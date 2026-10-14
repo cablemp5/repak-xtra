@@ -6,6 +6,7 @@
 mod asset_explorer;
 mod caleb_classify; // caleb fork: extra mod types, Project Galacta check
 mod caleb_sigeon; // caleb fork: Sigeon V2 switch
+mod caleb_setup; // caleb fork: Setup panel (signature bypass, Project Galacta)
 mod caleb_previews; // caleb fork: generated mod previews
 mod caleb_trash; // caleb fork: undoable delete
 mod character_data;
@@ -8695,6 +8696,10 @@ fn main() {
             caleb_sigeon::sigeon_rename,
             caleb_sigeon::sigeon_delete,
             caleb_sigeon::sigeon_restore,
+            caleb_setup::setup_bypass_status, // caleb fork: Setup panel
+            caleb_setup::setup_bypass,
+            caleb_setup::setup_galacta_status,
+            caleb_setup::setup_galacta_install,
             get_game_path,
             set_game_path,
             auto_detect_game_path,

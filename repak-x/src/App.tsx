@@ -63,6 +63,7 @@ import { TagsToggle } from './custom/uiPrefs'
 import { GeneratePreviewsButton } from './custom/previews'
 import { finishInstallLoadout } from './custom/installLoadout'
 import SigeonControl from './custom/SigeonControl'
+import SetupButton from './custom/SetupPanel'
 import { useGlobalTooltips } from './hooks/useGlobalTooltips'
 import { useAprilFools } from './hooks/useAprilFools'
 import Switch from './components/ui/Switch'
@@ -3928,6 +3929,7 @@ function App() {
           </button>
 
           <SigeonControl alert={alert} />{/* caleb fork */}
+          <SetupButton alert={alert} />{/* caleb fork: signature bypass and Project Galacta */}
           <button
             onClick={() => setPanel('sharing', true)}
             className="btn-settings"

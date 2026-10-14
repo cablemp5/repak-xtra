@@ -23,6 +23,13 @@ const sigeonPresets: Record<string, any[]> = Object.fromEntries(['base', 'high']
   sigeonLine('r.ContactShadows', '0'), sigeonLine('r.DetailMode', '1'), { kind: 'blank' },
 ]]))
 const sigeonDeleted: Record<string, any[]> = {}
+let mockBypass = 'installed'
+let mockGalacta: any = { installed: 'C:/Game/~mods', disabled: false, up_to_date: false }
+const galactaRelease = { latest: 'v1.4.1', published: '2026-10-14T14:29:44Z', url: 'https://github.com/0xSaturno/ProjectGalacta/releases/tag/v1.4.1',
+  notes: "## What's new:\n\n### Mod Loader:\n- Mods that add custom VFX to abilities are no longer blocked." }
+const setupBypass = () => ({ state: mockBypass, sigeon_on: true, license: 'MIT License\n\nCopyright (c) 2023 ThirteenAG',
+  files: [{ name: 'dsound.dll', place: 'Binaries\\Win64', size: 415232, sha256: 'bb8767f918c52a2ad055d2de9baffd2478598643b9894f09abd20d1f1ffd170c', found: mockBypass === 'installed' ? 'same' : 'missing' },
+    { name: 'MarvelRivalsUTOCSignatureBypass.asi', place: 'Binaries\\Win64\\plugins', size: 44032, sha256: '2f8b183149f30c94319a5f6636491ff39aa22afbbf3f5cbc5fb8f7ecc287a62d', found: mockBypass === 'missing' ? 'missing' : 'same' }] })
 const trash = new Map<string, any>() // trash id -> the deleted mod record
 // Browser checks flip window.__mockGameRunning live (polled every 5 s); localStorage 'mock.bypass' = 'false' turns the
 // fixture's game-lock bypass off at the next load
@@ -77,6 +84,15 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'sigeon_delete':
         if (sigeonState === args?.name) throw new Error(`${args?.name} is the config in use.`)
         sigeonDeleted[args?.name] = sigeonPresets[args?.name]; delete sigeonPresets[args?.name]; return null
+      // Setup panel: fake bypass files and a fake Galacta release (no game folder, no network)
+      case 'setup_bypass_status': return setupBypass()
+      case 'setup_bypass':
+        mockBypass = ({ install: 'installed', enable: 'installed', disable: 'disabled', remove: 'missing' } as any)[args?.action] ?? mockBypass
+        return setupBypass()
+      case 'setup_galacta_status': return { ...mockGalacta, ...(args?.online ? galactaRelease : {}) }
+      case 'setup_galacta_install':
+        mockGalacta = { installed: 'C:/Game/~mods', disabled: false, up_to_date: true }
+        return { ...mockGalacta, ...galactaRelease }
       case 'sigeon_restore': sigeonPresets[args?.name] = sigeonDeleted[args?.name]; return null
       case 'sigeon_set':
         sigeonState = args?.preset ?? 'off'
