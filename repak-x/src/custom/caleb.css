@@ -690,7 +690,7 @@ html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { d
 .vfx-log-entry.log-warning { color: #f5a524 !important; }
 .vfx-log-entry.log-success { color: #46a758 !important; }
 .vfx-panel { background: transparent !important; border: none !important; box-shadow: none !important; }
-.lo-grid { align-items: start; }
+.lo-grid { align-items: stretch; }
 .custom-dropdown-item { flex-shrink: 0 !important; }
 .lo-head-tools { display: flex; align-items: center; gap: 6px; }
 .lo-text-btn {
@@ -819,7 +819,8 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 .lo-card-title h3 { line-height: 22px; }
 .lo-card-title .repakx-switch-control { height: 22px !important; min-height: 0 !important; }
 .lo-card-meta { margin-top: 4px !important; line-height: 16px; }
-.lo-card-actions { margin-top: 12px !important; }
+.lo-card-actions { margin-top: auto !important; padding-top: 12px; }
+.lo-card-body { flex: 1; } /* a row's cards share one height; the actions sit on their bottom edge */
 .lo-expand { margin-left: -8px; }
 .bulk-previews { display: inline-flex !important; align-items: center; gap: 6px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .bulk-previews svg.lucide { width: 15px !important; height: 15px !important; }
@@ -985,7 +986,7 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
   color: var(--text-secondary) !important; font-size: 12px !important; font-weight: 500 !important; }
 .lp-types button:hover { color: var(--text-primary) !important; }
 .lp-types button[aria-pressed="true"] { background: var(--bg-lighter) !important; color: var(--text-primary) !important; border-color: rgba(255, 255, 255, 0.2) !important; }
-.lp-more { margin-top: 10px; }
+.lp-show-more { margin-top: 10px; }
 /* Fixed headings read as written; only saved group names get the capitalized look */
 .lp .lo-group-head, .new-strip .lo-group-head { text-transform: none; }
 
@@ -1273,7 +1274,8 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 
 /* Toasts: the status icon centered against the text; Clear all as a labeled pill on the toasts' own surface */
 .toast-icon { align-self: center; }
-.toast-footer-overlay { bottom: -14px !important; right: 10px !important; gap: 6px !important; }
+/* +N and Clear all sit below the stack (AlertHandler reserves the stack's visible height), never over a toast */
+.toast-footer-overlay { position: static; align-self: stretch; justify-content: flex-end; margin-top: 6px; gap: 6px; }
 .toast-clear-all, [data-theme="light"] .toast-clear-all {
   width: auto !important; max-width: none !important; height: 28px !important; min-height: 0 !important; max-height: none !important;
   padding: 0 12px 0 10px !important; display: inline-flex !important; align-items: center; gap: 6px; border-radius: 999px !important;

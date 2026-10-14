@@ -318,6 +318,8 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
     const [heights, setHeights] = useState<Record<number, number>>({});
     const reportHeight = useCallback((id: number, h: number) => setHeights(prev => (prev[id] === h ? prev : { ...prev, [id]: h })), []);
     const spread = recentToasts.map((_, i) => recentToasts.slice(0, i).reduce((sum, t) => sum + (heights[t.id] ?? 72) + 8, 0));
+    // caleb fork: the stack's visible height (its toasts are absolute), so the footer below it never covers one
+    const extent = Math.max(0, ...recentToasts.map((t, i) => (heights[t.id] ?? 72) * (isHovered ? 1 : 1 - i * 0.05) + (isHovered ? spread[i] : i * 10)));
 
     const isBottom = placement.startsWith('bottom');
 
@@ -333,7 +335,7 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
                 style={{
                     position: 'relative',
                     width: '100%',
-                    minHeight: recentToasts.length > 0 ? '70px' : '0',
+                    height: extent, // caleb fork: was minHeight 70px
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
@@ -355,25 +357,25 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
                         />
                     ))}
                 </AnimatePresence>
-
-                {/* Footer overlay - positioned at bottom-right of deck */}
-                {toasts.length > 1 && (
-                    <div className="toast-footer-overlay">
-                        {toasts.length > maxVisible && (
-                            <span className="toast-count-badge">
-                                +{toasts.length - maxVisible}
-                            </span>
-                        )}
-                        <button
-                            className="toast-clear-all"
-                            onClick={onDismissAll}
-                            title="Clear all notifications"
-                        >
-                            <X size={14} /> Clear all
-                        </button>
-                    </div>
-                )}
             </div>
+
+            {/* caleb fork: footer below the stack */}
+            {toasts.length > 1 && (
+                <div className="toast-footer-overlay">
+                    {toasts.length > maxVisible && (
+                        <span className="toast-count-badge">
+                            +{toasts.length - maxVisible}
+                        </span>
+                    )}
+                    <button
+                        className="toast-clear-all"
+                        onClick={onDismissAll}
+                        title="Clear all notifications"
+                    >
+                        <X size={14} /> Clear all
+                    </button>
+                </div>
+            )}
         </div>
     );
 }

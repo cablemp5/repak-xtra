@@ -190,7 +190,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia 
             </ul>
           )}
         {matches.length > limit && (
-          <button type="button" className="lo-text-btn lp-more" onClick={() => setLimit(limit + PAGE)}>Show {Math.min(PAGE, matches.length - limit)} more</button>
+          <button type="button" className="lo-text-btn lp-show-more" onClick={() => setLimit(limit + PAGE)}>Show {Math.min(PAGE, matches.length - limit)} more</button>
         )}
       </section>
       </div>

@@ -361,7 +361,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                       <p className="lo-card-meta">
                         {busy === l.id ? 'Switching mods…' : p.mods.length === 0 ? 'Loading mods…' : <>
                           {groupBy === 'hero' && <>{l.label}<span className="lo-sep">·</span></>}
-                          {l.on.length === present ? plural(present, 'mod') : `${present} of ${plural(l.on.length, 'mod')} installed`}
+                          {l.on.length === present ? plural(present, 'mod') : `${present}/${l.on.length} installed`}
                           {present > 0 && <><span className="lo-sep">·</span>{onNow === present ? 'all on' : `${onNow} on`}</>}
                         </>}
                       </p>
