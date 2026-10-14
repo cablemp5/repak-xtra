@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo, memo } from 'react';
 import type { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MdClearAll } from 'react-icons/md';
-import { Check } from 'lucide-react'; // caleb fork: a plain check for success
+import { Check, X } from 'lucide-react'; // caleb fork: a plain check for success, X for Clear all
 import './ui/Alert.css';
 import { alertSound } from '../custom/sounds' // caleb fork
 
@@ -370,7 +369,7 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
                             onClick={onDismissAll}
                             title="Clear all notifications"
                         >
-                            <MdClearAll size={14} />
+                            <X size={14} /> Clear all
                         </button>
                     </div>
                 )}

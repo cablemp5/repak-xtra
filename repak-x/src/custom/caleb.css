@@ -1259,8 +1259,18 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .lp-more .custom-dropdown-menu { min-width: 300px; }
 .lp-more .custom-dropdown-item:last-child { border-top: 1px solid var(--panel-border); margin-top: 4px; padding-top: 8px; }
 
-/* Success toasts: the app's blue check instead of green (Caleb, 2026-10-14) */
-.toast-item.success { --toast-color: var(--accent-primary); --toast-progress: var(--accent-primary); }
+/* Toasts: the status icon centered against the text; Clear all as a labeled pill on the toasts' own surface */
+.toast-icon { align-self: center; }
+.toast-footer-overlay { bottom: -14px !important; right: 10px !important; gap: 6px !important; }
+.toast-clear-all, [data-theme="light"] .toast-clear-all {
+  width: auto !important; max-width: none !important; height: 28px !important; min-height: 0 !important; max-height: none !important;
+  padding: 0 12px 0 10px !important; display: inline-flex !important; align-items: center; gap: 6px; border-radius: 999px !important;
+  background: #161616 !important; border: 1px solid rgba(255, 255, 255, 0.12) !important; color: var(--text-secondary) !important;
+  font-size: 12px !important; font-weight: 500 !important; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45); backdrop-filter: none !important; }
+.toast-clear-all:hover { color: var(--text-primary) !important; border-color: rgba(255, 255, 255, 0.22) !important; background: #1d1d1d !important; }
+.toast-clear-all svg.lucide { width: 14px !important; height: 14px !important; }
+.toast-count-badge { height: 28px; display: inline-flex; align-items: center; padding: 0 10px !important; border-radius: 999px !important;
+  background: #161616 !important; border: 1px solid rgba(255, 255, 255, 0.12); font-size: 12px !important; color: var(--text-secondary) !important; }
 
 /* ---------- preview batches: Home status line, card skeletons (transitions.dev Skeleton loader) ---------- */
 :root { --pulse-dur: 1000ms; --pulse-min: 0.5; --skel-tone: rgba(255, 255, 255, 0.07); }
