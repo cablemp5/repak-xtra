@@ -125,6 +125,9 @@ export const usePreviewVersion = () => useSyncExternalStore(subscribe, () => ver
 export const hasPreview = (key: string) => revs.has(key)
 /** Key of a loadout's combined character render. */
 export const previewSetKey = (loadoutId: string) => `loadout-${loadoutId}`
+/** A loadout has previews when its combined render exists or any of its mods has its own (loadouts of only VFX, UI or
+ *  sound mods never get a combined render). */
+export const loadoutHasPreview = (l: { id: string; on: string[] }) => hasPreview(previewSetKey(l.id)) || l.on.some(k => hasPreview(modKey(k)))
 /** The message from a key's last render (failed, nothing to show, another generator busy), if any. */
 export function usePreviewOutcome(key: string) {
   usePreviewVersion()
@@ -276,7 +279,7 @@ export const dismissPreviewSummary = () => { run.summary = ''; notify() }
 export async function generateAllLoadouts(loadouts: { id: string; name: string; on: string[] }[], mods: { path: string }[], which: 'missing' | 'all' = 'all') {
   const byKey = new Map(mods.map(m => [modKey(m.path), m.path]))
   const jobs = loadouts
-    .filter(l => which === 'all' || !hasPreview(previewSetKey(l.id)))
+    .filter(l => which === 'all' || !loadoutHasPreview(l))
     .map(l => ({ paths: l.on.map(k => byKey.get(modKey(k))).filter((x): x is string => Boolean(x)), set: previewSetKey(l.id), name: l.name, force: which === 'all' }))
     .filter(j => j.paths.length > 0)
   const started = jobs.map(generatePreviews) // all asked for in this tick: the first starts, the rest queue behind it
@@ -340,7 +343,7 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
   const alert = useAlert()
   const n = new Set(paths.map(modKey)).size
   // A loadout that already has its preview: the button renders it again, even when nothing changed
-  const again = Boolean(set && hasPreview(set))
+  const again = Boolean(set && (hasPreview(set) || paths.some(p => hasPreview(modKey(p)))))
   const job: Job = { paths, set, name: name ?? `${n} selected mod${n === 1 ? '' : 's'}`, force: again }
   const text = again ? label.replace(/^Generate/, 'Regenerate') : label
   const id = jobId(job)

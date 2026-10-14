@@ -12,7 +12,7 @@ import { CardMedia } from './loadoutBits'
 import { prepareMedia, putMedia } from './loadoutMedia'
 import { plural } from './modName'
 import { Num } from './motion'
-import { dismissPreviewSummary, generateAllLoadouts, hasPreview, previewSetKey, stopPreviews, usePreviewBatch, usePreviewSummary, usePreviewVersion } from './previews'
+import { dismissPreviewSummary, generateAllLoadouts, loadoutHasPreview, stopPreviews, usePreviewBatch, usePreviewSummary, usePreviewVersion } from './previews'
 import {
   type Loadout, type Mod, OTHER, addGroup, changesToTurnOff, changesToTurnOn, deleteGroup, displayName, groupKey,
   inGroup, isActive, modKey, moveGroup, nextLoadoutName, openLoadout, patchLoadout, readLoadouts, renameGroup,
@@ -204,7 +204,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   }
 
   /** Generate all: with no previews yet it just starts; otherwise it asks whether to redo the ones already made. */
-  const withPreview = loadouts.filter(l => hasPreview(previewSetKey(l.id))).length
+  const withPreview = loadouts.filter(loadoutHasPreview).length
   const generate = async (which: 'missing' | 'all') => {
     setGenMenu(false)
     const { count, error } = await generateAllLoadouts(loadouts, p.mods, which)
