@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, memo } from 'react'
+import { ModName } from '../custom/modName'
 import { motion } from 'framer-motion'
 import { Tooltip } from '@mui/material'
 import { RiDeleteBin2Fill } from 'react-icons/ri'
@@ -74,6 +75,7 @@ type ModItemProps = {
 }
 
 type ModsListProps = {
+    emptyState?: React.ReactNode // caleb fork: says why the list is empty and how to get mods back
     mods: ModRecord[]
     viewMode: ViewMode
     selectedMod: ModRecord | null
@@ -391,13 +393,8 @@ const ModItem = memo(function ModItem({
                             style={nameReveal.revealStyle}
                         >
                             <span ref={nameReveal.innerRef} className="mod-name-inner">
-                                {/* caleb fork: head shrinks with an ellipsis, tail keeps the version suffix visible */}
-                                {cleanName.length > 16 ? (
-                                    <>
-                                        <span className="mod-name-head">{cleanName.slice(0, -12)}</span>
-                                        <span className="mod-name-tail">{cleanName.slice(-12)}</span>
-                                    </>
-                                ) : cleanName}
+                                {/* caleb fork: slug + tags + version chip (custom/modName.tsx) */}
+                                <ModName name={cleanName} />
                                 {shouldShowSuffix && <span className="mod-name-suffix">{suffix}</span>}
                             </span>
                         </span>
@@ -575,7 +572,8 @@ export default function ModsList({
     onRenameBlocked,
     onDeleteBlocked,
     holdToDelete,
-    enableAnimations = true
+    enableAnimations = true,
+    emptyState
 }: ModsListProps) {
     // Stem key: a toggle renames the file but must not remount the card. An enabled
     // and a disabled copy of one mod share a stem though, and duplicate keys leave
@@ -597,9 +595,11 @@ export default function ModsList({
                 style={{ overflowY: 'auto', height: '100%' }}
             >
                 {mods.length === 0 ? (
-                    <div className="empty-state">
-                        <p>No mods found in this folder.</p>
-                    </div>
+                    emptyState ?? (
+                        <div className="empty-state">
+                            <p>No mods found in this folder.</p>
+                        </div>
+                    )
                 ) : (
                     mods.map((mod: ModRecord) => {
                         const details = modDetails?.[mod.path]

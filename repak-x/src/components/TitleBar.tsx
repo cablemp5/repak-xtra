@@ -12,7 +12,7 @@ interface TitleBarProps {
     hideMaximize?: boolean;
 }
 
-const TitleBar = ({ title = "Repak X", hideMaximize = false }: TitleBarProps) => {
+const TitleBar = ({ title = "repakXtra", hideMaximize = false }: TitleBarProps) => {
     const [appWindow, setAppWindow] = useState<ReturnType<typeof getCurrentWindow> | null>(null);
     const [isMaximized, setIsMaximized] = useState(false);
     const [isFocused, setIsFocused] = useState(true);

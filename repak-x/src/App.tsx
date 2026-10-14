@@ -526,7 +526,7 @@ function App() {
 
       const explorerWindow = new WebviewWindow('asset-explorer', {
         url: '/asset-explorer',
-        title: 'Repak X - Asset Explorer',
+        title: 'repakXtra - Asset Explorer',
         width: 1320,
         height: 820,
         minWidth: 900,
@@ -4328,6 +4328,18 @@ function App() {
                 gameRunning={gameRunning && !bypassGameRunningLock}
                 holdToDelete={holdToDelete}
                 enableAnimations={enableAnimations}
+                emptyState={/* caleb fork: name the reason the list is empty and offer the way back */
+                  searchQuery ? (
+                    <div className="empty-state">
+                      <p>No mods match “{searchQuery}”.</p>
+                      <button type="button" className="btn-ghost" onClick={() => { setLocalSearch(''); setSearchQuery('') }}>Clear search</button>
+                    </div>
+                  ) : (selectedCharacters.size || selectedCategories.size || filterTag || modState !== 'all') ? (
+                    <div className="empty-state">
+                      <p>No mods match these filters.</p>
+                      <button type="button" className="btn-ghost" onClick={() => { setSelectedCharacters(new Set()); setSelectedCategories(new Set()); setFilterTag(''); setModState('all') }}>Clear filters</button>
+                    </div>
+                  ) : undefined}
                 onRenameBlocked={stableRenameBlocked}
                 onDeleteBlocked={stableDeleteBlocked}
               />

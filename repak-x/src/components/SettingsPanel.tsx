@@ -291,7 +291,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                 </div>
 
                 <div className="setting-section">
-                  <h3>Repak X Updates</h3>
+                  <h3>Updates</h3>
                   <div className="setting-group">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                       <button

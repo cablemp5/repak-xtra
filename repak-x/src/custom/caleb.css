@@ -902,3 +902,15 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 /* Game running badge: a state, shown in neutral text with its icon (was red with a red glow) */
 .game-running-indicator { background: var(--bg-light) !important; border-color: var(--panel-border) !important; box-shadow: none !important; }
 .game-running-indicator .running-text { color: var(--text-primary) !important; text-shadow: none !important; background: transparent !important; }
+
+/* ---------- mod names: slug + muted tags + version chip (custom/modName.tsx); tags give way first, version never ---------- */
+.mn { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; max-width: 100%; vertical-align: bottom; }
+.mn-slug { flex: 0 1 auto; min-width: 2.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mn-tags { flex: 0 1000 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; font-weight: 400; color: var(--text-secondary); }
+.mn-ver { flex: none; font: 500 10.5px/1.5 var(--font-mono); padding: 0 5px; border-radius: 4px;
+  background: rgba(255, 255, 255, 0.07); color: var(--text-secondary); }
+.mod-name-inner:has(.mn) { display: flex; max-width: 100%; }
+.mod-name-inner .mn { flex: 1 1 auto; }
+.lo-mod-name .mn, .lo-match-name .mn { display: flex; width: 100%; }
+.empty-state .btn-ghost { margin-top: 10px; }

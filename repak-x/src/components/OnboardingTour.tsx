@@ -26,7 +26,7 @@ type OnboardingTourProps = {
 const TOUR_STEPS: TourStep[] = [
     {
         target: '[data-tour="header-branding"]',
-        title: 'Welcome to Repak X',
+        title: 'Welcome to repakXtra',
         description: "Your all-in-one Marvel Rivals mod manager and installer. Let's take a quick tour of the main features!",
         placement: 'bottom',
     },
@@ -69,7 +69,7 @@ const TOUR_STEPS: TourStep[] = [
     {
         target: '[data-tour="sharing-btn"]',
         title: 'Share Modpacks',
-        description: 'Create and share modpacks securely with other Repak X users across the globe.',
+        description: 'Create and share modpacks securely with other Repak X and repakXtra users.',
         placement: 'bottom',
     },
     {

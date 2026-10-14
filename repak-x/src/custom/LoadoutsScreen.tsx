@@ -8,6 +8,7 @@ import { ChevronDown, Download, ImageOff, ImagePlus, Info, Plus, RefreshCw, Tras
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, runChanges } from './Loadouts'
 import { isTyping } from './hotkeys'
+import { ModName, plural } from './modName'
 import { hasPreview, usePreviewUrl, usePreviewVersion } from './previews'
 import { deleteMedia, prepareMedia, putMedia, useMediaUrl } from './loadoutMedia'
 import {
@@ -139,7 +140,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     const url = URL.createObjectURL(new Blob([exportLoadouts()], { type: 'application/json' }))
     const a = document.createElement('a')
     a.href = url
-    a.download = 'repakxcable-loadouts.json'
+    a.download = 'repakxtra-loadouts.json'
     a.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
@@ -249,11 +250,11 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                     onChange={(checked: boolean) => toggle(l, checked)} />
                 </div>
                 <p className="lo-card-meta">
-                  {busy === l.id ? 'Switching mods…' : <>{l.label}<span className="lo-sep">·</span>{l.on.length} of {present} mods on</>}
+                  {busy === l.id ? 'Switching mods…' : <>{l.label}<span className="lo-sep">·</span>{l.on.length} of {plural(present, 'mod')} on</>}
                 </p>
                 <div className="lo-card-actions">
                   <button type="button" className="lo-expand" aria-expanded={isOpen} onClick={() => toggleExpanded(l.id)}>
-                    {l.on.length} mods <ChevronDown size={14} />
+                    {plural(l.on.length, 'mod')} <ChevronDown size={14} />
                   </button>
                   <span className="lo-card-tools">
                     <button type="button" className="lo-icon" title={`Overwrite ${l.name} with the shown mods' current state`}
@@ -286,7 +287,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                             <li key={key} className={mod ? (mod.enabled ? 'is-on' : '') : 'lo-mod-missing'}
                               title={mod ? `${p.modDetails?.[mod.path]?.category ?? 'Unknown type'} · ${mod.enabled ? 'on now' : 'off now'}` : 'Not installed anymore'}>
                               <span className={`lo-mod-dot ${mod?.enabled ? 'is-filled' : ''} ${typeClass(mod && p.modDetails?.[mod.path]?.category)}`} />
-                              <span className="lo-mod-name">{key}</span>
+                              <span className="lo-mod-name"><ModName name={key} /></span>
                               <button type="button" className="lo-icon lo-mod-remove" title={`Remove ${key} from ${l.name}`}
                                 onClick={() => removeModFromLoadout(l, key)}>
                                 <X size={13} />
@@ -305,7 +306,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                               <li key={k}>
                                 <button type="button" onClick={() => add(k)} title={k}>
                                   <span className={`lo-mod-dot is-filled ${typeClass(p.modDetails?.[byKey.get(k)!.path]?.category)}`} />
-                                  <span className="lo-match-name">{k}</span>
+                                  <span className="lo-match-name"><ModName name={k} /></span>
                                   <Plus size={13} />
                                 </button>
                               </li>
