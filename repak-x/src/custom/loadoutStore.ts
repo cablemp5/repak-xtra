@@ -182,7 +182,7 @@ export const displayName = normKey
 /** Loadouts as a JSON file (media stays in this app). Import adds loadouts whose name is new. */
 export const exportLoadouts = () =>
   JSON.stringify({
-    format: 'repakxcable-loadouts',
+    format: 'repakxtra-loadouts',
     version: 1,
     loadouts: readLoadouts().map(({ image: _i, mediaRev: _r, mediaType: _t, ...l }) => l),
   }, null, 2)

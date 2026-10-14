@@ -1,10 +1,9 @@
-"""Turn Repak-X tag groups into repakXcable loadouts. Run: python -I repak-x/scripts/tags-to-loadouts.py,
-then start the app: it adds the new loadouts by itself (names that already exist are skipped)."""
+"""Turn Repak-X tag groups into repakxtra loadouts. Run: python -I repak-x/scripts/tags-to-loadouts.py,
+then in repakxtra: Home > Import and pick the file it names (loadouts whose name exists are skipped)."""
 import json, os, re, sys, collections
 
 APP = os.path.join(os.environ['APPDATA'], 'Repak-X', 'state.json')
 MODS = r'C:\Program Files (x86)\Steam\steamapps\common\MarvelRivals\MarvelGame\Marvel\Content\Paks\~mods'
-# The app merges this file on its next start, then renames it (caleb_import.rs)
 OUT = os.path.join(os.environ['APPDATA'], 'Repak-X', 'caleb-import-loadouts.json')
 
 def norm(stem):
@@ -74,7 +73,7 @@ for t in SOLO:
 
 covered = set(LOOKS + EMOTES + SOLO + ['colored vfx'])
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
-json.dump({'format': 'repakxcable-loadouts', 'version': 1, 'loadouts': loadouts}, open(OUT, 'w', encoding='utf-8'), indent=2)
+json.dump({'format': 'repakxtra-loadouts', 'version': 1, 'loadouts': loadouts}, open(OUT, 'w', encoding='utf-8'), indent=2)
 for name, group, on, tagged in report:
     print(f'{name:<16} {group:<32} {len(on):>2} on (tag has {tagged})')
 print('skipped, nothing installed:', [t for t in sorted(tags) if not present(tags[t])])
