@@ -314,6 +314,7 @@ const ModItem = memo(function ModItem({
                         radius="sm"
                         color="primary"
                         className="mod-checkbox"
+                        aria-label={`Select ${cleanName}`}
                     />
                 </div>
                 {/* Hero icon before name in list view */}
@@ -512,7 +513,7 @@ const ModItem = memo(function ModItem({
                         disabled={gameRunning}
                     />
                     <div className="mod-switch-wrapper" onClick={(e) => e.stopPropagation()} >
-                        <Switch title={mod.enabled ? 'Disable mod' : 'Enable mod'}
+                        <Switch title={mod.enabled ? 'Disable mod' : 'Enable mod'} aria-label={mod.enabled ? `Turn ${cleanName} off` : `Turn ${cleanName} on`}
                             size="sm"
                             color="primary"
                             checked={mod.enabled}

@@ -1,10 +1,10 @@
 // caleb fork: Home, the app's first view. Loadouts as cards (image, on/off switch), grouped by saved group or hero, with
-// the "New · not in a loadout" strip on top; a card opens its page (LoadoutPage.tsx). The full mod list is the Library
+// the "New this week" strip below them; a card opens its page (LoadoutPage.tsx). The full mod list is the Library
 // view (header tabs, or L). On = its mods on, Off = its mods off; other mods and loadouts are never touched.
 import { useEffect, useRef, useState } from 'react'
-import { Download, Info, PackagePlus, Plus, Save, Trash2, Upload } from 'lucide-react'
+import { Download, Info, PackagePlus, Plus, Trash2, Upload } from 'lucide-react'
 import Switch from '../components/ui/Switch'
-import { type LoadoutProps, deleteWithUndo, overwriteWithUndo, runChanges } from './Loadouts'
+import { type LoadoutProps, deleteWithUndo, runChanges } from './Loadouts'
 import LoadoutPage from './LoadoutPage'
 import NewStrip from './NewStrip'
 import { isTyping } from './hotkeys'
@@ -13,8 +13,8 @@ import { prepareMedia, putMedia } from './loadoutMedia'
 import { plural } from './modName'
 import { Num } from './motion'
 import {
-  type Loadout, type Mod, changesToTurnOff, changesToTurnOn, displayName, exportLoadouts, importLoadouts, isActive, modKey,
-  patchLoadout, readLoadouts, setView, snapshotLoadout, useLoadouts, useView, writeLoadouts,
+  type Loadout, type Mod, changesToTurnOff, changesToTurnOn, displayName, exportLoadouts, groupKey, importLoadouts, isActive, modKey,
+  openLoadout, patchLoadout, readLoadouts, setView, snapshotLoadout, useLoadouts, useOpenLoadout, useView, writeLoadouts,
 } from './loadoutStore'
 
 type GroupBy = 'group' | 'hero'
@@ -40,11 +40,17 @@ function topHero(keys: string[], byKey: Map<string, Mod>, details: LoadoutProps[
 const heroOf = (l: Loadout, byKey: Map<string, Mod>, details: LoadoutProps['modDetails']) =>
   topHero(l.on, byKey, details) ?? topHero(l.scope, byKey, details) ?? NO_HERO
 
-/** Sections in display order. Saved groups holding a single loadout share one "Other" section. */
+/** Sections in display order. Saved groups holding a single loadout share one "Other" section. Names match without
+ *  regard to case or spaces; a section shows the first spelling it meets. */
 export function groupLoadouts(list: Loadout[], keyOf: (l: Loadout) => string, mergeSingles: boolean) {
-  const map = new Map<string, Loadout[]>()
-  for (const l of list) map.set(keyOf(l), [...(map.get(keyOf(l)) ?? []), l])
-  let groups = [...map]
+  const map = new Map<string, [string, Loadout[]]>()
+  for (const l of list) {
+    const k = groupKey(keyOf(l))
+    const entry = map.get(k) ?? [keyOf(l).trim(), []]
+    entry[1].push(l)
+    map.set(k, entry)
+  }
+  let groups = [...map.values()]
   if (mergeSingles) {
     const singles = groups.filter(([, ls]) => ls.length === 1).flatMap(([, ls]) => ls)
     groups = groups.filter(([, ls]) => ls.length > 1)
@@ -70,7 +76,8 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   const view = useView()
   const loadouts = useLoadouts()
   const [busy, setBusy] = useState<string | null>(null)
-  const [openId, setOpenId] = useState<string | null>(null)
+  const openId = useOpenLoadout()
+  const setOpenId = openLoadout
   const [renaming, setRenaming] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [legend, setLegendState] = useState(() => localStorage.getItem(LEGEND_KEY) === '1')
@@ -199,7 +206,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
       <header className="lo-screen-head">
         <div>
           <h2>Loadouts</h2>
-          <p>On switches a loadout's mods on, Off switches them off. Other mods are left alone. Open a card to edit it.</p>
+          {loadouts.length < 3 && <p>Switch a set of mods on or off together. Other mods stay as they are.</p>}
         </div>
         <div className="lo-head-tools">
           <button type="button" className="lo-text-btn" title="Install PAKs or archives (Ctrl+O)"
@@ -207,7 +214,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
             <PackagePlus size={14} /> Install mods
           </button>
           <button type="button" className="lo-text-btn" aria-pressed={legend} onClick={() => setLegend(!legend)}
-            title="Show what the type codes and colors mean">
+            title="Show what the type colors mean">
             <Info size={14} /> Legend
           </button>
           <div className="mod-state-filter lo-groupby" role="group" aria-label="Group loadouts by">
@@ -228,8 +235,8 @@ export default function LoadoutsScreen(p: LoadoutProps) {
         return (
           <div className="lo-legend" aria-label="Type legend">
             {types.map(t => (
-              <span key={t} className={`lo-legend-item ${typeClass(t)}`}>
-                <span className="lo-mod-dot is-filled" />{t}
+              <span key={t} className="lo-legend-item">
+                <span className={`lo-mod-dot is-filled ${typeClass(t)}`} />{t}
               </span>
             ))}
           </div>
@@ -237,7 +244,6 @@ export default function LoadoutsScreen(p: LoadoutProps) {
       })()}
 
       <div className="lo-body">
-        <NewStrip {...p} />
 
         {loadouts.length === 0 && (
           <div className="lo-first-run">
@@ -251,17 +257,20 @@ export default function LoadoutsScreen(p: LoadoutProps) {
         )}
 
         {groups.map(([group, list]) => (
-          <section className="lo-group" key={group}>
+          <section className="lo-group" key={groupKey(group)}>
             <h3 className="lo-group-head">{group}<span className="lo-group-count"><Num id={`group-${group}`} value={list.length} /></span></h3>
             <div className="lo-grid">
               {list.map(l => {
                 const active = isActive(l, p.mods)
-                const present = new Set(l.on.map(displayName).filter(k => byKey.has(k))).size
+                const keys = new Set(l.on.map(displayName))
+                const present = [...keys].filter(k => byKey.has(k)).length
+                const onNow = [...keys].filter(k => byKey.get(k)?.enabled).length
                 return (
                   <article key={l.id} className={`lo-card ${active ? 'is-on' : ''}`}
                     onKeyDown={e => { if (e.key === 'F2' && !isTyping(e.target)) { e.preventDefault(); setDraft(l.name); setRenaming(l.id) } }}
                     onMouseEnter={() => { hovered.current = l.id }} onMouseLeave={() => { if (hovered.current === l.id) hovered.current = null }}>
-                    <CardMedia p={p} l={l} onClick={() => setOpenId(l.id)} title={`Open ${l.name}`} />
+                    <CardMedia p={p} l={l} onClick={() => setOpenId(l.id)} title={`Open ${l.name}`}
+                      emptyText="No preview yet. Open it to generate one, or hover and paste an image." />
                     <div className="lo-card-body">
                       <div className="lo-card-title">
                         {renaming === l.id ? (
@@ -276,15 +285,16 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                           onChange={(checked: boolean) => toggle(l, checked)} />
                       </div>
                       <p className="lo-card-meta">
-                        {busy === l.id ? 'Switching mods…' : <>{l.label}<span className="lo-sep">·</span>{l.on.length === present ? plural(present, 'mod') : `${present} of ${plural(l.on.length, 'mod')} installed`}</>}
+                        {busy === l.id ? 'Switching mods…' : p.mods.length === 0 ? 'Loading mods…' : <>
+                          {groupBy === 'hero' && <>{l.label}<span className="lo-sep">·</span></>}
+                          {l.on.length === present ? plural(present, 'mod') : `${present} of ${plural(l.on.length, 'mod')} installed`}
+                          {present > 0 && <><span className="lo-sep">·</span>{onNow === present ? 'all on' : `${onNow} on`}</>}
+                        </>}
                       </p>
                       <div className="lo-card-actions">
                         <button type="button" className="lo-expand" onClick={() => setOpenId(l.id)}>Edit mods</button>
                         <span className="lo-card-tools">
-                          <button type="button" className="lo-icon" title={`Overwrite ${l.name} with the mods shown in the Library`} onClick={() => overwriteWithUndo(p, l)}>
-                            <Save size={14} />
-                          </button>
-                          <button type="button" className="lo-icon" title={`Delete ${l.name}`} onClick={() => deleteWithUndo(p, l)}>
+                          <button type="button" className="lo-icon" title={`Delete ${l.name}`} aria-label={`Delete ${l.name}`} onClick={() => deleteWithUndo(p, l)}>
                             <Trash2 size={14} />
                           </button>
                         </span>
@@ -308,6 +318,9 @@ export default function LoadoutsScreen(p: LoadoutProps) {
             </div>
           </div>
         )}
+
+        {/* below the loadouts: Home is for switching them; this is the inbox of recent mods */}
+        <NewStrip {...p} />
       </div>
     </div>
   )

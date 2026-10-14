@@ -1,14 +1,15 @@
-// caleb fork: sidebar list of saved loadouts (state lives in loadoutStore.ts). Click a loadout to
-// turn it on; the grid button opens the cards screen with on/off switches and images.
+// caleb fork: sidebar list of saved loadouts (state lives in loadoutStore.ts). The dot or check turns a loadout on or
+// off (as does Ctrl+1..9), the name opens its page on Home; drag rows to reorder them, which also reorders Ctrl+1..9.
 import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from 'react'
-import { invoke } from '@tauri-apps/api/core'
-import { Check, Layers, LayoutGrid, Plus, Save, X } from 'lucide-react'
+import { ArrowRightLeft, Check, Layers, LayoutGrid, Plus, Trash2 } from 'lucide-react'
 import CustomDropdown from '../components/CustomDropdown'
 import type { useAlert } from '../components/AlertHandler'
 import {
-  type Loadout, type Mod, addModToLoadout, changesToTurnOff, changesToTurnOn, deleteLoadout, flipMods, importLoadouts, isActive, modKey, readLoadouts,
-  setView, snapshotLoadout, useLoadouts, writeLoadouts,
+  type Loadout, type Mod, addModToLoadout, changesToTurnOff, changesToTurnOn, deleteLoadout, flipMods, isActive, modKey, moveLoadout,
+  openLoadout, readLoadouts, setView, snapshotLoadout, useLoadouts, writeLoadouts,
 } from './loadoutStore'
+import { isTyping } from './hotkeys'
+import { plural } from './modName'
 import { Num } from './motion'
 
 export type LoadoutProps = {
@@ -82,28 +83,71 @@ export function deleteWithUndo(p: LoadoutProps, l: Loadout) {
   })
 }
 
-/** Overwrite with the shown mods' current state, with Undo back to what it held before. */
+/** Replace the loadout with the Library's shown mods as they are now, with Undo back to what it held before. */
 export function overwriteWithUndo(p: LoadoutProps, l: Loadout) {
   const before = { label: l.label, scope: l.scope, on: l.on }
-  writeLoadouts(readLoadouts().map(x => (x.id === l.id ? snapshotLoadout(x, p.scopeMods) : x)))
-  const id = p.alert.info(`Updated ${l.name}`, `It now holds the ${p.scopeMods.length} shown mods as they are now.`, {
+  const next = snapshotLoadout(l, p.scopeMods)
+  writeLoadouts(readLoadouts().map(x => (x.id === l.id ? next : x)))
+  const id = p.alert.info(`Replaced ${l.name}`, `It now holds the ${plural(next.on.length, 'mod')} that were on in the Library (${p.scopeLabel}).`, {
     duration: 10000,
     action: { label: 'Undo', onClick: () => { p.alert.dismissAlert(id); writeLoadouts(readLoadouts().map(x => (x.id === l.id ? { ...x, ...before } : x))) } },
   })
 }
 
-/** Shared by the sidebar and the cards screen: apply a set of flips with the game-running guard. */
-export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], verb: string) {
+let switching = false // one loadout switch at a time, whether from the sidebar, Ctrl+N, a card or a page
+
+/** Heroes whose look (a Mesh or Texture mod) the loadout changes. */
+const looksOf = (p: LoadoutProps, l: Loadout) => {
+  const on = new Set(l.on.map(modKey))
+  const heroes = new Set<string>()
+  for (const m of p.mods) {
+    const d = p.modDetails?.[m.path]
+    if (on.has(modKey(m.path)) && (d?.category === 'Mesh' || d?.category === 'Texture') && d.character_name) heroes.add(d.character_name.split(' - ')[0])
+  }
+  return heroes
+}
+
+/** Shared by the sidebar and the cards screen: apply a set of flips with the game-running guard. Loadouts stay
+ *  independent, but it says when another loadout that is on also changes the same hero's look (the game shows only
+ *  one), and which other loadouts went off because they shared mods with this one. */
+export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], verb: 'on' | 'off') {
   if (p.blocked) {
-    p.alert.warning('Game Running', 'Cannot toggle mods while game is running.')
+    p.alert.warning('Game running', 'Mods cannot be switched while the game is running.')
     return
   }
-  if (changes.length === 0) return
-  const failed = await flipMods(changes)
-  await p.reload()
-  if (failed) p.alert.warning(`${l.name} partly ${verb}`, `${failed} of ${changes.length} mods could not be switched.`)
-  else {
-    p.alert.success(`${l.name} ${verb}`, `${changes.length} mod${changes.length === 1 ? '' : 's'} switched.`)
+  if (changes.length === 0 || switching) return
+  switching = true
+  try {
+    const wasOn = readLoadouts().filter(o => o.id !== l.id && isActive(o, p.mods))
+    const failed = await flipMods(changes)
+    await p.reload()
+    const flipped = new Set(changes.filter(m => !failed.includes(m)).map(m => m.path))
+    const after = p.mods.map(m => (flipped.has(m.path) ? { ...m, enabled: !m.enabled } : m))
+    if (failed.length) {
+      p.alert.warning(`${l.name} partly ${verb}`, `Could not switch ${failed.map(m => modKey(m.path)).join(', ')}. Close anything using those files, then try again.`)
+    } else {
+      p.alert.success(`${l.name} ${verb}`, `${plural(changes.length, 'mod')} switched.`)
+    }
+    if (verb === 'off') {
+      const alsoOff = wasOn.filter(o => !isActive(o, after))
+      if (alsoOff.length) p.alert.info(`${alsoOff.map(o => o.name).join(', ')} also off`, `${alsoOff.length === 1 ? 'It shares' : 'They share'} mods with ${l.name}.`)
+      return
+    }
+    const mine = looksOf(p, l)
+    for (const o of wasOn) {
+      const both = [...looksOf(p, o)].filter(h => mine.has(h))
+      if (!both.length) continue
+      const keep = new Set(l.on.map(modKey))
+      const id = p.alert.warning(`${o.name} is also on`, `It changes ${both.join(', ')} too, and the game shows only one look.`, {
+        duration: 12000,
+        action: {
+          label: `Turn ${o.name} off`,
+          onClick: () => { p.alert.dismissAlert(id); runChanges(p, o, changesToTurnOff(o, after).filter(m => !keep.has(modKey(m.path))), 'off') },
+        },
+      })
+    }
+  } finally {
+    switching = false
   }
 }
 
@@ -113,6 +157,7 @@ export default function Loadouts(p: LoadoutProps) {
   const [naming, setNaming] = useState(false)
   const [name, setName] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
+  const [dropOn, setDropOn] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   useEffect(() => { if (naming) inputRef.current?.focus() }, [naming])
 
@@ -123,8 +168,7 @@ export default function Loadouts(p: LoadoutProps) {
     setName('')
   }
 
-
-  // Click toggles: an active loadout turns off, any other turns on (and displaces overlapping ones)
+  // The dot or check (and Ctrl+N) toggles: an active loadout turns off, any other turns on
   const apply = async (l: Loadout) => {
     setBusy(l.id)
     if (isActive(l, p.mods)) await runChanges(p, l, changesToTurnOff(l, p.mods), 'off')
@@ -134,25 +178,12 @@ export default function Loadouts(p: LoadoutProps) {
     setBusy(null)
   }
 
-  // A loadouts file waiting in %APPDATA%\Repak-X (from scripts/tags-to-loadouts.py) is merged once
-  useEffect(() => {
-    invoke<string | null>('take_pending_loadouts').then(text => {
-      if (!text) return
-      try {
-        const { added, skipped } = importLoadouts(text)
-        p.alert.success('Loadouts added', `${added} new loadout${added === 1 ? '' : 's'}${skipped ? `, ${skipped} already existed` : ''}.`)
-      } catch (e) {
-        p.alert.error('Loadouts file not imported', String(e))
-      }
-    }).catch(() => undefined)
-  }, [])
-
   // Ctrl+1..9 toggles the loadout at that position in this list
   const latest = useRef({ loadouts, apply, busy })
   latest.current = { loadouts, apply, busy }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!e.ctrlKey || e.shiftKey || e.altKey || !/^[1-9]$/.test(e.key)) return
+      if (!e.ctrlKey || e.shiftKey || e.altKey || !/^[1-9]$/.test(e.key) || isTyping(e.target) || document.querySelector('.modal-overlay')) return
       const l = latest.current.loadouts[Number(e.key) - 1]
       if (!l || latest.current.busy) return
       e.preventDefault()
@@ -178,7 +209,7 @@ export default function Loadouts(p: LoadoutProps) {
       </div>
 
       {loadouts.length === 0 && !naming && (
-        <p className="lo-empty">Filter to a hero, set which mods are on, then save it here to switch back in one click.</p>
+        <p className="lo-empty">No loadouts yet. Make one on Home, or turn on the mods you want here and press + to save them as one.</p>
       )}
 
       {loadouts.map((l, i) => {
@@ -187,24 +218,30 @@ export default function Loadouts(p: LoadoutProps) {
         const pending = changesToTurnOn(l, p.mods).length
         const onNow = changesToTurnOff(l, p.mods).length // its mods that are on right now
         return (
-          <div className="fp-row-wrap lo-row" key={l.id}>
-            <button type="button" className="fp-row" aria-pressed={active} disabled={busy !== null}
-              onClick={() => apply(l)} title={active ? `${l.name} is on. Click to turn its mods off${hotkey}` : `Turn on ${l.name}: switches ${pending} of its mods on${hotkey}`}>
-              {/* transitions.dev: Icon swap. Both marks stay stacked; the active one fades and scales in */}
-              <span className="fp-lead t-icon-swap" data-state={active ? 'a' : 'b'}>
-                <Check size={15} className="lo-active t-icon" data-icon="a" />
-                <span className="lo-dot t-icon" data-icon="b" />
-              </span>
+          <div className={`fp-row-wrap lo-row ${active ? 'is-on' : ''} ${dropOn === l.id ? 'is-drop' : ''}`} key={l.id} draggable
+            onDragStart={e => { e.dataTransfer.setData('text/x-loadout', l.id); e.dataTransfer.effectAllowed = 'move' }}
+            onDragOver={e => { if (e.dataTransfer.types.includes('text/x-loadout')) { e.preventDefault(); setDropOn(l.id) } }}
+            onDragLeave={() => setDropOn(null)}
+            onDrop={e => { e.preventDefault(); setDropOn(null); const id = e.dataTransfer.getData('text/x-loadout'); if (id) moveLoadout(id, i) }}>
+            {/* transitions.dev: Icon swap. Both marks stay stacked; the active one fades and scales in */}
+            <button type="button" className="lo-toggle fp-lead t-icon-swap" data-state={active ? 'a' : 'b'} aria-pressed={active} disabled={busy !== null}
+              onClick={() => apply(l)} aria-label={active ? `Turn ${l.name} off` : `Turn ${l.name} on`}
+              title={active ? `${l.name} is on. Turn its mods off${hotkey}` : `Turn ${l.name} on: switches ${pending} of its mods on${hotkey}`}>
+              <Check size={15} className="lo-active t-icon" data-icon="a" />
+              <span className="lo-dot t-icon" data-icon="b" />
+            </button>
+            <button type="button" className="fp-row" onClick={() => openLoadout(l.id)} title={`Open ${l.name} on Home (drag to reorder)`}>
               <span className="fp-label">{l.name}</span>
               <span className="fp-count" title={`${onNow} of its ${l.on.length} mods are on`}>{busy === l.id ? '…' : <Num id={`side-${l.id}`} value={`${onNow}/${l.on.length}`} />}</span>
               {/* the number Ctrl+N toggles; rows past 9 have none */}
-              <span className="lo-num" aria-hidden="true">{i < 9 ? i + 1 : ''}</span>
+              <span className="lo-num" title={i < 9 ? `Ctrl+${i + 1} turns it on or off` : undefined}>{i < 9 ? i + 1 : ''}</span>
             </button>
-            <button type="button" className="lo-icon lo-hover" title={`Overwrite ${l.name} with the shown mods' current state`} onClick={() => overwriteWithUndo(p, l)}>
-              <Save size={14} />
+            <button type="button" className="lo-icon lo-hover" title={`Replace ${l.name} with the ${plural(p.scopeMods.length, 'mod')} shown here (${p.scopeLabel}), as they are now`}
+              aria-label={`Replace ${l.name} with the shown mods`} onClick={() => overwriteWithUndo(p, l)}>
+              <ArrowRightLeft size={14} />
             </button>
-            <button type="button" className="lo-icon lo-hover" title={`Delete ${l.name}`} onClick={() => deleteWithUndo(p, l)}>
-              <X size={14} />
+            <button type="button" className="lo-icon lo-hover" title={`Delete ${l.name}`} aria-label={`Delete ${l.name}`} onClick={() => deleteWithUndo(p, l)}>
+              <Trash2 size={14} />
             </button>
           </div>
         )

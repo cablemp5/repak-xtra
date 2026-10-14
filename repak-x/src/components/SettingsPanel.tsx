@@ -434,7 +434,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                         checked={showExperimental}
                         onChange={(checked: boolean) => setShowExperimental(checked)}
                       >
-                        <span>Enables "Compact List" view</span>
+                        <span>Compact list view</span>
                       </Checkbox>
                     </div>
                   </div>

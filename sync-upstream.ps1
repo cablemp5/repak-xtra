@@ -4,16 +4,19 @@
 param([string]$Tag)
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
+# PowerShell 5.1 does not stop on a failed git or gh: check their exit codes
+function Run([scriptblock]$cmd) { & $cmd; if ($LASTEXITCODE -ne 0) { throw "Failed: $cmd" } }
 
 # every build rewrites these; drop them so they never block a merge
 git checkout -- repak-x/gen/schemas repak-x/package-lock.json
 if (git status --porcelain --untracked-files=no) { throw 'Uncommitted changes: commit them first.' }
 
-git fetch upstream --tags --quiet
+Run { git fetch upstream --tags --quiet }
 if (-not $Tag) { $Tag = gh release view -R X-zant/Repak-X --json tagName -q .tagName }
+if (-not $Tag) { throw 'No release tag: is gh logged in and online? Or pass one: .\sync-upstream.ps1 v2.0.2' }
 Write-Host "Merging upstream release $Tag into caleb"
 
-git checkout caleb
+Run { git checkout caleb }
 git merge --no-edit $Tag
 if ($LASTEXITCODE -ne 0) {
     Write-Host 'Conflicts in:' -ForegroundColor Yellow

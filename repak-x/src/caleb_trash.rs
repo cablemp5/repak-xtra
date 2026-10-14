@@ -28,7 +28,11 @@ fn move_file(from: &Path, to: &Path) -> io::Result<()> {
     // rename fails across drives; copy + delete covers that
     if fs::rename(from, to).is_err() {
         fs::copy(from, to)?;
-        fs::remove_file(from)?;
+        // the original is still in use: drop the copy, or it would sit in the trash forever with no record
+        fs::remove_file(from).map_err(|e| {
+            let _ = fs::remove_file(to);
+            e
+        })?;
     }
     Ok(())
 }

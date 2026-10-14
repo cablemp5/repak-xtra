@@ -3113,6 +3113,7 @@ function App() {
         else if (panels.install) setPanel('install', false)
         else if (panels.clash) setPanel('clash', false)
         else if (selectedMod) setSelectedMod(null)
+        else if (selectedMods.size > 0) setSelectedMods(new Set()) // caleb fork: Esc clears the selection, as F1 says
       }
       // Ctrl+E - Toggle mod enabled/disabled
       else if (ctrl && key === 'e' && selectedMod) {

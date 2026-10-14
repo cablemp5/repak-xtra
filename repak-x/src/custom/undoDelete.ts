@@ -1,9 +1,7 @@
 // caleb fork: delete_mod moves files to a trash folder (src/caleb_trash.rs); this toast puts them back.
 import { invoke } from '@tauri-apps/api/core'
 import type { useAlert } from '../components/AlertHandler'
-
-const displayName = (path: string) =>
-  (path.split(/[/\\]/).pop() || path).replace(/(\.pak)?(\.bak_repak|\.pak_disabled)?$/i, '').replace(/(_\d+_P)+$/i, '')
+import { modKey as displayName } from './loadoutStore'
 
 export function offerUndoDelete(alert: ReturnType<typeof useAlert>, paths: string[], reload: () => Promise<unknown>) {
   if (paths.length === 0) return

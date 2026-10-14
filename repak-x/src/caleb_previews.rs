@@ -73,6 +73,12 @@ pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: O
     if !python.exists() || !script.exists() {
         return Err(format!("Preview generator not found at {}", script.display()));
     }
+    // A generator from an earlier app session may still be rendering (closing the app does not stop it); its lock file
+    // says so, and starting another would only end in "failed" for every mod
+    let lock_age = std::fs::metadata(previews_dir().join("generator.lock")).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok());
+    if lock_age.is_some_and(|age| age.as_secs() < 3 * 3600) {
+        return Ok(false);
+    }
     if RUNNING.swap(true, Ordering::SeqCst) {
         return Ok(false);
     }
@@ -92,7 +98,13 @@ pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: O
     if let Some(s) = &set {
         cmd.arg("--set").arg(s);
     }
-    cmd.current_dir(&root).stdout(Stdio::piped()).stderr(Stdio::null());
+    // Errors go to previews\generator.log, which the app names when a render fails; UTF-8 keeps a mod name like
+    // "Pokémon" from breaking the result lines
+    let log = std::fs::create_dir_all(previews_dir())
+        .and_then(|_| std::fs::File::create(previews_dir().join("generator.log")))
+        .map(Stdio::from)
+        .unwrap_or_else(|_| Stdio::null());
+    cmd.current_dir(&root).env("PYTHONUTF8", "1").stdout(Stdio::piped()).stderr(log);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;

@@ -84,6 +84,7 @@ export default function CalebUiSettings() {
     <>
       <div className="setting-section">
         <h3>UI scale</h3>
+        <p className="setting-subtext">UI scale, sound and motion, and optional controls apply right away; Save and Cancel cover the rest.</p>
         <div className="setting-group">
           <div className="mod-state-filter ui-scale" role="group" aria-label="UI scale">
             {SCALES.map(s => (

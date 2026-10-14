@@ -80,4 +80,4 @@ for name, group, on, tagged in report:
 print('skipped, nothing installed:', [t for t in sorted(tags) if not present(tags[t])])
 print('uncovered tags:', sorted(set(tags) - covered))
 print('looks scope', len(looks_scope), 'emote scope', len(emote_scope))
-print('wrote', OUT, len(loadouts), 'loadouts')
+print('wrote', OUT, len(loadouts), 'loadouts. In repakxtra: Home > Import, then pick this file.')

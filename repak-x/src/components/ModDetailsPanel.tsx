@@ -10,6 +10,7 @@ import { detectHeroesWithData } from '../utils/heroes'
 import { FALLBACK_HERO_ID, resolveHeroImage, useHeroImages } from '../utils/heroImages'
 import './ModDetailsPanel.css'
 import { ModPreview } from '../custom/previews' // caleb fork
+import { ModName } from '../custom/modName' // caleb fork
 
 type CharacterDataEntry = {
   name: string
@@ -164,18 +165,18 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
           onMouseEnter={titleReveal.onMouseEnter}
           onMouseLeave={titleReveal.onMouseLeave}
         >
-          <span className="mod-title-text" ref={titleReveal.innerRef}>
-            {cleanName}
+          <span className="mod-title-text" ref={titleReveal.innerRef} title={cleanName}>
+            <ModName name={cleanName} />{/* caleb fork: slug, tags and version, like the list */}
           </span>
         </h2>
         {onUpdateMod && (
           <button
             className="header-action-btn"
             onClick={onUpdateMod}
-            title="Replace Mod File"
+            title="Replace this mod's file with another .pak"
             style={{ marginLeft: 'auto', flexShrink: 0 }}
           >
-            <FaExchangeAlt /> Replace
+            <FaExchangeAlt /> Replace file…
           </button>
         )}
       </div>

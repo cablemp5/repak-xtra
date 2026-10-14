@@ -13,7 +13,7 @@ import { modKey } from './loadoutStore'
 import { revealOnLoad } from './motion'
 
 const NOTHING = 'Nothing to show for this mod: previews cover skins, meshes, textures, UI icons and your own VFX releases.'
-const FAILED = 'The render failed. Try again, or check the generator in your modding tools.'
+const FAILED = 'The render failed. The reason is in %APPDATA%\\Repak-X\\previews\\generator.log; try again once it is fixed.'
 
 const revs = new Map<string, number>() // key -> bump count, so a re-rendered preview reloads
 const pending = new Set<string>()       // keys still waiting in the current run
@@ -42,11 +42,13 @@ listen<string>('mod-preview-in', e => { // shown in the loadout's combined rende
   notify()
 }).catch(() => undefined)
 listen<string>('mod-preview-none', e => {
+  revs.delete(e.payload) // the generator deleted its old image
   outcome.set(e.payload, NOTHING)
   if (pending.delete(e.payload)) run.none++
   notify()
 }).catch(() => undefined)
 listen<boolean>('mod-previews-done', e => {
+  if (!run.total) return // a window that did not start this run (Asset Explorer, VFX Updater) stays quiet
   const left = pending.size
   pending.forEach(k => outcome.set(k, run.stopping ? 'Stopped before this mod.' : FAILED))
   pending.clear()
@@ -98,8 +100,7 @@ export function usePreviewUrl(key: string | undefined) {
 const running = () => pending.size > 0
 
 /** Renders the job's previews now, or queues it behind the run that is going. */
-export const generatePreviews = (job: Job) => generate(job)
-const generate = (job: Job) => {
+export const generatePreviews = (job: Job) => {
   if (!running()) start(job)
   else if (!queue.some(q => sameJob(q, job))) { queue.push(job); notify() }
 }
@@ -149,7 +150,7 @@ export function ModPreview({ path }: { path: string }) {
       )}
       <div className="mod-preview-bar">
         <button type="button" className="mod-preview-btn" disabled={busy}
-          onClick={() => (queued ? unqueue({ name }) : generate({ paths: [path], name }))}
+          onClick={() => (queued ? unqueue({ name }) : generatePreviews({ paths: [path], name }))}
           title={queued ? 'Remove from the preview queue' : running() ? `Queue it: previews for ${run.name} are generating` : 'Render this mod on its character in the lobby look (about 10 to 40 seconds)'}>
           {queued ? <X size={14} /> : running() && !busy ? <ListPlus size={14} /> : <Sparkles size={14} />}
           {busy ? <Shimmer text="Generating preview" /> : queued ? 'Queued' : running() ? 'Queue preview' : url ? 'Regenerate preview' : 'Generate preview'}
@@ -187,7 +188,7 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
           ? <button type="button" className={`${className} is-queued`} onClick={() => unqueue(job)} title="Remove from the preview queue">
               <X size={14} /><span className="bulk-btn-label">Queued{at > 0 ? ` (${at + 1} in line)` : ', up next'}</span>
             </button>
-          : <button type="button" className={className} disabled={n === 0} onClick={() => generate(job)}
+          : <button type="button" className={className} disabled={n === 0} onClick={() => generatePreviews(job)}
               title={`Previews for ${run.name} are generating; this starts when they finish`}>
               <ListPlus size={16} /><span className="bulk-btn-label">Queue previews</span>
               {n > 0 && <span className="bulk-num">{n}</span>}
@@ -197,7 +198,7 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
     )
   }
   return (
-    <button type="button" className={className} disabled={n === 0} onClick={() => generate(job)}
+    <button type="button" className={className} disabled={n === 0} onClick={() => generatePreviews(job)}
       title={run.summary ? `Last run: ${run.summary}` : `Render previews for these ${n} mods (about 20 seconds each)`}>
       <Sparkles size={16} />
       <span className="bulk-btn-label">{label}</span>

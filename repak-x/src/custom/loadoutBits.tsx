@@ -33,8 +33,8 @@ function usePreviewSlides(p: LoadoutProps, l: Loadout) {
 }
 
 /** The loadout's image: its own image or video, then its generated previews, paged with arrows. */
-export function CardMedia({ p, l, className = '', title, onClick }: {
-  p: LoadoutProps; l: Loadout; className?: string; title: string; onClick: () => void
+export function CardMedia({ p, l, className = '', title, onClick, emptyText = 'Click to add an image, or paste one' }: {
+  p: LoadoutProps; l: Loadout; className?: string; title: string; onClick: () => void; emptyText?: string
 }) {
   const url = useMediaUrl(l.id, l.mediaRev)
   const own = url ?? l.image
@@ -49,7 +49,7 @@ export function CardMedia({ p, l, className = '', title, onClick }: {
     <div className={`lo-media ${className}${paged ? ' is-paged' : ''}`}>
       <button type="button" className="lo-card-image" onClick={onClick} title={title}>
         {!src
-          ? <span className="lo-card-placeholder"><ImagePlus size={22} /><span>Click to add an image, or hover and paste</span></span>
+          ? <span className="lo-card-placeholder"><ImagePlus size={22} /><span>{emptyText}</span></span>
           : !slide?.key && l.mediaType === 'video' && url
             ? <video src={url} autoPlay loop muted playsInline />
             : <img key={src} src={src} alt="" onLoad={revealOnLoad} />}
@@ -75,7 +75,7 @@ export async function toggleMod(p: LoadoutProps, mod: Mod) {
     p.alert.warning('Game Running', 'Cannot toggle mods while game is running.')
     return
   }
-  if (await flipMods([mod])) p.alert.warning('Not switched', `${displayName(mod.path.split(/[/\\]/).pop() || mod.path)} could not be switched.`)
+  if ((await flipMods([mod])).length) p.alert.warning('Not switched', `${displayName(mod.path.split(/[/\\]/).pop() || mod.path)} could not be switched.`)
   await p.reload()
 }
 
@@ -88,10 +88,11 @@ export function ModRow({ p, k, mod, onToggle, children }: {
     <li className={`mod-row ${mod ? (mod.enabled ? 'is-on' : '') : 'is-missing'}`}
       title={mod ? `${category ?? 'Unknown type'} · ${mod.enabled ? 'on now' : 'off now'}` : 'Not installed anymore'}>
       {onToggle && (mod
-        ? <Switch size="sm" color="primary" checked={Boolean(mod.enabled)} title={mod.enabled ? 'Turn this mod off' : 'Turn this mod on'}
-            onChange={() => toggleMod(p, mod)} />
+        ? <Switch size="sm" color="primary" checked={Boolean(mod.enabled)} title={mod.enabled ? `Turn ${k} off` : `Turn ${k} on`}
+            aria-label={mod.enabled ? `Turn ${k} off` : `Turn ${k} on`} onChange={() => toggleMod(p, mod)} />
         : <span className="mod-row-switch-gap" />)}
       <span className="mod-row-name"><ModName name={k} /></span>
+      {!onToggle && mod?.enabled && <span className="mod-row-on" title="This mod is on now">on</span>}
       <span className={`mod-type-badge category-badge ${typeClass(category)}`}>{category ?? 'Unknown'}</span>
       {children}
     </li>

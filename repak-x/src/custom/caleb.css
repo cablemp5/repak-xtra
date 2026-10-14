@@ -167,11 +167,7 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
   border-radius: 10px !important;
   box-shadow: none !important;
 }
-.filter-title-row, .sidebar-filters .filter-title-row span:first-child {
-  color: var(--text-secondary);
-  font-size: 11px;
-  letter-spacing: 0.02em;
-}
+
 .sidebar-header h3 { font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .btn-icon { background: transparent !important; border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important; }
 .btn-icon:hover { background: var(--quiet-hover) !important; }
@@ -326,9 +322,7 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 .mod-hero-icon-inline { width: 20px !important; height: 20px !important; border-radius: 50% !important; box-shadow: none !important; border: none !important; }
 .mod-name-button:hover { background: transparent !important; color: var(--text-primary); }
 .mod-name-text { text-shadow: none !important; }
-.mod-name-inner:has(.mod-name-head) { display: flex; max-width: 100%; }
-.mod-name-head { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.mod-name-tail { flex: none; white-space: nowrap; }
+
 .mod-list-grid.view-list .mod-size { display: none; }
 
 /* Type badges: neutral chip, category hue kept only in a small dot */
@@ -358,15 +352,6 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
   border-radius: 50%;
   background: var(--badge-dot, #8f8f8f);
 }
-.mesh-badge { --badge-dot: #22d3ee; }
-.static-mesh-badge { --badge-dot: #38bdf8; }
-.vfx-badge { --badge-dot: #fb923c; }
-.audio-badge { --badge-dot: #4ade80; }
-.ui-badge { --badge-dot: #c084fc; }
-.texture-badge, .retexture-badge { --badge-dot: #facc15; }
-.movies-badge { --badge-dot: #f472b6; }
-.animation-badge { --badge-dot: #a3e635; }
-.blueprint-badge { --badge-dot: #60a5fa; }
 
 .tag { background: transparent !important; border: 1px solid var(--panel-border) !important; color: var(--text-secondary) !important; font-size: 11px !important; }
 
@@ -481,8 +466,6 @@ html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { d
 .lo-icon:hover { background: var(--quiet-active) !important; color: var(--text-primary) !important; }
 .lo-dot { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--text-secondary); }
 .lo-active { color: var(--accent-primary); }
-.lo-row .fp-row[aria-pressed="true"] .fp-count { display: inline; }
-.lo-row .fp-row[aria-pressed="true"] .fp-check { display: none; }
 .lo-empty, .lo-hint { margin: 2px 6px 4px; font-size: 12px; line-height: 1.45; color: var(--text-secondary); }
 .lo-new input {
   width: 100%; height: 28px; padding: 0 8px !important;
@@ -496,12 +479,12 @@ html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { d
   -webkit-text-fill-color: currentColor !important;
   animation: none !important;
 }
-.credits-app-name-x { color: var(--text-secondary) !important; }
-.credits-thanks, .credits-trigger-btn, .credits-trigger-btn:hover, .credits-tester-chip.special {
+
+.credits-thanks, .credits-tester-chip.special {
   background: var(--bg-dark) !important;
   border-color: var(--panel-border) !important;
 }
-.credits-trigger-btn:hover, .credits-tester-chip.special:hover { background: var(--bg-light) !important; border-color: rgba(255, 255, 255, 0.14) !important; }
+.credits-tester-chip.special:hover { background: var(--bg-light) !important; border-color: rgba(255, 255, 255, 0.14) !important; }
 .credits-badge, .credits-badge.ai, .credits-badge.community {
   background: var(--quiet-active) !important;
   color: var(--text-primary) !important;
@@ -544,7 +527,7 @@ html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { d
 }
 .lo-screen-head h2 { margin: 0 0 4px; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
 .lo-screen-head p { margin: 0; font-size: 13px; color: var(--text-secondary); max-width: 70ch; }
-.lo-close { width: 32px !important; height: 32px !important; }
+
 .lo-grid {
   flex: 1; overflow-y: auto;
   display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px;
@@ -586,8 +569,6 @@ html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { d
 .lo-card-add:hover { color: var(--text-primary) !important; background: var(--quiet-hover) !important; }
 .lo-card-add small { font-size: 12px; opacity: 0.8; }
 .lo-card-add svg.lucide { width: 20px !important; height: 20px !important; }
-.project-galacta-badge { --badge-dot: var(--accent-primary); }
-.animation-badge { --badge-dot: #a3e635; }
 
 /* ---------- round 7 fixes ---------- */
 /* Scrollbars: thin thumb, no arrow buttons (scrollbar-width would bring the arrows back) */
@@ -659,17 +640,8 @@ html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { d
 .lo-expand:hover { color: var(--text-primary) !important; background: var(--quiet-hover) !important; }
 .lo-expand svg { transition: transform 0.15s ease; }
 .lo-expand[aria-expanded="true"] svg { transform: rotate(180deg); }
-.lo-mod-list {
-  list-style: none; margin: 10px 0 2px; padding: 8px 0 0;
-  border-top: 1px solid var(--panel-border);
-  display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow-y: auto;
-}
-.lo-mod-list li { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); min-height: 22px; }
-.lo-mod-list li.is-on { color: var(--text-primary); }
+
 .lo-mod-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: rgba(255, 255, 255, 0.2); }
-.lo-mod-list li.is-on .lo-mod-dot { background: var(--accent-primary); }
-.lo-mod-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lo-mod-missing { opacity: 0.5; text-decoration: line-through; }
 
 /* ---------- VFX Updater window: same type, controls and quiet surfaces as the main app ---------- */
 .vfx-window-container, .vfx-updater-page { background: var(--bg-darkest) !important; font-family: var(--font-primary) !important; }
@@ -794,7 +766,7 @@ html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { d
 .lo-body .lo-grid { flex: none; overflow: visible; padding: 0; }
 .lo-group-head {
   display: flex; align-items: baseline; gap: 8px; margin: 0 0 12px;
-  font-size: 13px; font-weight: 600; color: var(--text-secondary); text-transform: capitalize;
+  font-size: 13px; font-weight: 600; color: var(--text-secondary);
 }
 .lo-group-count { font-size: 12px; font-weight: 500; opacity: 0.7; font-variant-numeric: tabular-nums; }
 .lo-card-title h3 { cursor: text; }
@@ -810,9 +782,7 @@ html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { d
 html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !important; }
 
 /* ---------- loadout card: remove and add mods ---------- */
-.lo-mod-name { flex: 1; }
-.lo-mod-remove { width: 20px !important; height: 20px !important; margin-left: auto; opacity: 0; }
-.lo-mod-list li:hover .lo-mod-remove, .lo-mod-remove:focus-visible { opacity: 1; }
+
 .lo-mod-add { position: relative; margin-top: 6px; }
 .lo-mod-add input {
   width: 100%; height: 28px; padding: 0 8px; box-sizing: border-box;
@@ -820,17 +790,6 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
   background: var(--bg-dark); border: 1px solid var(--panel-border); border-radius: 6px; outline: none;
 }
 .lo-mod-add input:focus { border-color: var(--accent-primary); }
-.lo-mod-matches {
-  list-style: none; margin: 4px 0 0; padding: 4px; display: flex; flex-direction: column; gap: 1px;
-  background: var(--bg-dark); border: 1px solid var(--panel-border); border-radius: 6px;
-}
-.lo-mod-matches button {
-  width: 100%; display: flex !important; align-items: center; gap: 6px; height: 24px !important; min-height: 0 !important;
-  padding: 0 6px !important; border: none !important; border-radius: 4px !important; background: transparent !important;
-  font-size: 12px !important; color: var(--text-secondary) !important; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.lo-mod-matches button:hover { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
-.lo-mod-matches svg.lucide { width: 13px !important; height: 13px !important; flex: none; }
 
 /* ---------- generated mod previews (custom/previews.tsx) ---------- */
 .mod-preview-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
@@ -870,23 +829,17 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 .lo-mod-dot { width: 7px !important; height: 7px !important; background: transparent !important; box-sizing: border-box;
   border: 1.5px solid var(--badge-dot, rgba(255, 255, 255, 0.35)); }
 .lo-mod-dot.is-filled { background: var(--badge-dot, rgba(255, 255, 255, 0.55)) !important; }
-.lo-mod-list li.is-on .lo-mod-dot.is-filled { background: var(--badge-dot, rgba(255, 255, 255, 0.55)) !important; }
-.unknown-badge { --badge-dot: #8f8f8f; }
+
 .lo-legend {
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px;
   padding: 10px 28px; border-bottom: 1px solid var(--panel-border);
   font-size: 12px; color: var(--text-secondary);
 }
 .lo-legend-item { display: inline-flex; align-items: center; gap: 7px; }
-.lo-legend-sep { width: 1px; height: 14px; background: var(--panel-border); }
+
 .lo-text-btn[aria-pressed="true"] { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
 
 /* Add-a-mod matches: left aligned, one line each, long names cut with an ellipsis */
-.lo-mod-matches { max-height: 240px; overflow-y: auto; }
-.lo-mod-matches button { justify-content: flex-start !important; gap: 8px; text-align: left !important; }
-.lo-match-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lo-mod-matches button svg.lucide { opacity: 0; transition: opacity 0.12s ease; }
-.lo-mod-matches button:hover svg.lucide { opacity: 1; }
 
 /* ---------- critique 2026-10-14: readable off state, solid state color, no red, calm motion ---------- */
 /* Switches: off = visible track with a hairline and a gray thumb (was about 1.2:1); on = solid accent (upstream drew a gradient) */
@@ -900,8 +853,6 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 }
 .repakx-checkbox-icon { transition: opacity 0.15s ease-out, transform 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important; }
 /* Game running badge: a state, shown in neutral text with its icon (was red with a red glow) */
-.game-running-indicator { background: var(--bg-light) !important; border-color: var(--panel-border) !important; box-shadow: none !important; }
-.game-running-indicator .running-text { color: var(--text-primary) !important; text-shadow: none !important; background: transparent !important; }
 
 /* ---------- mod names: slug + muted tags + version chip (custom/modName.tsx); tags give way first, version never ---------- */
 .mn { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; max-width: 100%; vertical-align: bottom; }
@@ -912,7 +863,7 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
   background: rgba(255, 255, 255, 0.07); color: var(--text-secondary); }
 .mod-name-inner:has(.mn) { display: flex; max-width: 100%; }
 .mod-name-inner .mn { flex: 1 1 auto; }
-.lo-mod-name .mn, .lo-match-name .mn { display: flex; width: 100%; }
+
 .empty-state .btn-ghost { margin-top: 10px; }
 
 /* ---------- selection bar: every action is a word + count; as the bar narrows, Move and Tags fold to icons first,
@@ -920,7 +871,6 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 .bulk-actions-toolbar .btn-ghost { gap: 6px; }
 .bulk-num { font-variant-numeric: tabular-nums; }
 .bulk-field .custom-dropdown-menu { min-width: 220px; }
-
 
 @container bulkbar (max-width: 900px) {
   .bulk-field { flex: 0 0 34px !important; min-width: 0 !important; max-width: 34px !important; }
@@ -1242,3 +1192,43 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .install-loadout-name { height: 32px; width: 200px; padding: 0 10px; border-radius: 8px; font-size: 13px;
   background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--panel-border); outline: none; }
 .install-loadout-name:focus-visible { border-color: var(--accent-primary); }
+
+/* ---------- critique fixes (2026-10-14) ---------- */
+/* Contrast: secondary text at full strength (the version line, group counts and Ctrl+N numbers fell under 4.5:1) */
+.header .version { color: var(--text-secondary) !important; opacity: 1 !important; }
+.lo-group-count { opacity: 1; }
+.lo-num { opacity: 0.9; }
+.mn-ver { font-size: 11px; }
+.app input::placeholder, .app textarea::placeholder { color: var(--text-secondary); opacity: 1; }
+/* Legend: a dot and the word, never the Library badge's tinted box (Badges.css) */
+.lo-legend-item { background: none !important; border: none !important; padding: 0 !important; color: var(--text-secondary) !important; font-size: 12px; }
+/* Material gets its own hue (it shared Texture's yellow) */
+.material-badge { --badge-dot: oklch(0.70 0.11 175); }
+/* Home header buttons never wrap mid-label */
+.lo-head-tools .lo-text-btn { white-space: nowrap; }
+/* Sidebar loadout row: the dot or check is its own on/off button, the name opens the page; drag to reorder */
+.lo-toggle { width: 22px; height: 24px !important; min-height: 0 !important; padding: 0 !important; flex: none;
+  border: none !important; border-radius: 6px !important; background: transparent !important; cursor: pointer; }
+.lo-toggle:hover { background: var(--quiet-active) !important; }
+.lo-toggle:disabled { cursor: default; opacity: 0.6; }
+.lo-row.is-on .fp-row { color: var(--text-primary) !important; }
+.lo-row[draggable="true"] { cursor: grab; }
+.lo-row.is-drop { box-shadow: inset 0 2px 0 var(--accent-primary); border-radius: 6px; }
+/* Loadout page: an edit cue on the name, Delete set apart, the two lists side by side when there is room */
+.lp-name-wrap { position: relative; display: block; }
+.lp-name-pen { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); opacity: 0; pointer-events: none;
+  transition: opacity 0.15s ease; }
+.lp-name-wrap:hover .lp-name-pen { opacity: 1; }
+.lp-name-wrap:focus-within .lp-name-pen { opacity: 0; }
+.lp-delete { margin-left: auto; }
+.lp-columns { display: flex; flex-direction: column; gap: 26px; min-width: 0; }
+@media (min-width: 1280px) {
+  .lp { max-width: 1480px; }
+  .lp-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: start; }
+}
+.lp-sort { flex: none; }
+/* Add mods: an "on" mark instead of bold alone */
+.mod-row-on { flex: none; font-size: 11px; padding: 0 6px; border-radius: 999px; color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent-primary), transparent 80%); }
+/* Credits: third-party avatars without their saturated colors (one is red) */
+.credits-panel img, .credits-avatar { filter: grayscale(0.7); }

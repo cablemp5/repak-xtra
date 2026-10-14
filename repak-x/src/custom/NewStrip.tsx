@@ -1,4 +1,5 @@
-// caleb fork: Home's "New · not in a loadout" strip. Mods that no loadout turns on, newest first, each with an on/off
+// caleb fork: Home's "New this week" strip. Mods added or changed in the last 7 days that no loadout turns on, newest
+// first (older loose mods live in the Library), each with an on/off
 // switch and "Add to loadout". When a loadout holds an older version of the same mod (same name, lower _vN) the row
 // offers "Replace v10 in <loadout>": one click swaps it in that loadout (and turns the old file off and the new one on
 // when the old one was on), with Undo.
@@ -14,6 +15,9 @@ import {
 } from './loadoutStore'
 
 const SHOWN = 6
+const WEEK = 7 * 24 * 3600
+/** modified_date in seconds (the backend) or milliseconds (older fixtures). */
+const ageSeconds = (m: Mod) => { const t = m.modified_date ?? 0; return Date.now() / 1000 - (t > 1e12 ? t / 1000 : t) }
 
 export default function NewStrip(p: LoadoutProps) {
   const loadouts = useLoadouts()
@@ -25,7 +29,7 @@ export default function NewStrip(p: LoadoutProps) {
   const seen = new Set<string>()
   const fresh = [...p.mods]
     .sort((a, b) => (b.modified_date ?? 0) - (a.modified_date ?? 0))
-    .filter(m => { const k = modKey(m.path); if (inAny.has(k) || seen.has(k)) return false; seen.add(k); return true })
+    .filter(m => { const k = modKey(m.path); if (ageSeconds(m) > WEEK || inAny.has(k) || seen.has(k)) return false; seen.add(k); return true })
   if (fresh.length === 0) return null
   const shown = all ? fresh : fresh.slice(0, SHOWN)
 
@@ -56,8 +60,8 @@ export default function NewStrip(p: LoadoutProps) {
 
   return (
     <section className="new-strip" aria-label="New mods not in a loadout">
-      <h3 className="lo-group-head">
-        New · not in a loadout<span className="lo-group-count"><Num id="new-strip" value={fresh.length} /></span>
+      <h3 className="lo-group-head" title="Added or changed in the last 7 days, and not in any loadout yet">
+        New this week · not in a loadout<span className="lo-group-count"><Num id="new-strip" value={fresh.length} /></span>
         {fresh.length > SHOWN && (
           <button type="button" className="new-strip-more" onClick={() => setAll(!all)}>{all ? 'Show fewer' : `Show all ${fresh.length}`}</button>
         )}

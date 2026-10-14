@@ -4,6 +4,7 @@
 import { useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { deleteMedia } from './loadoutMedia'
+import { isTyping } from './hotkeys'
 
 export type Mod = { path: string; enabled?: boolean; modified_date?: number }
 export type Loadout = {
@@ -31,15 +32,6 @@ export const writeLoadouts = (list: Loadout[]) => {
   localStorage.setItem(STORAGE, JSON.stringify(list))
   notify()
 }
-// One-time (2026-10-14): FlamingBP was saved under the filter text "all mods" and Catboy Additions under its tag
-// "catboy extra", which left both outside Panther looks. New saves no longer take those names.
-if (!localStorage.getItem('caleb.migrated.groups1')) {
-  const moved: Record<string, string> = { 'all mods': 'Panther looks', 'catboy extra': 'Panther looks' }
-  const list = readLoadouts()
-  if (list.some(l => l.label in moved)) localStorage.setItem(STORAGE, JSON.stringify(list.map(l => (l.label in moved ? { ...l, label: moved[l.label] } : l))))
-  localStorage.setItem('caleb.migrated.groups1', '1')
-}
-
 export const patchLoadout = (id: string, patch: Partial<Loadout>) =>
   writeLoadouts(readLoadouts().map(l => (l.id === id ? { ...l, ...patch } : l)))
 /** Removes the loadout and returns a function that puts it back in the same spot. Its image or video stays stored
@@ -160,14 +152,36 @@ export const importLoadouts = (text: string) => {
   return { added: added.length, skipped: incoming.length - added.length }
 }
 
-/** Toggle each mod through the backend; returns how many failed. */
+/** Toggle each mod through the backend; returns the mods that could not be switched. */
 export const flipMods = async (changes: Mod[]) => {
-  let failed = 0
+  const failed: Mod[] = []
   for (const m of changes) {
-    try { await invoke('toggle_mod', { modPath: m.path }) } catch { failed++ }
+    try { await invoke('toggle_mod', { modPath: m.path }) } catch { failed.push(m) }
   }
   return failed
 }
+
+/** Moves a loadout to another position (the sidebar's order is also the Ctrl+1..9 order). */
+export const moveLoadout = (id: string, to: number) => {
+  const list = readLoadouts()
+  const from = list.findIndex(l => l.id === id)
+  if (from < 0 || from === to) return
+  const [l] = list.splice(from, 1)
+  list.splice(Math.max(0, Math.min(to, list.length)), 0, l)
+  writeLoadouts(list)
+}
+
+/** A copy right after the original, "Name copy", same mods and group (its image stays with the original). */
+export const duplicateLoadout = (l: Loadout) => {
+  const list = readLoadouts()
+  const copy: Loadout = { id: crypto.randomUUID(), name: `${l.name} copy`, label: l.label, scope: [...l.scope], on: [...l.on] }
+  list.splice(list.findIndex(x => x.id === l.id) + 1, 0, copy)
+  writeLoadouts(list)
+  return copy
+}
+
+/** Groups match without regard to case or spaces, so "Panther looks" and "panther looks " are one group. */
+export const groupKey = (label: string) => label.trim().toLowerCase()
 
 /** Which main view shows: Home (loadout cards) or Library (the full mod list). Remembered; Home on first start.
  *  Mirrored on <html data-view> so caleb.css hides the other view (both stay mounted, keeping their state). */
@@ -178,12 +192,24 @@ applyView()
 export const setView = (v: View) => { view = v; localStorage.setItem('caleb.view', v); applyView(); notify() }
 export const useView = () => useSyncExternalStore(subscribe, () => view)
 
-// L switches between Home and Library (main window only: this module loads with the app)
+/** The loadout page open on Home (null = the cards). Shared so the Library sidebar can open one too. */
+let openId: string | null = null
+export const openLoadout = (id: string | null) => { openId = id; if (id && view !== 'home') setView('home'); else notify() }
+export const useOpenLoadout = () => useSyncExternalStore(subscribe, () => openId)
+
+// L switches between Home and Library. This module also loads in the Asset Explorer and VFX Updater windows, which
+// have no Home: only the window showing the Home | Library tabs reacts
 window.addEventListener('keydown', e => {
-  const t = e.target as HTMLElement | null
-  const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
-  if (e.key.toLowerCase() !== 'l' || e.ctrlKey || e.altKey || e.metaKey || typing) return
+  if (e.key.toLowerCase() !== 'l' || e.ctrlKey || e.altKey || e.metaKey || isTyping(e.target)) return
+  if (!document.querySelector('.view-tabs')) return
   if (document.querySelector('.modal-overlay')) return // Settings or another dialog is open
   e.preventDefault()
   setView(view === 'home' ? 'library' : 'home')
 })
+
+if (import.meta.env.DEV) {
+  // The one rule that ties a loadout to a file, whatever state the file is in (mod_previews.py mod_key must agree)
+  for (const [path, key] of [['C:/m/~mods/X_9999999_P.pak', 'X'], ['X_9999999_P.bak_repak', 'X'], ['X_9999999_P.pak.bak_repak', 'X'],
+    ['X_9999999_P.pak_disabled', 'X'], ['X_disabled', 'X'], ['bp-lime-vfx_vfx_noPG_v2_9999999_P.pak', 'bp-lime-vfx_vfx_noPG_v2'], ['B_P.pak', 'B_P']])
+    console.assert(modKey(path) === key, `modKey(${path}) = ${modKey(path)}, expected ${key}`)
+}
