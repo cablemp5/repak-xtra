@@ -830,12 +830,6 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
   border: 1.5px solid var(--badge-dot, rgba(255, 255, 255, 0.35)); }
 .lo-mod-dot.is-filled { background: var(--badge-dot, rgba(255, 255, 255, 0.55)) !important; }
 
-.lo-legend {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px;
-  padding: 10px 28px; border-bottom: 1px solid var(--panel-border);
-  font-size: 12px; color: var(--text-secondary);
-}
-.lo-legend-item { display: inline-flex; align-items: center; gap: 7px; }
 
 .lo-text-btn[aria-pressed="true"] { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
 
@@ -913,7 +907,6 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
   flex: 1 1 auto; min-height: 0; background: transparent !important; border: 1px solid var(--panel-border); border-radius: 10px; }
 .lo-screen-head { padding: 18px 22px 14px; }
 .lo-body { padding: 18px 22px 28px; }
-.lo-legend { padding: 10px 22px; }
 
 /* Home | Library tabs in the header */
 .view-tabs { display: inline-flex; padding: 2px; gap: 2px; margin-left: 18px; align-self: center;
@@ -1153,8 +1146,6 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .lo-card:nth-child(10), .mod-row:nth-child(10) { animation-delay: calc(var(--stagger-stagger) * 9); }
 .lo-card:nth-child(11), .mod-row:nth-child(11) { animation-delay: calc(var(--stagger-stagger) * 10); }
 .lo-card:nth-child(n+12), .mod-row:nth-child(n+12) { animation-delay: calc(var(--stagger-stagger) * 11); }
-/* transitions.dev: Panel reveal. The type legend slides down into place */
-.lo-legend { animation: t-rise-in var(--reveal-dur) var(--stagger-ease) backwards; }
 /* transitions.dev: Accordion. A hero's skins grow open under it; the chevron turns on the same clock */
 .t-acc-panel { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--acc-collapse) var(--acc-ease); }
 .t-acc-panel[data-open="true"] { grid-template-rows: 1fr; transition: grid-template-rows var(--acc-expand) var(--acc-ease); }
@@ -1182,7 +1173,7 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .sigeon-menu { transform-origin: top right; animation: t-dropdown-open var(--dropdown-open-dur) var(--dropdown-ease) backwards; }
 
 @media (prefers-reduced-motion: reduce) {
-  .lo-card, .mod-row, .lo-legend, .t-num-pop, .t-text-in, .sigeon-menu { animation: none !important; }
+  .lo-card, .mod-row, .t-num-pop, .t-text-in, .sigeon-menu { animation: none !important; }
   .t-acc-panel, .t-acc-panel-inner, .t-icon-swap .t-icon, .lo-card-image img, .mod-preview-frame img { transition: none !important; }
 }
 
@@ -1200,8 +1191,6 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .lo-num { opacity: 0.9; }
 .mn-ver { font-size: 11px; }
 .app input::placeholder, .app textarea::placeholder { color: var(--text-secondary); opacity: 1; }
-/* Legend: a dot and the word, never the Library badge's tinted box (Badges.css) */
-.lo-legend-item { background: none !important; border: none !important; padding: 0 !important; color: var(--text-secondary) !important; font-size: 12px; }
 /* Material gets its own hue (it shared Texture's yellow) */
 .material-badge { --badge-dot: oklch(0.70 0.11 175); }
 /* Home header buttons never wrap mid-label */
@@ -1232,3 +1221,29 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
   background: color-mix(in srgb, var(--accent-primary), transparent 80%); }
 /* Credits: third-party avatars without their saturated colors (one is red) */
 .credits-panel img, .credits-avatar { filter: grayscale(0.7); }
+
+/* ---------- groups on Home, count pills, preview spinner ---------- */
+/* Counts read as a small pill next to the name, not more text */
+.lo-group-count { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 999px;
+  background: var(--quiet-active); color: var(--text-secondary); font-size: 11px; font-weight: 600; line-height: 1; }
+.lo-group-head { align-items: center; }
+.lo-group-name { color: var(--text-primary); }
+.lo-group-tools { display: inline-flex; gap: 2px; margin-left: 4px; opacity: 0; transition: opacity 0.15s ease; }
+.lo-group-head:hover .lo-group-tools, .lo-group-head:focus-within .lo-group-tools { opacity: 1; }
+.lo-group-tools .lo-icon:disabled { opacity: 0.35; cursor: default; }
+.lo-group-rename { font: inherit; width: 220px; }
+.lo-group-empty { margin: 0 0 4px; font-size: 12px; color: var(--text-secondary); }
+.lo-group { border-radius: 12px; transition: background 0.15s ease, box-shadow 0.15s ease; }
+.lo-group.is-drop { background: color-mix(in srgb, var(--accent-primary), transparent 92%); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary), transparent 50%); }
+.lo-card[draggable="true"] { cursor: grab; }
+/* Loadout page Group: a dropdown of the groups */
+.lp-group { display: flex; align-items: center; gap: 10px; }
+.lp-group .custom-dropdown-container { width: 240px; }
+/* Generating: a spinner; pointing at it shows Stop */
+.run-icon { display: inline-grid; place-items: center; }
+.run-icon > * { grid-area: 1 / 1; }
+.run-spin { animation: run-spin 0.9s linear infinite; }
+.run-stop { opacity: 0; }
+.is-running:hover .run-spin { opacity: 0; }
+.is-running:hover .run-stop { opacity: 1; }
+@keyframes run-spin { to { transform: rotate(360deg); } }

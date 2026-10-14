@@ -7,7 +7,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { ListPlus, Sparkles, Square, X } from 'lucide-react'
+import { CircleStop, ListPlus, LoaderCircle, Sparkles, X } from 'lucide-react'
 import { play } from 'cuelume'
 import { modKey } from './loadoutStore'
 import { revealOnLoad } from './motion'
@@ -175,7 +175,8 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
     return (
       <button type="button" className={`${className} is-running`} onClick={stop} disabled={run.stopping}
         title={queue.length ? `Stop after the mod that is rendering now, and clear the ${queue.length} queued` : 'Stop after the mod that is rendering now'}>
-        <Square size={14} />
+        {/* a spinner while it works; pointing at it shows Stop */}
+        <span className="run-icon" aria-hidden="true"><LoaderCircle size={14} className="run-spin" /><CircleStop size={14} className="run-stop" /></span>
         {run.stopping ? 'Stopping…' : <Shimmer text={`Generating ${Math.min(run.total - pending.size + 1, run.total)} of ${run.total}`} />}
       </button>
     )

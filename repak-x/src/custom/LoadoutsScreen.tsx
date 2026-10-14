@@ -2,23 +2,23 @@
 // the "New this week" strip below them; a card opens its page (LoadoutPage.tsx). The full mod list is the Library
 // view (header tabs, or L). On = its mods on, Off = its mods off; other mods and loadouts are never touched.
 import { useEffect, useRef, useState } from 'react'
-import { Download, Info, PackagePlus, Plus, Trash2, Upload } from 'lucide-react'
+import { ChevronDown, ChevronUp, Download, FolderPlus, PackagePlus, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo, runChanges } from './Loadouts'
 import LoadoutPage from './LoadoutPage'
 import NewStrip from './NewStrip'
 import { isTyping } from './hotkeys'
-import { CardMedia, typeClass } from './loadoutBits'
+import { CardMedia } from './loadoutBits'
 import { prepareMedia, putMedia } from './loadoutMedia'
 import { plural } from './modName'
 import { Num } from './motion'
 import {
-  type Loadout, type Mod, changesToTurnOff, changesToTurnOn, displayName, exportLoadouts, groupKey, importLoadouts, isActive, modKey,
-  openLoadout, patchLoadout, readLoadouts, setView, snapshotLoadout, useLoadouts, useOpenLoadout, useView, writeLoadouts,
+  type Loadout, type Mod, OTHER, addGroup, changesToTurnOff, changesToTurnOn, deleteGroup, displayName, exportLoadouts, groupKey,
+  importLoadouts, inGroup, isActive, modKey, moveGroup, openLoadout, patchLoadout, readLoadouts, renameGroup, setLoadoutGroup, setView,
+  snapshotLoadout, useGroups, useLoadouts, useOpenLoadout, useView, writeLoadouts,
 } from './loadoutStore'
 
 type GroupBy = 'group' | 'hero'
-const LEGEND_KEY = 'caleb.loadoutLegend'
 const GROUP_BY_KEY = 'caleb.loadoutGroupBy'
 const NO_HERO = 'No hero'
 
@@ -40,25 +40,46 @@ function topHero(keys: string[], byKey: Map<string, Mod>, details: LoadoutProps[
 const heroOf = (l: Loadout, byKey: Map<string, Mod>, details: LoadoutProps['modDetails']) =>
   topHero(l.on, byKey, details) ?? topHero(l.scope, byKey, details) ?? NO_HERO
 
-/** Sections in display order. Saved groups holding a single loadout share one "Other" section. Names match without
- *  regard to case or spaces; a section shows the first spelling it meets. */
-export function groupLoadouts(list: Loadout[], keyOf: (l: Loadout) => string, mergeSingles: boolean) {
-  const map = new Map<string, [string, Loadout[]]>()
-  for (const l of list) {
-    const k = groupKey(keyOf(l))
-    const entry = map.get(k) ?? [keyOf(l).trim(), []]
-    entry[1].push(l)
-    map.set(k, entry)
+/** Hero sections, A to Z with "No hero" last. */
+function byHero(list: Loadout[], heroOfL: (l: Loadout) => string) {
+  const map = new Map<string, Loadout[]>()
+  for (const l of list) map.set(heroOfL(l), [...(map.get(heroOfL(l)) ?? []), l])
+  return [...map].sort(([a], [b]) => Number(a === NO_HERO) - Number(b === NO_HERO) || a.localeCompare(b))
+}
+
+/** A group's header on Home: its name (double-click or the pencil to rename), its count, and on hover or focus
+ *  Move up, Move down and Delete (with Undo). Other is not a real group, so it has none of these. */
+function GroupHead({ p, name, count, at, total, editing, setEditing }: {
+  p: LoadoutProps; name: string; count: number; at: number; total: number; editing: boolean; setEditing: (g: string | null) => void
+}) {
+  const [draft, setDraft] = useState(name)
+  const real = groupKey(name) !== groupKey(OTHER)
+  const done = (save: boolean) => { if (save) renameGroup(name, draft); setEditing(null) }
+  const remove = () => {
+    const undo = deleteGroup(name)
+    const id = p.alert.info(`Deleted group ${name}`, count ? `Its ${plural(count, 'loadout')} moved to Other.` : 'It was empty.', {
+      duration: 10000, action: { label: 'Undo', onClick: () => { p.alert.dismissAlert(id); undo() } },
+    })
   }
-  let groups = [...map.values()]
-  if (mergeSingles) {
-    const singles = groups.filter(([, ls]) => ls.length === 1).flatMap(([, ls]) => ls)
-    groups = groups.filter(([, ls]) => ls.length > 1)
-    if (singles.length) groups.push(['Other', singles])
-  } else {
-    groups.sort(([a], [b]) => Number(a === NO_HERO) - Number(b === NO_HERO) || a.localeCompare(b))
-  }
-  return groups
+  return (
+    <h3 className="lo-group-head">
+      {editing && real
+        ? <input className="lo-rename lo-group-rename" autoFocus value={draft} aria-label="Group name"
+            onFocus={e => e.target.select()} onChange={e => setDraft(e.target.value)} onBlur={() => done(true)}
+            onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') done(true); if (e.key === 'Escape') { setDraft(name); done(false) } }} />
+        : <span className="lo-group-name" onDoubleClick={() => { if (real) { setDraft(name); setEditing(name) } }}
+            title={real ? `${name} (double-click to rename)` : 'Loadouts without a group'}>{name}</span>}
+      <span className="lo-group-count"><Num id={`group-${groupKey(name)}`} value={count} /></span>
+      {real && !editing && (
+        <span className="lo-group-tools">
+          <button type="button" className="lo-icon" aria-label={`Rename ${name}`} title="Rename" onClick={() => { setDraft(name); setEditing(name) }}><Pencil size={13} /></button>
+          <button type="button" className="lo-icon" aria-label={`Move ${name} up`} title="Move up" disabled={at === 0} onClick={() => moveGroup(name, -1)}><ChevronUp size={14} /></button>
+          <button type="button" className="lo-icon" aria-label={`Move ${name} down`} title="Move down" disabled={at === total - 1} onClick={() => moveGroup(name, 1)}><ChevronDown size={14} /></button>
+          <button type="button" className="lo-icon" aria-label={`Delete group ${name}`} title="Delete group (its loadouts move to Other)" onClick={remove}><Trash2 size={13} /></button>
+        </span>
+      )}
+    </h3>
+  )
 }
 
 /** Home | Library switch for the app header. Its own class: the 1/2/3 hotkeys click the first .mod-state-filter. */
@@ -80,8 +101,9 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   const setOpenId = openLoadout
   const [renaming, setRenaming] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
-  const [legend, setLegendState] = useState(() => localStorage.getItem(LEGEND_KEY) === '1')
-  const setLegend = (on: boolean) => { localStorage.setItem(LEGEND_KEY, on ? '1' : '0'); setLegendState(on) }
+  const savedGroups = useGroups()
+  const [editingGroup, setEditingGroup] = useState<string | null>(null)
+  const [dropGroup, setDropGroup] = useState<string | null>(null)
   const [groupBy, setGroupByState] = useState<GroupBy>(() => (localStorage.getItem(GROUP_BY_KEY) === 'hero' ? 'hero' : 'group'))
   const setGroupBy = (g: GroupBy) => { localStorage.setItem(GROUP_BY_KEY, g); setGroupByState(g) }
   const fileRef = useRef<HTMLInputElement>(null)
@@ -165,9 +187,13 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   }
 
   const byKey = new Map(p.mods.map(m => [modKey(m.path), m]))
-  const groups = groupBy === 'hero'
-    ? groupLoadouts(loadouts, l => heroOf(l, byKey, p.modDetails), false)
-    : groupLoadouts(loadouts, l => l.label, true)
+  // Group mode: every saved group in its order (empty ones too, as drop targets), then Other for the rest
+  const ungrouped = loadouts.filter(l => !savedGroups.some(g => inGroup(l, g)))
+  const groups: [string, Loadout[]][] = groupBy === 'hero'
+    ? byHero(loadouts, l => heroOf(l, byKey, p.modDetails))
+    : [...savedGroups.map(g => [g, loadouts.filter(l => inGroup(l, g))] as [string, Loadout[]]),
+       ...(ungrouped.length ? [[OTHER, ungrouped] as [string, Loadout[]]] : [])]
+  const newGroup = () => { setGroupBy('group'); setEditingGroup(addGroup()) }
 
   const hidden = (
     <>
@@ -213,9 +239,8 @@ export default function LoadoutsScreen(p: LoadoutProps) {
             onClick={() => document.querySelector<HTMLElement>('[title="Install PAKs or Archives"]')?.click()}>
             <PackagePlus size={14} /> Install mods
           </button>
-          <button type="button" className="lo-text-btn" aria-pressed={legend} onClick={() => setLegend(!legend)}
-            title="Show what the type colors mean">
-            <Info size={14} /> Legend
+          <button type="button" className="lo-text-btn" onClick={newGroup} title="A new group to sort loadouts into (drag cards onto it)">
+            <FolderPlus size={14} /> New group
           </button>
           <div className="mod-state-filter lo-groupby" role="group" aria-label="Group loadouts by">
             <button type="button" aria-pressed={groupBy === 'group'} onClick={() => setGroupBy('group')}>Group</button>
@@ -230,19 +255,6 @@ export default function LoadoutsScreen(p: LoadoutProps) {
         </div>
       </header>
 
-      {legend && (() => {
-        const types = [...new Set(p.mods.map(m => p.modDetails?.[m.path]?.category).filter((c): c is string => Boolean(c)))].sort()
-        return (
-          <div className="lo-legend" aria-label="Type legend">
-            {types.map(t => (
-              <span key={t} className="lo-legend-item">
-                <span className={`lo-mod-dot is-filled ${typeClass(t)}`} />{t}
-              </span>
-            ))}
-          </div>
-        )
-      })()}
-
       <div className="lo-body">
 
         {loadouts.length === 0 && (
@@ -256,9 +268,16 @@ export default function LoadoutsScreen(p: LoadoutProps) {
           </div>
         )}
 
-        {groups.map(([group, list]) => (
-          <section className="lo-group" key={groupKey(group)}>
-            <h3 className="lo-group-head">{group}<span className="lo-group-count"><Num id={`group-${group}`} value={list.length} /></span></h3>
+        {groups.map(([group, list], gi) => (
+          <section className={`lo-group ${dropGroup === group ? 'is-drop' : ''}`} key={groupKey(group)}
+            onDragOver={e => { if (groupBy === 'group' && e.dataTransfer.types.includes('text/x-loadout-card')) { e.preventDefault(); setDropGroup(group) } }}
+            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropGroup(null) }}
+            onDrop={e => { e.preventDefault(); setDropGroup(null); const id = e.dataTransfer.getData('text/x-loadout-card'); if (id) setLoadoutGroup(id, group) }}>
+            {groupBy === 'group'
+              ? <GroupHead p={p} name={group} count={list.length} at={gi} total={savedGroups.length}
+                  editing={editingGroup !== null && groupKey(editingGroup) === groupKey(group)} setEditing={setEditingGroup} />
+              : <h3 className="lo-group-head"><span className="lo-group-name">{group}</span><span className="lo-group-count"><Num id={`hero-${group}`} value={list.length} /></span></h3>}
+            {list.length === 0 && <p className="lo-group-empty">Empty. Drag a loadout card here, or pick this group on a loadout's page.</p>}
             <div className="lo-grid">
               {list.map(l => {
                 const active = isActive(l, p.mods)
@@ -266,7 +285,8 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                 const present = [...keys].filter(k => byKey.has(k)).length
                 const onNow = [...keys].filter(k => byKey.get(k)?.enabled).length
                 return (
-                  <article key={l.id} className={`lo-card ${active ? 'is-on' : ''}`}
+                  <article key={l.id} className={`lo-card ${active ? 'is-on' : ''}`} draggable={groupBy === 'group' && renaming !== l.id}
+                    onDragStart={e => { e.dataTransfer.setData('text/x-loadout-card', l.id); e.dataTransfer.effectAllowed = 'move' }}
                     onKeyDown={e => { if (e.key === 'F2' && !isTyping(e.target)) { e.preventDefault(); setDraft(l.name); setRenaming(l.id) } }}
                     onMouseEnter={() => { hovered.current = l.id }} onMouseLeave={() => { if (hovered.current === l.id) hovered.current = null }}>
                     <CardMedia p={p} l={l} onClick={() => setOpenId(l.id)} title={`Open ${l.name}`}

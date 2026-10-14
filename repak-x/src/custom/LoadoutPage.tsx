@@ -7,7 +7,8 @@ import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo, overwriteWithUndo } from './Loadouts'
 import { CardMedia, ModRow, typeClass } from './loadoutBits'
 import { deleteMedia } from './loadoutMedia'
-import { type Loadout, addModToLoadout, displayName, duplicateLoadout, groupKey, isActive, modKey, openLoadout, patchLoadout, readLoadouts, removeModFromLoadout } from './loadoutStore'
+import CustomDropdown from '../components/CustomDropdown'
+import { type Loadout, OTHER, addGroup, addModToLoadout, displayName, duplicateLoadout, groupKey, setLoadoutGroup, useGroups, isActive, modKey, openLoadout, patchLoadout, readLoadouts, removeModFromLoadout } from './loadoutStore'
 import { plural } from './modName'
 import { Num, SwapText } from './motion'
 import { GeneratePreviewsButton, previewSetKey } from './previews'
@@ -23,12 +24,13 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia 
   onPickMedia: () => void
 }) {
   const [name, setName] = useState(l.name)
-  const [group, setGroup] = useState(l.label)
+  const groups = useGroups()
+  const [newGroup, setNewGroup] = useState<string | null>(null) // typing a new group's name
   const [q, setQ] = useState('')
   const [type, setType] = useState<string | null>(null)
   const [limit, setLimit] = useState(PAGE)
   const [sort, setSort] = useState<'name' | 'newest'>('name')
-  useEffect(() => { setName(l.name); setGroup(l.label) }, [l.id, l.name, l.label])
+  useEffect(() => { setName(l.name) }, [l.id, l.name])
 
   const byKey = new Map(p.mods.map(m => [modKey(m.path), m]))
   const mine = [...new Set(l.on.map(displayName))].sort((a, b) => a.localeCompare(b))
@@ -65,8 +67,8 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia 
   }
 
   const commit = () => {
-    const n = name.trim(), g = group.trim()
-    if ((n && n !== l.name) || g !== l.label) patchLoadout(l.id, { name: n || l.name, label: g || l.label })
+    const n = name.trim()
+    if (n && n !== l.name) patchLoadout(l.id, { name: n })
   }
 
   return (
@@ -82,14 +84,17 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia 
           <span className="lp-name-wrap"><Pencil size={14} className="lp-name-pen" aria-hidden="true" />
           <input className="lp-name" value={name} title="Rename" aria-label="Loadout name" onChange={e => setName(e.target.value)} onBlur={commit}
             onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setName(l.name) }} /></span>{/* Esc cancels: blurring here would save the typed text */}
-          <label className="lp-group">
+          <div className="lp-group">
             <span>Group</span>
-            <input value={group} aria-label="Group" list="lo-group-names" onChange={e => setGroup(e.target.value)} onBlur={commit}
-              onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setGroup(l.label) }} />
-            <datalist id="lo-group-names">
-              {[...new Map(readLoadouts().map(x => [groupKey(x.label), x.label.trim()])).values()].filter(g => groupKey(g) !== groupKey(l.label)).sort().map(g => <option key={g} value={g} />)}
-            </datalist>
-          </label>
+            {newGroup === null
+              ? <CustomDropdown
+                  options={[...groups.map(g => ({ value: g, label: g })), { value: OTHER, label: 'No group (Other)' }, { value: '__new', label: '+ New group…' }]}
+                  value={groups.find(g => groupKey(g) === groupKey(l.label)) ?? OTHER}
+                  onChange={(v: string) => (v === '__new' ? setNewGroup('') : setLoadoutGroup(l.id, v))} />
+              : <input autoFocus value={newGroup} placeholder="New group name" aria-label="New group name" onChange={e => setNewGroup(e.target.value)}
+                  onBlur={() => { if (newGroup.trim()) setLoadoutGroup(l.id, addGroup(newGroup.trim())); setNewGroup(null) }}
+                  onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setNewGroup(null) }} />}
+          </div>
           <p className="lp-meta">{busy ? 'Switching mods…' : <>{plural(mine.length, 'mod')} · <Num id={`page-${l.id}`} value={onNow} /> on now
             {missing.length > 0 && <> · {missing.length} not installed</>}</>}</p>
           <div className="lp-actions">

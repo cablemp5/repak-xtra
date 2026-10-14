@@ -181,7 +181,66 @@ export const duplicateLoadout = (l: Loadout) => {
 }
 
 /** Groups match without regard to case or spaces, so "Panther looks" and "panther looks " are one group. */
-export const groupKey = (label: string) => label.trim().toLowerCase()
+export const groupKey = (label: string) => (label || '').trim().toLowerCase()
+
+/** Loadout groups are their own ordered list (caleb.groups), so a group exists before it holds a loadout and keeps its
+ *  place. A loadout's label names its group; OTHER means none and always shows last. */
+export const OTHER = 'Other'
+const GROUPS = 'caleb.groups'
+const readGroupList = (): string[] => JSON.parse(localStorage.getItem(GROUPS) || '[]')
+const writeGroupList = (groups: string[]) => { localStorage.setItem(GROUPS, JSON.stringify(groups)); notify() }
+
+/** Every group in order: the saved list, then labels on loadouts the list lacks (older loadouts, imports). */
+export const listGroups = (loadouts = readLoadouts()) => {
+  const out = new Map<string, string>()
+  const add = (g: string) => { const k = groupKey(g); if (k && k !== groupKey(OTHER) && !out.has(k)) out.set(k, g.trim()) }
+  readGroupList().forEach(add)
+  loadouts.forEach(l => add(l.label))
+  return [...out.values()]
+}
+export const useGroups = () => {
+  useSyncExternalStore(subscribe, () => localStorage.getItem(GROUPS) || '')
+  return listGroups(useLoadouts())
+}
+export const inGroup = (l: Loadout, group: string) => groupKey(l.label) === groupKey(group)
+
+/** A new empty group at the end ("New group", "New group 2", ...); returns its name. */
+export const addGroup = (name = 'New group') => {
+  const groups = listGroups()
+  let n = name.trim() || 'New group'
+  for (let i = 2; groups.some(g => groupKey(g) === groupKey(n)); i++) n = `${name} ${i}`
+  writeGroupList([...groups, n])
+  return n
+}
+/** Renames a group on every loadout in it. Renaming onto another group's name merges the two. */
+export const renameGroup = (from: string, to: string) => {
+  const name = to.trim()
+  if (!name || groupKey(name) === groupKey(OTHER)) return
+  const groups = listGroups().map(g => (groupKey(g) === groupKey(from) ? name : g))
+  writeGroupList([...new Map(groups.map(g => [groupKey(g), g])).values()])
+  writeLoadouts(readLoadouts().map(l => (inGroup(l, from) ? { ...l, label: name } : l)))
+}
+/** Deletes a group; its loadouts move to Other. Returns an undo that puts the group and their labels back. */
+export const deleteGroup = (name: string) => {
+  const order = listGroups()
+  const moved = readLoadouts().filter(l => inGroup(l, name)).map(l => [l.id, l.label] as const)
+  writeGroupList(order.filter(g => groupKey(g) !== groupKey(name)))
+  writeLoadouts(readLoadouts().map(l => (inGroup(l, name) ? { ...l, label: OTHER } : l)))
+  return () => {
+    const back = new Map(moved)
+    writeGroupList(order)
+    writeLoadouts(readLoadouts().map(l => (back.has(l.id) ? { ...l, label: back.get(l.id)! } : l)))
+  }
+}
+export const moveGroup = (name: string, by: -1 | 1) => {
+  const groups = listGroups()
+  const i = groups.findIndex(g => groupKey(g) === groupKey(name))
+  const j = i + by
+  if (i < 0 || j < 0 || j >= groups.length) return
+  ;[groups[i], groups[j]] = [groups[j], groups[i]]
+  writeGroupList(groups)
+}
+export const setLoadoutGroup = (id: string, group: string) => patchLoadout(id, { label: group.trim() || OTHER })
 
 /** Which main view shows: Home (loadout cards) or Library (the full mod list). Remembered; Home on first start.
  *  Mirrored on <html data-view> so caleb.css hides the other view (both stay mounted, keeping their state). */

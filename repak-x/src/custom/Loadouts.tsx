@@ -1,7 +1,7 @@
 // caleb fork: sidebar list of saved loadouts (state lives in loadoutStore.ts). The dot or check turns a loadout on or
 // off (as does Ctrl+1..9), the name opens its page on Home; drag rows to reorder them, which also reorders Ctrl+1..9.
 import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from 'react'
-import { ArrowRightLeft, Check, Layers, LayoutGrid, Plus, Trash2 } from 'lucide-react'
+import { ArrowRightLeft, Check, Layers, LayoutGrid, Plus, Sparkles, Trash2 } from 'lucide-react'
 import CustomDropdown from '../components/CustomDropdown'
 import type { useAlert } from '../components/AlertHandler'
 import {
@@ -10,6 +10,7 @@ import {
 } from './loadoutStore'
 import { isTyping } from './hotkeys'
 import { plural } from './modName'
+import { generatePreviews, previewSetKey } from './previews'
 import { Num } from './motion'
 
 export type LoadoutProps = {
@@ -199,6 +200,16 @@ export default function Loadouts(p: LoadoutProps) {
       <div className="fp-head">
         <span className="fp-title">Loadouts</span>
         <span className="lo-head-actions">
+          <button type="button" className="lo-icon" title="Generate previews for every loadout (one after another)" aria-label="Generate previews for all loadouts"
+            disabled={loadouts.length === 0} onClick={() => {
+              const byKey = new Map(p.mods.map(m => [modKey(m.path), m.path]))
+              const jobs = loadouts.map(l => ({ paths: l.on.map(k => byKey.get(modKey(k))).filter((x): x is string => Boolean(x)), set: previewSetKey(l.id), name: l.name }))
+                .filter(j => j.paths.length > 0)
+              jobs.forEach(generatePreviews)
+              p.alert.success('Previews queued', `${plural(jobs.length, 'loadout')}, one after another. Progress shows on each loadout's page.`)
+            }}>
+            <Sparkles size={15} />
+          </button>
           <button type="button" className="lo-icon" title="Open Home (loadout cards)" onClick={() => setView('home')}>
             <LayoutGrid size={15} />
           </button>
