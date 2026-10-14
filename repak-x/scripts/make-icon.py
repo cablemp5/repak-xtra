@@ -31,4 +31,13 @@ if __name__ == "__main__":
     assert big.getpixel((0, 0))[3] == 0 and big.getpixel((512, 512))[:3] == BLUE[:3], "transparent corners, blue center"
     big.resize((512, 512), Image.LANCZOS).save(HERE / "icons" / "RepakIcon.png")
     big.save(HERE / "icons" / "RepakIcon.ico", sizes=[(s, s) for s in (16, 20, 24, 32, 40, 48, 64, 128, 256)])
-    print("wrote icons/RepakIcon.png and icons/RepakIcon.ico")
+    # The same x inside the app: the splash and Discord widget images, and ModularLogo's two masks (its accent-colored
+    # R layer draws the x in the title's blue; the theme-colored X layer is left empty)
+    art = HERE / "src" / "assets" / "app-icons"
+    for s in (512, 256):
+        big.resize((s, s), Image.LANCZOS).save(art / f"RepakIcon-x{s}.png")
+    mask = Image.new("RGBA", big.size, (255, 255, 255, 0))
+    mask.putalpha(big.getchannel("A"))
+    mask.resize((512, 512), Image.LANCZOS).save(art / "logomask_R.png")
+    Image.new("RGBA", (512, 512), (0, 0, 0, 0)).save(art / "logomask_X.png")
+    print("wrote icons/RepakIcon.png, icons/RepakIcon.ico and the app's logo images in src/assets/app-icons")
