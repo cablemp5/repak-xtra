@@ -64,6 +64,21 @@ export default function Loadouts(p: LoadoutProps) {
     setBusy(null)
   }
 
+  // Ctrl+1..9 toggles the loadout at that position in this list
+  const latest = useRef({ loadouts, apply, busy })
+  latest.current = { loadouts, apply, busy }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.shiftKey || e.altKey || !/^[1-9]$/.test(e.key)) return
+      const l = latest.current.loadouts[Number(e.key) - 1]
+      if (!l || latest.current.busy) return
+      e.preventDefault()
+      latest.current.apply(l)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   return (
     <div className="loadouts">
       <div className="fp-head">

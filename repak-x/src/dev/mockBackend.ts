@@ -15,7 +15,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
   mockWindows('main')
   mockIPC((cmd, args: any) => {
     switch (cmd) {
-      case 'get_pak_files': return data.mods
+      case 'get_pak_files': return data.mods.map((m: any) => ({ ...m })) // fresh objects, like the real backend
       case 'get_folders': return data.folders
       case 'get_app_settings': return data.settings
       case 'get_game_path': return data.gamePath

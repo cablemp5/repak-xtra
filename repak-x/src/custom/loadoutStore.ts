@@ -137,6 +137,7 @@ window.addEventListener('keydown', e => {
   const t = e.target as HTMLElement | null
   const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
   if (e.key.toLowerCase() !== 'l' || e.ctrlKey || e.altKey || e.metaKey || typing) return
+  if (document.querySelector('.modal-overlay')) return // Settings or another dialog is open
   e.preventDefault()
   setLoadoutsScreenOpen(!screenOpen)
 })

@@ -54,6 +54,7 @@ import { AlertProvider, useAlert } from './components/AlertHandler'
 import { offerUndoDelete } from './custom/undoDelete'
 import ModStateFilter, { matchesState, type ModState } from './custom/ModStateFilter'
 import './custom/keyboardClickables'
+import './custom/hotkeys' // caleb fork: extra shortcuts
 import FilterPanel from './custom/FilterPanel'
 import Loadouts from './custom/Loadouts'
 import LoadoutsScreen from './custom/LoadoutsScreen'
