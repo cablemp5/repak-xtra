@@ -8683,6 +8683,7 @@ fn main() {
             caleb_import::take_pending_loadouts,
             caleb_previews::list_mod_previews,
             caleb_previews::get_mod_preview,
+            caleb_previews::get_preview_covers,
             caleb_previews::generate_mod_previews,
             caleb_previews::cancel_mod_previews,
             caleb_sigeon::sigeon_status,

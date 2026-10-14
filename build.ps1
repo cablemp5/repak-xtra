@@ -10,7 +10,7 @@ function Run([scriptblock]$cmd) { & $cmd; if ($LASTEXITCODE -ne 0) { throw "Fail
 $running = @(Get-Process REPAK-X -ErrorAction SilentlyContinue | ForEach-Object { $_.Path })
 $out = 'dist\Repak-X-Caleb'
 if ($running -match [regex]::Escape('\dist\Repak-X-Caleb\')) { $out = 'dist\Repak-X-Caleb-next' }
-if ($running -match [regex]::Escape("\$out\")) { throw 'Close repakXtra first: both output folders are in use.' }
+if ($running -match [regex]::Escape("\$out\")) { throw 'Close repakxtra first: both output folders are in use.' }
 
 Run { dotnet publish UAssetToolRivals/src/UAssetTool/UAssetToolNative.csproj -c Release -r win-x64 -p:DebugType=none -p:DebugSymbols=false -o target/uassettool }
 Push-Location repak-x
@@ -27,7 +27,7 @@ Remove-Item "$out\*.pdb", "$out\UAssetTool.exe" -ErrorAction SilentlyContinue
 Copy-Item repak-x\src\data\character_data.json "$out\data" -Force
 # Desktop shortcut always opens the build just made (builds alternate between the two folders)
 $exe = (Resolve-Path "$out\REPAK-X.exe").Path
-$lnk = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) 'repakXtra.lnk'))
+$lnk = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) 'repakxtra.lnk'))
 $lnk.TargetPath = $exe
 $lnk.WorkingDirectory = Split-Path $exe
 $lnk.IconLocation = "$exe,0"

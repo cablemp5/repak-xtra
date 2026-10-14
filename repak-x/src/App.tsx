@@ -497,7 +497,7 @@ function App() {
 
       const vfxWindow = new WebviewWindow('vfx-updater', {
         url: '/vfx-updater',
-        title: 'repakXtra VFX Updater',
+        title: 'repakxtra VFX Updater',
         width: 650,
         height: 750,
         center: true,
@@ -524,7 +524,7 @@ function App() {
 
       const explorerWindow = new WebviewWindow('asset-explorer', {
         url: '/asset-explorer',
-        title: 'repakXtra - Asset Explorer',
+        title: 'repakxtra - Asset Explorer',
         width: 1320,
         height: 820,
         minWidth: 900,
@@ -3595,7 +3595,7 @@ function App() {
 
   return (
     <div className={`app${isAprilFools ? ' april-fools' : ''}`}>
-      <TitleBar title="repakXtra" />
+      <TitleBar title="repakxtra" />
       {panels.install && (
         <InstallModPanel
           mods={modsToInstall}
@@ -3827,7 +3827,7 @@ function App() {
         >
           <ModularLogo size={50} className="repak-icon" />
           <div className="header-title-group">
-            <h1 className="font-logo">repak<span className="title-x">X</span>tra</h1>{/* caleb fork */}
+            <h1 className="font-logo">repak<span className="title-x">x</span>tra</h1>{/* caleb fork */}
             <span className="version">v{version} (forked by cable)</span>
           </div>
         </div>

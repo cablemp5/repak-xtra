@@ -45,12 +45,26 @@ pub fn get_mod_preview(key: String) -> Result<tauri::ipc::Response, String> {
         .map_err(|e| e.to_string())
 }
 
-/// Renders previews for the given mods (`jobs` = [folder, mod key] pairs) one after another in the background,
-/// replacing existing ones. Progress: `mod-preview-ready` / `mod-preview-none` per mod, `mod-previews-done` (ok) at
-/// the end. Ok(false) = a run is already going.
+/// The mods a loadout's combined render (`set`) shows, from the generator's <set>.json; empty when there is none.
 #[tauri::command]
-pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>) -> Result<bool, String> {
-    if let Some((_, bad)) = jobs.iter().find(|(_, k)| !valid_key(k)) {
+pub fn get_preview_covers(key: String) -> Vec<String> {
+    if !valid_key(&key) {
+        return Vec::new();
+    }
+    std::fs::read_to_string(previews_dir().join(format!("{key}.json")))
+        .ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .and_then(|v| serde_json::from_value(v["covers"].clone()).ok())
+        .unwrap_or_default()
+}
+
+/// Renders previews for the given mods (`jobs` = [folder, mod key] pairs) one after another in the background,
+/// replacing existing ones. With `set` (a loadout), its character mods render once together as <set>.png.
+/// Progress: `mod-preview-ready` / `mod-preview-none` / `mod-preview-in` (shown in the set's render) per mod,
+/// `mod-previews-done` (ok) at the end. Ok(false) = a run is already going.
+#[tauri::command]
+pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: Option<String>) -> Result<bool, String> {
+    if let Some(bad) = jobs.iter().map(|(_, k)| k).chain(set.iter()).find(|k| !valid_key(k)) {
         return Err(format!("Invalid preview key: {bad}"));
     }
     let root = modding_dir();
@@ -63,46 +77,44 @@ pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>) -> Res
         return Ok(false);
     }
     let _ = std::fs::remove_file(previews_dir().join("cancel"));
-    // One generator run per mods folder (it scans one folder), in the order the folders first appear
-    let mut groups: Vec<(String, Vec<String>)> = Vec::new();
-    for (dir, key) in jobs {
-        match groups.iter_mut().find(|(d, _)| *d == dir) {
-            Some((_, keys)) => keys.push(key),
-            None => groups.push((dir, vec![key])),
-        }
+    // One generator run over every folder the mods sit in (a loadout's combined render needs all of them at once)
+    let mut cmd = Command::new(&python);
+    cmd.arg(&script).arg("--out").arg(previews_dir()).arg("--force");
+    let mut dirs: Vec<&String> = jobs.iter().map(|(d, _)| d).collect();
+    dirs.sort();
+    dirs.dedup();
+    for d in dirs {
+        cmd.arg("--mods").arg(d);
+    }
+    for (_, k) in &jobs {
+        cmd.arg("--key").arg(k);
+    }
+    if let Some(s) = &set {
+        cmd.arg("--set").arg(s);
+    }
+    cmd.current_dir(&root).stdout(Stdio::piped()).stderr(Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
     std::thread::spawn(move || {
-        let mut ok = true;
-        for (dir, keys) in groups {
-            let mut cmd = Command::new(&python);
-            cmd.arg(&script).arg("--mods").arg(&dir).arg("--out").arg(previews_dir()).arg("--force");
-            for k in &keys {
-                cmd.arg("--key").arg(k);
-            }
-            cmd.current_dir(&root).stdout(Stdio::piped()).stderr(Stdio::null());
-            #[cfg(windows)]
-            {
-                use std::os::windows::process::CommandExt;
-                cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-            }
-            let Ok(mut child) = cmd.spawn() else {
-                ok = false;
-                continue;
-            };
+        let mut ok = false;
+        if let Ok(mut child) = cmd.spawn() {
             if let Some(out) = child.stdout.take() {
-                // The generator prints "PREVIEW <key>" after writing a PNG, "PREVIEW_NONE <key>" when there is nothing to show
+                // "PREVIEW <key>" after writing a PNG, "PREVIEW_NONE <key>" when there is nothing to show,
+                // "PREVIEW_IN <key>" for a mod the loadout's combined render shows
                 for line in BufReader::new(out).lines().map_while(Result::ok) {
                     if let Some(key) = line.strip_prefix("PREVIEW_NONE ") {
                         let _ = app.emit("mod-preview-none", key.trim().to_string());
+                    } else if let Some(key) = line.strip_prefix("PREVIEW_IN ") {
+                        let _ = app.emit("mod-preview-in", key.trim().to_string());
                     } else if let Some(key) = line.strip_prefix("PREVIEW ") {
                         let _ = app.emit("mod-preview-ready", key.trim().to_string());
                     }
                 }
             }
-            ok &= child.wait().map(|s| s.success()).unwrap_or(false);
-            if previews_dir().join("cancel").exists() {
-                break;
-            }
+            ok = child.wait().map(|s| s.success()).unwrap_or(false);
         }
         let _ = std::fs::remove_file(previews_dir().join("cancel"));
         RUNNING.store(false, Ordering::SeqCst);

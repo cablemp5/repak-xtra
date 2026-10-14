@@ -74,7 +74,7 @@ export default function AssetExplorerPage() {
 
     return (
         <div className="ae-window">
-            <TitleBar title="repakXtra Asset Explorer" />
+            <TitleBar title="repakxtra Asset Explorer" />
             <div className="ae-window-body">
                 <AssetExplorerPanel />
             </div>

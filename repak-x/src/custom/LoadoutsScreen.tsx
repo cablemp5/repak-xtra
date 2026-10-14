@@ -260,9 +260,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                   <article key={l.id} className={`lo-card ${active ? 'is-on' : ''}`}
                     onKeyDown={e => { if (e.key === 'F2' && !isTyping(e.target)) { e.preventDefault(); setDraft(l.name); setRenaming(l.id) } }}
                     onMouseEnter={() => { hovered.current = l.id }} onMouseLeave={() => { if (hovered.current === l.id) hovered.current = null }}>
-                    <button type="button" className="lo-card-image" onClick={() => setOpenId(l.id)} title={`Open ${l.name}`}>
-                      <CardMedia l={l} />
-                    </button>
+                    <CardMedia p={p} l={l} onClick={() => setOpenId(l.id)} title={`Open ${l.name}`} />
                     <div className="lo-card-body">
                       <div className="lo-card-title">
                         {renaming === l.id ? (

@@ -14,6 +14,9 @@ let sigeonState = 'off'
 const previewUrls: Record<string, string> = import.meta.env.DEV
   ? import.meta.glob('./previews.local/*.png', { eager: true, query: '?url', import: 'default' })
   : {}
+const previewCovers: Record<string, { covers?: string[] }> = import.meta.env.DEV
+  ? import.meta.glob('./previews.local/*.json', { eager: true, import: 'default' })
+  : {}
 
 if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
   mockWindows('main')
@@ -44,6 +47,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         setTimeout(() => emit('mod-previews-done', true), 600 * ((args?.jobs ?? []).length + 1))
         return true
       case 'cancel_mod_previews': return null
+      case 'get_preview_covers': return previewCovers[`./previews.local/${args?.key}.json`]?.covers ?? []
       case 'get_hero_image':
         return fetch(`/src/dev/heroes.local/${args?.id}.png`).then(r => r.arrayBuffer()).then(b => new Uint8Array(b))
       case 'get_app_version': return __APP_VERSION__

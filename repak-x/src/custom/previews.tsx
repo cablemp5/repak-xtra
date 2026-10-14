@@ -1,7 +1,7 @@
 // caleb fork: generated mod previews (lobby-look renders, UI icons, VFX swatches) made by caleb_previews.rs's
 // generator for the mods you pick: the details panel's Generate button (one mod) or the selection bar's Previews
-// button (every selected mod, one after another). Loadout cards without an image of their own show the first of
-// their mods that has a preview.
+// button (every selected mod, one after another). A loadout's Generate previews also renders its character mods
+// together as one image (key previewSetKey(id)); loadout cards page through the previews (loadoutBits.tsx).
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
@@ -14,6 +14,7 @@ const FAILED = 'The render failed. Try again, or check the generator in your mod
 const revs = new Map<string, number>() // key -> bump count, so a re-rendered preview reloads
 const pending = new Set<string>()       // keys still waiting in the current run
 const outcome = new Map<string, string>() // key -> message from its last render
+const covers = new Map<string, string[]>() // loadout render key -> the mods it shows
 let run = { total: 0, made: 0, none: 0, stopping: false, summary: '' }
 let version = 0
 const listeners = new Set<() => void>()
@@ -23,6 +24,11 @@ const subscribe = (l: () => void) => { listeners.add(l); return () => listeners.
 invoke<string[]>('list_mod_previews').then(keys => { keys.forEach(k => revs.set(k, 0)); notify() }).catch(() => undefined)
 listen<string>('mod-preview-ready', e => {
   revs.set(e.payload, (revs.get(e.payload) ?? 0) + 1)
+  outcome.delete(e.payload)
+  if (pending.delete(e.payload)) run.made++
+  notify()
+}).catch(() => undefined)
+listen<string>('mod-preview-in', e => { // shown in the loadout's combined render instead of its own
   outcome.delete(e.payload)
   if (pending.delete(e.payload)) run.made++
   notify()
@@ -43,6 +49,19 @@ listen<boolean>('mod-previews-done', e => {
 
 export const usePreviewVersion = () => useSyncExternalStore(subscribe, () => version)
 export const hasPreview = (key: string) => revs.has(key)
+/** Key of a loadout's combined character render. */
+export const previewSetKey = (loadoutId: string) => `loadout-${loadoutId}`
+
+/** The mods a loadout's combined render shows (they get no slide of their own). */
+export function useCovers(setKey: string) {
+  usePreviewVersion()
+  const rev = revs.get(setKey)
+  useEffect(() => {
+    if (rev === undefined) return
+    invoke<string[]>('get_preview_covers', { key: setKey }).then(k => { covers.set(setKey, k); notify() }).catch(() => undefined)
+  }, [setKey, rev])
+  return rev === undefined ? [] : covers.get(setKey) ?? []
+}
 
 /** Object URL of the mod's preview, or null while none exists. */
 export function usePreviewUrl(key: string | undefined) {
@@ -66,14 +85,14 @@ export function usePreviewUrl(key: string | undefined) {
 }
 
 /** Renders the given mods' previews one after another; returns an error message, or null once started. */
-const generate = async (paths: string[]) => {
+const generate = async (paths: string[], set?: string) => {
   const jobs = [...new Map(paths.map(p => [modKey(p), [p.replace(/[/\\][^/\\]+$/, ''), modKey(p)] as [string, string]])).values()]
   if (jobs.length === 0 || pending.size > 0) return null
   jobs.forEach(([, k]) => { pending.add(k); outcome.delete(k) })
   run = { total: jobs.length, made: 0, none: 0, stopping: false, summary: '' }
   notify()
   try {
-    if (await invoke<boolean>('generate_mod_previews', { jobs })) return null
+    if (await invoke<boolean>('generate_mod_previews', { jobs, set: set ?? null })) return null
     pending.clear()
     run.summary = 'Another preview run is still going.'
   } catch (e) {
@@ -109,9 +128,10 @@ export function ModPreview({ path }: { path: string }) {
   )
 }
 
-/** Selection bar button: previews for every selected mod, with progress and Stop while it runs. */
-export function GeneratePreviewsButton({ paths, className = 'btn-ghost bulk-previews', label = 'Previews' }: {
-  paths: string[]; className?: string; label?: string
+/** Selection bar button: previews for every selected mod, with progress and Stop while it runs. With `set` (a loadout),
+ * its character mods render together as one image under that key. */
+export function GeneratePreviewsButton({ paths, set, className = 'btn-ghost bulk-previews', label = 'Previews' }: {
+  paths: string[]; set?: string; className?: string; label?: string
 }) {
   usePreviewVersion()
   const running = pending.size > 0
@@ -127,7 +147,7 @@ export function GeneratePreviewsButton({ paths, className = 'btn-ghost bulk-prev
   }
   const n = new Set(paths.map(modKey)).size
   return (
-    <button type="button" className={className} disabled={n === 0} onClick={() => generate(paths)}
+    <button type="button" className={className} disabled={n === 0} onClick={() => generate(paths, set)}
       title={run.summary ? `Last run: ${run.summary}` : `Render previews for these ${n} mods (about 20 seconds each)`}>
       <ImagePlus size={16} />
       <span className="bulk-btn-label">{label}</span>

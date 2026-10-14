@@ -1,25 +1,68 @@
 // caleb fork: small pieces shared by Home (LoadoutsScreen.tsx), the loadout page and the New strip.
-import { ImagePlus } from 'lucide-react'
+import { useState } from 'react'
+import { ChevronLeft, ChevronRight, ImagePlus } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import type { LoadoutProps } from './Loadouts'
 import { useMediaUrl } from './loadoutMedia'
-import { type Loadout, type Mod, displayName, flipMods } from './loadoutStore'
+import { type Loadout, type Mod, displayName, flipMods, modKey } from './loadoutStore'
 import { ModName } from './modName'
-import { hasPreview, usePreviewUrl, usePreviewVersion } from './previews'
+import { hasPreview, previewSetKey, useCovers, usePreviewUrl, usePreviewVersion } from './previews'
 
 /** The home screen's badge color class for a mod type (caleb.css *-badge sets --badge-dot). */
 export const typeClass = (category?: string | null) => `${(category || 'unknown').toLowerCase().replace(/\s+/g, '-')}-badge`
 
-/** The loadout's own image or video, else the generated preview of its first mod that has one. */
-export function CardMedia({ l }: { l: Loadout }) {
-  const url = useMediaUrl(l.id, l.mediaRev)
+const TYPE_ORDER = ['Mesh', 'Texture', 'Material', 'Animation', 'VFX', 'UI', 'Text']
+const rank = (c?: string | null) => { const i = TYPE_ORDER.indexOf(c ?? ''); return i < 0 ? TYPE_ORDER.length : i }
+
+/** A loadout's generated previews: its combined character render first, then its other mods' in type order. */
+function usePreviewSlides(p: LoadoutProps, l: Loadout) {
   usePreviewVersion()
-  const generated = usePreviewUrl(l.on.map(displayName).find(hasPreview))
-  const src = url ?? l.image ?? generated
-  if (!src) return <span className="lo-card-placeholder"><ImagePlus size={22} /><span>Click to add an image, or hover and paste</span></span>
-  return l.mediaType === 'video' && url
-    ? <video src={url} autoPlay loop muted playsInline />
-    : <img src={src} alt="" />
+  const set = previewSetKey(l.id)
+  const covered = useCovers(set)
+  const byKey = new Map(p.mods.map(m => [modKey(m.path), m]))
+  const categoryOf = (k: string) => { const m = byKey.get(k); return (m && p.modDetails?.[m.path]?.category) || undefined }
+  const keys = [...new Set(l.on.map(displayName))].filter(k => hasPreview(k) && !covered.includes(k))
+    .sort((a, b) => rank(categoryOf(a)) - rank(categoryOf(b)))
+  const slides = keys.map(k => ({ key: k, label: categoryOf(k) ?? 'Mod' }))
+  // The mods' type labels are unreliable for texture-only mods (shown as Mesh or UI), so the combined slide says what it is
+  if (hasPreview(set)) slides.unshift({ key: set, label: covered.length > 1 ? `${covered.length} mods together` : 'Character' })
+  return slides
+}
+
+/** The loadout's image: its own image or video, then its generated previews, paged with arrows. */
+export function CardMedia({ p, l, className = '', title, onClick }: {
+  p: LoadoutProps; l: Loadout; className?: string; title: string; onClick: () => void
+}) {
+  const url = useMediaUrl(l.id, l.mediaRev)
+  const own = url ?? l.image
+  const slides = [...(own ? [{ key: '', label: 'Your image' }] : []), ...usePreviewSlides(p, l)]
+  const [index, setIndex] = useState(0)
+  const at = slides.length ? ((index % slides.length) + slides.length) % slides.length : 0
+  const slide = slides[at]
+  const generated = usePreviewUrl(slide?.key || undefined)
+  const src = slide?.key ? generated : own
+  return (
+    <div className={`lo-media ${className}`}>
+      <button type="button" className="lo-card-image" onClick={onClick} title={title}>
+        {!src
+          ? <span className="lo-card-placeholder"><ImagePlus size={22} /><span>Click to add an image, or hover and paste</span></span>
+          : !slide?.key && l.mediaType === 'video' && url
+            ? <video src={url} autoPlay loop muted playsInline />
+            : <img src={src} alt="" />}
+      </button>
+      {slides.length > 1 && (
+        <>
+          <button type="button" className="lo-media-arrow is-prev" title="Previous preview" aria-label="Previous preview" onClick={() => setIndex(at - 1)}>
+            <ChevronLeft size={16} />
+          </button>
+          <button type="button" className="lo-media-arrow is-next" title="Next preview" aria-label="Next preview" onClick={() => setIndex(at + 1)}>
+            <ChevronRight size={16} />
+          </button>
+          <span className="lo-media-label">{slide.label} · {at + 1}/{slides.length}</span>
+        </>
+      )}
+    </div>
+  )
 }
 
 /** Turns single mods on or off from Home, with the same game-running guard as loadouts. */

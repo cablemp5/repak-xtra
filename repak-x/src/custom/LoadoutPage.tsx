@@ -8,7 +8,7 @@ import { CardMedia, ModRow, typeClass } from './loadoutBits'
 import { deleteMedia } from './loadoutMedia'
 import { type Loadout, addModToLoadout, displayName, isActive, modKey, patchLoadout, readLoadouts, removeModFromLoadout } from './loadoutStore'
 import { plural } from './modName'
-import { GeneratePreviewsButton } from './previews'
+import { GeneratePreviewsButton, previewSetKey } from './previews'
 
 const PAGE = 60
 
@@ -51,10 +51,8 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia 
       </button>
 
       <div className="lp-top">
-        <button type="button" className="lo-card-image lp-media" onClick={onPickMedia}
-          title={hasMedia ? 'Change image or video (or paste one)' : 'Add an image, GIF or video (or paste one)'}>
-          <CardMedia l={l} />
-        </button>
+        <CardMedia p={p} l={l} className="lp-media" onClick={onPickMedia}
+          title={hasMedia ? 'Change image or video (or paste one)' : 'Add an image, GIF or video (or paste one)'} />
         <div className="lp-info">
           <input className="lp-name" value={name} aria-label="Loadout name" onChange={e => setName(e.target.value)} onBlur={commit}
             onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') { setName(l.name); (e.target as HTMLInputElement).blur() } }} />
@@ -77,7 +75,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia 
               title={`Replace this loadout's mods with the ${p.scopeMods.length} mods shown in the Library, as they are now`}>
               <Save size={14} /> Overwrite from Library
             </button>
-            <GeneratePreviewsButton className="lo-text-btn" label="Generate previews"
+            <GeneratePreviewsButton className="lo-text-btn" label="Generate previews" set={previewSetKey(l.id)}
               paths={mine.map(k => byKey.get(k)?.path).filter((x): x is string => Boolean(x))} />
             <button type="button" className="lo-text-btn" onClick={onPickMedia}><ImagePlus size={14} /> {hasMedia ? 'Change image' : 'Add image'}</button>
             {hasMedia && (
