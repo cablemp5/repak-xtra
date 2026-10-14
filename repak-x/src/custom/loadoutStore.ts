@@ -5,7 +5,7 @@ import { useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { deleteMedia } from './loadoutMedia'
 
-export type Mod = { path: string; enabled?: boolean }
+export type Mod = { path: string; enabled?: boolean; modified_date?: number }
 export type Loadout = {
   id: string
   name: string
@@ -107,6 +107,26 @@ export const addModToLoadout = (l: Loadout, key: string) => {
 export const removeModFromLoadout = (l: Loadout, key: string) =>
   patchLoadout(l.id, { on: l.on.filter(x => normKey(x) !== normKey(key)) })
 
+/** "slug_type_..._v10" -> { base: "slug_type_...", n: 10 }; undefined without a trailing _vN. */
+export const versionOf = (key: string) => {
+  const m = normKey(key).match(/^(.*)_v(\d+)$/i)
+  return m ? { base: m[1], n: Number(m[2]) } : undefined
+}
+
+/** The older version of this mod that the loadout holds (same name, lower _vN), if any. */
+export const olderVersionIn = (l: Loadout, key: string) => {
+  const v = versionOf(key)
+  if (!v) return undefined
+  return l.on.map(normKey).find(k => { const o = versionOf(k); return o !== undefined && o.base === v.base && o.n < v.n })
+}
+
+/** Swaps one key for another in the loadout (on list, and scope so the loadout keeps managing it). */
+export const replaceInLoadout = (l: Loadout, oldKey: string, newKey: string) =>
+  patchLoadout(l.id, {
+    on: l.on.map(k => (normKey(k) === normKey(oldKey) ? normKey(newKey) : k)),
+    scope: keySet(l.scope).has(normKey(newKey)) ? l.scope : [...l.scope, normKey(newKey)],
+  })
+
 /** Readable mod name from its key: drops the _9999999_P priority suffix. */
 export const displayName = normKey
 
@@ -140,17 +160,21 @@ export const flipMods = async (changes: Mod[]) => {
   return failed
 }
 
-/** The cards screen open/close state, so any button can open it. */
-let screenOpen = false
-export const setLoadoutsScreenOpen = (open: boolean) => { screenOpen = open; notify() }
-export const useLoadoutsScreenOpen = () => useSyncExternalStore(subscribe, () => screenOpen)
+/** Which main view shows: Home (loadout cards) or Library (the full mod list). Remembered; Home on first start.
+ *  Mirrored on <html data-view> so caleb.css hides the other view (both stay mounted, keeping their state). */
+export type View = 'home' | 'library'
+let view: View = localStorage.getItem('caleb.view') === 'library' ? 'library' : 'home'
+const applyView = () => { document.documentElement.dataset.view = view }
+applyView()
+export const setView = (v: View) => { view = v; localStorage.setItem('caleb.view', v); applyView(); notify() }
+export const useView = () => useSyncExternalStore(subscribe, () => view)
 
-// L opens/closes the loadouts screen (main window only: this module loads with the app)
+// L switches between Home and Library (main window only: this module loads with the app)
 window.addEventListener('keydown', e => {
   const t = e.target as HTMLElement | null
   const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
   if (e.key.toLowerCase() !== 'l' || e.ctrlKey || e.altKey || e.metaKey || typing) return
   if (document.querySelector('.modal-overlay')) return // Settings or another dialog is open
   e.preventDefault()
-  setLoadoutsScreenOpen(!screenOpen)
+  setView(view === 'home' ? 'library' : 'home')
 })

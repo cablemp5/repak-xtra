@@ -49,7 +49,7 @@ export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
   {
     title: 'Loadouts and Sigeon',
     items: [
-      { keys: ['L'], action: 'Open / close the Loadouts screen' },
+      { keys: ['L'], action: 'Switch between Home and Library' },
       { keys: ['Ctrl', '1–9'], action: 'Turn loadout 1–9 on/off (sidebar order)' },
       { keys: ['S'], action: 'Cycle Sigeon: Off → Base → High' },
     ],
@@ -62,8 +62,8 @@ export const isTyping = (target: EventTarget | null) => {
   return Boolean(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable))
 }
 
-/** A dialog (Settings, Tools, help, loadouts screen) is open: plain-letter shortcuts pause. */
-export const dialogOpen = () => Boolean(document.querySelector('.modal-overlay, .lo-screen'))
+/** A dialog (Settings, Tools, help) is open, or Home is showing: the Library's plain-letter shortcuts pause. */
+export const dialogOpen = () => Boolean(document.querySelector('.modal-overlay')) || document.documentElement.dataset.view === 'home'
 
 const VIEWS = ['List View', 'Grid View', 'Compact Grid View']
 

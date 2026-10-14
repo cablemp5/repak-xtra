@@ -56,13 +56,11 @@ import ModStateFilter, { matchesState, type ModState } from './custom/ModStateFi
 import './custom/keyboardClickables'
 import './custom/hotkeys' // caleb fork: extra shortcuts
 import FilterPanel from './custom/FilterPanel'
-import Loadouts from './custom/Loadouts'
-import LoadoutsScreen from './custom/LoadoutsScreen'
+import Loadouts, { AddToLoadoutField } from './custom/Loadouts'
+import LoadoutsScreen, { ViewTabs } from './custom/LoadoutsScreen'
 import { TagsToggle } from './custom/uiPrefs'
 import { GeneratePreviewsButton } from './custom/previews'
 import SigeonControl from './custom/SigeonControl'
-import { setLoadoutsScreenOpen } from './custom/loadoutStore'
-import { Layers } from 'lucide-react'
 import { useGlobalTooltips } from './hooks/useGlobalTooltips'
 import { useAprilFools } from './hooks/useAprilFools'
 import Switch from './components/ui/Switch'
@@ -3833,6 +3831,7 @@ function App() {
             <span className="version">v{version} (forked by cable)</span>
           </div>
         </div>
+        <ViewTabs />{/* caleb fork: Home | Library */}
         <div className="header-actions-right">
           <button
             className="btn-settings"
@@ -3918,9 +3917,6 @@ function App() {
           </button>
 
           <SigeonControl alert={alert} />{/* caleb fork */}
-          <button onClick={() => setLoadoutsScreenOpen(true)} className="btn-settings" title="Loadouts">
-            <Layers size={20} /> Loadouts
-          </button>{/* caleb fork */}
           <button
             onClick={() => setPanel('sharing', true)}
             className="btn-settings"
@@ -3948,6 +3944,16 @@ function App() {
       </header>
 
       <div className="container">
+        {/* caleb fork: Home view (custom/LoadoutsScreen.tsx); the action bar and panels below are the Library */}
+        <LoadoutsScreen
+          mods={mods}
+          modDetails={modDetails}
+          scopeMods={folderMods}
+          scopeLabel={[...selectedCharacters, ...selectedCategories].join(', ') || 'all mods'}
+          blocked={gameRunning && !bypassGameRunningLock}
+          reload={loadMods}
+          alert={alert}
+        />
         {/* Main Action Bar */}
         <div className="main-action-bar">
           <div className="search-wrapper" data-tour="search-bar">
@@ -4042,15 +4048,6 @@ function App() {
               {/* caleb fork: saved loadouts (custom/Loadouts.tsx) */}
               <Loadouts
                 mods={mods}
-                scopeMods={folderMods}
-                scopeLabel={[...selectedCharacters, ...selectedCategories].join(', ') || 'all mods'}
-                blocked={gameRunning && !bypassGameRunningLock}
-                reload={loadMods}
-                alert={alert}
-              />
-              <LoadoutsScreen
-                mods={mods}
-                modDetails={modDetails}
                 scopeMods={folderMods}
                 scopeLabel={[...selectedCharacters, ...selectedCategories].join(', ') || 'all mods'}
                 blocked={gameRunning && !bypassGameRunningLock}
@@ -4255,7 +4252,8 @@ function App() {
                     />
                   </div>
 
-                  {/* caleb fork: previews for every selected mod (custom/previews.tsx) */}
+                  {/* caleb fork: add the selected mods to a loadout, and previews for every selected mod */}
+                  <AddToLoadoutField paths={[...selectedMods]} alert={alert} />
                   <GeneratePreviewsButton paths={[...selectedMods]} />
 
                   {(() => {

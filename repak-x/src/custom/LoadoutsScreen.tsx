@@ -1,25 +1,23 @@
-// caleb fork: full-window loadouts screen. Each loadout is a card with optional media (image, GIF or
-// looping video; upload or paste), an on/off switch and an expandable list of its mods.
-// On = its mods on, Off = its mods off; other mods and loadouts are never touched.
-// Cards are grouped by their saved group (label) or by hero; double-click a name to rename it.
+// caleb fork: Home, the app's first view. Loadouts as cards (image, on/off switch), grouped by saved group or hero, with
+// the "New · not in a loadout" strip on top; a card opens its page (LoadoutPage.tsx). The full mod list is the Library
+// view (header tabs, or L). On = its mods on, Off = its mods off; other mods and loadouts are never touched.
 import { useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { ChevronDown, Download, ImageOff, ImagePlus, Info, Plus, Save, Trash2, Upload, X } from 'lucide-react'
+import { Download, Info, PackagePlus, Plus, Save, Trash2, Upload } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo, overwriteWithUndo, runChanges } from './Loadouts'
+import LoadoutPage from './LoadoutPage'
+import NewStrip from './NewStrip'
 import { isTyping } from './hotkeys'
-import { ModName, plural, typeCode } from './modName'
-import { hasPreview, usePreviewUrl, usePreviewVersion } from './previews'
-import { deleteMedia, prepareMedia, putMedia, useMediaUrl } from './loadoutMedia'
+import { CardMedia, typeClass } from './loadoutBits'
+import { prepareMedia, putMedia } from './loadoutMedia'
+import { plural, typeCode } from './modName'
 import {
-  type Loadout, type Mod, addModToLoadout, changesToTurnOff, removeModFromLoadout, displayName, exportLoadouts, importLoadouts, isActive, modKey, patchLoadout, changesToTurnOn,
-  readLoadouts, setLoadoutsScreenOpen, snapshotLoadout, useLoadouts, useLoadoutsScreenOpen, writeLoadouts,
+  type Loadout, type Mod, changesToTurnOff, changesToTurnOn, displayName, exportLoadouts, importLoadouts, isActive, modKey,
+  patchLoadout, readLoadouts, setView, snapshotLoadout, useLoadouts, useView, writeLoadouts,
 } from './loadoutStore'
 
 type GroupBy = 'group' | 'hero'
 const LEGEND_KEY = 'caleb.loadoutLegend'
-const typeClass = (category?: string | null) => `${(category || 'unknown').toLowerCase().replace(/\s+/g, '-')}-badge`
-
 const GROUP_BY_KEY = 'caleb.loadoutGroupBy'
 const NO_HERO = 'No hero'
 
@@ -55,27 +53,24 @@ export function groupLoadouts(list: Loadout[], keyOf: (l: Loadout) => string, me
   return groups
 }
 
-function CardMedia({ l }: { l: Loadout }) {
-  const url = useMediaUrl(l.id, l.mediaRev)
-  usePreviewVersion()
-  const generated = usePreviewUrl(l.on.map(displayName).find(hasPreview)) // no own image: first mod with a generated preview
-  const src = url ?? l.image ?? generated
-  if (!src) return <span className="lo-card-placeholder"><ImagePlus size={22} /><span>Click to upload, or hover and paste</span></span>
-  return l.mediaType === 'video' && url
-    ? <video src={url} autoPlay loop muted playsInline />
-    : <img src={src} alt="" />
+/** Home | Library switch for the app header. Its own class: the 1/2/3 hotkeys click the first .mod-state-filter. */
+export function ViewTabs() {
+  const view = useView()
+  return (
+    <div className="view-tabs" role="tablist" aria-label="View">
+      <button type="button" role="tab" aria-selected={view === 'home'} onClick={() => setView('home')} title="Loadouts and new mods (L)">Home</button>
+      <button type="button" role="tab" aria-selected={view === 'library'} onClick={() => setView('library')} title="Every mod, with filters and folders (L)">Library</button>
+    </div>
+  )
 }
 
 export default function LoadoutsScreen(p: LoadoutProps) {
-  const open = useLoadoutsScreenOpen()
+  const view = useView()
   const loadouts = useLoadouts()
   const [busy, setBusy] = useState<string | null>(null)
-  const [naming, setNaming] = useState(false)
-  const [name, setName] = useState('')
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [openId, setOpenId] = useState<string | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
-  const [adding, setAdding] = useState<{ id: string; q: string } | null>(null)
   const [legend, setLegendState] = useState(() => localStorage.getItem(LEGEND_KEY) === '1')
   const setLegend = (on: boolean) => { localStorage.setItem(LEGEND_KEY, on ? '1' : '0'); setLegendState(on) }
   const [groupBy, setGroupByState] = useState<GroupBy>(() => (localStorage.getItem(GROUP_BY_KEY) === 'hero' ? 'hero' : 'group'))
@@ -84,6 +79,9 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   const importRef = useRef<HTMLInputElement>(null)
   const mediaTarget = useRef<string | null>(null)
   const hovered = useRef<string | null>(null)
+  const openRef = useRef(openId)
+  openRef.current = openId
+  const open = loadouts.find(l => l.id === openId)
 
   const setMedia = async (id: string, file: File) => {
     try {
@@ -96,31 +94,31 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   }
 
   useEffect(() => {
-    if (!open) return
-    // Esc in a text field (rename, new loadout) cancels that field instead of closing the screen
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !isTyping(e.target)) { e.stopPropagation(); setLoadoutsScreenOpen(false) } }
-    // Ctrl+V with an image, GIF or video on the clipboard sets the hovered card's media
+    if (view !== 'home') return
+    // Esc on a loadout page goes back to the cards (a text field takes its own Esc first)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && openRef.current && !isTyping(e.target) && !document.querySelector('.modal-overlay')) { e.stopPropagation(); setOpenId(null) }
+    }
+    // Ctrl+V with an image, GIF or video sets the open loadout's media, or the hovered card's
     const onPaste = (e: ClipboardEvent) => {
+      if (isTyping(e.target)) return
       const file = [...(e.clipboardData?.files ?? [])].find(f => /^(image|video)\//.test(f.type))
       if (!file) return
       e.preventDefault()
-      if (hovered.current) setMedia(hovered.current, file)
+      const id = openRef.current ?? hovered.current
+      if (id) setMedia(id, file)
       else p.alert.info('Hover a card first', 'Point at the loadout card, then paste.')
     }
     window.addEventListener('keydown', onKey, true)
     window.addEventListener('paste', onPaste)
     return () => { window.removeEventListener('keydown', onKey, true); window.removeEventListener('paste', onPaste) }
-  }, [open])
+  }, [view])
 
-  if (!open) return null
+  if (view !== 'home') return null
 
   const toggle = async (l: Loadout, on: boolean) => {
     setBusy(l.id)
-    if (on) {
-      await runChanges(p, l, changesToTurnOn(l, p.mods), 'on')
-    } else {
-      await runChanges(p, l, changesToTurnOff(l, p.mods), 'off')
-    }
+    await runChanges(p, l, on ? changesToTurnOn(l, p.mods) : changesToTurnOff(l, p.mods), on ? 'on' : 'off')
     setBusy(null)
   }
 
@@ -129,11 +127,17 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     fileRef.current?.click()
   }
 
-  const create = () => {
-    const trimmed = name.trim()
-    if (trimmed) writeLoadouts([...readLoadouts(), snapshotLoadout({ id: crypto.randomUUID(), name: trimmed }, p.scopeMods, p.scopeLabel)])
-    setNaming(false)
-    setName('')
+  /** A new empty loadout opens straight on its page, where mods get added */
+  const createEmpty = () => {
+    const l: Loadout = { id: crypto.randomUUID(), name: `Loadout ${loadouts.length + 1}`, label: 'Other', scope: [], on: [] }
+    writeLoadouts([...readLoadouts(), l])
+    setOpenId(l.id)
+  }
+  /** First-run shortcut: everything that is on right now becomes one loadout */
+  const createFromOn = () => {
+    const l = snapshotLoadout({ id: crypto.randomUUID(), name: 'What is on now' }, p.mods.filter(m => m.enabled), 'Other')
+    writeLoadouts([...readLoadouts(), l])
+    setOpenId(l.id)
   }
 
   const exportFile = () => {
@@ -156,41 +160,8 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     ? groupLoadouts(loadouts, l => heroOf(l, byKey, p.modDetails), false)
     : groupLoadouts(loadouts, l => l.label, true)
 
-  const toggleExpanded = (id: string) => setExpanded(prev => {
-    const next = new Set(prev)
-    next.has(id) ? next.delete(id) : next.add(id)
-    return next
-  })
-
-  // Portal: the sidebar that mounts this sits inside animated, overflow-clipped panels
-  return createPortal(
-    <div className="lo-screen" role="dialog" aria-label="Loadouts">
-      <header className="lo-screen-head">
-        <div>
-          <h2>Loadouts</h2>
-          <p>On switches a loadout's mods on, Off switches them off. Other mods and loadouts are left alone. Press L to open or close.</p>
-        </div>
-        <div className="lo-head-tools">
-          <button type="button" className="lo-text-btn" aria-pressed={legend} onClick={() => setLegend(!legend)}
-            title="Show what the dot colors in each loadout's mod list mean">
-            <Info size={14} /> Legend
-          </button>
-          <div className="mod-state-filter lo-groupby" role="group" aria-label="Group loadouts by">
-            <button type="button" aria-pressed={groupBy === 'group'} onClick={() => setGroupBy('group')}>Group</button>
-            <button type="button" aria-pressed={groupBy === 'hero'} onClick={() => setGroupBy('hero')}>Hero</button>
-          </div>
-          <button type="button" className="lo-text-btn" title="Add loadouts from a .json file" onClick={() => importRef.current?.click()}>
-            <Upload size={14} /> Import
-          </button>
-          <button type="button" className="lo-text-btn" title="Save all loadouts to a .json file (images stay in the app)" onClick={exportFile}>
-            <Download size={14} /> Export
-          </button>
-          <button type="button" className="lo-icon lo-close" title="Close (Esc)" onClick={() => setLoadoutsScreenOpen(false)}>
-            <X size={18} />
-          </button>
-        </div>
-      </header>
-
+  const hidden = (
+    <>
       <input ref={importRef} type="file" accept=".json,application/json" hidden
         onChange={async e => {
           const f = e.target.files?.[0]
@@ -203,154 +174,141 @@ export default function LoadoutsScreen(p: LoadoutProps) {
             p.alert.error('Import failed', err instanceof Error ? err.message : String(err))
           }
         }} />
-
       <input ref={fileRef} type="file" accept="image/*,video/*" hidden
         onChange={e => { const f = e.target.files?.[0]; if (f && mediaTarget.current) setMedia(mediaTarget.current, f); e.target.value = '' }} />
+    </>
+  )
+
+  if (open) {
+    return (
+      <div className="lo-screen" aria-label={`Loadout ${open.name}`}>
+        {hidden}
+        <div className="lo-body">
+          <LoadoutPage p={p} l={open} busy={busy === open.id} onToggle={on => toggle(open, on)} onBack={() => setOpenId(null)}
+            onPickMedia={() => pickMedia(open.id)} />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="lo-screen" aria-label="Home">
+      {hidden}
+      <header className="lo-screen-head">
+        <div>
+          <h2>Loadouts</h2>
+          <p>On switches a loadout's mods on, Off switches them off. Other mods are left alone. Open a card to edit it.</p>
+        </div>
+        <div className="lo-head-tools">
+          <button type="button" className="lo-text-btn" title="Install PAKs or archives (Ctrl+O)"
+            onClick={() => document.querySelector<HTMLElement>('[title="Install PAKs or Archives"]')?.click()}>
+            <PackagePlus size={14} /> Install mods
+          </button>
+          <button type="button" className="lo-text-btn" aria-pressed={legend} onClick={() => setLegend(!legend)}
+            title="Show what the type codes and colors mean">
+            <Info size={14} /> Legend
+          </button>
+          <div className="mod-state-filter lo-groupby" role="group" aria-label="Group loadouts by">
+            <button type="button" aria-pressed={groupBy === 'group'} onClick={() => setGroupBy('group')}>Group</button>
+            <button type="button" aria-pressed={groupBy === 'hero'} onClick={() => setGroupBy('hero')}>Hero</button>
+          </div>
+          <button type="button" className="lo-text-btn" title="Add loadouts from a .json file" onClick={() => importRef.current?.click()}>
+            <Upload size={14} /> Import
+          </button>
+          <button type="button" className="lo-text-btn" title="Save all loadouts to a .json file (images stay in the app)" onClick={exportFile}>
+            <Download size={14} /> Export
+          </button>
+        </div>
+      </header>
 
       {legend && (() => {
         const types = [...new Set(p.mods.map(m => p.modDetails?.[m.path]?.category).filter((c): c is string => Boolean(c)))].sort()
         return (
-          <div className="lo-legend" aria-label="Dot legend">
+          <div className="lo-legend" aria-label="Type legend">
             {types.map(t => (
               <span key={t} className={`lo-legend-item ${typeClass(t)}`}>
                 <span className="lo-mod-dot is-filled" /><span className="type-code">{typeCode(t)}</span>{t}
               </span>
             ))}
-            <span className="lo-legend-sep" />
-            <span className="lo-legend-item"><span className="lo-mod-dot is-filled" />On now</span>
-            <span className="lo-legend-item"><span className="lo-mod-dot" />Off now</span>
           </div>
         )
       })()}
 
       <div className="lo-body">
-      {groups.map(([group, list]) => (
-      <section className="lo-group" key={group}>
-        <h3 className="lo-group-head">{group}<span className="lo-group-count">{list.length}</span></h3>
-        <div className="lo-grid">
-        {list.map(l => {
-          const active = isActive(l, p.mods)
-          const present = new Set(l.scope.map(displayName).filter(k => byKey.has(k))).size
-          const isOpen = expanded.has(l.id)
-          const hasMedia = Boolean(l.mediaRev || l.image)
-          return (
-            <article key={l.id} className={`lo-card ${active ? 'is-on' : ''}`}
-              onKeyDown={e => { if (e.key === 'F2' && !isTyping(e.target)) { e.preventDefault(); setDraft(l.name); setRenaming(l.id) } }}
-              onMouseEnter={() => { hovered.current = l.id }} onMouseLeave={() => { if (hovered.current === l.id) hovered.current = null }}>
-              <button type="button" className="lo-card-image" onClick={() => pickMedia(l.id)}
-                title={hasMedia ? 'Change image or video (or paste one)' : 'Add an image, GIF or video (or paste one)'}>
-                <CardMedia l={l} />
-              </button>
-              <div className="lo-card-body">
-                <div className="lo-card-title">
-                  {renaming === l.id ? (
-                    <input className="lo-rename" autoFocus value={draft} aria-label="Loadout name"
-                      onFocus={e => e.target.select()} onChange={e => setDraft(e.target.value)} onBlur={() => commitRename(l)}
-                      onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') commitRename(l); if (e.key === 'Escape') setRenaming(null) }} />
-                  ) : (
-                    <h3 title={`${l.name} (double-click or F2 to rename)`} onDoubleClick={() => { setDraft(l.name); setRenaming(l.id) }}>{l.name}</h3>
-                  )}
-                  <Switch size="sm" color="primary" checked={active} disabled={busy !== null}
-                    title={active ? `Turn ${l.name} off` : `Turn ${l.name} on`}
-                    onChange={(checked: boolean) => toggle(l, checked)} />
-                </div>
-                <p className="lo-card-meta">
-                  {busy === l.id ? 'Switching mods…' : <>{l.label}<span className="lo-sep">·</span>{l.on.length} of {plural(present, 'mod')} on</>}
-                </p>
-                <div className="lo-card-actions">
-                  <button type="button" className="lo-expand" aria-expanded={isOpen} onClick={() => toggleExpanded(l.id)}>
-                    {plural(l.on.length, 'mod')} <ChevronDown size={14} />
-                  </button>
-                  <span className="lo-card-tools">
-                    <button type="button" className="lo-icon" title={`Overwrite ${l.name} with the shown mods' current state`}
-                      onClick={() => overwriteWithUndo(p, l)}>
-                      <Save size={14} />
-                    </button>
-                    {hasMedia && (
-                      <button type="button" className="lo-icon" title="Remove image or video"
-                        onClick={() => { deleteMedia(l.id); patchLoadout(l.id, { image: undefined, mediaRev: undefined, mediaType: undefined }) }}>
-                        <ImageOff size={14} />
-                      </button>
-                    )}
-                    <button type="button" className="lo-icon" title={`Delete ${l.name}`} onClick={() => deleteWithUndo(p, l)}>
-                      <Trash2 size={14} />
-                    </button>
-                  </span>
-                </div>
-                {isOpen && (() => {
-                  const inLoadout = new Set(l.on.map(displayName))
-                  const q = adding?.id === l.id ? adding.q.trim().toLowerCase() : ''
-                  const matches = q ? [...byKey.keys()].filter(k => !inLoadout.has(k) && k.toLowerCase().includes(q)).sort().slice(0, 8) : []
-                  const add = (key: string) => { addModToLoadout(l, key); setAdding({ id: l.id, q: '' }) }
-                  return (
-                    <>
-                      <ul className="lo-mod-list">
-                        {l.on.length === 0 && <li className="lo-mod-missing">No mods on in this loadout.</li>}
-                        {[...inLoadout].sort((a, b) => a.localeCompare(b)).map(key => {
-                          const mod = byKey.get(key)
-                          return (
-                            <li key={key} className={mod ? (mod.enabled ? 'is-on' : '') : 'lo-mod-missing'}
-                              title={mod ? `${p.modDetails?.[mod.path]?.category ?? 'Unknown type'} · ${mod.enabled ? 'on now' : 'off now'}` : 'Not installed anymore'}>
-                              <span className={`lo-mod-dot ${mod?.enabled ? 'is-filled' : ''} ${typeClass(mod && p.modDetails?.[mod.path]?.category)}`} />
-                              <span className={`type-code ${typeClass(mod && p.modDetails?.[mod.path]?.category)}`}>{typeCode(mod && p.modDetails?.[mod.path]?.category)}</span>
-                              <span className="lo-mod-name"><ModName name={key} /></span>
-                              <button type="button" className="lo-icon lo-mod-remove" title={`Remove ${key} from ${l.name}`}
-                                onClick={() => removeModFromLoadout(l, key)}>
-                                <X size={13} />
-                              </button>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                      <div className="lo-mod-add">
-                        <input value={adding?.id === l.id ? adding.q : ''} placeholder="Add a mod…" aria-label={`Add a mod to ${l.name}`}
-                          onChange={e => setAdding({ id: l.id, q: e.target.value })}
-                          onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter' && matches[0]) add(matches[0]); if (e.key === 'Escape') setAdding(null) }} />
-                        {matches.length > 0 && (
-                          <ul className="lo-mod-matches">
-                            {matches.map(k => (
-                              <li key={k}>
-                                <button type="button" onClick={() => add(k)} title={k}>
-                                  <span className={`lo-mod-dot is-filled ${typeClass(p.modDetails?.[byKey.get(k)!.path]?.category)}`} />
-                                  <span className={`type-code ${typeClass(p.modDetails?.[byKey.get(k)!.path]?.category)}`}>{typeCode(p.modDetails?.[byKey.get(k)!.path]?.category)}</span>
-                                  <span className="lo-match-name"><ModName name={k} /></span>
-                                  <Plus size={13} />
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    </>
-                  )
-                })()}
-              </div>
-            </article>
-          )
-        })}
-        </div>
-      </section>
-      ))}
+        <NewStrip {...p} />
 
-        <div className="lo-grid">
-        <div className="lo-card lo-card-new">
-          {naming ? (
-            <div className="lo-new">
-              <input autoFocus value={name} placeholder="Loadout name" onChange={e => setName(e.target.value)}
-                onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') create(); if (e.key === 'Escape') { setNaming(false); setName('') } }}
-                onBlur={create} />
-              <p className="lo-hint">Saves which of the {p.scopeMods.length} shown mods ({p.scopeLabel}) are on.</p>
+        {loadouts.length === 0 && (
+          <div className="lo-first-run">
+            <h3>No loadouts yet</h3>
+            <p>A loadout is a set of mods you switch on and off together, like one look, one VFX color or one emote wheel.</p>
+            <div className="lo-first-actions">
+              <button type="button" className="lo-text-btn is-primary" onClick={createFromOn}>Make one from the {p.mods.filter(m => m.enabled).length} mods that are on now</button>
+              <button type="button" className="lo-text-btn" onClick={createEmpty}>Start an empty one</button>
             </div>
-          ) : (
-            <button type="button" className="lo-card-add" onClick={() => setNaming(true)}>
-              <Plus size={20} />
-              <span>Save the shown mods as a loadout</span>
-              <small>{p.scopeLabel}<span className="lo-sep">·</span>{p.scopeMods.filter(m => m.enabled).length} of {p.scopeMods.length} on</small>
-            </button>
-          )}
-        </div>
-        </div>
+          </div>
+        )}
+
+        {groups.map(([group, list]) => (
+          <section className="lo-group" key={group}>
+            <h3 className="lo-group-head">{group}<span className="lo-group-count">{list.length}</span></h3>
+            <div className="lo-grid">
+              {list.map(l => {
+                const active = isActive(l, p.mods)
+                const present = new Set(l.on.map(displayName).filter(k => byKey.has(k))).size
+                return (
+                  <article key={l.id} className={`lo-card ${active ? 'is-on' : ''}`}
+                    onKeyDown={e => { if (e.key === 'F2' && !isTyping(e.target)) { e.preventDefault(); setDraft(l.name); setRenaming(l.id) } }}
+                    onMouseEnter={() => { hovered.current = l.id }} onMouseLeave={() => { if (hovered.current === l.id) hovered.current = null }}>
+                    <button type="button" className="lo-card-image" onClick={() => setOpenId(l.id)} title={`Open ${l.name}`}>
+                      <CardMedia l={l} />
+                    </button>
+                    <div className="lo-card-body">
+                      <div className="lo-card-title">
+                        {renaming === l.id ? (
+                          <input className="lo-rename" autoFocus value={draft} aria-label="Loadout name"
+                            onFocus={e => e.target.select()} onChange={e => setDraft(e.target.value)} onBlur={() => commitRename(l)}
+                            onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') commitRename(l); if (e.key === 'Escape') setRenaming(null) }} />
+                        ) : (
+                          <h3 title={`${l.name} (double-click or F2 to rename)`} onDoubleClick={() => { setDraft(l.name); setRenaming(l.id) }}>{l.name}</h3>
+                        )}
+                        <Switch size="sm" color="primary" checked={active} disabled={busy !== null}
+                          title={active ? `Turn ${l.name} off` : `Turn ${l.name} on`}
+                          onChange={(checked: boolean) => toggle(l, checked)} />
+                      </div>
+                      <p className="lo-card-meta">
+                        {busy === l.id ? 'Switching mods…' : <>{l.label}<span className="lo-sep">·</span>{l.on.length === present ? plural(present, 'mod') : `${present} of ${plural(l.on.length, 'mod')} installed`}</>}
+                      </p>
+                      <div className="lo-card-actions">
+                        <button type="button" className="lo-expand" onClick={() => setOpenId(l.id)}>Edit mods</button>
+                        <span className="lo-card-tools">
+                          <button type="button" className="lo-icon" title={`Overwrite ${l.name} with the mods shown in the Library`} onClick={() => overwriteWithUndo(p, l)}>
+                            <Save size={14} />
+                          </button>
+                          <button type="button" className="lo-icon" title={`Delete ${l.name}`} onClick={() => deleteWithUndo(p, l)}>
+                            <Trash2 size={14} />
+                          </button>
+                        </span>
+                      </div>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          </section>
+        ))}
+
+        {loadouts.length > 0 && (
+          <div className="lo-grid">
+            <div className="lo-card lo-card-new">
+              <button type="button" className="lo-card-add" onClick={createEmpty}>
+                <Plus size={20} />
+                <span>New loadout</span>
+                <small>Opens empty, then add mods to it</small>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
-  , document.body)
+  )
 }

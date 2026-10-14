@@ -2,11 +2,12 @@
 // turn it on; the grid button opens the cards screen with on/off switches and images.
 import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { Check, LayoutGrid, Plus, Save, X } from 'lucide-react'
+import { Check, Layers, LayoutGrid, Plus, Save, X } from 'lucide-react'
+import CustomDropdown from '../components/CustomDropdown'
 import type { useAlert } from '../components/AlertHandler'
 import {
-  type Loadout, type Mod, changesToTurnOff, changesToTurnOn, deleteLoadout, flipMods, importLoadouts, isActive, readLoadouts,
-  setLoadoutsScreenOpen, snapshotLoadout, useLoadouts, writeLoadouts,
+  type Loadout, type Mod, addModToLoadout, changesToTurnOff, changesToTurnOn, deleteLoadout, flipMods, importLoadouts, isActive, modKey, readLoadouts,
+  setView, snapshotLoadout, useLoadouts, writeLoadouts,
 } from './loadoutStore'
 
 export type LoadoutProps = {
@@ -45,6 +46,30 @@ function useListHeight() {
     document.addEventListener('mouseup', end)
   }
   return { height, dragging, start }
+}
+
+/** Selection bar: add every selected mod to a loadout (it also starts managing them). */
+export function AddToLoadoutField({ paths, alert }: { paths: string[]; alert: LoadoutProps['alert'] }) {
+  const loadouts = useLoadouts()
+  if (loadouts.length === 0) return null
+  return (
+    <div className="bulk-field" title="Add the selected mods to a loadout">
+      <CustomDropdown
+        icon={<Layers size={15} />}
+        options={loadouts.map(l => ({ value: l.id, label: l.name }))}
+        value=""
+        placeholder="Add to loadout"
+        disabled={paths.length === 0}
+        onChange={(id: string) => {
+          const l = readLoadouts().find(x => x.id === id)
+          if (!l) return
+          const keys = [...new Set(paths.map(modKey))]
+          keys.forEach(k => addModToLoadout(readLoadouts().find(x => x.id === id)!, k))
+          alert.success(`Added to ${l.name}`, `${keys.length} mod${keys.length === 1 ? '' : 's'}.`)
+        }}
+      />
+    </div>
+  )
 }
 
 /** Delete with a 10 s Undo, like deleting a mod. */
@@ -142,7 +167,7 @@ export default function Loadouts(p: LoadoutProps) {
       <div className="fp-head">
         <span className="fp-title">Loadouts</span>
         <span className="lo-head-actions">
-          <button type="button" className="lo-icon" title="Open the loadouts screen" onClick={() => setLoadoutsScreenOpen(true)}>
+          <button type="button" className="lo-icon" title="Open Home (loadout cards)" onClick={() => setView('home')}>
             <LayoutGrid size={15} />
           </button>
           <button type="button" className="lo-icon" title="Save the shown mods' on/off state as a loadout" onClick={() => setNaming(true)}>
