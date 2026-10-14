@@ -7,7 +7,7 @@ import { useMediaUrl } from './loadoutMedia'
 import { type Loadout, type Mod, displayName, flipMods, modKey } from './loadoutStore'
 import { ModName } from './modName'
 import { revealOnLoad } from './motion'
-import { hasPreview, previewSetKey, useCovers, usePreviewUrl, usePreviewVersion } from './previews'
+import { hasPreview, previewSetKey, useCovers, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
 
 /** The home screen's badge color class for a mod type (caleb.css *-badge sets --badge-dot). */
 export const typeClass = (category?: string | null) => `${(category || 'unknown').toLowerCase().replace(/\s+/g, '-')}-badge`
@@ -45,8 +45,19 @@ export function CardMedia({ p, l, className = '', title, onClick, emptyText = 'C
   const slide = slides[at]
   const generated = usePreviewUrl(slide?.key || undefined)
   const src = slide?.key ? generated : own
+  const state = usePreviewState(previewSetKey(l.id))
   return (
-    <div className={`lo-media ${className}${paged ? ' is-paged' : ''}`}>
+    <div className={`lo-media ${className}${paged ? ' is-paged' : ''}${state ? ` is-${state.kind}` : ''}`}>
+      {/* transitions.dev: Skeleton loader. Shown over the card while its preview renders or waits; the new image
+          blurs in when it lands (revealOnLoad) */}
+      {state && (
+        <span className="lo-skel" role="status">
+          <span className="lo-skel-figure" aria-hidden="true"><i className="is-head" /><i className="is-body" /><i className="is-legs" /></span>
+          <span className="lo-skel-label">
+            {state.kind === 'running' ? `Generating ${state.done} of ${state.total}` : state.at === 1 ? 'Queued, up next' : `Queued, ${state.at} in line`}
+          </span>
+        </span>
+      )}
       <button type="button" className="lo-card-image" onClick={onClick} title={title}>
         {!src
           ? <span className="lo-card-placeholder"><ImagePlus size={22} /><span>{emptyText}</span></span>

@@ -10,7 +10,7 @@ import {
 } from './loadoutStore'
 import { isTyping } from './hotkeys'
 import { plural } from './modName'
-import { generatePreviews, previewSetKey } from './previews'
+import { generateAllLoadouts } from './previews'
 import { Num } from './motion'
 
 export type LoadoutProps = {
@@ -202,11 +202,8 @@ export default function Loadouts(p: LoadoutProps) {
         <span className="lo-head-actions">
           <button type="button" className="lo-icon" title="Generate previews for every loadout (one after another)" aria-label="Generate previews for all loadouts"
             disabled={loadouts.length === 0} onClick={() => {
-              const byKey = new Map(p.mods.map(m => [modKey(m.path), m.path]))
-              const jobs = loadouts.map(l => ({ paths: l.on.map(k => byKey.get(modKey(k))).filter((x): x is string => Boolean(x)), set: previewSetKey(l.id), name: l.name }))
-                .filter(j => j.paths.length > 0)
-              jobs.forEach(generatePreviews)
-              p.alert.success('Previews queued', `${plural(jobs.length, 'loadout')}, one after another. Progress shows on each loadout's page.`)
+              const n = generateAllLoadouts(loadouts, p.mods)
+              p.alert.success('Previews queued', `${plural(n, 'loadout')}, one after another. Home shows the progress on each card.`)
             }}>
             <Sparkles size={15} />
           </button>

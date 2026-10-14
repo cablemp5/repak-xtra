@@ -2,7 +2,7 @@
 // the "New this week" strip below them; a card opens its page (LoadoutPage.tsx). The full mod list is the Library
 // view (header tabs, or L). On = its mods on, Off = its mods off; other mods and loadouts are never touched.
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronUp, Download, FolderPlus, PackagePlus, Pencil, Plus, Trash2, Upload } from 'lucide-react'
+import { ChevronDown, ChevronUp, CircleStop, Download, FolderPlus, LoaderCircle, PackagePlus, Pencil, Plus, Sparkles, Trash2, Upload } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo, runChanges } from './Loadouts'
 import LoadoutPage from './LoadoutPage'
@@ -12,6 +12,7 @@ import { CardMedia } from './loadoutBits'
 import { prepareMedia, putMedia } from './loadoutMedia'
 import { plural } from './modName'
 import { Num } from './motion'
+import { generateAllLoadouts, stopPreviews, usePreviewBatch } from './previews'
 import {
   type Loadout, type Mod, OTHER, addGroup, changesToTurnOff, changesToTurnOn, deleteGroup, displayName, exportLoadouts, groupKey,
   importLoadouts, inGroup, isActive, modKey, moveGroup, openLoadout, patchLoadout, readLoadouts, renameGroup, setLoadoutGroup, setView,
@@ -102,6 +103,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   const [renaming, setRenaming] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const savedGroups = useGroups()
+  const batch = usePreviewBatch()
   const [editingGroup, setEditingGroup] = useState<string | null>(null)
   const [dropGroup, setDropGroup] = useState<string | null>(null)
   const [groupBy, setGroupByState] = useState<GroupBy>(() => (localStorage.getItem(GROUP_BY_KEY) === 'hero' ? 'hero' : 'group'))
@@ -239,6 +241,11 @@ export default function LoadoutsScreen(p: LoadoutProps) {
             onClick={() => document.querySelector<HTMLElement>('[title="Install PAKs or Archives"]')?.click()}>
             <PackagePlus size={14} /> Install mods
           </button>
+          <button type="button" className="lo-text-btn" disabled={loadouts.length === 0}
+            title="Render a preview for every loadout, one after another (each card shows its progress)"
+            onClick={() => { const n = generateAllLoadouts(loadouts, p.mods); p.alert.success('Previews queued', `${plural(n, 'loadout')}, one after another.`) }}>
+            <Sparkles size={14} /> Generate all previews
+          </button>
           <button type="button" className="lo-text-btn" onClick={newGroup} title="A new group to sort loadouts into (drag cards onto it)">
             <FolderPlus size={14} /> New group
           </button>
@@ -254,6 +261,17 @@ export default function LoadoutsScreen(p: LoadoutProps) {
           </button>
         </div>
       </header>
+      {batch && (
+        <div className="lo-batch" role="status">
+          <LoaderCircle size={14} className="run-spin" />
+          <span className="t-shimmer" data-text={`Generating ${batch.name} · ${batch.done} of ${batch.total}`}>Generating {batch.name} · {batch.done} of {batch.total}</span>
+          {batch.left > 0 && <span className="lo-batch-left">{plural(batch.left, 'loadout')} queued after it</span>}
+          <button type="button" className="lo-text-btn lo-batch-stop" onClick={stopPreviews} disabled={batch.stopping}
+            title="Stop after the mod rendering now and clear the queue">
+            <CircleStop size={14} /> {batch.stopping ? 'Stopping…' : batch.left ? 'Stop all' : 'Stop'}
+          </button>
+        </div>
+      )}
 
       <div className="lo-body">
 

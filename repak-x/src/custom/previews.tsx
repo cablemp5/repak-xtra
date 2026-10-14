@@ -124,7 +124,33 @@ const start = async ({ paths, set, name }: Job) => {
   return run.summary
 }
 
+/** Where a loadout's combined render stands: rendering now (done of total), waiting (1 = up next), or neither. */
+export function usePreviewState(set: string) {
+  usePreviewVersion()
+  if (running() && run.set === set) return { kind: 'running' as const, done: Math.min(run.total - pending.size + 1, run.total), total: run.total }
+  const at = queue.findIndex(q => q.set === set)
+  return at >= 0 ? { kind: 'queued' as const, at: at + 1 } : null
+}
+
+/** The run going now and how many wait behind it (Home's status line); null when idle. */
+export function usePreviewBatch() {
+  usePreviewVersion()
+  if (!running()) return null
+  return { name: run.name, done: Math.min(run.total - pending.size + 1, run.total), total: run.total, left: queue.length, stopping: run.stopping }
+}
+
+/** Queues every loadout that has installed mods (one combined render each, one after another); returns how many. */
+export function generateAllLoadouts(loadouts: { id: string; name: string; on: string[] }[], mods: { path: string }[]) {
+  const byKey = new Map(mods.map(m => [modKey(m.path), m.path]))
+  const jobs = loadouts
+    .map(l => ({ paths: l.on.map(k => byKey.get(modKey(k))).filter((x): x is string => Boolean(x)), set: previewSetKey(l.id), name: l.name }))
+    .filter(j => j.paths.length > 0)
+  jobs.forEach(generatePreviews)
+  return jobs.length
+}
+
 /** Stops the run after the mod rendering now, and drops everything queued behind it. */
+export const stopPreviews = () => stop()
 const stop = () => { queue.length = 0; run.stopping = true; notify(); invoke('cancel_mod_previews').catch(() => undefined) }
 const unqueue = (job: { set?: string; name: string }) => {
   const i = queue.findIndex(q => sameJob(q, job))
