@@ -10,6 +10,9 @@ const data: any = Object.values(fixtures)[0] ?? {
 }
 
 let sigeonState = 'off'
+const previewUrls: Record<string, string> = import.meta.env.DEV
+  ? import.meta.glob('./previews.local/*.png', { eager: true, query: '?url', import: 'default' })
+  : {}
 
 if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
   mockWindows('main')
@@ -31,6 +34,11 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         sigeonState = args?.preset ?? 'off'
         return sigeonState
       case 'get_hero_image_ids': return data.heroIds ?? []
+      case 'list_mod_previews': // copies of %APPDATA%\Repak-X\previews in src/dev/previews.local
+        return Object.keys(previewUrls).map(f => f.replace(/^.*\/|\.png$/g, ''))
+      case 'get_mod_preview':
+        return fetch(previewUrls[`./previews.local/${args?.key}.png`]).then(r => r.arrayBuffer())
+      case 'generate_mod_preview': return false
       case 'get_hero_image':
         return fetch(`/src/dev/heroes.local/${args?.id}.png`).then(r => r.arrayBuffer()).then(b => new Uint8Array(b))
       case 'get_app_version': return __APP_VERSION__

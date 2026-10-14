@@ -8,9 +8,10 @@ import { ChevronDown, Download, ImageOff, ImagePlus, Plus, RefreshCw, Trash2, Up
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, runChanges } from './Loadouts'
 import { isTyping } from './hotkeys'
+import { hasPreview, usePreviewUrl, usePreviewVersion } from './previews'
 import { deleteMedia, prepareMedia, putMedia, useMediaUrl } from './loadoutMedia'
 import {
-  type Loadout, type Mod, changesToTurnOff, deleteLoadout, displayName, exportLoadouts, importLoadouts, isActive, modKey, patchLoadout, planTurnOn,
+  type Loadout, type Mod, addModToLoadout, changesToTurnOff, removeModFromLoadout, deleteLoadout, displayName, exportLoadouts, importLoadouts, isActive, modKey, patchLoadout, planTurnOn,
   readLoadouts, setLoadoutsScreenOpen, snapshotLoadout, useLoadouts, useLoadoutsScreenOpen, writeLoadouts,
 } from './loadoutStore'
 
@@ -52,7 +53,9 @@ export function groupLoadouts(list: Loadout[], keyOf: (l: Loadout) => string, me
 
 function CardMedia({ l }: { l: Loadout }) {
   const url = useMediaUrl(l.id, l.mediaRev)
-  const src = url ?? l.image
+  usePreviewVersion()
+  const generated = usePreviewUrl(l.on.map(displayName).find(hasPreview)) // no own image: first mod with a generated preview
+  const src = url ?? l.image ?? generated
   if (!src) return <span className="lo-card-placeholder"><ImagePlus size={22} /><span>Click to upload, or hover and paste</span></span>
   return l.mediaType === 'video' && url
     ? <video src={url} autoPlay loop muted playsInline />
@@ -68,6 +71,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [renaming, setRenaming] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  const [adding, setAdding] = useState<{ id: string; q: string } | null>(null)
   const [groupBy, setGroupByState] = useState<GroupBy>(() => (localStorage.getItem(GROUP_BY_KEY) === 'hero' ? 'hero' : 'group'))
   const setGroupBy = (g: GroupBy) => { localStorage.setItem(GROUP_BY_KEY, g); setGroupByState(g) }
   const fileRef = useRef<HTMLInputElement>(null)
@@ -247,21 +251,45 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                     </button>
                   </span>
                 </div>
-                {isOpen && (
-                  <ul className="lo-mod-list">
-                    {l.on.length === 0 && <li className="lo-mod-missing">No mods on in this loadout.</li>}
-                    {[...new Set(l.on.map(displayName))].sort((a, b) => a.localeCompare(b)).map(key => {
-                      const mod = byKey.get(key)
-                      return (
-                        <li key={key} className={mod ? (mod.enabled ? 'is-on' : '') : 'lo-mod-missing'}
-                          title={mod ? (mod.enabled ? 'On now' : 'Off now') : 'Not installed anymore'}>
-                          <span className="lo-mod-dot" />
-                          <span className="lo-mod-name">{displayName(key)}</span>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                )}
+                {isOpen && (() => {
+                  const inLoadout = new Set(l.on.map(displayName))
+                  const q = adding?.id === l.id ? adding.q.trim().toLowerCase() : ''
+                  const matches = q ? [...byKey.keys()].filter(k => !inLoadout.has(k) && k.toLowerCase().includes(q)).sort().slice(0, 8) : []
+                  const add = (key: string) => { addModToLoadout(l, key); setAdding({ id: l.id, q: '' }) }
+                  return (
+                    <>
+                      <ul className="lo-mod-list">
+                        {l.on.length === 0 && <li className="lo-mod-missing">No mods on in this loadout.</li>}
+                        {[...inLoadout].sort((a, b) => a.localeCompare(b)).map(key => {
+                          const mod = byKey.get(key)
+                          return (
+                            <li key={key} className={mod ? (mod.enabled ? 'is-on' : '') : 'lo-mod-missing'}
+                              title={mod ? (mod.enabled ? 'On now' : 'Off now') : 'Not installed anymore'}>
+                              <span className="lo-mod-dot" />
+                              <span className="lo-mod-name">{key}</span>
+                              <button type="button" className="lo-icon lo-mod-remove" title={`Remove ${key} from ${l.name}`}
+                                onClick={() => removeModFromLoadout(l, key)}>
+                                <X size={13} />
+                              </button>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                      <div className="lo-mod-add">
+                        <input value={adding?.id === l.id ? adding.q : ''} placeholder="Add a mod…" aria-label={`Add a mod to ${l.name}`}
+                          onChange={e => setAdding({ id: l.id, q: e.target.value })}
+                          onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter' && matches[0]) add(matches[0]); if (e.key === 'Escape') setAdding(null) }} />
+                        {matches.length > 0 && (
+                          <ul className="lo-mod-matches">
+                            {matches.map(k => (
+                              <li key={k}><button type="button" onClick={() => add(k)}><Plus size={13} />{k}</button></li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </>
+                  )
+                })()}
               </div>
             </article>
           )

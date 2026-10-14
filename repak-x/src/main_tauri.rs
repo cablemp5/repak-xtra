@@ -7,6 +7,7 @@ mod asset_explorer;
 mod caleb_classify; // caleb fork: extra mod types, Project Galacta check
 mod caleb_sigeon; // caleb fork: Sigeon V2 switch
 mod caleb_import; // caleb fork: one-time loadouts import file
+mod caleb_previews; // caleb fork: generated mod previews
 mod caleb_trash; // caleb fork: undoable delete
 mod character_data;
 mod crash_monitor;
@@ -8680,6 +8681,9 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             caleb_trash::restore_trashed_mods,
             caleb_import::take_pending_loadouts,
+            caleb_previews::list_mod_previews,
+            caleb_previews::get_mod_preview,
+            caleb_previews::generate_mod_preview,
             caleb_sigeon::sigeon_status,
             caleb_sigeon::sigeon_set,
             get_game_path,

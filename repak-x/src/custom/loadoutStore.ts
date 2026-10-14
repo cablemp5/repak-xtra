@@ -94,6 +94,19 @@ export const planTurnOn = (l: Loadout, all: Loadout[], mods: Mod[]) => {
   return { flips: [...flips.values()], displaced }
 }
 
+/** Adds a mod to the loadout's on list (and its scope, so the loadout manages it from now on). */
+export const addModToLoadout = (l: Loadout, key: string) => {
+  const k = normKey(key)
+  patchLoadout(l.id, {
+    on: keySet(l.on).has(k) ? l.on : [...l.on, k],
+    scope: keySet(l.scope).has(k) ? l.scope : [...l.scope, k],
+  })
+}
+
+/** Takes a mod off the loadout's on list. It stays in scope, so turning the loadout on switches it off. */
+export const removeModFromLoadout = (l: Loadout, key: string) =>
+  patchLoadout(l.id, { on: l.on.filter(x => normKey(x) !== normKey(key)) })
+
 /** Readable mod name from its key: drops the _9999999_P priority suffix. */
 export const displayName = normKey
 

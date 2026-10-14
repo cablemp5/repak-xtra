@@ -156,6 +156,9 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 [aria-label="add mods button group"] .MuiButtonGroup-firstButton { border-radius: var(--quiet-radius) 0 0 var(--quiet-radius) !important; }
 [aria-label="add mods button group"] .MuiButtonGroup-lastButton { border-radius: 0 var(--quiet-radius) var(--quiet-radius) 0 !important; margin-left: -1px !important; }
 [aria-label="add mods button group"] .MuiButton-root svg { color: var(--text-secondary); font-size: 18px; }
+/* Icon and label sit together like the dropdown triggers beside them (upstream spreads them apart) */
+[aria-label="add mods button group"] .MuiButton-root { justify-content: flex-start !important; gap: 8px; min-width: 0 !important; line-height: 1 !important; }
+[aria-label="add mods button group"] .MuiButton-root svg.lucide { width: 16px !important; height: 16px !important; margin: 0 !important; flex: none; }
 
 /* ---------- panels ---------- */
 .left-sidebar, .center-header {
@@ -803,3 +806,40 @@ html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { d
 .tags-toggle { width: 40px; height: 40px; display: inline-flex !important; align-items: center; justify-content: center; padding: 0 !important; color: var(--text-secondary) !important; }
 .tags-toggle[aria-pressed="true"] { color: var(--text-primary) !important; }
 html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !important; }
+
+/* ---------- loadout card: remove and add mods ---------- */
+.lo-mod-name { flex: 1; }
+.lo-mod-remove { width: 20px !important; height: 20px !important; margin-left: auto; opacity: 0; }
+.lo-mod-list li:hover .lo-mod-remove, .lo-mod-remove:focus-visible { opacity: 1; }
+.lo-mod-add { position: relative; margin-top: 6px; }
+.lo-mod-add input {
+  width: 100%; height: 28px; padding: 0 8px; box-sizing: border-box;
+  font: 12px var(--font-primary); color: var(--text-primary);
+  background: var(--bg-dark); border: 1px solid var(--panel-border); border-radius: 6px; outline: none;
+}
+.lo-mod-add input:focus { border-color: var(--accent-primary); }
+.lo-mod-matches {
+  list-style: none; margin: 4px 0 0; padding: 4px; display: flex; flex-direction: column; gap: 1px;
+  background: var(--bg-dark); border: 1px solid var(--panel-border); border-radius: 6px;
+}
+.lo-mod-matches button {
+  width: 100%; display: flex !important; align-items: center; gap: 6px; height: 24px !important; min-height: 0 !important;
+  padding: 0 6px !important; border: none !important; border-radius: 4px !important; background: transparent !important;
+  font-size: 12px !important; color: var(--text-secondary) !important; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lo-mod-matches button:hover { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
+.lo-mod-matches svg.lucide { width: 13px !important; height: 13px !important; flex: none; }
+
+/* ---------- generated mod previews (custom/previews.tsx) ---------- */
+.mod-preview img { display: block; width: 100%; max-height: 340px; object-fit: contain; border-radius: 10px; background: var(--bg-dark); border: 1px solid var(--panel-border); }
+.mod-preview-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.mod-preview .mod-preview-bar:first-child { margin-top: 0; }
+.mod-preview-btn {
+  display: inline-flex !important; align-items: center; gap: 6px; height: 30px !important; min-height: 0 !important; padding: 0 12px !important;
+  border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important;
+  background: transparent !important; color: var(--text-primary) !important; font-size: 12px !important; font-weight: 500 !important;
+}
+.mod-preview-btn:hover:not(:disabled) { background: var(--quiet-hover) !important; }
+.mod-preview-btn:disabled { opacity: 0.55; cursor: default; }
+.mod-preview-btn svg.lucide { width: 14px !important; height: 14px !important; }
+.mod-preview-note { font-size: 12px; color: var(--text-secondary); }

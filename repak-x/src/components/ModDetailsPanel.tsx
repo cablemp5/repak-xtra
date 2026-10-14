@@ -9,6 +9,7 @@ import { formatFileSize } from '../utils/format'
 import { detectHeroesWithData } from '../utils/heroes'
 import { FALLBACK_HERO_ID, resolveHeroImage, useHeroImages } from '../utils/heroImages'
 import './ModDetailsPanel.css'
+import { ModPreview } from '../custom/previews' // caleb fork
 
 type CharacterDataEntry = {
   name: string
@@ -180,6 +181,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
       </div>
 
       <div className="details-body">
+        <ModPreview path={mod.path} />
         {loading ? (
           <div className="loading-state">Loading mod details...</div>
         ) : error ? (
