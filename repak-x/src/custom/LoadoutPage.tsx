@@ -45,6 +45,8 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia 
   const matches = others.filter(k => (!needle || k.toLowerCase().includes(needle)) && (!type || categoryOf(k) === type))
   const active = isActive(l, p.mods)
   const onNow = mine.filter(k => byKey.get(k)?.enabled).length
+  const present = mine.length - missing.length
+  const switchTitle = present === 0 ? 'No installed mods' : active ? `Turn ${l.name}'s mods off` : `Turn ${l.name}'s mods on`
   const hasMedia = Boolean(l.mediaRev || l.image)
 
   /** Undo adds the removed mods back to the loadout as it is now, so mods added meanwhile stay. */
@@ -103,8 +105,8 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia 
             {missing.length > 0 && <> · {missing.length} not installed</>}</>}</p>
           <div className="lp-actions">
             <label className="lp-switch">
-              <Switch size="sm" color="primary" checked={active} disabled={busy} onChange={(on: boolean) => onToggle(on)}
-                title={active ? `Turn ${l.name}'s mods off` : `Turn ${l.name}'s mods on`} />
+              <Switch size="sm" color="primary" checked={active} isDisabled={present === 0} disabled={busy || present === 0}
+                onChange={(on: boolean) => onToggle(on)} title={switchTitle} aria-label={switchTitle} />
               <SwapText text={active ? 'On' : 'Off'} />
             </label>
             <GeneratePreviewsButton className="lo-text-btn" label="Generate previews" set={previewSetKey(l.id)} name={l.name}

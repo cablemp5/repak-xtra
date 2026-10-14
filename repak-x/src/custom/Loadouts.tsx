@@ -127,7 +127,12 @@ export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], ve
     p.alert.warning('Game running', 'Mods cannot be switched while the game is running.')
     return
   }
-  if (changes.length === 0 || switching) return
+  if (switching) return
+  if (changes.length === 0) {
+    const installed = changesToTurnOn(l, p.mods).length + changesToTurnOff(l, p.mods).length
+    p.alert.info('Nothing to switch', installed ? `${l.name}'s mods are already ${verb}.` : `${l.name} has no installed mods.`)
+    return
+  }
   switching = true
   try {
     const wasOn = readLoadouts().filter(o => o.id !== l.id && isActive(o, p.mods))
@@ -237,6 +242,7 @@ export default function Loadouts(p: LoadoutProps) {
         const hotkey = i < 9 ? ` (Ctrl+${i + 1})` : ''
         const pending = changesToTurnOn(l, p.mods).length
         const onNow = changesToTurnOff(l, p.mods).length // its mods that are on right now
+        const none = pending + onNow === 0 // none of its mods is installed
         return (
           <div className={`fp-row-wrap lo-row ${active ? 'is-on' : ''} ${dropOn === l.id ? 'is-drop' : ''}`} key={l.id} draggable
             onDragStart={e => { e.dataTransfer.setData('text/x-loadout', l.id); e.dataTransfer.effectAllowed = 'move' }}
@@ -244,9 +250,9 @@ export default function Loadouts(p: LoadoutProps) {
             onDragLeave={() => setDropOn(null)}
             onDrop={e => { e.preventDefault(); setDropOn(null); const id = e.dataTransfer.getData('text/x-loadout'); if (id) moveLoadout(id, i) }}>
             {/* transitions.dev: Icon swap. Both marks stay stacked; the active one fades and scales in */}
-            <button type="button" className="lo-toggle fp-lead t-icon-swap" data-state={active ? 'a' : 'b'} aria-pressed={active} disabled={busy !== null}
-              onClick={() => apply(l)} aria-label={active ? `Turn ${l.name} off` : `Turn ${l.name} on`}
-              title={active ? `${l.name} is on. Turn its mods off${hotkey}` : `Turn ${l.name} on: switches ${pending} of its mods on${hotkey}`}>
+            <button type="button" className="lo-toggle fp-lead t-icon-swap" data-state={active ? 'a' : 'b'} aria-pressed={active} disabled={busy !== null || none}
+              onClick={() => apply(l)} aria-label={none ? 'No installed mods' : active ? `Turn ${l.name} off` : `Turn ${l.name} on`}
+              title={none ? 'No installed mods' : active ? `${l.name} is on. Turn its mods off${hotkey}` : `Turn ${l.name} on: switches ${pending} of its mods on${hotkey}`}>
               <Check size={15} className="lo-active t-icon" data-icon="a" />
               <span className="lo-dot t-icon" data-icon="b" />
             </button>

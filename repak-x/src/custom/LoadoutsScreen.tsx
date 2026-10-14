@@ -116,6 +116,21 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   const openRef = useRef(openId)
   openRef.current = openId
   const open = loadouts.find(l => l.id === openId)
+  // Leaving a loadout page puts focus back on its card's Edit mods (or on New loadout when it was deleted); only then,
+  // never on first paint or a Home/Library switch
+  const newRef = useRef<HTMLButtonElement>(null)
+  const closedId = useRef<string | null>(null)
+  const shownPage = useRef(open?.id ?? null)
+  const closePage = () => { closedId.current = openRef.current; setOpenId(null) }
+  useEffect(() => {
+    const was = shownPage.current
+    shownPage.current = open?.id ?? null
+    if (view !== 'home' || !was || open) return
+    const id = closedId.current
+    closedId.current = null
+    const edit = id && document.querySelector<HTMLElement>(`[data-loadout="${CSS.escape(id)}"] .lo-expand`)
+    ;(edit || newRef.current)?.focus()
+  })
 
   const setMedia = async (id: string, file: File) => {
     try {
@@ -133,7 +148,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     if (view !== 'home') return
     // Esc on a loadout page goes back to the cards (a text field takes its own Esc first)
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && openRef.current && !isTyping(e.target) && !document.querySelector('.modal-overlay')) { e.stopPropagation(); setOpenId(null) }
+      if (e.key === 'Escape' && openRef.current && !isTyping(e.target) && !document.querySelector('.modal-overlay')) { e.stopPropagation(); closePage() }
     }
     // Ctrl+V with an image, GIF or video sets the open loadout's media, or the hovered card's
     const onPaste = (e: ClipboardEvent) => {
@@ -225,7 +240,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
       <div className="lo-screen" aria-label={`Loadout ${open.name}`}>
         {hidden}
         <div className="lo-body">
-          <LoadoutPage p={p} l={open} busy={busy === open.id} onToggle={on => toggle(open, on)} onBack={() => setOpenId(null)}
+          <LoadoutPage p={p} l={open} busy={busy === open.id} onToggle={on => toggle(open, on)} onBack={closePage}
             onPickMedia={() => pickMedia(open.id)} />
         </div>
       </div>
@@ -244,6 +259,9 @@ export default function LoadoutsScreen(p: LoadoutProps) {
           <button type="button" className="lo-text-btn" title="Install PAKs or archives (Ctrl+O)"
             onClick={() => document.querySelector<HTMLElement>('[title="Install PAKs or Archives"]')?.click()}>
             <PackagePlus size={14} /> Install mods
+          </button>
+          <button type="button" ref={newRef} className="lo-text-btn" onClick={createEmpty} title="A new empty loadout, opened to add mods to it">
+            <Plus size={14} /> New loadout
           </button>
           <button type="button" className="lo-text-btn" disabled={loadouts.length === 0}
             title="Render a preview for every loadout, one after another (each card shows its progress)"
@@ -294,7 +312,10 @@ export default function LoadoutsScreen(p: LoadoutProps) {
             <h3>No loadouts yet</h3>
             <p>A loadout is a set of mods you switch on and off together, like one look, one VFX color or one emote wheel.</p>
             <div className="lo-first-actions">
-              <button type="button" className="lo-text-btn is-primary" onClick={createFromOn}>Make one from the {p.mods.filter(m => m.enabled).length} mods that are on now</button>
+              <button type="button" className="lo-text-btn is-primary" onClick={createFromOn} disabled={!p.mods.some(m => m.enabled)}
+                title={p.mods.some(m => m.enabled) ? undefined : 'No mods are on right now'}>
+                Make one from the {p.mods.filter(m => m.enabled).length} mods that are on now
+              </button>
               <button type="button" className="lo-text-btn" onClick={createEmpty}>Start an empty one</button>
             </div>
           </div>
@@ -317,7 +338,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                 const present = [...keys].filter(k => byKey.has(k)).length
                 const onNow = [...keys].filter(k => byKey.get(k)?.enabled).length
                 return (
-                  <article key={l.id} className={`lo-card ${active ? 'is-on' : ''}`} draggable={groupBy === 'group' && renaming !== l.id}
+                  <article key={l.id} data-loadout={l.id} className={`lo-card ${active ? 'is-on' : ''}`} draggable={groupBy === 'group' && renaming !== l.id}
                     onDragStart={e => { e.dataTransfer.setData('text/x-loadout-card', l.id); e.dataTransfer.effectAllowed = 'move' }}
                     onKeyDown={e => { if (e.key === 'F2' && !isTyping(e.target)) { e.preventDefault(); setDraft(l.name); setRenaming(l.id) } }}
                     onMouseEnter={() => { hovered.current = l.id }} onMouseLeave={() => { if (hovered.current === l.id) hovered.current = null }}>
@@ -332,8 +353,9 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                         ) : (
                           <h3 title={`${l.name} (double-click or F2 to rename)`} onDoubleClick={() => { setDraft(l.name); setRenaming(l.id) }}>{l.name}</h3>
                         )}
-                        <Switch size="sm" color="primary" checked={active} disabled={busy !== null}
-                          title={active ? `Turn ${l.name} off` : `Turn ${l.name} on`}
+                        <Switch size="sm" color="primary" checked={active} isDisabled={present === 0} disabled={busy !== null || present === 0}
+                          title={present === 0 ? 'No installed mods' : active ? `Turn ${l.name} off` : `Turn ${l.name} on`}
+                          aria-label={present === 0 ? 'No installed mods' : active ? `Turn ${l.name} off` : `Turn ${l.name} on`}
                           onChange={(checked: boolean) => toggle(l, checked)} />
                       </div>
                       <p className="lo-card-meta">
