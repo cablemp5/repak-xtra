@@ -45,25 +45,48 @@ pub fn get_mod_preview(key: String) -> Result<tauri::ipc::Response, String> {
         .map_err(|e| e.to_string())
 }
 
-/// The mods a loadout's combined render (`set`) shows, from the generator's <set>.json; empty when there is none.
+/// A loadout's combined render (`set`), from the generator's <set>.json: `covers`, the mods it shows (empty when there
+/// is none), and `members`, the installed mods it was rendered for (null for renders older than that record).
 #[tauri::command]
-pub fn get_preview_covers(key: String) -> Vec<String> {
-    if !valid_key(&key) {
-        return Vec::new();
+pub fn get_preview_covers(key: String) -> serde_json::Value {
+    let v = if valid_key(&key) {
+        std::fs::read_to_string(previews_dir().join(format!("{key}.json")))
+            .ok()
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+            .unwrap_or_default()
+    } else {
+        serde_json::Value::Null
+    };
+    let list = |name: &str| serde_json::from_value::<Vec<String>>(v[name].clone()).ok();
+    serde_json::json!({ "covers": list("covers").unwrap_or_default(), "members": list("members") })
+}
+
+/// One line of the generator's output as (event, key): "PREVIEW <key>" after writing a PNG, "PREVIEW_NONE <key>" when
+/// there is nothing to show, "PREVIEW_IN <key>" for a mod the loadout's combined render shows, "PREVIEW_FAIL <key>" when
+/// it failed (its last good preview stays), and "PREVIEW_BUSY" (no key) when another generator holds the lock.
+fn parse_line(line: &str) -> Option<(&'static str, Option<String>)> {
+    if line.trim() == "PREVIEW_BUSY" {
+        return Some(("mod-previews-busy", None));
     }
-    std::fs::read_to_string(previews_dir().join(format!("{key}.json")))
-        .ok()
-        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
-        .and_then(|v| serde_json::from_value(v["covers"].clone()).ok())
-        .unwrap_or_default()
+    [
+        ("PREVIEW_NONE ", "mod-preview-none"),
+        ("PREVIEW_IN ", "mod-preview-in"),
+        ("PREVIEW_FAIL ", "mod-preview-failed"),
+        ("PREVIEW ", "mod-preview-ready"),
+    ]
+    .into_iter()
+    .find_map(|(prefix, event)| line.strip_prefix(prefix).map(|k| (event, Some(k.trim().to_string()))))
 }
 
 /// Renders previews for the given mods (`jobs` = [folder, mod key] pairs) one after another in the background,
 /// replacing existing ones. With `set` (a loadout), its character mods render once together as <set>.png.
-/// Progress: `mod-preview-ready` / `mod-preview-none` / `mod-preview-in` (shown in the set's render) per mod,
-/// `mod-previews-done` (ok) at the end. Ok(false) = a run is already going.
+/// Progress: `mod-preview-ready` / `mod-preview-none` / `mod-preview-in` (shown in the set's render) /
+/// `mod-preview-failed` per mod or set, `mod-previews-busy` when another generator (a manual run, or one an earlier
+/// app session left going) holds its lock, `mod-previews-done` (ok) at the end. Ok(false) = this app runs one already.
+/// Unchanged mods and sets report their existing result without rendering; `force` (Regenerate) renders them anyway.
+/// The generator alone owns its lock and the cancel file (it clears a stale Stop once it holds the lock).
 #[tauri::command]
-pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: Option<String>) -> Result<bool, String> {
+pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: Option<String>, force: Option<bool>) -> Result<bool, String> {
     if let Some(bad) = jobs.iter().map(|(_, k)| k).chain(set.iter()).find(|k| !valid_key(k)) {
         return Err(format!("Invalid preview key: {bad}"));
     }
@@ -73,19 +96,15 @@ pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: O
     if !python.exists() || !script.exists() {
         return Err(format!("Preview generator not found at {}", script.display()));
     }
-    // A generator from an earlier app session may still be rendering (closing the app does not stop it); its lock file
-    // says so, and starting another would only end in "failed" for every mod
-    let lock_age = std::fs::metadata(previews_dir().join("generator.lock")).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok());
-    if lock_age.is_some_and(|age| age.as_secs() < 3 * 3600) {
-        return Ok(false);
-    }
     if RUNNING.swap(true, Ordering::SeqCst) {
         return Ok(false);
     }
-    let _ = std::fs::remove_file(previews_dir().join("cancel"));
     // One generator run over every folder the mods sit in (a loadout's combined render needs all of them at once)
     let mut cmd = Command::new(&python);
-    cmd.arg(&script).arg("--out").arg(previews_dir()).arg("--force");
+    cmd.arg(&script).arg("--out").arg(previews_dir());
+    if force == Some(true) {
+        cmd.arg("--force");
+    }
     let mut dirs: Vec<&String> = jobs.iter().map(|(d, _)| d).collect();
     dirs.sort();
     dirs.dedup();
@@ -114,21 +133,20 @@ pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: O
         let mut ok = false;
         if let Ok(mut child) = cmd.spawn() {
             if let Some(out) = child.stdout.take() {
-                // "PREVIEW <key>" after writing a PNG, "PREVIEW_NONE <key>" when there is nothing to show,
-                // "PREVIEW_IN <key>" for a mod the loadout's combined render shows
                 for line in BufReader::new(out).lines().map_while(Result::ok) {
-                    if let Some(key) = line.strip_prefix("PREVIEW_NONE ") {
-                        let _ = app.emit("mod-preview-none", key.trim().to_string());
-                    } else if let Some(key) = line.strip_prefix("PREVIEW_IN ") {
-                        let _ = app.emit("mod-preview-in", key.trim().to_string());
-                    } else if let Some(key) = line.strip_prefix("PREVIEW ") {
-                        let _ = app.emit("mod-preview-ready", key.trim().to_string());
+                    match parse_line(&line) {
+                        Some((event, Some(key))) => {
+                            let _ = app.emit(event, key);
+                        }
+                        Some((event, None)) => {
+                            let _ = app.emit(event, ());
+                        }
+                        None => {}
                     }
                 }
             }
             ok = child.wait().map(|s| s.success()).unwrap_or(false);
         }
-        let _ = std::fs::remove_file(previews_dir().join("cancel"));
         RUNNING.store(false, Ordering::SeqCst);
         let _ = app.emit("mod-previews-done", ok);
     });
@@ -153,5 +171,17 @@ mod tests {
         assert!(!valid_key("C:evil"));
         assert!(!valid_key("a/b"));
         assert!(!valid_key(""));
+    }
+
+    #[test]
+    fn generator_lines_become_events() {
+        let k = |s: &str| Some(s.to_string());
+        assert_eq!(parse_line("PREVIEW_BUSY"), Some(("mod-previews-busy", None)));
+        assert_eq!(parse_line("PREVIEW_BUSY\r"), Some(("mod-previews-busy", None)));
+        assert_eq!(parse_line("PREVIEW_FAIL loadout-1"), Some(("mod-preview-failed", k("loadout-1"))));
+        assert_eq!(parse_line("PREVIEW_NONE A"), Some(("mod-preview-none", k("A"))));
+        assert_eq!(parse_line("PREVIEW_IN A"), Some(("mod-preview-in", k("A"))));
+        assert_eq!(parse_line("PREVIEW A_v2\r"), Some(("mod-preview-ready", k("A_v2"))));
+        assert_eq!(parse_line("# A: character (12 s)"), None);
     }
 }

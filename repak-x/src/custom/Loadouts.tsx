@@ -211,9 +211,10 @@ export default function Loadouts(p: LoadoutProps) {
         <span className="fp-title">Loadouts</span>
         <span className="lo-head-actions">
           <button type="button" className="lo-icon" title="Generate previews for every loadout (one after another)" aria-label="Generate previews for all loadouts"
-            disabled={loadouts.length === 0} onClick={() => {
-              const n = generateAllLoadouts(loadouts, p.mods)
-              p.alert.success('Previews queued', `${plural(n, 'loadout')}, one after another. Home shows the progress on each card.`)
+            disabled={loadouts.length === 0} onClick={async () => {
+              const { count, error } = await generateAllLoadouts(loadouts, p.mods)
+              if (error) p.alert.warning('Previews not started', error)
+              else p.alert.success('Previews queued', `${plural(count, 'loadout')}, one after another. Home shows the progress on each card.`)
             }}>
             <Sparkles size={15} />
           </button>

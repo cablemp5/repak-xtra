@@ -61,7 +61,9 @@ export async function finishInstallLoadout(installed: { customName?: string; mod
   writeLoadouts([...readLoadouts(), { id, name: job.name, label: 'Other', scope: keys, on: keys }])
   const missing = wanted.size - keys.length
   alert.success(`Loadout ${job.name} created`, `${keys.length} mod${keys.length === 1 ? '' : 's'}${missing ? `; ${missing} could not be found` : ''}.${job.preview ? ' Generating its preview.' : ''}`)
-  if (job.preview) generatePreviews({ paths: onDisk.map(m => m.path), set: previewSetKey(id), name: job.name })
+  if (!job.preview) return
+  const error = await generatePreviews({ paths: onDisk.map(m => m.path), set: previewSetKey(id), name: job.name })
+  if (error) alert.warning('Preview not started', error)
 }
 
 if (import.meta.env.DEV) {

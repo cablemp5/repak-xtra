@@ -12,7 +12,7 @@ import { CardMedia } from './loadoutBits'
 import { prepareMedia, putMedia } from './loadoutMedia'
 import { plural } from './modName'
 import { Num } from './motion'
-import { generateAllLoadouts, stopPreviews, usePreviewBatch } from './previews'
+import { dismissPreviewSummary, generateAllLoadouts, stopPreviews, usePreviewBatch, usePreviewSummary } from './previews'
 import {
   type Loadout, type Mod, OTHER, addGroup, changesToTurnOff, changesToTurnOn, deleteGroup, displayName, exportLoadouts, groupKey,
   importLoadouts, inGroup, isActive, modKey, moveGroup, nextLoadoutName, openLoadout, patchLoadout, readLoadouts, renameGroup,
@@ -104,6 +104,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   const [draft, setDraft] = useState('')
   const savedGroups = useGroups()
   const batch = usePreviewBatch()
+  const lastRun = usePreviewSummary()
   const [editingGroup, setEditingGroup] = useState<string | null>(null)
   const [dropGroup, setDropGroup] = useState<string | null>(null)
   const [groupBy, setGroupByState] = useState<GroupBy>(() => (localStorage.getItem(GROUP_BY_KEY) === 'hero' ? 'hero' : 'group'))
@@ -246,7 +247,11 @@ export default function LoadoutsScreen(p: LoadoutProps) {
           </button>
           <button type="button" className="lo-text-btn" disabled={loadouts.length === 0}
             title="Render a preview for every loadout, one after another (each card shows its progress)"
-            onClick={() => { const n = generateAllLoadouts(loadouts, p.mods); p.alert.success('Previews queued', `${plural(n, 'loadout')}, one after another.`) }}>
+            onClick={async () => {
+              const { count, error } = await generateAllLoadouts(loadouts, p.mods)
+              if (error) p.alert.warning('Previews not started', error)
+              else p.alert.success('Previews queued', `${plural(count, 'loadout')}, one after another.`)
+            }}>
             <Sparkles size={14} /> Generate all previews
           </button>
           <button type="button" className="lo-text-btn" onClick={newGroup} title="A new group to sort loadouts into (drag cards onto it)">
@@ -267,12 +272,18 @@ export default function LoadoutsScreen(p: LoadoutProps) {
       {batch && (
         <div className="lo-batch" role="status">
           <LoaderCircle size={14} className="run-spin" />
-          <span className="t-shimmer" data-text={`Generating ${batch.name} · ${batch.done} of ${batch.total}`}>Generating {batch.name} · {batch.done} of {batch.total}</span>
-          {batch.left > 0 && <span className="lo-batch-left">{plural(batch.left, 'loadout')} queued after it</span>}
+          <span className="t-shimmer" data-text={`Generating ${batch.name} · mod ${batch.done} of ${batch.total}`}>Generating {batch.name} · mod {batch.done} of {batch.total}</span>
+          {batch.left > 0 && <span className="lo-batch-left">{batch.leftText} queued after it</span>}
           <button type="button" className="lo-text-btn lo-batch-stop" onClick={stopPreviews} disabled={batch.stopping}
             title="Stop after the mod rendering now and clear the queue">
             <CircleStop size={14} /> {batch.stopping ? 'Stopping…' : batch.left ? 'Stop all' : 'Stop'}
           </button>
+        </div>
+      )}
+      {!batch && lastRun && (
+        <div className="lo-batch is-summary" role="status">
+          <span>Last preview run: {lastRun}</span>
+          <button type="button" className="lo-text-btn lo-batch-stop" onClick={dismissPreviewSummary}>Dismiss</button>
         </div>
       )}
 

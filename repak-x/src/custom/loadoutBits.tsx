@@ -7,7 +7,7 @@ import { useMediaUrl } from './loadoutMedia'
 import { type Loadout, type Mod, displayName, flipMods, modKey } from './loadoutStore'
 import { ModName } from './modName'
 import { revealOnLoad } from './motion'
-import { hasPreview, previewSetKey, useCovers, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
+import { hasPreview, previewSetKey, useCovers, usePreviewOutcome, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
 
 /** The home screen's badge color class for a mod type (caleb.css *-badge sets --badge-dot). */
 export const typeClass = (category?: string | null) => `${(category || 'unknown').toLowerCase().replace(/\s+/g, '-')}-badge`
@@ -15,19 +15,25 @@ export const typeClass = (category?: string | null) => `${(category || 'unknown'
 const TYPE_ORDER = ['Mesh', 'Texture', 'Material', 'Animation', 'VFX', 'UI', 'Text']
 const rank = (c?: string | null) => { const i = TYPE_ORDER.indexOf(c ?? ''); return i < 0 ? TYPE_ORDER.length : i }
 
-/** A loadout's generated previews: its combined character render first, then its other mods' in type order. */
+/** A loadout's generated previews: its combined character render first, then its other mods' in type order. The
+ *  combined render hides only the mods it shows that the loadout still holds. It reads "Older render" when it was made
+ *  for other installed mods than the loadout has now (or before that was recorded). */
 function usePreviewSlides(p: LoadoutProps, l: Loadout) {
   usePreviewVersion()
   const set = previewSetKey(l.id)
-  const covered = useCovers(set)
+  const info = useCovers(set)
   const byKey = new Map(p.mods.map(m => [modKey(m.path), m]))
   const categoryOf = (k: string) => { const m = byKey.get(k); return (m && p.modDetails?.[m.path]?.category) || undefined }
-  const keys = [...new Set(l.on.map(displayName))].filter(k => hasPreview(k) && !covered.includes(k))
+  const mine = [...new Set(l.on.map(displayName))]
+  const covered = (info?.covers ?? []).filter(k => mine.includes(k))
+  const keys = mine.filter(k => hasPreview(k) && !covered.includes(k))
     .sort((a, b) => rank(categoryOf(a)) - rank(categoryOf(b)))
-  const slides = keys.map(k => ({ key: k, label: categoryOf(k) ?? 'Mod' }))
+  const slides: { key: string; label: string; older?: boolean }[] = keys.map(k => ({ key: k, label: categoryOf(k) ?? 'Mod' }))
   if (hasPreview(set)) {
+    const installed = new Set(mine.filter(k => byKey.has(k)))
+    const older = info !== undefined && !(info.members && info.members.length === installed.size && info.members.every(k => installed.has(k)))
     const kinds = [...new Set(covered.map(categoryOf).filter((c): c is string => Boolean(c)))].sort((a, b) => rank(a) - rank(b))
-    slides.unshift({ key: set, label: kinds.join(' + ') || 'Character' }) // e.g. "Mesh + Texture + Material"
+    slides.unshift({ key: set, label: older ? 'Older render' : kinds.join(' + ') || 'Character', older }) // e.g. "Mesh + Texture + Material"
   }
   return slides
 }
@@ -46,6 +52,7 @@ export function CardMedia({ p, l, className = '', title, onClick, emptyText = 'C
   const generated = usePreviewUrl(slide?.key || undefined)
   const src = slide?.key ? generated : own
   const state = usePreviewState(previewSetKey(l.id))
+  const setNote = usePreviewOutcome(previewSetKey(l.id)) // the last loadout render failed (its image stays) or was refused
   return (
     <div className={`lo-media ${className}${paged ? ' is-paged' : ''}${state ? ` is-${state.kind}` : ''}`}>
       {/* transitions.dev: Skeleton loader. Shown over the card while its preview renders or waits; the new image
@@ -53,7 +60,7 @@ export function CardMedia({ p, l, className = '', title, onClick, emptyText = 'C
       {state && (
         <span className="lo-skel" role="status">
           <span className="lo-skel-label">
-            {state.kind === 'running' ? `Generating ${state.done} of ${state.total}` : state.at === 1 ? 'Queued, up next' : `Queued, ${state.at} in line`}
+            {state.kind === 'running' ? `Generating mod ${state.done} of ${state.total}` : state.at === 1 ? 'Queued, up next' : `Queued, ${state.at} in line`}
           </span>
         </span>
       )}
@@ -75,6 +82,8 @@ export function CardMedia({ p, l, className = '', title, onClick, emptyText = 'C
           <span className="lo-media-label">{slide.label} · {at + 1}/{slides.length}</span>
         </>
       )}
+      {slides.length === 1 && slide.older && <span className="lo-media-label">{slide.label}</span>}
+      {!state && setNote && <span className="lo-media-note" title={setNote}>{setNote}</span>}
     </div>
   )
 }

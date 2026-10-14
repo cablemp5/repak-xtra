@@ -21,9 +21,15 @@ const mock = window as any
 const previewUrls: Record<string, () => Promise<string>> = import.meta.env.DEV
   ? import.meta.glob<string>('./previews.local/*.png', { query: '?url', import: 'default' })
   : {}
-const previewCovers: Record<string, () => Promise<{ covers?: string[] }>> = import.meta.env.DEV
-  ? import.meta.glob<{ covers?: string[] }>('./previews.local/*.json', { import: 'default' })
+const previewCovers: Record<string, () => Promise<{ covers?: string[]; members?: string[] }>> = import.meta.env.DEV
+  ? import.meta.glob<{ covers?: string[]; members?: string[] }>('./previews.local/*.json', { import: 'default' })
   : {}
+// Loadout renders made in this page: what get_preview_covers reports for them (the local copies have no members)
+const setCovers = new Map<string, { covers: string[]; members: string[] | null }>()
+// window.__previewMock picks how generate_mod_previews answers: 'ok' (default), 'busy' (another generator holds the
+// lock), 'fail-set' (the loadout render fails), 'throw' (the start throws), 'refuse' (a run is going); an array is used
+// one entry per call. window.__previewStep sets the ms between events (600).
+const previewMode = (): string => (Array.isArray(mock.__previewMock) ? mock.__previewMock.shift() : mock.__previewMock) ?? 'ok'
 
 if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
   mockWindows('main')
@@ -48,14 +54,42 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'get_hero_image_ids': return data.heroIds ?? []
       case 'list_mod_previews': // copies of %APPDATA%\Repak-X\previews in src/dev/previews.local
         return Object.keys(previewUrls).map(f => f.replace(/^.*\/|\.png$/g, ''))
-      case 'get_mod_preview':
-        return previewUrls[`./previews.local/${args?.key}.png`]().then(url => fetch(url)).then(r => r.arrayBuffer())
-      case 'generate_mod_previews': // pretend run: each job reports back as already rendered
-        ;(args?.jobs ?? []).forEach(([, key]: [string, string], i: number) => setTimeout(() => emit('mod-preview-ready', key), 600 * (i + 1)))
-        setTimeout(() => emit('mod-previews-done', true), 600 * ((args?.jobs ?? []).length + 1))
+      case 'get_mod_preview': { // a loadout render made in this page shows a local copy's image
+        const load = previewUrls[`./previews.local/${args?.key}.png`] ?? (setCovers.has(args?.key) ? Object.values(previewUrls)[0] : undefined)
+        if (!load) throw `No preview for ${args?.key}`
+        return load().then(url => fetch(url)).then(r => r.arrayBuffer())
+      }
+      case 'generate_mod_previews': { // pretend run: each job reports back as already rendered
+        const mode = previewMode()
+        if (mode === 'throw') throw 'Preview generator not found at C:/Fake/tools/previews/mod_previews.py'
+        if (mode === 'refuse') return false
+        const keys: string[] = (args?.jobs ?? []).map(([, key]: [string, string]) => key)
+        const set: string | null = args?.set ?? null
+        let t = 0
+        const at = (f: () => void) => setTimeout(f, (t += mock.__previewStep ?? 600))
+        if (mode === 'busy') {
+          at(() => emit('mod-previews-busy'))
+          at(() => emit('mod-previews-done', false))
+          return true
+        }
+        let alone = keys
+        if (set && mode === 'fail-set') at(() => emit('mod-preview-failed', set))
+        else if (set) { // the first mod renders in the loadout's image, the rest alone
+          alone = keys.slice(1)
+          at(() => {
+            setCovers.set(set, { covers: keys.slice(0, 1), members: [...keys].sort() })
+            emit('mod-preview-ready', set)
+            emit('mod-preview-in', keys[0])
+          })
+        }
+        alone.forEach(k => at(() => emit('mod-preview-ready', k)))
+        at(() => emit('mod-previews-done', true))
         return true
+      }
       case 'cancel_mod_previews': return null
-      case 'get_preview_covers': return previewCovers[`./previews.local/${args?.key}.json`]?.().then(c => c?.covers ?? []) ?? []
+      case 'get_preview_covers':
+        return setCovers.get(args?.key) ?? previewCovers[`./previews.local/${args?.key}.json`]?.()
+          .then(c => ({ covers: c?.covers ?? [], members: c?.members ?? null })) ?? { covers: [], members: null }
       case 'get_hero_image':
         return fetch(`/src/dev/heroes.local/${args?.id}.png`).then(r => r.arrayBuffer()).then(b => new Uint8Array(b))
       case 'get_app_version': return __APP_VERSION__
