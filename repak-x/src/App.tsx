@@ -54,7 +54,7 @@ import { AlertProvider, useAlert } from './components/AlertHandler'
 import { offerUndoDelete } from './custom/undoDelete'
 import ModStateFilter, { matchesState, type ModState } from './custom/ModStateFilter'
 import './custom/keyboardClickables'
-import './custom/hotkeys' // caleb fork: extra shortcuts
+import { dialogOpen } from './custom/hotkeys' // caleb fork: extra shortcuts
 import FilterPanel from './custom/FilterPanel'
 import Loadouts, { AddToLoadoutField } from './custom/Loadouts'
 import LoadoutsScreen, { ViewTabs } from './custom/LoadoutsScreen'
@@ -3115,6 +3115,7 @@ function App() {
         else if (selectedMod) setSelectedMod(null)
         else if (selectedMods.size > 0) setSelectedMods(new Set()) // caleb fork: Esc clears the selection, as F1 says
       }
+      else if (key !== 'f1' && (e.defaultPrevented || dialogOpen())) return // caleb fork: Home or a dialog is showing: the Library's selection keys below stay quiet
       // Ctrl+E - Toggle mod enabled/disabled
       else if (ctrl && key === 'e' && selectedMod) {
         e.preventDefault()
