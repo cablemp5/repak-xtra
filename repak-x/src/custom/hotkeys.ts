@@ -2,6 +2,7 @@
 // Upstream keys are handled in App.tsx; L in loadoutStore.ts, Ctrl+1-9 in Loadouts.tsx, S in
 // SigeonControl.tsx, zoom in uiPrefs.tsx. The ones below drive existing buttons, so they follow
 // the same rules (game-running locks, confirmations) as clicking.
+import { toggleTags } from './uiPrefs'
 
 export type Shortcut = { keys: string[]; action: string }
 export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
@@ -39,6 +40,7 @@ export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
       { keys: ['3'], action: 'Show disabled mods' },
       { keys: ['V'], action: 'Cycle list / grid / compact grid' },
       { keys: ['X'], action: 'Clear hero and type filters' },
+      { keys: ['T'], action: 'Show / hide tags on mods' },
       { keys: ['Ctrl', '+'], action: 'Zoom in' },
       { keys: ['Ctrl', '-'], action: 'Zoom out' },
       { keys: ['Ctrl', '0'], action: 'Reset zoom' },
@@ -109,6 +111,10 @@ window.addEventListener('keydown', e => {
     }
     case 'x':
       click('.fp-clear')
+      break
+    case 't':
+      e.preventDefault()
+      toggleTags()
       break
   }
 })

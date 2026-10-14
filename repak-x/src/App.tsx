@@ -58,6 +58,7 @@ import './custom/hotkeys' // caleb fork: extra shortcuts
 import FilterPanel from './custom/FilterPanel'
 import Loadouts from './custom/Loadouts'
 import LoadoutsScreen from './custom/LoadoutsScreen'
+import { TagsToggle } from './custom/uiPrefs'
 import SigeonControl from './custom/SigeonControl'
 import { setLoadoutsScreenOpen } from './custom/loadoutStore'
 import { Layers } from 'lucide-react'
@@ -4009,6 +4010,7 @@ function App() {
               addNewLabel="+ Create Tag"
               onDeleteOption={handleDeleteTagFromCatalog}
             />
+            <TagsToggle />
 
             <AddModSplitButton
               data-tour="add-mod-btn"
@@ -4047,6 +4049,7 @@ function App() {
               />
               <LoadoutsScreen
                 mods={mods}
+                modDetails={modDetails}
                 scopeMods={folderMods}
                 scopeLabel={[...selectedCharacters, ...selectedCategories].join(', ') || 'all mods'}
                 blocked={gameRunning && !bypassGameRunningLock}

@@ -3,6 +3,7 @@
 // the element when it is absent. UI scale uses the webview zoom, like Ctrl + in a browser.
 import { useSyncExternalStore } from 'react'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
+import { Tags } from 'lucide-react'
 import Checkbox from '../components/ui/Checkbox'
 
 const PREFS = [
@@ -14,15 +15,18 @@ const PREFS = [
 
 const SCALES = [0.9, 1, 1.1, 1.25, 1.4, 1.5]
 const SCALE_KEY = 'caleb.uiScale'
+const HIDE_TAGS_KEY = 'caleb.hideTags' // tags show by default, so this one stores the hidden state
 
 const storageKey = (key: string) => `caleb.show.${key}`
 const listeners = new Set<() => void>()
 
 const isOn = (key: string) => localStorage.getItem(storageKey(key)) === '1'
 const getScale = () => Number(localStorage.getItem(SCALE_KEY)) || 1
+const tagsHidden = () => localStorage.getItem(HIDE_TAGS_KEY) === '1'
 
 const apply = () => {
   PREFS.forEach(({ key }) => document.documentElement.toggleAttribute(`data-show-${key}`, isOn(key)))
+  document.documentElement.toggleAttribute('data-hide-tags', tagsHidden())
   getCurrentWebview().setZoom(getScale()).catch(e => console.warn('[uiPrefs] zoom failed', e))
 }
 apply()
@@ -48,6 +52,19 @@ const update = (key: string, value: string) => {
 const subscribe = (l: () => void) => {
   listeners.add(l)
   return () => listeners.delete(l)
+}
+
+/** Show or hide the custom tag chips on mods (T, or the button next to the tag filter). */
+export const toggleTags = () => update(HIDE_TAGS_KEY, tagsHidden() ? '0' : '1')
+
+export function TagsToggle() {
+  const hidden = useSyncExternalStore(subscribe, tagsHidden)
+  return (
+    <button type="button" className="btn-icon tags-toggle" aria-pressed={!hidden} onClick={toggleTags}
+      title={hidden ? 'Show tags on mods (T)' : 'Hide tags on mods (T)'}>
+      <Tags size={18} />
+    </button>
+  )
 }
 
 export default function CalebUiSettings() {

@@ -1,16 +1,54 @@
 // caleb fork: full-window loadouts screen. Each loadout is a card with optional media (image, GIF or
 // looping video; upload or paste), an on/off switch and an expandable list of its mods.
 // On = its mods on, the rest of its group off, and other loadouts sharing mods off. Off = its mods off.
+// Cards are grouped by their saved group (label) or by hero; double-click a name to rename it.
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, Download, ImageOff, ImagePlus, Plus, RefreshCw, Trash2, Upload, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, runChanges } from './Loadouts'
+import { isTyping } from './hotkeys'
 import { deleteMedia, prepareMedia, putMedia, useMediaUrl } from './loadoutMedia'
 import {
-  type Loadout, changesToTurnOff, deleteLoadout, displayName, exportLoadouts, importLoadouts, isActive, modKey, patchLoadout, planTurnOn,
+  type Loadout, type Mod, changesToTurnOff, deleteLoadout, displayName, exportLoadouts, importLoadouts, isActive, modKey, patchLoadout, planTurnOn,
   readLoadouts, setLoadoutsScreenOpen, snapshotLoadout, useLoadouts, useLoadoutsScreenOpen, writeLoadouts,
 } from './loadoutStore'
+
+type GroupBy = 'group' | 'hero'
+const GROUP_BY_KEY = 'caleb.loadoutGroupBy'
+const NO_HERO = 'No hero'
+
+/** The hero most of the given mods belong to, or undefined when none has a detected hero. */
+function topHero(keys: string[], byKey: Map<string, Mod>, details: LoadoutProps['modDetails']) {
+  const counts = new Map<string, number>()
+  for (const key of keys) {
+    const mod = byKey.get(displayName(key))
+    let hero = mod && details?.[mod.path]?.character_name
+    if (!hero) continue
+    if (hero.startsWith('Multiple Heroes')) hero = 'Multiple heroes'
+    counts.set(hero, (counts.get(hero) ?? 0) + 1)
+  }
+  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0]
+}
+
+/** A loadout's hero from its on mods; VFX and texture-only mods often have none, so its scope decides then. */
+const heroOf = (l: Loadout, byKey: Map<string, Mod>, details: LoadoutProps['modDetails']) =>
+  topHero(l.on, byKey, details) ?? topHero(l.scope, byKey, details) ?? NO_HERO
+
+/** Sections in display order. Saved groups holding a single loadout share one "Other" section. */
+export function groupLoadouts(list: Loadout[], keyOf: (l: Loadout) => string, mergeSingles: boolean) {
+  const map = new Map<string, Loadout[]>()
+  for (const l of list) map.set(keyOf(l), [...(map.get(keyOf(l)) ?? []), l])
+  let groups = [...map]
+  if (mergeSingles) {
+    const singles = groups.filter(([, ls]) => ls.length === 1).flatMap(([, ls]) => ls)
+    groups = groups.filter(([, ls]) => ls.length > 1)
+    if (singles.length) groups.push(['Other', singles])
+  } else {
+    groups.sort(([a], [b]) => Number(a === NO_HERO) - Number(b === NO_HERO) || a.localeCompare(b))
+  }
+  return groups
+}
 
 function CardMedia({ l }: { l: Loadout }) {
   const url = useMediaUrl(l.id, l.mediaRev)
@@ -28,6 +66,10 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   const [naming, setNaming] = useState(false)
   const [name, setName] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const [groupBy, setGroupByState] = useState<GroupBy>(() => (localStorage.getItem(GROUP_BY_KEY) === 'hero' ? 'hero' : 'group'))
+  const setGroupBy = (g: GroupBy) => { localStorage.setItem(GROUP_BY_KEY, g); setGroupByState(g) }
   const fileRef = useRef<HTMLInputElement>(null)
   const importRef = useRef<HTMLInputElement>(null)
   const mediaTarget = useRef<string | null>(null)
@@ -45,7 +87,8 @@ export default function LoadoutsScreen(p: LoadoutProps) {
 
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setLoadoutsScreenOpen(false) } }
+    // Esc in a text field (rename, new loadout) cancels that field instead of closing the screen
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !isTyping(e.target)) { e.stopPropagation(); setLoadoutsScreenOpen(false) } }
     // Ctrl+V with an image, GIF or video on the clipboard sets the hovered card's media
     const onPaste = (e: ClipboardEvent) => {
       const file = [...(e.clipboardData?.files ?? [])].find(f => /^(image|video)\//.test(f.type))
@@ -93,6 +136,17 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
+  const commitRename = (l: Loadout) => {
+    const trimmed = draft.trim()
+    if (trimmed && trimmed !== l.name) patchLoadout(l.id, { name: trimmed })
+    setRenaming(null)
+  }
+
+  const byKey = new Map(p.mods.map(m => [modKey(m.path), m]))
+  const groups = groupBy === 'hero'
+    ? groupLoadouts(loadouts, l => heroOf(l, byKey, p.modDetails), false)
+    : groupLoadouts(loadouts, l => l.label, true)
+
   const toggleExpanded = (id: string) => setExpanded(prev => {
     const next = new Set(prev)
     next.has(id) ? next.delete(id) : next.add(id)
@@ -108,6 +162,10 @@ export default function LoadoutsScreen(p: LoadoutProps) {
           <p>On switches a loadout's mods on, the rest of its group off, and any other loadout sharing its mods off. Off switches its mods off. Press L to open or close.</p>
         </div>
         <div className="lo-head-tools">
+          <div className="mod-state-filter lo-groupby" role="group" aria-label="Group loadouts by">
+            <button type="button" aria-pressed={groupBy === 'group'} onClick={() => setGroupBy('group')}>Group</button>
+            <button type="button" aria-pressed={groupBy === 'hero'} onClick={() => setGroupBy('hero')}>Hero</button>
+          </div>
           <button type="button" className="lo-text-btn" title="Add loadouts from a .json file" onClick={() => importRef.current?.click()}>
             <Upload size={14} /> Import
           </button>
@@ -136,10 +194,13 @@ export default function LoadoutsScreen(p: LoadoutProps) {
       <input ref={fileRef} type="file" accept="image/*,video/*" hidden
         onChange={e => { const f = e.target.files?.[0]; if (f && mediaTarget.current) setMedia(mediaTarget.current, f); e.target.value = '' }} />
 
-      <div className="lo-grid">
-        {loadouts.map(l => {
+      <div className="lo-body">
+      {groups.map(([group, list]) => (
+      <section className="lo-group" key={group}>
+        <h3 className="lo-group-head">{group}<span className="lo-group-count">{list.length}</span></h3>
+        <div className="lo-grid">
+        {list.map(l => {
           const active = isActive(l, p.mods)
-          const byKey = new Map(p.mods.map(m => [modKey(m.path), m]))
           const present = new Set(l.scope.map(displayName).filter(k => byKey.has(k))).size
           const isOpen = expanded.has(l.id)
           const hasMedia = Boolean(l.mediaRev || l.image)
@@ -152,7 +213,13 @@ export default function LoadoutsScreen(p: LoadoutProps) {
               </button>
               <div className="lo-card-body">
                 <div className="lo-card-title">
-                  <h3 title={l.name}>{l.name}</h3>
+                  {renaming === l.id ? (
+                    <input className="lo-rename" autoFocus value={draft} aria-label="Loadout name"
+                      onFocus={e => e.target.select()} onChange={e => setDraft(e.target.value)} onBlur={() => commitRename(l)}
+                      onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') commitRename(l); if (e.key === 'Escape') setRenaming(null) }} />
+                  ) : (
+                    <h3 title={`${l.name} (double-click to rename)`} onDoubleClick={() => { setDraft(l.name); setRenaming(l.id) }}>{l.name}</h3>
+                  )}
                   <Switch size="sm" color="primary" checked={active} disabled={busy !== null}
                     title={active ? `Turn ${l.name} off` : `Turn ${l.name} on`}
                     onChange={(checked: boolean) => toggle(l, checked)} />
@@ -199,7 +266,11 @@ export default function LoadoutsScreen(p: LoadoutProps) {
             </article>
           )
         })}
+        </div>
+      </section>
+      ))}
 
+        <div className="lo-grid">
         <div className="lo-card lo-card-new">
           {naming ? (
             <div className="lo-new">
@@ -215,6 +286,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
               <small>{p.scopeLabel}<span className="lo-sep">·</span>{p.scopeMods.filter(m => m.enabled).length} of {p.scopeMods.length} on</small>
             </button>
           )}
+        </div>
         </div>
       </div>
     </div>

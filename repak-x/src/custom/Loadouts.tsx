@@ -1,6 +1,6 @@
 // caleb fork: sidebar list of saved loadouts (state lives in loadoutStore.ts). Click a loadout to
 // turn it on; the grid button opens the cards screen with on/off switches and images.
-import { useEffect, useRef, useState } from 'react'
+import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { Check, LayoutGrid, Plus, Save, X } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
@@ -16,6 +16,35 @@ export type LoadoutProps = {
   blocked: boolean       // game running and the lock is not bypassed
   reload: () => Promise<unknown>
   alert: ReturnType<typeof useAlert>
+  modDetails?: Record<string, { character_name?: string | null } | undefined>
+}
+
+const HEIGHT_KEY = 'caleb.loadoutsHeight'
+
+/** Drag to set the sidebar list's height (same grip as the filters/folders handle); saved across starts. */
+function useListHeight() {
+  const [height, setHeight] = useState<number | null>(() => Number(localStorage.getItem(HEIGHT_KEY)) || null)
+  const [dragging, setDragging] = useState(false)
+  const start = (e: ReactMouseEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const startY = e.clientY
+    const startH = (e.currentTarget.previousElementSibling as HTMLElement).offsetHeight
+    let last = startH
+    setDragging(true)
+    const move = (ev: MouseEvent) => {
+      last = Math.max(48, Math.min(window.innerHeight - 260, startH + ev.clientY - startY))
+      setHeight(last)
+    }
+    const end = () => {
+      setDragging(false)
+      localStorage.setItem(HEIGHT_KEY, String(last))
+      document.removeEventListener('mousemove', move)
+      document.removeEventListener('mouseup', end)
+    }
+    document.addEventListener('mousemove', move)
+    document.addEventListener('mouseup', end)
+  }
+  return { height, dragging, start }
 }
 
 /** Shared by the sidebar and the cards screen: apply a set of flips with the game-running guard. */
@@ -36,6 +65,7 @@ export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], ve
 
 export default function Loadouts(p: LoadoutProps) {
   const loadouts = useLoadouts()
+  const size = useListHeight()
   const [naming, setNaming] = useState(false)
   const [name, setName] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
@@ -94,7 +124,8 @@ export default function Loadouts(p: LoadoutProps) {
   }, [])
 
   return (
-    <div className="loadouts">
+    <>
+    <div className="loadouts" style={size.height ? { height: size.height, maxHeight: 'none' } : undefined}>
       <div className="fp-head">
         <span className="fp-title">Loadouts</span>
         <span className="lo-head-actions">
@@ -141,5 +172,7 @@ export default function Loadouts(p: LoadoutProps) {
         </div>
       )}
     </div>
+    <div className={`vertical-resizer lo-resizer ${size.dragging ? 'resizing' : ''}`} onMouseDown={size.start} />
+    </>
   )
 }
