@@ -298,7 +298,7 @@ export default function Loadouts(p: LoadoutProps) {
               <Check size={15} className="lo-active t-icon" data-icon="a" />
               <span className="lo-dot t-icon" data-icon="b" />
             </button>
-            <button type="button" className="fp-row" onClick={() => openLoadout(l.id)} title={`Open ${l.name} on Home (drag to reorder)`}>
+            <button type="button" className="fp-row" onClick={() => openLoadout(l.id)} title={`Open ${l.name} in Loadouts (drag to reorder)`}>
               <span className="fp-label">{l.name}</span>
               <span className="fp-count" title={`${onNow} of its ${l.on.length} mods are on`}>{busy === l.id ? '…' : <Num id={`side-${l.id}`} value={`${onNow}/${l.on.length}`} />}</span>
               {/* the number Ctrl+N toggles; rows past 9 have none */}

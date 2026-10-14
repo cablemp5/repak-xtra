@@ -19,7 +19,7 @@ export function cueFor(target: Element): Cue | null {
   if (el.matches('[role="switch"], [role="checkbox"], input[type="checkbox"]')) return ['toggle', { direction: on ? 'back' : 'forward' }]
   if (el.closest('.lo-media-arrow')) return ['navigate', { direction: el.classList.contains('is-prev') ? 'back' : 'forward', emphasis: 'subtle' }]
   if (el.closest('.lp-back')) return ['navigate', { direction: 'back' }]
-  if (el.closest('.view-tabs')) return ['navigate', { direction: el.textContent === 'Home' ? 'back' : 'forward' }]
+  if (el.closest('.view-tabs')) return ['navigate', { direction: el.textContent === 'Loadouts' ? 'back' : 'forward' }]
   if (el.matches('.custom-dropdown-trigger')) return el.classList.contains('open') ? ['close', { emphasis: 'subtle' }] : ['open']
   if (el.matches('[role="tab"], [role="option"], .custom-dropdown-item') || el.closest('.mod-state-filter')) return ['select']
   const label = `${el.getAttribute('title') ?? ''} ${el.getAttribute('aria-label') ?? ''}`.trim()

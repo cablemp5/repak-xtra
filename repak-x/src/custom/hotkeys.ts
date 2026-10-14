@@ -49,7 +49,7 @@ export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
   {
     title: 'Loadouts and Sigeon',
     items: [
-      { keys: ['L'], action: 'Switch between Home and Library' },
+      { keys: ['L'], action: 'Switch between Loadouts and Library' },
       { keys: ['Ctrl', '1–9'], action: 'Turn loadout 1–9 on/off (sidebar order)' },
       { keys: ['S'], action: 'Cycle Sigeon: Off → Base → High' },
     ],

@@ -88,7 +88,7 @@ export function ViewTabs() {
   const view = useView()
   return (
     <div className="view-tabs" role="tablist" aria-label="View">
-      <button type="button" role="tab" aria-selected={view === 'home'} onClick={() => setView('home')} title="Loadouts and new mods (L)">Home</button>
+      <button type="button" role="tab" aria-selected={view === 'home'} onClick={() => setView('home')} title="Loadouts and new mods (L)">Loadouts</button>
       <button type="button" role="tab" aria-selected={view === 'library'} onClick={() => setView('library')} title="Every mod, with filters and folders (L)">Library</button>
     </div>
   )
@@ -167,6 +167,15 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     return () => { window.removeEventListener('keydown', onKey, true); window.removeEventListener('paste', onPaste) }
   }, [view])
 
+  // Generate all previews' choice menu closes on an outside click or Esc (above the early return: hooks run every render)
+  useEffect(() => {
+    if (!genMenu) return
+    const close = (e: MouseEvent) => { if (!genRef.current?.contains(e.target as Node)) setGenMenu(false) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setGenMenu(false) } }
+    document.addEventListener('mousedown', close)
+    window.addEventListener('keydown', esc, true)
+    return () => { document.removeEventListener('mousedown', close); window.removeEventListener('keydown', esc, true) }
+  }, [genMenu])
   if (view !== 'home') return null
 
   const toggle = async (l: Loadout, on: boolean) => {
@@ -203,14 +212,6 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     else if (!count) p.alert.info('Nothing to generate', 'Every loadout with installed mods already has a preview.')
     else p.alert.success('Previews queued', `${plural(count, 'loadout')}, one after another.`)
   }
-  useEffect(() => {
-    if (!genMenu) return
-    const close = (e: MouseEvent) => { if (!genRef.current?.contains(e.target as Node)) setGenMenu(false) }
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setGenMenu(false) } }
-    document.addEventListener('mousedown', close)
-    window.addEventListener('keydown', esc, true)
-    return () => { document.removeEventListener('mousedown', close); window.removeEventListener('keydown', esc, true) }
-  }, [genMenu])
 
   const commitRename = (l: Loadout) => {
     const trimmed = draft.trim()
@@ -247,7 +248,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   }
 
   return (
-    <div className="lo-screen" aria-label="Home">
+    <div className="lo-screen" aria-label="Loadouts">
       {hidden}
       <header className="lo-screen-head">
         <div>
