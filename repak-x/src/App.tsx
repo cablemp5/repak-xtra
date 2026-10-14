@@ -51,7 +51,7 @@ import ChangelogModal from './components/ChangelogModal'
 import PromiseTransitionLoader from './components/PromiseTransitionLoader'
 import { AuroraText } from './components/ui/AuroraText'
 import { AlertProvider, useAlert } from './components/AlertHandler'
-import { offerUndoDelete } from './custom/undoDelete'
+import { offerUndoDelete, type TrashedMod } from './custom/undoDelete'
 import ModStateFilter, { matchesState, type ModState } from './custom/ModStateFilter'
 import './custom/keyboardClickables'
 import { dialogOpen } from './custom/hotkeys' // caleb fork: extra shortcuts
@@ -417,6 +417,8 @@ function App() {
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const modsGridRef = useRef<HTMLDivElement | null>(null)
   const gameRunningRef = useRef(false)
+  const bypassRef = useRef(false); bypassRef.current = bypassGameRunningLock // caleb fork: live game lock for Undo toasts
+  const undoBlocked = () => gameRunningRef.current && !bypassRef.current // caleb fork
   const lastSelectedModIndex = useRef<number | null>(null) // For Shift+click range selection
   const filteredModsRef = useRef<ModRecord[]>([]) // Keep in sync with filteredMods for selection handler
   const clashScopeModPath = useRef<string | null>(null) // null = global clashes, path = single-mod scope
@@ -1142,16 +1144,17 @@ function App() {
 
       const modPaths = Array.from(selectedMods)
       let deletedCount = 0
-      const deletedPaths: string[] = []
+      const deletedPaths: TrashedMod[] = [] // caleb fork: one trash id per deletion
       let errors: string[] = []
 
       for (const path of modPaths) {
         try {
           // Find mod details to check if it's a folder mod or regular file
           // If we don't have details, try delete_mod anyway
-          await invoke('delete_mod', { path: path })
+          const trashId = crypto.randomUUID() // caleb fork
+          await invoke('delete_mod', { path: path, trashId })
           deletedCount++
-          deletedPaths.push(path)
+          deletedPaths.push({ id: trashId, path }) // caleb fork
         } catch (e) {
           console.error(`Failed to delete ${path}:`, e)
           errors.push(path)
@@ -1164,7 +1167,7 @@ function App() {
           `Deleted ${deletedCount} mods. Failed to delete ${errors.length} mods.`
         )
       }
-      offerUndoDelete(alert, deletedPaths, loadMods)
+      offerUndoDelete(alert, deletedPaths, loadMods, undoBlocked) // caleb fork
 
       setSelectedMods(new Set()) // Clear selection
       await loadMods()
@@ -2151,9 +2154,10 @@ function App() {
     try {
       // Pass the real path: delete_mod resolves the associated IoStore files itself, and
       // rewriting .bak_repak to .pak deleted the enabled copy when both exist.
-      await invoke('delete_mod', { path: modPath })
+      const trashId = crypto.randomUUID() // caleb fork
+      await invoke('delete_mod', { path: modPath, trashId })
       setStatus('Mod deleted')
-      offerUndoDelete(alert, [modPath], loadMods)
+      offerUndoDelete(alert, [{ id: trashId, path: modPath }], loadMods, undoBlocked) // caleb fork
 
       // Clear selection if the deleted mod was selected
       if (selectedMod && selectedMod.path === modPath) {

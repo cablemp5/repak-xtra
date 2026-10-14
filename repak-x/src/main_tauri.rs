@@ -3336,11 +3336,13 @@ async fn install_mods(
 #[tauri::command]
 async fn delete_mod(
     path: String,
+    trash_id: Option<String>, // caleb fork: one trash folder per deletion, named by the frontend's Undo
     window: Window,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<(), String> {
     let path_buf = PathBuf::from(&path);
     log::info!("delete_mod called with path: {}", path);
+    let trash = caleb_trash::reserve(trash_id)?; // caleb fork: undoable delete
 
     // Determine the actual file to delete - check both .pak and .bak_repak variants
     let (actual_path, is_disabled) = if path_buf.exists() {
@@ -3376,7 +3378,8 @@ async fn delete_mod(
 
     // Try to delete the main file
     if actual_path.exists() {
-        if let Err(e) = caleb_trash::discard(&actual_path) {
+        if let Err(e) = caleb_trash::discard(&trash, &actual_path) { // caleb fork
+            caleb_trash::release_if_empty(&trash); // caleb fork
             let error_msg = format!("Failed to delete mod file: {}", e);
             toast_events::emit_delete_failed(&window, &error_msg);
             return Err(error_msg);
@@ -3429,7 +3432,7 @@ async fn delete_mod(
     // Delete associated IoStore files (.ucas and .utoc)
     let ucas_path = base_pak_path.with_extension("ucas");
     if ucas_path.exists() {
-        if let Err(e) = caleb_trash::discard(&ucas_path) {
+        if let Err(e) = caleb_trash::discard(&trash, &ucas_path) { // caleb fork
             log::warn!("Failed to delete .ucas file: {}", e);
         } else {
             log::info!("Deleted associated .ucas file: {:?}", ucas_path);
@@ -3438,7 +3441,7 @@ async fn delete_mod(
 
     let utoc_path = base_pak_path.with_extension("utoc");
     if utoc_path.exists() {
-        if let Err(e) = caleb_trash::discard(&utoc_path) {
+        if let Err(e) = caleb_trash::discard(&trash, &utoc_path) { // caleb fork
             log::warn!("Failed to delete .utoc file: {}", e);
         } else {
             log::info!("Deleted associated .utoc file: {:?}", utoc_path);

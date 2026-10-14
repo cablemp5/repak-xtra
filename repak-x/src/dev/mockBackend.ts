@@ -12,6 +12,10 @@ const data: any = Object.values(fixtures)[0] ?? {
 }
 
 let sigeonState = 'off'
+const trash = new Map<string, any>() // trash id -> the deleted mod record
+// Browser checks flip window.__mockGameRunning live (polled every 5 s); localStorage 'mock.bypass' = 'false' turns the
+// fixture's game-lock bypass off at the next load
+const mock = window as any
 // Lazy loaders, not eager imports: the app's production build drops this dev-only branch with them (eager ones copied
 // every local preview PNG into the app's assets)
 const previewUrls: Record<string, () => Promise<string>> = import.meta.env.DEV
@@ -27,7 +31,8 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
     switch (cmd) {
       case 'get_pak_files': return data.mods.map((m: any) => ({ ...m })) // fresh objects, like the real backend
       case 'get_folders': return data.folders
-      case 'get_app_settings': return data.settings
+      case 'get_app_settings':
+        return localStorage.getItem('mock.bypass') === 'false' ? { ...data.settings, bypassGameRunningLock: false } : data.settings
       case 'get_game_path': return data.gamePath
       case 'get_all_tags': return data.tags
       case 'get_character_data': return data.characterData
@@ -56,8 +61,26 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'get_app_version': return __APP_VERSION__
       case 'get_last_seen_version': return __APP_VERSION__
       case 'get_sig_bypasser_status': return 'installed'
+      case 'check_game_running': return Boolean(mock.__mockGameRunning)
+      case 'delete_mod': {
+        if (trash.has(args?.trashId)) throw `Trash id ${args?.trashId} is already used`
+        const i = data.mods.findIndex((m: any) => m.path === args?.path)
+        if (i >= 0) trash.set(args?.trashId, data.mods.splice(i, 1)[0])
+        return null
+      }
+      case 'restore_trashed_mods': {
+        let restored = 0
+        const failed: string[] = []
+        for (const id of args?.ids ?? []) {
+          const mod = trash.get(id)
+          if (!mod) failed.push(`trash ${id}: not found`)
+          else if (data.mods.some((m: any) => m.path === mod.path)) failed.push(`${mod.path} already exists, left the trashed copy alone`)
+          else { data.mods.push(mod); trash.delete(id); restored++ }
+        }
+        if (failed.length) throw `Restored ${restored} file(s); failed: ${failed.join('; ')}`
+        return restored
+      }
       case 'get_skip_launcher_status':
-      case 'check_game_running':
       case 'check_for_previous_crash': return false
       case 'check_mod_clashes': return []
       // Installing: the file picker returns two fake paks, install adds them to the library and reports done
