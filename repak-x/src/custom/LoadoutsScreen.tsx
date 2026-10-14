@@ -4,15 +4,15 @@
 // Cards are grouped by their saved group (label) or by hero; double-click a name to rename it.
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, Download, ImageOff, ImagePlus, Info, Plus, RefreshCw, Trash2, Upload, X } from 'lucide-react'
+import { ChevronDown, Download, ImageOff, ImagePlus, Info, Plus, Save, Trash2, Upload, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
-import { type LoadoutProps, runChanges } from './Loadouts'
+import { type LoadoutProps, deleteWithUndo, overwriteWithUndo, runChanges } from './Loadouts'
 import { isTyping } from './hotkeys'
 import { ModName, plural, typeCode } from './modName'
 import { hasPreview, usePreviewUrl, usePreviewVersion } from './previews'
 import { deleteMedia, prepareMedia, putMedia, useMediaUrl } from './loadoutMedia'
 import {
-  type Loadout, type Mod, addModToLoadout, changesToTurnOff, removeModFromLoadout, deleteLoadout, displayName, exportLoadouts, importLoadouts, isActive, modKey, patchLoadout, changesToTurnOn,
+  type Loadout, type Mod, addModToLoadout, changesToTurnOff, removeModFromLoadout, displayName, exportLoadouts, importLoadouts, isActive, modKey, patchLoadout, changesToTurnOn,
   readLoadouts, setLoadoutsScreenOpen, snapshotLoadout, useLoadouts, useLoadoutsScreenOpen, writeLoadouts,
 } from './loadoutStore'
 
@@ -235,6 +235,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
           const hasMedia = Boolean(l.mediaRev || l.image)
           return (
             <article key={l.id} className={`lo-card ${active ? 'is-on' : ''}`}
+              onKeyDown={e => { if (e.key === 'F2' && !isTyping(e.target)) { e.preventDefault(); setDraft(l.name); setRenaming(l.id) } }}
               onMouseEnter={() => { hovered.current = l.id }} onMouseLeave={() => { if (hovered.current === l.id) hovered.current = null }}>
               <button type="button" className="lo-card-image" onClick={() => pickMedia(l.id)}
                 title={hasMedia ? 'Change image or video (or paste one)' : 'Add an image, GIF or video (or paste one)'}>
@@ -247,7 +248,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                       onFocus={e => e.target.select()} onChange={e => setDraft(e.target.value)} onBlur={() => commitRename(l)}
                       onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') commitRename(l); if (e.key === 'Escape') setRenaming(null) }} />
                   ) : (
-                    <h3 title={`${l.name} (double-click to rename)`} onDoubleClick={() => { setDraft(l.name); setRenaming(l.id) }}>{l.name}</h3>
+                    <h3 title={`${l.name} (double-click or F2 to rename)`} onDoubleClick={() => { setDraft(l.name); setRenaming(l.id) }}>{l.name}</h3>
                   )}
                   <Switch size="sm" color="primary" checked={active} disabled={busy !== null}
                     title={active ? `Turn ${l.name} off` : `Turn ${l.name} on`}
@@ -262,8 +263,8 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                   </button>
                   <span className="lo-card-tools">
                     <button type="button" className="lo-icon" title={`Overwrite ${l.name} with the shown mods' current state`}
-                      onClick={() => { patchLoadout(l.id, snapshotLoadout(l, p.scopeMods, p.scopeLabel)); p.alert.success('Loadout updated', `${l.name} now matches the ${p.scopeMods.length} shown mods.`) }}>
-                      <RefreshCw size={14} />
+                      onClick={() => overwriteWithUndo(p, l)}>
+                      <Save size={14} />
                     </button>
                     {hasMedia && (
                       <button type="button" className="lo-icon" title="Remove image or video"
@@ -271,7 +272,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                         <ImageOff size={14} />
                       </button>
                     )}
-                    <button type="button" className="lo-icon" title={`Delete ${l.name}`} onClick={() => deleteLoadout(l.id)}>
+                    <button type="button" className="lo-icon" title={`Delete ${l.name}`} onClick={() => deleteWithUndo(p, l)}>
                       <Trash2 size={14} />
                     </button>
                   </span>

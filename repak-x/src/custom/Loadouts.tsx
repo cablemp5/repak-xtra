@@ -47,6 +47,25 @@ function useListHeight() {
   return { height, dragging, start }
 }
 
+/** Delete with a 10 s Undo, like deleting a mod. */
+export function deleteWithUndo(p: LoadoutProps, l: Loadout) {
+  const restore = deleteLoadout(l.id)
+  const id = p.alert.info(`Deleted ${l.name}`, 'Its mods were not changed.', {
+    duration: 10000,
+    action: { label: 'Undo', onClick: () => { p.alert.dismissAlert(id); restore() } },
+  })
+}
+
+/** Overwrite with the shown mods' current state, with Undo back to what it held before. */
+export function overwriteWithUndo(p: LoadoutProps, l: Loadout) {
+  const before = { label: l.label, scope: l.scope, on: l.on }
+  writeLoadouts(readLoadouts().map(x => (x.id === l.id ? snapshotLoadout(x, p.scopeMods, p.scopeLabel) : x)))
+  const id = p.alert.info(`Updated ${l.name}`, `It now holds the ${p.scopeMods.length} shown mods as they are now.`, {
+    duration: 10000,
+    action: { label: 'Undo', onClick: () => { p.alert.dismissAlert(id); writeLoadouts(readLoadouts().map(x => (x.id === l.id ? { ...x, ...before } : x))) } },
+  })
+}
+
 /** Shared by the sidebar and the cards screen: apply a set of flips with the game-running guard. */
 export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], verb: string) {
   if (p.blocked) {
@@ -78,10 +97,6 @@ export default function Loadouts(p: LoadoutProps) {
     setName('')
   }
 
-  const update = (l: Loadout) => {
-    writeLoadouts(readLoadouts().map(x => (x.id === l.id ? snapshotLoadout(x, p.scopeMods, p.scopeLabel) : x)))
-    p.alert.success('Loadout updated', `${l.name} now matches the ${p.scopeMods.length} shown mods.`)
-  }
 
   // Click toggles: an active loadout turns off, any other turns on (and displaces overlapping ones)
   const apply = async (l: Loadout) => {
@@ -151,10 +166,10 @@ export default function Loadouts(p: LoadoutProps) {
               <span className="fp-label">{l.name}</span>
               <span className="fp-count">{busy === l.id ? '…' : `${l.on.length} on`}</span>
             </button>
-            <button type="button" className="lo-icon lo-hover" title={`Overwrite ${l.name} with the shown mods' current state`} onClick={() => update(l)}>
+            <button type="button" className="lo-icon lo-hover" title={`Overwrite ${l.name} with the shown mods' current state`} onClick={() => overwriteWithUndo(p, l)}>
               <Save size={14} />
             </button>
-            <button type="button" className="lo-icon lo-hover" title={`Delete ${l.name}`} onClick={() => deleteLoadout(l.id)}>
+            <button type="button" className="lo-icon lo-hover" title={`Delete ${l.name}`} onClick={() => deleteWithUndo(p, l)}>
               <X size={14} />
             </button>
           </div>

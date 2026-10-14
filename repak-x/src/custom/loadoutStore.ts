@@ -33,9 +33,25 @@ export const writeLoadouts = (list: Loadout[]) => {
 }
 export const patchLoadout = (id: string, patch: Partial<Loadout>) =>
   writeLoadouts(readLoadouts().map(l => (l.id === id ? { ...l, ...patch } : l)))
-export const deleteLoadout = (id: string) => {
-  writeLoadouts(readLoadouts().filter(l => l.id !== id))
-  deleteMedia(id)
+/** Removes the loadout and returns a function that puts it back in the same spot. Its image or video stays stored
+ *  until the undo window closes. shortcut: closing the app inside that window leaves the media blob behind (harmless,
+ *  a few MB in IndexedDB); sweep orphans at startup if that ever matters. */
+export const deleteLoadout = (id: string, undoMs = 10000) => {
+  const list = readLoadouts()
+  const at = list.findIndex(l => l.id === id)
+  if (at < 0) return () => undefined
+  const removed = list[at]
+  writeLoadouts(list.filter(l => l.id !== id))
+  let restored = false
+  const timer = setTimeout(() => { if (!restored) deleteMedia(id) }, undoMs + 1000)
+  return () => {
+    restored = true
+    clearTimeout(timer)
+    const now = readLoadouts()
+    if (now.some(l => l.id === id)) return
+    now.splice(Math.min(at, now.length), 0, removed)
+    writeLoadouts(now)
+  }
 }
 
 export const useLoadouts = (): Loadout[] =>

@@ -4121,6 +4121,10 @@ function App() {
                       {selectedFolderId === 'all' ? 'All Mods' :
                         folders.find(f => f.id === selectedFolderId)?.name || 'Unknown Folder'}
                     </span>
+                    {/* caleb fork: say which filters narrow the list */}
+                    {(selectedCharacters.size > 0 || selectedCategories.size > 0) && (
+                      <span className="header-title-scope"> · {[...selectedCharacters, ...selectedCategories].join(', ')}</span>
+                    )}
                   </h2>
                   <ModStateFilter value={modState} onChange={setModState} mods={folderMods} />
                 </div>

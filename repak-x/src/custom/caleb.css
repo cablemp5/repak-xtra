@@ -947,3 +947,10 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
   color: var(--badge-dot, var(--text-secondary)); min-width: 3ch;
 }
 .lo-legend-item .type-code { min-width: 0; }
+
+/* ---------- harden: one focus ring everywhere (MUI buttons set outline 0 and mark keyboard focus with a class) ---------- */
+.app .MuiButtonBase-root.Mui-focusVisible, .app .MuiButtonBase-root:focus-visible {
+  outline: 2px solid var(--focus-ring) !important; outline-offset: 2px !important;
+  transition-duration: 0s !important;   /* MUI animates all properties: the ring grew in from 0px */
+}
+.header-title-scope { color: var(--text-secondary); font-weight: 500; }
