@@ -7,9 +7,10 @@ Set-Location $PSScriptRoot
 # PowerShell 5.1 does not stop on a failed git or gh: check their exit codes
 function Run([scriptblock]$cmd) { & $cmd; if ($LASTEXITCODE -ne 0) { throw "Failed: $cmd" } }
 
-# every build rewrites these; drop them so they never block a merge
-git checkout -- repak-x/gen/schemas repak-x/package-lock.json
-if (git status --porcelain --untracked-files=no) { throw 'Uncommitted changes: commit them first.' }
+$dirty = @(Run { git status --porcelain --untracked-files=no -- . ':!repak-x/gen/schemas' })
+if ($dirty) { throw "Uncommitted changes (commit or discard them first):`n$($dirty -join "`n")" }
+# every build rewrites the generated schemas; the lockfile is not touched: a dirty package-lock.json is a real change and stops the sync
+Run { git checkout -- repak-x/gen/schemas }
 
 Run { git fetch upstream --tags --quiet }
 if (-not $Tag) { $Tag = gh release view -R X-zant/Repak-X --json tagName -q .tagName }
