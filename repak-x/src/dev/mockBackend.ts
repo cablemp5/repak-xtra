@@ -3,6 +3,7 @@
 // Refresh the snapshot with `node scripts/capture-dev-fixture.mjs`. Never active inside the app.
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
 import { emit } from '@tauri-apps/api/event'
+import { normalizeModBaseName } from '../utils/format'
 
 // DEV guard keeps the snapshot out of release bundles
 const fixtures = import.meta.env.DEV ? import.meta.glob('./fixture.local.json', { eager: true, import: 'default' }) : {}
@@ -57,6 +58,18 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'check_game_running':
       case 'check_for_previous_crash': return false
       case 'check_mod_clashes': return []
+      // Installing: the file picker returns two fake paks, install adds them to the library and reports done
+      case 'plugin:dialog|open': return ['C:/Fake/Drop/Alpha_Skin_9999999_P.pak', 'C:/Fake/Drop/Beta_Icons_9999999_P.pak']
+      case 'parse_dropped_files':
+        return (args?.paths ?? []).map((path: string) => ({ path, mod_name: path.split('/').pop(), mod_type: 'Black Panther - Texture',
+          is_dir: false, contains_uassets: true, contains_raw_assets: false, auto_to_repak: false, file_size: 1048576 }))
+      case 'install_mods':
+        for (const m of args?.mods ?? []) {
+          const path = `${data.gamePath}\\${normalizeModBaseName(m.customName || m.mod_name)}.pak`
+          if (!data.mods.some((x: any) => x.path === path)) data.mods.push({ ...data.mods[0], path, enabled: true, modified_date: Date.now() / 1000 })
+        }
+        setTimeout(() => emit('install_complete', null), 300)
+        return null
       case 'toggle_mod': {
         const mod = data.mods.find((m: any) => m.path === args?.modPath)
         if (mod) mod.enabled = !mod.enabled

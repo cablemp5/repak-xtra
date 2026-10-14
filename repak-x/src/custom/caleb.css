@@ -1235,3 +1235,10 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
   .lo-card, .mod-row, .lo-legend, .t-num-pop, .t-text-in, .sigeon-menu { animation: none !important; }
   .t-acc-panel, .t-acc-panel-inner, .t-icon-swap .t-icon, .lo-card-image img, .mod-preview-frame img { transition: none !important; }
 }
+
+/* Install panel: Save as a loadout (2+ mods), left of Cancel / Install */
+.install-actions { align-items: center; }
+.install-loadout { display: flex; align-items: center; gap: 14px; margin-right: auto; min-width: 0; flex-wrap: wrap; }
+.install-loadout-name { height: 32px; width: 200px; padding: 0 10px; border-radius: 8px; font-size: 13px;
+  background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--panel-border); outline: none; }
+.install-loadout-name:focus-visible { border-color: var(--accent-primary); }

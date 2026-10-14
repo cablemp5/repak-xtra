@@ -98,6 +98,7 @@ export function usePreviewUrl(key: string | undefined) {
 const running = () => pending.size > 0
 
 /** Renders the job's previews now, or queues it behind the run that is going. */
+export const generatePreviews = (job: Job) => generate(job)
 const generate = (job: Job) => {
   if (!running()) start(job)
   else if (!queue.some(q => sameJob(q, job))) { queue.push(job); notify() }

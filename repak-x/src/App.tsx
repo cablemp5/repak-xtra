@@ -60,6 +60,7 @@ import Loadouts, { AddToLoadoutField } from './custom/Loadouts'
 import LoadoutsScreen, { ViewTabs } from './custom/LoadoutsScreen'
 import { TagsToggle } from './custom/uiPrefs'
 import { GeneratePreviewsButton } from './custom/previews'
+import { finishInstallLoadout } from './custom/installLoadout'
 import SigeonControl from './custom/SigeonControl'
 import { useGlobalTooltips } from './hooks/useGlobalTooltips'
 import { useAprilFools } from './hooks/useAprilFools'
@@ -3342,6 +3343,8 @@ function App() {
 
           typeTracker[modType] = count + 1
         }
+
+        await finishInstallLoadout(modsWithSettings, alert) // caleb fork: Save as a loadout
 
         // Reload in background so alert shows success immediately
         loadMods()
