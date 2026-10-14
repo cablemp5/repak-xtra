@@ -4,7 +4,9 @@
 import { useSyncExternalStore } from 'react'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { Tags } from 'lucide-react'
+import { MotionGlobalConfig } from 'framer-motion'
 import Checkbox from '../components/ui/Checkbox'
+import { setSoundOn, unlockSound } from './sounds'
 
 const PREFS = [
   { key: 'priority', label: 'Show load priority counter on mods' },
@@ -16,6 +18,8 @@ const PREFS = [
 const SCALES = [0.9, 1, 1.1, 1.25, 1.4, 1.5]
 const SCALE_KEY = 'caleb.uiScale'
 const HIDE_TAGS_KEY = 'caleb.hideTags' // tags show by default, so this one stores the hidden state
+const SOUND_KEY = 'caleb.sound'   // on by default: '0' = off
+const MOTION_KEY = 'caleb.motion' // on by default: '0' = off
 
 const storageKey = (key: string) => `caleb.show.${key}`
 const listeners = new Set<() => void>()
@@ -23,10 +27,16 @@ const listeners = new Set<() => void>()
 const isOn = (key: string) => localStorage.getItem(storageKey(key)) === '1'
 const getScale = () => Number(localStorage.getItem(SCALE_KEY)) || 1
 const tagsHidden = () => localStorage.getItem(HIDE_TAGS_KEY) === '1'
+const soundOn = () => localStorage.getItem(SOUND_KEY) !== '0'
+const motionOn = () => localStorage.getItem(MOTION_KEY) !== '0'
 
 const apply = () => {
   PREFS.forEach(({ key }) => document.documentElement.toggleAttribute(`data-show-${key}`, isOn(key)))
   document.documentElement.toggleAttribute('data-hide-tags', tagsHidden())
+  // Motion off: caleb.css zeroes every CSS transition and animation, framer-motion jumps to the end state
+  document.documentElement.setAttribute('data-motion', motionOn() ? 'on' : 'off')
+  MotionGlobalConfig.skipAnimations = !motionOn()
+  setSoundOn(soundOn())
   getCurrentWebview().setZoom(getScale()).catch(e => console.warn('[uiPrefs] zoom failed', e))
 }
 apply()
@@ -68,7 +78,7 @@ export function TagsToggle() {
 }
 
 export default function CalebUiSettings() {
-  const snapshot = useSyncExternalStore(subscribe, () => PREFS.map(p => (isOn(p.key) ? 1 : 0)).join('') + '|' + getScale())
+  const snapshot = useSyncExternalStore(subscribe, () => PREFS.map(p => (isOn(p.key) ? 1 : 0)).join('') + '|' + getScale() + '|' + soundOn() + motionOn())
   const scale = getScale()
   return (
     <>
@@ -81,6 +91,23 @@ export default function CalebUiSettings() {
                 {Math.round(s * 100)}%
               </button>
             ))}
+          </div>
+        </div>
+      </div>
+      <div className="setting-section">
+        <h3>Sound and motion</h3>
+        <div className="setting-group">
+          <div className="setting-item">
+            <Checkbox checked={soundOn()} onChange={(checked: boolean) => { update(SOUND_KEY, checked ? '1' : '0'); if (checked) unlockSound() }}>
+              <span>Sound effects</span>
+            </Checkbox>
+            <p className="setting-subtext">Soft bubble sounds on clicks, switches, menus, page changes and alerts.</p>
+          </div>
+          <div className="setting-item">
+            <Checkbox checked={motionOn()} onChange={(checked: boolean) => update(MOTION_KEY, checked ? '1' : '0')}>
+              <span>Animations</span>
+            </Checkbox>
+            <p className="setting-subtext">Page slides, menus, switches and toasts. Off stops every animation in the app, including the extra animations below.</p>
           </div>
         </div>
       </div>

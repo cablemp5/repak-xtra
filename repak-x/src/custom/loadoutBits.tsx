@@ -37,25 +37,26 @@ export function CardMedia({ p, l, className = '', title, onClick }: {
   const own = url ?? l.image
   const slides = [...(own ? [{ key: '', label: 'Your image' }] : []), ...usePreviewSlides(p, l)]
   const [index, setIndex] = useState(0)
+  const [paged, setPaged] = useState(false) // only paging animates the image, not the first paint
   const at = slides.length ? ((index % slides.length) + slides.length) % slides.length : 0
   const slide = slides[at]
   const generated = usePreviewUrl(slide?.key || undefined)
   const src = slide?.key ? generated : own
   return (
-    <div className={`lo-media ${className}`}>
+    <div className={`lo-media ${className}${paged ? ' is-paged' : ''}`}>
       <button type="button" className="lo-card-image" onClick={onClick} title={title}>
         {!src
           ? <span className="lo-card-placeholder"><ImagePlus size={22} /><span>Click to add an image, or hover and paste</span></span>
           : !slide?.key && l.mediaType === 'video' && url
             ? <video src={url} autoPlay loop muted playsInline />
-            : <img src={src} alt="" />}
+            : <img key={src} src={src} alt="" />}
       </button>
       {slides.length > 1 && (
         <>
-          <button type="button" className="lo-media-arrow is-prev" title="Previous preview" aria-label="Previous preview" onClick={() => setIndex(at - 1)}>
+          <button type="button" className="lo-media-arrow is-prev" title="Previous preview" aria-label="Previous preview" onClick={() => { setPaged(true); setIndex(at - 1) }}>
             <ChevronLeft size={16} />
           </button>
-          <button type="button" className="lo-media-arrow is-next" title="Next preview" aria-label="Next preview" onClick={() => setIndex(at + 1)}>
+          <button type="button" className="lo-media-arrow is-next" title="Next preview" aria-label="Next preview" onClick={() => { setPaged(true); setIndex(at + 1) }}>
             <ChevronRight size={16} />
           </button>
           <span className="lo-media-label">{slide.label} · {at + 1}/{slides.length}</span>

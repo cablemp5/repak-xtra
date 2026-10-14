@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MdClearAll } from 'react-icons/md';
 import './ui/Alert.css';
+import { alertSound } from '../custom/sounds' // caleb fork
 
 // Toast Icons
 type ToastColor = 'success' | 'danger' | 'warning' | 'info' | 'default' | 'crash' | 'primary' | 'secondary';
@@ -144,6 +145,7 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
         };
 
         setToasts(prev => [...prev, toast]);
+        alertSound(toast.color, toast.isLoading); // caleb fork
         return id;
     }, []);
 
@@ -159,6 +161,7 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
 
     // Update an existing toast
     const updateToast = useCallback((id: number, updates: AlertOptions) => {
+        if (updates.color) alertSound(updates.color, updates.isLoading); // caleb fork: a loading toast that finished
         setToasts(prev => prev.map(toast =>
             toast.id === id ? { ...toast, ...updates } : toast
         ));

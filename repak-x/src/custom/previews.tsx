@@ -6,6 +6,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { ImagePlus, RefreshCw, Square } from 'lucide-react'
+import { play } from 'cuelume'
 import { modKey } from './loadoutStore'
 
 const NOTHING = 'Nothing to show for this mod: previews cover skins, meshes, textures, UI icons and your own VFX releases.'
@@ -44,6 +45,7 @@ listen<boolean>('mod-previews-done', e => {
   pending.clear()
   const parts = [`${run.made} made`, run.none && `${run.none} with nothing to show`, left && `${left} ${run.stopping ? 'skipped' : 'failed'}`]
   run = { ...run, stopping: false, summary: e.payload || run.made ? parts.filter(Boolean).join(' · ') : FAILED }
+  play(run.made ? 'ready' : e.payload ? 'warning' : 'error') // a slow run finished: the result is there
   notify()
 }).catch(() => undefined)
 

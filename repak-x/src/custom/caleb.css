@@ -1120,3 +1120,46 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
   padding: 3px 8px; border-radius: 999px; font-size: 11px; font-variant-numeric: tabular-nums;
   background: rgba(10, 11, 14, 0.62); color: var(--text-secondary);
 }
+
+/* ---------- motion: recipes from transitions.dev (free library), with its motion tokens. Settings > Interface >
+   Animations sets html[data-motion="off"], which zeroes these and every other transition and animation. ---------- */
+:root {
+  --page-slide-dur: 250ms; --page-slide-distance: 8px; --page-blur: 3px; --page-slide-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dropdown-open-dur: 250ms; --dropdown-pre-scale: 0.97; --dropdown-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --toggle-dur: 350ms; --toggle-ease: cubic-bezier(0.34, 1.35, 0.64, 1);
+  --tabs-dur: 250ms; --tabs-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --icon-swap-dur: 250ms; --icon-swap-blur: 2px; --icon-swap-ease: ease-in-out;
+}
+/* transitions.dev: Page side-by-side. Home and the loadout grid come in from the left, the Library and a loadout page
+   from the right */
+@keyframes t-page-from-left { from { opacity: 0; transform: translateX(calc(var(--page-slide-distance) * -1)); filter: blur(var(--page-blur)); } }
+@keyframes t-page-from-right { from { opacity: 0; transform: translateX(var(--page-slide-distance)); filter: blur(var(--page-blur)); } }
+.lo-screen-head, .lo-body { animation: t-page-from-left var(--page-slide-dur) var(--page-slide-ease) backwards; }
+.lp,
+html[data-view="library"] .container > .main-action-bar,
+html[data-view="library"] .container > .main-panels { animation: t-page-from-right var(--page-slide-dur) var(--page-slide-ease) backwards; }
+/* transitions.dev: Menu dropdown (open) */
+@keyframes t-dropdown-open { from { opacity: 0; transform: scale(var(--dropdown-pre-scale)); } }
+.custom-dropdown-menu { transform-origin: top center; animation: t-dropdown-open var(--dropdown-open-dur) var(--dropdown-ease) backwards; }
+/* transitions.dev: Toggle (the thumb settles with a small overshoot) */
+.repakx-switch-thumb { transition: transform var(--toggle-dur) var(--toggle-ease), box-shadow var(--toggle-dur) var(--toggle-ease) !important; }
+/* transitions.dev: Tabs sliding (one pill moves between Home and Library) */
+.view-tabs { position: relative; display: inline-grid !important; grid-template-columns: 1fr 1fr; }
+.view-tabs::before { content: ''; position: absolute; top: 2px; bottom: 2px; left: 2px; width: calc(50% - 3px); border-radius: 6px;
+  background: var(--bg-lighter); transition: transform var(--tabs-dur) var(--tabs-ease); }
+html[data-view="library"] .view-tabs::before { transform: translateX(calc(100% + 2px)); }
+.view-tabs button { position: relative; z-index: 1; transition: color var(--tabs-dur) var(--tabs-ease) !important; }
+.view-tabs button[aria-selected="true"] { background: transparent !important; }
+/* transitions.dev: Icon swap (a loadout's previews blur in as you page through them) */
+@keyframes t-swap-in { from { opacity: 0; filter: blur(var(--icon-swap-blur)); } }
+.lo-media.is-paged .lo-card-image img { animation: t-swap-in var(--icon-swap-dur) var(--icon-swap-ease) backwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lo-screen-head, .lo-body, .lp, .custom-dropdown-menu, .lo-media img,
+  html .container > .main-action-bar, html .container > .main-panels { animation: none !important; }
+  .view-tabs::before, .view-tabs button, .repakx-switch-thumb { transition: none !important; }
+}
+html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="off"] *::after {
+  animation-duration: 0s !important; animation-delay: 0s !important; transition-duration: 0s !important; transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}
