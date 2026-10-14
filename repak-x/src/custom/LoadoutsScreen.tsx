@@ -1,6 +1,6 @@
 // caleb fork: full-window loadouts screen. Each loadout is a card with optional media (image, GIF or
 // looping video; upload or paste), an on/off switch and an expandable list of its mods.
-// On = its mods on, the rest of its group off, and other loadouts sharing mods off. Off = its mods off.
+// On = its mods on, Off = its mods off; other mods and loadouts are never touched.
 // Cards are grouped by their saved group (label) or by hero; double-click a name to rename it.
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -11,7 +11,7 @@ import { isTyping } from './hotkeys'
 import { hasPreview, usePreviewUrl, usePreviewVersion } from './previews'
 import { deleteMedia, prepareMedia, putMedia, useMediaUrl } from './loadoutMedia'
 import {
-  type Loadout, type Mod, addModToLoadout, changesToTurnOff, removeModFromLoadout, deleteLoadout, displayName, exportLoadouts, importLoadouts, isActive, modKey, patchLoadout, planTurnOn,
+  type Loadout, type Mod, addModToLoadout, changesToTurnOff, removeModFromLoadout, deleteLoadout, displayName, exportLoadouts, importLoadouts, isActive, modKey, patchLoadout, changesToTurnOn,
   readLoadouts, setLoadoutsScreenOpen, snapshotLoadout, useLoadouts, useLoadoutsScreenOpen, writeLoadouts,
 } from './loadoutStore'
 
@@ -116,8 +116,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   const toggle = async (l: Loadout, on: boolean) => {
     setBusy(l.id)
     if (on) {
-      const { flips, displaced } = planTurnOn(l, readLoadouts(), p.mods)
-      await runChanges(p, l, flips, 'on', displaced)
+      await runChanges(p, l, changesToTurnOn(l, p.mods), 'on')
     } else {
       await runChanges(p, l, changesToTurnOff(l, p.mods), 'off')
     }
@@ -168,7 +167,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
       <header className="lo-screen-head">
         <div>
           <h2>Loadouts</h2>
-          <p>On switches a loadout's mods on, the rest of its group off, and any other loadout sharing its mods off. Off switches its mods off. Press L to open or close.</p>
+          <p>On switches a loadout's mods on, Off switches them off. Other mods and loadouts are left alone. Press L to open or close.</p>
         </div>
         <div className="lo-head-tools">
           <button type="button" className="lo-text-btn" aria-pressed={legend} onClick={() => setLegend(!legend)}

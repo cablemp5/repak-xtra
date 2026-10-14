@@ -1,6 +1,6 @@
 // caleb fork: saved loadouts, shared by the sidebar list (Loadouts.tsx) and the cards screen
-// (LoadoutsScreen.tsx). A loadout remembers which mods were on among the mods shown when it was
-// saved (its scope, e.g. everything filtered to Black Panther). Stored in localStorage.
+// (LoadoutsScreen.tsx). A loadout is a set of mods: On switches them on, Off switches them off, nothing else is touched.
+// It also remembers the mods shown when it was saved (its scope), unused for now. Stored in localStorage.
 import { useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { deleteMedia } from './loadoutMedia'
@@ -58,11 +58,11 @@ export const snapshotLoadout = (base: Pick<Loadout, 'id' | 'name'> & Partial<Loa
   on: scopeMods.filter(m => m.enabled).map(m => modKey(m.path)),
 })
 
-/** Mods to flip so the loadout is on: its mods on, the rest of its scope off. */
+/** Mods to switch so the loadout is on: its own mods that are off. Nothing else changes: other mods and other loadouts
+ *  stay as they are (Caleb, 2026-10-14; the scope is still saved, unused while loadouts are independent). */
 export const changesToTurnOn = (l: Loadout, mods: Mod[]) => {
-  const scope = keySet(l.scope)
   const on = keySet(l.on)
-  return mods.filter(m => scope.has(modKey(m.path)) && Boolean(m.enabled) !== on.has(modKey(m.path)))
+  return mods.filter(m => on.has(modKey(m.path)) && !m.enabled)
 }
 
 /** Mods to flip so the loadout is off: its own mods that are currently on. */
@@ -71,27 +71,11 @@ export const changesToTurnOff = (l: Loadout, mods: Mod[]) => {
   return mods.filter(m => on.has(modKey(m.path)) && m.enabled)
 }
 
+/** On = every one of its installed mods is on (other mods may be on too). */
 export const isActive = (l: Loadout, mods: Mod[]) => {
-  const scope = keySet(l.scope)
-  return mods.some(m => scope.has(modKey(m.path))) && changesToTurnOn(l, mods).length === 0
-}
-
-/**
- * Turning a loadout on also turns off every other active loadout that shares mods with it
- * (overlapping scope): their mods go off unless this loadout wants them on.
- * Returns the flips plus the loadouts that end up switched off.
- */
-export const planTurnOn = (l: Loadout, all: Loadout[], mods: Mod[]) => {
-  const flips = new Map(changesToTurnOn(l, mods).map(m => [m.path, m]))
-  const scope = keySet(l.scope)
-  const keep = keySet(l.on)
-  const displaced: Loadout[] = []
-  for (const k of all) {
-    if (k.id === l.id || !isActive(k, mods) || !k.scope.some(key => scope.has(normKey(key)))) continue
-    displaced.push(k)
-    for (const m of changesToTurnOff(k, mods)) if (!keep.has(modKey(m.path))) flips.set(m.path, m)
-  }
-  return { flips: [...flips.values()], displaced }
+  const on = keySet(l.on)
+  const mine = mods.filter(m => on.has(modKey(m.path)))
+  return mine.length > 0 && mine.every(m => m.enabled)
 }
 
 /** Adds a mod to the loadout's on list (and its scope, so the loadout manages it from now on). */
