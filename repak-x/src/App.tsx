@@ -4215,7 +4215,7 @@ function App() {
                         if (val === 'root') handleAssignToFolder(null) // Handle move to root
                         else handleAssignToFolder(val)
                       }}
-                      placeholder="Move to..."
+                      placeholder="Move"
                       disabled={selectedMods.size === 0}
                     />
                   </div>
@@ -4270,7 +4270,8 @@ function App() {
                           title={allEnabled ? 'All selected mods are already enabled' : `Enable ${disabledCount} disabled mod${disabledCount !== 1 ? 's' : ''}`}
                         >
                           <ToggleOnIcon fontSize="small" style={{ color: accentColor }} />
-                          {disabledCount > 0 && `(${disabledCount})`}
+                          <span className="bulk-btn-label">Enable</span>
+                          {disabledCount > 0 && <span className="bulk-num">{disabledCount}</span>}
                         </button>
                         <button
                           onClick={() => handleBulkToggle(false)}
@@ -4280,7 +4281,8 @@ function App() {
                           title={allDisabled ? 'All selected mods are already disabled' : `Disable ${enabledCount} enabled mod${enabledCount !== 1 ? 's' : ''}`}
                         >
                           <ToggleOffIcon fontSize="small" style={{ opacity: 0.7 }} />
-                          {enabledCount > 0 && `(${enabledCount})`}
+                          <span className="bulk-btn-label">Disable</span>
+                          {enabledCount > 0 && <span className="bulk-num">{enabledCount}</span>}
                         </button>
                       </div>
                     )
@@ -4296,7 +4298,8 @@ function App() {
                     <div className="danger-bg" />
                     <span style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                       <RiDeleteBin2Fill size="1rem" />
-                      {`(${selectedMods.size})`}
+                      <span className="bulk-btn-label">Delete</span>
+                      <span className="bulk-num">{selectedMods.size}</span>
                     </span>
                   </button>
                 </div>

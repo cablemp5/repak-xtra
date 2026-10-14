@@ -914,3 +914,19 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 .mod-name-inner .mn { flex: 1 1 auto; }
 .lo-mod-name .mn, .lo-match-name .mn { display: flex; width: 100%; }
 .empty-state .btn-ghost { margin-top: 10px; }
+
+/* ---------- selection bar: every action is a word + count; as the bar narrows, Move and Tags fold to icons first,
+   then the action words; the count, Clear and every count stay. Hidden words stay readable to screen readers. ---------- */
+.bulk-actions-toolbar .btn-ghost { gap: 6px; }
+.bulk-num { font-variant-numeric: tabular-nums; }
+.bulk-field .custom-dropdown-menu { min-width: 220px; }
+
+
+@container bulkbar (max-width: 900px) {
+  .bulk-field { flex: 0 0 34px !important; min-width: 0 !important; max-width: 34px !important; }
+  .bulk-field .custom-dropdown-trigger { padding: 0 !important; justify-content: center !important; background-image: none !important; }
+  .bulk-field .custom-dropdown-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+@container bulkbar (max-width: 720px) {
+  .bulk-btn-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}

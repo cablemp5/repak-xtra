@@ -128,7 +128,8 @@ export function GeneratePreviewsButton({ paths }: { paths: string[] }) {
     <button type="button" className="btn-ghost bulk-previews" disabled={n === 0} onClick={() => generate(paths)}
       title={run.summary ? `Last run: ${run.summary}` : `Render previews for the ${n} selected mods (about 20 seconds each)`}>
       <ImagePlus size={16} />
-      {n > 0 ? `Previews (${n})` : 'Previews'}
+      <span className="bulk-btn-label">Previews</span>
+      {n > 0 && <span className="bulk-num">{n}</span>}
     </button>
   )
 }
