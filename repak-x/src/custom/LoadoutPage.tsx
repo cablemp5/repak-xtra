@@ -2,7 +2,7 @@
 // delete; its mods with switches and Remove (with Undo); and every other mod, searchable, sortable and filterable by
 // type, to add. Wide windows put the two lists side by side.
 import { useEffect, useState } from 'react'
-import { ArrowLeft, ArrowRightLeft, Copy, Eraser, ImageOff, ImagePlus, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Ellipsis, ImagePlus, Pencil, Plus, Search, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo, overwriteWithUndo } from './Loadouts'
 import { CardMedia, ModRow, typeClass } from './loadoutBits'
@@ -103,30 +103,30 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia 
                 title={active ? `Turn ${l.name}'s mods off` : `Turn ${l.name}'s mods on`} />
               <SwapText text={active ? 'On' : 'Off'} />
             </label>
-            <button type="button" className="lo-text-btn" onClick={() => overwriteWithUndo(p, l)}
-              title={`Replace this loadout's mods with the ${p.scopeMods.length} mods the Library shows (${p.scopeLabel}), as they are now. Undo is offered.`}>
-              <ArrowRightLeft size={14} /> Replace with Library selection <span className="bulk-num">{p.scopeMods.filter(m => m.enabled).length}</span>
-            </button>
             <GeneratePreviewsButton className="lo-text-btn" label="Generate previews" set={previewSetKey(l.id)} name={l.name}
               paths={mine.map(k => byKey.get(k)?.path).filter((x): x is string => Boolean(x))} />
             <button type="button" className="lo-text-btn" onClick={onPickMedia}><ImagePlus size={14} /> {hasMedia ? 'Change image' : 'Add image'}</button>
-            {hasMedia && (
-              <button type="button" className="lo-text-btn" onClick={() => { deleteMedia(l.id); patchLoadout(l.id, { image: undefined, mediaRev: undefined, mediaType: undefined }) }}>
-                <ImageOff size={14} /> Remove image
-              </button>
-            )}
-            <button type="button" className="lo-text-btn" title="A copy with the same mods and group"
-              onClick={() => openLoadout(duplicateLoadout(l).id)}>
-              <Copy size={14} /> Duplicate
-            </button>
-            {missing.length > 0 && (
-              <button type="button" className="lo-text-btn" onClick={dropMissing} title={`Remove the ${missing.length} mods that are no longer installed`}>
-                <Eraser size={14} /> Remove {missing.length} missing
-              </button>
-            )}
-            <button type="button" className="lo-text-btn lp-delete" onClick={() => { deleteWithUndo(p, l); onBack() }}>
-              <Trash2 size={14} /> Delete loadout
-            </button>
+            {/* The rest are occasional: one menu instead of a wrapping row of equal buttons */}
+            <div className="lp-more" title="More actions">
+              <CustomDropdown
+                icon={<Ellipsis size={15} />}
+                value=""
+                placeholder="More"
+                options={[
+                  { value: 'replace', label: `Replace with Library selection (${p.scopeMods.filter(m => m.enabled).length} on)` },
+                  { value: 'duplicate', label: 'Duplicate' },
+                  ...(missing.length ? [{ value: 'missing', label: `Remove ${missing.length} missing mod${missing.length === 1 ? '' : 's'}` }] : []),
+                  ...(hasMedia ? [{ value: 'unimage', label: 'Remove image' }] : []),
+                  { value: 'delete', label: 'Delete loadout' },
+                ]}
+                onChange={(v: string) => {
+                  if (v === 'replace') overwriteWithUndo(p, l)
+                  if (v === 'duplicate') openLoadout(duplicateLoadout(l).id)
+                  if (v === 'missing') dropMissing()
+                  if (v === 'unimage') { deleteMedia(l.id); patchLoadout(l.id, { image: undefined, mediaRev: undefined, mediaType: undefined }) }
+                  if (v === 'delete') { deleteWithUndo(p, l); onBack() }
+                }} />
+            </div>
           </div>
         </div>
       </div>

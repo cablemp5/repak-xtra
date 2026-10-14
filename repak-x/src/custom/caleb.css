@@ -1247,3 +1247,14 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .is-running:hover .run-spin { opacity: 0; }
 .is-running:hover .run-stop { opacity: 1; }
 @keyframes run-spin { to { transform: rotate(360deg); } }
+
+/* Loadout page actions: On/Off, Generate previews, image, and a More menu, on one line */
+.lp-actions { row-gap: 8px; }
+.lp-actions > * { flex: none; }
+.lp-more, .lp-more .custom-dropdown-container { display: flex; align-items: center; height: 32px; margin: 0 !important; }
+.lp-more .custom-dropdown-trigger { width: auto !important; height: 32px !important; min-height: 0 !important; padding: 0 12px !important; gap: 6px;
+  background: transparent !important; border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important;
+  color: var(--text-primary) !important; font-size: 13px !important; font-weight: 500 !important; box-shadow: none !important; }
+.lp-more .custom-dropdown-trigger:hover, .lp-more .custom-dropdown-trigger.open { background: var(--quiet-hover) !important; border-color: rgba(255, 255, 255, 0.14) !important; }
+.lp-more .custom-dropdown-menu { min-width: 300px; }
+.lp-more .custom-dropdown-item:last-child { border-top: 1px solid var(--panel-border); margin-top: 4px; padding-top: 8px; }
