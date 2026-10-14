@@ -52,7 +52,6 @@ export function CardMedia({ p, l, className = '', title, onClick, emptyText = 'C
           blurs in when it lands (revealOnLoad) */}
       {state && (
         <span className="lo-skel" role="status">
-          <span className="lo-skel-figure" aria-hidden="true"><i className="is-head" /><i className="is-body" /><i className="is-legs" /></span>
           <span className="lo-skel-label">
             {state.kind === 'running' ? `Generating ${state.done} of ${state.total}` : state.at === 1 ? 'Queued, up next' : `Queued, ${state.at} in line`}
           </span>

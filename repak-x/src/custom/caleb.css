@@ -1274,30 +1274,25 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 
 /* ---------- preview batches: Home status line, card skeletons (transitions.dev Skeleton loader) ---------- */
 :root { --pulse-dur: 1000ms; --pulse-min: 0.5; --skel-tone: rgba(255, 255, 255, 0.07); }
-.lo-batch { display: flex; align-items: center; gap: 10px; margin: 0 22px 4px; padding: 8px 8px 8px 14px; border-radius: 10px;
+.lo-batch { display: flex; align-items: center; gap: 10px; margin: 14px 22px 4px; padding: 8px 8px 8px 14px; border-radius: 10px;
   background: color-mix(in srgb, var(--accent-primary), transparent 90%); border: 1px solid color-mix(in srgb, var(--accent-primary), transparent 70%);
   font-size: 13px; color: var(--text-primary); }
 .lo-batch .run-spin { color: var(--accent-primary); flex: none; }
 .lo-batch-left { color: var(--text-secondary); font-size: 12px; }
 .lo-batch-stop { margin-left: auto; height: 28px !important; }
-/* The card: its image dims and blurs under a pulsing figure while the render runs or waits */
-.lo-media.is-running .lo-card-image img, .lo-media.is-queued .lo-card-image img { opacity: 0.25; filter: blur(3px); }
+/* The card: its image darkens and blurs under a shimmer while the render runs or waits, the status pill centered on it */
+.lo-media.is-running .lo-card-image img, .lo-media.is-queued .lo-card-image img { opacity: 0.3; filter: blur(10px); }
 .lo-media.is-running .lo-card-placeholder, .lo-media.is-queued .lo-card-placeholder { visibility: hidden; }
-.lo-skel { position: absolute; inset: 0; z-index: 1; pointer-events: none; display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 14px; overflow: hidden; }
-.lo-skel-figure { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 46%; }
-.lo-skel-figure i { display: block; background: var(--skel-tone); border-radius: 999px; animation: t-skel-pulse var(--pulse-dur) ease-in-out infinite; }
-.lo-skel-figure .is-head { width: 26%; aspect-ratio: 1; }
-.lo-skel-figure .is-body { width: 100%; height: 34%; min-height: 70px; border-radius: 18px; animation-delay: 120ms; }
-.lo-skel-figure .is-legs { width: 70%; height: 16%; min-height: 40px; border-radius: 14px; animation-delay: 240ms; }
-@keyframes t-skel-pulse { 0%, 100% { opacity: 1; } 50% { opacity: var(--pulse-min); } }
+.lo-skel { position: absolute; inset: 0; z-index: 1; pointer-events: none; display: flex; align-items: center; justify-content: center;
+  overflow: hidden; background: rgba(6, 7, 9, 0.55); animation: t-skel-pulse var(--pulse-dur) ease-in-out infinite; }
+@keyframes t-skel-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.85; } }
 /* Running: a light band sweeps across, so it reads as working; queued only pulses */
+.lo-media.is-running .lo-skel { animation: none; }
 .lo-media.is-running .lo-skel::after { content: ''; position: absolute; inset: 0;
   background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.07) 50%, transparent 70%); background-size: 250% 100%;
   animation: lo-skel-sweep 1.6s linear infinite; }
 @keyframes lo-skel-sweep { from { background-position: 120% 0; } to { background-position: -120% 0; } }
-.lo-media.is-queued .lo-skel-figure i { --skel-tone: rgba(255, 255, 255, 0.045); }
-.lo-skel-label { padding: 3px 10px; border-radius: 999px; font-size: 11px; font-variant-numeric: tabular-nums;
+.lo-skel-label { position: relative; z-index: 1; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-variant-numeric: tabular-nums;
   background: rgba(10, 11, 14, 0.7); color: var(--text-primary); }
 .lo-media.is-running .lo-skel-label { color: #fff; background: color-mix(in srgb, var(--accent-primary), transparent 25%); }
-@media (prefers-reduced-motion: reduce) { .lo-skel-figure i, .lo-media.is-running .lo-skel::after { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .lo-skel, .lo-media.is-running .lo-skel::after { animation: none !important; } }
