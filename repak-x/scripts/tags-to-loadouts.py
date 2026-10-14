@@ -1,9 +1,11 @@
-"""Turn Repak-X tag groups into a repakXcable loadouts file. Run: python -I repak-x/scripts/tags-to-loadouts.py, then Loadouts > Import dist/loadouts-from-tags.json."""
+"""Turn Repak-X tag groups into repakXcable loadouts. Run: python -I repak-x/scripts/tags-to-loadouts.py,
+then start the app: it adds the new loadouts by itself (names that already exist are skipped)."""
 import json, os, re, sys, collections
 
 APP = os.path.join(os.environ['APPDATA'], 'Repak-X', 'state.json')
 MODS = r'C:\Program Files (x86)\Steam\steamapps\common\MarvelRivals\MarvelGame\Marvel\Content\Paks\~mods'
-OUT = r'C:\Users\Caleb\Programming\Repak-X\dist\loadouts-from-tags.json'
+# The app merges this file on its next start, then renames it (caleb_import.rs)
+OUT = os.path.join(os.environ['APPDATA'], 'Repak-X', 'caleb-import-loadouts.json')
 
 def norm(stem):
     s = re.sub(r'(\.pak)?(\.bak_repak|\.pak_disabled)?$', '', stem, flags=re.I)

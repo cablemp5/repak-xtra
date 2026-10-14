@@ -1,10 +1,11 @@
 // caleb fork: sidebar list of saved loadouts (state lives in loadoutStore.ts). Click a loadout to
 // turn it on; the grid button opens the cards screen with on/off switches and images.
 import { useEffect, useRef, useState } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import { Check, LayoutGrid, Plus, Save, X } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import {
-  type Loadout, type Mod, changesToTurnOff, changesToTurnOn, deleteLoadout, flipMods, isActive, planTurnOn, readLoadouts,
+  type Loadout, type Mod, changesToTurnOff, changesToTurnOn, deleteLoadout, flipMods, importLoadouts, isActive, planTurnOn, readLoadouts,
   setLoadoutsScreenOpen, snapshotLoadout, useLoadouts, writeLoadouts,
 } from './loadoutStore'
 
@@ -63,6 +64,19 @@ export default function Loadouts(p: LoadoutProps) {
     }
     setBusy(null)
   }
+
+  // A loadouts file waiting in %APPDATA%\Repak-X (from scripts/tags-to-loadouts.py) is merged once
+  useEffect(() => {
+    invoke<string | null>('take_pending_loadouts').then(text => {
+      if (!text) return
+      try {
+        const { added, skipped } = importLoadouts(text)
+        p.alert.success('Loadouts added', `${added} new loadout${added === 1 ? '' : 's'}${skipped ? `, ${skipped} already existed` : ''}.`)
+      } catch (e) {
+        p.alert.error('Loadouts file not imported', String(e))
+      }
+    }).catch(() => undefined)
+  }, [])
 
   // Ctrl+1..9 toggles the loadout at that position in this list
   const latest = useRef({ loadouts, apply, busy })
