@@ -56,8 +56,8 @@ function guessDetails(stem, isIostore, size) {
     : /matswap|bodylights|passive|ult_|eyes/.test(n) ? 'Material'
     : /vfx|lightning|trail|swipe|glow|flame|fire/.test(n) ? 'VFX'
     : /sfx|sound|voice|audio/.test(n) ? 'Audio'
-    : /icon|text|prompt|ui|wheel/.test(n) ? 'UI'
-    : /texture|color|normals|blush/.test(n) ? 'Texture' : 'Mesh'
+    : /texture|color|normals|blush|skin|suit|orm/.test(n) ? 'Texture'
+    : /icon|text|prompt|(^|[^a-z])ui([^a-z]|$)|wheel/.test(n) ? 'UI' : 'Mesh'
   const character_name = panther ? 'Black Panther' : ''
   return {
     mod_name: stem,

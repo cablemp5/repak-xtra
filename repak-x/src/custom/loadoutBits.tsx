@@ -24,8 +24,10 @@ function usePreviewSlides(p: LoadoutProps, l: Loadout) {
   const keys = [...new Set(l.on.map(displayName))].filter(k => hasPreview(k) && !covered.includes(k))
     .sort((a, b) => rank(categoryOf(a)) - rank(categoryOf(b)))
   const slides = keys.map(k => ({ key: k, label: categoryOf(k) ?? 'Mod' }))
-  // The mods' type labels are unreliable for texture-only mods (shown as Mesh or UI), so the combined slide says what it is
-  if (hasPreview(set)) slides.unshift({ key: set, label: covered.length > 1 ? `${covered.length} mods together` : 'Character' })
+  if (hasPreview(set)) {
+    const kinds = [...new Set(covered.map(categoryOf).filter((c): c is string => Boolean(c)))].sort((a, b) => rank(a) - rank(b))
+    slides.unshift({ key: set, label: kinds.join(' + ') || 'Character' }) // e.g. "Mesh + Texture + Material"
+  }
   return slides
 }
 
