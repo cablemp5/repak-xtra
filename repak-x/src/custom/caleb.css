@@ -831,7 +831,7 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 .lo-mod-matches svg.lucide { width: 13px !important; height: 13px !important; flex: none; }
 
 /* ---------- generated mod previews (custom/previews.tsx) ---------- */
-.mod-preview img { display: block; width: 100%; max-height: 340px; object-fit: contain; border-radius: 10px; background: var(--bg-dark); border: 1px solid var(--panel-border); }
+.mod-preview img { display: block; height: 380px; max-width: 100%; aspect-ratio: 1358 / 1920; margin: 0 auto; object-fit: contain; border-radius: 10px; background: var(--preview-gray); border: 1px solid var(--panel-border); }
 .mod-preview-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
 .mod-preview .mod-preview-bar:first-child { margin-top: 0; }
 .mod-preview-btn {
@@ -843,3 +843,8 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 .mod-preview-btn:disabled { opacity: 0.55; cursor: default; }
 .mod-preview-btn svg.lucide { width: 14px !important; height: 14px !important; }
 .mod-preview-note { font-size: 12px; color: var(--text-secondary); }
+
+/* ---------- generated previews are transparent portrait cutouts (hero card art ratio) on clean dark gray ---------- */
+:root { --preview-gray: #2a2b2f; }
+.lo-card-image { aspect-ratio: 1358 / 1920; background: var(--preview-gray) !important; }
+.lo-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
