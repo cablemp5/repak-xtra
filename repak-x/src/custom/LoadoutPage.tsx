@@ -47,22 +47,26 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia 
   const onNow = mine.filter(k => byKey.get(k)?.enabled).length
   const hasMedia = Boolean(l.mediaRev || l.image)
 
-  /** Remove one mod, with Undo that puts the loadout back as it was. */
+  /** Undo adds the removed mods back to the loadout as it is now, so mods added meanwhile stay. */
+  const addBack = (keys: string[]) => keys.forEach(k => {
+    const now = readLoadouts().find(x => x.id === l.id)
+    if (now) addModToLoadout(now, k)
+  })
+  /** Remove one mod, with Undo. */
   const removeWithUndo = (k: string) => {
-    const before = { on: l.on }
     removeModFromLoadout(l, k)
     const id = p.alert.info(`Removed from ${l.name}`, k, {
       duration: 10000,
-      action: { label: 'Undo', onClick: () => { p.alert.dismissAlert(id); patchLoadout(l.id, before) } },
+      action: { label: 'Undo', onClick: () => { p.alert.dismissAlert(id); addBack([k]) } },
     })
   }
   const dropMissing = () => {
-    const before = { on: l.on }
-    const gone = new Set(missing)
-    patchLoadout(l.id, { on: l.on.filter(k => !gone.has(displayName(k))) })
-    const id = p.alert.info(`Removed ${missing.length} missing from ${l.name}`, 'They are no longer installed.', {
+    const gone = [...missing]
+    const goneSet = new Set(gone)
+    patchLoadout(l.id, { on: l.on.filter(k => !goneSet.has(displayName(k))) })
+    const id = p.alert.info(`Removed ${gone.length} missing from ${l.name}`, 'They are no longer installed.', {
       duration: 10000,
-      action: { label: 'Undo', onClick: () => { p.alert.dismissAlert(id); patchLoadout(l.id, before) } },
+      action: { label: 'Undo', onClick: () => { p.alert.dismissAlert(id); addBack(gone) } },
     })
   }
 

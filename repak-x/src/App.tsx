@@ -58,6 +58,7 @@ import { dialogOpen } from './custom/hotkeys' // caleb fork: extra shortcuts
 import FilterPanel from './custom/FilterPanel'
 import Loadouts, { AddToLoadoutField } from './custom/Loadouts'
 import LoadoutsScreen, { ViewTabs } from './custom/LoadoutsScreen'
+import { modKey, renameModKey } from './custom/loadoutStore' // caleb fork
 import { TagsToggle } from './custom/uiPrefs'
 import { GeneratePreviewsButton } from './custom/previews'
 import { finishInstallLoadout } from './custom/installLoadout'
@@ -2707,6 +2708,7 @@ function App() {
 
     try {
       const newPath = await invoke('rename_mod', { modPath, newName }) as string
+      renameModKey(modKey(modPath), modKey(newPath)) // caleb fork: loadouts follow the rename
       setStatus(`Renamed to "${newName}"`)
       const refreshed = await loadMods()
       if (selectedMod && selectedMod.path === modPath) {

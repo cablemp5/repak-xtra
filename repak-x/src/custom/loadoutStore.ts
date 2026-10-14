@@ -3,7 +3,7 @@
 // It also remembers the mods shown when it was saved (its scope), unused for now. Stored in localStorage.
 import { useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { deleteMedia } from './loadoutMedia'
+import { sweepOrphanMedia } from './loadoutMedia'
 import { isTyping } from './hotkeys'
 
 export type Mod = { path: string; enabled?: boolean; modified_date?: number }
@@ -26,28 +26,29 @@ const subscribe = (l: () => void) => {
 }
 const notify = () => listeners.forEach(l => l())
 
-export const readLoadouts = (): Loadout[] => JSON.parse(localStorage.getItem(STORAGE) || '[]')
+/** A label that is not a string (a hand-edited or imported file) reads as no group, so grouping never sees an object. */
+const decode = (json: string): Loadout[] =>
+  (JSON.parse(json) as Loadout[]).map(l => (typeof l.label === 'string' ? l : { ...l, label: OTHER }))
+export const readLoadouts = (): Loadout[] => decode(localStorage.getItem(STORAGE) || '[]')
+/** Every id written this session: the startup media sweep keeps their media (a deleted one may still come back by Undo). */
+const sessionIds = new Set<string>()
 /** Throws when localStorage is full (large images). */
 export const writeLoadouts = (list: Loadout[]) => {
   localStorage.setItem(STORAGE, JSON.stringify(list))
+  list.forEach(l => sessionIds.add(l.id))
   notify()
 }
 export const patchLoadout = (id: string, patch: Partial<Loadout>) =>
   writeLoadouts(readLoadouts().map(l => (l.id === id ? { ...l, ...patch } : l)))
 /** Removes the loadout and returns a function that puts it back in the same spot. Its image or video stays stored
- *  until the undo window closes. shortcut: closing the app inside that window leaves the media blob behind (harmless,
- *  a few MB in IndexedDB); sweep orphans at startup if that ever matters. */
-export const deleteLoadout = (id: string, undoMs = 10000) => {
+ *  for the rest of the session; sweepMediaOnce drops it at the next start. */
+export const deleteLoadout = (id: string) => {
   const list = readLoadouts()
   const at = list.findIndex(l => l.id === id)
   if (at < 0) return () => undefined
   const removed = list[at]
   writeLoadouts(list.filter(l => l.id !== id))
-  let restored = false
-  const timer = setTimeout(() => { if (!restored) deleteMedia(id) }, undoMs + 1000)
   return () => {
-    restored = true
-    clearTimeout(timer)
     const now = readLoadouts()
     if (now.some(l => l.id === id)) return
     now.splice(Math.min(at, now.length), 0, removed)
@@ -56,7 +57,24 @@ export const deleteLoadout = (id: string, undoMs = 10000) => {
 }
 
 export const useLoadouts = (): Loadout[] =>
-  JSON.parse(useSyncExternalStore(subscribe, () => localStorage.getItem(STORAGE) || '[]'))
+  decode(useSyncExternalStore(subscribe, () => localStorage.getItem(STORAGE) || '[]'))
+
+let swept = false
+/** Once per start, from Home (the main window only): deletes stored media whose loadout no longer exists. The ids are
+ *  read before anything is awaited and the set stays live, so loadouts made or deleted meanwhile keep their media.
+ *  Anything unreadable skips the cleanup rather than counting as "no loadouts". */
+export function sweepMediaOnce() {
+  if (swept) return
+  swept = true
+  try {
+    const list: unknown = JSON.parse(localStorage.getItem(STORAGE) || '[]')
+    if (!Array.isArray(list) || !list.every(l => typeof l?.id === 'string' && l.id)) return
+    list.forEach(l => sessionIds.add(l.id))
+  } catch {
+    return
+  }
+  sweepOrphanMedia(sessionIds).catch(e => console.warn('Loadout media sweep skipped:', e))
+}
 
 /** Strips the _9999999_P priority suffix so a key survives priority changes (same as the backend's tag key). */
 const normKey = (key: string) => key.replace(/(_\d+_P)+$/i, '')
@@ -104,6 +122,35 @@ export const addModToLoadout = (l: Loadout, key: string) => {
   })
 }
 
+/** Every loadout with oldKey (on and scope) now holding newKey instead, once. Pure. */
+export const renameKeyIn = (list: Loadout[], oldKey: string, newKey: string): Loadout[] => {
+  const from = normKey(oldKey), to = normKey(newKey)
+  const swap = (keys: string[]) => (keys.some(k => normKey(k) === from)
+    ? [...new Map(keys.map(k => (normKey(k) === from ? to : k)).map(k => [normKey(k), k])).values()]
+    : keys)
+  return list.map(l => ({ ...l, on: swap(l.on), scope: swap(l.scope) }))
+}
+/** A renamed mod stays in its loadouts. */
+export const renameModKey = (oldKey: string, newKey: string) => {
+  if (normKey(oldKey) !== normKey(newKey)) writeLoadouts(renameKeyIn(readLoadouts(), oldKey, newKey))
+}
+
+/** Same mods (on and scope), ignoring order, duplicates and priority suffixes. Pure. */
+const memberKey = (keys: string[]) => [...keySet(keys)].sort().join('\n')
+export const sameMembership = (a: Pick<Loadout, 'on' | 'scope'>, b: Pick<Loadout, 'on' | 'scope'>) =>
+  memberKey(a.on) === memberKey(b.on) && memberKey(a.scope) === memberKey(b.scope)
+
+/** "Loadout N" with the lowest N no loadout uses (any case). Pure. */
+export const nextLoadoutName = (names: string[]) => {
+  const used = new Set(names.map(n => n.trim().toLowerCase()))
+  let n = 1
+  while (used.has(`loadout ${n}`)) n++
+  return `Loadout ${n}`
+}
+
+/** Imported labels: a non-empty string, else "imported". */
+export const coerceLabel = (x: unknown) => (typeof x === 'string' && x.trim() ? x : 'imported')
+
 /** Takes a mod off the loadout's on list. It stays in scope, so turning the loadout on switches it off. */
 export const removeModFromLoadout = (l: Loadout, key: string) =>
   patchLoadout(l.id, { on: l.on.filter(x => normKey(x) !== normKey(key)) })
@@ -147,7 +194,7 @@ export const importLoadouts = (text: string) => {
   const names = new Set(existing.map(l => l.name.toLowerCase()))
   const added: Loadout[] = incoming
     .filter(l => l && typeof l.name === 'string' && Array.isArray(l.scope) && Array.isArray(l.on) && !names.has(l.name.toLowerCase()))
-    .map(l => ({ id: crypto.randomUUID(), name: l.name, label: l.label || 'imported', scope: l.scope.map(String), on: l.on.map(String) }))
+    .map(l => ({ id: crypto.randomUUID(), name: l.name, label: coerceLabel(l.label), scope: l.scope.map(String), on: l.on.map(String) }))
   writeLoadouts([...existing, ...added])
   return { added: added.length, skipped: incoming.length - added.length }
 }
@@ -220,16 +267,20 @@ export const renameGroup = (from: string, to: string) => {
   writeGroupList([...new Map(groups.map(g => [groupKey(g), g])).values()])
   writeLoadouts(readLoadouts().map(l => (inGroup(l, from) ? { ...l, label: name } : l)))
 }
-/** Deletes a group; its loadouts move to Other. Returns an undo that puts the group and their labels back. */
+/** Deletes a group; its loadouts move to Other. Returns an undo that puts the group back at its old place among the
+ *  groups as they are by then, and its loadouts back in it unless they were given another group meanwhile. */
 export const deleteGroup = (name: string) => {
   const order = listGroups()
+  const at = order.findIndex(g => groupKey(g) === groupKey(name))
   const moved = readLoadouts().filter(l => inGroup(l, name)).map(l => [l.id, l.label] as const)
   writeGroupList(order.filter(g => groupKey(g) !== groupKey(name)))
   writeLoadouts(readLoadouts().map(l => (inGroup(l, name) ? { ...l, label: OTHER } : l)))
   return () => {
     const back = new Map(moved)
-    writeGroupList(order)
-    writeLoadouts(readLoadouts().map(l => (back.has(l.id) ? { ...l, label: back.get(l.id)! } : l)))
+    const now = listGroups().filter(g => groupKey(g) !== groupKey(name))
+    now.splice(at < 0 ? now.length : Math.min(at, now.length), 0, at < 0 ? name : order[at])
+    writeGroupList(now)
+    writeLoadouts(readLoadouts().map(l => (back.has(l.id) && inGroup(l, OTHER) ? { ...l, label: back.get(l.id)! } : l)))
   }
 }
 export const moveGroup = (name: string, by: -1 | 1) => {
@@ -271,4 +322,14 @@ if (import.meta.env.DEV) {
   for (const [path, key] of [['C:/m/~mods/X_9999999_P.pak', 'X'], ['X_9999999_P.bak_repak', 'X'], ['X_9999999_P.pak.bak_repak', 'X'],
     ['X_9999999_P.pak_disabled', 'X'], ['X_disabled', 'X'], ['bp-lime-vfx_vfx_noPG_v2_9999999_P.pak', 'bp-lime-vfx_vfx_noPG_v2'], ['B_P.pak', 'B_P']])
     console.assert(modKey(path) === key, `modKey(${path}) = ${modKey(path)}, expected ${key}`)
+  const L = (on: string[], scope = on): Loadout => ({ id: 'a', name: 'A', label: OTHER, on, scope })
+  const [r] = renameKeyIn([L(['Old_9999999_P', 'B'])], 'Old', 'New')
+  console.assert(r.on.join() === 'New,B' && r.scope.join() === 'New,B', `renameKeyIn rename: ${r.on}`)
+  const [d] = renameKeyIn([L(['Old', 'New_9999999_P'])], 'Old', 'New')
+  console.assert(d.on.length === 1 && normKey(d.on[0]) === 'New', `renameKeyIn dedupe: ${d.on}`)
+  console.assert(coerceLabel({}) === 'imported' && coerceLabel('') === 'imported' && coerceLabel('x') === 'x', 'coerceLabel')
+  console.assert(nextLoadoutName(['Loadout 1', 'loadout 3']) === 'Loadout 2', 'nextLoadoutName')
+  console.assert(nextLoadoutName([]) === 'Loadout 1', 'nextLoadoutName empty')
+  console.assert(sameMembership(L(['A', 'B_9999999_P', 'A']), L(['B', 'A'])), 'sameMembership order/suffix/duplicates')
+  console.assert(!sameMembership(L(['A']), L(['A', 'C'])) && !sameMembership(L(['A'], ['A']), L(['A'], ['A', 'C'])), 'sameMembership differs')
 }

@@ -95,6 +95,13 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         }
         setTimeout(() => emit('install_complete', null), 300)
         return null
+      case 'rename_mod': { // same folder, priority suffix and extension, new name
+        const mod = data.mods.find((m: any) => m.path === args?.modPath)
+        if (!mod) throw 'Mod not found'
+        const [, dir, , tail] = mod.path.match(/^(.*[\\/])(.*?)((_\d+_P)?(\.pak)?(\.bak_repak|\.pak_disabled)?)$/)
+        mod.path = `${dir}${args.newName}${tail}`
+        return mod.path
+      }
       case 'toggle_mod': {
         const mod = data.mods.find((m: any) => m.path === args?.modPath)
         if (mod) mod.enabled = !mod.enabled

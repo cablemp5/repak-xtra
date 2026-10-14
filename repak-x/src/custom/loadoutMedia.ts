@@ -15,18 +15,39 @@ function db(): Promise<IDBDatabase> {
   return dbPromise
 }
 
+/** A write settles when its transaction does: committed, or rejected on error or abort. */
 async function run<T>(mode: IDBTransactionMode, op: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
-  const store = (await db()).transaction('media', mode).objectStore('media')
+  const tx = (await db()).transaction('media', mode)
   return new Promise((resolve, reject) => {
-    const req = op(store)
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
+    const req = op(tx.objectStore('media'))
+    if (mode === 'readonly') {
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+      return
+    }
+    tx.oncomplete = () => resolve(req.result)
+    tx.onerror = () => reject(tx.error ?? req.error)
+    tx.onabort = () => reject(tx.error ?? req.error)
   })
 }
 
 export const getMedia = (id: string) => run<Blob | undefined>('readonly', s => s.get(id))
 export const putMedia = (id: string, blob: Blob) => run('readwrite', s => s.put(blob, id))
 export const deleteMedia = (id: string) => run('readwrite', s => s.delete(id)).catch(() => undefined)
+
+/** Deletes every stored file whose id is not in `keep`, in one transaction. `keep` is read when the keys arrive, so ids
+ *  added to it meanwhile still count. Resolves on commit; any error aborts the whole sweep. */
+export async function sweepOrphanMedia(keep: Set<string>): Promise<void> {
+  const tx = (await db()).transaction('media', 'readwrite')
+  const store = tx.objectStore('media')
+  return new Promise((resolve, reject) => {
+    const req = store.getAllKeys()
+    req.onsuccess = () => { for (const k of req.result) if (!keep.has(String(k))) store.delete(k) }
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error ?? req.error)
+    tx.onabort = () => reject(tx.error ?? req.error)
+  })
+}
 
 /** Images are downscaled to 1280 px wide; GIFs and videos are kept as-is so they still animate. */
 export async function prepareMedia(file: File): Promise<{ blob: Blob; type: 'image' | 'video' }> {

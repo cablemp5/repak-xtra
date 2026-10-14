@@ -11,7 +11,7 @@ import { ModRow } from './loadoutBits'
 import { Num } from './motion'
 import {
   type Loadout, type Mod, addModToLoadout, displayName, flipMods, modKey, olderVersionIn, patchLoadout, readLoadouts,
-  replaceInLoadout, useLoadouts, versionOf,
+  replaceInLoadout, sameMembership, useLoadouts, versionOf,
 } from './loadoutStore'
 
 const SHOWN = 6
@@ -38,6 +38,7 @@ export default function NewStrip(p: LoadoutProps) {
     const before = { on: l.on, scope: l.scope }
     const oldMod = latest.current.find(m => modKey(m.path) === oldKey)
     replaceInLoadout(l, oldKey, newKey)
+    const after = readLoadouts().find(x => x.id === l.id) // Undo only puts this back while the mods are still as left here
     // Keep the loadout's state: if the old version was on, the new one takes its place
     const swap = oldMod?.enabled && !p.blocked ? [oldMod, ...(mod.enabled ? [] : [mod])] : []
     if (swap.length) { await flipMods(swap); await p.reload() }
@@ -50,7 +51,9 @@ export default function NewStrip(p: LoadoutProps) {
           label: 'Undo', onClick: async () => {
             p.alert.dismissAlert(id)
             const now = readLoadouts().find(x => x.id === l.id)
-            if (now) patchLoadout(l.id, before)
+            if (!now || !after) return p.alert.warning('Not undone', `${l.name} was deleted after the swap.`)
+            if (!sameMembership(now, after)) return p.alert.warning('Not undone', `${now.name} was edited after the swap.`)
+            patchLoadout(l.id, before)
             const back = latest.current.filter(m => modKey(m.path) in was && Boolean(m.enabled) !== was[modKey(m.path)])
             if (back.length && !p.blocked) { await flipMods(back); await p.reload() }
           },

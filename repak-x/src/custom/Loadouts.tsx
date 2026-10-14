@@ -6,7 +6,7 @@ import CustomDropdown from '../components/CustomDropdown'
 import type { useAlert } from '../components/AlertHandler'
 import {
   type Loadout, type Mod, addModToLoadout, changesToTurnOff, changesToTurnOn, deleteLoadout, flipMods, isActive, modKey, moveLoadout,
-  openLoadout, readLoadouts, setView, snapshotLoadout, useLoadouts, writeLoadouts,
+  openLoadout, patchLoadout, readLoadouts, sameMembership, setView, snapshotLoadout, useLoadouts, writeLoadouts,
 } from './loadoutStore'
 import { isTyping } from './hotkeys'
 import { plural } from './modName'
@@ -84,14 +84,24 @@ export function deleteWithUndo(p: LoadoutProps, l: Loadout) {
   })
 }
 
-/** Replace the loadout with the Library's shown mods as they are now, with Undo back to what it held before. */
+/** Replace the loadout with the Library's shown mods as they are now, with Undo back to the mods it held before.
+ *  Undo puts back only its mods, so a later rename, group or image change survives; it refuses when the mods were
+ *  edited since (a mod added after Replace would vanish) or the loadout is gone. */
 export function overwriteWithUndo(p: LoadoutProps, l: Loadout) {
-  const before = { label: l.label, scope: l.scope, on: l.on }
+  const before = { scope: l.scope, on: l.on }
   const next = snapshotLoadout(l, p.scopeMods)
   writeLoadouts(readLoadouts().map(x => (x.id === l.id ? next : x)))
   const id = p.alert.info(`Replaced ${l.name}`, `It now holds the ${plural(next.on.length, 'mod')} that were on in the Library (${p.scopeLabel}).`, {
     duration: 10000,
-    action: { label: 'Undo', onClick: () => { p.alert.dismissAlert(id); writeLoadouts(readLoadouts().map(x => (x.id === l.id ? { ...x, ...before } : x))) } },
+    action: {
+      label: 'Undo', onClick: () => {
+        p.alert.dismissAlert(id)
+        const now = readLoadouts().find(x => x.id === l.id)
+        if (!now) p.alert.warning('Not undone', `${l.name} was deleted after it was replaced.`)
+        else if (!sameMembership(now, next)) p.alert.warning('Not undone', `${now.name} was edited after it was replaced.`)
+        else patchLoadout(l.id, before)
+      },
+    },
   })
 }
 

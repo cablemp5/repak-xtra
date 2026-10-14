@@ -15,8 +15,8 @@ import { Num } from './motion'
 import { generateAllLoadouts, stopPreviews, usePreviewBatch } from './previews'
 import {
   type Loadout, type Mod, OTHER, addGroup, changesToTurnOff, changesToTurnOn, deleteGroup, displayName, exportLoadouts, groupKey,
-  importLoadouts, inGroup, isActive, modKey, moveGroup, openLoadout, patchLoadout, readLoadouts, renameGroup, setLoadoutGroup, setView,
-  snapshotLoadout, useGroups, useLoadouts, useOpenLoadout, useView, writeLoadouts,
+  importLoadouts, inGroup, isActive, modKey, moveGroup, nextLoadoutName, openLoadout, patchLoadout, readLoadouts, renameGroup,
+  setLoadoutGroup, setView, snapshotLoadout, sweepMediaOnce, useGroups, useLoadouts, useOpenLoadout, useView, writeLoadouts,
 } from './loadoutStore'
 
 type GroupBy = 'group' | 'hero'
@@ -126,6 +126,8 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     }
   }
 
+  useEffect(sweepMediaOnce, []) // stored media of loadouts deleted in an earlier session
+
   useEffect(() => {
     if (view !== 'home') return
     // Esc on a loadout page goes back to the cards (a text field takes its own Esc first)
@@ -162,8 +164,9 @@ export default function LoadoutsScreen(p: LoadoutProps) {
 
   /** A new empty loadout opens straight on its page, where mods get added */
   const createEmpty = () => {
-    const l: Loadout = { id: crypto.randomUUID(), name: `Loadout ${loadouts.length + 1}`, label: 'Other', scope: [], on: [] }
-    writeLoadouts([...readLoadouts(), l])
+    const list = readLoadouts()
+    const l: Loadout = { id: crypto.randomUUID(), name: nextLoadoutName(list.map(x => x.name)), label: 'Other', scope: [], on: [] }
+    writeLoadouts([...list, l])
     setOpenId(l.id)
   }
   /** First-run shortcut: everything that is on right now becomes one loadout */
