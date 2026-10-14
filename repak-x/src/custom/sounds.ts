@@ -1,9 +1,9 @@
-// caleb fork: UI sounds with cuelume (synthesized live, no audio files), bubble theme. One click listener maps the
-// control under the pointer to a cue, so upstream components need no changes; alerts add success, error, warning
-// and loading. Settings > Interface > Sound effects turns it off (uiPrefs.tsx calls setSoundOn).
+// caleb fork: UI sounds with cuelume (synthesized live, no audio files), mech theme. One click listener maps the
+// control under the pointer to a cue and one key listener plays typing in text fields, so upstream components need no
+// changes; alerts add success, error, warning and loading. Settings > Interface > Sound effects turns it off (uiPrefs.tsx calls setSoundOn).
 import { play, setEnabled, setTheme, setVolume, unlock, type PlayOptions, type SoundName } from 'cuelume'
 
-setTheme('bubble')
+setTheme('mech') // Caleb, 2026-10-14: the mech preset for every sound
 setVolume(0.7)
 
 export const setSoundOn = (on: boolean) => setEnabled(on)
@@ -36,6 +36,22 @@ document.addEventListener('click', e => {
   play(...cue)
 }, true)
 
+/** The typing cue's key role, or null for keys that do not edit text (arrows, shortcuts, held-down repeats). */
+export function typingKey(e: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | 'altKey' | 'repeat'>): 'printable' | 'space' | 'delete' | 'enter' | null {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return null
+  if (e.key === ' ') return 'space'
+  if (e.key === 'Backspace' || e.key === 'Delete') return 'delete'
+  if (e.key === 'Enter') return 'enter'
+  return e.key.length === 1 ? 'printable' : null
+}
+
+const isTextField = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || t instanceof HTMLTextAreaElement ||
+  (t instanceof HTMLInputElement && /^(text|search|email|url|password|number|tel|)$/.test(t.type)))
+document.addEventListener('keydown', e => {
+  const key = isTextField(e.target) && !(e.target as HTMLInputElement).readOnly ? typingKey(e) : null
+  if (key) play('type', { key })
+}, true)
+
 /** Alert sounds (AlertHandler): what happened, on top of the click that caused it. */
 export function alertSound(color?: string, isLoading?: boolean) {
   if (isLoading) play('loading')
@@ -52,4 +68,7 @@ if (import.meta.env.DEV) {
   console.assert(cueFor(d)?.[1]?.emphasis === 'strong', 'delete plays a strong close')
   const s = document.createElement('span')
   console.assert(cueFor(s) === null, 'plain text is silent')
+  const k = (key: string, more = {}) => typingKey({ key, ctrlKey: false, metaKey: false, altKey: false, repeat: false, ...more })
+  console.assert(k('a') === 'printable' && k(' ') === 'space' && k('Backspace') === 'delete' && k('Enter') === 'enter', 'typing roles')
+  console.assert(k('ArrowLeft') === null && k('a', { ctrlKey: true }) === null && k('a', { repeat: true }) === null, 'non-typing keys are silent')
 }

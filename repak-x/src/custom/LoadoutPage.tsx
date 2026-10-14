@@ -75,7 +75,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia 
               title={`Replace this loadout's mods with the ${p.scopeMods.length} mods shown in the Library, as they are now`}>
               <Save size={14} /> Overwrite from Library
             </button>
-            <GeneratePreviewsButton className="lo-text-btn" label="Generate previews" set={previewSetKey(l.id)}
+            <GeneratePreviewsButton className="lo-text-btn" label="Generate previews" set={previewSetKey(l.id)} name={l.name}
               paths={mine.map(k => byKey.get(k)?.path).filter((x): x is string => Boolean(x))} />
             <button type="button" className="lo-text-btn" onClick={onPickMedia}><ImagePlus size={14} /> {hasMedia ? 'Change image' : 'Add image'}</button>
             {hasMedia && (

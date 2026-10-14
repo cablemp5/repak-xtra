@@ -101,7 +101,7 @@ export default function CalebUiSettings() {
             <Checkbox checked={soundOn()} onChange={(checked: boolean) => { update(SOUND_KEY, checked ? '1' : '0'); if (checked) unlockSound() }}>
               <span>Sound effects</span>
             </Checkbox>
-            <p className="setting-subtext">Soft bubble sounds on clicks, switches, menus, page changes and alerts.</p>
+            <p className="setting-subtext">Mechanical click sounds on clicks, typing, switches, menus, page changes and alerts.</p>
           </div>
           <div className="setting-item">
             <Checkbox checked={motionOn()} onChange={(checked: boolean) => update(MOTION_KEY, checked ? '1' : '0')}>
