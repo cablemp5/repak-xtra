@@ -831,7 +831,6 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 .lo-mod-matches svg.lucide { width: 13px !important; height: 13px !important; flex: none; }
 
 /* ---------- generated mod previews (custom/previews.tsx) ---------- */
-.mod-preview img { display: block; height: 380px; max-width: 100%; aspect-ratio: 1358 / 1920; margin: 0 auto; object-fit: contain; border-radius: 10px; background: var(--preview-gray); border: 1px solid var(--panel-border); }
 .mod-preview-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
 .mod-preview .mod-preview-bar:first-child { margin-top: 0; }
 .mod-preview-btn {
@@ -846,5 +845,18 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 
 /* ---------- generated previews are transparent portrait cutouts (hero card art ratio) on clean dark gray ---------- */
 :root { --preview-gray: #2a2b2f; }
-.lo-card-image { aspect-ratio: 1358 / 1920; background: var(--preview-gray) !important; }
+.lo-card-image { aspect-ratio: 1358 / 1920; background: var(--preview-gray) !important; isolation: isolate; }
+.lo-card-image:hover img { opacity: 1; }
+.lo-card-image:hover .media-main { filter: brightness(1.08); }
 .lo-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+
+/* Card and details-panel media sit on a blurred, darkened copy of themselves (ambient backdrop in the image's own colors) */
+.media-ambient {
+  position: absolute; inset: -15%; width: 130% !important; height: 130% !important; z-index: 0; pointer-events: none;
+  object-fit: cover !important; filter: blur(28px) saturate(1.5) brightness(0.42); transform: translateZ(0);
+}
+.media-main { position: relative; z-index: 1; width: 100%; height: 100%; object-fit: contain !important; display: block; transition: filter 0.15s ease; }
+.mod-preview-frame {
+  position: relative; overflow: hidden; isolation: isolate; height: 380px; max-width: 100%; aspect-ratio: 1358 / 1920; margin: 0 auto;
+  border-radius: 12px; border: 1px solid var(--panel-border); background: var(--preview-gray);
+}
