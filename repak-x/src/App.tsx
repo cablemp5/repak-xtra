@@ -57,6 +57,7 @@ import './custom/keyboardClickables'
 import FilterPanel from './custom/FilterPanel'
 import Loadouts from './custom/Loadouts'
 import LoadoutsScreen from './custom/LoadoutsScreen'
+import SigeonControl from './custom/SigeonControl'
 import { setLoadoutsScreenOpen } from './custom/loadoutStore'
 import { Layers } from 'lucide-react'
 import { useGlobalTooltips } from './hooks/useGlobalTooltips'
@@ -3913,6 +3914,7 @@ function App() {
             <span>VFX Updater</span>
           </button>
 
+          <SigeonControl alert={alert} />{/* caleb fork */}
           <button onClick={() => setLoadoutsScreenOpen(true)} className="btn-settings" title="Loadouts">
             <Layers size={20} /> Loadouts
           </button>{/* caleb fork */}

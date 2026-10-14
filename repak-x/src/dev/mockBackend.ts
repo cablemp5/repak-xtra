@@ -9,6 +9,8 @@ const data: any = Object.values(fixtures)[0] ?? {
   gamePath: '', settings: {}, tags: [], characterData: [], mods: [], folders: [], details: {},
 }
 
+let sigeonState = 'off'
+
 if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
   mockWindows('main')
   mockIPC((cmd, args: any) => {
@@ -23,6 +25,11 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'plugin:webview|set_webview_zoom': // the browser has no webview zoom; CSS zoom stands in
         document.documentElement.style.zoom = String(args?.value ?? 1)
         return null
+      case 'sigeon_status':
+        return { state: sigeonState, presets: ['base', 'high'], storage: 'Desktop/Sigeon V2', plugins: '', game_running: false, problem: null }
+      case 'sigeon_set':
+        sigeonState = args?.preset ?? 'off'
+        return sigeonState
       case 'get_hero_image_ids': return data.heroIds ?? []
       case 'get_hero_image':
         return fetch(`/src/dev/heroes.local/${args?.id}.png`).then(r => r.arrayBuffer()).then(b => new Uint8Array(b))
