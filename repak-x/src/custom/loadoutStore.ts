@@ -67,9 +67,9 @@ export const modKey = (path: string) =>
 /** Stored keys normalized, so loadouts saved before the suffix was dropped still match. */
 const keySet = (keys: string[]) => new Set(keys.map(normKey))
 
-export const snapshotLoadout = (base: Pick<Loadout, 'id' | 'name'> & Partial<Loadout>, scopeMods: Mod[], label: string): Loadout => ({
+export const snapshotLoadout = (base: Pick<Loadout, 'id' | 'name'> & Partial<Loadout>, scopeMods: Mod[], label = 'Other'): Loadout => ({
   ...base,
-  label,
+  label: base.label ?? label, // overwriting keeps the group; the filter text ("all mods") is not a group name
   scope: scopeMods.map(m => modKey(m.path)),
   on: scopeMods.filter(m => m.enabled).map(m => modKey(m.path)),
 })

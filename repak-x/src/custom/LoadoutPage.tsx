@@ -6,7 +6,7 @@ import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo, overwriteWithUndo } from './Loadouts'
 import { CardMedia, ModRow, typeClass } from './loadoutBits'
 import { deleteMedia } from './loadoutMedia'
-import { type Loadout, addModToLoadout, displayName, isActive, modKey, patchLoadout, removeModFromLoadout } from './loadoutStore'
+import { type Loadout, addModToLoadout, displayName, isActive, modKey, patchLoadout, readLoadouts, removeModFromLoadout } from './loadoutStore'
 import { plural } from './modName'
 import { GeneratePreviewsButton } from './previews'
 
@@ -60,8 +60,11 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia 
             onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') { setName(l.name); (e.target as HTMLInputElement).blur() } }} />
           <label className="lp-group">
             <span>Group</span>
-            <input value={group} aria-label="Group" onChange={e => setGroup(e.target.value)} onBlur={commit}
+            <input value={group} aria-label="Group" list="lo-group-names" onChange={e => setGroup(e.target.value)} onBlur={commit}
               onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') { setGroup(l.label); (e.target as HTMLInputElement).blur() } }} />
+            <datalist id="lo-group-names">
+              {[...new Set(readLoadouts().map(x => x.label))].filter(g => g !== l.label).sort().map(g => <option key={g} value={g} />)}
+            </datalist>
           </label>
           <p className="lp-meta">{busy ? 'Switching mods…' : `${plural(mine.length, 'mod')} · ${onNow} on now`}</p>
           <div className="lp-actions">

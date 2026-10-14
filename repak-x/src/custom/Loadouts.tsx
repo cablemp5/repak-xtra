@@ -84,7 +84,7 @@ export function deleteWithUndo(p: LoadoutProps, l: Loadout) {
 /** Overwrite with the shown mods' current state, with Undo back to what it held before. */
 export function overwriteWithUndo(p: LoadoutProps, l: Loadout) {
   const before = { label: l.label, scope: l.scope, on: l.on }
-  writeLoadouts(readLoadouts().map(x => (x.id === l.id ? snapshotLoadout(x, p.scopeMods, p.scopeLabel) : x)))
+  writeLoadouts(readLoadouts().map(x => (x.id === l.id ? snapshotLoadout(x, p.scopeMods) : x)))
   const id = p.alert.info(`Updated ${l.name}`, `It now holds the ${p.scopeMods.length} shown mods as they are now.`, {
     duration: 10000,
     action: { label: 'Undo', onClick: () => { p.alert.dismissAlert(id); writeLoadouts(readLoadouts().map(x => (x.id === l.id ? { ...x, ...before } : x))) } },
@@ -117,7 +117,7 @@ export default function Loadouts(p: LoadoutProps) {
 
   const save = () => {
     const trimmed = name.trim()
-    if (trimmed) writeLoadouts([...readLoadouts(), snapshotLoadout({ id: crypto.randomUUID(), name: trimmed }, p.scopeMods, p.scopeLabel)])
+    if (trimmed) writeLoadouts([...readLoadouts(), snapshotLoadout({ id: crypto.randomUUID(), name: trimmed }, p.scopeMods)])
     setNaming(false)
     setName('')
   }
