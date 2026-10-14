@@ -55,7 +55,7 @@ import { offerUndoDelete, type TrashedMod } from './custom/undoDelete'
 import ModStateFilter, { matchesState, type ModState } from './custom/ModStateFilter'
 import './custom/keyboardClickables'
 import { dialogOpen } from './custom/hotkeys' // caleb fork: extra shortcuts
-import FilterPanel from './custom/FilterPanel'
+import FilterPanel, { filterScope } from './custom/FilterPanel'
 import Loadouts, { AddToLoadoutField } from './custom/Loadouts'
 import LoadoutsScreen, { ViewTabs } from './custom/LoadoutsScreen'
 import { modKey, renameModKey } from './custom/loadoutStore' // caleb fork
@@ -4133,7 +4133,7 @@ function App() {
                     </span>
                     {/* caleb fork: say which filters narrow the list */}
                     {(selectedCharacters.size > 0 || selectedCategories.size > 0) && (
-                      <span className="header-title-scope"> · {[...selectedCharacters, ...selectedCategories].join(', ')}</span>
+                      <span className="header-title-scope" title={filterScope(selectedCharacters, selectedCategories)}> · {filterScope(selectedCharacters, selectedCategories)}</span>
                     )}
                   </h2>
                   <ModStateFilter value={modState} onChange={setModState} mods={folderMods} />

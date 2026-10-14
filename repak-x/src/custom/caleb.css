@@ -245,9 +245,10 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 /* ---------- list header ---------- */
 .center-header { padding: 12px 14px !important; flex-wrap: wrap !important; row-gap: 10px !important; }
 /* Title + state filter never shrink; when the details panel narrows the header, actions wrap below */
-.center-header .header-title { display: flex; align-items: center; gap: 14px; min-width: max-content; }
+.center-header .header-title { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.center-header .header-title > :not(h2) { flex: none; }
 .center-header .header-actions { margin-left: auto; }
-.center-header .header-title h2 { font-size: 16px; font-weight: 600; flex: none; }
+.center-header .header-title h2 { font-size: 16px; font-weight: 600; flex: 0 1 auto; min-width: 0; }
 /* The state filter took header room; collapse the two text buttons to icons sooner */
 @container modheader (max-width: 960px) {
   .center-header .header-actions .btn-label { display: none; }
@@ -892,7 +893,8 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
   outline: 2px solid var(--focus-ring) !important; outline-offset: 2px !important;
   transition-duration: 0s !important;   /* MUI animates all properties: the ring grew in from 0px */
 }
-.header-title-scope { color: var(--text-secondary); font-weight: 500; }
+/* The filter line gives way first (it shrinks 100x faster than the folder name), ending in an ellipsis */
+.header-title-scope { color: var(--text-secondary); font-weight: 500; margin-left: 0.3em; min-width: 0; flex: 0 100 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Sidebar loadouts: the Ctrl+1-9 number at the row's end, quiet until the row is hovered or focused */
 .lo-num { flex: none; width: 2.2ch; text-align: right; font: 500 10.5px/1 var(--font-mono); color: var(--text-secondary); opacity: 0.55; font-variant-numeric: tabular-nums; }
