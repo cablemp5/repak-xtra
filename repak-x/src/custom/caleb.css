@@ -1258,3 +1258,6 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .lp-more .custom-dropdown-trigger:hover, .lp-more .custom-dropdown-trigger.open { background: var(--quiet-hover) !important; border-color: rgba(255, 255, 255, 0.14) !important; }
 .lp-more .custom-dropdown-menu { min-width: 300px; }
 .lp-more .custom-dropdown-item:last-child { border-top: 1px solid var(--panel-border); margin-top: 4px; padding-top: 8px; }
+
+/* Success toasts: the app's blue check instead of green (Caleb, 2026-10-14) */
+.toast-item.success { --toast-color: var(--accent-primary); --toast-progress: var(--accent-primary); }

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import type { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MdClearAll } from 'react-icons/md';
+import { Check } from 'lucide-react'; // caleb fork: a plain check for success
 import './ui/Alert.css';
 import { alertSound } from '../custom/sounds' // caleb fork
 
@@ -10,12 +11,7 @@ type ToastColor = 'success' | 'danger' | 'warning' | 'info' | 'default' | 'crash
 type IconColor = Exclude<ToastColor, 'primary' | 'secondary'>;
 
 const Icons: Record<IconColor, React.ReactNode> = {
-    success: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-            <polyline points="22 4 12 14.01 9 11.01"></polyline>
-        </svg>
-    ),
+    success: <Check size={18} strokeWidth={2.5} />,
     danger: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10"></circle>
@@ -318,6 +314,12 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
     // Get the most recent toasts (reverse so newest is first)
     const recentToasts = [...toasts].reverse().slice(0, maxVisible);
 
+    // caleb fork: fanned out on hover, each toast sits 8px past the real height of the ones in front of it (a fixed
+    // 100px step left big gaps under short toasts)
+    const [heights, setHeights] = useState<Record<number, number>>({});
+    const reportHeight = useCallback((id: number, h: number) => setHeights(prev => (prev[id] === h ? prev : { ...prev, [id]: h })), []);
+    const spread = recentToasts.map((_, i) => recentToasts.slice(0, i).reduce((sum, t) => sum + (heights[t.id] ?? 72) + 8, 0));
+
     const isBottom = placement.startsWith('bottom');
 
     return (
@@ -349,6 +351,8 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
                             total={recentToasts.length}
                             isHovered={isHovered}
                             placement={placement}
+                            spread={spread[index]}
+                            onHeight={reportHeight}
                         />
                     ))}
                 </AnimatePresence>
@@ -376,7 +380,15 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
 }
 
 // Individual Toast Item with card stacking effect - memoized to prevent unnecessary re-renders
-const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHovered, placement }: any) {
+const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHovered, placement, spread = index * 100, onHeight }: any) {
+    const itemRef = useRef<HTMLDivElement>(null);
+    useEffect(() => { // caleb fork: report this toast's height so the hovered stack spaces by it
+        const el = itemRef.current;
+        if (!el || !onHeight) return;
+        const ro = new ResizeObserver(() => onHeight(toast.id, el.offsetHeight));
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [toast.id, onHeight]);
     const [progress, setProgress] = useState(100);
     const [isPaused, setIsPaused] = useState(false);
     const elapsedTimeRef = useRef(0); // Track total elapsed time across pauses
@@ -437,20 +449,19 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
     const isBottom = placement.startsWith('bottom');
 
     // When hovered, expand the cards; when not hovered, stack them tightly
-    const stackOffset = isHovered ? 100 : 10; // Fan out on hover (70px between cards)
+    const stackOffset = 10; // stacked tightly; hovered, spread (measured heights) decides
     const scaleReduction = isHovered ? 0 : 0.05; // No scale reduction when hovered
     const opacityReduction = isHovered ? 0 : 0.2; // Full opacity when hovered
 
     // Calculate transforms for stacking effect
-    const yOffset = isBottom
-        ? -index * stackOffset  // Stack upward for bottom placement
-        : index * stackOffset;  // Stack downward for top placement
+    const yOffset = (isBottom ? -1 : 1) * (isHovered ? spread : index * stackOffset);
     const scale = 1 - (index * scaleReduction);
     const opacity = index === 0 ? 1 : Math.max(0.6, 1 - (index * opacityReduction));
     const zIndex = 100 - index;
 
     return (
         <motion.div
+            ref={itemRef}
             layout
             initial={{
                 opacity: 0,
