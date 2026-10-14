@@ -8689,6 +8689,12 @@ fn main() {
             caleb_previews::cancel_mod_previews,
             caleb_sigeon::sigeon_status,
             caleb_sigeon::sigeon_set,
+            caleb_sigeon::sigeon_read, // caleb fork: Sigeon editor
+            caleb_sigeon::sigeon_save,
+            caleb_sigeon::sigeon_create,
+            caleb_sigeon::sigeon_rename,
+            caleb_sigeon::sigeon_delete,
+            caleb_sigeon::sigeon_restore,
             get_game_path,
             set_game_path,
             auto_detect_game_path,

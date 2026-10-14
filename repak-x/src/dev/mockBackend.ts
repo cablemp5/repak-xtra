@@ -12,6 +12,17 @@ const data: any = Object.values(fixtures)[0] ?? {
 }
 
 let sigeonState = 'off'
+// Fake Sigeon configs as the editor sees them (caleb_sigeon.rs Line); the license is only ever a placeholder line
+const sigeonLine = (key: string, value: string, on = true) => ({ kind: 'entry', key, value, on })
+const sigeonPresets: Record<string, any[]> = Object.fromEntries(['base', 'high'].map(v => [v, [
+  { kind: 'comment', text: ' SigeonLoader configuration.' }, { kind: 'blank' }, { kind: 'license' }, { kind: 'blank' },
+  sigeonLine('variant', v), sigeonLine('lowLatency', '0'), sigeonLine('stretched', '1.0'), sigeonLine('darkHair', '0'),
+  sigeonLine('fontAA', '1'), sigeonLine('fixDarkMaps', '1'), sigeonLine('gamma', '0', false), { kind: 'blank' },
+  { kind: 'section', name: 'Overrides' }, { kind: 'comment', text: ' ---- Invisible: streaming, threading ----' },
+  sigeonLine('r.Streaming.PoolSize', '3072'), sigeonLine('r.OneFrameThreadLag', '1'), { kind: 'comment', text: ' Small shadow extras' },
+  sigeonLine('r.ContactShadows', '0'), sigeonLine('r.DetailMode', '1'), { kind: 'blank' },
+]]))
+const sigeonDeleted: Record<string, any[]> = {}
 const trash = new Map<string, any>() // trash id -> the deleted mod record
 // Browser checks flip window.__mockGameRunning live (polled every 5 s); localStorage 'mock.bypass' = 'false' turns the
 // fixture's game-lock bypass off at the next load
@@ -53,7 +64,20 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         document.documentElement.style.zoom = String(args?.value ?? 1)
         return null
       case 'sigeon_status':
-        return { state: sigeonState, presets: ['base', 'high'], storage: 'Desktop/Sigeon V2', plugins: '', game_running: false, problem: null }
+        return { state: sigeonState, presets: Object.keys(sigeonPresets).sort(), storage: 'Desktop/Sigeon V2', plugins: '', game_running: false, problem: null }
+      case 'sigeon_read': return structuredClone(sigeonPresets[args?.preset])
+      case 'sigeon_save':
+        sigeonPresets[args?.preset] = args?.lines
+        return { state: sigeonState, applied: sigeonState === args?.preset }
+      case 'sigeon_create': sigeonPresets[args?.name] = structuredClone(sigeonPresets[args?.from]); return null
+      case 'sigeon_rename':
+        sigeonPresets[args?.to] = sigeonPresets[args?.from]; delete sigeonPresets[args?.from]
+        if (sigeonState === args?.from) sigeonState = args?.to
+        return null
+      case 'sigeon_delete':
+        if (sigeonState === args?.name) throw new Error(`${args?.name} is the config in use.`)
+        sigeonDeleted[args?.name] = sigeonPresets[args?.name]; delete sigeonPresets[args?.name]; return null
+      case 'sigeon_restore': sigeonPresets[args?.name] = sigeonDeleted[args?.name]; return null
       case 'sigeon_set':
         sigeonState = args?.preset ?? 'off'
         return sigeonState

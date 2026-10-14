@@ -1315,3 +1315,65 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
   background: rgba(10, 11, 14, 0.7); color: var(--text-primary); }
 .lo-media.is-running .lo-skel-label { color: #fff; background: color-mix(in srgb, var(--accent-primary), transparent 25%); }
 @media (prefers-reduced-motion: reduce) { .lo-skel, .lo-media.is-running .lo-skel::after { animation: none !important; } }
+
+/* ---------- Sigeon config editor (SigeonEditor.tsx): configs on the left, one config's settings on the right ---------- */
+.sigeon-edit { border-top: 1px solid var(--panel-border) !important; margin-top: 4px !important; border-radius: 0 0 6px 6px !important; }
+.sigeon-edit span { display: inline-flex; align-items: center; gap: 8px; }
+.sg-modal { width: min(980px, 94vw) !important; max-width: none !important; height: min(760px, 90vh); display: flex; flex-direction: column; padding: 0 !important; }
+.sg-modal .modal-header { padding: 16px 20px !important; border-bottom: 1px solid var(--panel-border); }
+.sg-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 210px 1fr; }
+.sg-list { border-right: 1px solid var(--panel-border); padding: 12px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+.sg-preset { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: none; border-radius: 8px; background: transparent;
+  color: var(--text-secondary); font: 500 13px var(--font-primary); text-align: left; cursor: pointer; }
+.sg-preset:hover { background: var(--quiet-hover); color: var(--text-primary); }
+.sg-preset[aria-pressed="true"] { background: var(--quiet-active); color: var(--text-primary); }
+.sg-preset > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sg-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-primary); flex: none; }
+.sg-pill { flex: none; padding: 1px 7px; border-radius: 999px; font-size: 11px; color: #fff; background: color-mix(in srgb, var(--accent-primary), transparent 25%); }
+.sg-list-actions { display: flex; gap: 4px; margin-top: 8px; }
+.sg-list-actions .lo-text-btn { height: 30px !important; }
+.sg-icon { width: 30px; padding: 0 !important; justify-content: center; }
+.sg-name { margin-top: 8px; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--accent-primary); background: var(--bg-dark); color: var(--text-primary); font: 13px var(--font-primary); }
+.sg-foot { margin: auto 2px 0; padding-top: 14px; font-size: 11.5px; line-height: 1.45; color: var(--text-secondary); }
+.sg-empty { display: grid; place-items: center; color: var(--text-secondary); font-size: 13px; padding: 24px; }
+.sg-edit { overflow-y: auto; padding: 18px 22px 24px; display: flex; flex-direction: column; gap: 22px; }
+.sg-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sg-head h3 { margin: 0; font-size: 18px; font-weight: 700; color: var(--text-primary); }
+.sg-status { font-size: 12px; color: var(--text-secondary); }
+.sg-section h4 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.sg-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.sg-section-head h4 { margin: 0; }
+.sg-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 12px; border: 1px solid var(--panel-border); }
+.sg-row + .sg-row { border-top: none; }
+.sg-row:first-of-type { border-radius: 10px 10px 0 0; }
+.sg-row:last-of-type { border-radius: 0 0 10px 10px; }
+.sg-row > div:first-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sg-row b { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.sg-row small { font-size: 12px; color: var(--text-secondary); }
+.sg-row .custom-dropdown { min-width: 150px; }
+.sg-row input[type="range"] { width: 180px; accent-color: var(--accent-primary); }
+.sg-inline { display: flex; align-items: center; gap: 8px; }
+.sg-num { width: 70px; height: 30px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--panel-border); background: var(--bg-dark); color: var(--text-primary); font: 13px var(--font-mono); }
+.sg-search { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--panel-border); color: var(--text-secondary); }
+.sg-search input { width: 170px; border: none; background: transparent; color: var(--text-primary); font: 12.5px var(--font-primary); outline: none; }
+.sg-hint { margin: 0 0 10px; font-size: 12px; color: var(--text-secondary); }
+.sg-block { border: 1px solid var(--panel-border); border-radius: 10px; padding: 6px 0; }
+.sg-block + .sg-block { margin-top: 10px; }
+.sg-block-name { padding: 4px 12px 6px; font: 600 12px var(--font-mono); color: var(--text-secondary); }
+.sg-note { margin: 10px 12px 2px; font-size: 11.5px; color: var(--text-secondary); opacity: 0.8; }
+.sg-entry { display: grid; grid-template-columns: auto minmax(0, 1fr) 140px 28px; align-items: center; gap: 10px; padding: 4px 12px; }
+.sg-entry:hover { background: var(--quiet-hover); }
+.sg-entry code { font: 12.5px var(--font-mono); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sg-entry.is-off code, .sg-entry.is-off input { opacity: 0.5; }
+.sg-entry input { height: 28px; min-width: 0; padding: 0 8px; border-radius: 6px; border: 1px solid var(--panel-border); background: var(--bg-dark);
+  color: var(--text-primary); font: 12.5px var(--font-mono); }
+.sg-entry input:focus { border-color: var(--accent-primary); outline: none; }
+.sg-x { display: grid; place-items: center; width: 28px; height: 28px; border: none; border-radius: 6px; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.sg-x:hover { background: var(--quiet-active); color: var(--text-primary); }
+.sg-add { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--panel-border); grid-template-columns: auto minmax(0, 1fr) 140px auto; }
+.sg-add:hover { background: transparent; }
+.sg-add-icon { color: var(--text-secondary); margin: 0 9px; }
+.sg-add .lo-text-btn { height: 28px !important; }
+.sg-footer { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 12px 20px !important; border-top: 1px solid var(--panel-border); }
+.sg-leave { margin-right: auto; font-size: 13px; color: var(--text-primary); }
+.sg-save { min-width: 88px; }
