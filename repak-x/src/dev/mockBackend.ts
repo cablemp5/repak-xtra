@@ -2,6 +2,7 @@
 // so this answers invoke() calls from a snapshot of the real library.
 // Refresh the snapshot with `node scripts/capture-dev-fixture.mjs`. Never active inside the app.
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
+import { emit } from '@tauri-apps/api/event'
 
 // DEV guard keeps the snapshot out of release bundles
 const fixtures = import.meta.env.DEV ? import.meta.glob('./fixture.local.json', { eager: true, import: 'default' }) : {}
@@ -38,7 +39,11 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         return Object.keys(previewUrls).map(f => f.replace(/^.*\/|\.png$/g, ''))
       case 'get_mod_preview':
         return fetch(previewUrls[`./previews.local/${args?.key}.png`]).then(r => r.arrayBuffer())
-      case 'generate_mod_preview': return false
+      case 'generate_mod_previews': // pretend run: each job reports back as already rendered
+        ;(args?.jobs ?? []).forEach(([, key]: [string, string], i: number) => setTimeout(() => emit('mod-preview-ready', key), 600 * (i + 1)))
+        setTimeout(() => emit('mod-previews-done', true), 600 * ((args?.jobs ?? []).length + 1))
+        return true
+      case 'cancel_mod_previews': return null
       case 'get_hero_image':
         return fetch(`/src/dev/heroes.local/${args?.id}.png`).then(r => r.arrayBuffer()).then(b => new Uint8Array(b))
       case 'get_app_version': return __APP_VERSION__

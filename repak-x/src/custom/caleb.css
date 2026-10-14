@@ -860,3 +860,6 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 .lo-card-meta { margin-top: 4px !important; line-height: 16px; }
 .lo-card-actions { margin-top: 12px !important; }
 .lo-expand { margin-left: -8px; }
+.bulk-previews { display: inline-flex !important; align-items: center; gap: 6px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bulk-previews svg.lucide { width: 15px !important; height: 15px !important; }
+.bulk-previews.is-running { color: var(--text-primary) !important; }

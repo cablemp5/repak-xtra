@@ -59,6 +59,7 @@ import FilterPanel from './custom/FilterPanel'
 import Loadouts from './custom/Loadouts'
 import LoadoutsScreen from './custom/LoadoutsScreen'
 import { TagsToggle } from './custom/uiPrefs'
+import { GeneratePreviewsButton } from './custom/previews'
 import SigeonControl from './custom/SigeonControl'
 import { setLoadoutsScreenOpen } from './custom/loadoutStore'
 import { Layers } from 'lucide-react'
@@ -4249,6 +4250,9 @@ function App() {
                       alwaysShowDeleteIcon={true}
                     />
                   </div>
+
+                  {/* caleb fork: previews for every selected mod (custom/previews.tsx) */}
+                  <GeneratePreviewsButton paths={[...selectedMods]} />
 
                   {(() => {
                     const selMods = mods.filter(m => selectedMods.has(m.path))
