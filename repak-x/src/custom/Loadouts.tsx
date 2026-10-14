@@ -1,16 +1,15 @@
 // caleb fork: sidebar list of saved loadouts (state lives in loadoutStore.ts). The dot or check turns a loadout on or
 // off (as does Ctrl+1..9), the name opens its page on Home; drag rows to reorder them, which also reorders Ctrl+1..9.
 import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from 'react'
-import { ArrowRightLeft, Check, Layers, LayoutGrid, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowRightLeft, Check, Layers, Plus, Trash2 } from 'lucide-react'
 import CustomDropdown from '../components/CustomDropdown'
 import type { useAlert } from '../components/AlertHandler'
 import {
   type Loadout, type Mod, changesToTurnOff, changesToTurnOn, deleteLoadout, flipMods, isActive, modKey, moveLoadout,
-  openLoadout, patchLoadout, readLoadouts, sameMembership, setView, snapshotLoadout, useLoadouts, withMods, writeLoadouts,
+  nextLoadoutName, openLoadout, patchLoadout, readLoadouts, sameMembership, snapshotLoadout, useLoadouts, withMods, writeLoadouts,
 } from './loadoutStore'
 import { isTyping } from './hotkeys'
 import { plural } from './modName'
-import { generateAllLoadouts } from './previews'
 import { Num } from './motion'
 
 export type LoadoutProps = {
@@ -22,6 +21,7 @@ export type LoadoutProps = {
   reload: () => Promise<unknown>
   alert: ReturnType<typeof useAlert>
   modDetails?: Record<string, { character_name?: string | null; category?: string | null } | undefined>
+  selected?: string[]    // paths picked in the Library: + makes a loadout of exactly these
 }
 
 const HEIGHT_KEY = 'caleb.loadoutsHeight'
@@ -52,10 +52,17 @@ function useListHeight() {
   return { height, dragging, start }
 }
 
-/** Selection bar: add every selected mod to a loadout (it also starts managing them). */
+/** A new loadout holding exactly these mods (all of them on), named "Loadout N". */
+export function createFromMods(paths: string[], name?: string) {
+  const keys = [...new Set(paths.map(modKey))]
+  const l: Loadout = { id: crypto.randomUUID(), name: name || nextLoadoutName(readLoadouts().map(x => x.name)), label: 'Other', ...withMods({ on: [], scope: [] }, keys) }
+  writeLoadouts([...readLoadouts(), l])
+  return l
+}
+
+/** Selection bar: add every selected mod to a loadout (it also starts managing them), or start a new one with them. */
 export function AddToLoadoutField({ paths, alert }: { paths: string[]; alert: LoadoutProps['alert'] }) {
   const loadouts = useLoadouts()
-  if (loadouts.length === 0) return null
   return (
     <div className="bulk-field" title="Add the selected mods to a loadout">
       <CustomDropdown
@@ -64,6 +71,13 @@ export function AddToLoadoutField({ paths, alert }: { paths: string[]; alert: Lo
         value=""
         placeholder="Add to loadout"
         disabled={paths.length === 0}
+        addNewLabel="+ New loadout"
+        onAddNew={() => {
+          const l = createFromMods(paths)
+          const id = alert.success(`${l.name} created`, `With the ${plural(l.on.length, 'selected mod')}. Rename it on its page.`, {
+            action: { label: 'Open', onClick: () => { alert.dismissAlert(id); openLoadout(l.id) } },
+          })
+        }}
         onChange={(id: string) => {
           const l = readLoadouts().find(x => x.id === id)
           if (!l) return
@@ -73,6 +87,41 @@ export function AddToLoadoutField({ paths, alert }: { paths: string[]; alert: Lo
         }}
       />
     </div>
+  )
+}
+
+/** The Library's right-click "Add to loadout" submenu: a new loadout with these mods, then every loadout. */
+export function LoadoutMenuItems({ paths, alert, close }: { paths: string[]; alert: LoadoutProps['alert']; close: () => void }) {
+  const loadouts = useLoadouts()
+  const keys = [...new Set(paths.map(modKey))]
+  const addTo = (l: Loadout) => {
+    patchLoadout(l.id, withMods(l, keys))
+    alert.success(`Added to ${l.name}`, `${plural(keys.length, 'mod')}.`)
+    close()
+  }
+  const create = () => {
+    const l = createFromMods(paths)
+    const id = alert.success(`${l.name} created`, `With ${plural(l.on.length, 'mod')}. Rename it on its page.`, {
+      action: { label: 'Open', onClick: () => { alert.dismissAlert(id); openLoadout(l.id) } },
+    })
+    close()
+  }
+  return (
+    <>
+      <div className="context-menu-item" onClick={create}>+ New loadout</div>
+      {loadouts.length > 0 && <div className="context-menu-separator" />}
+      <div className="scrollable-menu-list" style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }}>
+        {loadouts.map(l => {
+          const has = keys.every(k => l.on.some(o => modKey(o) === k))
+          return (
+            <div key={l.id} className={`context-menu-item${has ? ' is-disabled' : ''}`} onClick={() => !has && addTo(l)}
+              title={has ? `Already in ${l.name}` : undefined}>
+              {l.name}{has && <Check size={13} className="lo-menu-check" />}
+            </div>
+          )
+        })}
+      </div>
+    </>
   )
 }
 
@@ -178,9 +227,12 @@ export default function Loadouts(p: LoadoutProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   useEffect(() => { if (naming) inputRef.current?.focus() }, [naming])
 
+  const picked = p.selected ?? []
+  // Selected mods: exactly those. Nothing selected: the shown mods that are on.
   const save = () => {
     const trimmed = name.trim()
-    if (trimmed) writeLoadouts([...readLoadouts(), snapshotLoadout({ id: crypto.randomUUID(), name: trimmed }, p.scopeMods)])
+    if (trimmed && picked.length) createFromMods(picked, trimmed)
+    else if (trimmed) writeLoadouts([...readLoadouts(), snapshotLoadout({ id: crypto.randomUUID(), name: trimmed }, p.scopeMods)])
     setNaming(false)
     setName('')
   }
@@ -216,25 +268,15 @@ export default function Loadouts(p: LoadoutProps) {
       <div className="fp-head">
         <span className="fp-title">Loadouts</span>
         <span className="lo-head-actions">
-          <button type="button" className="lo-icon" title="Generate previews for every loadout (one after another)" aria-label="Generate previews for all loadouts"
-            disabled={loadouts.length === 0} onClick={async () => {
-              const { count, error } = await generateAllLoadouts(loadouts, p.mods)
-              if (error) p.alert.warning('Previews not started', error)
-              else p.alert.success('Previews queued', `${plural(count, 'loadout')}, one after another. Home shows the progress on each card.`)
-            }}>
-            <Sparkles size={15} />
-          </button>
-          <button type="button" className="lo-icon" title="Open Home (loadout cards)" onClick={() => setView('home')}>
-            <LayoutGrid size={15} />
-          </button>
-          <button type="button" className="lo-icon" title="Save the shown mods' on/off state as a loadout" onClick={() => setNaming(true)}>
+          <button type="button" className="lo-icon" aria-label="New loadout" onClick={() => setNaming(true)}
+            title={picked.length ? `New loadout from the ${plural(picked.length, 'selected mod')}` : 'New loadout from the mods that are on here'}>
             <Plus size={15} />
           </button>
         </span>
       </div>
 
       {loadouts.length === 0 && !naming && (
-        <p className="lo-empty">No loadouts yet. Make one on Home, or turn on the mods you want here and press + to save them as one.</p>
+        <p className="lo-empty">No loadouts yet. Select mods (or turn on the ones you want) and press + to save them as one.</p>
       )}
 
       {loadouts.map((l, i) => {
@@ -278,7 +320,7 @@ export default function Loadouts(p: LoadoutProps) {
           <input ref={inputRef} value={name} placeholder="Loadout name" onChange={e => setName(e.target.value)}
             onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') save(); if (e.key === 'Escape') { setNaming(false); setName('') } }}
             onBlur={save} />
-          <p className="lo-hint">Saves which of the {p.scopeMods.length} shown mods ({p.scopeLabel}) are on.</p>
+          <p className="lo-hint">{picked.length ? `Holds the ${plural(picked.length, 'selected mod')}.` : `Holds the shown mods that are on (${p.scopeLabel}).`}</p>
         </div>
       )}
     </div>

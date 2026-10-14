@@ -342,30 +342,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
             {activeCategory === 'interface' && (
               <>
                 <CalebUiSettings />
-                <div className="setting-section">
-                  <h3>Theme</h3>
-                  <div className="setting-group">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                      <AnimatedThemeToggler theme={theme} setTheme={handleThemeToggle} />
-                      <span style={{ fontSize: '0.9rem', opacity: 0.8 }}>
-                        {theme === 'dark' ? 'Dark Mode' : (showRatMode ? 'Rat Mode 🐀' : 'Light Mode')}
-                      </span>
-                    </div>
-
-                    <label style={{ display: 'block', fontSize: '0.9rem', opacity: 0.9 }}>Accent Color</label>
-                    <div className="color-options">
-                      {Object.entries(ACCENT_COLORS).map(([name, color]) => (
-                        <button
-                          key={name}
-                          className={`color-option ${accentColor === color ? 'selected' : ''}`}
-                          style={{ backgroundColor: color }}
-                          onClick={() => setAccentColor(color)}
-                          title={name.charAt(0).toUpperCase() + name.slice(1)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                {/* caleb fork: no Theme section (dark only, accent fixed to the title's blue) */}
 
                 <div className="setting-section">
                   <h3>Mods View Settings</h3>

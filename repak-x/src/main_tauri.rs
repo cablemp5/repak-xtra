@@ -8696,6 +8696,9 @@ fn main() {
             caleb_sigeon::sigeon_rename,
             caleb_sigeon::sigeon_delete,
             caleb_sigeon::sigeon_restore,
+            caleb_sigeon::sigeon_storage,
+            caleb_sigeon::sigeon_set_storage,
+            caleb_sigeon::sigeon_open,
             caleb_setup::setup_bypass_status, // caleb fork: Setup panel
             caleb_setup::setup_bypass,
             caleb_setup::setup_galacta_status,

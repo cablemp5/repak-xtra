@@ -15,7 +15,7 @@ let sigeonState = 'off'
 // Fake Sigeon configs as the editor sees them (caleb_sigeon.rs Line); the license is only ever a placeholder line
 const sigeonLine = (key: string, value: string, on = true) => ({ kind: 'entry', key, value, on })
 const sigeonPresets: Record<string, any[]> = Object.fromEntries(['base', 'high'].map(v => [v, [
-  { kind: 'comment', text: ' SigeonLoader configuration.' }, { kind: 'blank' }, { kind: 'license' }, { kind: 'blank' },
+  { kind: 'comment', text: ' SigeonLoader configuration.' }, { kind: 'blank' }, { kind: 'license', set: true }, { kind: 'blank' },
   sigeonLine('variant', v), sigeonLine('lowLatency', '0'), sigeonLine('stretched', '1.0'), sigeonLine('darkHair', '0'),
   sigeonLine('fontAA', '1'), sigeonLine('fixDarkMaps', '1'), sigeonLine('gamma', '0', false), { kind: 'blank' },
   { kind: 'section', name: 'Overrides' }, { kind: 'comment', text: ' ---- Invisible: streaming, threading ----' },
@@ -76,7 +76,15 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'sigeon_save':
         sigeonPresets[args?.preset] = args?.lines
         return { state: sigeonState, applied: sigeonState === args?.preset }
-      case 'sigeon_create': sigeonPresets[args?.name] = structuredClone(sigeonPresets[args?.from]); return null
+      case 'sigeon_create':
+        sigeonPresets[args?.name] = args?.from ? structuredClone(sigeonPresets[args?.from]) : [
+          { kind: 'license', set: false }, { kind: 'blank' }, sigeonLine('variant', 'base'), sigeonLine('lowLatency', '0'), sigeonLine('stretched', '1.0'),
+          sigeonLine('darkHair', '0'), sigeonLine('fontAA', '0'), sigeonLine('fixDarkMaps', '0'), sigeonLine('gamma', '0', false),
+          sigeonLine('enableCAS', '1', false), { kind: 'blank' }, { kind: 'section', name: 'Overrides' }]
+        return null
+      case 'sigeon_storage': return { path: 'C:\\Users\\you\\Desktop\\Sigeon V2', default: true, loader: true }
+      case 'sigeon_set_storage': return { path: args?.path ?? 'C:\\Users\\you\\Desktop\\Sigeon V2', default: !args?.path, loader: !args?.path }
+      case 'sigeon_open': return null
       case 'sigeon_rename':
         sigeonPresets[args?.to] = sigeonPresets[args?.from]; delete sigeonPresets[args?.from]
         if (sigeonState === args?.from) sigeonState = args?.to

@@ -17,7 +17,7 @@ type Props = {
 }
 
 const COLLAPSED_HEROES = 6
-const SPECIAL: Record<string, string> = { __multi: 'Multiple heroes', __generic: 'No hero' }
+const SPECIAL: Record<string, string> = { __multi: 'Multiple heroes', __generic: 'No Hero' }
 
 /** The Library title's filter line: a hero picked whole reads as just the hero; skins show only when picked one by one */
 export const filterScope = (chars: Set<string>, cats: Set<string>) =>

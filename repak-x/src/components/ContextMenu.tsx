@@ -35,6 +35,7 @@ type ContextMenuProps = {
   onRename: () => void
   onRenameFolder: () => void
   onCheckConflicts?: () => void
+  loadoutMenu?: (close: () => void) => React.ReactNode // caleb fork: Add to loadout submenu
   onUpdateMod?: () => void
   onSendToVfxUpdater?: (mod: ModRecord) => void
   onShowInAssetExplorer?: (mod: ModRecord) => void
@@ -47,7 +48,7 @@ type ContextMenuProps = {
   selectionCount?: number
 }
 
-const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMoveTo, onMoveFolderTo, onCreateFolder, folders, onDelete, onToggle, onRename, onRenameFolder, onCheckConflicts, onUpdateMod, onSendToVfxUpdater, onShowInAssetExplorer, onExtractAssets, allTags, onDeleteTag, gamePath, holdToDelete = true, selectionCount = 0 }: ContextMenuProps) => {
+const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMoveTo, onMoveFolderTo, onCreateFolder, folders, onDelete, onToggle, onRename, onRenameFolder, onCheckConflicts, loadoutMenu, onUpdateMod, onSendToVfxUpdater, onShowInAssetExplorer, onExtractAssets, allTags, onDeleteTag, gamePath, holdToDelete = true, selectionCount = 0 }: ContextMenuProps) => {
   const [isDeleting, setIsDeleting] = useState(false)
   const deleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
@@ -387,6 +388,14 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
           </div>
         </div>
       </div>
+
+      {/* caleb fork: Add to loadout (custom/Loadouts.tsx LoadoutMenuItems) */}
+      {loadoutMenu && (
+        <div className="context-menu-item submenu-trigger" onMouseEnter={handleSubmenuEnter}>
+          {selectionCount > 1 ? `Add ${selectionCount} mods to loadout...` : 'Add to loadout...'}
+          <div className="submenu">{loadoutMenu(onClose)}</div>
+        </div>
+      )}
 
       <div className="context-menu-separator" />
 

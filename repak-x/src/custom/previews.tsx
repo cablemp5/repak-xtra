@@ -270,12 +270,14 @@ export function usePreviewSummary() {
 }
 export const dismissPreviewSummary = () => { run.summary = ''; notify() }
 
-/** Queues every loadout that has installed mods (one combined render each, one after another). Returns how many, or
- *  the reason the first could not start (then nothing is queued). */
-export async function generateAllLoadouts(loadouts: { id: string; name: string; on: string[] }[], mods: { path: string }[]) {
+/** Queues every loadout that has installed mods (one combined render each, one after another). `missing`: only the
+ *  loadouts with no preview yet; `all`: every one, rendered again even when nothing changed. Returns how many, or the
+ *  reason the first could not start (then nothing is queued). */
+export async function generateAllLoadouts(loadouts: { id: string; name: string; on: string[] }[], mods: { path: string }[], which: 'missing' | 'all' = 'all') {
   const byKey = new Map(mods.map(m => [modKey(m.path), m.path]))
   const jobs = loadouts
-    .map(l => ({ paths: l.on.map(k => byKey.get(modKey(k))).filter((x): x is string => Boolean(x)), set: previewSetKey(l.id), name: l.name }))
+    .filter(l => which === 'all' || !hasPreview(previewSetKey(l.id)))
+    .map(l => ({ paths: l.on.map(k => byKey.get(modKey(k))).filter((x): x is string => Boolean(x)), set: previewSetKey(l.id), name: l.name, force: which === 'all' }))
     .filter(j => j.paths.length > 0)
   const started = jobs.map(generatePreviews) // all asked for in this tick: the first starts, the rest queue behind it
   const error = (await Promise.all(started)).find(Boolean) ?? null
@@ -337,7 +339,10 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
   usePreviewVersion()
   const alert = useAlert()
   const n = new Set(paths.map(modKey)).size
-  const job: Job = { paths, set, name: name ?? `${n} selected mod${n === 1 ? '' : 's'}` }
+  // A loadout that already has its preview: the button renders it again, even when nothing changed
+  const again = Boolean(set && hasPreview(set))
+  const job: Job = { paths, set, name: name ?? `${n} selected mod${n === 1 ? '' : 's'}`, force: again }
+  const text = again ? label.replace(/^Generate/, 'Regenerate') : label
   const id = jobId(job)
   if (running() && run.id === id) {
     return (
@@ -368,9 +373,9 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
   }
   return (
     <button type="button" className={className} disabled={n === 0} onClick={() => ask(alert, job)}
-      title={run.summary ? `Last run: ${run.summary}` : `Render previews for these ${n} mods (about 20 seconds each)`}>
+      title={run.summary ? `Last run: ${run.summary}` : again ? `Render this loadout's previews again (about 20 seconds per mod)` : `Render previews for these ${n} mods (about 20 seconds each)`}>
       <Sparkles size={16} />
-      <span className="bulk-btn-label">{label}</span>
+      <span className="bulk-btn-label">{text}</span>
       {n > 0 && <span className="bulk-num">{n}</span>}
     </button>
   )

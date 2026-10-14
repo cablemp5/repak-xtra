@@ -56,7 +56,7 @@ import ModStateFilter, { matchesState, type ModState } from './custom/ModStateFi
 import './custom/keyboardClickables'
 import { dialogOpen } from './custom/hotkeys' // caleb fork: extra shortcuts
 import FilterPanel, { filterScope } from './custom/FilterPanel'
-import Loadouts, { AddToLoadoutField } from './custom/Loadouts'
+import Loadouts, { AddToLoadoutField, LoadoutMenuItems } from './custom/Loadouts'
 import LoadoutsScreen, { ViewTabs } from './custom/LoadoutsScreen'
 import { modKey, renameModKey } from './custom/loadoutStore' // caleb fork
 import { TagsToggle } from './custom/uiPrefs'
@@ -1048,8 +1048,13 @@ function App() {
     setSelectedMod(mod)
     if (!autoOpenDetails) return
     if (!isRightPanelOpen) {
-      setLeftPanelWidth(lastPanelWidth > 60 ? lastPanelWidth : 70) // Ensure reasonable width
-      setIsRightPanelOpen(true)
+      // caleb fork: open after the double-click window, and not at all once a double-click started renaming; opening at
+      // once moved the row under the cursor, so the second click missed and renaming needed a third
+      window.setTimeout(() => {
+        if (document.querySelector('.mod-rename-input')) return
+        setLeftPanelWidth(lastPanelWidth > 60 ? lastPanelWidth : 70) // Ensure reasonable width
+        setIsRightPanelOpen(true)
+      }, 260)
     } else if (isViewed) {
       // Clicking the card already on show closes the panel again
       setLastPanelWidth(leftPanelWidth)
@@ -4068,6 +4073,7 @@ function App() {
                 isBlocked={undoBlocked} /* caleb fork: live game lock for Undo */
                 reload={loadMods}
                 alert={alert}
+                selected={[...selectedMods]} /* caleb fork: + makes a loadout of the selection */
               />
               {/* Filters Section */}
               <div
@@ -4468,6 +4474,9 @@ function App() {
               }
             }}
             onToggle={() => contextMenu.mod && handleToggleMod(contextMenu.mod.path)}
+            loadoutMenu={contextMenu.mod ? (close => ( /* caleb fork: the right-clicked mod, or the selection it belongs to */
+              <LoadoutMenuItems alert={alert} close={close}
+                paths={selectedMods.has(contextMenu.mod!.path) ? [...selectedMods] : [contextMenu.mod!.path]} />)) : undefined}
             onRename={() => {
               if (contextMenu.mod) {
                 if (gameRunning && !bypassGameRunningLock) {

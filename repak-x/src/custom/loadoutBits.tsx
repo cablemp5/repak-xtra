@@ -12,7 +12,7 @@ import { hasPreview, previewSetKey, useCovers, usePreviewOutcome, usePreviewStat
 /** The home screen's badge color class for a mod type (caleb.css *-badge sets --badge-dot). */
 export const typeClass = (category?: string | null) => `${(category || 'unknown').toLowerCase().replace(/\s+/g, '-')}-badge`
 
-const TYPE_ORDER = ['Mesh', 'Texture', 'Material', 'Animation', 'VFX', 'UI', 'Text']
+const TYPE_ORDER = ['Mesh', 'Texture', 'Material', 'Animation', 'VFX', 'UI', 'Text', 'Audio']   // Audio: the generator's list of changed sounds
 const rank = (c?: string | null) => { const i = TYPE_ORDER.indexOf(c ?? ''); return i < 0 ? TYPE_ORDER.length : i }
 
 /** A loadout's generated previews: its combined character render first, then its other mods' in type order. The

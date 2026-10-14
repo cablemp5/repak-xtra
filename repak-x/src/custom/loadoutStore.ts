@@ -149,9 +149,6 @@ export const nextLoadoutName = (names: string[]) => {
   return `Loadout ${n}`
 }
 
-/** Imported labels: a non-empty string, else "imported". */
-export const coerceLabel = (x: unknown) => (typeof x === 'string' && x.trim() ? x : 'imported')
-
 /** Takes a mod off the loadout's on list. It stays in scope, so turning the loadout on switches it off. */
 export const removeModFromLoadout = (l: Loadout, key: string) =>
   patchLoadout(l.id, { on: l.on.filter(x => normKey(x) !== normKey(key)) })
@@ -178,27 +175,6 @@ export const replaceInLoadout = (l: Loadout, oldKey: string, newKey: string) =>
 
 /** Readable mod name from its key: drops the _9999999_P priority suffix. */
 export const displayName = normKey
-
-/** Loadouts as a JSON file (media stays in this app). Import adds loadouts whose name is new. */
-export const exportLoadouts = () =>
-  JSON.stringify({
-    format: 'repakxtra-loadouts',
-    version: 1,
-    loadouts: readLoadouts().map(({ image: _i, mediaRev: _r, mediaType: _t, ...l }) => l),
-  }, null, 2)
-
-export const importLoadouts = (text: string) => {
-  const data = JSON.parse(text)
-  const incoming: Loadout[] = Array.isArray(data) ? data : data?.loadouts
-  if (!Array.isArray(incoming)) throw new Error('Not a loadouts file.')
-  const existing = readLoadouts()
-  const names = new Set(existing.map(l => l.name.toLowerCase()))
-  const added: Loadout[] = incoming
-    .filter(l => l && typeof l.name === 'string' && Array.isArray(l.scope) && Array.isArray(l.on) && !names.has(l.name.toLowerCase()))
-    .map(l => ({ id: crypto.randomUUID(), name: l.name, label: coerceLabel(l.label), scope: l.scope.map(String), on: l.on.map(String) }))
-  writeLoadouts([...existing, ...added])
-  return { added: added.length, skipped: incoming.length - added.length }
-}
 
 /** Toggle each mod through the backend; returns the mods that could not be switched. */
 export const flipMods = async (changes: Mod[]) => {
@@ -328,7 +304,6 @@ if (import.meta.env.DEV) {
   console.assert(r.on.join() === 'New,B' && r.scope.join() === 'New,B', `renameKeyIn rename: ${r.on}`)
   const [d] = renameKeyIn([L(['Old', 'New_9999999_P'])], 'Old', 'New')
   console.assert(d.on.length === 1 && normKey(d.on[0]) === 'New', `renameKeyIn dedupe: ${d.on}`)
-  console.assert(coerceLabel({}) === 'imported' && coerceLabel('') === 'imported' && coerceLabel('x') === 'x', 'coerceLabel')
   console.assert(nextLoadoutName(['Loadout 1', 'loadout 3']) === 'Loadout 2', 'nextLoadoutName')
   console.assert(nextLoadoutName([]) === 'Loadout 1', 'nextLoadoutName empty')
   const w = withMods(L(['A'], ['A', 'B']), ['B_9999999_P', 'C', 'C', 'A'])

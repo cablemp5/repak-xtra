@@ -2,7 +2,7 @@
 // the "New this week" strip below them; a card opens its page (LoadoutPage.tsx). The full mod list is the Library
 // view (header tabs, or L). On = its mods on, Off = its mods off; other mods and loadouts are never touched.
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronUp, CircleStop, Download, FolderPlus, LoaderCircle, PackagePlus, Pencil, Plus, Sparkles, Trash2, Upload } from 'lucide-react'
+import { ChevronDown, ChevronUp, CircleStop, FolderPlus, LoaderCircle, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo, runChanges } from './Loadouts'
 import LoadoutPage from './LoadoutPage'
@@ -12,16 +12,16 @@ import { CardMedia } from './loadoutBits'
 import { prepareMedia, putMedia } from './loadoutMedia'
 import { plural } from './modName'
 import { Num } from './motion'
-import { dismissPreviewSummary, generateAllLoadouts, stopPreviews, usePreviewBatch, usePreviewSummary } from './previews'
+import { dismissPreviewSummary, generateAllLoadouts, hasPreview, previewSetKey, stopPreviews, usePreviewBatch, usePreviewSummary, usePreviewVersion } from './previews'
 import {
-  type Loadout, type Mod, OTHER, addGroup, changesToTurnOff, changesToTurnOn, deleteGroup, displayName, exportLoadouts, groupKey,
-  importLoadouts, inGroup, isActive, modKey, moveGroup, nextLoadoutName, openLoadout, patchLoadout, readLoadouts, renameGroup,
+  type Loadout, type Mod, OTHER, addGroup, changesToTurnOff, changesToTurnOn, deleteGroup, displayName, groupKey,
+  inGroup, isActive, modKey, moveGroup, nextLoadoutName, openLoadout, patchLoadout, readLoadouts, renameGroup,
   setLoadoutGroup, setView, snapshotLoadout, sweepMediaOnce, useGroups, useLoadouts, useOpenLoadout, useView, writeLoadouts,
 } from './loadoutStore'
 
 type GroupBy = 'group' | 'hero'
 const GROUP_BY_KEY = 'caleb.loadoutGroupBy'
-const NO_HERO = 'No hero'
+const NO_HERO = 'No Hero'
 
 /** The hero most of the given mods belong to, or undefined when none has a detected hero. */
 function topHero(keys: string[], byKey: Map<string, Mod>, details: LoadoutProps['modDetails']) {
@@ -41,7 +41,7 @@ function topHero(keys: string[], byKey: Map<string, Mod>, details: LoadoutProps[
 const heroOf = (l: Loadout, byKey: Map<string, Mod>, details: LoadoutProps['modDetails']) =>
   topHero(l.on, byKey, details) ?? topHero(l.scope, byKey, details) ?? NO_HERO
 
-/** Hero sections, A to Z with "No hero" last. */
+/** Hero sections, A to Z with "No Hero" last. */
 function byHero(list: Loadout[], heroOfL: (l: Loadout) => string) {
   const map = new Map<string, Loadout[]>()
   for (const l of list) map.set(heroOfL(l), [...(map.get(heroOfL(l)) ?? []), l])
@@ -110,7 +110,9 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   const [groupBy, setGroupByState] = useState<GroupBy>(() => (localStorage.getItem(GROUP_BY_KEY) === 'hero' ? 'hero' : 'group'))
   const setGroupBy = (g: GroupBy) => { localStorage.setItem(GROUP_BY_KEY, g); setGroupByState(g) }
   const fileRef = useRef<HTMLInputElement>(null)
-  const importRef = useRef<HTMLInputElement>(null)
+  const [genMenu, setGenMenu] = useState(false)
+  const genRef = useRef<HTMLDivElement>(null)
+  usePreviewVersion()
   const mediaTarget = useRef<string | null>(null)
   const hovered = useRef<string | null>(null)
   const openRef = useRef(openId)
@@ -192,14 +194,23 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     setOpenId(l.id)
   }
 
-  const exportFile = () => {
-    const url = URL.createObjectURL(new Blob([exportLoadouts()], { type: 'application/json' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'repakxtra-loadouts.json'
-    a.click()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  /** Generate all: with no previews yet it just starts; otherwise it asks whether to redo the ones already made. */
+  const withPreview = loadouts.filter(l => hasPreview(previewSetKey(l.id))).length
+  const generate = async (which: 'missing' | 'all') => {
+    setGenMenu(false)
+    const { count, error } = await generateAllLoadouts(loadouts, p.mods, which)
+    if (error) p.alert.warning('Previews not started', error)
+    else if (!count) p.alert.info('Nothing to generate', 'Every loadout with installed mods already has a preview.')
+    else p.alert.success('Previews queued', `${plural(count, 'loadout')}, one after another.`)
   }
+  useEffect(() => {
+    if (!genMenu) return
+    const close = (e: MouseEvent) => { if (!genRef.current?.contains(e.target as Node)) setGenMenu(false) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setGenMenu(false) } }
+    document.addEventListener('mousedown', close)
+    window.addEventListener('keydown', esc, true)
+    return () => { document.removeEventListener('mousedown', close); window.removeEventListener('keydown', esc, true) }
+  }, [genMenu])
 
   const commitRename = (l: Loadout) => {
     const trimmed = draft.trim()
@@ -218,18 +229,6 @@ export default function LoadoutsScreen(p: LoadoutProps) {
 
   const hidden = (
     <>
-      <input ref={importRef} type="file" accept=".json,application/json" hidden
-        onChange={async e => {
-          const f = e.target.files?.[0]
-          e.target.value = ''
-          if (!f) return
-          try {
-            const { added, skipped } = importLoadouts(await f.text())
-            p.alert.success('Loadouts imported', `${added} added${skipped ? `, ${skipped} skipped (same name already exists)` : ''}.`)
-          } catch (err) {
-            p.alert.error('Import failed', err instanceof Error ? err.message : String(err))
-          }
-        }} />
       <input ref={fileRef} type="file" accept="image/*,video/*" hidden
         onChange={e => { const f = e.target.files?.[0]; if (f && mediaTarget.current) setMedia(mediaTarget.current, f); e.target.value = '' }} />
     </>
@@ -256,35 +255,34 @@ export default function LoadoutsScreen(p: LoadoutProps) {
           {loadouts.length < 3 && <p>Switch a set of mods on or off together. Other mods stay as they are.</p>}
         </div>
         <div className="lo-head-tools">
-          <button type="button" className="lo-text-btn" title="Install PAKs or archives (Ctrl+O)"
-            onClick={() => document.querySelector<HTMLElement>('[title="Install PAKs or Archives"]')?.click()}>
-            <PackagePlus size={14} /> Install mods
-          </button>
           <button type="button" ref={newRef} className="lo-text-btn" onClick={createEmpty} title="A new empty loadout, opened to add mods to it">
             <Plus size={14} /> New loadout
-          </button>
-          <button type="button" className="lo-text-btn" disabled={loadouts.length === 0}
-            title="Render a preview for every loadout, one after another (each card shows its progress)"
-            onClick={async () => {
-              const { count, error } = await generateAllLoadouts(loadouts, p.mods)
-              if (error) p.alert.warning('Previews not started', error)
-              else p.alert.success('Previews queued', `${plural(count, 'loadout')}, one after another.`)
-            }}>
-            <Sparkles size={14} /> Generate all previews
           </button>
           <button type="button" className="lo-text-btn" onClick={newGroup} title="A new group to sort loadouts into (drag cards onto it)">
             <FolderPlus size={14} /> New group
           </button>
+          <div className="lo-gen" ref={genRef}>
+            <button type="button" className="lo-text-btn" disabled={loadouts.length === 0} aria-haspopup={withPreview > 0 ? 'menu' : undefined}
+              aria-expanded={withPreview > 0 ? genMenu : undefined}
+              title="Render a preview for every loadout, one after another (each card shows its progress)"
+              onClick={() => (withPreview > 0 ? setGenMenu(v => !v) : generate('all'))}>
+              <Sparkles size={14} /> Generate all previews
+            </button>
+            {genMenu && (
+              <div className="sigeon-menu lo-gen-menu" role="menu">
+                <button type="button" role="menuitem" className="sigeon-item" disabled={withPreview === loadouts.length} onClick={() => generate('missing')}>
+                  <span>Only the ones without a preview</span><small>{loadouts.length - withPreview}</small>
+                </button>
+                <button type="button" role="menuitem" className="sigeon-item" onClick={() => generate('all')}>
+                  <span>Regenerate every loadout</span><small>{loadouts.length}</small>
+                </button>
+              </div>
+            )}
+          </div>
           <div className="mod-state-filter lo-groupby" role="group" aria-label="Group loadouts by">
             <button type="button" aria-pressed={groupBy === 'group'} onClick={() => setGroupBy('group')}>Group</button>
             <button type="button" aria-pressed={groupBy === 'hero'} onClick={() => setGroupBy('hero')}>Hero</button>
           </div>
-          <button type="button" className="lo-text-btn" title="Add loadouts from a .json file" onClick={() => importRef.current?.click()}>
-            <Upload size={14} /> Import
-          </button>
-          <button type="button" className="lo-text-btn" title="Save all loadouts to a .json file (images stay in the app)" onClick={exportFile}>
-            <Download size={14} /> Export
-          </button>
         </div>
       </header>
       {batch && (
@@ -385,9 +383,9 @@ export default function LoadoutsScreen(p: LoadoutProps) {
           <div className="lo-grid">
             <div className="lo-card lo-card-new">
               <button type="button" className="lo-card-add" onClick={createEmpty}>
-                <Plus size={20} />
-                <span>New loadout</span>
-                <small>Opens empty, then add mods to it</small>
+                <span className="lo-card-add-icon"><Plus size={20} /></span>
+                <span className="lo-card-add-title">New loadout</span>
+                <small>Start empty, then add mods to it</small>
               </button>
             </div>
           </div>
