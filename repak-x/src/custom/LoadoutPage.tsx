@@ -7,7 +7,8 @@ import { type LoadoutProps, deleteWithUndo, overwriteWithUndo } from './Loadouts
 import { CardMedia, ModRow, typeClass } from './loadoutBits'
 import { deleteMedia } from './loadoutMedia'
 import { type Loadout, addModToLoadout, displayName, isActive, modKey, patchLoadout, removeModFromLoadout } from './loadoutStore'
-import { plural, typeCode } from './modName'
+import { plural } from './modName'
+import { GeneratePreviewsButton } from './previews'
 
 const PAGE = 60
 
@@ -73,6 +74,8 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia 
               title={`Replace this loadout's mods with the ${p.scopeMods.length} mods shown in the Library, as they are now`}>
               <Save size={14} /> Overwrite from Library
             </button>
+            <GeneratePreviewsButton className="lo-text-btn" label="Generate previews"
+              paths={mine.map(k => byKey.get(k)?.path).filter((x): x is string => Boolean(x))} />
             <button type="button" className="lo-text-btn" onClick={onPickMedia}><ImagePlus size={14} /> {hasMedia ? 'Change image' : 'Add image'}</button>
             {hasMedia && (
               <button type="button" className="lo-text-btn" onClick={() => { deleteMedia(l.id); patchLoadout(l.id, { image: undefined, mediaRev: undefined, mediaType: undefined }) }}>
@@ -115,7 +118,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia 
             <button type="button" aria-pressed={type === null} onClick={() => setType(null)}>All</button>
             {types.map(t => (
               <button key={t} type="button" aria-pressed={type === t} className={typeClass(t)} onClick={() => { setType(type === t ? null : t); setLimit(PAGE) }}>
-                <span className="type-code">{typeCode(t)}</span>{t}
+                <span className="lo-mod-dot is-filled" />{t}
               </button>
             ))}
           </div>

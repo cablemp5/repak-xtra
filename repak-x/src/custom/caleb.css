@@ -942,12 +942,6 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 .audio-badge { --badge-dot: oklch(0.68 0.15 290); }
 .blueprint-badge, .data-badge, .movies-badge, .unknown-badge { --badge-dot: oklch(0.70 0.02 260); }
 .project-galacta-badge { --badge-dot: oklch(0.92 0 0); }
-.type-code {
-  flex: none; font: 600 9.5px/1 var(--font-mono); letter-spacing: 0.04em;
-  color: var(--badge-dot, var(--text-secondary)); min-width: 3ch;
-}
-.lo-legend-item .type-code { min-width: 0; }
-
 /* ---------- harden: one focus ring everywhere (MUI buttons set outline 0 and mark keyboard focus with a class) ---------- */
 .app .MuiButtonBase-root.Mui-focusVisible, .app .MuiButtonBase-root:focus-visible {
   outline: 2px solid var(--focus-ring) !important; outline-offset: 2px !important;
@@ -1051,3 +1045,12 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
 .lp-more { margin-top: 10px; }
 /* Fixed headings read as written; only saved group names get the capitalized look */
 .lp .lo-group-head, .new-strip .lo-group-head { text-transform: none; }
+
+/* Row badges match the Library's; "Add to loadout" sizes to its label (the trigger kept 2.5rem for a caret the theme hides) */
+.mod-row .mod-type-badge { flex: none; }
+.row-add-to { flex: none; height: 28px; }
+.row-add-to .custom-dropdown-trigger { width: auto !important; padding: 0 12px !important; gap: 6px; background: transparent !important;
+  border-color: var(--panel-border) !important; }
+.row-add-to .custom-dropdown-trigger:hover { background: var(--quiet-hover) !important; }
+.lp-types button .lo-mod-dot { background: var(--badge-dot) !important; border: none; }
+.lp-actions .lo-text-btn .bulk-num { color: var(--text-secondary); }

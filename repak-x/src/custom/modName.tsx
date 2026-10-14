@@ -18,13 +18,6 @@ if (import.meta.env.DEV) {
   console.assert(splitModName('cosmic-panther_sfx_v6').version === 'v6', 'splitModName short pattern')
 }
 
-/** Short mono code per mod type, so the type reads without color (the color comes from the *-badge classes). */
-const TYPE_CODES: Record<string, string> = {
-  Mesh: 'MSH', 'Static Mesh': 'SMH', Animation: 'ANM', Material: 'MAT', Texture: 'TEX', Retexture: 'TEX', VFX: 'VFX',
-  UI: 'UI', Audio: 'AUD', Blueprint: 'BP', Data: 'DAT', Movies: 'MOV', 'Project Galacta': 'PG',
-}
-export const typeCode = (category?: string | null) => (category && TYPE_CODES[category]) || '?'
-
 /** "1 mod", "3 mods" */
 export const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 

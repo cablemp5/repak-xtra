@@ -110,13 +110,15 @@ export function ModPreview({ path }: { path: string }) {
 }
 
 /** Selection bar button: previews for every selected mod, with progress and Stop while it runs. */
-export function GeneratePreviewsButton({ paths }: { paths: string[] }) {
+export function GeneratePreviewsButton({ paths, className = 'btn-ghost bulk-previews', label = 'Previews' }: {
+  paths: string[]; className?: string; label?: string
+}) {
   usePreviewVersion()
   const running = pending.size > 0
   const done = run.total - pending.size
   if (running) {
     return (
-      <button type="button" className="btn-ghost bulk-previews is-running" onClick={stop} disabled={run.stopping}
+      <button type="button" className={`${className} is-running`} onClick={stop} disabled={run.stopping}
         title="Stop after the mod that is rendering now">
         <Square size={14} />
         {run.stopping ? 'Stopping…' : `Rendering ${Math.min(done + 1, run.total)} of ${run.total}`}
@@ -125,10 +127,10 @@ export function GeneratePreviewsButton({ paths }: { paths: string[] }) {
   }
   const n = new Set(paths.map(modKey)).size
   return (
-    <button type="button" className="btn-ghost bulk-previews" disabled={n === 0} onClick={() => generate(paths)}
-      title={run.summary ? `Last run: ${run.summary}` : `Render previews for the ${n} selected mods (about 20 seconds each)`}>
+    <button type="button" className={className} disabled={n === 0} onClick={() => generate(paths)}
+      title={run.summary ? `Last run: ${run.summary}` : `Render previews for these ${n} mods (about 20 seconds each)`}>
       <ImagePlus size={16} />
-      <span className="bulk-btn-label">Previews</span>
+      <span className="bulk-btn-label">{label}</span>
       {n > 0 && <span className="bulk-num">{n}</span>}
     </button>
   )

@@ -4,7 +4,7 @@ import Switch from '../components/ui/Switch'
 import type { LoadoutProps } from './Loadouts'
 import { useMediaUrl } from './loadoutMedia'
 import { type Loadout, type Mod, displayName, flipMods } from './loadoutStore'
-import { ModName, typeCode } from './modName'
+import { ModName } from './modName'
 import { hasPreview, usePreviewUrl, usePreviewVersion } from './previews'
 
 /** The home screen's badge color class for a mod type (caleb.css *-badge sets --badge-dot). */
@@ -44,8 +44,8 @@ export function ModRow({ p, k, mod, onToggle, children }: {
         ? <Switch size="sm" color="primary" checked={Boolean(mod.enabled)} title={mod.enabled ? 'Turn this mod off' : 'Turn this mod on'}
             onChange={() => toggleMod(p, mod)} />
         : <span className="mod-row-switch-gap" />)}
-      <span className={`type-code ${typeClass(category)}`}>{typeCode(category)}</span>
       <span className="mod-row-name"><ModName name={k} /></span>
+      <span className={`mod-type-badge category-badge ${typeClass(category)}`}>{category ?? 'Unknown'}</span>
       {children}
     </li>
   )

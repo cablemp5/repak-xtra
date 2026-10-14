@@ -10,7 +10,7 @@ import NewStrip from './NewStrip'
 import { isTyping } from './hotkeys'
 import { CardMedia, typeClass } from './loadoutBits'
 import { prepareMedia, putMedia } from './loadoutMedia'
-import { plural, typeCode } from './modName'
+import { plural } from './modName'
 import {
   type Loadout, type Mod, changesToTurnOff, changesToTurnOn, displayName, exportLoadouts, importLoadouts, isActive, modKey,
   patchLoadout, readLoadouts, setView, snapshotLoadout, useLoadouts, useView, writeLoadouts,
@@ -227,7 +227,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
           <div className="lo-legend" aria-label="Type legend">
             {types.map(t => (
               <span key={t} className={`lo-legend-item ${typeClass(t)}`}>
-                <span className="lo-mod-dot is-filled" /><span className="type-code">{typeCode(t)}</span>{t}
+                <span className="lo-mod-dot is-filled" />{t}
               </span>
             ))}
           </div>
