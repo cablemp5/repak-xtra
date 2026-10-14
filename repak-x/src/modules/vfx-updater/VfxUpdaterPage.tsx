@@ -8,7 +8,7 @@ import TitleBar from "../../components/TitleBar";
 export default function VfxUpdaterPage() {
   return (
     <div className="vfx-window-container">
-      <TitleBar title="Repak VFX Updater" hideMaximize={true} />
+      <TitleBar title="repakXtra VFX Updater" hideMaximize={true} />
       <div className="vfx-updater-page">
         <VfxUpdaterPanel />
       </div>
