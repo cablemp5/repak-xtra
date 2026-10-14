@@ -7,6 +7,7 @@ import { ArrowRightLeft } from 'lucide-react'
 import CustomDropdown from '../components/CustomDropdown'
 import type { LoadoutProps } from './Loadouts'
 import { ModRow } from './loadoutBits'
+import { Num } from './motion'
 import {
   type Loadout, type Mod, addModToLoadout, displayName, flipMods, modKey, olderVersionIn, patchLoadout, readLoadouts,
   replaceInLoadout, useLoadouts, versionOf,
@@ -56,7 +57,7 @@ export default function NewStrip(p: LoadoutProps) {
   return (
     <section className="new-strip" aria-label="New mods not in a loadout">
       <h3 className="lo-group-head">
-        New · not in a loadout<span className="lo-group-count">{fresh.length}</span>
+        New · not in a loadout<span className="lo-group-count"><Num id="new-strip" value={fresh.length} /></span>
         {fresh.length > SHOWN && (
           <button type="button" className="new-strip-more" onClick={() => setAll(!all)}>{all ? 'Show fewer' : `Show all ${fresh.length}`}</button>
         )}

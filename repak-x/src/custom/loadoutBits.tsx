@@ -6,6 +6,7 @@ import type { LoadoutProps } from './Loadouts'
 import { useMediaUrl } from './loadoutMedia'
 import { type Loadout, type Mod, displayName, flipMods, modKey } from './loadoutStore'
 import { ModName } from './modName'
+import { revealOnLoad } from './motion'
 import { hasPreview, previewSetKey, useCovers, usePreviewUrl, usePreviewVersion } from './previews'
 
 /** The home screen's badge color class for a mod type (caleb.css *-badge sets --badge-dot). */
@@ -51,7 +52,7 @@ export function CardMedia({ p, l, className = '', title, onClick }: {
           ? <span className="lo-card-placeholder"><ImagePlus size={22} /><span>Click to add an image, or hover and paste</span></span>
           : !slide?.key && l.mediaType === 'video' && url
             ? <video src={url} autoPlay loop muted playsInline />
-            : <img key={src} src={src} alt="" />}
+            : <img key={src} src={src} alt="" onLoad={revealOnLoad} />}
       </button>
       {slides.length > 1 && (
         <>

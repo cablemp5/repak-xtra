@@ -8,6 +8,7 @@ import { CardMedia, ModRow, typeClass } from './loadoutBits'
 import { deleteMedia } from './loadoutMedia'
 import { type Loadout, addModToLoadout, displayName, isActive, modKey, patchLoadout, readLoadouts, removeModFromLoadout } from './loadoutStore'
 import { plural } from './modName'
+import { Num, SwapText } from './motion'
 import { GeneratePreviewsButton, previewSetKey } from './previews'
 
 const PAGE = 60
@@ -64,12 +65,12 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia 
               {[...new Set(readLoadouts().map(x => x.label))].filter(g => g !== l.label).sort().map(g => <option key={g} value={g} />)}
             </datalist>
           </label>
-          <p className="lp-meta">{busy ? 'Switching mods…' : `${plural(mine.length, 'mod')} · ${onNow} on now`}</p>
+          <p className="lp-meta">{busy ? 'Switching mods…' : <>{plural(mine.length, 'mod')} · <Num id={`page-${l.id}`} value={onNow} /> on now</>}</p>
           <div className="lp-actions">
             <label className="lp-switch">
               <Switch size="sm" color="primary" checked={active} disabled={busy} onChange={(on: boolean) => onToggle(on)}
                 title={active ? `Turn ${l.name}'s mods off` : `Turn ${l.name}'s mods on`} />
-              <span>{active ? 'On' : 'Off'}</span>
+              <SwapText text={active ? 'On' : 'Off'} />
             </label>
             <button type="button" className="lo-text-btn" onClick={() => overwriteWithUndo(p, l)}
               title={`Replace this loadout's mods with the ${p.scopeMods.length} mods shown in the Library, as they are now`}>

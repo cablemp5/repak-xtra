@@ -11,6 +11,7 @@ import { isTyping } from './hotkeys'
 import { CardMedia, typeClass } from './loadoutBits'
 import { prepareMedia, putMedia } from './loadoutMedia'
 import { plural } from './modName'
+import { Num } from './motion'
 import {
   type Loadout, type Mod, changesToTurnOff, changesToTurnOn, displayName, exportLoadouts, importLoadouts, isActive, modKey,
   patchLoadout, readLoadouts, setView, snapshotLoadout, useLoadouts, useView, writeLoadouts,
@@ -251,7 +252,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
 
         {groups.map(([group, list]) => (
           <section className="lo-group" key={group}>
-            <h3 className="lo-group-head">{group}<span className="lo-group-count">{list.length}</span></h3>
+            <h3 className="lo-group-head">{group}<span className="lo-group-count"><Num id={`group-${group}`} value={list.length} /></span></h3>
             <div className="lo-grid">
               {list.map(l => {
                 const active = isActive(l, p.mods)

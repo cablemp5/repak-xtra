@@ -1179,3 +1179,59 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 /* Another preview run is going: say whose, next to the Queue button */
 .preview-run-note { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
 .is-queued { color: var(--text-primary) !important; border-color: color-mix(in srgb, var(--accent-primary), transparent 50%) !important; }
+
+/* ---------- more motion from transitions.dev (free library). html[data-motion="off"] stops all of it. ---------- */
+:root {
+  --stagger-dur: 500ms; --stagger-distance: 12px; --stagger-stagger: 40ms; --stagger-blur: 3px; --stagger-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --acc-expand: 250ms; --acc-collapse: 250ms; --acc-chevron: 250ms; --acc-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --reveal-dur: 400ms; --reveal-blur: 2px; --reveal-ease: ease-in-out;
+  --digit-dur: 500ms; --digit-distance: 8px; --digit-blur: 2px; --digit-ease: cubic-bezier(0.34, 1.45, 0.64, 1);
+  --text-swap-dur: 150ms; --text-swap-translate-y: 4px; --text-swap-blur: 2px; --text-swap-ease: ease-in-out;
+  --icon-swap-start-scale: 0.25;
+}
+/* transitions.dev: Texts reveal. Loadout cards and mod rows rise in one after another (first 12 staggered) */
+@keyframes t-rise-in { from { opacity: 0; transform: translateY(var(--stagger-distance)); filter: blur(var(--stagger-blur)); } }
+.lo-card, .mod-row { animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; }
+.lo-card:nth-child(2), .mod-row:nth-child(2) { animation-delay: calc(var(--stagger-stagger) * 1); }
+.lo-card:nth-child(3), .mod-row:nth-child(3) { animation-delay: calc(var(--stagger-stagger) * 2); }
+.lo-card:nth-child(4), .mod-row:nth-child(4) { animation-delay: calc(var(--stagger-stagger) * 3); }
+.lo-card:nth-child(5), .mod-row:nth-child(5) { animation-delay: calc(var(--stagger-stagger) * 4); }
+.lo-card:nth-child(6), .mod-row:nth-child(6) { animation-delay: calc(var(--stagger-stagger) * 5); }
+.lo-card:nth-child(7), .mod-row:nth-child(7) { animation-delay: calc(var(--stagger-stagger) * 6); }
+.lo-card:nth-child(8), .mod-row:nth-child(8) { animation-delay: calc(var(--stagger-stagger) * 7); }
+.lo-card:nth-child(9), .mod-row:nth-child(9) { animation-delay: calc(var(--stagger-stagger) * 8); }
+.lo-card:nth-child(10), .mod-row:nth-child(10) { animation-delay: calc(var(--stagger-stagger) * 9); }
+.lo-card:nth-child(11), .mod-row:nth-child(11) { animation-delay: calc(var(--stagger-stagger) * 10); }
+.lo-card:nth-child(n+12), .mod-row:nth-child(n+12) { animation-delay: calc(var(--stagger-stagger) * 11); }
+/* transitions.dev: Panel reveal. The type legend slides down into place */
+.lo-legend { animation: t-rise-in var(--reveal-dur) var(--stagger-ease) backwards; }
+/* transitions.dev: Accordion. A hero's skins grow open under it; the chevron turns on the same clock */
+.t-acc-panel { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--acc-collapse) var(--acc-ease); }
+.t-acc-panel[data-open="true"] { grid-template-rows: 1fr; transition: grid-template-rows var(--acc-expand) var(--acc-ease); }
+.t-acc-panel-inner { overflow: hidden; min-height: 0; opacity: 0; filter: blur(2px);
+  transition: opacity var(--acc-collapse) var(--acc-ease), filter var(--acc-collapse) var(--acc-ease); }
+.t-acc-panel[data-open="true"] .t-acc-panel-inner { opacity: 1; filter: blur(0); transition: opacity var(--acc-expand) var(--acc-ease), filter var(--acc-expand) var(--acc-ease); }
+.fp-expand svg { transition: transform var(--acc-chevron) var(--acc-ease) !important; }
+/* transitions.dev: Skeleton reveal. Previews and loadout images cross-blur in once loaded */
+.lo-card-image img, .mod-preview-frame img { opacity: 0; filter: blur(var(--reveal-blur));
+  transition: opacity var(--reveal-dur) var(--reveal-ease), filter var(--reveal-dur) var(--reveal-ease); }
+.lo-card-image img.is-loaded, .mod-preview-frame img.is-loaded { opacity: 1; filter: blur(0); }
+/* transitions.dev: Number pop-in. A count that changes pops up into place */
+@keyframes t-num-pop { from { opacity: 0; transform: translateY(var(--digit-distance)); filter: blur(var(--digit-blur)); } }
+.t-num-pop { display: inline-block; animation: t-num-pop var(--digit-dur) var(--digit-ease) backwards; }
+/* transitions.dev: Text states swap. On becomes Off by rising in */
+@keyframes t-text-in { from { opacity: 0; transform: translateY(var(--text-swap-translate-y)); filter: blur(var(--text-swap-blur)); } }
+.t-text-in { display: inline-block; animation: t-text-in var(--text-swap-dur) var(--text-swap-ease) backwards; }
+/* transitions.dev: Icon swap. The sidebar's on check and off dot share one slot */
+.fp-lead.t-icon-swap { display: inline-grid; place-items: center; }
+.t-icon-swap .t-icon { grid-area: 1 / 1;
+  transition: opacity var(--icon-swap-dur) var(--icon-swap-ease), filter var(--icon-swap-dur) var(--icon-swap-ease), transform var(--icon-swap-dur) var(--icon-swap-ease); }
+.t-icon-swap[data-state="a"] .t-icon[data-icon="b"], .t-icon-swap[data-state="b"] .t-icon[data-icon="a"] {
+  opacity: 0; filter: blur(var(--icon-swap-blur)); transform: scale(var(--icon-swap-start-scale)); }
+/* transitions.dev: Menu dropdown. The Sigeon menu opens like the other menus */
+.sigeon-menu { transform-origin: top right; animation: t-dropdown-open var(--dropdown-open-dur) var(--dropdown-ease) backwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lo-card, .mod-row, .lo-legend, .t-num-pop, .t-text-in, .sigeon-menu { animation: none !important; }
+  .t-acc-panel, .t-acc-panel-inner, .t-icon-swap .t-icon, .lo-card-image img, .mod-preview-frame img { transition: none !important; }
+}

@@ -9,6 +9,7 @@ import {
   type Loadout, type Mod, addModToLoadout, changesToTurnOff, changesToTurnOn, deleteLoadout, flipMods, importLoadouts, isActive, modKey, readLoadouts,
   setView, snapshotLoadout, useLoadouts, writeLoadouts,
 } from './loadoutStore'
+import { Num } from './motion'
 
 export type LoadoutProps = {
   mods: Mod[]            // every installed mod
@@ -189,9 +190,13 @@ export default function Loadouts(p: LoadoutProps) {
           <div className="fp-row-wrap lo-row" key={l.id}>
             <button type="button" className="fp-row" aria-pressed={active} disabled={busy !== null}
               onClick={() => apply(l)} title={active ? `${l.name} is on. Click to turn its mods off${hotkey}` : `Turn on ${l.name}: switches ${pending} of its mods on${hotkey}`}>
-              <span className="fp-lead">{active ? <Check size={15} className="lo-active" /> : <span className="lo-dot" />}</span>
+              {/* transitions.dev: Icon swap. Both marks stay stacked; the active one fades and scales in */}
+              <span className="fp-lead t-icon-swap" data-state={active ? 'a' : 'b'}>
+                <Check size={15} className="lo-active t-icon" data-icon="a" />
+                <span className="lo-dot t-icon" data-icon="b" />
+              </span>
               <span className="fp-label">{l.name}</span>
-              <span className="fp-count" title={`${onNow} of its ${l.on.length} mods are on`}>{busy === l.id ? '…' : `${onNow}/${l.on.length}`}</span>
+              <span className="fp-count" title={`${onNow} of its ${l.on.length} mods are on`}>{busy === l.id ? '…' : <Num id={`side-${l.id}`} value={`${onNow}/${l.on.length}`} />}</span>
               {/* the number Ctrl+N toggles; rows past 9 have none */}
               <span className="lo-num" aria-hidden="true">{i < 9 ? i + 1 : ''}</span>
             </button>

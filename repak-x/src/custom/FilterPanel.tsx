@@ -95,9 +95,16 @@ export default function FilterPanel(p: Props) {
                   <ChevronRight size={14} />
                 </button>
               ))}
-            {isOpen && h.skins.map(s =>
-              row(s, s.split(' - ')[1], undefined, p.selectedCharacters.has(s),
-                () => p.setSelectedCharacters(toggled(p.selectedCharacters, [s])), <span className="fp-indent" />))}
+            {h.skins.length > 0 && (
+              // transitions.dev: Accordion. Height grows from 0fr to 1fr, no measuring
+              <div className="t-acc-panel" data-open={isOpen} ref={el => el?.toggleAttribute("inert", !isOpen)}>
+                <div className="t-acc-panel-inner">
+                  {h.skins.map(s =>
+                    row(s, s.split(' - ')[1], undefined, p.selectedCharacters.has(s),
+                      () => p.setSelectedCharacters(toggled(p.selectedCharacters, [s])), <span className="fp-indent" />))}
+                </div>
+              </div>
+            )}
           </div>
         )
       })}

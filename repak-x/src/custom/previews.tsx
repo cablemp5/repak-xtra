@@ -10,6 +10,7 @@ import { listen } from '@tauri-apps/api/event'
 import { ListPlus, Sparkles, Square, X } from 'lucide-react'
 import { play } from 'cuelume'
 import { modKey } from './loadoutStore'
+import { revealOnLoad } from './motion'
 
 const NOTHING = 'Nothing to show for this mod: previews cover skins, meshes, textures, UI icons and your own VFX releases.'
 const FAILED = 'The render failed. Try again, or check the generator in your modding tools.'
@@ -143,7 +144,7 @@ export function ModPreview({ path }: { path: string }) {
   return (
     <div className="detail-section mod-preview">
       {url && (
-        <div className="mod-preview-frame"><img src={url} alt="Generated preview" /></div>
+        <div className="mod-preview-frame"><img src={url} alt="Generated preview" onLoad={revealOnLoad} /></div>
       )}
       <div className="mod-preview-bar">
         <button type="button" className="mod-preview-btn" disabled={busy}
