@@ -61,7 +61,9 @@ export function CardMedia({ p, l, className = '', title, onClick, emptyText = 'C
       {state && (
         <span className="lo-skel" role="status">
           <span className="lo-skel-label">
-            {state.kind === 'running' ? `Generating mod ${state.done} of ${state.total}` : state.at === 1 ? 'Queued, up next' : `Queued, ${state.at} in line`}
+            {state.kind === 'running'
+              ? <>Generating previews<span className="lo-dots" aria-hidden="true"><i>.</i><i>.</i><i>.</i></span></>
+              : state.at === 1 ? 'Queued, up next' : `Queued, ${state.at} in line`}
           </span>
         </span>
       )}

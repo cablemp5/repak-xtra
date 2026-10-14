@@ -289,8 +289,8 @@ export default function LoadoutsScreen(p: LoadoutProps) {
       {batch && (
         <div className="lo-batch" role="status">
           <LoaderCircle size={14} className="run-spin" />
-          <span className="t-shimmer" data-text={`Generating ${batch.name} · mod ${batch.done} of ${batch.total}`}>Generating {batch.name} · mod {batch.done} of {batch.total}</span>
-          {batch.left > 0 && <span className="lo-batch-left">{batch.leftText} queued after it</span>}
+          <span className="t-shimmer" data-text={`Generating ${batch.name}`}>Generating {batch.name}</span>
+          {batch.left > 0 && <span className="lo-batch-left">{batch.left} queued</span>}
           <button type="button" className="lo-text-btn lo-batch-stop" onClick={stopPreviews} disabled={batch.stopping}
             title="Stop after the mod rendering now and clear the queue">
             <CircleStop size={14} /> {batch.stopping ? 'Stopping…' : batch.left ? 'Stop all' : 'Stop'}
@@ -360,8 +360,8 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                       <p className="lo-card-meta">
                         {busy === l.id ? 'Switching mods…' : p.mods.length === 0 ? 'Loading mods…' : <>
                           {groupBy === 'hero' && <>{l.label}<span className="lo-sep">·</span></>}
-                          {l.on.length === present ? plural(present, 'mod') : `${present}/${l.on.length} installed`}
-                          {present > 0 && <><span className="lo-sep">·</span>{onNow === present ? 'all on' : `${onNow} on`}</>}
+                          {`${onNow}/${l.on.length} on`}
+                          {present < l.on.length && <><span className="lo-sep">·</span>{l.on.length - present} not installed</>}
                         </>}
                       </p>
                       <div className="lo-card-actions">
