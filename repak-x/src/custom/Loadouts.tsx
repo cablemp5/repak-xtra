@@ -155,16 +155,19 @@ export default function Loadouts(p: LoadoutProps) {
         <p className="lo-empty">Filter to a hero, set which mods are on, then save it here to switch back in one click.</p>
       )}
 
-      {loadouts.map(l => {
+      {loadouts.map((l, i) => {
         const active = isActive(l, p.mods)
+        const hotkey = i < 9 ? ` (Ctrl+${i + 1})` : ''
         const pending = changesToTurnOn(l, p.mods).length
         return (
           <div className="fp-row-wrap lo-row" key={l.id}>
             <button type="button" className="fp-row" aria-pressed={active} disabled={busy !== null}
-              onClick={() => apply(l)} title={active ? `${l.name} is on. Click to turn its mods off` : `Turn on ${l.name}: switches ${pending} of its mods on`}>
+              onClick={() => apply(l)} title={active ? `${l.name} is on. Click to turn its mods off${hotkey}` : `Turn on ${l.name}: switches ${pending} of its mods on${hotkey}`}>
               <span className="fp-lead">{active ? <Check size={15} className="lo-active" /> : <span className="lo-dot" />}</span>
               <span className="fp-label">{l.name}</span>
               <span className="fp-count">{busy === l.id ? '…' : `${l.on.length} on`}</span>
+              {/* the number Ctrl+N toggles; rows past 9 have none */}
+              <span className="lo-num" aria-hidden="true">{i < 9 ? i + 1 : ''}</span>
             </button>
             <button type="button" className="lo-icon lo-hover" title={`Overwrite ${l.name} with the shown mods' current state`} onClick={() => overwriteWithUndo(p, l)}>
               <Save size={14} />

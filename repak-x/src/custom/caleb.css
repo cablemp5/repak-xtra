@@ -954,3 +954,8 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
   transition-duration: 0s !important;   /* MUI animates all properties: the ring grew in from 0px */
 }
 .header-title-scope { color: var(--text-secondary); font-weight: 500; }
+
+/* Sidebar loadouts: the Ctrl+1-9 number at the row's end, quiet until the row is hovered or focused */
+.lo-num { flex: none; width: 2.2ch; text-align: right; font: 500 10.5px/1 var(--font-mono); color: var(--text-secondary); opacity: 0.55; font-variant-numeric: tabular-nums; }
+.lo-row:hover .lo-num, .lo-row:focus-within .lo-num { opacity: 1; }
+.lo-row:hover .lo-num:empty { display: none; }
