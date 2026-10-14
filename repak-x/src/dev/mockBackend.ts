@@ -16,6 +16,7 @@ const trash = new Map<string, any>() // trash id -> the deleted mod record
 // Browser checks flip window.__mockGameRunning live (polled every 5 s); localStorage 'mock.bypass' = 'false' turns the
 // fixture's game-lock bypass off at the next load
 const mock = window as any
+mock.__mockData = data // browser checks add or change mods here, then refresh (Ctrl+Shift+R)
 // Lazy loaders, not eager imports: the app's production build drops this dev-only branch with them (eager ones copied
 // every local preview PNG into the app's assets)
 const previewUrls: Record<string, () => Promise<string>> = import.meta.env.DEV
@@ -137,6 +138,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         return mod.path
       }
       case 'toggle_mod': {
+        if (mock.__toggleFail && String(args?.modPath).includes(mock.__toggleFail)) throw 'The file is in use' // window.__toggleFail = part of a path
         const mod = data.mods.find((m: any) => m.path === args?.modPath)
         if (mod) mod.enabled = !mod.enabled
         return mod?.enabled ?? null

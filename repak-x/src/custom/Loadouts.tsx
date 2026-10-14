@@ -18,6 +18,7 @@ export type LoadoutProps = {
   scopeMods: Mod[]       // mods currently shown (folder, hero, type, tag and search filters)
   scopeLabel: string     // what the current filters mean, e.g. "Black Panther"
   blocked: boolean       // game running and the lock is not bypassed
+  isBlocked: () => boolean // the same, read live (Undo toasts outlive the component that made them)
   reload: () => Promise<unknown>
   alert: ReturnType<typeof useAlert>
   modDetails?: Record<string, { character_name?: string | null; category?: string | null } | undefined>

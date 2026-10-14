@@ -3962,6 +3962,7 @@ function App() {
           scopeMods={folderMods}
           scopeLabel={[...selectedCharacters, ...selectedCategories].join(', ') || 'all mods'}
           blocked={gameRunning && !bypassGameRunningLock}
+          isBlocked={undoBlocked} /* caleb fork: live game lock for Undo */
           reload={loadMods}
           alert={alert}
         />
@@ -4062,6 +4063,7 @@ function App() {
                 scopeMods={folderMods}
                 scopeLabel={[...selectedCharacters, ...selectedCategories].join(', ') || 'all mods'}
                 blocked={gameRunning && !bypassGameRunningLock}
+                isBlocked={undoBlocked} /* caleb fork: live game lock for Undo */
                 reload={loadMods}
                 alert={alert}
               />
