@@ -78,10 +78,7 @@ export function ModPreview({ path }: { path: string }) {
   return (
     <div className="detail-section mod-preview">
       {url && (
-        <div className="mod-preview-frame">
-          <img className="media-ambient" src={url} alt="" aria-hidden="true" />
-          <img className="media-main" src={url} alt="Generated preview" />
-        </div>
+        <div className="mod-preview-frame"><img src={url} alt="Generated preview" /></div>
       )}
       <div className="mod-preview-bar">
         <button type="button" className="mod-preview-btn" disabled={generating !== null} onClick={() => generate(path)}

@@ -57,10 +57,9 @@ function CardMedia({ l }: { l: Loadout }) {
   const generated = usePreviewUrl(l.on.map(displayName).find(hasPreview)) // no own image: first mod with a generated preview
   const src = url ?? l.image ?? generated
   if (!src) return <span className="lo-card-placeholder"><ImagePlus size={22} /><span>Click to upload, or hover and paste</span></span>
-  // A blurred copy of the image fills the card behind it, so any shape fits whole and the backdrop takes its colors
   return l.mediaType === 'video' && url
     ? <video src={url} autoPlay loop muted playsInline />
-    : <><img className="media-ambient" src={src} alt="" aria-hidden="true" /><img className="media-main" src={src} alt="" /></>
+    : <img src={src} alt="" />
 }
 
 export default function LoadoutsScreen(p: LoadoutProps) {
