@@ -23,7 +23,22 @@ const revs = new Map<string, number>() // key -> bump count, so a re-rendered pr
 const pending = new Set<string>()       // mod keys still waiting in the current run (a loadout's set key is not one)
 const outcome = new Map<string, string>() // key (mod or set) -> message from its last render
 export type Covers = { covers: string[]; members: string[] | null } // members null: rendered before that was recorded
-const covers = new Map<string, Covers>() // loadout render key -> the mods it shows and the mods it was rendered for
+const covers = new Map<string, Covers & { rev: number }>() // loadout render key -> the mods it shows and the mods it was rendered for
+// Shared caches, so a card that remounts (Home -> page -> Home) shows its image at once without reading it again.
+// Entries belong to one revision; a newer one, or none, drops them. A read that finishes after its revision was dropped
+// or replaced is thrown away, so it can never bring back an old image or old covers.
+const urls = new Map<string, { rev: number; url: string }>() // preview key -> object URL of its PNG
+const urlLoads = new Map<string, { rev: number; p: Promise<string | null | undefined> }>()
+const coverLoads = new Map<string, { rev: number; p: Promise<unknown> }>()
+/** Forget a key's cached image and covers (its revision changed, or it has none now). */
+const dropCached = (key: string) => {
+  const u = urls.get(key)
+  if (u) URL.revokeObjectURL(u.url)
+  urls.delete(key)
+  urlLoads.delete(key)
+  covers.delete(key)
+  coverLoads.delete(key)
+}
 /** What a run is for: its mods, the loadout's combined render key (if any), a name to show ("Electric Blue"), and
  *  force (Regenerate: render even when nothing changed). */
 type Job = { paths: string[]; set?: string; name: string; force?: boolean }
@@ -43,6 +58,7 @@ const subscribe = (l: () => void) => { listeners.add(l); return () => listeners.
 
 invoke<string[]>('list_mod_previews').then(keys => { keys.forEach(k => revs.set(k, 0)); notify() }).catch(() => undefined)
 listen<string>('mod-preview-ready', e => {
+  dropCached(e.payload)
   revs.set(e.payload, (revs.get(e.payload) ?? 0) + 1)
   outcome.delete(e.payload)
   if (active && e.payload === run.set) run.setResult = 'ok'
@@ -55,10 +71,10 @@ listen<string>('mod-preview-in', e => { // shown in the loadout's combined rende
   notify()
 }).catch(() => undefined)
 listen<string>('mod-preview-none', e => {
+  dropCached(e.payload)
   revs.delete(e.payload) // the generator deleted its old image
-  if (active && e.payload === run.set) { // nothing to combine: its mods render one by one
-    run.setResult = 'none'
-    covers.delete(e.payload)
+  if (e.payload.startsWith(previewSetKey(''))) { // a loadout render with nothing to combine: its mods render one by one
+    if (active && e.payload === run.set) run.setResult = 'none'
     outcome.delete(e.payload)
   } else {
     outcome.set(e.payload, NOTHING)
@@ -115,36 +131,67 @@ export function usePreviewOutcome(key: string) {
   return outcome.get(key)
 }
 
-/** A loadout's combined render: the mods it shows and the mods it was rendered for; undefined while there is none. */
+/** A loadout's combined render: the mods it shows and the mods it was rendered for; undefined while there is none
+ *  (or until it is read, once per revision). */
 export function useCovers(setKey: string): Covers | undefined {
   usePreviewVersion()
   const rev = revs.get(setKey)
+  const cached = covers.get(setKey)
   useEffect(() => {
-    if (rev === undefined) return
-    invoke<Covers>('get_preview_covers', { key: setKey }).then(c => { covers.set(setKey, c); notify() }).catch(() => undefined)
+    if (rev === undefined || covers.get(setKey)?.rev === rev || coverLoads.get(setKey)?.rev === rev) return
+    const p: Promise<unknown> = invoke<Covers>('get_preview_covers', { key: setKey }).then(c => {
+      if (coverLoads.get(setKey)?.p !== p || revs.get(setKey) !== rev) return // dropped or replaced meanwhile
+      coverLoads.delete(setKey)
+      covers.set(setKey, { ...c, rev })
+      notify()
+    }, () => { if (coverLoads.get(setKey)?.p === p) coverLoads.delete(setKey) })
+    coverLoads.set(setKey, { rev, p })
   }, [setKey, rev])
-  return rev === undefined ? undefined : covers.get(setKey)
+  return rev !== undefined && cached?.rev === rev ? cached : undefined
 }
 
-/** Object URL of the mod's preview, or null while none exists. */
+/** A preview's object URL at this revision: cached, or read once however many cards ask. Resolves to the URL, null
+ *  when the read failed, or undefined when the revision was dropped or replaced before it finished. */
+function loadUrl(key: string, rev: number): Promise<string | null | undefined> {
+  const c = urls.get(key)
+  if (c?.rev === rev) return Promise.resolve(c.url)
+  const f = urlLoads.get(key)
+  if (f?.rev === rev) return f.p
+  const p: Promise<string | null | undefined> = invoke<ArrayBuffer>('get_mod_preview', { key }).then(bytes => {
+    if (urlLoads.get(key)?.p !== p || revs.get(key) !== rev) return undefined // stale: the bytes are dropped unused
+    urlLoads.delete(key)
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }))
+    urls.set(key, { rev, url })
+    return url
+  }, () => {
+    if (urlLoads.get(key)?.p !== p) return undefined
+    urlLoads.delete(key)
+    return null
+  })
+  urlLoads.set(key, { rev, p })
+  return p
+}
+/** The cached URL of a preview at its current revision, if it has been read. */
+export const cachedPreviewUrl = (key: string | undefined) => {
+  const rev = key !== undefined ? revs.get(key) : undefined
+  const c = key !== undefined ? urls.get(key) : undefined
+  return rev !== undefined && c?.rev === rev ? c.url : null
+}
+
+/** Object URL of the mod's preview, or null while none exists. The URL is shared: unmounting never revokes it. */
 export function usePreviewUrl(key: string | undefined) {
   usePreviewVersion()
   const rev = key !== undefined ? revs.get(key) : undefined
-  const [url, setUrl] = useState<string | null>(null)
+  const cached = cachedPreviewUrl(key)
+  const [shown, setShown] = useState<{ key?: string; url: string | null }>({ key, url: cached })
   useEffect(() => {
-    if (key === undefined || rev === undefined) { setUrl(null); return }
-    let made: string | null = null
+    if (key === undefined || rev === undefined) { setShown({ key, url: null }); return }
     let live = true
-    invoke<ArrayBuffer>('get_mod_preview', { key })
-      .then(bytes => {
-        if (!live) return
-        made = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }))
-        setUrl(made)
-      })
-      .catch(() => live && setUrl(null))
-    return () => { live = false; if (made) URL.revokeObjectURL(made) }
+    loadUrl(key, rev).then(url => { if (live && url !== undefined) setShown({ key, url }) })
+    return () => { live = false }
   }, [key, rev])
-  return url
+  // A re-rendered preview keeps showing its last image until the new one is read
+  return cached ?? (shown.key === key && rev !== undefined ? shown.url : null)
 }
 
 const running = () => active

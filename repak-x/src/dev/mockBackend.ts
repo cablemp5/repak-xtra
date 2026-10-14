@@ -17,6 +17,10 @@ const trash = new Map<string, any>() // trash id -> the deleted mod record
 // fixture's game-lock bypass off at the next load
 const mock = window as any
 mock.__mockData = data // browser checks add or change mods here, then refresh (Ctrl+Shift+R)
+mock.__emit = emit // browser checks fire backend events (mod-preview-ready, ...)
+mock.__calls = {} as Record<string, number> // invoke count per command
+// window.__previewDelay (ms) holds get_mod_preview and get_preview_covers answers back, for cache race checks
+const later = <T,>(v: T | Promise<T>) => (mock.__previewDelay ? new Promise<T>(r => setTimeout(() => r(v), mock.__previewDelay)) : v)
 // Lazy loaders, not eager imports: the app's production build drops this dev-only branch with them (eager ones copied
 // every local preview PNG into the app's assets)
 const previewUrls: Record<string, () => Promise<string>> = import.meta.env.DEV
@@ -35,6 +39,7 @@ const previewMode = (): string => (Array.isArray(mock.__previewMock) ? mock.__pr
 if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
   mockWindows('main')
   mockIPC((cmd, args: any) => {
+    mock.__calls[cmd] = (mock.__calls[cmd] ?? 0) + 1
     switch (cmd) {
       case 'get_pak_files': return data.mods.map((m: any) => ({ ...m })) // fresh objects, like the real backend
       case 'get_folders': return data.folders
@@ -58,7 +63,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'get_mod_preview': { // a loadout render made in this page shows a local copy's image
         const load = previewUrls[`./previews.local/${args?.key}.png`] ?? (setCovers.has(args?.key) ? Object.values(previewUrls)[0] : undefined)
         if (!load) throw `No preview for ${args?.key}`
-        return load().then(url => fetch(url)).then(r => r.arrayBuffer())
+        return later(load().then(url => fetch(url)).then(r => r.arrayBuffer()))
       }
       case 'generate_mod_previews': { // pretend run: each job reports back as already rendered
         const mode = previewMode()
@@ -89,8 +94,8 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       }
       case 'cancel_mod_previews': return null
       case 'get_preview_covers':
-        return setCovers.get(args?.key) ?? previewCovers[`./previews.local/${args?.key}.json`]?.()
-          .then(c => ({ covers: c?.covers ?? [], members: c?.members ?? null })) ?? { covers: [], members: null }
+        return later(setCovers.get(args?.key) ?? previewCovers[`./previews.local/${args?.key}.json`]?.()
+          .then(c => ({ covers: c?.covers ?? [], members: c?.members ?? null })) ?? { covers: [], members: null })
       case 'get_hero_image':
         return fetch(`/src/dev/heroes.local/${args?.id}.png`).then(r => r.arrayBuffer()).then(b => new Uint8Array(b))
       case 'get_app_version': return __APP_VERSION__

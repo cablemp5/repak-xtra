@@ -32,8 +32,47 @@ async function run<T>(mode: IDBTransactionMode, op: (s: IDBObjectStore) => IDBRe
 }
 
 export const getMedia = (id: string) => run<Blob | undefined>('readonly', s => s.get(id))
-export const putMedia = (id: string, blob: Blob) => run('readwrite', s => s.put(blob, id))
-export const deleteMedia = (id: string) => run('readwrite', s => s.delete(id)).catch(() => undefined)
+/** Stores a loadout's file; its cached image is dropped once the write commits (a failed write keeps it). */
+export const putMedia = (id: string, blob: Blob) => run('readwrite', s => s.put(blob, id)).then(r => { dropMedia(id); return r })
+export const deleteMedia = (id: string) => run('readwrite', s => s.delete(id)).then(() => dropMedia(id)).catch(() => undefined)
+
+// Images are cached by loadout and revision (mediaRev), shared by every card and page that shows them, so a remount
+// shows them at once; videos are read per use and their URL lives as long as the component (they can be huge).
+type MediaRead = { url: string } | { video: Blob } | undefined
+const mediaUrls = new Map<string, { rev: number; url: string }>()
+const mediaLoads = new Map<string, { rev: number; p: Promise<MediaRead> }>()
+const dropMedia = (id: string) => {
+  const c = mediaUrls.get(id)
+  if (c) URL.revokeObjectURL(c.url)
+  mediaUrls.delete(id)
+  mediaLoads.delete(id)
+}
+/** One read per loadout and revision; a read that finishes after its file was replaced or removed is thrown away. */
+function loadMedia(id: string, rev: number): Promise<MediaRead> {
+  const c = mediaUrls.get(id)
+  if (c?.rev === rev) return Promise.resolve({ url: c.url })
+  const f = mediaLoads.get(id)
+  if (f?.rev === rev) return f.p
+  const p: Promise<MediaRead> = getMedia(id).then(blob => {
+    if (mediaLoads.get(id)?.p !== p) return undefined
+    mediaLoads.delete(id) // a finished video read is not kept
+    if (!blob) return undefined
+    if (blob.type.startsWith('video/')) return { video: blob }
+    const url = URL.createObjectURL(blob)
+    mediaUrls.set(id, { rev, url })
+    return { url }
+  }, () => {
+    if (mediaLoads.get(id)?.p === p) mediaLoads.delete(id)
+    return undefined
+  })
+  mediaLoads.set(id, { rev, p })
+  return p
+}
+/** The cached image URL of a loadout's media at this revision, if it has been read. */
+export const cachedMediaUrl = (id: string, rev?: number) => {
+  const c = mediaUrls.get(id)
+  return rev && c?.rev === rev ? c.url : undefined
+}
 
 /** Deletes every stored file whose id is not in `keep`, in one transaction. `keep` is read when the keys arrive, so ids
  *  added to it meanwhile still count. Resolves on commit; any error aborts the whole sweep. */
@@ -66,19 +105,21 @@ export async function prepareMedia(file: File): Promise<{ blob: Blob; type: 'ima
   return { blob: blob ?? file, type: 'image' }
 }
 
-/** Object URL for a loadout's stored media; reloads when rev changes. */
+/** Object URL for a loadout's stored media; reloads when rev changes. Image URLs are shared (never revoked here);
+ *  a video's is this component's own. */
 export function useMediaUrl(id: string, rev?: number): string | undefined {
-  const [url, setUrl] = useState<string>()
+  const cached = cachedMediaUrl(id, rev)
+  const [shown, setShown] = useState<{ id: string; rev?: number; url?: string }>({ id, rev, url: cached })
   useEffect(() => {
-    if (!rev) { setUrl(undefined); return }
+    if (!rev) { setShown({ id, rev, url: undefined }); return }
     let live = true
-    let made: string | undefined
-    getMedia(id).then(blob => {
-      if (!live || !blob) return
-      made = URL.createObjectURL(blob)
-      setUrl(made)
+    let video: string | undefined
+    loadMedia(id, rev).then(read => {
+      if (!live || !read) return
+      if ('video' in read) video = URL.createObjectURL(read.video)
+      setShown({ id, rev, url: 'video' in read ? video : read.url })
     })
-    return () => { live = false; if (made) URL.revokeObjectURL(made) }
+    return () => { live = false; if (video) URL.revokeObjectURL(video) }
   }, [id, rev])
-  return url
+  return cached ?? (shown.id === id && shown.rev === rev ? shown.url : undefined)
 }

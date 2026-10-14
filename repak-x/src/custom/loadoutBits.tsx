@@ -51,6 +51,7 @@ export function CardMedia({ p, l, className = '', title, onClick, emptyText = 'C
   const slide = slides[at]
   const generated = usePreviewUrl(slide?.key || undefined)
   const src = slide?.key ? generated : own
+  const [warm] = useState(src) // already cached when the card mounted: shown at once, without the blur-in
   const state = usePreviewState(previewSetKey(l.id))
   const setNote = usePreviewOutcome(previewSetKey(l.id)) // the last loadout render failed (its image stays) or was refused
   return (
@@ -69,7 +70,7 @@ export function CardMedia({ p, l, className = '', title, onClick, emptyText = 'C
           ? <span className="lo-card-placeholder"><ImagePlus size={22} /><span>{emptyText}</span></span>
           : !slide?.key && l.mediaType === 'video' && url
             ? <video src={url} autoPlay loop muted playsInline />
-            : <img key={src} src={src} alt="" onLoad={revealOnLoad} />}
+            : <img key={src} src={src} alt="" className={src === warm ? 'is-loaded' : undefined} onLoad={revealOnLoad} />}
       </button>
       {slides.length > 1 && (
         <>

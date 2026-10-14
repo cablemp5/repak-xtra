@@ -5,8 +5,8 @@ import { ArrowRightLeft, Check, Layers, LayoutGrid, Plus, Sparkles, Trash2 } fro
 import CustomDropdown from '../components/CustomDropdown'
 import type { useAlert } from '../components/AlertHandler'
 import {
-  type Loadout, type Mod, addModToLoadout, changesToTurnOff, changesToTurnOn, deleteLoadout, flipMods, isActive, modKey, moveLoadout,
-  openLoadout, patchLoadout, readLoadouts, sameMembership, setView, snapshotLoadout, useLoadouts, writeLoadouts,
+  type Loadout, type Mod, changesToTurnOff, changesToTurnOn, deleteLoadout, flipMods, isActive, modKey, moveLoadout,
+  openLoadout, patchLoadout, readLoadouts, sameMembership, setView, snapshotLoadout, useLoadouts, withMods, writeLoadouts,
 } from './loadoutStore'
 import { isTyping } from './hotkeys'
 import { plural } from './modName'
@@ -68,7 +68,7 @@ export function AddToLoadoutField({ paths, alert }: { paths: string[]; alert: Lo
           const l = readLoadouts().find(x => x.id === id)
           if (!l) return
           const keys = [...new Set(paths.map(modKey))]
-          keys.forEach(k => addModToLoadout(readLoadouts().find(x => x.id === id)!, k))
+          patchLoadout(id, withMods(l, keys)) // one write however many mods
           alert.success(`Added to ${l.name}`, `${keys.length} mod${keys.length === 1 ? '' : 's'}.`)
         }}
       />

@@ -113,14 +113,15 @@ export const isActive = (l: Loadout, mods: Mod[]) => {
   return mine.length > 0 && mine.every(m => m.enabled)
 }
 
-/** Adds a mod to the loadout's on list (and its scope, so the loadout manages it from now on). */
-export const addModToLoadout = (l: Loadout, key: string) => {
-  const k = normKey(key)
-  patchLoadout(l.id, {
-    on: keySet(l.on).has(k) ? l.on : [...l.on, k],
-    scope: keySet(l.scope).has(k) ? l.scope : [...l.scope, k],
-  })
+/** The loadout's on list and scope with these mods added (normalized, each once). Pure. */
+export const withMods = (l: Pick<Loadout, 'on' | 'scope'>, keys: string[]) => {
+  const add = [...new Set(keys.map(normKey))]
+  const on = keySet(l.on), scope = keySet(l.scope)
+  return { on: [...l.on, ...add.filter(k => !on.has(k))], scope: [...l.scope, ...add.filter(k => !scope.has(k))] }
 }
+
+/** Adds a mod to the loadout's on list (and its scope, so the loadout manages it from now on). */
+export const addModToLoadout = (l: Loadout, key: string) => patchLoadout(l.id, withMods(l, [key]))
 
 /** Every loadout with oldKey (on and scope) now holding newKey instead, once. Pure. */
 export const renameKeyIn = (list: Loadout[], oldKey: string, newKey: string): Loadout[] => {
@@ -330,6 +331,8 @@ if (import.meta.env.DEV) {
   console.assert(coerceLabel({}) === 'imported' && coerceLabel('') === 'imported' && coerceLabel('x') === 'x', 'coerceLabel')
   console.assert(nextLoadoutName(['Loadout 1', 'loadout 3']) === 'Loadout 2', 'nextLoadoutName')
   console.assert(nextLoadoutName([]) === 'Loadout 1', 'nextLoadoutName empty')
+  const w = withMods(L(['A'], ['A', 'B']), ['B_9999999_P', 'C', 'C', 'A'])
+  console.assert(w.on.join() === 'A,B,C' && w.scope.join() === 'A,B,C', `withMods: ${w.on} / ${w.scope}`)
   console.assert(sameMembership(L(['A', 'B_9999999_P', 'A']), L(['B', 'A'])), 'sameMembership order/suffix/duplicates')
   console.assert(!sameMembership(L(['A']), L(['A', 'C'])) && !sameMembership(L(['A'], ['A']), L(['A'], ['A', 'C'])), 'sameMembership differs')
 }
