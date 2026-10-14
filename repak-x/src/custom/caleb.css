@@ -1000,14 +1000,19 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
 
 /* ---------- credits in the app's language: left-aligned wordmark, quiet headings, people as rows of one list,
    small badges, neutral Close (blue is for state only) ---------- */
-.credits-branding { align-items: flex-start !important; text-align: left !important; padding: 4px 0 18px !important; }
-.credits-app-name { font: 800 30px/1.1 var(--font-primary) !important; letter-spacing: -0.03em !important; margin: 0 0 6px !important; color: var(--text-primary); }
-.credits-version { margin: 0 0 4px !important; font-size: 12px !important; color: var(--text-secondary) !important; }
-.credits-tagline { margin: 0 !important; font-size: 13px !important; color: var(--text-secondary) !important; }
+.credits-branding { align-items: flex-start !important; text-align: left !important; padding: 4px 0 0 !important; }
+.credits-app-name { font: 800 30px/1.1 var(--font-primary) !important; letter-spacing: -0.03em !important; margin: 0 0 8px !important; color: var(--text-primary); }
+.credits-version { margin: 0 0 6px !important; font-size: 12px !important; color: var(--text-secondary) !important; }
+.credits-tagline { margin: 0 !important; font-size: 13px !important; line-height: 1.5 !important; color: var(--text-secondary) !important; }
 .credits-section-title, .credits-subsection-title {
   color: var(--text-secondary) !important; text-transform: none !important; letter-spacing: 0 !important;
-  font-size: 13px !important; font-weight: 600 !important; margin: 0 0 10px !important;
+  font-size: 13px !important; font-weight: 600 !important; margin: 0 0 12px !important; padding: 0 !important; border: none !important;
 }
+/* One rhythm: 28px between sections, 12px under a heading, 10px between a note and its chips */
+.credits-content { gap: 28px !important; }
+.credits-subsection-title { margin-top: 24px !important; }
+.credits-testers-thanks { margin: 0 0 10px !important; }
+.credits-divider { margin: 0 !important; }
 .credits-section .credits-contributor {
   margin: 0 !important; border: 1px solid var(--panel-border) !important; border-radius: 0 !important;
   background: transparent !important; box-shadow: none !important; transform: none !important;
