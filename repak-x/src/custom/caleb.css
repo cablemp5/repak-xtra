@@ -788,8 +788,24 @@ html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { d
 }
 .lo-groupby { margin-right: 6px; }
 .loadouts:has(+ .lo-resizer) { border-bottom: none; }
-.tags-toggle { width: 40px; height: 40px; display: inline-flex !important; align-items: center; justify-content: center; padding: 0 !important; color: var(--text-secondary) !important; }
-.tags-toggle[aria-pressed="true"] { color: var(--text-primary) !important; }
+/* Tags shown or hidden, in words: shown is lit (accent icon), hidden is dim with a struck eye; the arrow holds Delete all tags */
+.tags-toggle-wrap { position: relative; display: inline-flex; align-items: stretch; height: 40px; border: 1px solid var(--panel-border);
+  border-radius: var(--quiet-radius); background: var(--bg-dark); }
+.tags-toggle, .tags-toggle-more { display: inline-flex !important; align-items: center; gap: 7px; border: none !important; background: transparent !important;
+  color: var(--text-secondary) !important; font: 600 13px var(--font-primary) !important; cursor: pointer; }
+.tags-toggle { padding: 0 12px !important; border-radius: var(--quiet-radius) 0 0 var(--quiet-radius); }
+.tags-toggle-more { padding: 0 8px !important; border-left: 1px solid var(--panel-border) !important; border-radius: 0 var(--quiet-radius) var(--quiet-radius) 0; }
+.tags-toggle:hover, .tags-toggle-more:hover { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
+.tags-toggle-wrap.is-shown .tags-toggle { color: var(--text-primary) !important; }
+.tags-toggle-wrap.is-shown .tags-toggle svg { color: var(--accent-primary); }
+.tags-toggle-wrap.is-hidden { border-style: dashed; }
+.tags-menu { right: 0; left: auto; top: calc(100% + 6px); min-width: 250px; z-index: 40; }
+.tags-menu .sigeon-item span { display: inline-flex; align-items: center; gap: 8px; }
+.tags-menu .sigeon-item small { margin-left: auto; color: var(--text-secondary); }
+.tags-confirm { padding: 8px; display: flex; flex-direction: column; gap: 10px; }
+.tags-confirm p { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-primary); }
+.tags-confirm > div { display: flex; justify-content: flex-end; gap: 6px; }
+.tags-confirm-go { border-color: color-mix(in srgb, var(--accent-primary), transparent 40%) !important; }
 html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !important; }
 
 /* ---------- loadout card: remove and add mods ---------- */

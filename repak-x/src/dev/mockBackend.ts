@@ -65,6 +65,16 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         return localStorage.getItem('mock.bypass') === 'false' ? { ...data.settings, bypassGameRunningLock: false } : data.settings
       case 'get_game_path': return data.gamePath
       case 'get_all_tags': return data.tags
+      case 'delete_tag_from_all_mods':
+        data.tags = data.tags.filter((t: string) => t !== args?.tag)
+        data.mods.forEach((m: any) => { m.custom_tags = (m.custom_tags ?? []).filter((t: string) => t !== args?.tag) })
+        return null
+      case 'add_tag_to_catalog': if (!data.tags.includes(args?.tag)) data.tags = [...data.tags, args?.tag].sort(); return null
+      case 'add_custom_tag': {
+        const mod = data.mods.find((m: any) => m.path === args?.modPath)
+        if (mod && !(mod.custom_tags ?? []).includes(args?.tag)) mod.custom_tags = [...(mod.custom_tags ?? []), args?.tag]
+        return null
+      }
       case 'get_character_data': return data.characterData
       case 'get_mod_details': return data.details[args?.modPath] ?? null
       case 'plugin:webview|set_webview_zoom': // the browser has no webview zoom; CSS zoom stands in

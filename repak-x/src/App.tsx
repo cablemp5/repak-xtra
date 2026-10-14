@@ -4036,7 +4036,8 @@ function App() {
               addNewLabel="+ Create Tag"
               onDeleteOption={handleDeleteTagFromCatalog}
             />
-            <TagsToggle />
+            <TagsToggle tags={allTags} mods={mods} alert={alert} /* caleb fork: shown or hidden in words, Delete all tags */
+              onChanged={async () => { setFilterTag(''); await loadMods(); await loadTags() }} />
 
             <AddModSplitButton
               data-tour="add-mod-btn"
