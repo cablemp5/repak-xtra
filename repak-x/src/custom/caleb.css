@@ -863,3 +863,25 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 .bulk-previews { display: inline-flex !important; align-items: center; gap: 6px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .bulk-previews svg.lucide { width: 15px !important; height: 15px !important; }
 .bulk-previews.is-running { color: var(--text-primary) !important; }
+
+/* ---------- loadout mod list: dot = mod type (home screen badge colors), filled = on now, ring = off now ---------- */
+.lo-mod-dot { width: 7px !important; height: 7px !important; background: transparent !important; box-sizing: border-box;
+  border: 1.5px solid var(--badge-dot, rgba(255, 255, 255, 0.35)); }
+.lo-mod-dot.is-filled { background: var(--badge-dot, rgba(255, 255, 255, 0.55)) !important; }
+.lo-mod-list li.is-on .lo-mod-dot.is-filled { background: var(--badge-dot, rgba(255, 255, 255, 0.55)) !important; }
+.unknown-badge { --badge-dot: #8f8f8f; }
+.lo-legend {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px;
+  padding: 10px 28px; border-bottom: 1px solid var(--panel-border);
+  font-size: 12px; color: var(--text-secondary);
+}
+.lo-legend-item { display: inline-flex; align-items: center; gap: 7px; }
+.lo-legend-sep { width: 1px; height: 14px; background: var(--panel-border); }
+.lo-text-btn[aria-pressed="true"] { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
+
+/* Add-a-mod matches: left aligned, one line each, long names cut with an ellipsis */
+.lo-mod-matches { max-height: 240px; overflow-y: auto; }
+.lo-mod-matches button { justify-content: flex-start !important; gap: 8px; text-align: left !important; }
+.lo-match-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lo-mod-matches button svg.lucide { opacity: 0; transition: opacity 0.12s ease; }
+.lo-mod-matches button:hover svg.lucide { opacity: 1; }

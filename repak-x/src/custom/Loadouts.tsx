@@ -16,7 +16,7 @@ export type LoadoutProps = {
   blocked: boolean       // game running and the lock is not bypassed
   reload: () => Promise<unknown>
   alert: ReturnType<typeof useAlert>
-  modDetails?: Record<string, { character_name?: string | null } | undefined>
+  modDetails?: Record<string, { character_name?: string | null; category?: string | null } | undefined>
 }
 
 const HEIGHT_KEY = 'caleb.loadoutsHeight'

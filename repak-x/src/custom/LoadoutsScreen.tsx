@@ -4,7 +4,7 @@
 // Cards are grouped by their saved group (label) or by hero; double-click a name to rename it.
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, Download, ImageOff, ImagePlus, Plus, RefreshCw, Trash2, Upload, X } from 'lucide-react'
+import { ChevronDown, Download, ImageOff, ImagePlus, Info, Plus, RefreshCw, Trash2, Upload, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, runChanges } from './Loadouts'
 import { isTyping } from './hotkeys'
@@ -16,6 +16,9 @@ import {
 } from './loadoutStore'
 
 type GroupBy = 'group' | 'hero'
+const LEGEND_KEY = 'caleb.loadoutLegend'
+const typeClass = (category?: string | null) => `${(category || 'unknown').toLowerCase().replace(/\s+/g, '-')}-badge`
+
 const GROUP_BY_KEY = 'caleb.loadoutGroupBy'
 const NO_HERO = 'No hero'
 
@@ -72,6 +75,8 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   const [renaming, setRenaming] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [adding, setAdding] = useState<{ id: string; q: string } | null>(null)
+  const [legend, setLegendState] = useState(() => localStorage.getItem(LEGEND_KEY) === '1')
+  const setLegend = (on: boolean) => { localStorage.setItem(LEGEND_KEY, on ? '1' : '0'); setLegendState(on) }
   const [groupBy, setGroupByState] = useState<GroupBy>(() => (localStorage.getItem(GROUP_BY_KEY) === 'hero' ? 'hero' : 'group'))
   const setGroupBy = (g: GroupBy) => { localStorage.setItem(GROUP_BY_KEY, g); setGroupByState(g) }
   const fileRef = useRef<HTMLInputElement>(null)
@@ -166,6 +171,10 @@ export default function LoadoutsScreen(p: LoadoutProps) {
           <p>On switches a loadout's mods on, the rest of its group off, and any other loadout sharing its mods off. Off switches its mods off. Press L to open or close.</p>
         </div>
         <div className="lo-head-tools">
+          <button type="button" className="lo-text-btn" aria-pressed={legend} onClick={() => setLegend(!legend)}
+            title="Show what the dot colors in each loadout's mod list mean">
+            <Info size={14} /> Legend
+          </button>
           <div className="mod-state-filter lo-groupby" role="group" aria-label="Group loadouts by">
             <button type="button" aria-pressed={groupBy === 'group'} onClick={() => setGroupBy('group')}>Group</button>
             <button type="button" aria-pressed={groupBy === 'hero'} onClick={() => setGroupBy('hero')}>Hero</button>
@@ -197,6 +206,18 @@ export default function LoadoutsScreen(p: LoadoutProps) {
 
       <input ref={fileRef} type="file" accept="image/*,video/*" hidden
         onChange={e => { const f = e.target.files?.[0]; if (f && mediaTarget.current) setMedia(mediaTarget.current, f); e.target.value = '' }} />
+
+      {legend && (() => {
+        const types = [...new Set(p.mods.map(m => p.modDetails?.[m.path]?.category).filter((c): c is string => Boolean(c)))].sort()
+        return (
+          <div className="lo-legend" aria-label="Dot legend">
+            {types.map(t => <span key={t} className="lo-legend-item"><span className={`lo-mod-dot is-filled ${typeClass(t)}`} />{t}</span>)}
+            <span className="lo-legend-sep" />
+            <span className="lo-legend-item"><span className="lo-mod-dot is-filled" />On now</span>
+            <span className="lo-legend-item"><span className="lo-mod-dot" />Off now</span>
+          </div>
+        )
+      })()}
 
       <div className="lo-body">
       {groups.map(([group, list]) => (
@@ -264,8 +285,8 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                           const mod = byKey.get(key)
                           return (
                             <li key={key} className={mod ? (mod.enabled ? 'is-on' : '') : 'lo-mod-missing'}
-                              title={mod ? (mod.enabled ? 'On now' : 'Off now') : 'Not installed anymore'}>
-                              <span className="lo-mod-dot" />
+                              title={mod ? `${p.modDetails?.[mod.path]?.category ?? 'Unknown type'} · ${mod.enabled ? 'on now' : 'off now'}` : 'Not installed anymore'}>
+                              <span className={`lo-mod-dot ${mod?.enabled ? 'is-filled' : ''} ${typeClass(mod && p.modDetails?.[mod.path]?.category)}`} />
                               <span className="lo-mod-name">{key}</span>
                               <button type="button" className="lo-icon lo-mod-remove" title={`Remove ${key} from ${l.name}`}
                                 onClick={() => removeModFromLoadout(l, key)}>
@@ -282,7 +303,13 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                         {matches.length > 0 && (
                           <ul className="lo-mod-matches">
                             {matches.map(k => (
-                              <li key={k}><button type="button" onClick={() => add(k)}><Plus size={13} />{k}</button></li>
+                              <li key={k}>
+                                <button type="button" onClick={() => add(k)} title={k}>
+                                  <span className={`lo-mod-dot is-filled ${typeClass(p.modDetails?.[byKey.get(k)!.path]?.category)}`} />
+                                  <span className="lo-match-name">{k}</span>
+                                  <Plus size={13} />
+                                </button>
+                              </li>
                             ))}
                           </ul>
                         )}
