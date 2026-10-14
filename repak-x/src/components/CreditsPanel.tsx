@@ -4,8 +4,6 @@ import { FiExternalLink, FiHeart } from 'react-icons/fi';
 import { SiDiscord } from 'react-icons/si';
 import { IoLogoGithub } from 'react-icons/io';
 import { open } from '@tauri-apps/plugin-shell';
-import { AuroraText } from './ui/AuroraText';
-import ModularLogo from './ui/ModularLogo';
 import mrmLogo from '../assets/extra/mrm_logo.webp';
 import './CreditsPanel.css';
 
@@ -140,13 +138,10 @@ export default function CreditsPanel({ onClose, version }: CreditsPanelProps) {
                     <div className="credits-content">
                         {/* App Branding */}
                         <div className="credits-branding">
-                            <ModularLogo size={80} className="credits-logo" />
-                            <h1 className="credits-app-name">
-                                <span className="credits-app-name-repak">Repak </span>
-                                <AuroraText className="credits-app-name-x">X</AuroraText>
-                            </h1>
-                            <p className="credits-version">Version {version || '1.0.0'}</p>
-                            <p className="credits-tagline">Mod Manager & Modding Tool for Marvel Rivals</p>
+                            {/* caleb fork: repakXtra wordmark; the people below made Repak X, which this fork builds on */}
+                            <h1 className="credits-app-name font-logo">repak<span className="title-x">X</span>tra</h1>
+                            <p className="credits-version">v{version || '1.0.0'} (forked by cable)</p>
+                            <p className="credits-tagline">A fork of Repak X, the mod manager and modding tool for Marvel Rivals, made by the people below.</p>
                         </div>
 
                         {/* Main Contributors */}

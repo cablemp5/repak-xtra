@@ -184,13 +184,14 @@ export default function Loadouts(p: LoadoutProps) {
         const active = isActive(l, p.mods)
         const hotkey = i < 9 ? ` (Ctrl+${i + 1})` : ''
         const pending = changesToTurnOn(l, p.mods).length
+        const onNow = changesToTurnOff(l, p.mods).length // its mods that are on right now
         return (
           <div className="fp-row-wrap lo-row" key={l.id}>
             <button type="button" className="fp-row" aria-pressed={active} disabled={busy !== null}
               onClick={() => apply(l)} title={active ? `${l.name} is on. Click to turn its mods off${hotkey}` : `Turn on ${l.name}: switches ${pending} of its mods on${hotkey}`}>
               <span className="fp-lead">{active ? <Check size={15} className="lo-active" /> : <span className="lo-dot" />}</span>
               <span className="fp-label">{l.name}</span>
-              <span className="fp-count">{busy === l.id ? '…' : `${l.on.length} on`}</span>
+              <span className="fp-count" title={`${onNow} of its ${l.on.length} mods are on`}>{busy === l.id ? '…' : `${onNow}/${l.on.length}`}</span>
               {/* the number Ctrl+N toggles; rows past 9 have none */}
               <span className="lo-num" aria-hidden="true">{i < 9 ? i + 1 : ''}</span>
             </button>

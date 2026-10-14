@@ -443,7 +443,7 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 
 /* ---------- title: repakXtra, no logo mark ---------- */
 .header .repak-icon { display: none !important; }
-.header .title-x { color: var(--text-secondary); }
+.header .title-x, .credits-app-name .title-x { color: var(--accent-primary); }
 
 /* ---------- optional controls, off unless enabled in Settings > Interface (custom/uiPrefs.tsx) ---------- */
 html:not([data-show-priority]) .mod-card .number-input-container { display: none !important; }
@@ -1054,3 +1054,47 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
 .row-add-to .custom-dropdown-trigger:hover { background: var(--quiet-hover) !important; }
 .lp-types button .lo-mod-dot { background: var(--badge-dot) !important; border: none; }
 .lp-actions .lo-text-btn .bulk-num { color: var(--text-secondary); }
+
+/* ---------- credits in the app's language: left-aligned wordmark, quiet headings, people as rows of one list,
+   small badges, neutral Close (blue is for state only) ---------- */
+.credits-branding { align-items: flex-start !important; text-align: left !important; padding: 4px 0 18px !important; }
+.credits-app-name { font: 800 30px/1.1 var(--font-primary) !important; letter-spacing: -0.03em !important; margin: 0 0 6px !important; color: var(--text-primary); }
+.credits-version { margin: 0 0 4px !important; font-size: 12px !important; color: var(--text-secondary) !important; }
+.credits-tagline { margin: 0 !important; font-size: 13px !important; color: var(--text-secondary) !important; }
+.credits-section-title, .credits-subsection-title {
+  color: var(--text-secondary) !important; text-transform: none !important; letter-spacing: 0 !important;
+  font-size: 13px !important; font-weight: 600 !important; margin: 0 0 10px !important;
+}
+.credits-section .credits-contributor {
+  margin: 0 !important; border: 1px solid var(--panel-border) !important; border-radius: 0 !important;
+  background: transparent !important; box-shadow: none !important; transform: none !important;
+}
+.credits-section .credits-contributor + .credits-contributor { border-top: none !important; }
+.credits-section-title + .credits-contributor { border-top-left-radius: 10px !important; border-top-right-radius: 10px !important; }
+.credits-section .credits-contributor:last-child { border-bottom-left-radius: 10px !important; border-bottom-right-radius: 10px !important; }
+.credits-section .credits-contributor:hover { background: var(--quiet-hover) !important; }
+.credits-name { font-size: 14px !important; font-weight: 600 !important; }
+.credits-role { font-size: 12px !important; color: var(--text-secondary) !important; }
+.credits-badge, .credits-badge.ai, .credits-badge.community {
+  text-transform: none !important; letter-spacing: 0 !important; font: 500 11px/1.4 var(--font-primary) !important;
+  padding: 1px 6px !important; border: none !important; border-radius: 4px !important;
+  background: var(--bg-lighter) !important; color: var(--text-secondary) !important;
+}
+.credits-link-icon { color: var(--text-secondary) !important; }
+.credits-testers-thanks { font-size: 12px !important; color: var(--text-secondary) !important; }
+.credits-tester-chip, .credits-tester-chip.special {
+  background: transparent !important; border: 1px solid var(--panel-border) !important; border-radius: 999px !important;
+  color: var(--text-primary) !important; font-size: 12px !important; font-weight: 500 !important;
+}
+.credits-divider { border: none !important; border-top: 1px solid var(--panel-border) !important; }
+.credits-thanks { background: transparent !important; border: none !important; padding: 0 !important; }
+.credits-thanks-text { font-size: 12px !important; color: var(--text-secondary) !important; }
+.credits-modal .modal-footer .btn-primary {
+  background: transparent !important; color: var(--text-primary) !important; border: 1px solid var(--panel-border) !important;
+  box-shadow: none !important;
+}
+.credits-modal .modal-footer .btn-primary:hover { background: var(--quiet-hover) !important; }
+/* upstream lays the credits name out as a spaced flex row and its sections as gapped columns */
+.credits-app-name { display: block !important; gap: 0 !important; }
+.credits-app-name .title-x { display: inline !important; margin: 0 !important; padding: 0 !important; }
+.credits-section { gap: 0 !important; }

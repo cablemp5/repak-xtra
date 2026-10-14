@@ -31,6 +31,15 @@ export const writeLoadouts = (list: Loadout[]) => {
   localStorage.setItem(STORAGE, JSON.stringify(list))
   notify()
 }
+// One-time (2026-10-14): FlamingBP was saved under the filter text "all mods" and Catboy Additions under its tag
+// "catboy extra", which left both outside Panther looks. New saves no longer take those names.
+if (!localStorage.getItem('caleb.migrated.groups1')) {
+  const moved: Record<string, string> = { 'all mods': 'Panther looks', 'catboy extra': 'Panther looks' }
+  const list = readLoadouts()
+  if (list.some(l => l.label in moved)) localStorage.setItem(STORAGE, JSON.stringify(list.map(l => (l.label in moved ? { ...l, label: moved[l.label] } : l))))
+  localStorage.setItem('caleb.migrated.groups1', '1')
+}
+
 export const patchLoadout = (id: string, patch: Partial<Loadout>) =>
   writeLoadouts(readLoadouts().map(l => (l.id === id ? { ...l, ...patch } : l)))
 /** Removes the loadout and returns a function that puts it back in the same spot. Its image or video stays stored

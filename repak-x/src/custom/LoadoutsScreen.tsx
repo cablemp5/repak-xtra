@@ -29,6 +29,7 @@ function topHero(keys: string[], byKey: Map<string, Mod>, details: LoadoutProps[
     let hero = mod && details?.[mod.path]?.character_name
     if (!hero) continue
     if (hero.startsWith('Multiple Heroes')) hero = 'Multiple heroes'
+    hero = hero.split(' - ')[0] // the backend names skin-specific mods "Hero - Skin"; group by the hero
     counts.set(hero, (counts.get(hero) ?? 0) + 1)
   }
   return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0]
