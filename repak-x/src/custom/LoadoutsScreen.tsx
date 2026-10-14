@@ -8,7 +8,7 @@ import { ChevronDown, Download, ImageOff, ImagePlus, Info, Plus, RefreshCw, Tras
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, runChanges } from './Loadouts'
 import { isTyping } from './hotkeys'
-import { ModName, plural } from './modName'
+import { ModName, plural, typeCode } from './modName'
 import { hasPreview, usePreviewUrl, usePreviewVersion } from './previews'
 import { deleteMedia, prepareMedia, putMedia, useMediaUrl } from './loadoutMedia'
 import {
@@ -211,7 +211,11 @@ export default function LoadoutsScreen(p: LoadoutProps) {
         const types = [...new Set(p.mods.map(m => p.modDetails?.[m.path]?.category).filter((c): c is string => Boolean(c)))].sort()
         return (
           <div className="lo-legend" aria-label="Dot legend">
-            {types.map(t => <span key={t} className="lo-legend-item"><span className={`lo-mod-dot is-filled ${typeClass(t)}`} />{t}</span>)}
+            {types.map(t => (
+              <span key={t} className={`lo-legend-item ${typeClass(t)}`}>
+                <span className="lo-mod-dot is-filled" /><span className="type-code">{typeCode(t)}</span>{t}
+              </span>
+            ))}
             <span className="lo-legend-sep" />
             <span className="lo-legend-item"><span className="lo-mod-dot is-filled" />On now</span>
             <span className="lo-legend-item"><span className="lo-mod-dot" />Off now</span>
@@ -287,6 +291,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                             <li key={key} className={mod ? (mod.enabled ? 'is-on' : '') : 'lo-mod-missing'}
                               title={mod ? `${p.modDetails?.[mod.path]?.category ?? 'Unknown type'} · ${mod.enabled ? 'on now' : 'off now'}` : 'Not installed anymore'}>
                               <span className={`lo-mod-dot ${mod?.enabled ? 'is-filled' : ''} ${typeClass(mod && p.modDetails?.[mod.path]?.category)}`} />
+                              <span className={`type-code ${typeClass(mod && p.modDetails?.[mod.path]?.category)}`}>{typeCode(mod && p.modDetails?.[mod.path]?.category)}</span>
                               <span className="lo-mod-name"><ModName name={key} /></span>
                               <button type="button" className="lo-icon lo-mod-remove" title={`Remove ${key} from ${l.name}`}
                                 onClick={() => removeModFromLoadout(l, key)}>
@@ -306,6 +311,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                               <li key={k}>
                                 <button type="button" onClick={() => add(k)} title={k}>
                                   <span className={`lo-mod-dot is-filled ${typeClass(p.modDetails?.[byKey.get(k)!.path]?.category)}`} />
+                                  <span className={`type-code ${typeClass(p.modDetails?.[byKey.get(k)!.path]?.category)}`}>{typeCode(p.modDetails?.[byKey.get(k)!.path]?.category)}</span>
                                   <span className="lo-match-name"><ModName name={k} /></span>
                                   <Plus size={13} />
                                 </button>

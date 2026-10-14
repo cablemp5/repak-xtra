@@ -930,3 +930,20 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 @container bulkbar (max-width: 720px) {
   .bulk-btn-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
+
+/* ---------- mod type colors: six hue families, far apart in hue AND lightness (OKLCH), so no two read as twins; the
+   short mono codes in custom/modName.tsx carry the type without color. Related types share a family on purpose
+   (Mesh / Static mesh, Material / Texture). Galacta is a compatibility flag, not a type: neutral, never the accent. ---------- */
+.mesh-badge, .static-mesh-badge { --badge-dot: oklch(0.80 0.12 210); }
+.animation-badge { --badge-dot: oklch(0.82 0.17 140); }
+.material-badge, .texture-badge, .retexture-badge { --badge-dot: oklch(0.88 0.14 95); }
+.vfx-badge { --badge-dot: oklch(0.72 0.16 50); }
+.ui-badge { --badge-dot: oklch(0.72 0.18 340); }
+.audio-badge { --badge-dot: oklch(0.68 0.15 290); }
+.blueprint-badge, .data-badge, .movies-badge, .unknown-badge { --badge-dot: oklch(0.70 0.02 260); }
+.project-galacta-badge { --badge-dot: oklch(0.92 0 0); }
+.type-code {
+  flex: none; font: 600 9.5px/1 var(--font-mono); letter-spacing: 0.04em;
+  color: var(--badge-dot, var(--text-secondary)); min-width: 3ch;
+}
+.lo-legend-item .type-code { min-width: 0; }
