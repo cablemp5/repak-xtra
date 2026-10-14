@@ -7,7 +7,13 @@ export default defineConfig({
   define: {
     '__APP_VERSION__': JSON.stringify(packageJson.version),
   },
-  plugins: [lucideSwap(), react()],
+  plugins: [
+    lucideSwap(),
+    // caleb fork: the browser-preview mock (src/dev) is empty in the app's build, so none of its local fixtures and
+    // preview PNGs get bundled
+    { name: 'drop-dev-mock', apply: 'build', enforce: 'pre', load: (id: string) => (/[\/]src[\/]dev[\/]mockBackend\.ts$/.test(id) ? 'export {}' : null) },
+    react(),
+  ],
   clearScreen: false,
   server: {
     port: 5173,

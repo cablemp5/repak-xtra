@@ -12,11 +12,13 @@ const data: any = Object.values(fixtures)[0] ?? {
 }
 
 let sigeonState = 'off'
-const previewUrls: Record<string, string> = import.meta.env.DEV
-  ? import.meta.glob('./previews.local/*.png', { eager: true, query: '?url', import: 'default' })
+// Lazy loaders, not eager imports: the app's production build drops this dev-only branch with them (eager ones copied
+// every local preview PNG into the app's assets)
+const previewUrls: Record<string, () => Promise<string>> = import.meta.env.DEV
+  ? import.meta.glob<string>('./previews.local/*.png', { query: '?url', import: 'default' })
   : {}
-const previewCovers: Record<string, { covers?: string[] }> = import.meta.env.DEV
-  ? import.meta.glob('./previews.local/*.json', { eager: true, import: 'default' })
+const previewCovers: Record<string, () => Promise<{ covers?: string[] }>> = import.meta.env.DEV
+  ? import.meta.glob<{ covers?: string[] }>('./previews.local/*.json', { import: 'default' })
   : {}
 
 if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
@@ -42,13 +44,13 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'list_mod_previews': // copies of %APPDATA%\Repak-X\previews in src/dev/previews.local
         return Object.keys(previewUrls).map(f => f.replace(/^.*\/|\.png$/g, ''))
       case 'get_mod_preview':
-        return fetch(previewUrls[`./previews.local/${args?.key}.png`]).then(r => r.arrayBuffer())
+        return previewUrls[`./previews.local/${args?.key}.png`]().then(url => fetch(url)).then(r => r.arrayBuffer())
       case 'generate_mod_previews': // pretend run: each job reports back as already rendered
         ;(args?.jobs ?? []).forEach(([, key]: [string, string], i: number) => setTimeout(() => emit('mod-preview-ready', key), 600 * (i + 1)))
         setTimeout(() => emit('mod-previews-done', true), 600 * ((args?.jobs ?? []).length + 1))
         return true
       case 'cancel_mod_previews': return null
-      case 'get_preview_covers': return previewCovers[`./previews.local/${args?.key}.json`]?.covers ?? []
+      case 'get_preview_covers': return previewCovers[`./previews.local/${args?.key}.json`]?.().then(c => c?.covers ?? []) ?? []
       case 'get_hero_image':
         return fetch(`/src/dev/heroes.local/${args?.id}.png`).then(r => r.arrayBuffer()).then(b => new Uint8Array(b))
       case 'get_app_version': return __APP_VERSION__
