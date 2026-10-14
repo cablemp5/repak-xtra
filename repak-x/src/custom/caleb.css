@@ -25,7 +25,7 @@
   --field-bg: rgba(255, 255, 255, 0.04);
   --mod-size-color: #8f8f8f;
   --mod-switch-track: rgba(255, 255, 255, 0.12);
-  --danger: #e5484d;
+  --danger: #e6e6e6;   /* no red in this app: destructive actions are marked by icon and label, not hue */
   --quiet-hover: rgba(255, 255, 255, 0.04);
   --quiet-active: rgba(255, 255, 255, 0.07);
   --quiet-radius: 8px;
@@ -266,7 +266,9 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 .btn-ghost:hover { background: var(--quiet-hover) !important; border-color: rgba(255, 255, 255, 0.14) !important; }
 .btn-ghost.active { background: var(--quiet-active) !important; }
 .center-header .header-actions svg { color: var(--text-secondary) !important; }
-.btn-ghost.danger:hover { border-color: var(--danger) !important; color: var(--danger); }
+.btn-ghost.danger { color: var(--text-primary) !important; border-color: var(--panel-border) !important; }
+.btn-ghost.danger:hover { background: var(--quiet-hover) !important; border-color: rgba(255, 255, 255, 0.24) !important; color: var(--text-primary) !important; }
+.btn-ghost.danger .danger-bg, .context-menu-item.danger .danger-bg { background: rgba(255, 255, 255, 0.12) !important; opacity: 1 !important; }
 
 .mod-state-filter {
   display: inline-flex;
@@ -403,7 +405,7 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 }
 .context-menu-item { border-radius: 6px; }
 .context-menu-item:hover { background: var(--quiet-active) !important; color: var(--text-primary) !important; }
-.context-menu-item.danger { color: var(--danger) !important; }
+.context-menu-item.danger, .context-menu-item.danger span { color: var(--text-primary) !important; }
 .context-menu-separator { background: rgba(255, 255, 255, 0.07) !important; }
 
 .settings-modal, .modal-content {
@@ -712,7 +714,7 @@ html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { d
 .vfx-segment.active { background: var(--accent-primary) !important; animation: none !important; }
 .vfx-complete-header { background: transparent !important; border-bottom: 1px solid var(--panel-border) !important; }
 .vfx-logs-content { font-family: var(--font-mono) !important; font-size: 12px !important; }
-.vfx-log-entry.log-error { color: #e5484d !important; }
+.vfx-log-entry.log-error { color: var(--text-primary) !important; font-weight: 600; }
 .vfx-log-entry.log-warning { color: #f5a524 !important; }
 .vfx-log-entry.log-success { color: #46a758 !important; }
 .vfx-panel { background: transparent !important; border: none !important; box-shadow: none !important; }
@@ -885,3 +887,18 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 .lo-match-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lo-mod-matches button svg.lucide { opacity: 0; transition: opacity 0.12s ease; }
 .lo-mod-matches button:hover svg.lucide { opacity: 1; }
+
+/* ---------- critique 2026-10-14: readable off state, solid state color, no red, calm motion ---------- */
+/* Switches: off = visible track with a hairline and a gray thumb (was about 1.2:1); on = solid accent (upstream drew a gradient) */
+.repakx-switch-track { background: rgba(255, 255, 255, 0.14) !important; background-image: none !important; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22) !important; }
+.repakx-switch-thumb { background: #9a9a9a !important; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4) !important; }
+.repakx-switch.checked .repakx-switch-track { background: var(--accent-primary) !important; box-shadow: none !important; }
+.repakx-switch.checked .repakx-switch-thumb { background: #ffffff !important; }
+/* Checked checkboxes: solid accent, and the checkmark eases in instead of bouncing */
+.repakx-checkbox.checked .repakx-checkbox-box, .repakx-checkbox.indeterminate .repakx-checkbox-box {
+  background: var(--accent-primary) !important; background-image: none !important; border-color: var(--accent-primary) !important;
+}
+.repakx-checkbox-icon { transition: opacity 0.15s ease-out, transform 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important; }
+/* Game running badge: a state, shown in neutral text with its icon (was red with a red glow) */
+.game-running-indicator { background: var(--bg-light) !important; border-color: var(--panel-border) !important; box-shadow: none !important; }
+.game-running-indicator .running-text { color: var(--text-primary) !important; text-shadow: none !important; background: transparent !important; }
