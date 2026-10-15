@@ -48,6 +48,11 @@ $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path ([Environ
 $lnk.TargetPath = $exe
 $lnk.WorkingDirectory = Split-Path $exe
 $lnk.IconLocation = "$exe,0"
+if ($Test) {
+    # a green x on the desktop shortcut tells the test copy from the stable one (the exe's own icon stays blue)
+    Copy-Item repak-x\icons\RepakIconTest.ico $out -Force
+    $lnk.IconLocation = (Resolve-Path "$out\RepakIconTest.ico").Path
+}
 $lnk.Save()
 Write-Host "Built: $out\REPAK-X.exe (desktop shortcut '$shortcut' updated)" -ForegroundColor Green
 if ($Test) { Write-Host 'The app runs one copy at a time: close the stable repakxtra before opening the test one, or you will just get the stable window.' -ForegroundColor Yellow }

@@ -1,6 +1,7 @@
 """repakxtra's app icon: the lowercase x from the title (Geist, weight 800) in its blue on a transparent background.
 Writes icons/RepakIcon.png (512) and icons/RepakIcon.ico (16 to 256), which tauri.conf.json bundles into the exe: the
-taskbar, the window and the desktop shortcut all show it. Run from repak-x/ with any Python that has Pillow:
+taskbar, the window and the desktop shortcut all show it. Also icons/RepakIconTest.ico, the same x in green: build.ps1 -Test
+puts it on the "repakxtra test" desktop shortcut so the two copies are told apart. Run from repak-x/ with any Python that has Pillow:
     python scripts/make-icon.py"""
 from pathlib import Path
 
@@ -9,10 +10,11 @@ from PIL import Image, ImageDraw, ImageFont
 HERE = Path(__file__).resolve().parents[1]
 FONT = HERE / "src" / "custom" / "fonts" / "Geist-Variable.ttf"
 BLUE = (0x34, 0x6B, 0xF1, 255)   # the title's x (--accent-primary)
+GREEN = (0x3F, 0xB9, 0x50, 255)   # the test copy's x
 FILL = 0.86                      # the glyph's share of the square: big enough to read at 16 px
 
 
-def render(size=1024):
+def render(size=1024, tint=BLUE):
     font = ImageFont.truetype(str(FONT), size)
     font.set_variation_by_axes([800])   # the title's weight
     probe = Image.new("L", (size * 2, size * 2), 0)
@@ -21,7 +23,7 @@ def render(size=1024):
     k = FILL * size / max(glyph.size)
     glyph = glyph.resize((round(glyph.width * k), round(glyph.height * k)), Image.LANCZOS)
     icon = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    color = Image.new("RGBA", glyph.size, BLUE)
+    color = Image.new("RGBA", glyph.size, tint)
     icon.paste(color, ((size - glyph.width) // 2, (size - glyph.height) // 2), glyph)
     return icon
 
@@ -31,6 +33,7 @@ if __name__ == "__main__":
     assert big.getpixel((0, 0))[3] == 0 and big.getpixel((512, 512))[:3] == BLUE[:3], "transparent corners, blue center"
     big.resize((512, 512), Image.LANCZOS).save(HERE / "icons" / "RepakIcon.png")
     big.save(HERE / "icons" / "RepakIcon.ico", sizes=[(s, s) for s in (16, 20, 24, 32, 40, 48, 64, 128, 256)])
+    render(tint=GREEN).save(HERE / "icons" / "RepakIconTest.ico", sizes=[(s, s) for s in (16, 20, 24, 32, 40, 48, 64, 128, 256)])
     # The same x inside the app: the splash image and ModularLogo's two masks (its accent-colored R layer draws the x
     # in the title's blue; the theme-colored X layer is left empty). RepakIcon-x256.png stays Repak X's own logo: the
     # Discord widget shows the original (Caleb, 2026-10-14)
@@ -40,4 +43,4 @@ if __name__ == "__main__":
     mask.putalpha(big.getchannel("A"))
     mask.resize((512, 512), Image.LANCZOS).save(art / "logomask_R.png")
     Image.new("RGBA", (512, 512), (0, 0, 0, 0)).save(art / "logomask_X.png")
-    print("wrote icons/RepakIcon.png, icons/RepakIcon.ico and the app's logo images in src/assets/app-icons")
+    print("wrote icons/RepakIcon.png, icons/RepakIcon.ico, icons/RepakIconTest.ico and the app's logo images in src/assets/app-icons")
