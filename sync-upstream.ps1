@@ -1,4 +1,4 @@
-# Merge the latest (or a given) official Repak-X release into the caleb branch.
+# Merge the latest (or a given) official Repak-X release into the caleb branch, through a pull request.
 # Usage: .\sync-upstream.ps1            -> newest X-zant release
 #        .\sync-upstream.ps1 v2.0.2     -> a specific tag
 param([string]$Tag)
@@ -15,9 +15,15 @@ Run { git checkout -- repak-x/gen/schemas }
 Run { git fetch upstream --tags --quiet }
 if (-not $Tag) { $Tag = gh release view -R X-zant/Repak-X --json tagName -q .tagName }
 if (-not $Tag) { throw 'No release tag: is gh logged in and online? Or pass one: .\sync-upstream.ps1 v2.0.2' }
-Write-Host "Merging upstream release $Tag into caleb"
+# caleb is protected (changes land through a pull request with green checks): the merge happens on sync/<tag> and
+# goes up as a PR. Running the script again after fixing conflicts picks up the same branch and finishes.
+$branch = "sync/$Tag"
+Write-Host "Merging upstream release $Tag on $branch"
 
 Run { git checkout caleb }
+Run { git pull --ff-only origin caleb }
+git rev-parse --verify --quiet "refs/heads/$branch" | Out-Null
+if ($LASTEXITCODE -eq 0) { Run { git checkout $branch } } else { Run { git checkout -b $branch } }
 git merge --no-edit $Tag
 if ($LASTEXITCODE -ne 0) {
     Write-Host 'Conflicts in:' -ForegroundColor Yellow
@@ -27,6 +33,13 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 git submodule update --init --recursive
-git push origin caleb
-git push origin "refs/remotes/upstream/main:refs/heads/main"   # keep the fork's main an exact mirror
-Write-Host "Done: caleb now includes $Tag. Rebuild with .\build.ps1" -ForegroundColor Green
+Run { git push -u origin $branch }
+$pr = gh pr list -R cablemp5/repak-xtra --head $branch --json url -q '.[0].url'
+if (-not $pr) {
+    $pr = gh pr create -R cablemp5/repak-xtra --base caleb --head $branch --title "Sync upstream Repak-X $Tag" --body "Merges the official Repak-X release $Tag into caleb (made by sync-upstream.ps1). Merge it with **Create a merge commit**, not squash, so git keeps $Tag's history and the next sync only brings what is new."
+    if ($LASTEXITCODE -ne 0) { throw 'Could not open the pull request' }
+}
+Run { git push origin "refs/remotes/upstream/main:refs/heads/main" }   # keep the fork's main an exact mirror
+Run { git checkout caleb }
+Write-Host "Pull request: $pr" -ForegroundColor Green
+Write-Host 'When its checks pass, merge it with "Create a merge commit" (not squash), then: git pull; .\build.ps1' -ForegroundColor Green
