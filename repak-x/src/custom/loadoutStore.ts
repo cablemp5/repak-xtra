@@ -83,27 +83,31 @@ const normKey = (key: string) => key.replace(/(_\d+_P)+$/i, '')
 export const modKey = (path: string) =>
   normKey((path.split(/[/\\]/).pop() || path).replace(/(\.pak)?(\.bak_repak|\.pak_disabled)?$/i, '').replace(/_disabled$/i, ''))
 
+/** Mods a loadout may hold: not the Project Galacta loader, which every Galacta mod needs on (a loadout switching it
+ *  off would break all the others; Caleb, 2026-10-14). */
+export const loadoutable = (key: string) => !/^!?projectgalacta$/i.test(normKey(key))
+
 /** Stored keys normalized, so loadouts saved before the suffix was dropped still match. */
 const keySet = (keys: string[]) => new Set(keys.map(normKey))
 
 export const snapshotLoadout = (base: Pick<Loadout, 'id' | 'name'> & Partial<Loadout>, scopeMods: Mod[], label = 'Other'): Loadout => ({
   ...base,
   label: base.label ?? label, // overwriting keeps the group; the filter text ("all mods") is not a group name
-  scope: scopeMods.map(m => modKey(m.path)),
-  on: scopeMods.filter(m => m.enabled).map(m => modKey(m.path)),
+  scope: scopeMods.map(m => modKey(m.path)).filter(loadoutable),
+  on: scopeMods.filter(m => m.enabled).map(m => modKey(m.path)).filter(loadoutable),
 })
 
 /** Mods to switch so the loadout is on: its own mods that are off. Nothing else changes: other mods and other loadouts
  *  stay as they are (Caleb, 2026-10-14; the scope is still saved, unused while loadouts are independent). */
 export const changesToTurnOn = (l: Loadout, mods: Mod[]) => {
   const on = keySet(l.on)
-  return mods.filter(m => on.has(modKey(m.path)) && !m.enabled)
+  return mods.filter(m => on.has(modKey(m.path)) && loadoutable(modKey(m.path)) && !m.enabled)
 }
 
 /** Mods to flip so the loadout is off: its own mods that are currently on. */
 export const changesToTurnOff = (l: Loadout, mods: Mod[]) => {
   const on = keySet(l.on)
-  return mods.filter(m => on.has(modKey(m.path)) && m.enabled)
+  return mods.filter(m => on.has(modKey(m.path)) && loadoutable(modKey(m.path)) && m.enabled)
 }
 
 /** On = every one of its installed mods is on (other mods may be on too). */
@@ -115,7 +119,7 @@ export const isActive = (l: Loadout, mods: Mod[]) => {
 
 /** The loadout's on list and scope with these mods added (normalized, each once). Pure. */
 export const withMods = (l: Pick<Loadout, 'on' | 'scope'>, keys: string[]) => {
-  const add = [...new Set(keys.map(normKey))]
+  const add = [...new Set(keys.map(normKey))].filter(loadoutable)
   const on = keySet(l.on), scope = keySet(l.scope)
   return { on: [...l.on, ...add.filter(k => !on.has(k))], scope: [...l.scope, ...add.filter(k => !scope.has(k))] }
 }
@@ -310,4 +314,10 @@ if (import.meta.env.DEV) {
   console.assert(w.on.join() === 'A,B,C' && w.scope.join() === 'A,B,C', `withMods: ${w.on} / ${w.scope}`)
   console.assert(sameMembership(L(['A', 'B_9999999_P', 'A']), L(['B', 'A'])), 'sameMembership order/suffix/duplicates')
   console.assert(!sameMembership(L(['A']), L(['A', 'C'])) && !sameMembership(L(['A'], ['A']), L(['A'], ['A', 'C'])), 'sameMembership differs')
+}
+
+if (import.meta.env.DEV) {
+  // The Galacta loader never joins a loadout, whichever way it is added
+  console.assert(!loadoutable('!ProjectGalacta_9999999_P') && loadoutable('galactic claw mane proj galacta swappable'), 'loadoutable')
+  console.assert(withMods({ on: [], scope: [] }, ['!ProjectGalacta', 'A']).on.join() === 'A', 'withMods skips the Galacta loader')
 }

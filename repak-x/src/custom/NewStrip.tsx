@@ -11,7 +11,7 @@ import type { LoadoutProps } from './Loadouts'
 import { ModRow } from './loadoutBits'
 import { Num } from './motion'
 import {
-  type Loadout, type Mod, addModToLoadout, displayName, flipMods, modKey, olderVersionIn, patchLoadout, readLoadouts,
+  type Loadout, type Mod, addModToLoadout, displayName, flipMods, loadoutable, modKey, olderVersionIn, patchLoadout, readLoadouts,
   replaceInLoadout, sameMembership, useLoadouts, versionOf,
 } from './loadoutStore'
 
@@ -30,7 +30,7 @@ export default function NewStrip(p: LoadoutProps) {
     .sort((a, b) => (b.modified_date ?? 0) - (a.modified_date ?? 0))
     .filter(m => {
       const k = modKey(m.path)
-      if (ageSeconds(m) > WEEK || seen.has(k) || (inAny.has(k) && !loadouts.some(l => olderVersionIn(l, k)))) return false
+      if (!loadoutable(k) || ageSeconds(m) > WEEK || seen.has(k) || (inAny.has(k) && !loadouts.some(l => olderVersionIn(l, k)))) return false
       seen.add(k)
       return true
     })

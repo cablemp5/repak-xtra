@@ -8,7 +8,7 @@ import { type LoadoutProps, deleteWithUndo, overwriteWithUndo } from './Loadouts
 import { CardMedia, ModRow, typeClass } from './loadoutBits'
 import { deleteMedia } from './loadoutMedia'
 import CustomDropdown from '../components/CustomDropdown'
-import { type Loadout, OTHER, addGroup, addModToLoadout, displayName, duplicateLoadout, groupKey, setLoadoutGroup, useGroups, isActive, modKey, openLoadout, patchLoadout, readLoadouts, removeModFromLoadout } from './loadoutStore'
+import { type Loadout, OTHER, loadoutable, addGroup, addModToLoadout, displayName, duplicateLoadout, groupKey, setLoadoutGroup, useGroups, isActive, modKey, openLoadout, patchLoadout, readLoadouts, removeModFromLoadout } from './loadoutStore'
 import { plural } from './modName'
 import { Num, SwapText } from './motion'
 import { GeneratePreviewsButton, previewSetKey } from './previews'
@@ -37,7 +37,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia 
   const inLoadout = new Set(mine)
   const categoryOf = (k: string) => { const m = byKey.get(k); return (m && p.modDetails?.[m.path]?.category) || 'Unknown' }
   const age = (k: string) => byKey.get(k)?.modified_date ?? 0
-  const others = [...byKey.keys()].filter(k => !inLoadout.has(k))
+  const others = [...byKey.keys()].filter(k => !inLoadout.has(k) && loadoutable(k))
     .sort((a, b) => (sort === 'newest' ? age(b) - age(a) : 0) || a.localeCompare(b))
   const missing = mine.filter(k => !byKey.has(k))
   const types = [...new Set(others.map(categoryOf))].sort()
