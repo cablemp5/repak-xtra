@@ -152,6 +152,11 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       }
       case 'cancel_mod_previews': return null
       case 'previews_available': return localStorage.getItem('mock.noPreviews') !== '1'
+      case 'preview_kit_status': return { version: localStorage.getItem('mock.kit'), dev: localStorage.getItem('mock.noPreviews') !== '1', blender: 'C:\\Program Files\\Blender Foundation\\Blender 5.2\\blender.exe' }
+      case 'preview_kit_latest': return { version: '1', published: '2026-10-15T12:00:00Z', notes: '## First kit\n- Python, the generator and its tools', url: 'https://github.com/cablemp5/repak-xtra/releases', asset: '', size: 150000000 }
+      case 'preview_kit_install': localStorage.setItem('mock.kit', '1'); return '1'
+      case 'preview_kit_remove': localStorage.removeItem('mock.kit'); return null
+      case 'preview_kit_set_blender': return args?.path ?? null
       case 'get_preview_covers':
         return later(setCovers.get(args?.key) ?? previewCovers[`./previews.local/${args?.key}.json`]?.()
           .then(c => ({ covers: c?.covers ?? [], members: c?.members ?? null })) ?? { covers: [], members: null })

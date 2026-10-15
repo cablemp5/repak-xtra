@@ -7,6 +7,7 @@ mod asset_explorer;
 mod caleb_classify; // caleb fork: extra mod types, Project Galacta check
 mod caleb_sigeon; // caleb fork: Sigeon V2 switch
 mod caleb_setup; // caleb fork: Setup panel (signature bypass, Project Galacta)
+mod caleb_kit; // caleb fork: preview kit (previews on other PCs)
 mod caleb_previews; // caleb fork: generated mod previews
 mod caleb_trash; // caleb fork: undoable delete
 mod character_data;
@@ -8688,6 +8689,11 @@ fn main() {
             caleb_previews::get_preview_covers,
             caleb_previews::generate_mod_previews,
             caleb_previews::previews_available, // caleb fork: hide Generate where there is no generator
+            caleb_kit::preview_kit_status, // caleb fork: preview kit in Setup
+            caleb_kit::preview_kit_latest,
+            caleb_kit::preview_kit_install,
+            caleb_kit::preview_kit_remove,
+            caleb_kit::preview_kit_set_blender,
             caleb_previews::cancel_mod_previews,
             caleb_sigeon::sigeon_status,
             caleb_sigeon::sigeon_set,

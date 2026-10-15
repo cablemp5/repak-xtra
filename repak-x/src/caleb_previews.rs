@@ -1,13 +1,14 @@
-//! caleb fork: generated mod previews. The generator lives in Caleb's modding tools
-//! (`tools\previews\mod_previews.py`, it needs Cue4Export and Blender from there) and writes one PNG per
-//! mod to %APPDATA%\Repak-X\previews\<mod key>.png. This module serves those files and runs the generator
-//! for the mods you pick (details panel button, or the selection bar's Previews button).
+//! caleb fork: generated mod previews. The generator (`mod_previews.py`, with Cue4Export and Blender) comes from the
+//! preview kit (caleb_kit.rs) or, on Caleb's PC, his modding tools, and writes one PNG per mod to
+//! %APPDATA%\Repak-X\previews\<mod key>.png. This module serves those files and runs the generator for the mods you
+//! pick (details panel button, the selection bar's Previews button, a loadout's Generate previews).
 
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::{AppHandle, Emitter};
+use std::sync::{Arc, Mutex};
+use tauri::{AppHandle, Emitter, State};
 
 static RUNNING: AtomicBool = AtomicBool::new(false);
 
@@ -20,12 +21,24 @@ fn modding_dir() -> PathBuf {
     dirs::home_dir().unwrap_or_default().join(r"Programming\Modding\Claude Assisted Mods")
 }
 
-/// The generator's python and script, when this PC has them (Caleb's; other PCs need the preview kit, not shipped yet).
-fn generator() -> Option<(PathBuf, PathBuf, PathBuf)> {
+/// Caleb's own generator: his modding folder's python and script (no kit needed on his PC).
+pub fn dev_generator() -> Option<(PathBuf, PathBuf, PathBuf)> {
     let root = modding_dir();
     let python = root.join(r".venv\Scripts\python.exe");
     let script = root.join(r"tools\previews\mod_previews.py");
     (python.exists() && script.exists()).then_some((root, python, script))
+}
+
+/// (folder to run in, python, script, kit?): an installed preview kit first, else Caleb's own generator.
+fn generator() -> Option<(PathBuf, PathBuf, PathBuf, bool)> {
+    if let Some(kit) = crate::caleb_kit::installed_kit() {
+        return Some((kit.clone(), kit.join(r"python\python.exe"), kit.join(r"previews\mod_previews.py"), true));
+    }
+    dev_generator().map(|(root, python, script)| (root, python, script, false))
+}
+
+pub fn is_running() -> bool {
+    RUNNING.load(Ordering::SeqCst)
 }
 
 /// Whether previews can be generated here; without it the app hides its Generate buttons and keeps showing previews it has.
@@ -100,13 +113,17 @@ fn parse_line(line: &str) -> Option<(&'static str, Option<String>)> {
 /// Unchanged mods and sets report their existing result without rendering; `force` (Regenerate) renders them anyway.
 /// The generator alone owns its lock and the cancel file (it clears a stale Stop once it holds the lock).
 #[tauri::command]
-pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: Option<String>, force: Option<bool>) -> Result<bool, String> {
+pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: Option<String>, force: Option<bool>, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<bool, String> {
     if let Some(bad) = jobs.iter().map(|(_, k)| k).chain(set.iter()).find(|k| !valid_key(k)) {
         return Err(format!("Invalid preview key: {bad}"));
     }
-    let Some((root, python, script)) = generator() else {
-        return Err("Previews need the preview kit, which is not installed on this PC.".into());
+    let Some((root, python, script, kit)) = generator() else {
+        return Err("Previews need the preview kit: install it in Setup.".into());
     };
+    if kit && crate::caleb_kit::blender().is_none() {
+        return Err("Previews need Blender: install it (blender.org), or pick blender.exe in Setup.".into());
+    }
+    let paks = state.lock().unwrap().game_path.parent().map(|p| p.to_path_buf());
     if RUNNING.swap(true, Ordering::SeqCst) {
         return Ok(false);
     }
@@ -135,6 +152,17 @@ pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: O
         .map(Stdio::from)
         .unwrap_or_else(|_| Stdio::null());
     cmd.current_dir(&root).env("PYTHONUTF8", "1").stdout(Stdio::piped()).stderr(log);
+    if kit {
+        // The kit's contract (tools\previews\build_kit.py): where the kit is, the game's Paks folder, a writable work
+        // folder for exports, caches and the lock, and Blender
+        cmd.env("REPAKXTRA_KIT", &root).env("REPAKXTRA_WORK", previews_dir().join("work"));
+        if let Some(p) = &paks {
+            cmd.env("REPAKXTRA_PAKS", p);
+        }
+        if let Some(b) = crate::caleb_kit::blender() {
+            cmd.env("REPAKXTRA_BLENDER", b);
+        }
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;

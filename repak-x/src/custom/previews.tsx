@@ -59,7 +59,9 @@ const subscribe = (l: () => void) => { listeners.add(l); return () => listeners.
 invoke<string[]>('list_mod_previews').then(keys => { keys.forEach(k => revs.set(k, 0)); notify() }).catch(() => undefined)
 // No generator on this PC (a friend's copy without the preview kit): Generate buttons stay hidden, existing previews still show
 let available = false
-invoke<boolean>('previews_available').then(v => { available = v; notify() }).catch(() => undefined)
+/** Asks the backend again (after the preview kit was installed or removed in Setup). */
+export const refreshPreviewsAvailable = () => invoke<boolean>('previews_available').then(v => { available = v; notify() }).catch(() => undefined)
+refreshPreviewsAvailable()
 export const usePreviewsAvailable = () => useSyncExternalStore(subscribe, () => available)
 listen<string>('mod-preview-ready', e => {
   dropCached(e.payload)

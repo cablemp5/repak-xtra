@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
 import { ChevronRight, Copy, ExternalLink, RefreshCw, ShieldCheck, Wrench } from 'lucide-react'
+import { open as pickFile } from '@tauri-apps/plugin-dialog'
+import { refreshPreviewsAvailable } from './previews'
 import Checkbox from '../components/ui/Checkbox'
 import CustomDropdown from '../components/CustomDropdown'
 import type { useAlert } from '../components/AlertHandler'
@@ -44,13 +46,15 @@ function Notes({ text }: { text: string }) {
   )
 }
 
-function Changelog({ g, title, onClose }: { g: Galacta; title: string; onClose: () => void }) {
+function Changelog({ g, title, onClose, product = 'Project Galacta' }: {
+  g: Pick<Galacta, 'latest' | 'published' | 'notes' | 'url'>; title: string; onClose: () => void; product?: string
+}) {
   return (
     <div className="modal-overlay su-changelog-overlay" onClick={e => { e.stopPropagation(); onClose() }}>
       <motion.div className="modal-content su-changelog" role="dialog" aria-label={title} onClick={e => e.stopPropagation()}
         initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}>
         <div className="modal-header">
-          <div><h2>{title}</h2><p className="su-sub">Project Galacta {g.latest} · {date(g.published)}</p></div>
+          <div><h2>{title}</h2><p className="su-sub">{product} {g.latest} · {date(g.published)}</p></div>
           <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
         <div className="modal-body">{g.notes?.trim() ? <Notes text={g.notes} /> : <p className="su-sub">This release has no notes.</p>}</div>
@@ -60,6 +64,88 @@ function Changelog({ g, title, onClose }: { g: Galacta; title: string; onClose: 
         </div>
       </motion.div>
     </div>
+  )
+}
+
+type KitStatus = { version: string | null; dev: boolean; blender: string | null }
+type KitRelease = { version: string; published: string; notes: string; url: string; asset: string; size: number }
+const BLENDER = 'https://www.blender.org/download/'
+
+/** The preview kit: what this PC needs to render mod previews (caleb_kit.rs). Blender comes from blender.org. */
+function PreviewKitCard({ alert }: { alert: Alert }) {
+  const [kit, setKit] = useState<KitStatus | null>(null)
+  const [latest, setLatest] = useState<KitRelease | null | undefined>(undefined)   // undefined: not checked yet
+  const [busy, setBusy] = useState<string | null>(null)
+  const [notes, setNotes] = useState<string | null>(null)
+  const status = () => invoke<KitStatus>('preview_kit_status').then(setKit).catch(e => alert.warning('Preview kit', String(e)))
+  useEffect(() => { status() }, [])
+  const run = async (what: string, f: () => Promise<unknown>) => {
+    setBusy(what)
+    try { await f() } catch (e) { alert.warning('Preview kit', String(e)) } finally { setBusy(null) }
+  }
+  const check = () => run('check', async () => {
+    const r = await invoke<KitRelease | null>('preview_kit_latest')
+    setLatest(r)
+    if (!r) alert.info('Preview kit', 'No preview kit has been published yet.')
+    else if (kit?.version === r.version) alert.success('Preview kit', `Up to date (v${r.version}).`)
+  })
+  const install = (file?: string) => run('install', async () => {
+    const was = kit?.version
+    const v = await invoke<string>('preview_kit_install', { file: file ?? null })
+    await status()
+    await refreshPreviewsAvailable()
+    alert.success('Preview kit', was ? `Updated to v${v}.` : `v${v} installed. Generate previews from a loadout or Loadouts.`)
+    if (!file && latest) setNotes(was ? `Updated to v${v}` : `Installed v${v}`)
+  })
+  const fromFile = async () => {
+    const f = await pickFile({ title: 'The preview kit zip', filters: [{ name: 'Preview kit', extensions: ['zip'] }] }).catch(() => null)
+    if (typeof f === 'string') install(f)
+  }
+  const remove = () => run('remove', async () => {
+    await invoke('preview_kit_remove')
+    await status()
+    await refreshPreviewsAvailable()
+    alert.info('Preview kit', 'Removed. Previews already made stay.')
+  })
+  const pickBlender = async () => {
+    const f = await pickFile({ title: 'blender.exe', filters: [{ name: 'Blender', extensions: ['exe'] }] }).catch(() => null)
+    if (typeof f !== 'string') return
+    try { await invoke('preview_kit_set_blender', { path: f }); await status() } catch (e) { alert.warning('Blender', String(e)) }
+  }
+  const update = latest && kit?.version && latest.version !== kit.version
+  const chip = !kit ? 'Checking…' : kit.version ? (update ? 'Update available' : `Kit v${kit.version}`) : kit.dev ? 'Built in' : 'Not installed'
+  return (
+    <section className="su-card">
+      <div className="su-card-head">
+        <div>
+          <h3>Mod previews</h3>
+          <p>Renders a picture of each mod and loadout. Needs the preview kit (a one-time download) and Blender, which is free.</p>
+        </div>
+        <span className={`su-chip ${update ? 'is-update' : kit?.version || kit?.dev ? 'is-installed' : 'is-missing'}`}>{chip}</span>
+      </div>
+      <p className="su-meta">
+        {kit?.blender
+          ? <>Blender: <code>{kit.blender.replace(/^.*[\\/](Blender[^\\/]*)[\\/]blender\.exe$/i, '$1')}</code> · <a onClick={pickBlender}>Use another</a></>
+          : <>Blender not found · <a onClick={() => open(BLENDER)}>Download Blender</a> · <a onClick={pickBlender}>Pick blender.exe</a></>}
+        {latest && <> · Latest kit v{latest.version}, {date(latest.published)} · <a onClick={() => setNotes("What's new")}>What's new</a></>}
+      </p>
+      {kit?.dev && !kit.version && <p className="su-note">This PC has the generator built in, so it needs no kit. Installing one uses the kit instead (to test it).</p>}
+      <div className="su-actions">
+        {(!kit?.version || update) && (
+          <button type="button" className="btn-primary su-main" disabled={Boolean(busy) || latest === null} onClick={() => install()}
+            title={latest === null ? 'No preview kit has been published yet' : 'Downloads the kit from GitHub'}>
+            {busy === 'install' ? 'Installing…' : update ? `Update to v${latest!.version}` : 'Install kit'}
+          </button>
+        )}
+        <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={fromFile}>Install from file…</button>
+        <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={check}>
+          <RefreshCw size={14} className={busy === 'check' ? 'su-spin' : ''} /> {busy === 'check' ? 'Checking…' : 'Check for updates'}
+        </button>
+        {kit?.version && <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={remove}>Remove</button>}
+      </div>
+      {notes && latest && <Changelog product="Preview kit" g={{ latest: `v${latest.version}`, published: latest.published, notes: latest.notes, url: latest.url }}
+        title={notes} onClose={() => setNotes(null)} />}
+    </section>
   )
 }
 
@@ -219,6 +305,8 @@ export function SetupPanel({ alert, onClose, start }: { alert: Alert; onClose: (
               </Checkbox>
             </div>
           </section>
+
+          <PreviewKitCard alert={alert} />
         </div>
         {notes && g && <Changelog g={g} title={notes} onClose={() => setNotes(null)} />}
       </motion.div>
