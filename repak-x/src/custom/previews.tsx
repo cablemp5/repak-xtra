@@ -57,6 +57,10 @@ const notify = () => { version++; listeners.forEach(l => l()) }
 const subscribe = (l: () => void) => { listeners.add(l); return () => listeners.delete(l) }
 
 invoke<string[]>('list_mod_previews').then(keys => { keys.forEach(k => revs.set(k, 0)); notify() }).catch(() => undefined)
+// No generator on this PC (a friend's copy without the preview kit): Generate buttons stay hidden, existing previews still show
+let available = false
+invoke<boolean>('previews_available').then(v => { available = v; notify() }).catch(() => undefined)
+export const usePreviewsAvailable = () => useSyncExternalStore(subscribe, () => available)
 listen<string>('mod-preview-ready', e => {
   dropCached(e.payload)
   revs.set(e.payload, (revs.get(e.payload) ?? 0) + 1)
@@ -308,6 +312,7 @@ const ask = async (alert: ReturnType<typeof useAlert>, job: Job) => {
 /** Preview block for the mod details panel: the image (if any) and a Generate / Regenerate button. */
 export function ModPreview({ path }: { path: string }) {
   const alert = useAlert()
+  const canGenerate = usePreviewsAvailable()
   const key = modKey(path)
   const url = usePreviewUrl(key)
   const id = jobId({ paths: [path] })
@@ -319,7 +324,7 @@ export function ModPreview({ path }: { path: string }) {
       {url && (
         <div className="mod-preview-frame"><img src={url} alt="Generated preview" onLoad={revealOnLoad} /></div>
       )}
-      <div className="mod-preview-bar">
+      {canGenerate && <div className="mod-preview-bar">
         <button type="button" className="mod-preview-btn" disabled={busy}
           onClick={() => (queued ? unqueue(id) : ask(alert, { paths: [path], name: key, force: Boolean(url) }))}
           title={queued ? 'Remove from the preview queue' : running() ? `Queue it: previews for ${run.name} are generating` : 'Render this mod on its character in the lobby look (about 10 to 40 seconds)'}>
@@ -328,7 +333,7 @@ export function ModPreview({ path }: { path: string }) {
         </button>
         {running() && !busy && <span className="mod-preview-note">Generating <Shimmer text={progressText()} /></span>}
         {!running() && message && <span className="mod-preview-note">{message}</span>}
-      </div>
+      </div>}
     </div>
   )
 }
@@ -341,11 +346,13 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
 }) {
   usePreviewVersion()
   const alert = useAlert()
+  const canGenerate = usePreviewsAvailable()
   const n = new Set(paths.map(modKey)).size
   // A loadout that already has its preview: the button renders it again, even when nothing changed
   const again = Boolean(set && (hasPreview(set) || paths.some(p => hasPreview(modKey(p)))))
   const job: Job = { paths, set, name: name ?? `${n} selected mod${n === 1 ? '' : 's'}`, force: again }
   const text = again ? label.replace(/^Generate/, 'Regenerate') : label
+  if (!canGenerate) return null
   const id = jobId(job)
   if (running() && run.id === id) {
     return (

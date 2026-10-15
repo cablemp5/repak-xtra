@@ -151,6 +151,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         return true
       }
       case 'cancel_mod_previews': return null
+      case 'previews_available': return localStorage.getItem('mock.noPreviews') !== '1'
       case 'get_preview_covers':
         return later(setCovers.get(args?.key) ?? previewCovers[`./previews.local/${args?.key}.json`]?.()
           .then(c => ({ covers: c?.covers ?? [], members: c?.members ?? null })) ?? { covers: [], members: null })

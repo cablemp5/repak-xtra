@@ -12,7 +12,7 @@ import { CardMedia } from './loadoutBits'
 import { prepareMedia, putMedia } from './loadoutMedia'
 import { plural } from './modName'
 import { Num } from './motion'
-import { dismissPreviewSummary, generateAllLoadouts, loadoutHasPreview, stopPreviews, usePreviewBatch, usePreviewSummary, usePreviewVersion } from './previews'
+import { dismissPreviewSummary, generateAllLoadouts, loadoutHasPreview, stopPreviews, usePreviewsAvailable, usePreviewBatch, usePreviewSummary, usePreviewVersion } from './previews'
 import {
   type Loadout, type Mod, OTHER, addGroup, changesToTurnOff, changesToTurnOn, deleteGroup, displayName, groupKey,
   inGroup, isActive, modKey, moveGroup, nextLoadoutName, openLoadout, patchLoadout, readLoadouts, renameGroup,
@@ -111,6 +111,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   const setGroupBy = (g: GroupBy) => { localStorage.setItem(GROUP_BY_KEY, g); setGroupByState(g) }
   const fileRef = useRef<HTMLInputElement>(null)
   const [genMenu, setGenMenu] = useState(false)
+  const canGenerate = usePreviewsAvailable()
   const genRef = useRef<HTMLDivElement>(null)
   usePreviewVersion()
   const mediaTarget = useRef<string | null>(null)
@@ -262,7 +263,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
           <button type="button" className="lo-text-btn" onClick={newGroup} title="A new group to sort loadouts into (drag cards onto it)">
             <FolderPlus size={14} /> New group
           </button>
-          <div className="lo-gen" ref={genRef}>
+          {canGenerate && <div className="lo-gen" ref={genRef}>
             <button type="button" className="lo-text-btn" disabled={loadouts.length === 0} aria-haspopup={withPreview > 0 ? 'menu' : undefined}
               aria-expanded={withPreview > 0 ? genMenu : undefined}
               title="Render a preview for every loadout, one after another (each card shows its progress)"
@@ -279,7 +280,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                 </button>
               </div>
             )}
-          </div>
+          </div>}
           <div className="mod-state-filter lo-groupby" role="group" aria-label="Group loadouts by">
             <button type="button" aria-pressed={groupBy === 'group'} onClick={() => setGroupBy('group')}>Group</button>
             <button type="button" aria-pressed={groupBy === 'hero'} onClick={() => setGroupBy('hero')}>Hero</button>
@@ -342,7 +343,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                     onKeyDown={e => { if (e.key === 'F2' && !isTyping(e.target)) { e.preventDefault(); setDraft(l.name); setRenaming(l.id) } }}
                     onMouseEnter={() => { hovered.current = l.id }} onMouseLeave={() => { if (hovered.current === l.id) hovered.current = null }}>
                     <CardMedia p={p} l={l} onClick={() => setOpenId(l.id)} title={`Open ${l.name}`}
-                      emptyText="No preview yet. Open it to generate one, or hover and paste an image." />
+                      emptyText={canGenerate ? 'No preview yet. Open it to generate one, or hover and paste an image.' : 'No picture yet. Hover and paste an image, or open it to add one.'} />
                     <div className="lo-card-body">
                       <div className="lo-card-title">
                         {renaming === l.id ? (

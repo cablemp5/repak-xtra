@@ -8687,6 +8687,7 @@ fn main() {
             caleb_previews::get_mod_preview,
             caleb_previews::get_preview_covers,
             caleb_previews::generate_mod_previews,
+            caleb_previews::previews_available, // caleb fork: hide Generate where there is no generator
             caleb_previews::cancel_mod_previews,
             caleb_sigeon::sigeon_status,
             caleb_sigeon::sigeon_set,

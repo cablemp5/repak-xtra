@@ -20,6 +20,20 @@ fn modding_dir() -> PathBuf {
     dirs::home_dir().unwrap_or_default().join(r"Programming\Modding\Claude Assisted Mods")
 }
 
+/// The generator's python and script, when this PC has them (Caleb's; other PCs need the preview kit, not shipped yet).
+fn generator() -> Option<(PathBuf, PathBuf, PathBuf)> {
+    let root = modding_dir();
+    let python = root.join(r".venv\Scripts\python.exe");
+    let script = root.join(r"tools\previews\mod_previews.py");
+    (python.exists() && script.exists()).then_some((root, python, script))
+}
+
+/// Whether previews can be generated here; without it the app hides its Generate buttons and keeps showing previews it has.
+#[tauri::command]
+pub fn previews_available() -> bool {
+    generator().is_some()
+}
+
 /// A mod key is a bare file stem from the frontend: never let it leave the previews folder.
 fn valid_key(key: &str) -> bool {
     !key.is_empty() && !key.contains(['/', '\\', ':']) && !key.contains("..")
@@ -90,12 +104,9 @@ pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: O
     if let Some(bad) = jobs.iter().map(|(_, k)| k).chain(set.iter()).find(|k| !valid_key(k)) {
         return Err(format!("Invalid preview key: {bad}"));
     }
-    let root = modding_dir();
-    let python = root.join(r".venv\Scripts\python.exe");
-    let script = root.join(r"tools\previews\mod_previews.py");
-    if !python.exists() || !script.exists() {
-        return Err(format!("Preview generator not found at {}", script.display()));
-    }
+    let Some((root, python, script)) = generator() else {
+        return Err("Previews need the preview kit, which is not installed on this PC.".into());
+    };
     if RUNNING.swap(true, Ordering::SeqCst) {
         return Ok(false);
     }
