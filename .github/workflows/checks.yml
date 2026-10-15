@@ -1,12 +1,12 @@
-# repakxtra: the checks every pull request into caleb must pass before it can merge (typecheck, frontend build,
-# Rust tests). Also runs on pushes to caleb so the branch's own state stays visible.
+# repakxtra: the checks every pull request into main must pass before it can merge (typecheck, frontend build,
+# Rust tests). Also runs on pushes to main so the branch's own state stays visible.
 name: Checks
 
 on:
   pull_request:
-    branches: [caleb]
+    branches: [main]
   push:
-    branches: [caleb]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
