@@ -12,3 +12,7 @@
 *.ogg filter=lfs diff=lfs merge=lfs -text
 
 scripts/** linguist-vendored
+
+# repakxtra: the bundled signature bypass is compiled into the exe (include_bytes!), so it must be a real file in every checkout,
+# including CI and release builds that skip LFS (an LFS pointer would be embedded instead)
+repak-x/resources/utoc-bypass/dsound.dll -filter -diff -merge binary
