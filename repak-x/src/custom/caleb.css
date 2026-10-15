@@ -1578,3 +1578,9 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .sg-row input[type="range"]::-webkit-slider-thumb { width: 16px !important; height: 16px !important; margin-top: -6px !important;
   background: var(--accent-primary) !important; border: none !important; box-shadow: none !important; }
 .sg-row input[type="range"]:focus-visible::-webkit-slider-thumb { outline: none; box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-primary), transparent 70%) !important; }
+
+/* Batch line: "Generating" quiet, the loadout's name bright, the queue as its own count chip */
+.lo-batch-what { color: var(--text-secondary); }
+.lo-batch-what b { color: var(--text-primary); font-weight: 600; }
+.lo-batch .lo-batch-left { padding: 2px 9px; border-radius: 999px; font-size: 12px; font-variant-numeric: tabular-nums;
+  color: var(--text-primary); background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.08); }
