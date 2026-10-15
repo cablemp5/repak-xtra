@@ -12,9 +12,14 @@ const data: any = Object.values(fixtures)[0] ?? {
 }
 
 let sigeonState = 'off'
+// ?sigeon=unset in the page URL: no Sigeon yet (header > Sigeon not configured opens the setup); a folder whose name
+// has "Sigeon" in it has the loader
+const sigeonUnset = location.search.includes('sigeon=unset')
+const sigeonHome = { path: 'C:\\Users\\you\\Desktop\\Sigeon V2', default: true, loader: !sigeonUnset }
+let sigeonDir = sigeonHome
 // Fake Sigeon configs as the editor sees them (caleb_sigeon.rs Line); the license is only ever a placeholder line
 const sigeonLine = (key: string, value: string, on = true) => ({ kind: 'entry', key, value, on })
-const sigeonPresets: Record<string, any[]> = Object.fromEntries(['base', 'high'].map(v => [v, [
+const sigeonPresets: Record<string, any[]> = sigeonUnset ? {} : Object.fromEntries(['base', 'high'].map(v => [v, [
   { kind: 'comment', text: ' SigeonLoader configuration.' }, { kind: 'blank' }, { kind: 'license', set: true }, { kind: 'blank' },
   sigeonLine('variant', v), sigeonLine('lowLatency', '0'), sigeonLine('stretched', '1.0'), sigeonLine('darkHair', '0'),
   sigeonLine('fontAA', '1'), sigeonLine('fixDarkMaps', '1'), sigeonLine('gamma', '0', false), { kind: 'blank' },
@@ -23,7 +28,7 @@ const sigeonPresets: Record<string, any[]> = Object.fromEntries(['base', 'high']
   sigeonLine('r.ContactShadows', '0'), sigeonLine('r.DetailMode', '1'), { kind: 'blank' },
 ]]))
 const sigeonDeleted: Record<string, any[]> = {}
-let mockBypass = 'installed'
+let mockBypass = sigeonUnset ? 'missing' : 'installed'   // a fresh PC has neither
 let mockGalacta: any = { installed: 'C:/Game/~mods', disabled: false, up_to_date: false }
 const galactaRelease = { latest: 'v1.4.1', published: '2026-10-14T14:29:44Z', url: 'https://github.com/0xSaturno/ProjectGalacta/releases/tag/v1.4.1',
   notes: "## What's new:\n\n### Mod Loader:\n- Mods that add custom VFX to abilities are no longer blocked." }
@@ -81,7 +86,8 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         document.documentElement.style.zoom = String(args?.value ?? 1)
         return null
       case 'sigeon_status':
-        return { state: sigeonState, presets: Object.keys(sigeonPresets).sort(), storage: 'Desktop/Sigeon V2', plugins: '', game_running: false, problem: null }
+        return { state: sigeonState, configured: sigeonDir.loader, presets: Object.keys(sigeonPresets).sort(), storage: sigeonDir.path, plugins: '',
+          game_running: false, problem: sigeonDir.loader ? null : `${sigeonDir.path}\\SigeonLoader.asi not found` }
       case 'sigeon_read': return structuredClone(sigeonPresets[args?.preset])
       case 'sigeon_save':
         sigeonPresets[args?.preset] = args?.lines
@@ -92,8 +98,10 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
           sigeonLine('darkHair', '0'), sigeonLine('fontAA', '0'), sigeonLine('fixDarkMaps', '0'), sigeonLine('gamma', '0', false),
           sigeonLine('enableCAS', '1', false), { kind: 'blank' }, { kind: 'section', name: 'Overrides' }]
         return null
-      case 'sigeon_storage': return { path: 'C:\\Users\\you\\Desktop\\Sigeon V2', default: true, loader: true }
-      case 'sigeon_set_storage': return { path: args?.path ?? 'C:\\Users\\you\\Desktop\\Sigeon V2', default: !args?.path, loader: !args?.path }
+      case 'sigeon_storage': return { ...sigeonDir }
+      case 'sigeon_set_storage':
+        sigeonDir = args?.path ? { path: args.path, default: false, loader: /sigeon/i.test(args.path) } : sigeonHome
+        return { ...sigeonDir }
       case 'sigeon_open': return null
       case 'sigeon_rename':
         sigeonPresets[args?.to] = sigeonPresets[args?.from]; delete sigeonPresets[args?.from]
@@ -187,8 +195,11 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'get_skip_launcher_status':
       case 'check_for_previous_crash': return false
       case 'check_mod_clashes': return []
-      // Installing: the file picker returns two fake paks, install adds them to the library and reports done
-      case 'plugin:dialog|open': return ['C:/Fake/Drop/Alpha_Skin_9999999_P.pak', 'C:/Fake/Drop/Beta_Icons_9999999_P.pak']
+      // Installing: the file picker returns two fake paks, install adds them to the library and reports done. A folder
+      // pick (the Sigeon folder) returns an unzipped Sigeon download.
+      case 'plugin:dialog|open':
+        if (args?.options?.directory) return 'C:\\Users\\you\\Downloads\\Sigeon V2'
+        return ['C:/Fake/Drop/Alpha_Skin_9999999_P.pak', 'C:/Fake/Drop/Beta_Icons_9999999_P.pak']
       case 'parse_dropped_files':
         return (args?.paths ?? []).map((path: string) => ({ path, mod_name: path.split('/').pop(), mod_type: 'Black Panther - Texture',
           is_dir: false, contains_uassets: true, contains_raw_assets: false, auto_to_repak: false, file_size: 1048576 }))

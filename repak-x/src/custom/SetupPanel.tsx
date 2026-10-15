@@ -322,6 +322,11 @@ export default function SetupButton({ alert }: { alert: Alert }) {
   const [attention, setAttention] = useState(false)
   const [start, setStart] = useState<Galacta | undefined>()
 
+  const recheck = () => invoke<Bypass>('setup_bypass_status').then(b => setAttention(b.state !== 'installed')).catch(() => {})
+  useEffect(() => {   // the Sigeon setup installs the bypass too
+    window.addEventListener('bypass-changed', recheck)
+    return () => window.removeEventListener('bypass-changed', recheck)
+  }, [])
   useEffect(() => {
     invoke<Bypass>('setup_bypass_status').then(b => b.state !== 'installed' && setAttention(true)).catch(() => {})
     if (!autoCheck() || startupChecked) return
@@ -341,10 +346,7 @@ export default function SetupButton({ alert }: { alert: Alert }) {
       <button type="button" className="btn-settings su-btn" onClick={() => { setStart(undefined); setOpen(true) }} title="What the game needs to load mods">
         <Wrench size={16} /> Setup {attention && <i className="su-dot" aria-label="Needs attention" />}
       </button>
-      {open && <SetupPanel alert={alert} start={start} onClose={() => {
-        setOpen(false)
-        invoke<Bypass>('setup_bypass_status').then(b => setAttention(b.state !== 'installed')).catch(() => {})
-      }} />}
+      {open && <SetupPanel alert={alert} start={start} onClose={() => { setOpen(false); recheck() }} />}
     </>
   )
 }

@@ -60,6 +60,7 @@ This fork is personal and unofficial: it is not made by the Repak X team, and ne
 - Create, duplicate, rename and delete Sigeon V2 configs, pick the base config, flip its switches, set stretched resolution, gamma and sharpening, and add, edit or remove console overrides with search.
 - Your notes in the files stay where they are. The license key is never shown or touched by the app; you type it into the config file yourself (`Open in Notepad`).
 - Choose where your Sigeon folder lives. Switch configs from the header's Sigeon menu.
+- No Sigeon yet? The header reads `Sigeon not configured` and opens a short setup: where to buy it ([oinkerhub.com/CABLE](https://oinkerhub.com/CABLE)), the signature bypass it loads through, and its folder.
 
 <img src=".github/screenshots/sigeon-editor.png" alt="Sigeon V2 Editor" width="900" />
 
@@ -73,7 +74,7 @@ This fork is personal and unofficial: it is not made by the Repak X team, and ne
 ## Getting started
 
 1. Download the newest release from [Releases](https://github.com/cablemp5/repak-xtra/releases) and unzip it anywhere.
-2. Open `REPAK-X.exe`. If Windows SmartScreen warns about an unknown publisher, choose More info, then Run anyway.
+2. Open `repakxtra.exe`. If Windows SmartScreen warns about an unknown publisher, choose More info, then Run anyway.
 3. Set your game's `~mods` folder in Settings (Auto Detect finds a Steam install).
 4. Open **Setup** to install the signature bypass, Project Galacta and, for previews, the preview kit and Blender.
 

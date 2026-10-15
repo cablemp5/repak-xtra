@@ -64,6 +64,7 @@ import { GeneratePreviewsButton } from './custom/previews'
 import { finishInstallLoadout } from './custom/installLoadout'
 import SigeonControl from './custom/SigeonControl'
 import SetupButton from './custom/SetupPanel'
+import { versionTag } from './custom/version'
 import { useGlobalTooltips } from './hooks/useGlobalTooltips'
 import { useAprilFools } from './hooks/useAprilFools'
 import Switch from './components/ui/Switch'
@@ -3845,7 +3846,7 @@ function App() {
           <ModularLogo size={50} className="repak-icon" />
           <div className="header-title-group">
             <h1 className="font-logo">repak<span className="title-x">x</span>tra</h1>{/* caleb fork */}
-            <span className="version">v{version} (forked by cable)</span>
+            <span className="version">{versionTag(version)}</span>{/* caleb fork */}
           </div>
         </div>
         <ViewTabs />{/* caleb fork: Home | Library */}

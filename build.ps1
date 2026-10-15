@@ -1,8 +1,8 @@
 # Release build, same steps as .github/workflows/release.yml.
-#   .\build.ps1        the stable app: only from a clean main. Output: dist\Repak-X-Caleb (or -next), opened as dist\repakxtra\REPAK-X.exe
+#   .\build.ps1        the stable app: only from a clean main. Output: dist\Repak-X-Caleb (or -next), opened as dist\repakxtra\repakxtra.exe
 #   .\build.ps1 -Test  whatever is in the folder now, even uncommitted edits. Output: dist\Repak-X-Test
 # The two never overwrite each other. The app runs one copy at a time (single-instance) and both share %APPDATA%\Repak-X.
-# Neither touches the desktop: point a shortcut at dist\repakxtra\REPAK-X.exe once and it always opens the newest stable build.
+# Neither touches the desktop: point a shortcut at dist\repakxtra\repakxtra.exe once and it always opens the newest stable build.
 param([switch]$Test)
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
@@ -17,11 +17,12 @@ $env:PATH = "$env:USERPROFILE\.cargo\bin;${env:ProgramFiles(x86)}\Microsoft Visu
 
 function Run([scriptblock]$cmd) { & $cmd; if ($LASTEXITCODE -ne 0) { throw "Failed: $cmd" } }
 
-# A running copy locks its REPAK-X.exe; package into whichever of the two folders is not in use.
+# A running copy locks its exe; package into whichever of the two folders is not in use.
 # dist\repakxtra links to the newest stable folder, and a copy opened through it reports the link's path: map that to the real folder
 $link = 'dist\repakxtra'
 $linked = if (Test-Path $link) { "$((Get-Item $link).Target)" }
-$running = @(Get-Process REPAK-X -ErrorAction SilentlyContinue | ForEach-Object {
+# REPAK-X: the exe's name in builds made before it shipped as repakxtra.exe
+$running = @(Get-Process repakxtra, REPAK-X -ErrorAction SilentlyContinue | ForEach-Object {
     if ($linked) { $_.Path -replace [regex]::Escape("$PSScriptRoot\$link"), $linked } else { $_.Path } })
 if ($Test) {
     $out = 'dist\Repak-X-Test'
@@ -41,14 +42,16 @@ $env:SKIP_UASSET_TOOL_BUILD = '1'
 Run { cargo build --release --target x86_64-pc-windows-msvc --features custom-protocol }
 
 New-Item -ItemType Directory -Force "$out\data" | Out-Null
-Copy-Item target\x86_64-pc-windows-msvc\release\REPAK-X.exe $out -Force
+# cargo names the exe after upstream's bin (REPAK-X); it ships as repakxtra.exe. An older build's REPAK-X.exe goes, so a
+# shortcut still pointing at it fails instead of opening a stale copy.
+Copy-Item target\x86_64-pc-windows-msvc\release\REPAK-X.exe "$out\repakxtra.exe" -Force
 Copy-Item target\uassettool\* $out -Recurse -Force
-Remove-Item "$out\*.pdb", "$out\UAssetTool.exe" -ErrorAction SilentlyContinue
+Remove-Item "$out\*.pdb", "$out\UAssetTool.exe", "$out\REPAK-X.exe" -ErrorAction SilentlyContinue
 Copy-Item repak-x\src\data\character_data.json "$out\data" -Force
 if (-not $Test) {
     # repoint dist\repakxtra at the build just made (rmdir removes only the link, never the folder it points to)
     if (Test-Path $link) { Run { cmd /c rmdir $link } }
     New-Item -ItemType Junction -Path $link -Target (Resolve-Path $out).Path | Out-Null
 }
-Write-Host "Built: $out\REPAK-X.exe" -ForegroundColor Green
+Write-Host "Built: $out\repakxtra.exe" -ForegroundColor Green
 if ($Test) { Write-Host 'The app runs one copy at a time: close the stable repakxtra before opening the test one, or you will just get the stable window.' -ForegroundColor Yellow }
