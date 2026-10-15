@@ -1,0 +1,66 @@
+# repakxtra: the checks every pull request into caleb must pass before it can merge (typecheck, frontend build,
+# Rust tests). Also runs on pushes to caleb so the branch's own state stays visible.
+name: Checks
+
+on:
+  pull_request:
+    branches: [caleb]
+  push:
+    branches: [caleb]
+  workflow_dispatch:
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  checks:
+    name: Typecheck, build and test
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: repak-x/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: repak-x
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: repak-x
+        run: npx tsc --noEmit -p .
+
+      # The Rust app embeds the built frontend, so it is built before the tests
+      - name: Build frontend
+        working-directory: repak-x
+        run: npm run build
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: checks-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: checks-${{ runner.os }}-
+
+      - name: Rust tests
+        env:
+          SKIP_UASSET_TOOL_BUILD: '1'   # the .NET asset tool is only needed to package, not to test
+        run: cargo test -p repak-x --bin REPAK-X
