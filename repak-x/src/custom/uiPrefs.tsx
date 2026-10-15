@@ -1,5 +1,5 @@
-// caleb fork: UI scale and show/hide switches for optional UI, saved in localStorage and applied
-// instantly in every window. Show/hide prefs set a data-show-* attribute on <html>; caleb.css hides
+// repakxtra: UI scale and show/hide switches for optional UI, saved in localStorage and applied
+// instantly in every window. Show/hide prefs set a data-show-* attribute on <html>; theme.css hides
 // the element when it is absent. UI scale uses the webview zoom, like Ctrl + in a browser.
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
@@ -9,6 +9,7 @@ import type { useAlert } from '../components/AlertHandler'
 import { MotionGlobalConfig } from 'framer-motion'
 import Checkbox from '../components/ui/Checkbox'
 import { setSoundOn, unlockSound } from './sounds'
+import { savedItem } from './storageCarryOver'
 
 const PREFS = [
   { key: 'priority', label: 'Show load priority counter on mods' },
@@ -18,24 +19,31 @@ const PREFS = [
 ] as const
 
 const SCALES = [0.9, 1, 1.1, 1.25, 1.4, 1.5]
-const SCALE_KEY = 'caleb.uiScale'
-const HIDE_TAGS_KEY = 'caleb.hideTags' // tags show by default, so this one stores the hidden state
-const SOUND_KEY = 'caleb.sound'   // on by default: '0' = off
-const MOTION_KEY = 'caleb.motion' // on by default: '0' = off
+const SCALE_KEY = 'repakxtra.uiScale'
+const HIDE_TAGS_KEY = 'repakxtra.hideTags' // tags show by default, so this one stores the hidden state
+const SOUND_KEY = 'repakxtra.sound'   // on by default: '0' = off
+const MOTION_KEY = 'repakxtra.motion' // on by default: '0' = off
+const MINIMAL_TOASTS_KEY = 'repakxtra.minimalToasts' // off by default: '1' = on
 
-const storageKey = (key: string) => `caleb.show.${key}`
+const storageKey = (key: string) => `repakxtra.show.${key}`
 const listeners = new Set<() => void>()
 
-const isOn = (key: string) => localStorage.getItem(storageKey(key)) === '1'
-const getScale = () => Number(localStorage.getItem(SCALE_KEY)) || 1
-const tagsHidden = () => localStorage.getItem(HIDE_TAGS_KEY) === '1'
-const soundOn = () => localStorage.getItem(SOUND_KEY) !== '0'
-const motionOn = () => localStorage.getItem(MOTION_KEY) !== '0'
+const isOn = (key: string) => savedItem(storageKey(key)) === '1'
+const getScale = () => Number(savedItem(SCALE_KEY)) || 1
+const tagsHidden = () => savedItem(HIDE_TAGS_KEY) === '1'
+const soundOn = () => savedItem(SOUND_KEY) !== '0'
+const motionOn = () => savedItem(MOTION_KEY) !== '0'
+const minimalToasts = () => savedItem(MINIMAL_TOASTS_KEY) === '1'
+
+/** Minimal toasts: an everyday confirmation (success or info with nothing to click, not a progress toast) is skipped.
+ *  Errors, warnings, crash reports, update offers and deletions (they carry Undo) still show. */
+export const quietToast = (t: { color?: string; action?: unknown; isLoading?: boolean }) =>
+  minimalToasts() && (!t.color || t.color === 'success' || t.color === 'primary' || t.color === 'default') && !t.action && !t.isLoading
 
 const apply = () => {
   PREFS.forEach(({ key }) => document.documentElement.toggleAttribute(`data-show-${key}`, isOn(key)))
   document.documentElement.toggleAttribute('data-hide-tags', tagsHidden())
-  // Motion off: caleb.css zeroes every CSS transition and animation, framer-motion jumps to the end state
+  // Motion off: theme.css zeroes every CSS transition and animation, framer-motion jumps to the end state
   document.documentElement.setAttribute('data-motion', motionOn() ? 'on' : 'off')
   MotionGlobalConfig.skipAnimations = !motionOn()
   setSoundOn(soundOn())
@@ -53,7 +61,7 @@ window.addEventListener('keydown', e => {
   update(SCALE_KEY, String(next))
 })
 // Other windows (Asset Explorer, VFX Updater) pick up changes made in Settings
-window.addEventListener('storage', e => { if (e.key?.startsWith('caleb.')) { apply(); listeners.forEach(l => l()) } })
+window.addEventListener('storage', e => { if (e.key?.startsWith('repakxtra.')) { apply(); listeners.forEach(l => l()) } })
 
 const update = (key: string, value: string) => {
   localStorage.setItem(key, value)
@@ -146,14 +154,14 @@ export function TagsToggle({ tags, mods, onChanged, alert }: {
   )
 }
 
-export default function CalebUiSettings() {
-  const snapshot = useSyncExternalStore(subscribe, () => PREFS.map(p => (isOn(p.key) ? 1 : 0)).join('') + '|' + getScale() + '|' + soundOn() + motionOn())
+export default function UiSettings() {
+  const snapshot = useSyncExternalStore(subscribe, () => PREFS.map(p => (isOn(p.key) ? 1 : 0)).join('') + '|' + getScale() + '|' + soundOn() + motionOn() + minimalToasts())
   const scale = getScale()
   return (
     <>
       <div className="setting-section">
         <h3>UI scale</h3>
-        <p className="setting-subtext">UI scale, sound and motion, and optional controls apply right away; Save and Cancel cover the rest.</p>
+        <p className="setting-subtext">UI scale, sound, motion, toasts and optional controls apply right away; Save and Cancel cover the rest.</p>
         <div className="setting-group">
           <div className="mod-state-filter ui-scale" role="group" aria-label="UI scale">
             {SCALES.map(s => (
@@ -165,7 +173,7 @@ export default function CalebUiSettings() {
         </div>
       </div>
       <div className="setting-section">
-        <h3>Sound and motion</h3>
+        <h3>Sound, motion and toasts</h3>
         <div className="setting-group">
           <div className="setting-item">
             <Checkbox checked={soundOn()} onChange={(checked: boolean) => { update(SOUND_KEY, checked ? '1' : '0'); if (checked) unlockSound() }}>
@@ -178,6 +186,12 @@ export default function CalebUiSettings() {
               <span>Animations</span>
             </Checkbox>
             <p className="setting-subtext">Page slides, menus, switches and toasts. Off stops every animation in the app, including the extra animations below.</p>
+          </div>
+          <div className="setting-item">
+            <Checkbox checked={minimalToasts()} onChange={(checked: boolean) => update(MINIMAL_TOASTS_KEY, checked ? '1' : '0')}>
+              <span>Minimal toasts</span>
+            </Checkbox>
+            <p className="setting-subtext">No toasts for everyday actions like switching loadouts, installing mods or generating previews. Errors, warnings, updates and deletions you can undo still show.</p>
           </div>
         </div>
       </div>

@@ -1,4 +1,4 @@
-// caleb fork: All / Enabled / Disabled switch next to the list title.
+// repakxtra: All / Enabled / Disabled switch next to the list title.
 export type ModState = 'all' | 'enabled' | 'disabled'
 
 export const matchesState = (state: ModState) => (mod: { enabled?: boolean }) =>

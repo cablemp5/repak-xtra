@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
 import Switch from './ui/Switch'
 import Checkbox from './ui/Checkbox'
-import { InstallAsLoadout, commitInstallLoadout } from '../custom/installLoadout' // caleb fork
+import { InstallAsLoadout, InstallToLoadouts, commitInstallLoadout } from '../custom/installLoadout' // repakxtra
 import { FaTag } from "react-icons/fa6"
 import { VscFolder, VscFolderOpened, VscChevronRight, VscChevronDown, VscNewFolder } from 'react-icons/vsc'
 import { MdCreateNewFolder } from 'react-icons/md'
@@ -38,6 +38,7 @@ type ModSetting = {
   compression: string
   customName: string
   selectedTags: string[]
+  loadouts?: string[] // repakxtra: loadout ids this mod joins
   installSubfolder: string | null
   path: string
 }
@@ -302,7 +303,7 @@ export default function InstallModPanel({ mods, allTags, folders = [], currentFo
         }
       })
       .filter(m => m.enabled !== false)
-    commitInstallLoadout() // caleb fork
+    commitInstallLoadout() // repakxtra
     onInstall(modsToInstall)
   }
 
@@ -458,83 +459,8 @@ export default function InstallModPanel({ mods, allTags, folders = [], currentFo
                       </div>
 
 
-                      <div className="install-mod-card__tags">
-                        <div className="install-mod-card__row">
-                          <span className="field-label">Tags</span>
-                          <div className="tags-cell">
-                            <div className="tags-list">
-                              {(modSettings[idx]?.selectedTags || []).map(tag => (
-                                <span key={tag} className="tag">
-                                  <FaTag />
-                                  {tag}
-                                  <button
-                                    type="button"
-                                    className="tag-remove"
-                                    onClick={() => handleRemoveTag(idx, tag)}
-                                  >
-                                    ×
-                                  </button>
-                                </span>
-                              ))}
-                            </div>
-                            <div className="add-tag-wrapper" onClick={e => e.stopPropagation()}>
-                              <button
-                                className="add-tag-btn"
-                                onClick={(e) => {
-                                  const rect = e.currentTarget.getBoundingClientRect()
-                                  setDropdownPos({ x: rect.left, y: rect.bottom })
-                                  setOpenDropdown(openDropdown === idx ? null : idx)
-                                }}
-                                title="Add Tag"
-                              >
-                                +
-                              </button>
-                              {openDropdown === idx && (
-                                <div
-                                  className="tag-dropdown"
-                                  style={{
-                                    position: 'fixed',
-                                    top: dropdownPos.y,
-                                    left: dropdownPos.x
-                                  }}
-                                >
-                                  <div className="dropdown-item" onClick={() => {
-                                    onNewTag((tag) => {
-                                      if (tag && tag.trim()) {
-                                        handleAddTag(idx, tag)
-                                        if (onCreateTag) onCreateTag(tag)
-                                      }
-                                    })
-                                    setOpenDropdown(null)
-                                  }}>
-                                    + New Tag...
-                                  </div>
-                                  {allTags && allTags.length > 0 && <div className="dropdown-separator" />}
-                                  {allTags && allTags.map(tag => (
-                                    <div key={tag} className="dropdown-item" onClick={() => {
-                                      handleAddTag(idx, tag)
-                                      setOpenDropdown(null)
-                                    }}>
-                                      <span className="dropdown-item-label">{tag}</span>
-                                      {onDeleteTag && (
-                                        <button
-                                          className="dropdown-item-delete"
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            onDeleteTag(tag)
-                                          }}
-                                          title={`Delete "${tag}" tag`}
-                                        >
-                                          ×
-                                        </button>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
+                      <div className="install-mod-card__tags">{/* repakxtra: loadouts in place of tags */}
+                        <InstallToLoadouts ids={modSettings[idx]?.loadouts ?? []} onChange={ids => updateModSetting(idx, 'loadouts', ids)} />
                       </div>
 
                       <div className="install-mod-card__footer">
@@ -683,7 +609,7 @@ export default function InstallModPanel({ mods, allTags, folders = [], currentFo
 
         {/* Action Buttons */}
         <div className="install-actions">
-          <InstallAsLoadout count={enabledCount} />{/* caleb fork */}
+          <InstallAsLoadout count={enabledCount} />{/* repakxtra */}
           <button onClick={onCancel} className="btn-cancel">
             Cancel
           </button>

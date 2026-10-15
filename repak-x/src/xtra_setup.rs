@@ -1,4 +1,4 @@
-//! caleb fork: Setup panel backend. Puts in place what Marvel Rivals needs to load mods:
+//! repakxtra: Setup panel backend. Puts in place what Marvel Rivals needs to load mods:
 //! - the UTOC signature bypass, bundled in the exe (resources/utoc-bypass, provenance in its SOURCE.md): dsound.dll (the
 //!   Ultimate ASI Loader) in Binaries\Win64 and MarvelRivalsUTOCSignatureBypass.asi in Binaries\Win64\plugins;
 //! - Project Galacta from its GitHub releases (0xSaturno/ProjectGalacta), checked and updated in one click.
@@ -27,6 +27,26 @@ fn sha256(bytes: &[u8]) -> String {
 /// ...\Content\Paks\~mods -> ...\Marvel\Binaries\Win64
 fn win64_dir(mods_dir: &Path) -> Option<PathBuf> {
     Some(mods_dir.parent()?.parent()?.parent()?.join("Binaries").join("Win64"))
+}
+
+/// The mods folder for a folder picked by hand: the game's install folder (or any level down to Paks) becomes its
+/// Paks\~mods, created when missing, as auto-detect does; anything else (a ~mods folder, or a custom mods folder)
+/// stays as picked. Err when that ~mods cannot be created (the path stays as it was).
+pub fn mods_folder_for(picked: &Path) -> Result<PathBuf, String> {
+    let named = |p: &Path, n: &str| p.file_name().is_some_and(|f| f.eq_ignore_ascii_case(n));
+    let paks = [r"MarvelGame\Marvel\Content\Paks", r"Marvel\Content\Paks", r"Content\Paks", "Paks"]
+        .iter()
+        .map(|rel| picked.join(rel))
+        .chain(named(picked, "Paks").then(|| picked.to_path_buf()))
+        .find(|p| p.is_dir());
+    match paks {
+        Some(paks) => {
+            let mods = paks.join("~mods");
+            fs::create_dir_all(&mods).map_err(|e| format!("Could not create the mods folder {}: {e}", mods.display()))?;
+            Ok(mods)
+        }
+        None => Ok(picked.to_path_buf()),
+    }
 }
 
 fn setup_dir() -> PathBuf {
@@ -309,6 +329,30 @@ pub async fn setup_galacta_install(folder: Option<String>, state: State<'_, Arc<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_picked_game_folder_becomes_its_mods_folder() {
+        let root = std::env::temp_dir().join(format!("mods-folder-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let game = root.join("MarvelRivals");
+        let paks = game.join(r"MarvelGame\Marvel\Content\Paks");
+        fs::create_dir_all(&paks).unwrap();
+        let mods = paks.join("~mods");
+        for pick in [game.clone(), game.join("MarvelGame"), game.join(r"MarvelGame\Marvel"), game.join(r"MarvelGame\Marvel\Content"), paks.clone()] {
+            assert_eq!(mods_folder_for(&pick).unwrap(), mods, "picked {}", pick.display());
+        }
+        assert!(mods.is_dir(), "~mods is created");
+        assert_eq!(mods_folder_for(&mods).unwrap(), mods, "the mods folder itself stays");
+        let custom = root.join("My mods");
+        fs::create_dir_all(&custom).unwrap();
+        assert_eq!(mods_folder_for(&custom).unwrap(), custom, "a custom folder stays as picked");
+        // A file where ~mods should be: an error, not a folder that cannot hold mods
+        let other = root.join(r"Other\Content\Paks");
+        fs::create_dir_all(&other).unwrap();
+        fs::write(other.join("~mods"), b"").unwrap();
+        assert!(mods_folder_for(&root.join("Other")).is_err());
+        let _ = fs::remove_dir_all(&root);
+    }
     use std::io::Write;
 
     fn temp(tag: &str) -> PathBuf {

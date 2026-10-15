@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo, memo } from 'react';
 import type { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, X } from 'lucide-react'; // caleb fork: a plain check for success, X for Clear all
+import { Check, X } from 'lucide-react'; // repakxtra: a plain check for success, X for Clear all
 import './ui/Alert.css';
-import { alertSound } from '../custom/sounds' // caleb fork
+import { alertSound } from '../custom/sounds' // repakxtra
+import { quietToast } from '../custom/uiPrefs' // repakxtra
 
 // Toast Icons
 type ToastColor = 'success' | 'danger' | 'warning' | 'info' | 'default' | 'crash' | 'primary' | 'secondary';
@@ -127,6 +128,7 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
 
     // Add a new toast
     const showAlert = useCallback((alertConfig: AlertOptions) => {
+        if (quietToast(alertConfig)) return -1; // repakxtra: Minimal toasts skips everyday confirmations
         const id = Date.now() + Math.random();
         const toast: Toast = {
             id,
@@ -140,7 +142,7 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
         };
 
         setToasts(prev => [...prev, toast]);
-        alertSound(toast.color, toast.isLoading); // caleb fork
+        alertSound(toast.color, toast.isLoading); // repakxtra
         return id;
     }, []);
 
@@ -156,7 +158,9 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
 
     // Update an existing toast
     const updateToast = useCallback((id: number, updates: AlertOptions) => {
-        if (updates.color) alertSound(updates.color, updates.isLoading); // caleb fork: a loading toast that finished
+        // repakxtra: Minimal toasts: a progress toast that finished as an everyday success goes away instead
+        if (updates.color && quietToast(updates)) { setToasts(prev => prev.filter(toast => toast.id !== id)); return; }
+        if (updates.color) alertSound(updates.color, updates.isLoading); // repakxtra: a loading toast that finished
         setToasts(prev => prev.map(toast =>
             toast.id === id ? { ...toast, ...updates } : toast
         ));
@@ -313,12 +317,12 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
     // Get the most recent toasts (reverse so newest is first)
     const recentToasts = [...toasts].reverse().slice(0, maxVisible);
 
-    // caleb fork: fanned out on hover, each toast sits 8px past the real height of the ones in front of it (a fixed
+    // repakxtra: fanned out on hover, each toast sits 8px past the real height of the ones in front of it (a fixed
     // 100px step left big gaps under short toasts)
     const [heights, setHeights] = useState<Record<number, number>>({});
     const reportHeight = useCallback((id: number, h: number) => setHeights(prev => (prev[id] === h ? prev : { ...prev, [id]: h })), []);
     const spread = recentToasts.map((_, i) => recentToasts.slice(0, i).reduce((sum, t) => sum + (heights[t.id] ?? 72) + 8, 0));
-    // caleb fork: the stack's visible height (its toasts are absolute), so the footer below it never covers one
+    // repakxtra: the stack's visible height (its toasts are absolute), so the footer below it never covers one
     const extent = Math.max(0, ...recentToasts.map((t, i) => (heights[t.id] ?? 72) * (isHovered ? 1 : 1 - i * 0.05) + (isHovered ? spread[i] : i * 10)));
 
     const isBottom = placement.startsWith('bottom');
@@ -335,7 +339,7 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
                 style={{
                     position: 'relative',
                     width: '100%',
-                    height: extent, // caleb fork: was minHeight 70px
+                    height: extent, // repakxtra: was minHeight 70px
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
@@ -359,7 +363,7 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
                 </AnimatePresence>
             </div>
 
-            {/* caleb fork: footer below the stack */}
+            {/* repakxtra: footer below the stack */}
             {toasts.length > 1 && (
                 <div className="toast-footer-overlay">
                     {toasts.length > maxVisible && (
@@ -383,7 +387,7 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
 // Individual Toast Item with card stacking effect - memoized to prevent unnecessary re-renders
 const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHovered, placement, spread = index * 100, onHeight }: any) {
     const itemRef = useRef<HTMLDivElement>(null);
-    useEffect(() => { // caleb fork: report this toast's height so the hovered stack spaces by it
+    useEffect(() => { // repakxtra: report this toast's height so the hovered stack spaces by it
         const el = itemRef.current;
         if (!el || !onHeight) return;
         const ro = new ResizeObserver(() => onHeight(toast.id, el.offsetHeight));

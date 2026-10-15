@@ -1,0 +1,347 @@
+//! repakxtra: generated mod previews. The generator (`mod_previews.py`, with Cue4Export and Blender) comes from the
+//! preview kit (xtra_kit.rs) or, on the developer's PC, the modding tools, and writes one image per mod to
+//! %APPDATA%\Repak-X\previews\<mod key>.png (an animated <mod key>.webp for animation mods). This module serves those
+//! files and runs the generator for the mods you pick (details panel button, the selection bar's Previews button, a
+//! loadout's Generate previews).
+
+use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
+use tauri::{AppHandle, Emitter, State};
+
+/// Who works in the preview kit's folders right now: a preview run, a kit install or removal, or the PC check. One at a
+/// time, so an install never replaces files a render or the check is using, and two installs never share a side folder.
+static OWNER: Mutex<Option<&'static str>> = Mutex::new(None);
+
+/// The reservation: whoever holds it owns the kit's folders until it is dropped (on every path, panics included).
+pub struct Hold(());
+impl Drop for Hold {
+    fn drop(&mut self) {
+        *OWNER.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+}
+
+/// Reserves the kit's folders for `who` ("previews", "kit" or "doctor"); Err names who has them.
+pub fn reserve(who: &'static str) -> Result<Hold, &'static str> {
+    let mut owner = OWNER.lock().unwrap_or_else(|e| e.into_inner());
+    match *owner {
+        Some(other) => Err(other),
+        None => {
+            *owner = Some(who);
+            Ok(Hold(()))
+        }
+    }
+}
+
+/// Why the kit's folders are busy, for whoever asked.
+pub fn busy_text(who: &str) -> String {
+    match who {
+        "previews" => "Previews are generating. Stop them or wait, then try again.",
+        "kit" => "The preview kit is installing or being removed. Wait for it to finish.",
+        _ => "This PC is being checked for previews. Try again in a moment.",
+    }
+    .into()
+}
+
+fn previews_dir() -> PathBuf {
+    crate::app_dir().join("previews")
+}
+
+/// The developer's modding folder (the generator, its python and its tools live there).
+fn modding_dir() -> PathBuf {
+    dirs::home_dir().unwrap_or_default().join(r"Programming\Modding\Claude Assisted Mods")
+}
+
+/// The developer's own generator: the modding folder's python and script (no kit needed on that PC).
+pub fn dev_generator() -> Option<(PathBuf, PathBuf, PathBuf)> {
+    let root = modding_dir();
+    let python = root.join(r".venv\Scripts\python.exe");
+    let script = root.join(r"tools\previews\mod_previews.py");
+    (python.exists() && script.exists()).then_some((root, python, script))
+}
+
+/// (folder to run in, python, script, kit?): an installed preview kit first, else the developer's own generator.
+fn generator() -> Option<(PathBuf, PathBuf, PathBuf, bool)> {
+    if let Some(kit) = crate::xtra_kit::installed_kit() {
+        return Some((kit.clone(), kit.join(r"python\python.exe"), kit.join(r"previews\mod_previews.py"), true));
+    }
+    dev_generator().map(|(root, python, script)| (root, python, script, false))
+}
+
+
+/// Whether previews can be generated here; without it the app hides its Generate buttons and keeps showing previews it has.
+#[tauri::command]
+pub fn previews_available() -> bool {
+    generator().is_some()
+}
+
+/// A mod key is a bare file stem from the frontend: never let it leave the previews folder.
+fn valid_key(key: &str) -> bool {
+    !key.is_empty() && !key.contains(['/', '\\', ':']) && !key.contains("..")
+}
+
+/// A preview is a PNG, or an animated WebP for animation mods (a clip on a gray model).
+const PREVIEW_EXTS: [&str; 2] = [".png", ".webp"];
+
+#[tauri::command]
+pub fn list_mod_previews() -> Vec<String> {
+    let mut keys: Vec<String> = std::fs::read_dir(previews_dir())
+        .map(|it| {
+            it.filter_map(|e| {
+                let name = e.ok()?.file_name().to_str()?.to_string();
+                PREVIEW_EXTS.iter().find_map(|x| name.strip_suffix(x).map(str::to_string))
+            })
+            .collect()
+        })
+        .unwrap_or_default();
+    keys.sort();
+    keys.dedup();
+    keys
+}
+
+/// The preview file of a key: the newer of its PNG and WebP (the generator removes the other one, but a run that was
+/// stopped mid-way may leave both).
+fn preview_file(dir: &std::path::Path, key: &str) -> Option<PathBuf> {
+    PREVIEW_EXTS
+        .iter()
+        .map(|x| dir.join(format!("{key}{x}")))
+        .filter_map(|p| Some((std::fs::metadata(&p).ok()?.modified().ok()?, p)))
+        .max_by_key(|(t, _)| *t)
+        .map(|(_, p)| p)
+}
+
+#[tauri::command]
+pub fn get_mod_preview(key: String) -> Result<tauri::ipc::Response, String> {
+    if !valid_key(&key) {
+        return Err(format!("Invalid preview key: {key}"));
+    }
+    let file = preview_file(&previews_dir(), &key).ok_or_else(|| format!("No preview for {key}"))?;
+    std::fs::read(file).map(tauri::ipc::Response::new).map_err(|e| e.to_string())
+}
+
+/// A loadout's combined render (`set`), from the generator's <set>.json: `covers`, the mods it shows (empty when there
+/// is none), and `members`, the installed mods it was rendered for (null for renders older than that record).
+#[tauri::command]
+pub fn get_preview_covers(key: String) -> serde_json::Value {
+    let v = if valid_key(&key) {
+        std::fs::read_to_string(previews_dir().join(format!("{key}.json")))
+            .ok()
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+            .unwrap_or_default()
+    } else {
+        serde_json::Value::Null
+    };
+    let list = |name: &str| serde_json::from_value::<Vec<String>>(v[name].clone()).ok();
+    serde_json::json!({ "covers": list("covers").unwrap_or_default(), "members": list("members") })
+}
+
+/// One line of the generator's output as (event, key): "PREVIEW <key>" after writing a PNG, "PREVIEW_NONE <key>" when
+/// there is nothing to show, "PREVIEW_IN <key>" for a mod the loadout's combined render shows, "PREVIEW_FAIL <key>" when
+/// it failed (its last good preview stays), and "PREVIEW_BUSY" (no key) when another generator holds the lock.
+fn parse_line(line: &str) -> Option<(&'static str, Option<String>)> {
+    if line.trim() == "PREVIEW_BUSY" {
+        return Some(("mod-previews-busy", None));
+    }
+    [
+        ("PREVIEW_NONE ", "mod-preview-none"),
+        ("PREVIEW_IN ", "mod-preview-in"),
+        ("PREVIEW_FAIL ", "mod-preview-failed"),
+        ("PREVIEW ", "mod-preview-ready"),
+    ]
+    .into_iter()
+    .find_map(|(prefix, event)| line.strip_prefix(prefix).map(|k| (event, Some(k.trim().to_string()))))
+}
+
+/// Renders previews for the given mods (`jobs` = [folder, mod key] pairs) one after another in the background,
+/// replacing existing ones. With `set` (a loadout), its character mods render once together as <set>.png.
+/// Progress: `mod-preview-ready` / `mod-preview-none` / `mod-preview-in` (shown in the set's render) /
+/// `mod-preview-failed` per mod or set, `mod-previews-busy` when another generator (a manual run, or one an earlier
+/// app session left going) holds its lock, `mod-previews-done` (ok) at the end. Ok(false) = this app runs one already.
+/// Unchanged mods and sets report their existing result without rendering; `force` (Regenerate) renders them anyway.
+/// The generator alone owns its lock and the cancel file (it clears a stale Stop once it holds the lock).
+#[tauri::command]
+pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: Option<String>, force: Option<bool>, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<bool, String> {
+    if let Some(bad) = jobs.iter().map(|(_, k)| k).chain(set.iter()).find(|k| !valid_key(k)) {
+        return Err(format!("Invalid preview key: {bad}"));
+    }
+    let hold = match reserve("previews") {
+        Ok(h) => h,
+        Err("previews") => return Ok(false),
+        Err(other) => return Err(busy_text(other)),
+    };
+    let paks = state.lock().unwrap().game_path.parent().map(|p| p.to_path_buf());
+    let mut cmd = generator_command(paks, true)?;
+    // One generator run over every folder the mods sit in (a loadout's combined render needs all of them at once)
+    cmd.arg("--out").arg(previews_dir());
+    if force == Some(true) {
+        cmd.arg("--force");
+    }
+    let mut dirs: Vec<&String> = jobs.iter().map(|(d, _)| d).collect();
+    dirs.sort();
+    dirs.dedup();
+    for d in dirs {
+        cmd.arg("--mods").arg(d);
+    }
+    for (_, k) in &jobs {
+        cmd.arg("--key").arg(k);
+    }
+    if let Some(s) = &set {
+        cmd.arg("--set").arg(s);
+    }
+    // Errors go to previews\generator.log, which the app names when a render fails; UTF-8 keeps a mod name like
+    // "Pokémon" from breaking the result lines
+    let log = std::fs::create_dir_all(previews_dir())
+        .and_then(|_| std::fs::File::create(previews_dir().join("generator.log")))
+        .map(Stdio::from)
+        .unwrap_or_else(|_| Stdio::null());
+    cmd.stdout(Stdio::piped()).stderr(log);
+    std::thread::spawn(move || {
+        let hold = hold; // the run owns the kit until its generator exits
+        let mut ok = false;
+        if let Ok(mut child) = cmd.spawn() {
+            if let Some(out) = child.stdout.take() {
+                for line in BufReader::new(out).lines().map_while(Result::ok) {
+                    match parse_line(&line) {
+                        Some((event, Some(key))) => {
+                            let _ = app.emit(event, key);
+                        }
+                        Some((event, None)) => {
+                            let _ = app.emit(event, ());
+                        }
+                        None => {}
+                    }
+                }
+            }
+            ok = child.wait().map(|s| s.success()).unwrap_or(false);
+        }
+        drop(hold); // free before "done": the app starts the next queued run on it
+        let _ = app.emit("mod-previews-done", ok);
+    });
+    Ok(true)
+}
+
+/// The generator's command so far (python and its script, run in its folder, with the kit's variables): the kit, or the
+/// developer's own generator. The error says what to install.
+fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Result<Command, String> {
+    let Some((root, python, script, kit)) = generator() else {
+        return Err("Previews need the preview kit: install it in Setup.".into());
+    };
+    if need_blender && kit && crate::xtra_kit::blender().is_none() {
+        return Err("Previews need Blender: install it in Setup (or from blender.org), or pick blender.exe there.".into());
+    }
+    let mut cmd = Command::new(&python);
+    cmd.arg(&script).current_dir(&root).env("PYTHONUTF8", "1");
+    if kit {
+        // The kit's contract (tools\previews\build_kit.py): where the kit is, the game's Paks folder, a writable work
+        // folder for exports, caches and the lock, and Blender
+        cmd.env("REPAKXTRA_KIT", &root).env("REPAKXTRA_WORK", previews_dir().join("work"));
+        if let Some(p) = &paks {
+            cmd.env("REPAKXTRA_PAKS", p);
+        }
+        if let Some(b) = crate::xtra_kit::blender() {
+            cmd.env("REPAKXTRA_BLENDER", b);
+        }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    Ok(cmd)
+}
+
+/// The generator's own check of this PC (`--doctor`): `{ ok, problems: [sentences], blender, ... }`. Setup runs it after
+/// the kit or Blender is installed, so a missing piece is named before the first render fails on it.
+#[tauri::command]
+pub async fn previews_doctor(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<serde_json::Value, String> {
+    let hold = reserve("doctor").map_err(busy_text)?;
+    let paks = state.lock().unwrap().game_path.parent().map(|p| p.to_path_buf());
+    let mut cmd = generator_command(paks, false)?; // without Blender the check itself says it is missing
+    cmd.arg("--doctor");
+    // The hold lives in the worker: it outlasts this future if the app stops waiting
+    let out = tauri::async_runtime::spawn_blocking(move || { let _hold = hold; cmd.output() }).await.map_err(|e| e.to_string())?
+        .map_err(|e| format!("The preview generator did not start: {e}"))?;
+    doctor_line(&String::from_utf8_lossy(&out.stdout))
+        .ok_or_else(|| format!("The preview check gave no answer (exit {}).", out.status.code().unwrap_or(-1)))
+}
+
+/// The generator's `DOCTOR {json}` line.
+fn doctor_line(stdout: &str) -> Option<serde_json::Value> {
+    stdout.lines().find_map(|l| serde_json::from_str(l.trim().strip_prefix("DOCTOR ")?).ok())
+}
+
+/// Stops a run after the mod it is rendering now (the generator checks for this file between mods).
+#[tauri::command]
+pub fn cancel_mod_previews() -> Result<(), String> {
+    std::fs::create_dir_all(previews_dir()).map_err(|e| e.to_string())?;
+    std::fs::write(previews_dir().join("cancel"), b"").map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keys_stay_inside_the_folder() {
+        assert!(valid_key("bp-8bit_bp+matSwap_outline_noPG_v3"));
+        assert!(!valid_key("..\\state"));
+        assert!(!valid_key("C:evil"));
+        assert!(!valid_key("a/b"));
+        assert!(!valid_key(""));
+    }
+
+    #[test]
+    fn the_newer_of_png_and_webp_is_the_preview() {
+        let dir = std::env::temp_dir().join(format!("previews-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(preview_file(&dir, "A").is_none());
+        std::fs::write(dir.join("A.png"), b"png").unwrap();
+        assert_eq!(preview_file(&dir, "A").unwrap().extension().unwrap(), "png");
+        let webp = dir.join("A.webp");
+        std::fs::write(&webp, b"webp").unwrap();
+        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(5);
+        std::fs::File::options().write(true).open(&webp).unwrap().set_modified(later).unwrap();
+        assert_eq!(preview_file(&dir, "A").unwrap().extension().unwrap(), "webp");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_kit_has_one_owner_at_a_time() {
+        let hold = reserve("kit").unwrap();
+        assert_eq!(reserve("previews").err(), Some("kit"));
+        assert_eq!(reserve("doctor").err(), Some("kit"));
+        drop(hold);
+        let hold = reserve("previews").unwrap();
+        assert_eq!(reserve("previews").err(), Some("previews"));
+        drop(hold);
+        // A panic while holding it still frees it
+        let r = std::panic::catch_unwind(|| { let _h = reserve("doctor").unwrap(); panic!("boom") });
+        assert!(r.is_err());
+        drop(reserve("kit").expect("free again after the panic"));
+        // A worker that fails to start (the hold moves into it and drops with it)
+        let hold = reserve("previews").unwrap();
+        std::thread::spawn(move || { let _hold = hold; }).join().unwrap();
+        drop(reserve("previews").expect("free once the worker ended"));
+    }
+
+    #[test]
+    fn doctor_answers_are_read() {
+        let v = doctor_line("# a note\nDOCTOR {\"ok\": false, \"problems\": [\"Blender was not found.\"]}\r\n").unwrap();
+        assert_eq!((v["ok"].as_bool(), v["problems"][0].as_str()), (Some(false), Some("Blender was not found.")));
+        assert!(doctor_line("PREVIEW_BUSY").is_none());
+    }
+
+    #[test]
+    fn generator_lines_become_events() {
+        let k = |s: &str| Some(s.to_string());
+        assert_eq!(parse_line("PREVIEW_BUSY"), Some(("mod-previews-busy", None)));
+        assert_eq!(parse_line("PREVIEW_BUSY\r"), Some(("mod-previews-busy", None)));
+        assert_eq!(parse_line("PREVIEW_FAIL loadout-1"), Some(("mod-preview-failed", k("loadout-1"))));
+        assert_eq!(parse_line("PREVIEW_NONE A"), Some(("mod-preview-none", k("A"))));
+        assert_eq!(parse_line("PREVIEW_IN A"), Some(("mod-preview-in", k("A"))));
+        assert_eq!(parse_line("PREVIEW A_v2\r"), Some(("mod-preview-ready", k("A_v2"))));
+        assert_eq!(parse_line("# A: character (12 s)"), None);
+    }
+}

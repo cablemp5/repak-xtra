@@ -1,4 +1,4 @@
-// caleb fork: Home, the app's first view. Loadouts as cards (image, on/off switch), grouped by saved group or hero, with
+// repakxtra: Home, the app's first view. Loadouts as cards (image, on/off switch), grouped by saved group or hero, with
 // the "New this week" strip below them; a card opens its page (LoadoutPage.tsx). The full mod list is the Library
 // view (header tabs, or L). On = its mods on, Off = its mods off; other mods and loadouts are never touched.
 import { useEffect, useRef, useState } from 'react'
@@ -18,9 +18,10 @@ import {
   inGroup, isActive, modKey, moveGroup, nextLoadoutName, openLoadout, patchLoadout, readLoadouts, renameGroup,
   setLoadoutGroup, setView, snapshotLoadout, sweepMediaOnce, useGroups, useLoadouts, useOpenLoadout, useView, writeLoadouts,
 } from './loadoutStore'
+import { savedItem } from './storageCarryOver'
 
 type GroupBy = 'group' | 'hero'
-const GROUP_BY_KEY = 'caleb.loadoutGroupBy'
+const GROUP_BY_KEY = 'repakxtra.loadoutGroupBy'
 const NO_HERO = 'No Hero'
 
 /** The hero most of the given mods belong to, or undefined when none has a detected hero. */
@@ -87,7 +88,7 @@ function GroupHead({ p, name, count, at, total, editing, setEditing }: {
 export function ViewTabs() {
   const view = useView()
   return (
-    <div className="view-tabs" role="tablist" aria-label="View">
+    <div className="view-tabs" role="tablist" aria-label="View" data-tour="view-tabs">
       <button type="button" role="tab" aria-selected={view === 'home'} onClick={() => setView('home')} title="Loadouts and new mods (L)">Loadouts</button>
       <button type="button" role="tab" aria-selected={view === 'library'} onClick={() => setView('library')} title="Every mod, with filters and folders (L)">Library</button>
     </div>
@@ -107,7 +108,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   const lastRun = usePreviewSummary()
   const [editingGroup, setEditingGroup] = useState<string | null>(null)
   const [dropGroup, setDropGroup] = useState<string | null>(null)
-  const [groupBy, setGroupByState] = useState<GroupBy>(() => (localStorage.getItem(GROUP_BY_KEY) === 'hero' ? 'hero' : 'group'))
+  const [groupBy, setGroupByState] = useState<GroupBy>(() => (savedItem(GROUP_BY_KEY) === 'hero' ? 'hero' : 'group'))
   const setGroupBy = (g: GroupBy) => { localStorage.setItem(GROUP_BY_KEY, g); setGroupByState(g) }
   const fileRef = useRef<HTMLInputElement>(null)
   const [genMenu, setGenMenu] = useState(false)
@@ -135,13 +136,16 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     ;(edit || newRef.current)?.focus()
   })
 
-  const setMedia = async (id: string, file: File) => {
+  /** Stores the loadout's picture; false (with the reason shown) when it could not be saved. */
+  const setMedia = async (id: string, file: Blob) => {
     try {
       const { blob, type } = await prepareMedia(file)
       await putMedia(id, blob)
       patchLoadout(id, { mediaType: type, mediaRev: Date.now(), image: undefined })
+      return true
     } catch (e) {
-      p.alert.error('Media not saved', e instanceof Error ? e.message : String(e))
+      p.alert.warning('Media not saved', e instanceof Error ? e.message : String(e))
+      return false
     }
   }
 
@@ -242,7 +246,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
         {hidden}
         <div className="lo-body">
           <LoadoutPage p={p} l={open} busy={busy === open.id} onToggle={on => toggle(open, on)} onBack={closePage}
-            onPickMedia={() => pickMedia(open.id)} />
+            onPickMedia={() => pickMedia(open.id)} onSetMedia={image => setMedia(open.id, image)} />
         </div>
       </div>
     )
@@ -257,7 +261,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
           {loadouts.length < 3 && <p>Switch a set of mods on or off together. Other mods stay as they are.</p>}
         </div>
         <div className="lo-head-tools">
-          <button type="button" ref={newRef} className="lo-text-btn" onClick={createEmpty} title="A new empty loadout, opened to add mods to it">
+          <button type="button" ref={newRef} className="lo-text-btn" data-tour="new-loadout" onClick={createEmpty} title="A new empty loadout, opened to add mods to it">
             <Plus size={14} /> New loadout
           </button>
           <button type="button" className="lo-text-btn" onClick={newGroup} title="A new group to sort loadouts into (drag cards onto it)">
@@ -290,7 +294,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
       {batch && (
         <div className="lo-batch" role="status">
           <LoaderCircle size={14} className="run-spin" />
-          <span className="lo-batch-what"><span className="t-shimmer" data-text="Generating">Generating</span> <b>{batch.name}</b></span>
+          <span className="lo-batch-what t-shimmer">Generating <b>{batch.name}</b></span>
           {batch.left > 0 && <span className="lo-batch-left">{batch.left} queued</span>}
           <button type="button" className="lo-text-btn lo-batch-stop" onClick={stopPreviews} disabled={batch.stopping}
             title="Stop after the mod rendering now and clear the queue">

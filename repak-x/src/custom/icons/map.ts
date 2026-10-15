@@ -1,4 +1,4 @@
-// caleb fork: icon name in react-icons / @mui/icons-material -> lucide-react (T3 Code's icon set).
+// repakxtra: icon name in react-icons / @mui/icons-material -> lucide-react (T3 Code's icon set).
 // Names not listed (brand logos: Discord, Steam, Epic, GitHub) keep their original icon.
 // A new upstream icon also keeps its original until it is added here.
 

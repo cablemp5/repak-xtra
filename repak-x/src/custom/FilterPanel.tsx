@@ -1,4 +1,4 @@
-// caleb fork: sidebar filters as T3-style rows. Heroes with portrait and count (skins expand under
+// repakxtra: sidebar filters as T3-style rows. Heroes with portrait and count (skins expand under
 // their hero), types with a color dot and count. Everything is multi-select; one Clear resets both.
 import { useMemo, useState } from 'react'
 import { Check, ChevronRight } from 'lucide-react'

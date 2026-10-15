@@ -5,8 +5,8 @@ import { SiDiscord } from 'react-icons/si';
 import { IoLogoGithub } from 'react-icons/io';
 import { open } from '@tauri-apps/plugin-shell';
 import mrmLogo from '../assets/extra/mrm_logo.webp';
-import cableAvatar from '../custom/cable.jpg'; // caleb fork
-import { versionTag } from '../custom/version'; // caleb fork
+import cableAvatar from '../custom/cable.jpg'; // repakxtra
+import { versionTag } from '../custom/version'; // repakxtra
 import './CreditsPanel.css';
 
 type Contributor = {
@@ -51,7 +51,7 @@ const CONTRIBUTORS: Contributor[] = [
         link: 'https://github.com/0xSaturno',
         badge: 'developer'
     },
-    {   // caleb fork: repakxtra
+    {   // repakxtra: repakxtra
         name: 'cable',
         role: 'Developer, Modder',
         avatar: cableAvatar,
@@ -147,8 +147,8 @@ export default function CreditsPanel({ onClose, version }: CreditsPanelProps) {
                     <div className="credits-content">
                         {/* App Branding */}
                         <div className="credits-branding">
-                            {/* caleb fork: repakxtra wordmark; the people below made Repak X, which this fork builds on */}
-                            <h1 className="credits-app-name font-logo">repak<span className="title-x">x</span>tra</h1>
+                            {/* repakxtra: repakxtra wordmark; the people below made Repak X, which this fork builds on */}
+                            <h1 className="credits-app-name font-logo">repak<span className="title-x">xtra</span></h1>
                             <p className="credits-version">{versionTag(version)}</p>
                             <p className="credits-tagline">A fork of Repak X, the mod manager and modding tool for Marvel Rivals, made by the people below.</p>
                         </div>

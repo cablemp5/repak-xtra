@@ -1,4 +1,4 @@
-// caleb fork: tiny wrappers for transitions.dev recipes that need React state (the CSS lives in caleb.css).
+// repakxtra: tiny wrappers for transitions.dev recipes that need React state (the CSS lives in theme.css).
 import { useEffect, useRef } from 'react'
 
 const seen = new Map<string, string>() // count id -> last value shown, so a count that remounts still knows it changed
@@ -23,5 +23,5 @@ export function SwapText({ text }: { text: string }) {
   return <span key={text} className={changed.current ? 't-text-in' : undefined}>{text}</span>
 }
 
-/** transitions.dev: Skeleton reveal. Marks an image loaded so caleb.css cross-fades it in from a blur. */
+/** transitions.dev: Skeleton reveal. Marks an image loaded so theme.css cross-fades it in from a blur. */
 export const revealOnLoad = (e: React.SyntheticEvent<HTMLImageElement>) => e.currentTarget.classList.add('is-loaded')

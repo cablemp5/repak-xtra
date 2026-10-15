@@ -75,7 +75,7 @@ type ModItemProps = {
 }
 
 type ModsListProps = {
-    emptyState?: React.ReactNode // caleb fork: says why the list is empty and how to get mods back
+    emptyState?: React.ReactNode // repakxtra: says why the list is empty and how to get mods back
     mods: ModRecord[]
     viewMode: ViewMode
     selectedMod: ModRecord | null
@@ -394,7 +394,7 @@ const ModItem = memo(function ModItem({
                             style={nameReveal.revealStyle}
                         >
                             <span ref={nameReveal.innerRef} className="mod-name-inner">
-                                {/* caleb fork: slug + tags + version chip (custom/modName.tsx) */}
+                                {/* repakxtra: slug + tags + version chip (custom/modName.tsx) */}
                                 <ModName name={cleanName} />
                                 {shouldShowSuffix && <span className="mod-name-suffix">{suffix}</span>}
                             </span>
@@ -489,7 +489,7 @@ const ModItem = memo(function ModItem({
                             </span>
                         </Tooltip>
                     )}
-                    {/* caleb fork: Project Galacta compatible mods (caleb_classify.rs) */}
+                    {/* repakxtra: Project Galacta compatible mods (xtra_classify.rs) */}
                     {typeof modDetails?.mod_type === 'string' && /\[[^\]]*Project Galacta[^\]]*\]$/.test(modDetails.mod_type) && (
                         <span className="mod-type-badge pg-badge" title="Project Galacta compatible: pick it per skin in the Galacta Companion App">Galacta</span>
                     )}

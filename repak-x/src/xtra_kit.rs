@@ -1,12 +1,13 @@
-//! caleb fork: the preview kit, what another PC needs to generate mod previews (Python, the generator, Cue4Export,
-//! UAssetTool, repak, mappings; built by Caleb's tools\previews\build_kit.py). It lives in %APPDATA%\Repak-X\preview-kit,
+//! repakxtra: the preview kit, what another PC needs to generate mod previews (Python, the generator, Cue4Export,
+//! UAssetTool, repak, mappings; built by the modding tools' previews\build_kit.py). It lives in %APPDATA%\Repak-X\preview-kit,
 //! comes from a GitHub release (tag preview-kit-v<N>, a repakxtra-preview-kit*.zip asset) or a zip picked by hand, and
-//! needs Blender, which the user installs (found in Program Files or picked once).
+//! needs Blender (installed from Setup with winget, found in Program Files, or picked once).
 
 use serde::Serialize;
 use std::fs;
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
+use tauri::{AppHandle, Emitter};
 
 const RELEASES: &str = "https://api.github.com/repos/cablemp5/repak-xtra/releases";
 
@@ -24,7 +25,12 @@ fn installed(dir: &Path) -> Option<String> {
         return None;
     }
     let v: serde_json::Value = serde_json::from_str(&fs::read_to_string(dir.join("kit.json")).ok()?).ok()?;
-    Some(v["version"].as_str().map(str::to_string).unwrap_or_else(|| v["version"].to_string()))
+    // A non-empty string or a number; anything else is not a kit
+    match &v["version"] {
+        serde_json::Value::String(s) if !s.trim().is_empty() => Some(s.trim().to_string()),
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }
 }
 
 pub fn installed_kit() -> Option<PathBuf> {
@@ -54,7 +60,7 @@ fn version_of(exe: &Path) -> Vec<u32> {
 pub struct KitStatus {
     /// Installed kit version
     version: Option<String>,
-    /// Caleb's own generator is on this PC (no kit needed)
+    /// The developer's own generator is on this PC (no kit needed)
     dev: bool,
     blender: Option<String>,
 }
@@ -63,7 +69,7 @@ pub struct KitStatus {
 pub fn preview_kit_status() -> KitStatus {
     KitStatus {
         version: installed(&kit_dir()),
-        dev: crate::caleb_previews::dev_generator().is_some(),
+        dev: crate::xtra_previews::dev_generator().is_some(),
         blender: blender().map(|p| p.display().to_string()),
     }
 }
@@ -136,30 +142,81 @@ fn unpack(zip: &[u8], dir: &Path) -> Result<String, String> {
     Ok(version)
 }
 
-/// Installs the kit from `file` (a zip picked by hand) or, without one, from the newest GitHub release.
-#[tauri::command]
-pub async fn preview_kit_install(file: Option<String>) -> Result<String, String> {
-    if crate::caleb_previews::is_running() {
-        return Err("Previews are generating. Stop them or wait, then install the kit.".into());
+/// Install progress for Setup (`preview-kit-progress`): the stage, and the bytes so far of `total` (0 when unknown).
+#[derive(Clone, Serialize)]
+struct Progress {
+    stage: &'static str,
+    done: u64,
+    total: u64,
+}
+
+/// Downloads the kit zip, reporting about every megabyte.
+async fn download(app: &AppHandle, url: &str) -> Result<Vec<u8>, String> {
+    let mut resp = reqwest::Client::new().get(url).header("User-Agent", "repakxtra").send().await
+        .and_then(|r| r.error_for_status()).map_err(|e| format!("Download failed: {e}"))?;
+    let total = resp.content_length().unwrap_or(0);
+    let mut bytes = Vec::with_capacity(total.min(1 << 30) as usize); // a wrong length never reserves more than 1 GB
+    let mut told = 0u64;
+    while let Some(chunk) = resp.chunk().await.map_err(|e| format!("Download failed: {e}"))? {
+        bytes.extend_from_slice(&chunk);
+        let done = bytes.len() as u64;
+        if done - told >= 1 << 20 || done == total {
+            told = done;
+            let _ = app.emit("preview-kit-progress", Progress { stage: "download", done, total });
+        }
     }
+    Ok(bytes)
+}
+
+/// Installs the kit from `file` (a zip picked or dropped by hand) or, without one, from the newest GitHub release.
+#[tauri::command]
+pub async fn preview_kit_install(app: AppHandle, file: Option<String>) -> Result<String, String> {
+    // Owned from before the download until the kit is in place: no render, check or second install meanwhile
+    let hold = crate::xtra_previews::reserve("kit").map_err(crate::xtra_previews::busy_text)?;
     let zip = match file {
         Some(f) => fs::read(&f).map_err(|e| format!("Could not read {f}: {e}"))?,
         None => {
             let release = preview_kit_latest().await?.ok_or("No preview kit has been published yet.")?;
-            reqwest::Client::new().get(&release.asset).header("User-Agent", "repakxtra").send().await
-                .and_then(|r| r.error_for_status()).map_err(|e| format!("Download failed: {e}"))?
-                .bytes().await.map_err(|e| format!("Download failed: {e}"))?.to_vec()
+            download(&app, &release.asset).await?
         }
     };
+    let _ = app.emit("preview-kit-progress", Progress { stage: "unpack", done: 0, total: 0 });
     fs::create_dir_all(crate::app_dir()).map_err(|e| e.to_string())?;
-    unpack(&zip, &kit_dir())
+    // Thousands of files: off the async runtime
+    tauri::async_runtime::spawn_blocking(move || { let _hold = hold; unpack(&zip, &kit_dir()) }).await.map_err(|e| e.to_string())?
+}
+
+/// Installs Blender with winget (Windows' package manager; Blender's own installer asks for admin rights once), then
+/// finds it. Already installed: just finds it.
+#[tauri::command]
+pub async fn preview_kit_install_blender() -> Result<String, String> {
+    if let Some(b) = blender() {
+        return Ok(b.display().to_string());
+    }
+    let out = tauri::async_runtime::spawn_blocking(|| {
+        let mut cmd = std::process::Command::new("winget");
+        cmd.args(["install", "--id", "BlenderFoundation.Blender", "--exact", "--silent", "--accept-package-agreements", "--accept-source-agreements"]);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+        cmd.output()
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|_| "winget is not on this PC. Download Blender from blender.org, then pick blender.exe in Setup.".to_string())?;
+    if let Some(b) = blender() {
+        return Ok(b.display().to_string());
+    }
+    let said = String::from_utf8_lossy(&out.stdout);
+    let last = said.lines().map(str::trim).filter(|l| l.chars().any(char::is_alphabetic)).last().unwrap_or("");
+    Err(format!("Blender did not install (winget exit {}). {last}", out.status.code().unwrap_or(-1)))
 }
 
 #[tauri::command]
 pub fn preview_kit_remove() -> Result<(), String> {
-    if crate::caleb_previews::is_running() {
-        return Err("Previews are generating. Stop them or wait first.".into());
-    }
+    let _hold = crate::xtra_previews::reserve("kit").map_err(crate::xtra_previews::busy_text)?;
     fs::remove_dir_all(kit_dir()).or_else(|e| if e.kind() == std::io::ErrorKind::NotFound { Ok(()) } else { Err(e.to_string()) })
 }
 
@@ -208,6 +265,11 @@ mod tests {
         assert!(!dir.parent().unwrap().join("evil.txt").exists());
         let _ = unpack(&kit_zip(&[("../evil.txt", b"x")]), &dir);
         assert!(!dir.parent().unwrap().join("evil.txt").exists(), "nothing lands outside the kit folder");
+        for (json, want) in [(&br#"{"version": 3}"#[..], Some("3")), (br#"{"version": " 4 "}"#, Some("4")), (br#"{"version": null}"#, None),
+                             (br#"{"version": ""}"#, None), (br#"{"version": [1]}"#, None), (br#"{}"#, None)] {
+            fs::write(dir.join("kit.json"), json).unwrap();
+            assert_eq!(installed(&dir).as_deref(), want, "kit.json {}", String::from_utf8_lossy(json));
+        }
         let _ = fs::remove_dir_all(dir.parent().unwrap());
     }
 

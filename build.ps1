@@ -1,5 +1,5 @@
 # Release build, same steps as .github/workflows/release.yml.
-#   .\build.ps1        the stable app: only from a clean main. Output: dist\Repak-X-Caleb (or -next), opened as dist\repakxtra\repakxtra.exe
+#   .\build.ps1        the stable app: only from a clean main. Output: dist\Repak-X-Stable (or -next), opened as dist\repakxtra\repakxtra.exe
 #   .\build.ps1 -Test  whatever is in the folder now, even uncommitted edits. Output: dist\Repak-X-Test
 # The two never overwrite each other. The app runs one copy at a time (single-instance) and both share %APPDATA%\Repak-X.
 # Neither touches the desktop: point a shortcut at dist\repakxtra\repakxtra.exe once and it always opens the newest stable build.
@@ -28,8 +28,8 @@ if ($Test) {
     $out = 'dist\Repak-X-Test'
     if ($running -match [regex]::Escape("\$out\")) { throw 'Close the test copy of repakxtra first.' }
 } else {
-    $out = 'dist\Repak-X-Caleb'
-    if ($running -match [regex]::Escape('\dist\Repak-X-Caleb\')) { $out = 'dist\Repak-X-Caleb-next' }
+    $out = 'dist\Repak-X-Stable'
+    if ($running -match [regex]::Escape('\dist\Repak-X-Stable\')) { $out = 'dist\Repak-X-Stable-next' }
     if ($running -match [regex]::Escape("\$out\")) { throw 'Close repakxtra first: both output folders are in use.' }
 }
 

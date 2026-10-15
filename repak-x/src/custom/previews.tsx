@@ -1,4 +1,4 @@
-// caleb fork: generated mod previews (lobby-look renders, UI icons, VFX swatches) made by caleb_previews.rs's
+// repakxtra: generated mod previews (lobby-look renders, UI icons, VFX swatches) made by xtra_previews.rs's
 // generator for the mods you pick: the details panel's Generate button (one mod) or the selection bar's Previews
 // button (every selected mod, one after another). A loadout's Generate previews also renders its character mods
 // together as one image (key previewSetKey(id)); loadout cards page through the previews (loadoutBits.tsx).
@@ -14,7 +14,7 @@ import { modKey } from './loadoutStore'
 import { revealOnLoad } from './motion'
 import { plural } from './modName'
 
-const NOTHING = 'Nothing to show for this mod: previews cover skins, meshes, textures, UI icons and your own VFX releases.'
+const NOTHING = 'Nothing to show for this mod: previews cover skins, meshes, textures, animations, UI icons, VFX colors and sounds.'
 const FAILED = 'The render failed. The reason is in %APPDATA%\\Repak-X\\previews\\generator.log; try again once it is fixed.'
 const SET_FAILED = 'The loadout render failed. The reason is in %APPDATA%\\Repak-X\\previews\\generator.log.'
 const BUSY = 'Another preview generator is running (a manual run or an earlier app session).'
@@ -159,6 +159,10 @@ export function useCovers(setKey: string): Covers | undefined {
   return rev !== undefined && cached?.rev === rev ? cached : undefined
 }
 
+/** PNG, or an animated WebP (animation mods): told apart by the file's signature ("RIFF....WEBP"). */
+const imageType = (bytes: ArrayBuffer) =>
+  new TextDecoder().decode(new Uint8Array(bytes, 0, Math.min(12, bytes.byteLength))).slice(8) === 'WEBP' ? 'image/webp' : 'image/png'
+
 /** A preview's object URL at this revision: cached, or read once however many cards ask. Resolves to the URL, null
  *  when the read failed, or undefined when the revision was dropped or replaced before it finished. */
 function loadUrl(key: string, rev: number): Promise<string | null | undefined> {
@@ -169,7 +173,7 @@ function loadUrl(key: string, rev: number): Promise<string | null | undefined> {
   const p: Promise<string | null | undefined> = invoke<ArrayBuffer>('get_mod_preview', { key }).then(bytes => {
     if (urlLoads.get(key)?.p !== p || revs.get(key) !== rev) return undefined // stale: the bytes are dropped unused
     urlLoads.delete(key)
-    const url = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }))
+    const url = URL.createObjectURL(new Blob([bytes], { type: imageType(bytes) }))
     urls.set(key, { rev, url })
     return url
   }, () => {
@@ -301,9 +305,9 @@ const unqueue = (id: string) => {
   if (i >= 0) { queue.splice(i, 1); notify() }
 }
 
-/** "Electric Blue · mod 2 of 9", shimmering while it works. */
-const progressText = () => `${run.name} · mod ${doneOf()} of ${run.total}`
-const Shimmer = ({ text }: { text: string }) => <span className="t-shimmer" data-text={text}>{text}</span>
+/** "Electric Blue · preview 2 of 9", shimmering while it works. */
+const progressText = () => `${run.name} · preview ${doneOf()} of ${run.total}`
+const Shimmer = ({ text }: { text: string }) => <span className="t-shimmer">{text}</span>
 
 /** Starts or queues a job from a button and shows why when it could not start. */
 const ask = async (alert: ReturnType<typeof useAlert>, job: Job) => {
@@ -362,7 +366,7 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
         title={queue.length ? `Stop after the mod that is rendering now, and clear the ${queue.length} queued` : 'Stop after the mod that is rendering now'}>
         {/* a spinner while it works; pointing at it shows Stop */}
         <span className="run-icon" aria-hidden="true"><LoaderCircle size={14} className="run-spin" /><CircleStop size={14} className="run-stop" /></span>
-        {run.stopping ? 'Stopping…' : <Shimmer text={`Generating mod ${doneOf()} of ${run.total}`} />}
+        {run.stopping ? 'Stopping…' : <Shimmer text={`Generating preview ${doneOf()} of ${run.total}`} />}
       </button>
     )
   }
@@ -379,7 +383,6 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
               <ListPlus size={16} /><span className="bulk-btn-label">Queue previews</span>
               {n > 0 && <span className="bulk-num">{n}</span>}
             </button>}
-        <span className="preview-run-note" title="Another preview run is going">Generating <Shimmer text={progressText()} /></span>
       </>
     )
   }

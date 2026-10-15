@@ -1,4 +1,4 @@
-// caleb fork: one loadout as a page (Home > card). Header with its image, name, group, on/off, replace, duplicate and
+// repakxtra: one loadout as a page (Home > card). Header with its image, name, group, on/off, replace, duplicate and
 // delete; its mods with switches and Remove (with Undo); and every other mod, searchable, sortable and filterable by
 // type, to add. Wide windows put the two lists side by side.
 import { useEffect, useState } from 'react'
@@ -12,16 +12,18 @@ import { type Loadout, OTHER, loadoutable, addGroup, addModToLoadout, displayNam
 import { plural } from './modName'
 import { Num, SwapText } from './motion'
 import { GeneratePreviewsButton, previewSetKey } from './previews'
+import { CaptureButton } from './CapturePreview'
 
 const PAGE = 60
 
-export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia }: {
+export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia, onSetMedia }: {
   p: LoadoutProps
   l: Loadout
   busy: boolean
   onToggle: (on: boolean) => void
   onBack: () => void
   onPickMedia: () => void
+  onSetMedia: (image: Blob) => Promise<boolean>
 }) {
   const [name, setName] = useState(l.name)
   const groups = useGroups()
@@ -112,6 +114,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia 
             <GeneratePreviewsButton className="lo-text-btn" label="Generate previews" set={previewSetKey(l.id)} name={l.name}
               paths={mine.map(k => byKey.get(k)?.path).filter((x): x is string => Boolean(x))} />
             <button type="button" className="lo-text-btn" onClick={onPickMedia}><ImagePlus size={14} /> {hasMedia ? 'Change image' : 'Add image'}</button>
+            <CaptureButton p={p} l={l} onUse={onSetMedia} />
             {/* The rest are occasional: one menu instead of a wrapping row of equal buttons */}
             <div className="lp-more" title="More actions">
               <CustomDropdown

@@ -1,4 +1,4 @@
-//! caleb fork: deleting a mod moves its files to a trash folder so the delete can be undone.
+//! repakxtra: deleting a mod moves its files to a trash folder so the delete can be undone.
 //! The trash lives in the app data dir, not under ~mods, because the game loads paks in
 //! subfolders too. Each deletion gets its own folder trash\<id> (the frontend's id, or a fresh
 //! one), so Undo restores exactly that deletion's files. Entries older than KEEP are purged on the

@@ -1,4 +1,4 @@
-//! caleb fork: extra mod type rules for content upstream reports as "Unknown", plus the
+//! repakxtra: extra mod type rules for content upstream reports as "Unknown", plus the
 //! Project Galacta compatibility check. Called from utils::get_pak_characteristics_detailed.
 
 fn rel_lower(file: &str) -> String {

@@ -1,9 +1,9 @@
-// caleb fork: UI sounds with cuelume (synthesized live, no audio files), mech theme. One click listener maps the
+// repakxtra: UI sounds with cuelume (synthesized live, no audio files), mech theme. One click listener maps the
 // control under the pointer to a cue and one key listener plays typing in text fields, so upstream components need no
 // changes; alerts add success, error, warning and loading. Settings > Interface > Sound effects turns it off (uiPrefs.tsx calls setSoundOn).
 import { play, setEnabled, setTheme, setVolume, unlock, type PlayOptions, type SoundName } from 'cuelume'
 
-setTheme('mech') // Caleb, 2026-10-14: the mech preset for every sound
+setTheme('mech') // the mech preset for every sound
 setVolume(0.7)
 
 export const setSoundOn = (on: boolean) => setEnabled(on)

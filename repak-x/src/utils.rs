@@ -351,8 +351,8 @@ pub fn get_pak_characteristics_detailed(mod_contents: Vec<String>) -> ModCharact
     } else if has_text {
         // Text-only mod (no other primary category detected)
         "Text"
-    } else if let Some(c) = crate::caleb_classify::fallback_category(&mod_contents) {
-        c // caleb fork: Animation / Material / Audio / Data instead of Unknown
+    } else if let Some(c) = crate::xtra_classify::fallback_category(&mod_contents) {
+        c // repakxtra: Animation / Material / Audio / Data instead of Unknown
     } else {
         "Unknown"
     };
@@ -398,8 +398,8 @@ pub fn get_pak_characteristics_detailed(mod_contents: Vec<String>) -> ModCharact
     if has_text && category != "Text" {
         additional_categories.push("Text".to_string());
     }
-    if crate::caleb_classify::is_galacta_compatible(&mod_contents) {
-        additional_categories.push("Project Galacta".to_string()); // caleb fork
+    if crate::xtra_classify::is_galacta_compatible(&mod_contents) {
+        additional_categories.push("Project Galacta".to_string()); // repakxtra
     }
 
     // Build the combined mod_type string with " - " separator for easy splitting

@@ -1,4 +1,4 @@
-// caleb fork: delete_mod moves files to a trash folder (src/caleb_trash.rs), one folder per deletion named by
+// repakxtra: delete_mod moves files to a trash folder (src/xtra_trash.rs), one folder per deletion named by
 // its trash id; this toast puts exactly those deletions back.
 import { invoke } from '@tauri-apps/api/core'
 import type { useAlert } from '../components/AlertHandler'

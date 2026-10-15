@@ -1,4 +1,4 @@
-// caleb fork: adapters so Lucide icons accept the props upstream passes to react-icons and MUI icons.
+// repakxtra: adapters so Lucide icons accept the props upstream passes to react-icons and MUI icons.
 import { forwardRef, type ComponentType } from 'react'
 import type { LucideProps } from 'lucide-react'
 

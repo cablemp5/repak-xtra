@@ -1,4 +1,4 @@
-// caleb fork: upstream renders some controls as clickable divs. Make them reachable with Tab and
+// repakxtra: upstream renders some controls as clickable divs. Make them reachable with Tab and
 // activatable with Enter/Space without touching the upstream components.
 const SELECTOR = '.filter-section-header, .folder-tree .node-content'
 

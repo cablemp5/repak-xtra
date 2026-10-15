@@ -1,4 +1,4 @@
-// caleb fork: Home's "New this week" strip. Mods added or changed in the last 7 days that no loadout turns on, newest
+// repakxtra: Home's "New this week" strip. Mods added or changed in the last 7 days that no loadout turns on, newest
 // first (older loose mods live in the Library), each with an on/off
 // switch and "Add to loadout". When a loadout holds an older version of the same mod (same name, lower _vN) the row
 // offers "Replace v10 in <loadout>": one click swaps it in that loadout (and turns the old file off and the new one on

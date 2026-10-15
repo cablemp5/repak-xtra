@@ -1,6 +1,6 @@
 # Marvel Rivals UTOC Signature Bypass, bundled with repakxtra
 
-Installed by repakxtra's Setup panel (src/caleb_setup.rs). These are the files of the Nexus Mods release, unchanged:
+Installed by repakxtra's Setup panel (src/xtra_setup.rs). These are the files of the Nexus Mods release, unchanged:
 https://www.nexusmods.com/marvelrivals/mods/2940 (archive "Marvel Rivals UTOC Signature Bypass Patch-2940-1-0-0-1746280225.7z",
 sha256 251d2830ec8c1f3ed804ce4d8340705264642435cd3218308d18c7ee314db776; VirusTotal 0 of 63 engines on 2026-10-14:
 https://www.virustotal.com/gui/file/251d2830ec8c1f3ed804ce4d8340705264642435cd3218308d18c7ee314db776).

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { AnimatedThemeToggler } from './ui/AnimatedThemeToggler'
 import Switch from './ui/Switch'
 import Checkbox from './ui/Checkbox'
-import CalebUiSettings from '../custom/uiPrefs' // caleb fork
+import UiSettings from '../custom/uiPrefs' // repakxtra
 import TailInput from './ui/TailInput'
 import { LuFolderInput } from "react-icons/lu"
 import { RiSparkling2Fill } from "react-icons/ri"
@@ -341,8 +341,8 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
 
             {activeCategory === 'interface' && (
               <>
-                <CalebUiSettings />
-                {/* caleb fork: no Theme section (dark only, accent fixed to the title's blue) */}
+                <UiSettings />
+                {/* repakxtra: no Theme section (dark only, accent fixed to the title's blue) */}
 
                 <div className="setting-section">
                   <h3>Mods View Settings</h3>

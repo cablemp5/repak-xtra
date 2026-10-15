@@ -1,6 +1,6 @@
-// caleb fork: small pieces shared by Home (LoadoutsScreen.tsx), the loadout page and the New strip.
+// repakxtra: small pieces shared by Home (LoadoutsScreen.tsx), the loadout page and the New strip.
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, ImagePlus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ImagePlus, LoaderCircle } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import type { LoadoutProps } from './Loadouts'
 import { useMediaUrl } from './loadoutMedia'
@@ -9,7 +9,7 @@ import { ModName } from './modName'
 import { revealOnLoad } from './motion'
 import { hasPreview, previewSetKey, useCovers, usePreviewOutcome, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
 
-/** The home screen's badge color class for a mod type (caleb.css *-badge sets --badge-dot). */
+/** The home screen's badge color class for a mod type (theme.css *-badge sets --badge-dot). */
 export const typeClass = (category?: string | null) => `${(category || 'unknown').toLowerCase().replace(/\s+/g, '-')}-badge`
 
 const TYPE_ORDER = ['Mesh', 'Texture', 'Material', 'Animation', 'VFX', 'UI', 'Text', 'Audio']   // Audio: the generator's list of changed sounds
@@ -62,7 +62,7 @@ export function CardMedia({ p, l, className = '', title, onClick, emptyText = 'C
         <span className="lo-skel" role="status">
           <span className="lo-skel-label">
             {state.kind === 'running'
-              ? <>Generating previews<span className="lo-dots" aria-hidden="true"><i>.</i><i>.</i><i>.</i></span></>
+              ? <><LoaderCircle size={12} className="run-spin" aria-hidden="true" />Generating previews</>
               : state.at === 1 ? 'Queued, up next' : `Queued, ${state.at} in line`}
           </span>
         </span>

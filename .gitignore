@@ -42,7 +42,7 @@ ScriptObjectExportTest/
 # Sensitive files
 *.env
 *.env.local
-# caleb fork: personal library snapshot for the browser preview
+# repakxtra: personal library snapshot for the browser preview
 repak-x/src/dev/fixture.local.json
 repak-x/src/dev/heroes.local/
 repak-x/src/dev/previews.local/

@@ -1,4 +1,4 @@
-// caleb fork: swaps react-icons / @mui/icons-material imports for Lucide at build time, so upstream
+// repakxtra: swaps react-icons / @mui/icons-material imports for Lucide at build time, so upstream
 // components keep their imports untouched. Each swapped module re-exports the original package, then
 // overrides the mapped names (local exports win over `export *`).
 import type { Plugin } from 'vite'
@@ -8,7 +8,7 @@ const PREFIX = '\0lucide-swap:'
 
 export default function lucideSwap(): Plugin {
   return {
-    name: 'caleb-lucide-swap',
+    name: 'lucide-swap',
     enforce: 'pre',
     resolveId(id, importer) {
       if (importer?.startsWith(PREFIX)) return null // the swapped module itself reaches the real package

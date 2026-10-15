@@ -2,14 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import './OnboardingTour.css'
 
-type Placement = 'top' | 'bottom' | 'left' | 'right'
-
-type TourStep = {
-    target: string
-    title: string
-    description: string
-    placement: Placement
-}
+// repakxtra: the steps live in custom/tourSteps.ts (the essentials, each opening the view its target is in)
+import { TOUR_STEPS, type Placement } from '../custom/tourSteps'
 
 type TooltipPosition = {
     top: number
@@ -22,75 +16,6 @@ type OnboardingTourProps = {
     isOpen: boolean
     onClose: () => void
 }
-
-const TOUR_STEPS: TourStep[] = [
-    {
-        target: '[data-tour="header-branding"]',
-        title: 'Welcome to repakxtra',
-        description: "Your all-in-one Marvel Rivals mod manager and installer. Let's take a quick tour of the main features!",
-        placement: 'bottom',
-    },
-    {
-        target: '[data-tour="search-bar"]',
-        title: 'Search Mods',
-        description: 'Quickly find any installed mod by name. Use Ctrl+F to focus the search bar anytime.',
-        placement: 'bottom',
-    },
-    {
-        target: '[data-tour="add-mod-btn"]',
-        title: 'Add Mods',
-        description: 'Click here or drag & drop files onto the app to install new mods. Supports .pak files, archives, and folders.',
-        placement: 'bottom',
-    },
-    {
-        target: '[data-tour="folder-sidebar"]',
-        title: 'Folders & Filters',
-        description: 'Organize mods into folders and filter them by character or mod type.',
-        placement: 'right',
-    },
-    {
-        target: '[data-tour="mod-list"]',
-        title: 'Your Mods',
-        description: 'All your installed mods live here! Toggle them on/off, rename, change priority, right-click for more options, or select multiple for bulk actions.',
-        placement: 'top',
-    },
-    {
-        target: '[data-tour="header-actions"]',
-        title: 'List Controls',
-        description: 'Check for mod conflicts, switch between Grid and List views, toggle the details side-panel, and manually refresh your mod list.',
-        placement: 'bottom',
-    },
-    {
-        target: '[data-tour="vfx-updater-btn"]',
-        title: 'VFX Updater',
-        description: "Quickly port outdated VFX mods to the latest game version. Opens a dedicated tool that automatically extracts, converts, patches, and repacks the VFX assets so your mods keep working after game updates.",
-        placement: 'bottom',
-    },
-    {
-        target: '[data-tour="sharing-btn"]',
-        title: 'Share Modpacks',
-        description: 'Create and share modpacks securely with other Repak X and repakxtra users.',
-        placement: 'bottom',
-    },
-    {
-        target: '[data-tour="tools-btn"]',
-        title: 'Tools',
-        description: 'Access additional tools like Skip Launcher, update Heroes database, re-compress mods, and other utilities.',
-        placement: 'bottom',
-    },
-    {
-        target: '[data-tour="launch-btn"]',
-        title: 'Launch Game',
-        description: 'Launch Marvel Rivals via Steam directly from here. The app will detect when the game is running to prevent you from making any breaking changes to your mods.',
-        placement: 'bottom',
-    },
-    {
-        target: '[data-tour="settings-btn"]',
-        title: 'Settings',
-        description: 'Configure your game path and app preferences to your liking. You can replay this tour from Settings anytime!',
-        placement: 'left',
-    },
-]
 
 const PADDING = 8
 const TOOLTIP_GAP = 20
@@ -197,6 +122,8 @@ function OnboardingTour({ isOpen, onClose }: OnboardingTourProps) {
             const th = tooltipRef.current.offsetHeight
             const pos = computeTooltipPosition(rect, step.placement, tw, th)
             setTooltipPos(pos)
+        } else if (tooltipRef.current) { // repakxtra: no target on screen: the tip sits centered
+            setTooltipPos({ top: (window.innerHeight - tooltipRef.current.offsetHeight) / 2, left: (window.innerWidth - tooltipRef.current.offsetWidth) / 2, actualPlacement: step.placement, arrowOffset: -1 })
         }
     }, [isOpen, step])
 
@@ -206,6 +133,7 @@ function OnboardingTour({ isOpen, onClose }: OnboardingTourProps) {
             return
         }
 
+        step.onEnter?.() // repakxtra: show the view the target lives in
         const el = document.querySelector<HTMLElement>(step.target)
         if (el) {
             el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -293,15 +221,11 @@ function OnboardingTour({ isOpen, onClose }: OnboardingTourProps) {
                     transition={{ duration: 0.25, ease: 'easeOut' }}
                     onClick={(e) => e.stopPropagation()}
                 >
-                    <div className="onboarding-tooltip-arrow" style={{ '--arrow-offset': `${tooltipPos.arrowOffset || 50}%` } as React.CSSProperties} />
+                    {tooltipPos.arrowOffset >= 0 && <div className="onboarding-tooltip-arrow" style={{ '--arrow-offset': `${tooltipPos.arrowOffset || 50}%` } as React.CSSProperties} />}
 
                     <div className="onboarding-tooltip-content">
                         <h3 className="onboarding-tooltip-title">{step.title}</h3>
                         <p className="onboarding-tooltip-desc">{step.description}</p>
-                    </div>
-
-                    <div className="onboarding-step-counter">
-                        {currentStep + 1} of {TOUR_STEPS.length}
                     </div>
 
                     <div className="onboarding-tooltip-footer">
@@ -310,6 +234,7 @@ function OnboardingTour({ isOpen, onClose }: OnboardingTourProps) {
                                 <button
                                     key={i}
                                     className={`onboarding-dot ${i === currentStep ? 'active' : ''}`}
+                                    aria-label={`Step ${i + 1} of ${TOUR_STEPS.length}`} aria-current={i === currentStep ? 'step' : undefined} // repakxtra: the dots are the step count
                                     onClick={() => setCurrentStep(i)}
                                 />
                             ))}

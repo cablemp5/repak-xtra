@@ -18,7 +18,7 @@ jobs:
   # BUILD JOB - Builds the Windows release (Linux dropped for now; AOT-on-Linux is separate)
   # ============================================================================
   build:
-    # caleb fork: never on repakxtra, whose releases are made by hand with gh release create (the release job needs this one)
+    # repakxtra: never on repakxtra, whose releases are made by hand with gh release create (the release job needs this one)
     if: >-
       github.repository != 'cablemp5/repak-xtra' && (
       github.event_name == 'workflow_dispatch' ||

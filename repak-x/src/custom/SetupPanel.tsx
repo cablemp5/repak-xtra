@@ -1,23 +1,24 @@
-// caleb fork: Setup, what the game needs to load mods (backend: caleb_setup.rs). The UTOC signature bypass ships inside
+// repakxtra: Setup, what the game needs to load mods (backend: xtra_setup.rs). The UTOC signature bypass ships inside
 // repakxtra; Project Galacta comes from its GitHub releases, with an update check and the release notes.
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
 import { ChevronRight, Copy, ExternalLink, RefreshCw, ShieldCheck, Wrench } from 'lucide-react'
 import { open as pickFile } from '@tauri-apps/plugin-dialog'
-import { refreshPreviewsAvailable } from './previews'
+import { type Doctor, type KitProgress, isNewerKit, progressShare, progressText, usePreviewKit } from './previewKit'
 import Checkbox from '../components/ui/Checkbox'
 import CustomDropdown from '../components/CustomDropdown'
 import type { useAlert } from '../components/AlertHandler'
+import { savedItem } from './storageCarryOver'
 
 type Alert = ReturnType<typeof useAlert>
 type FileCheck = { name: string; place: string; size: number; sha256: string; found: 'missing' | 'same' | 'other' }
 type Bypass = { state: 'installed' | 'disabled' | 'partial' | 'other' | 'missing'; files: FileCheck[]; license: string; sigeon_on: boolean }
 type Galacta = { installed: string | null; disabled: boolean; latest: string | null; published: string | null; notes: string | null; url: string | null; up_to_date: boolean | null }
 
-const AUTO_KEY = 'caleb.setup.autoCheck'
-const autoCheck = () => localStorage.getItem(AUTO_KEY) !== '0'
-const FOLDER_KEY = 'caleb.setup.galactaFolder'
+const AUTO_KEY = 'repakxtra.setup.autoCheck'
+const autoCheck = () => savedItem(AUTO_KEY) !== '0'
+const FOLDER_KEY = 'repakxtra.setup.galactaFolder'
 const HERE = '__here'   // install where Galacta already is, or the mods folder itself
 const NEXUS = 'https://www.nexusmods.com/marvelrivals/mods/2940'
 const LOADER = 'https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases/tag/v7.7.0'
@@ -67,81 +68,77 @@ function Changelog({ g, title, onClose, product = 'Project Galacta' }: {
   )
 }
 
-type KitStatus = { version: string | null; dev: boolean; blender: string | null }
-type KitRelease = { version: string; published: string; notes: string; url: string; asset: string; size: number }
 const BLENDER = 'https://www.blender.org/download/'
 
-/** The preview kit: what this PC needs to render mod previews (caleb_kit.rs). Blender comes from blender.org. */
+/** Download progress: a thin bar and "38 MB of 108 MB", or "Unpacking…". */
+export function KitProgressBar({ p }: { p: KitProgress | null }) {
+  if (!p) return null
+  const share = progressShare(p)
+  return (
+    <div className="su-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={share === null ? undefined : Math.round(share * 100)}>
+      <span className="su-progress-track"><i style={share === null ? undefined : { width: `${share * 100}%` }} className={share === null ? 'is-indeterminate' : ''} /></span>
+      <span className="su-progress-text">{progressText(p)}</span>
+    </div>
+  )
+}
+
+/** What the generator's check says is missing on this PC, one sentence each. */
+export function DoctorProblems({ d }: { d: Doctor | null }) {
+  if (!d || d.ok || !d.problems.length) return null
+  return <ul className="su-problems">{d.problems.map(x => <li key={x}>{x}</li>)}</ul>
+}
+
+/** The preview kit: what this PC needs to render mod previews (xtra_kit.rs, shared logic in previewKit.tsx). */
 function PreviewKitCard({ alert }: { alert: Alert }) {
-  const [kit, setKit] = useState<KitStatus | null>(null)
-  const [latest, setLatest] = useState<KitRelease | null | undefined>(undefined)   // undefined: not checked yet
-  const [busy, setBusy] = useState<string | null>(null)
+  const k = usePreviewKit(alert)
+  const { kit, latest, busy, update } = k
   const [notes, setNotes] = useState<string | null>(null)
-  const status = () => invoke<KitStatus>('preview_kit_status').then(setKit).catch(e => alert.warning('Preview kit', String(e)))
-  useEffect(() => { status() }, [])
-  const run = async (what: string, f: () => Promise<unknown>) => {
-    setBusy(what)
-    try { await f() } catch (e) { alert.warning('Preview kit', String(e)) } finally { setBusy(null) }
-  }
-  const check = () => run('check', async () => {
-    const r = await invoke<KitRelease | null>('preview_kit_latest')
-    setLatest(r)
-    if (!r) alert.info('Preview kit', 'No preview kit has been published yet.')
-    else if (kit?.version === r.version) alert.success('Preview kit', `Up to date (v${r.version}).`)
-  })
-  const install = (file?: string) => run('install', async () => {
-    const was = kit?.version
-    const v = await invoke<string>('preview_kit_install', { file: file ?? null })
-    await status()
-    await refreshPreviewsAvailable()
-    alert.success('Preview kit', was ? `Updated to v${v}.` : `v${v} installed. Generate previews from a loadout or Loadouts.`)
-    if (!file && latest) setNotes(was ? `Updated to v${v}` : `Installed v${v}`)
-  })
+  useEffect(() => { k.peek() }, [])   // the newest kit and its notes, so Set up says what it gets
   const fromFile = async () => {
     const f = await pickFile({ title: 'The preview kit zip', filters: [{ name: 'Preview kit', extensions: ['zip'] }] }).catch(() => null)
-    if (typeof f === 'string') install(f)
+    if (typeof f === 'string') k.install(f)
   }
-  const remove = () => run('remove', async () => {
-    await invoke('preview_kit_remove')
-    await status()
-    await refreshPreviewsAvailable()
-    alert.info('Preview kit', 'Removed. Previews already made stay.')
-  })
   const pickBlender = async () => {
     const f = await pickFile({ title: 'blender.exe', filters: [{ name: 'Blender', extensions: ['exe'] }] }).catch(() => null)
-    if (typeof f !== 'string') return
-    try { await invoke('preview_kit_set_blender', { path: f }); await status() } catch (e) { alert.warning('Blender', String(e)) }
+    if (typeof f === 'string') k.pickBlender(f)
   }
-  const update = latest && kit?.version && latest.version !== kit.version
+  const ready = Boolean((kit?.version || kit?.dev) && kit?.blender)
   const chip = !kit ? 'Checking…' : kit.version ? (update ? 'Update available' : `Kit v${kit.version}`) : kit.dev ? 'Built in' : 'Not installed'
+  const missing = kit && !ready
   return (
     <section className="su-card">
       <div className="su-card-head">
         <div>
           <h3>Mod previews</h3>
-          <p>Renders a picture of each mod and loadout. Needs the preview kit (a one-time download) and Blender, which is free.</p>
+          <p>Renders a picture of each mod and loadout, and a clip of animation mods. Needs the preview kit (one download, about {latest?.size ? Math.round(latest.size / 1048576) : 110} MB) and Blender, which is free.</p>
         </div>
         <span className={`su-chip ${update ? 'is-update' : kit?.version || kit?.dev ? 'is-installed' : 'is-missing'}`}>{chip}</span>
       </div>
       <p className="su-meta">
         {kit?.blender
           ? <>Blender: <code>{kit.blender.replace(/^.*[\\/](Blender[^\\/]*)[\\/]blender\.exe$/i, '$1')}</code> · <a onClick={pickBlender}>Use another</a></>
-          : <>Blender not found · <a onClick={() => open(BLENDER)}>Download Blender</a> · <a onClick={pickBlender}>Pick blender.exe</a></>}
+          : <>Blender not found · <a onClick={() => open(BLENDER)}>blender.org</a> · <a onClick={pickBlender}>Pick blender.exe</a></>}
         {latest && <> · Latest kit v{latest.version}, {date(latest.published)} · <a onClick={() => setNotes("What's new")}>What's new</a></>}
+        {latest === null && <> · No kit published yet: drop a kit zip on the window, or install it from the file</>}
       </p>
       {kit?.dev && !kit.version && <p className="su-note">This PC has the generator built in, so it needs no kit. Installing one uses the kit instead (to test it).</p>}
+      <KitProgressBar p={k.progress} />
+      <DoctorProblems d={k.doctor} />
+      {k.doctor?.ok && !busy && <p className="su-note is-ok">This PC can make previews.</p>}
       <div className="su-actions">
-        {(!kit?.version || update) && (
-          <button type="button" className="btn-primary su-main" disabled={Boolean(busy) || latest === null} onClick={() => install()}
-            title={latest === null ? 'No preview kit has been published yet' : 'Downloads the kit from GitHub'}>
-            {busy === 'install' ? 'Installing…' : update ? `Update to v${latest!.version}` : 'Install kit'}
+        {(missing || update) && (
+          <button type="button" className="btn-primary su-main" disabled={Boolean(busy) || (!kit?.version && !kit?.dev && latest === null)} onClick={() => k.setUp()}
+            title={update ? 'Downloads the newest kit from GitHub' : 'Installs what is missing: the kit (from GitHub) and Blender (with winget), then checks this PC'}>
+            {busy === 'setup' ? (k.progress ? 'Installing kit…' : 'Setting up…') : update ? `Update to v${latest!.version}` : 'Set up previews'}
           </button>
         )}
+        {kit && !kit.blender && <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={() => k.installBlender()}
+          title="Installs Blender with winget (Windows asks for admin rights once)">{busy === 'blender' ? 'Installing Blender…' : 'Install Blender'}</button>}
         <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={fromFile}>Install from file…</button>
-        <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={check}>
-          <RefreshCw size={14} className={busy === 'check' ? 'su-spin' : ''} /> {busy === 'check' ? 'Checking…' : 'Check for updates'}
+        <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={() => k.checkPc()}>
+          <RefreshCw size={14} className={busy === 'doctor' ? 'su-spin' : ''} /> {busy === 'doctor' ? 'Checking…' : 'Check this PC'}
         </button>
-        {kit?.version && <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={remove}>Remove</button>}
+        {kit?.version && <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={() => k.remove()}>Remove</button>}
       </div>
       {notes && latest && <Changelog product="Preview kit" g={{ latest: `v${latest.version}`, published: latest.published, notes: latest.notes, url: latest.url }}
         title={notes} onClose={() => setNotes(null)} />}
@@ -149,11 +146,18 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
   )
 }
 
-export function SetupPanel({ alert, onClose, start }: { alert: Alert; onClose: () => void; start?: Galacta }) {
+let lastCheck: Galacta | null = null // the newest online Galacta check this run: Setup opens knowing it
+const remember = (g: Galacta) => { if (g.latest) lastCheck = g; return g }
+/** The offline status with the last online check's release info, while Galacta is still where that check found it. */
+const withLastCheck = (g: Galacta): Galacta => lastCheck && !g.latest && lastCheck.installed === g.installed
+  ? { ...g, latest: lastCheck.latest, published: lastCheck.published, notes: lastCheck.notes, url: lastCheck.url, up_to_date: lastCheck.up_to_date }
+  : g
+
+export function SetupPanel({ alert, onClose }: { alert: Alert; onClose: () => void }) {
   const [bypass, setBypass] = useState<Bypass | null>(null)
-  const [galacta, setGalacta] = useState<Galacta | null>(start ?? null)
+  const [galacta, setGalacta] = useState<Galacta | null>(lastCheck)
   const [folders, setFolders] = useState<string[]>([])
-  const [folder, setFolder] = useState(localStorage.getItem(FOLDER_KEY) || HERE)
+  const [folder, setFolder] = useState(savedItem(FOLDER_KEY) || HERE)
   const [auto, setAuto] = useState(autoCheck())
   const [busy, setBusy] = useState<string | null>(null)
   const [confirmOff, setConfirmOff] = useState<'disable' | 'remove' | null>(null)
@@ -162,7 +166,7 @@ export function SetupPanel({ alert, onClose, start }: { alert: Alert; onClose: (
 
   useEffect(() => {
     invoke<Bypass>('setup_bypass_status').then(setBypass).catch(e => alert.warning('Setup', String(e)))
-    if (!start) invoke<Galacta>('setup_galacta_status', { online: false }).then(setGalacta).catch(() => {})
+    invoke<Galacta>('setup_galacta_status', { online: false }).then(g => setGalacta(withLastCheck(g))).catch(() => {})
     invoke<{ id: string; depth: number }[]>('get_folders')   // subfolders by their path below ~mods ("A/B")
       .then(fs => setFolders((fs ?? []).filter(f => f.depth > 0).map(f => f.id))).catch(() => {})
   }, [])
@@ -188,13 +192,13 @@ export function SetupPanel({ alert, onClose, start }: { alert: Alert; onClose: (
       disable: 'Off. Mods that need it will not load.', remove: 'Removed.' }[action])
   })
   const check = () => run('check', async () => {
-    const g = await invoke<Galacta>('setup_galacta_status', { online: true })
+    const g = remember(await invoke<Galacta>('setup_galacta_status', { online: true }))
     setGalacta(g)
     if (g.up_to_date === true) alert.success('Project Galacta', `Up to date (${g.latest}).`)
   })
   const install = () => run('install-galacta', async () => {
     const wasInstalled = Boolean(galacta?.installed)
-    const g = await invoke<Galacta>('setup_galacta_install', { folder: folder === HERE ? null : folder })
+    const g = remember(await invoke<Galacta>('setup_galacta_install', { folder: folder === HERE ? null : folder }))
     setGalacta(g)
     setNotes(wasInstalled ? `Updated to ${g.latest}` : `Installed ${g.latest}`)   // what changed, right away
   })
@@ -211,6 +215,8 @@ export function SetupPanel({ alert, onClose, start }: { alert: Alert; onClose: (
         initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.15 }}>
         <div className="modal-header">
           <div><h2>Mod setup</h2><p className="su-sub">What Marvel Rivals needs to load mods. Close the game before changing these.</p></div>
+          <button type="button" className="lo-text-btn su-guided" onClick={() => { onClose(); window.dispatchEvent(new Event('repakxtra-first-run')) }}
+            title="The first-launch setup: game folder, bypass, Project Galacta, previews and your first mods, one screen">Guided setup</button>
           <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
 
@@ -320,7 +326,6 @@ let startupChecked = false
 export default function SetupButton({ alert }: { alert: Alert }) {
   const [open, setOpen] = useState(false)
   const [attention, setAttention] = useState(false)
-  const [start, setStart] = useState<Galacta | undefined>()
 
   const recheck = () => invoke<Bypass>('setup_bypass_status').then(b => setAttention(b.state !== 'installed')).catch(() => {})
   useEffect(() => {   // the Sigeon setup installs the bypass too
@@ -332,21 +337,31 @@ export default function SetupButton({ alert }: { alert: Alert }) {
     if (!autoCheck() || startupChecked) return
     startupChecked = true   // once per app start, even when React mounts this twice
     invoke<Galacta>('setup_galacta_status', { online: true }).then(g => {
+      remember(g)
       if (!g.installed || g.up_to_date !== false) return
       setAttention(true)
       const id = alert.info('Project Galacta update', `${g.latest} is out.`, {
         duration: 12000,
-        action: { label: 'Update', onClick: () => { alert.dismissAlert(id); setStart(g); setOpen(true) } },
+        action: { label: 'Update', onClick: () => { alert.dismissAlert(id); setOpen(true) } },
       })
     }).catch(() => {})   // offline: no update check, no noise
+    // An installed preview kit with a newer release: the same kind of toast, opening Setup at its card
+    Promise.all([invoke<{ version: string | null }>('preview_kit_status'), invoke<{ version: string } | null>('preview_kit_latest')]).then(([k, r]) => {
+      if (!k.version || !r || !isNewerKit(r.version, k.version)) return
+      setAttention(true)
+      const id = alert.info('Preview kit update', `Kit v${r.version} is out (you have v${k.version}).`, {
+        duration: 12000,
+        action: { label: 'Update', onClick: () => { alert.dismissAlert(id); setOpen(true) } },
+      })
+    }).catch(() => {})
   }, [])
 
   return (
     <>
-      <button type="button" className="btn-settings su-btn" onClick={() => { setStart(undefined); setOpen(true) }} title="What the game needs to load mods">
+      <button type="button" className="btn-settings su-btn" data-tour="setup-btn" onClick={() => setOpen(true)} title="What the game needs to load mods">
         <Wrench size={16} /> Setup {attention && <i className="su-dot" aria-label="Needs attention" />}
       </button>
-      {open && <SetupPanel alert={alert} start={start} onClose={() => { setOpen(false); recheck() }} />}
+      {open && <SetupPanel alert={alert} onClose={() => { setOpen(false); recheck() }} />}
     </>
   )
 }

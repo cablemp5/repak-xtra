@@ -9,8 +9,8 @@ import { formatFileSize } from '../utils/format'
 import { detectHeroesWithData } from '../utils/heroes'
 import { FALLBACK_HERO_ID, resolveHeroImage, useHeroImages } from '../utils/heroImages'
 import './ModDetailsPanel.css'
-import { ModPreview } from '../custom/previews' // caleb fork
-import { ModName } from '../custom/modName' // caleb fork
+import { ModPreview } from '../custom/previews' // repakxtra
+import { ModName } from '../custom/modName' // repakxtra
 
 type CharacterDataEntry = {
   name: string
@@ -166,7 +166,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
           onMouseLeave={titleReveal.onMouseLeave}
         >
           <span className="mod-title-text" ref={titleReveal.innerRef} title={cleanName}>
-            <ModName name={cleanName} />{/* caleb fork: slug, tags and version, like the list */}
+            <ModName name={cleanName} />{/* repakxtra: slug, tags and version, like the list */}
           </span>
         </h2>
         {onUpdateMod && (

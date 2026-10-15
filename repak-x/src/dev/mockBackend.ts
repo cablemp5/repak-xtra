@@ -17,7 +17,7 @@ let sigeonState = 'off'
 const sigeonUnset = location.search.includes('sigeon=unset')
 const sigeonHome = { path: 'C:\\Users\\you\\Desktop\\Sigeon V2', default: true, loader: !sigeonUnset }
 let sigeonDir = sigeonHome
-// Fake Sigeon configs as the editor sees them (caleb_sigeon.rs Line); the license is only ever a placeholder line
+// Fake Sigeon configs as the editor sees them (xtra_sigeon.rs Line); the license is only ever a placeholder line
 const sigeonLine = (key: string, value: string, on = true) => ({ kind: 'entry', key, value, on })
 const sigeonPresets: Record<string, any[]> = sigeonUnset ? {} : Object.fromEntries(['base', 'high'].map(v => [v, [
   { kind: 'comment', text: ' SigeonLoader configuration.' }, { kind: 'blank' }, { kind: 'license', set: true }, { kind: 'blank' },
@@ -47,7 +47,7 @@ const later = <T,>(v: T | Promise<T>) => (mock.__previewDelay ? new Promise<T>(r
 // Lazy loaders, not eager imports: the app's production build drops this dev-only branch with them (eager ones copied
 // every local preview PNG into the app's assets)
 const previewUrls: Record<string, () => Promise<string>> = import.meta.env.DEV
-  ? import.meta.glob<string>('./previews.local/*.png', { query: '?url', import: 'default' })
+  ? import.meta.glob<string>('./previews.local/*.{png,webp}', { query: '?url', import: 'default' })
   : {}
 const previewCovers: Record<string, () => Promise<{ covers?: string[]; members?: string[] }>> = import.meta.env.DEV
   ? import.meta.glob<{ covers?: string[]; members?: string[] }>('./previews.local/*.json', { import: 'default' })
@@ -115,7 +115,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'setup_bypass':
         mockBypass = ({ install: 'installed', enable: 'installed', disable: 'disabled', remove: 'missing' } as any)[args?.action] ?? mockBypass
         return setupBypass()
-      case 'setup_galacta_status': return { ...mockGalacta, ...(args?.online ? galactaRelease : {}) }
+      case 'setup_galacta_status': return args?.online ? { ...mockGalacta, ...galactaRelease } : { ...mockGalacta, up_to_date: null } // offline: no release info, like the backend
       case 'setup_galacta_install':
         mockGalacta = { installed: 'C:/Game/~mods', disabled: false, up_to_date: true }
         return { ...mockGalacta, ...galactaRelease }
@@ -125,9 +125,9 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         return sigeonState
       case 'get_hero_image_ids': return data.heroIds ?? []
       case 'list_mod_previews': // copies of %APPDATA%\Repak-X\previews in src/dev/previews.local
-        return Object.keys(previewUrls).map(f => f.replace(/^.*\/|\.png$/g, ''))
+        return Object.keys(previewUrls).map(f => f.replace(/^.*\/|\.(png|webp)$/g, ''))
       case 'get_mod_preview': { // a loadout render made in this page shows a local copy's image
-        const load = previewUrls[`./previews.local/${args?.key}.png`] ?? (setCovers.has(args?.key) ? Object.values(previewUrls)[0] : undefined)
+        const load = previewUrls[`./previews.local/${args?.key}.png`] ?? previewUrls[`./previews.local/${args?.key}.webp`] ?? (setCovers.has(args?.key) ? Object.values(previewUrls)[0] : undefined)
         if (!load) throw `No preview for ${args?.key}`
         return later(load().then(url => fetch(url)).then(r => r.arrayBuffer()))
       }
@@ -165,6 +165,15 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'preview_kit_install': localStorage.setItem('mock.kit', '1'); return '1'
       case 'preview_kit_remove': localStorage.removeItem('mock.kit'); return null
       case 'preview_kit_set_blender': return args?.path ?? null
+      case 'preview_kit_install_blender': return 'C:\\Program Files\\Blender Foundation\\Blender 5.2\\blender.exe'
+      case 'set_game_path': return String(args?.path ?? '')
+      case 'previews_doctor': return localStorage.getItem('mock.doctor') === 'fail'
+        ? { ok: false, problems: ["The game's Paks folder was not found (REPAKXTRA_PAKS is not set)."] } : { ok: true, problems: [] }
+      // Capture: the game counts as open while window.__mockGameRunning is set; captures fail (no game to picture)
+      case 'capture_game_status': return { running: Boolean(mock.__mockGameRunning), width: 2560, height: 1440 }
+      case 'capture_game_now':
+      case 'capture_game_hotkey': throw 'The browser preview has no game window to capture.'
+      case 'capture_game_cancel': return null
       case 'get_preview_covers':
         return later(setCovers.get(args?.key) ?? previewCovers[`./previews.local/${args?.key}.json`]?.()
           .then(c => ({ covers: c?.covers ?? [], members: c?.members ?? null })) ?? { covers: [], members: null })

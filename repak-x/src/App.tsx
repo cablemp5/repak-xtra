@@ -54,17 +54,19 @@ import { AlertProvider, useAlert } from './components/AlertHandler'
 import { offerUndoDelete, type TrashedMod } from './custom/undoDelete'
 import ModStateFilter, { matchesState, type ModState } from './custom/ModStateFilter'
 import './custom/keyboardClickables'
-import { dialogOpen } from './custom/hotkeys' // caleb fork: extra shortcuts
+import { dialogOpen } from './custom/hotkeys' // repakxtra: extra shortcuts
 import FilterPanel, { filterScope } from './custom/FilterPanel'
 import Loadouts, { AddToLoadoutField, LoadoutMenuItems } from './custom/Loadouts'
 import LoadoutsScreen, { ViewTabs } from './custom/LoadoutsScreen'
-import { modKey, renameModKey } from './custom/loadoutStore' // caleb fork
+import { modKey, renameModKey } from './custom/loadoutStore' // repakxtra
 import { TagsToggle } from './custom/uiPrefs'
 import { GeneratePreviewsButton } from './custom/previews'
 import { finishInstallLoadout } from './custom/installLoadout'
 import SigeonControl from './custom/SigeonControl'
 import SetupButton from './custom/SetupPanel'
 import { versionTag } from './custom/version'
+import FirstRun from './custom/FirstRun' // repakxtra: first-launch setup
+import { installDroppedKit } from './custom/previewKit'
 import { useGlobalTooltips } from './hooks/useGlobalTooltips'
 import { useAprilFools } from './hooks/useAprilFools'
 import Switch from './components/ui/Switch'
@@ -260,11 +262,11 @@ type AppSettings = {
 
 function App() {
   const isAprilFools = useAprilFools();
-  const [hideSuffix, setHideSuffix] = useState(false);
-  const [autoOpenDetails, setAutoOpenDetails] = useState(false);
-  const [showHeroIcons, setShowHeroIcons] = useState(false);
-  const [showHeroBg, setShowHeroBg] = useState(false);
-  const [showModType, setShowModType] = useState(false);
+  const [hideSuffix, setHideSuffix] = useState(true); // repakxtra: on by default
+  const [autoOpenDetails, setAutoOpenDetails] = useState(true);
+  const [showHeroIcons, setShowHeroIcons] = useState(true);
+  const [showHeroBg, setShowHeroBg] = useState(true);
+  const [showModType, setShowModType] = useState(true);
   const [showExperimental, setShowExperimental] = useState(false);
   const [showSubfolderMods, setShowSubfolderMods] = useState(true);
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
@@ -281,7 +283,7 @@ function App() {
   }, [enableAnimations]);
   const [theme, setTheme] = useState('dark');
   const [accentColor, setAccentColor] = useState('#4a9eff');
-  const [sortBy, setSortBy] = useState<'name' | 'modified' | 'enabled'>('modified'); // caleb fork: newest first
+  const [sortBy, setSortBy] = useState<'name' | 'modified' | 'enabled'>('modified'); // repakxtra: newest first
   const [modState, setModState] = useState<ModState>('all');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
@@ -420,8 +422,8 @@ function App() {
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const modsGridRef = useRef<HTMLDivElement | null>(null)
   const gameRunningRef = useRef(false)
-  const bypassRef = useRef(false); bypassRef.current = bypassGameRunningLock // caleb fork: live game lock for Undo toasts
-  const undoBlocked = () => gameRunningRef.current && !bypassRef.current // caleb fork
+  const bypassRef = useRef(false); bypassRef.current = bypassGameRunningLock // repakxtra: live game lock for Undo toasts
+  const undoBlocked = () => gameRunningRef.current && !bypassRef.current // repakxtra
   const lastSelectedModIndex = useRef<number | null>(null) // For Shift+click range selection
   const filteredModsRef = useRef<ModRecord[]>([]) // Keep in sync with filteredMods for selection handler
   const clashScopeModPath = useRef<string | null>(null) // null = global clashes, path = single-mod scope
@@ -669,6 +671,7 @@ function App() {
   const handleFileDrop = async (paths: string[]) => {
     if (!paths || paths.length === 0) return
     console.log('Dropped items:', paths)
+    if (await installDroppedKit(paths, alert)) return // repakxtra: a preview kit zip installs as the kit, not as a mod
 
     // A recognized Project Galacta update always replaces the existing install
     // in place, regardless of which folder (if any) it was dropped on, or how
@@ -1049,7 +1052,7 @@ function App() {
     setSelectedMod(mod)
     if (!autoOpenDetails) return
     if (!isRightPanelOpen) {
-      // caleb fork: open after the double-click window, and not at all once a double-click started renaming; opening at
+      // repakxtra: open after the double-click window, and not at all once a double-click started renaming; opening at
       // once moved the row under the cursor, so the second click missed and renaming needed a third
       window.setTimeout(() => {
         if (document.querySelector('.mod-rename-input')) return
@@ -1152,17 +1155,17 @@ function App() {
 
       const modPaths = Array.from(selectedMods)
       let deletedCount = 0
-      const deletedPaths: TrashedMod[] = [] // caleb fork: one trash id per deletion
+      const deletedPaths: TrashedMod[] = [] // repakxtra: one trash id per deletion
       let errors: string[] = []
 
       for (const path of modPaths) {
         try {
           // Find mod details to check if it's a folder mod or regular file
           // If we don't have details, try delete_mod anyway
-          const trashId = crypto.randomUUID() // caleb fork
+          const trashId = crypto.randomUUID() // repakxtra
           await invoke('delete_mod', { path: path, trashId })
           deletedCount++
-          deletedPaths.push({ id: trashId, path }) // caleb fork
+          deletedPaths.push({ id: trashId, path }) // repakxtra
         } catch (e) {
           console.error(`Failed to delete ${path}:`, e)
           errors.push(path)
@@ -1175,7 +1178,7 @@ function App() {
           `Deleted ${deletedCount} mods. Failed to delete ${errors.length} mods.`
         )
       }
-      offerUndoDelete(alert, deletedPaths, loadMods, undoBlocked) // caleb fork
+      offerUndoDelete(alert, deletedPaths, loadMods, undoBlocked) // repakxtra
 
       setSelectedMods(new Set()) // Clear selection
       await loadMods()
@@ -2087,10 +2090,10 @@ function App() {
       })
 
       if (selected) {
-        await invoke('set_game_path', { path: selected })
-        setGamePath(selected)
-        uiLog.info('GamePath', `Mods folder set to ${selected}`)
-        setStatus('Game path set: ' + selected)
+        const stored = await invoke<string>('set_game_path', { path: selected }) // repakxtra: the game folder means its ~mods
+        setGamePath(stored)
+        uiLog.info('GamePath', `Mods folder set to ${stored}`)
+        setStatus('Game path set: ' + stored)
         await loadMods()
         await loadFolders()
       }
@@ -2162,10 +2165,10 @@ function App() {
     try {
       // Pass the real path: delete_mod resolves the associated IoStore files itself, and
       // rewriting .bak_repak to .pak deleted the enabled copy when both exist.
-      const trashId = crypto.randomUUID() // caleb fork
+      const trashId = crypto.randomUUID() // repakxtra
       await invoke('delete_mod', { path: modPath, trashId })
       setStatus('Mod deleted')
-      offerUndoDelete(alert, [{ id: trashId, path: modPath }], loadMods, undoBlocked) // caleb fork
+      offerUndoDelete(alert, [{ id: trashId, path: modPath }], loadMods, undoBlocked) // repakxtra
 
       // Clear selection if the deleted mod was selected
       if (selectedMod && selectedMod.path === modPath) {
@@ -2715,7 +2718,7 @@ function App() {
 
     try {
       const newPath = await invoke('rename_mod', { modPath, newName }) as string
-      renameModKey(modKey(modPath), modKey(newPath)) // caleb fork: loadouts follow the rename
+      renameModKey(modKey(modPath), modKey(newPath)) // repakxtra: loadouts follow the rename
       setStatus(`Renamed to "${newName}"`)
       const refreshed = await loadMods()
       if (selectedMod && selectedMod.path === modPath) {
@@ -3126,9 +3129,9 @@ function App() {
         else if (panels.install) setPanel('install', false)
         else if (panels.clash) setPanel('clash', false)
         else if (selectedMod) setSelectedMod(null)
-        else if (selectedMods.size > 0) setSelectedMods(new Set()) // caleb fork: Esc clears the selection, as F1 says
+        else if (selectedMods.size > 0) setSelectedMods(new Set()) // repakxtra: Esc clears the selection, as F1 says
       }
-      else if (key !== 'f1' && (e.defaultPrevented || dialogOpen())) return // caleb fork: Home or a dialog is showing: the Library's selection keys below stay quiet
+      else if (key !== 'f1' && (e.defaultPrevented || dialogOpen())) return // repakxtra: Home or a dialog is showing: the Library's selection keys below stay quiet
       // Ctrl+E - Toggle mod enabled/disabled
       else if (ctrl && key === 'e' && selectedMod) {
         e.preventDefault()
@@ -3197,7 +3200,7 @@ function App() {
           setSelectedMod(filteredMods[0])
         }
       }
-      // Delete - delete the checked mods, or the viewed one (undoable, caleb fork)
+      // Delete - delete the checked mods, or the viewed one (undoable, repakxtra)
       else if (key === 'delete' && (selectedMods.size > 0 || selectedMod)) {
         e.preventDefault()
         if (gameRunning && !bypassGameRunningLock) alert.warning('Game Running', 'Cannot delete mods while game is running.')
@@ -3359,7 +3362,7 @@ function App() {
           typeTracker[modType] = count + 1
         }
 
-        await finishInstallLoadout(modsWithSettings, alert) // caleb fork: Save as a loadout
+        await finishInstallLoadout(modsWithSettings, alert) // repakxtra: Save as a loadout
 
         // Reload in background so alert shows success immediately
         loadMods()
@@ -3571,10 +3574,7 @@ function App() {
         uiLog.error('Startup', `Could not load app settings: ${err}`);
       });
 
-    const hasSeenTour = localStorage.getItem('hasSeenOnboarding');
-    if (!hasSeenTour) {
-      setTimeout(() => setShowOnboarding(true), 1200);
-    }
+    // repakxtra: a first launch opens the setup screen instead (custom/FirstRun.tsx), which offers the tour
   }, []);
 
 
@@ -3845,11 +3845,11 @@ function App() {
         >
           <ModularLogo size={50} className="repak-icon" />
           <div className="header-title-group">
-            <h1 className="font-logo">repak<span className="title-x">x</span>tra</h1>{/* caleb fork */}
-            <span className="version">{versionTag(version)}</span>{/* caleb fork */}
+            <h1 className="font-logo">repak<span className="title-x">xtra</span></h1>{/* repakxtra */}
+            <span className="version">{versionTag(version)}</span>{/* repakxtra */}
           </div>
         </div>
-        <ViewTabs />{/* caleb fork: Home | Library */}
+        <ViewTabs />{/* repakxtra: Home | Library */}
         <div className="header-actions-right">
           <button
             className="btn-settings"
@@ -3934,8 +3934,8 @@ function App() {
             <span>VFX Updater</span>
           </button>
 
-          <SigeonControl alert={alert} />{/* caleb fork */}
-          <SetupButton alert={alert} />{/* caleb fork: signature bypass and Project Galacta */}
+          <SigeonControl alert={alert} />{/* repakxtra */}
+          <SetupButton alert={alert} />{/* repakxtra: signature bypass and Project Galacta */}
           <button
             onClick={() => setPanel('sharing', true)}
             className="btn-settings"
@@ -3963,14 +3963,14 @@ function App() {
       </header>
 
       <div className="container">
-        {/* caleb fork: Home view (custom/LoadoutsScreen.tsx); the action bar and panels below are the Library */}
+        {/* repakxtra: Home view (custom/LoadoutsScreen.tsx); the action bar and panels below are the Library */}
         <LoadoutsScreen
           mods={mods}
           modDetails={modDetails}
           scopeMods={folderMods}
           scopeLabel={[...selectedCharacters, ...selectedCategories].join(', ') || 'all mods'}
           blocked={gameRunning && !bypassGameRunningLock}
-          isBlocked={undoBlocked} /* caleb fork: live game lock for Undo */
+          isBlocked={undoBlocked} /* repakxtra: live game lock for Undo */
           reload={loadMods}
           alert={alert}
         />
@@ -4037,7 +4037,7 @@ function App() {
               addNewLabel="+ Create Tag"
               onDeleteOption={handleDeleteTagFromCatalog}
             />
-            <TagsToggle tags={allTags} mods={mods} alert={alert} /* caleb fork: shown or hidden in words, Delete all tags */
+            <TagsToggle tags={allTags} mods={mods} alert={alert} /* repakxtra: shown or hidden in words, Delete all tags */
               onChanged={async () => { setFilterTag(''); await loadMods(); await loadTags() }} />
 
             <AddModSplitButton
@@ -4066,23 +4066,23 @@ function App() {
           >
             {/* Left Sidebar - Folders */}
             <div className="left-sidebar" data-tour="folder-sidebar">
-              {/* caleb fork: saved loadouts (custom/Loadouts.tsx) */}
+              {/* repakxtra: saved loadouts (custom/Loadouts.tsx) */}
               <Loadouts
                 mods={mods}
                 scopeMods={folderMods}
                 scopeLabel={[...selectedCharacters, ...selectedCategories].join(', ') || 'all mods'}
                 blocked={gameRunning && !bypassGameRunningLock}
-                isBlocked={undoBlocked} /* caleb fork: live game lock for Undo */
+                isBlocked={undoBlocked} /* repakxtra: live game lock for Undo */
                 reload={loadMods}
                 alert={alert}
-                selected={[...selectedMods]} /* caleb fork: + makes a loadout of the selection */
+                selected={[...selectedMods]} /* repakxtra: + makes a loadout of the selection */
               />
               {/* Filters Section */}
               <div
                 className="sidebar-filters"
                 style={filtersHeight !== null ? { height: `${filtersHeight}px` } : { maxHeight: '35vh' }}
               >
-                {/* caleb fork: redesigned filters (custom/FilterPanel.tsx) */}
+                {/* repakxtra: redesigned filters (custom/FilterPanel.tsx) */}
                 <FilterPanel
                   availableCharacters={availableCharacters}
                   availableCategories={availableCategories}
@@ -4141,7 +4141,7 @@ function App() {
                       {selectedFolderId === 'all' ? 'All Mods' :
                         folders.find(f => f.id === selectedFolderId)?.name || 'Unknown Folder'}
                     </span>
-                    {/* caleb fork: say which filters narrow the list */}
+                    {/* repakxtra: say which filters narrow the list */}
                     {(selectedCharacters.size > 0 || selectedCategories.size > 0) && (
                       <span className="header-title-scope" title={filterScope(selectedCharacters, selectedCategories)}> · {filterScope(selectedCharacters, selectedCategories)}</span>
                     )}
@@ -4275,7 +4275,7 @@ function App() {
                     />
                   </div>
 
-                  {/* caleb fork: add the selected mods to a loadout, and previews for every selected mod */}
+                  {/* repakxtra: add the selected mods to a loadout, and previews for every selected mod */}
                   <AddToLoadoutField paths={[...selectedMods]} alert={alert} />
                   <GeneratePreviewsButton paths={[...selectedMods]} />
 
@@ -4356,7 +4356,7 @@ function App() {
                 gameRunning={gameRunning && !bypassGameRunningLock}
                 holdToDelete={holdToDelete}
                 enableAnimations={enableAnimations}
-                emptyState={/* caleb fork: name the reason the list is empty and offer the way back */
+                emptyState={/* repakxtra: name the reason the list is empty and offer the way back */
                   searchQuery ? (
                     <div className="empty-state">
                       <p>No mods match “{searchQuery}”.</p>
@@ -4476,7 +4476,7 @@ function App() {
               }
             }}
             onToggle={() => contextMenu.mod && handleToggleMod(contextMenu.mod.path)}
-            loadoutMenu={contextMenu.mod ? (close => ( /* caleb fork: the right-clicked mod, or the selection it belongs to */
+            loadoutMenu={contextMenu.mod ? (close => ( /* repakxtra: the right-clicked mod, or the selection it belongs to */
               <LoadoutMenuItems alert={alert} close={close}
                 paths={selectedMods.has(contextMenu.mod!.path) ? [...selectedMods] : [contextMenu.mod!.path]} />)) : undefined}
             onRename={() => {
@@ -4528,6 +4528,8 @@ function App() {
         isOpen={showOnboarding}
         onClose={handleCloseTour}
       />
+      <FirstRun alert={alert} gamePath={gamePath} onAutoDetect={handleAutoDetect} onBrowse={handleBrowseGamePath}
+        onAddFiles={handleFileDrop} onStartTour={() => setShowOnboarding(true)} />{/* repakxtra */}
     </div >
   )
 }

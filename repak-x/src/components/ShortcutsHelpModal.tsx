@@ -7,7 +7,7 @@ type ShortcutsHelpModalProps = {
     onClose: () => void
 }
 
-// caleb fork: one grouped list shared with the shortcut handlers (custom/hotkeys.ts)
+// repakxtra: one grouped list shared with the shortcut handlers (custom/hotkeys.ts)
 
 function ShortcutsHelpModal({ isOpen, onClose }: ShortcutsHelpModalProps) {
     if (!isOpen) return null

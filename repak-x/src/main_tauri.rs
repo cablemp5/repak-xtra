@@ -4,12 +4,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod asset_explorer;
-mod caleb_classify; // caleb fork: extra mod types, Project Galacta check
-mod caleb_sigeon; // caleb fork: Sigeon V2 switch
-mod caleb_setup; // caleb fork: Setup panel (signature bypass, Project Galacta)
-mod caleb_kit; // caleb fork: preview kit (previews on other PCs)
-mod caleb_previews; // caleb fork: generated mod previews
-mod caleb_trash; // caleb fork: undoable delete
+mod xtra_classify; // repakxtra: extra mod types, Project Galacta check
+mod xtra_sigeon; // repakxtra: Sigeon V2 switch
+mod xtra_setup; // repakxtra: Setup panel (signature bypass, Project Galacta)
+mod xtra_kit; // repakxtra: preview kit (previews on other PCs)
+mod xtra_previews; // repakxtra: generated mod previews
+mod xtra_trash; // repakxtra: undoable delete
+mod xtra_capture; // repakxtra: capture preview in game
 mod character_data;
 mod crash_monitor;
 mod discord_presence;
@@ -135,15 +136,15 @@ struct AppState {
     accent_color: String,
     #[serde(default = "default_view_mode")]
     view_mode: String,
-    #[serde(default)]
+    #[serde(default = "default_true")] // repakxtra: on by default
     hide_suffix: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     auto_open_details: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     show_hero_icons: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     show_hero_bg: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     show_mod_type: bool,
     #[serde(default)]
     show_experimental: bool,
@@ -202,11 +203,11 @@ impl Default for AppState {
             theme: default_theme(),
             accent_color: default_accent(),
             view_mode: default_view_mode(),
-            hide_suffix: false,
-            auto_open_details: false,
-            show_hero_icons: false,
-            show_hero_bg: false,
-            show_mod_type: false,
+            hide_suffix: default_true(),
+            auto_open_details: default_true(),
+            show_hero_icons: default_true(),
+            show_hero_bg: default_true(),
+            show_mod_type: default_true(),
             show_experimental: false,
             auto_check_updates: default_true(),
             parallel_processing: false,
@@ -455,13 +456,13 @@ async fn get_game_path(state: State<'_, Arc<Mutex<AppState>>>) -> Result<String,
 }
 
 #[tauri::command]
-async fn set_game_path(path: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
-    let mods_path = PathBuf::from(&path);
+async fn set_game_path(path: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<String, String> {
+    let mods_path = xtra_setup::mods_folder_for(&PathBuf::from(&path))?; // repakxtra: the install folder means its ~mods
 
     let mut state = state.lock().unwrap();
-    state.game_path = mods_path;
+    state.game_path = mods_path.clone();
     save_state(&state).map_err(|e| e.to_string())?;
-    Ok(())
+    Ok(mods_path.to_string_lossy().to_string()) // repakxtra: the folder actually stored
 }
 
 #[tauri::command]
@@ -3338,13 +3339,13 @@ async fn install_mods(
 #[tauri::command]
 async fn delete_mod(
     path: String,
-    trash_id: Option<String>, // caleb fork: one trash folder per deletion, named by the frontend's Undo
+    trash_id: Option<String>, // repakxtra: one trash folder per deletion, named by the frontend's Undo
     window: Window,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<(), String> {
     let path_buf = PathBuf::from(&path);
     log::info!("delete_mod called with path: {}", path);
-    let trash = caleb_trash::reserve(trash_id)?; // caleb fork: undoable delete
+    let trash = xtra_trash::reserve(trash_id)?; // repakxtra: undoable delete
 
     // Determine the actual file to delete - check both .pak and .bak_repak variants
     let (actual_path, is_disabled) = if path_buf.exists() {
@@ -3380,8 +3381,8 @@ async fn delete_mod(
 
     // Try to delete the main file
     if actual_path.exists() {
-        if let Err(e) = caleb_trash::discard(&trash, &actual_path) { // caleb fork
-            caleb_trash::release_if_empty(&trash); // caleb fork
+        if let Err(e) = xtra_trash::discard(&trash, &actual_path) { // repakxtra
+            xtra_trash::release_if_empty(&trash); // repakxtra
             let error_msg = format!("Failed to delete mod file: {}", e);
             toast_events::emit_delete_failed(&window, &error_msg);
             return Err(error_msg);
@@ -3434,7 +3435,7 @@ async fn delete_mod(
     // Delete associated IoStore files (.ucas and .utoc)
     let ucas_path = base_pak_path.with_extension("ucas");
     if ucas_path.exists() {
-        if let Err(e) = caleb_trash::discard(&trash, &ucas_path) { // caleb fork
+        if let Err(e) = xtra_trash::discard(&trash, &ucas_path) { // repakxtra
             log::warn!("Failed to delete .ucas file: {}", e);
         } else {
             log::info!("Deleted associated .ucas file: {:?}", ucas_path);
@@ -3443,7 +3444,7 @@ async fn delete_mod(
 
     let utoc_path = base_pak_path.with_extension("utoc");
     if utoc_path.exists() {
-        if let Err(e) = caleb_trash::discard(&trash, &utoc_path) { // caleb fork
+        if let Err(e) = xtra_trash::discard(&trash, &utoc_path) { // repakxtra
             log::warn!("Failed to delete .utoc file: {}", e);
         } else {
             log::info!("Deleted associated .utoc file: {:?}", utoc_path);
@@ -5971,7 +5972,7 @@ async fn set_last_seen_version(version: String) -> Result<bool, String> {
 /// Check for application updates and emit update_available event when found
 #[tauri::command]
 async fn check_for_updates(window: Window) -> Result<Option<UpdateInfo>, String> {
-    // caleb fork: the self-updater installs the official zip over this build; updates come via git merge instead
+    // repakxtra: the self-updater installs the official zip over this build; updates come via git merge instead
     if true {
         return Ok(None);
     }
@@ -8683,33 +8684,39 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            caleb_trash::restore_trashed_mods,
-            caleb_previews::list_mod_previews,
-            caleb_previews::get_mod_preview,
-            caleb_previews::get_preview_covers,
-            caleb_previews::generate_mod_previews,
-            caleb_previews::previews_available, // caleb fork: hide Generate where there is no generator
-            caleb_kit::preview_kit_status, // caleb fork: preview kit in Setup
-            caleb_kit::preview_kit_latest,
-            caleb_kit::preview_kit_install,
-            caleb_kit::preview_kit_remove,
-            caleb_kit::preview_kit_set_blender,
-            caleb_previews::cancel_mod_previews,
-            caleb_sigeon::sigeon_status,
-            caleb_sigeon::sigeon_set,
-            caleb_sigeon::sigeon_read, // caleb fork: Sigeon editor
-            caleb_sigeon::sigeon_save,
-            caleb_sigeon::sigeon_create,
-            caleb_sigeon::sigeon_rename,
-            caleb_sigeon::sigeon_delete,
-            caleb_sigeon::sigeon_restore,
-            caleb_sigeon::sigeon_storage,
-            caleb_sigeon::sigeon_set_storage,
-            caleb_sigeon::sigeon_open,
-            caleb_setup::setup_bypass_status, // caleb fork: Setup panel
-            caleb_setup::setup_bypass,
-            caleb_setup::setup_galacta_status,
-            caleb_setup::setup_galacta_install,
+            xtra_trash::restore_trashed_mods,
+            xtra_previews::list_mod_previews,
+            xtra_previews::get_mod_preview,
+            xtra_previews::get_preview_covers,
+            xtra_previews::generate_mod_previews,
+            xtra_previews::previews_available, // repakxtra: hide Generate where there is no generator
+            xtra_kit::preview_kit_status, // repakxtra: preview kit in Setup
+            xtra_kit::preview_kit_latest,
+            xtra_kit::preview_kit_install,
+            xtra_kit::preview_kit_remove,
+            xtra_kit::preview_kit_set_blender,
+            xtra_kit::preview_kit_install_blender, // repakxtra: Blender with winget
+            xtra_previews::previews_doctor, // repakxtra: can this PC make previews
+            xtra_previews::cancel_mod_previews,
+            xtra_capture::capture_game_status, // repakxtra: capture preview in game
+            xtra_capture::capture_game_now,
+            xtra_capture::capture_game_hotkey,
+            xtra_capture::capture_game_cancel,
+            xtra_sigeon::sigeon_status,
+            xtra_sigeon::sigeon_set,
+            xtra_sigeon::sigeon_read, // repakxtra: Sigeon editor
+            xtra_sigeon::sigeon_save,
+            xtra_sigeon::sigeon_create,
+            xtra_sigeon::sigeon_rename,
+            xtra_sigeon::sigeon_delete,
+            xtra_sigeon::sigeon_restore,
+            xtra_sigeon::sigeon_storage,
+            xtra_sigeon::sigeon_set_storage,
+            xtra_sigeon::sigeon_open,
+            xtra_setup::setup_bypass_status, // repakxtra: Setup panel
+            xtra_setup::setup_bypass,
+            xtra_setup::setup_galacta_status,
+            xtra_setup::setup_galacta_install,
             get_game_path,
             set_game_path,
             auto_detect_game_path,

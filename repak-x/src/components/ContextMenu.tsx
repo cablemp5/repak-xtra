@@ -35,7 +35,7 @@ type ContextMenuProps = {
   onRename: () => void
   onRenameFolder: () => void
   onCheckConflicts?: () => void
-  loadoutMenu?: (close: () => void) => React.ReactNode // caleb fork: Add to loadout submenu
+  loadoutMenu?: (close: () => void) => React.ReactNode // repakxtra: Add to loadout submenu
   onUpdateMod?: () => void
   onSendToVfxUpdater?: (mod: ModRecord) => void
   onShowInAssetExplorer?: (mod: ModRecord) => void
@@ -389,7 +389,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
         </div>
       </div>
 
-      {/* caleb fork: Add to loadout (custom/Loadouts.tsx LoadoutMenuItems) */}
+      {/* repakxtra: Add to loadout (custom/Loadouts.tsx LoadoutMenuItems) */}
       {loadoutMenu && (
         <div className="context-menu-item submenu-trigger" onMouseEnter={handleSubmenuEnter}>
           {selectionCount > 1 ? `Add ${selectionCount} mods to loadout...` : 'Add to loadout...'}

@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import packageJson from './package.json'
-import lucideSwap from './src/custom/icons/vitePlugin' // caleb fork: Lucide icons
+import lucideSwap from './src/custom/icons/vitePlugin' // repakxtra: Lucide icons
 
 export default defineConfig({
   define: {
@@ -9,7 +9,7 @@ export default defineConfig({
   },
   plugins: [
     lucideSwap(),
-    // caleb fork: the browser-preview mock (src/dev) is empty in the app's build, so none of its local fixtures and
+    // repakxtra: the browser-preview mock (src/dev) is empty in the app's build, so none of its local fixtures and
     // preview PNGs get bundled
     { name: 'drop-dev-mock', apply: 'build', enforce: 'pre', load: (id: string) => (/[\/]src[\/]dev[\/]mockBackend\.ts$/.test(id) ? 'export {}' : null) },
     react(),
