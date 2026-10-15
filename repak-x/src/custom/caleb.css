@@ -1572,7 +1572,9 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .sg-none { margin: 10px 16px 2px; font-size: 12.5px; color: var(--text-secondary); }
 .sg-footer { padding: 14px 24px !important; }
 .sg-row input[type="range"] { width: 200px; height: 20px; }
-.sg-row input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 999px; background: var(--accent-primary) !important; border: none; }
+/* blue up to the handle, gray past it (--fill is set from the value) */
+.sg-row input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 999px; border: none;
+  background: linear-gradient(to right, var(--accent-primary) var(--fill, 0%), rgba(255, 255, 255, 0.16) var(--fill, 0%)) !important; }
 .sg-row input[type="range"]::-webkit-slider-thumb { width: 16px !important; height: 16px !important; margin-top: -6px !important;
   background: var(--accent-primary) !important; border: none !important; box-shadow: none !important; }
 .sg-row input[type="range"]:focus-visible::-webkit-slider-thumb { outline: none; box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-primary), transparent 70%) !important; }
