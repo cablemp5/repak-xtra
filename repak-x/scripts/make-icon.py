@@ -1,7 +1,7 @@
 """repakxtra's app icon: the lowercase x from the title (Geist, weight 800) in its blue on a transparent background.
 Writes icons/RepakIcon.png (512) and icons/RepakIcon.ico (16 to 256), which tauri.conf.json bundles into the exe: the
-taskbar, the window and the desktop shortcut all show it. Also icons/RepakIconTest.ico, the same x in green: build.ps1 -Test
-puts it on the "repakxtra test" desktop shortcut so the two copies are told apart. Run from repak-x/ with any Python that has Pillow:
+taskbar, the window and the desktop shortcut all show it. Also icons/RepakIconTest.ico, the same x in green, for a desktop
+shortcut to the test build (dist/Repak-X-Test) so the two copies are told apart. Run from repak-x/ with any Python that has Pillow:
     python scripts/make-icon.py"""
 from pathlib import Path
 
