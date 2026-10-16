@@ -1,4 +1,6 @@
 import './custom/storageCarryOver' // repakxtra: settings saved under the old key prefix, before any module reads them
+import './custom/devStorage' // repakxtra: the dev copy loads the app's saved loadouts; the app keeps that copy
+import './custom/buildMark' // repakxtra: test and dev copies color every window's taskbar icon
 import './dev/mockBackend' // repakxtra: fake backend for the browser preview, inert in the app
 import React from 'react'
 import ReactDOM from 'react-dom/client'

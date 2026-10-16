@@ -555,7 +555,6 @@ html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { d
   transition: border-color 0.15s ease;
 }
 .lo-card:hover { border-color: rgba(255, 255, 255, 0.14); }
-.lo-card.is-on { border-color: color-mix(in srgb, var(--accent-primary), transparent 35%); }
 .lo-card-image {
   display: block !important; aspect-ratio: 16 / 9; width: 100%; padding: 0 !important;
   border: none !important; border-radius: 0 !important; background: var(--bg-dark) !important;
@@ -1421,11 +1420,15 @@ button.is-running:hover .run-stop { opacity: 1; }
 .sg-search { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--panel-border); color: var(--text-secondary); }
 .sg-search input { width: 170px; border: none; background: transparent; color: var(--text-primary); font: 12.5px var(--font-primary); outline: none; }
 .sg-hint { margin: 0; font-size: 12px; line-height: 1.45; color: var(--text-secondary); max-width: 460px; }
-.sg-block { border: 1px solid var(--panel-border); border-radius: 10px; padding: 6px 0; }
+.sg-block { border: 1px solid var(--panel-border); border-radius: 10px; padding: 6px 0 8px; }
 .sg-block + .sg-block { margin-top: 10px; }
-.sg-block-name { padding: 4px 12px 6px; font: 600 12px var(--font-mono); color: var(--text-secondary); }
+.sg-block-head { display: flex; flex-direction: column; gap: 3px; margin-bottom: 4px; border-bottom: 1px solid var(--panel-border); }
+.sg-block-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.sg-block-title b { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.sg-block-title code { font: 11.5px var(--font-mono); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sg-block-head small { font-size: 12px; line-height: 1.45; color: var(--text-secondary); }
 .sg-note { margin: 10px 12px 2px; font-size: 11.5px; color: var(--text-secondary); opacity: 0.8; }
-.sg-entry { display: grid; grid-template-columns: auto minmax(0, 1fr) 140px 28px; align-items: center; gap: 10px; padding: 4px 12px; }
+.sg-entry { display: grid; grid-template-columns: 38px minmax(0, 1fr) 140px 28px; align-items: center; gap: 10px; padding: 4px 12px; }
 .sg-entry:hover { background: var(--quiet-hover); }
 .sg-entry code { font: 12.5px var(--font-mono); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sg-entry.is-off code, .sg-entry.is-off input { opacity: 0.5; }
@@ -1434,10 +1437,10 @@ button.is-running:hover .run-stop { opacity: 1; }
 .sg-entry input:focus { border-color: var(--accent-primary); outline: none; }
 .sg-x { display: grid; place-items: center; width: 28px; height: 28px; border: none; border-radius: 6px; background: transparent; color: var(--text-secondary); cursor: pointer; }
 .sg-x:hover { background: var(--quiet-active); color: var(--text-primary); }
-.sg-add { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--panel-border); grid-template-columns: auto minmax(0, 1fr) 140px auto; }
+.sg-add { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--panel-border); grid-template-columns: 38px minmax(0, 1fr) 140px auto; }
+.sg-add input::placeholder { color: var(--text-secondary); opacity: 0.6; }
 .sg-add:hover { background: transparent; }
-.sg-add-icon { color: var(--text-secondary); margin: 0 9px; }
-.sg-add .lo-text-btn { height: 28px !important; }
+.sg-add .lo-text-btn { height: 28px !important; padding: 0 10px !important; gap: 4px; }
 .sg-footer { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 12px 20px !important; border-top: 1px solid var(--panel-border); }
 .sg-leave { margin-right: auto; font-size: 13px; color: var(--text-primary); }
 .sg-save { min-width: 88px; }
@@ -1587,13 +1590,14 @@ button.is-running:hover .run-stop { opacity: 1; }
 .sg-license > div { gap: 4px !important; }
 .sg-license .btn-primary { flex: none !important; width: auto !important; white-space: nowrap; }
 .sg-block { padding: 8px 0 !important; }
-.sg-block-name { padding: 6px 16px 8px !important; }
+.sg-block-head { padding: 6px 16px 10px !important; }
 .sg-note { margin: 12px 16px 4px !important; }
-.sg-entry { padding: 6px 16px !important; gap: 12px !important; grid-template-columns: auto minmax(0, 1fr) 150px 28px !important; }
+.sg-entry { padding: 6px 16px !important; gap: 12px !important; grid-template-columns: 38px minmax(0, 1fr) 150px 28px !important; }
+.sg-block.is-wide .sg-entry { grid-template-columns: 38px minmax(120px, 180px) minmax(0, 1fr) 28px !important; }
 .sg-entry input { height: 30px !important; }
-.sg-add { margin-top: 8px !important; padding: 12px 16px 4px !important; grid-template-columns: auto minmax(0, 1fr) 150px auto !important; }
+.sg-add { margin-top: 8px !important; padding: 12px 16px 4px !important; grid-template-columns: 38px minmax(0, 1fr) 150px auto !important; }
+.sg-block.is-wide .sg-add { grid-template-columns: 38px minmax(120px, 180px) minmax(0, 1fr) auto !important; }
 .sg-add .lo-text-btn { height: 30px !important; }
-.sg-add-icon { margin: 0 8px !important; }
 .sg-block.is-empty { padding-top: 4px !important; }
 .sg-block.is-empty .sg-add { margin-top: 0 !important; border-top: none !important; padding-top: 6px !important; }
 .sg-none { margin: 10px 16px 2px; font-size: 12.5px; color: var(--text-secondary); }
@@ -1744,3 +1748,8 @@ html[data-motion="off"] .t-matrix i { animation: none; opacity: 0.6; }
 .su-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .su-row .su-meta { margin: 0; min-width: 0; }
 .su-ok { color: #3ecf6e; }
+
+/* Test and dev copies (custom/version.ts BUILD): the "xtra" in the app name is green for a test build (build.ps1 -Test)
+   and amber for the live dev copy (dev.ps1), instead of blue */
+:root[data-build="test"] .title-x { color: #3ecf6e !important; }
+:root[data-build="dev"] .title-x { color: #f5a524 !important; }

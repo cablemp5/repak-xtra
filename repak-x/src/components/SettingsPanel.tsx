@@ -106,7 +106,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
   const changelogStateMismatch = useMemo(() => {
     if (!changelogMarker) return null;
     const { lastSeen, current, recorded } = changelogMarker;
-    if (recorded && lastSeen === current) return null;
+    if (recorded) return null; // repakxtra: the version stuck; a different last-seen one just means this start was an update
     return { lastSeen: lastSeen || 'not recorded', current, recorded };
   }, [changelogMarker]);
 

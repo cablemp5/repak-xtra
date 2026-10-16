@@ -2,7 +2,7 @@
 #   .\build.ps1        the stable app: only from a clean main. Output: dist\Repak-X-Stable (or -next), opened as dist\repakxtra\repakxtra.exe
 #   .\build.ps1 -Test  whatever is in the folder now, even uncommitted edits. Output: dist\Repak-X-Test
 #   .\build.ps1 -Release  main, as repakxtra v<REPAKXTRA_VERSION> (custom/version.ts): builds dist\Repak-X-Release, zips it as
-#                      dist\repakxtra-v<ver>-windows.zip and prints the gh command that publishes it. Once published, running
+#                      dist\repak-xtra-v<ver>-windows.zip and copies the gh command that publishes it. Once published, running
 #                      copies offer it in Settings > Updates. Bump the version in the PR before releasing.
 # The two never overwrite each other. The app runs one copy at a time (single-instance) and both share %APPDATA%\Repak-X.
 # Neither touches the desktop: point a shortcut at dist\repakxtra\repakxtra.exe once and it always opens the newest stable build.
@@ -51,6 +51,10 @@ if ($Release) {
 Run { dotnet publish UAssetToolRivals/src/UAssetTool/UAssetToolNative.csproj -c Release -r win-x64 -p:DebugType=none -p:DebugSymbols=false -o target/uassettool }
 Push-Location repak-x
 Run { npm install }
+# Test copies mark themselves (green "xtra", "test build" in the version line, a green taskbar icon from
+# xtra_buildmark.rs); stable and release builds never do
+$env:VITE_REPAKXTRA_TEST = if ($Test) { '1' } else { '' }
+$env:REPAKXTRA_BUILD = if ($Test) { 'test' } else { '' }
 Run { npm run build }
 Pop-Location
 $env:SKIP_UASSET_TOOL_BUILD = '1'
@@ -71,11 +75,14 @@ if (-not $Test -and -not $Release) {
 Write-Host "Built: $out\repakxtra.exe" -ForegroundColor Green
 if ($Release) {
     # tar (bsdtar, in Windows 10+) writes forward-slash entries; the in-app updater unzips this over the app folder
-    $zip = "dist\repakxtra-v$ver-windows.zip"
+    $zip = "dist\repak-xtra-v$ver-windows.zip"
     Remove-Item $zip -ErrorAction SilentlyContinue
     Run { tar.exe -a -cf $zip -C $out repakxtra.exe UAssetTool.dll data }
     Write-Host "Packed: $zip (SHA-256 $((Get-FileHash $zip).Hash.ToLower()))" -ForegroundColor Green
-    Write-Host 'Publish it (swap --generate-notes for --notes-file notes.md to write your own):'
-    Write-Host "  gh release create v$ver $zip -R cablemp5/repak-xtra --target main --prerelease --title `"repakxtra $ver`" --generate-notes"
+    # On the clipboard as one line: a wrapped terminal line copied by hand can pick up a line break and fail to parse
+    $publish = "gh release create v$ver $zip -R cablemp5/repak-xtra --target main --prerelease --title `"repak-xtra $ver`" --generate-notes"
+    Set-Clipboard -Value $publish
+    Write-Host 'The publish command is on the clipboard: paste it and press Enter (swap --generate-notes for --notes-file notes.md to write your own):'
+    Write-Host "  $publish"
 }
 if ($Test) { Write-Host 'The app runs one copy at a time: close the stable repakxtra before opening the test one, or you will just get the stable window.' -ForegroundColor Yellow }

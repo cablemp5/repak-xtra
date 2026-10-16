@@ -1,10 +1,18 @@
 // repakxtra: repakxtra's own version, bumped for each repakxtra release. The Repak X version it is built on still comes
 // from Cargo (get_app_version).
-export const REPAKXTRA_VERSION = '0.3.1'
+export const REPAKXTRA_VERSION = '0.4.0'
 
-/** The header's and Credits' version line: "v0.3.0 (RepakX v2.0.1, forked by cable)" */
-export const versionTag = (repakx?: string) =>
-  repakx ? `v${REPAKXTRA_VERSION} (RepakX v${repakx}, forked by cable)` : `v${REPAKXTRA_VERSION} (forked by cable)`
+/** Which copy this is. "dev": the live dev copy (dev.ps1, or the browser preview), served by Vite. "test": made with
+ *  `build.ps1 -Test`, which sets VITE_REPAKXTRA_TEST for the frontend build. Both mark themselves: the "xtra" in the app
+ *  name takes their color (theme.css, :root[data-build]) and the version line says "dev build" or "test build". */
+export const BUILD: 'dev' | 'test' | '' = import.meta.env.DEV ? 'dev' : import.meta.env.VITE_REPAKXTRA_TEST === '1' ? 'test' : ''
+if (BUILD) document.documentElement.dataset.build = BUILD
+
+/** The header's and Credits' version line: "v0.3.1 (RepakX v2.0.1, forked by cable)", "v0.3.1 dev build (...)" */
+export const versionTag = (repakx?: string) => {
+  const v = `v${REPAKXTRA_VERSION}${BUILD ? ` ${BUILD} build` : ''}`
+  return repakx ? `${v} (RepakX v${repakx}, forked by cable)` : `${v} (forked by cable)`
+}
 
 /** repakxtra's newest app release (tag v<semver>) from GitHub, or null. Pre-releases count: GitHub's releases/latest
  *  skips them, so the list is read (xtra_update.rs picks the same one). */

@@ -46,8 +46,8 @@ import type { ExtensionInstallOptions } from './components/ExtensionModOverlay'
 import QuickOrganizeOverlay from './components/QuickOrganizeOverlay'
 import InputPromptModal from './components/InputPromptModal'
 import UpdateModModal from './components/UpdateModModal'
-import UpdateAppModal from './components/UpdateAppModal'
-import ChangelogModal from './components/ChangelogModal'
+// repakxtra: repakxtra's own update and What's new dialogs (custom/UpdateDialogs.tsx), same props
+import { UpdateModal as UpdateAppModal, WhatsNewModal as ChangelogModal } from './custom/UpdateDialogs'
 import PromiseTransitionLoader from './components/PromiseTransitionLoader'
 import { AuroraText } from './components/ui/AuroraText'
 import { AlertProvider, useAlert } from './components/AlertHandler'
@@ -297,6 +297,7 @@ function App() {
   // a user on a release build (no devtools) can read back what the check saw.
   const [changelogMarker, setChangelogMarker] = useState<{ lastSeen: string; current: string; recorded: boolean } | null>(null);
   const [changelogContent, setChangelogContent] = useState('');
+  const [changelogVersion, setChangelogVersion] = useState(REPAKXTRA_VERSION); // repakxtra: the version the shown notes belong to
 
   // Panel visibility state - grouped for cleaner management
   const [panels, setPanels] = useState<PanelState>({
@@ -872,6 +873,7 @@ function App() {
       }
 
       setChangelogContent(releaseBody);
+      setChangelogVersion(release.tag_name); // repakxtra
       setShowChangelogModal(true);
       console.debug('[Changelog] Opened changelog modal from settings', {
         bodyLength: releaseBody.length,
@@ -1796,6 +1798,7 @@ function App() {
           if (releaseBody) {
             uiLog.info('Changelog', `Updated from v${lastSeen} to ${xver} - showing changelog`)
             setChangelogContent(releaseBody)
+            setChangelogVersion(xver) // repakxtra
             setShowChangelogModal(true)
             console.debug('[Changelog] Showing changelog modal', {
               version: xver,
@@ -3825,7 +3828,7 @@ function App() {
 
       <ChangelogModal
         isOpen={showChangelogModal}
-        version={version}
+        version={changelogVersion} // repakxtra: not Repak X's version
         changelog={changelogContent}
         onClose={() => setShowChangelogModal(false)}
       />

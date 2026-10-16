@@ -54,8 +54,6 @@ repakxtra is a fork of **[Repak X](https://github.com/X-zant/Repak-X)** by **Xza
 
 **Sigeon V2 Editor:** create and edit configs and console overrides, and switch configs from the header. Your license key is never shown or touched.
 
-**Look and feel:** a quiet dark theme with Geist and Geist Mono, optional sounds and motion, Minimal toasts, and UI scale from 90% to 150%.
-
 ## Keyboard shortcuts
 
 | Keys | Action |
@@ -85,6 +83,77 @@ repakxtra is a fork of **[Repak X](https://github.com/X-zant/Repak-X)** by **Xza
   </tr>
 </table>
 
+## FAQ
+
+<details>
+<summary><strong>Is repakxtra the official Repak X?</strong></summary>
+
+No. repakxtra is an unofficial fork of [Repak X](https://github.com/X-zant/Repak-X). Installing, conflict checks,
+the Asset Explorer and the VFX Updater are Repak X's work; repakxtra adds loadouts, previews and guided setup.
+Bugs in repakxtra belong here, not with the Repak X team.
+
+</details>
+
+<details>
+<summary><strong>Why does every mod need the signature bypass?</strong></summary>
+
+Marvel Rivals only loads files it has signed, so a mod that replaces game files is ignored without the bypass.
+repakxtra ships the bypass inside the app: **Setup** installs, repairs or turns it off, and its
+**Is it safe?** report shows what gets installed. Close the game before changing anything in Setup.
+
+</details>
+
+<details>
+<summary><strong>What is Project Galacta, and do I need it?</strong></summary>
+
+Most skin mods need it. It loads more mod types and swaps mesh mods live in game. **Setup** installs the newest
+[Project Galacta](https://github.com/0xSaturno/ProjectGalacta) release in one click and tells you when an update is out.
+
+</details>
+
+<details>
+<summary><strong>Why can't I switch mods or loadouts right now?</strong></summary>
+
+The game is running. Mods and loadouts only switch while Marvel Rivals is closed. Close the game, switch, then
+launch it again (`Ctrl+G`).
+
+</details>
+
+<details>
+<summary><strong>How do I get mod previews?</strong></summary>
+
+Rendered previews need the preview kit and [Blender](https://www.blender.org/download/) (free).
+**Setup > Mod previews** downloads the newest kit and installs Blender if it's missing; a kit zip dropped on the
+window installs too. Without either, **Capture in game** on a loadout's page uses a screenshot of the hero instead.
+
+</details>
+
+<details>
+<summary><strong>How do I update repakxtra?</strong></summary>
+
+**Settings > Updates > Check Now.** When a newer release is out, **Download update** fetches it and
+**Install and restart** replaces the app and opens the new version. Loadouts, settings and pictures carry over.
+
+</details>
+
+<details>
+<summary><strong>Does the Sigeon V2 Editor see my license key?</strong></summary>
+
+No. The editor never reads, shows or saves the key: **Open in Notepad** opens the config so you can paste the key
+after `licenseKey=` yourself, and every save writes the key line back exactly as it was. The editor follows the
+current `SigeonLoader.ini` format (base, n64, low, mid and high configs, Hide UID, gamma and sharpening).
+
+</details>
+
+<details>
+<summary><strong>What should I do if I hit a bug?</strong></summary>
+
+Update first (**Settings > Updates > Check Now**); a newer release may already fix it. If it persists, ask on
+[Discord](https://discord.gg/C7geHdWBP5) with your repakxtra version (shown in the header), what you
+did, and what happened.
+
+</details>
+
 ## Building from source
 
 **Requirements (Windows):** Git with [Git LFS](https://git-lfs.com/), [rustup](https://rustup.rs/) (`rust-toolchain.toml` picks the toolchain and the MSVC target), [Node.js](https://nodejs.org/) 22, the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0), and Visual Studio Build Tools with the C++ workload (the MSVC linker).
@@ -100,13 +169,16 @@ cd repak-xtra
 Build:
 
 ```powershell
+# Live dev copy: the real app from the folder as it is, interface edits reloading on save (the first start compiles a debug build)
+.\dev.ps1
+
 # Builds the folder as it is, uncommitted edits included, into dist\Repak-X-Test\repakxtra.exe
 .\build.ps1 -Test
 
 # The stable build: only from a clean main. Open it as dist\repakxtra\repakxtra.exe (always the newest stable build)
 .\build.ps1
 
-# A release: builds main into dist\repakxtra-v<version>-windows.zip and prints the gh command that publishes it
+# A release: builds main into dist\repak-xtra-v<version>-windows.zip and copies the gh command that publishes it
 .\build.ps1 -Release
 ```
 

@@ -12,6 +12,8 @@ mod xtra_previews; // repakxtra: generated mod previews
 mod xtra_trash; // repakxtra: undoable delete
 mod xtra_capture; // repakxtra: capture preview in game
 mod xtra_update; // repakxtra: updates from repakxtra's own releases
+mod xtra_storage; // repakxtra: saved loadouts and settings shared with the dev copy
+mod xtra_buildmark; // repakxtra: test and dev copies color their taskbar icon
 mod character_data;
 mod crash_monitor;
 mod discord_presence;
@@ -8626,6 +8628,7 @@ fn main() {
             // void. Entries land in a replay buffer until the webview mounts.
             ui_log::init(app.handle().clone());
             emit_session_banner(app);
+            xtra_buildmark::tint_window_icon(app); // repakxtra: green (test) or amber (dev) taskbar icon
 
             #[cfg(any(windows, target_os = "linux"))]
             {
@@ -8700,6 +8703,10 @@ fn main() {
             xtra_kit::preview_kit_install,
             xtra_kit::preview_kit_remove,
             xtra_kit::preview_kit_set_blender,
+            xtra_storage::xtra_storage_snapshot_write,
+            xtra_storage::xtra_storage_snapshot_read,
+            xtra_storage::xtra_storage_backup_write,
+            xtra_buildmark::xtra_buildmark_tint,
             xtra_kit::preview_kit_install_blender, // repakxtra: Blender with winget
             xtra_previews::previews_doctor, // repakxtra: can this PC make previews
             xtra_previews::cancel_mod_previews,
