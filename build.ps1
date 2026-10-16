@@ -20,7 +20,8 @@ if ($Release) {
     if ((git rev-parse HEAD) -ne (git rev-parse origin/main)) { throw 'Release what GitHub has: run git pull on main first.' }
     $ver = [regex]::Match((Get-Content -Raw repak-x\src\custom\version.ts), "REPAKXTRA_VERSION = '([^']+)'").Groups[1].Value
     if (-not $ver) { throw 'No REPAKXTRA_VERSION in repak-x\src\custom\version.ts.' }
-    gh release view "v$ver" -R cablemp5/repak-xtra *> $null
+    # cmd swallows gh's "release not found" (the answer wanted here): PowerShell 5.1 would make that stderr line a fatal error
+    cmd /c "gh release view v$ver -R cablemp5/repak-xtra >nul 2>&1"
     if ($LASTEXITCODE -eq 0) { throw "v$ver is already released: bump REPAKXTRA_VERSION in custom/version.ts (in a PR) first." }
 }
 # vswhere: the .NET NativeAOT linker step calls it to find MSVC
