@@ -200,6 +200,7 @@ pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: O
         let hold = hold; // the run owns the kit until its generator exits
         let mut ok = false;
         if let Ok(mut child) = cmd.spawn() {
+            *RUNNING.lock().unwrap() = Some(child.id());
             if let Some(out) = child.stdout.take() {
                 for line in BufReader::new(out).lines().map_while(Result::ok) {
                     match parse_line(&line) {
@@ -214,6 +215,7 @@ pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: O
                 }
             }
             ok = child.wait().map(|s| s.success()).unwrap_or(false);
+            *RUNNING.lock().unwrap() = None;
         }
         drop(hold); // free before "done": the app starts the next queued run on it
         let _ = app.emit("mod-previews-done", ok);
@@ -271,11 +273,27 @@ fn doctor_line(stdout: &str) -> Option<serde_json::Value> {
     stdout.lines().find_map(|l| serde_json::from_str(l.trim().strip_prefix("DOCTOR ")?).ok())
 }
 
-/// Stops a run after the mod it is rendering now (the generator checks for this file between mods).
+/// The running generator's process id, so Stop can end it (and the Blender it started) at once.
+static RUNNING: std::sync::Mutex<Option<u32>> = std::sync::Mutex::new(None);
+
+/// Stops a run now: ends the generator's whole process tree. Safe mid-render: the generator writes every preview to a
+/// temp file and renames it, and Windows frees its lock when it dies. The cancel file stays as a fallback (the generator
+/// checks it between mods) in case the kill fails.
 #[tauri::command]
 pub fn cancel_mod_previews() -> Result<(), String> {
     std::fs::create_dir_all(previews_dir()).map_err(|e| e.to_string())?;
-    std::fs::write(previews_dir().join("cancel"), b"").map_err(|e| e.to_string())
+    std::fs::write(previews_dir().join("cancel"), b"").map_err(|e| e.to_string())?;
+    if let Some(pid) = *RUNNING.lock().unwrap() {
+        let mut kill = Command::new("taskkill");
+        kill.args(["/PID", &pid.to_string(), "/T", "/F"]).stdout(Stdio::null()).stderr(Stdio::null());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            kill.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+        let _ = kill.status();
+    }
+    Ok(())
 }
 
 #[cfg(test)]

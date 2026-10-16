@@ -4,11 +4,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
-import { Camera, LoaderCircle, RotateCcw } from 'lucide-react'
+import { Camera, RotateCcw } from 'lucide-react'
+import { MatrixLoader } from './motion'
 import type { LoadoutProps } from './Loadouts'
 import { type Loadout, displayName, modKey } from './loadoutStore'
 import { getAdditionalCategories } from '../utils'
 import './capture.css'
+import example from './capture-example.webp'
 
 type GameStatus = { running: boolean; width: number; height: number }
 type Phase = 'listening' | 'capturing' | 'idle' | 'done' | 'saving'
@@ -26,6 +28,9 @@ function toWebp(buf: ArrayBuffer): Promise<Blob> {
   canvas.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(buf, 8, w * h * 4), w, h), 0, 0)
   return new Promise((ok, fail) => canvas.toBlob(b => (b ? ok(b) : fail(new Error('Could not encode the picture.'))), 'image/webp', 0.9))
 }
+
+/** Ctrl + Shift + X as keycaps with room between them. */
+const Keys = () => <span className="cp-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd></span>
 
 function CaptureDialog({ p, l, hero, onUse, onClose }: {
   p: LoadoutProps; l: Loadout; hero?: string; onUse: (blob: Blob) => Promise<boolean>; onClose: () => void
@@ -81,7 +86,7 @@ function CaptureDialog({ p, l, hero, onUse, onClose }: {
       <motion.div className="modal-content cp-modal" role="dialog" aria-label="Capture preview in game" onClick={e => e.stopPropagation()}
         initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.15 }}>
         <div className="modal-header">
-          <div><h2>Capture preview in game</h2><p className="cp-sub">A picture of {who} for {l.name}'s image.</p></div>
+          <div><h2>Capture preview in game</h2><p className="cp-sub">A picture of {who} for {l.name}'s preview.</p></div>
           <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
         <div className="modal-body cp-body">
@@ -89,17 +94,19 @@ function CaptureDialog({ p, l, hero, onUse, onClose }: {
             ? <div className="cp-shot"><img src={shot.url} alt={`${who} in game`} /></div>
             : (
               <>
+                {/* What the picture keeps: xtra_capture.rs crop_rect on a 16:9 screen (1007, 112, 477 x 675 of 2000 x 1125) */}
+                <figure className="cp-example">
+                  <div className="cp-example-frame">
+                    <img src={example} alt="The Hero Profile Overview screen, with the part that is kept boxed in green" />
+                    <span className="cp-crop" aria-hidden="true" />
+                  </div>
+                  <figcaption>Your picture keeps what is in the green box, framed like the generated previews.</figcaption>
+                </figure>
                 <ol className="cp-steps">
                   <li>In Marvel Rivals, open <b>Heroes</b> and pick <b>{who}</b>.</li>
-                  <li>Open the hero's <b>Overview</b> or <b>Cosmetics</b> screen.</li>
-                  <li>Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> in the game. Or come back here and press <b>Capture now</b>: repakxtra
-                    switches to the game, takes the picture and comes back.</li>
+                  <li>Go to the hero's <b>Overview</b> or <b>Cosmetics</b> screen.</li>
+                  <li>Press <Keys /> in the game, or <b>Capture now</b> below.</li>
                 </ol>
-                <p className="cp-status" role="status">
-                  {phase === 'listening' && <><i className="cp-dot" aria-hidden="true" />Listening for Ctrl+Shift+X</>}
-                  {phase === 'capturing' && <><LoaderCircle size={14} className="su-spin" />Switching to the game…</>}
-                  {phase === 'idle' && <>Not listening for Ctrl+Shift+X. <button type="button" className="cp-link" onClick={() => take('capture_game_hotkey')}>Listen again</button></>}
-                </p>
               </>
             )}
         </div>
@@ -110,6 +117,11 @@ function CaptureDialog({ p, l, hero, onUse, onClose }: {
                 <button type="button" className="btn-primary" disabled={phase === 'saving'} onClick={use}>{phase === 'saving' ? 'Saving…' : 'Use as loadout image'}</button>
               </>
             : <>
+                <span className="cp-status" role="status">
+                  {phase === 'listening' && <><i className="cp-dot" aria-hidden="true" />Listening for <Keys /></>}
+                  {phase === 'capturing' && <><MatrixLoader size={12} />Switching to the game…</>}
+                  {phase === 'idle' && <>Not listening. <button type="button" className="cp-link" onClick={() => take('capture_game_hotkey')}>Listen again</button></>}
+                </span>
                 <button type="button" className="lo-text-btn" onClick={onClose}>Cancel</button>
                 <button type="button" className="btn-primary" disabled={phase === 'capturing'} onClick={() => take('capture_game_now')}>
                   <Camera size={14} /> {phase === 'capturing' ? 'Capturing…' : 'Capture now'}

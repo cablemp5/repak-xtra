@@ -21,6 +21,8 @@ import { RiGraduationCapFill } from "react-icons/ri"
 import { BsKeyboardFill } from "react-icons/bs"
 import { IoIosSettings } from "react-icons/io"
 import DiscordWidget from './DiscordWidget'
+import { REPAKXTRA_VERSION } from '../custom/version' // repakxtra
+import CableDiscord from '../custom/CableDiscord' // repakxtra
 import './SettingsPanel.css'
 import { useAlert } from './AlertHandler'
 import { motion } from 'framer-motion'
@@ -313,7 +315,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                         <MdArticle />
                         View Changelog
                       </button>
-                      <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>Current Version: v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'}</span>
+                      <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>Current Version: v{REPAKXTRA_VERSION}</span>{/* repakxtra: repakxtra's version, which the updater checks */}
                     </div>
 
                     {/* Only rendered when the recorded version disagrees with the
@@ -518,6 +520,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                       </p>
                     </div>
                     <DiscordWidget />
+                    <CableDiscord />{/* repakxtra: cable's server */}
                   </div>
                 </div>
               </>

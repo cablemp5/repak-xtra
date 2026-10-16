@@ -64,7 +64,7 @@ import { GeneratePreviewsButton } from './custom/previews'
 import { finishInstallLoadout } from './custom/installLoadout'
 import SigeonControl from './custom/SigeonControl'
 import SetupButton from './custom/SetupPanel'
-import { versionTag } from './custom/version'
+import { latestRelease, versionTag } from './custom/version'
 import FirstRun from './custom/FirstRun' // repakxtra: first-launch setup
 import { installDroppedKit } from './custom/previewKit'
 import { useGlobalTooltips } from './hooks/useGlobalTooltips'
@@ -859,17 +859,11 @@ function App() {
   const handleViewChangelog = async () => {
     try {
       console.debug('[Changelog] Manual changelog open requested from settings');
-      const res = await fetch('https://api.github.com/repos/XzantGaming/Repak-X/releases/latest', {
-        headers: { 'Accept': 'application/vnd.github.v3+json' }
-      });
-      console.debug('[Changelog] Latest changelog fetch response', { status: res.status, ok: res.ok });
-
-      if (!res.ok) {
+      const release = await latestRelease(); // repakxtra: repakxtra's own newest release, not upstream's
+      if (!release) {
         alert.error('Changelog Unavailable', 'Could not fetch latest changelog right now.');
         return;
       }
-
-      const release = await res.json();
       const releaseBody = String(release?.body || '').trim();
 
       if (!releaseBody) {

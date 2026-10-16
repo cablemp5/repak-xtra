@@ -4,6 +4,7 @@
 // adds the mods that actually landed and, if asked, queues the new loadout's previews.
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { Plus } from 'lucide-react'
 import Checkbox from '../components/ui/Checkbox'
 import type { useAlert } from '../components/AlertHandler'
 import { normalizeModBaseName } from '../utils/format'
@@ -67,7 +68,7 @@ export function InstallToLoadouts({ ids, onChange }: { ids: string[]; onChange: 
         </div>
         <div className="add-tag-wrapper" onClick={e => e.stopPropagation()}>
           <button type="button" className="add-tag-btn" title="Add to a loadout" aria-label="Add to a loadout" aria-expanded={Boolean(at)}
-            onClick={e => { const r = e.currentTarget.getBoundingClientRect(); setAt(at ? null : { x: r.left, y: r.bottom }) }}>+</button>
+            onClick={e => { const r = e.currentTarget.getBoundingClientRect(); setAt(at ? null : { x: r.left, y: r.bottom }) }}><Plus size={14} /></button>
           {at && (
             <div className="tag-dropdown install-loadout-menu" role="menu" style={{ position: 'fixed', top: at.y, left: at.x }}>
               {rest.length === 0

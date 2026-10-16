@@ -11,6 +11,7 @@ mod xtra_kit; // repakxtra: preview kit (previews on other PCs)
 mod xtra_previews; // repakxtra: generated mod previews
 mod xtra_trash; // repakxtra: undoable delete
 mod xtra_capture; // repakxtra: capture preview in game
+mod xtra_update; // repakxtra: updates from repakxtra's own releases
 mod character_data;
 mod crash_monitor;
 mod discord_presence;
@@ -5972,9 +5973,13 @@ async fn set_last_seen_version(version: String) -> Result<bool, String> {
 /// Check for application updates and emit update_available event when found
 #[tauri::command]
 async fn check_for_updates(window: Window) -> Result<Option<UpdateInfo>, String> {
-    // repakxtra: the self-updater installs the official zip over this build; updates come via git merge instead
+    // repakxtra: repakxtra's own releases (xtra_update.rs), not upstream Repak X's
     if true {
-        return Ok(None);
+        let info = xtra_update::check().await?;
+        if let Some(i) = &info {
+            let _ = window.emit("update_available", i);
+        }
+        return Ok(info);
     }
     ui_log::info("Update", "Checking for a newer Repak-X release...");
 

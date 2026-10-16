@@ -7,11 +7,11 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { CircleStop, ListPlus, LoaderCircle, Sparkles, X } from 'lucide-react'
+import { ListPlus, Sparkles, Square, X } from 'lucide-react'
 import { play } from 'cuelume'
 import { useAlert } from '../components/AlertHandler'
 import { modKey } from './loadoutStore'
-import { revealOnLoad } from './motion'
+import { MatrixLoader, revealOnLoad } from './motion'
 import { plural } from './modName'
 
 const NOTHING = 'Nothing to show for this mod: previews cover skins, meshes, textures, animations, UI icons, VFX colors and sounds.'
@@ -23,6 +23,14 @@ const revs = new Map<string, number>() // key -> bump count, so a re-rendered pr
 const pending = new Set<string>()       // mod keys still waiting in the current run (a loadout's set key is not one)
 const outcome = new Map<string, string>() // key (mod or set) -> message from its last render
 export type Covers = { covers: string[]; members: string[] | null } // members null: rendered before that was recorded
+// Mods whose last render had nothing to show, kept across restarts: a loadout of only those counts as done, not missing
+const NONE_KEY = 'repakxtra.previewNone'
+const none = new Set<string>((() => { try { return JSON.parse(localStorage.getItem(NONE_KEY) ?? '[]') as string[] } catch { return [] } })())
+const markNone = (key: string, on: boolean) => {
+  if (none.has(key) === on) return
+  if (on) none.add(key); else none.delete(key)
+  try { localStorage.setItem(NONE_KEY, JSON.stringify([...none])) } catch { /* storage full or off: only this session knows */ }
+}
 const covers = new Map<string, Covers & { rev: number }>() // loadout render key -> the mods it shows and the mods it was rendered for
 // Shared caches, so a card that remounts (Home -> page -> Home) shows its image at once without reading it again.
 // Entries belong to one revision; a newer one, or none, drops them. A read that finishes after its revision was dropped
@@ -49,6 +57,7 @@ export const jobId = (j: { paths: string[]; set?: string }) => j.set ?? `mods:${
 const keysOf = (j: Job) => [...new Set(j.paths.map(modKey)), ...(j.set ? [j.set] : [])]
 const queue: QueuedJob[] = []
 let active = false // a run was accepted and its done event has not arrived yet
+let batchDone = 0  // jobs finished since the queue was last empty, for Home's "3 of 21"
 type SetResult = 'ok' | 'none' | 'failed' | undefined
 let run = { id: '', total: 0, made: 0, none: 0, failed: 0, stopping: false, summary: '', set: undefined as string | undefined, name: '', setResult: undefined as SetResult, busy: '' }
 let version = 0
@@ -67,6 +76,7 @@ listen<string>('mod-preview-ready', e => {
   dropCached(e.payload)
   revs.set(e.payload, (revs.get(e.payload) ?? 0) + 1)
   outcome.delete(e.payload)
+  markNone(e.payload, false)
   if (active && e.payload === run.set) run.setResult = 'ok'
   if (active && pending.delete(e.payload)) run.made++
   notify()
@@ -84,6 +94,7 @@ listen<string>('mod-preview-none', e => {
     outcome.delete(e.payload)
   } else {
     outcome.set(e.payload, NOTHING)
+    markNone(e.payload, true)
     if (active && pending.delete(e.payload)) run.none++
   }
   notify()
@@ -123,8 +134,10 @@ listen<boolean>('mod-previews-done', e => {
   const summary = run.busy || (e.payload || run.made || run.none || run.failed ? parts.filter(Boolean).join(' · ') : FAILED)
   run = { ...run, stopping: false, summary }
   play(run.busy ? 'warning' : run.made && !failed && run.setResult !== 'failed' ? 'ready' : run.made ? 'warning' : 'error')
+  batchDone++
   notify()
   startNext()
+  if (!running()) batchDone = 0
 }).catch(() => undefined)
 
 export const usePreviewVersion = () => useSyncExternalStore(subscribe, () => version)
@@ -133,7 +146,9 @@ export const hasPreview = (key: string) => revs.has(key)
 export const previewSetKey = (loadoutId: string) => `loadout-${loadoutId}`
 /** A loadout has previews when its combined render exists or any of its mods has its own (loadouts of only VFX, UI or
  *  sound mods never get a combined render). */
-export const loadoutHasPreview = (l: { id: string; on: string[] }) => hasPreview(previewSetKey(l.id)) || l.on.some(k => hasPreview(modKey(k)))
+export const loadoutHasPreview = (l: { id: string; on: string[] }) => hasPreview(previewSetKey(l.id)) || l.on.some(k => hasPreview(modKey(k))) || noPreviewPossible(l)
+/** Every mod of the loadout rendered with nothing to show (sounds, unknown types): there is no preview to make. */
+export const noPreviewPossible = (l: { on: string[] }) => l.on.length > 0 && l.on.every(k => none.has(modKey(k)))
 /** The message from a key's last render (failed, nothing to show, another generator busy), if any. */
 export function usePreviewOutcome(key: string) {
   usePreviewVersion()
@@ -273,7 +288,8 @@ const queuedText = () => {
 export function usePreviewBatch() {
   usePreviewVersion()
   if (!running()) return null
-  return { name: run.name, done: doneOf(), total: run.total, left: queue.length, leftText: queuedText(), stopping: run.stopping }
+  return { name: run.name, done: doneOf(), total: run.total, left: queue.length, leftText: queuedText(), stopping: run.stopping,
+    job: batchDone + 1, jobs: batchDone + 1 + queue.length }
 }
 
 /** The last run's result line ("4 made · 1 failed"), kept until the next run starts or it is dismissed. */
@@ -297,7 +313,7 @@ export async function generateAllLoadouts(loadouts: { id: string; name: string; 
   return { count: error ? 0 : jobs.length, error }
 }
 
-/** Stops the run after the mod rendering now, and drops everything queued behind it. */
+/** Stops the run now (the generator is ended mid-render) and drops everything queued behind it. */
 export const stopPreviews = () => stop()
 const stop = () => { queue.length = 0; run.stopping = true; notify(); invoke('cancel_mod_previews').catch(() => undefined) }
 const unqueue = (id: string) => {
@@ -363,9 +379,9 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
   if (running() && run.id === id) {
     return (
       <button type="button" className={`${className} is-running`} onClick={stop} disabled={run.stopping}
-        title={queue.length ? `Stop after the mod that is rendering now, and clear the ${queue.length} queued` : 'Stop after the mod that is rendering now'}>
-        {/* a spinner while it works; pointing at it shows Stop */}
-        <span className="run-icon" aria-hidden="true"><LoaderCircle size={14} className="run-spin" /><CircleStop size={14} className="run-stop" /></span>
+        title={queue.length ? `Stop now, and clear the ${queue.length} queued` : 'Stop now'}>
+        {/* the dot loader while it works; pointing at it shows Stop */}
+        <span className="run-icon" aria-hidden="true"><MatrixLoader className="run-spin" /><Square size={11} fill="currentColor" className="run-stop" /></span>
         {run.stopping ? 'Stopping…' : <Shimmer text={`Generating preview ${doneOf()} of ${run.total}`} />}
       </button>
     )

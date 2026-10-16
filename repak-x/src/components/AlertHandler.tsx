@@ -468,26 +468,28 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
         <motion.div
             ref={itemRef}
             layout
+            // repakxtra: transitions.dev Banner stacking. A new banner rises in from a blur and pushes the others back
+            // (three deep, each smaller and dimmer); a dismissed one blurs out where it is
             initial={{
                 opacity: 0,
-                y: isBottom ? 100 : -100,
-                scale: 0.8
+                y: isBottom ? 24 : -24,
+                scale: 0.96,
+                filter: 'blur(4px)'
             }}
             animate={{
                 opacity: opacity,
                 y: yOffset,
                 scale: scale,
+                filter: index === 0 || isHovered ? 'blur(0px)' : `blur(${index * 0.5}px)`
             }}
             exit={{
                 opacity: 0,
-                y: isBottom ? 50 : -50,
-                scale: 0.8
+                scale: 0.96,
+                filter: 'blur(4px)'
             }}
             transition={{
-                type: 'spring',
-                damping: 25,
-                stiffness: 300,
-                mass: 0.8
+                duration: 0.4,
+                ease: [0.22, 1, 0.36, 1]
             }}
             className={`toast-item ${color} ${variant}`}
             style={{

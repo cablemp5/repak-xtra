@@ -16,11 +16,11 @@ const CARD_H: f64 = 1920.0;
 /// Where the character stands on the Hero Profile screens, as fractions of a 16:9 frame. Measured on four screenshots
 /// of Black Panther (Overview: the silhouette, tall catboy ears, cosmic horns; Cosmetics: a fur collar): the character
 /// spans x 0.4547..0.8146 and y 0.0705..0.966. The top stays under the tab bar (it ends at y 0.0583, x 0.483), so the
-/// crop runs from there to the bottom and is centered on the character; the Cosmetics name and EQUIPPED button start at
-/// x 0.770, left of the feet, so a little of them stays in.
-const CROP_TOP: f64 = 0.06;
-const CROP_HEIGHT: f64 = 0.94;
-const CROP_CENTER_X: f64 = 0.6347;
+/// crop matches the generated previews' framing (render_preview.py): the head near the top with room for tall ears, cut
+/// at the knees, the torso centered. Fitted on the Overview silhouette against a render of the same skin.
+const CROP_TOP: f64 = 0.10;
+const CROP_HEIGHT: f64 = 0.60;
+const CROP_CENTER_X: f64 = 0.6228;
 /// Bigger crops (4K screens) are box-filtered down to this height, which keeps the IPC small.
 const MAX_HEIGHT: u32 = 1358;
 /// How long a switch to the game may take (restore, focus, a stable size), then how long its frame gets to update.
@@ -591,12 +591,14 @@ mod tests {
     }
 
     #[test]
-    fn crop_holds_the_measured_character_under_the_tab_bar() {
+    fn crop_frames_the_character_like_the_previews() {
+        // Overview silhouette: ears at y 0.133, torso centered at x 0.625, feet at y 0.966
         for (w, h) in [(2560, 1440), (1920, 1080), (2559, 1440), (1280, 720)] {
             let (x, y, cw, ch) = crop_rect(w, h);
             let (wf, hf) = (w as f64, h as f64);
-            assert!((x as f64) < 0.4547 * wf - 0.005 * wf && ((x + cw) as f64) > 0.8146 * wf + 0.005 * wf, "{w}x{h}: sides");
-            assert!((y as f64) < 0.0705 * hf - 0.005 * hf && ((y + ch) as f64) > 0.966 * hf, "{w}x{h}: head or feet");
+            assert!((y as f64) < 0.133 * hf - 0.02 * hf, "{w}x{h}: room above the head");
+            assert!(((y + ch) as f64) < 0.966 * hf - 0.1 * hf, "{w}x{h}: cut above the feet, like a render");
+            assert!(((x as f64 + cw as f64 / 2.0) / wf - 0.625).abs() < 0.01, "{w}x{h}: torso centered");
             assert!((y as f64) >= 0.0583 * hf, "{w}x{h}: the tab bar shows");
         }
     }

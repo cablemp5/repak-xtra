@@ -1,10 +1,10 @@
-// repakxtra: one loadout as a page (Home > card). Header with its image, name, group, on/off, replace, duplicate and
+// repakxtra: one loadout as a page (Home > card). Header with its image, name, group, on/off, duplicate and
 // delete; its mods with switches and Remove (with Undo); and every other mod, searchable, sortable and filterable by
 // type, to add. Wide windows put the two lists side by side.
 import { useEffect, useState } from 'react'
 import { ArrowLeft, Ellipsis, ImagePlus, Pencil, Plus, Search, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
-import { type LoadoutProps, deleteWithUndo, overwriteWithUndo } from './Loadouts'
+import { type LoadoutProps, deleteWithUndo } from './Loadouts'
 import { CardMedia, ModRow, typeClass } from './loadoutBits'
 import { deleteMedia } from './loadoutMedia'
 import CustomDropdown from '../components/CustomDropdown'
@@ -122,14 +122,12 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
                 value=""
                 placeholder="More"
                 options={[
-                  { value: 'replace', label: `Replace with Library selection (${p.scopeMods.filter(m => m.enabled).length} on)` },
                   { value: 'duplicate', label: 'Duplicate' },
                   ...(missing.length ? [{ value: 'missing', label: `Remove ${missing.length} missing mod${missing.length === 1 ? '' : 's'}` }] : []),
                   ...(hasMedia ? [{ value: 'unimage', label: 'Remove image' }] : []),
                   { value: 'delete', label: 'Delete loadout' },
                 ]}
                 onChange={(v: string) => {
-                  if (v === 'replace') overwriteWithUndo(p, l)
                   if (v === 'duplicate') openLoadout(duplicateLoadout(l).id)
                   if (v === 'missing') dropMissing()
                   if (v === 'unimage') { deleteMedia(l.id); patchLoadout(l.id, { image: undefined, mediaRev: undefined, mediaType: undefined }) }
@@ -185,8 +183,8 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
             <ul className="mod-rows">
               {matches.slice(0, limit).map(k => (
                 <ModRow key={k} p={p} k={k} mod={byKey.get(k)}>
-                  <button type="button" className="row-action" onClick={() => addModToLoadout(l, k)} title={`Add ${k} to ${l.name}`}>
-                    <Plus size={13} /> Add
+                  <button type="button" className="lo-icon row-add" onClick={() => addModToLoadout(l, k)} title={`Add ${k} to ${l.name}`} aria-label={`Add ${k} to ${l.name}`}>
+                    <Plus size={14} />
                   </button>
                 </ModRow>
               ))}

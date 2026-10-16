@@ -38,16 +38,22 @@
   --logo-x-color: #ededed;
 }
 
-/* Geist (OFL, bundled in ./fonts, one variable file covering 100-900) for UI; JetBrains Mono (bundled upstream) for code */
+/* Geist and Geist Mono (OFL, bundled in ./fonts, one variable file each covering 100-900): UI and code */
 @font-face {
   font-family: 'Geist';
   src: url('./fonts/Geist-Variable.ttf') format('truetype');
   font-weight: 100 900;
   font-display: swap;
 }
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('./fonts/GeistMono-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
 :root {
   --font-primary: 'Geist', -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif !important;
-  --font-mono: 'JetBrains Mono', ui-monospace, Consolas, monospace !important;
+  --font-mono: 'Geist Mono', ui-monospace, Consolas, monospace !important;
   --font-logo: var(--font-primary) !important;
 }
 body, .app { font-family: var(--font-primary); font-size: 14px; }
@@ -395,7 +401,9 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 }
 .context-menu-item { border-radius: 6px; }
 .context-menu-item:hover { background: var(--quiet-active) !important; color: var(--text-primary) !important; }
-.context-menu-item.danger, .context-menu-item.danger span { color: var(--text-primary) !important; }
+/* Delete is the one red word in the menu */
+.context-menu-item.danger, .context-menu-item.danger span { color: #f2555a !important; }
+.context-menu-item.danger:hover { background: rgba(242, 85, 90, 0.1) !important; }
 .context-menu-separator { background: rgba(255, 255, 255, 0.07) !important; }
 
 .settings-modal, .modal-content {
@@ -526,11 +534,11 @@ html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { d
 @keyframes lo-screen-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .lo-screen { animation: none; } }
 .lo-screen-head {
-  display: flex; align-items: flex-start; justify-content: space-between; gap: 24px;
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
   padding: 22px 28px 18px;
   border-bottom: 1px solid var(--panel-border);
 }
-.lo-screen-head h2 { margin: 0 0 4px; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+.lo-screen-head h2 { margin: 0; line-height: 32px; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
 .lo-screen-head p { margin: 0; font-size: 13px; color: var(--text-secondary); max-width: 70ch; }
 
 .lo-grid {
@@ -797,9 +805,12 @@ html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { d
 .lo-rename {
   flex: 1; min-width: 0; height: 26px; padding: 0 6px; margin: 0 -7px;
   font: 700 15px var(--font-primary); color: var(--text-primary);
-  background: var(--bg-dark); border: 1px solid var(--accent-primary); border-radius: 6px; outline: none;
+  background: var(--field-bg); border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 6px; outline: none;
+  transition: border-color 120ms ease;
 }
 .lo-groupby { margin-right: 6px; }
+/* Group | Hero: 32px tall, like the buttons beside it */
+.lo-groupby button { height: 26px !important; min-height: 0 !important; padding: 0 12px !important; display: inline-flex; align-items: center; }
 .loadouts:has(+ .lo-resizer) { border-bottom: none; }
 /* Tags shown or hidden, in words: shown is lit (accent icon), hidden is dim with a struck eye; the arrow holds Delete all tags */
 .tags-toggle-wrap { position: relative; display: inline-flex; align-items: stretch; height: 40px; border: 1px solid var(--panel-border);
@@ -927,6 +938,7 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 .audio-badge { --badge-dot: oklch(0.68 0.15 290); }
 .blueprint-badge, .data-badge, .movies-badge, .unknown-badge { --badge-dot: oklch(0.70 0.02 260); }
 .project-galacta-badge { --badge-dot: oklch(0.92 0 0); }
+.text-badge { --badge-dot: oklch(0.80 0.09 255); }   /* had none: its dot drew black on black */
 /* ---------- harden: one focus ring everywhere (MUI buttons set outline 0 and mark keyboard focus with a class) ---------- */
 .app .MuiButtonBase-root.Mui-focusVisible, .app .MuiButtonBase-root:focus-visible {
   outline: 2px solid var(--focus-ring) !important; outline-offset: 2px !important;
@@ -953,7 +965,7 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
 /* Home | Library tabs in the header */
 .view-tabs { display: inline-flex; padding: 2px; gap: 2px; margin-left: 18px; align-self: center;
   background: var(--bg-dark); border: 1px solid var(--panel-border); border-radius: var(--quiet-radius); }
-.view-tabs button { height: 28px !important; min-height: 0 !important; padding: 0 14px !important; border: none !important; border-radius: 6px !important;
+.view-tabs button { height: 30px !important; min-height: 0 !important; padding: 0 14px !important; border: none !important; border-radius: 6px !important;
   background: transparent !important; color: var(--text-secondary) !important; font-size: 13px !important; font-weight: 500 !important; }
 .view-tabs button:hover { color: var(--text-primary) !important; }
 .view-tabs button[aria-selected="true"] { background: var(--bg-lighter) !important; color: var(--text-primary) !important; }
@@ -978,8 +990,7 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
 .row-add-to { flex: 0 0 150px; height: 28px; }
 .row-add-to .custom-dropdown-trigger { height: 28px !important; min-height: 0 !important; font-size: 12px !important; }
 .row-add-to .custom-dropdown-menu { min-width: 220px; right: 0; left: auto; }
-.row-remove { opacity: 0; }
-.mod-row:hover .row-remove, .row-remove:focus-visible { opacity: 1; }
+.row-remove { opacity: 1; }
 
 /* New strip */
 .new-strip { margin-bottom: 28px; }
@@ -1004,7 +1015,7 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
 .lp-name { font: 800 26px/1.2 var(--font-primary); letter-spacing: -0.02em; color: var(--text-primary); background: transparent; border: 1px solid transparent;
   border-radius: 8px; padding: 2px 8px; margin: 0 -9px; outline: none; width: 100%; }
 .lp-name:hover { border-color: var(--panel-border); }
-.lp-name:focus { border-color: var(--accent-primary); background: var(--bg-dark); }
+.lp-name:focus { border-color: rgba(255, 255, 255, 0.16); background: var(--field-bg); outline: none !important; box-shadow: none !important; }
 .lp-group { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
 .lp-group input { height: 28px; padding: 0 8px; width: 220px; font: 13px var(--font-primary); color: var(--text-primary);
   background: var(--bg-dark); border: 1px solid var(--panel-border); border-radius: 6px; outline: none; }
@@ -1037,7 +1048,7 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
 .row-add-to .custom-dropdown-trigger { width: auto !important; padding: 0 12px !important; gap: 6px; background: transparent !important;
   border-color: var(--panel-border) !important; }
 .row-add-to .custom-dropdown-trigger:hover { background: var(--quiet-hover) !important; }
-.lp-types button .lo-mod-dot { background: var(--badge-dot) !important; border: none; }
+.lp-types button .lo-mod-dot { background: var(--badge-dot, #8f8f8f) !important; border: none; }
 .lp-actions .lo-text-btn .bulk-num { color: var(--text-secondary); }
 
 /* ---------- credits in the app's language: left-aligned wordmark, quiet headings, people as rows of one list,
@@ -1300,10 +1311,10 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 /* Generating: a spinner; pointing at it shows Stop */
 .run-icon { display: inline-grid; place-items: center; }
 .run-icon > * { grid-area: 1 / 1; }
-.run-spin { animation: run-spin 0.9s linear infinite; }
+svg.run-spin { animation: run-spin 0.9s linear infinite; }
 .run-stop { opacity: 0; }
-.is-running:hover .run-spin { opacity: 0; }
-.is-running:hover .run-stop { opacity: 1; }
+button.is-running:hover .run-spin { opacity: 0; }   /* a run's own button turns into Stop; a card that is generating keeps its spinner */
+button.is-running:hover .run-stop { opacity: 1; }
 @keyframes run-spin { to { transform: rotate(360deg); } }
 
 /* Loadout page actions: On/Off, Generate previews, image, and a More menu, on one line */
@@ -1333,16 +1344,19 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 
 /* ---------- preview batches: Home status line, card skeletons (transitions.dev Skeleton loader) ---------- */
 :root { --pulse-dur: 1000ms; --pulse-min: 0.5; --skel-tone: rgba(255, 255, 255, 0.07); }
-.lo-batch { display: flex; align-items: center; gap: 10px; margin: 14px 22px 4px; padding: 8px 8px 8px 14px; border-radius: 10px;
-  background: color-mix(in srgb, var(--accent-primary), transparent 90%); border: 1px solid color-mix(in srgb, var(--accent-primary), transparent 70%);
-  font-size: 13px; color: var(--text-primary); }
-.lo-batch .run-spin { color: var(--accent-primary); flex: none; }
-.lo-batch-left { color: var(--text-secondary); font-size: 12px; }
-.lo-batch-stop { margin-left: auto; height: 28px !important; }
+.lo-batch { position: relative; overflow: hidden; display: flex; align-items: center; gap: 12px; margin: 14px 22px 4px; padding: 8px 8px 8px 14px;
+  border-radius: 10px; background: var(--field-bg); border: 1px solid var(--panel-border); font-size: 13px; color: var(--text-primary); }
+.lo-batch-what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lo-batch-left { margin-left: auto; flex: none; color: var(--text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
+.lo-batch-stop { margin-left: auto; height: 28px !important; flex: none; }
+.lo-batch-left + .lo-batch-stop { margin-left: 0; }
+/* The batch's progress: a hairline along the bar's bottom edge */
+.lo-batch-track { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: rgba(255, 255, 255, 0.05); }
+.lo-batch-track i { display: block; height: 100%; background: var(--accent-primary); transition: width 400ms cubic-bezier(0.22, 1, 0.36, 1); }
 /* After a run: its result, quiet, until the next run or Dismiss */
 .lo-batch.is-summary { background: var(--field-bg); border-color: var(--border-color);
   color: var(--text-secondary); }
-/* The card: its image darkens and blurs under a shimmer while the render runs or waits, the status pill centered on it */
+/* The card: its image darkens and blurs under a shimmer while the render runs or waits, its status written on it */
 .lo-media.is-running .lo-card-image img, .lo-media.is-queued .lo-card-image img { opacity: 0.3; filter: blur(10px); }
 .lo-media.is-running .lo-card-placeholder, .lo-media.is-queued .lo-card-placeholder { visibility: hidden; }
 .lo-skel { position: absolute; inset: 0; z-index: 1; pointer-events: none; display: flex; align-items: center; justify-content: center;
@@ -1356,9 +1370,9 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
   background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.07) 50%, transparent 100%);
   transform: translateX(-100%); animation: lo-skel-sweep 1.6s ease-in-out infinite; }
 @keyframes lo-skel-sweep { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
-.lo-skel-label { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
-  font-size: 11px; font-variant-numeric: tabular-nums; background: rgba(10, 11, 14, 0.7); color: var(--text-primary); }
-.lo-media.is-running .lo-skel-label { color: #fff; background: color-mix(in srgb, var(--accent-primary), transparent 25%); }
+.lo-skel-label { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text-secondary); text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8); }
+.lo-media.is-running .lo-skel-label { color: var(--text-primary); }
 @media (prefers-reduced-motion: reduce) { .lo-skel, .lo-media.is-running .lo-skel::after, .lo-skel-label .run-spin { animation: none !important; } }
 
 /* ---------- Sigeon config editor (SigeonEditor.tsx): configs on the left, one config's settings on the right ---------- */
@@ -1487,7 +1501,8 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .su-options .repakx-checkbox, .su-options .repakx-checkbox-label { font-size: 12.5px !important; font-weight: 500; color: var(--text-secondary); }
 
 /* Library right-click menu: Check Conflicts icon neutral like the rest of the menu; loadouts already holding the mod */
-.context-menu .warning-icon-small { fill: var(--text-secondary) !important; color: var(--text-secondary) !important; }
+/* Check Conflicts: the outline layers icon at the row's end, like the submenu chevrons (it was a filled blob) */
+.context-menu .warning-icon-small { fill: none !important; color: var(--text-secondary) !important; margin-left: auto; }
 .context-menu-item.is-disabled { opacity: 0.5; cursor: default; }
 .context-menu-item .lo-menu-check { margin-left: auto; color: var(--text-secondary); }
 /* Setup and changelog: every button one height (the primary ones were 44px beside 32px ones); a closed "Is it safe?"
@@ -1591,10 +1606,7 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
   background: var(--accent-primary) !important; border: none !important; box-shadow: none !important; }
 .sg-row input[type="range"]:focus-visible::-webkit-slider-thumb { outline: none; box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-primary), transparent 70%) !important; }
 
-/* Batch line: "Generating <name>" all one shimmer (the name bold), the queue as its own count chip */
-.lo-batch-what b { font-weight: 600; }
-.lo-batch .lo-batch-left { padding: 2px 9px; border-radius: 999px; font-size: 12px; font-variant-numeric: tabular-nums;
-  color: var(--text-primary); background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.08); }
+
 
 /* First-launch setup (FirstRun.tsx): numbered steps that turn into checks, an action on the right of each */
 .fr-modal { width: min(720px, 94vw) !important; max-width: none !important; max-height: 90vh; display: flex; flex-direction: column; padding: 0 !important; }
@@ -1641,3 +1653,81 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .su-modal .modal-header { align-items: center; gap: 12px; padding: 18px 22px !important; }
 .su-modal .modal-header h2 { margin: 0; }
 .su-modal .modal-close, .fr-modal .modal-close, .cp-modal .modal-close { display: grid; place-items: center; width: 32px; height: 32px; line-height: 1; flex: none; }
+
+/* Renaming a mod in the Library: a quiet field the size of the name, the accent only as a thin focus line */
+.mod-rename-input { height: 26px; padding: 0 8px !important; font-weight: 500 !important; font-size: inherit !important;
+  background: var(--field-bg) !important; border: 1px solid rgba(255, 255, 255, 0.16) !important; border-radius: 6px !important;
+  box-shadow: none !important; outline: none; transition: border-color 120ms ease; }
+.mod-rename-input:focus, .lo-rename:focus { border-color: color-mix(in srgb, var(--accent-primary), transparent 35%) !important; box-shadow: none !important; outline: none !important; }
+.mod-rename-input::selection, .lo-rename::selection { background: color-mix(in srgb, var(--accent-primary), transparent 55%); color: var(--text-primary); }
+
+/* Loadout count: a dot, green when all its installed mods are on, yellow when some are, red when none is */
+.lo-on-dot { display: inline-block; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%; vertical-align: 1px; background: #f2555a; }
+.lo-on-dot.is-on { background: #3ecf6e; }
+.lo-on-dot.is-some { background: #e3b341; }
+
+/* A loadout whose mods have nothing to render */
+.lo-card-placeholder small { font-size: 11px; opacity: 0.7; }
+
+/* A loadout's VFX mods: their swatches share one slide, side by side */
+.lo-media-multi { display: grid; grid-template-columns: repeat(2, 1fr); grid-auto-rows: 1fr; width: 100%; height: 100%; }
+.lo-media-multi img { width: 100%; height: 100%; object-fit: contain; min-width: 0; }
+
+/* cable's Discord server (custom/CableDiscord.tsx) */
+.cd-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-top: 10px; border-radius: 10px;
+  background: var(--field-bg); border: 1px solid var(--panel-border); }
+.cd-icon { width: 40px; height: 40px; border-radius: 12px; flex: none; background: var(--bg-lighter); object-fit: cover; }
+.cd-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.cd-name { font-weight: 600; font-size: 14px; color: var(--text-primary); }
+.cd-meta { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.cd-dot { width: 7px; height: 7px; border-radius: 50%; background: #3ecf6e; }
+.cd-members { margin-left: 6px; }
+
+/* transitions.dev: Matrix dot loader (custom/motion.tsx MatrixLoader). Dots fade up and down on a 1.4s loop, each
+   starting at its own point, so the grid twinkles at random */
+.t-matrix { --matrix-gap: calc(var(--matrix-size) / 10); display: inline-grid; flex: none; grid-template-columns: repeat(4, 1fr);
+  gap: var(--matrix-gap); width: var(--matrix-size); height: var(--matrix-size); color: var(--accent-primary); vertical-align: middle; }
+.t-matrix i { border-radius: 30%; background: currentColor; opacity: 0.18; animation: t-matrix 1.4s ease-in-out infinite; }
+@keyframes t-matrix { 0%, 100% { opacity: 0.18; } 45% { opacity: 1; } 70% { opacity: 0.35; } }
+html[data-motion="off"] .t-matrix i { animation: none; opacity: 0.6; }
+@media (prefers-reduced-motion: reduce) { .t-matrix i { animation: none; opacity: 0.6; } }
+
+/* Library filters: a hero's skins sit indented under it on a guide line, each row with room around its highlight */
+.filter-panel .t-acc-panel-inner .fp-row-wrap { margin: 0 26px 0 15px; padding: 1px 0 1px 8px; border-left: 1px solid var(--panel-border); }
+.filter-panel .t-acc-panel-inner .fp-row-wrap:first-child { padding-top: 3px; }
+.filter-panel .t-acc-panel-inner .fp-row-wrap:last-child { padding-bottom: 4px; }
+.filter-panel .t-acc-panel-inner .fp-lead { display: none; }
+
+/* Install panel card: one type scale (13px text, 12px labels and hints), labels in sentence case like the rest */
+.install-mod-card .field-label { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.install-mod-card__hint { font-size: 12px; opacity: 1; }
+.install-mod-card .mod-name-input { font-size: 13px !important; }
+.install-mod-card .mod-name-suffix-hint { font-size: 12px; }
+.install-mod-card__pill { text-transform: none; font-size: 12px; font-weight: 500; padding: 3px 10px; color: var(--text-secondary); }
+.install-mod-card .install-toggle__label { font-size: 13px !important; }
+.install-mod-card .install-toggle__hint { font-size: 12px !important; }
+.install-mod-card .character-badge, .install-mod-card .category-badge, .install-mod-card .additional-badge { font-size: 12px !important; }
+/* Add to loadout's + : the app's quiet icon button */
+.install-mod-card .add-tag-btn { width: 26px; height: 26px; border-radius: var(--quiet-radius); background: transparent; border: 1px solid var(--panel-border);
+  color: var(--text-secondary); }
+.install-mod-card .add-tag-btn:hover { background: var(--quiet-hover); border-color: rgba(255, 255, 255, 0.14); color: var(--text-primary); }
+
+/* Toasts: wider, so a title and an action fit on one line */
+.toast-container { width: 480px !important; max-width: calc(100vw - 32px); }
+.toast-item { max-width: none !important; }
+
+/* Loadout page rows: Add is a plain + like Remove's X */
+.row-add { color: var(--text-secondary) !important; }
+.row-add:hover { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
+
+/* Library sidebar loadouts: status dot, name, Ctrl number, then the on/off switch */
+.lo-row .fp-lead .lo-on-dot { margin: 0; vertical-align: middle; }
+.lo-row > .repakx-switch { flex: none; margin: 0 2px 0 4px; }
+
+/* Grid / compact / list: wider targets */
+.view-switcher .btn-icon-small { width: 40px !important; min-width: 40px !important; }
+
+/* Setup cards: the status line on the left, its buttons on the right, one row */
+.su-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.su-row .su-meta { margin: 0; min-width: 0; }
+.su-ok { color: #3ecf6e; }

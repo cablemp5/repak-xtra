@@ -110,21 +110,21 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
       <div className="su-card-head">
         <div>
           <h3>Mod previews</h3>
-          <p>Renders a picture of each mod and loadout, and a clip of animation mods. Needs the preview kit (one download, about {latest?.size ? Math.round(latest.size / 1048576) : 110} MB) and Blender, which is free.</p>
+          <p>Renders each mod and loadout. Needs the preview kit (about {latest?.size ? Math.round(latest.size / 1048576) : 110} MB) and Blender (free).</p>
         </div>
-        <span className={`su-chip ${update ? 'is-update' : kit?.version || kit?.dev ? 'is-installed' : 'is-missing'}`}>{chip}</span>
+        <span className={`su-chip ${update ? 'is-update' : kit?.version || kit?.dev ? 'is-installed' : 'is-missing'}`}
+          title={kit?.dev && !kit.version ? 'This PC has the generator built in, so it needs no kit. Installing one uses the kit instead.' : undefined}>{chip}</span>
       </div>
-      <p className="su-meta">
-        {kit?.blender
-          ? <>Blender: <code>{kit.blender.replace(/^.*[\\/](Blender[^\\/]*)[\\/]blender\.exe$/i, '$1')}</code> · <a onClick={pickBlender}>Use another</a></>
-          : <>Blender not found · <a onClick={() => open(BLENDER)}>blender.org</a> · <a onClick={pickBlender}>Pick blender.exe</a></>}
-        {latest && <> · Latest kit v{latest.version}, {date(latest.published)} · <a onClick={() => setNotes("What's new")}>What's new</a></>}
-        {latest === null && <> · No kit published yet: drop a kit zip on the window, or install it from the file</>}
-      </p>
-      {kit?.dev && !kit.version && <p className="su-note">This PC has the generator built in, so it needs no kit. Installing one uses the kit instead (to test it).</p>}
       <KitProgressBar p={k.progress} />
       <DoctorProblems d={k.doctor} />
-      {k.doctor?.ok && !busy && <p className="su-note is-ok">This PC can make previews.</p>}
+      <div className="su-row">
+      <p className="su-meta">
+        {kit?.blender
+          ? <>{kit.blender.replace(/^.*[\\/](Blender[^\\/]*)[\\/]blender\.exe$/i, '$1')} · <a onClick={pickBlender}>Change</a></>
+          : <>No Blender · <a onClick={() => open(BLENDER)}>Get it</a> · <a onClick={pickBlender}>Pick blender.exe</a></>}
+        {latest && <> · Kit v{latest.version} · <a onClick={() => setNotes("What's new")}>What's new</a></>}
+        {k.doctor?.ok && !busy && <> · <span className="su-ok">Ready</span></>}
+      </p>
       <div className="su-actions">
         {(missing || update) && (
           <button type="button" className="btn-primary su-main" disabled={Boolean(busy) || (!kit?.version && !kit?.dev && latest === null)} onClick={() => k.setUp()}
@@ -134,11 +134,12 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
         )}
         {kit && !kit.blender && <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={() => k.installBlender()}
           title="Installs Blender with winget (Windows asks for admin rights once)">{busy === 'blender' ? 'Installing Blender…' : 'Install Blender'}</button>}
-        <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={fromFile}>Install from file…</button>
-        <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={() => k.checkPc()}>
-          <RefreshCw size={14} className={busy === 'doctor' ? 'su-spin' : ''} /> {busy === 'doctor' ? 'Checking…' : 'Check this PC'}
+        <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={fromFile} title="Install a preview kit zip (or drop one on the window)">From file…</button>
+        <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={() => k.checkPc()} title="Check that this PC can make previews">
+          <RefreshCw size={14} className={busy === 'doctor' ? 'su-spin' : ''} /> {busy === 'doctor' ? 'Checking…' : 'Check'}
         </button>
         {kit?.version && <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={() => k.remove()}>Remove</button>}
+      </div>
       </div>
       {notes && latest && <Changelog product="Preview kit" g={{ latest: `v${latest.version}`, published: latest.published, notes: latest.notes, url: latest.url }}
         title={notes} onClose={() => setNotes(null)} />}
@@ -282,13 +283,14 @@ export function SetupPanel({ alert, onClose }: { alert: Alert; onClose: () => vo
             <div className="su-card-head">
               <div>
                 <h3>Project Galacta</h3>
-                <p>The mod loader for Galacta skin mods. From <a onClick={() => open(GALACTA)}>0xSaturno on GitHub</a>.</p>
+                <p>Loads Galacta skin mods. By <a onClick={() => open(GALACTA)}>0xSaturno</a>.</p>
               </div>
               <span className={`su-chip ${g?.up_to_date === false ? 'is-update' : g?.installed ? 'is-installed' : 'is-missing'}`}>{g ? galactaState : 'Checking…'}</span>
             </div>
+            <div className="su-row">
             <p className="su-meta">
-              {g?.installed ? <>In <code>{where}</code>{g.disabled ? ', switched off in the Library' : ''}</> : 'Not in your mods folder.'}
-              {g?.latest && <> · Latest {g.latest}, {date(g.published)} · <a onClick={() => setNotes("What's new")}>What's new</a></>}
+              {g?.installed ? <>In <code>{where}</code>{g.disabled ? ' (off in the Library)' : ''}</> : 'Not installed'}
+              {g?.latest && <> · Latest {g.latest} · <a onClick={() => setNotes("What's new")}>What's new</a></>}
             </p>
             <div className="su-actions">
               {(!g?.installed || g.up_to_date === false) && (
@@ -297,17 +299,21 @@ export function SetupPanel({ alert, onClose }: { alert: Alert; onClose: () => vo
                 </button>
               )}
               <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={check}>
-                <RefreshCw size={14} className={busy === 'check' ? 'su-spin' : ''} /> {busy === 'check' ? 'Checking…' : 'Check for updates'}
+                <RefreshCw size={14} className={busy === 'check' ? 'su-spin' : ''} /> {busy === 'check' ? 'Checking…' : 'Check'}
               </button>
             </div>
+            </div>
             <div className="su-options">
-              <div className="su-option">
-                <span>Install into</span>
-                <CustomDropdown value={folder} onChange={v => { setFolder(v); localStorage.setItem(FOLDER_KEY, v) }}
-                  options={[{ value: HERE, label: g?.installed ? 'Where it is now' : 'Mods folder' }, ...folders.map(f => ({ value: f, label: `~mods/${f}` }))]} />
-              </div>
+              {/* where to install only matters when an install or update is offered */}
+              {(!g?.installed || g.up_to_date === false) && (
+                <div className="su-option">
+                  <span>Install into</span>
+                  <CustomDropdown value={folder} onChange={v => { setFolder(v); localStorage.setItem(FOLDER_KEY, v) }}
+                    options={[{ value: HERE, label: g?.installed ? 'Where it is now' : 'Mods folder' }, ...folders.map(f => ({ value: f, label: `~mods/${f}` }))]} />
+                </div>
+              )}
               <Checkbox checked={auto} onChange={(v: boolean) => { setAuto(v); localStorage.setItem(AUTO_KEY, v ? '1' : '0') }}>
-                Check for updates when repakxtra starts
+                Check for updates at startup
               </Checkbox>
             </div>
           </section>

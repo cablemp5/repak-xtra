@@ -1,16 +1,17 @@
 // repakxtra: sidebar list of saved loadouts (state lives in loadoutStore.ts). The dot or check turns a loadout on or
 // off (as does Ctrl+1..9), the name opens its page on Home; drag rows to reorder them, which also reorders Ctrl+1..9.
 import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from 'react'
-import { ArrowRightLeft, Check, Layers, Plus, Trash2 } from 'lucide-react'
+import { Check, Layers, Plus, Trash2 } from 'lucide-react'
+import Switch from '../components/ui/Switch'
 import CustomDropdown from '../components/CustomDropdown'
 import type { useAlert } from '../components/AlertHandler'
 import {
   type Loadout, type Mod, changesToTurnOff, changesToTurnOn, deleteLoadout, flipMods, isActive, modKey, moveLoadout,
-  nextLoadoutName, openLoadout, patchLoadout, readLoadouts, sameMembership, snapshotLoadout, useLoadouts, withMods, writeLoadouts,
+  nextLoadoutName, openLoadout, patchLoadout, readLoadouts, snapshotLoadout, useLoadouts, withMods, writeLoadouts,
 } from './loadoutStore'
 import { isTyping } from './hotkeys'
 import { plural } from './modName'
-import { Num } from './motion'
+import { OnDot } from './loadoutBits'
 import { savedItem } from './storageCarryOver'
 
 export type LoadoutProps = {
@@ -135,27 +136,6 @@ export function deleteWithUndo(p: LoadoutProps, l: Loadout) {
   })
 }
 
-/** Replace the loadout with the Library's shown mods as they are now, with Undo back to the mods it held before.
- *  Undo puts back only its mods, so a later rename, group or image change survives; it refuses when the mods were
- *  edited since (a mod added after Replace would vanish) or the loadout is gone. */
-export function overwriteWithUndo(p: LoadoutProps, l: Loadout) {
-  const before = { scope: l.scope, on: l.on }
-  const next = snapshotLoadout(l, p.scopeMods)
-  writeLoadouts(readLoadouts().map(x => (x.id === l.id ? next : x)))
-  const id = p.alert.info(`Replaced ${l.name}`, `It now holds the ${plural(next.on.length, 'mod')} that were on in the Library (${p.scopeLabel}).`, {
-    duration: 10000,
-    action: {
-      label: 'Undo', onClick: () => {
-        p.alert.dismissAlert(id)
-        const now = readLoadouts().find(x => x.id === l.id)
-        if (!now) p.alert.warning('Not undone', `${l.name} was deleted after it was replaced.`)
-        else if (!sameMembership(now, next)) p.alert.warning('Not undone', `${now.name} was edited after it was replaced.`)
-        else patchLoadout(l.id, before)
-      },
-    },
-  })
-}
-
 let switching = false // one loadout switch at a time, whether from the sidebar, Ctrl+N, a card or a page
 
 /** Heroes whose look (a Mesh or Texture mod) the loadout changes. */
@@ -238,7 +218,7 @@ export default function Loadouts(p: LoadoutProps) {
     setName('')
   }
 
-  // The dot or check (and Ctrl+N) toggles: an active loadout turns off, any other turns on
+  // The switch (and Ctrl+N) toggles: an active loadout turns off, any other turns on
   const apply = async (l: Loadout) => {
     setBusy(l.id)
     if (isActive(l, p.mods)) await runChanges(p, l, changesToTurnOff(l, p.mods), 'off')
@@ -270,7 +250,7 @@ export default function Loadouts(p: LoadoutProps) {
         <span className="fp-title">Loadouts</span>
         <span className="lo-head-actions">
           <button type="button" className="lo-icon" aria-label="New loadout" onClick={() => setNaming(true)}
-            title={picked.length ? `New loadout from the ${plural(picked.length, 'selected mod')}` : 'New loadout from the mods that are on here'}>
+            title={picked.length ? `New loadout from the ${plural(picked.length, 'selected mod')}` : 'New loadout from the mods that are enabled'}>
             <Plus size={15} />
           </button>
         </span>
@@ -292,23 +272,16 @@ export default function Loadouts(p: LoadoutProps) {
             onDragOver={e => { if (e.dataTransfer.types.includes('text/x-loadout')) { e.preventDefault(); setDropOn(l.id) } }}
             onDragLeave={() => setDropOn(null)}
             onDrop={e => { e.preventDefault(); setDropOn(null); const id = e.dataTransfer.getData('text/x-loadout'); if (id) moveLoadout(id, i) }}>
-            {/* transitions.dev: Icon swap. Both marks stay stacked; the active one fades and scales in */}
-            <button type="button" className="lo-toggle fp-lead t-icon-swap" data-state={active ? 'a' : 'b'} aria-pressed={active} disabled={busy !== null || none}
-              onClick={() => apply(l)} aria-label={none ? 'No installed mods' : active ? `Turn ${l.name} off` : `Turn ${l.name} on`}
-              title={none ? 'No installed mods' : active ? `${l.name} is on. Turn its mods off${hotkey}` : `Turn ${l.name} on: switches ${pending} of its mods on${hotkey}`}>
-              <Check size={15} className="lo-active t-icon" data-icon="a" />
-              <span className="lo-dot t-icon" data-icon="b" />
-            </button>
+            {/* Left: how many of its mods are on (green all, yellow some, red none). Right: the switch that turns it on or off */}
             <button type="button" className="fp-row" onClick={() => openLoadout(l.id)} title={`Open ${l.name} in Loadouts (drag to reorder)`}>
+              <span className="fp-lead"><OnDot on={onNow} of={onNow + pending} /></span>
               <span className="fp-label">{l.name}</span>
-              <span className="fp-count" title={`${onNow} of its ${l.on.length} mods are on`}>{busy === l.id ? '…' : <Num id={`side-${l.id}`} value={`${onNow}/${l.on.length}`} />}</span>
               {/* the number Ctrl+N toggles; rows past 9 have none */}
               <span className="lo-num" title={i < 9 ? `Ctrl+${i + 1} turns it on or off` : undefined}>{i < 9 ? i + 1 : ''}</span>
             </button>
-            <button type="button" className="lo-icon lo-hover" title={`Replace ${l.name} with the ${plural(p.scopeMods.length, 'mod')} shown here (${p.scopeLabel}), as they are now`}
-              aria-label={`Replace ${l.name} with the shown mods`} onClick={() => overwriteWithUndo(p, l)}>
-              <ArrowRightLeft size={14} />
-            </button>
+            <Switch size="sm" color="primary" checked={active} isDisabled={none} disabled={busy !== null || none}
+              onChange={() => apply(l)} aria-label={none ? 'No installed mods' : active ? `Turn ${l.name} off` : `Turn ${l.name} on`}
+              title={none ? 'No installed mods' : active ? `Turn ${l.name}'s mods off${hotkey}` : `Turn ${l.name} on: switches ${pending} of its mods on${hotkey}`} />
             <button type="button" className="lo-icon lo-hover" title={`Delete ${l.name}`} aria-label={`Delete ${l.name}`} onClick={() => deleteWithUndo(p, l)}>
               <Trash2 size={14} />
             </button>

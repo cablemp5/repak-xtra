@@ -152,6 +152,12 @@
     .status-text { font-family: 'Geist', sans-serif; font-size: 0.875rem !important; font-weight: 400 !important; color: #8f8f8f !important; margin-top: 1rem; }
     .splash-progress-container { height: 2px !important; max-width: 200px; margin: 1.5rem auto 0 !important; background: rgba(255, 255, 255, 0.08) !important; }
     .splash-progress-bar { background: #ededed !important; }
+    /* transitions.dev: Texts reveal. The name and the status line rise in from a blur, the second a beat later */
+    @keyframes t-texts-reveal { from { opacity: 0; transform: translateY(12px); filter: blur(3px); } }
+    .splash-logo, .status-text { animation: t-texts-reveal 500ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+    .status-text { animation-delay: 90ms; }
+    html[data-motion="off"] .splash-logo, html[data-motion="off"] .status-text { animation: none; }
+    @media (prefers-reduced-motion: reduce) { .splash-logo, .status-text { animation: none; } }
   </style>
 </head>
 
@@ -183,6 +189,8 @@
     // it, and secondary windows never render App - so a route missing from this
     // list keeps a full-screen overlay parked on top of a window that did load.
     // Keep in sync with the route checks in src/main.tsx.
+    // repakxtra: Settings > Motion off also stills the splash (uiPrefs.tsx sets the same attribute once React runs)
+    try { if (localStorage.getItem('repakxtra.motion') === '0') document.documentElement.setAttribute('data-motion', 'off'); } catch (e) { }
     var SECONDARY_WINDOW_ROUTES = ['vfx-updater', 'asset-explorer'];
     if (SECONDARY_WINDOW_ROUTES.some(function (route) {
       return window.location.href.includes(route);

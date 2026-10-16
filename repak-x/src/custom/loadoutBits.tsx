@@ -1,23 +1,25 @@
 // repakxtra: small pieces shared by Home (LoadoutsScreen.tsx), the loadout page and the New strip.
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, ImagePlus, LoaderCircle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ImagePlus } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import type { LoadoutProps } from './Loadouts'
 import { useMediaUrl } from './loadoutMedia'
 import { type Loadout, type Mod, displayName, flipMods, modKey } from './loadoutStore'
 import { ModName } from './modName'
-import { revealOnLoad } from './motion'
-import { hasPreview, previewSetKey, useCovers, usePreviewOutcome, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
+import { MatrixLoader, revealOnLoad } from './motion'
+import { hasPreview, noPreviewPossible, previewSetKey, useCovers, usePreviewOutcome, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
 
 /** The home screen's badge color class for a mod type (theme.css *-badge sets --badge-dot). */
 export const typeClass = (category?: string | null) => `${(category || 'unknown').toLowerCase().replace(/\s+/g, '-')}-badge`
 
 const TYPE_ORDER = ['Mesh', 'Texture', 'Material', 'Animation', 'VFX', 'UI', 'Text', 'Audio']   // Audio: the generator's list of changed sounds
+const SHARED = ['Material', 'VFX'] // types whose previews go on one slide together
 const rank = (c?: string | null) => { const i = TYPE_ORDER.indexOf(c ?? ''); return i < 0 ? TYPE_ORDER.length : i }
 
-/** A loadout's generated previews: its combined character render first, then its other mods' in type order. The
- *  combined render hides only the mods it shows that the loadout still holds. It reads "Older render" when it was made
- *  for other installed mods than the loadout has now (or before that was recorded). */
+/** A loadout's generated previews: its combined character render first, then its other mods' in type order, its
+ *  Material previews together on one slide and its VFX swatches on another. The combined render hides only the mods it
+ *  shows that the loadout still holds. It reads "Older render" when it was made for other installed mods than the
+ *  loadout has now (or before that was recorded). */
 function usePreviewSlides(p: LoadoutProps, l: Loadout) {
   usePreviewVersion()
   const set = previewSetKey(l.id)
@@ -28,7 +30,13 @@ function usePreviewSlides(p: LoadoutProps, l: Loadout) {
   const covered = (info?.covers ?? []).filter(k => mine.includes(k))
   const keys = mine.filter(k => hasPreview(k) && !covered.includes(k))
     .sort((a, b) => rank(categoryOf(a)) - rank(categoryOf(b)))
-  const slides: { key: string; label: string; older?: boolean }[] = keys.map(k => ({ key: k, label: categoryOf(k) ?? 'Mod' }))
+  // Material and VFX previews each share one slide, however many mods of that type the loadout has
+  const together = (k: string) => { const c = categoryOf(k); return c && SHARED.includes(c) ? keys.filter(x => categoryOf(x) === c) : [k] }
+  const slides: { key: string; label: string; older?: boolean; keys?: string[] }[] = keys.flatMap(k => {
+    const g = together(k)
+    if (g.length < 2) return [{ key: k, label: categoryOf(k) ?? 'Mod' }]
+    return k === g[0] ? [{ key: k, keys: g, label: `${g.length} ${categoryOf(k)}` }] : []
+  })
   if (hasPreview(set)) {
     const installed = new Set(mine.filter(k => byKey.has(k)))
     const older = info !== undefined && !(info.members && info.members.length === installed.size && info.members.every(k => installed.has(k)))
@@ -54,6 +62,7 @@ export function CardMedia({ p, l, className = '', title, onClick, emptyText = 'C
   const [warm] = useState(src) // already cached when the card mounted: shown at once, without the blur-in
   const state = usePreviewState(previewSetKey(l.id))
   const setNote = usePreviewOutcome(previewSetKey(l.id)) // the last loadout render failed (its image stays) or was refused
+  const impossible = !src && !state && noPreviewPossible(l)
   return (
     <div className={`lo-media ${className}${paged ? ' is-paged' : ''}${state ? ` is-${state.kind}` : ''}`}>
       {/* transitions.dev: Skeleton loader. Shown over the card while its preview renders or waits; the new image
@@ -62,14 +71,18 @@ export function CardMedia({ p, l, className = '', title, onClick, emptyText = 'C
         <span className="lo-skel" role="status">
           <span className="lo-skel-label">
             {state.kind === 'running'
-              ? <><LoaderCircle size={12} className="run-spin" aria-hidden="true" />Generating previews</>
+              ? <><MatrixLoader size={12} />Generating previews</>
               : state.at === 1 ? 'Queued, up next' : `Queued, ${state.at} in line`}
           </span>
         </span>
       )}
       <button type="button" className="lo-card-image" onClick={onClick} title={title}>
         {!src
-          ? <span className="lo-card-placeholder"><ImagePlus size={22} /><span>{emptyText}</span></span>
+          ? impossible
+            ? <span className="lo-card-placeholder"><span>No preview possible</span><small>Click to add an image</small></span>
+            : <span className="lo-card-placeholder"><ImagePlus size={22} /><span>{emptyText}</span></span>
+          : slide?.keys
+            ? <span className="lo-media-multi">{slide.keys.map(k => <SlideImage key={k} k={k} />)}</span>
           : !slide?.key && l.mediaType === 'video' && url
             ? <video src={url} autoPlay loop muted playsInline />
             : <img key={src} src={src} alt="" className={src === warm ? 'is-loaded' : undefined} onLoad={revealOnLoad} />}
@@ -91,6 +104,19 @@ export function CardMedia({ p, l, className = '', title, onClick, emptyText = 'C
   )
 }
 
+/** One preview of a slide that shows several (a loadout's VFX swatches). */
+function SlideImage({ k }: { k: string }) {
+  const src = usePreviewUrl(k)
+  const [warm] = useState(src)
+  return src ? <img src={src} alt="" className={src === warm ? 'is-loaded' : undefined} onLoad={revealOnLoad} /> : <span />
+}
+
+/** How many of a loadout's installed mods are on: green all, yellow some, red none. */
+export function OnDot({ on, of }: { on: number; of: number }) {
+  const state = on === 0 ? '' : on < of ? ' is-some' : ' is-on'
+  return <span className={`lo-on-dot${state}`} title={on === 0 ? 'None of its mods are on' : on < of ? `${on} of its ${of} mods are on` : 'All of its mods are on'} />
+}
+
 /** Turns single mods on or off from Home, with the same game-running guard as loadouts. */
 export async function toggleMod(p: LoadoutProps, mod: Mod) {
   if (p.blocked) {
@@ -101,7 +127,8 @@ export async function toggleMod(p: LoadoutProps, mod: Mod) {
   await p.reload()
 }
 
-/** One mod row: optional on/off switch, type code, name (slug + tags + version), then any trailing actions. */
+/** One mod row: name (slug + tags + version), type, then the optional on/off switch (on the right, like the Library) and
+ *  any trailing actions. */
 export function ModRow({ p, k, mod, onToggle, children }: {
   p: LoadoutProps; k: string; mod?: Mod; onToggle?: boolean; children?: React.ReactNode
 }) {
@@ -109,13 +136,13 @@ export function ModRow({ p, k, mod, onToggle, children }: {
   return (
     <li className={`mod-row ${mod ? (mod.enabled ? 'is-on' : '') : 'is-missing'}`}
       title={mod ? `${category ?? 'Unknown type'} · ${mod.enabled ? 'on now' : 'off now'}` : 'Not installed anymore'}>
+      <span className="mod-row-name"><ModName name={k} /></span>
+      {!onToggle && mod?.enabled && <span className="mod-row-on" title="This mod is on now">on</span>}
+      <span className={`mod-type-badge category-badge ${typeClass(category)}`}>{category ?? 'Unknown'}</span>
       {onToggle && (mod
         ? <Switch size="sm" color="primary" checked={Boolean(mod.enabled)} title={mod.enabled ? `Turn ${k} off` : `Turn ${k} on`}
             aria-label={mod.enabled ? `Turn ${k} off` : `Turn ${k} on`} onChange={() => toggleMod(p, mod)} />
         : <span className="mod-row-switch-gap" />)}
-      <span className="mod-row-name"><ModName name={k} /></span>
-      {!onToggle && mod?.enabled && <span className="mod-row-on" title="This mod is on now">on</span>}
-      <span className={`mod-type-badge category-badge ${typeClass(category)}`}>{category ?? 'Unknown'}</span>
       {children}
     </li>
   )

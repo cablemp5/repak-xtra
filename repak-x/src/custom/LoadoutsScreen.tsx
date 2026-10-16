@@ -2,16 +2,16 @@
 // the "New this week" strip below them; a card opens its page (LoadoutPage.tsx). The full mod list is the Library
 // view (header tabs, or L). On = its mods on, Off = its mods off; other mods and loadouts are never touched.
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronUp, CircleStop, FolderPlus, LoaderCircle, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, FolderPlus, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo, runChanges } from './Loadouts'
 import LoadoutPage from './LoadoutPage'
 import NewStrip from './NewStrip'
 import { isTyping } from './hotkeys'
-import { CardMedia } from './loadoutBits'
+import { CardMedia, OnDot } from './loadoutBits'
 import { prepareMedia, putMedia } from './loadoutMedia'
 import { plural } from './modName'
-import { Num } from './motion'
+import { MatrixLoader, Num } from './motion'
 import { dismissPreviewSummary, generateAllLoadouts, loadoutHasPreview, stopPreviews, usePreviewsAvailable, usePreviewBatch, usePreviewSummary, usePreviewVersion } from './previews'
 import {
   type Loadout, type Mod, OTHER, addGroup, changesToTurnOff, changesToTurnOn, deleteGroup, displayName, groupKey,
@@ -293,13 +293,15 @@ export default function LoadoutsScreen(p: LoadoutProps) {
       </header>
       {batch && (
         <div className="lo-batch" role="status">
-          <LoaderCircle size={14} className="run-spin" />
-          <span className="lo-batch-what t-shimmer">Generating <b>{batch.name}</b></span>
-          {batch.left > 0 && <span className="lo-batch-left">{batch.left} queued</span>}
+          <MatrixLoader />
+          <span className="lo-batch-what t-shimmer">Generating {batch.name} Preview</span>
+          {batch.jobs > 1 && <span className="lo-batch-left">{batch.job} of {batch.jobs}</span>}
           <button type="button" className="lo-text-btn lo-batch-stop" onClick={stopPreviews} disabled={batch.stopping}
-            title="Stop after the mod rendering now and clear the queue">
-            <CircleStop size={14} /> {batch.stopping ? 'Stopping…' : batch.left ? 'Stop all' : 'Stop'}
+            title={batch.left ? 'Stop now and clear the queue' : 'Stop now'}>
+            {batch.stopping ? 'Stopping…' : batch.left ? 'Stop all' : 'Stop'}
           </button>
+          {/* how far the batch is: loadouts done of all asked for */}
+          {batch.jobs > 1 && <span className="lo-batch-track" aria-hidden="true"><i style={{ width: `${((batch.job - 1) / batch.jobs) * 100}%` }} /></span>}
         </div>
       )}
       {!batch && lastRun && (
@@ -365,7 +367,8 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                       <p className="lo-card-meta">
                         {busy === l.id ? 'Switching mods…' : p.mods.length === 0 ? 'Loading mods…' : <>
                           {groupBy === 'hero' && <>{l.label}<span className="lo-sep">·</span></>}
-                          {`${onNow}/${l.on.length} on`}
+                          {`${onNow}/${l.on.length}`}
+                          <OnDot on={onNow} of={present} />
                           {present < l.on.length && <><span className="lo-sep">·</span>{l.on.length - present} not installed</>}
                         </>}
                       </p>
