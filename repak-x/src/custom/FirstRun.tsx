@@ -6,7 +6,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open as pick } from '@tauri-apps/plugin-dialog'
 import { motion } from 'framer-motion'
-import { Check, FolderOpen, Upload } from 'lucide-react'
+import { Check, Upload } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import { DoctorProblems, KitProgressBar } from './SetupPanel'
 import { isKitZip, usePreviewKit } from './previewKit'
@@ -21,11 +21,11 @@ const openUrl = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.
 /** A fresh install: neither this screen nor the old tour was ever shown. */
 const firstLaunch = () => !localStorage.getItem(SEEN) && !localStorage.getItem('hasSeenOnboarding')
 
-function Step({ n, done, title, optional, children, action }: {
-  n: number; done: boolean; title: string; optional?: boolean; children: React.ReactNode; action?: React.ReactNode
+function Step({ n, done, title, optional, wide, children, action }: {
+  n: number; done: boolean; title: string; optional?: boolean; wide?: boolean; children: React.ReactNode; action?: React.ReactNode
 }) {
   return (
-    <li className={`fr-step${done ? ' is-done' : ''}`}>
+    <li className={`fr-step${done ? ' is-done' : ''}${wide ? ' is-wide' : ''}`}>
       <span className="fr-num" aria-hidden="true">{done ? <Check size={14} /> : n}</span>
       <div className="fr-text">
         <h3>{title}{optional && <span className="fr-optional">Optional</span>}</h3>
@@ -92,10 +92,8 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
     window.dispatchEvent(new Event('bypass-changed')) // the Setup button's dot
   })
   const installGalacta = () => run('galacta', async () => { setGalacta(await invoke<Galacta>('setup_galacta_install', { folder: null })) })
-  const addFiles = async (directory: boolean) => {
-    const got = await pick(directory
-      ? { directory: true, multiple: true, title: 'Mod folders to install' }
-      : { multiple: true, title: 'Mods to install', filters: [{ name: 'Mod files', extensions: ['pak', 'zip', 'rar', '7z'] }] }).catch(() => null)
+  const addFiles = async () => {
+    const got = await pick({ multiple: true, title: 'Mods to install', filters: [{ name: 'Mod files', extensions: ['pak', 'zip', 'rar', '7z'] }] }).catch(() => null)
     const paths = Array.isArray(got) ? got : got ? [got] : []
     if (!paths.length) return
     close()
@@ -146,7 +144,9 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
           <Step n={3} done={galactaOn} title="Install Project Galacta"
             action={!galacta?.installed && <button type="button" className="btn-primary" disabled={noGame || Boolean(busy)} onClick={installGalacta}
               title={noGame ? 'Find the game first' : 'Downloads the newest release from GitHub'}>{busy === 'galacta' ? 'Installing…' : 'Install'}</button>}>
-            <p>{galactaOn ? 'Installed.' : galacta?.installed ? 'Installed but switched off. Turn it on in the Library.' : 'The mod loader for skin mods. Downloads the newest release from GitHub.'}</p>
+            <p>{galacta?.installed && !galactaOn ? 'Installed but switched off. Turn it on in the Library.'
+              : galactaOn ? 'Installed. Loads more mod types and swaps mesh mods live in game.'
+              : 'Needed by most skin mods: loads more mod types and swaps mesh mods live in game.'}</p>
           </Step>
 
           <Step n={4} done={kitReady && kit.doctor?.ok !== false} optional title="Mod previews"
@@ -158,13 +158,12 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
             <DoctorProblems d={kit.doctor} />
           </Step>
 
-          <Step n={5} done={false} title="Add your first mods">
+          <Step n={5} done={false} wide title="Add your first mods">
             <div className="fr-drop">
               <Upload size={18} aria-hidden="true" />
               <span>Drop .pak, .zip, .rar or .7z files, or mod folders, anywhere on this window.</span>
               <span className="fr-drop-actions">
-                <button type="button" className="lo-text-btn" disabled={noGame} onClick={() => addFiles(false)}>Choose files…</button>
-                <button type="button" className="lo-text-btn" disabled={noGame} onClick={() => addFiles(true)}><FolderOpen size={14} /> Folder…</button>
+                <button type="button" className="lo-text-btn" disabled={noGame} onClick={addFiles}>Choose files…</button>
                 <a onClick={() => openUrl(NEXUS)}>Find mods on Nexus Mods</a>
               </span>
             </div>

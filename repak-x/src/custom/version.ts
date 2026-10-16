@@ -1,6 +1,6 @@
 // repakxtra: repakxtra's own version, bumped for each repakxtra release. The Repak X version it is built on still comes
 // from Cargo (get_app_version).
-export const REPAKXTRA_VERSION = '0.3.0'
+export const REPAKXTRA_VERSION = '0.3.1'
 
 /** The header's and Credits' version line: "v0.3.0 (RepakX v2.0.1, forked by cable)" */
 export const versionTag = (repakx?: string) =>

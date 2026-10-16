@@ -1,12 +1,12 @@
-// repakxtra: sidebar list of saved loadouts (state lives in loadoutStore.ts). The dot or check turns a loadout on or
-// off (as does Ctrl+1..9), the name opens its page on Home; drag rows to reorder them, which also reorders Ctrl+1..9.
+// repakxtra: the Library sidebar's quick view of saved loadouts (state lives in loadoutStore.ts). A row turns its loadout
+// on or off (as does Ctrl+N, N its place in the Loadouts page order); loadouts that are on, then partly on, list first.
+// Its arrow opens the loadout's page, where everything else (rename, reorder, delete) lives.
 import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from 'react'
-import { Check, Layers, Plus, Trash2 } from 'lucide-react'
-import Switch from '../components/ui/Switch'
+import { ArrowUpRight, Check, Layers, Plus } from 'lucide-react'
 import CustomDropdown from '../components/CustomDropdown'
 import type { useAlert } from '../components/AlertHandler'
 import {
-  type Loadout, type Mod, changesToTurnOff, changesToTurnOn, deleteLoadout, flipMods, isActive, modKey, moveLoadout,
+  type Loadout, type Mod, changesToTurnOff, changesToTurnOn, deleteLoadout, flipMods, isActive, modKey,
   nextLoadoutName, openLoadout, patchLoadout, readLoadouts, snapshotLoadout, useLoadouts, withMods, writeLoadouts,
 } from './loadoutStore'
 import { isTyping } from './hotkeys'
@@ -204,7 +204,6 @@ export default function Loadouts(p: LoadoutProps) {
   const [naming, setNaming] = useState(false)
   const [name, setName] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
-  const [dropOn, setDropOn] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   useEffect(() => { if (naming) inputRef.current?.focus() }, [naming])
 
@@ -218,7 +217,7 @@ export default function Loadouts(p: LoadoutProps) {
     setName('')
   }
 
-  // The switch (and Ctrl+N) toggles: an active loadout turns off, any other turns on
+  // A row (and Ctrl+N) toggles: an active loadout turns off, any other turns on
   const apply = async (l: Loadout) => {
     setBusy(l.id)
     if (isActive(l, p.mods)) await runChanges(p, l, changesToTurnOff(l, p.mods), 'off')
@@ -260,34 +259,32 @@ export default function Loadouts(p: LoadoutProps) {
         <p className="lo-empty">No loadouts yet. Select mods (or turn on the ones you want) and press + to save them as one.</p>
       )}
 
-      {loadouts.map((l, i) => {
-        const active = isActive(l, p.mods)
-        const hotkey = i < 9 ? ` (Ctrl+${i + 1})` : ''
-        const pending = changesToTurnOn(l, p.mods).length
-        const onNow = changesToTurnOff(l, p.mods).length // its mods that are on right now
-        const none = pending + onNow === 0 // none of its mods is installed
-        return (
-          <div className={`fp-row-wrap lo-row ${active ? 'is-on' : ''} ${dropOn === l.id ? 'is-drop' : ''}`} key={l.id} draggable
-            onDragStart={e => { e.dataTransfer.setData('text/x-loadout', l.id); e.dataTransfer.effectAllowed = 'move' }}
-            onDragOver={e => { if (e.dataTransfer.types.includes('text/x-loadout')) { e.preventDefault(); setDropOn(l.id) } }}
-            onDragLeave={() => setDropOn(null)}
-            onDrop={e => { e.preventDefault(); setDropOn(null); const id = e.dataTransfer.getData('text/x-loadout'); if (id) moveLoadout(id, i) }}>
-            {/* Left: how many of its mods are on (green all, yellow some, red none). Right: the switch that turns it on or off */}
-            <button type="button" className="fp-row" onClick={() => openLoadout(l.id)} title={`Open ${l.name} in Loadouts (drag to reorder)`}>
-              <span className="fp-lead"><OnDot on={onNow} of={onNow + pending} /></span>
-              <span className="fp-label">{l.name}</span>
-              {/* the number Ctrl+N toggles; rows past 9 have none */}
-              <span className="lo-num" title={i < 9 ? `Ctrl+${i + 1} turns it on or off` : undefined}>{i < 9 ? i + 1 : ''}</span>
-            </button>
-            <Switch size="sm" color="primary" checked={active} isDisabled={none} disabled={busy !== null || none}
-              onChange={() => apply(l)} aria-label={none ? 'No installed mods' : active ? `Turn ${l.name} off` : `Turn ${l.name} on`}
-              title={none ? 'No installed mods' : active ? `Turn ${l.name}'s mods off${hotkey}` : `Turn ${l.name} on: switches ${pending} of its mods on${hotkey}`} />
-            <button type="button" className="lo-icon lo-hover" title={`Delete ${l.name}`} aria-label={`Delete ${l.name}`} onClick={() => deleteWithUndo(p, l)}>
-              <Trash2 size={14} />
-            </button>
-          </div>
-        )
-      })}
+      {loadouts
+        .map((l, i) => {
+          const onNow = changesToTurnOff(l, p.mods).length // its mods that are on right now
+          const pending = changesToTurnOn(l, p.mods).length
+          return { l, i, onNow, pending, rank: isActive(l, p.mods) ? 0 : onNow ? 1 : 2 }
+        })
+        .sort((a, b) => a.rank - b.rank || a.i - b.i)
+        .map(({ l, i, onNow, pending, rank }, at, rows) => {
+          const hotkey = i < 9 ? ` (Ctrl+${i + 1})` : ''
+          const none = onNow + pending === 0 // none of its mods is installed
+          const what = none ? `${l.name} has no installed mods` : rank === 0 ? `Turn ${l.name} off` : rank === 1 ? `Turn on the rest of ${l.name} (${pending} more)` : `Turn ${l.name} on`
+          return (
+            <div className={`fp-row-wrap lo-row${rank === 0 ? ' is-on' : rank === 1 ? ' is-some' : ''}${none ? ' is-empty' : ''}${at > 0 && rows[at - 1].rank < 2 && rank === 2 ? ' is-first-off' : ''}`} key={l.id}>
+              <button type="button" className="fp-row" disabled={busy !== null} onClick={() => apply(l)} title={what + hotkey}
+                aria-label={what} aria-pressed={rank === 0}>
+                <span className={`fp-lead${busy === l.id ? ' is-busy' : ''}`}><OnDot on={onNow} of={onNow + pending} /></span>
+                <span className="fp-label">{l.name}</span>
+                {/* the number Ctrl+N toggles; rows past 9 have none */}
+                <span className="lo-num">{i < 9 ? i + 1 : ''}</span>
+              </button>
+              <button type="button" className="lo-icon lo-hover" title={`Open ${l.name}`} aria-label={`Open ${l.name}`} onClick={() => openLoadout(l.id)}>
+                <ArrowUpRight size={14} />
+              </button>
+            </div>
+          )
+        })}
 
       {naming && (
         <div className="lo-new">

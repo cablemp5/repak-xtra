@@ -107,6 +107,13 @@ function CaptureDialog({ p, l, hero, onUse, onClose }: {
                   <li>Go to the hero's <b>Overview</b> or <b>Cosmetics</b> screen.</li>
                   <li>Press <Keys /> in the game, or <b>Capture now</b> below.</li>
                 </ol>
+                {/* One quiet line, full width, so it never wraps next to the buttons */}
+                <div className={`cp-status is-${phase}`} role="status">
+                  {phase === 'listening' && <><i className="cp-dot" aria-hidden="true" /><span>Listening for <Keys /> in the game</span></>}
+                  {phase === 'capturing' && <><MatrixLoader size={12} /><span>Switching to the game…</span></>}
+                  {phase === 'idle' && <><i className="cp-dot is-off" aria-hidden="true" /><span>Not listening.</span>
+                    <button type="button" className="cp-link" onClick={() => take('capture_game_hotkey')}>Listen again</button></>}
+                </div>
               </>
             )}
         </div>
@@ -117,11 +124,6 @@ function CaptureDialog({ p, l, hero, onUse, onClose }: {
                 <button type="button" className="btn-primary" disabled={phase === 'saving'} onClick={use}>{phase === 'saving' ? 'Saving…' : 'Use as loadout image'}</button>
               </>
             : <>
-                <span className="cp-status" role="status">
-                  {phase === 'listening' && <><i className="cp-dot" aria-hidden="true" />Listening for <Keys /></>}
-                  {phase === 'capturing' && <><MatrixLoader size={12} />Switching to the game…</>}
-                  {phase === 'idle' && <>Not listening. <button type="button" className="cp-link" onClick={() => take('capture_game_hotkey')}>Listen again</button></>}
-                </span>
                 <button type="button" className="lo-text-btn" onClick={onClose}>Cancel</button>
                 <button type="button" className="btn-primary" disabled={phase === 'capturing'} onClick={() => take('capture_game_now')}>
                   <Camera size={14} /> {phase === 'capturing' ? 'Capturing…' : 'Capture now'}

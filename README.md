@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/cablemp5/repak-xtra/stargazers"><img src="https://img.shields.io/github/stars/cablemp5/repak-xtra?style=flat-square&color=111111&label=stars" alt="Stars"></a>
-  <a href="https://github.com/cablemp5/repak-xtra/releases"><img src="https://img.shields.io/github/v/release/cablemp5/repak-xtra?include_prereleases&style=flat-square&color=111111&label=release" alt="Release"></a>
+  <a href="https://github.com/cablemp5/repak-xtra/releases"><img src="https://img.shields.io/github/v/release/cablemp5/repak-xtra?include_prereleases&sort=semver&style=flat-square&color=111111&label=release" alt="Release"></a>
   <a href="https://github.com/cablemp5/repak-xtra/releases"><img src="https://img.shields.io/github/downloads/cablemp5/repak-xtra/total?style=flat-square&color=111111&label=downloads" alt="Downloads"></a>
   <img src="https://img.shields.io/badge/platform-Windows-111111?style=flat-square" alt="Windows">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-111111?style=flat-square" alt="GPL-3.0 license"></a>
@@ -17,10 +17,10 @@
 
 ## Built on Repak X
 
-repakxtra is cable's fork of **[Repak X](https://github.com/X-zant/Repak-X)** by **Xzant** (backend, founder) and **Saturn** (frontend), with thanks to **Trumank**, **Krisan Thyme**, **Natimerry**, **amMatt** and the **Marvel Rivals Modding Server**. Installing, conflict checks, the Asset Explorer, the VFX Updater and the rest of the core come from Repak X. Please support the original project.
+repakxtra is a fork of **[Repak X](https://github.com/X-zant/Repak-X)** by **Xzant** (backend, founder) and **Saturn** (frontend), with thanks to **Trumank**, **Krisan Thyme**, **Natimerry**, **amMatt** and the **Marvel Rivals Modding Server**. It adds loadouts, previews and guided setup on top; installing, conflict checks, the Asset Explorer, the VFX Updater and the rest of the core are Repak X's work. Please support the original project.
 
 > [!NOTE]
-> Personal and unofficial: not made by the Repak X team, and not affiliated with NetEase or Marvel.
+> repakxtra is an unofficial fork: not made by the Repak X team, and not affiliated with NetEase or Marvel.
 
 ## Getting started
 
@@ -34,9 +34,10 @@ repakxtra is cable's fork of **[Repak X](https://github.com/X-zant/Repak-X)** by
 ## Features
 
 **Loadouts**
-- One switch turns a set of mods on or off. Loadouts are independent, and you are warned when two that are on change the same hero.
+- One click turns a set of mods on or off. Loadouts are independent, and you are warned when two that are on change the same hero.
 - Groups (drag cards between them) or a view by hero.
 - Make one from the Library selection, the right-click menu, the sidebar or while installing. Undo for every removal.
+- The Library sidebar lists them for quick switching, the ones that are on first.
 
 **Previews**
 - Character mods render on the hero in the lobby pose, using the mods' real materials. A loadout's mods render together.
@@ -61,7 +62,7 @@ repakxtra is cable's fork of **[Repak X](https://github.com/X-zant/Repak-X)** by
 | --- | --- |
 | `F1` | Show every shortcut |
 | `L` | Switch between Loadouts and the Library |
-| `Ctrl+1` to `Ctrl+9` | Turn loadout 1 to 9 on or off (sidebar order) |
+| `Ctrl+1` to `Ctrl+9` | Turn loadout 1 to 9 on or off (Loadouts page order) |
 | `Ctrl+G` | Launch the game |
 | `Ctrl+O` | Install PAKs or archives |
 | `S` | Cycle Sigeon: Off, Base, High |
@@ -104,6 +105,9 @@ Build:
 
 # The stable build: only from a clean main. Open it as dist\repakxtra\repakxtra.exe (always the newest stable build)
 .\build.ps1
+
+# A release: builds main into dist\repakxtra-v<version>-windows.zip and prints the gh command that publishes it
+.\build.ps1 -Release
 ```
 
 > [!NOTE]

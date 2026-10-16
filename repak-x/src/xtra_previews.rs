@@ -244,6 +244,8 @@ fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Result<Comman
         if let Some(b) = crate::xtra_kit::blender() {
             cmd.env("REPAKXTRA_BLENDER", b);
         }
+        // The game's key comes from the app (the same one it installs mods with), so the kit carries none
+        cmd.env("REPAKXTRA_AES", format!("0x{}", crate::install_mod::AES_KEY_HEX.trim_start_matches("0x")));
     }
     #[cfg(windows)]
     {

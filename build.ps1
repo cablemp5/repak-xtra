@@ -1,9 +1,12 @@
 # Release build, same steps as .github/workflows/release.yml.
 #   .\build.ps1        the stable app: only from a clean main. Output: dist\Repak-X-Stable (or -next), opened as dist\repakxtra\repakxtra.exe
 #   .\build.ps1 -Test  whatever is in the folder now, even uncommitted edits. Output: dist\Repak-X-Test
+#   .\build.ps1 -Release  main, as repakxtra v<REPAKXTRA_VERSION> (custom/version.ts): builds dist\Repak-X-Release, zips it as
+#                      dist\repakxtra-v<ver>-windows.zip and prints the gh command that publishes it. Once published, running
+#                      copies offer it in Settings > Updates. Bump the version in the PR before releasing.
 # The two never overwrite each other. The app runs one copy at a time (single-instance) and both share %APPDATA%\Repak-X.
 # Neither touches the desktop: point a shortcut at dist\repakxtra\repakxtra.exe once and it always opens the newest stable build.
-param([switch]$Test)
+param([switch]$Test, [switch]$Release)
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
@@ -11,6 +14,14 @@ if (-not $Test) {
     $branch = (git rev-parse --abbrev-ref HEAD)
     $dirty = @(git status --porcelain --untracked-files=no -- . ':!repak-x/gen/schemas')
     if ($branch -ne 'main' -or $dirty) { throw "The stable build comes from a clean main (this is '$branch'). Use .\build.ps1 -Test to try anything else." }
+}
+if ($Release) {
+    git fetch -q origin main
+    if ((git rev-parse HEAD) -ne (git rev-parse origin/main)) { throw 'Release what GitHub has: run git pull on main first.' }
+    $ver = [regex]::Match((Get-Content -Raw repak-x\src\custom\version.ts), "REPAKXTRA_VERSION = '([^']+)'").Groups[1].Value
+    if (-not $ver) { throw 'No REPAKXTRA_VERSION in repak-x\src\custom\version.ts.' }
+    gh release view "v$ver" -R cablemp5/repak-xtra *> $null
+    if ($LASTEXITCODE -eq 0) { throw "v$ver is already released: bump REPAKXTRA_VERSION in custom/version.ts (in a PR) first." }
 }
 # vswhere: the .NET NativeAOT linker step calls it to find MSVC
 $env:PATH = "$env:USERPROFILE\.cargo\bin;${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer;$env:PATH"
@@ -24,7 +35,10 @@ $linked = if (Test-Path $link) { "$((Get-Item $link).Target)" }
 # REPAK-X: the exe's name in builds made before it shipped as repakxtra.exe
 $running = @(Get-Process repakxtra, REPAK-X -ErrorAction SilentlyContinue | ForEach-Object {
     if ($linked) { $_.Path -replace [regex]::Escape("$PSScriptRoot\$link"), $linked } else { $_.Path } })
-if ($Test) {
+if ($Release) {
+    $out = 'dist\Repak-X-Release'   # never run from, so a fresh folder holds exactly what ships
+    if (Test-Path $out) { Remove-Item $out -Recurse -Force }
+} elseif ($Test) {
     $out = 'dist\Repak-X-Test'
     if ($running -match [regex]::Escape("\$out\")) { throw 'Close the test copy of repakxtra first.' }
 } else {
@@ -48,10 +62,19 @@ Copy-Item target\x86_64-pc-windows-msvc\release\REPAK-X.exe "$out\repakxtra.exe"
 Copy-Item target\uassettool\* $out -Recurse -Force
 Remove-Item "$out\*.pdb", "$out\UAssetTool.exe", "$out\REPAK-X.exe" -ErrorAction SilentlyContinue
 Copy-Item repak-x\src\data\character_data.json "$out\data" -Force
-if (-not $Test) {
+if (-not $Test -and -not $Release) {
     # repoint dist\repakxtra at the build just made (rmdir removes only the link, never the folder it points to)
     if (Test-Path $link) { Run { cmd /c rmdir $link } }
     New-Item -ItemType Junction -Path $link -Target (Resolve-Path $out).Path | Out-Null
 }
 Write-Host "Built: $out\repakxtra.exe" -ForegroundColor Green
+if ($Release) {
+    # tar (bsdtar, in Windows 10+) writes forward-slash entries; the in-app updater unzips this over the app folder
+    $zip = "dist\repakxtra-v$ver-windows.zip"
+    Remove-Item $zip -ErrorAction SilentlyContinue
+    Run { tar.exe -a -cf $zip -C $out repakxtra.exe UAssetTool.dll data }
+    Write-Host "Packed: $zip (SHA-256 $((Get-FileHash $zip).Hash.ToLower()))" -ForegroundColor Green
+    Write-Host 'Publish it (swap --generate-notes for --notes-file notes.md to write your own):'
+    Write-Host "  gh release create v$ver $zip -R cablemp5/repak-xtra --target main --prerelease --title `"repakxtra $ver`" --generate-notes"
+}
 if ($Test) { Write-Host 'The app runs one copy at a time: close the stable repakxtra before opening the test one, or you will just get the stable window.' -ForegroundColor Yellow }

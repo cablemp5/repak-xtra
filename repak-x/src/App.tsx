@@ -64,7 +64,7 @@ import { GeneratePreviewsButton } from './custom/previews'
 import { finishInstallLoadout } from './custom/installLoadout'
 import SigeonControl from './custom/SigeonControl'
 import SetupButton from './custom/SetupPanel'
-import { latestRelease, versionTag } from './custom/version'
+import { REPAKXTRA_VERSION, latestRelease, versionTag } from './custom/version'
 import FirstRun from './custom/FirstRun' // repakxtra: first-launch setup
 import { installDroppedKit } from './custom/previewKit'
 import { useGlobalTooltips } from './hooks/useGlobalTooltips'
@@ -1696,6 +1696,7 @@ function App() {
 
       const ver = await invoke('get_app_version') as any
       setVersion(ver)
+      const xver = REPAKXTRA_VERSION // repakxtra: the changelog after an update is repakxtra's own (its version and releases)
 
       // Check if we just updated — show changelog if version changed.
       //
@@ -1744,19 +1745,19 @@ function App() {
         }
       }
 
-      const normalizedVersion = String(ver || '').replace(/^v/, '')
-      const versionRecorded = normalizedVersion ? await recordSeenVersion(ver) : false
-      setChangelogMarker({ lastSeen, current: String(ver || ''), recorded: versionRecorded })
+      const normalizedVersion = String(xver || '').replace(/^v/, '')
+      const versionRecorded = normalizedVersion ? await recordSeenVersion(xver) : false
+      setChangelogMarker({ lastSeen, current: String(xver || ''), recorded: versionRecorded })
 
-      if (versionRecorded && lastSeen && lastSeen !== ver) {
-        console.debug('[Changelog] Version change detected', { lastSeen, currentVersion: ver, normalizedVersion })
+      if (versionRecorded && lastSeen && lastSeen !== xver) {
+        console.debug('[Changelog] Version change detected', { lastSeen, currentVersion: xver, normalizedVersion })
         try {
           const headers = { 'Accept': 'application/vnd.github.v3+json' }
           let releaseBody = ''
           const tagCandidates = [`v${normalizedVersion}`, normalizedVersion]
 
           for (const tag of tagCandidates) {
-            const tagUrl = `https://api.github.com/repos/XzantGaming/Repak-X/releases/tags/${encodeURIComponent(tag)}`
+            const tagUrl = `https://api.github.com/repos/cablemp5/repak-xtra/releases/tags/${encodeURIComponent(tag)}` // repakxtra
             console.debug('[Changelog] Trying tag endpoint', { tag, tagUrl })
             const tagRes = await fetch(tagUrl, { headers })
             console.debug('[Changelog] Tag endpoint response', { tag, status: tagRes.status, ok: tagRes.ok })
@@ -1772,7 +1773,7 @@ function App() {
 
           // Fallback: releases/latest (helps when the expected tag is not published yet)
           if (!releaseBody) {
-            const latestUrl = 'https://api.github.com/repos/XzantGaming/Repak-X/releases/latest'
+            const latestUrl = 'https://api.github.com/repos/cablemp5/repak-xtra/releases/latest' // repakxtra
             console.debug('[Changelog] Falling back to latest release endpoint', { latestUrl })
             const latestRes = await fetch(latestUrl, { headers })
             console.debug('[Changelog] Latest release response', { status: latestRes.status, ok: latestRes.ok })
@@ -1793,17 +1794,17 @@ function App() {
           }
 
           if (releaseBody) {
-            uiLog.info('Changelog', `Updated from v${lastSeen} to ${ver} - showing changelog`)
+            uiLog.info('Changelog', `Updated from v${lastSeen} to ${xver} - showing changelog`)
             setChangelogContent(releaseBody)
             setShowChangelogModal(true)
             console.debug('[Changelog] Showing changelog modal', {
-              version: ver,
+              version: xver,
               bodyLength: releaseBody.length
             })
           } else {
             console.warn('[Changelog] No changelog body found for updated version', {
               lastSeen,
-              currentVersion: ver,
+              currentVersion: xver,
               normalizedVersion,
               tagCandidates
             })
@@ -1821,7 +1822,7 @@ function App() {
                 ? 'first_install_or_no_last_seen'
                 : 'version_unchanged',
           lastSeen,
-          currentVersion: ver,
+          currentVersion: xver,
           versionRecorded
         })
       }
