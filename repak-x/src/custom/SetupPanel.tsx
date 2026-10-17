@@ -13,6 +13,7 @@ import { savedItem } from './storageCarryOver'
 import { MatrixLoader } from './motion'
 import CopySetupReport from './CopySetupReport'
 import { noteGalactaCheck } from './setupReport'
+import { useDialogFocus } from './dialogFocus'
 
 type Alert = ReturnType<typeof useAlert>
 type FileCheck = { name: string; place: string; size: number; sha256: string; found: 'missing' | 'same' | 'other' }
@@ -222,6 +223,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   const [busy, setBusy] = useState<string | null>(null)
   const [confirmOff, setConfirmOff] = useState<'disable' | 'remove' | null>(null)
   const [safety, setSafety] = useState(false)
+  const trap = useDialogFocus() // focus inside, Tab stays inside, back to the opener on close
   const [notes, setNotes] = useState<string | null>(null)
 
   // Opened from a grayed-out Generate button: straight to the Mod previews card (its top, so it can still grow as it loads)
@@ -273,14 +275,14 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <motion.div className="modal-content su-modal" role="dialog" aria-modal="true" aria-label="Mod setup" onClick={e => e.stopPropagation()}
+      <motion.div ref={trap.ref} onKeyDown={trap.onKeyDown} tabIndex={-1} className="modal-content su-modal" role="dialog" aria-modal="true" aria-label="Mod setup" onClick={e => e.stopPropagation()}
         initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.15 }}>
         <div className="modal-header">
           <div><h2>Mod setup</h2><p className="su-sub">What Marvel Rivals needs to load mods. Close the game before changing these.</p></div>
           <button type="button" className="lo-text-btn su-guided" onClick={() => { onClose(); window.dispatchEvent(new Event('repakxtra-first-run')) }}
             title="The first-launch setup: game folder, bypass, Project Galacta, previews and your first mods, one screen">Guided setup</button>
           <CopySetupReport alert={alert} className="lo-text-btn su-report" />
-          <button className="modal-close" onClick={onClose} aria-label="Close" autoFocus>×</button>
+          <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
 
         <div className="modal-body su-body">

@@ -181,7 +181,7 @@ export function ModRow({ p, k, mod, onToggle, onRename, children }: {
   const finish = () => { if (!cancelled.current && draft !== null && mod && onRename) onRename(mod, draft); setDraft(null) }
   return (
     <li className={`mod-row ${mod ? (mod.enabled ? 'is-on' : '') : 'is-missing'}`}
-      title={draft !== null ? undefined : mod ? `${category ?? 'Unknown type'} · ${mod.enabled ? 'on now' : 'off now'}` : 'Not installed anymore'}>
+      title={draft !== null || mod ? undefined : 'Not installed anymore'}>{/* an installed row's badge and switch already say its type and state */}
       {draft !== null
         ? <input className="mod-row-rename" autoFocus value={draft} aria-label={`New name for ${k}`} onFocus={e => e.target.select()}
             onChange={e => setDraft(e.target.value)} onBlur={finish}

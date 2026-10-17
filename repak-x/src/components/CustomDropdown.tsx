@@ -87,6 +87,12 @@ const CustomDropdown = ({
         items[at < 0 ? Math.max(0, items.findIndex(i => i.getAttribute('aria-selected') === 'true')) : (at + dir + items.length) % items.length]?.focus();
     };
     const onKeys = (e: React.KeyboardEvent) => {
+        if (isOpen && (e.key === 'Home' || e.key === 'End')) {
+            e.preventDefault();
+            const items = menuRef.current?.querySelectorAll<HTMLElement>('[role="option"]');
+            items?.[e.key === 'Home' ? 0 : items.length - 1]?.focus();
+            return;
+        }
         if (disabled || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return;
         e.preventDefault();
         if (!isOpen) { setIsOpen(true); requestAnimationFrame(() => moveFocus(1)); } else moveFocus(e.key === 'ArrowDown' ? 1 : -1);
@@ -100,7 +106,8 @@ const CustomDropdown = ({
     };
 
     return (
-        <div className={`custom-dropdown-container ${className}`} ref={dropdownRef} onKeyDown={onKeys}>
+        <div className={`custom-dropdown-container ${className}`} ref={dropdownRef} onKeyDown={onKeys}
+            onBlur={(e) => { if (isOpen && !dropdownRef.current?.contains(e.relatedTarget as Node | null)) setIsOpen(false); }}>
             <button
                 className={`custom-dropdown-trigger ${isOpen ? 'open' : ''} ${value ? 'active' : ''}`}
                 onClick={handleToggle}

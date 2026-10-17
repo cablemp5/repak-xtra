@@ -55,7 +55,7 @@ export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
       { keys: ['Ctrl', 'V'], action: 'Paste an image onto the card under the mouse' },
       { keys: ['Ctrl', 'Scroll'], action: 'Change the card size on Loadouts' },
       { keys: ['Esc'], action: "Back from a loadout's page" },
-      { keys: ['S'], action: 'Cycle Sigeon: Off → Base → High' },
+      { keys: ['S'], action: 'Cycle Sigeon through Off and each config' },
     ],
   },
 ]

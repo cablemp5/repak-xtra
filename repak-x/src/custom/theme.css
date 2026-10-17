@@ -2287,3 +2287,21 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 .app .custom-dropdown-item:focus-visible { outline-offset: -2px !important; } /* the focused option of a dropdown (arrow keys): its ring inside the menu */
 /* F1: keys never wrap inside or between their caps (a long action used to squeeze Ctrl + 1–9 onto two lines) */
 .shortcut-keys { flex-shrink: 0; white-space: nowrap; }
+/* test round 1: a long loadout name ends in an ellipsis on its page (until it is clicked to edit), a long collection name too */
+.lp-name { text-overflow: ellipsis; }
+.lo-group-head { min-width: 0; }
+.lo-group-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Narrow windows (a large UI scale at the smallest window): the version tag goes first, then the header buttons keep
+   only their icons (each has a title), and the Loadouts tools wrap under the title instead of running off the edge */
+@media (max-width: 1100px) {
+  .header .version { display: none; }
+  .lo-screen-head { flex-wrap: wrap; row-gap: 10px; }
+  .lo-head-tools { flex-wrap: wrap; }
+}
+@media (max-width: 960px) {
+  .header-actions-right .btn-settings:not(:first-child), .header-actions-right .sigeon > button { font-size: 0 !important; gap: 0 !important; }
+}
+/* Light theme (no Settings entry now; an older settings.json can still pick it): the same blue accent, never the
+   upstream red the app sets inline */
+:root[data-theme="light"] { --accent-primary: #346bf1 !important; --accent-secondary: #346bf1 !important; }
+:root[data-theme="light"] .repakx-switch:not(.checked):not(.is-partly) .repakx-switch-track { background: rgba(0, 0, 0, 0.1) !important; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18) !important; }
