@@ -122,6 +122,7 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
   const k = usePreviewKit(alert)
   const { kit, latest, busy, update } = k
   const [notes, setNotes] = useState<string | null>(null)
+  const [armed, setArmed] = useState(false) // Remove asks for a second click
   useEffect(() => { k.peek() }, [])   // the newest kit and its notes, so Set up says what it gets
   const fromFile = async () => {
     const f = await pickFile({ title: 'The preview kit zip', filters: [{ name: 'Preview kit', extensions: ['zip'] }] }).catch(() => null)
@@ -165,7 +166,9 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
               {busy === 'check' ? 'Checking…' : 'Check for updates'}
             </button>
             <button type="button" className="su-link" disabled={Boolean(busy)} onClick={fromFile} title="Install a preview kit zip (or drop one on the window)">From file…</button>
-            {kit?.version && <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => k.remove()}>Remove</button>}
+            {kit?.version && <button type="button" className="su-link" disabled={Boolean(busy)} onBlur={() => setArmed(false)}
+              onClick={() => { if (armed) { setArmed(false); k.remove() } else setArmed(true) }}
+              title="Deletes the kit; it downloads again from here">{armed ? 'Click again to remove' : 'Remove'}</button>}
           </span>
         </li>
         <li className="su-part">
@@ -270,14 +273,14 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <motion.div className="modal-content su-modal" role="dialog" aria-label="Mod setup" onClick={e => e.stopPropagation()}
+      <motion.div className="modal-content su-modal" role="dialog" aria-modal="true" aria-label="Mod setup" onClick={e => e.stopPropagation()}
         initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.15 }}>
         <div className="modal-header">
           <div><h2>Mod setup</h2><p className="su-sub">What Marvel Rivals needs to load mods. Close the game before changing these.</p></div>
           <button type="button" className="lo-text-btn su-guided" onClick={() => { onClose(); window.dispatchEvent(new Event('repakxtra-first-run')) }}
             title="The first-launch setup: game folder, bypass, Project Galacta, previews and your first mods, one screen">Guided setup</button>
           <CopySetupReport alert={alert} className="lo-text-btn su-report" />
-          <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
+          <button className="modal-close" onClick={onClose} aria-label="Close" autoFocus>×</button>
         </div>
 
         <div className="modal-body su-body">

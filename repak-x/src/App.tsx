@@ -810,6 +810,7 @@ function App() {
         return
       }
       console.log('Parsed mods:', modsData)
+      setStatus(`Found ${modsData.length} mod(s) in the dropped items`) // repakxtra: "Processing..." stayed after the install was cancelled
 
       // Check if ALL mods are PAK files with no uassets - if so, use quick organize
       const allPaksWithNoUassets = modsData.every((mod: DroppedModParse) =>
@@ -4017,6 +4018,7 @@ function App() {
               ref={searchInputRef}
               type="text"
               placeholder="Search installed mods..."
+              aria-label="Search installed mods"
               value={localSearch}
               onChange={handleSearchChange}
               className="main-search-input"

@@ -35,16 +35,19 @@ repakxtra is a fork of **[Repak X](https://github.com/X-zant/Repak-X)** by **Xza
 
 **Loadouts**
 - One click turns a set of mods on or off. Loadouts are independent, and you are warned when two that are on change the same hero.
-- Collections (drag cards between them) or a view by hero. The pencils rename loadouts and collections.
+- Collections or a view by hero. Drag a card to reorder it, move it to another collection or start a new one with it; the
+  pencils rename loadouts and collections. **−** and **+** in the header (or `Ctrl` + scroll) change the card size.
 - Make one from the Library selection, the right-click menu, the sidebar or while installing. Undo for every removal.
 - On a loadout's page: add and remove mods, rename a mod, turn single mods on or off, and **More > Export as zip** (every
-  mod's files in one zip, named after the loadout). Changes save as you make them.
+  mod's files in one zip, named after the loadout). Mods installed from the page join the loadout, and mods deleted
+  from the Library show a red **Deleted** tag. Changes save as you make them.
 - The Library sidebar lists them for quick switching, the ones that are on first.
 
 **Previews**
 - Character mods render on the hero in the lobby pose, using the mods' real materials. A loadout's mods render together.
 - Heroes with forms get one picture per form the mod changes (Magik and Darkchylde, Hulk's three); cards page through them.
 - Animations get a looping clip, VFX mods a palette of the colors they change, UI mods an icon sheet, sound mods a list.
+  When a loadout has an emote's sound mod, hovering the emote's clip plays its sound.
 - **Generate all previews** queues every loadout. Mods with nothing to show are marked "No preview possible".
 - **Capture in game:** on a loadout's page, click **Capture preview in game**, switch to the hero's Overview or Cosmetics
   screen in the game, then press `Ctrl+Shift+X` to use a screenshot instead.

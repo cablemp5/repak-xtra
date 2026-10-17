@@ -108,7 +108,9 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
   const active = isActive(l, p.mods)
   const onNow = mine.filter(k => byKey.get(k)?.enabled).length
   const present = mine.length - missing.length
-  const switchTitle = present === 0 ? 'No installed mods' : active ? `Turn ${l.name}'s mods off` : `Turn ${l.name}'s mods on`
+  const partly = !active && onNow > 0
+  const switchTitle = present === 0 ? 'No installed mods' : active ? `Turn ${l.name}'s mods off`
+    : partly ? `Turn on the rest of ${l.name}'s mods (${present - onNow} more)` : `Turn ${l.name}'s mods on`
   const hasMedia = Boolean(l.mediaRev || l.image)
   const group = groups.find(g => groupKey(g) === groupKey(l.label))
 
@@ -234,8 +236,9 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
           <div className="lp-actions">
             <label className="lp-switch">
               <Switch size="sm" color="primary" checked={active} isDisabled={present === 0} disabled={busy || present === 0}
+                className={partly ? 'is-partly' : ''} aria-checked={partly ? 'mixed' : active}
                 onChange={(on: boolean) => onToggle(on)} title={switchTitle} aria-label={switchTitle} />
-              <SwapText text={active ? 'On' : 'Off'} />
+              <SwapText text={active ? 'On' : partly ? 'Partly on' : 'Off'} />
             </label>
             <GeneratePreviewsButton className="lo-text-btn" label="Generate previews" set={previewSetKey(l.id)} name={l.name} stopOnly
               paths={mine.map(k => byKey.get(k)?.path).filter((x): x is string => Boolean(x))} />

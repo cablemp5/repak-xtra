@@ -69,6 +69,8 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
   outline-offset: 2px !important;
 }
 .app .mod-name-button:focus-visible { outline-offset: 0 !important; border-radius: 4px; }
+/* A dialog that takes focus itself (tabIndex -1, so keys reach it) gets no ring: a ring round the whole box reads as an error border */
+.app [role="dialog"][tabindex="-1"]:focus-visible { outline: none !important; }
 
 /* ---------- header ---------- */
 .titlebar, .header {
@@ -648,7 +650,7 @@ html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { d
   height: 32px !important; font-size: 13px !important; font-weight: 400 !important;
   margin-bottom: 1px !important; color: var(--text-secondary) !important;
 }
-.custom-dropdown-item:hover { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
+.custom-dropdown-item:hover, .app .custom-dropdown-item:focus-visible { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
 .custom-dropdown-item.selected, .custom-dropdown-item.selected:hover {
   background: var(--quiet-active) !important; color: var(--text-primary) !important; font-weight: 400 !important;
 }
@@ -746,7 +748,7 @@ html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { d
   background: transparent !important; color: var(--text-primary) !important; font-size: 13px !important; font-weight: 500 !important;
 }
 .lo-text-btn:hover:not(:disabled) { background: var(--quiet-hover) !important; border-color: rgba(255, 255, 255, 0.14) !important; }
-.lo-text-btn:disabled { opacity: 0.45; cursor: not-allowed; }   /* e.g. Revert and Rename with no config to act on */
+.lo-text-btn:disabled, .lo-text-btn[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }   /* e.g. Revert and Rename with no config to act on */
 
 /* ---------- Sigeon switch (custom/SigeonControl.tsx) ---------- */
 .sigeon { position: relative; }
@@ -916,6 +918,10 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 .repakx-switch-thumb { background: #9a9a9a !important; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4) !important; }
 .repakx-switch.checked .repakx-switch-track { background: var(--accent-primary) !important; box-shadow: none !important; }
 .repakx-switch.checked .repakx-switch-thumb { background: #ffffff !important; }
+/* Partly on (some of a loadout's mods on): thumb in the middle of a dim accent track */
+.repakx-switch.is-partly .repakx-switch-track { background: color-mix(in srgb, var(--accent-primary) 40%, transparent) !important; box-shadow: none !important; }
+.repakx-switch.is-partly .repakx-switch-thumb { background: #ffffff !important; }
+.repakx-switch.sm.is-partly .repakx-switch-thumb { transform: translateX(8px); }
 /* Checked checkboxes: solid accent, and the checkmark eases in instead of bouncing */
 .repakx-checkbox.checked .repakx-checkbox-box, .repakx-checkbox.indeterminate .repakx-checkbox-box {
   background: var(--accent-primary) !important; background-image: none !important; border-color: var(--accent-primary) !important;
@@ -1273,9 +1279,11 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 
 /* ---------- critique fixes (2026-10-14) ---------- */
 /* Contrast: secondary text at full strength (the version line, group counts and Ctrl+N numbers fell under 4.5:1) */
-.header .version { color: color-mix(in srgb, var(--text-secondary) 72%, transparent) !important; opacity: 1 !important; }
+.header .version { color: var(--text-secondary) !important; opacity: 1 !important; }
 .lo-group-count { opacity: 1; }
 .lo-num { opacity: 0.9; }
+/* critique 2026-10-17: the Ctrl+N number drawn as a key, so it does not read as a mod count like the Filters' numbers */
+.lo-num:not(:empty) { width: auto; min-width: 16px; padding: 2px 4px; text-align: center; border: 1px solid color-mix(in srgb, currentColor 35%, transparent); border-bottom-width: 2px; border-radius: 4px; }
 .mn-ver { font-size: 11px; }
 .app input::placeholder, .app textarea::placeholder { color: var(--text-secondary); opacity: 1; }
 /* Material gets its own hue (it shared Texture's yellow) */
@@ -2276,3 +2284,4 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
    where that part's state or the step's action would be; a long winget step is cut with an ellipsis (its title has it all) */
 .su-install-status { display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; font-size: 12px; color: var(--text-primary); }
 .su-install-status > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app .custom-dropdown-item:focus-visible { outline-offset: -2px !important; } /* the focused option of a dropdown (arrow keys): its ring inside the menu */

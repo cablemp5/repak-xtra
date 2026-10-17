@@ -120,7 +120,8 @@ const LoadoutCard = memo(function LoadoutCard({ p, l, groupBy, canGenerate, busy
   const keys = new Set(l.on.map(displayName))
   const present = [...keys].filter(k => byKey.has(k)).length
   const onNow = [...keys].filter(k => byKey.get(k)?.enabled).length
-  const label = present === 0 ? 'No installed mods' : active ? `Turn ${l.name} off` : `Turn ${l.name} on`
+  const partly = !active && onNow > 0 // some of its mods on: the switch draws a middle state
+  const label = present === 0 ? 'No installed mods' : active ? `Turn ${l.name} off` : partly ? `Turn on the rest of ${l.name} (${present - onNow} more)` : `Turn ${l.name} on`
   return (
     <article data-loadout={l.id} className={`lo-card ${active ? 'is-on' : ''}${placeholder ? ' is-placeholder' : ''}`}
       onPointerDown={groupBy === 'group' && !renaming ? e => onPick(e, l.id) : undefined}
@@ -143,6 +144,7 @@ const LoadoutCard = memo(function LoadoutCard({ p, l, groupBy, canGenerate, busy
             </span>
           )}
           <Switch size="sm" color="primary" checked={active} isDisabled={present === 0} disabled={anyBusy || present === 0}
+            className={partly ? 'is-partly' : ''} aria-checked={partly ? 'mixed' : active}
             title={label} aria-label={label} onChange={(checked: boolean) => onToggle(l, checked)} />
         </div>
         <p className="lo-card-meta">
@@ -312,12 +314,12 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   }
 
   /** Generate all: with no previews yet it just starts; otherwise it asks whether to redo the ones already made. */
-  const withPreview = loadouts.filter(loadoutHasPreview).length
+  const withPreview = loadouts.filter(l => loadoutHasPreview(l) || l.mediaRev || l.image).length // its own image counts: the menu then offers to keep it
   const generate = async (which: 'missing' | 'all') => {
     setGenMenu(false)
     const { count, error } = await generateAllLoadouts(loadouts, p.mods, which)
     if (error) p.alert.warning('Previews not started', error)
-    else if (!count) p.alert.info('Nothing to generate', 'Every loadout with installed mods already has a preview.')
+    else if (!count) p.alert.info('Nothing to generate', 'Every loadout with installed mods already has a preview or its own image.')
     else p.alert.success('Previews queued', `${plural(count, 'loadout')}, one after another.`)
   }
 

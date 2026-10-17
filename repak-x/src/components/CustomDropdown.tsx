@@ -79,6 +79,19 @@ const CustomDropdown = ({
     };
 
     // Helper to get display label
+    // repakxtra: keyboard use. Arrow keys open the list and move through it, Enter or Space picks, Esc closes
+    const menuRef = useRef<HTMLDivElement | null>(null);
+    const moveFocus = (dir: 1 | -1) => {
+        const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role="option"]') ?? [])];
+        const at = items.indexOf(document.activeElement as HTMLElement);
+        items[at < 0 ? Math.max(0, items.findIndex(i => i.getAttribute('aria-selected') === 'true')) : (at + dir + items.length) % items.length]?.focus();
+    };
+    const onKeys = (e: React.KeyboardEvent) => {
+        if (disabled || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return;
+        e.preventDefault();
+        if (!isOpen) { setIsOpen(true); requestAnimationFrame(() => moveFocus(1)); } else moveFocus(e.key === 'ArrowDown' ? 1 : -1);
+    };
+
     const getLabel = (val?: string) => {
         if (!val) return placeholder;
         const found = options.find(opt => (typeof opt === 'string' ? opt : opt.value) === val);
@@ -87,10 +100,12 @@ const CustomDropdown = ({
     };
 
     return (
-        <div className={`custom-dropdown-container ${className}`} ref={dropdownRef}>
+        <div className={`custom-dropdown-container ${className}`} ref={dropdownRef} onKeyDown={onKeys}>
             <button
                 className={`custom-dropdown-trigger ${isOpen ? 'open' : ''} ${value ? 'active' : ''}`}
                 onClick={handleToggle}
+                aria-haspopup="listbox"
+                aria-expanded={isOpen}
                 title={getLabel(value)}
                 disabled={disabled}
                 style={disabled ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
@@ -100,7 +115,7 @@ const CustomDropdown = ({
             </button>
 
             {isOpen && !disabled && (
-                <div className="custom-dropdown-menu">
+                <div className="custom-dropdown-menu" role="listbox" ref={menuRef}>
                     {/* Optional "Clear" or "All" option if placeholder suggests it */}
                     {/* For now, we assume parent handles specific "All" options by passing them in options array if needed, 
                         BUT for consistency with previous Tag behavior, if value is present, we might want a way to clear it?
@@ -124,6 +139,8 @@ const CustomDropdown = ({
                                 <div
                                     key={`${optValue}-${index}`}
                                     className={`custom-dropdown-item ${isSelected ? 'selected' : ''}`}
+                                    role="option" aria-selected={isSelected} tabIndex={-1}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSelect(option); dropdownRef.current?.querySelector<HTMLElement>('.custom-dropdown-trigger')?.focus(); } }}
                                     onClick={() => handleSelect(option)}
                                     title={optLabel}
                                 >

@@ -173,6 +173,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
     <div className="modal-overlay" onClick={onClose}>
       <motion.div
         className="modal-content settings-modal settings-modal-split"
+        role="dialog" aria-modal="true" aria-label="Settings"
         onClick={(e) => e.stopPropagation()}
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -182,7 +183,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
           <h2>
             <IoIosSettings size={20} /> Settings
           </h2>
-          <button className="modal-close" onClick={onClose}>×</button>
+          <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
 
         <div className="settings-layout">

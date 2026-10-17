@@ -22,7 +22,7 @@ export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
   {
     title: 'Mods',
     items: [
-      { keys: ['↑', '↓', '←', '→'], action: 'Move through the list' },
+      { keys: ['↑ ↓ ← →'], action: 'Move through the list' },
       { keys: ['Space'], action: 'Turn the selected mod on/off (or Ctrl+E)' },
       { keys: ['Enter'], action: 'Open mod details' },
       { keys: ['F2'], action: 'Rename mod' },
@@ -50,7 +50,11 @@ export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
     title: 'Loadouts and Sigeon',
     items: [
       { keys: ['L'], action: 'Switch between Loadouts and Library' },
-      { keys: ['Ctrl', '1–9'], action: 'Turn loadout 1–9 on/off (sidebar order)' },
+      { keys: ['Ctrl', '1–9'], action: 'Turn the loadout with that number in the Library sidebar on/off' },
+      { keys: ['F2'], action: 'Rename the focused loadout card' },
+      { keys: ['Ctrl', 'V'], action: 'Paste an image onto the card under the mouse' },
+      { keys: ['Ctrl', 'Scroll'], action: 'Change the card size on Loadouts' },
+      { keys: ['Esc'], action: "Back from a loadout's page" },
       { keys: ['S'], action: 'Cycle Sigeon: Off → Base → High' },
     ],
   },
