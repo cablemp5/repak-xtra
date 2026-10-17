@@ -166,6 +166,8 @@ const CustomDropdown = ({
                             <div className="custom-dropdown-separator" />
                             <div
                                 className="custom-dropdown-item add-new"
+                                role="option" aria-selected={false} tabIndex={-1}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAddNew(); setIsOpen(false); } }}
                                 onClick={() => { onAddNew(); setIsOpen(false); }}
                             >
                                 {addNewLabel}

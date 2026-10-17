@@ -3736,7 +3736,8 @@ async fn update_mod(
     // ========================================================================
 
     // Determine the new mod's path
-    let new_mod_filename = format!("{}_9999999_P.pak", mod_name);
+    // repakxtra: the name install_mods gave it (mod_name may already end in _9999999_P: it came from the old file)
+    let new_mod_filename = format!("{}.pak", crate::install_mod::install_mod_logic::normalize_mod_base_name(&mod_name, crate::install_mod::install_mod_logic::BASE_MOD_NINES));
     let new_mod_path = if install_subfolder.is_empty() {
         mod_directory.join(&new_mod_filename)
     } else {
@@ -4618,7 +4619,9 @@ async fn assign_mod_to_folder(
     };
 
     // repakxtra: on Windows a rename replaces the file already there, which would delete a same-named mod in that folder
-    if dest_path != source_path && dest_path.exists() {
+    // (on or off, and its .utoc/.ucas)
+    let taken = ["pak", "bak_repak", "pak_disabled", "utoc", "ucas"].iter().any(|x| dest_path.with_extension(x).exists());
+    if dest_path.parent() != source_path.parent() && taken {
         let error_msg = "A mod with the same file name is already in that folder".to_string();
         toast_events::emit_move_failed(&window, &error_msg);
         return Err(error_msg);

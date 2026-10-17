@@ -11,7 +11,7 @@ import { ListPlus, Sparkles, X } from 'lucide-react'
 import { play } from 'cuelume'
 import { useAlert } from '../components/AlertHandler'
 import { modKey, patchLoadout, readLoadouts } from './loadoutStore'
-import { deleteMedia } from './loadoutMedia'
+import { deleteMedia, getMedia } from './loadoutMedia'
 import { MatrixLoader, revealOnLoad } from './motion'
 import { plural } from './modName'
 
@@ -338,9 +338,11 @@ export const dismissPreviewSummary = () => { run.summary = ''; notify() }
  *  reason the first could not start (then nothing is queued). */
 export async function generateAllLoadouts(loadouts: { id: string; name: string; on: string[]; mediaRev?: number; image?: string }[], mods: { path: string }[], which: 'missing' | 'all' = 'all') {
   const byKey = new Map(mods.map(m => [modKey(m.path), m.path]))
+  // a loadout with its own pasted or uploaded image has a picture: "only missing" must not replace (delete) it. Only the
+  // image in this copy counts: pictures are not shared between copies, the loadout's mediaRev is
+  const own = await Promise.all(loadouts.map(l => (l.mediaRev ? getMedia(l.id).then(Boolean, () => false) : Boolean(l.image))))
   const jobs = loadouts
-    // a loadout with its own pasted or uploaded image has a picture: "only missing" must not replace (delete) it
-    .filter(l => which === 'all' || !(loadoutHasPreview(l) || l.mediaRev || l.image))
+    .filter((l, i) => which === 'all' || !(loadoutHasPreview(l) || own[i]))
     .map(l => ({ paths: l.on.map(k => byKey.get(modKey(k))).filter((x): x is string => Boolean(x)), set: previewSetKey(l.id), name: l.name, force: which === 'all' }))
     .filter(j => j.paths.length > 0)
   const started = jobs.map(generatePreviews) // all asked for in this tick: the first starts, the rest queue behind it

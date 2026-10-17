@@ -165,7 +165,7 @@ export function CaptureButton({ p, l, onUse }: { p: LoadoutProps; l: Loadout; on
     <>
       {/* aria-disabled, not disabled: a click while the game is closed says why instead of doing nothing */}
       <button type="button" className="lo-text-btn" aria-disabled={!running}
-        onClick={() => { if (!running) { p.alert.info('Open Marvel Rivals first', 'Capture takes its picture from the game window.'); return } primeShutter(); setOpen(true) }}
+        onClick={() => { if (!running) { p.alert.warning('Open Marvel Rivals first', 'Capture takes its picture from the game window.'); return } primeShutter(); setOpen(true) }}
         title={running ? `Take a picture of ${hero ?? 'the hero'} in Marvel Rivals for this loadout's image` : 'Open Marvel Rivals first'}>
         <Camera size={14} /> Capture preview in game
       </button>

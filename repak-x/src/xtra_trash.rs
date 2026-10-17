@@ -109,15 +109,24 @@ pub fn discard_tree(folder: &Path) -> Result<(), String> {
 }
 
 fn discard_tree_in(root: &Path, folder: &Path) -> Result<(), String> {
-    let entries: Vec<PathBuf> = fs::read_dir(folder).map_err(|e| e.to_string())?.flatten().map(|e| e.path()).collect();
-    let files: Vec<&PathBuf> = entries.iter().filter(|p| p.is_file()).collect();
+    // file_type() does not follow links: a junction or symlink inside is never walked into (its target may be outside
+    // ~mods); remove_dir_all later removes only the link itself
+    let mut files = Vec::new();
+    let mut subs = Vec::new();
+    for e in fs::read_dir(folder).map_err(|e| e.to_string())?.flatten() {
+        match e.file_type() {
+            Ok(t) if t.is_file() => files.push(e.path()),
+            Ok(t) if t.is_dir() => subs.push(e.path()),
+            _ => {}
+        }
+    }
     if !files.is_empty() {
         let dir = reserve_in(root, None)?;
-        for f in files {
+        for f in &files {
             discard(&dir, f).map_err(|e| format!("{}: {e}", f.display()))?;
         }
     }
-    for sub in entries.iter().filter(|p| p.is_dir()) {
+    for sub in &subs {
         discard_tree_in(root, sub)?;
     }
     Ok(())
@@ -393,6 +402,21 @@ mod tests {
         restore_from(&root, &list.iter().map(|t| t.id.clone()).collect::<Vec<_>>()).unwrap();
         assert_eq!(fs::read(mods.join("Hulk/Old/A_9999999_P.pak")).unwrap(), b"22", "restored into the folder it was deleted from");
         assert!(mods.join("Hulk/A_9999999_P.pak").exists());
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn folder_delete_never_follows_a_junction() {
+        let (mods, root, base) = roots("junction");
+        put(&base.join("outside/Keep.pak"), b"k");
+        put(&mods.join("Hulk/A.pak"), b"a");
+        let made = std::process::Command::new("cmd").args(["/C", "mklink", "/J"]).arg(mods.join("Hulk").join("link")).arg(base.join("outside")).output().unwrap();
+        assert!(made.status.success(), "mklink /J failed");
+        discard_tree_in(&root, &mods.join("Hulk")).unwrap();
+        fs::remove_dir_all(mods.join("Hulk")).unwrap();
+        assert!(base.join("outside/Keep.pak").exists(), "the junction's target is outside the folder and stays");
+        assert_eq!(list_in(&root).len(), 1);
         let _ = fs::remove_dir_all(base);
     }
 

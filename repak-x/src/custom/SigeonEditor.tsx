@@ -146,7 +146,7 @@ export default function SigeonEditor({ alert, onClose }: { alert: Alert; onClose
   }, [])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.stopPropagation(); close() }
+      if (e.key === 'Escape' && !document.querySelector('.custom-dropdown-menu')) { e.stopPropagation(); close() } // an open dropdown takes Esc first
       if (e.key.toLowerCase() === 's' && e.ctrlKey) { e.preventDefault(); save() }
     }
     window.addEventListener('keydown', onKey, true)

@@ -2285,3 +2285,5 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 .su-install-status { display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; font-size: 12px; color: var(--text-primary); }
 .su-install-status > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app .custom-dropdown-item:focus-visible { outline-offset: -2px !important; } /* the focused option of a dropdown (arrow keys): its ring inside the menu */
+/* F1: keys never wrap inside or between their caps (a long action used to squeeze Ctrl + 1–9 onto two lines) */
+.shortcut-keys { flex-shrink: 0; white-space: nowrap; }
