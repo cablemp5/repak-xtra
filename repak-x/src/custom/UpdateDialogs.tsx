@@ -1,7 +1,8 @@
 // repakxtra: the app update dialog and the "What's new" dialog, replacing Repak X's UpdateAppModal and ChangelogModal
 // (App.tsx imports these instead; same props). Same build as Setup and Capture: hairline sections, 32px buttons, no emoji.
 // Release notes render GitHub-style markdown: headings, "-" or "*" bullets, **bold**, `code` and links. GitHub's generated
-// notes lose their "by @user in <PR link>" tails and the "Full Changelog" line, which read as noise in the app.
+// notes lose their "by @user in <PR link>" tails and the "Full Changelog" line, which read as noise in the app. A release's
+// Downloads section (its file table, build.ps1 -Release) and its "Changelog" heading stay on GitHub: the dialog shows the changes.
 import { type ReactNode, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Check, Download, ExternalLink } from 'lucide-react'
@@ -15,12 +16,14 @@ type Block = { kind: 'h' | 'li' | 'p'; text: string }
 /** Release notes as headings, bullets and paragraphs, without GitHub's generated-notes noise. */
 export function parseNotes(raw: string): Block[] {
   const out: Block[] = []
+  let downloads = false
   for (const line of raw.replace(/\r/g, '').split('\n')) {
     const t = line.trim()
-    if (!t || /^(\*\*)?Full Changelog(\*\*)?:/i.test(t) || t.startsWith('<!--')) continue
     const h = t.match(/^#{1,6}\s+(.*)$/)
+    if (h) downloads = /^downloads$/i.test(h[1].trim())
+    if (downloads || !t || t.startsWith('|') || /^(\*\*)?Full Changelog(\*\*)?:/i.test(t) || t.startsWith('<!--')) continue
     if (h) {
-      if (!/^what'?s changed$/i.test(h[1].trim())) out.push({ kind: 'h', text: h[1] })
+      if (!/^(what'?s changed|changelog)$/i.test(h[1].trim())) out.push({ kind: 'h', text: h[1] })
       continue
     }
     const li = t.match(/^[-*+]\s+(.*)$/)
@@ -153,4 +156,6 @@ if (import.meta.env.DEV) {
   console.assert(gen.length === 1 && gen[0].kind === 'li' && gen[0].text === 'Sidebar fixes', 'parseNotes: generated notes', gen)
   const hand = parseNotes('Intro line\n## New\n- **Loadouts:** one click\n- Second')
   console.assert(hand.map(b => b.kind).join() === 'p,h,li,li' && hand[2].text === '**Loadouts:** one click', 'parseNotes: hand-written', hand)
+  const ours = parseNotes('## Downloads\n\n| File | |\n| :---: | :---: |\n| [a.zip](u) | [checksum](u) |\n\n## Changelog\n\n- Add zoom\n- Fix drag')
+  console.assert(ours.length === 2 && ours.every(b => b.kind === 'li') && ours[0].text === 'Add zoom', 'parseNotes: Downloads and Changelog heading left out', ours)
 }

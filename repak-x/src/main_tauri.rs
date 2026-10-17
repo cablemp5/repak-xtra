@@ -8771,6 +8771,9 @@ fn main() {
             xtra_crash::xtra_newest_crash, // repakxtra: setup report
             xtra_crash::xtra_crash_suspects, // repakxtra: crash suspects
             xtra_nexus::xtra_nexus_sources, // repakxtra: Nexus source
+            xtra_nexus::xtra_install_paks, // repakxtra: the paks an install puts in place, for loadouts made at install
+            xtra_previews::get_preview_emotes, // repakxtra: emote sounds over animation previews
+            xtra_previews::get_preview_audio,
             xtra_offfiles::xtra_stage_off_files, // repakxtra: .pak.off files
             xtra_kit::preview_kit_install_blender, // repakxtra: Blender with winget
             xtra_previews::previews_doctor, // repakxtra: can this PC make previews

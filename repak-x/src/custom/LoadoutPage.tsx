@@ -31,7 +31,7 @@ function SavedNote({ sig }: { sig: string }) {
 
 /** The page's occasional actions in one menu of real buttons: Tab and arrow keys reach them, Esc closes the menu (not the
  *  page), an outside click closes it. */
-function MoreMenu({ items }: { items: { label: string; onClick: () => void; disabled?: boolean }[] }) {
+function MoreMenu({ items }: { items: { label: string; onClick: () => void; disabled?: boolean; danger?: boolean }[] }) {
   const [open, setOpen] = useState(false)
   const wrap = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -58,7 +58,7 @@ function MoreMenu({ items }: { items: { label: string; onClick: () => void; disa
       {open && (
         <div className="sigeon-menu lp-more-menu" role="menu">
           {items.map(it => (
-            <button key={it.label} type="button" role="menuitem" className="sigeon-item" disabled={it.disabled} onClick={() => { setOpen(false); it.onClick() }}>
+            <button key={it.label} type="button" role="menuitem" className={`sigeon-item${it.danger ? ' is-danger' : ''}`} disabled={it.disabled} onClick={() => { setOpen(false); it.onClick() }}>
               {it.label}
             </button>
           ))}
@@ -237,7 +237,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
                 onChange={(on: boolean) => onToggle(on)} title={switchTitle} aria-label={switchTitle} />
               <SwapText text={active ? 'On' : 'Off'} />
             </label>
-            <GeneratePreviewsButton className="lo-text-btn" label="Generate previews" set={previewSetKey(l.id)} name={l.name}
+            <GeneratePreviewsButton className="lo-text-btn" label="Generate previews" set={previewSetKey(l.id)} name={l.name} stopOnly
               paths={mine.map(k => byKey.get(k)?.path).filter((x): x is string => Boolean(x))} />
             <button type="button" className="lo-text-btn" onClick={onPickMedia}><ImagePlus size={14} /> {hasMedia ? 'Change image' : 'Add image'}</button>
             <CaptureButton p={p} l={l} onUse={onSetMedia} />
@@ -247,7 +247,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
               { label: exporting ? 'Exporting…' : 'Export as zip', onClick: exportZip, disabled: exporting },
               ...(missing.length ? [{ label: `Remove ${plural(missing.length, 'missing mod')}`, onClick: dropMissing }] : []),
               ...(hasMedia ? [{ label: 'Remove image', onClick: removeImage }] : []),
-              { label: 'Delete loadout', onClick: () => { deleteWithUndo(p, l); onBack() } },
+              { label: 'Delete', danger: true, onClick: () => { deleteWithUndo(p, l); onBack() } },
             ]} />
           </div>
         </div>

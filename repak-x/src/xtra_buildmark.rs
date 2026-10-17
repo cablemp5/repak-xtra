@@ -1,27 +1,40 @@
 //! repakxtra: test and dev copies mark their window (and so taskbar) icon in their color, like the "xtra" in the header
 //! (custom/version.ts): green for a test build (`build.ps1 -Test` sets REPAKXTRA_BUILD=test for the Rust build), amber for
-//! the dev copy (dev.ps1 runs a debug build). The icon is the app's own x glyph, recolored, so no extra icon files exist.
+//! the dev copy (dev.ps1 runs a debug build). The icon is the app's own x with its blues turned to that color, so no extra icon files exist.
 
-/// "test" or "dev" and its color, or None for the stable copy.
-fn mark() -> Option<[u8; 3]> {
+/// How far this copy turns the icon's blues around the color wheel, in degrees, or None for the stable copy.
+fn mark() -> Option<f32> {
     if cfg!(debug_assertions) {
-        Some([0xF5, 0xA5, 0x24]) // dev, amber
+        Some(170.0) // dev, amber
     } else if option_env!("REPAKXTRA_BUILD") == Some("test") {
-        Some([0x3E, 0xCF, 0x6E]) // test, green
+        Some(-80.0) // test, green
     } else {
         None
     }
 }
 
-/// Every pixel takes the color and keeps its own alpha: the icon is one color on transparency.
-fn recolor(rgba: &[u8], [r, g, b]: [u8; 3]) -> Vec<u8> {
-    rgba.chunks_exact(4).flat_map(|px| [r, g, b, px[3]]).collect()
+/// Every pixel's hue turned by `degrees`, its saturation, brightness and alpha kept: grays stay as they are.
+fn recolor(rgba: &[u8], degrees: f32) -> Vec<u8> {
+    rgba.chunks_exact(4).flat_map(|px| {
+        let [r, g, b] = [px[0], px[1], px[2]].map(|c| f32::from(c) / 255.0);
+        let (max, min) = (r.max(g).max(b), r.min(g).min(b));
+        let chroma = max - min;
+        if chroma == 0.0 {
+            return [px[0], px[1], px[2], px[3]];
+        }
+        let hue = if max == r { (g - b) / chroma } else if max == g { (b - r) / chroma + 2.0 } else { (r - g) / chroma + 4.0 };
+        let h = (hue * 60.0 + degrees).rem_euclid(360.0) / 60.0;
+        let x = chroma * (1.0 - (h % 2.0 - 1.0).abs());
+        let (r, g, b) = match h as u8 { 0 => (chroma, x, 0.0), 1 => (x, chroma, 0.0), 2 => (0.0, chroma, x), 3 => (0.0, x, chroma), 4 => (x, 0.0, chroma), _ => (chroma, 0.0, x) };
+        let byte = |c: f32| ((c + min) * 255.0).round() as u8;
+        [byte(r), byte(g), byte(b), px[3]]
+    }).collect()
 }
 
-/// The app's icon in this copy's color, or None for the stable copy.
+/// The app's icon in this copy's colors, or None for the stable copy.
 fn tinted(icon: Option<&tauri::image::Image<'_>>) -> Option<tauri::image::Image<'static>> {
-    let (color, icon) = (mark()?, icon?);
-    Some(tauri::image::Image::new_owned(recolor(icon.rgba(), color), icon.width(), icon.height()))
+    let (degrees, icon) = (mark()?, icon?);
+    Some(tauri::image::Image::new_owned(recolor(icon.rgba(), degrees), icon.width(), icon.height()))
 }
 
 /// At startup, for the windows that exist then (the main one), before its page loads; the stable copy keeps its blue icon.
@@ -48,8 +61,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn recolor_keeps_alpha() {
-        let px = [0x34, 0x6B, 0xF1, 255, 0, 0, 0, 0, 0x34, 0x6B, 0xF1, 128];
-        assert_eq!(recolor(&px, [1, 2, 3]), vec![1, 2, 3, 255, 1, 2, 3, 0, 1, 2, 3, 128]);
+    fn recolor_turns_hues_and_keeps_white_and_alpha() {
+        let px = [0x03, 0x4E, 0xFE, 255, 255, 255, 255, 200, 255, 0, 0, 0];
+        assert_eq!(recolor(&px, 0.0), px.to_vec());
+        assert_eq!(recolor(&px[8..], 120.0), vec![0, 255, 0, 0]); // red to green
+        let out = recolor(&px, -80.0);
+        assert_eq!(&out[4..8], &[255, 255, 255, 200]); // white and its alpha untouched
+        assert!(out[1] > out[2] && out[1] > out[0], "the blue turned green: {:?}", &out[..3]);
     }
 }

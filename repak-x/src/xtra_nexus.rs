@@ -1,5 +1,6 @@
 //! repakxtra: where a mod came from, read off the archive's name when it is a Nexus Mods download
-//! (see parse for its two name formats). Nothing is fetched; other names give nothing.
+//! (see parse for its two name formats). Nothing is fetched; other names give nothing. Also lists the paks an install
+//! source holds (install_paks).
 
 use regex_lite::Regex;
 use serde::Serialize;
@@ -86,6 +87,27 @@ pub async fn xtra_nexus_sources(paths: Vec<String>) -> Result<Vec<Option<NexusSo
     .map_err(|e| e.to_string())
 }
 
+/// The pak names each install source puts in place (without .pak): an archive or folder installs every pak inside under
+/// the pak's own name, not the source's, so a loadout made at install looks the mods up by these (installLoadout.tsx).
+/// A lone .pak gives its own name.
+fn install_paks(path: &str) -> Vec<String> {
+    let entries = if std::path::Path::new(path).is_dir() {
+        walkdir::WalkDir::new(path).into_iter().filter_map(Result::ok).map(|e| e.path().to_string_lossy().into_owned()).collect()
+    } else {
+        let listed = archive_entries(path);
+        if listed.is_empty() { vec![path.to_string()] } else { listed }
+    };
+    pak_stems(&entries)
+}
+
+/// install_paks for each install source, in order.
+#[tauri::command]
+pub async fn xtra_install_paks(paths: Vec<String>) -> Result<Vec<Vec<String>>, String> {
+    tauri::async_runtime::spawn_blocking(move || paths.iter().map(|p| install_paks(p)).collect())
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -133,6 +155,19 @@ mod tests {
         }
         w.finish().unwrap();
         assert_eq!(pak_stems(&archive_entries(path.to_str().unwrap())), vec!["A_9999999_P".to_string()]);
+    }
+
+    #[test]
+    fn lists_the_paks_an_install_puts_in_place() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("Mod")).unwrap();
+        for name in ["Mod/A_9999999_P.pak", "Mod/A_9999999_P.utoc", "B.pak", "readme.txt"] {
+            std::fs::write(dir.path().join(name), b"x").unwrap();
+        }
+        let mut found = install_paks(dir.path().to_str().unwrap());
+        found.sort();
+        assert_eq!(found, vec!["A_9999999_P".to_string(), "B".to_string()]);
+        assert_eq!(install_paks(dir.path().join("B.pak").to_str().unwrap()), vec!["B".to_string()]);
     }
 
     #[test]

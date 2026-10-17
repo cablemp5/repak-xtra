@@ -122,9 +122,44 @@ pub fn get_preview_covers(key: String) -> serde_json::Value {
     serde_json::json!({ "covers": list("covers").unwrap_or_default(), "members": list("members") })
 }
 
+/// Which previews belong to emotes, from the generator's index.json: `anim` {mod key: [emote]} for animation previews
+/// and `audio` {mod key: [emote]} for sound mods whose emote sounds it saved (custom/emoteSound.ts pairs them on hover).
+/// An emote is "<hero>-<item index>", like "1026-205".
+#[tauri::command]
+pub fn get_preview_emotes() -> serde_json::Value {
+    let index: serde_json::Value = std::fs::read_to_string(previews_dir().join("index.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default();
+    let pick = |field: &str| -> serde_json::Map<String, serde_json::Value> {
+        index.as_object().into_iter().flatten()
+            .filter_map(|(k, v)| v.get(field).filter(|e| e.as_array().is_some_and(|a| !a.is_empty())).map(|e| (k.clone(), e.clone())))
+            .collect()
+    };
+    serde_json::json!({ "anim": pick("emotes"), "audio": pick("emote_sounds") })
+}
+
+/// "1026-205": four digits, a dash, three digits (an emote id never leaves the mod's audio folder).
+fn valid_emote(emote: &str) -> bool {
+    let b = emote.as_bytes();
+    b.len() == 8 && b[4] == b'-' && b.iter().enumerate().all(|(i, c)| i == 4 || c.is_ascii_digit())
+}
+
+/// A sound mod's emote sound (WAV), saved by the generator as <key>.audio/<emote>.wav.
+#[tauri::command]
+pub fn get_preview_audio(key: String, emote: String) -> Result<tauri::ipc::Response, String> {
+    if !valid_key(&key) || !valid_emote(&emote) {
+        return Err(format!("Invalid emote sound: {key} {emote}"));
+    }
+    std::fs::read(previews_dir().join(format!("{key}.audio")).join(format!("{emote}.wav")))
+        .map(tauri::ipc::Response::new)
+        .map_err(|e| e.to_string())
+}
+
 /// One line of the generator's output as (event, key): "PREVIEW <key>" after writing a PNG, "PREVIEW_NONE <key>" when
 /// there is nothing to show, "PREVIEW_IN <key>" for a mod the loadout's combined render shows, "PREVIEW_FAIL <key>" when
-/// it failed (its last good preview stays), and "PREVIEW_BUSY" (no key) when another generator holds the lock.
+/// it failed (its last good preview stays), "PREVIEW_WARN <key>" when a mod could not be read (encrypted with a key
+/// other than the game's, so a render would not show it), and "PREVIEW_BUSY" (no key) when another generator holds the lock.
 fn parse_line(line: &str) -> Option<(&'static str, Option<String>)> {
     if line.trim() == "PREVIEW_BUSY" {
         return Some(("mod-previews-busy", None));
@@ -133,6 +168,7 @@ fn parse_line(line: &str) -> Option<(&'static str, Option<String>)> {
         ("PREVIEW_NONE ", "mod-preview-none"),
         ("PREVIEW_IN ", "mod-preview-in"),
         ("PREVIEW_FAIL ", "mod-preview-failed"),
+        ("PREVIEW_WARN ", "mod-preview-warn"),
         ("PREVIEW ", "mod-preview-ready"),
     ]
     .into_iter()
@@ -407,8 +443,15 @@ mod tests {
         assert_eq!(parse_line("PREVIEW_BUSY\r"), Some(("mod-previews-busy", None)));
         assert_eq!(parse_line("PREVIEW_FAIL loadout-1"), Some(("mod-preview-failed", k("loadout-1"))));
         assert_eq!(parse_line("PREVIEW_NONE A"), Some(("mod-preview-none", k("A"))));
+        assert_eq!(parse_line("PREVIEW_WARN loadout-1"), Some(("mod-preview-warn", k("loadout-1"))));
         assert_eq!(parse_line("PREVIEW_IN A"), Some(("mod-preview-in", k("A"))));
         assert_eq!(parse_line("PREVIEW A_v2\r"), Some(("mod-preview-ready", k("A_v2"))));
         assert_eq!(parse_line("# A: character (12 s)"), None);
+    }
+
+    #[test]
+    fn emote_ids_stay_in_their_folder() {
+        assert!(valid_emote("1026-205") && valid_emote("9999-297"));
+        assert!(!valid_emote("../x-205") && !valid_emote("1026205") && !valid_emote("1026-20a") && !valid_emote("1026-2050"));
     }
 }

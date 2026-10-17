@@ -138,6 +138,10 @@ listen<string>('mod-preview-failed', e => { // its last good preview stays
   }
   notify()
 }).catch(() => undefined)
+// A mod the generator could not read (encrypted with a key other than the game's): its preview, or the loadout render it
+// belongs to, would not show it. The window that started the run says so (usePreviewFailureToast)
+const warnListeners = new Set<(key: string) => void>()
+listen<string>('mod-preview-warn', e => { if (active) warnListeners.forEach(l => l(e.payload)) }).catch(() => undefined)
 listen('mod-previews-busy', () => { // the generator refused: another one holds its lock. Nothing starts until done
   if (!active) return
   run.busy = BUSY
@@ -362,8 +366,12 @@ export function usePreviewFailureToast(alert: ReturnType<typeof useAlert>) {
         action: { label: 'Open logs', onClick: () => { alert.dismissAlert(id); window.dispatchEvent(new Event('repakxtra-open-logs')) } },
       })
     }
+    const warn = (key: string) => alert.warning('Preview may not match the game', key.startsWith(previewSetKey(''))
+      ? `A mod in ${run.name} is encrypted with a key other than the game's, so the loadout's preview was made without it.`
+      : `${key} is encrypted with a key other than the game's, so its files could not be read for a preview.`, { duration: 15000 })
     failureListeners.add(show)
-    return () => { failureListeners.delete(show) }
+    warnListeners.add(warn)
+    return () => { failureListeners.delete(show); warnListeners.delete(warn) }
   }, [alert])
 }
 
@@ -431,8 +439,9 @@ function FormImage({ k }: { k: string }) {
 /** Previews for a set of mods (the selection bar, a loadout page), with progress and Stop while its own run goes.
  * While a different run goes it says so, and offers to queue this one. With `set` (a loadout), its character mods
  * render together as one image under that key. */
-export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghost bulk-previews', label = 'Previews' }: {
-  paths: string[]; set?: string; name?: string; className?: string; label?: string
+export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghost bulk-previews', label = 'Previews', stopOnly = false }: {
+  /** stopOnly: while it runs, only its Stop button (a loadout page, whose card already shows the progress) */
+  paths: string[]; set?: string; name?: string; className?: string; label?: string; stopOnly?: boolean
 }) {
   usePreviewVersion()
   const alert = useAlert()
@@ -446,16 +455,20 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
   const id = jobId(job)
   if (running() && run.id === id) {
     // What it is doing (the dot loader and "2 of 9"), and Stop as its own button beside it
+    const stopBtn = (
+      <button type="button" className={`${className} run-stop-btn`} onClick={stop} disabled={run.stopping}
+        title={queue.length ? `Stop now, and clear the ${queue.length} queued` : 'Stop now'}>
+        <span className="stop-glyph" aria-hidden="true" />{stopOnly ? (run.stopping ? 'Stopping…' : 'Stop generating previews') : 'Stop'}
+      </button>
+    )
+    if (stopOnly) return stopBtn
     return (
       <span className="run-group">
         <span className={`${className} is-running`} role="status">
           <MatrixLoader size={12} />
           {run.stopping ? 'Stopping…' : <Shimmer text={`Generating ${doneOf()} of ${run.total}`} />}
         </span>
-        <button type="button" className={`${className} run-stop-btn`} onClick={stop} disabled={run.stopping}
-          title={queue.length ? `Stop now, and clear the ${queue.length} queued` : 'Stop now'}>
-          <span className="stop-glyph" aria-hidden="true" />Stop
-        </button>
+        {stopBtn}
       </span>
     )
   }

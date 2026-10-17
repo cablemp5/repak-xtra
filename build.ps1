@@ -88,11 +88,27 @@ if ($Release) {
             (Get-FileHash "$check\repakxtra.exe").Hash -eq (Get-FileHash "$out\repakxtra.exe").Hash
         if (-not $same) { throw "$zip does not unpack to this build: the in-app updater could not install it. Nothing to publish." }
     } finally { Remove-Item $check -Recurse -Force -ErrorAction SilentlyContinue }
-    Write-Host "Packed: $zip (SHA-256 $((Get-FileHash $zip).Hash.ToLower()))" -ForegroundColor Green
+    $hash = (Get-FileHash $zip).Hash.ToLower()
+    Write-Host "Packed: $zip (SHA-256 $hash)" -ForegroundColor Green
+    # Release notes (cable's format, 2026-10-17): a Downloads table (the zip and its checksum) and a Changelog of short
+    # lines from release-notes\v<ver>.md. No version bump line, generated "What's changed", PR or author lines
+    $name = Split-Path $zip -Leaf
+    $sum = "$zip.sha256"
+    [IO.File]::WriteAllText((Join-Path $PWD $sum), "$hash  $name`n")
+    $changes = "release-notes\v$ver.md"
+    if (-not (Test-Path $changes)) { throw "Write $changes first: one '- ' line per change, like '- Add card zoom to the Loadouts screen'." }
+    $lines = @(Get-Content $changes | Where-Object { $_ -match '^\s*[-*]\s+\S' } | ForEach-Object { '- ' + ($_ -replace '^\s*[-*]\s+', '') })
+    if (-not $lines.Count) { throw "$changes has no '- ' lines." }
+    $url = "https://github.com/cablemp5/repak-xtra/releases/download/v$ver"
+    $notes = "dist\release-notes-v$ver.md"
+    $body = @('## Downloads', '', '| File | |', '| :---: | :---: |', "| [$name]($url/$name) | [checksum]($url/$name.sha256) |", '',
+        '## Changelog', '') + $lines
+    [IO.File]::WriteAllText((Join-Path $PWD $notes), ($body -join "`n") + "`n")
+    Write-Host "Notes: $notes" -ForegroundColor Green
     # On the clipboard as one line: a wrapped terminal line copied by hand can pick up a line break and fail to parse
-    $publish = "gh release create v$ver $zip -R cablemp5/repak-xtra --target main --latest --title `"repak-xtra $ver`" --generate-notes"
+    $publish = "gh release create v$ver $zip $sum -R cablemp5/repak-xtra --target main --latest --title `"repak-xtra $ver`" --notes-file $notes"
     Set-Clipboard -Value $publish
-    Write-Host 'The publish command is on the clipboard: paste it and press Enter (swap --generate-notes for --notes-file notes.md to write your own):'
+    Write-Host 'The publish command is on the clipboard: paste it and press Enter:'
     Write-Host "  $publish"
 }
 if ($Test) { Write-Host 'The app runs one copy at a time: close the stable repakxtra before opening the test one, or you will just get the stable window.' -ForegroundColor Yellow }

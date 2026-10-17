@@ -1,5 +1,5 @@
 // repakxtra: small pieces shared by Home (LoadoutsScreen.tsx), the loadout page and the New strip.
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, ImagePlus, Pencil, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import type { LoadoutProps } from './Loadouts'
@@ -8,6 +8,7 @@ import { type Loadout, type Mod, displayName, flipMods, modKey } from './loadout
 import { ModName } from './modName'
 import { MatrixLoader, revealOnLoad } from './motion'
 import { formKeys, hasPreview, noPreviewPossible, previewSetKey, useCovers, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
+import { playEmoteSound, stopEmoteSound, useEmoteSound, webpSeconds } from './emoteSound'
 
 /** The home screen's badge color class for a mod type (theme.css *-badge sets --badge-dot). */
 export const typeClass = (category?: string | null) => `${(category || 'unknown').toLowerCase().replace(/\s+/g, '-')}-badge`
@@ -54,7 +55,7 @@ function usePreviewSlides(p: LoadoutProps, l: Loadout) {
 }
 
 /** The loadout's image: its own image or video, then its generated previews, paged with arrows. Hovering shows the
- *  arrows and what the slide is ("Mesh + Texture · 1/4"). With onRemoveImage, its own image shows an X that removes it. */
+ *  arrows and what the slide is ("Mesh + Texture"). With onRemoveImage, its own image shows an X that removes it. */
 export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage, emptyText = 'Click to add an image, or paste one' }: {
   p: LoadoutProps; l: Loadout; className?: string; title: string; onClick: () => void; onRemoveImage?: () => void; emptyText?: string
 }) {
@@ -70,8 +71,35 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   const [warm] = useState(src) // already cached when the card mounted: shown at once, without the blur-in
   const state = usePreviewState(previewSetKey(l.id))
   const impossible = !src && !state && noPreviewPossible(l)
+  // An animation slide whose emote has a sound in this loadout: while hovered, the clip restarts (a fresh copy of its
+  // image) and the sound plays once the restarted clip is on screen (custom/emoteSound.ts). The restart belongs to the
+  // slide it was made for: paging ends it and its sound, and paging onto such a slide while hovered starts its own
+  const slideKey = slide?.keys ? undefined : slide?.key || undefined
+  const sound = useEmoteSound(slideKey, [...new Set(l.on.map(displayName))])
+  const [restart, setRestart] = useState<{ key: string; url: string; seconds: number } | null>(null)
+  const hovering = useRef(false)
+  const shownKey = useRef(slideKey)
+  shownKey.current = slideKey
+  const dropRestart = () => {
+    stopEmoteSound()
+    // revoked later: a card picked up to drag carries a copy of this image for a while
+    setRestart(r => { if (r) setTimeout(() => URL.revokeObjectURL(r.url), 30000); return null })
+  }
+  const startRestart = () => {
+    if (!hovering.current || !sound || !src || !slideKey || document.documentElement.classList.contains('is-dragging-card')) return
+    const key = slideKey
+    fetch(src).then(r => r.arrayBuffer()).then(buf => {
+      if (!hovering.current || shownKey.current !== key) return // paged on, or left, while it loaded
+      setRestart({ key, url: URL.createObjectURL(new Blob([buf], { type: 'image/webp' })), seconds: webpSeconds(buf) })
+    }).catch(() => undefined)
+  }
+  useEffect(() => { dropRestart(); startRestart() }, [slideKey, src, sound?.key, sound?.emote]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { if (hovering.current) stopEmoteSound() }, []) // this card's sound ends with it, no other card's
+  const live = restart && restart.key === slideKey ? restart : null
+  const enter = () => { hovering.current = true; startRestart() }
+  const leave = () => { hovering.current = false; dropRestart() }
   return (
-    <div className={`lo-media ${className}${paged ? ' is-paged' : ''}${state ? ` is-${state.kind}` : ''}`}>
+    <div className={`lo-media ${className}${paged ? ' is-paged' : ''}${state ? ` is-${state.kind}` : ''}`} onMouseEnter={enter} onMouseLeave={leave}>
       {/* transitions.dev: Skeleton loader. Shown over the card while its preview renders or waits; the new image
           blurs in when it lands (revealOnLoad) */}
       {state && (
@@ -92,7 +120,8 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
             ? <span className="lo-media-multi">{slide.keys.map(k => <SlideImage key={k} k={k} />)}</span>
           : !slide?.key && l.mediaType === 'video' && url
             ? <video src={url} autoPlay loop muted playsInline />
-            : <img key={src} src={src} alt="" className={src === warm ? 'is-loaded' : undefined} onLoad={revealOnLoad} />}
+            : <img key={src} src={live?.url ?? src} alt="" className={src === warm ? 'is-loaded' : undefined}
+                onLoad={e => { revealOnLoad(e); if (sound && live && hovering.current && e.currentTarget.src === live.url) playEmoteSound(sound, live.seconds) }} />}
       </button>
       {slides.length > 1 && (
         <>
@@ -102,7 +131,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
           <button type="button" className="lo-media-arrow is-next" title="Next preview" aria-label="Next preview" onClick={() => { setPaged(true); setIndex(at + 1) }}>
             <ChevronRight size={16} />
           </button>
-          <span className="lo-media-label">{slide.label} · {at + 1}/{slides.length}</span>
+          <span className="lo-media-label">{slide.label}</span>
         </>
       )}
       {slides.length === 1 && slide.older && <span className="lo-media-label">{slide.label}</span>}
@@ -170,7 +199,7 @@ export function ModRow({ p, k, mod, onToggle, onRename, children }: {
       {onToggle && (mod
         ? <Switch size="sm" color="primary" checked={Boolean(mod.enabled)} title={mod.enabled ? `Turn ${k} off` : `Turn ${k} on`}
             aria-label={mod.enabled ? `Turn ${k} off` : `Turn ${k} on`} onChange={() => toggleMod(p, mod)} />
-        : <span className="mod-row-switch-gap" />)}
+        : <span className="mod-type-badge category-badge deleted-badge" title="This mod was deleted: it is no longer installed">Deleted</span>)}
       {children}
     </li>
   )

@@ -23,9 +23,9 @@ export const isNewerKit = (latest: string, installed?: string | null) =>
 const mb = (n: number) => `${Math.round(n / 1048576)} MB`
 /** The generator's check of this PC; when it cannot run (no kit, busy, would not start) that is its one problem. */
 const checkPc = () => invoke<Doctor>('previews_doctor').catch((e): Doctor => ({ ok: false, problems: [String(e)] }))
-/** "38 MB of 108 MB", "Unpacking…", "Downloading Blender · 120 MB of 345 MB" */
+/** "38 MB of 108 MB", "Unpacking", "Downloading Blender · 120 MB of 345 MB" */
 export const progressText = (p: KitProgress | null) =>
-  !p ? '' : p.stage === 'unpack' ? 'Unpacking…'
+  !p ? '' : p.stage === 'unpack' ? 'Unpacking'
     : p.stage === 'blender' ? [p.text || 'Installing Blender', p.total === 100 ? `${p.done}%` : p.total ? `${mb(p.done)} of ${mb(p.total)}` : ''].filter(Boolean).join(' · ')
     : p.total ? `${mb(p.done)} of ${mb(p.total)}` : mb(p.done)
 export const progressShare = (p: KitProgress | null) => (p?.stage !== 'unpack' && p?.total ? Math.min(1, p.done / p.total) : null)

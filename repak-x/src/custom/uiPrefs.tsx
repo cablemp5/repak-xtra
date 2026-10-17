@@ -25,6 +25,7 @@ const HIDE_TAGS_KEY = 'repakxtra.hideTags' // tags show by default, so this one 
 const SOUND_KEY = 'repakxtra.sound'   // on by default: '0' = off
 const MOTION_KEY = 'repakxtra.motion' // on by default: '0' = off
 const MINIMAL_TOASTS_KEY = 'repakxtra.minimalToasts' // off by default: '1' = on
+const TAGS_OFF_KEY = 'repakxtra.tagsOff' // tag features hidden by default: '0' = shown
 
 const storageKey = (key: string) => `repakxtra.show.${key}`
 const listeners = new Set<() => void>()
@@ -35,6 +36,7 @@ const tagsHidden = () => savedItem(HIDE_TAGS_KEY) === '1'
 const soundOn = () => savedItem(SOUND_KEY) !== '0'
 const motionOn = () => savedItem(MOTION_KEY) !== '0'
 const minimalToasts = () => savedItem(MINIMAL_TOASTS_KEY) === '1'
+const tagsOff = () => savedItem(TAGS_OFF_KEY) !== '0'
 
 /** Minimal toasts: an everyday confirmation (success or info with nothing to click, not a progress toast) is skipped.
  *  Errors, warnings, crash reports, update offers and deletions (they carry Undo) still show. */
@@ -44,6 +46,7 @@ export const quietToast = (t: { color?: string; action?: unknown; isLoading?: bo
 const apply = () => {
   PREFS.forEach(({ key }) => document.documentElement.toggleAttribute(`data-show-${key}`, isOn(key)))
   document.documentElement.toggleAttribute('data-hide-tags', tagsHidden())
+  document.documentElement.toggleAttribute('data-tags-off', tagsOff()) // theme.css hides the tags on mods
   // Motion off: theme.css zeroes every CSS transition and animation, framer-motion jumps to the end state
   document.documentElement.setAttribute('data-motion', motionOn() ? 'on' : 'off')
   MotionGlobalConfig.skipAnimations = !motionOn()
@@ -119,7 +122,14 @@ async function deleteAllTags(tags: string[], mods: TagMod[], onChanged: () => Pr
 }
 
 /** Tags shown or hidden on mods, said in words (T toggles too); the arrow holds Delete all tags. */
-export function TagsToggle({ tags, mods, onChanged, alert }: {
+/** Hide tag features (Settings, on by default): no tags on mods, no tag filter, Tags button or Assign Tag. */
+export const useTagsOff = () => useSyncExternalStore(subscribe, tagsOff)
+
+export function TagsToggle(props: Parameters<typeof TagsToggleButton>[0]) {
+  return useTagsOff() ? null : <TagsToggleButton {...props} />
+}
+
+function TagsToggleButton({ tags, mods, onChanged, alert }: {
   tags: string[]; mods: TagMod[]; onChanged: () => Promise<unknown>; alert: ReturnType<typeof useAlert>
 }) {
   const hidden = useSyncExternalStore(subscribe, tagsHidden)
@@ -195,7 +205,7 @@ export default function UiSettings() {
             <Checkbox checked={soundOn()} onChange={(checked: boolean) => { update(SOUND_KEY, checked ? '1' : '0'); if (checked) unlockSound() }}>
               <span>Sound effects</span>
             </Checkbox>
-            <p className="setting-subtext">Mechanical click sounds on clicks, typing, switches, menus, page changes and alerts.</p>
+            <p className="setting-subtext">Mechanical click sounds on clicks, typing, switches, menus, page changes and alerts, and an emote's sound when you hover its animation preview.</p>
           </div>
           <div className="setting-item">
             <Checkbox checked={motionOn()} onChange={(checked: boolean) => update(MOTION_KEY, checked ? '1' : '0')}>
@@ -214,6 +224,12 @@ export default function UiSettings() {
       <div className="setting-section">
         <h3>Optional controls</h3>
         <div className="setting-group">
+          <div className="setting-item">
+            <Checkbox checked={tagsOff()} onChange={(checked: boolean) => update(TAGS_OFF_KEY, checked ? '1' : '0')}>
+              <span>Hide tag features</span>
+            </Checkbox>
+            <p className="setting-subtext">Hides tags on mods, the tag filter, the tags show/hide button, the Tags button for selected mods and Assign Tag. Your tags are kept.</p>
+          </div>
           {PREFS.map(({ key, label }, i) => key !== 'mod-size' && (
             <div className="setting-item" key={key}>
               <Checkbox checked={snapshot[i] === '1'} onChange={(checked: boolean) => update(storageKey(key), checked ? '1' : '0')}>

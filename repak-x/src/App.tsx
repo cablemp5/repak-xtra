@@ -59,10 +59,9 @@ import FilterPanel, { filterScope } from './custom/FilterPanel'
 import Loadouts, { AddToLoadoutField, LoadoutMenuItems } from './custom/Loadouts'
 import LoadoutsScreen, { ViewTabs } from './custom/LoadoutsScreen'
 import { modKey, renameModKey } from './custom/loadoutStore' // repakxtra
-import { TagsToggle } from './custom/uiPrefs'
+import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
 import { reportSource } from './custom/setupReport' // repakxtra: Copy setup report reads the live list
-import { GeneratePreviewsButton } from './custom/previews'
 import { finishInstallLoadout } from './custom/installLoadout'
 import SigeonControl from './custom/SigeonControl'
 import SetupButton from './custom/SetupPanel'
@@ -351,6 +350,8 @@ function App() {
   const [newTagInput, setNewTagInput] = useState('')
   const [allTags, setAllTags] = useState<string[]>([])
   const [filterTag, setFilterTag] = useState('')
+  const tagsOff = useTagsOff() // repakxtra: Hide tag features
+  useEffect(() => { if (tagsOff) setFilterTag('') }, [tagsOff]) // repakxtra: no hidden tag filter left on
   const [filterType, setFilterType] = useState('')
   const [modDetails, setModDetails] = useState<Record<string, any>>({}) // { [path]: ModDetails }
   // Latest details for callbacks with stale closures (e.g. the file watcher's loadMods)
@@ -4054,7 +4055,7 @@ function App() {
               placeholder="Sort By"
               icon={<FaSort style={{ fontSize: '1.2rem', opacity: 1, color: 'var(--accent-primary)' }} />}
             />
-            <CustomDropdown
+            {!tagsOff && <CustomDropdown /* repakxtra: hidden with Hide tag features */
               options={[{ value: '', label: 'View All' }, ...allTags]}
               value={filterTag}
               onChange={setFilterTag}
@@ -4070,7 +4071,7 @@ function App() {
               })}
               addNewLabel="+ Create Tag"
               onDeleteOption={handleDeleteTagFromCatalog}
-            />
+            />}
             <TagsToggle tags={allTags} mods={mods} alert={alert} /* repakxtra: shown or hidden in words, Delete all tags */
               onChanged={async () => { setFilterTag(''); await loadMods(); await loadTags() }} />
 
@@ -4280,7 +4281,7 @@ function App() {
                     />
                   </div>
 
-                  <div className="bulk-field" title="Add or remove tags on selected mods">
+                  {!tagsOff && <div className="bulk-field" title="Add or remove tags on selected mods">{/* repakxtra: hidden with Hide tag features */}
                     <CustomDropdown
                       icon={<FaTag style={{ fontSize: '1rem', opacity: 0.7 }} />}
                       options={allTags.map(t => {
@@ -4309,11 +4310,10 @@ function App() {
                       addNewLabel="+ New Tag"
                       alwaysShowDeleteIcon={true}
                     />
-                  </div>
+                  </div>}
 
-                  {/* repakxtra: add the selected mods to a loadout, and previews for every selected mod */}
+                  {/* repakxtra: add the selected mods to a loadout */}
                   <AddToLoadoutField paths={[...selectedMods]} alert={alert} />
-                  <GeneratePreviewsButton paths={[...selectedMods]} />
 
                   {(() => {
                     const selMods = mods.filter(m => selectedMods.has(m.path))
@@ -4332,7 +4332,6 @@ function App() {
                         >
                           <ToggleOnIcon fontSize="small" style={{ color: accentColor }} />
                           <span className="bulk-btn-label">Enable</span>
-                          {disabledCount > 0 && <span className="bulk-num">{disabledCount}</span>}
                         </button>
                         <button
                           onClick={() => handleBulkToggle(false)}
@@ -4343,7 +4342,6 @@ function App() {
                         >
                           <ToggleOffIcon fontSize="small" style={{ opacity: 0.7 }} />
                           <span className="bulk-btn-label">Disable</span>
-                          {enabledCount > 0 && <span className="bulk-num">{enabledCount}</span>}
                         </button>
                       </div>
                     )
@@ -4361,7 +4359,6 @@ function App() {
                     <span style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                       <RiDeleteBin2Fill size="1rem" />
                       <span className="bulk-btn-label">Delete</span>
-                      <span className="bulk-num">{selectedMods.size}</span>
                     </span>
                   </button>
                 </div>

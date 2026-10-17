@@ -58,7 +58,7 @@ const useSource = (path: string) => {
 const open = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
 const day = (s: number) => new Date(s * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 
-/** ModDetailsPanel's source line: "Nexus 12890, uploaded Sep 13, 2026 · Open page". */
+/** ModDetailsPanel's source line: "Nexus Mods, uploaded Sep 13, 2026 · Open page". */
 export function NexusSourceLine({ path }: { path: string }) {
   const s = useSource(path)
   if (!s) return null
@@ -66,7 +66,7 @@ export function NexusSourceLine({ path }: { path: string }) {
     <div className="detail-item nx-source">
       <span className="detail-label">Source:</span>
       <span className="detail-value" title={`File version ${s.version}, uploaded ${new Date(s.uploaded * 1000).toUTCString()}`}>
-        Nexus {s.id}, uploaded {day(s.uploaded)}
+        Nexus Mods, uploaded {day(s.uploaded)}
         <button type="button" className="su-link nx-open" onClick={() => open(pageUrl(s.id))}><ExternalLink size={12} /> Open page</button>
       </span>
     </div>

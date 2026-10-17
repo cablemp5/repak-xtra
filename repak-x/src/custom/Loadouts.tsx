@@ -2,7 +2,7 @@
 // on or off (as does Ctrl+N, N its place in the Loadouts page order); loadouts that are on, then partly on, list first.
 // Its arrow opens the loadout's page, where everything else (rename, reorder, delete) lives.
 import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from 'react'
-import { ArrowUpRight, Check, Layers, Plus } from 'lucide-react'
+import { ArrowUpRight, Check, ListPlus, Plus } from 'lucide-react'
 import CustomDropdown from '../components/CustomDropdown'
 import type { useAlert } from '../components/AlertHandler'
 import {
@@ -68,7 +68,7 @@ export function AddToLoadoutField({ paths, alert }: { paths: string[]; alert: Lo
   return (
     <div className="bulk-field" title="Add the selected mods to a loadout">
       <CustomDropdown
-        icon={<Layers size={15} />}
+        icon={<ListPlus size={15} />}
         options={loadouts.map(l => ({ value: l.id, label: l.name }))}
         value=""
         placeholder="Add to loadout"

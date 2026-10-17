@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
 import Switch from './ui/Switch'
 import Checkbox from './ui/Checkbox'
-import { InstallAsLoadout, InstallToLoadouts, commitInstallLoadout } from '../custom/installLoadout' // repakxtra
+import { InstallAsLoadout, InstallToLoadouts, commitInstallLoadout, startingLoadouts } from '../custom/installLoadout' // repakxtra
 import { FaTag } from "react-icons/fa6"
 import { VscFolder, VscFolderOpened, VscChevronRight, VscChevronDown, VscNewFolder } from 'react-icons/vsc'
 import { MdCreateNewFolder } from 'react-icons/md'
@@ -192,7 +192,8 @@ const buildInitialSettings = (mods: ModInput[] = [], currentFolderId?: string): 
       customName: '',
       selectedTags: [],
       installSubfolder: currentFolderId && currentFolderId !== 'all' ? currentFolderId : null, // Per-mod install destination
-      path: mod.path
+      path: mod.path,
+      loadouts: startingLoadouts(), // repakxtra: installing from a loadout's page adds to it
     }
     return acc
   }, {} as Record<number, ModSetting>)

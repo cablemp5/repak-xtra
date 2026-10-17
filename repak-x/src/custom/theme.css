@@ -1203,7 +1203,7 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 }
 @keyframes t-shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0% 0; } }
 @media (prefers-reduced-motion: reduce) { .t-shimmer { animation: none !important; background-position: 50% 0; } }
-.is-queued { color: var(--text-primary) !important; border-color: color-mix(in srgb, var(--accent-primary), transparent 50%) !important; }
+.is-queued { color: var(--text-primary) !important; }   /* no accent outline on a queued card or its button (cable, 2026-10-17) */
 
 /* ---------- more motion from transitions.dev (free library). html[data-motion="off"] stops all of it. ---------- */
 :root {
@@ -1391,15 +1391,17 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 
 /* ---------- preview batches: Home status line, card skeletons (transitions.dev Skeleton loader) ---------- */
 :root { --pulse-dur: 1000ms; --pulse-min: 0.5; --skel-tone: rgba(255, 255, 255, 0.07); }
-.lo-batch { position: relative; overflow: hidden; display: flex; align-items: center; gap: 12px; margin: 14px 22px 4px; padding: 8px 8px 8px 14px;
-  border-radius: 10px; background: var(--field-bg); border: 1px solid var(--panel-border); font-size: 13px; color: var(--text-primary); }
-.lo-batch-what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lo-batch-left { margin-left: auto; flex: none; color: var(--text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
-.lo-batch-stop { margin-left: auto; height: 28px !important; flex: none; }
-.lo-batch-left + .lo-batch-stop { margin-left: 0; }
-/* The batch's progress: a hairline along the bar's bottom edge */
-.lo-batch-track { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: rgba(255, 255, 255, 0.05); }
-.lo-batch-track i { display: block; height: 100%; background: var(--accent-primary); transition: width 400ms cubic-bezier(0.22, 1, 0.36, 1); }
+/* One quiet line (cable, 2026-10-17): the dot loader, "Generating preview" and the loadout's name, how many are
+   left, and Stop at the end. No progress line */
+.lo-batch { display: flex; align-items: center; gap: 10px; margin: 14px 22px 4px; padding: 5px 5px 5px 14px; min-height: 40px;
+  border-radius: 10px; background: color-mix(in srgb, var(--text-primary), transparent 96%); border: 1px solid var(--panel-border);
+  font-size: 13px; color: var(--text-secondary); }
+.lo-batch .t-matrix { flex: none; }
+.lo-batch-what { display: flex; align-items: baseline; gap: 6px; min-width: 0; overflow: hidden; white-space: nowrap; }
+.lo-batch-what b { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 600; color: var(--text-primary); }
+.lo-batch-left { flex: none; padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--text-primary), transparent 92%);
+  color: var(--text-secondary); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.lo-batch-stop { margin-left: auto; height: 30px !important; flex: none; }
 /* After a run: its result, quiet, until the next run or Dismiss */
 .lo-batch.is-summary { background: var(--field-bg); border-color: var(--border-color);
   color: var(--text-secondary); }
@@ -2196,3 +2198,81 @@ html[data-motion] .btn-ghost.danger .danger-bg, html[data-motion] .context-menu-
 }
 html[data-motion] .btn-ghost.danger.holding .danger-bg, html[data-motion] .context-menu-item.danger.holding .danger-bg,
 html[data-motion] .hold-delete.holding::after { transition-duration: 2s !important; }
+
+/* Card size on Home (custom/cardZoom.tsx): the cards' own zoom, apart from the app's UI scale */
+.lo-screen .lo-grid { zoom: var(--lo-card-zoom, 1); }
+.lo-zoom { display: inline-flex; align-items: center; gap: 2px; margin-right: 6px; }
+.lo-zoom-value { min-width: 44px; height: 26px; padding: 0 4px; border: none; border-radius: 6px; background: none;
+  color: var(--text-secondary); font: 600 12px var(--font-primary); font-variant-numeric: tabular-nums; cursor: pointer; }
+.lo-zoom-value:hover { background: var(--quiet-active); color: var(--text-primary); }
+.lo-zoom .lo-icon:disabled { opacity: 0.35; pointer-events: none; }
+
+/* Selection bar (cable, 2026-10-17): each control as wide as its words (no reserved chevron space beside the text),
+   Delete red like the right-click menu's */
+@container bulkbar (min-width: 901px) {   /* narrower, the 900px rule above folds them to icons */
+  .bulk-field { flex: 0 0 auto; min-width: 0; max-width: none; }
+  .bulk-field .custom-dropdown-trigger { width: auto; padding: 0 0.65rem !important; background-image: none !important; gap: 6px; }
+  .bulk-field .custom-dropdown-text { overflow: visible; text-overflow: clip; }
+}
+.btn-ghost.danger.bulk-delete, .btn-ghost.danger.bulk-delete:hover { color: #f2555a !important; }
+.btn-ghost.danger.bulk-delete:hover { background: rgba(242, 85, 90, 0.1) !important; }
+.btn-ghost.danger.bulk-delete .danger-bg { background: rgba(242, 85, 90, 0.24) !important; }
+
+/* ---------- Text fields never get the blue focus ring (cable, 2026-10-17). The app-wide ring (.app :focus-visible) is for
+   buttons, links and switches; every text field, now and added later, shows focus as a lighter hairline instead, in every
+   window. Matched by element type, so a new field needs no class of its own. Boxes that hold a field (a search or rename
+   box) do the same while the field inside has focus. ---------- */
+:is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="button"], [type="submit"], [type="reset"], [type="color"], [type="file"], [type="image"]), textarea, select, [contenteditable="true"]):is(:focus, :focus-visible) {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: color-mix(in srgb, var(--text-primary), transparent 72%) !important;
+}
+:is(.rename-input-wrapper, .combined-input-group, .search-wrapper, .tail-input, .lp-search):focus-within {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: color-mix(in srgb, var(--text-primary), transparent 72%) !important;
+}
+/* A loadout page's More menu: Delete in red, like the Library's right-click Delete (cable, 2026-10-17) */
+.lp-more-menu .sigeon-item.is-danger { color: #f2555a !important; }
+.lp-more-menu .sigeon-item.is-danger:hover, .lp-more-menu .sigeon-item.is-danger:focus-visible { background: rgba(242, 85, 90, 0.1) !important; }
+/* A loadout's mod that was deleted: a red "Deleted" tag where its switch was, the On tag's shape without the dot
+   (cable, 2026-10-17) */
+.mod-row .mod-type-badge.category-badge.deleted-badge { color: #f2555a !important; flex: none;
+  background: color-mix(in srgb, #f2555a, transparent 90%) !important; border-color: color-mix(in srgb, #f2555a, transparent 62%) !important; }
+.mod-row .mod-type-badge.category-badge.deleted-badge::before { display: none !important; }
+/* Hide tag features (Settings, on by default, custom/uiPrefs.tsx): custom tags on mods, in the details panel and the
+   right-click Assign Tag go; hero tags stay. The filter, show/hide button and selection Tags button are not rendered. */
+html[data-tags-off] .mod-tags-row > .tag:not(.hero-tag),
+html[data-tags-off] .mod-tags-row .extra-tags-badge,
+html[data-tags-off] .detail-section:has(> .tags-list),
+html[data-tags-off] .context-menu-item.tag-submenu { display: none !important; }
+/* Dragging loadout cards (custom/cardDrag.ts, cable 2026-10-17). The picked-up copy lifts with the Toggle overshoot
+   (transitions.dev), follows the pointer, and glides into its slot on release with the Page slide ease; the cards it
+   passes slide on the same ease. The card's slot is a quiet outline where it would land. A card never replays its
+   entrance when it moves (data-in, set once it has played). */
+:root { --drag-slide-dur: 300ms; --drag-slide-ease: cubic-bezier(0.25, 1, 0.5, 1); }
+.lo-drag-ghost { position: fixed; left: 0; top: 0; z-index: 10000; pointer-events: none; will-change: transform; }
+.lo-drag-ghost .lo-card { width: 100%; height: 100%; animation: none !important; will-change: transform;
+  transition: transform var(--toggle-dur) var(--toggle-ease), box-shadow var(--toggle-dur) ease, border-color 150ms ease; }
+.lo-drag-ghost.is-lifted .lo-card { transform: scale(1.04); border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.55), 0 6px 14px rgba(0, 0, 0, 0.35); }
+.lo-drag-ghost.is-landing .lo-card, .lo-drag-ghost.is-returning .lo-card { transition: transform 260ms var(--drag-slide-ease), box-shadow 260ms ease; }
+.lo-card[data-in], html.is-dragging-card .lo-card { animation: none !important; }
+.lo-card.is-placeholder { background: rgba(255, 255, 255, 0.02) !important; border: 1.5px dashed rgba(255, 255, 255, 0.16) !important; box-shadow: none !important; }
+.lo-card.is-placeholder > * { visibility: hidden; }
+html.is-dragging-card, html.is-dragging-card * { cursor: grabbing !important; user-select: none !important; }
+html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
+.lo-screen .lo-card img { -webkit-user-drag: none; }
+/* A collection a card from another one would land in: a soft panel with room around its title and cards, drawn
+   behind them so nothing shifts */
+.lo-group { position: relative; isolation: isolate; }
+.lo-group.is-drop { background: none !important; box-shadow: none !important; }
+.lo-group::before { content: ''; position: absolute; inset: -10px -16px -16px; z-index: -1; pointer-events: none; border-radius: 16px;
+  background: color-mix(in srgb, var(--accent-primary), transparent 93%); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-primary), transparent 62%);
+  opacity: 0; transform: scale(0.99); transition: opacity 160ms ease, transform 160ms var(--page-slide-ease); }
+.lo-group.is-drop::before { opacity: 1; transform: none; }
+.lo-text-btn.is-drop { border-color: color-mix(in srgb, var(--accent-primary), transparent 40%) !important; background: color-mix(in srgb, var(--accent-primary), transparent 88%) !important; }
+/* The kit unpacking or Blender installing (SetupPanel.tsx InstallStatus): the blue dot loader and what is happening,
+   where that part's state or the step's action would be; a long winget step is cut with an ellipsis (its title has it all) */
+.su-install-status { display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; font-size: 12px; color: var(--text-primary); }
+.su-install-status > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

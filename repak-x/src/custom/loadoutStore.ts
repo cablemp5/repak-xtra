@@ -283,6 +283,22 @@ export const moveGroup = (name: string, by: -1 | 1) => {
   writeGroupList(groups)
 }
 export const setLoadoutGroup = (id: string, group: string) => patchLoadout(id, { label: group.trim() || OTHER })
+/** Drag and drop on Home: the list with the loadout moved into `group`, before or after another loadout (`beside`), or
+ *  after the group's last one. Pure (placeLoadout writes it). */
+export const placed = (list: Loadout[], id: string, group: string, beside?: { id: string; after: boolean }) => {
+  const from = list.findIndex(l => l.id === id)
+  if (from < 0 || beside?.id === id) return list
+  const rest = list.filter(l => l.id !== id)
+  const moved = { ...list[from], label: group.trim() || OTHER }
+  let at = beside ? rest.findIndex(l => l.id === beside.id) : -1
+  if (at >= 0) at += beside!.after ? 1 : 0
+  else { const last = rest.map(l => inGroup(l, moved.label)).lastIndexOf(true); at = last >= 0 ? last + 1 : rest.length }
+  return [...rest.slice(0, at), moved, ...rest.slice(at)]
+}
+export const placeLoadout = (id: string, group: string, beside?: { id: string; after: boolean }) => {
+  const list = readLoadouts(), next = placed(list, id, group, beside)
+  if (next !== list) writeLoadouts(next)
+}
 
 /** Which main view shows: Home (loadout cards) or Library (the full mod list). Remembered; Home on first start.
  *  Mirrored on <html data-view> so theme.css hides the other view (both stay mounted, keeping their state). */
@@ -305,6 +321,8 @@ export const openLoadout = (id: string | null, fresh = false) => {
 /** True once for a loadout opened as fresh. */
 export const takeFresh = (id: string) => { const was = freshId === id; if (was) freshId = null; return was }
 export const useOpenLoadout = () => useSyncExternalStore(subscribe, () => openId)
+/** The loadout page showing right now, or null (the cards, or the Library). */
+export const openLoadoutId = () => (view === 'home' ? openId : null)
 
 // L switches between Home and Library. This module also loads in the Asset Explorer and VFX Updater windows, which
 // have no Home: only the window showing the Home | Library tabs reacts
@@ -317,6 +335,15 @@ window.addEventListener('keydown', e => {
 })
 
 if (import.meta.env.DEV) {
+  { // drag and drop on Home
+    const L = (id: string, label: string) => ({ id, name: id, label, scope: [], on: [] }) as Loadout
+    const order = (xs: Loadout[]) => xs.map(x => `${x.id}:${x.label}`).join()
+    const base = [L('a', 'G'), L('b', 'G'), L('c', 'H'), L('d', 'G')]
+    console.assert(order(placed(base, 'd', 'G', { id: 'a', after: false })) === 'd:G,a:G,b:G,c:H', 'reorder before a card')
+    console.assert(order(placed(base, 'a', 'H', { id: 'c', after: true })) === 'b:G,c:H,a:H,d:G', 'into another collection after a card')
+    console.assert(order(placed(base, 'c', 'G')) === 'a:G,b:G,d:G,c:G', 'dropped on a collection: after its last loadout')
+    console.assert(placed(base, 'a', 'G', { id: 'a', after: true }) === base, 'dropped on itself: unchanged')
+  }
   // The one rule that ties a loadout to a file, whatever state the file is in (mod_previews.py mod_key must agree)
   for (const [path, key] of [['C:/m/~mods/X_9999999_P.pak', 'X'], ['X_9999999_P.bak_repak', 'X'], ['X_9999999_P.pak.bak_repak', 'X'],
     ['X_9999999_P.pak_disabled', 'X'], ['X_disabled', 'X'], ['bp-lime-vfx_vfx_noPG_v2_9999999_P.pak', 'bp-lime-vfx_vfx_noPG_v2'], ['B_P.pak', 'B_P']])

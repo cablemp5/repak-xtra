@@ -8,7 +8,11 @@ setVolume(0.7)
 
 let soundOn = true
 export const setSoundOn = (on: boolean) => { soundOn = on; setEnabled(on) }
+/** Sound effects on (Settings): emote sounds over animation previews follow it too (emoteSound.ts). */
+export const isSoundOn = () => soundOn
 export const unlockSound = () => { unlock().catch(() => undefined) }
+/** A cue for something that is not a click (dragging a card, cardDrag.ts); silent with Sound effects off. */
+export const cue = (name: SoundName, options?: PlayOptions) => play(name, options)
 
 type Cue = [SoundName, PlayOptions?]
 

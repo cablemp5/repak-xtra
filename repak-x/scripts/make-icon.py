@@ -1,51 +1,57 @@
-"""repakxtra's app icon: the logo's dotted x (custom/Wordmark.tsx), 7 by 7 dots in its saturated blues, on transparency.
-Writes icons/RepakIcon.png (512) and icons/RepakIcon.ico (16 to 256), which tauri.conf.json bundles into the exe: the
-taskbar, the window and the desktop shortcut all show it. Each size is drawn on its own with the dots on whole pixels,
-so small sizes stay crisp instead of blurring the grid. Run from repak-x/ with any Python that has Pillow:
+"""repakxtra's app icon: the logo's lowercase x (custom/Wordmark.tsx), Geist 800, filled with the logo's mesh gradient (a
+deep blue base under three radial glows: ice blue top left, bright blue top right, azure bottom middle), centered on
+transparency. Writes icons/RepakIcon.png (512) and icons/RepakIcon.ico (16 to
+256), which tauri.conf.json bundles into the exe: the taskbar, the window and the desktop shortcut all show it. Colors are
+theme.css .wm's. Run from repak-x/ with any Python that has Pillow and numpy:
     python scripts/make-icon.py [--test-ico path.ico] [--sheet contact.png]
---test-ico writes the same x in the test build's green, for the test copy's desktop shortcut (kept outside the repo).
+--test-ico writes the same icon in the test build's green, for the test copy's desktop shortcut (kept outside the repo).
 --sheet writes the 16 to 48 px sizes on dark and light, to check them."""
 import sys
 from pathlib import Path
 
+import numpy as np
 from PIL import Image, ImageDraw
 
 HERE = Path(__file__).resolve().parents[1]
-X = ['XX...XX',   # the x from Wordmark.tsx's LETTERS
-     'XX...XX',
-     '.XX.XX.',
-     '..XXX..',
-     '.XX.XX.',
-     'XX...XX',
-     'XX...XX']
-BLUES = ['#1f5bff', '#3d74ff', '#0f46e8', '#4a80ff']   # Wordmark's --wm-0..3
-GREENS = ['#3ecf6e', '#5fe08a', '#27b356', '#72e89b']  # its test-build colors
+# Wordmark.tsx's x (font units, y up)
+X = [(45, 0), (233, 272), (47, 540), (247, 540), (345, 386), (441, 540), (645, 540), (459, 272),
+     (648, 0), (448, 0), (349, 160), (249, 0)]
+BLUES = ['#0a2499', '#9fd0ff', '#1f5bff', '#2f7dff']   # theme.css .wm: --wm-base, then glows --wm-c1..3
+GREENS = ['#27b356', '#c6f7d6', '#5fe08a', '#3ecf6e']  # its test-build colors
+GLOWS = [(0.0, 1.0), (1.0, 1.0), (0.5, 0.0)]           # glow centers as fractions of the x's box (y up): top left, top right, bottom middle
+RADIUS = 0.8                                           # in x heights
 SIZES = (16, 20, 24, 32, 40, 48, 64, 128, 256)
-SS = 4  # drawn 4x, then averaged down: whole-pixel dots stay sharp, rounded corners stay smooth
+SS = 4  # drawn 4x, then averaged down: edges stay smooth
 
 
-def shade(n, r, c):
-    """The same texture as the logo's x (Wordmark.tsx DOTS)."""
-    return [0, 0, 0, 0, 0, 0, 0, 1, 2, 3][(n * 7 + c * 3 + r * 5) % 10]
+def rgb(h):
+    return np.array([int(h[i:i + 2], 16) for i in (1, 3, 5)], float)
 
 
 def render(size, colors=BLUES):
-    cell = max(2, int(size * 0.92) // 7)           # whole pixels per dot cell, about 4% margin each side
-    dot = cell if cell < 3 else cell - max(1, round(cell * 0.14))  # 16 and 20 px: touching dots; larger: a gap of 1 px or more
-    left = (size - 7 * cell) // 2
-    top = (size - 7 * cell) // 2
-    radius = 0 if dot < 4 else dot * 0.25
-    big = Image.new('RGBA', (size * SS, size * SS), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(big)
-    n = 0
-    for r, line in enumerate(X):
-        for c, v in enumerate(line):
-            if v != 'X':
-                continue
-            x, y = (left + c * cell + (cell - dot) // 2) * SS, (top + r * cell + (cell - dot) // 2) * SS
-            draw.rounded_rectangle((x, y, x + dot * SS - 1, y + dot * SS - 1), radius=radius * SS, fill=colors[shade(n, r, c)])
-            n += 1
-    return big.resize((size, size), Image.BOX)
+    n = size * SS
+    pts = X
+    u0, u1 = min(u for u, _ in pts), max(u for u, _ in pts)
+    v0, v1 = min(v for _, v in pts), max(v for _, v in pts)
+    scale = n * 0.92 / max(u1 - u0, v1 - v0)                # about 4% margin on the long side
+    ox, oy = (n - (u1 - u0) * scale) / 2 - u0 * scale, (n + (v1 - v0) * scale) / 2 + v0 * scale  # centered
+
+    def shape(poly):
+        im = Image.new('L', (n, n), 0)
+        ImageDraw.Draw(im).polygon([(ox + u * scale, oy - v * scale) for u, v in poly], fill=255)
+        return np.asarray(im, float)[..., None] / 255
+
+    yy, xx = np.mgrid[0:n, 0:n].astype(float)
+    xu0, xu1 = min(u for u, _ in X), max(u for u, _ in X)
+    xh = max(v for _, v in X)
+    fill = np.zeros((n, n, 3)) + rgb(colors[0])
+    for (fu, fv), c in zip(GLOWS, colors[1:]):
+        cx, cy = ox + (xu0 + fu * (xu1 - xu0)) * scale, oy - fv * xh * scale
+        d = np.hypot(xx - cx, yy - cy) / (RADIUS * xh * scale)
+        a = np.clip((1 - d) / 0.7, 0, 1)[..., None]  # the logo's stops: opaque to 30% of the radius, then fading out
+        fill = fill * (1 - a) + rgb(c) * a
+    img = np.dstack([fill, shape(X) * 255]).round().astype(np.uint8)
+    return Image.fromarray(img, 'RGBA').resize((size, size), Image.BOX)
 
 
 def save_ico(path, colors=BLUES):

@@ -334,7 +334,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
     <div ref={menuRef} className="context-menu" style={{ top: adjustedPos.y, left: adjustedPos.x }} onClick={(e) => e.stopPropagation()}>
       <div className="context-menu-header">{mod.custom_name || mod.path.split(/[/\\]/).pop()}</div>
 
-      <div className="context-menu-item submenu-trigger" onMouseEnter={handleSubmenuEnter}>
+      <div className="context-menu-item submenu-trigger tag-submenu" onMouseEnter={handleSubmenuEnter}>{/* repakxtra: class, hidden with Hide tag features */}
         Assign Tag...
         <div className="submenu">
           <div className="context-menu-item" onClick={() => {

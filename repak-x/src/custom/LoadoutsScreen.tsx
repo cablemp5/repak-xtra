@@ -1,7 +1,8 @@
 // repakxtra: Home, the app's first view. Loadouts as cards (image, on/off switch), grouped by collection or hero, with
 // the "New this week" strip below them; a card opens its page (LoadoutPage.tsx). The full mod list is the Library
 // view (header tabs, or L). On = its mods on, Off = its mods off; other mods and loadouts are never touched.
-import { useEffect, useRef, useState } from 'react'
+import { type CSSProperties, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useStableCallback } from '../hooks/useStableCallback'
 import { ChevronDown, ChevronUp, FolderPlus, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo, runChanges } from './Loadouts'
@@ -9,14 +10,16 @@ import LoadoutPage from './LoadoutPage'
 import NewStrip from './NewStrip'
 import { isTyping } from './hotkeys'
 import { CardMedia, OnDot } from './loadoutBits'
+import { CardZoomControl, useCardZoom, useWheelZoom } from './cardZoom'
+import { type Spot, playFlip, snapshotCards, useCardDrag } from './cardDrag'
 import { prepareMedia, putMedia } from './loadoutMedia'
 import { plural } from './modName'
 import { MatrixLoader, Num } from './motion'
 import { PreviewsUnavailable, dismissPreviewSummary, generateAllLoadouts, loadoutHasPreview, stopPreviews, usePreviewFailureToast, usePreviewsAvailable, usePreviewBatch, usePreviewSummary, usePreviewVersion } from './previews'
 import {
   type Loadout, type Mod, OTHER, addGroup, changesToTurnOff, changesToTurnOn, deleteGroup, displayName, groupKey,
-  inGroup, isActive, modKey, moveGroup, nextLoadoutName, openLoadout, patchLoadout, readLoadouts, renameGroup,
-  setLoadoutGroup, setView, snapshotLoadout, sweepMediaOnce, useGroups, useLoadouts, useOpenLoadout, useView, writeLoadouts,
+  inGroup, isActive, modKey, moveGroup, nextLoadoutName, openLoadout, patchLoadout, placeLoadout, placed, readLoadouts, renameGroup,
+  setView, snapshotLoadout, sweepMediaOnce, useGroups, useLoadouts, useOpenLoadout, useView, writeLoadouts,
 } from './loadoutStore'
 import { savedItem } from './storageCarryOver'
 import { useUpstreamWatch } from './upstream'
@@ -66,7 +69,7 @@ function GroupHead({ p, name, count, at, total, editing, setEditing }: {
     })
   }
   return (
-    <h3 className="lo-group-head">
+    <h3 className="lo-group-head" data-flip={`head:${groupKey(name)}`}>
       {editing && real
         ? <input className="lo-rename lo-group-rename" autoFocus value={draft} aria-label="Collection name"
             onFocus={e => e.target.select()} onChange={e => setDraft(e.target.value)} onBlur={() => done(true)}
@@ -102,6 +105,67 @@ export function ViewTabs() {
   )
 }
 
+type CardProps = {
+  p: LoadoutProps; l: Loadout; groupBy: GroupBy; canGenerate: boolean; busy: boolean; anyBusy: boolean; renaming: boolean; draft: string
+  placeholder: boolean; hovered: React.MutableRefObject<string | null>
+  onPick: (e: React.PointerEvent<HTMLElement>, id: string) => void; onToggle: (l: Loadout, on: boolean) => void
+  onStartRename: (l: Loadout) => void; onDraft: (name: string) => void; onCommit: (l: Loadout) => void; onCancelRename: () => void
+}
+
+/** One loadout card on Home. Memoized: it re-renders only when its loadout, the mods or its own state change. */
+const LoadoutCard = memo(function LoadoutCard({ p, l, groupBy, canGenerate, busy, anyBusy, renaming, draft, placeholder, hovered,
+  onPick, onToggle, onStartRename, onDraft, onCommit, onCancelRename }: CardProps) {
+  const byKey = useMemo(() => new Map(p.mods.map(m => [modKey(m.path), m])), [p.mods])
+  const active = isActive(l, p.mods)
+  const keys = new Set(l.on.map(displayName))
+  const present = [...keys].filter(k => byKey.has(k)).length
+  const onNow = [...keys].filter(k => byKey.get(k)?.enabled).length
+  const label = present === 0 ? 'No installed mods' : active ? `Turn ${l.name} off` : `Turn ${l.name} on`
+  return (
+    <article data-loadout={l.id} className={`lo-card ${active ? 'is-on' : ''}${placeholder ? ' is-placeholder' : ''}`}
+      onPointerDown={groupBy === 'group' && !renaming ? e => onPick(e, l.id) : undefined}
+      onKeyDown={e => { if (e.key === 'F2' && !isTyping(e.target)) { e.preventDefault(); onStartRename(l) } }}
+      onMouseEnter={() => { hovered.current = l.id }} onMouseLeave={() => { if (hovered.current === l.id) hovered.current = null }}>
+      <CardMedia p={p} l={l} onClick={() => openLoadout(l.id)} title={`Open ${l.name}`}
+        emptyText={canGenerate ? 'No preview yet. Open it to generate one, or hover and paste an image.' : 'No picture yet. Hover and paste an image, or open it to add one.'} />
+      <div className="lo-card-body">
+        <div className="lo-card-title">
+          {renaming ? (
+            <input className="lo-rename" autoFocus value={draft} aria-label="Loadout name"
+              onFocus={e => e.target.select()} onChange={e => onDraft(e.target.value)} onBlur={() => onCommit(l)}
+              onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') onCommit(l); if (e.key === 'Escape') onCancelRename() }} />
+          ) : (
+            <span className="lo-card-name">
+              <h3 title={`${l.name} (double-click or F2 to rename)`} onDoubleClick={() => onStartRename(l)}>{l.name}</h3>
+              <button type="button" className="lo-icon lo-card-pen" title="Rename" aria-label={`Rename ${l.name}`} onClick={() => onStartRename(l)}>
+                <Pencil size={12} />
+              </button>
+            </span>
+          )}
+          <Switch size="sm" color="primary" checked={active} isDisabled={present === 0} disabled={anyBusy || present === 0}
+            title={label} aria-label={label} onChange={(checked: boolean) => onToggle(l, checked)} />
+        </div>
+        <p className="lo-card-meta">
+          {busy ? 'Switching mods…' : p.mods.length === 0 ? 'Loading mods…' : <>
+            {groupBy === 'hero' && <>{l.label}<span className="lo-sep">·</span></>}
+            {`${onNow}/${l.on.length}`}
+            <OnDot on={onNow} of={present} />
+            {present < l.on.length && <><span className="lo-sep">·</span>{l.on.length - present} not installed</>}
+          </>}
+        </p>
+        <div className="lo-card-actions">
+          <button type="button" className="lo-expand" onClick={() => openLoadout(l.id)}>Edit mods</button>
+          <span className="lo-card-tools">
+            <button type="button" className="lo-icon" title={`Delete ${l.name}`} aria-label={`Delete ${l.name}`} onClick={() => deleteWithUndo(p, l)}>
+              <Trash2 size={14} />
+            </button>
+          </span>
+        </div>
+      </div>
+    </article>
+  )
+})
+
 export default function LoadoutsScreen(p: LoadoutProps) {
   const view = useView()
   const loadouts = useLoadouts()
@@ -114,13 +178,35 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   const batch = usePreviewBatch()
   const lastRun = usePreviewSummary()
   const [editingGroup, setEditingGroup] = useState<string | null>(null)
-  const [dropGroup, setDropGroup] = useState<string | null>(null)
   const [groupBy, setGroupByState] = useState<GroupBy>(() => (savedItem(GROUP_BY_KEY) === 'hero' ? 'hero' : 'group'))
   const setGroupBy = (g: GroupBy) => { localStorage.setItem(GROUP_BY_KEY, g); setGroupByState(g) }
   const fileRef = useRef<HTMLInputElement>(null)
   const [genMenu, setGenMenu] = useState(false)
   const canGenerate = usePreviewsAvailable()
   const genRef = useRef<HTMLDivElement>(null)
+  const cardZoom = useCardZoom()
+  const [cardsEl, setCardsEl] = useState<HTMLDivElement | null>(null)
+  useWheelZoom(cardsEl)
+  // Dragging a card (Collection view, custom/cardDrag.ts): `spot` is where it would land; the cards show that order
+  // live, sliding from where they were (flipFrom, taken just before each change)
+  const [spot, setSpot] = useState<Spot | null>(null)
+  const flipFrom = useRef<Map<string, DOMRect> | null>(null)
+  const drag = useCardDrag({
+    zoom: cardZoom, scroller: cardsEl,
+    onMove: (_id, s) => { flipFrom.current = snapshotCards(cardsEl); setSpot(s) },
+    onDrop: (id, s) => {
+      flipFrom.current = snapshotCards(cardsEl)
+      setSpot(null)
+      if (!s) return
+      if ('newCollection' in s) { const name = addGroup(); placeLoadout(id, name); setGroupBy('group'); setEditingGroup(name) }
+      else placeLoadout(id, s.group, besideOf(id, s))
+    },
+  })
+  useLayoutEffect(() => {
+    if (!flipFrom.current) return
+    playFlip(cardsEl, flipFrom.current, cardZoom)
+    flipFrom.current = null
+  })
   usePreviewVersion()
   usePreviewFailureToast(p.alert)
   useUpstreamWatch(p.alert) // Repak X open beside it
@@ -159,6 +245,14 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   }
 
   useEffect(sweepMediaOnce, []) // stored media of loadouts deleted in an earlier session
+
+  // The cards' handlers keep one identity, so a card re-renders only when its own data changes (a drag reorders the
+  // cards on every step; re-rendering all of them made it stutter)
+  const pickCard = useStableCallback((e: React.PointerEvent<HTMLElement>, id: string) => drag.onPointerDown(e, id))
+  const toggleCard = useStableCallback((l: Loadout, on: boolean) => toggle(l, on))
+  const startRename = useStableCallback((l: Loadout) => { setDraft(l.name); setRenaming(l.id) })
+  const commitCard = useStableCallback((l: Loadout) => commitRename(l))
+  const cancelRename = useStableCallback(() => setRenaming(null))
 
   useEffect(() => {
     if (view !== 'home') return
@@ -234,12 +328,23 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   }
 
   const byKey = new Map(p.mods.map(m => [modKey(m.path), m]))
+  const dragFrom = drag.dragId ? loadouts.find(l => l.id === drag.dragId)?.label : undefined
   // Collection mode: every saved collection in its order (empty ones too, as drop targets), then Other for the rest
-  const ungrouped = loadouts.filter(l => !savedGroups.some(g => inGroup(l, g)))
-  const groups: [string, Loadout[]][] = groupBy === 'hero'
-    ? byHero(loadouts, l => heroOf(l, byKey, p.modDetails))
-    : [...savedGroups.map(g => [g, loadouts.filter(l => inGroup(l, g))] as [string, Loadout[]]),
-       ...(ungrouped.length ? [[OTHER, ungrouped] as [string, Loadout[]]] : [])]
+  // (kept while its last card is dragged out, so it can go back)
+  const keepOther = Boolean(drag.dragId) && !savedGroups.some(g => groupKey(g) === groupKey(dragFrom ?? ''))
+  const grouped = (list: Loadout[]): [string, Loadout[]][] => {
+    const ungrouped = list.filter(l => !savedGroups.some(g => inGroup(l, g)))
+    return [...savedGroups.map(g => [g, list.filter(l => inGroup(l, g))] as [string, Loadout[]]),
+            ...(ungrouped.length || keepOther ? [[OTHER, ungrouped] as [string, Loadout[]]] : [])]
+  }
+  // A spot's place in its collection as the loadout it goes before (or after the last one), in the saved order
+  function besideOf(id: string, s: { group: string; index: number }) {
+    const members = (grouped(loadouts).find(([g]) => groupKey(g) === groupKey(s.group))?.[1] ?? []).filter(l => l.id !== id)
+    return s.index < members.length ? { id: members[s.index].id, after: false } : members.length ? { id: members[members.length - 1].id, after: true } : undefined
+  }
+  // While a card is dragged, the order it would make if dropped now
+  const shown = drag.dragId && spot && 'group' in spot ? placed(loadouts, drag.dragId, spot.group, besideOf(drag.dragId, spot)) : loadouts
+  const groups: [string, Loadout[]][] = groupBy === 'hero' ? byHero(loadouts, l => heroOf(l, byKey, p.modDetails)) : grouped(shown)
   const newGroup = () => { setGroupBy('group'); setEditingGroup(addGroup()) }
 
   const hidden = (
@@ -262,7 +367,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   }
 
   return (
-    <div className="lo-screen" aria-label="Loadouts">
+    <div className="lo-screen" aria-label="Loadouts" style={{ '--lo-card-zoom': cardZoom } as CSSProperties}>
       {hidden}
       <header className="lo-screen-head">
         <div>
@@ -273,8 +378,10 @@ export default function LoadoutsScreen(p: LoadoutProps) {
           <button type="button" ref={newRef} className="lo-text-btn" data-tour="new-loadout" onClick={createEmpty} title="A new empty loadout, opened to add mods to it">
             <Plus size={14} /> New loadout
           </button>
-          <button type="button" className="lo-text-btn" data-tour="new-collection" onClick={newGroup} title="A new collection: a named shelf for loadouts that belong together (drag cards onto it)">
-            <FolderPlus size={14} /> New collection
+          {/* Also a drop target: a card dropped here starts a new collection, named right away */}
+          <button type="button" className={`lo-text-btn${spot && 'newCollection' in spot ? ' is-drop' : ''}`} data-tour="new-collection" onClick={newGroup}
+            data-drop-new title="A new collection: a named shelf for loadouts that belong together (drag cards onto it, or a card onto this button)">
+            <FolderPlus size={14} /> {drag.dragId ? 'Drop for a new collection' : 'New collection'}
           </button>
           {!canGenerate && <PreviewsUnavailable className="lo-text-btn" label="Generate all previews" />}
           {canGenerate && <div className="lo-gen" ref={genRef}>
@@ -295,6 +402,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
               </div>
             )}
           </div>}
+          <CardZoomControl />
           <div className="mod-state-filter lo-groupby" role="group" aria-label="Sort loadouts by">
             <button type="button" aria-pressed={groupBy === 'group'} onClick={() => setGroupBy('group')} title="Your collections">Collection</button>
             <button type="button" aria-pressed={groupBy === 'hero'} onClick={() => setGroupBy('hero')}>Hero</button>
@@ -304,14 +412,12 @@ export default function LoadoutsScreen(p: LoadoutProps) {
       {batch && (
         <div className="lo-batch" role="status">
           <MatrixLoader />
-          <span className="lo-batch-what t-shimmer">Generating {batch.name} Preview</span>
+          <span className="lo-batch-what"><span className="t-shimmer">Generating preview</span><b>{batch.name}</b></span>
           {batch.jobs > 1 && <span className="lo-batch-left">{batch.job} of {batch.jobs}</span>}
           <button type="button" className="lo-text-btn lo-batch-stop run-stop-btn" onClick={stopPreviews} disabled={batch.stopping}
             title={batch.left ? 'Stop now and clear the queue' : 'Stop now'}>
             <span className="stop-glyph" aria-hidden="true" />{batch.stopping ? 'Stopping…' : batch.left ? 'Stop all' : 'Stop'}
           </button>
-          {/* how far the batch is: loadouts done of all asked for */}
-          {batch.jobs > 1 && <span className="lo-batch-track" aria-hidden="true"><i style={{ width: `${((batch.job - 1) / batch.jobs) * 100}%` }} /></span>}
         </div>
       )}
       {!batch && lastRun && (
@@ -321,7 +427,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
         </div>
       )}
 
-      <div className="lo-body">
+      <div className="lo-body" ref={setCardsEl}>
 
         {loadouts.length === 0 && (
           <div className="lo-first-run">
@@ -338,67 +444,20 @@ export default function LoadoutsScreen(p: LoadoutProps) {
         )}
 
         {groups.map(([group, list], gi) => (
-          <section className={`lo-group ${dropGroup === group ? 'is-drop' : ''}`} key={groupKey(group)}
-            onDragOver={e => { if (groupBy === 'group' && e.dataTransfer.types.includes('text/x-loadout-card')) { e.preventDefault(); setDropGroup(group) } }}
-            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropGroup(null) }}
-            onDrop={e => { e.preventDefault(); setDropGroup(null); const id = e.dataTransfer.getData('text/x-loadout-card'); if (id) setLoadoutGroup(id, group) }}>
+          // A collection lights up while a card from another one would land in it
+          <section className={`lo-group ${drag.dragId && spot && 'group' in spot && groupKey(spot.group) === groupKey(group) && groupKey(dragFrom ?? '') !== groupKey(group) ? 'is-drop' : ''}`}
+            key={groupKey(group)} data-group={groupBy === 'group' ? group : undefined}>
             {groupBy === 'group'
               ? <GroupHead p={p} name={group} count={list.length} at={gi} total={savedGroups.length}
                   editing={editingGroup !== null && groupKey(editingGroup) === groupKey(group)} setEditing={setEditingGroup} />
-              : <h3 className="lo-group-head"><span className="lo-group-name">{group}</span><span className="lo-group-count"><Num id={`hero-${group}`} value={list.length} /></span></h3>}
+              : <h3 className="lo-group-head" data-flip={`head:${group}`}><span className="lo-group-name">{group}</span><span className="lo-group-count"><Num id={`hero-${group}`} value={list.length} /></span></h3>}
             {list.length === 0 && <p className="lo-group-empty">Empty. Drag a loadout card here, or pick this collection on a loadout's page.</p>}
             <div className="lo-grid">
-              {list.map(l => {
-                const active = isActive(l, p.mods)
-                const keys = new Set(l.on.map(displayName))
-                const present = [...keys].filter(k => byKey.has(k)).length
-                const onNow = [...keys].filter(k => byKey.get(k)?.enabled).length
-                return (
-                  <article key={l.id} data-loadout={l.id} className={`lo-card ${active ? 'is-on' : ''}`} draggable={groupBy === 'group' && renaming !== l.id}
-                    onDragStart={e => { e.dataTransfer.setData('text/x-loadout-card', l.id); e.dataTransfer.effectAllowed = 'move' }}
-                    onKeyDown={e => { if (e.key === 'F2' && !isTyping(e.target)) { e.preventDefault(); setDraft(l.name); setRenaming(l.id) } }}
-                    onMouseEnter={() => { hovered.current = l.id }} onMouseLeave={() => { if (hovered.current === l.id) hovered.current = null }}>
-                    <CardMedia p={p} l={l} onClick={() => setOpenId(l.id)} title={`Open ${l.name}`}
-                      emptyText={canGenerate ? 'No preview yet. Open it to generate one, or hover and paste an image.' : 'No picture yet. Hover and paste an image, or open it to add one.'} />
-                    <div className="lo-card-body">
-                      <div className="lo-card-title">
-                        {renaming === l.id ? (
-                          <input className="lo-rename" autoFocus value={draft} aria-label="Loadout name"
-                            onFocus={e => e.target.select()} onChange={e => setDraft(e.target.value)} onBlur={() => commitRename(l)}
-                            onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') commitRename(l); if (e.key === 'Escape') setRenaming(null) }} />
-                        ) : (
-                          <span className="lo-card-name">
-                            <h3 title={`${l.name} (double-click or F2 to rename)`} onDoubleClick={() => { setDraft(l.name); setRenaming(l.id) }}>{l.name}</h3>
-                            <button type="button" className="lo-icon lo-card-pen" title="Rename" aria-label={`Rename ${l.name}`} onClick={() => { setDraft(l.name); setRenaming(l.id) }}>
-                              <Pencil size={12} />
-                            </button>
-                          </span>
-                        )}
-                        <Switch size="sm" color="primary" checked={active} isDisabled={present === 0} disabled={busy !== null || present === 0}
-                          title={present === 0 ? 'No installed mods' : active ? `Turn ${l.name} off` : `Turn ${l.name} on`}
-                          aria-label={present === 0 ? 'No installed mods' : active ? `Turn ${l.name} off` : `Turn ${l.name} on`}
-                          onChange={(checked: boolean) => toggle(l, checked)} />
-                      </div>
-                      <p className="lo-card-meta">
-                        {busy === l.id ? 'Switching mods…' : p.mods.length === 0 ? 'Loading mods…' : <>
-                          {groupBy === 'hero' && <>{l.label}<span className="lo-sep">·</span></>}
-                          {`${onNow}/${l.on.length}`}
-                          <OnDot on={onNow} of={present} />
-                          {present < l.on.length && <><span className="lo-sep">·</span>{l.on.length - present} not installed</>}
-                        </>}
-                      </p>
-                      <div className="lo-card-actions">
-                        <button type="button" className="lo-expand" onClick={() => setOpenId(l.id)}>Edit mods</button>
-                        <span className="lo-card-tools">
-                          <button type="button" className="lo-icon" title={`Delete ${l.name}`} aria-label={`Delete ${l.name}`} onClick={() => deleteWithUndo(p, l)}>
-                            <Trash2 size={14} />
-                          </button>
-                        </span>
-                      </div>
-                    </div>
-                  </article>
-                )
-              })}
+              {list.map(l => (
+                <LoadoutCard key={l.id} p={p} l={l} groupBy={groupBy} canGenerate={canGenerate} busy={busy === l.id} anyBusy={busy !== null}
+                  renaming={renaming === l.id} draft={renaming === l.id ? draft : ''} placeholder={drag.dragId === l.id} hovered={hovered}
+                  onPick={pickCard} onToggle={toggleCard} onStartRename={startRename} onDraft={setDraft} onCommit={commitCard} onCancelRename={cancelRename} />
+              ))}
             </div>
           </section>
         ))}
@@ -406,7 +465,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
         {loadouts.length > 0 && (
           <div className="lo-grid">
             {/* A real card's parts, unseen, give it a real card's size at every width; the plus and words sit on top */}
-            <div className="lo-card lo-card-new">
+            <div className="lo-card lo-card-new" data-flip="new">
               <div className="lo-card-ghost" aria-hidden="true" ref={el => el?.setAttribute('inert', '')}>
                 <div className="lo-card-image" />
                 <div className="lo-card-body">

@@ -8,7 +8,7 @@ import { open as pick } from '@tauri-apps/plugin-dialog'
 import { motion } from 'framer-motion'
 import { Check, Upload } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
-import { BlenderTrust, DoctorProblems, KitProgressBar } from './SetupPanel'
+import { BlenderTrust, DoctorProblems, InstallStatus, KitProgressBar } from './SetupPanel'
 import { isKitZip, usePreviewKit } from './previewKit'
 import { OFF_EXT } from './offFiles'
 import Wordmark from './Wordmark'
@@ -154,7 +154,7 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
           </Step>
 
           <Step n={4} done={kitReady && kit.doctor?.ok !== false} optional title="Mod previews"
-            action={!kitReady && <button type="button" className="lo-text-btn" disabled={Boolean(kit.busy) || (kit.latest === null && !kit.kit?.version)} onClick={() => kit.setUp()}
+            action={kit.progress?.stage === 'unpack' || kit.progress?.stage === 'blender' ? <InstallStatus p={kit.progress} /> : !kitReady && <button type="button" className="lo-text-btn" disabled={Boolean(kit.busy) || (kit.latest === null && !kit.kit?.version)} onClick={() => kit.setUp()}
               title={kit.latest === null ? 'No kit published yet: drop a kit zip on the window' : 'Downloads the preview kit and installs Blender if it is missing (Windows asks for admin rights once)'}>
               {kit.busy === 'setup' ? 'Setting up…' : 'Set up previews'}</button>}>
             <p>{kitReady ? 'Ready. A loadout page renders its preview.' : `Renders of your mods and loadouts, and clips of animation mods. Downloads the preview kit${kit.latest?.size ? ` (${Math.round(kit.latest.size / 1048576)} MB)` : ''} and uses Blender (installed for you if missing).`}</p>
