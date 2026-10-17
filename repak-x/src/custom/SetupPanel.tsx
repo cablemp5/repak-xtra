@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
-import { ChevronRight, Copy, ExternalLink, RefreshCw, ShieldCheck, Wrench } from 'lucide-react'
+import { Check, ChevronRight, Copy, ExternalLink, MonitorCheck, ShieldCheck, Wrench } from 'lucide-react'
 import { open as pickFile } from '@tauri-apps/plugin-dialog'
 import { type Doctor, type KitProgress, isNewerKit, progressShare, progressText, usePreviewKit } from './previewKit'
 import Checkbox from '../components/ui/Checkbox'
 import CustomDropdown from '../components/CustomDropdown'
 import type { useAlert } from '../components/AlertHandler'
 import { savedItem } from './storageCarryOver'
+import { MatrixLoader } from './motion'
 
 type Alert = ReturnType<typeof useAlert>
 type FileCheck = { name: string; place: string; size: number; sha256: string; found: 'missing' | 'same' | 'other' }
@@ -70,15 +71,27 @@ function Changelog({ g, title, onClose, product = 'Project Galacta' }: {
 
 const BLENDER = 'https://www.blender.org/download/'
 
-/** Download progress: a thin bar and "38 MB of 108 MB", or "Unpacking…". */
+/** Install progress: the dot loader and what is happening ("38 MB of 108 MB", "Unpacking…", winget's step while
+ *  Blender installs), over a thin bar. */
 export function KitProgressBar({ p }: { p: KitProgress | null }) {
   if (!p) return null
   const share = progressShare(p)
   return (
     <div className="su-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={share === null ? undefined : Math.round(share * 100)}>
+      <span className="su-progress-text"><MatrixLoader size={12} />{progressText(p)}</span>
       <span className="su-progress-track"><i style={share === null ? undefined : { width: `${share * 100}%` }} className={share === null ? 'is-indeterminate' : ''} /></span>
-      <span className="su-progress-text">{progressText(p)}</span>
     </div>
+  )
+}
+
+/** Why Blender is safe to install, where it comes from, and its real download page. */
+export function BlenderTrust() {
+  return (
+    <p className="su-trust">
+      <ShieldCheck size={13} aria-hidden="true" />
+      <span>Blender is free, open-source 3D software from the Blender Foundation. repakxtra installs the official release
+        through winget, Windows' own package manager, and Windows asks for admin rights once. <a href={BLENDER} onClick={e => { e.preventDefault(); open(BLENDER) }}>blender.org/download</a></span>
+    </p>
   )
 }
 
@@ -88,7 +101,13 @@ export function DoctorProblems({ d }: { d: Doctor | null }) {
   return <ul className="su-problems">{d.problems.map(x => <li key={x}>{x}</li>)}</ul>
 }
 
-/** The preview kit: what this PC needs to render mod previews (xtra_kit.rs, shared logic in previewKit.tsx). */
+/** A part's state beside its name: a green check when it is there, an empty ring when not. */
+const PartMark = ({ ok }: { ok: boolean }) => (
+  <span className={`su-part-mark${ok ? ' is-ok' : ''}`} role="img" aria-label={ok ? 'Installed' : 'Not installed'}>{ok && <Check size={14} strokeWidth={2.5} />}</span>
+)
+
+/** The preview kit: what this PC needs to render mod previews (xtra_kit.rs, shared logic in previewKit.tsx). Its two
+ *  parts, the kit and Blender, are one row each with their state and links; one main button sets up what is missing. */
 function PreviewKitCard({ alert }: { alert: Alert }) {
   const k = usePreviewKit(alert)
   const { kit, latest, busy, update } = k
@@ -102,44 +121,71 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
     const f = await pickFile({ title: 'blender.exe', filters: [{ name: 'Blender', extensions: ['exe'] }] }).catch(() => null)
     if (typeof f === 'string') k.pickBlender(f)
   }
-  const ready = Boolean((kit?.version || kit?.dev) && kit?.blender)
-  const chip = !kit ? 'Checking…' : kit.version ? (update ? 'Update available' : `Kit v${kit.version}`) : kit.dev ? 'Built in' : 'Not installed'
+  const ready = Boolean(kit?.version && kit?.blender)
+  const chip = !kit ? 'Checking…' : ready ? (update ? 'Update available' : 'Ready') : 'Not set up'
   const missing = kit && !ready
+  const kitOk = Boolean(kit?.version)
+  const from = kit?.source === 'github' ? 'Downloaded from GitHub' : kit?.source === 'file' ? 'Loaded from a file' : null
+  const size = latest?.size ? Math.round(latest.size / 1048576) : null
+  const blenderName = kit?.blender?.replace(/^.*[\\/](Blender[^\\/]*)[\\/]blender\.exe$/i, '$1')
+  const installingBlender = busy === 'blender' || k.progress?.stage === 'blender'
   return (
-    <section className="su-card">
+    <section className="su-card su-previews">
       <div className="su-card-head">
         <div>
           <h3>Mod previews</h3>
-          <p>Renders each mod and loadout. Needs the preview kit (about {latest?.size ? Math.round(latest.size / 1048576) : 110} MB) and Blender (free).</p>
+          <p>Renders of each mod and loadout, made on this PC. Needs two free parts: the preview kit and Blender.</p>
         </div>
-        <span className={`su-chip ${update ? 'is-update' : kit?.version || kit?.dev ? 'is-installed' : 'is-missing'}`}
-          title={kit?.dev && !kit.version ? 'This PC has the generator built in, so it needs no kit. Installing one uses the kit instead.' : undefined}>{chip}</span>
+        <span className={`su-chip ${update ? 'is-update' : ready ? 'is-installed' : 'is-missing'}`}>{chip}</span>
       </div>
+      <ul className="su-parts">
+        <li className="su-part">
+          <PartMark ok={kitOk} />
+          <div className="su-part-text">
+            <b>Preview kit</b>
+            <span>
+              {!kit ? 'Checking…' : kit.version ? [`v${kit.version}`, from].filter(Boolean).join(' · ') : `Not installed${size ? ` · ${size} MB on GitHub` : ''}`}
+              {latest && <> · <button type="button" className="su-link" onClick={() => setNotes("What's new")}>{update ? `v${latest.version} on GitHub` : `What's new in v${latest.version}`}</button></>}
+              {/* After Check for updates: what GitHub has, here rather than in a toast (Minimal toasts would hide that) */}
+              {k.checked && busy !== 'check' && (latest === null ? ' · No kit on GitHub yet' : kit?.version && latest && !update ? <> · <span className="su-ok">Up to date</span></> : null)}
+            </span>
+          </div>
+          <span className="su-part-links">
+            <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => k.check()} title="Ask GitHub for the newest preview kit">
+              {busy === 'check' ? 'Checking…' : 'Check for updates'}
+            </button>
+            <button type="button" className="su-link" disabled={Boolean(busy)} onClick={fromFile} title="Install a preview kit zip (or drop one on the window)">From file…</button>
+            {kit?.version && <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => k.remove()}>Remove</button>}
+          </span>
+        </li>
+        <li className="su-part">
+          <PartMark ok={Boolean(kit?.blender)} />
+          <div className="su-part-text">
+            <b>Blender</b>
+            <span>{kit?.blender ? blenderName : 'Not installed'}</span>
+          </div>
+          <span className="su-part-links">
+            {kit && !kit.blender && <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => k.installBlender()} title="Installs Blender with winget">Install</button>}
+            <button type="button" className="su-link" disabled={Boolean(busy)} onClick={pickBlender}>{kit?.blender ? 'Change' : 'Pick blender.exe'}</button>
+          </span>
+        </li>
+      </ul>
+      {(kit && !kit.blender || installingBlender) && <BlenderTrust />}
       <KitProgressBar p={k.progress} />
       <DoctorProblems d={k.doctor} />
       <div className="su-row">
-      <p className="su-meta">
-        {kit?.blender
-          ? <>{kit.blender.replace(/^.*[\\/](Blender[^\\/]*)[\\/]blender\.exe$/i, '$1')} · <a onClick={pickBlender}>Change</a></>
-          : <>No Blender · <a onClick={() => open(BLENDER)}>Get it</a> · <a onClick={pickBlender}>Pick blender.exe</a></>}
-        {latest && <> · Kit v{latest.version} · <a onClick={() => setNotes("What's new")}>What's new</a></>}
-        {k.doctor?.ok && !busy && <> · <span className="su-ok">Ready</span></>}
-      </p>
-      <div className="su-actions">
-        {(missing || update) && (
-          <button type="button" className="btn-primary su-main" disabled={Boolean(busy) || (!kit?.version && !kit?.dev && latest === null)} onClick={() => k.setUp()}
-            title={update ? 'Downloads the newest kit from GitHub' : 'Installs what is missing: the kit (from GitHub) and Blender (with winget), then checks this PC'}>
-            {busy === 'setup' ? (k.progress ? 'Installing kit…' : 'Setting up…') : update ? `Update to v${latest!.version}` : 'Set up previews'}
+        <p className="su-meta">{k.doctor?.ok && !busy && <span className="su-ok">This PC can make previews</span>}</p>
+        <div className="su-actions">
+          {(missing || update) && (
+            <button type="button" className="btn-primary su-main" disabled={Boolean(busy) || (!kit?.version && latest === null)} onClick={() => k.setUp()}
+              title={update ? 'Downloads the newest kit from GitHub' : 'Installs what is missing: the kit (from GitHub) and Blender (with winget), then checks this PC'}>
+              {busy === 'setup' ? (installingBlender ? 'Installing Blender…' : k.progress ? 'Installing kit…' : 'Setting up…') : busy === 'blender' ? 'Installing Blender…' : update ? `Update to v${latest!.version}` : 'Set up previews'}
+            </button>
+          )}
+          <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={() => k.checkPc()} title="Check that this PC can make previews">
+            <MonitorCheck size={14} /> {busy === 'doctor' ? 'Checking…' : 'Check this PC'}
           </button>
-        )}
-        {kit && !kit.blender && <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={() => k.installBlender()}
-          title="Installs Blender with winget (Windows asks for admin rights once)">{busy === 'blender' ? 'Installing Blender…' : 'Install Blender'}</button>}
-        <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={fromFile} title="Install a preview kit zip (or drop one on the window)">From file…</button>
-        <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={() => k.checkPc()} title="Check that this PC can make previews">
-          <RefreshCw size={14} className={busy === 'doctor' ? 'su-spin' : ''} /> {busy === 'doctor' ? 'Checking…' : 'Check'}
-        </button>
-        {kit?.version && <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={() => k.remove()}>Remove</button>}
-      </div>
+        </div>
       </div>
       {notes && latest && <Changelog product="Preview kit" g={{ latest: `v${latest.version}`, published: latest.published, notes: latest.notes, url: latest.url }}
         title={notes} onClose={() => setNotes(null)} />}
@@ -154,7 +200,7 @@ const withLastCheck = (g: Galacta): Galacta => lastCheck && !g.latest && lastChe
   ? { ...g, latest: lastCheck.latest, published: lastCheck.published, notes: lastCheck.notes, url: lastCheck.url, up_to_date: lastCheck.up_to_date }
   : g
 
-export function SetupPanel({ alert, onClose }: { alert: Alert; onClose: () => void }) {
+export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: () => void; focus?: string | null }) {
   const [bypass, setBypass] = useState<Bypass | null>(null)
   const [galacta, setGalacta] = useState<Galacta | null>(lastCheck)
   const [folders, setFolders] = useState<string[]>([])
@@ -165,6 +211,8 @@ export function SetupPanel({ alert, onClose }: { alert: Alert; onClose: () => vo
   const [safety, setSafety] = useState(false)
   const [notes, setNotes] = useState<string | null>(null)
 
+  // Opened from a grayed-out Generate button: straight to the Mod previews card (its top, so it can still grow as it loads)
+  useEffect(() => { if (focus === 'previews') document.querySelector('.su-previews')?.scrollIntoView({ block: 'start' }) }, [focus])
   useEffect(() => {
     invoke<Bypass>('setup_bypass_status').then(setBypass).catch(e => alert.warning('Setup', String(e)))
     invoke<Galacta>('setup_galacta_status', { online: false }).then(g => setGalacta(withLastCheck(g))).catch(() => {})
@@ -283,24 +331,30 @@ export function SetupPanel({ alert, onClose }: { alert: Alert; onClose: () => vo
             <div className="su-card-head">
               <div>
                 <h3>Project Galacta</h3>
-                <p>Loads Galacta skin mods. By <a onClick={() => open(GALACTA)}>0xSaturno</a>.</p>
+                <p>Loads more types of mods and lets you toggle mods in game. By <a onClick={() => open(GALACTA)}>0xSaturno</a>.</p>
               </div>
               <span className={`su-chip ${g?.up_to_date === false ? 'is-update' : g?.installed ? 'is-installed' : 'is-missing'}`}>{g ? galactaState : 'Checking…'}</span>
             </div>
             <div className="su-row">
-            <p className="su-meta">
-              {g?.installed ? <>In <code>{where}</code>{g.disabled ? ' (off in the Library)' : ''}</> : 'Not installed'}
-              {g?.latest && <> · Latest {g.latest} · <a onClick={() => setNotes("What's new")}>What's new</a></>}
-            </p>
+            {/* Where it is and what the newest release is, one labelled line each */}
+            <dl className="su-dl">
+              <dt>Location</dt>
+              <dd>{!g ? 'Checking…' : g.installed ? <><code>{where}</code>{g.disabled ? ', off in the Library' : ''}</> : 'Not installed'}</dd>
+              <dt>Latest</dt>
+              <dd>
+                {g?.latest
+                  ? <>{g.latest}{g.published ? `, ${date(g.published)}` : ''} · <button type="button" className="su-link" onClick={() => setNotes("What's new")}>What's new</button></>
+                  : 'Not checked yet'}
+                {/* the same words and look as the preview kit's update check */}
+                {' · '}<button type="button" className="su-link" disabled={Boolean(busy)} onClick={check}>{busy === 'check' ? 'Checking…' : 'Check for updates'}</button>
+              </dd>
+            </dl>
             <div className="su-actions">
               {(!g?.installed || g.up_to_date === false) && (
                 <button type="button" className="btn-primary su-main" disabled={Boolean(busy)} onClick={install}>
                   {busy === 'install-galacta' ? 'Installing…' : g?.installed ? `Update${g.latest ? ` to ${g.latest}` : ''}` : 'Install'}
                 </button>
               )}
-              <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={check}>
-                <RefreshCw size={14} className={busy === 'check' ? 'su-spin' : ''} /> {busy === 'check' ? 'Checking…' : 'Check'}
-              </button>
             </div>
             </div>
             <div className="su-options">
@@ -331,7 +385,13 @@ let startupChecked = false
 /** Header button. Shows a dot when the bypass is missing or Galacta has an update, and checks once at start. */
 export default function SetupButton({ alert }: { alert: Alert }) {
   const [open, setOpen] = useState(false)
+  const [focus, setFocus] = useState<string | null>(null)
   const [attention, setAttention] = useState(false)
+  useEffect(() => { // openPreviewSetup (previews.tsx): a Generate button on a PC without the preview kit
+    const show = (e: Event) => { setFocus((e as CustomEvent<string>).detail ?? null); setOpen(true) }
+    window.addEventListener('repakxtra-open-setup', show)
+    return () => window.removeEventListener('repakxtra-open-setup', show)
+  }, [])
 
   const recheck = () => invoke<Bypass>('setup_bypass_status').then(b => setAttention(b.state !== 'installed')).catch(() => {})
   useEffect(() => {   // the Sigeon setup installs the bypass too
@@ -367,7 +427,7 @@ export default function SetupButton({ alert }: { alert: Alert }) {
       <button type="button" className="btn-settings su-btn" data-tour="setup-btn" onClick={() => setOpen(true)} title="What the game needs to load mods">
         <Wrench size={16} /> Setup {attention && <i className="su-dot" aria-label="Needs attention" />}
       </button>
-      {open && <SetupPanel alert={alert} onClose={() => { setOpen(false); recheck() }} />}
+      {open && <SetupPanel alert={alert} focus={focus} onClose={() => { setOpen(false); setFocus(null); recheck() }} />}
     </>
   )
 }

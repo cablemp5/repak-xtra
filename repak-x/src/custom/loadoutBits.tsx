@@ -1,13 +1,13 @@
 // repakxtra: small pieces shared by Home (LoadoutsScreen.tsx), the loadout page and the New strip.
-import { useState } from 'react'
-import { ChevronLeft, ChevronRight, ImagePlus } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { ChevronLeft, ChevronRight, ImagePlus, Pencil, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import type { LoadoutProps } from './Loadouts'
 import { useMediaUrl } from './loadoutMedia'
 import { type Loadout, type Mod, displayName, flipMods, modKey } from './loadoutStore'
 import { ModName } from './modName'
 import { MatrixLoader, revealOnLoad } from './motion'
-import { hasPreview, noPreviewPossible, previewSetKey, useCovers, usePreviewOutcome, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
+import { formKeys, hasPreview, noPreviewPossible, previewSetKey, useCovers, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
 
 /** The home screen's badge color class for a mod type (theme.css *-badge sets --badge-dot). */
 export const typeClass = (category?: string | null) => `${(category || 'unknown').toLowerCase().replace(/\s+/g, '-')}-badge`
@@ -20,6 +20,7 @@ const rank = (c?: string | null) => { const i = TYPE_ORDER.indexOf(c ?? ''); ret
  *  Material previews together on one slide and its VFX swatches on another. The combined render hides only the mods it
  *  shows that the loadout still holds. It reads "Older render" when it was made for other installed mods than the
  *  loadout has now (or before that was recorded). */
+type Slide = { key: string; label: string; older?: boolean; keys?: string[] }
 function usePreviewSlides(p: LoadoutProps, l: Loadout) {
   usePreviewVersion()
   const set = previewSetKey(l.id)
@@ -32,7 +33,7 @@ function usePreviewSlides(p: LoadoutProps, l: Loadout) {
     .sort((a, b) => rank(categoryOf(a)) - rank(categoryOf(b)))
   // Material and VFX previews each share one slide, however many mods of that type the loadout has
   const together = (k: string) => { const c = categoryOf(k); return c && SHARED.includes(c) ? keys.filter(x => categoryOf(x) === c) : [k] }
-  const slides: { key: string; label: string; older?: boolean; keys?: string[] }[] = keys.flatMap(k => {
+  const slides: Slide[] = keys.flatMap(k => {
     const g = together(k)
     if (g.length < 2) return [{ key: k, label: categoryOf(k) ?? 'Mod' }]
     return k === g[0] ? [{ key: k, keys: g, label: `${g.length} ${categoryOf(k)}` }] : []
@@ -43,12 +44,19 @@ function usePreviewSlides(p: LoadoutProps, l: Loadout) {
     const kinds = [...new Set(covered.map(categoryOf).filter((c): c is string => Boolean(c)))].sort((a, b) => rank(a) - rank(b))
     slides.unshift({ key: set, label: older ? 'Older render' : kinds.join(' + ') || 'Character', older }) // e.g. "Mesh + Texture + Material"
   }
-  return slides
+  // A hero with forms (Magik and Darkchylde, Hulk's three): each other form's image follows its first; a shared slide
+  // (several Material mods) gets one more shared slide with their other forms
+  return slides.flatMap((s): Slide[] => {
+    if (!s.keys) return [s, ...formKeys(s.key).map((k, i) => ({ key: k, label: `${s.label} · form ${i + 2}`, older: s.older }))]
+    const more = s.keys.flatMap(formKeys)
+    return more.length ? [s, { key: more[0], keys: more, label: `${s.label} · other forms` }] : [s]
+  })
 }
 
-/** The loadout's image: its own image or video, then its generated previews, paged with arrows. */
-export function CardMedia({ p, l, className = '', title, onClick, emptyText = 'Click to add an image, or paste one' }: {
-  p: LoadoutProps; l: Loadout; className?: string; title: string; onClick: () => void; emptyText?: string
+/** The loadout's image: its own image or video, then its generated previews, paged with arrows. Hovering shows the
+ *  arrows and what the slide is ("Mesh + Texture · 1/4"). With onRemoveImage, its own image shows an X that removes it. */
+export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage, emptyText = 'Click to add an image, or paste one' }: {
+  p: LoadoutProps; l: Loadout; className?: string; title: string; onClick: () => void; onRemoveImage?: () => void; emptyText?: string
 }) {
   const url = useMediaUrl(l.id, l.mediaRev)
   const own = url ?? l.image
@@ -61,7 +69,6 @@ export function CardMedia({ p, l, className = '', title, onClick, emptyText = 'C
   const src = slide?.key ? generated : own
   const [warm] = useState(src) // already cached when the card mounted: shown at once, without the blur-in
   const state = usePreviewState(previewSetKey(l.id))
-  const setNote = usePreviewOutcome(previewSetKey(l.id)) // the last loadout render failed (its image stays) or was refused
   const impossible = !src && !state && noPreviewPossible(l)
   return (
     <div className={`lo-media ${className}${paged ? ' is-paged' : ''}${state ? ` is-${state.kind}` : ''}`}>
@@ -99,7 +106,11 @@ export function CardMedia({ p, l, className = '', title, onClick, emptyText = 'C
         </>
       )}
       {slides.length === 1 && slide.older && <span className="lo-media-label">{slide.label}</span>}
-      {!state && setNote && <span className="lo-media-note" title={setNote}>{setNote}</span>}
+      {onRemoveImage && own && slide && !slide.key && (
+        <button type="button" className="lo-media-remove" title="Remove this image" aria-label="Remove this image" onClick={onRemoveImage}>
+          <X size={14} />
+        </button>
+      )}
     </div>
   )
 }
@@ -123,21 +134,38 @@ export async function toggleMod(p: LoadoutProps, mod: Mod) {
     p.alert.warning('Game Running', 'Cannot toggle mods while game is running.')
     return
   }
-  if ((await flipMods([mod])).length) p.alert.warning('Not switched', `${displayName(mod.path.split(/[/\\]/).pop() || mod.path)} could not be switched.`)
+  const failed = await flipMods([mod])
+  if (failed.length) p.alert.warning('Not switched', failed.reason ?? `${displayName(mod.path.split(/[/\\]/).pop() || mod.path)} could not be switched.`)
   await p.reload()
 }
 
-/** One mod row: name (slug + tags + version), type, then the optional on/off switch (on the right, like the Library) and
- *  any trailing actions. */
-export function ModRow({ p, k, mod, onToggle, children }: {
-  p: LoadoutProps; k: string; mod?: Mod; onToggle?: boolean; children?: React.ReactNode
+/** One mod row: name, type, then the optional on/off switch (on the right, like the Library) and any trailing actions.
+ *  With onRename, the pencil (or a double-click on the name) renames the mod's files. */
+export function ModRow({ p, k, mod, onToggle, onRename, children }: {
+  p: LoadoutProps; k: string; mod?: Mod; onToggle?: boolean; onRename?: (mod: Mod, name: string) => void; children?: React.ReactNode
 }) {
   const category = mod && p.modDetails?.[mod.path]?.category
+  const [draft, setDraft] = useState<string | null>(null)
+  const cancelled = useRef(false) // Esc: the blur that follows must not rename
+  const canRename = Boolean(mod && onRename)
+  const begin = () => { cancelled.current = false; setDraft(k) }
+  const finish = () => { if (!cancelled.current && draft !== null && mod && onRename) onRename(mod, draft); setDraft(null) }
   return (
     <li className={`mod-row ${mod ? (mod.enabled ? 'is-on' : '') : 'is-missing'}`}
-      title={mod ? `${category ?? 'Unknown type'} · ${mod.enabled ? 'on now' : 'off now'}` : 'Not installed anymore'}>
-      <span className="mod-row-name"><ModName name={k} /></span>
-      {!onToggle && mod?.enabled && <span className="mod-row-on" title="This mod is on now">on</span>}
+      title={draft !== null ? undefined : mod ? `${category ?? 'Unknown type'} · ${mod.enabled ? 'on now' : 'off now'}` : 'Not installed anymore'}>
+      {draft !== null
+        ? <input className="mod-row-rename" autoFocus value={draft} aria-label={`New name for ${k}`} onFocus={e => e.target.select()}
+            onChange={e => setDraft(e.target.value)} onBlur={finish}
+            onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { cancelled.current = true; e.currentTarget.blur() } }} />
+        : <span className="mod-row-main">
+            <span className="mod-row-name" onDoubleClick={canRename ? begin : undefined}><ModName name={k} /></span>
+            {canRename && (
+              <button type="button" className="lo-icon row-rename" title={`Rename ${k} (renames its files)`} aria-label={`Rename ${k}`} onClick={begin}>
+                <Pencil size={13} />
+              </button>
+            )}
+          </span>}
+      {!onToggle && mod?.enabled && <span className="mod-type-badge category-badge on-badge" title="This mod is on now">On</span>}
       <span className={`mod-type-badge category-badge ${typeClass(category)}`}>{category ?? 'Unknown'}</span>
       {onToggle && (mod
         ? <Switch size="sm" color="primary" checked={Boolean(mod.enabled)} title={mod.enabled ? `Turn ${k} off` : `Turn ${k} on`}

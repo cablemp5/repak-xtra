@@ -1,5 +1,5 @@
 //! repakxtra: generated mod previews. The generator (`mod_previews.py`, with Cue4Export and Blender) comes from the
-//! preview kit (xtra_kit.rs) or, on the developer's PC, the modding tools, and writes one image per mod to
+//! preview kit (xtra_kit.rs), on every PC, and writes one image per mod to
 //! %APPDATA%\Repak-X\previews\<mod key>.png (an animated <mod key>.webp for animation mods). This module serves those
 //! files and runs the generator for the mods you pick (details panel button, the selection bar's Previews button, a
 //! loadout's Generate previews).
@@ -48,25 +48,11 @@ fn previews_dir() -> PathBuf {
     crate::app_dir().join("previews")
 }
 
-/// The developer's modding folder (the generator, its python and its tools live there).
-fn modding_dir() -> PathBuf {
-    dirs::home_dir().unwrap_or_default().join(r"Programming\Modding\Claude Assisted Mods")
-}
-
-/// The developer's own generator: the modding folder's python and script (no kit needed on that PC).
-pub fn dev_generator() -> Option<(PathBuf, PathBuf, PathBuf)> {
-    let root = modding_dir();
-    let python = root.join(r".venv\Scripts\python.exe");
-    let script = root.join(r"tools\previews\mod_previews.py");
-    (python.exists() && script.exists()).then_some((root, python, script))
-}
-
-/// (folder to run in, python, script, kit?): an installed preview kit first, else the developer's own generator.
-fn generator() -> Option<(PathBuf, PathBuf, PathBuf, bool)> {
-    if let Some(kit) = crate::xtra_kit::installed_kit() {
-        return Some((kit.clone(), kit.join(r"python\python.exe"), kit.join(r"previews\mod_previews.py"), true));
-    }
-    dev_generator().map(|(root, python, script)| (root, python, script, false))
+/// (kit folder to run in, python, script): the installed preview kit. Without one a PC makes no previews; the
+/// developer's PC too, so Setup always says where its kit came from (a file or GitHub).
+fn generator() -> Option<(PathBuf, PathBuf, PathBuf)> {
+    let kit = crate::xtra_kit::installed_kit()?;
+    Some((kit.clone(), kit.join(r"python\python.exe"), kit.join(r"previews\mod_previews.py")))
 }
 
 
@@ -189,33 +175,47 @@ pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: O
     if let Some(s) = &set {
         cmd.arg("--set").arg(s);
     }
-    // Errors go to previews\generator.log, which the app names when a render fails; UTF-8 keeps a mod name like
-    // "Pokémon" from breaking the result lines
-    let log = std::fs::create_dir_all(previews_dir())
-        .and_then(|_| std::fs::File::create(previews_dir().join("generator.log")))
-        .map(Stdio::from)
-        .unwrap_or_else(|_| Stdio::null());
-    cmd.stdout(Stdio::piped()).stderr(log);
+    // The generator's own notes and errors go to the app's Logs (scope Previews) and to previews\generator.log; UTF-8
+    // keeps a mod name like "Pokémon" from breaking the result lines
+    let mut log = std::fs::create_dir_all(previews_dir()).and_then(|_| std::fs::File::create(previews_dir().join("generator.log"))).ok();
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
     std::thread::spawn(move || {
         let hold = hold; // the run owns the kit until its generator exits
         let mut ok = false;
-        if let Ok(mut child) = cmd.spawn() {
-            *RUNNING.lock().unwrap() = Some(child.id());
-            if let Some(out) = child.stdout.take() {
-                for line in BufReader::new(out).lines().map_while(Result::ok) {
-                    match parse_line(&line) {
-                        Some((event, Some(key))) => {
-                            let _ = app.emit(event, key);
+        match cmd.spawn() {
+            Err(e) => {
+                // Python blocked or missing: the failure toast points at Logs, so the reason must be there
+                let text = format!("The preview generator did not start: {e}");
+                if let Some(f) = log.as_mut() {
+                    use std::io::Write;
+                    let _ = writeln!(f, "{text}");
+                }
+                crate::ui_log::error("Previews", text);
+            }
+            Ok(mut child) => {
+                *RUNNING.lock().unwrap() = Some(child.id());
+                // Drained on its own thread (both pipes are read at once); joined below so every line is in the Logs and
+                // generator.log is closed before "done" lets the next run truncate it
+                let logger = child.stderr.take().map(|err| std::thread::spawn(move || log_generator(err, log)));
+                if let Some(out) = child.stdout.take() {
+                    for line in BufReader::new(out).lines().map_while(Result::ok) {
+                        match parse_line(&line) {
+                            Some((event, Some(key))) => {
+                                let _ = app.emit(event, key);
+                            }
+                            Some((event, None)) => {
+                                let _ = app.emit(event, ());
+                            }
+                            None => {}
                         }
-                        Some((event, None)) => {
-                            let _ = app.emit(event, ());
-                        }
-                        None => {}
                     }
                 }
+                ok = child.wait().map(|s| s.success()).unwrap_or(false);
+                if let Some(l) = logger {
+                    let _ = l.join();
+                }
+                *RUNNING.lock().unwrap() = None;
             }
-            ok = child.wait().map(|s| s.success()).unwrap_or(false);
-            *RUNNING.lock().unwrap() = None;
         }
         drop(hold); // free before "done": the app starts the next queued run on it
         let _ = app.emit("mod-previews-done", ok);
@@ -223,30 +223,66 @@ pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: O
     Ok(true)
 }
 
-/// The generator's command so far (python and its script, run in its folder, with the kit's variables): the kit, or the
-/// developer's own generator. The error says what to install.
+/// Copies the generator's stderr to generator.log and the app's Logs: lines that report a failure (an error, a Python
+/// traceback) as errors, the rest (what it rendered, optional assets not in the game) as notes.
+fn log_generator(err: std::process::ChildStderr, mut file: Option<std::fs::File>) {
+    use std::io::Write;
+    let mut traceback = false;
+    for line in BufReader::new(err).lines().map_while(Result::ok) {
+        if let Some(f) = file.as_mut() {
+            let _ = writeln!(f, "{line}");
+        }
+        // A tool's output tails come wrapped as "# stdout: ..." / "# stderr: ..." (mod_previews.py run)
+        let text = line.trim_start_matches('#').trim();
+        let text = text.strip_prefix("stderr:").or_else(|| text.strip_prefix("stdout:")).unwrap_or(text).trim();
+        if text.is_empty() {
+            continue;
+        }
+        // A Python traceback: its header and indented frames go to the log's details (debug), and the one unindented line
+        // naming the exception, which ends it, is the error. A failed run showed 27 red lines for one error
+        let starts = text.starts_with("Traceback");
+        let in_traceback = traceback || starts;
+        traceback = in_traceback && (starts || line.starts_with(char::is_whitespace));
+        if traceback {
+            crate::ui_log::debug("Previews", text);
+        } else if in_traceback || generator_error(text) {
+            crate::ui_log::error("Previews", text);
+        } else {
+            crate::ui_log::info("Previews", text);
+        }
+    }
+}
+
+/// A generator line that reports a failure ("<key>: error: ...", "spec: export failed: ..."), not a note: a count like
+/// "0 failed" stays a note.
+fn generator_error(text: &str) -> bool {
+    let t = text.to_lowercase();
+    let exit = t.find(" exit ").map(|i| &t[i + 6..]).is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_digit() && c != '0'));
+    t.contains(": error") || t.contains("export failed") || t.starts_with("error") || t.contains("exception") || exit
+}
+
+/// The generator's command so far (the kit's python and script, run in its folder, with the kit's variables). The error
+/// says what to install.
 fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Result<Command, String> {
-    let Some((root, python, script, kit)) = generator() else {
+    let Some((root, python, script)) = generator() else {
         return Err("Previews need the preview kit: install it in Setup.".into());
     };
-    if need_blender && kit && crate::xtra_kit::blender().is_none() {
+    if need_blender && crate::xtra_kit::blender().is_none() {
         return Err("Previews need Blender: install it in Setup (or from blender.org), or pick blender.exe there.".into());
     }
     let mut cmd = Command::new(&python);
     cmd.arg(&script).current_dir(&root).env("PYTHONUTF8", "1");
-    if kit {
-        // The kit's contract (tools\previews\build_kit.py): where the kit is, the game's Paks folder, a writable work
-        // folder for exports, caches and the lock, and Blender
-        cmd.env("REPAKXTRA_KIT", &root).env("REPAKXTRA_WORK", previews_dir().join("work"));
-        if let Some(p) = &paks {
-            cmd.env("REPAKXTRA_PAKS", p);
-        }
-        if let Some(b) = crate::xtra_kit::blender() {
-            cmd.env("REPAKXTRA_BLENDER", b);
-        }
-        // The game's key comes from the app (the same one it installs mods with), so the kit carries none
-        cmd.env("REPAKXTRA_AES", format!("0x{}", crate::install_mod::AES_KEY_HEX.trim_start_matches("0x")));
+    // The kit's contract (tools\previews\build_kit.py): where the kit is, the game's Paks folder, a writable work folder
+    // for exports, caches and the lock, and Blender
+    cmd.env("REPAKXTRA_KIT", &root).env("REPAKXTRA_WORK", previews_dir().join("work"));
+    if let Some(p) = &paks {
+        cmd.env("REPAKXTRA_PAKS", p);
     }
+    if let Some(b) = crate::xtra_kit::blender() {
+        cmd.env("REPAKXTRA_BLENDER", b);
+    }
+    // The game's key comes from the app (the same one it installs mods with), so the kit carries none
+    cmd.env("REPAKXTRA_AES", format!("0x{}", crate::install_mod::AES_KEY_HEX.trim_start_matches("0x")));
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -300,6 +336,17 @@ pub fn cancel_mod_previews() -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn generator_errors_are_told_from_notes() {
+        assert!(super::generator_error("A_Magik_II_DiscoDazzlerHair: error: the character render failed (1.5 s)"));
+        assert!(super::generator_error("loadout-3a8c: error: Blender not found"));
+        assert!(!super::generator_error("spec: not in the game (optional): ['/Game/Marvel/x']"));
+        assert!(!super::generator_error("loadout-3a8c: 3 mods on SK_1026_1026001 (12.4 s)"));
+        assert!(super::generator_error("spec: export failed: package not found"));
+        assert!(!super::generator_error("done: 4 made, 0 failed"));
+        assert!(super::generator_error("blender.exe exit 1") && !super::generator_error("blender.exe exit 0"));
+    }
+
     use super::*;
 
     #[test]

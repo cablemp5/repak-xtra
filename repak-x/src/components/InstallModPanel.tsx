@@ -9,7 +9,7 @@ import { VscFolder, VscFolderOpened, VscChevronRight, VscChevronDown, VscNewFold
 import { MdCreateNewFolder } from 'react-icons/md'
 import './InstallModPanel.css'
 import characterData from '../data/character_data.json'
-import { resolveHeroImage, useHeroImages } from '../utils/heroImages'
+import { type CharacterDataEntry, resolveHeroImage, useHeroImages } from '../utils/heroImages'
 
 type FolderRecord = {
   id: string
@@ -56,6 +56,7 @@ type InstallModPanelProps = {
   onNewTag: (callback: (tag: string) => void) => void
   onNewFolder: (callback: (name: string) => void) => void
   onMergeHybrid?: (path1: string, path2: string) => void
+  characterData?: CharacterDataEntry[] // repakxtra: the app's hero list (newer heroes than the bundled file), for portraits
 }
 
 
@@ -222,7 +223,7 @@ function parseModType(modType: string | undefined): { character: string | null; 
   return { character, category, additional }
 }
 
-export default function InstallModPanel({ mods, allTags, folders = [], currentFolderId, onCreateTag, onDeleteTag, onCreateFolder, onInstall, onCancel, onNewTag, onNewFolder, onMergeHybrid }: InstallModPanelProps) {
+export default function InstallModPanel({ mods, allTags, folders = [], currentFolderId, onCreateTag, onDeleteTag, onCreateFolder, onInstall, onCancel, onNewTag, onNewFolder, onMergeHybrid, characterData: heroes }: InstallModPanelProps) {
   // Repaint when the synced hero portraits finish loading.
   useHeroImages()
   const [openDropdown, setOpenDropdown] = useState<number | null>(null)
@@ -368,7 +369,7 @@ export default function InstallModPanel({ mods, allTags, folders = [], currentFo
         transition={{ duration: 0.15 }}
       >
         <div className="install-header">
-          <h2>Install Mods</h2>
+          <h2>Install mods</h2>{/* repakxtra: sentence case, like the other dialogs */}
           <button className="close-btn" onClick={onCancel}>×</button>
         </div>
 
@@ -414,10 +415,11 @@ export default function InstallModPanel({ mods, allTags, folders = [], currentFo
                           />
                         )}
                         <div className="install-mod-card__title">
-                          <label className="field-label">Custom Name</label>
+                          {/* repakxtra: no "Custom name" label above the field: its placeholder says it (screen readers get aria-label) */}
                           <div className="mod-name-input-wrapper">
                             <input
                               type="text"
+                              aria-label="Custom name"
                               placeholder="Insert custom name here"
                               value={modSettings[idx]?.customName || ''}
                               onChange={(e) => updateModSetting(idx, 'customName', e.target.value)}
@@ -439,7 +441,7 @@ export default function InstallModPanel({ mods, allTags, folders = [], currentFo
                       <div className="install-mod-card__badges">
                         {character && (
                           <span className={`character-badge ${character.startsWith('Multiple Heroes') ? 'multi-hero' : ''}`}>
-                            {getHeroImage(character) && <img src={getHeroImage(character)} alt="" />}
+                            {getHeroImage(character, heroes) && <img src={getHeroImage(character, heroes)} alt="" />}
                             {character}
                           </span>
                         )}
@@ -465,7 +467,7 @@ export default function InstallModPanel({ mods, allTags, folders = [], currentFo
 
                       <div className="install-mod-card__footer">
                         <Switch
-                          size="md"
+                          size="sm" // repakxtra: the Library's switch size, here and in the three below
                           color="primary"
                           checked={modSettings[idx]?.obfuscate || false}
                           onChange={(value) => updateModSetting(idx, 'obfuscate', value)}
@@ -481,7 +483,7 @@ export default function InstallModPanel({ mods, allTags, folders = [], currentFo
                         </Switch>
 
                         <Switch
-                          size="md"
+                          size="sm"
                           color="success"
                           checked={modSettings[idx]?.hybrid || false}
                           onChange={(value) => {
@@ -509,7 +511,7 @@ export default function InstallModPanel({ mods, allTags, folders = [], currentFo
                         </Switch>
 
                         <Switch
-                          size="md"
+                          size="sm"
                           color="warning"
                           checked={mod.contains_uassets === false ? true : (modSettings[idx]?.hybrid ? false : (modSettings[idx]?.forceLegacy || false))}
                           onChange={(value) => {
@@ -536,7 +538,7 @@ export default function InstallModPanel({ mods, allTags, folders = [], currentFo
 
                         {mod.contains_uassets !== false && (
                           <Switch
-                            size="md"
+                            size="sm"
                             color="secondary"
                             checked={modSettings[idx]?.hybrid ? true : (modSettings[idx]?.toRepak || false)}
                             onChange={(value) => updateModSetting(idx, 'toRepak', value)}
@@ -623,6 +625,6 @@ export default function InstallModPanel({ mods, allTags, folders = [], currentFo
 }
 
 // Portraits come from the synced cache (see utils/heroImages).
-function getHeroImage(heroName?: string | null): string | undefined {
-  return resolveHeroImage(heroName, characterData)
+function getHeroImage(heroName?: string | null, heroes?: CharacterDataEntry[]): string | undefined {
+  return resolveHeroImage(heroName, heroes?.length ? heroes : characterData) // repakxtra: the app's list first
 }

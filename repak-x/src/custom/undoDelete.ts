@@ -10,7 +10,7 @@ export type TrashedMod = { id: string; path: string }
 export function offerUndoDelete(alert: ReturnType<typeof useAlert>, entries: TrashedMod[], reload: () => Promise<unknown>, blocked: () => boolean) {
   if (entries.length === 0) return
   const what = entries.length === 1 ? displayName(entries[0].path) : `${entries.length} mods`
-  const id = alert.info(`Deleted ${what}`, 'Kept in the trash for 7 days.', {
+  const id = alert.info(`Deleted ${what}`, 'Kept for 7 days in Settings > Recently deleted.', {
     duration: 10000,
     action: {
       label: 'Undo',

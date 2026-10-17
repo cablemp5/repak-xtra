@@ -109,6 +109,7 @@ const NumberInput = ({ value, min = 0, max = 999, onChange, className, disabled 
       <button
         type="button"
         className="number-btn minus"
+        aria-label="Lower" // repakxtra: named for screen readers (the stepper's own label says what it counts)
         onClick={handleDecrement}
         disabled={disabled || numericLocalValue <= min || isOnCooldown}
       >
@@ -129,6 +130,7 @@ const NumberInput = ({ value, min = 0, max = 999, onChange, className, disabled 
       <button
         type="button"
         className="number-btn plus"
+        aria-label="Raise" // repakxtra
         onClick={handleIncrement}
         disabled={disabled || numericLocalValue >= max || isOnCooldown}
       >

@@ -1,5 +1,5 @@
 // repakxtra: the tour (components/OnboardingTour.tsx draws it). Only the essentials: what a loadout is, making one,
-// switching and editing it, the Library and adding mods, then Setup and Launch. Each step shows the view its target
+// switching and editing it, collections, the Library and adding mods, then Setup and Launch. Each step shows the view its target
 // lives in; a target that is missing (no loadouts yet) gets the tip centered instead.
 import { openLoadout, setView } from './loadoutStore'
 
@@ -26,8 +26,15 @@ export const TOUR_STEPS: TourStep[] = [
   {
     target: '[data-loadout], .lo-first-run',
     title: 'Switch it, edit it',
-    description: "The switch turns all of a loadout's mods on or off; other mods and loadouts stay as they are. Open the card to add or remove mods, set its picture or group, and generate its preview.",
+    description: "The switch turns all of a loadout's mods on or off; other mods and loadouts stay as they are. Open the card to add, remove or rename mods, set its picture and collection, and generate its preview.",
     placement: 'right',
+    onEnter: home,
+  },
+  {
+    target: '[data-tour="new-collection"]',
+    title: 'Collections',
+    description: "A collection is a named shelf for loadouts that belong together, like Panther looks or Emotes. Make one here, then drag cards onto it or pick it on a loadout's page. Loadouts in no collection sit under Other. The pencil renames it; Collection | Hero sorts the cards by hero instead.",
+    placement: 'bottom',
     onEnter: home,
   },
   {

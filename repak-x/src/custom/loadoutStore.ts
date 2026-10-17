@@ -181,11 +181,19 @@ export const replaceInLoadout = (l: Loadout, oldKey: string, newKey: string) =>
 /** Readable mod name from its key: drops the _9999999_P priority suffix. */
 export const displayName = normKey
 
-/** Toggle each mod through the backend; returns the mods that could not be switched. */
+/** The backend's refusal while Repak X is open (xtra_identity.rs upstream_guard), or null for any other error. */
+export const repakXOpen = (e: unknown) => (/^Repak X is open/.test(String(e)) ? String(e) : null)
+
+/** Toggle each mod through the backend; returns the mods that could not be switched, with the reason when Repak X is
+ *  open (then the rest are not tried: every one would be refused). */
 export const flipMods = async (changes: Mod[]) => {
-  const failed: Mod[] = []
-  for (const m of changes) {
-    try { await invoke('toggle_mod', { modPath: m.path }) } catch { failed.push(m) }
+  const failed: Mod[] & { reason?: string } = []
+  for (const [i, m] of changes.entries()) {
+    try { await invoke('toggle_mod', { modPath: m.path }) } catch (e) {
+      failed.push(m)
+      failed.reason = repakXOpen(e) ?? undefined
+      if (failed.reason) { failed.push(...changes.slice(i + 1)); break }
+    }
   }
   return failed
 }
@@ -233,10 +241,11 @@ export const useGroups = () => {
 }
 export const inGroup = (l: Loadout, group: string) => groupKey(l.label) === groupKey(group)
 
-/** A new empty group at the end ("New group", "New group 2", ...); returns its name. */
-export const addGroup = (name = 'New group') => {
+/** A new empty group at the end ("New collection", "New collection 2", ...); returns its name. Groups are called
+ *  collections in the interface. */
+export const addGroup = (name = 'New collection') => {
   const groups = listGroups()
-  let n = name.trim() || 'New group'
+  let n = name.trim() || 'New collection'
   for (let i = 2; groups.some(g => groupKey(g) === groupKey(n)); i++) n = `${name} ${i}`
   writeGroupList([...groups, n])
   return n
@@ -284,9 +293,17 @@ applyView()
 export const setView = (v: View) => { view = v; localStorage.setItem('repakxtra.view', v); applyView(); notify() }
 export const useView = () => useSyncExternalStore(subscribe, () => view)
 
-/** The loadout page open on Home (null = the cards). Shared so the Library sidebar can open one too. */
+/** The loadout page open on Home (null = the cards). Shared so the Library sidebar can open one too. `fresh`: a loadout
+ *  just made, whose page starts with its name selected for typing. */
 let openId: string | null = null
-export const openLoadout = (id: string | null) => { openId = id; if (id && view !== 'home') setView('home'); else notify() }
+let freshId: string | null = null
+export const openLoadout = (id: string | null, fresh = false) => {
+  openId = id
+  freshId = fresh ? id : null
+  if (id && view !== 'home') setView('home'); else notify()
+}
+/** True once for a loadout opened as fresh. */
+export const takeFresh = (id: string) => { const was = freshId === id; if (was) freshId = null; return was }
 export const useOpenLoadout = () => useSyncExternalStore(subscribe, () => openId)
 
 // L switches between Home and Library. This module also loads in the Asset Explorer and VFX Updater windows, which

@@ -9,7 +9,7 @@ import Checkbox from '../components/ui/Checkbox'
 import type { useAlert } from '../components/AlertHandler'
 import { normalizeModBaseName } from '../utils/format'
 import { type Mod, modKey, readLoadouts, useLoadouts, withMods, writeLoadouts } from './loadoutStore'
-import { generatePreviews, previewSetKey } from './previews'
+import { generatePreviews, previewSetKey, usePreviewsAvailable } from './previews'
 
 type Options = { name: string; preview: boolean }
 let draft: Options | null = null   // what the open panel shows
@@ -22,7 +22,8 @@ export function InstallAsLoadout({ count }: { count: number }) {
   const [on, setOn] = useState(false)
   const [name, setName] = useState('')
   const [preview, setPreview] = useState(true)
-  useEffect(() => { draft = on && count > 0 ? { name: name.trim() || 'New loadout', preview } : null }, [on, name, preview, count])
+  const canGenerate = usePreviewsAvailable() // no preview kit: no checkbox, and nothing is queued
+  useEffect(() => { draft = on && count > 0 ? { name: name.trim() || 'New loadout', preview: preview && canGenerate } : null }, [on, name, preview, count, canGenerate])
   useEffect(() => () => { draft = null }, [])
   if (count < 1) return null
   return (
@@ -34,9 +35,11 @@ export function InstallAsLoadout({ count }: { count: number }) {
         <>
           <input className="install-loadout-name" value={name} placeholder="Loadout name" aria-label="Loadout name" autoFocus
             onChange={e => setName(e.target.value)} onKeyDown={e => e.stopPropagation()} />
-          <Checkbox checked={preview} onChange={(v: boolean) => setPreview(v)} size="sm" color="primary">
-            <span>Generate its preview</span>
-          </Checkbox>
+          {canGenerate && (
+            <Checkbox checked={preview} onChange={(v: boolean) => setPreview(v)} size="sm" color="primary">
+              <span>Generate its preview</span>
+            </Checkbox>
+          )}
         </>
       )}
     </div>

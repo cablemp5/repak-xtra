@@ -779,13 +779,13 @@ html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { d
 }
 .shortcut-row:hover { background: transparent !important; }
 .shortcut-action { font-size: 13px; color: var(--text-primary); text-align: right; }
-.shortcuts-modal kbd {
+.shortcuts-modal kbd, .cp-modal kbd {   /* the capture dialog's keys too */
   display: inline-block; min-width: 22px; padding: 1px 6px; text-align: center;
   font-family: var(--font-primary) !important; font-size: 11px; font-weight: 600;
   color: var(--text-primary); background: var(--bg-light); border: 1px solid rgba(255, 255, 255, 0.1);
   border-bottom-width: 2px; border-radius: 5px; box-shadow: none;
 }
-.shortcuts-modal .key-separator { margin: 0 3px; color: var(--text-secondary); font-size: 11px; }
+.shortcuts-modal .key-separator, .cp-modal .key-separator { margin: 0 3px; color: var(--text-secondary); font-size: 11px; }
 .shortcuts-footer { font-size: 12px; color: var(--text-secondary); }
 /* Rows size to their cards: overflow-clipped cards let auto rows shrink to fit the screen and overlap */
 .lo-grid { grid-auto-rows: max-content; }
@@ -1006,7 +1006,7 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
 .lo-text-btn.is-primary { background: var(--accent-primary) !important; border-color: var(--accent-primary) !important; color: #fff !important; }
 
 /* Loadout page */
-.lp { display: flex; flex-direction: column; gap: 26px; max-width: 980px; }
+.lp { display: flex; flex-direction: column; gap: 26px; max-width: 1180px; margin: 0 auto; }
 .lp-back { align-self: flex-start; }
 .lp-top { display: flex; gap: 24px; align-items: flex-start; }
 .lp-media { width: 220px; flex: none; border-radius: 12px !important; border: 1px solid var(--panel-border) !important; overflow: hidden; }
@@ -1016,9 +1016,9 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
 .lp-name:hover { border-color: var(--panel-border); }
 .lp-name:focus { border-color: rgba(255, 255, 255, 0.16); background: var(--field-bg); outline: none !important; box-shadow: none !important; }
 .lp-group { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
-.lp-group input { height: 28px; padding: 0 8px; width: 220px; font: 13px var(--font-primary); color: var(--text-primary);
-  background: var(--bg-dark); border: 1px solid var(--panel-border); border-radius: 6px; outline: none; }
-.lp-group input:focus { border-color: var(--accent-primary); }
+.lp-group input { height: 32px; padding: 0 10px; width: 240px; font: 13px var(--font-primary); color: var(--text-primary);
+  background: var(--field-bg); border: 1px solid var(--panel-border); border-radius: var(--quiet-radius); outline: none; }
+.lp-group input:focus { border-color: rgba(255, 255, 255, 0.16); }
 .lp-meta { margin: 0; font-size: 13px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .lp-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
 .lp-switch { display: inline-flex; align-items: center; gap: 8px; margin-right: 6px; font-size: 13px; font-weight: 600; }
@@ -1026,10 +1026,13 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
 .lp-section .lo-group-head { margin-bottom: 10px; }
 .lp-empty { margin: 0; padding: 18px; border: 1px dashed var(--panel-border); border-radius: 10px; color: var(--text-secondary); font-size: 13px; }
 .lp-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
+/* Search: a quiet field like the others (no blue ring on focus, only a lighter hairline) */
 .lp-search { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; width: 280px;
-  background: var(--bg-dark); border: 1px solid var(--panel-border); border-radius: var(--quiet-radius); color: var(--text-secondary); }
-.lp-search:focus-within { border-color: var(--accent-primary); }
-.lp-search input { flex: 1; min-width: 0; height: 100%; background: transparent; border: none; outline: none; color: var(--text-primary); font: 13px var(--font-primary); }
+  background: var(--field-bg); border: 1px solid var(--panel-border); border-radius: var(--quiet-radius); color: var(--text-secondary);
+  transition: border-color 0.15s ease; }
+.lp-search:focus-within { border-color: rgba(255, 255, 255, 0.16); }
+.lp-search input { flex: 1; min-width: 0; height: 100%; padding: 0 !important; background: transparent !important; border: none !important;
+  outline: none !important; box-shadow: none !important; color: var(--text-primary); font: 13px var(--font-primary); }
 .lp-search svg.lucide { width: 14px !important; height: 14px !important; }
 .lp-types { display: flex; flex-wrap: wrap; gap: 4px; }
 .lp-types button { display: inline-flex !important; align-items: center; gap: 6px; height: 28px !important; min-height: 0 !important; padding: 0 10px !important;
@@ -1119,13 +1122,6 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
   position: absolute; left: 8px; bottom: 8px; pointer-events: none;
   padding: 3px 8px; border-radius: 999px; font-size: 11px; font-variant-numeric: tabular-nums;
   background: rgba(10, 11, 14, 0.62); color: var(--text-secondary);
-}
-/* The last loadout render failed or was refused: said over the image it kept */
-.lo-media-note {
-  position: absolute; left: 8px; right: 8px; top: 8px; pointer-events: auto; z-index: 1;
-  padding: 4px 9px; border-radius: 8px; font-size: 11px; line-height: 1.35;
-  background: rgba(10, 11, 14, 0.78); color: var(--text-secondary);
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 
 /* ---------- motion: recipes from transitions.dev (free library), with its motion tokens. Settings > Interface >
@@ -1271,22 +1267,45 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .lo-row.is-on .fp-row { color: var(--text-primary) !important; }
 .lo-row[draggable="true"] { cursor: grab; }
 .lo-row.is-drop { box-shadow: inset 0 2px 0 var(--accent-primary); border-radius: 6px; }
-/* Loadout page: an edit cue on the name, Delete set apart, the two lists side by side when there is room */
-.lp-name-wrap { position: relative; display: block; }
-.lp-name-pen { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); opacity: 0; pointer-events: none;
-  transition: opacity 0.15s ease; }
-.lp-name-wrap:hover .lp-name-pen { opacity: 1; }
-.lp-name-wrap:focus-within .lp-name-pen { opacity: 0; }
+/* Loadout page: the name sizes to its text with a pencil right after it (always shown: renaming should be obvious);
+   the collection has one too. A quiet "Saved" fades in and out after each change. */
+.lp-name-wrap { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.lp-name { field-sizing: content; width: auto !important; min-width: 4ch; max-width: calc(100% - 36px); }
+.lp-pen { color: var(--text-secondary) !important; }
+.lp-name-wrap .lp-pen { width: 28px; height: 28px !important; }
 .lp-delete { margin-left: auto; }
-.lp-columns { display: flex; flex-direction: column; gap: 26px; min-width: 0; }
-@media (min-width: 1280px) {
-  .lp { max-width: 1480px; }
-  .lp-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: start; }
-}
+.lp-meta { display: flex; align-items: center; flex-wrap: wrap; min-height: 20px; }
+.lp-meta .lo-on-dot { vertical-align: 0; }
+.lp-saved { display: inline-flex; align-items: center; gap: 4px; margin-left: 12px; font-size: 12px; color: var(--text-secondary);
+  animation: lp-saved 2.4s ease forwards; }
+.lp-saved svg.lucide { width: 12px !important; height: 12px !important; color: #3ecf6e; }
+@keyframes lp-saved { 0% { opacity: 0; } 10%, 70% { opacity: 1; } 100% { opacity: 0; } }
 .lp-sort { flex: none; }
-/* Add mods: an "on" mark instead of bold alone */
-.mod-row-on { flex: none; font-size: 11px; padding: 0 6px; border-radius: 999px; color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-primary), transparent 80%); }
+/* Add mods: a mod that is on now gets a small green dot */
+.mod-row-on { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #3ecf6e; }
+/* Quiet fields on the loadout page: the app-wide blue focus ring (.app :focus-visible) is for buttons and links; these
+   fields show focus with a lighter hairline instead */
+.app .lp-search input:focus-visible, .app .mod-row-rename:focus-visible, .app .lp-name:focus-visible, .app .lp-group input:focus-visible { outline: none !important; }
+/* Rename a mod from its row: a pencil on hover (or a double-click on the name) turns the name into a field; the pencil
+   sits right after the name */
+.mod-row-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px; }
+.mod-row-main .mod-row-name { flex: 0 1 auto; }
+.mod-row .row-rename { opacity: 0; transition: opacity 0.12s ease; }
+.mod-row:hover .row-rename, .mod-row .row-rename:focus-visible { opacity: 1; }
+.mod-row-rename { flex: 1; min-width: 0; height: 28px; padding: 0 8px !important; font: 13px var(--font-primary); color: var(--text-primary);
+  background: var(--field-bg) !important; border: 1px solid rgba(255, 255, 255, 0.16) !important; border-radius: 6px !important;
+  outline: none !important; box-shadow: none !important; }
+/* The loadout's own image: an X in its corner removes it */
+.lo-media-remove { position: absolute; top: 8px; right: 8px; z-index: 2; width: 28px; height: 28px !important; min-height: 0 !important; padding: 0 !important;
+  display: grid; place-items: center; border-radius: 50% !important; background: rgba(10, 11, 14, 0.62) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important; color: var(--text-primary) !important; opacity: 0; transition: opacity 0.15s ease, background 0.15s ease; }
+.lo-media:hover .lo-media-remove, .lo-media-remove:focus-visible { opacity: 1; }
+.lo-media-remove:hover { background: rgba(10, 11, 14, 0.85) !important; }
+/* Home: collection names and card titles show their pencil at all times, muted */
+.lo-group-pen { width: 22px; height: 22px !important; }
+.lo-card-name { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.lo-card-pen { width: 22px; height: 22px !important; opacity: 0.7; }
+.lo-card-pen:hover { opacity: 1; }
 /* Credits: third-party avatars without their saturated colors (one is red) */
 .credits-panel img, .credits-avatar { filter: grayscale(0.7); }
 
@@ -1307,25 +1326,31 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 /* Loadout page Group: a dropdown of the groups */
 .lp-group { display: flex; align-items: center; gap: 10px; }
 .lp-group .custom-dropdown-container { width: 240px; }
-/* Generating: a spinner; pointing at it shows Stop */
-.run-icon { display: inline-grid; place-items: center; }
-.run-icon > * { grid-area: 1 / 1; }
-svg.run-spin { animation: run-spin 0.9s linear infinite; }
-.run-stop { opacity: 0; }
-button.is-running:hover .run-spin { opacity: 0; }   /* a run's own button turns into Stop; a card that is generating keeps its spinner */
-button.is-running:hover .run-stop { opacity: 1; }
-@keyframes run-spin { to { transform: rotate(360deg); } }
+/* Generating: what it is doing (dot loader, "2 of 9") as a quiet status, and Stop as its own button beside it with a
+   small rounded square, the same Stop as Home's batch line */
+.run-group { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.run-group .is-running { display: inline-flex !important; align-items: center; gap: 8px; cursor: default; pointer-events: none;
+  border-color: transparent !important; background: transparent !important; padding-left: 4px !important; color: var(--text-primary) !important; }
+.run-stop-btn { display: inline-flex !important; align-items: center; gap: 7px; }
+.stop-glyph { width: 9px; height: 9px; border-radius: 2px; background: currentColor; flex: none; }
+/* A Generate button on a PC without the preview kit: grayed out, with a small blue "Set up" that says where to go */
+.is-unavailable { color: var(--text-secondary) !important; opacity: 0.85; }
+.is-unavailable svg.lucide { opacity: 0.6; }
+.is-unavailable:hover { color: var(--text-primary) !important; opacity: 1; }
+.setup-chip { margin-left: 2px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 16px;
+  color: color-mix(in srgb, var(--accent-primary), white 35%); background: color-mix(in srgb, var(--accent-primary), transparent 82%); }
 
 /* Loadout page actions: On/Off, Generate previews, image, and a More menu, on one line */
 .lp-actions { row-gap: 8px; }
 .lp-actions > * { flex: none; }
-.lp-more, .lp-more .custom-dropdown-container { display: flex; align-items: center; height: 32px; margin: 0 !important; }
-.lp-more .custom-dropdown-trigger { width: auto !important; height: 32px !important; min-height: 0 !important; padding: 0 12px !important; gap: 6px;
-  background: transparent !important; border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important;
-  color: var(--text-primary) !important; font-size: 13px !important; font-weight: 500 !important; box-shadow: none !important; }
-.lp-more .custom-dropdown-trigger:hover, .lp-more .custom-dropdown-trigger.open { background: var(--quiet-hover) !important; border-color: rgba(255, 255, 255, 0.14) !important; }
-.lp-more .custom-dropdown-menu { min-width: 300px; }
-.lp-more .custom-dropdown-item:last-child { border-top: 1px solid var(--panel-border); margin-top: 4px; padding-top: 8px; }
+/* More: a menu of buttons under its button; Delete loadout set apart by a hairline */
+.lp-more { position: relative; display: flex; align-items: center; }
+.lp-more-btn[aria-expanded="true"] { background: var(--quiet-hover) !important; }
+.lp-more-menu { left: 0; right: auto; width: auto; min-width: 220px; z-index: 30; }
+.lp-more-menu .sigeon-item { justify-content: flex-start !important; }
+.lp-more-menu .sigeon-item:focus-visible { background: var(--quiet-active) !important; outline: none !important; }
+.lp-more-menu .sigeon-item:last-child { position: relative; margin-top: 9px; }
+.lp-more-menu .sigeon-item:last-child::before { content: ''; position: absolute; left: -4px; right: -4px; top: -5px; border-top: 1px solid var(--panel-border); }
 
 /* Toasts: the status icon centered against the text; Clear all as a labeled pill on the toasts' own surface */
 .toast-icon { align-self: center; }
@@ -1551,15 +1576,16 @@ button.is-running:hover .run-stop { opacity: 1; }
 .sg-row input[type="range"]:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--focus-ring, var(--accent-primary)); outline-offset: 2px; }
 .sg-search { flex: none; }
 
-/* Loadout page: the picture is a column of its own, the name, group and actions sit beside it at the top and the two
-   lists start right under them (they began below the picture, leaving a tall empty band beside it) */
+/* Loadout page on wide windows: the picture is a column of its own (it stays in view while the lists scroll); beside it
+   the name, collection and actions, then In this loadout, then Add mods, one under the other at every width. The page
+   is centered with a readable width instead of stretching rows across a full screen. */
 @media (min-width: 1100px) {
-  .lp { display: grid !important; grid-template-columns: 240px minmax(0, 1fr); column-gap: 28px; row-gap: 22px; align-items: start; }
+  .lp { display: grid !important; grid-template-columns: 240px minmax(0, 1fr); column-gap: 32px; row-gap: 26px; align-items: start; }
   .lp > .lp-back { grid-column: 1 / -1; justify-self: start; }
   .lp-top { display: contents; }
-  .lp-media { grid-column: 1; grid-row: 2 / span 2; width: auto !important; position: sticky; top: 0; }
+  .lp-media { grid-column: 1; grid-row: 2 / span 3; width: auto !important; position: sticky; top: 0; }
   .lp-info { grid-column: 2; grid-row: 2; padding-top: 0; }
-  .lp-columns { grid-column: 2; grid-row: 3; }
+  .lp > .lp-section { grid-column: 2; min-width: 0; }
 }
 .lo-grid .lo-card.lo-card-new { min-height: 300px !important; }   /* .lo-card min-height: max-content comes later */
 
@@ -1645,12 +1671,13 @@ button.is-running:hover .run-stop { opacity: 1; }
 .fr-foot .su-sub { margin: 0 auto 0 0; }
 
 /* Preview kit: download progress and what the PC check found missing (Setup and the first-launch setup) */
-.su-progress { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.su-progress { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .su-progress-track { flex: 1; height: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); overflow: hidden; position: relative; }
 .su-progress-track i { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: inherit; background: var(--accent-primary); transition: width 0.2s ease; }
 .su-progress-track i.is-indeterminate { width: 30%; animation: su-slide 1.1s ease-in-out infinite; }
 @keyframes su-slide { from { left: -30%; } to { left: 100%; } }
-.su-progress-text { flex: none; min-width: 110px; text-align: right; }
+.su-progress-text { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.su-progress-track { flex: none; }
 .su-problems { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .su-problems li { font-size: 12.5px; line-height: 1.5; color: var(--text-primary); padding-left: 14px; position: relative; }
 .su-problems li::before { content: ''; position: absolute; left: 2px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: #e3a008; }
@@ -1753,3 +1780,341 @@ html[data-motion="off"] .t-matrix i { animation: none; opacity: 0.6; }
    and amber for the live dev copy (dev.ps1), instead of blue */
 :root[data-build="test"] .title-x { color: #3ecf6e !important; }
 :root[data-build="dev"] .title-x { color: #f5a524 !important; }
+
+/* Setup > Mod previews: its two parts (the kit, Blender) as rows with a check when present, their links on the right;
+   a quiet trust line while Blender is missing or installing */
+.su-parts { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; border: 1px solid var(--panel-border); border-radius: 10px; }
+.su-part { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 8px 12px; }
+.su-part + .su-part { border-top: 1px solid var(--panel-border); }
+.su-part-mark { flex: none; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; border: 1.5px dashed rgba(255, 255, 255, 0.22); }
+.su-part-mark.is-ok { border: none; background: color-mix(in srgb, #3ecf6e, transparent 80%); color: #3ecf6e; }
+.su-part-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.su-part-text b { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.su-part-text span { font-size: 12.5px; color: var(--text-secondary); }
+.su-part-links { flex: none; display: inline-flex; gap: 14px; font-size: 12.5px; }
+.su-link, .su-trust a { cursor: pointer; color: color-mix(in srgb, var(--accent-primary), white 30%) !important; }
+.su-link { display: inline; height: auto !important; min-height: 0 !important; padding: 0 !important; border: none !important;
+  background: none !important; font: inherit !important; }
+.su-link:hover:not(:disabled), .su-trust a:hover { text-decoration: underline; }
+.su-link:disabled { opacity: 0.45; cursor: default; }
+.su-trust { margin: 0; display: flex; gap: 8px; align-items: flex-start; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.su-trust svg.lucide { flex: none; margin-top: 2px; color: #3ecf6e; }
+
+/* Details panel: a hero with forms shows each form's preview side by side */
+.mod-preview-frame.has-forms { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; width: 100%; aspect-ratio: auto; }
+.mod-preview-frame.has-forms img { width: 100%; min-width: 0; }
+
+/* ---------- Library: a quiet search (no blue box inside the field), file sizes only when asked for, conflicts in red
+   (cable asked: a dot on Check conflicts, a badge on each clashing mod that is on) ---------- */
+.app .main-search-input:focus-visible { outline: none !important; }
+.main-action-bar .search-wrapper { background: var(--field-bg) !important; border-color: var(--panel-border) !important; }
+.main-action-bar .search-wrapper:focus-within { border-color: rgba(255, 255, 255, 0.16) !important; }
+.main-action-bar .search-wrapper > svg { width: 16px !important; height: 16px !important; color: var(--text-secondary) !important; opacity: 0.8; }
+.main-search-input { font-size: 13.5px !important; }
+.main-search-input::placeholder { color: var(--text-secondary) !important; opacity: 0.8; }
+/* Mod file size: in the tags row, left of the type tag (ModsList.tsx sizeTag); the actions row's own size stays hidden */
+.mod-actions-row .mod-size { display: none !important; }
+.btn-check-conflicts { position: relative; }
+.conflict-dot { position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%; background: #f2555a;
+  box-shadow: 0 0 0 2px var(--bg-darkest); pointer-events: none; }
+.mod-type-badge.conflict-badge { background: color-mix(in srgb, #f2555a, transparent 85%) !important; border: 1px solid color-mix(in srgb, #f2555a, transparent 55%) !important;
+  color: #ff8a8e !important; font-size: 11px !important; font-weight: 600 !important; }
+
+/* ---------- Install panel: the app's quiet surfaces. Same parts and options as before: neutral cards instead of
+   blue-tinted ones, option tiles with a hairline instead of four colors (on = a lighter tile), the folder picker and
+   buttons in the app's style ---------- */
+.install-mod-panel { background: var(--bg-darker) !important; border: 1px solid var(--panel-border); border-radius: 14px !important; max-width: 1100px; }
+.install-header { padding: 18px 24px !important; }
+.install-header h2 { font-size: 18px !important; font-weight: 700 !important; letter-spacing: -0.01em; }
+.install-mod-panel .close-btn { font-size: 22px !important; color: var(--text-secondary) !important; border-radius: 8px !important; }
+.install-mod-panel .close-btn:hover { color: var(--text-primary) !important; background: var(--quiet-hover) !important; }
+.imp-mods-section { padding: 16px 24px !important; }
+.install-mod-grid { gap: 12px !important; padding: 0 !important; }
+.install-mod-card { background: transparent !important; border: 1px solid var(--panel-border) !important; border-radius: 12px !important; box-shadow: none !important; }
+.install-mod-card__left { padding: 16px 18px !important; gap: 14px !important; }
+.install-mod-card__divider { background: var(--panel-border) !important; }
+.install-mod-card__right { background: transparent !important; padding: 14px !important; }
+.install-mod-card__pill { background: transparent !important; border: 1px solid var(--panel-border) !important; color: var(--text-secondary) !important; font-weight: 500 !important; }
+.install-mod-card .mod-name-input { background: var(--field-bg) !important; border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important;
+  height: 32px; padding: 0 10px !important; max-width: 260px; outline: none !important; box-shadow: none !important; }
+.install-mod-card .mod-name-input:focus { border-color: rgba(255, 255, 255, 0.16) !important; }
+.install-mod-card__tags { border-top: 1px solid var(--panel-border) !important; padding-top: 12px !important; }
+.install-mod-card__footer { border-top: 1px solid var(--panel-border) !important; padding-top: 12px !important; gap: 8px !important;
+  align-items: stretch !important; justify-content: stretch !important; }
+.install-mod-card__footer > .install-toggle { flex: 1 1 0; min-width: 0; margin: 0 !important; }   /* four equal tiles, one height */
+.install-mod-card .install-toggle,
+.install-mod-card .obfuscate-toggle, .install-mod-card .hybrid-toggle, .install-mod-card .legacy-toggle, .install-mod-card .repak-toggle {
+  background: transparent !important; border: 1px solid var(--panel-border) !important; border-radius: 10px !important; padding: 8px 10px !important; }
+.install-mod-card .install-toggle:hover:not(.locked) { background: var(--quiet-hover) !important; border-color: rgba(255, 255, 255, 0.12) !important; }
+.install-mod-card .install-toggle.active { background: var(--quiet-active) !important; border-color: rgba(255, 255, 255, 0.16) !important; }
+.install-mod-card .install-toggle .install-toggle__label { color: var(--text-primary) !important; font-weight: 600 !important; }
+.install-mod-card .install-toggle .install-toggle__hint, .legacy-toggle.locked.active .install-toggle__hint { color: var(--text-secondary) !important; }
+.install-mod-card .install-toggle.locked { opacity: 0.45; }
+.imp-section-header { color: var(--text-secondary) !important; font-size: 12px !important; font-weight: 500 !important; }
+.imp-btn-new-folder { background: transparent !important; border: 1px solid var(--panel-border) !important; color: var(--text-secondary) !important; border-radius: 8px !important; }
+.imp-btn-new-folder:hover:not(:disabled) { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
+.imp-folder-tree-container { background: transparent !important; border: 1px solid var(--panel-border) !important; border-radius: 10px !important; }
+.imp-folder-item.selected { background: var(--quiet-active) !important; color: var(--text-primary) !important; border-color: transparent !important; }
+.imp-folder-item.selected .folder-icon, .imp-folder-item.selected .folder-name { color: var(--text-primary) !important; }
+.install-actions { padding: 14px 24px !important; gap: 10px !important; align-items: center; }
+.install-actions .btn-cancel { padding: 0 18px !important; height: 36px; background: transparent !important; border: 1px solid var(--panel-border) !important;
+  border-radius: var(--quiet-radius) !important; font-size: 13px !important; font-weight: 500; flex: none; }
+.install-actions .btn-cancel:hover { background: var(--quiet-hover) !important; }
+.install-actions .btn-install { padding: 0 22px !important; height: 36px; border-radius: var(--quiet-radius) !important; font-size: 13px !important; font-weight: 600 !important; flex: none; }
+.imp-folder-item.selected { box-shadow: none !important; }
+.imp-section-header svg, .imp-btn-new-folder svg, .imp-folder-item .folder-icon { color: var(--text-secondary) !important; }
+.install-mod-card .install-toggle__label { white-space: normal !important; }
+.install-mod-card { max-height: none !important; }   /* each card shows all its parts: no scrollbar inside a card */
+/* A switch clicked in a tile: a quiet ring, not the app's blue one (keyboard focus still shows it) */
+.app .install-mod-card .install-toggle :focus-visible { outline-color: rgba(255, 255, 255, 0.35) !important; }
+
+/* ---------- Settings: a sidebar like the app's other sidebars (quiet rows, the active one a soft fill, no boxed pill
+   or blue icon), section titles as readable sentence-case headings with a hairline between sections (not small gray
+   capitals), and Help's lines at one size ---------- */
+.settings-sidebar { background: transparent !important; padding: 12px 8px !important; gap: 2px !important; }
+@media (min-width: 761px) { .settings-sidebar { flex-basis: 196px !important; } }   /* narrower, it is a row of tabs (SettingsPanel.css) */
+.settings-nav-item { height: 34px; padding: 0 10px !important; border: none !important; border-radius: var(--quiet-radius) !important;
+  font-size: 13px !important; font-weight: 500 !important; color: var(--text-secondary) !important; box-shadow: none !important; }
+.settings-nav-item:hover:not(.active) { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
+.settings-nav-item.active { background: var(--quiet-active) !important; color: var(--text-primary) !important; box-shadow: none !important; }
+.settings-nav-icon { opacity: 0.75 !important; color: currentColor !important; }
+.settings-nav-item.active .settings-nav-icon { color: var(--text-primary) !important; opacity: 1 !important; }
+.settings-content .setting-section h3 { text-transform: none !important; letter-spacing: -0.005em !important; font-size: 14px !important;
+  font-weight: 600 !important; color: var(--text-primary) !important; margin: 0 0 2px !important; }
+.settings-content .setting-section + .setting-section {
+  border-top: 1px solid var(--panel-border); padding-top: 20px; margin-top: 4px; }
+.settings-content .setting-hint { font-size: 12.5px !important; color: var(--text-secondary) !important; }
+.settings-content .setting-group > div > span { font-size: 13px !important; font-weight: 400 !important; opacity: 1 !important; color: var(--text-primary); }
+.settings-content .setting-group > div > span strong { font-weight: 600; }
+.settings-content .setting-item > p:first-child:not([class]) { font-size: 13px !important; font-weight: 600 !important; margin-bottom: 4px !important; }   /* Community's intro line, under its heading */
+.shortcut-setting { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.shortcut-done { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); }
+.shortcut-done svg.lucide { color: #3ecf6e; }
+/* VFX Updater title: "xtra" in the app's blue, like the main window */
+.vfx-header .title-x { color: var(--accent-primary) !important; }   /* over .vfx-header h1 span; test and dev colors still win */
+/* Sigeon V2 Editor: its section labels read like Settings' headings now (sentence case, not small capitals) */
+.sg-section h4 { text-transform: none !important; letter-spacing: -0.005em !important; font-size: 14px !important; color: var(--text-primary) !important; }
+.sg-folder-label { text-transform: none !important; letter-spacing: 0 !important; font-size: 12.5px !important; font-weight: 600 !important; color: var(--text-primary) !important; }
+
+/* VFX Updater title: its first span is the "repak" + "xtra" word (white, like the main window); "VFX Updater" stays gray */
+.vfx-header h1 > span:first-child { color: var(--text-primary) !important; }   /* "VFX Updater" white, "(WIP)" gray */
+/* Animations off: the Saved note stays shown instead of fading (a 0 s fade ended invisible) */
+html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !important; }
+/* Home: renaming a collection edits in a field its own size, lined up with the header */
+.lo-group-head .lo-group-rename { flex: none !important; width: 260px !important; margin: 0 !important; }
+
+/* ---------- batch 2, group 1: loadouts ---------- */
+/* Add mods list: a mod that is on says so with a green badge the size of its type badge */
+.mod-row .mod-type-badge.category-badge.on-badge { --badge-dot: #3ecf6e; color: #3ecf6e !important;
+  background: color-mix(in srgb, #3ecf6e, transparent 90%) !important; border-color: color-mix(in srgb, #3ecf6e, transparent 62%) !important; }
+/* New loadout card: an unseen real card underneath sets its size; the plus and words fill it */
+.lo-grid .lo-card.lo-card-new { position: relative; display: block !important; min-height: 0 !important; }
+.lo-card-new .lo-card-ghost { visibility: hidden; display: flex; flex-direction: column; }
+.lo-card-new .lo-card-add { position: absolute; inset: 0; }
+/* A preview's caption ("Mesh + Texture + Material · 1/4", "Older render") shows on hover, with the arrows */
+.lo-media-label { opacity: 0; transition: opacity 0.15s ease; }
+.lo-media:hover .lo-media-label, .lo-media:focus-within .lo-media-label { opacity: 1; }
+/* Saved: beside the loadout's name, on the name's line */
+.lp-name-wrap .lp-saved { margin-left: 6px; align-self: center; }
+/* A card's status line stays one line ("Black Panther · 0/9 · 1 not installed" ends in … when narrow), so every card,
+   the New loadout card included, is one height */
+.lo-card-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Capture dialog: the + between keys in the step text's color (the dialog's steps are one color) */
+.cp-modal .key-separator { color: var(--text-primary); }
+
+/* ---------- batch 2, group 2: Setup ---------- */
+/* A part's mark: a plain green check beside its name when present, an empty ring when not (no filled or dashed disc) */
+.su-part-mark { align-self: center; width: 16px !important; height: 16px !important; border: none !important; border-radius: 0 !important;
+  background: none !important; display: grid; place-items: center; }
+.su-part-mark:not(.is-ok)::before { content: ""; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.28); }
+.su-part-mark.is-ok { color: #3ecf6e; }
+.su-part { gap: 10px !important; }
+/* Project Galacta: where it is and the newest release as two labelled lines */
+.su-dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 14px; row-gap: 4px; font-size: 12.5px; line-height: 1.5; min-width: 0; }
+.su-dl dt { color: var(--text-secondary); }
+.su-dl dd { margin: 0; color: var(--text-primary); min-width: 0; }
+.su-dl code { font: 12px var(--font-mono); color: var(--text-primary); }
+/* ---------- batch 2, group 2: install panel ---------- */
+/* The four options as a 2 x 2 grid of tiles, each tinted with its own color again (Obfuscation sky blue, Hybrid green,
+   Legacy amber, Send to Repak the app's blue), on = a stronger tint and its switch in that color; the Library's small
+   switch and room for the words */
+.install-mod-card__footer { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px !important; }
+.install-mod-card__footer > .install-toggle { flex: none !important; }
+.install-mod-card .obfuscate-toggle { --tile: #42a5f5; }
+.install-mod-card .hybrid-toggle { --tile: #3ecf6e; }
+.install-mod-card .legacy-toggle { --tile: #f5a524; }
+.install-mod-card .repak-toggle { --tile: var(--accent-primary); }
+.install-mod-card .install-toggle { padding: 10px 12px !important; align-items: center !important;
+  background: color-mix(in srgb, var(--tile, #888), transparent 95%) !important; border-color: color-mix(in srgb, var(--tile, #888), transparent 80%) !important; }
+.install-mod-card .install-toggle:hover:not(.locked) { background: color-mix(in srgb, var(--tile, #888), transparent 91%) !important; border-color: color-mix(in srgb, var(--tile, #888), transparent 66%) !important; }
+.install-mod-card .install-toggle.active { background: color-mix(in srgb, var(--tile, #888), transparent 87%) !important; border-color: color-mix(in srgb, var(--tile, #888), transparent 52%) !important; }
+.install-mod-card .install-toggle .install-toggle__label { color: color-mix(in srgb, var(--tile, #888), white 30%) !important; font-size: 13px !important; line-height: 1.3; }
+.install-mod-card .install-toggle .install-toggle__hint { font-size: 12px !important; line-height: 1.4; }
+.install-mod-card .install-toggle__text { gap: 2px !important; }
+.install-mod-card .install-toggle .repakx-switch-control { margin-right: 12px !important; }
+/* the tile is the switch's own label element (label.repakx-switch.install-toggle) */
+.install-mod-card .install-toggle.repakx-switch.checked .repakx-switch-track { background: var(--tile) !important; }
+.install-mod-card .install-toggle.locked { opacity: 0.5 !important; }
+/* The hero tag (with its portrait) and the type tags beside it: one size */
+.install-mod-card .install-mod-card__badges .character-badge,
+.install-mod-card .install-mod-card__badges .category-badge,
+.install-mod-card .install-mod-card__badges .additional-badge,
+.install-mod-card .install-mod-card__badges .no-uassets-badge {
+  height: 24px; box-sizing: border-box; display: inline-flex !important; align-items: center; gap: 6px;
+  padding: 0 8px !important; border-radius: 6px !important; font-size: 12px !important; font-weight: 500 !important; line-height: 1 !important; }
+.install-mod-card .install-mod-card__badges .character-badge img { width: 16px; height: 16px; border-radius: 4px; object-fit: cover; margin: 0 !important; }
+/* Add to loadout's +: a plain icon, no box */
+.install-mod-card .add-tag-btn { width: 22px !important; height: 22px !important; border: none !important; background: transparent !important;
+  border-radius: 6px !important; color: var(--text-secondary) !important; }
+.install-mod-card .add-tag-btn:hover { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
+/* Install to: a wider column, its new-folder button a plain icon, folder names at the panel's text size */
+.install-mod-card__right { width: 260px !important; min-width: 260px !important; }
+.imp-btn-new-folder { border: none !important; background: transparent !important; width: 24px !important; height: 24px !important; border-radius: 6px !important; }
+.imp-btn-new-folder:hover:not(:disabled) { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
+.imp-btn-new-folder svg { font-size: 14px !important; }
+.install-mod-card .imp-folder-item, .install-mod-card .imp-folder-item .folder-name { font-size: 12.5px !important; }
+.install-mod-card .imp-folder-item.root-item { font-weight: 500 !important; }
+/* The footer's checkboxes at the buttons' 13px */
+.install-actions .install-loadout .repakx-checkbox-label, .install-actions .install-loadout .repakx-checkbox-label span { font-size: 13px !important; font-weight: 500 !important; }
+/* Small icon buttons: the app's 36px button floor would make them tall pills */
+.install-mod-card .add-tag-btn, .imp-btn-new-folder { min-height: 0 !important; padding: 0 !important; }
+/* Setup card descriptions: no single word left alone on the last line */
+.su-card p { text-wrap: pretty; }
+
+/* ---------- batch 2, group 3: the conflicts screen (custom/ConflictsPanel.tsx), built like Setup ---------- */
+.cf-modal { width: min(720px, 92vw) !important; max-width: none !important; max-height: 86vh; display: flex; flex-direction: column; padding: 0 !important; }
+.cf-modal .modal-header { padding: 16px 20px !important; border-bottom: 1px solid var(--panel-border); align-items: flex-start; }
+.cf-modal .modal-header h2 { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 16px !important; font-weight: 700; }
+/* The count of conflicts still open, in the conflict red; green "All resolved" once none are */
+.cf-count { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 18px;
+  color: #ff8a8e; background: color-mix(in srgb, #f2555a, transparent 85%); border: 1px solid color-mix(in srgb, #f2555a, transparent 55%); }
+.cf-count.is-done { color: #3ecf6e; background: color-mix(in srgb, #3ecf6e, transparent 88%); border-color: color-mix(in srgb, #3ecf6e, transparent 60%); }
+.cf-intro { flex: 1; min-width: 0; }
+.cf-sub { margin: 4px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.cf-body { overflow-y: auto; padding: 16px 20px !important; display: flex; flex-direction: column; gap: 12px !important; }
+.cf-group { border: 1px solid var(--panel-border); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.cf-head { display: flex; align-items: center; gap: 12px; }
+.cf-hero { flex: none; width: 36px; height: 36px; border-radius: 8px; object-fit: cover; background: var(--bg-dark); }
+.cf-what { min-width: 0; }
+.cf-what h3 { margin: 0; font-size: 14px; font-weight: 600; line-height: 1.4; color: var(--text-primary); }
+.cf-what p { margin: 2px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.cf-files-btn { display: inline-flex; align-items: center; gap: 2px; height: auto !important; min-height: 0 !important; padding: 0 !important;
+  border: none !important; background: none !important; font: inherit !important; color: inherit !important; cursor: pointer; }
+.cf-files-btn:hover { color: var(--text-primary) !important; }
+.cf-caret { transition: transform 150ms ease; }
+.cf-files-btn[aria-expanded="true"] .cf-caret { transform: rotate(90deg); }
+.cf-files { margin: 0; padding: 8px 10px; list-style: none; max-height: 160px; overflow: auto; border-radius: 8px; background: var(--bg-dark);
+  font: 11.5px/1.6 var(--font-mono); color: var(--text-secondary); }
+.cf-files li { white-space: nowrap; }
+.cf-mods { margin: 0; padding: 0; list-style: none; border: 1px solid var(--panel-border); border-radius: 10px; }
+.cf-mod { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 6px 12px; }
+.cf-mod + .cf-mod { border-top: 1px solid var(--panel-border); }
+.cf-mod-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--text-primary); }
+.cf-mod.is-off .cf-mod-name { color: var(--text-secondary); }
+.cf-priority { flex: none; }
+.cf-empty { margin: 0; padding: 28px 0; text-align: center; font-size: 13px; color: var(--text-secondary); }
+.cf-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px !important; border-top: 1px solid var(--panel-border); }
+.cf-modal .btn-primary { height: 32px !important; min-height: 0 !important; padding: 0 18px !important; font-size: 13px !important; width: auto !important; flex: none;
+  border-radius: var(--quiet-radius) !important; }
+
+/* ---------- batch 2, group 3: Library, Recently deleted, Settings type scale, VFX Updater title ---------- */
+/* File size: plain text at the type tag's 11px, just left of it */
+.mod-size-tag { flex: none; font-size: 11px; font-weight: 500; line-height: 1; color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* VFX Updater (WIP): the WIP in gray beside the white title */
+.vfx-header h1 .vfx-wip { color: var(--text-secondary) !important; font-weight: 600 !important; }
+/* Settings, one type scale: section titles 14px; every row label, field, choice and button 13px; notes 12.5px gray
+   lined up under their label; icons 16px; buttons in the app's quiet style instead of gray text that reads as disabled */
+.settings-content .repakx-checkbox-label, .settings-content .repakx-checkbox-label > span,
+.settings-content .setting-toggle-label { font-size: 13px !important; font-weight: 450 !important; color: var(--text-primary) !important; }
+.settings-content .setting-subtext { font-size: 12.5px !important; line-height: 1.5 !important; }
+.settings-content .integrated-input, .settings-content .integrated-input input { font-size: 12.5px !important; font-family: var(--font-mono) !important; }
+.settings-content .segment-btn { font-size: 13px !important; height: 34px !important; min-height: 0 !important; gap: 8px !important; }
+.settings-content .segment-btn svg { width: 16px !important; height: 16px !important; }
+.settings-content .action-btn { height: 32px !important; min-height: 0 !important; min-width: 0 !important; padding: 0 12px !important; gap: 6px !important;
+  font-size: 13px !important; font-weight: 500 !important; color: var(--text-primary) !important; background: transparent !important;
+  border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important; }
+.settings-content .action-btn:hover:not(:disabled) { background: var(--quiet-hover) !important; }
+.settings-content .action-btn.icon-only { width: 32px !important; padding: 0 !important; justify-content: center; }
+.settings-content .action-btn svg { width: 15px !important; height: 15px !important; flex: none; color: var(--text-secondary) !important; }
+/* A switch row's icon sits in the checkbox's 22px column, so its words and note line up with the checkbox rows' */
+.settings-content .setting-toggle-label { display: inline-flex !important; align-items: center; gap: 8px !important; }
+.settings-content .setting-toggle-label svg { width: 16px !important; height: 16px !important; margin: 0 3px; flex: none; color: var(--text-secondary) !important; }
+.settings-content .setting-toggle-actions > span { font-size: 12px !important; font-weight: 500 !important; font-style: normal !important;
+  text-shadow: none !important; opacity: 1 !important; color: var(--text-secondary) !important; }
+.settings-content .setting-item:has(.setting-toggle-label) > .setting-subtext { padding-left: 30px !important; }
+/* Settings > Recently deleted */
+.rd-empty { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.rd-list { margin: 0; padding: 0; list-style: none; border: 1px solid var(--panel-border); border-radius: 10px; }
+.rd-row { display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 8px 8px 8px 14px; }
+.rd-row + .rd-row { border-top: 1px solid var(--panel-border); }
+.rd-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.rd-name { font-size: 13px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rd-meta { font-size: 12.5px; color: var(--text-secondary); }
+.rd-empty-btn { align-self: flex-start; margin-top: 4px; }
+.rd-confirm { display: flex; align-items: center; gap: 8px; margin-top: 4px; padding: 8px 10px; border-radius: 8px; font-size: 12.5px; color: var(--text-primary);
+  background: var(--quiet-hover); border: 1px solid var(--panel-border); }
+.rd-confirm span { margin-right: auto; }
+.cf-modal:focus { outline: none; }   /* the dialog itself takes focus when it opens; its controls show the ring */
+
+/* ---------- batch 2, last round ---------- */
+/* Settings footer: Cancel and Save at the scale's 13px and one height */
+.settings-modal .modal-footer button { font-size: 13px !important; height: 34px !important; min-height: 0 !important; padding: 0 16px !important; }
+/* The scale's last 12px stragglers in Settings: UI scale presets 13px like the other choices, notes and values 12.5px */
+.settings-content .mod-state-filter.ui-scale button { font-size: 13px !important; }
+.settings-content .setting-toggle-actions > span { font-size: 12.5px !important; }
+.settings-content .cd-meta { font-size: 12.5px !important; }
+/* The mods folder field shows the path's end; its cut-off start fades instead of slicing a letter */
+.settings-content .integrated-input { -webkit-mask-image: linear-gradient(to right, transparent, #000 18px); mask-image: linear-gradient(to right, transparent, #000 18px); }
+/* Install panel: a switch's keyboard ring in its tile's color, close to the switch */
+.app .install-mod-card .install-toggle :focus-visible { outline: 2px solid color-mix(in srgb, var(--tile, #888), white 25%) !important; outline-offset: 2px !important; }
+/* Recently deleted: the row's own yes/no before deleting one mod for good */
+.rd-ask { font-size: 12.5px; color: var(--text-primary); white-space: nowrap; }
+
+/* ---------- batch 2, review round ---------- */
+/* Conflicts: a group whose mods no longer clash says "Resolved" in green and settles back */
+.cf-head { position: relative; }
+.cf-resolved { order: 2; margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; color: #3ecf6e; background: color-mix(in srgb, #3ecf6e, transparent 88%); }
+.cf-group { transition: border-color 200ms ease, background 200ms ease; }
+.cf-group.is-resolved { border-color: color-mix(in srgb, #3ecf6e, transparent 70%); background: color-mix(in srgb, #3ecf6e, transparent 97%); }
+.cf-group.is-resolved .cf-what h3 { color: var(--text-secondary); }
+
+/* Toasts: icon, words, action and close on one center line; the close a square, never a tall box */
+.toast-item { align-items: center !important; }
+.toast-close { width: 28px !important; height: 28px !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important;
+  display: grid !important; place-items: center; flex: none; border-radius: 6px !important; align-self: center !important; }
+.toast-close:hover { background: var(--quiet-hover) !important; }
+.toast-end-content { align-self: center; }
+
+/* Icon-only buttons are squares: the app's 36px button floor no longer stretches them into tall boxes */
+.modal-close, .install-mod-panel .close-btn { width: 32px !important; height: 32px !important; min-height: 0 !important; padding: 0 !important;
+  display: inline-grid !important; place-items: center; flex: none; line-height: 1 !important; }
+button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { width: 36px !important; min-width: 36px !important; height: 36px !important;
+  min-height: 0 !important; padding: 0 !important; display: inline-flex !important; align-items: center; justify-content: center; }
+.btn-ghost[title="Refresh list"], .btn-ghost[title="Expand Details"], .btn-ghost[title="Collapse Details"] { width: 36px !important; min-width: 36px !important;
+  height: 36px !important; padding: 0 !important; justify-content: center; }
+.fp-expand { width: 24px !important; height: 24px !important; min-height: 0 !important; padding: 0 !important; }
+.tags-toggle-more { width: 38px !important; min-width: 38px !important; padding: 0 !important; justify-content: center; }
+
+/* Settings > Help & Community: rows like every other section (label, gray note, button); buttons in regular weight */
+.settings-content .xs-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; }
+.settings-content .xs-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.settings-content .xs-label { font-size: 13px; font-weight: 450; color: var(--text-primary); }
+.settings-content .xs-text .setting-subtext { padding: 0 !important; margin: 0 !important; }
+.settings-content .xs-note { margin: -4px 0 4px !important; padding: 0 !important; }
+.settings-content .action-btn, .settings-content .lo-text-btn { font-weight: 400 !important; }
+/* Install card, one scale: labels (Custom name, Add to loadout, Install to) 12.5px gray; what you type and pick (the
+   name, folders, the footer choice) 13px regular; the file-name preview 12.5px gray; tile hints 12px regular under
+   their 13px tinted names; tags 12px */
+.install-mod-card .field-label, .install-mod-card__tags .field-label, .imp-section-header, .imp-section-header span {
+  font-size: 12.5px !important; font-weight: 500 !important; color: var(--text-secondary) !important; }
+.install-mod-card .mod-name-input { font-size: 13px !important; }
+.install-mod-card__hint { font-size: 12.5px !important; color: var(--text-secondary) !important; }
+.install-mod-card .install-toggle .install-toggle__hint { font-weight: 400 !important; }
+.install-mod-card .imp-folder-item, .install-mod-card .imp-folder-item .folder-name { font-size: 13px !important; font-weight: 400 !important; }
+.install-mod-card .imp-folder-item.selected .folder-name { font-weight: 500 !important; }
+.install-actions .install-loadout .repakx-checkbox-label, .install-actions .install-loadout .repakx-checkbox-label span { font-weight: 400 !important; }
+/* Add to loadout: the + right after its label (an empty chip list no longer holds a gap between them) */
+.install-mod-card__tags .install-mod-card__row { gap: 4px !important; }
+.install-mod-card__tags .tags-list:empty { display: none; }
+.install-mod-card__tags .tags-list:not(:empty) { margin-left: 4px; }   /* picked loadouts keep a little room from the label */

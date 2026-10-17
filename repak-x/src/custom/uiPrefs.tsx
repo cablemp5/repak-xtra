@@ -16,6 +16,7 @@ const PREFS = [
   { key: 'asset-explorer', label: 'Show Asset Explorer button' },
   { key: 'share', label: 'Show Share button' },
   { key: 'tools', label: 'Show Tools button' },
+  { key: 'mod-size', label: 'Show mod file sizes' }, // shown in Settings > Mods view (ModSizeSetting), not Optional controls
 ] as const
 
 const SCALES = [0.9, 1, 1.1, 1.25, 1.4, 1.5]
@@ -72,6 +73,21 @@ const update = (key: string, value: string) => {
 const subscribe = (l: () => void) => {
   listeners.add(l)
   return () => listeners.delete(l)
+}
+
+/** Whether a show/hide pref is on, re-rendering when it changes (e.g. 'mod-size'). */
+export const useUiPref = (key: (typeof PREFS)[number]['key']) => useSyncExternalStore(subscribe, () => isOn(key))
+
+/** Settings > Mods view: file sizes on mod rows (applies right away, like the other switches here in uiPrefs). */
+export function ModSizeSetting() {
+  const on = useUiPref('mod-size')
+  return (
+    <div className="setting-item">
+      <Checkbox checked={on} onChange={(checked: boolean) => update(storageKey('mod-size'), checked ? '1' : '0')}>
+        <span>Show mod file sizes</span>
+      </Checkbox>
+    </div>
+  )
 }
 
 /** Show or hide the custom tag chips on mods (T, or the button next to the tag filter). */
@@ -161,7 +177,7 @@ export default function UiSettings() {
     <>
       <div className="setting-section">
         <h3>UI scale</h3>
-        <p className="setting-subtext">UI scale, sound, motion, toasts and optional controls apply right away; Save and Cancel cover the rest.</p>
+        <p className="setting-subtext">UI scale, sound, motion, toasts, optional controls and file sizes apply right away; Save and Cancel cover the rest.</p>
         <div className="setting-group">
           <div className="mod-state-filter ui-scale" role="group" aria-label="UI scale">
             {SCALES.map(s => (
@@ -198,7 +214,7 @@ export default function UiSettings() {
       <div className="setting-section">
         <h3>Optional controls</h3>
         <div className="setting-group">
-          {PREFS.map(({ key, label }, i) => (
+          {PREFS.map(({ key, label }, i) => key !== 'mod-size' && (
             <div className="setting-item" key={key}>
               <Checkbox checked={snapshot[i] === '1'} onChange={(checked: boolean) => update(storageKey(key), checked ? '1' : '0')}>
                 <span>{label}</span>

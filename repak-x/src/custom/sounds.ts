@@ -6,7 +6,8 @@ import { play, setEnabled, setTheme, setVolume, unlock, type PlayOptions, type S
 setTheme('mech') // the mech preset for every sound
 setVolume(0.7)
 
-export const setSoundOn = (on: boolean) => setEnabled(on)
+let soundOn = true
+export const setSoundOn = (on: boolean) => { soundOn = on; setEnabled(on) }
 export const unlockSound = () => { unlock().catch(() => undefined) }
 
 type Cue = [SoundName, PlayOptions?]
@@ -51,6 +52,32 @@ document.addEventListener('keydown', e => {
   const key = isTextField(e.target) && !(e.target as HTMLInputElement).readOnly ? typingKey(e) : null
   if (key) play('type', { key })
 }, true)
+
+/** A camera shutter (two short filtered noise clicks) for a picture taken in game with Ctrl+Shift+X. primeShutter runs
+ *  on the click that opens the capture dialog, so the audio is allowed to start while repakxtra is in the background. */
+let shutterCtx: AudioContext | null = null
+export const primeShutter = () => { shutterCtx ??= new AudioContext(); shutterCtx.resume().catch(() => undefined) }
+export function playShutter() {
+  if (!soundOn) return
+  primeShutter()
+  const ctx = shutterCtx!
+  const len = Math.floor(ctx.sampleRate * 0.08)
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate)
+  const d = buf.getChannelData(0)
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 3
+  for (const [at, level] of [[0, 0.45], [0.075, 0.3]]) { // the shutter opening, then closing
+    const src = ctx.createBufferSource()
+    src.buffer = buf
+    const band = ctx.createBiquadFilter()
+    band.type = 'bandpass'
+    band.frequency.value = 2600
+    band.Q.value = 0.9
+    const gain = ctx.createGain()
+    gain.gain.value = level
+    src.connect(band).connect(gain).connect(ctx.destination)
+    src.start(ctx.currentTime + at)
+  }
+}
 
 /** Alert sounds (AlertHandler): what happened, on top of the click that caused it. */
 export function alertSound(color?: string, isLoading?: boolean) {

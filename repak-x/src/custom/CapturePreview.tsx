@@ -6,6 +6,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
 import { Camera, RotateCcw } from 'lucide-react'
 import { MatrixLoader } from './motion'
+import { playShutter, primeShutter } from './sounds'
 import type { LoadoutProps } from './Loadouts'
 import { type Loadout, displayName, modKey } from './loadoutStore'
 import { getAdditionalCategories } from '../utils'
@@ -29,8 +30,12 @@ function toWebp(buf: ArrayBuffer): Promise<Blob> {
   return new Promise((ok, fail) => canvas.toBlob(b => (b ? ok(b) : fail(new Error('Could not encode the picture.'))), 'image/webp', 0.9))
 }
 
-/** Ctrl + Shift + X as keycaps with room between them. */
-const Keys = () => <span className="cp-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd></span>
+/** Ctrl + Shift + X as keycaps, drawn like the Keyboard shortcuts screen's (F1). */
+const Keys = () => (
+  <span className="cp-keys">
+    <kbd>Ctrl</kbd><span className="key-separator">+</span><kbd>Shift</kbd><span className="key-separator">+</span><kbd>X</kbd>
+  </span>
+)
 
 function CaptureDialog({ p, l, hero, onUse, onClose }: {
   p: LoadoutProps; l: Loadout; hero?: string; onUse: (blob: Blob) => Promise<boolean>; onClose: () => void
@@ -47,6 +52,7 @@ function CaptureDialog({ p, l, hero, onUse, onClose }: {
       .then(toWebp)
       .then(blob => {
         if (id !== run.current) return
+        if (cmd === 'capture_game_hotkey') playShutter() // taken in game: the sound says it worked
         setShot({ blob, url: URL.createObjectURL(blob) })
         setPhase('done')
       })
@@ -86,38 +92,39 @@ function CaptureDialog({ p, l, hero, onUse, onClose }: {
       <motion.div className="modal-content cp-modal" role="dialog" aria-label="Capture preview in game" onClick={e => e.stopPropagation()}
         initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.15 }}>
         <div className="modal-header">
-          <div><h2>Capture preview in game</h2><p className="cp-sub">A picture of {who} for {l.name}'s preview.</p></div>
+          <div><h2>Capture preview in game</h2><p className="cp-sub">A picture of {who} for {l.name}.</p></div>
           <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
         <div className="modal-body cp-body">
           {shot
             ? <div className="cp-shot"><img src={shot.url} alt={`${who} in game`} /></div>
             : (
-              <>
+              <div className="cp-how">
                 {/* What the picture keeps: xtra_capture.rs crop_rect on a 16:9 screen (1007, 112, 477 x 675 of 2000 x 1125) */}
                 <figure className="cp-example">
                   <div className="cp-example-frame">
                     <img src={example} alt="The Hero Profile Overview screen, with the part that is kept boxed in green" />
                     <span className="cp-crop" aria-hidden="true" />
                   </div>
-                  <figcaption>Your picture keeps what is in the green box, framed like the generated previews.</figcaption>
+                  <figcaption>The green box is what you get.</figcaption>
                 </figure>
                 <ol className="cp-steps">
-                  <li>In Marvel Rivals, open <b>Heroes</b> and pick <b>{who}</b>.</li>
-                  <li>Go to the hero's <b>Overview</b> or <b>Cosmetics</b> screen.</li>
-                  <li>Press <Keys /> in the game, or <b>Capture now</b> below.</li>
+                  <li><span>In the game, open {who}'s Overview or Cosmetics screen.</span></li>
+                  <li><span>Press <Keys /> there, or click Capture now.</span></li>
                 </ol>
-                {/* One quiet line, full width, so it never wraps next to the buttons */}
-                <div className={`cp-status is-${phase}`} role="status">
-                  {phase === 'listening' && <><i className="cp-dot" aria-hidden="true" /><span>Listening for <Keys /> in the game</span></>}
-                  {phase === 'capturing' && <><MatrixLoader size={12} /><span>Switching to the game…</span></>}
-                  {phase === 'idle' && <><i className="cp-dot is-off" aria-hidden="true" /><span>Not listening.</span>
-                    <button type="button" className="cp-link" onClick={() => take('capture_game_hotkey')}>Listen again</button></>}
-                </div>
-              </>
+              </div>
             )}
         </div>
         <div className="modal-footer cp-footer">
+          {/* Listening state on the footer's left: one quiet line beside the buttons */}
+          {!shot && (
+            <div className={`cp-status is-${phase}`} role="status">
+              {phase === 'listening' && <><i className="cp-dot" aria-hidden="true" /><span>Listening for <Keys /></span></>}
+              {phase === 'capturing' && <><MatrixLoader size={12} /><span>Switching to the game…</span></>}
+              {phase === 'idle' && <><i className="cp-dot is-off" aria-hidden="true" /><span>Not listening.</span>
+                <button type="button" className="cp-link" onClick={() => take('capture_game_hotkey')}>Listen again</button></>}
+            </div>
+          )}
           {shot
             ? <>
                 <button type="button" className="lo-text-btn" disabled={phase === 'saving'} onClick={retake}><RotateCcw size={14} /> Retake</button>
@@ -156,7 +163,7 @@ export function CaptureButton({ p, l, onUse }: { p: LoadoutProps; l: Loadout; on
   if (!show) return null
   return (
     <>
-      <button type="button" className="lo-text-btn" disabled={!running} onClick={() => setOpen(true)}
+      <button type="button" className="lo-text-btn" disabled={!running} onClick={() => { primeShutter(); setOpen(true) }}
         title={running ? `Take a picture of ${hero ?? 'the hero'} in Marvel Rivals for this loadout's image` : 'Open Marvel Rivals first'}>
         <Camera size={14} /> Capture preview in game
       </button>

@@ -8,10 +8,12 @@ import { refreshPreviewsAvailable } from './previews'
 import type { useAlert } from '../components/AlertHandler'
 
 type Alert = ReturnType<typeof useAlert>
-export type KitStatus = { version: string | null; dev: boolean; blender: string | null }
+/** source: where the installed kit came from ("github" or "file"; null for a kit installed before that was recorded) */
+export type KitStatus = { version: string | null; source: 'github' | 'file' | null; blender: string | null }
 export type KitRelease = { version: string; published: string; notes: string; url: string; asset: string; size: number }
 export type Doctor = { ok: boolean; problems: string[] }
-export type KitProgress = { stage: 'download' | 'unpack'; done: number; total: number }
+/** blender: winget's progress (done of total bytes, or percent when total is 100) and its latest message */
+export type KitProgress = { stage: 'download' | 'unpack' | 'blender'; done: number; total: number; text?: string }
 
 /** A kit zip by its file name (repakxtra-preview-kit-v2.zip, also "... (1).zip" from a browser). */
 export const isKitZip = (path: string) => /(^|[\\/])repakxtra-preview-kit[^\\/]*\.zip$/i.test(path)
@@ -21,10 +23,15 @@ export const isNewerKit = (latest: string, installed?: string | null) =>
 const mb = (n: number) => `${Math.round(n / 1048576)} MB`
 /** The generator's check of this PC; when it cannot run (no kit, busy, would not start) that is its one problem. */
 const checkPc = () => invoke<Doctor>('previews_doctor').catch((e): Doctor => ({ ok: false, problems: [String(e)] }))
-/** "38 MB of 108 MB", "Unpacking…" */
+/** "38 MB of 108 MB", "Unpacking…", "Downloading Blender · 120 MB of 345 MB" */
 export const progressText = (p: KitProgress | null) =>
-  !p ? '' : p.stage === 'unpack' ? 'Unpacking…' : p.total ? `${mb(p.done)} of ${mb(p.total)}` : mb(p.done)
-export const progressShare = (p: KitProgress | null) => (p?.stage === 'download' && p.total ? Math.min(1, p.done / p.total) : null)
+  !p ? '' : p.stage === 'unpack' ? 'Unpacking…'
+    : p.stage === 'blender' ? [p.text || 'Installing Blender', p.total === 100 ? `${p.done}%` : p.total ? `${mb(p.done)} of ${mb(p.total)}` : ''].filter(Boolean).join(' · ')
+    : p.total ? `${mb(p.done)} of ${mb(p.total)}` : mb(p.done)
+export const progressShare = (p: KitProgress | null) => (p?.stage !== 'unpack' && p?.total ? Math.min(1, p.done / p.total) : null)
+/** Tells every kit card (Setup's, Guided setup's) to re-read the kit: each keeps its own copy of the state. */
+const changed = () => window.dispatchEvent(new Event('preview-kit-changed'))
+const BLENDER_START: KitProgress = { stage: 'blender', done: 0, total: 0, text: 'Asking winget for Blender (Windows may ask for permission)' }
 
 export function usePreviewKit(alert: Alert) {
   const [kit, setKit] = useState<KitStatus | null>(null)
@@ -32,6 +39,7 @@ export function usePreviewKit(alert: Alert) {
   const [busy, setBusy] = useState<string | null>(null)
   const [progress, setProgress] = useState<KitProgress | null>(null)
   const [doctor, setDoctor] = useState<Doctor | null>(null)
+  const [checked, setChecked] = useState(false) // Check for updates was clicked: the kit's line says what GitHub has
   const status = () => invoke<KitStatus>('preview_kit_status').then(s => { setKit(s); return s })
   useEffect(() => {
     status().catch(e => alert.warning('Preview kit', String(e)))
@@ -49,15 +57,17 @@ export function usePreviewKit(alert: Alert) {
     const v = await invoke<string>('preview_kit_install', { file: file ?? null })
     await status()
     await refreshPreviewsAvailable()
+    changed()
     return v
   }
   /** A later step's result, then the check of this PC (so a card always says what is missing). */
   const runDoctorAfter = <T,>(p: Promise<T>, what: string) => run(what, async () => { const r = await p; setDoctor(await checkPc()); return r })
 
   return {
-    kit, latest, busy, progress, doctor,
+    kit, latest, busy, progress, doctor, checked,
     update: Boolean(latest && kit?.version && isNewerKit(latest.version, kit.version)),
-    check: () => run('check', fetchLatest),
+    /** Asks GitHub for the newest kit; the card's kit line then says what it found (an update is one click: Update to vN). */
+    check: () => run('check', async () => { setChecked(false); const r = await fetchLatest(); setChecked(true); return r }),
     /** The newest kit, quietly (offline: nothing to say). */
     peek: () => fetchLatest().catch(() => null),
     checkPc: () => runDoctorAfter(Promise.resolve(), 'doctor'),
@@ -69,19 +79,23 @@ export function usePreviewKit(alert: Alert) {
       return v
     }),
     installBlender: () => run('blender', async () => {
+      setProgress(BLENDER_START)
       const path = await invoke<string>('preview_kit_install_blender')
       await status()
+      changed()
       setDoctor(await checkPc())
       return path
     }),
     pickBlender: (path: string) => run('blender', async () => {
       await invoke('preview_kit_set_blender', { path })
       await status()
+      changed()
       setDoctor(await checkPc())
     }),
     remove: () => run('remove', async () => {
       await invoke('preview_kit_remove')
       await status()
+      changed()
       await refreshPreviewsAvailable()
       setDoctor(null)
       alert.info('Preview kit', 'Removed. Previews already made stay.')
@@ -91,9 +105,9 @@ export function usePreviewKit(alert: Alert) {
     setUp: () => run('setup', async () => {
       const now = kit ?? await status()
       const release = latest === undefined ? await fetchLatest() : latest
-      if (!now.version && !now.dev && !release) throw new Error('No preview kit has been published yet. If someone sent you the kit zip, drop it on this window.')
-      if (release && (!now.version ? !now.dev : isNewerKit(release.version, now.version))) await installKit()
-      if (!now.blender) { await invoke<string>('preview_kit_install_blender'); await status() }
+      if (!now.version && !release) throw new Error('No preview kit has been published yet. If someone sent you the kit zip, drop it on this window.')
+      if (release && (!now.version || isNewerKit(release.version, now.version))) await installKit()
+      if (!now.blender) { setProgress(BLENDER_START); await invoke<string>('preview_kit_install_blender'); await status(); changed() }
       const d = await checkPc()
       setDoctor(d)
       if (d.ok) alert.success('Mod previews', 'Ready. Generate previews from a loadout.')

@@ -77,7 +77,7 @@ export function AddToLoadoutField({ paths, alert }: { paths: string[]; alert: Lo
         onAddNew={() => {
           const l = createFromMods(paths)
           const id = alert.success(`${l.name} created`, `With the ${plural(l.on.length, 'selected mod')}. Rename it on its page.`, {
-            action: { label: 'Open', onClick: () => { alert.dismissAlert(id); openLoadout(l.id) } },
+            action: { label: 'Open', onClick: () => { alert.dismissAlert(id); openLoadout(l.id, true) } },
           })
         }}
         onChange={(id: string) => {
@@ -104,7 +104,7 @@ export function LoadoutMenuItems({ paths, alert, close }: { paths: string[]; ale
   const create = () => {
     const l = createFromMods(paths)
     const id = alert.success(`${l.name} created`, `With ${plural(l.on.length, 'mod')}. Rename it on its page.`, {
-      action: { label: 'Open', onClick: () => { alert.dismissAlert(id); openLoadout(l.id) } },
+      action: { label: 'Open', onClick: () => { alert.dismissAlert(id); openLoadout(l.id, true) } },
     })
     close()
   }
@@ -171,7 +171,7 @@ export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], ve
     const flipped = new Set(changes.filter(m => !failed.includes(m)).map(m => m.path))
     const after = p.mods.map(m => (flipped.has(m.path) ? { ...m, enabled: !m.enabled } : m))
     if (failed.length) {
-      p.alert.warning(`${l.name} partly ${verb}`, `Could not switch ${failed.map(m => modKey(m.path)).join(', ')}. Close anything using those files, then try again.`)
+      p.alert.warning(`${l.name} partly ${verb}`, failed.reason ?? `Could not switch ${failed.map(m => modKey(m.path)).join(', ')}. Close anything using those files, then try again.`)
     } else {
       p.alert.success(`${l.name} ${verb}`, `${plural(changes.length, 'mod')} switched.`)
     }

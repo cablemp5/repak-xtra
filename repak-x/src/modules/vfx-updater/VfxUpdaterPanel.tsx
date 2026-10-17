@@ -560,7 +560,7 @@ export default function VfxUpdaterPanel() {
     <div className="vfx-panel">
       <header className="vfx-header">
         <h1 className="font-logo">
-          repakxtra <AuroraText className="font-logo">VFX</AuroraText>
+          <AuroraText className="font-logo">VFX Updater</AuroraText> <span className="vfx-wip">(WIP)</span>{/* repakxtra */}
         </h1>
       </header>
 

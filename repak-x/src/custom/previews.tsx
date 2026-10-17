@@ -7,16 +7,17 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { ListPlus, Sparkles, Square, X } from 'lucide-react'
+import { ListPlus, Sparkles, X } from 'lucide-react'
 import { play } from 'cuelume'
 import { useAlert } from '../components/AlertHandler'
-import { modKey } from './loadoutStore'
+import { modKey, patchLoadout, readLoadouts } from './loadoutStore'
+import { deleteMedia } from './loadoutMedia'
 import { MatrixLoader, revealOnLoad } from './motion'
 import { plural } from './modName'
 
 const NOTHING = 'Nothing to show for this mod: previews cover skins, meshes, textures, animations, UI icons, VFX colors and sounds.'
-const FAILED = 'The render failed. The reason is in %APPDATA%\\Repak-X\\previews\\generator.log; try again once it is fixed.'
-const SET_FAILED = 'The loadout render failed. The reason is in %APPDATA%\\Repak-X\\previews\\generator.log.'
+const FAILED = 'The last render failed. The full error is in Logs.'
+const SET_FAILED = 'The last loadout render failed. The full error is in Logs.'
 const BUSY = 'Another preview generator is running (a manual run or an earlier app session).'
 
 const revs = new Map<string, number>() // key -> bump count, so a re-rendered preview reloads
@@ -30,6 +31,22 @@ const markNone = (key: string, on: boolean) => {
   if (none.has(key) === on) return
   if (on) none.add(key); else none.delete(key)
   try { localStorage.setItem(NONE_KEY, JSON.stringify([...none])) } catch { /* storage full or off: only this session knows */ }
+}
+/** A run that ended with failures, for the toast (usePreviewFailureToast): the full errors are in the Logs. */
+type Failure = { name: string; failed: number; setFailed: boolean }
+const failureListeners = new Set<(f: Failure) => void>()
+/** Opens Setup at its Mod previews card (SetupPanel.tsx listens). */
+export const openPreviewSetup = () => window.dispatchEvent(new CustomEvent('repakxtra-open-setup', { detail: 'previews' }))
+const loadoutOf = (setKey: string) => readLoadouts().find(x => previewSetKey(x.id) === setKey)
+/** The loadout's own image as its run starts (its stored revision, or the legacy data URL), or null without one. */
+const ownImageOf = (setKey?: string) => { const l = setKey ? loadoutOf(setKey) : undefined; return l ? (l.mediaRev ?? l.image ?? null) : null }
+/** A loadout's generated previews take the place of its own pasted or uploaded image (the image is deleted): only the
+ *  image it had when the run started, so one added during the run stays. */
+const replaceOwnImage = (setKey: string, had: string | number | null) => {
+  const l = loadoutOf(setKey)
+  if (!l || had === null || (l.mediaRev ?? l.image ?? null) !== had) return
+  deleteMedia(l.id)
+  patchLoadout(l.id, { image: undefined, mediaRev: undefined, mediaType: undefined })
 }
 const covers = new Map<string, Covers & { rev: number }>() // loadout render key -> the mods it shows and the mods it was rendered for
 // Shared caches, so a card that remounts (Home -> page -> Home) shows its image at once without reading it again.
@@ -59,13 +76,24 @@ const queue: QueuedJob[] = []
 let active = false // a run was accepted and its done event has not arrived yet
 let batchDone = 0  // jobs finished since the queue was last empty, for Home's "3 of 21"
 type SetResult = 'ok' | 'none' | 'failed' | undefined
-let run = { id: '', total: 0, made: 0, none: 0, failed: 0, stopping: false, summary: '', set: undefined as string | undefined, name: '', setResult: undefined as SetResult, busy: '' }
+let run = { id: '', total: 0, made: 0, none: 0, failed: 0, stopping: false, summary: '', set: undefined as string | undefined, name: '', setResult: undefined as SetResult, busy: '',
+  ownImage: null as string | number | null }
 let version = 0
 const listeners = new Set<() => void>()
 const notify = () => { version++; listeners.forEach(l => l()) }
 const subscribe = (l: () => void) => { listeners.add(l); return () => listeners.delete(l) }
 
-invoke<string[]>('list_mod_previews').then(keys => { keys.forEach(k => revs.set(k, 0)); notify() }).catch(() => undefined)
+/** Reads which previews exist. After a run it also drops the other-form images (<key>@2) the generator deleted, since
+ *  nothing else reports those as gone. */
+const syncPreviewList = () => invoke<string[]>('list_mod_previews').then(keys => {
+  const now = new Set(keys)
+  for (const k of [...revs.keys()]) if (k.includes('@') && !now.has(k)) { revs.delete(k); dropCached(k) }
+  keys.forEach(k => { if (!revs.has(k)) revs.set(k, 0) })
+  notify()
+}).catch(() => undefined)
+syncPreviewList()
+/** A character's other forms (Magik's Darkchylde, Hulk's other two): <key>@2, <key>@3 beside <key>. */
+export const formKeys = (key: string) => [2, 3, 4].map(n => `${key}@${n}`).filter(k => revs.has(k))
 // No generator on this PC (a friend's copy without the preview kit): Generate buttons stay hidden, existing previews still show
 let available = false
 /** Asks the backend again (after the preview kit was installed or removed in Setup). */
@@ -131,11 +159,17 @@ listen<boolean>('mod-previews-done', e => {
   const failed = run.failed + (run.stopping ? 0 : left)
   const parts = [`${run.made} made`, run.none && `${run.none} with nothing to show`, failed && `${failed} failed`,
     run.stopping && left && `${left} skipped`, run.setResult === 'failed' && '1 loadout render failed']
-  const summary = run.busy || (e.payload || run.made || run.none || run.failed ? parts.filter(Boolean).join(' · ') : FAILED)
+  // Stopped before anything was made is a stop, not a failure
+  const stoppedEarly = run.stopping && !run.made && !run.none && !run.failed
+  const summary = run.busy || (stoppedEarly ? 'Stopped' : e.payload || run.made || run.none || run.failed ? parts.filter(Boolean).join(' · ') : FAILED)
   run = { ...run, stopping: false, summary }
-  play(run.busy ? 'warning' : run.made && !failed && run.setResult !== 'failed' ? 'ready' : run.made ? 'warning' : 'error')
+  // Previews made for a loadout replace the image pasted or uploaded for it (not on Stop: the user ended it)
+  if (run.set && !run.stopping && (run.setResult === 'ok' || run.made > 0)) replaceOwnImage(run.set, run.ownImage)
+  if (!run.busy && (failed || run.setResult === 'failed')) failureListeners.forEach(f => f({ name: run.name, failed, setFailed: run.setResult === 'failed' }))
+  play(run.busy ? 'warning' : stoppedEarly ? 'close' : run.made && !failed && run.setResult !== 'failed' ? 'ready' : run.made ? 'warning' : 'error')
   batchDone++
   notify()
+  syncPreviewList()
   startNext()
   if (!running()) batchDone = 0
 }).catch(() => undefined)
@@ -149,12 +183,6 @@ export const previewSetKey = (loadoutId: string) => `loadout-${loadoutId}`
 export const loadoutHasPreview = (l: { id: string; on: string[] }) => hasPreview(previewSetKey(l.id)) || l.on.some(k => hasPreview(modKey(k))) || noPreviewPossible(l)
 /** Every mod of the loadout rendered with nothing to show (sounds, unknown types): there is no preview to make. */
 export const noPreviewPossible = (l: { on: string[] }) => l.on.length > 0 && l.on.every(k => none.has(modKey(k)))
-/** The message from a key's last render (failed, nothing to show, another generator busy), if any. */
-export function usePreviewOutcome(key: string) {
-  usePreviewVersion()
-  return outcome.get(key)
-}
-
 /** A loadout's combined render: the mods it shows and the mods it was rendered for; undefined while there is none
  *  (or until it is read, once per revision). */
 export function useCovers(setKey: string): Covers | undefined {
@@ -254,7 +282,8 @@ const start = async (job: QueuedJob): Promise<string | null> => {
   active = true
   jobs.forEach(([, k]) => { pending.add(k); outcome.delete(k) })
   if (job.set) outcome.delete(job.set)
-  run = { id: job.id, total: jobs.length, made: 0, none: 0, failed: 0, stopping: false, summary: '', set: job.set, name: job.name, setResult: undefined, busy: '' }
+  run = { id: job.id, total: jobs.length, made: 0, none: 0, failed: 0, stopping: false, summary: '', set: job.set, name: job.name, setResult: undefined, busy: '',
+    ownImage: ownImageOf(job.set) }
   notify()
   try {
     if (await invoke<boolean>('generate_mod_previews', { jobs, set: job.set ?? null, force: Boolean(job.force) })) return null
@@ -321,6 +350,34 @@ const unqueue = (id: string) => {
   if (i >= 0) { queue.splice(i, 1); notify() }
 }
 
+/** One toast per run that had failures (mounted once, on Home): what failed, that the full error is in Logs, and where
+ *  to send it if it keeps happening. Open logs opens the log drawer (App.tsx listens). */
+export function usePreviewFailureToast(alert: ReturnType<typeof useAlert>) {
+  useEffect(() => {
+    const show = (f: Failure) => {
+      const n = f.failed + (f.setFailed ? 1 : 0)
+      const what = f.setFailed && !f.failed ? `The ${f.name} render failed.` : `${plural(n, 'preview')} for ${f.name} failed.`
+      const id = alert.error('Preview failed', `${what} The full error is in Logs. If it keeps happening, export the log there and send it to cable on Discord.`, {
+        duration: 15000,
+        action: { label: 'Open logs', onClick: () => { alert.dismissAlert(id); window.dispatchEvent(new Event('repakxtra-open-logs')) } },
+      })
+    }
+    failureListeners.add(show)
+    return () => { failureListeners.delete(show) }
+  }, [alert])
+}
+
+/** A Generate button on a PC without the preview kit: grayed out, says what is missing, and opens Setup at Mod previews. */
+export function PreviewsUnavailable({ className, label }: { className: string; label: string }) {
+  return (
+    <button type="button" className={`${className} is-unavailable`} onClick={openPreviewSetup}
+      aria-label={`${label}: needs the preview kit. Set it up in Setup`}
+      title="Previews need the preview kit and Blender (both free). Click to set them up in Setup > Mod previews.">
+      <Sparkles size={16} /><span className="bulk-btn-label">{label}</span><span className="setup-chip">Set up</span>
+    </button>
+  )
+}
+
 /** "Electric Blue · preview 2 of 9", shimmering while it works. */
 const progressText = () => `${run.name} · preview ${doneOf()} of ${run.total}`
 const Shimmer = ({ text }: { text: string }) => <span className="t-shimmer">{text}</span>
@@ -341,11 +398,16 @@ export function ModPreview({ path }: { path: string }) {
   const busy = pending.has(key)
   const queued = queue.some(q => q.id === id)
   const message = outcome.get(key)
+  const forms = formKeys(key)
   return (
     <div className="detail-section mod-preview">
       {url && (
-        <div className="mod-preview-frame"><img src={url} alt="Generated preview" onLoad={revealOnLoad} /></div>
+        <div className={`mod-preview-frame${forms.length ? ' has-forms' : ''}`}>
+          <img src={url} alt="Generated preview" onLoad={revealOnLoad} />
+          {forms.map(k => <FormImage key={k} k={k} />)}
+        </div>
       )}
+      {!canGenerate && <div className="mod-preview-bar"><PreviewsUnavailable className="mod-preview-btn" label="Generate preview" /></div>}
       {canGenerate && <div className="mod-preview-bar">
         <button type="button" className="mod-preview-btn" disabled={busy}
           onClick={() => (queued ? unqueue(id) : ask(alert, { paths: [path], name: key, force: Boolean(url) }))}
@@ -358,6 +420,12 @@ export function ModPreview({ path }: { path: string }) {
       </div>}
     </div>
   )
+}
+
+/** Another form's image beside the first in the details panel. */
+function FormImage({ k }: { k: string }) {
+  const src = usePreviewUrl(k)
+  return src ? <img src={src} alt="Generated preview, another form" onLoad={revealOnLoad} /> : null
 }
 
 /** Previews for a set of mods (the selection bar, a loadout page), with progress and Stop while its own run goes.
@@ -374,16 +442,21 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
   const again = Boolean(set && (hasPreview(set) || paths.some(p => hasPreview(modKey(p)))))
   const job: Job = { paths, set, name: name ?? `${n} selected mod${n === 1 ? '' : 's'}`, force: again }
   const text = again ? label.replace(/^Generate/, 'Regenerate') : label
-  if (!canGenerate) return null
+  if (!canGenerate) return <PreviewsUnavailable className={className} label={label} />
   const id = jobId(job)
   if (running() && run.id === id) {
+    // What it is doing (the dot loader and "2 of 9"), and Stop as its own button beside it
     return (
-      <button type="button" className={`${className} is-running`} onClick={stop} disabled={run.stopping}
-        title={queue.length ? `Stop now, and clear the ${queue.length} queued` : 'Stop now'}>
-        {/* the dot loader while it works; pointing at it shows Stop */}
-        <span className="run-icon" aria-hidden="true"><MatrixLoader className="run-spin" /><Square size={11} fill="currentColor" className="run-stop" /></span>
-        {run.stopping ? 'Stopping…' : <Shimmer text={`Generating preview ${doneOf()} of ${run.total}`} />}
-      </button>
+      <span className="run-group">
+        <span className={`${className} is-running`} role="status">
+          <MatrixLoader size={12} />
+          {run.stopping ? 'Stopping…' : <Shimmer text={`Generating ${doneOf()} of ${run.total}`} />}
+        </span>
+        <button type="button" className={`${className} run-stop-btn`} onClick={stop} disabled={run.stopping}
+          title={queue.length ? `Stop now, and clear the ${queue.length} queued` : 'Stop now'}>
+          <span className="stop-glyph" aria-hidden="true" />Stop
+        </button>
+      </span>
     )
   }
   if (running()) {

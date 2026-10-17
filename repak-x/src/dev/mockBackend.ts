@@ -159,11 +159,21 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         return true
       }
       case 'cancel_mod_previews': return null
+      // A kit is installed (v4, loaded from a file) unless 'mock.noPreviews' = '1'; 'mock.kit' / 'mock.kitSource' override
+      // it, 'mock.kitLatest' is the newest on GitHub ('none': nothing published)
       case 'previews_available': return localStorage.getItem('mock.noPreviews') !== '1'
-      case 'preview_kit_status': return { version: localStorage.getItem('mock.kit'), dev: localStorage.getItem('mock.noPreviews') !== '1', blender: 'C:\\Program Files\\Blender Foundation\\Blender 5.2\\blender.exe' }
-      case 'preview_kit_latest': return { version: '1', published: '2026-10-15T12:00:00Z', notes: '## First kit\n- Python, the generator and its tools', url: 'https://github.com/cablemp5/repak-xtra/releases', asset: '', size: 150000000 }
-      case 'preview_kit_install': localStorage.setItem('mock.kit', '1'); return '1'
-      case 'preview_kit_remove': localStorage.removeItem('mock.kit'); return null
+      case 'preview_kit_status': {
+        const version = localStorage.getItem('mock.kit') ?? (localStorage.getItem('mock.noPreviews') === '1' ? null : '4')
+        return { version, source: version ? localStorage.getItem('mock.kitSource') || 'file' : null, blender: 'C:\\Program Files\\Blender Foundation\\Blender 5.2\\blender.exe' }
+      }
+      case 'preview_kit_latest': return localStorage.getItem('mock.kitLatest') === 'none' ? null
+        : { version: localStorage.getItem('mock.kitLatest') || '4', published: '2026-10-15T12:00:00Z', notes: '## Kit v4\n- Previews for each hero form', url: 'https://github.com/cablemp5/repak-xtra/releases', asset: '', size: 113000000 }
+      case 'preview_kit_install': {
+        const v = localStorage.getItem('mock.kitLatest') || '4'
+        localStorage.setItem('mock.kit', v); localStorage.setItem('mock.kitSource', args?.file ? 'file' : 'github'); localStorage.removeItem('mock.noPreviews')
+        return v
+      }
+      case 'preview_kit_remove': localStorage.setItem('mock.noPreviews', '1'); localStorage.removeItem('mock.kit'); return null
       case 'preview_kit_set_blender': return args?.path ?? null
       case 'preview_kit_install_blender': return 'C:\\Program Files\\Blender Foundation\\Blender 5.2\\blender.exe'
       case 'set_game_path': return String(args?.path ?? '')
@@ -189,6 +199,10 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         if (i >= 0) trash.set(args?.trashId, data.mods.splice(i, 1)[0])
         return null
       }
+      // Recently deleted: what delete_mod put in the trash, newest first
+      case 'list_trashed_mods': return [...trash.entries()].reverse().map(([id, m]) => ({ id, paths: [m.path], size: m.file_size ?? 1048576,
+        deleted: Math.floor(Date.now() / 1000) - 120, expires: Math.floor(Date.now() / 1000) + 7 * 86400 - 120 }))
+      case 'empty_trashed_mods': { let n = 0; for (const id of args?.ids ?? []) if (trash.delete(id)) n++; return n }
       case 'restore_trashed_mods': {
         let restored = 0
         const failed: string[] = []
@@ -198,19 +212,22 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
           else if (data.mods.some((m: any) => m.path === mod.path)) failed.push(`${mod.path} already exists, left the trashed copy alone`)
           else { data.mods.push(mod); trash.delete(id); restored++ }
         }
+        if (restored) setTimeout(() => emit('mods_dir_changed', null), 200) // the real app's folder watcher sees them come back
         if (failed.length) throw `Restored ${restored} file(s); failed: ${failed.join('; ')}`
         return restored
       }
       case 'get_skip_launcher_status':
       case 'check_for_previous_crash': return false
-      case 'check_mod_clashes': return []
+      // localStorage 'mock.clashes': a JSON list of { file_path, mod_paths } to show conflicts (custom/conflicts.ts)
+      case 'check_mod_clashes': return JSON.parse(localStorage.getItem('mock.clashes') || '[]')
       // Installing: the file picker returns two fake paks, install adds them to the library and reports done. A folder
       // pick (the Sigeon folder) returns an unzipped Sigeon download.
       case 'plugin:dialog|open':
         if (args?.options?.directory) return 'C:\\Users\\you\\Downloads\\Sigeon V2'
         return ['C:/Fake/Drop/Alpha_Skin_9999999_P.pak', 'C:/Fake/Drop/Beta_Icons_9999999_P.pak']
+      // localStorage 'mock.dropType' sets the dropped mods' type (e.g. 'Daredevil - Mesh [Blueprint]')
       case 'parse_dropped_files':
-        return (args?.paths ?? []).map((path: string) => ({ path, mod_name: path.split('/').pop(), mod_type: 'Black Panther - Texture',
+        return (args?.paths ?? []).map((path: string) => ({ path, mod_name: path.split('/').pop(), mod_type: localStorage.getItem('mock.dropType') || 'Black Panther - Texture',
           is_dir: false, contains_uassets: true, contains_raw_assets: false, auto_to_repak: false, file_size: 1048576 }))
       case 'install_mods':
         for (const m of args?.mods ?? []) {

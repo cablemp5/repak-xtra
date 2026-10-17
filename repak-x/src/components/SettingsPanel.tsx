@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { AnimatedThemeToggler } from './ui/AnimatedThemeToggler'
 import Switch from './ui/Switch'
 import Checkbox from './ui/Checkbox'
-import UiSettings from '../custom/uiPrefs' // repakxtra
+import UiSettings, { ModSizeSetting } from '../custom/uiPrefs' // repakxtra
+import RecentlyDeleted from '../custom/RecentlyDeleted' // repakxtra: Settings > Recently deleted
 import TailInput from './ui/TailInput'
 import { LuFolderInput } from "react-icons/lu"
 import { RiSparkling2Fill } from "react-icons/ri"
@@ -13,16 +14,17 @@ import {
   MdTune,
   MdPalette,
   MdExtension,
-  MdHelpOutline
+  MdHelpOutline,
+  MdRestoreFromTrash
 } from "react-icons/md"
 import { FaDiscord, FaSteam } from "react-icons/fa"
 import { SiEpicgames } from "react-icons/si"
 import { RiGraduationCapFill } from "react-icons/ri"
 import { BsKeyboardFill } from "react-icons/bs"
 import { IoIosSettings } from "react-icons/io"
-import DiscordWidget from './DiscordWidget'
 import { REPAKXTRA_VERSION } from '../custom/version' // repakxtra
-import CableDiscord from '../custom/CableDiscord' // repakxtra
+import CableDiscord, { RepakXDiscord } from '../custom/CableDiscord' // repakxtra: both servers as quiet cards
+import { ShortcutSetting } from '../custom/shortcut' // repakxtra
 import './SettingsPanel.css'
 import { useAlert } from './AlertHandler'
 import { motion } from 'framer-motion'
@@ -40,6 +42,7 @@ const CATEGORIES = [
   { id: 'general', label: 'General', icon: MdTune },
   { id: 'interface', label: 'Interface', icon: MdPalette },
   { id: 'integrations', label: 'Integrations', icon: MdExtension },
+  { id: 'trash', label: 'Recently deleted', icon: MdRestoreFromTrash }, // repakxtra
   { id: 'help', label: 'Help & Community', icon: MdHelpOutline }
 ] as const;
 
@@ -201,7 +204,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
             {activeCategory === 'general' && (
               <>
                 <div className="setting-section">
-                  <h3>Game Mods Path</h3>
+                  <h3>Mods folder</h3>
                   <div className="setting-group">
                     <p className="setting-hint">Your game's mods folder path.</p>
                     <div className="combined-input-group">
@@ -292,6 +295,8 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                   </div>
                 </div>
 
+                <ShortcutSetting />{/* repakxtra: desktop shortcut */}
+
                 <div className="setting-section">
                   <h3>Updates</h3>
                   <div className="setting-group">
@@ -347,7 +352,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                 {/* repakxtra: no Theme section (dark only, accent fixed to the title's blue) */}
 
                 <div className="setting-section">
-                  <h3>Mods View Settings</h3>
+                  <h3>Mods view</h3>
                   <div className="setting-group">
                     <div className="setting-item">
                       <Checkbox
@@ -416,11 +421,12 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                         <span>Compact list view</span>
                       </Checkbox>
                     </div>
+                    <ModSizeSetting />{/* repakxtra: off by default */}
                   </div>
                 </div>
 
                 <div className="setting-section">
-                  <h3>Advanced UI Settings</h3>
+                  <h3>Advanced</h3>
                   <div className="setting-group">
                     <div className="setting-item">
                       <Checkbox
@@ -431,7 +437,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                       </Checkbox>
                       <p className={`setting-subtext ${!holdToDelete ? 'is-danger' : ''}`}>
                         {!holdToDelete
-                          ? 'Deletes happen on click. Deleted mods stay in the trash for 7 days, and an Undo button appears after each delete.'
+                          ? 'Deletes happen on click. Deleted mods stay in Recently deleted for 7 days, and an Undo button appears after each delete.'
                           : 'Hold the delete button for 2 seconds to confirm deletion.'}
                       </p>
                     </div>
@@ -452,6 +458,8 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                 </div>
               </>
             )}
+
+            {activeCategory === 'trash' && <RecentlyDeleted />}{/* repakxtra */}
 
             {activeCategory === 'integrations' && (
               <div className="setting-section">
@@ -480,29 +488,23 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
               <>
                 <div className="setting-section">
                   <h3>Help</h3>
-                  <div className="setting-group">
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-                      <span style={{ fontWeight: 'normal', opacity: 0.9 }}>Replay the app tour to learn about key features</span>
-                      <button
-                        onClick={onReplayTour}
-                        className="action-btn"
-                        title="Replay the onboarding tour"
-                        style={{ minWidth: '120px' }}
-                      >
-                        <RiGraduationCapFill style={{ color: accentColor }} /> Replay Tour
+                  <div className="setting-group">{/* repakxtra: a label, a gray note and a button per row, like the other sections */}
+                    <div className="xs-row">
+                      <div className="xs-text">
+                        <span className="xs-label">App tour</span>
+                        <span className="setting-subtext">A short walk through the main screens and features.</span>
+                      </div>
+                      <button onClick={onReplayTour} className="action-btn" title="Replay the onboarding tour">
+                        <RiGraduationCapFill /> Replay tour
                       </button>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-                      <span style={{ fontSize: '1rem', opacity: 0.9 }}>
-                        Press <strong style={{ opacity: 1 }}>F1</strong> anytime to view all available keyboard shortcuts
-                      </span>
-                      <button
-                        onClick={onOpenShortcuts}
-                        className="action-btn"
-                        title="View keyboard shortcuts"
-                        style={{ minWidth: '120px' }}
-                      >
-                        <BsKeyboardFill style={{ color: accentColor }} /> Shortcuts
+                    <div className="xs-row">
+                      <div className="xs-text">
+                        <span className="xs-label">Keyboard shortcuts</span>
+                        <span className="setting-subtext">Every shortcut in one list. F1 opens it from anywhere.</span>
+                      </div>
+                      <button onClick={onOpenShortcuts} className="action-btn" title="View keyboard shortcuts">
+                        <BsKeyboardFill /> Shortcuts
                       </button>
                     </div>
                   </div>
@@ -511,15 +513,10 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                 <div className="setting-section">
                   <h3>Community</h3>
                   <div className="setting-group">
-                    <div className="setting-item">
-                      <p style={{ margin: 0, fontSize: '0.925rem', fontWeight: 600, opacity: 0.9 }}>
-                        Repak X is built for the community.
-                      </p>
-                      <p className="setting-hint" style={{ marginBottom: 0 }}>
-                        If you need help, want to report a bug, or have a feature request, join the Discord server and help make Repak X better for everyone.
-                      </p>
-                    </div>
-                    <DiscordWidget />
+                    <p className="setting-subtext xs-note">{/* repakxtra: one gray note like the other sections */}
+                      Repak X is built for the community. For help, bug reports or feature requests, join a Discord server: Repak X's for the app it is built on, cable's for repakxtra.
+                    </p>
+                    <RepakXDiscord />
                     <CableDiscord />{/* repakxtra: cable's server */}
                   </div>
                 </div>

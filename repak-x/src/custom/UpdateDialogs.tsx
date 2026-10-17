@@ -58,8 +58,10 @@ export function ReleaseNotes({ text }: { text: string }) {
   return out.length ? <div className="upd-notes">{out}</div> : <p className="upd-sub">No release notes for this version.</p>
 }
 
-function useEscape(onClose: () => void) {
+/** Esc closes the dialog, only while it is open: a closed one must not swallow Esc meant for text fields. */
+function useEscape(open: boolean, onClose: () => void) {
   useEffect(() => {
+    if (!open) return
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }
     window.addEventListener('keydown', esc, true)
     return () => window.removeEventListener('keydown', esc, true)
@@ -79,7 +81,7 @@ export function UpdateModal({ isOpen, updateInfo, downloadProgress, downloadedPa
   onOpenReleasePage: (url: string) => void
   onClose: () => void
 }) {
-  useEscape(onClose)
+  useEscape(isOpen && Boolean(updateInfo), onClose)
   if (!isOpen || !updateInfo) return null
   const downloading = downloadProgress?.status === 'downloading'
   const ready = downloadProgress?.status === 'ready' || Boolean(downloadedPath)
@@ -124,7 +126,7 @@ export function UpdateModal({ isOpen, updateInfo, downloadProgress, downloadedPa
 
 /** "What's new": the release notes of a version (after an update, or Settings > View changelog). */
 export function WhatsNewModal({ isOpen, version, changelog, onClose }: { isOpen: boolean; version: string; changelog: string; onClose: () => void }) {
-  useEscape(onClose)
+  useEscape(isOpen, onClose)
   if (!isOpen) return null
   return (
     <div className="modal-overlay" onClick={onClose}>

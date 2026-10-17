@@ -52,12 +52,17 @@ const CustomDropdown = ({
             }
         };
 
+        // repakxtra: Esc closes an open menu first (before a page or dialog takes it)
+        const handleEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.stopPropagation(); setIsOpen(false); } };
+
         if (isOpen) {
             document.addEventListener('mousedown', handleClickOutside);
+            window.addEventListener('keydown', handleEscape, true);
         }
 
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
+            window.removeEventListener('keydown', handleEscape, true);
         };
     }, [isOpen]);
 
