@@ -6343,6 +6343,11 @@ async fn apply_update(downloaded_path: String, window: Window) -> Result<(), Str
     // Determine archive type
     let is_zip = downloaded_path.to_lowercase().ends_with(".zip");
     let is_tar_gz = downloaded_path.to_lowercase().ends_with(".tar.gz");
+    // repakxtra: a download that is not a zip holding an app unpacks to nothing, and the script below would only restart
+    // this version (v0.5.0 first shipped a tar named .zip): refused here, while the app is still open to say so
+    if is_zip {
+        crate::xtra_update::check_update_zip(&download_path)?;
+    }
 
     // Use runtime OS detection to create the appropriate updater script
     if cfg!(target_os = "windows") {
@@ -6378,7 +6383,7 @@ cd /d "{temp_dir}"
 if not exist "{temp_dir}\extracted" mkdir "{temp_dir}\extracted"
 
 :: Use PowerShell to extract the ZIP
-powershell -Command "Expand-Archive -LiteralPath '{zip_path}' -DestinationPath '{temp_dir}\extracted' -Force" 2>nul
+powershell -NoProfile -Command "$ErrorActionPreference = 'Stop'; Expand-Archive -LiteralPath '{zip_path}' -DestinationPath '{temp_dir}\extracted' -Force" 2>nul
 if %ERRORLEVEL% NEQ 0 (
     echo ERROR: Failed to extract update archive!
     echo Please extract manually from: "{zip_path}"
@@ -6411,6 +6416,15 @@ if "%FOLDER_COUNT%"=="1" (
 echo Source: "%EXTRACTED_DIR%"
 echo Destination: "{app_dir}"
 echo.
+
+:: repakxtra: the update must hold the app; otherwise nothing is copied and this version opens again, saying why
+if not exist "%EXTRACTED_DIR%\*.exe" (
+    echo ERROR: The update archive holds no app, so nothing was changed.
+    echo Download the release by hand from https://github.com/cablemp5/repak-xtra/releases
+    start "" "{exe_path}"
+    pause
+    exit /b 1
+)
 
 echo Copying new files...
 xcopy /E /Y /I /Q "%EXTRACTED_DIR%\*" "{app_dir}\" >nul

@@ -49,9 +49,45 @@ pub async fn check() -> Result<Option<crate::UpdateInfo>, String> {
     }))
 }
 
+/// A downloaded update must be a zip holding the app (an .exe at its root or in one top folder). Anything else would
+/// unpack to nothing, and the updater would only restart the old version (v0.5.0 first shipped a tar named .zip).
+pub fn check_update_zip(path: &std::path::Path) -> Result<(), String> {
+    const HELP: &str = "Nothing was changed: download the release from github.com/cablemp5/repak-xtra/releases instead.";
+    let file = std::fs::File::open(path).map_err(|e| format!("Could not open the downloaded update: {e}"))?;
+    let mut zip = zip::ZipArchive::new(file).map_err(|e| format!("The downloaded update is not a zip ({e}). {HELP}"))?;
+    let has_app = (0..zip.len()).filter_map(|i| zip.by_index(i).ok().map(|f| f.name().trim_end_matches('/').to_lowercase()))
+        .any(|n| n.ends_with(".exe") && n.matches('/').count() <= 1);
+    if has_app { Ok(()) } else { Err(format!("The downloaded update holds no app (.exe). {HELP}")) }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn only_a_zip_with_the_app_is_applied() {
+        let dir = std::env::temp_dir().join(format!("update-zip-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let zip_of = |name: &str, entries: &[&str]| {
+            let p = dir.join(name);
+            let mut w = zip::ZipWriter::new(std::fs::File::create(&p).unwrap());
+            for e in entries {
+                w.start_file(*e, zip::write::SimpleFileOptions::default()).unwrap();
+                w.write_all(b"x").unwrap();
+            }
+            w.finish().unwrap();
+            p
+        };
+        assert!(check_update_zip(&zip_of("ok.zip", &["repakxtra.exe", "UAssetTool.dll", "data/character_data.json"])).is_ok());
+        assert!(check_update_zip(&zip_of("nested.zip", &["repakxtra/repakxtra.exe"])).is_ok(), "one top folder is fine");
+        assert!(check_update_zip(&zip_of("noapp.zip", &["data/character_data.json"])).is_err(), "no exe");
+        assert!(check_update_zip(&zip_of("deep.zip", &["a/b/repakxtra.exe"])).is_err(), "too deep to be copied over the app");
+        let tar = dir.join("tar.zip"); // what GNU tar wrote: a tar archive named .zip
+        std::fs::write(&tar, [b"repakxtra.exe".as_slice(), &[0u8; 244], b"ustar  \0"].concat()).unwrap();
+        assert!(check_update_zip(&tar).unwrap_err().contains("not a zip"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn version_comes_from_version_ts() {
