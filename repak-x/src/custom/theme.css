@@ -918,10 +918,6 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 .repakx-switch-thumb { background: #9a9a9a !important; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4) !important; }
 .repakx-switch.checked .repakx-switch-track { background: var(--accent-primary) !important; box-shadow: none !important; }
 .repakx-switch.checked .repakx-switch-thumb { background: #ffffff !important; }
-/* Partly on (some of a loadout's mods on): thumb in the middle of a dim accent track */
-.repakx-switch.is-partly .repakx-switch-track { background: color-mix(in srgb, var(--accent-primary) 40%, transparent) !important; box-shadow: none !important; }
-.repakx-switch.is-partly .repakx-switch-thumb { background: #ffffff !important; }
-.repakx-switch.sm.is-partly .repakx-switch-thumb { transform: translateX(8px); }
 /* Checked checkboxes: solid accent, and the checkmark eases in instead of bouncing */
 .repakx-checkbox.checked .repakx-checkbox-box, .repakx-checkbox.indeterminate .repakx-checkbox-box {
   background: var(--accent-primary) !important; background-image: none !important; border-color: var(--accent-primary) !important;
@@ -2304,4 +2300,4 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 /* Light theme (no Settings entry now; an older settings.json can still pick it): the same blue accent, never the
    upstream red the app sets inline */
 :root[data-theme="light"] { --accent-primary: #346bf1 !important; --accent-secondary: #346bf1 !important; }
-:root[data-theme="light"] .repakx-switch:not(.checked):not(.is-partly) .repakx-switch-track { background: rgba(0, 0, 0, 0.1) !important; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18) !important; }
+:root[data-theme="light"] .repakx-switch:not(.checked) .repakx-switch-track { background: rgba(0, 0, 0, 0.1) !important; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18) !important; }

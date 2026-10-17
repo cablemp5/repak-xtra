@@ -35,7 +35,6 @@ repakxtra is a fork of **[Repak X](https://github.com/X-zant/Repak-X)** by **Xza
 
 **Loadouts**
 - One click turns a set of mods on or off. Loadouts are independent, and you are warned when two that are on change the same hero.
-  A loadout with only some of its mods on shows its switch half way and says "Partly on".
 - Collections or a view by hero. Drag a card to reorder it, move it to another collection or start a new one with it; the
   pencils rename loadouts and collections. **−** and **+** in the header (or `Ctrl` + scroll) change the card size.
 - Make one from the Library selection, the right-click menu, the sidebar or while installing. Undo for every removal.
