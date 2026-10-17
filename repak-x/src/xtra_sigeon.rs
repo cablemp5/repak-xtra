@@ -89,6 +89,14 @@ fn write_marker(storage: &Path, state: &str) {
 }
 
 fn apply(storage: &Path, plugins: &Path, preset: Option<&str>) -> Result<String, String> {
+    // A hand-edited live ini (it matches no preset) is copied to Sigeon V2\.deleted before Off or a preset replaces it
+    if current_state(storage, plugins) == "custom" {
+        let bin = storage.join(".deleted");
+        let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+        fs::create_dir_all(&bin)
+            .and_then(|_| fs::copy(plugins.join(LIVE_INI), bin.join(format!("SigeonLoader.edited-{secs}.ini"))))
+            .map_err(|e| format!("Could not keep a copy of the edited SigeonLoader.ini first: {e}"))?;
+    }
     match preset {
         None => {
             for f in [ASI, LIVE_INI] {
@@ -596,6 +604,9 @@ mod tests {
         assert_eq!(current_state(&storage, &plugins), "custom");
         assert_eq!(apply(&storage, &plugins, None).unwrap(), "off");
         assert!(!plugins.join(ASI).exists());
+        let kept: Vec<_> = fs::read_dir(storage.join(".deleted")).unwrap().flatten().collect();
+        assert_eq!(kept.len(), 1, "the edited ini is kept before Off removes it");
+        assert_eq!(fs::read(kept[0].path()).unwrap(), b"edited");
         assert!(apply(&storage, &plugins, Some("missing")).is_err());
         let _ = fs::remove_dir_all(&base);
     }

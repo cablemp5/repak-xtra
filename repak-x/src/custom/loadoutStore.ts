@@ -198,16 +198,6 @@ export const flipMods = async (changes: Mod[]) => {
   return failed
 }
 
-/** Moves a loadout to another position (the sidebar's order is also the Ctrl+1..9 order). */
-export const moveLoadout = (id: string, to: number) => {
-  const list = readLoadouts()
-  const from = list.findIndex(l => l.id === id)
-  if (from < 0 || from === to) return
-  const [l] = list.splice(from, 1)
-  list.splice(Math.max(0, Math.min(to, list.length)), 0, l)
-  writeLoadouts(list)
-}
-
 /** A copy right after the original, "Name copy", same mods and group (its image stays with the original). */
 export const duplicateLoadout = (l: Loadout) => {
   const list = readLoadouts()
