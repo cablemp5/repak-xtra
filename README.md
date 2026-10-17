@@ -35,6 +35,7 @@ repakxtra is a fork of **[Repak X](https://github.com/X-zant/Repak-X)** by **Xza
 
 **Loadouts**
 - One click turns a set of mods on or off. Loadouts are independent, and you are warned when two that are on change the same hero.
+  A loadout with only some of its mods on shows its switch half way and says "Partly on".
 - Collections or a view by hero. Drag a card to reorder it, move it to another collection or start a new one with it; the
   pencils rename loadouts and collections. **−** and **+** in the header (or `Ctrl` + scroll) change the card size.
 - Make one from the Library selection, the right-click menu, the sidebar or while installing. Undo for every removal.
@@ -55,7 +56,7 @@ repakxtra is a fork of **[Repak X](https://github.com/X-zant/Repak-X)** by **Xza
 > [!NOTE]
 > Rendered previews need the preview kit and [Blender](https://www.blender.org/download/) (free). **Setup > Mod previews** installs both.
 
-**Library:** hero and type filters, double-click to rename. Deleted mods wait 7 days in **Settings > Recently deleted**
+**Library:** hero and type filters, double-click to rename. Deleted mods (and a mod's old version when it is updated, or a folder's mods when the folder is deleted) wait 7 days in **Settings > Recently deleted**
 (Undo right after a delete, Restore any time before). Mods that are on and clash with another mod that is on get a red
 **Conflict** badge, and **Check Conflicts** shows a red dot while any do; it groups the clashing mods and says what they
 replace ("These 3 mods replace Black Panther's materials"); **Keep this one** on a mod turns the others in its group off,
@@ -77,7 +78,8 @@ channel, with no folder paths or user name. Audio and UI mods say in their detai
 
 ## See it in action
 
-**Turn a loadout on.** One switch per loadout; its mods switch together, and the dot says how many are on.
+**Turn a loadout on.** One switch per loadout; its mods switch together, and the dot says how many are on. A switch
+half way across means only some of them are, and clicking it turns on the rest.
 
 <img src=".github/screenshots/demo-loadouts.gif" alt="Turning loadouts on and off from the Loadouts screen" width="100%">
 
