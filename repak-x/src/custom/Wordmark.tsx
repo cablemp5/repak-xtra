@@ -1,0 +1,60 @@
+// repakxtra: the app's name as its logo, both words in Geist 800 (the README banner's letters): "repak" white, "xtra"
+// filled by three radial glows at the corners of a triangle (top left, top right, bottom middle) over a deep base, all
+// blues. While the app works (mods loading or installing, previews generating) and on hover, the glows drift inside the
+// letters; never with Animations off or reduced motion. Colors live in theme.css (.wm): the light theme draws "repak" in
+// ink with darker glows, dev and test copies use amber and green.
+import { useId } from 'react'
+import { usePreviewBatch } from './previews'
+
+type Glyph = [number, string]   // [x offset, path] in font units (baseline at 0, y up)
+const REPAK: Glyph[] = [
+  [0, 'M56 0V540H244L250 370L236 372Q251 462 284 501Q317 540 377 540H423V386H375Q332 386 304 378Q277 369 264 348Q250 327 250 289V0Z'],
+  [395, 'M321 -12Q234 -12 169 23Q104 58 68 122Q32 185 32 270Q32 355 68 418Q104 481 169 516Q234 552 321 552Q408 552 472 516Q535 479 569 412Q603 345 603 254V220H232Q234 171 260 148Q285 124 325 124Q354 124 374 135Q395 146 404 174L596 164Q574 77 500 32Q426 -12 321 -12ZM232 324H409Q408 371 384 396Q360 420 321 420Q284 420 260 394Q235 368 232 324Z'],
+  [1000, 'M56 -150V540H245L249 427L236 432Q256 490 300 521Q344 552 404 552Q476 552 526 516Q576 480 602 416Q628 353 628 270Q628 188 602 124Q575 60 524 24Q474 -12 402 -12Q364 -12 331 2Q298 17 274 44Q249 71 237 108L250 112V-150ZM339 127Q381 127 405 166Q429 204 429 270Q429 336 405 374Q381 413 339 413Q311 413 291 397Q271 381 260 349Q250 317 250 270Q250 223 260 191Q271 159 291 143Q311 127 339 127Z'],
+  [1630, 'M227 -12Q142 -12 87 27Q32 66 32 136Q32 208 80 246Q127 285 215 304L377 338Q377 380 359 402Q341 424 309 424Q275 424 256 408Q238 391 233 359L41 365Q57 463 126 508Q195 552 309 552Q441 552 506 495Q571 438 571 322V164Q571 138 580 130Q588 122 603 122H614V0Q605 -3 585 -6Q565 -8 546 -8Q517 -8 486 2Q455 12 434 40Q413 69 413 124L427 108Q416 71 391 44Q366 17 326 2Q285 -12 227 -12ZM281 110Q308 110 330 121Q351 132 364 154Q377 177 377 212V230L289 208Q264 202 248 188Q231 175 231 154Q231 133 243 122Q255 110 281 110Z'],
+  [2225, 'M56 0V710H250V364L410 540H636L428 322L640 0H434L304 218L250 160V0Z'],
+]
+const XTRA: Glyph[] = [
+  [2840, 'M45 0 233 272 47 540H247L345 386L441 540H645L459 272L648 0H448L349 160L249 0Z'],
+  [3469, 'M298 0Q207 0 165 42Q123 85 123 178V667H317V206Q317 166 334 152Q350 137 384 137H458V0ZM31 403V540H458V403Z'],
+  [3934, 'M56 0V540H244L250 370L236 372Q251 462 284 501Q317 540 377 540H423V386H375Q332 386 304 378Q277 369 264 348Q250 327 250 289V0Z'],
+  [4339, 'M227 -12Q142 -12 87 27Q32 66 32 136Q32 208 80 246Q127 285 215 304L377 338Q377 380 359 402Q341 424 309 424Q275 424 256 408Q238 391 233 359L41 365Q57 463 126 508Q195 552 309 552Q441 552 506 495Q571 438 571 322V164Q571 138 580 130Q588 122 603 122H614V0Q605 -3 585 -6Q565 -8 546 -8Q517 -8 486 2Q455 12 434 40Q413 69 413 124L427 108Q416 71 391 44Q366 17 326 2Q285 -12 227 -12ZM281 110Q308 110 330 121Q351 132 364 154Q377 177 377 212V230L289 208Q264 202 248 188Q231 175 231 154Q231 133 243 122Q255 110 281 110Z'],
+]
+const LEFT = 40, TOP = 725, W = 4950, H = 890   // the viewBox: x from 40, 725 units above the baseline to 165 below
+/** The glows' box (viewBox units) and their centers: top left, top right, bottom middle of "xtra" */
+const BOX = { x: 2700, y: 0, w: 2350, h: 900 }
+const SPOTS = [[2860, 85], [4873, 165], [3957, 805]]
+
+/** `height` in px; `busy`: the app is working (the header passes its mods-loading state; preview runs count anywhere). */
+export default function Wordmark({ height, busy = false, className = '' }: { height: number; busy?: boolean; className?: string }) {
+  const previews = usePreviewBatch()   // every hook on every render: `busy || usePreviewBatch()` skipped it while busy
+  const live = busy || previews !== null
+  const id = useId().replace(/:/g, '')   // gradients and the mask need ids unique on the page (header and Credits at once)
+  const glyphs = (items: Glyph[]) => items.map(([x, d]) => <path key={x} transform={`translate(${x} 0)`} d={d} />)
+  const letters = `translate(${-LEFT} ${TOP}) scale(1 -1)`
+  return (
+    <svg className={`wm${live ? ' is-live' : ''} ${className}`} viewBox={`0 0 ${W} ${H}`} height={height} width={(height * W) / H}
+      role="img" aria-label="repakxtra">
+      <defs>
+        {SPOTS.map(([cx, cy], i) => (
+          <radialGradient key={i} id={`${id}g${i}`} gradientUnits="userSpaceOnUse" cx={cx} cy={cy} r={900}>
+            <stop offset="0" className={`wm-c${i + 1}`} />
+            <stop offset="0.3" className={`wm-c${i + 1}`} />
+            <stop offset="1" className={`wm-c${i + 1}`} stopOpacity={0} />
+          </radialGradient>
+        ))}
+        <mask id={`${id}m`} maskUnits="userSpaceOnUse" x={BOX.x} y={BOX.y} width={BOX.w} height={BOX.h}>
+          <g transform={letters} fill="#fff">{glyphs(XTRA)}</g>
+        </mask>
+      </defs>
+      <g className="wm-repak" transform={letters}>{glyphs(REPAK)}</g>
+      <g mask={`url(#${id}m)`}>
+        <rect className="wm-base" x={BOX.x} y={BOX.y} width={BOX.w} height={BOX.h} />
+        {SPOTS.map((_, i) => (
+          <rect key={i} className={`wm-glow wm-glow${i + 1}`} x={BOX.x - 600} y={BOX.y - 600} width={BOX.w + 1200} height={BOX.h + 1200}
+            fill={`url(#${id}g${i})`} />
+        ))}
+      </g>
+    </svg>
+  )
+}

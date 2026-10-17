@@ -11,6 +11,8 @@ import CustomDropdown from '../components/CustomDropdown'
 import type { useAlert } from '../components/AlertHandler'
 import { savedItem } from './storageCarryOver'
 import { MatrixLoader } from './motion'
+import CopySetupReport from './CopySetupReport'
+import { noteGalactaCheck } from './setupReport'
 
 type Alert = ReturnType<typeof useAlert>
 type FileCheck = { name: string; place: string; size: number; sha256: string; found: 'missing' | 'same' | 'other' }
@@ -194,7 +196,7 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
 }
 
 let lastCheck: Galacta | null = null // the newest online Galacta check this run: Setup opens knowing it
-const remember = (g: Galacta) => { if (g.latest) lastCheck = g; return g }
+const remember = (g: Galacta) => { if (g.latest) { lastCheck = g; noteGalactaCheck(g) } return g }
 /** The offline status with the last online check's release info, while Galacta is still where that check found it. */
 const withLastCheck = (g: Galacta): Galacta => lastCheck && !g.latest && lastCheck.installed === g.installed
   ? { ...g, latest: lastCheck.latest, published: lastCheck.published, notes: lastCheck.notes, url: lastCheck.url, up_to_date: lastCheck.up_to_date }
@@ -266,6 +268,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
           <div><h2>Mod setup</h2><p className="su-sub">What Marvel Rivals needs to load mods. Close the game before changing these.</p></div>
           <button type="button" className="lo-text-btn su-guided" onClick={() => { onClose(); window.dispatchEvent(new Event('repakxtra-first-run')) }}
             title="The first-launch setup: game folder, bypass, Project Galacta, previews and your first mods, one screen">Guided setup</button>
+          <CopySetupReport alert={alert} className="lo-text-btn su-report" />
           <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
 

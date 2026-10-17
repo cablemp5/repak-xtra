@@ -471,7 +471,8 @@ const DropZoneOverlay = ({
                             <h2>Install Mods</h2>
                             <p>Drop files here to open the install panel with full configuration options for legacy .pak files from UE or single-pak old mods.</p>
                             <div className="zone-hint">
-                                Supports .pak, .zip, .rar, .7z, folders
+                                Supports .pak, .pak.off, .zip, .rar, .7z, folders{/* repakxtra: .pak.off, and zips as they are */}
+                                <br />Drop zips as they are: no need to extract.
                             </div>
                         </motion.div>
 

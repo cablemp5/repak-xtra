@@ -96,9 +96,10 @@ export function describe(g: ConflictGroup, heroes: Hero[]) {
   return { title: `${who} replace ${whose} ${what}`, hero: known, skin }
 }
 
-function Group({ g, heroes, find, done, onSetPriority, onToggleMod }: {
+function Group({ g, heroes, find, done, onSetPriority, onToggleMod, onKeep }: {
   g: ConflictGroup; heroes: Hero[]; find: (path: string) => Mod | undefined; done: boolean
   onSetPriority?: (path: string, priority: number) => void; onToggleMod?: (path: string) => void
+  onKeep?: (keep: string, others: Mod[]) => void
 }) {
   const [open, setOpen] = useState(false)
   const d = describe(g, heroes)
@@ -127,9 +128,16 @@ function Group({ g, heroes, find, done, onSetPriority, onToggleMod }: {
           const now = mod?.path ?? path
           const on = mod?.enabled !== false
           const name = modKey(now)
+          const othersOn = g.mods.map(find).filter((m): m is Mod => Boolean(m && m !== mod && m.enabled !== false))
           return (
             <li key={stemOf(path)} className={`cf-mod${on ? '' : ' is-off'}`}>
               <span className="cf-mod-name" title={now}><ModName name={name} /></span>
+              {mod && on && onKeep && othersOn.length > 0 && (
+                <button type="button" className="lo-text-btn cf-keep" onClick={() => onKeep(now, othersOn)}
+                  title={`Turn off the other ${othersOn.length === 1 ? 'mod' : `${othersOn.length} mods`} in this group that ${othersOn.length === 1 ? 'is' : 'are'} on`}>
+                  Keep this one
+                </button>
+              )}
               {mod && onSetPriority && (
                 <span className="cf-priority" role="group" aria-label={`Priority of ${name}`}
                   title="Priority: a higher number wins; 0 (a ! before the name) is above them all">
@@ -148,9 +156,10 @@ function Group({ g, heroes, find, done, onSetPriority, onToggleMod }: {
   )
 }
 
-export default function ConflictsPanel({ clashes, mods = [], characterData = [], onSetPriority, onToggleMod, onClose }: {
+export default function ConflictsPanel({ clashes, mods = [], characterData = [], onSetPriority, onToggleMod, onKeep, onClose }: {
   clashes: Clash[]; mods?: Mod[]; characterData?: Hero[]
-  onSetPriority?: (path: string, priority: number) => void; onToggleMod?: (path: string) => void; onClose: () => void
+  onSetPriority?: (path: string, priority: number) => void; onToggleMod?: (path: string) => void
+  onKeep?: (keep: string, others: Mod[]) => void; onClose: () => void
 }) {
   useHeroImages()
   const dialog = useRef<HTMLDivElement>(null)
@@ -209,7 +218,7 @@ export default function ConflictsPanel({ clashes, mods = [], characterData = [],
           {groups.length === 0
             ? <p className="cf-empty">No conflicts: no two mods that are on share files at the same priority.</p>
             : groups.map(g => <Group key={g.mods.map(stemOf).join('|')} g={g} heroes={characterData} find={find} done={resolved(g, find)}
-                onSetPriority={onSetPriority} onToggleMod={onToggleMod} />)}
+                onSetPriority={onSetPriority} onToggleMod={onToggleMod} onKeep={onKeep} />)}
         </div>
         <div className="modal-footer cf-footer">
           <button type="button" className="btn-primary" onClick={onClose}>Done</button>

@@ -92,7 +92,7 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 .setting-subtext.is-danger { color: var(--text-secondary) !important; }
 /* shortcut: the Discord card banner is an inline red gradient; matched on its rendered color, recheck after upstream updates */
 [style*="190, 28, 28"] { background: var(--bg-lighter) !important; }
-.header .version { font-size: 12px; color: var(--text-secondary); }
+.header .version { font-size: 11px; }   /* secondary beside the logo (its dimmer color is below) */
 /* a narrow window (1200px) shortens the version line ("…"), never wraps a button's label */
 .header-branding, .header-title-group, .header .version { min-width: 0; }
 .header .version { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -441,7 +441,31 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 
 /* ---------- title: repakxtra, no logo mark ---------- */
 .header .repak-icon { display: none !important; }
-.header .title-x, .credits-app-name .title-x, .fr-head .title-x { color: var(--accent-primary); }
+/* The logo (custom/Wordmark.tsx): "repak" white (ink on the light theme); "xtra" a deep blue base under three glows
+   (top left, top right, bottom middle) */
+.wm { display: block; flex: none; overflow: visible;
+  --wm-base: #0a2499; --wm-c1: #9fd0ff; --wm-c2: #1f5bff; --wm-c3: #2f7dff; }
+[data-theme="light"] .wm { --wm-c1: #3d8bff; }   /* ice blue would wash out on white */
+.wm-repak { fill: #ededed; }
+[data-theme="light"] .wm-repak { fill: #0a0a0a; }
+.wm-base { fill: var(--wm-base); }
+.wm .wm-c1 { stop-color: var(--wm-c1); } .wm .wm-c2 { stop-color: var(--wm-c2); } .wm .wm-c3 { stop-color: var(--wm-c3); }
+/* While the app works and on hover, the glows drift inside the letters, each its own way */
+.wm.is-live .wm-glow, .header-branding:hover .wm .wm-glow, .wm:hover .wm-glow { animation: 2.6s ease-in-out infinite alternate; }
+.wm.is-live .wm-glow1, .header-branding:hover .wm .wm-glow1, .wm:hover .wm-glow1 { animation-name: wm-drift1; }
+.wm.is-live .wm-glow2, .header-branding:hover .wm .wm-glow2, .wm:hover .wm-glow2 { animation-name: wm-drift2; animation-delay: -0.9s; }
+.wm.is-live .wm-glow3, .header-branding:hover .wm .wm-glow3, .wm:hover .wm-glow3 { animation-name: wm-drift3; animation-delay: -1.7s; }
+@keyframes wm-drift1 { to { transform: translate(900px, 420px); } }
+@keyframes wm-drift2 { to { transform: translate(-1000px, 300px); } }
+@keyframes wm-drift3 { to { transform: translate(300px, -650px); } }
+html[data-motion="off"] .wm .wm-glow, html[data-animations="off"] .wm .wm-glow { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .wm .wm-glow { animation: none !important; } }
+/* Beside text ("Welcome to"): its baseline on the text's (the p's descender is 18.5% of its height) */
+.fr-welcome { display: flex; align-items: baseline; gap: 0.3em; }
+.fr-welcome .wm { align-self: baseline; transform: translateY(18.5%); }
+/* The header lines the version tag up with the logo's bottom edge; the same shift puts the logo's baseline on the tag's */
+.header .wm { transform: translateY(18.5%); }
+.header-title-group { gap: 3px !important; }   /* the version tag close beside the logo */
 
 /* ---------- optional controls, off unless enabled in Settings > Interface (custom/uiPrefs.tsx) ---------- */
 html:not([data-show-priority]) .mod-card .number-input-container { display: none !important; }
@@ -1099,7 +1123,6 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
 .credits-modal .modal-footer .btn-primary:hover { background: var(--quiet-hover) !important; }
 /* upstream lays the credits name out as a spaced flex row and its sections as gapped columns */
 .credits-app-name { display: block !important; gap: 0 !important; }
-.credits-app-name .title-x { display: inline !important; margin: 0 !important; padding: 0 !important; }
 .credits-section { gap: 0 !important; }
 
 /* ---------- loadout image: own image + generated previews, paged with arrows ---------- */
@@ -1250,7 +1273,7 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 
 /* ---------- critique fixes (2026-10-14) ---------- */
 /* Contrast: secondary text at full strength (the version line, group counts and Ctrl+N numbers fell under 4.5:1) */
-.header .version { color: var(--text-secondary) !important; opacity: 1 !important; }
+.header .version { color: color-mix(in srgb, var(--text-secondary) 72%, transparent) !important; opacity: 1 !important; }
 .lo-group-count { opacity: 1; }
 .lo-num { opacity: 0.9; }
 .mn-ver { font-size: 11px; }
@@ -1472,8 +1495,7 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 
 /* ---------- Setup panel (SetupPanel.tsx): the signature bypass and Project Galacta, one card each ---------- */
 .su-btn { position: relative; gap: 6px !important; }
-.su-dot { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent-primary);
-  box-shadow: 0 0 0 2px var(--bg-darker); }
+.su-dot { background: var(--accent-primary); --dot-ring: var(--bg-darkest); }   /* the header behind it */
 .su-modal { width: min(760px, 94vw) !important; max-width: none !important; max-height: 90vh; display: flex; flex-direction: column; padding: 0 !important; }
 .su-modal .modal-header, .su-changelog .modal-header { padding: 16px 20px !important; border-bottom: 1px solid var(--panel-border); align-items: flex-start; }
 .su-sub { margin: 4px 0 0; font-size: 12.5px; color: var(--text-secondary); }
@@ -1682,7 +1704,8 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .su-problems li { font-size: 12.5px; line-height: 1.5; color: var(--text-primary); padding-left: 14px; position: relative; }
 .su-problems li::before { content: ''; position: absolute; left: 2px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: #e3a008; }
 .su-note.is-ok { color: var(--text-primary); }
-.su-guided { margin-left: auto; margin-right: 4px; }
+.su-guided { margin-left: auto; margin-right: 4px; white-space: nowrap; }
+.su-report { margin-right: 4px; white-space: nowrap; }
 /* Setup header: the title block, Guided setup and the close button share one center line */
 .su-modal .modal-header { align-items: center; gap: 12px; padding: 18px 22px !important; }
 .su-modal .modal-header h2 { margin: 0; }
@@ -1776,10 +1799,10 @@ html[data-motion="off"] .t-matrix i { animation: none; opacity: 0.6; }
 .su-row .su-meta { margin: 0; min-width: 0; }
 .su-ok { color: #3ecf6e; }
 
-/* Test and dev copies (custom/version.ts BUILD): the "xtra" in the app name is green for a test build (build.ps1 -Test)
-   and amber for the live dev copy (dev.ps1), instead of blue */
-:root[data-build="test"] .title-x { color: #3ecf6e !important; }
-:root[data-build="dev"] .title-x { color: #f5a524 !important; }
+/* Test and dev copies (custom/version.ts BUILD): the logo's "xtra" is green for a test build (build.ps1 -Test) and
+   amber for the live dev copy (dev.ps1), instead of blue */
+:root[data-build="test"] .wm { --wm-base: #27b356; --wm-c1: #c6f7d6; --wm-c2: #5fe08a; --wm-c3: #3ecf6e; }   /* no dark base: it muddied the glows */
+:root[data-build="dev"] .wm { --wm-base: #d97706; --wm-c1: #fcd34d; --wm-c2: #f59e0b; --wm-c3: #fb923c; }
 
 /* Setup > Mod previews: its two parts (the kit, Blender) as rows with a check when present, their links on the right;
    a quiet trust line while Blender is missing or installing */
@@ -1815,8 +1838,11 @@ html[data-motion="off"] .t-matrix i { animation: none; opacity: 0.6; }
 /* Mod file size: in the tags row, left of the type tag (ModsList.tsx sizeTag); the actions row's own size stays hidden */
 .mod-actions-row .mod-size { display: none !important; }
 .btn-check-conflicts { position: relative; }
-.conflict-dot { position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%; background: #f2555a;
-  box-shadow: 0 0 0 2px var(--bg-darkest); pointer-events: none; }
+.conflict-dot { background: #f2555a; --dot-ring: var(--bg-darker); }   /* the Library toolbar behind it */
+/* Attention dots (Setup, Check Conflicts) sit on their button's top-right corner like a notification badge, centered on
+   the corner, with a ring in the color behind them */
+.su-dot, .conflict-dot { position: absolute; top: -1px; right: -1px; transform: translate(50%, -50%); width: 8px; height: 8px;
+  border-radius: 50%; box-shadow: 0 0 0 2px var(--dot-ring); pointer-events: none; z-index: 2; }
 .mod-type-badge.conflict-badge { background: color-mix(in srgb, #f2555a, transparent 85%) !important; border: 1px solid color-mix(in srgb, #f2555a, transparent 55%) !important;
   color: #ff8a8e !important; font-size: 11px !important; font-weight: 600 !important; }
 
@@ -2012,6 +2038,7 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
 .cf-mod-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--text-primary); }
 .cf-mod.is-off .cf-mod-name { color: var(--text-secondary); }
 .cf-priority { flex: none; }
+.cf-keep { flex: none; height: 28px !important; padding: 0 10px !important; font-size: 12px !important; white-space: nowrap; }
 .cf-empty { margin: 0; padding: 28px 0; text-align: center; font-size: 13px; color: var(--text-secondary); }
 .cf-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px !important; border-top: 1px solid var(--panel-border); }
 .cf-modal .btn-primary { height: 32px !important; min-height: 0 !important; padding: 0 18px !important; font-size: 13px !important; width: auto !important; flex: none;
@@ -2118,3 +2145,54 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 .install-mod-card__tags .install-mod-card__row { gap: 4px !important; }
 .install-mod-card__tags .tags-list:empty { display: none; }
 .install-mod-card__tags .tags-list:not(:empty) { margin-left: 4px; }   /* picked loadouts keep a little room from the label */
+
+/* ---------- Crash suspects (custom/CrashSuspects.tsx): the crash toast's two buttons, and the suspects list ---------- */
+.cs-toast-actions { display: inline-flex; gap: 6px; }
+.cs-modal { width: min(560px, 92vw) !important; max-width: none !important; max-height: 80vh; display: flex; flex-direction: column; padding: 0 !important; }
+.cs-modal .modal-header { padding: 16px 20px !important; border-bottom: 1px solid var(--panel-border); align-items: flex-start; }
+.cs-modal .modal-header h2 { margin: 0; font-size: 16px !important; font-weight: 700; }
+.cs-sub { margin: 4px 0 0; font: 12px/1.5 var(--font-mono); color: var(--text-secondary); overflow-wrap: anywhere; }
+.cs-body { overflow-y: auto; padding: 14px 20px !important; display: flex; flex-direction: column; gap: 10px !important; }
+.cs-note { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }
+.cs-empty { margin: 0; padding: 18px 0; text-align: center; font-size: 13px; color: var(--text-secondary); }
+.cs-list { margin: 0; padding: 0; list-style: none; border: 1px solid var(--panel-border); border-radius: 10px; }
+.cs-list li { display: flex; align-items: center; min-height: 44px; padding: 6px 12px; }
+.cs-list li + li { border-top: 1px solid var(--panel-border); }
+.cs-list li > * { min-width: 0; }
+.cs-name { display: block; font-size: 13px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-reason { display: block; font-size: 12px; color: var(--text-secondary); }
+.cs-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px !important; border-top: 1px solid var(--panel-border); }
+.cs-modal .btn-primary { height: 32px !important; min-height: 0 !important; padding: 0 18px !important; font-size: 13px !important; width: auto !important; flex: none;
+  border-radius: var(--quiet-radius) !important; }
+
+/* Nexus source line in mod details (custom/nexusSource.tsx) */
+.nx-source { gap: 12px; }
+.nx-source .detail-value { display: inline-flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 2px 10px; text-align: right; }
+.nx-open { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Type hint under the type badges in mod details (custom/typeHints.tsx) */
+.type-hint { margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+
+/* ---------- Hold to delete (the holdToDelete setting): one fill for every hold control (bulk Delete, the Library
+   right-click Delete and Delete Folder, a mod card's delete). Nothing on hover; pressing grows it from the left edge to
+   the right, linear, over the same 2 s as the delete timer; letting go or leaving snaps it back in 150 ms. It is the
+   timer, so it shows with animations off too. Neutral white tint, red only in the right-click menu (cable's call). */
+.btn-ghost.danger, .context-menu-item.danger, .hold-delete { position: relative; overflow: hidden; isolation: isolate; }
+.btn-ghost.danger .danger-bg, .context-menu-item.danger .danger-bg, .hold-delete::after {
+  content: ''; position: absolute !important; inset: 0 !important; width: auto !important; height: auto !important;
+  border-radius: 0 !important; z-index: 0 !important; pointer-events: none;
+  background: rgba(255, 255, 255, 0.14) !important; opacity: 1 !important;
+  transform: scaleX(0) !important; transform-origin: left center !important;
+  transition: transform 150ms ease-out !important; animation: none !important;
+}
+.context-menu-item.danger .danger-bg { background: rgba(242, 85, 90, 0.24) !important; }
+.btn-ghost.danger.holding .danger-bg, .context-menu-item.danger.holding .danger-bg, .hold-delete.holding::after {
+  transform: scaleX(1) !important; transition: transform 2s linear !important;
+}
+.hold-delete svg, .context-menu-item.danger > span { position: relative; z-index: 1; }
+/* Animations off (html[data-motion="off"] zeroes every transition) keeps these: the fill is the timer, not decoration */
+html[data-motion] .btn-ghost.danger .danger-bg, html[data-motion] .context-menu-item.danger .danger-bg, html[data-motion] .hold-delete::after {
+  transition-duration: 150ms !important; transition-delay: 0s !important;
+}
+html[data-motion] .btn-ghost.danger.holding .danger-bg, html[data-motion] .context-menu-item.danger.holding .danger-bg,
+html[data-motion] .hold-delete.holding::after { transition-duration: 2s !important; }

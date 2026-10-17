@@ -216,8 +216,37 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         if (failed.length) throw `Restored ${restored} file(s); failed: ${failed.join('; ')}`
         return restored
       }
-      case 'get_skip_launcher_status':
-      case 'check_for_previous_crash': return false
+      // localStorage 'mock.crash' = '1': the newest crash the setup report names
+      case 'xtra_newest_crash': return localStorage.getItem('mock.crash') === '1'
+        ? { time: Math.floor(Date.now() / 1000) - 3600, crash_type: 'Access Violation', asset_path: '/Game/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001' } : null
+      case 'xtra_upstream_running': return Boolean(mock.__repakXOpen)
+      case 'xtra_stage_off_files': { // like xtra_offfiles.rs: a .off set becomes one staged .pak
+        const out: string[] = []
+        for (const p of args?.paths ?? []) {
+          const m = p.match(/^(.*[\\/])?(.+)\.(pak|utoc|ucas)\.off$/i)
+          const next = m ? `C:/Temp/repakxtra-off/${m[2]}.pak` : p
+          if (!out.includes(next)) out.push(next)
+        }
+        return out
+      }
+      case 'xtra_nexus_sources': return (args?.paths ?? []).map((p: string) => { // same rule as xtra_nexus.rs
+        const file = p.split(/[\\/]/).pop()!
+        const m = file.match(/^(.+)[_ ](\d+)[_ ]([0-9A-Za-z.-]+)[_ ](\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})Z[_ ][0-9A-Za-z]+\.(zip|rar|7z)$/i)
+        if (m) return { id: Number(m[2]), version: m[3].replace(/-/g, '.'), uploaded: Date.UTC(+m[4], +m[5] - 1, +m[6], +m[7], +m[8]) / 1000, paks: [m[1]] }
+        const o = file.match(/^(.+?)-(\d+)-([0-9A-Za-z]+(?:-[0-9A-Za-z]+)*)-(\d{9,11})\.(zip|rar|7z)$/i)
+        return o ? { id: Number(o[2]), version: o[3].replace(/-/g, '.'), uploaded: Number(o[4]), paks: [o[1]] } : null
+      })
+      // Crash suspects: mods whose path has window.__suspectMatch (part of a name) hold the crashed asset
+      case 'xtra_crash_suspects': return (args?.modPaths ?? []).filter((p: string) => mock.__suspectMatch && p.includes(mock.__suspectMatch))
+      // localStorage 'mock.prevCrash' = '1': a crash from before the app started (its toast at startup)
+      case 'check_for_previous_crash': {
+        if (localStorage.getItem('mock.prevCrash') !== '1') return null
+        const crash_folder = 'C:/Users/you/AppData/Local/Marvel/Saved/Crashes/UECC-Windows-MOCK_0000'
+        setTimeout(() => emit('game_crash_detected', { title: 'Game Crashed', description: 'Error: Access Violation', type: 'danger', crash_folder,
+          crash_type: 'Access Violation', asset_path: '/Game/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001', character_id: '1026', is_mesh_crash: true }), 500)
+        return { crash_folder }
+      }
+      case 'get_skip_launcher_status': return false
       // localStorage 'mock.clashes': a JSON list of { file_path, mod_paths } to show conflicts (custom/conflicts.ts)
       case 'check_mod_clashes': return JSON.parse(localStorage.getItem('mock.clashes') || '[]')
       // Installing: the file picker returns two fake paks, install adds them to the library and reports done. A folder
@@ -233,6 +262,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         for (const m of args?.mods ?? []) {
           const path = `${data.gamePath}\\${normalizeModBaseName(m.customName || m.mod_name)}.pak`
           if (!data.mods.some((x: any) => x.path === path)) data.mods.push({ ...data.mods[0], path, enabled: true, modified_date: Date.now() / 1000 })
+          data.details[path] ??= { ...data.details[data.mods[0].path], mod_name: path.split('\\').pop()?.replace(/\.pak$/, '') } // details open for it
         }
         setTimeout(() => emit('install_complete', null), 300)
         return null
@@ -245,6 +275,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       }
       case 'toggle_mod': {
         if (mock.__toggleFail && String(args?.modPath).includes(mock.__toggleFail)) throw 'The file is in use' // window.__toggleFail = part of a path
+        if (mock.__repakXOpen) throw 'Repak X is open too. Close it to change mods in repakxtra: both apps change the same files.' // window.__repakXOpen = true
         const mod = data.mods.find((m: any) => m.path === args?.modPath)
         if (mod) mod.enabled = !mod.enabled
         return mod?.enabled ?? null

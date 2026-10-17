@@ -1,5 +1,6 @@
 //! repakxtra: the self-updater checks repakxtra's own releases (cablemp5/repak-xtra), not upstream Repak X's.
-//! Every repakxtra release so far is a pre-release, which GitHub's releases/latest skips, so the list is read instead.
+//! App releases are published as GitHub's "Latest" now (older ones were pre-releases). The list is still read rather
+//! than releases/latest: preview kit releases share the repo, and newest() skips their tags.
 
 const RELEASES: &str = "https://api.github.com/repos/cablemp5/repak-xtra/releases?per_page=30";
 

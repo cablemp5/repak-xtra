@@ -24,6 +24,7 @@ import { BsKeyboardFill } from "react-icons/bs"
 import { IoIosSettings } from "react-icons/io"
 import { REPAKXTRA_VERSION } from '../custom/version' // repakxtra
 import CableDiscord, { RepakXDiscord } from '../custom/CableDiscord' // repakxtra: both servers as quiet cards
+import CopySetupReport from '../custom/CopySetupReport' // repakxtra: setup report for help channels
 import { ShortcutSetting } from '../custom/shortcut' // repakxtra
 import './SettingsPanel.css'
 import { useAlert } from './AlertHandler'
@@ -506,6 +507,13 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                       <button onClick={onOpenShortcuts} className="action-btn" title="View keyboard shortcuts">
                         <BsKeyboardFill /> Shortcuts
                       </button>
+                    </div>
+                    <div className="xs-row">{/* repakxtra: setup report */}
+                      <div className="xs-text">
+                        <span className="xs-label">Setup report</span>
+                        <span className="setting-subtext">Your setup and the mods that are on, as text to paste in a help channel. No folder paths or user name.</span>
+                      </div>
+                      <CopySetupReport alert={alert} />
                     </div>
                   </div>
                 </div>

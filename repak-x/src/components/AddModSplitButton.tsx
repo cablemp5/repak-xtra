@@ -5,6 +5,7 @@ import type { ButtonGroupProps } from '@mui/material/ButtonGroup';
 import { GrInstall } from "react-icons/gr";
 import { CreateNewFolder as CreateNewFolderIcon } from '@mui/icons-material';
 import { open } from '@tauri-apps/plugin-dialog';
+import { OFF_EXT } from '../custom/offFiles'; // repakxtra
 import { styled } from '@mui/material/styles';
 
 const StyledButtonGroup = styled(ButtonGroup)(({ theme }) => ({
@@ -66,7 +67,7 @@ export default function AddModSplitButton({ onAddFiles, onAddFolder, ...rest }: 
                 multiple: true,
                 filters: [{
                     name: 'Mod Files',
-                    extensions: ['pak', 'zip', 'rar', '7z']
+                    extensions: ['pak', 'zip', 'rar', '7z', OFF_EXT] // repakxtra: .pak.off sets
                 }],
                 title: 'Select Mods to Install'
             });

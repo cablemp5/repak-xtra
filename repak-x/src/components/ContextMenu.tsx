@@ -316,9 +316,10 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
         <div className="context-menu-separator" />
         <div
           className={`context-menu-item danger ${isDeleting ? 'holding' : ''}`}
-          onMouseDown={handleDeleteDown}
-          onMouseUp={handleDeleteUp}
-          onMouseLeave={handleDeleteUp}
+          onPointerDown={handleDeleteDown} /* repakxtra: pointer events, so a pen holds too */
+          onPointerUp={handleDeleteUp}
+          onPointerLeave={handleDeleteUp}
+          onPointerCancel={handleDeleteUp}
         >
           <div className="danger-bg" />
           <span style={{ position: 'relative', zIndex: 2 }}>{!holdToDelete ? 'Delete Folder' : isDeleting ? 'Hold to delete...' : 'Delete Folder (Hold 2s)'}</span>
@@ -425,9 +426,10 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
 
       <div
         className={`context-menu-item danger ${isDeleting ? 'holding' : ''}`}
-        onMouseDown={handleDeleteDown}
-        onMouseUp={handleDeleteUp}
-        onMouseLeave={handleDeleteUp}
+        onPointerDown={handleDeleteDown} /* repakxtra: pointer events, so a pen holds too */
+        onPointerUp={handleDeleteUp}
+        onPointerLeave={handleDeleteUp}
+        onPointerCancel={handleDeleteUp}
       >
         <div className="danger-bg" />
         <span style={{ position: 'relative', zIndex: 2 }}>{!holdToDelete ? 'Delete' : isDeleting ? 'Hold to delete...' : 'Delete (Hold 2s)'}</span>

@@ -15,6 +15,7 @@ import { useHoverTextReveal } from '../hooks/useHoverTextReveal'
 import { FALLBACK_HERO_ID, resolveHeroImage, useHeroImages } from '../utils/heroImages'
 import { useUiPref } from '../custom/uiPrefs' // repakxtra: file sizes beside the type tag
 import './ModsList.css'
+import { useTypeHint } from '../custom/typeHints' // repakxtra
 import './ModDetailsPanel.css'
 
 type CharacterDataEntry = {
@@ -281,6 +282,7 @@ const ModItem = memo(function ModItem({
     const heroImage = (showHeroIcons || showHeroBg) ? getHeroImage(characterName, characterData, modDetails?.character_id) : null
     const isCardView = viewMode === 'grid' || viewMode === 'compact'
     const showSize = useUiPref('mod-size') // repakxtra
+    const typeHint = useTypeHint(category) // repakxtra: badge tooltip for Audio, and UI under Sigeon
     const sizeTag = showSize && <span className="mod-size-tag">{formatFileSize(mod.file_size ?? 0)}</span> // repakxtra
 
     // Detect heroes for multi-hero mods - check both characterName and mod_type
@@ -448,7 +450,7 @@ const ModItem = memo(function ModItem({
                     {/* Type badge at start for card views */}
                     {isCardView && sizeTag}
                     {showModType && category && isCardView && (
-                        <span className={`mod-type-badge category-badge ${category.toLowerCase().replace(/\s+/g, '-')}-badge`}>
+                        <span className={`mod-type-badge category-badge ${category.toLowerCase().replace(/\s+/g, '-')}-badge`} title={typeHint}>
                             {category}
                         </span>
                     )}
@@ -504,7 +506,7 @@ const ModItem = memo(function ModItem({
                     {/* Type badge at end for list view */}
                     {!isCardView && sizeTag}
                     {showModType && category && !isCardView && (
-                        <span className={`mod-type-badge category-badge ${category.toLowerCase().replace(/\s+/g, '-')}-badge`}>
+                        <span className={`mod-type-badge category-badge ${category.toLowerCase().replace(/\s+/g, '-')}-badge`} title={typeHint}>
                             {category}
                         </span>
                     )}
@@ -535,11 +537,10 @@ const ModItem = memo(function ModItem({
                     </div>
                     <button
                         className={`hold-delete ${isDeleteHolding ? 'holding' : ''}`}
-                        onMouseDown={startDeleteHold}
-                        onMouseUp={cancelDeleteHold}
-                        onMouseLeave={cancelDeleteHold}
-                        onTouchStart={startDeleteHold}
-                        onTouchEnd={cancelDeleteHold}
+                        onPointerDown={startDeleteHold} /* repakxtra: pointer events (mouse, pen and touch) in place of mouse + touch */
+                        onPointerUp={cancelDeleteHold}
+                        onPointerLeave={cancelDeleteHold}
+                        onPointerCancel={cancelDeleteHold}
                         aria-label={holdToDelete ? "Hold to delete mod" : "Delete mod"}
                         title={holdToDelete ? "Hold 2s to delete" : "Click to delete"}
                     >

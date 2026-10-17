@@ -17,6 +17,9 @@ mod xtra_buildmark; // repakxtra: test and dev copies color their taskbar icon
 mod xtra_export; // repakxtra: export a loadout as a zip
 mod xtra_shortcut; // repakxtra: desktop shortcut
 mod xtra_identity; // repakxtra: its own app identifier, beside Repak X
+mod xtra_crash; // repakxtra: crash facts for the setup report, crash suspects
+mod xtra_nexus; // repakxtra: Nexus source from archive names
+mod xtra_offfiles; // repakxtra: .pak.off files install like .pak
 mod character_data;
 mod crash_monitor;
 mod discord_presence;
@@ -8765,6 +8768,10 @@ fn main() {
             xtra_shortcut::shortcut_create,
             xtra_identity::xtra_upstream_running, // repakxtra: beside Repak X
             xtra_identity::xtra_protocol_reclaim,
+            xtra_crash::xtra_newest_crash, // repakxtra: setup report
+            xtra_crash::xtra_crash_suspects, // repakxtra: crash suspects
+            xtra_nexus::xtra_nexus_sources, // repakxtra: Nexus source
+            xtra_offfiles::xtra_stage_off_files, // repakxtra: .pak.off files
             xtra_kit::preview_kit_install_blender, // repakxtra: Blender with winget
             xtra_previews::previews_doctor, // repakxtra: can this PC make previews
             xtra_previews::cancel_mod_previews,

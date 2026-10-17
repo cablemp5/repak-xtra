@@ -55,7 +55,18 @@ repakxtra is a fork of **[Repak X](https://github.com/X-zant/Repak-X)** by **Xza
 **Library:** hero and type filters, double-click to rename. Deleted mods wait 7 days in **Settings > Recently deleted**
 (Undo right after a delete, Restore any time before). Mods that are on and clash with another mod that is on get a red
 **Conflict** badge, and **Check Conflicts** shows a red dot while any do; it groups the clashing mods and says what they
-replace ("These 3 mods replace Black Panther's materials"). File sizes are a setting (**Settings > Interface > Mods view**).
+replace ("These 3 mods replace Black Panther's materials"); **Keep this one** on a mod turns the others in its group off,
+with Undo. Mods installed from a Nexus Mods download show their source in mod details ("Nexus 12890, uploaded Sep 13,
+2026" with **Open page**), read from the download's file name. File sizes are a setting (**Settings > Interface > Mods view**).
+
+**Installing:** drop zips, rars and 7zs as they are, no need to extract. `.pak.off`, `.utoc.off` and `.ucas.off` files
+(how RivalsFPS turns mods off, and how they often get shared) install like any other mod, each set as one mod, on.
+
+**When something breaks:** a crash alert's **See suspects** lists the mods that were on and hold the asset that crashed
+(or else change the hero it names), checked, to turn off together with Undo. **Copy setup report** (in **Setup** and
+**Settings > Help & Community**) copies your setup, conflicts, newest crash and the mods that are on as text for a help
+channel, with no folder paths or user name. Audio and UI mods say in their details when they only look broken
+(cooldown sounds in the practice range, icons under Sigeon).
 
 **Setup:** the signature bypass ships inside the app (with an "Is it safe?" report), Project Galacta installs and updates in one click, and the preview kit and Blender install from here.
 
@@ -194,12 +205,51 @@ current `SigeonLoader.ini` format (base, n64, low, mid and high configs, Hide UI
 </details>
 
 <details>
+<summary><strong>The game crashed. Which mod was it?</strong></summary>
+<br>
+
+The crash alert has **See suspects**: the mods that were on and hold the asset that crashed, or else the ones that
+change the hero the crash names. They come checked; **Turn off selected** switches them off, with Undo. For a crash
+from before repakxtra started, the crash report does not say which mods were on, so the list uses the mods on now. With
+no match, turn mods off a few at a time to find it.
+
+</details>
+
+<details>
+<summary><strong>Two mods change the same thing. How do I pick one?</strong></summary>
+<br>
+
+**Check Conflicts** groups them. **Keep this one** on the mod you want turns the others in its group off, with Undo;
+or raise its priority so it wins instead.
+
+</details>
+
+<details>
+<summary><strong>Someone sent me .pak.off files. Do I rename them?</strong></summary>
+<br>
+
+No. Drop them as they are (a zip of them too): repakxtra drops the ".off", keeps each pak, utoc and ucas together as
+one mod and installs it on. Your original files stay as they were.
+
+</details>
+
+<details>
+<summary><strong>Where did this mod come from?</strong></summary>
+<br>
+
+Mods installed from a Nexus Mods download keep its mod id and upload date, read from the download's file name: mod
+details shows "Nexus 12890, uploaded Sep 13, 2026" and **Open page**. Mods from anywhere else show nothing there.
+
+</details>
+
+<details>
 <summary><strong>What should I do if I hit a bug?</strong></summary>
 <br>
 
-Update first (**Settings > Updates > Check Now**); a newer release may already fix it. If it persists, ask on
-[Discord](https://discord.gg/C7geHdWBP5) with your repakxtra version (shown in the header), what you
-did, and what happened.
+Update first (**Settings > Updates > Check Now**); a newer release may already fix it. If it persists, press **Copy
+setup report** (in **Setup** or **Settings > Help & Community**) and paste it on [Discord](https://discord.gg/C7geHdWBP5)
+with what you did and what happened. The report has your repakxtra version, Setup state, conflicts, newest crash and the
+mods that are on, without folder paths or your user name.
 
 </details>
 

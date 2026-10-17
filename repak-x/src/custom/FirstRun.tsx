@@ -10,6 +10,8 @@ import { Check, Upload } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import { BlenderTrust, DoctorProblems, KitProgressBar } from './SetupPanel'
 import { isKitZip, usePreviewKit } from './previewKit'
+import { OFF_EXT } from './offFiles'
+import Wordmark from './Wordmark'
 import { ShortcutButton, useShortcut } from './shortcut'
 
 type Alert = ReturnType<typeof useAlert>
@@ -95,7 +97,7 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
   })
   const installGalacta = () => run('galacta', async () => { setGalacta(await invoke<Galacta>('setup_galacta_install', { folder: null })) })
   const addFiles = async () => {
-    const got = await pick({ multiple: true, title: 'Mods to install', filters: [{ name: 'Mod files', extensions: ['pak', 'zip', 'rar', '7z'] }] }).catch(() => null)
+    const got = await pick({ multiple: true, title: 'Mods to install', filters: [{ name: 'Mod files', extensions: ['pak', 'zip', 'rar', '7z', OFF_EXT] }] }).catch(() => null)
     const paths = Array.isArray(got) ? got : got ? [got] : []
     if (!paths.length) return
     close()
@@ -119,7 +121,7 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
         initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }}>
         <div className="modal-header fr-head">
           <div>
-            <h2>Welcome to repak<span className="title-x">xtra</span></h2>
+            <h2 className="fr-welcome">Welcome to <Wordmark height={17} /></h2>
             <p className="su-sub">Get Marvel Rivals ready for mods. Steps 1 to 3 make mods work; close the game first.</p>
           </div>
           <button className="modal-close" onClick={close} aria-label="Close">×</button>
@@ -169,7 +171,7 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
           <Step n={6} done={false} wide title="Add your first mods">
             <div className="fr-drop">
               <Upload size={18} aria-hidden="true" />
-              <span>Drop .pak, .zip, .rar or .7z files, or mod folders, anywhere on this window.</span>
+              <span>Drop .pak, .pak.off, .zip, .rar or .7z files, or mod folders, anywhere on this window. Drop zips as they are: no need to extract.</span>
               <span className="fr-drop-actions">
                 <button type="button" className="lo-text-btn" disabled={noGame} onClick={addFiles}>Choose files…</button>
                 <a onClick={() => openUrl(NEXUS)}>Find mods on Nexus Mods</a>

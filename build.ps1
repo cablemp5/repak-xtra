@@ -90,7 +90,7 @@ if ($Release) {
     } finally { Remove-Item $check -Recurse -Force -ErrorAction SilentlyContinue }
     Write-Host "Packed: $zip (SHA-256 $((Get-FileHash $zip).Hash.ToLower()))" -ForegroundColor Green
     # On the clipboard as one line: a wrapped terminal line copied by hand can pick up a line break and fail to parse
-    $publish = "gh release create v$ver $zip -R cablemp5/repak-xtra --target main --prerelease --title `"repak-xtra $ver`" --generate-notes"
+    $publish = "gh release create v$ver $zip -R cablemp5/repak-xtra --target main --latest --title `"repak-xtra $ver`" --generate-notes"
     Set-Clipboard -Value $publish
     Write-Host 'The publish command is on the clipboard: paste it and press Enter (swap --generate-notes for --notes-file notes.md to write your own):'
     Write-Host "  $publish"

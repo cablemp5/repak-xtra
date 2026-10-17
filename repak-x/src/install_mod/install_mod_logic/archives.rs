@@ -19,6 +19,7 @@ pub fn extract_zip(zip_path: &str, output_dir: &str) -> io::Result<()> {
         }
     }
 
+    crate::xtra_offfiles::strip_off_names(Path::new(output_dir)); // repakxtra: .pak.off sets install like .pak
     Ok(())
 }
 
@@ -39,6 +40,7 @@ pub fn extract_rar(rar_path: &str, output_dir: &str) -> Result<(), unrar::error:
             header.skip()?
         };
     }
+    crate::xtra_offfiles::strip_off_names(output_dir); // repakxtra: .pak.off sets install like .pak
     Ok(())
 }
 
@@ -54,5 +56,6 @@ pub fn extract_7z(archive_path: &str, output_dir: &str) -> io::Result<()> {
         )
     })?;
 
+    crate::xtra_offfiles::strip_off_names(output_path); // repakxtra: .pak.off sets install like .pak
     Ok(())
 }

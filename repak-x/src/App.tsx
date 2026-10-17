@@ -61,6 +61,7 @@ import LoadoutsScreen, { ViewTabs } from './custom/LoadoutsScreen'
 import { modKey, renameModKey } from './custom/loadoutStore' // repakxtra
 import { TagsToggle } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
+import { reportSource } from './custom/setupReport' // repakxtra: Copy setup report reads the live list
 import { GeneratePreviewsButton } from './custom/previews'
 import { finishInstallLoadout } from './custom/installLoadout'
 import SigeonControl from './custom/SigeonControl'
@@ -129,7 +130,12 @@ import SettingsPanel from './components/SettingsPanel'
 import CreditsPanel from './components/CreditsPanel'
 import ToolsPanel from './components/ToolsPanel'
 import SharingPanel from './components/SharingPanel'
+import Wordmark from './custom/Wordmark' // repakxtra: the logo
 import ConflictsPanel from './custom/ConflictsPanel' // repakxtra: in place of Repak X's ClashPanel (grouped, in words)
+import { keepThisOne } from './custom/keepOne' // repakxtra: Keep this one
+import { recordSources, renameSource } from './custom/nexusSource' // repakxtra: Nexus source
+import { stageOffFiles } from './custom/offFiles' // repakxtra: .pak.off files
+import CrashSuspects, { previousCrashes, withSuspects } from './custom/CrashSuspects' // repakxtra: crash suspects
 
 type ModRecord = {
   path: string
@@ -395,6 +401,7 @@ function App() {
   const [isLogDrawerOpen, setIsLogDrawerOpen] = useState(false)
   useConflictWatch(mods) // repakxtra
   const conflictCount = useConflictCount() // repakxtra
+  reportSource.get = () => ({ mods, modDetails, launcherType, gamePath }) // repakxtra: setup report
   useEffect(() => { // repakxtra: the Library tab lands on its home view (custom/LoadoutsScreen.tsx ViewTabs)
     const home = () => {
       setSelectedFolderId('all'); setSelectedCharacters(new Set()); setSelectedCategories(new Set()); setFilterTag(''); setModState('all')
@@ -692,6 +699,7 @@ function App() {
   // Unified file drop handler function
   const handleFileDrop = async (paths: string[]) => {
     if (!paths || paths.length === 0) return
+    paths = await stageOffFiles(paths) // repakxtra: .pak.off sets install like .pak
     console.log('Dropped items:', paths)
     if (await installDroppedKit(paths, alert)) return // repakxtra: a preview kit zip installs as the kit, not as a mod
 
@@ -1561,7 +1569,7 @@ function App() {
 
       // Show persistent error toast for crashes
       alert.crash(payload.title, payload.description, {
-        action: {
+        action: withSuspects({ // repakxtra: See suspects beside Details
           label: 'Details',
           onClick: () => {
             // Appended, not assigned. Replacing the entries threw away the
@@ -1574,7 +1582,7 @@ function App() {
             setIsLogDrawerOpen(true)
             alert.info('Crash Details', 'Report opened in Log Drawer.')
           }
-        }
+        }, payload)
       })
 
       // Log detailed crash info to console for debugging
@@ -1589,7 +1597,7 @@ function App() {
 
     // Check for crashes from previous game sessions
     if (isFirstRun) {
-      invoke('check_for_previous_crash').catch(err => {
+      invoke<{ crash_folder?: string } | null>('check_for_previous_crash').then(c => { if (c?.crash_folder) previousCrashes.add(c.crash_folder) }).catch(err => { // repakxtra: its suspects are the mods on now
         uiLog.error('Crash', `Could not check for previous crashes: ${err}`)
       })
     }
@@ -2738,6 +2746,7 @@ function App() {
     try {
       const newPath = await invoke('rename_mod', { modPath, newName }) as string
       renameModKey(modKey(modPath), modKey(newPath)) // repakxtra: loadouts follow the rename
+      renameSource(modKey(modPath), modKey(newPath)) // repakxtra: so does its Nexus source
       setStatus(`Renamed to "${newName}"`)
       const refreshed = await loadMods()
       if (selectedMod && selectedMod.path === modPath) {
@@ -3382,6 +3391,7 @@ function App() {
         }
 
         await finishInstallLoadout(modsWithSettings, alert) // repakxtra: Save as a loadout
+        await recordSources(modsWithSettings) // repakxtra: Nexus source from the archive name
 
         // Reload in background so alert shows success immediately
         loadMods()
@@ -3658,9 +3668,12 @@ function App() {
           characterData={characterData}
           onSetPriority={handleSetPriority}
           onToggleMod={stableToggleMod}
+          onKeep={(keep, others) => keepThisOne({ alert, isBlocked: undoBlocked, reload: loadMods }, keep, others)} /* repakxtra */
           onClose={() => setPanel('clash', false)}
         />
       )}
+
+      <CrashSuspects deps={{ alert, isBlocked: undoBlocked, reload: loadMods }} mods={mods} details={modDetails} heroes={characterData} />{/* repakxtra */}
 
       {panels.settings && (
         <SettingsPanel
@@ -3866,7 +3879,7 @@ function App() {
         >
           <ModularLogo size={50} className="repak-icon" />
           <div className="header-title-group">
-            <h1 className="font-logo">repak<span className="title-x">xtra</span></h1>{/* repakxtra */}
+            <h1 className="font-logo"><Wordmark height={22} busy={isModsLoading} /></h1>{/* repakxtra: the logo; its dots pulse while mods load or install */}
             <span className="version">{versionTag(version)}</span>{/* repakxtra */}
           </div>
         </div>
@@ -4338,9 +4351,10 @@ function App() {
 
                   <button
                     className={`btn-ghost danger bulk-delete ${isDeletingBulk ? 'holding' : ''}`}
-                    onMouseDown={handleBulkDeleteDown}
-                    onMouseUp={handleBulkDeleteUp}
-                    onMouseLeave={handleBulkDeleteUp}
+                    onPointerDown={handleBulkDeleteDown} /* repakxtra: pointer events, so a pen holds too */
+                    onPointerUp={handleBulkDeleteUp}
+                    onPointerLeave={handleBulkDeleteUp}
+                    onPointerCancel={handleBulkDeleteUp}
                     title={holdToDelete ? "Hold 2s to delete selected mods" : "Click to delete selected mods"}
                   >
                     <div className="danger-bg" />
