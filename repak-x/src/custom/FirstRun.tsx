@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { open as pick } from '@tauri-apps/plugin-dialog'
 import { motion } from 'framer-motion'
+import { Upload } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import { BypassStep, GalactaStep, PreviewsStep, Step } from './SetupPanel'
 import { isKitZip } from './previewKit'
@@ -84,7 +85,7 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
         </div>
 
         <ol className="modal-body fr-steps">
-          <Step n={1} className="is-req" done={!noGame} title="Find the game"
+          <Step n={1} done={!noGame} title="Find the game"
             action={noGame
               ? <><button type="button" className="btn-primary" disabled={finding} onClick={find}>{finding ? 'Looking…' : 'Find it'}</button>
                   <button type="button" className="lo-text-btn" onClick={() => onBrowse()}>Browse…</button></>
@@ -104,7 +105,11 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
 
           <Step n={6} done={false} wide title="Add your first mods">
             <div className="fr-drop">
-              <span className="fr-drop-text">Drop .pak, .pak.off, .zip, .rar or .7z files, or mod folders, anywhere on this window. Drop zips as they are: no need to extract.</span>
+              {/* the icon on the text's first line, not a line of its own */}
+              <span className="fr-drop-text">
+                <Upload size={16} aria-hidden="true" />
+                <span>Drop .pak, .pak.off, .zip, .rar or .7z files, or mod folders, anywhere on this window. Drop zips as they are: no need to extract.</span>
+              </span>
               <span className="fr-drop-actions">
                 <button type="button" className="lo-text-btn" disabled={noGame} onClick={addFiles}>Choose files…</button>
                 <a onClick={() => openUrl(NEXUS)}>Find mods on Nexus Mods</a>
@@ -116,8 +121,7 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
         <div className="modal-footer fr-foot">
           <span className="su-sub">Open this again from Setup &gt; Guided setup.</span>
           <button type="button" className="lo-text-btn" onClick={() => { close(); onStartTour() }}>Take the 1-minute tour</button>
-          {/* "Finish later" while steps 1 to 3 wait (theme.css swaps the label and quiets the button by what the steps show) */}
-          <button type="button" className="btn-primary fr-finish" onClick={close}><span className="fr-later">Finish later</span><span className="fr-done">Done</span></button>
+          <button type="button" className="btn-primary" onClick={close}>Done</button>
         </div>
       </motion.div>
     </div>

@@ -1700,11 +1700,12 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .fr-step:last-child { border-bottom: none; }
 .fr-num { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 12.5px; font-weight: 700;
   color: var(--text-primary); border: 1px solid var(--panel-border); background: var(--bg-lighter); font-variant-numeric: tabular-nums; }
-.fr-step.is-done .fr-num { color: var(--text-primary); background: var(--bg-lighter); border-color: var(--panel-border); }   /* a quiet check: blue is for what to do next */
+.fr-step.is-done .fr-num { color: #fff; background: var(--accent-primary); border-color: var(--accent-primary); }
 .fr-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .fr-text h3 { margin: 0; font-size: 14.5px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
 .fr-text p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }
 .fr-text code { font: 12px var(--font-mono); color: var(--text-primary); }
+.fr-step.is-done .fr-text h3 { color: var(--text-secondary); }
 .fr-optional { padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--text-secondary); background: var(--bg-lighter); }
 .fr-action { display: flex; align-items: center; gap: 8px; align-self: start; }   /* on the title's line, like the number */
 .fr-step.is-wide .fr-text h3 { line-height: 26px; }
@@ -1751,7 +1752,7 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
    is scoped to this window */
 .su-modal .modal-header { flex-wrap: wrap; row-gap: 4px; }
 .su-modal .modal-header > .su-sub { flex-basis: 100%; margin: 0; }
-.su-modal .su-rows, .su-modal .su-parts { border: none; border-radius: 0; border-top: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); }
+.su-modal .su-rows, .su-modal .su-parts, .su-details { border: none; border-radius: 0; border-top: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); }
 .su-modal .su-rows { padding: 10px 0; }
 .su-modal .su-part { padding: 8px 0; }
 .su-modal .su-actions .su-option { gap: 8px; }
@@ -2368,63 +2369,12 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 /* One setup design (2026-10-18): the welcome screen, Setup and the Sigeon setup share SetupPanel's Step rows. Setup's
    rows have no number: an empty ring until done, then the check. Each step's extra detail in Setup (Galacta's facts,
    the preview kit's parts) sits between hairlines under its description; links in a step's text are the accent's */
+.su-files td:nth-child(2) { white-space: nowrap; }   /* the size */
+.su-files-where { display: block; margin-top: 2px; font-size: 11.5px; color: var(--text-secondary); }   /* where a file goes, under its name */
+.fr-text .su-details { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 6px; padding: 8px 0; }
+.fr-text .su-parts { margin-top: 6px; }
 .fr-text .su-actions { margin-top: 4px; }
 .fr-text .su-confirm { margin-top: 4px; }
 .fr-text a, .su-trust-body a { color: color-mix(in srgb, var(--accent-primary), white 30%); cursor: pointer; text-decoration: none; }
 .fr-text a:hover, .su-trust-body a:hover { text-decoration: underline; }
-/* Setup's detail rows (SetupPanel Detail), one kind under every step: what, its value, the links that act on it */
-.fr-step { row-gap: 0; }
-.fr-more { grid-column: 2 / -1; min-width: 0; }   /* under the title row, past the action: every step's details the same width */
-.su-details { margin-top: 10px; border-top: 1px solid var(--panel-border); }
-.su-detail { display: grid; grid-template-columns: 104px minmax(0, 1fr) auto; column-gap: 14px; align-items: center; min-height: 34px;
-  padding: 5px 0; border-bottom: 1px solid var(--panel-border); font-size: 12.5px; }
-.su-detail-label { color: var(--text-secondary); }
-.su-detail-value { min-width: 0; color: var(--text-primary); overflow-wrap: anywhere; }
-.su-detail-value code { font: 12px var(--font-mono); }
-.su-detail-links { display: inline-flex; gap: 14px; white-space: nowrap; }
-.su-detail .custom-dropdown-container { width: 200px; }
-/* Inside "Is it safe?": plain sentences, then each file on one quiet line with its hash to copy */
-.su-trust-body { gap: 8px; }
-.su-trust-body .su-files { width: auto; margin: 2px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
-.su-trust-body .su-files li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: 12px; color: var(--text-secondary); }
-.su-trust-body .su-files code { font: 11.5px var(--font-mono); color: var(--text-primary); }
-.su-trust-body .su-hash { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px !important; }
-.su-trust-body .su-license summary { font-size: 12px; }
-/* Setup review round 1 (GPT-6.1-Sol): one next action, details as value-then-actions, quiet marks and safety lines */
-/* Only the first unfinished step with a main button keeps it blue; main buttons in the steps after it wait, quiet */
-.fr-step:not(.is-done):has(.fr-action .btn-primary) ~ .fr-step .fr-action .btn-primary {
-  background: transparent !important; color: var(--text-primary) !important; border: 1px solid var(--panel-border) !important; box-shadow: none !important; }
-/* The welcome screen's footer: "Finish later", quiet, while a step it needs (1 to 3) is unfinished; "Done", blue, after */
-.fr-finish .fr-later { display: none; }
-.fr-modal:has(.fr-step.is-req:not(.is-done)) .fr-finish .fr-later { display: inline; }
-.fr-modal:has(.fr-step.is-req:not(.is-done)) .fr-finish .fr-done { display: none; }
-.fr-modal:has(.fr-step.is-req:not(.is-done)) .fr-finish {
-  background: transparent !important; color: var(--text-primary) !important; border: 1px solid var(--panel-border) !important; box-shadow: none !important; }
-/* Setup's ring before a step is done: an outline, not a filled dot */
-.fr-step.is-plain:not(.is-done) .fr-num { background: transparent; }
-/* A detail row: the value on its line, the links that act on it under it */
-.su-detail { grid-template-columns: 104px minmax(0, 1fr); row-gap: 4px; align-items: baseline; padding: 8px 0; }
-.su-detail-links { grid-column: 2; display: flex; flex-wrap: wrap; gap: 4px 16px; white-space: normal; }
-/* "Is it safe?": the shield in the text's own gray (it should not vouch before the facts are read), small icons */
-.su-trust-btn svg.lucide { width: 13px !important; height: 13px !important; }
-.su-trust-btn svg.lucide:first-child { color: currentColor; }
-.su-hash svg.lucide { width: 11px !important; height: 11px !important; }
-.su-trust-body p { font-size: 12.5px; }   /* the descriptions' size: the facts read as easily as the step */
-.su-trust-body .su-files li { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; row-gap: 1px; }
-.su-trust-body .su-files li > span { grid-column: 1 / -1; }
-.su-trust-body .su-hash { margin-left: 0; }
-/* The first-mods step: flat like the rows around it (the whole window takes drops) */
-.fr-drop { border: none; background: transparent; padding: 0; margin-top: 4px; }
-.fr-drop-text > svg { color: var(--text-secondary); }
-/* Setup review round 2: the description under the title row at the full width (buttons no longer set how it wraps), each
-   step's state on its own line in the brighter text, the first-mods text as quiet as the other descriptions */
-.fr-body { grid-column: 2 / -1; min-width: 0; gap: 2px; margin-top: 1px; }
-.fr-body:empty { display: none; }
-.fr-body .fr-state { color: var(--text-primary); }
-.fr-drop-text { font-size: 12.5px; font-weight: 400; line-height: 1.5; color: var(--text-secondary); }
-.fr-drop-actions { justify-content: flex-start; gap: 16px; }
-.fr-drop a { margin-left: 0; }
-.su-detail:last-child { border-bottom: none; }   /* the step's own separator follows */
-.su-trust-body p { text-wrap: pretty; }
-.su-trust-body a, .fr-text a { white-space: nowrap; }   /* "See it on GitHub" stays one piece */
-.fr-action { margin-block: -3px; }   /* its 32px buttons centered on the 26px title row: a row with a button keeps the same rhythm */
+.su-dl dd .custom-dropdown-container { width: 200px; }
