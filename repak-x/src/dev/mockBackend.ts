@@ -11,6 +11,15 @@ const data: any = Object.values(fixtures)[0] ?? {
   gamePath: '', settings: {}, tags: [], characterData: [], mods: [], folders: [], details: {},
 }
 
+// localStorage 'mock.fresh' = '1': a fresh PC (the README guide's demos). No game folder until Find it, no bypass or
+// Galacta, an empty library; installing a file named like a snapshot mod brings that mod back. 'mock.noPreviews' = '1'
+// takes the preview kit away too.
+const fresh = localStorage.getItem('mock.fresh') === '1'
+const held: any[] = fresh ? data.mods.splice(0) : []
+const freshGame = data.gamePath
+if (fresh) data.gamePath = ''
+const baseName = (p: string) => (p.split(/[\\/]/).pop() || p).replace(/(_\d+_P)?\.(pak|bak_repak|pak_disabled)$/i, '').toLowerCase()
+
 let sigeonState = 'off'
 // ?sigeon=unset in the page URL: no Sigeon yet (header > Sigeon not configured opens the setup); a folder whose name
 // has "Sigeon" in it has the loader
@@ -28,8 +37,8 @@ const sigeonPresets: Record<string, any[]> = sigeonUnset ? {} : Object.fromEntri
   sigeonLine('r.ContactShadows', '0'), sigeonLine('r.DetailMode', '1'), { kind: 'blank' },
 ]]))
 const sigeonDeleted: Record<string, any[]> = {}
-let mockBypass = sigeonUnset ? 'missing' : 'installed'   // a fresh PC has neither
-let mockGalacta: any = { installed: 'C:/Game/~mods', disabled: false, up_to_date: false }
+let mockBypass = sigeonUnset || fresh ? 'missing' : 'installed'   // a fresh PC has neither
+let mockGalacta: any = { installed: fresh ? null : 'C:/Game/~mods', disabled: false, up_to_date: false }
 const galactaRelease = { latest: 'v1.4.1', published: '2026-10-14T14:29:44Z', url: 'https://github.com/0xSaturno/ProjectGalacta/releases/tag/v1.4.1',
   notes: "## What's new:\n\n### Mod Loader:\n- Mods that add custom VFX to abilities are no longer blocked." }
 const setupBypass = () => ({ state: mockBypass, sigeon_on: true, license: 'MIT License\n\nCopyright (c) 2023 ThirteenAG',
@@ -126,8 +135,9 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'get_hero_image_ids': return data.heroIds ?? []
       case 'list_mod_previews': // copies of %APPDATA%\Repak-X\previews in src/dev/previews.local
         return Object.keys(previewUrls).map(f => f.replace(/^.*\/|\.(png|webp)$/g, ''))
-      case 'get_mod_preview': { // a loadout render made in this page shows a local copy's image
-        const load = previewUrls[`./previews.local/${args?.key}.png`] ?? previewUrls[`./previews.local/${args?.key}.webp`] ?? (setCovers.has(args?.key) ? Object.values(previewUrls)[0] : undefined)
+      case 'get_mod_preview': { // a loadout render made in this page shows a local copy's image ('mock.setImage' = its name)
+        const made = previewUrls[`./previews.local/${localStorage.getItem('mock.setImage')}.png`] ?? Object.values(previewUrls)[0]
+        const load = previewUrls[`./previews.local/${args?.key}.png`] ?? previewUrls[`./previews.local/${args?.key}.webp`] ?? (setCovers.has(args?.key) ? made : undefined)
         if (!load) throw `No preview for ${args?.key}`
         return later(load().then(url => fetch(url)).then(r => r.arrayBuffer()))
       }
@@ -164,7 +174,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'previews_available': return localStorage.getItem('mock.noPreviews') !== '1'
       case 'preview_kit_status': {
         const version = localStorage.getItem('mock.kit') ?? (localStorage.getItem('mock.noPreviews') === '1' ? null : '4')
-        return { version, source: version ? localStorage.getItem('mock.kitSource') || 'file' : null, blender: 'C:\\Program Files\\Blender Foundation\\Blender 5.2\\blender.exe' }
+        return { version, source: version ? localStorage.getItem('mock.kitSource') || 'file' : null, blender: fresh && !version ? null : 'C:\\Program Files\\Blender Foundation\\Blender 5.2\\blender.exe' }
       }
       case 'preview_kit_latest': return localStorage.getItem('mock.kitLatest') === 'none' ? null
         : { version: localStorage.getItem('mock.kitLatest') || '4', published: '2026-10-15T12:00:00Z', notes: '## Kit v4\n- Previews for each hero form', url: 'https://github.com/cablemp5/repak-xtra/releases', asset: '', size: 113000000 }
@@ -176,7 +186,8 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'preview_kit_remove': localStorage.setItem('mock.noPreviews', '1'); localStorage.removeItem('mock.kit'); return null
       case 'preview_kit_set_blender': return args?.path ?? null
       case 'preview_kit_install_blender': return 'C:\\Program Files\\Blender Foundation\\Blender 5.2\\blender.exe'
-      case 'set_game_path': return String(args?.path ?? '')
+      case 'set_game_path': if (fresh) data.gamePath = String(args?.path ?? ''); return String(args?.path ?? '')
+      case 'auto_detect_game_path': if (fresh) data.gamePath = freshGame; return freshGame
       case 'previews_doctor': return localStorage.getItem('mock.doctor') === 'fail'
         ? { ok: false, problems: ["The game's Paks folder was not found (REPAKXTRA_PAKS is not set)."] } : { ok: true, problems: [] }
       // Capture: the game counts as open while window.__mockGameRunning is set; captures fail (no game to picture)
@@ -253,6 +264,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       // pick (the Sigeon folder) returns an unzipped Sigeon download.
       case 'plugin:dialog|open':
         if (args?.options?.directory) return 'C:\\Users\\you\\Downloads\\Sigeon V2'
+        if (localStorage.getItem('mock.pick')) return JSON.parse(localStorage.getItem('mock.pick')!) // a JSON list of paths
         return ['C:/Fake/Drop/Alpha_Skin_9999999_P.pak', 'C:/Fake/Drop/Beta_Icons_9999999_P.pak']
       // localStorage 'mock.dropType' sets the dropped mods' type (e.g. 'Daredevil - Mesh [Blueprint]')
       case 'parse_dropped_files':
@@ -260,6 +272,13 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
           is_dir: false, contains_uassets: true, contains_raw_assets: false, auto_to_repak: false, file_size: 1048576 }))
       case 'install_mods':
         for (const m of args?.mods ?? []) {
+          const back = held.findIndex(x => baseName(x.path) === baseName(m.path ?? m.mod_name ?? ''))
+          if (back >= 0) { // a snapshot mod held back by mock.fresh returns, on
+            const old = held.splice(back, 1)[0], at = old.path.replace(/\.(bak_repak|pak_disabled)$/i, '.pak')
+            data.mods.push({ ...old, path: at, enabled: true, modified_date: Date.now() / 1000 })
+            data.details[at] ??= data.details[old.path]
+            continue
+          }
           const path = `${data.gamePath}\\${normalizeModBaseName(m.customName || m.mod_name)}.pak`
           if (!data.mods.some((x: any) => x.path === path)) data.mods.push({ ...data.mods[0], path, enabled: true, modified_date: Date.now() / 1000 })
           data.details[path] ??= { ...data.details[data.mods[0].path], mod_name: path.split('\\').pop()?.replace(/\.pak$/, '') } // details open for it

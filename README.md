@@ -22,14 +22,61 @@ repakxtra is a fork of **[Repak X](https://github.com/X-zant/Repak-X)** by **Xza
 > [!NOTE]
 > repakxtra is an unofficial fork: not made by the Repak X team, and not affiliated with NetEase or Marvel.
 
-## Getting started
+## How to install repakxtra and your first mod
 
-1. Download the newest release from [Releases](https://github.com/cablemp5/repak-xtra/releases) and unzip it anywhere.
-2. Open `repakxtra.exe` (on a SmartScreen warning: **More info**, then **Run anyway**).
-3. Follow the first-launch setup: game folder, signature bypass, Project Galacta, optional mod previews, first mods. All of it stays under **Setup** later.
+You need a Windows PC with Marvel Rivals and a mod you downloaded. The mod is a `.pak`, `.zip`, `.rar` or `.7z` file;
+you do not need to unzip it.
+
+1. **Download repakxtra.** Open the [newest release](https://github.com/cablemp5/repak-xtra/releases/latest) and click
+   the file whose name ends in `-windows.zip`.
+2. **Unzip it.** Right-click the zip in your Downloads folder, click **Extract All...**, then **Extract**. You can move
+   the folder anywhere, like your Desktop.
+3. **Close Marvel Rivals** if it is open.
+4. **Open repakxtra.** Double-click `repakxtra.exe` in the folder. If Windows says "Windows protected your PC", click
+   **More info**, then **Run anyway**.
+5. **Follow the welcome screen.** It opens by itself the first time.
+   - **Find the game** usually has a blue check already. If not, click **Find it**.
+   - **Install the signature bypass:** click **Install**. Without it, the game does not load mods.
+   - **Install Project Galacta:** click **Install**. Most skin mods need it.
+   - **Mod previews** and **Desktop shortcut** are optional. You can skip them for now.
+
+   <img src=".github/screenshots/guide-welcome.png" alt="The welcome screen with its six steps" width="70%">
+6. **Add your mod.** Under **Add your first mods**, click **Choose files...** and pick the mod you downloaded. You can
+   also drag the file onto the repakxtra window.
+7. **Click Install 1 mod.** Leave the switches as they are; they are for special mods.
+8. **Check that it is on.** Click **Library** at the top. Your mod is in the list with a blue switch, which means on.
+9. **Play.** Click **Launch Game**. The mod loads when the game starts.
+
+<img src=".github/screenshots/guide-first-mod.gif" alt="Installing the signature bypass and Project Galacta, then installing a mod and seeing it on in the Library" width="100%">
+
+To turn a mod off, click its switch in the Library. To remove one, right-click it and click **Delete**; it waits 7 days
+in **Settings > Recently deleted** in case you want it back.
 
 > [!WARNING]
-> Close the game before changing anything in Setup.
+> Close the game before you install, turn on or turn off mods, or change anything in **Setup**.
+
+## How to create your first loadout
+
+A loadout is a group of mods with one switch, like one look for a hero. It gets a picture of what the mods look like
+in the game.
+
+1. **Set up previews (only once).** Click **Setup** at the top. Under **Mod previews**, click **Set up previews**. It
+   downloads the free preview kit (about 110 MB) and installs Blender, the free program that draws the pictures. If
+   Windows asks whether to allow changes, click **Yes**. When it says **Ready**, close Setup.
+
+   <img src=".github/screenshots/guide-previews-setup.gif" alt="Setup, Mod previews, Set up previews, then Ready" width="80%">
+2. **Install a mod** as in the steps above: drag the file onto the window, or click **PAK** in the Library and pick it,
+   then click **Install 1 mod**.
+3. **Make a loadout.** Click **Loadouts** at the top, then **New loadout**.
+4. **Name it.** Type a name, like `Ultimate`, and press **Enter**.
+5. **Add your mod.** Under **Add mods**, type part of the mod's name in the search box, then click the **+** next to it.
+   It moves up to **In this loadout**.
+6. **Make its picture.** Click **Generate previews**. The picture shows up on the left when it is ready; this can take
+   a minute or two, and you can keep using the app while it works.
+7. **Turn it on.** Click **Loadouts** at the top left of the page to go back. Click the switch on your loadout's card:
+   blue turns all its mods on, grey turns them off. Mods that are not in the loadout stay as they are.
+
+<img src=".github/screenshots/guide-first-loadout.gif" alt="Making a loadout called Ultimate, adding a mod, generating its preview and turning it on" width="100%">
 
 ## Features
 
