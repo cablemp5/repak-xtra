@@ -35,16 +35,19 @@ repakxtra is a fork of **[Repak X](https://github.com/X-zant/Repak-X)** by **Xza
 
 **Loadouts**
 - One click turns a set of mods on or off. Loadouts are independent, and you are warned when two that are on change the same hero.
-- Collections (drag cards between them) or a view by hero. The pencils rename loadouts and collections.
+- Collections or a view by hero. Drag a card to reorder it, move it to another collection or start a new one with it; the
+  pencils rename loadouts and collections. **−** and **+** in the header (or `Ctrl` + scroll) change the card size.
 - Make one from the Library selection, the right-click menu, the sidebar or while installing. Undo for every removal.
 - On a loadout's page: add and remove mods, rename a mod, turn single mods on or off, and **More > Export as zip** (every
-  mod's files in one zip, named after the loadout). Changes save as you make them.
+  mod's files in one zip, named after the loadout). Mods installed from the page join the loadout, and mods deleted
+  from the Library show a red **Deleted** tag. Changes save as you make them.
 - The Library sidebar lists them for quick switching, the ones that are on first.
 
 **Previews**
 - Character mods render on the hero in the lobby pose, using the mods' real materials. A loadout's mods render together.
 - Heroes with forms get one picture per form the mod changes (Magik and Darkchylde, Hulk's three); cards page through them.
 - Animations get a looping clip, VFX mods a palette of the colors they change, UI mods an icon sheet, sound mods a list.
+  When a loadout has an emote's sound mod, hovering the emote's clip plays its sound.
 - **Generate all previews** queues every loadout. Mods with nothing to show are marked "No preview possible".
 - **Capture in game:** on a loadout's page, click **Capture preview in game**, switch to the hero's Overview or Cosmetics
   screen in the game, then press `Ctrl+Shift+X` to use a screenshot instead.
@@ -52,7 +55,7 @@ repakxtra is a fork of **[Repak X](https://github.com/X-zant/Repak-X)** by **Xza
 > [!NOTE]
 > Rendered previews need the preview kit and [Blender](https://www.blender.org/download/) (free). **Setup > Mod previews** installs both.
 
-**Library:** hero and type filters, double-click to rename. Deleted mods wait 7 days in **Settings > Recently deleted**
+**Library:** hero and type filters, double-click to rename. Deleted mods (and a mod's old version when it is updated, or a folder's mods when the folder is deleted) wait 7 days in **Settings > Recently deleted**
 (Undo right after a delete, Restore any time before). Mods that are on and clash with another mod that is on get a red
 **Conflict** badge, and **Check Conflicts** shows a red dot while any do; it groups the clashing mods and says what they
 replace ("These 3 mods replace Black Panther's materials"); **Keep this one** on a mod turns the others in its group off,
@@ -74,7 +77,8 @@ channel, with no folder paths or user name. Audio and UI mods say in their detai
 
 ## See it in action
 
-**Turn a loadout on.** One switch per loadout; its mods switch together, and the dot says how many are on.
+**Turn a loadout on.** One switch per loadout; its mods switch together, and the dot says how many are on. A switch
+half way across means only some of them are, and clicking it turns on the rest.
 
 <img src=".github/screenshots/demo-loadouts.gif" alt="Turning loadouts on and off from the Loadouts screen" width="100%">
 

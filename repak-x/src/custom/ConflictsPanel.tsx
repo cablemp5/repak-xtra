@@ -1,7 +1,7 @@
 // repakxtra: the conflicts screen (Check Conflicts, and a mod's own conflict check), in place of Repak X's ClashPanel.
 // Mods that are on and change the same game files are grouped by exactly which files they share, and each group says
 // in words what they replace ("Both replace Black Panther's materials"), with each mod's priority and switch below.
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Check, ChevronRight } from 'lucide-react'
 import NumberInput from '../components/ui/NumberInput'
@@ -9,6 +9,7 @@ import Switch from '../components/ui/Switch'
 import { resolveHeroImage, useHeroImages } from '../utils/heroImages'
 import { modKey } from './loadoutStore'
 import { ModName, plural } from './modName'
+import { useDialogFocus } from './dialogFocus'
 
 type Clash = { file_path: string; mod_paths: string[]; files?: string[] }
 type Mod = { path: string; priority?: number; enabled?: boolean }
@@ -162,21 +163,7 @@ export default function ConflictsPanel({ clashes, mods = [], characterData = [],
   onKeep?: (keep: string, others: Mod[]) => void; onClose: () => void
 }) {
   useHeroImages()
-  const dialog = useRef<HTMLDivElement>(null)
-  // Keyboard focus moves into the dialog, Tab stays inside it, and goes back to what opened it on close
-  useEffect(() => {
-    const before = document.activeElement as HTMLElement | null
-    dialog.current?.focus()
-    return () => { before?.focus?.() }
-  }, [])
-  const trap = (e: React.KeyboardEvent) => {
-    if (e.key !== 'Tab' || !dialog.current) return
-    const all = [...dialog.current.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])')]
-    if (!all.length) return
-    const [first, last] = [all[0], all[all.length - 1]]
-    if (e.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) { e.preventDefault(); last.focus() }
-    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
-  }
+  const { ref: dialog, onKeyDown: trap } = useDialogFocus() // focus inside, Tab stays inside, back to the opener on close
   const groups = useMemo(() => groupConflicts(clashes), [clashes])
   // The list is not checked again after a switch or a priority change, so a mod may now have another extension or
   // name suffix: matched by its stem, then by its name alone

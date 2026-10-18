@@ -13,7 +13,7 @@ type Sound = { key: string; emote: string }
 let emotes: Emotes = { anim: {}, audio: {} }
 const listeners = new Set<() => void>()
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
-const load = () => invoke<Emotes>('get_preview_emotes').then(e => { emotes = e; listeners.forEach(l => l()) }).catch(() => undefined)
+const load = () => invoke<Emotes>('get_preview_emotes').then(e => { emotes = { anim: e?.anim ?? {}, audio: e?.audio ?? {} }; listeners.forEach(l => l()) }).catch(() => undefined)
 load()
 
 /** Same emote: same item index, and the same hero or a universal emote (hero 9999) on either side. */

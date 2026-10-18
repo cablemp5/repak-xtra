@@ -100,6 +100,38 @@ pub fn discard(dir: &Path, path: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Deleting a mods subfolder: every file in it (and in its subfolders) goes to the trash first, one deletion per folder
+/// so files with the same name in two folders never collide, then the empty folders go. A file that cannot move stops it
+/// before any folder is removed; what already moved can be restored from Recently deleted.
+pub fn discard_tree(folder: &Path) -> Result<(), String> {
+    discard_tree_in(&trash_dir(), folder)?;
+    fs::remove_dir_all(folder).map_err(|e| e.to_string())
+}
+
+fn discard_tree_in(root: &Path, folder: &Path) -> Result<(), String> {
+    // file_type() does not follow links: a junction or symlink inside is never walked into (its target may be outside
+    // ~mods); remove_dir_all later removes only the link itself
+    let mut files = Vec::new();
+    let mut subs = Vec::new();
+    for e in fs::read_dir(folder).map_err(|e| e.to_string())?.flatten() {
+        match e.file_type() {
+            Ok(t) if t.is_file() => files.push(e.path()),
+            Ok(t) if t.is_dir() => subs.push(e.path()),
+            _ => {}
+        }
+    }
+    if !files.is_empty() {
+        let dir = reserve_in(root, None)?;
+        for f in &files {
+            discard(&dir, f).map_err(|e| format!("{}: {e}", f.display()))?;
+        }
+    }
+    for sub in &subs {
+        discard_tree_in(root, sub)?;
+    }
+    Ok(())
+}
+
 /// Removes a reserved folder that ended up holding nothing (the delete failed or found no files).
 pub fn release_if_empty(dir: &Path) {
     let _ = fs::remove_dir(dir); // only succeeds when empty
@@ -298,6 +330,9 @@ fn restore_from(root: &Path, ids: &[String]) -> Result<usize, String> {
             continue;
         }
         for (sidecar, trashed, original) in records {
+            if let Some(parent) = original.parent() {
+                let _ = fs::create_dir_all(parent); // its folder may have been deleted since
+            }
             match move_file(&trashed, &original) {
                 Ok(()) => {
                     let _ = fs::remove_file(&sidecar);
@@ -352,6 +387,36 @@ mod tests {
         assert!(old.deleted.abs_diff(secs) <= 2, "the deletion keeps its time");
         assert!(root.join("Stray.pak").exists() && !root.join("Old_9999999_P.ucas").exists());
         assert_eq!(mod_stem("A.b_9999999_P.pak.bak_repak"), "A.b_9999999_P");
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn folder_delete_trashes_every_file_and_restores() {
+        let (mods, root, base) = roots("tree");
+        put(&mods.join("Hulk/A_9999999_P.pak"), b"1");
+        put(&mods.join("Hulk/Old/A_9999999_P.pak"), b"22"); // same name in a subfolder
+        discard_tree_in(&root, &mods.join("Hulk")).unwrap();
+        fs::remove_dir_all(mods.join("Hulk")).unwrap();
+        let list = list_in(&root);
+        assert_eq!(list.len(), 2, "one deletion per folder: {list:?}");
+        restore_from(&root, &list.iter().map(|t| t.id.clone()).collect::<Vec<_>>()).unwrap();
+        assert_eq!(fs::read(mods.join("Hulk/Old/A_9999999_P.pak")).unwrap(), b"22", "restored into the folder it was deleted from");
+        assert!(mods.join("Hulk/A_9999999_P.pak").exists());
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn folder_delete_never_follows_a_junction() {
+        let (mods, root, base) = roots("junction");
+        put(&base.join("outside/Keep.pak"), b"k");
+        put(&mods.join("Hulk/A.pak"), b"a");
+        let made = std::process::Command::new("cmd").args(["/C", "mklink", "/J"]).arg(mods.join("Hulk").join("link")).arg(base.join("outside")).output().unwrap();
+        assert!(made.status.success(), "mklink /J failed");
+        discard_tree_in(&root, &mods.join("Hulk")).unwrap();
+        fs::remove_dir_all(mods.join("Hulk")).unwrap();
+        assert!(base.join("outside/Keep.pak").exists(), "the junction's target is outside the folder and stays");
+        assert_eq!(list_in(&root).len(), 1);
         let _ = fs::remove_dir_all(base);
     }
 

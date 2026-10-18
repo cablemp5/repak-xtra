@@ -421,7 +421,7 @@ export default function InstallModPanel({ mods, allTags, folders = [], currentFo
                             <input
                               type="text"
                               aria-label="Custom name"
-                              placeholder="Insert custom name here"
+                              placeholder="Name (optional)"
                               value={modSettings[idx]?.customName || ''}
                               onChange={(e) => updateModSetting(idx, 'customName', e.target.value)}
                               className="mod-name-input"
@@ -617,7 +617,7 @@ export default function InstallModPanel({ mods, allTags, folders = [], currentFo
             Cancel
           </button>
           <button onClick={handleInstall} className="btn-install" disabled={enabledCount === 0}>
-            Install {enabledCount} Mod(s)
+            Install {enabledCount} {enabledCount === 1 ? 'mod' : 'mods'}
           </button>
         </div>
       </motion.div>

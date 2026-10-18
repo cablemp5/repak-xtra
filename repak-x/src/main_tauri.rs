@@ -2489,6 +2489,7 @@ fn quick_organize_impl(
         );
 
         if let Ok(entries) = std::fs::read_dir(dest_dir) {
+            let trash = xtra_trash::reserve(None).ok(); // repakxtra: the replaced copy goes to Recently deleted
             for entry in entries.flatten() {
                 let entry_path = entry.path();
                 if entry_path.is_file() {
@@ -2499,7 +2500,7 @@ fn quick_organize_impl(
                                 "[QuickOrganize] Removing conflicting pre-existing file: {}",
                                 entry_path.display()
                             );
-                            if let Err(e) = std::fs::remove_file(&entry_path) {
+                            if let Err(e) = trash.as_ref().map_or_else(|| std::fs::remove_file(&entry_path), |t| xtra_trash::discard(t, &entry_path)) { // repakxtra
                                 warn!(
                                     "[QuickOrganize] Failed to remove conflicting file {}: {}",
                                     entry_path.display(),
@@ -2510,6 +2511,7 @@ fn quick_organize_impl(
                     }
                 }
             }
+            if let Some(t) = &trash { xtra_trash::release_if_empty(t); } // repakxtra
         }
     };
 
@@ -3604,11 +3606,12 @@ async fn update_mod(
     // ========================================================================
 
     info!("Deleting old mod files...");
+    let trash = xtra_trash::reserve(None)?; // repakxtra: the replaced version goes to Recently deleted, not gone for good
 
     // Delete main file
     let mut old_deleted = false;
     if actual_old_path.exists() {
-        if let Err(e) = std::fs::remove_file(&actual_old_path) {
+        if let Err(e) = xtra_trash::discard(&trash, &actual_old_path) { // repakxtra
             warn!("Failed to delete old mod file: {}", e);
         } else {
             old_deleted = true;
@@ -3635,13 +3638,15 @@ async fn update_mod(
     for ext in &["ucas", "utoc"] {
         let companion_path = base_pak_path.with_extension(ext);
         if companion_path.exists() {
-            if let Err(e) = std::fs::remove_file(&companion_path) {
+            if let Err(e) = xtra_trash::discard(&trash, &companion_path) { // repakxtra
                 warn!("Failed to delete .{} file: {}", ext, e);
             } else {
                 info!("Deleted associated .{} file: {:?}", ext, companion_path);
             }
         }
     }
+
+    xtra_trash::release_if_empty(&trash); // repakxtra: nothing was there to keep
 
     // ========================================================================
     // Step 3: Install the new mod
@@ -3731,7 +3736,8 @@ async fn update_mod(
     // ========================================================================
 
     // Determine the new mod's path
-    let new_mod_filename = format!("{}_9999999_P.pak", mod_name);
+    // repakxtra: the name install_mods gave it (mod_name may already end in _9999999_P: it came from the old file)
+    let new_mod_filename = format!("{}.pak", crate::install_mod::install_mod_logic::normalize_mod_base_name(&mod_name, crate::install_mod::install_mod_logic::BASE_MOD_NINES));
     let new_mod_path = if install_subfolder.is_empty() {
         mod_directory.join(&new_mod_filename)
     } else {
@@ -4410,7 +4416,7 @@ async fn delete_folder(
         return Err(error_msg);
     }
 
-    if let Err(e) = std::fs::remove_dir_all(&canonical_folder_path) {
+    if let Err(e) = xtra_trash::discard_tree(&folder_path) { // repakxtra: its mods go to Recently deleted (plain path: shown there)
         let error_msg = format!("Failed to delete folder: {}", e);
         toast_events::emit_folder_delete_failed(&window, &error_msg);
         return Err(error_msg);
@@ -4612,6 +4618,15 @@ async fn assign_mod_to_folder(
         game_path.join(filename)
     };
 
+    // repakxtra: on Windows a rename replaces the file already there, which would delete a same-named mod in that folder
+    // (on or off, and its .utoc/.ucas)
+    let taken = ["pak", "bak_repak", "pak_disabled", "utoc", "ucas"].iter().any(|x| dest_path.with_extension(x).exists());
+    if dest_path.parent() != source_path.parent() && taken {
+        let error_msg = "A mod with the same file name is already in that folder".to_string();
+        toast_events::emit_move_failed(&window, &error_msg);
+        return Err(error_msg);
+    }
+
     // Move the main file
     if let Err(e) = std::fs::rename(&source_path, &dest_path) {
         let error_msg = format!("Failed to move mod: {}", e);
@@ -4741,6 +4756,14 @@ async fn toggle_mod(
     } else {
         path.with_extension("pak")
     };
+
+    // repakxtra: an on and an off copy can sit side by side; a rename on Windows would replace (delete) the other copy
+    if new_path.exists() {
+        let error_msg = format!("Both an on and an off copy of {} are in the mods folder. Delete one of them, then switch it.",
+            path.file_stem().and_then(|s| s.to_str()).unwrap_or("this mod"));
+        toast_events::emit_toggle_failed(&window, &error_msg);
+        return Err(error_msg);
+    }
 
     if let Err(e) = std::fs::rename(&path, &new_path) {
         let error_msg = format!("Failed to toggle mod: {}", e);
@@ -7248,8 +7271,10 @@ fn save_state(state: &AppState) -> std::io::Result<()> {
     let dir = app_dir();
     std::fs::create_dir_all(&dir)?;
     let path = dir.join("repakxtra-state.json"); // repakxtra: its own file, so an open Repak X never overwrites it
-    let file = File::create(path)?;
-    serde_json::to_writer_pretty(file, state)?;
+    // repakxtra: written beside it, then swapped in, so a crash mid-save never leaves half a file (load would reset it)
+    let tmp = dir.join("repakxtra-state.json.tmp");
+    std::fs::write(&tmp, serde_json::to_vec_pretty(state)?)?;
+    std::fs::rename(&tmp, &path)?;
     Ok(())
 }
 

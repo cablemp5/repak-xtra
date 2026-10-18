@@ -13,6 +13,7 @@ import { savedItem } from './storageCarryOver'
 import { MatrixLoader } from './motion'
 import CopySetupReport from './CopySetupReport'
 import { noteGalactaCheck } from './setupReport'
+import { useDialogFocus } from './dialogFocus'
 
 type Alert = ReturnType<typeof useAlert>
 type FileCheck = { name: string; place: string; size: number; sha256: string; found: 'missing' | 'same' | 'other' }
@@ -122,6 +123,7 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
   const k = usePreviewKit(alert)
   const { kit, latest, busy, update } = k
   const [notes, setNotes] = useState<string | null>(null)
+  const [armed, setArmed] = useState(false) // Remove asks for a second click
   useEffect(() => { k.peek() }, [])   // the newest kit and its notes, so Set up says what it gets
   const fromFile = async () => {
     const f = await pickFile({ title: 'The preview kit zip', filters: [{ name: 'Preview kit', extensions: ['zip'] }] }).catch(() => null)
@@ -165,7 +167,9 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
               {busy === 'check' ? 'Checking…' : 'Check for updates'}
             </button>
             <button type="button" className="su-link" disabled={Boolean(busy)} onClick={fromFile} title="Install a preview kit zip (or drop one on the window)">From file…</button>
-            {kit?.version && <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => k.remove()}>Remove</button>}
+            {kit?.version && <button type="button" className="su-link" disabled={Boolean(busy)} onBlur={() => setArmed(false)}
+              onClick={() => { if (armed) { setArmed(false); k.remove() } else setArmed(true) }}
+              title="Deletes the kit; it downloads again from here">{armed ? 'Click again to remove' : 'Remove'}</button>}
           </span>
         </li>
         <li className="su-part">
@@ -219,6 +223,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   const [busy, setBusy] = useState<string | null>(null)
   const [confirmOff, setConfirmOff] = useState<'disable' | 'remove' | null>(null)
   const [safety, setSafety] = useState(false)
+  const trap = useDialogFocus() // focus inside, Tab stays inside, back to the opener on close
   const [notes, setNotes] = useState<string | null>(null)
 
   // Opened from a grayed-out Generate button: straight to the Mod previews card (its top, so it can still grow as it loads)
@@ -270,7 +275,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <motion.div className="modal-content su-modal" role="dialog" aria-label="Mod setup" onClick={e => e.stopPropagation()}
+      <motion.div ref={trap.ref} onKeyDown={trap.onKeyDown} tabIndex={-1} className="modal-content su-modal" role="dialog" aria-modal="true" aria-label="Mod setup" onClick={e => e.stopPropagation()}
         initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.15 }}>
         <div className="modal-header">
           <div><h2>Mod setup</h2><p className="su-sub">What Marvel Rivals needs to load mods. Close the game before changing these.</p></div>

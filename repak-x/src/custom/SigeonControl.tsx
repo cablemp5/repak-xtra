@@ -54,7 +54,7 @@ export default function SigeonControl({ alert }: { alert: ReturnType<typeof useA
     if (!open) return
     refresh()
     const close = (e: MouseEvent) => { if (!wrapRef.current?.contains(e.target as Node)) setOpen(false) }
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false) } } // the menu only, not the Library's selection
     document.addEventListener('mousedown', close)
     document.addEventListener('keydown', esc)
     return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc) }

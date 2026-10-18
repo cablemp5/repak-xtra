@@ -248,8 +248,9 @@ export default function Loadouts(p: LoadoutProps) {
       <div className="fp-head">
         <span className="fp-title">Loadouts</span>
         <span className="lo-head-actions">
-          <button type="button" className="lo-icon" aria-label="New loadout" onClick={() => setNaming(true)}
-            title={picked.length ? `New loadout from the ${plural(picked.length, 'selected mod')}` : 'New loadout from the mods that are enabled'}>
+          <button type="button" className="lo-icon" onClick={() => setNaming(true)}
+            title={picked.length ? `Save the ${plural(picked.length, 'selected mod')} as a loadout` : 'Save the mods that are on as a loadout'}
+            aria-label={picked.length ? `Save the ${plural(picked.length, 'selected mod')} as a loadout` : 'Save the mods that are on as a loadout'}>
             <Plus size={15} />
           </button>
         </span>

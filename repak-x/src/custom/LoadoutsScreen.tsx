@@ -312,12 +312,12 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   }
 
   /** Generate all: with no previews yet it just starts; otherwise it asks whether to redo the ones already made. */
-  const withPreview = loadouts.filter(loadoutHasPreview).length
+  const withPreview = loadouts.filter(l => loadoutHasPreview(l) || l.mediaRev || l.image).length // its own image counts: the menu then offers to keep it
   const generate = async (which: 'missing' | 'all') => {
     setGenMenu(false)
     const { count, error } = await generateAllLoadouts(loadouts, p.mods, which)
     if (error) p.alert.warning('Previews not started', error)
-    else if (!count) p.alert.info('Nothing to generate', 'Every loadout with installed mods already has a preview.')
+    else if (!count) p.alert.info('Nothing to generate', 'Every loadout with installed mods already has a preview or its own image.')
     else p.alert.success('Previews queued', `${plural(count, 'loadout')}, one after another.`)
   }
 

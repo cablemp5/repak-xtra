@@ -268,9 +268,10 @@ async fn latest_release() -> Result<(String, String, String, String, Vec<u8>), S
     let url = asset["browser_download_url"].as_str().unwrap_or("").to_string();
     // Cached per tag: checking again or installing after a check downloads nothing new
     let cache = setup_dir().join(format!("galacta-{}.zip", tag.replace(|c: char| !c.is_ascii_alphanumeric() && c != '.', "_")));
-    let zip = match fs::read(&cache) {
-        Ok(b) => b,
-        Err(_) => {
+    // a cached file that is not a whole zip (the app closed mid-write) is downloaded again
+    let zip = match fs::read(&cache).ok().filter(|b| zip_files(b).is_ok()) {
+        Some(b) => b,
+        None => {
             let b = client.get(&url).header("User-Agent", "repakxtra").send().await
                 .and_then(|r| r.error_for_status()).map_err(|e| format!("Download failed: {e}"))?
                 .bytes().await.map_err(|e| format!("Download failed: {e}"))?.to_vec();

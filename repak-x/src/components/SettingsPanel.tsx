@@ -4,6 +4,7 @@ import Switch from './ui/Switch'
 import Checkbox from './ui/Checkbox'
 import UiSettings, { ModSizeSetting } from '../custom/uiPrefs' // repakxtra
 import RecentlyDeleted from '../custom/RecentlyDeleted' // repakxtra: Settings > Recently deleted
+import { useDialogFocus } from '../custom/dialogFocus' // repakxtra
 import TailInput from './ui/TailInput'
 import { LuFolderInput } from "react-icons/lu"
 import { RiSparkling2Fill } from "react-icons/ri"
@@ -91,6 +92,7 @@ type SettingsPanelProps = {
 export default function SettingsPanel({ settings, onSave, onClose, theme, setTheme, accentColor, setAccentColor, gamePath, onAutoDetectGamePath, onBrowseGamePath, isGamePathLoading, setParallelProcessing, onCheckForUpdates, onViewChangelog, isCheckingUpdates, onReplayTour, onOpenShortcuts, changelogMarker = null }: SettingsPanelProps) {
   const alert = useAlert();
   const [activeCategory, setActiveCategory] = useState<CategoryId>('general');
+  const focus = useDialogFocus(); // repakxtra
   const [hideSuffix, setHideSuffix] = useState(settings.hideSuffix || false);
   const [autoOpenDetails, setAutoOpenDetails] = useState(settings.autoOpenDetails || false);
   const [showHeroIcons, setShowHeroIcons] = useState(settings.showHeroIcons || false);
@@ -173,6 +175,8 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
     <div className="modal-overlay" onClick={onClose}>
       <motion.div
         className="modal-content settings-modal settings-modal-split"
+        role="dialog" aria-modal="true" aria-label="Settings"
+        ref={focus.ref} onKeyDown={focus.onKeyDown} tabIndex={-1} // repakxtra: focus inside, Tab stays inside
         onClick={(e) => e.stopPropagation()}
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -182,7 +186,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
           <h2>
             <IoIosSettings size={20} /> Settings
           </h2>
-          <button className="modal-close" onClick={onClose}>×</button>
+          <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
 
         <div className="settings-layout">
