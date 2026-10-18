@@ -1687,7 +1687,8 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .fr-action { display: flex; align-items: center; gap: 8px; }
 .fr-step.is-wide .fr-text h3 { line-height: 26px; }
 .fr-text .fr-drop { margin-top: 8px; }
-.fr-action .btn-primary, .fr-foot .btn-primary { width: auto !important; flex: none; min-width: 84px; height: 32px !important; padding: 0 14px !important; }
+.fr-action .btn-primary, .fr-foot .btn-primary { width: auto !important; flex: none; min-width: 84px; height: 32px !important; min-height: 0 !important;
+  padding: 0 14px !important; font-size: 13px !important; border-radius: 8px !important; }   /* the same size as the quiet buttons beside them */
 .fr-drop { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 14px 16px; border-radius: 10px;
   border: 1px dashed color-mix(in srgb, var(--accent-primary), transparent 45%); background: color-mix(in srgb, var(--accent-primary), transparent 94%);
   font-size: 12.5px; color: var(--text-primary); }
@@ -1826,8 +1827,8 @@ html[data-motion="off"] .t-matrix i { animation: none; opacity: 0.6; }
   background: none !important; font: inherit !important; }
 .su-link:hover:not(:disabled), .su-trust a:hover { text-decoration: underline; }
 .su-link:disabled { opacity: 0.45; cursor: default; }
-.su-trust { margin: 0; display: flex; gap: 8px; align-items: flex-start; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
-.su-trust svg.lucide { flex: none; margin-top: 2px; color: #3ecf6e; }
+.su-trust { margin: 0; display: flex; gap: 8px; align-items: center; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.su-trust svg.lucide { flex: none; color: #3ecf6e; }   /* centered on the note, however many lines it wraps to */
 
 /* Details panel: a hero with forms shows each form's preview side by side */
 .mod-preview-frame.has-forms { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; width: 100%; aspect-ratio: auto; }

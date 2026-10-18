@@ -40,13 +40,13 @@ you do not need to unzip it.
    - **Mod previews** and **Desktop shortcut** are optional. You can skip them for now.
 
    <img src=".github/screenshots/guide-welcome.png" alt="The welcome screen with its six steps" width="70%">
-6. **Add your mod.** Under **Add your first mods**, click **Choose files...** and pick the mod you downloaded. You can
-   also drag the file onto the repakxtra window.
+6. **Add your mod.** Drag the mod file from your Downloads folder onto the repakxtra window and drop it on
+   **Install Mods**. You can also click **Choose files...** under **Add your first mods** and pick it.
 7. **Click Install 1 mod.** Leave the switches as they are; they are for special mods.
 8. **Check that it is on.** Click **Library** at the top. Your mod is in the list with a blue switch, which means on.
 9. **Play.** Click **Launch Game**. The mod loads when the game starts.
 
-<img src=".github/screenshots/guide-first-mod.gif" alt="Installing the signature bypass and Project Galacta, then installing a mod and seeing it on in the Library" width="100%">
+<img src=".github/screenshots/guide-first-mod.gif" alt="Installing the signature bypass and Project Galacta, dragging a mod file onto the window, installing it and seeing it on in the Library" width="100%">
 
 To turn a mod off, click its switch in the Library. To remove one, right-click it and click **Delete**; it waits 7 days
 in **Settings > Recently deleted** in case you want it back.
@@ -64,8 +64,8 @@ in the game.
    Windows asks whether to allow changes, click **Yes**. When it says **Ready**, close Setup.
 
    <img src=".github/screenshots/guide-previews-setup.gif" alt="Setup, Mod previews, Set up previews, then Ready" width="80%">
-2. **Install a mod** as in the steps above: drag the file onto the window, or click **PAK** in the Library and pick it,
-   then click **Install 1 mod**.
+2. **Install a mod** as in the steps above: drag the file onto the window and drop it on **Install Mods** (or click
+   **PAK** in the Library and pick it), then click **Install 1 mod**.
 3. **Make a loadout.** Click **Loadouts** at the top, then **New loadout**.
 4. **Name it.** Type a name, like `Ultimate`, and press **Enter**.
 5. **Add your mod.** Under **Add mods**, type part of the mod's name in the search box, then click the **+** next to it.

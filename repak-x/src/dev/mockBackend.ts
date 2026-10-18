@@ -18,6 +18,9 @@ const fresh = localStorage.getItem('mock.fresh') === '1'
 const held: any[] = fresh ? data.mods.splice(0) : []
 const freshGame = data.gamePath
 if (fresh) data.gamePath = ''
+// localStorage 'mock.slow' = ms: installs take about that long and report progress like the real ones (README demos)
+const slow = () => Number(localStorage.getItem('mock.slow') || 0)
+const wait = (k: number) => new Promise(r => setTimeout(r, slow() * k))
 const baseName = (p: string) => (p.split(/[\\/]/).pop() || p).replace(/(_\d+_P)?\.(pak|bak_repak|pak_disabled)$/i, '').toLowerCase()
 
 let sigeonState = 'off'
@@ -121,13 +124,15 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         sigeonDeleted[args?.name] = sigeonPresets[args?.name]; delete sigeonPresets[args?.name]; return null
       // Setup panel: fake bypass files and a fake Galacta release (no game folder, no network)
       case 'setup_bypass_status': return setupBypass()
-      case 'setup_bypass':
+      case 'setup_bypass': return wait(0.6).then(() => {
         mockBypass = ({ install: 'installed', enable: 'installed', disable: 'disabled', remove: 'missing' } as any)[args?.action] ?? mockBypass
         return setupBypass()
+      })
       case 'setup_galacta_status': return args?.online ? { ...mockGalacta, ...galactaRelease } : { ...mockGalacta, up_to_date: null } // offline: no release info, like the backend
-      case 'setup_galacta_install':
+      case 'setup_galacta_install': return wait(1.4).then(() => {
         mockGalacta = { installed: 'C:/Game/~mods', disabled: false, up_to_date: true }
         return { ...mockGalacta, ...galactaRelease }
+      })
       case 'sigeon_restore': sigeonPresets[args?.name] = sigeonDeleted[args?.name]; return null
       case 'sigeon_set':
         sigeonState = args?.preset ?? 'off'
@@ -178,14 +183,20 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       }
       case 'preview_kit_latest': return localStorage.getItem('mock.kitLatest') === 'none' ? null
         : { version: localStorage.getItem('mock.kitLatest') || '4', published: '2026-10-15T12:00:00Z', notes: '## Kit v4\n- Previews for each hero form', url: 'https://github.com/cablemp5/repak-xtra/releases', asset: '', size: 113000000 }
-      case 'preview_kit_install': {
-        const v = localStorage.getItem('mock.kitLatest') || '4'
+      case 'preview_kit_install': return (async () => {
+        const v = localStorage.getItem('mock.kitLatest') || '4', total = 116957394
+        for (let i = 1; slow() && i <= 20; i++) { emit('preview-kit-progress', { stage: 'download', done: (total * i) / 20, total }); await wait(0.1) }
+        if (slow()) { emit('preview-kit-progress', { stage: 'unpack', done: 0, total: 0 }); await wait(0.8) }
         localStorage.setItem('mock.kit', v); localStorage.setItem('mock.kitSource', args?.file ? 'file' : 'github'); localStorage.removeItem('mock.noPreviews')
         return v
-      }
+      })()
       case 'preview_kit_remove': localStorage.setItem('mock.noPreviews', '1'); localStorage.removeItem('mock.kit'); return null
       case 'preview_kit_set_blender': return args?.path ?? null
-      case 'preview_kit_install_blender': return 'C:\\Program Files\\Blender Foundation\\Blender 5.2\\blender.exe'
+      case 'preview_kit_install_blender': return (async () => {
+        for (const text of ['Found Blender [BlenderFoundation.Blender] Version 5.2.0', 'Downloading https://download.blender.org/release/Blender5.2/blender-5.2.0-windows-x64.msi', 'Successfully installed'])
+          if (slow()) { emit('preview-kit-progress', { stage: 'blender', done: 0, total: 0, text }); await wait(0.7) }
+        return 'C:\\Program Files\\Blender Foundation\\Blender 5.2\\blender.exe'
+      })()
       case 'set_game_path': if (fresh) data.gamePath = String(args?.path ?? ''); return String(args?.path ?? '')
       case 'auto_detect_game_path': if (fresh) data.gamePath = freshGame; return freshGame
       case 'previews_doctor': return localStorage.getItem('mock.doctor') === 'fail'
@@ -283,7 +294,8 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
           if (!data.mods.some((x: any) => x.path === path)) data.mods.push({ ...data.mods[0], path, enabled: true, modified_date: Date.now() / 1000 })
           data.details[path] ??= { ...data.details[data.mods[0].path], mod_name: path.split('\\').pop()?.replace(/\.pak$/, '') } // details open for it
         }
-        setTimeout(() => emit('install_complete', null), 300)
+        if (slow()) [20, 45, 70, 90, 100].forEach((p, i) => setTimeout(() => emit('install_progress', p), slow() * 0.3 * (i + 1)))
+        setTimeout(() => emit('install_complete', null), 300 + slow() * 1.6)
         return null
       case 'rename_mod': { // same folder, priority suffix and extension, new name
         const mod = data.mods.find((m: any) => m.path === args?.modPath)
