@@ -38,8 +38,6 @@ you do not need to unzip it.
    - **Install the signature bypass:** click **Install**. Without it, the game does not load mods.
    - **Install Project Galacta:** click **Install**. Most skin mods need it.
    - **Mod previews** and **Desktop shortcut** are optional. You can skip them for now.
-
-   <img src=".github/screenshots/guide-welcome.png" alt="The welcome screen with its six steps" width="70%">
 6. **Add your mod.** Drag the mod file from your Downloads folder onto the repakxtra window and drop it on
    **Install Mods**. You can also click **Choose files...** under **Add your first mods** and pick it.
 7. **Click Install 1 mod.** Leave the switches as they are; they are for special mods.
@@ -62,8 +60,6 @@ in the game.
 1. **Set up previews (only once).** Click **Setup** at the top. Under **Mod previews**, click **Set up previews**. It
    downloads the free preview kit (about 110 MB) and installs Blender, the free program that draws the pictures. If
    Windows asks whether to allow changes, click **Yes**. When it says **Ready**, close Setup.
-
-   <img src=".github/screenshots/guide-previews-setup.gif" alt="Setup, Mod previews, Set up previews, then Ready" width="80%">
 2. **Install a mod** as in the steps above: drag the file onto the window and drop it on **Install Mods** (or click
    **PAK** in the Library and pick it), then click **Install 1 mod**.
 3. **Make a loadout.** Click **Loadouts** at the top, then **New loadout**.
