@@ -1690,11 +1690,11 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 
 
 /* First-launch setup (FirstRun.tsx): numbered steps that turn into checks, an action on the right of each */
-.fr-modal { width: min(720px, 94vw) !important; max-width: none !important; max-height: 90vh; display: flex; flex-direction: column; padding: 0 !important; }
+.fr-modal { width: min(760px, 94vw) !important; max-width: none !important; max-height: 90vh; display: flex; flex-direction: column; padding: 0 !important; }
 .fr-head { padding: 18px 22px !important; border-bottom: 1px solid var(--panel-border); align-items: flex-start; }
 .fr-head h2 { margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
 .fr-steps { list-style: none; margin: 0; overflow-y: auto; padding: 4px 22px !important; display: flex; flex-direction: column; }
-.fr-modal .fr-steps, .ss-modal .fr-steps { gap: 0; }   /* .modal-body's 2rem section gap stacked on every step's padding */
+.fr-modal .fr-steps, .su-modal .fr-steps { gap: 0; }   /* .modal-body's 2rem section gap stacked on every step's padding */
 .fr-step { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--panel-border); }
 .fr-step.is-wide { align-items: start; }   /* the drop card under the title: the number stays level with the title */
 .fr-step:last-child { border-bottom: none; }
@@ -1707,7 +1707,7 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .fr-text code { font: 12px var(--font-mono); color: var(--text-primary); }
 .fr-step.is-done .fr-text h3 { color: var(--text-secondary); }
 .fr-optional { padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--text-secondary); background: var(--bg-lighter); }
-.fr-action { display: flex; align-items: center; gap: 8px; }
+.fr-action { display: flex; align-items: center; gap: 8px; align-self: start; }   /* on the title's line, like the number */
 .fr-step.is-wide .fr-text h3 { line-height: 26px; }
 .fr-text .fr-drop { margin-top: 8px; }
 .fr-action .btn-primary, .fr-foot .btn-primary { width: auto !important; flex: none; min-width: 84px; height: 32px !important; min-height: 0 !important;
@@ -1752,7 +1752,7 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
    is scoped to this window */
 .su-modal .modal-header { flex-wrap: wrap; row-gap: 4px; }
 .su-modal .modal-header > .su-sub { flex-basis: 100%; margin: 0; }
-.su-modal .su-rows, .su-modal .su-parts { border: none; border-radius: 0; border-top: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); }
+.su-modal .su-rows, .su-modal .su-parts, .su-details { border: none; border-radius: 0; border-top: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); }
 .su-modal .su-rows { padding: 10px 0; }
 .su-modal .su-part { padding: 8px 0; }
 .su-modal .su-actions .su-option { gap: 8px; }
@@ -1876,7 +1876,8 @@ html[data-motion="off"] .t-matrix i { animation: none; opacity: 0.6; }
 .su-trust-btn svg.lucide:first-child { flex: none; color: #3ecf6e; }
 .su-trust-btn .su-caret { transition: transform 150ms ease; }
 .su-trust-btn[aria-expanded="true"] .su-caret { transform: rotate(90deg); }
-.su-trust p { margin: 0; padding: 4px 0 0 19px; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }   /* under the words, past the shield */
+.su-trust-body { display: flex; flex-direction: column; gap: 10px; padding: 6px 0 2px 19px; }   /* under the words, past the shield */
+.su-trust-body p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
 
 /* Details panel: a hero with forms shows each form's preview side by side */
 .mod-preview-frame.has-forms { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; width: 100%; aspect-ratio: auto; }
@@ -2364,3 +2365,16 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
    upstream red the app sets inline */
 :root[data-theme="light"] { --accent-primary: #346bf1 !important; --accent-secondary: #346bf1 !important; }
 :root[data-theme="light"] .repakx-switch:not(.checked) .repakx-switch-track { background: rgba(0, 0, 0, 0.1) !important; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18) !important; }
+
+/* One setup design (2026-10-18): the welcome screen, Setup and the Sigeon setup share SetupPanel's Step rows. Setup's
+   rows have no number: an empty ring until done, then the check. Each step's extra detail in Setup (Galacta's facts,
+   the preview kit's parts) sits between hairlines under its description; links in a step's text are the accent's */
+.su-files td:nth-child(2) { white-space: nowrap; }   /* the size */
+.su-files-where { display: block; margin-top: 2px; font-size: 11.5px; color: var(--text-secondary); }   /* where a file goes, under its name */
+.fr-text .su-details { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 6px; padding: 8px 0; }
+.fr-text .su-parts { margin-top: 6px; }
+.fr-text .su-actions { margin-top: 4px; }
+.fr-text .su-confirm { margin-top: 4px; }
+.fr-text a, .su-trust-body a { color: color-mix(in srgb, var(--accent-primary), white 30%); cursor: pointer; text-decoration: none; }
+.fr-text a:hover, .su-trust-body a:hover { text-decoration: underline; }
+.su-dl dd .custom-dropdown-container { width: 200px; }

@@ -1,5 +1,5 @@
 // repakxtra: Sigeon V2 setup, opened from the header while Sigeon reads "not configured" (no SigeonLoader.asi in the
-// Sigeon folder). Four numbered steps, the guided setup's own rows (FirstRun.tsx Step: a check once done, the action on
+// Sigeon folder). Four numbered steps, the welcome screen's and Setup's rows (SetupPanel.tsx Step: a check once done, the action on
 // the right): where to buy it, the signature bypass it loads through, the folder its files stay in, then the editor
 // (a config and its license key).
 import { useEffect, useState } from 'react'
@@ -9,7 +9,7 @@ import { ExternalLink, FolderOpen, SlidersHorizontal } from 'lucide-react'
 import { open as pickFolder } from '@tauri-apps/plugin-dialog'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import type { useAlert } from '../components/AlertHandler'
-import { Step } from './FirstRun'
+import { Step } from './SetupPanel'
 
 type Storage = { path: string; default: boolean; loader: boolean }
 type Bypass = { state: 'installed' | 'disabled' | 'partial' | 'other' | 'missing' }
