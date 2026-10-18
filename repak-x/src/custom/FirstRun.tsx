@@ -24,7 +24,8 @@ const openUrl = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.
 /** A fresh install: neither this screen nor the old tour was ever shown. */
 const firstLaunch = () => !localStorage.getItem(SEEN) && !localStorage.getItem('hasSeenOnboarding')
 
-function Step({ n, done, title, optional, wide, children, action }: {
+/** One numbered step: its number (a check once done), title, text and its action on the right. Sigeon's setup uses it too. */
+export function Step({ n, done, title, optional, wide, children, action }: {
   n: number; done: boolean; title: string; optional?: boolean; wide?: boolean; children: React.ReactNode; action?: React.ReactNode
 }) {
   return (
@@ -170,8 +171,11 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
 
           <Step n={6} done={false} wide title="Add your first mods">
             <div className="fr-drop">
-              <Upload size={18} aria-hidden="true" />
-              <span>Drop .pak, .pak.off, .zip, .rar or .7z files, or mod folders, anywhere on this window. Drop zips as they are: no need to extract.</span>
+              {/* the icon on the text's first line, not a line of its own */}
+              <span className="fr-drop-text">
+                <Upload size={16} aria-hidden="true" />
+                <span>Drop .pak, .pak.off, .zip, .rar or .7z files, or mod folders, anywhere on this window. Drop zips as they are: no need to extract.</span>
+              </span>
               <span className="fr-drop-actions">
                 <button type="button" className="lo-text-btn" disabled={noGame} onClick={addFiles}>Choose files…</button>
                 <a onClick={() => openUrl(NEXUS)}>Find mods on Nexus Mods</a>
