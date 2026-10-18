@@ -1,11 +1,13 @@
 // repakxtra: Setup, what the game needs to load mods (backend: xtra_setup.rs). The UTOC signature bypass ships inside
 // repakxtra; Project Galacta comes from its GitHub releases, with an update check and the release notes. Its steps
-// (BypassStep, GalactaStep, PreviewsStep, in Step rows) are the welcome screen's too (FirstRun.tsx): one design, Setup
-// showing each step's extra detail (`full`).
+// (BypassStep, GalactaStep, PreviewsStep, in Step rows) are the welcome screen's too (FirstRun.tsx): the same titles,
+// descriptions, buttons and "Is it safe?", Setup adding each step's detail lines (`full`).
+// Buttons, in all three setup windows: blue only for the main action of an unfinished required step (and Done), quiet
+// bordered for every other button, accent text links for the small actions on a detail line.
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
-import { Check, ChevronRight, Copy, ExternalLink, MonitorCheck, ShieldCheck, Wrench } from 'lucide-react'
+import { Check, ChevronRight, ExternalLink, ListChecks, ShieldCheck, Wrench } from 'lucide-react'
 import { open as pickFile } from '@tauri-apps/plugin-dialog'
 import { type Doctor, type KitProgress, isNewerKit, progressShare, progressText, usePreviewKit } from './previewKit'
 import Checkbox from '../components/ui/Checkbox'
@@ -32,7 +34,10 @@ const VIRUSTOTAL = 'https://www.virustotal.com/gui/file/251d2830ec8c1f3ed804ce4d
 const GALACTA = 'https://github.com/0xSaturno/ProjectGalacta'
 
 const open = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
-const date = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '')
+/** A web page link in a step's text: opens in the browser, and has a real href so Tab reaches it. */
+export const ExtLink = ({ href, children }: { href: string; children: React.ReactNode }) =>
+  <a href={href} onClick={e => { e.preventDefault(); open(href) }}>{children}</a>
+const date =(iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '')
 
 /** Release notes are short Markdown: headings, bullets and paragraphs, drawn as such (no HTML from the web). */
 function Notes({ text }: { text: string }) {
@@ -99,28 +104,30 @@ export function InstallStatus({ p }: { p: KitProgress | null }) {
   return <span className="su-install-status" role="status" title={text}><MatrixLoader size={11} /><span>{text}</span></span>
 }
 
-/** A quiet line that opens what it is about under it ("Is it safe? ›"): the bypass's safety facts, the Blender note. A
- *  click, not a hover, so it works from the keyboard and stays put while it is read. */
-function Disclosure({ label, children }: { label: string; children: React.ReactNode }) {
+/** A quiet gray line that opens what it is about under it ("Is it safe? ›", the loader license). A click, not a hover,
+ *  so it works from the keyboard and stays put while it is read. The shield marks the safety notes. */
+function Disclosure({ label, shield = true, children }: { label: string; shield?: boolean; children: React.ReactNode }) {
   const [shown, setShown] = useState(false)
   return (
     <div className="su-trust">
       <button type="button" className="su-trust-btn" aria-expanded={shown} onClick={() => setShown(v => !v)}>
-        <ShieldCheck size={13} aria-hidden="true" /> {label} <ChevronRight size={13} className="su-caret" aria-hidden="true" />
+        {shield && <ShieldCheck size={13} aria-hidden="true" />} {label} <ChevronRight size={13} className="su-caret" aria-hidden="true" />
       </button>
       <div className="t-acc-panel" data-open={shown} ref={el => el?.toggleAttribute('inert', !shown)}>
-        <div className="t-acc-panel-inner"><div className="su-trust-body">{children}</div></div>
+        <div className="t-acc-panel-inner"><div className={`su-trust-body${shield ? '' : ' is-flush'}`}>{children}</div></div>
       </div>
     </div>
   )
 }
 
-/** Why Blender is safe to install, where it comes from, and its real download page. */
+/** Why Blender is safe to install, where it comes from, and its real download page: on the previews step in both
+ *  windows, installed or not. */
 export function BlenderTrust() {
   return (
     <Disclosure label="Is Blender safe?">
-      <p>Blender is free, open-source 3D software from the Blender Foundation. repakxtra installs the official release
-        through winget, Windows' own package manager, and Windows asks for admin rights once. <a href={BLENDER} onClick={e => { e.preventDefault(); open(BLENDER) }}>blender.org/download</a></p>
+      <p>Blender is free, open-source 3D software from the Blender Foundation (<ExtLink href={BLENDER}>blender.org/download</ExtLink>).
+        repakxtra installs the official release through winget, Windows' own package manager, and Windows
+        asks&nbsp;for&nbsp;admin&nbsp;rights&nbsp;once.</p>
     </Disclosure>
   )
 }
@@ -131,24 +138,32 @@ export function DoctorProblems({ d }: { d: Doctor | null }) {
   return <ul className="su-problems">{d.problems.map(x => <li key={x}>{x}</li>)}</ul>
 }
 
-/** A part's state beside its name: a green check when it is there, an empty ring when not. */
-const PartMark = ({ ok }: { ok: boolean }) => (
-  <span className={`su-part-mark${ok ? ' is-ok' : ''}`} role="img" aria-label={ok ? 'Installed' : 'Not installed'}>{ok && <Check size={14} strokeWidth={2.5} />}</span>
-)
+/** One of Setup's detail lines, the same under every step: what it is, its value, then the links that act on it. */
+function Line({ label, children, links }: { label: string; children: React.ReactNode; links?: React.ReactNode }) {
+  return (
+    <div className="su-line">
+      <span className="su-line-label">{label}</span>
+      <div className="su-line-value">{children}</div>
+      {links && <span className="su-line-links">{links}</span>}
+    </div>
+  )
+}
 
-/** One setup step, the same row in the welcome screen, Setup and the Sigeon setup: its mark (the welcome's number, an
- *  empty ring in Setup, a check once done), its title, what it is and its state, then its action on the title's line. */
-export function Step({ n, done, title, optional, wide, className = '', children, action }: {
-  n?: number; done: boolean; title: string; optional?: boolean; wide?: boolean; className?: string; children: React.ReactNode; action?: React.ReactNode
+/** One setup step, the same row in the welcome screen, Setup and the Sigeon setup: its mark (a number, an empty ring in
+ *  Setup, a check once done), its title, description and state, its buttons on the right, then `more` (Is it safe?,
+ *  Setup's detail lines) under both at the full width, so a button never sits beside a long block. */
+export function Step({ n, done, title, optional, className = '', children, action, more }: {
+  n?: number; done: boolean; title: string; optional?: boolean; className?: string; children: React.ReactNode; action?: React.ReactNode; more?: React.ReactNode
 }) {
   return (
-    <li className={`fr-step${done ? ' is-done' : ''}${wide ? ' is-wide' : ''}${n === undefined ? ' is-plain' : ''} ${className}`}>
+    <li className={`fr-step${done ? ' is-done' : ''} ${className}`}>
       <span className="fr-num" aria-hidden="true">{done ? <Check size={14} /> : n}</span>
       <div className="fr-text">
         <h3>{title}{optional && <span className="fr-optional">Optional</span>}</h3>
         {children}
       </div>
       {action && <div className="fr-action">{action}</div>}
+      {more && <div className="fr-more">{more}</div>}
     </li>
   )
 }
@@ -163,8 +178,8 @@ const useRun = (alert: Alert) => {
   return { busy, run }
 }
 
-/** The signature bypass step. Both screens: what it does in its current state, Install / Repair / Turn on, and "Is it safe?"
- *  with the facts, the files and their hashes, and the loader's license. Setup (`full`) adds Turn off and Remove, which ask
+/** The signature bypass step. Both screens: what it does, its state, Install / Repair / Turn on, and "Is it safe?" with
+ *  the facts, the files and their hashes, and the loader's license. Setup (`full`) adds Turn off and Remove, which ask
  *  first while Sigeon is on (it loads through the same loader). `blocked`: no game folder yet. */
 export function BypassStep({ alert, n, full, blocked }: { alert: Alert; n?: number; full?: boolean; blocked?: boolean }) {
   const [b, setB] = useState<Bypass | null>(null)
@@ -181,15 +196,15 @@ export function BypassStep({ alert, n, full, blocked }: { alert: Alert; n?: numb
       disable: 'Off. Mods that need it will not load.', remove: 'Removed.' }[action])
   })
   const fixable = b && b.state !== 'installed'
-  const text = error ? `Could not check it: ${error}`
+  const state = error ? `Could not check it: ${error}`
     : !b ? 'Checking…'
     : b.state === 'installed' ? 'Installed. Mods load from the next game launch.'
     : b.state === 'disabled' ? 'Installed but turned off. Mods that need it will not load.'
     : b.state === 'other' ? 'A different loader or bypass is installed. Installing keeps it next to the new one as a .repakxtra-backup file.'
     : b.state === 'partial' ? 'Part of it is missing. Repair puts the missing files back.'
-    : 'Lets the game load mods that replace its files. Every mod needs it, and it comes with repakxtra.'
+    : null   // missing: the Install button says it
   return (
-    <Step n={n} done={b?.state === 'installed'} title={full ? 'Signature bypass' : 'Install the signature bypass'}
+    <Step n={n} done={b?.state === 'installed'} title="Signature bypass"
       action={error ? <button type="button" className="lo-text-btn" onClick={load}>Retry</button> : <>
         {fixable && <button type="button" className="btn-primary" disabled={blocked || Boolean(busy)} onClick={() => act(b.state === 'disabled' ? 'enable' : 'install')}
           title={blocked ? 'Find the game first' : undefined}>
@@ -198,37 +213,38 @@ export function BypassStep({ alert, n, full, blocked }: { alert: Alert; n?: numb
           onClick={() => (b.sigeon_on ? setConfirmOff('disable') : act('disable'))}>Turn off</button>}
         {full && (b?.state === 'installed' || b?.state === 'disabled') && <button type="button" className="lo-text-btn" disabled={Boolean(busy)}
           onClick={() => (b.sigeon_on ? setConfirmOff('remove') : act('remove'))}>Remove</button>}
-      </>}>
-      <p>{text}</p>
-      {b?.sigeon_on && confirmOff && (
-        <div className="su-confirm" role="alert">
-          <span>Sigeon loads through the same loader, so it turns off too.</span>
-          <button type="button" className="lo-text-btn" onClick={() => setConfirmOff(null)}>Cancel</button>
-          <button type="button" className="lo-text-btn" onClick={() => act(confirmOff)}>{confirmOff === 'remove' ? 'Remove anyway' : 'Turn off anyway'}</button>
-        </div>
-      )}
-      <Disclosure label="Is it safe?">
-        <ul className="su-facts">
-          <li><b>Scanned clean.</b> VirusTotal: 0 of 63 engines flagged the release archive (Oct 14, 2026). <a onClick={() => open(VIRUSTOTAL)}>See the report</a></li>
-          <li><b>The loader is open source.</b> dsound.dll is ThirteenAG's Ultimate ASI Loader 7.7.0 (MIT), byte for byte the official release. <a onClick={() => open(LOADER)}>See it on GitHub</a></li>
-          <li><b>The bypass only patches the game in memory.</b> MarvelRivalsUTOCSignatureBypass.asi uses Windows memory and thread functions only: no internet, file, registry or program-launch calls. It is closed source and unsigned.</li>
-          <li><b>Same files as the original.</b> Unchanged from the Nexus Mods release. <a onClick={() => open(NEXUS)}>Open the mod page</a></li>
-        </ul>
-        {b && b.files.length > 0 && (
-          <table className="su-files">
-            <thead><tr><th>File</th><th>Size</th><th>SHA-256</th><th>On this PC</th></tr></thead>
-            <tbody>{b.files.map(f => (
-              <tr key={f.name}>
-                <td><code>{f.name}</code><span className="su-files-where">{f.place}</span></td><td>{(f.size / 1024).toFixed(0)} KB</td>
-                <td><button type="button" className="su-hash" title="Copy" onClick={() => { navigator.clipboard.writeText(f.sha256); alert.success('Copied', f.name) }}>
-                  <code>{f.sha256.slice(0, 12)}…</code><Copy size={12} /></button></td>
-                <td>{f.found === 'same' ? 'Matches' : f.found === 'other' ? 'Different file' : 'Not there'}</td>
-              </tr>
-            ))}</tbody>
-          </table>
+      </>}
+      more={<>
+        {b?.sigeon_on && confirmOff && (
+          <div className="su-confirm" role="alert">
+            <span>Sigeon loads through the same loader, so it turns off too.</span>
+            <button type="button" className="lo-text-btn" onClick={() => setConfirmOff(null)}>Cancel</button>
+            <button type="button" className="lo-text-btn" onClick={() => act(confirmOff)}>{confirmOff === 'remove' ? 'Remove anyway' : 'Turn off anyway'}</button>
+          </div>
         )}
-        {b?.license && <details className="su-license"><summary>Loader license (MIT)</summary><pre>{b.license}</pre></details>}
-      </Disclosure>
+        {/* Plain sentences, then each file (copy its hash to check it yourself), then the loader's license */}
+        <Disclosure label="Is it safe?">
+          <p>VirusTotal: 0 of 63 engines flagged the release archive (Oct 14, 2026). <ExtLink href={VIRUSTOTAL}>See the report</ExtLink></p>
+          <p>dsound.dll is ThirteenAG's Ultimate ASI Loader 7.7.0, open source (MIT) and byte for byte the official&nbsp;release.&nbsp;<ExtLink href={LOADER}>See it on GitHub</ExtLink></p>
+          <p>MarvelRivalsUTOCSignatureBypass.asi only patches the game in memory. It uses Windows memory and thread functions
+            only: no internet, file, registry or program-launch calls. It is closed source and unsigned.</p>
+          <p>Both files are unchanged from the Nexus Mods release. <ExtLink href={NEXUS}>Open the mod page</ExtLink></p>
+          {b && b.files.length > 0 && (
+            <ul className="su-files">{b.files.map(f => (
+              <li key={f.name}>
+                <code>{f.name}</code>
+                <button type="button" className="su-link" title={`Copies the full SHA-256 of ${f.name}`}
+                  onClick={() => { navigator.clipboard.writeText(f.sha256); alert.success('Copied', `${f.name} SHA-256`) }}>Copy SHA-256</button>
+                <span>{f.place} · {(f.size / 1024).toFixed(0)} KB · SHA-256 <code>{f.sha256.slice(0, 12)}…</code> · {
+                  f.found === 'same' ? 'matches the file on this PC' : f.found === 'other' ? 'a different file is on this PC' : 'not on this PC'}</span>
+              </li>
+            ))}</ul>
+          )}
+          {b?.license && <Disclosure label="Loader license (MIT)" shield={false}><pre className="su-license">{b.license}</pre></Disclosure>}
+        </Disclosure>
+      </>}>
+      <p>Lets the game load mods that replace its files. Every mod needs it, and it&nbsp;comes&nbsp;with&nbsp;repakxtra.</p>
+      {state && <p className="fr-state">{state}</p>}
     </Step>
   )
 }
@@ -240,8 +256,8 @@ const withLastCheck = (g: Galacta): Galacta => lastCheck && !g.latest && lastChe
   ? { ...g, latest: lastCheck.latest, published: lastCheck.published, notes: lastCheck.notes, url: lastCheck.url, up_to_date: lastCheck.up_to_date }
   : g
 
-/** The Project Galacta step. Both screens: what it does in its current state and Install (Update when one is out).
- *  Setup (`full`) adds where it is and the newest release with What's new and Check for updates, and which folder an
+/** The Project Galacta step. Both screens: what it does, its state and Install (Update when one is out). Setup (`full`)
+ *  adds its detail lines: where it is, the newest release with What's new and Check for updates, and which folder an
  *  install or update goes into. */
 export function GalactaStep({ alert, n, full, blocked }: { alert: Alert; n?: number; full?: boolean; blocked?: boolean }) {
   const [g, setG] = useState<Galacta | null>(lastCheck)
@@ -268,45 +284,42 @@ export function GalactaStep({ alert, n, full, blocked }: { alert: Alert; n?: num
   const on = Boolean(g?.installed && !g.disabled)
   const offered = Boolean(g && (!g.installed || g.up_to_date === false))
   const where = g?.installed?.replace(/^.*[\\/]~mods/i, '~mods') ?? ''
-  const text = !g ? 'Checking…'
-    : !g.installed ? 'Needed by most skin mods: loads more types of mods and lets you toggle mods in game.'
+  const state = !g ? 'Checking…'
+    : !g.installed ? null   // the Install button says it
     : g.up_to_date === false ? `Installed. ${g.latest} is out.`
     : g.disabled ? 'Installed but switched off. Turn it on in the Library.'
-    : 'Installed. Loads more types of mods and lets you toggle mods in game.'
+    : 'Installed.'
   return (
-    <Step n={n} done={on && g?.up_to_date !== false} title={full ? 'Project Galacta' : 'Install Project Galacta'}
+    <Step n={n} done={on && g?.up_to_date !== false} title="Project Galacta"
       action={offered && (
         <button type="button" className="btn-primary" disabled={blocked || Boolean(busy)} onClick={install}
           title={blocked ? 'Find the game first' : 'Downloads the newest release from GitHub'}>
-          {busy === 'install' ? 'Installing…' : g?.installed ? `Update${g.latest ? ` to ${g.latest}` : ''}` : 'Install'}</button>)}>
-      <p>{text} By <a onClick={() => open(GALACTA)}>0xSaturno</a>.</p>
-      {full && (
-        <div className="su-details">
-          <dl className="su-dl">
-            <dt>Location</dt>
-            <dd>{!g ? 'Checking…' : g.installed ? <><code>{where}</code>{g.disabled ? ', off in the Library' : ''}</> : 'Not installed'}</dd>
-            <dt>Newest release</dt>
-            <dd>{g?.latest
-              ? <>{g.latest}{g.published ? `, ${date(g.published)}` : ''} · <button type="button" className="su-link" onClick={() => setNotes("What's new")}>What's new</button></>
-              : 'Not checked yet'}</dd>
-            {offered && <><dt>Install into</dt>
-              <dd><CustomDropdown value={folder} onChange={v => { setFolder(v); localStorage.setItem(FOLDER_KEY, v) }}
-                options={[{ value: HERE, label: g?.installed ? 'Where it is now' : 'Mods folder' }, ...folders.map(f => ({ value: f, label: `~mods/${f}` }))]} /></dd></>}
-          </dl>
-          <span className="su-part-links">
+          {busy === 'install' ? 'Installing…' : g?.installed ? `Update${g.latest ? ` to ${g.latest}` : ''}` : 'Install'}</button>)}
+      more={full && (
+        <div className="su-lines">
+          <Line label="Location">{!g ? 'Checking…' : g.installed ? <><code>{where}</code>{g.disabled ? ', off in the Library' : ''}</> : 'Not installed'}</Line>
+          <Line label="Newest release" links={<>
+            {g?.latest && <button type="button" className="su-link" onClick={() => setNotes("What's new")}>What's new</button>}
             <button type="button" className="su-link" disabled={Boolean(busy)} onClick={check} title="Ask GitHub for the newest Project Galacta">
               {busy === 'check' ? 'Checking…' : 'Check for updates'}</button>
-          </span>
+          </>}>{g?.latest ? `${g.latest}${g.published ? `, ${date(g.published)}` : ''}` : 'Not checked yet'}</Line>
+          {offered && <Line label="Install into">
+            <CustomDropdown value={folder} onChange={v => { setFolder(v); localStorage.setItem(FOLDER_KEY, v) }}
+              options={[{ value: HERE, label: g?.installed ? 'Where it is now' : 'Mods folder' }, ...folders.map(f => ({ value: f, label: `~mods/${f}` }))]} />
+          </Line>}
         </div>
-      )}
+      )}>
+      {/* &nbsp; keeps the sentence's last words together: no one- or two-word last line at any width */}
+      <p>Needed by most skin mods: loads more types of mods and lets you toggle&nbsp;mods&nbsp;in&nbsp;game. By&nbsp;<ExtLink href={GALACTA}>0xSaturno</ExtLink>.</p>
+      {state && <p className="fr-state">{state}</p>}
       {notes && g && <Changelog g={g} title={notes} onClose={() => setNotes(null)} />}
     </Step>
   )
 }
 
-/** The mod previews step (xtra_kit.rs, shared logic in previewKit.tsx). Both screens: what previews are in their current
- *  state, "Is Blender safe?" while Blender is missing, the download and install progress, and Set up previews. Setup
- *  (`full`) adds the two parts, the kit and Blender, one row each with their state and links, and Check this PC. */
+/** The mod previews step (xtra_kit.rs, shared logic in previewKit.tsx). Both screens: what previews are, their state,
+ *  "Is Blender safe?", the download and install progress, and Set up previews (quiet: the step is optional). Setup
+ *  (`full`) adds its detail lines: the kit, its newest release, Blender and Check this PC. */
 export function PreviewsStep({ alert, n, full }: { alert: Alert; n?: number; full?: boolean }) {
   const k = usePreviewKit(alert)
   const { kit, latest, busy, update } = k
@@ -322,67 +335,62 @@ export function PreviewsStep({ alert, n, full }: { alert: Alert; n?: number; ful
     if (typeof f === 'string') k.pickBlender(f)
   }
   const ready = Boolean(kit?.version && kit?.blender)
-  const kitOk = Boolean(kit?.version)
-  const from = kit?.source === 'github' ? 'Downloaded from GitHub' : kit?.source === 'file' ? 'Loaded from a file' : null
+  const from = kit?.source === 'github' ? 'downloaded from GitHub' : kit?.source === 'file' ? 'loaded from a file' : null
   const size = latest?.size ? Math.round(latest.size / 1048576) : null
   const blenderName = kit?.blender?.replace(/^.*[\\/](Blender[^\\/]*)[\\/]blender\.exe$/i, '$1')
   const installingBlender = busy === 'blender' || k.progress?.stage === 'blender'
   const working = k.progress?.stage === 'unpack' || k.progress?.stage === 'blender'
-  const text = !kit ? 'Checking…'
-    : ready ? (update ? `Ready. Kit v${latest!.version} is out.` : 'Ready. A loadout page renders its preview.')
-    : `Renders of your mods and loadouts, and clips of animation mods, made on this PC. Downloads the preview kit${size ? ` (${size} MB)` : ''} and uses Blender (installed for you if missing).`
+  const state = !kit ? 'Checking…'
+    : ready ? (update ? `Ready. Kit v${latest!.version} is out.` : 'Ready. Open a loadout and choose Generate previews.')
+    : null   // not set up: the Set up previews button says it
   return (
     <Step n={n} done={ready && !update && k.doctor?.ok !== false} optional title="Mod previews" className="su-previews"
       action={!full && working ? <InstallStatus p={k.progress} />
         : (!ready || update) && kit && <button type="button" className="lo-text-btn" disabled={Boolean(busy) || (!kit.version && latest === null)} onClick={() => k.setUp()}
           title={latest === null ? 'No kit published yet: drop a kit zip on the window' : update ? 'Downloads the newest kit from GitHub' : 'Downloads the preview kit and installs Blender if it is missing (Windows asks for admin rights once)'}>
-          {busy === 'setup' ? (installingBlender ? 'Installing Blender…' : k.progress ? 'Installing kit…' : 'Setting up…') : busy === 'blender' ? 'Installing Blender…' : update ? `Update to v${latest!.version}` : 'Set up previews'}</button>}>
-      <p>{text}</p>
-      {(kit && !kit.blender || installingBlender) && <BlenderTrust />}
-      {full && (
-        <ul className="su-parts">
-          <li className="su-part">
-            <PartMark ok={kitOk} />
-            <div className="su-part-text">
-              <b>Preview kit</b>
-              {k.progress?.stage === 'unpack' ? <InstallStatus p={k.progress} /> : <span>
-                {!kit ? 'Checking…' : kit.version ? [`v${kit.version}`, from].filter(Boolean).join(' · ') : `Not installed${size ? ` · ${size} MB on GitHub` : ''}`}
-                {latest && <> · <button type="button" className="su-link" onClick={() => setNotes("What's new")}>{update ? `v${latest.version} on GitHub` : `What's new in v${latest.version}`}</button></>}
-                {/* After Check for updates: what GitHub has, here rather than in a toast (Minimal toasts would hide that) */}
-                {k.checked && busy !== 'check' && (latest === null ? ' · No kit on GitHub yet' : kit?.version && latest && !update ? <> · <span className="su-ok">Up to date</span></> : null)}
-              </span>}
-            </div>
-            <span className="su-part-links">
-              <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => k.check()} title="Ask GitHub for the newest preview kit">
-                {busy === 'check' ? 'Checking…' : 'Check for updates'}</button>
+          {busy === 'setup' ? (installingBlender ? 'Installing Blender…' : k.progress ? 'Installing kit…' : 'Setting up…') : busy === 'blender' ? 'Installing Blender…' : update ? `Update to v${latest!.version}` : 'Set up previews'}</button>}
+      more={<>
+        <BlenderTrust />
+        {full && (
+          <div className="su-lines">
+            <Line label="Preview kit" links={<>
               <button type="button" className="su-link" disabled={Boolean(busy)} onClick={fromFile} title="Install a preview kit zip (or drop one on the window)">Install from file…</button>
               {kit?.version && <button type="button" className="su-link" disabled={Boolean(busy)} onBlur={() => setArmed(false)}
                 onClick={() => { if (armed) { setArmed(false); k.remove() } else setArmed(true) }}
                 title="Deletes the kit; it downloads again from here">{armed ? 'Click again to remove' : 'Remove'}</button>}
-            </span>
-          </li>
-          <li className="su-part">
-            <PartMark ok={Boolean(kit?.blender)} />
-            <div className="su-part-text">
-              <b>Blender</b>
-              {k.progress?.stage === 'blender' ? <InstallStatus p={k.progress} /> : <span>{kit?.blender ? blenderName : 'Not installed'}</span>}
-            </div>
-            <span className="su-part-links">
+            </>}>
+              {k.progress?.stage === 'unpack' ? <InstallStatus p={k.progress} />
+                : !kit ? 'Checking…' : kit.version ? `v${kit.version}${from ? `, ${from}` : ''}` : 'Not installed'}
+            </Line>
+            <Line label="Newest release" links={<>
+              {latest && <button type="button" className="su-link" onClick={() => setNotes("What's new")}>What's new</button>}
+              <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => k.check()} title="Ask GitHub for the newest preview kit">
+                {busy === 'check' ? 'Checking…' : 'Check for updates'}</button>
+            </>}>
+              {latest === undefined ? 'Not checked yet' : latest === null ? 'No kit on GitHub yet'
+                : `v${latest.version}${latest.published ? `, ${date(latest.published)}` : ''}`}
+              {/* After Check for updates: what GitHub has, here rather than in a toast (Minimal toasts would hide that) */}
+              {k.checked && busy !== 'check' && kit?.version && latest && !update && ', up to date'}
+            </Line>
+            <Line label="Blender" links={<>
               {kit && !kit.blender && <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => k.installBlender()} title="Installs Blender with winget">Install</button>}
               <button type="button" className="su-link" disabled={Boolean(busy)} onClick={pickBlender} title="Choose the blender.exe previews use">{kit?.blender ? 'Change…' : 'Choose blender.exe…'}</button>
-            </span>
-          </li>
-        </ul>
-      )}
-      <KitProgressBar p={k.progress} />
-      <DoctorProblems d={k.doctor} />
-      {full && (
-        <div className="su-actions">
-          <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={() => k.checkPc()} title="Check that this PC can make previews">
-            <MonitorCheck size={14} /> {busy === 'doctor' ? 'Checking…' : 'Check this PC'}</button>
-          {k.doctor?.ok && !busy && <span className="su-meta su-ok">This PC can make previews</span>}
-        </div>
-      )}
+            </>}>
+              {k.progress?.stage === 'blender' ? <InstallStatus p={k.progress} /> : kit?.blender ? blenderName : 'Not installed'}
+            </Line>
+            <Line label="This PC" links={
+              <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => k.checkPc()} title="Check that this PC can make previews">
+                {busy === 'doctor' ? 'Checking…' : 'Check this PC'}</button>}>
+              {!k.doctor ? 'Not checked yet' : k.doctor.ok ? 'Can make previews' : <DoctorProblems d={k.doctor} />}
+            </Line>
+          </div>
+        )}
+        <KitProgressBar p={k.progress} />
+        {!full && <DoctorProblems d={k.doctor} />}
+      </>}>
+      <p>Renders of your mods and loadouts, and clips of animation mods, made on this PC. Downloads the preview
+        kit{size ? ` (${size} MB)` : ''} and uses Blender (installed for you if missing).</p>
+      {state && <p className="fr-state">{state}</p>}
       {notes && latest && <Changelog product="Preview kit" g={{ latest: `v${latest.version}`, published: latest.published, notes: latest.notes, url: latest.url }}
         title={notes} onClose={() => setNotes(null)} />}
     </Step>
@@ -412,14 +420,14 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
         <div className="modal-header">
           <h2>Mod setup</h2>
           <button type="button" className="lo-text-btn su-guided" onClick={() => { onClose(); window.dispatchEvent(new Event('repakxtra-first-run')) }}
-            title="The first-launch setup: game folder, bypass, Project Galacta, previews and your first mods, one screen">Guided setup</button>
+            title="The first-launch setup: game folder, bypass, Project Galacta, previews and your first mods, one screen"><ListChecks size={14} /> Guided setup</button>
           <CopySetupReport alert={alert} className="lo-text-btn su-report" />
           <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
           {/* its own line under the title row, so the header buttons never squeeze it */}
           <p className="su-sub">What Marvel Rivals needs to load mods. Close the game before changing anything here.</p>
         </div>
 
-        {/* The welcome screen's rows, with Setup's extra detail in each */}
+        {/* The welcome screen's rows, with Setup's detail lines in each */}
         <ol className="modal-body fr-steps">
           <BypassStep alert={alert} full />
           <GalactaStep alert={alert} full />

@@ -4570,7 +4570,7 @@ function App() {
         onClose={handleCloseTour}
       />
       <FirstRun alert={alert} gamePath={gamePath} onAutoDetect={handleAutoDetect} onBrowse={handleBrowseGamePath}
-        onAddFiles={handleFileDrop} onStartTour={() => setShowOnboarding(true)} />{/* repakxtra */}
+        onAddFiles={handleFileDrop} onStartTour={() => setShowOnboarding(true)} hasMods={mods.length > 0} />{/* repakxtra */}
     </div >
   )
 }

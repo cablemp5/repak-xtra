@@ -1,15 +1,15 @@
 // repakxtra: the first-launch setup, the welcome screen. One screen, top to bottom: the game folder, the signature
 // bypass, Project Galacta, mod previews (optional), a desktop shortcut, then the first mods. Its bypass, Galacta and
 // previews steps are Setup's own (SetupPanel.tsx: BypassStep, GalactaStep, PreviewsStep, with their descriptions and
-// "Is it safe?"), numbered here; Setup shows the same steps with more detail. It opens once on a fresh install, and
-// again from Setup > Guided setup. Closing it, or dropping mods on the window, marks it seen; the tour is offered at the end.
+// "Is it safe?"), numbered here; Setup shows the same steps with its detail lines. Every step is the same row (Step),
+// its button on the right. It opens once on a fresh install, and again from Setup > Guided setup. Closing it, or
+// dropping mods on the window, marks it seen; the tour is offered at the end.
 import { useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { open as pick } from '@tauri-apps/plugin-dialog'
 import { motion } from 'framer-motion'
-import { Upload } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
-import { BypassStep, GalactaStep, PreviewsStep, Step } from './SetupPanel'
+import { BypassStep, ExtLink, GalactaStep, PreviewsStep, Step } from './SetupPanel'
 import { isKitZip } from './previewKit'
 import { OFF_EXT } from './offFiles'
 import Wordmark from './Wordmark'
@@ -19,13 +19,13 @@ type Alert = ReturnType<typeof useAlert>
 
 const SEEN = 'repakxtra.welcomed'
 const NEXUS = 'https://www.nexusmods.com/marvelrivals/mods'
-const openUrl = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
 /** A fresh install: neither this screen nor the old tour was ever shown. */
 const firstLaunch = () => !localStorage.getItem(SEEN) && !localStorage.getItem('hasSeenOnboarding')
 
-export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAddFiles, onStartTour }: {
+export default function FirstRun({ alert, gamePath, hasMods, onAutoDetect, onBrowse, onAddFiles, onStartTour }: {
   alert: Alert
   gamePath: string
+  hasMods: boolean   // the Library has mods: the last step is done, and offers more
   onAutoDetect: () => Promise<void>
   onBrowse: () => Promise<void>
   onAddFiles: (paths: string[]) => void
@@ -76,12 +76,10 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
     <div className="modal-overlay fr-overlay" onClick={close}>
       <motion.div className="modal-content fr-modal" role="dialog" aria-label="Set up repakxtra" onClick={e => e.stopPropagation()}
         initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }}>
-        <div className="modal-header fr-head">
-          <div>
-            <h2 className="fr-welcome">Welcome to <Wordmark height={17} /></h2>
-            <p className="su-sub">Get Marvel Rivals ready for mods. Steps 1 to 3 make mods work; close the game first.</p>
-          </div>
+        <div className="modal-header">
+          <h2 className="fr-welcome">Welcome to <Wordmark height={17} /></h2>
           <button className="modal-close" onClick={close} aria-label="Close">×</button>
+          <p className="su-sub">Get Marvel Rivals ready for mods. Steps 1 to 3 make mods work; close the game first.</p>
         </div>
 
         <ol className="modal-body fr-steps">
@@ -100,21 +98,14 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
 
           <Step n={5} done={Boolean(shortcut.exists)} optional title="Desktop shortcut"
             action={!shortcut.exists && <ShortcutButton s={shortcut} />}>
-            <p>{shortcut.exists ? 'On your desktop. Settings > General can make one again later.' : 'Start repakxtra from your desktop. You can also make one later in Settings > General.'}</p>
+            <p>Start repakxtra from your desktop. You can also make one later in Settings &gt; General.</p>
+            {shortcut.exists && <p className="fr-state">On your desktop.</p>}
           </Step>
 
-          <Step n={6} done={false} wide title="Add your first mods">
-            <div className="fr-drop">
-              {/* the icon on the text's first line, not a line of its own */}
-              <span className="fr-drop-text">
-                <Upload size={16} aria-hidden="true" />
-                <span>Drop .pak, .pak.off, .zip, .rar or .7z files, or mod folders, anywhere on this window. Drop zips as they are: no need to extract.</span>
-              </span>
-              <span className="fr-drop-actions">
-                <button type="button" className="lo-text-btn" disabled={noGame} onClick={addFiles}>Choose files…</button>
-                <a onClick={() => openUrl(NEXUS)}>Find mods on Nexus Mods</a>
-              </span>
-            </div>
+          <Step n={6} done={hasMods} title={hasMods ? 'Add more mods' : 'Add your first mods'}
+            action={<button type="button" className="lo-text-btn" disabled={noGame} onClick={addFiles}>Choose files…</button>}>
+            <p>Drop .pak, .pak.off, .zip, .rar or .7z files, or mod folders, anywhere on this window. Drop zips as they are: no
+              need to extract. <ExtLink href={NEXUS}>Find mods on Nexus Mods</ExtLink></p>
           </Step>
         </ol>
 
