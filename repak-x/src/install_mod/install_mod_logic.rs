@@ -396,6 +396,16 @@ pub fn install_mods_in_viewport(
                 });
                 continue;
             }
+            // repakxtra: installing a mod from where it is already installed would clean up (delete) its own files first
+            let same = |a: &Path, b: &Path| b.exists() && fs::canonicalize(a).ok() == fs::canonicalize(b).ok();
+            if [(&pak_path, "pak"), (&utoc_path, "utoc"), (&ucas_path, "ucas")].iter().any(|(src, x)| same(src, &output_directory.join(format!("{}.{}", base, x)))) {
+                results.push(ModInstallResult {
+                    mod_name: installable_mod.mod_name.clone(),
+                    success: false,
+                    error: Some("This mod is already installed in that folder".to_string()),
+                });
+                continue;
+            }
             cleanup_existing_mod_variants(&output_directory, &base);
             let dests = vec![
                 (pak_path, format!("{}.pak", base)),

@@ -58,8 +58,11 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
     const handleClickOutside = () => {
       onClose()
     }
+    // repakxtra: Esc closes the menu (and only the menu: the Library's Esc would clear the selection)
+    const handleEscape = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }
     window.addEventListener('click', handleClickOutside)
-    return () => window.removeEventListener('click', handleClickOutside)
+    window.addEventListener('keydown', handleEscape, true)
+    return () => { window.removeEventListener('click', handleClickOutside); window.removeEventListener('keydown', handleEscape, true) }
   }, [onClose])
 
   useEffect(() => {

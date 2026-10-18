@@ -9,7 +9,7 @@ use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter};
 
-const RELEASES: &str = "https://api.github.com/repos/cablemp5/repak-xtra/releases";
+const RELEASES: &str = "https://api.github.com/repos/cablemp5/repak-xtra/releases?per_page=100"; // GitHub lists 30 by default: app releases would push the kit off the page
 
 pub fn kit_dir() -> PathBuf {
     crate::app_dir().join("preview-kit")

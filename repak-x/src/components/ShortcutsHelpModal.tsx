@@ -24,7 +24,7 @@ function ShortcutsHelpModal({ isOpen, onClose }: ShortcutsHelpModalProps) {
             >
                 <div className="modal-header">
                     <h2>Keyboard shortcuts</h2>
-                    <button className="modal-close" onClick={onClose}>×</button>
+                    <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
                 </div>
                 <div className="shortcuts-list">
                     {SHORTCUT_GROUPS.map(group => (

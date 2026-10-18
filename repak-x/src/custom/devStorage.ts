@@ -80,7 +80,7 @@ async function start() {
       .catch(e => { last = ''; console.warn('[devStorage] Could not save the shared copy:', e) })
   }
   setTimeout(save, 1500)
-  setInterval(save, 4000)
+  setInterval(save, 1000) // often: a copy closed right after an edit must not lose it to the other copy
   window.addEventListener('pagehide', save)
 }
 

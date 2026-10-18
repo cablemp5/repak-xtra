@@ -11,7 +11,7 @@ import { ListPlus, Sparkles, X } from 'lucide-react'
 import { play } from 'cuelume'
 import { useAlert } from '../components/AlertHandler'
 import { modKey, patchLoadout, readLoadouts } from './loadoutStore'
-import { deleteMedia } from './loadoutMedia'
+import { deleteMedia, getMedia } from './loadoutMedia'
 import { MatrixLoader, revealOnLoad } from './motion'
 import { plural } from './modName'
 
@@ -166,9 +166,10 @@ listen<boolean>('mod-previews-done', e => {
   // Stopped before anything was made is a stop, not a failure
   const stoppedEarly = run.stopping && !run.made && !run.none && !run.failed
   const summary = run.busy || (stoppedEarly ? 'Stopped' : e.payload || run.made || run.none || run.failed ? parts.filter(Boolean).join(' · ') : FAILED)
+  const stopped = run.stopping
   run = { ...run, stopping: false, summary }
   // Previews made for a loadout replace the image pasted or uploaded for it (not on Stop: the user ended it)
-  if (run.set && !run.stopping && (run.setResult === 'ok' || run.made > 0)) replaceOwnImage(run.set, run.ownImage)
+  if (run.set && !stopped && (run.setResult === 'ok' || run.made > 0)) replaceOwnImage(run.set, run.ownImage)
   if (!run.busy && (failed || run.setResult === 'failed')) failureListeners.forEach(f => f({ name: run.name, failed, setFailed: run.setResult === 'failed' }))
   play(run.busy ? 'warning' : stoppedEarly ? 'close' : run.made && !failed && run.setResult !== 'failed' ? 'ready' : run.made ? 'warning' : 'error')
   batchDone++
@@ -335,10 +336,13 @@ export const dismissPreviewSummary = () => { run.summary = ''; notify() }
 /** Queues every loadout that has installed mods (one combined render each, one after another). `missing`: only the
  *  loadouts with no preview yet; `all`: every one, rendered again even when nothing changed. Returns how many, or the
  *  reason the first could not start (then nothing is queued). */
-export async function generateAllLoadouts(loadouts: { id: string; name: string; on: string[] }[], mods: { path: string }[], which: 'missing' | 'all' = 'all') {
+export async function generateAllLoadouts(loadouts: { id: string; name: string; on: string[]; mediaRev?: number; image?: string }[], mods: { path: string }[], which: 'missing' | 'all' = 'all') {
   const byKey = new Map(mods.map(m => [modKey(m.path), m.path]))
+  // a loadout with its own pasted or uploaded image has a picture: "only missing" must not replace (delete) it. Only the
+  // image in this copy counts: pictures are not shared between copies, the loadout's mediaRev is
+  const own = await Promise.all(loadouts.map(l => (l.mediaRev ? getMedia(l.id).then(Boolean, () => false) : Boolean(l.image))))
   const jobs = loadouts
-    .filter(l => which === 'all' || !loadoutHasPreview(l))
+    .filter((l, i) => which === 'all' || !(loadoutHasPreview(l) || own[i]))
     .map(l => ({ paths: l.on.map(k => byKey.get(modKey(k))).filter((x): x is string => Boolean(x)), set: previewSetKey(l.id), name: l.name, force: which === 'all' }))
     .filter(j => j.paths.length > 0)
   const started = jobs.map(generatePreviews) // all asked for in this tick: the first starts, the rest queue behind it

@@ -810,6 +810,7 @@ function App() {
         return
       }
       console.log('Parsed mods:', modsData)
+      setStatus(`Found ${modsData.length} mod(s) in the dropped items`) // repakxtra: "Processing..." stayed after the install was cancelled
 
       // Check if ALL mods are PAK files with no uassets - if so, use quick organize
       const allPaksWithNoUassets = modsData.every((mod: DroppedModParse) =>
@@ -2749,6 +2750,7 @@ function App() {
       renameModKey(modKey(modPath), modKey(newPath)) // repakxtra: loadouts follow the rename
       renameSource(modKey(modPath), modKey(newPath)) // repakxtra: so does its Nexus source
       setStatus(`Renamed to "${newName}"`)
+      if (selectedMod?.path === modPath) setSelectedMod({ ...selectedMod, path: newPath }) // repakxtra: details read the new file, not the old path
       const refreshed = await loadMods()
       if (selectedMod && selectedMod.path === modPath) {
         const updated = refreshed.find(m => m.path === newPath)
@@ -3223,6 +3225,9 @@ function App() {
           else if (key === 'arrowright') newIndex = Math.min(filteredMods.length - 1, currentIndex + 1)
         }
 
+        // repakxtra: a clicked row's button keeps focus, so Enter would open that row again instead of the selected one
+        const focused = document.activeElement as HTMLElement | null
+        if (focused?.closest('.mod-card')) focused.blur()
         if (newIndex !== currentIndex && newIndex >= 0 && newIndex < filteredMods.length) {
           setSelectedMod(filteredMods[newIndex])
         } else if (currentIndex === -1 && filteredMods.length > 0) {
@@ -3991,6 +3996,7 @@ function App() {
             onClick={() => setPanel('settings', true)}
             className="btn-settings"
             data-tour="settings-btn"
+            title="Settings (Ctrl+,)"
           >
             <IoIosSettings size={20} /> Settings
           </button>
@@ -4017,6 +4023,7 @@ function App() {
               ref={searchInputRef}
               type="text"
               placeholder="Search installed mods..."
+              aria-label="Search installed mods"
               value={localSearch}
               onChange={handleSearchChange}
               className="main-search-input"
