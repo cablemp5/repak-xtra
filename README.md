@@ -3,7 +3,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/cablemp5/repak-xtra/stargazers"><img src="https://img.shields.io/github/stars/cablemp5/repak-xtra?style=flat-square&color=111111&label=stars" alt="Stars"></a>
   <a href="https://github.com/cablemp5/repak-xtra/releases"><img src="https://img.shields.io/github/v/release/cablemp5/repak-xtra?include_prereleases&sort=semver&style=flat-square&color=111111&label=release" alt="Release"></a>
   <a href="https://github.com/cablemp5/repak-xtra/releases"><img src="https://img.shields.io/github/downloads/cablemp5/repak-xtra/total?style=flat-square&color=111111&label=downloads" alt="Downloads"></a>
   <img src="https://img.shields.io/badge/platform-Windows-111111?style=flat-square" alt="Windows">
