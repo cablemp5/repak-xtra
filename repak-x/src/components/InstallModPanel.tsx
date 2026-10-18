@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import Switch from './ui/Switch'
 import Checkbox from './ui/Checkbox'
 import { InstallAsLoadout, InstallToLoadouts, commitInstallLoadout, startingLoadouts } from '../custom/installLoadout' // repakxtra
+import InstallAdvanced from '../custom/InstallAdvanced' // repakxtra
 import { FaTag } from "react-icons/fa6"
 import { VscFolder, VscFolderOpened, VscChevronRight, VscChevronDown, VscNewFolder } from 'react-icons/vsc'
 import { MdCreateNewFolder } from 'react-icons/md'
@@ -466,6 +467,7 @@ export default function InstallModPanel({ mods, allTags, folders = [], currentFo
                         <InstallToLoadouts ids={modSettings[idx]?.loadouts ?? []} onChange={ids => updateModSetting(idx, 'loadouts', ids)} />
                       </div>
 
+                      <InstallAdvanced mod={mod} settings={modSettings[idx]}>{/* repakxtra: the four switches behind Advanced */}
                       <div className="install-mod-card__footer">
                         <Switch
                           size="sm" // repakxtra: the Library's switch size, here and in the three below
@@ -556,6 +558,7 @@ export default function InstallModPanel({ mods, allTags, folders = [], currentFo
                           </Switch>
                         )}
                       </div>
+                      </InstallAdvanced>
                     </div>
 
                     {/* Divider */}

@@ -443,25 +443,29 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 
 /* ---------- title: repakxtra, no logo mark ---------- */
 .header .repak-icon { display: none !important; }
-/* The logo (custom/Wordmark.tsx): "repak" white (ink on the light theme); "xtra" a deep blue base under three glows
-   (top left, top right, bottom middle) */
+/* The logo (custom/Wordmark.tsx): "repak" white (ink on the light theme); "xtra" a mesh of three colors over a base, all
+   at full strength (a dark base or a pale color reads muted) and spread as wide as the dev copy's yellow to red-orange
+   (close hues read as one flat color): cyan, violet-blue and azure over electric blue */
 .wm { display: block; flex: none; overflow: visible;
-  --wm-base: #0a2499; --wm-c1: #9fd0ff; --wm-c2: #1f5bff; --wm-c3: #2f7dff; }
-[data-theme="light"] .wm { --wm-c1: #3d8bff; }   /* ice blue would wash out on white */
+  --wm-base: #2a4bff; --wm-c1: #00e1ff; --wm-c2: #6a3dff; --wm-c3: #1d8bff; }
+[data-theme="light"] .wm { --wm-c1: #0094ff; }   /* bright cyan would wash out on white */
 .wm-repak { fill: #ededed; }
 [data-theme="light"] .wm-repak { fill: #0a0a0a; }
 .wm-base { fill: var(--wm-base); }
-.wm .wm-c1 { stop-color: var(--wm-c1); } .wm .wm-c2 { stop-color: var(--wm-c2); } .wm .wm-c3 { stop-color: var(--wm-c3); }
-/* While the app works and on hover, the glows drift inside the letters, each its own way */
-.wm.is-live .wm-glow, .header-branding:hover .wm .wm-glow, .wm:hover .wm-glow { animation: 2.6s ease-in-out infinite alternate; }
-.wm.is-live .wm-glow1, .header-branding:hover .wm .wm-glow1, .wm:hover .wm-glow1 { animation-name: wm-drift1; }
-.wm.is-live .wm-glow2, .header-branding:hover .wm .wm-glow2, .wm:hover .wm-glow2 { animation-name: wm-drift2; animation-delay: -0.9s; }
-.wm.is-live .wm-glow3, .header-branding:hover .wm .wm-glow3, .wm:hover .wm-glow3 { animation-name: wm-drift3; animation-delay: -1.7s; }
-@keyframes wm-drift1 { to { transform: translate(900px, 420px); } }
-@keyframes wm-drift2 { to { transform: translate(-1000px, 300px); } }
-@keyframes wm-drift3 { to { transform: translate(300px, -650px); } }
-html[data-motion="off"] .wm .wm-glow, html[data-animations="off"] .wm .wm-glow { animation: none !important; }
-@media (prefers-reduced-motion: reduce) { .wm .wm-glow { animation: none !important; } }
+.wm .wm-c1 { fill: var(--wm-c1); } .wm .wm-c2 { fill: var(--wm-c2); } .wm .wm-c3 { fill: var(--wm-c3); }
+/* While the app works and on hover, each blob drifts, turns and stretches its own way (along its tilt), so the streaks flow */
+.wm-blob { transform-box: fill-box; transform-origin: center; }
+.wm.is-live .wm-blob, .header-branding:hover .wm .wm-blob, .wm:hover .wm-blob { animation: 3.2s ease-in-out infinite alternate; }
+.wm.is-live .wm-blob1, .header-branding:hover .wm .wm-blob1, .wm:hover .wm-blob1 { animation-name: wm-flow1; }
+.wm.is-live .wm-blob2, .header-branding:hover .wm .wm-blob2, .wm:hover .wm-blob2 { animation-name: wm-flow2; animation-delay: -1.1s; }
+.wm.is-live .wm-blob3, .header-branding:hover .wm .wm-blob3, .wm:hover .wm-blob3 { animation-name: wm-flow3; animation-delay: -2.0s; }
+.wm.is-live .wm-blob4, .header-branding:hover .wm .wm-blob4, .wm:hover .wm-blob4 { animation-name: wm-flow2; animation-delay: -2.7s; animation-direction: alternate-reverse; }
+.wm.is-live .wm-blob5, .header-branding:hover .wm .wm-blob5, .wm:hover .wm-blob5 { animation-name: wm-flow1; animation-delay: -0.5s; animation-direction: alternate-reverse; }
+@keyframes wm-flow1 { to { transform: translate(380px, 120px) rotate(22deg) scale(1.2, 0.85); } }
+@keyframes wm-flow2 { to { transform: translate(-420px, -90px) rotate(-18deg) scale(0.85, 1.25); } }
+@keyframes wm-flow3 { to { transform: translate(160px, 260px) rotate(30deg) scale(1.15, 1.1); } }
+html[data-motion="off"] .wm .wm-blob, html[data-animations="off"] .wm .wm-blob { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .wm .wm-blob { animation: none !important; } }
 /* Beside text ("Welcome to"): its baseline on the text's (the p's descender is 18.5% of its height) */
 .fr-welcome { display: flex; align-items: baseline; gap: 0.3em; }
 .fr-welcome .wm { align-self: baseline; transform: translateY(18.5%); }
@@ -1045,9 +1049,11 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
 .lp-group input { height: 32px; padding: 0 10px; width: 240px; font: 13px var(--font-primary); color: var(--text-primary);
   background: var(--field-bg); border: 1px solid var(--panel-border); border-radius: var(--quiet-radius); outline: none; }
 .lp-group input:focus { border-color: rgba(255, 255, 255, 0.16); }
-.lp-meta { margin: 0; font-size: 13px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .lp-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
-.lp-switch { display: inline-flex; align-items: center; gap: 8px; margin-right: 6px; font-size: 13px; font-weight: 600; }
+.lp-switch { display: inline-flex; align-items: center; gap: 8px; margin-right: 6px; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.lp-switch-state { display: inline-flex; align-items: center; gap: 8px; }
+.lp-switch-state .lo-on-dot { margin: 0; }
+.lp-head-note { font-size: 12px; font-weight: 400; } /* In this loadout: how many of its mods are not installed */
 .lp-switch .repakx-switch-control { height: 22px !important; min-height: 0 !important; }
 .lp-section .lo-group-head { margin-bottom: 10px; }
 .lp-empty { margin: 0; padding: 18px; border: 1px dashed var(--panel-border); border-radius: 10px; color: var(--text-secondary); font-size: 13px; }
@@ -1257,7 +1263,7 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .sigeon-menu { transform-origin: top right; animation: t-dropdown-open var(--dropdown-open-dur) var(--dropdown-ease) backwards; }
 
 @media (prefers-reduced-motion: reduce) {
-  .lo-card, .mod-row, .t-num-pop, .t-text-in, .sigeon-menu { animation: none !important; }
+  .lo-card, .mod-row, .t-num-pop, .t-text-in, .sigeon-menu, .lp-more-view { animation: none !important; }
   .t-acc-panel, .t-acc-panel-inner, .t-icon-swap .t-icon, .lo-card-image img, .mod-preview-frame img { transition: none !important; }
 }
 
@@ -1301,8 +1307,6 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .lp-pen { color: var(--text-secondary) !important; }
 .lp-name-wrap .lp-pen { width: 28px; height: 28px !important; }
 .lp-delete { margin-left: auto; }
-.lp-meta { display: flex; align-items: center; flex-wrap: wrap; min-height: 20px; }
-.lp-meta .lo-on-dot { vertical-align: 0; }
 .lp-saved { display: inline-flex; align-items: center; gap: 4px; margin-left: 12px; font-size: 12px; color: var(--text-secondary);
   animation: lp-saved 2.4s ease forwards; }
 .lp-saved svg.lucide { width: 12px !important; height: 12px !important; color: #3ecf6e; }
@@ -1373,11 +1377,28 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 /* More: a menu of buttons under its button; Delete loadout set apart by a hairline */
 .lp-more { position: relative; display: flex; align-items: center; }
 .lp-more-btn[aria-expanded="true"] { background: var(--quiet-hover) !important; }
-.lp-more-menu { left: 0; right: auto; width: auto; min-width: 220px; z-index: 30; }
+.lp-more-menu { left: 0; right: auto; width: 252px; z-index: 30; }
 .lp-more-menu .sigeon-item { justify-content: flex-start !important; }
 .lp-more-menu .sigeon-item:focus-visible { background: var(--quiet-active) !important; outline: none !important; }
-.lp-more-menu .sigeon-item:last-child { position: relative; margin-top: 9px; }
-.lp-more-menu .sigeon-item:last-child::before { content: ''; position: absolute; left: -4px; right: -4px; top: -5px; border-top: 1px solid var(--panel-border); }
+.lp-more-view { display: flex; flex-direction: column; }
+.lp-more-view:not(.is-keys) > .sigeon-item:last-child { position: relative; margin-top: 9px; }
+.lp-more-view:not(.is-keys) > .sigeon-item:last-child::before { content: ''; position: absolute; left: -4px; right: -4px; top: -5px; border-top: 1px solid var(--panel-border); }
+/* More > Hotkey: a row that opens its choices in place (they slide in from the side they lead to), keys drawn as caps */
+@keyframes lp-view-in { from { opacity: 0; transform: translateX(var(--lp-view-from)); } }
+.lp-more-view.is-keys { --lp-view-from: 12px; animation: lp-view-in 180ms var(--dropdown-ease) backwards; }
+.lp-more-view.is-back { --lp-view-from: -12px; animation: lp-view-in 180ms var(--dropdown-ease) backwards; }
+.lp-more-menu .sigeon-item.lp-more-sub, .lp-more-menu .sigeon-item.lp-key-row { justify-content: space-between !important; gap: 12px; }
+.lp-more-value { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+.lp-more-value > svg { margin-right: -4px; }
+.lp-more-menu .sigeon-item.lp-more-back { position: relative; margin-bottom: 9px; gap: 6px; padding-left: 6px !important; color: var(--text-secondary) !important; font-size: 12px !important; }
+.lp-more-back::after { content: ''; position: absolute; left: -4px; right: -4px; bottom: -5px; border-top: 1px solid var(--panel-border); }
+.lp-more-back:hover { color: var(--text-primary) !important; }
+.lp-keys { display: inline-flex; align-items: center; gap: 3px; flex: none; }
+.lp-keys .key-separator { margin: 0; font-size: 11px; color: var(--text-secondary); }
+.lp-more-menu kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 5px;
+  font: 600 11px/1 var(--font-primary) !important; color: var(--text-primary); background: var(--bg-light);
+  border: 1px solid rgba(255, 255, 255, 0.1); border-bottom-width: 2px; border-radius: 5px; }
+.lp-key-holder { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--text-secondary); }
 
 /* Toasts: the status icon centered against the text; Clear all as a labeled pill on the toasts' own surface */
 .toast-icon { align-self: center; }
@@ -1574,8 +1595,13 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .settings-content .setting-section { gap: 10px !important; }
 .settings-content .setting-group { gap: 6px !important; }
 .settings-content .setting-item { gap: 0 !important; }
-.settings-content .setting-item > .setting-subtext { margin-top: -2px !important; padding-bottom: 6px; }
-.settings-content .setting-section > .setting-subtext { padding-left: 0 !important; margin-top: -4px !important; }
+/* A description sits about 3px under its name's text (more reads as a new item). Checkbox rows are 32px around a 20px
+   line and switch rows 44px (click targets), headings have the section's 10px under them: each description pulls up
+   into that space */
+.settings-content .setting-item > .setting-subtext { margin-top: -8px !important; padding-bottom: 6px; }
+.settings-content .setting-item > .setting-toggle-row + .setting-subtext { margin-top: -12px !important; }
+.settings-content .setting-section > .setting-subtext { padding-left: 0 !important; margin-top: -9px !important; }
+.settings-content .setting-group > .setting-hint:first-child { margin-top: -8px !important; }
 .settings-content .setting-group label.repakx-checkbox { min-height: 32px; padding-top: 0 !important; padding-bottom: 0 !important; }
 .settings-content .mod-state-filter.ui-scale { align-self: flex-start; width: auto !important; }
 .settings-content .setting-group:has(> .ui-scale) { align-items: flex-start; }
@@ -1717,6 +1743,18 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .su-modal .modal-header { align-items: center; gap: 12px; padding: 18px 22px !important; }
 .su-modal .modal-header h2 { margin: 0; }
 .su-modal .modal-close, .fr-modal .modal-close, .cp-modal .modal-close { display: grid; place-items: center; width: 32px; height: 32px; line-height: 1; flex: none; }
+/* Setup layout (2026-10-18): the subtitle on its own line under the title row; every card is its head, then a body between
+   hairlines (Galacta's facts, the preview kit's parts, no box inside the card), then its actions from the left; the
+   startup-check switch, which covers two cards, in a footer under all of them. Sigeon's setup shares .su-card: all here
+   is scoped to this window */
+.su-modal .modal-header { flex-wrap: wrap; row-gap: 4px; }
+.su-modal .modal-header > .su-sub { flex-basis: 100%; margin: 0; }
+.su-modal .su-rows, .su-modal .su-parts { border: none; border-radius: 0; border-top: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); }
+.su-modal .su-rows { padding: 10px 0; }
+.su-modal .su-part { padding: 8px 0; }
+.su-modal .su-actions .su-option { gap: 8px; }
+.su-modal-foot { padding: 12px 22px; border-top: 1px solid var(--panel-border); }
+.su-modal-foot .repakx-checkbox-label { font-size: 12.5px !important; color: var(--text-secondary); }
 
 /* Renaming a mod in the Library: a quiet field the size of the name, the accent only as a thin focus line */
 .mod-rename-input { height: 26px; padding: 0 8px !important; font-weight: 500 !important; font-size: inherit !important;
@@ -1808,8 +1846,8 @@ html[data-motion="off"] .t-matrix i { animation: none; opacity: 0.6; }
 
 /* Test and dev copies (custom/version.ts BUILD): the logo's "xtra" is green for a test build (build.ps1 -Test) and
    amber for the live dev copy (dev.ps1), instead of blue */
-:root[data-build="test"] .wm { --wm-base: #27b356; --wm-c1: #c6f7d6; --wm-c2: #5fe08a; --wm-c3: #3ecf6e; }   /* no dark base: it muddied the glows */
-:root[data-build="dev"] .wm { --wm-base: #d97706; --wm-c1: #fcd34d; --wm-c2: #f59e0b; --wm-c3: #fb923c; }
+:root[data-build="test"] .wm { --wm-base: #12c85a; --wm-c1: #b6ff2e; --wm-c2: #00d4b0; --wm-c3: #00e070; }   /* lime, teal and green: no dark base, it muddied the mesh */
+:root[data-build="dev"] .wm { --wm-base: #ff7a00; --wm-c1: #ffd000; --wm-c2: #ff9500; --wm-c3: #ff5a14; }
 
 /* Setup > Mod previews: its two parts (the kit, Blender) as rows with a check when present, their links on the right;
    a quiet trust line while Blender is missing or installing */
@@ -1973,6 +2011,17 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
    switch and room for the words */
 .install-mod-card__footer { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px !important; }
 .install-mod-card__footer > .install-toggle { flex: none !important; }
+/* Install card: Advanced (custom/InstallAdvanced.tsx) takes the divider line the switches had, the switches open under it;
+   closed, the options that are on sit at the row's end */
+.ia { border-top: 1px solid var(--panel-border); padding-top: 10px; }
+.ia-toggle { display: flex; align-items: center; justify-content: flex-start !important; gap: 6px; width: 100%; height: auto !important; min-height: 0 !important; padding: 2px 0 !important;
+  border: none !important; background: transparent !important; cursor: pointer; text-align: left;
+  font-size: 12.5px !important; font-weight: 500 !important; color: var(--text-secondary) !important; }
+.ia-toggle:hover { color: var(--text-primary) !important; }
+.ia-caret { flex: none; transition: transform 150ms ease; }
+.ia.is-open .ia-caret { transform: rotate(90deg); }
+.ia-on { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
+.ia .install-mod-card__footer { border-top: none !important; padding-top: 10px !important; }
 .install-mod-card .obfuscate-toggle { --tile: #42a5f5; }
 .install-mod-card .hybrid-toggle { --tile: #3ecf6e; }
 .install-mod-card .legacy-toggle { --tile: #f5a524; }
@@ -2284,6 +2333,9 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 .app .custom-dropdown-item:focus-visible { outline-offset: -2px !important; } /* the focused option of a dropdown (arrow keys): its ring inside the menu */
 /* F1: keys never wrap inside or between their caps (a long action used to squeeze Ctrl + 1–9 onto two lines) */
 .shortcut-keys { flex-shrink: 0; white-space: nowrap; }
+/* F1: each key and the + after it share a span, so the + sat 3px after a key and 7px before the next; one even gap instead */
+.shortcut-keys, .shortcut-keys > span { display: inline-flex; align-items: center; gap: 3px; }
+.shortcuts-modal .shortcut-keys .key-separator { margin: 0; }
 /* test round 1: a long loadout name ends in an ellipsis on its page (until it is clicked to edit), a long collection name too */
 .lp-name { text-overflow: ellipsis; }
 .lo-group-head { min-width: 0; }

@@ -1,12 +1,12 @@
 // repakxtra: the Library sidebar's quick view of saved loadouts (state lives in loadoutStore.ts). A row turns its loadout
-// on or off (as does Ctrl+N, N its place in the Loadouts page order); loadouts that are on, then partly on, list first.
+// on or off (as does Ctrl+N for a loadout pinned to N on its page); loadouts that are on, then partly on, list first.
 // Its arrow opens the loadout's page, where everything else (rename, reorder, delete) lives.
 import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from 'react'
 import { ArrowUpRight, Check, ListPlus, Plus } from 'lucide-react'
 import CustomDropdown from '../components/CustomDropdown'
 import type { useAlert } from '../components/AlertHandler'
 import {
-  type Loadout, type Mod, changesToTurnOff, changesToTurnOn, deleteLoadout, flipMods, isActive, modKey,
+  type Loadout, type Mod, changesToTurnOff, changesToTurnOn, deleteLoadout, flipMods, hotkeyOf, hotkeySlots, isActive, modKey,
   nextLoadoutName, openLoadout, patchLoadout, readLoadouts, snapshotLoadout, useLoadouts, withMods, writeLoadouts,
 } from './loadoutStore'
 import { isTyping } from './hotkeys'
@@ -227,13 +227,13 @@ export default function Loadouts(p: LoadoutProps) {
     setBusy(null)
   }
 
-  // Ctrl+1..9 toggles the loadout at that position in this list
+  // Ctrl+1..9 toggles the loadout pinned to that number
   const latest = useRef({ loadouts, apply, busy })
   latest.current = { loadouts, apply, busy }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.ctrlKey || e.shiftKey || e.altKey || !/^[1-9]$/.test(e.key) || isTyping(e.target) || document.querySelector('.modal-overlay')) return
-      const l = latest.current.loadouts[Number(e.key) - 1]
+      const l = hotkeySlots(latest.current.loadouts).get(Number(e.key))
       if (!l || latest.current.busy) return
       e.preventDefault()
       latest.current.apply(l)
@@ -267,8 +267,9 @@ export default function Loadouts(p: LoadoutProps) {
           return { l, i, onNow, pending, rank: isActive(l, p.mods) ? 0 : onNow ? 1 : 2 }
         })
         .sort((a, b) => a.rank - b.rank || a.i - b.i)
-        .map(({ l, i, onNow, pending, rank }, at, rows) => {
-          const hotkey = i < 9 ? ` (Ctrl+${i + 1})` : ''
+        .map(({ l, onNow, pending, rank }, at, rows) => {
+          const n = hotkeyOf(l, loadouts)
+          const hotkey = n ? ` (Ctrl+${n})` : ''
           const none = onNow + pending === 0 // none of its mods is installed
           const what = none ? `${l.name} has no installed mods` : rank === 0 ? `Turn ${l.name} off` : rank === 1 ? `Turn on the rest of ${l.name} (${pending} more)` : `Turn ${l.name} on`
           return (
@@ -277,8 +278,8 @@ export default function Loadouts(p: LoadoutProps) {
                 aria-label={what} aria-pressed={rank === 0}>
                 <span className={`fp-lead${busy === l.id ? ' is-busy' : ''}`}><OnDot on={onNow} of={onNow + pending} /></span>
                 <span className="fp-label">{l.name}</span>
-                {/* the number Ctrl+N toggles; rows past 9 have none */}
-                <span className="lo-num">{i < 9 ? i + 1 : ''}</span>
+                {/* the number Ctrl+N toggles; unpinned rows have none */}
+                <span className="lo-num">{n ?? ''}</span>
               </button>
               <button type="button" className="lo-icon lo-hover" title={`Open ${l.name}`} aria-label={`Open ${l.name}`} onClick={() => openLoadout(l.id)}>
                 <ArrowUpRight size={14} />

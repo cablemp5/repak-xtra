@@ -17,6 +17,7 @@ export type Loadout = {
   image?: string          // legacy: small data URL kept in localStorage
   mediaType?: 'image' | 'video'
   mediaRev?: number       // set when a file is stored in IndexedDB (loadoutMedia.ts); bumps on change
+  hotkey?: number         // 1 to 9: Ctrl+N toggles it, set in its page's More menu; unpinned loadouts have no hotkey
 }
 
 const STORAGE = 'repakxtra.loadouts'
@@ -290,6 +291,31 @@ export const placeLoadout = (id: string, group: string, beside?: { id: string; a
   if (next !== list) writeLoadouts(next)
 }
 
+/** Ctrl+1..9: each pinned number to its loadout. Only pins count, wherever the loadout sits. A number two loadouts hold
+ *  (a deleted one put back by Undo after its slot was given away) goes to the first. Pure. */
+export const hotkeySlots = (list: Loadout[]) => {
+  const out = new Map<number, Loadout>()
+  for (const l of list) if (l.hotkey && !out.has(l.hotkey)) out.set(l.hotkey, l)
+  return out
+}
+/** The number that toggles this loadout, or undefined. */
+export const hotkeyOf = (l: Loadout, list: Loadout[]) => (l.hotkey && hotkeySlots(list).get(l.hotkey)?.id === l.id ? l.hotkey : undefined)
+/** The list with the loadout pinned to Ctrl+n (0: no hotkey); a loadout that held n loses it. Pure. */
+export const withHotkey = (list: Loadout[], id: string, n: number) =>
+  list.map(l => (l.id === id ? { ...l, hotkey: n || undefined } : n && l.hotkey === n ? { ...l, hotkey: undefined } : l))
+export const pinHotkey = (id: string, n: number) => writeLoadouts(withHotkey(readLoadouts(), id, n))
+
+// Before pins, Ctrl+N toggled the Nth loadout in the list: once, the first nine keep those numbers as pins
+if (!localStorage.getItem('repakxtra.hotkeysPinned')) {
+  try {
+    const list = readLoadouts()
+    if (list.length && !list.some(l => l.hotkey)) writeLoadouts(list.map((l, i) => (i < 9 ? { ...l, hotkey: i + 1 } : l)))
+    localStorage.setItem('repakxtra.hotkeysPinned', '1')
+  } catch (e) {
+    console.warn('Hotkey pins not carried over:', e) // unreadable list: left as it is, tried again next start
+  }
+}
+
 /** Which main view shows: Home (loadout cards) or Library (the full mod list). Remembered; Home on first start.
  *  Mirrored on <html data-view> so theme.css hides the other view (both stay mounted, keeping their state). */
 export type View = 'home' | 'library'
@@ -333,6 +359,16 @@ if (import.meta.env.DEV) {
     console.assert(order(placed(base, 'a', 'H', { id: 'c', after: true })) === 'b:G,c:H,a:H,d:G', 'into another collection after a card')
     console.assert(order(placed(base, 'c', 'G')) === 'a:G,b:G,d:G,c:G', 'dropped on a collection: after its last loadout')
     console.assert(placed(base, 'a', 'G', { id: 'a', after: true }) === base, 'dropped on itself: unchanged')
+  }
+  { // hotkey pins
+    const L = (id: string, hotkey?: number) => ({ id, name: id, label: OTHER, scope: [], on: [], hotkey }) as Loadout
+    const pins = (xs: Loadout[]) => xs.map(x => `${x.id}${x.hotkey ?? '-'}`).join()
+    const base = [L('a', 3), L('b'), L('c', 1)]
+    console.assert(hotkeySlots(base).get(3)?.id === 'a' && !hotkeySlots(base).has(2), 'only pins hold a number, wherever they sit')
+    console.assert(pins(withHotkey(base, 'b', 3)) === 'a-,b3,c1', 'pinning a taken number moves it')
+    console.assert(pins(withHotkey(base, 'a', 0)) === 'a-,b-,c1', 'unpin')
+    const twice = [L('a', 2), L('b', 2)]
+    console.assert(hotkeyOf(twice[0], twice) === 2 && hotkeyOf(twice[1], twice) === undefined, 'a doubled number goes to the first')
   }
   // The one rule that ties a loadout to a file, whatever state the file is in (mod_previews.py mod_key must agree)
   for (const [path, key] of [['C:/m/~mods/X_9999999_P.pak', 'X'], ['X_9999999_P.bak_repak', 'X'], ['X_9999999_P.pak.bak_repak', 'X'],

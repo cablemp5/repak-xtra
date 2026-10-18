@@ -166,7 +166,7 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
             <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => k.check()} title="Ask GitHub for the newest preview kit">
               {busy === 'check' ? 'Checking…' : 'Check for updates'}
             </button>
-            <button type="button" className="su-link" disabled={Boolean(busy)} onClick={fromFile} title="Install a preview kit zip (or drop one on the window)">From file…</button>
+            <button type="button" className="su-link" disabled={Boolean(busy)} onClick={fromFile} title="Install a preview kit zip (or drop one on the window)">Install from file…</button>
             {kit?.version && <button type="button" className="su-link" disabled={Boolean(busy)} onBlur={() => setArmed(false)}
               onClick={() => { if (armed) { setArmed(false); k.remove() } else setArmed(true) }}
               title="Deletes the kit; it downloads again from here">{armed ? 'Click again to remove' : 'Remove'}</button>}
@@ -180,26 +180,25 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
           </div>
           <span className="su-part-links">
             {kit && !kit.blender && <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => k.installBlender()} title="Installs Blender with winget">Install</button>}
-            <button type="button" className="su-link" disabled={Boolean(busy)} onClick={pickBlender}>{kit?.blender ? 'Change' : 'Pick blender.exe'}</button>
+            <button type="button" className="su-link" disabled={Boolean(busy)} onClick={pickBlender} title="Choose the blender.exe previews use">{kit?.blender ? 'Change…' : 'Choose blender.exe…'}</button>
           </span>
         </li>
       </ul>
       {(kit && !kit.blender || installingBlender) && <BlenderTrust />}
       <KitProgressBar p={k.progress} />
       <DoctorProblems d={k.doctor} />
-      <div className="su-row">
-        <p className="su-meta">{k.doctor?.ok && !busy && <span className="su-ok">This PC can make previews</span>}</p>
-        <div className="su-actions">
-          {(missing || update) && (
-            <button type="button" className="btn-primary su-main" disabled={Boolean(busy) || (!kit?.version && latest === null)} onClick={() => k.setUp()}
-              title={update ? 'Downloads the newest kit from GitHub' : 'Installs what is missing: the kit (from GitHub) and Blender (with winget), then checks this PC'}>
-              {busy === 'setup' ? (installingBlender ? 'Installing Blender…' : k.progress ? 'Installing kit…' : 'Setting up…') : busy === 'blender' ? 'Installing Blender…' : update ? `Update to v${latest!.version}` : 'Set up previews'}
-            </button>
-          )}
-          <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={() => k.checkPc()} title="Check that this PC can make previews">
-            <MonitorCheck size={14} /> {busy === 'doctor' ? 'Checking…' : 'Check this PC'}
+      {/* Actions on the left like the other cards; the check's result follows them */}
+      <div className="su-actions">
+        {(missing || update) && (
+          <button type="button" className="btn-primary su-main" disabled={Boolean(busy) || (!kit?.version && latest === null)} onClick={() => k.setUp()}
+            title={update ? 'Downloads the newest kit from GitHub' : 'Installs what is missing: the kit (from GitHub) and Blender (with winget), then checks this PC'}>
+            {busy === 'setup' ? (installingBlender ? 'Installing Blender…' : k.progress ? 'Installing kit…' : 'Setting up…') : busy === 'blender' ? 'Installing Blender…' : update ? `Update to v${latest!.version}` : 'Set up previews'}
           </button>
-        </div>
+        )}
+        <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={() => k.checkPc()} title="Check that this PC can make previews">
+          <MonitorCheck size={14} /> {busy === 'doctor' ? 'Checking…' : 'Check this PC'}
+        </button>
+        {k.doctor?.ok && !busy && <span className="su-meta su-ok">This PC can make previews</span>}
       </div>
       {notes && latest && <Changelog product="Preview kit" g={{ latest: `v${latest.version}`, published: latest.published, notes: latest.notes, url: latest.url }}
         title={notes} onClose={() => setNotes(null)} />}
@@ -278,11 +277,13 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
       <motion.div ref={trap.ref} onKeyDown={trap.onKeyDown} tabIndex={-1} className="modal-content su-modal" role="dialog" aria-modal="true" aria-label="Mod setup" onClick={e => e.stopPropagation()}
         initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.15 }}>
         <div className="modal-header">
-          <div><h2>Mod setup</h2><p className="su-sub">What Marvel Rivals needs to load mods. Close the game before changing these.</p></div>
+          <h2>Mod setup</h2>
           <button type="button" className="lo-text-btn su-guided" onClick={() => { onClose(); window.dispatchEvent(new Event('repakxtra-first-run')) }}
             title="The first-launch setup: game folder, bypass, Project Galacta, previews and your first mods, one screen">Guided setup</button>
           <CopySetupReport alert={alert} className="lo-text-btn su-report" />
           <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
+          {/* its own line under the title row, so the header buttons never squeeze it */}
+          <p className="su-sub">What Marvel Rivals needs to load mods. Close the game before changing anything here.</p>
         </div>
 
         <div className="modal-body su-body">
@@ -351,44 +352,46 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
               </div>
               <span className={`su-chip ${g?.up_to_date === false ? 'is-update' : g?.installed ? 'is-installed' : 'is-missing'}`}>{g ? galactaState : 'Checking…'}</span>
             </div>
-            <div className="su-row">
-            {/* Where it is and what the newest release is, one labelled line each */}
-            <dl className="su-dl">
-              <dt>Location</dt>
-              <dd>{!g ? 'Checking…' : g.installed ? <><code>{where}</code>{g.disabled ? ', off in the Library' : ''}</> : 'Not installed'}</dd>
-              <dt>Latest</dt>
-              <dd>
-                {g?.latest
-                  ? <>{g.latest}{g.published ? `, ${date(g.published)}` : ''} · <button type="button" className="su-link" onClick={() => setNotes("What's new")}>What's new</button></>
-                  : 'Not checked yet'}
-                {/* the same words and look as the preview kit's update check */}
-                {' · '}<button type="button" className="su-link" disabled={Boolean(busy)} onClick={check}>{busy === 'check' ? 'Checking…' : 'Check for updates'}</button>
-              </dd>
-            </dl>
-            <div className="su-actions">
-              {(!g?.installed || g.up_to_date === false) && (
+            {/* Laid out like the preview kit's rows: what it is on the left (What's new inline), Check for updates on the right */}
+            <div className="su-row su-rows">
+              <dl className="su-dl">
+                <dt>Location</dt>
+                <dd>{!g ? 'Checking…' : g.installed ? <><code>{where}</code>{g.disabled ? ', off in the Library' : ''}</> : 'Not installed'}</dd>
+                <dt>Newest release</dt>
+                <dd>
+                  {g?.latest
+                    ? <>{g.latest}{g.published ? `, ${date(g.published)}` : ''} · <button type="button" className="su-link" onClick={() => setNotes("What's new")}>What's new</button></>
+                    : 'Not checked yet'}
+                </dd>
+              </dl>
+              <span className="su-part-links">
+                <button type="button" className="su-link" disabled={Boolean(busy)} onClick={check} title="Ask GitHub for the newest Project Galacta">
+                  {busy === 'check' ? 'Checking…' : 'Check for updates'}
+                </button>
+              </span>
+            </div>
+            {/* Install or update, and where to: only when one is offered */}
+            {(!g?.installed || g.up_to_date === false) && (
+              <div className="su-actions">
                 <button type="button" className="btn-primary su-main" disabled={Boolean(busy)} onClick={install}>
                   {busy === 'install-galacta' ? 'Installing…' : g?.installed ? `Update${g.latest ? ` to ${g.latest}` : ''}` : 'Install'}
                 </button>
-              )}
-            </div>
-            </div>
-            <div className="su-options">
-              {/* where to install only matters when an install or update is offered */}
-              {(!g?.installed || g.up_to_date === false) && (
-                <div className="su-option">
-                  <span>Install into</span>
+                <span className="su-option">
+                  <span>into</span>
                   <CustomDropdown value={folder} onChange={v => { setFolder(v); localStorage.setItem(FOLDER_KEY, v) }}
                     options={[{ value: HERE, label: g?.installed ? 'Where it is now' : 'Mods folder' }, ...folders.map(f => ({ value: f, label: `~mods/${f}` }))]} />
-                </div>
-              )}
-              <Checkbox checked={auto} onChange={(v: boolean) => { setAuto(v); localStorage.setItem(AUTO_KEY, v ? '1' : '0') }}>
-                Check for updates at startup
-              </Checkbox>
-            </div>
+                </span>
+              </div>
+            )}
           </section>
 
           <PreviewKitCard alert={alert} />
+        </div>
+        {/* One switch for both startup checks (SetupButton: Project Galacta and the preview kit), so it lives under all the cards */}
+        <div className="su-modal-foot">
+          <Checkbox checked={auto} onChange={(v: boolean) => { setAuto(v); localStorage.setItem(AUTO_KEY, v ? '1' : '0') }}>
+            Check for Project Galacta and preview kit updates when repakxtra starts
+          </Checkbox>
         </div>
         {notes && g && <Changelog g={g} title={notes} onClose={() => setNotes(null)} />}
       </motion.div>
