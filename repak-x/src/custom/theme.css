@@ -1868,8 +1868,15 @@ html[data-motion="off"] .t-matrix i { animation: none; opacity: 0.6; }
   background: none !important; font: inherit !important; }
 .su-link:hover:not(:disabled), .su-trust a:hover { text-decoration: underline; }
 .su-link:disabled { opacity: 0.45; cursor: default; }
-.su-trust { margin: 0; display: flex; gap: 8px; align-items: center; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
-.su-trust svg.lucide { flex: none; color: #3ecf6e; }   /* centered on the note, however many lines it wraps to */
+/* The Blender note (SetupPanel BlenderTrust): one quiet "Is Blender safe? ›" line, the note opening under it */
+.su-trust { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.su-trust-btn { display: inline-flex; align-items: center; gap: 6px; height: auto !important; min-height: 0 !important; padding: 2px 0 !important;
+  border: none !important; background: transparent !important; cursor: pointer; font-size: 12px !important; font-weight: 500 !important; color: var(--text-secondary) !important; }
+.su-trust-btn:hover { color: var(--text-primary) !important; }
+.su-trust-btn svg.lucide:first-child { flex: none; color: #3ecf6e; }
+.su-trust-btn .su-caret { transition: transform 150ms ease; }
+.su-trust-btn[aria-expanded="true"] .su-caret { transform: rotate(90deg); }
+.su-trust p { margin: 0; padding: 4px 0 0 19px; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }   /* under the words, past the shield */
 
 /* Details panel: a hero with forms shows each form's preview side by side */
 .mod-preview-frame.has-forms { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; width: 100%; aspect-ratio: auto; }

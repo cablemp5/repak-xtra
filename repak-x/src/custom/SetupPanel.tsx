@@ -95,14 +95,23 @@ export function InstallStatus({ p }: { p: KitProgress | null }) {
   return <span className="su-install-status" role="status" title={text}><MatrixLoader size={11} /><span>{text}</span></span>
 }
 
-/** Why Blender is safe to install, where it comes from, and its real download page. */
+/** Why Blender is safe to install, where it comes from, and its real download page: closed to one line ("Is Blender safe?",
+ *  like the bypass's "Is it safe?"), the full note opens under it. A click, not a hover, so it works from the keyboard and
+ *  stays put while it is read. */
 export function BlenderTrust() {
+  const [shown, setShown] = useState(false)
   return (
-    <p className="su-trust">
-      <ShieldCheck size={13} aria-hidden="true" />
-      <span>Blender is free, open-source 3D software from the Blender Foundation. repakxtra installs the official release
-        through winget, Windows' own package manager, and Windows asks for admin rights once. <a href={BLENDER} onClick={e => { e.preventDefault(); open(BLENDER) }}>blender.org/download</a></span>
-    </p>
+    <div className="su-trust">
+      <button type="button" className="su-trust-btn" aria-expanded={shown} onClick={() => setShown(v => !v)}>
+        <ShieldCheck size={13} aria-hidden="true" /> Is Blender safe? <ChevronRight size={13} className="su-caret" aria-hidden="true" />
+      </button>
+      <div className="t-acc-panel" data-open={shown} ref={el => el?.toggleAttribute('inert', !shown)}>
+        <div className="t-acc-panel-inner">
+          <p>Blender is free, open-source 3D software from the Blender Foundation. repakxtra installs the official release
+            through winget, Windows' own package manager, and Windows asks for admin rights once. <a href={BLENDER} onClick={e => { e.preventDefault(); open(BLENDER) }}>blender.org/download</a></p>
+        </div>
+      </div>
+    </div>
   )
 }
 
