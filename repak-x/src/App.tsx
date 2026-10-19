@@ -3885,7 +3885,7 @@ function App() {
         >
           <ModularLogo size={50} className="repak-icon" />
           <div className="header-title-group">
-            <h1 className="font-logo"><Wordmark height={22} busy={isModsLoading} /></h1>{/* repakxtra: the logo; its dots pulse while mods load or install */}
+            <h1 className="font-logo"><Wordmark height={22} /></h1>{/* repakxtra: the logo */}
             <span className="version">{versionTag(version)}</span>{/* repakxtra */}
           </div>
         </div>

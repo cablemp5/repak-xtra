@@ -1,9 +1,9 @@
-"""repakxtra's app icon: the logo's lowercase x (custom/Wordmark.tsx), Geist Mono 600, filled with the logo's mesh gradient (the
-long tilted color blobs that cross the logo's x, blurred into each other and bent along smooth noise, over the base
-color), centered on transparency. Writes icons/RepakIcon.png (512) and icons/RepakIcon.ico (16 to
+"""repakxtra's app icon: the logo's lowercase x (custom/Wordmark.tsx), Geist Mono 600, in the logo's solid color, centered on
+transparency. With --mesh it is filled with the logo's old mesh gradient instead (the long tilted color blobs that cross
+the logo's x, blurred into each other and bent along smooth noise, over the base color; custom/WordmarkMesh.tsx). Writes icons/RepakIcon.png (512) and icons/RepakIcon.ico (16 to
 256), which tauri.conf.json bundles into the exe: the taskbar, the window and the desktop shortcut all show it. Colors are
 theme.css .wm's. Run from repak-x/ with any Python that has Pillow and numpy:
-    python scripts/make-icon.py [--test-ico path.ico] [--sheet contact.png]
+    python scripts/make-icon.py [--mesh] [--test-ico path.ico] [--sheet contact.png]
 --test-ico writes the same icon in the test build's green, for the test copy's desktop shortcut (kept outside the repo).
 --sheet writes the 16 to 48 px sizes on dark and light, to check them."""
 import sys
@@ -16,6 +16,7 @@ HERE = Path(__file__).resolve().parents[1]
 # Wordmark.tsx's x (font units, y up)
 X = [(40, 0), (233, 274), (50, 534), (180, 534), (301, 355), (419, 534), (551, 534), (369, 272),
      (560, 0), (429, 0), (301, 193), (172, 0)]   # Geist Mono 600's x
+SOLID, TEST_SOLID = '#346bf1', '#12c85a'   # theme.css .wm --wm-xtra, and its test-build color
 BLUES = ['#2a4bff', '#00e1ff', '#6a3dff', '#1d8bff']   # theme.css .wm: --wm-base, then --wm-c1..3
 GREENS = ['#12c85a', '#b6ff2e', '#00d4b0', '#00e070']  # its test-build colors
 # Wordmark.tsx BLOBS (viewBox units, y down): center, half width, half height, tilt in degrees, color 1 to 3. The logo's x
@@ -83,7 +84,7 @@ def mesh(colors):
     return field, left, top
 
 
-def render(size, colors=BLUES):
+def render(size, colors=SOLID):   # colors: one '#rrggbb' for the solid icon, or a mesh's [base, c1, c2, c3]
     n = size * SS
     pts = X
     u0, u1 = min(u for u, _ in pts), max(u for u, _ in pts)
@@ -101,13 +102,16 @@ def render(size, colors=BLUES):
     cu, cv = (u0 + u1) / 2, (v0 + v1) / 2
     vx = X0 + cu + ((xx - ox) / scale - cu) * SPREAD
     vy = BASELINE - cv - ((oy - yy) / scale - cv) * SPREAD
-    field, left, top = mesh(colors)
-    fill = sample(field, (vx - left) / UNIT, (vy - top) / UNIT)
+    if isinstance(colors, str):
+        fill = np.broadcast_to(rgb(colors), (n, n, 3))
+    else:
+        field, left, top = mesh(colors)
+        fill = sample(field, (vx - left) / UNIT, (vy - top) / UNIT)
     img = np.dstack([fill, shape(X) * 255]).round().clip(0, 255).astype(np.uint8)
     return Image.fromarray(img, 'RGBA').resize((size, size), Image.BOX)
 
 
-def save_ico(path, colors=BLUES):
+def save_ico(path, colors=SOLID):
     frames = [render(s, colors) for s in sorted(SIZES, reverse=True)]
     frames[0].save(path, sizes=[f.size for f in frames], append_images=frames[1:])
 
@@ -121,12 +125,12 @@ def turned(img, degrees):
     return out
 
 
-def contact_sheet(path):
+def contact_sheet(path, BLUE, GREEN):
     """16 to 48 px on dark and light: the blue icon, the test shortcut's green one, then the window icons the dev and test
     copies turn out of the blue one (xtra_buildmark.rs: +170 and -80 degrees)."""
     pad, cell = 12, 60
-    rows = [lambda s: render(s, BLUES), lambda s: render(s, GREENS),
-            lambda s: turned(render(s, BLUES), 170), lambda s: turned(render(s, BLUES), -80)]
+    rows = [lambda s: render(s, BLUE), lambda s: render(s, GREEN),
+            lambda s: turned(render(s, BLUE), 170), lambda s: turned(render(s, BLUE), -80)]
     sheet = Image.new('RGBA', (pad + cell * 8, pad + cell * len(rows)), (128, 128, 128, 255))
     for row, draw in enumerate(rows):
         for half, bg in enumerate([(10, 10, 10, 255), (245, 245, 245, 255)]):
@@ -139,10 +143,11 @@ def contact_sheet(path):
 
 if __name__ == '__main__':
     args = sys.argv[1:]
-    big = render(512)
+    BLUE, GREEN = (BLUES, GREENS) if '--mesh' in args else (SOLID, TEST_SOLID)
+    big = render(512, BLUE)
     assert big.getpixel((0, 0))[3] == 0, 'transparent corners'
     big.save(HERE / 'icons' / 'RepakIcon.png', optimize=True)
-    save_ico(HERE / 'icons' / 'RepakIcon.ico')
+    save_ico(HERE / 'icons' / 'RepakIcon.ico', BLUE)
     # The same x inside the app: the splash image and ModularLogo's accent-colored R mask. RepakIcon-x256.png stays
     # Repak X's own logo (the Discord widget shows it), and ModularLogo's X mask stays empty
     art = HERE / 'src' / 'assets' / 'app-icons'
@@ -151,7 +156,7 @@ if __name__ == '__main__':
     mask.putalpha(big.getchannel('A'))
     mask.save(art / 'logomask_R.png', optimize=True)
     if '--test-ico' in args:
-        save_ico(args[args.index('--test-ico') + 1], GREENS)
+        save_ico(args[args.index('--test-ico') + 1], GREEN)
     if '--sheet' in args:
-        contact_sheet(args[args.index('--sheet') + 1])
+        contact_sheet(args[args.index('--sheet') + 1], BLUE, GREEN)
     print('wrote icons/RepakIcon.png, icons/RepakIcon.ico and the app\'s logo images in src/assets/app-icons')

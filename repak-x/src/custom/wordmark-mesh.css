@@ -1,0 +1,29 @@
+/* The logo's mesh gradient fill, saved (not imported anywhere). To bring it back: render WordmarkMesh.tsx instead of Wordmark.tsx,
+   import this file in main.tsx, and replace the solid ".wm" colors in theme.css (the .wm and .wm-xtra rules and the dev and test
+   --wm-xtra overrides) with the ones below. The icon: python scripts/make-icon.py --mesh. */
+/* The logo (custom/Wordmark.tsx): "repak" white (ink on the light theme); "xtra" a mesh of three colors over a base, all
+   at full strength (a dark base or a pale color reads muted) and spread as wide as the dev copy's yellow to red-orange
+   (close hues read as one flat color): cyan, violet-blue and azure over electric blue */
+.wm { display: block; flex: none; overflow: visible;
+  --wm-base: #2a4bff; --wm-c1: #00e1ff; --wm-c2: #6a3dff; --wm-c3: #1d8bff; }
+[data-theme="light"] .wm { --wm-c1: #0094ff; }   /* bright cyan would wash out on white */
+.wm-repak { fill: #ededed; }
+[data-theme="light"] .wm-repak { fill: #0a0a0a; }
+.wm-base { fill: var(--wm-base); }
+.wm .wm-c1 { fill: var(--wm-c1); } .wm .wm-c2 { fill: var(--wm-c2); } .wm .wm-c3 { fill: var(--wm-c3); }
+/* While the app works and on hover, each blob drifts, turns and stretches its own way (along its tilt), so the streaks flow */
+.wm-blob { transform-box: fill-box; transform-origin: center; }
+.wm.is-live .wm-blob, .header-branding:hover .wm .wm-blob, .wm:hover .wm-blob { animation: 3.2s ease-in-out infinite alternate; }
+.wm.is-live .wm-blob1, .header-branding:hover .wm .wm-blob1, .wm:hover .wm-blob1 { animation-name: wm-flow1; }
+.wm.is-live .wm-blob2, .header-branding:hover .wm .wm-blob2, .wm:hover .wm-blob2 { animation-name: wm-flow2; animation-delay: -1.1s; }
+.wm.is-live .wm-blob3, .header-branding:hover .wm .wm-blob3, .wm:hover .wm-blob3 { animation-name: wm-flow3; animation-delay: -2.0s; }
+.wm.is-live .wm-blob4, .header-branding:hover .wm .wm-blob4, .wm:hover .wm-blob4 { animation-name: wm-flow2; animation-delay: -2.7s; animation-direction: alternate-reverse; }
+.wm.is-live .wm-blob5, .header-branding:hover .wm .wm-blob5, .wm:hover .wm-blob5 { animation-name: wm-flow1; animation-delay: -0.5s; animation-direction: alternate-reverse; }
+@keyframes wm-flow1 { to { transform: translate(380px, 120px) rotate(22deg) scale(1.2, 0.85); } }
+@keyframes wm-flow2 { to { transform: translate(-420px, -90px) rotate(-18deg) scale(0.85, 1.25); } }
+@keyframes wm-flow3 { to { transform: translate(160px, 260px) rotate(30deg) scale(1.15, 1.1); } }
+html[data-motion="off"] .wm .wm-blob, html[data-animations="off"] .wm .wm-blob { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .wm .wm-blob { animation: none !important; } }
+/* dev and test copies */
+:root[data-build="test"] .wm { --wm-base: #12c85a; --wm-c1: #b6ff2e; --wm-c2: #00d4b0; --wm-c3: #00e070; }   /* lime, teal and green: no dark base, it muddied the mesh */
+:root[data-build="dev"] .wm { --wm-base: #ff7a00; --wm-c1: #ffd000; --wm-c2: #ff9500; --wm-c3: #ff5a14; }
