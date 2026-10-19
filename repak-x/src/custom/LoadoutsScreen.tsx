@@ -18,7 +18,7 @@ import { MatrixLoader, Num } from './motion'
 import { PreviewsUnavailable, dismissPreviewSummary, generateAllLoadouts, loadoutHasPreview, stopPreviews, usePreviewFailureToast, usePreviewsAvailable, usePreviewBatch, usePreviewSummary, usePreviewVersion } from './previews'
 import {
   type Loadout, type Mod, OTHER, addGroup, changesToTurnOff, changesToTurnOn, deleteGroup, displayName, groupKey,
-  inGroup, isActive, modKey, moveGroup, nextLoadoutName, openLoadout, patchLoadout, placeLoadout, placed, readLoadouts, renameGroup,
+  inGroup, isActive, modKey, moveGroup, moveLoadout, movedBeside, nextLoadoutName, openLoadout, patchLoadout, placeLoadout, placed, readLoadouts, renameGroup,
   setView, snapshotLoadout, sweepMediaOnce, useGroups, useLoadouts, useOpenLoadout, useView, writeLoadouts,
 } from './loadoutStore'
 import { savedItem } from './storageCarryOver'
@@ -123,7 +123,7 @@ const LoadoutCard = memo(function LoadoutCard({ p, l, groupBy, canGenerate, busy
   const label = present === 0 ? 'No installed mods' : active ? `Turn ${l.name} off` : `Turn ${l.name} on`
   return (
     <article data-loadout={l.id} className={`lo-card ${active ? 'is-on' : ''}${placeholder ? ' is-placeholder' : ''}`}
-      onPointerDown={groupBy === 'group' && !renaming ? e => onPick(e, l.id) : undefined}
+      onPointerDown={!renaming ? e => onPick(e, l.id) : undefined}
       onKeyDown={e => { if (e.key === 'F2' && !isTyping(e.target)) { e.preventDefault(); onStartRename(l) } }}
       onMouseEnter={() => { hovered.current = l.id }} onMouseLeave={() => { if (hovered.current === l.id) hovered.current = null }}>
       <CardMedia p={p} l={l} onClick={() => openLoadout(l.id)} title={`Open ${l.name}`}
@@ -187,18 +187,20 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   const cardZoom = useCardZoom()
   const [cardsEl, setCardsEl] = useState<HTMLDivElement | null>(null)
   useWheelZoom(cardsEl)
-  // Dragging a card (Collection view, custom/cardDrag.ts): `spot` is where it would land; the cards show that order
+  // Dragging a card (custom/cardDrag.ts; in the Hero view only within its hero): `spot` is where it would land; the cards show that order
   // live, sliding from where they were (flipFrom, taken just before each change)
   const [spot, setSpot] = useState<Spot | null>(null)
   const flipFrom = useRef<Map<string, DOMRect> | null>(null)
   const drag = useCardDrag({
     zoom: cardZoom, scroller: cardsEl,
+    ownGroupOnly: groupBy === 'hero', // a card's hero comes from its mods: reordered within it, never moved to another
     onMove: (_id, s) => { flipFrom.current = snapshotCards(cardsEl); setSpot(s) },
     onDrop: (id, s) => {
       flipFrom.current = snapshotCards(cardsEl)
       setSpot(null)
       if (!s) return
       if ('newCollection' in s) { const name = addGroup(); placeLoadout(id, name); setGroupBy('group'); setEditingGroup(name) }
+      else if (groupBy === 'hero') moveLoadout(id, besideOf(id, s))
       else placeLoadout(id, s.group, besideOf(id, s))
     },
   })
@@ -338,13 +340,16 @@ export default function LoadoutsScreen(p: LoadoutProps) {
             ...(ungrouped.length || keepOther ? [[OTHER, ungrouped] as [string, Loadout[]]] : [])]
   }
   // A spot's place in its collection as the loadout it goes before (or after the last one), in the saved order
+  const heroGroups = (list: Loadout[]) => byHero(list, l => heroOf(l, byKey, p.modDetails))
   function besideOf(id: string, s: { group: string; index: number }) {
-    const members = (grouped(loadouts).find(([g]) => groupKey(g) === groupKey(s.group))?.[1] ?? []).filter(l => l.id !== id)
+    const members = ((groupBy === 'hero' ? heroGroups(loadouts) : grouped(loadouts)).find(([g]) => groupKey(g) === groupKey(s.group))?.[1] ?? []).filter(l => l.id !== id)
     return s.index < members.length ? { id: members[s.index].id, after: false } : members.length ? { id: members[members.length - 1].id, after: true } : undefined
   }
   // While a card is dragged, the order it would make if dropped now
-  const shown = drag.dragId && spot && 'group' in spot ? placed(loadouts, drag.dragId, spot.group, besideOf(drag.dragId, spot)) : loadouts
-  const groups: [string, Loadout[]][] = groupBy === 'hero' ? byHero(loadouts, l => heroOf(l, byKey, p.modDetails)) : grouped(shown)
+  const shown = !(drag.dragId && spot && 'group' in spot) ? loadouts
+    : groupBy === 'hero' ? movedBeside(loadouts, drag.dragId, besideOf(drag.dragId, spot))
+    : placed(loadouts, drag.dragId, spot.group, besideOf(drag.dragId, spot))
+  const groups: [string, Loadout[]][] = groupBy === 'hero' ? heroGroups(shown) : grouped(shown)
   const newGroup = () => { setGroupBy('group'); setEditingGroup(addGroup()) }
 
   const hidden = (
@@ -445,8 +450,8 @@ export default function LoadoutsScreen(p: LoadoutProps) {
 
         {groups.map(([group, list], gi) => (
           // A collection lights up while a card from another one would land in it
-          <section className={`lo-group ${drag.dragId && spot && 'group' in spot && groupKey(spot.group) === groupKey(group) && groupKey(dragFrom ?? '') !== groupKey(group) ? 'is-drop' : ''}`}
-            key={groupKey(group)} data-group={groupBy === 'group' ? group : undefined}>
+          <section className={`lo-group ${groupBy === 'group' && drag.dragId && spot && 'group' in spot && groupKey(spot.group) === groupKey(group) && groupKey(dragFrom ?? '') !== groupKey(group) ? 'is-drop' : ''}`}
+            key={groupKey(group)} data-group={group}>
             {groupBy === 'group'
               ? <GroupHead p={p} name={group} count={list.length} at={gi} total={savedGroups.length}
                   editing={editingGroup !== null && groupKey(editingGroup) === groupKey(group)} setEditing={setEditingGroup} />
