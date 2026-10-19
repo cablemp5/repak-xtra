@@ -1,0 +1,146 @@
+/* repakxtra: the install dialog (custom/InstallPanel.tsx), loadout first. The top is the loadout as its page shows it
+   (picture, big name, collection, preview), the body its contents (one row per mod, opening to its details), the
+   footer the action. Hero and type tags and the four colored switch tiles are the Library install card's own. */
+.ip-modal { position: relative; width: min(780px, 94vw) !important; max-width: none !important; max-height: 90vh; padding: 0 !important;
+  background: var(--bg-darker) !important; border: 1px solid var(--panel-border); border-radius: 14px !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.35); overflow: hidden; }
+.ip-close.modal-close { position: absolute; top: 12px; right: 12px; z-index: 2; display: grid; place-items: center; width: 32px; height: 32px;
+  line-height: 1; border-radius: 8px; font-size: 22px; }
+.ip-close.modal-close:hover { background: var(--quiet-hover); }
+
+/* The loadout: its picture beside its name, like the loadout page (lp-top) */
+.ip-hero { display: flex; gap: 20px; align-items: stretch; padding: 22px 56px 20px 22px; border-bottom: 1px solid var(--panel-border); }
+.ip-cover { position: relative; flex: none; width: 112px; aspect-ratio: 1358 / 1920; border-radius: 12px; overflow: hidden;
+  border: 1px solid var(--panel-border); background: var(--bg-dark); }
+.ip-cover > img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Until the loadout's own preview exists: the hero's default shape, lit from the top and fading out at the feet */
+.ip-cover-shape { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0.1) 55%, rgba(255, 255, 255, 0) 100%);
+  mask-size: cover; mask-position: center; mask-repeat: no-repeat; -webkit-mask-size: cover; -webkit-mask-position: center; -webkit-mask-repeat: no-repeat; }
+/* The note in the middle of the tile, straight on the shape */
+.ip-cover-note { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 0 10px; text-align: center; font-size: 11.5px; line-height: 1.35; color: var(--text-secondary); }
+.ip-cover.is-preview .ip-cover-note { color: var(--text-primary); }
+
+.ip-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; justify-content: center; }
+/* New loadout or Add to: plain words with a chevron, lit on hover, opening a small menu */
+.ip-target { position: relative; align-self: flex-start; margin-left: -6px; }
+.ip-target-btn { display: inline-flex !important; align-items: center; gap: 4px; height: 24px !important; min-height: 0 !important; padding: 0 6px !important;
+  border: none !important; border-radius: 6px !important; background: transparent !important; cursor: pointer;
+  font-size: 12px !important; font-weight: 600 !important; letter-spacing: 0.01em; color: var(--text-secondary) !important;
+  transition: color 0.15s ease, background 0.15s ease; }
+.ip-target-btn:hover, .ip-target-btn[aria-expanded="true"] { color: var(--text-primary) !important; background: var(--quiet-hover) !important; }
+.ip-target-btn svg.lucide { width: 14px !important; height: 14px !important; opacity: 0.8; transition: transform 0.15s ease; }
+.ip-target-btn[aria-expanded="true"] svg.lucide { transform: rotate(180deg); }
+.sigeon-menu.ip-target-menu { top: calc(100% + 4px); left: 0; right: auto; width: 240px; max-height: 260px; overflow-y: auto; transform-origin: top left; z-index: 20; }
+.ip-modal .custom-dropdown-trigger { height: 30px !important; min-height: 0 !important; font-size: 12.5px !important; }
+.ip-title-wrap { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.ip-title { min-width: 0; margin: 0 -9px; padding: 2px 8px; font: 800 26px/1.2 var(--font-primary); letter-spacing: -0.02em; color: var(--text-primary);
+  background: transparent; border: 1px solid transparent; border-radius: 8px; outline: none; }
+.ip-title-wrap .ip-title { flex: 0 1 auto; field-sizing: content; min-width: 4ch; max-width: 100%; }   /* as wide as the name: the pencil follows it */
+input.ip-title:hover { border-color: var(--panel-border); }
+input.ip-title:focus { border-color: rgba(255, 255, 255, 0.16); background: var(--field-bg); outline: none !important; box-shadow: none !important; }
+.ip-title.is-static { margin: 0; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ip-pen { flex: none; margin-left: 6px; width: 28px; height: 28px !important; color: var(--text-secondary) !important; }
+.ip-pen:hover { color: var(--text-primary) !important; }
+.ip-meta { margin: 0; font-size: 12.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ip-settings { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; margin-top: 4px; }
+.ip-setting { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
+.ip-check span { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.ip-setup { height: 30px !important; font-size: 12.5px !important; }
+
+/* No loadout: just the install, with the way back */
+.ip-plain-head { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 22px 56px 20px 22px; border-bottom: 1px solid var(--panel-border); }
+.ip-back { margin-top: 6px; }
+.ip-plain-spacer { margin-right: auto; }
+
+/* Its contents */
+.ip-body { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 22px 14px; scrollbar-gutter: stable; }
+.ip-section { margin: 10px 0 8px !important; }
+.ip-empty { margin: 24px 0; color: var(--text-secondary); font-size: 13px; text-align: center; }
+.ip-note { display: flex; align-items: center; gap: 16px; margin: 10px 0 4px; padding: 12px 14px; border-radius: 10px; background: var(--quiet-hover); }
+.ip-note div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ip-note strong { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.ip-note span { font-size: 12.5px; color: var(--text-secondary); line-height: 1.45; }
+.ip-note .lo-text-btn { flex: none; }
+
+.ip-rows { list-style: none; margin: 0; padding: 0; border: 1px solid var(--panel-border); border-radius: 12px; overflow: hidden; }
+.ip-row { border-bottom: 1px solid var(--panel-border); transition: background 0.15s ease; }
+.ip-row:last-child { border-bottom: none; }
+.ip-row.is-open { background: rgba(255, 255, 255, 0.015); }
+.ip-row-main { display: flex; align-items: center; gap: 4px; padding: 0 8px 0 14px; min-height: 48px; }
+.ip-row-open { flex: 1; min-width: 0; display: flex !important; align-items: center; gap: 10px; height: 48px; padding: 0 !important;
+  border: none !important; background: transparent !important; text-align: left; cursor: pointer; color: var(--text-primary) !important; }
+.ip-row-open:disabled { cursor: default; }
+.ip-row-hero { flex: none; width: 22px; height: 22px; border-radius: 50%; object-fit: cover; background: var(--bg-light); }
+.ip-row-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 600; }
+.ip-row-on { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--text-secondary); }
+.ip-leave { flex: none; width: 28px; height: 28px !important; color: var(--text-secondary) !important; }
+/* Advanced: the word and its chevron, right after the type tag */
+.ip-row-advanced { flex: none; display: inline-flex !important; align-items: center; gap: 4px; height: 28px !important; min-height: 0 !important;
+  margin-left: 4px; padding: 0 6px 0 8px !important; border: none !important; border-radius: 6px !important; background: transparent !important;
+  font-size: 12px !important; font-weight: 500 !important; color: var(--text-secondary) !important; cursor: pointer; }
+.ip-row-advanced:hover:not(:disabled), .ip-row-advanced[aria-expanded="true"] { color: var(--text-primary) !important; background: var(--quiet-hover) !important; }
+.ip-row-advanced:disabled { visibility: hidden; }
+.ip-leave { opacity: 0; transition: opacity 0.15s ease; }
+.ip-row:hover .ip-leave, .ip-leave:focus-visible { opacity: 1; }
+.ip-leave:hover { color: var(--text-primary) !important; }
+.ip-add-back { height: 26px !important; padding: 0 10px !important; font-size: 12px !important; }
+.ip-row-caret { transition: transform 0.2s var(--acc-ease, ease); }
+.ip-row.is-open .ip-row-caret { transform: rotate(180deg); }
+.ip-row.is-off .ip-row-hero, .ip-row.is-off .ip-row-name, .ip-row.is-off .ip-badges { opacity: 0.4; }
+
+/* Hero and type tags, the Library install card's size: portrait in the hero tag, the type's color in its dot */
+.ip-badges { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; overflow: hidden; flex: 0 1 auto; }
+.ip-row-main > .ip-leave, .ip-row-main > .ip-add-back { margin-right: 4px; }
+.ip-badges .character-badge, .ip-badges .category-badge, .ip-badges .additional-badge, .ip-badges .no-uassets-badge {
+  flex: none; height: 24px; box-sizing: border-box; display: inline-flex !important; align-items: center; gap: 6px;
+  padding: 0 8px !important; border-radius: 6px !important; font-size: 12px !important; font-weight: 500 !important; line-height: 1 !important; white-space: nowrap; }
+.ip-badges .character-badge img { width: 16px; height: 16px; border-radius: 4px; object-fit: cover; margin: 0 !important; }
+
+/* A row's details: file name and folder, the source file, then the four switches */
+.ip-details { display: flex; flex-direction: column; gap: 10px; padding: 2px 14px 14px; }
+.ip-detail-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.ip-name-wrap { flex: 1 1 260px; min-width: 0; display: flex; align-items: center; height: 30px; border-radius: var(--quiet-radius); background: var(--field-bg);
+  border: 1px solid var(--panel-border); transition: border-color 0.15s ease; cursor: text; }
+.ip-name-wrap:hover { border-color: rgba(255, 255, 255, 0.12); }
+.ip-name-wrap:focus-within { border-color: rgba(255, 255, 255, 0.2); }
+.ip-name { flex: 1; min-width: 0; height: 100%; padding: 0 0 0 11px !important; border: none !important; background: transparent !important;
+  font: 500 13px var(--font-primary) !important; color: var(--text-primary) !important; outline: none !important; box-shadow: none !important; }
+.ip-name::placeholder { color: var(--text-secondary); opacity: 1; }
+.ip-suffix { flex: none; padding: 0 11px 0 2px; font: 12px var(--font-mono); color: var(--text-secondary); opacity: 0.7; user-select: none; }
+.ip-field { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ip-label { font-size: 12px; color: var(--text-secondary); flex: none; }
+.ip-field .custom-dropdown-container { min-width: 160px; max-width: 260px; }
+.ip-file { font: 11.5px var(--font-mono); color: var(--text-secondary); opacity: 0.75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The four switches, each in its own color as on the Library install card */
+.ip-switches { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.ip-switches .install-toggle { margin: 0 !important; padding: 10px 12px !important; align-items: center !important; border: 1px solid; border-radius: 10px;
+  background: color-mix(in srgb, var(--tile, #888), transparent 95%) !important; border-color: color-mix(in srgb, var(--tile, #888), transparent 80%) !important; }
+.ip-switches .obfuscate-toggle { --tile: #42a5f5; }
+.ip-switches .hybrid-toggle { --tile: #3ecf6e; }
+.ip-switches .legacy-toggle { --tile: #f5a524; }
+.ip-switches .repak-toggle { --tile: var(--accent-primary); }
+.ip-switches .install-toggle:hover:not(.locked) { background: color-mix(in srgb, var(--tile, #888), transparent 91%) !important; border-color: color-mix(in srgb, var(--tile, #888), transparent 66%) !important; }
+.ip-switches .install-toggle.active { background: color-mix(in srgb, var(--tile, #888), transparent 87%) !important; border-color: color-mix(in srgb, var(--tile, #888), transparent 52%) !important; }
+.ip-switches .install-toggle .install-toggle__label { color: color-mix(in srgb, var(--tile, #888), white 30%) !important; font-size: 13px !important; line-height: 1.3; white-space: normal; }
+.ip-switches .install-toggle .install-toggle__hint { font-size: 12px !important; line-height: 1.4; }
+.ip-switches .install-toggle__text { gap: 2px !important; }
+.ip-switches .install-toggle .repakx-switch-control { margin-right: 12px !important; }
+.ip-switches .install-toggle.repakx-switch.checked .repakx-switch-track { background: var(--tile) !important; }
+.ip-switches .install-toggle.locked { opacity: 0.5 !important; }
+.ip-switches .install-toggle :focus-visible { outline: 2px solid color-mix(in srgb, var(--tile, #888), white 25%) !important; outline-offset: 2px !important; }
+
+.ip-foot { display: flex; align-items: center; gap: 10px; padding: 12px 22px !important; border-top: 1px solid var(--panel-border); }
+/* Install without a loadout: a real (quiet) button on the left, away from Cancel and Install */
+.lo-text-btn.ip-plain { margin-right: auto; }
+.ip-folder { font: 12px var(--font-mono); color: var(--text-primary); }
+.ip-foot .btn-primary { width: auto !important; flex: none; min-width: 112px; height: 32px !important; min-height: 0 !important;
+  padding: 0 16px !important; font-size: 13px !important; font-weight: 600 !important; border-radius: 8px !important; }
+
+@media (max-width: 640px) {
+  .ip-hero { flex-direction: column; padding-right: 22px; }
+  .ip-cover { width: 88px; }
+  .ip-switches { grid-template-columns: minmax(0, 1fr); }
+  .ip-badges .additional-badge { display: none !important; }
+}

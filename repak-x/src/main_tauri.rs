@@ -18,6 +18,7 @@ mod xtra_export; // repakxtra: export a loadout as a zip
 mod xtra_shortcut; // repakxtra: desktop shortcut
 mod xtra_identity; // repakxtra: its own app identifier, beside Repak X
 mod xtra_crash; // repakxtra: crash facts for the setup report, crash suspects
+mod xtra_broken; // repakxtra: mods that will not work in the installed game version
 mod xtra_nexus; // repakxtra: Nexus source from archive names
 mod xtra_offfiles; // repakxtra: .pak.off files install like .pak
 mod character_data;
@@ -147,7 +148,7 @@ struct AppState {
     view_mode: String,
     #[serde(default = "default_true")] // repakxtra: on by default
     hide_suffix: bool,
-    #[serde(default = "default_true")]
+    #[serde(default)] // repakxtra: off by default
     auto_open_details: bool,
     #[serde(default = "default_true")]
     show_hero_icons: bool,
@@ -161,7 +162,7 @@ struct AppState {
     auto_check_updates: bool,
     #[serde(default)]
     parallel_processing: bool,
-    #[serde(default = "default_true")]
+    #[serde(default)] // repakxtra: off by default
     hold_to_delete: bool,
     #[serde(default = "default_true")]
     show_subfolder_mods: bool,
@@ -213,14 +214,14 @@ impl Default for AppState {
             accent_color: default_accent(),
             view_mode: default_view_mode(),
             hide_suffix: default_true(),
-            auto_open_details: default_true(),
+            auto_open_details: false, // repakxtra
             show_hero_icons: default_true(),
             show_hero_bg: default_true(),
             show_mod_type: default_true(),
             show_experimental: false,
             auto_check_updates: default_true(),
             parallel_processing: false,
-            hold_to_delete: default_true(),
+            hold_to_delete: false, // repakxtra
             show_subfolder_mods: default_true(),
             bypass_game_running_lock: false,
             enable_drp: default_true(),
@@ -8795,6 +8796,7 @@ fn main() {
             xtra_identity::xtra_protocol_reclaim,
             xtra_crash::xtra_newest_crash, // repakxtra: setup report
             xtra_crash::xtra_crash_suspects, // repakxtra: crash suspects
+            xtra_broken::xtra_broken_mods, // repakxtra: broken mods
             xtra_nexus::xtra_nexus_sources, // repakxtra: Nexus source
             xtra_nexus::xtra_install_paks, // repakxtra: the paks an install puts in place, for loadouts made at install
             xtra_previews::get_preview_emotes, // repakxtra: emote sounds over animation previews

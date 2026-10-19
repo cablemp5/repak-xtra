@@ -1,5 +1,5 @@
 // repakxtra: the first-launch setup. One screen, top to bottom: the game folder, the signature bypass, Project Galacta,
-// mod previews (optional), then the first mods. It opens once on a fresh install, and again
+// mod previews (optional), then the first mods. It opens once on repakxtra's first launch, and again
 // from Setup > Guided setup. Closing it, or dropping mods on the window, marks it seen; the tour is offered at the end.
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
@@ -21,8 +21,9 @@ type Galacta = { installed: string | null; disabled: boolean }
 const SEEN = 'repakxtra.welcomed'
 const NEXUS = 'https://www.nexusmods.com/marvelrivals/mods'
 const openUrl = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
-/** A fresh install: neither this screen nor the old tour was ever shown. */
-const firstLaunch = () => !localStorage.getItem(SEEN) && !localStorage.getItem('hasSeenOnboarding')
+/** repakxtra's first launch: this screen was never shown here, whatever is set up already (Repak X's tour, a game
+ *  folder, the bypass). Its steps show what is done. */
+const firstLaunch = () => !localStorage.getItem(SEEN)
 
 /** One numbered step: its number (a check once done), title, text and its action on the right. Sigeon's setup uses it too. */
 export function Step({ n, done, title, optional, wide, children, action }: {

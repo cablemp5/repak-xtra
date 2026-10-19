@@ -61,6 +61,8 @@ import LoadoutsScreen, { ViewTabs } from './custom/LoadoutsScreen'
 import { modKey, renameModKey } from './custom/loadoutStore' // repakxtra
 import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
+import { useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
+import { newDefaultsOnce } from './custom/uiPrefs' // repakxtra
 import { reportSource } from './custom/setupReport' // repakxtra: Copy setup report reads the live list
 import { finishInstallLoadout } from './custom/installLoadout'
 import SigeonControl from './custom/SigeonControl'
@@ -124,7 +126,7 @@ const ASSET_EXPLORER_FOCUS_MOD_KEY = 'repakx:assetExplorer:focusModPath'
 
 import TitleBar from './components/TitleBar'
 
-import InstallModPanel from './components/InstallModPanel'
+import InstallModPanel from './custom/InstallPanel' // repakxtra: the install dialog redesigned around saving a loadout
 import SettingsPanel from './components/SettingsPanel'
 import CreditsPanel from './components/CreditsPanel'
 import ToolsPanel from './components/ToolsPanel'
@@ -269,7 +271,7 @@ type AppSettings = {
 function App() {
   const isAprilFools = useAprilFools();
   const [hideSuffix, setHideSuffix] = useState(true); // repakxtra: on by default
-  const [autoOpenDetails, setAutoOpenDetails] = useState(true);
+  const [autoOpenDetails, setAutoOpenDetails] = useState(false); // repakxtra: off by default
   const [showHeroIcons, setShowHeroIcons] = useState(true);
   const [showHeroBg, setShowHeroBg] = useState(true);
   const [showModType, setShowModType] = useState(true);
@@ -279,7 +281,7 @@ function App() {
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
   const [enableDrp, setEnableDrp] = useState(false);
   const [parallelProcessing, setParallelProcessing] = useState(false);
-  const [holdToDelete, setHoldToDelete] = useState(true);
+  const [holdToDelete, setHoldToDelete] = useState(false); // repakxtra: off by default
   const [bypassGameRunningLock, setBypassGameRunningLock] = useState(false);
   const [launcherType, setLauncherType] = useState<'steam' | 'epic'>('steam');
   const [enableAnimations, setEnableAnimations] = useState(true);
@@ -401,6 +403,8 @@ function App() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null) // { x, y, mod }
   const [isLogDrawerOpen, setIsLogDrawerOpen] = useState(false)
   useConflictWatch(mods) // repakxtra
+  useBrokenWatch(mods) // repakxtra
+  useBrokenVersion() // repakxtra: the Broken filter re-runs when the verdicts land
   const conflictCount = useConflictCount() // repakxtra
   reportSource.get = () => ({ mods, modDetails, launcherType, gamePath }) // repakxtra: setup report
   useEffect(() => { // repakxtra: the Library tab lands on its home view (custom/LoadoutsScreen.tsx ViewTabs)
@@ -3553,6 +3557,7 @@ function App() {
     // Load App Settings from backend state.json
     invoke('get_app_settings')
       .then((settings: any) => {
+        settings = newDefaultsOnce(settings) // repakxtra: details on click and hold to delete start off, once for existing installs
         // Resolve hex code from accent preset name
         const hexAccent = ACCENT_COLORS_MAP[settings.accentColor] || ACCENT_COLORS_MAP['red'] || '#be1c1c';
 
@@ -4243,7 +4248,8 @@ function App() {
                   <div className="divider-vertical" />
                   <button
                     onClick={toggleRightPanel}
-                    className={`btn-ghost ${!isRightPanelOpen ? 'active' : ''}`}
+                    className={`btn-ghost ${isRightPanelOpen ? 'active' : ''}`} /* repakxtra: lit while the details panel is open */
+                    aria-pressed={isRightPanelOpen}
                     title={isRightPanelOpen ? "Collapse Details" : "Expand Details"}
                   >
                     <ViewSidebarIcon fontSize="small" style={{ transform: isRightPanelOpen ? 'none' : 'rotate(180deg)' }} />

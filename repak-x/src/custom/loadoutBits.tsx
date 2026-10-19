@@ -1,14 +1,15 @@
 // repakxtra: small pieces shared by Home (LoadoutsScreen.tsx), the loadout page and the New strip.
 import { useEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, ImagePlus, Pencil, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ImagePlus, Pencil, Volume2, VolumeX, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import type { LoadoutProps } from './Loadouts'
 import { useMediaUrl } from './loadoutMedia'
-import { type Loadout, type Mod, displayName, flipMods, modKey } from './loadoutStore'
+import { type Loadout, type Mod, displayName, flipMods, modKey, patchLoadout } from './loadoutStore'
 import { ModName } from './modName'
 import { MatrixLoader, revealOnLoad } from './motion'
 import { formKeys, hasPreview, noPreviewPossible, previewSetKey, useCovers, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
 import { playEmoteSound, stopEmoteSound, useEmoteSound, webpSeconds } from './emoteSound'
+import { useVerdict } from './brokenMods'
 
 /** The home screen's badge color class for a mod type (theme.css *-badge sets --badge-dot). */
 export const typeClass = (category?: string | null) => `${(category || 'unknown').toLowerCase().replace(/\s+/g, '-')}-badge`
@@ -55,9 +56,12 @@ function usePreviewSlides(p: LoadoutProps, l: Loadout) {
 }
 
 /** The loadout's image: its own image or video, then its generated previews, paged with arrows. Hovering shows the
- *  arrows and what the slide is ("Mesh + Texture"). With onRemoveImage, its own image shows an X that removes it. */
-export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage, emptyText = 'Click to add an image, or paste one' }: {
+ *  arrows and what the slide is ("Mesh + Texture"). With onRemoveImage, its own image shows an X that removes it.
+ *  With generate (the loadout page), the card holds both ways to fill it: empty, it reads "Click to add an image, or"
+ *  over its Generate previews button. With a picture, the button (Regenerate, or Stop while it runs) sits in a corner. */
+export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage, emptyText = 'Click to add an image, or paste one', generate }: {
   p: LoadoutProps; l: Loadout; className?: string; title: string; onClick: () => void; onRemoveImage?: () => void; emptyText?: string
+  generate?: (className: string) => React.ReactNode
 }) {
   const url = useMediaUrl(l.id, l.mediaRev)
   const own = url ?? l.image
@@ -71,11 +75,13 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   const [warm] = useState(src) // already cached when the card mounted: shown at once, without the blur-in
   const state = usePreviewState(previewSetKey(l.id))
   const impossible = !src && !state && noPreviewPossible(l)
+  const cta = Boolean(generate) && !src && !state && !impossible
   // An animation slide whose emote has a sound in this loadout: while hovered, the clip restarts (a fresh copy of its
   // image) and the sound plays once the restarted clip is on screen (custom/emoteSound.ts). The restart belongs to the
   // slide it was made for: paging ends it and its sound, and paging onto such a slide while hovered starts its own
   const slideKey = slide?.keys ? undefined : slide?.key || undefined
   const sound = useEmoteSound(slideKey, [...new Set(l.on.map(displayName))])
+  const audible = l.muted ? null : sound // muted: the clip still plays, without its sound and its restart
   const [restart, setRestart] = useState<{ key: string; url: string; seconds: number } | null>(null)
   const hovering = useRef(false)
   const shownKey = useRef(slideKey)
@@ -86,14 +92,14 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
     setRestart(r => { if (r) setTimeout(() => URL.revokeObjectURL(r.url), 30000); return null })
   }
   const startRestart = () => {
-    if (!hovering.current || !sound || !src || !slideKey || document.documentElement.classList.contains('is-dragging-card')) return
+    if (!hovering.current || !audible || !src || !slideKey || document.documentElement.classList.contains('is-dragging-card')) return
     const key = slideKey
     fetch(src).then(r => r.arrayBuffer()).then(buf => {
       if (!hovering.current || shownKey.current !== key) return // paged on, or left, while it loaded
       setRestart({ key, url: URL.createObjectURL(new Blob([buf], { type: 'image/webp' })), seconds: webpSeconds(buf) })
     }).catch(() => undefined)
   }
-  useEffect(() => { dropRestart(); startRestart() }, [slideKey, src, sound?.key, sound?.emote]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { dropRestart(); startRestart() }, [slideKey, src, audible?.key, audible?.emote]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (hovering.current) stopEmoteSound() }, []) // this card's sound ends with it, no other card's
   const live = restart && restart.key === slideKey ? restart : null
   const enter = () => { hovering.current = true; startRestart() }
@@ -115,13 +121,13 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
         {!src
           ? impossible
             ? <span className="lo-card-placeholder"><span>No preview possible</span><small>Click to add an image</small></span>
-            : <span className="lo-card-placeholder"><ImagePlus size={22} /><span>{emptyText}</span></span>
+            : cta ? <span className="lo-card-placeholder" /> : <span className="lo-card-placeholder"><ImagePlus size={22} /><span>{emptyText}</span></span>
           : slide?.keys
             ? <span className="lo-media-multi">{slide.keys.map(k => <SlideImage key={k} k={k} />)}</span>
           : !slide?.key && l.mediaType === 'video' && url
             ? <video src={url} autoPlay loop muted playsInline />
             : <img key={src} src={live?.url ?? src} alt="" className={src === warm ? 'is-loaded' : undefined}
-                onLoad={e => { revealOnLoad(e); if (sound && live && hovering.current && e.currentTarget.src === live.url) playEmoteSound(sound, live.seconds) }} />}
+                onLoad={e => { revealOnLoad(e); if (audible && live && hovering.current && e.currentTarget.src === live.url) playEmoteSound(audible, live.seconds) }} />}
       </button>
       {slides.length > 1 && (
         <>
@@ -135,6 +141,23 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
         </>
       )}
       {slides.length === 1 && slide.older && <span className="lo-media-label">{slide.label}</span>}
+      {cta && (
+        <div className="lo-media-cta">
+          <ImagePlus size={22} aria-hidden="true" />
+          <span>Click to add an image</span>
+          <small>or paste one, or</small>
+          {generate!('lo-text-btn lo-media-gen-btn')}
+        </div>
+      )}
+      {generate && !cta && !impossible && <div className={`lo-media-gen${state ? ' is-busy' : ''}`}>{generate('lo-media-chip')}</div>}
+      {sound && (
+        <button type="button" className={`lo-media-mute${l.muted ? ' is-muted' : ''}`} aria-pressed={Boolean(l.muted)}
+          title={l.muted ? `Play ${l.name}'s emote sound on hover` : `Mute ${l.name}'s emote sound (the animation still plays)`}
+          aria-label={l.muted ? `Unmute ${l.name}` : `Mute ${l.name}`}
+          onClick={() => patchLoadout(l.id, { muted: l.muted ? undefined : true })}>
+          {l.muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+        </button>
+      )}
       {onRemoveImage && own && slide && !slide.key && (
         <button type="button" className="lo-media-remove" title="Remove this image" aria-label="Remove this image" onClick={onRemoveImage}>
           <X size={14} />
@@ -174,6 +197,7 @@ export function ModRow({ p, k, mod, onToggle, onRename, children }: {
   p: LoadoutProps; k: string; mod?: Mod; onToggle?: boolean; onRename?: (mod: Mod, name: string) => void; children?: React.ReactNode
 }) {
   const category = mod && p.modDetails?.[mod.path]?.category
+  const verdict = useVerdict(mod?.path ?? '') // Broken or May crash, as in the Library
   const [draft, setDraft] = useState<string | null>(null)
   const cancelled = useRef(false) // Esc: the blur that follows must not rename
   const canRename = Boolean(mod && onRename)
@@ -195,6 +219,7 @@ export function ModRow({ p, k, mod, onToggle, onRename, children }: {
             )}
           </span>}
       {!onToggle && mod?.enabled && <span className="mod-type-badge category-badge on-badge" title="This mod is on now">On</span>}
+      {verdict && <span className={`mod-type-badge broken-badge is-${verdict.kind}`} title={verdict.reason}>{verdict.kind === 'broken' ? 'Broken' : 'May crash'}</span>}
       <span className={`mod-type-badge category-badge ${typeClass(category)}`}>{category ?? 'Unknown'}</span>
       {onToggle && (mod
         ? <Switch size="sm" color="primary" checked={Boolean(mod.enabled)} title={mod.enabled ? `Turn ${k} off` : `Turn ${k} on`}

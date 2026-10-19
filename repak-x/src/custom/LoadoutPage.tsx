@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { save as pickSavePath } from '@tauri-apps/plugin-dialog'
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, Ellipsis, ImagePlus, Pencil, Plus, Search, X } from 'lucide-react'
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Ellipsis, Pencil, Plus, Search, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo } from './Loadouts'
 import { CardMedia, ModRow, OnDot, typeClass } from './loadoutBits'
@@ -233,8 +233,11 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
       </button>
 
       <div className="lp-top">
+        {/* The picture card holds both ways to fill it: click for an image, or its Generate previews button */}
         <CardMedia p={p} l={l} className="lp-media" onClick={onPickMedia} onRemoveImage={removeImage}
-          title={hasMedia ? 'Change image or video (or paste one)' : 'Add an image, GIF or video (or paste one)'} />
+          title={hasMedia ? 'Change image or video (or paste one)' : 'Add an image, GIF or video (or paste one)'}
+          generate={className => <GeneratePreviewsButton className={className} label="Generate previews" set={previewSetKey(l.id)} name={l.name} stopOnly
+            paths={mine.map(k => byKey.get(k)?.path).filter((x): x is string => Boolean(x))} />} />
         <div className="lp-info">
           <span className="lp-name-wrap">
             <input ref={nameRef} className="lp-name" value={name} title="Rename" aria-label="Loadout name" onChange={e => setName(e.target.value)} onBlur={commit}
@@ -266,9 +269,6 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
                 {!busy && present > 0 && <OnDot on={onNow} of={present} />}
               </span>
             </label>
-            <GeneratePreviewsButton className="lo-text-btn" label="Generate previews" set={previewSetKey(l.id)} name={l.name} stopOnly
-              paths={mine.map(k => byKey.get(k)?.path).filter((x): x is string => Boolean(x))} />
-            <button type="button" className="lo-text-btn" onClick={onPickMedia}><ImagePlus size={14} /> {hasMedia ? 'Change image' : 'Add image'}</button>
             <CaptureButton p={p} l={l} onUse={onSetMedia} />
             {/* The rest are occasional: one menu instead of a wrapping row of equal buttons */}
             <MoreMenu items={[

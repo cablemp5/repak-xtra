@@ -10,6 +10,7 @@ import NumberInput from './ui/NumberInput'
 import { toTagArray } from '../utils/tags'
 import { formatFileSize } from '../utils/format'
 import { useIsConflicting } from '../custom/conflicts' // repakxtra
+import { useVerdict } from '../custom/brokenMods' // repakxtra
 import { detectHeroesWithData } from '../utils/heroes'
 import { useHoverTextReveal } from '../hooks/useHoverTextReveal'
 import { FALLBACK_HERO_ID, resolveHeroImage, useHeroImages } from '../utils/heroImages'
@@ -150,6 +151,7 @@ const ModItem = memo(function ModItem({
     // repaints the row when they arrive, which `memo` would otherwise skip.
     useHeroImages()
     const conflicting = useIsConflicting(mod.path) && mod.enabled !== false // repakxtra: red Conflict badge, mods that are on (custom/conflicts.ts)
+    const verdict = useVerdict(mod.path) // repakxtra: Broken or May crash badge (custom/brokenMods.ts)
     const [isDeleteHolding, setIsDeleteHolding] = useState(false)
     const [isLeaving, setIsLeaving] = useState(false)
     const nameReveal = useHoverTextReveal(animationsEnabled)
@@ -499,6 +501,7 @@ const ModItem = memo(function ModItem({
                     )}
                     {/* repakxtra: on, and clashing with another enabled mod (same priority, same files) */}
                     {conflicting && <span className="mod-type-badge conflict-badge" title="Conflicts with another enabled mod: Check Conflicts shows which">Conflict</span>}
+                    {verdict && <span className={`mod-type-badge broken-badge is-${verdict.kind}`} title={verdict.reason}>{verdict.kind === 'broken' ? 'Broken' : 'May crash'}</span>}
                     {/* repakxtra: Project Galacta compatible mods (xtra_classify.rs) */}
                     {typeof modDetails?.mod_type === 'string' && /\[[^\]]*Project Galacta[^\]]*\]$/.test(modDetails.mod_type) && (
                         <span className="mod-type-badge pg-badge" title="Project Galacta compatible: pick it per skin in the Galacta Companion App">Galacta</span>

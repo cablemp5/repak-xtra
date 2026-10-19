@@ -2336,3 +2336,40 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
    upstream red the app sets inline */
 :root[data-theme="light"] { --accent-primary: #346bf1 !important; --accent-secondary: #346bf1 !important; }
 :root[data-theme="light"] .repakx-switch:not(.checked) .repakx-switch-track { background: rgba(0, 0, 0, 0.1) !important; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18) !important; }
+
+/* Loadout page picture card: empty, it says both ways to fill it ("Click to add an image, or paste one, or" over its
+   Generate previews button). The text lets clicks through to the card; only the button takes its own. With a picture,
+   the same button (Regenerate, or Stop while it runs) sits in the top left corner on hover. */
+.lo-media-cta { position: absolute; inset: 0; z-index: 1; pointer-events: none; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 6px; padding: 0 14px; text-align: center; color: var(--text-secondary); font-size: 12.5px; }
+.lo-media-cta > span { color: var(--text-primary); font-weight: 500; font-size: 13px; }
+.lo-media-cta small { font-size: 12px; }
+.lo-media:hover .lo-media-cta svg.lucide { color: var(--text-primary); }
+.lo-media-cta .lo-text-btn { pointer-events: auto; margin-top: 8px; background: var(--bg-darker) !important; }
+.lo-media-cta .lo-text-btn .bulk-num { color: var(--text-secondary); }
+.lo-media-gen { position: absolute; top: 8px; left: 8px; right: 44px; z-index: 2; display: flex; opacity: 0; transition: opacity 0.15s ease; }
+.lo-media:hover .lo-media-gen, .lo-media-gen:focus-within, .lo-media-gen.is-busy { opacity: 1; }
+.lo-media-chip { display: inline-flex !important; align-items: center; gap: 6px; min-width: 0; height: 28px !important; min-height: 0 !important;
+  padding: 0 10px !important; border-radius: 999px !important; font-size: 12px !important; font-weight: 500 !important; white-space: nowrap;
+  background: rgba(10, 11, 14, 0.72) !important; border: 1px solid rgba(255, 255, 255, 0.12) !important; color: var(--text-primary) !important; }
+.lo-media-chip:hover { background: rgba(10, 11, 14, 0.9) !important; }
+.lo-media-chip svg.lucide { width: 13px !important; height: 13px !important; }
+.lo-media-chip .bulk-num, .lo-media-chip .setup-chip { display: none; }
+
+/* Broken and May crash on a mod row (custom/brokenMods.ts): amber, not red. Broken is filled, May crash outlined */
+.mod-type-badge.broken-badge { color: #f0b54a !important; border: 1px solid color-mix(in srgb, #f0b54a, transparent 55%) !important; cursor: help; font-size: 11px !important; font-weight: 600 !important; }
+[data-theme="light"] .mod-type-badge.broken-badge, [data-theme="light"] .mod-state-filter button.is-broken, [data-theme="light"] .mod-state-filter button.is-broken .mod-state-count { color: #9a6200 !important; }
+.mod-type-badge.broken-badge.is-broken { background: color-mix(in srgb, #f0b54a, transparent 85%) !important; }
+.mod-type-badge.broken-badge.is-risky { background: transparent !important; }
+.mod-state-filter button.is-broken { color: #f0b54a; }
+.mod-state-filter button.is-broken .mod-state-count { color: #f0b54a; }
+
+/* An animation card's speaker (bottom right): mutes that loadout's emote sound on hover, the clip still plays. Shown on
+   hover like the arrows, and always while muted so the state is visible */
+.lo-media-mute { position: absolute; right: 6px; bottom: 6px; z-index: 2; width: 28px; height: 28px !important; min-height: 0 !important; padding: 0 !important;
+  display: grid; place-items: center; background: transparent !important; border: none !important; color: var(--text-primary) !important;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.85)); opacity: 0; transition: opacity 0.15s ease, color 0.15s ease; }   /* no circle: the icon alone, shaded to read on any image */
+.lo-media:hover .lo-media-mute, .lo-media-mute:focus-visible, .lo-media-mute.is-muted { opacity: 1; }
+.lo-media-mute.is-muted { color: var(--text-secondary) !important; }
+.lo-media-mute:hover { color: #fff !important; }
+.lo-media-mute svg.lucide { width: 16px !important; height: 16px !important; }

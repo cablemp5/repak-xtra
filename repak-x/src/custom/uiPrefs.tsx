@@ -19,26 +19,43 @@ const PREFS = [
   { key: 'mod-size', label: 'Show mod file sizes' }, // shown in Settings > Mods view (ModSizeSetting), not Optional controls
 ] as const
 
-const SCALES = [0.9, 1, 1.1, 1.25, 1.4, 1.5]
-const SCALE_KEY = 'repakxtra.uiScale'
+// 100% draws the app at the webview's 120% (what was the old 125% step, a little smaller); the rest scale from there.
+// A new key: everyone starts at the new 100%, the old repakxtra.uiScale is no longer read.
+const SCALES = [75, 90, 100, 110, 125]
+const BASE_ZOOM = 1.2
+const SCALE_KEY = 'repakxtra.uiScale2'
 const HIDE_TAGS_KEY = 'repakxtra.hideTags' // tags show by default, so this one stores the hidden state
 const SOUND_KEY = 'repakxtra.sound'   // on by default: '0' = off
 const MOTION_KEY = 'repakxtra.motion' // on by default: '0' = off
-const MINIMAL_TOASTS_KEY = 'repakxtra.minimalToasts' // off by default: '1' = on
+const MINIMAL_TOASTS_KEY = 'repakxtra.minimalToasts' // off by default: '1' = on (shown as Fewer pop-ups)
+const DEFAULTS_KEY = 'repakxtra.defaults.v2'
+const PLAIN_INSTALL_KEY = 'repakxtra.install.plain' // off by default: '1' = the install dialog starts without a loadout
 const TAGS_OFF_KEY = 'repakxtra.tagsOff' // tag features hidden by default: '0' = shown
 
 const storageKey = (key: string) => `repakxtra.show.${key}`
 const listeners = new Set<() => void>()
 
 const isOn = (key: string) => savedItem(storageKey(key)) === '1'
-const getScale = () => Number(savedItem(SCALE_KEY)) || 1
+const getScale = () => { const s = Number(savedItem(SCALE_KEY)); return SCALES.includes(s) ? s : 100 }
 const tagsHidden = () => savedItem(HIDE_TAGS_KEY) === '1'
 const soundOn = () => savedItem(SOUND_KEY) !== '0'
 const motionOn = () => savedItem(MOTION_KEY) !== '0'
 const minimalToasts = () => savedItem(MINIMAL_TOASTS_KEY) === '1'
 const tagsOff = () => savedItem(TAGS_OFF_KEY) !== '0'
+/** Settings > Install mods without a loadout: the install dialog opens on Install without a loadout. */
+export const installsPlain = () => savedItem(PLAIN_INSTALL_KEY) === '1'
 
-/** Minimal toasts: an everyday confirmation (success or info with nothing to click, not a progress toast) is skipped.
+/** Settings that changed their default reach installs made before the change, once: opening the details panel on a
+ *  click and hold to delete both start off (App applies this to the loaded settings and saves it). */
+export function newDefaultsOnce<T extends { autoOpenDetails?: boolean; holdToDelete?: boolean }>(settings: T): T {
+  if (localStorage.getItem(DEFAULTS_KEY)) return settings
+  localStorage.setItem(DEFAULTS_KEY, '1')
+  const next = { ...settings, autoOpenDetails: false, holdToDelete: false }
+  invoke('save_app_settings', { settings: next }).catch(e => console.warn('[uiPrefs] new defaults not saved', e))
+  return next
+}
+
+/** Fewer pop-ups (stored as minimal toasts): an everyday confirmation (success or info with nothing to click, not a progress toast) is skipped.
  *  Errors, warnings, crash reports, update offers and deletions (they carry Undo) still show. */
 export const quietToast = (t: { color?: string; action?: unknown; isLoading?: boolean }) =>
   minimalToasts() && (!t.color || t.color === 'success' || t.color === 'primary' || t.color === 'default') && !t.action && !t.isLoading
@@ -51,7 +68,7 @@ const apply = () => {
   document.documentElement.setAttribute('data-motion', motionOn() ? 'on' : 'off')
   MotionGlobalConfig.skipAnimations = !motionOn()
   setSoundOn(soundOn())
-  getCurrentWebview().setZoom(getScale()).catch(e => console.warn('[uiPrefs] zoom failed', e))
+  getCurrentWebview().setZoom(getScale() / 100 * BASE_ZOOM).catch(e => console.warn('[uiPrefs] zoom failed', e))
 }
 apply()
 // Ctrl + / Ctrl - step through the scales, Ctrl 0 resets to 100%
@@ -61,7 +78,7 @@ window.addEventListener('keydown', e => {
   const step = e.key === '=' || e.key === '+' ? 1 : e.key === '-' || e.key === '_' ? -1 : e.key === '0' ? 0 : null
   if (step === null) return
   e.preventDefault()
-  const next = step === 0 ? 1 : SCALES[Math.max(0, Math.min(SCALES.length - 1, (i < 0 ? SCALES.indexOf(1) : i) + step))]
+  const next = step === 0 ? 100 : SCALES[Math.max(0, Math.min(SCALES.length - 1, (i < 0 ? SCALES.indexOf(100) : i) + step))]
   update(SCALE_KEY, String(next))
 })
 // Other windows (Asset Explorer, VFX Updater) pick up changes made in Settings
@@ -181,25 +198,25 @@ function TagsToggleButton({ tags, mods, onChanged, alert }: {
 }
 
 export default function UiSettings() {
-  const snapshot = useSyncExternalStore(subscribe, () => PREFS.map(p => (isOn(p.key) ? 1 : 0)).join('') + '|' + getScale() + '|' + soundOn() + motionOn() + minimalToasts())
+  const snapshot = useSyncExternalStore(subscribe, () => PREFS.map(p => (isOn(p.key) ? 1 : 0)).join('') + '|' + getScale() + '|' + soundOn() + motionOn() + minimalToasts() + installsPlain())
   const scale = getScale()
   return (
     <>
       <div className="setting-section">
         <h3>UI scale</h3>
-        <p className="setting-subtext">UI scale, sound, motion, toasts, optional controls and file sizes apply right away; Save and Cancel cover the rest.</p>
+        <p className="setting-subtext">UI scale, sound, motion, pop-ups, installing, optional controls and file sizes apply right away; Save and Cancel cover the rest.</p>
         <div className="setting-group">
           <div className="mod-state-filter ui-scale" role="group" aria-label="UI scale">
             {SCALES.map(s => (
               <button key={s} type="button" aria-pressed={scale === s} onClick={() => update(SCALE_KEY, String(s))}>
-                {Math.round(s * 100)}%
+                {s}%
               </button>
             ))}
           </div>
         </div>
       </div>
       <div className="setting-section">
-        <h3>Sound, motion and toasts</h3>
+        <h3>Sound, motion and pop-ups</h3>
         <div className="setting-group">
           <div className="setting-item">
             <Checkbox checked={soundOn()} onChange={(checked: boolean) => { update(SOUND_KEY, checked ? '1' : '0'); if (checked) unlockSound() }}>
@@ -211,13 +228,24 @@ export default function UiSettings() {
             <Checkbox checked={motionOn()} onChange={(checked: boolean) => update(MOTION_KEY, checked ? '1' : '0')}>
               <span>Animations</span>
             </Checkbox>
-            <p className="setting-subtext">Page slides, menus, switches and toasts. Off stops every animation in the app, including the extra animations below.</p>
+            <p className="setting-subtext">Page slides, menus, switches and pop-ups. Off stops every animation in the app, including the extra animations below.</p>
           </div>
           <div className="setting-item">
             <Checkbox checked={minimalToasts()} onChange={(checked: boolean) => update(MINIMAL_TOASTS_KEY, checked ? '1' : '0')}>
-              <span>Minimal toasts</span>
+              <span>Fewer pop-ups</span>
             </Checkbox>
-            <p className="setting-subtext">No toasts for everyday actions like switching loadouts, installing mods or generating previews. Errors, warnings, updates and deletions you can undo still show.</p>
+            <p className="setting-subtext">Skips the small messages that pop up in the bottom corner after everyday actions like switching loadouts, installing mods or generating previews. Errors, warnings, updates and deletions you can undo still pop up.</p>
+          </div>
+        </div>
+      </div>
+      <div className="setting-section">
+        <h3>Installing mods</h3>
+        <div className="setting-group">
+          <div className="setting-item">
+            <Checkbox checked={installsPlain()} onChange={(checked: boolean) => update(PLAIN_INSTALL_KEY, checked ? '1' : '0')}>
+              <span>Install mods without a loadout by default (classic Repak X installer)</span>
+            </Checkbox>
+            <p className="setting-subtext">The install window starts on Install without a loadout. Save as a loadout stays one click away in it.</p>
           </div>
         </div>
       </div>
