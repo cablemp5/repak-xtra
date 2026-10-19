@@ -783,6 +783,8 @@ html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { d
 /* not set up yet (no SigeonLoader.asi): amber, apart from Off (gray) and on (blue). Opens custom/SigeonSetup.tsx, four
    numbered steps in the guided setup's rows */
 .sigeon-btn.is-unset .sigeon-state { color: #f5a524; }
+.ss-modal { width: min(640px, 94vw) !important; max-height: 90vh; display: flex; flex-direction: column; }
+.ss-modal .modal-header { border-bottom: 1px solid var(--panel-border); }   /* its steps are the guided setup's rows (.fr-steps) */
 /* 20+ loadouts must not push Filters off screen */
 .loadouts { max-height: 34vh; overflow-y: auto; flex-shrink: 0; }
 
@@ -1515,12 +1517,50 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .sg-leave { margin-right: auto; font-size: 13px; color: var(--text-primary); }
 .sg-save { min-width: 88px; }
 
-/* ---------- Setup panel (SetupPanel.tsx): the header button and its changelog dialog; the setup windows' own rules are
-   under "One setup design" at the end ---------- */
+/* ---------- Setup panel (SetupPanel.tsx): the signature bypass and Project Galacta, one card each ---------- */
 .su-btn { position: relative; gap: 6px !important; }
 .su-dot { background: var(--accent-primary); --dot-ring: var(--bg-darkest); }   /* the header behind it */
-.su-changelog .modal-header { padding: 16px 20px !important; border-bottom: 1px solid var(--panel-border); align-items: flex-start; }
+.su-modal { width: min(760px, 94vw) !important; max-width: none !important; max-height: 90vh; display: flex; flex-direction: column; padding: 0 !important; }
+.su-modal .modal-header, .su-changelog .modal-header { padding: 16px 20px !important; border-bottom: 1px solid var(--panel-border); align-items: flex-start; }
 .su-sub { margin: 4px 0 0; font-size: 12.5px; color: var(--text-secondary); }
+.su-body { overflow-y: auto; padding: 18px 20px 22px !important; display: flex; flex-direction: column; gap: 14px; }
+.su-card { border: 1px solid var(--panel-border); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.su-card-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.su-card h3 { margin: 0 0 4px; font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.su-card p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }
+.su-card a, .su-facts a { color: color-mix(in srgb, var(--accent-primary), white 30%); cursor: pointer; text-decoration: none; }
+.su-card a:hover { text-decoration: underline; }
+.su-chip { flex: none; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--bg-lighter); color: var(--text-secondary); }
+.su-chip.is-installed { color: var(--text-primary); }
+.su-chip.is-update, .su-chip.is-missing, .su-chip.is-partial, .su-chip.is-other { color: #fff; background: color-mix(in srgb, var(--accent-primary), transparent 25%); }
+.su-note, .su-meta { font-size: 12.5px; color: var(--text-secondary); }
+.su-meta code { font: 12px var(--font-mono); color: var(--text-primary); }
+.su-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.su-actions .btn-primary { width: auto !important; flex: none; }
+.su-main { min-width: 96px; }
+.su-safety-btn { margin-right: auto; }   /* on the left: the buttons after it go right */
+.su-safety-btn .su-caret { transition: transform 150ms ease; }
+.su-safety-btn[aria-expanded="true"] .su-caret { transform: rotate(90deg); }
+.su-spin { animation: su-spin 0.9s linear infinite; }
+@keyframes su-spin { to { transform: rotate(360deg); } }
+.su-confirm { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: 12.5px; color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent-primary), transparent 88%); border: 1px solid color-mix(in srgb, var(--accent-primary), transparent 65%); }
+.su-confirm span { margin-right: auto; }
+.su-safety { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; border-top: 1px solid var(--panel-border); }   /* a line between the buttons and the facts */
+.su-facts { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.su-facts li { font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); padding-left: 14px; position: relative; }
+.su-facts li::before { content: ''; position: absolute; left: 2px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--text-primary); }
+.su-facts b { color: var(--text-primary); font-weight: 500; }   /* a step up from the sentence, not a shout */
+.su-files { width: 100%; border-collapse: collapse; font-size: 12px; }
+.su-files th { text-align: left; font-weight: 500; color: var(--text-secondary); padding: 6px 8px; border-bottom: 1px solid var(--panel-border); }
+.su-files td { padding: 6px 8px; color: var(--text-secondary); border-bottom: 1px solid var(--panel-border); }
+.su-files code { font: 11.5px var(--font-mono); }
+.su-files td:first-child code { color: var(--text-primary); }   /* only the file names in white, like the bold lead-ins */
+.su-hash { display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent; color: inherit; font: inherit; cursor: pointer; padding: 0; }
+.su-hash svg { color: var(--text-secondary); }
+.su-options { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; padding-top: 12px; border-top: 1px solid var(--panel-border); }
+.su-option { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-secondary); }
+.su-option .custom-dropdown-container { width: 210px; }
 .su-changelog-overlay { z-index: 10001; }
 .su-changelog { width: min(560px, 92vw) !important; max-height: 80vh; display: flex; flex-direction: column; padding: 0 !important; }
 .su-changelog .modal-body { overflow-y: auto; padding: 16px 20px !important; }
@@ -1531,16 +1571,19 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .su-notes .su-bullet { padding-left: 14px; position: relative; }
 .su-notes .su-bullet::before { content: ''; position: absolute; left: 3px; top: 9px; width: 4px; height: 4px; border-radius: 50%; background: var(--text-secondary); }
 .su-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px !important; border-top: 1px solid var(--panel-border); }
+.su-options .repakx-checkbox, .su-options .repakx-checkbox-label { font-size: 12.5px !important; font-weight: 500; color: var(--text-secondary); }
 
 /* Library right-click menu: Check Conflicts icon neutral like the rest of the menu; loadouts already holding the mod */
 /* Check Conflicts: the outline layers icon at the row's end, like the submenu chevrons (it was a filled blob) */
 .context-menu .warning-icon-small { fill: none !important; color: var(--text-secondary) !important; margin-left: auto; }
 .context-menu-item.is-disabled { opacity: 0.5; cursor: default; }
 .context-menu-item .lo-menu-check { margin-left: auto; color: var(--text-secondary); }
-/* Setup and changelog: every button one height (the primary ones were 44px beside 32px ones) */
+/* Setup and changelog: every button one height (the primary ones were 44px beside 32px ones); a closed "Is it safe?"
+   adds no gap under the buttons */
 .su-modal .btn-primary, .su-changelog .btn-primary, .sg-modal .btn-primary {
   height: 32px !important; min-height: 0 !important; padding: 0 16px !important; font-size: 13px !important; border-radius: var(--quiet-radius) !important;
   display: inline-flex !important; align-items: center; justify-content: center; }
+.su-card > .t-acc-panel[data-open="false"] { margin-top: -12px; }
 
 /* ---------- Settings: one rhythm (24px between sections, 10px under a heading, 6px between controls), a control's
    description right under its label, a note under a heading flush with it, the scale picker as wide as its buttons ---------- */
@@ -1645,6 +1688,43 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 
 
 
+/* First-launch setup (FirstRun.tsx): numbered steps that turn into checks, an action on the right of each */
+.fr-modal { width: min(720px, 94vw) !important; max-width: none !important; max-height: 90vh; display: flex; flex-direction: column; padding: 0 !important; }
+.fr-head { padding: 18px 22px !important; border-bottom: 1px solid var(--panel-border); align-items: flex-start; }
+.fr-head h2 { margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+.fr-steps { list-style: none; margin: 0; overflow-y: auto; padding: 4px 22px !important; display: flex; flex-direction: column; }
+.fr-modal .fr-steps, .ss-modal .fr-steps { gap: 0; }   /* .modal-body's 2rem section gap stacked on every step's padding */
+.fr-step { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--panel-border); }
+.fr-step.is-wide { align-items: start; }   /* the drop card under the title: the number stays level with the title */
+.fr-step:last-child { border-bottom: none; }
+/* A step's marker: its number as plain gray text, a plain green check once done (Setup's part mark), no circle */
+.fr-num { width: 22px; height: 22px; display: grid; place-items: center; font-size: 13px; font-weight: 600;
+  color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.fr-step.is-done .fr-num { color: #3ecf6e; }
+.fr-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.fr-text h3 { margin: 0; font-size: 14.5px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
+.fr-text p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }
+.fr-text code { font: 12px var(--font-mono); color: var(--text-primary); }
+.fr-step.is-done .fr-text h3 { color: var(--text-secondary); }
+.fr-optional { padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--text-secondary); background: var(--bg-lighter); }
+.fr-action { display: flex; align-items: center; gap: 8px; }
+.fr-text .fr-drop { margin-top: 8px; }
+.fr-action .btn-primary, .fr-foot .btn-primary { width: auto !important; flex: none; min-width: 84px; height: 32px !important; min-height: 0 !important;
+  padding: 0 14px !important; font-size: 13px !important; border-radius: 8px !important; }   /* the same size as the quiet buttons beside them */
+.fr-drop { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 14px 16px; border-radius: 10px;
+  border: 1px dashed color-mix(in srgb, var(--accent-primary), transparent 45%); background: color-mix(in srgb, var(--accent-primary), transparent 94%);
+  font-size: 12.5px; color: var(--text-primary); }
+.fr-drop-text { width: 100%; }
+/* A step's number or check sits in the middle of its row; its text right under the title */
+.fr-text { gap: 2px; }
+.fr-text h3 { line-height: 20px; }
+.fr-step.is-wide .fr-num { align-self: center; }   /* in the middle of its row like every other step's, the drop card included */
+.fr-drop-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; }
+.fr-drop a { color: color-mix(in srgb, var(--accent-primary), white 30%); cursor: pointer; margin-left: auto; }
+.fr-drop a:hover { text-decoration: underline; }
+.fr-foot { padding: 14px 22px !important; border-top: 1px solid var(--panel-border); display: flex; align-items: center; gap: 10px; }
+.fr-foot .su-sub { margin: 0 auto 0 0; }
+
 /* Preview kit: download progress and what the PC check found missing (Setup and the first-launch setup) */
 .su-progress { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .su-progress-track { flex: 1; height: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); overflow: hidden; position: relative; }
@@ -1656,7 +1736,24 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .su-problems { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .su-problems li { font-size: 12.5px; line-height: 1.5; color: var(--text-primary); padding-left: 14px; position: relative; }
 .su-problems li::before { content: ''; position: absolute; left: 2px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: #e3a008; }
+.su-note.is-ok { color: var(--text-primary); }
+.su-guided { margin-left: auto; margin-right: -4px; white-space: nowrap; }   /* 8px to Copy setup report, like the cards' buttons (the header's gap is 12px) */
+.su-report { margin-right: 4px; white-space: nowrap; }
+/* Setup header: the title block, Guided setup and the close button share one center line */
+.su-modal .modal-header { align-items: center; gap: 12px; padding: 14px 22px 18px !important; }   /* 4px less on top: the title sits in the 32px button row, so the visible space above and below matches */
+.su-modal .modal-header h2 { margin: 0; }
 .su-modal .modal-close, .fr-modal .modal-close, .cp-modal .modal-close { display: grid; place-items: center; width: 32px; height: 32px; line-height: 1; flex: none; }
+/* Setup layout (2026-10-18): the subtitle on its own line under the title row; every card is its head, then a body between
+   hairlines (Galacta's and the preview kit's parts, no box inside the card), then its actions from the left; the
+   startup-check switch, which covers two cards, in a footer under all of them. Sigeon's setup shares .su-card: all here
+   is scoped to this window */
+.su-modal .modal-header { flex-wrap: wrap; row-gap: 4px; }
+.su-modal .modal-header > .su-sub { flex-basis: 100%; margin: 0; }
+.su-modal .su-parts { border: none; border-radius: 0; border-top: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); }
+.su-modal .su-part { padding: 8px 0; }
+.su-modal .su-actions .su-option { gap: 8px; }
+.su-modal-foot { padding: 12px 22px; border-top: 1px solid var(--panel-border); }
+.su-modal-foot .repakx-checkbox-label { font-size: 12.5px !important; color: var(--text-secondary); }
 
 /* Renaming a mod in the Library: a quiet field the size of the name, the accent only as a thin focus line */
 .mod-rename-input { height: 26px; padding: 0 8px !important; font-weight: 500 !important; font-size: inherit !important;
@@ -1741,11 +1838,39 @@ html[data-motion="off"] .t-matrix i { animation: none; opacity: 0.6; }
 /* Grid / compact / list: wider targets */
 .view-switcher .btn-icon-small { width: 40px !important; min-width: 40px !important; }
 
+/* Setup cards: the status line on the left, its buttons on the right, one row */
+.su-ok { color: #3ecf6e; }
+
 /* Test and dev copies (custom/version.ts BUILD): the logo's "xtra" is green for a test build (build.ps1 -Test) and
    amber for the live dev copy (dev.ps1), instead of blue */
 :root[data-build="test"] .wm { --wm-base: #12c85a; --wm-c1: #b6ff2e; --wm-c2: #00d4b0; --wm-c3: #00e070; }   /* lime, teal and green: no dark base, it muddied the mesh */
 :root[data-build="dev"] .wm { --wm-base: #ff7a00; --wm-c1: #ffd000; --wm-c2: #ff9500; --wm-c3: #ff5a14; }
 
+/* Setup > Mod previews: its two parts (the kit, Blender) as rows with a check when present, their links on the right;
+   a quiet trust line while Blender is missing or installing */
+.su-parts { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; border: 1px solid var(--panel-border); border-radius: 10px; }
+.su-part { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 8px 12px; }
+.su-part + .su-part { border-top: 1px solid var(--panel-border); }
+.su-part-mark { flex: none; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; border: 1.5px dashed rgba(255, 255, 255, 0.22); }
+.su-part-mark.is-ok { border: none; background: color-mix(in srgb, #3ecf6e, transparent 80%); color: #3ecf6e; }
+.su-part-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.su-part-text b { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.su-part-text span { font-size: 12.5px; color: var(--text-secondary); }
+.su-part-links { flex: none; display: inline-flex; gap: 14px; font-size: 12.5px; }
+.su-link, .su-trust a { cursor: pointer; color: color-mix(in srgb, var(--accent-primary), white 30%) !important; }
+.su-link { display: inline; height: auto !important; min-height: 0 !important; padding: 0 !important; border: none !important;
+  background: none !important; font: inherit !important; }
+.su-link:hover:not(:disabled), .su-trust a:hover { text-decoration: underline; }
+.su-link:disabled { opacity: 0.45; cursor: default; }
+/* The Blender note (SetupPanel BlenderTrust): one quiet "Is Blender safe? ›" line, the note opening under it */
+.su-trust { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.su-trust-btn { display: inline-flex; align-items: center; gap: 6px; height: auto !important; min-height: 0 !important; padding: 2px 0 !important;
+  border: none !important; background: transparent !important; cursor: pointer; font-size: 12px !important; font-weight: 500 !important; color: var(--text-secondary) !important; }
+.su-trust-btn:hover { color: var(--text-primary) !important; }
+.su-trust-btn svg.lucide:first-child { flex: none; color: #3ecf6e; }
+.su-trust-btn .su-caret { transition: transform 150ms ease; }
+.su-trust-btn[aria-expanded="true"] .su-caret { transform: rotate(90deg); }
+.su-trust p { margin: 0; padding: 4px 0 0 19px; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }   /* under the words, past the shield */
 
 /* Details panel: a hero with forms shows each form's preview side by side */
 .mod-preview-frame.has-forms { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; width: 100%; aspect-ratio: auto; }
@@ -1872,6 +1997,13 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
 /* Capture dialog: the + between keys in the step text's color (the dialog's steps are one color) */
 .cp-modal .key-separator { color: var(--text-primary); }
 
+/* ---------- batch 2, group 2: Setup ---------- */
+/* A part's mark: a plain green check beside its name when present, an empty ring when not (no filled or dashed disc) */
+.su-part-mark { align-self: center; width: 16px !important; height: 16px !important; border: none !important; border-radius: 0 !important;
+  background: none !important; display: grid; place-items: center; }
+.su-part-mark:not(.is-ok)::before { content: ""; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.28); }
+.su-part-mark.is-ok { color: #3ecf6e; }
+.su-part { gap: 10px !important; }
 /* ---------- batch 2, group 2: install panel ---------- */
 /* The four options as a 2 x 2 grid of tiles, each tinted with its own color again (Obfuscation sky blue, Hybrid green,
    Legacy amber, Send to Repak the app's blue), on = a stronger tint and its switch in that color; the Library's small
@@ -1927,6 +2059,8 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
 .install-actions .install-loadout .repakx-checkbox-label, .install-actions .install-loadout .repakx-checkbox-label span { font-size: 13px !important; font-weight: 500 !important; }
 /* Small icon buttons: the app's 36px button floor would make them tall pills */
 .install-mod-card .add-tag-btn, .imp-btn-new-folder { min-height: 0 !important; padding: 0 !important; }
+/* Setup card descriptions: no single word left alone on the last line */
+.su-card p { text-wrap: pretty; }
 
 /* ---------- batch 2, group 3: the conflicts screen (custom/ConflictsPanel.tsx), built like Setup ---------- */
 .cf-modal { width: min(720px, 92vw) !important; max-width: none !important; max-height: 86vh; display: flex; flex-direction: column; padding: 0 !important; }
@@ -2219,93 +2353,3 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
    upstream red the app sets inline */
 :root[data-theme="light"] { --accent-primary: #346bf1 !important; --accent-secondary: #346bf1 !important; }
 :root[data-theme="light"] .repakx-switch:not(.checked) .repakx-switch-track { background: rgba(0, 0, 0, 0.1) !important; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18) !important; }
-
-/* ---------- One setup design (2026-10-18, round 2): the welcome screen (FirstRun.tsx), Setup (SetupPanel.tsx) and the
-   Sigeon setup (SigeonSetup.tsx) are one kind of window: a header (title, its buttons, the close button, then the
-   subtitle on a line of its own), rows of SetupPanel's Step, a footer. A step is [mark | title, description, state |
-   its buttons], then `more` (Is it safe?, Setup's detail lines) at the full width under the text and the buttons, so a
-   button never sits beside a long block and every row ends on one right edge. Buttons: blue only for the main action
-   of an unfinished required step (and Done), quiet bordered for every other button, accent text links for a detail
-   line's small actions. Spacing: 22px window padding, 16px above and below a step, 14px between columns, 8px between
-   blocks and between buttons ---------- */
-.fr-modal, .su-modal { width: min(760px, 94vw) !important; max-width: none !important; display: flex; flex-direction: column; padding: 0 !important;
-  max-height: min(90vh, calc(100vh - 2 * 44px)); }   /* clear of the 32px title bar and the 36px log bar however short the window */
-.fr-modal .modal-header, .su-modal .modal-header { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 4px;
-  padding: 18px 22px !important; border-bottom: 1px solid var(--panel-border); }
-.fr-modal .modal-header h2, .su-modal .modal-header h2 { margin: 0 auto 0 0; font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
-.fr-modal .modal-header > .su-sub, .su-modal .modal-header > .su-sub { flex-basis: 100%; margin: 0; }
-.su-guided, .su-report { white-space: nowrap; }
-.su-modal .modal-header .lo-text-btn svg { color: var(--text-secondary); }   /* like the app header's buttons */
-/* the 8px scrollbar's room is kept even when nothing scrolls, so opening "Is it safe?" never moves the buttons: 14px
-   padding plus that 8px puts them on the header's 22px edge either way */
-.fr-steps { list-style: none; margin: 0; overflow-y: auto; scrollbar-gutter: stable; padding: 0 14px 0 22px !important; display: flex; flex-direction: column; gap: 0 !important; }
-
-.fr-step { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; column-gap: 14px; row-gap: 6px; align-items: start;
-  padding: 16px 0; border-bottom: 1px solid var(--panel-border); }
-.fr-step:last-child { border-bottom: none; }
-/* the mark and the buttons center on the title's 32px line, the buttons' own height */
-.fr-num { width: 26px; height: 26px; margin-top: 3px; border-radius: 50%; display: grid; place-items: center; font-size: 12.5px; font-weight: 700;
-  color: var(--text-primary); border: 1px solid var(--panel-border); background: var(--bg-lighter); font-variant-numeric: tabular-nums; }
-.fr-step.is-done .fr-num { color: #fff; background: var(--accent-primary); border-color: var(--accent-primary); }
-.fr-text { display: flex; flex-direction: column; min-width: 0; }
-.fr-text h3 { margin: 0; min-height: 32px; display: flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 700; line-height: 1.25; color: var(--text-primary); }
-.fr-text p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }   /* no one-word last lines */
-.fr-text .fr-state { margin-top: 2px; color: var(--text-primary); }   /* the step's state, under what it is */
-.fr-text code { font: 12px var(--font-mono); color: var(--text-primary); overflow-wrap: anywhere; }
-.fr-optional { padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--text-secondary); background: var(--bg-lighter); }
-.fr-action { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-.fr-action .lo-text-btn > svg { display: none; }   /* step buttons are words only (the shared desktop shortcut button brings an icon) */
-.fr-action .su-install-status { max-width: 220px; height: 32px; }
-.fr-action .btn-primary, .fr-foot .btn-primary { width: auto !important; flex: none; min-width: 84px; height: 32px !important; min-height: 0 !important;
-  padding: 0 14px !important; font-size: 13px !important; border-radius: var(--quiet-radius) !important; }
-.fr-more { grid-column: 2 / -1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-.fr-text a, .su-trust-body a { color: color-mix(in srgb, var(--accent-primary), white 30%); cursor: pointer; text-decoration: none; }
-.fr-text a:hover, .su-trust-body a:hover { text-decoration: underline; }
-.su-link { display: inline; height: auto !important; min-height: 0 !important; padding: 0 !important; border: none !important; background: none !important;
-  font: inherit !important; cursor: pointer; color: color-mix(in srgb, var(--accent-primary), white 30%) !important; }
-.su-link:hover:not(:disabled) { text-decoration: underline; }
-.su-link:disabled { opacity: 0.45; cursor: default; }
-
-/* "Is it safe?" and the loader license: a gray line with a chevron, plain sentences under it (no bullets, no table, no
-   green: safety is stated, not endorsed) */
-.su-trust { margin: 0; }
-.su-trust-btn { display: inline-flex; align-items: center; gap: 6px; height: auto !important; min-height: 0 !important; padding: 2px 0 !important;
-  border: none !important; background: transparent !important; cursor: pointer; font-size: 12.5px !important; font-weight: 500 !important; color: var(--text-secondary) !important; }
-.su-trust-btn:hover { color: var(--text-primary) !important; }
-.su-trust-btn .su-caret { transition: transform 150ms ease; }
-.su-trust-btn[aria-expanded="true"] .su-caret { transform: rotate(90deg); }
-.su-trust-body { display: flex; flex-direction: column; gap: 8px; padding: 6px 0 4px 19px; }   /* under the words, past the shield */
-.su-trust-body.is-flush { padding-left: 0; }
-/* sentences keep a reading measure; the file lines run to the row's edge, their Copy links on the buttons' edge */
-.su-trust-body p { max-width: 620px; margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--text-secondary); text-wrap: pretty; }
-.su-files { margin: 2px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.su-files li { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 14px; align-items: baseline; font-size: 12.5px; line-height: 1.5; }
-.su-files li > code { font: 12px var(--font-mono); color: var(--text-primary); overflow-wrap: anywhere; }
-.su-files li > span { grid-column: 1 / -1; color: var(--text-secondary); }
-.su-files li > span code { font: 11.5px var(--font-mono); }
-.su-license { margin: 0; max-height: 160px; overflow: auto; padding: 10px 12px; border: 1px solid var(--panel-border); border-radius: var(--quiet-radius);
-  font: 11.5px/1.5 var(--font-mono); color: var(--text-secondary); white-space: pre-wrap; }
-
-/* Setup's detail lines (SetupPanel Line): one kind of line under every step, its label, its value, then the links that
-   act on it at the row's right edge */
-.su-lines { display: flex; flex-direction: column; border-top: 1px solid var(--panel-border); }
-.su-line { display: grid; grid-template-columns: 104px minmax(0, 1fr) auto; column-gap: 14px; align-items: baseline; padding: 8px 0; font-size: 12.5px; line-height: 1.5; }
-.su-line + .su-line { border-top: 1px solid var(--panel-border); }
-.su-line-label { color: var(--text-secondary); }
-.su-line-value { min-width: 0; color: var(--text-primary); }
-.su-line-value code { font: 12px var(--font-mono); }
-.su-line-links { display: flex; gap: 14px; white-space: nowrap; }
-.su-line .custom-dropdown-container { width: 200px; height: auto; }
-/* the theme's background shorthand drops CustomDropdown's own chevron image: a 32px field like the buttons, its chevron
-   drawn back at the end in the secondary gray */
-.su-line .custom-dropdown-trigger { height: 32px !important; min-height: 0 !important; padding: 0 12px !important; }
-.su-line .custom-dropdown-trigger::after { content: ''; flex: none; width: 12px; height: 12px; margin-left: auto; background: var(--text-secondary);
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") center / contain no-repeat; }
-.su-confirm { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; border-radius: var(--quiet-radius); border: 1px solid var(--panel-border);
-  background: var(--field-bg); font-size: 12.5px; color: var(--text-primary); }
-.su-confirm span { margin-right: auto; }
-
-.fr-foot { display: flex; align-items: center; gap: 8px; padding: 14px 22px !important; border-top: 1px solid var(--panel-border); }
-.fr-foot .su-sub { margin: 0 auto 0 0; }
-.su-modal-foot { padding: 14px 22px; border-top: 1px solid var(--panel-border); }
-.su-modal-foot .repakx-checkbox-label { font-size: 12.5px !important; color: var(--text-secondary); }
