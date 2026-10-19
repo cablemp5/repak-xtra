@@ -1,14 +1,8 @@
 // repakxtra: the app's name as its logo: "repak" white in Geist 800 (the README banner's letters), "xtra" in Geist Mono
-// 600 spaced like Geist, filled with a mesh gradient: long tilted blobs of three bright colors over a bright base, blurred into each other and warped by
-// soft noise so the colors flow in streaks instead of sitting in round spots. While the app works (mods loading or
-// installing, previews generating) and on hover, the blobs drift, turn and stretch, so the flow moves; never with
-// Animations off or reduced motion. Colors live in theme.css (.wm): the light theme draws "repak" in ink with a darker
-// first color, dev and test copies use orange and green.
-import { useId } from 'react'
-import { usePreviewBatch } from './previews'
-
-type Glyph = [number, string]   // [x offset, path] in font units (baseline at 0, y up)
-const REPAK: Glyph[] = [
+// 600 spaced like Geist, in one solid color. Colors live in theme.css (.wm): the light theme draws "repak" in ink, dev and
+// test copies use orange and green. The earlier mesh gradient fill is kept in WordmarkMesh.tsx and wordmark-mesh.css.
+export type Glyph = [number, string]   // [x offset, path] in font units (baseline at 0, y up)
+export const REPAK: Glyph[] = [
   [0, 'M56 0V540H244L250 370L236 372Q251 462 284 501Q317 540 377 540H423V386H375Q332 386 304 378Q277 369 264 348Q250 327 250 289V0Z'],
   [395, 'M321 -12Q234 -12 169 23Q104 58 68 122Q32 185 32 270Q32 355 68 418Q104 481 169 516Q234 552 321 552Q408 552 472 516Q535 479 569 412Q603 345 603 254V220H232Q234 171 260 148Q285 124 325 124Q354 124 374 135Q395 146 404 174L596 164Q574 77 500 32Q426 -12 321 -12ZM232 324H409Q408 371 384 396Q360 420 321 420Q284 420 260 394Q235 368 232 324Z'],
   [1000, 'M56 -150V540H245L249 427L236 432Q256 490 300 521Q344 552 404 552Q476 552 526 516Q576 480 602 416Q628 353 628 270Q628 188 602 124Q575 60 524 24Q474 -12 402 -12Q364 -12 331 2Q298 17 274 44Q249 71 237 108L250 112V-150ZM339 127Q381 127 405 166Q429 204 429 270Q429 336 405 374Q381 413 339 413Q311 413 291 397Q271 381 260 349Q250 317 250 270Q250 223 260 191Q271 159 291 143Q311 127 339 127Z'],
@@ -17,61 +11,23 @@ const REPAK: Glyph[] = [
 ]
 // "xtra" in Geist Mono SemiBold (600, from vercel/geist-font's static TTF), each letter placed so the space between the
 // letters' ink is Geist 800's (k|x 20, x|t 12, t|r 63, r|a 14 units): proportional spacing, not the mono grid
-const XTRA: Glyph[] = [
+export const XTRA: Glyph[] = [
   [2845, 'M40 0L233 274L50 534L180 534L301 355L419 534L551 534L369 272L560 0L429 0L301 193L172 0L40 0Z'],
   [3371, 'M375 0Q289 0 248 39.5Q207 79 207 160L207 438L46 438L46 534L207 534L207 659L325 659L325 534L528 534L528 438L325 438L325 169Q325 96 396 96L528 96L528 0L375 0Z'],
   [3884, 'M78 0L78 96L210 96L210 438L78 438L78 534L300 534L307 430Q332 534 435 534L552 534L552 435L442 435Q328 435 328 312L328 96L493 96L493 0L78 0Z'],
   [4402, 'M226 -12Q176 -12 136 6Q96 24 72 57.5Q48 91 48 137Q48 204 90.5 242Q133 280 213 297L380 332Q380 447 283 447Q237 447 212 425Q187 403 179 367L56 374Q71 451 130 498.5Q189 546 281 546Q390 546 444 488Q498 430 498 326L498 127Q498 107 505.5 99.5Q513 92 528 92L554 92L554 0Q548 -1 534.5 -2.5Q521 -4 507 -4Q411 -4 391 78Q372 38 328.5 13Q285 -12 226 -12ZM247 80Q312 80 346 114.5Q380 149 380 208L380 244L247 216Q205 207 188 190Q171 173 171 144Q171 114 191 97Q211 80 247 80Z'],
 ]
-const LEFT = 40, TOP = 725, W = 4950, H = 890   // the viewBox: x from 40, 725 units above the baseline to 165 below
-/** The mesh's box (viewBox units) around "xtra" (its letters span about x 2800 to 4950, y 58 to 737) */
-const BOX = { x: 2700, y: 0, w: 2350, h: 900 }
-/** The blobs: [center x, center y, half width, half height, tilt in degrees, color 1 to 3]. Long and tilted against
- *  each other, so after the blur and the warp they cross as streaks; each letter gets a different mix. */
-const BLOBS: [number, number, number, number, number, number][] = [
-  [2820, 160, 360, 120, -28, 1],
-  [3120, 600, 380, 110, 22, 2],
-  [3400, 220, 340, 120, 35, 3],
-  [3700, 700, 360, 110, -18, 1],
-  [3960, 150, 380, 120, -30, 2],
-  [4200, 520, 340, 110, 40, 3],
-  [4480, 180, 360, 120, 18, 1],
-  [4720, 660, 360, 120, -26, 2],
-  [4980, 300, 300, 120, 30, 3],
-]
+export const LEFT = 40, TOP = 725, W = 4950, H = 890   // the viewBox: x from 40, 725 units above the baseline to 165 below
 
-/** `height` in px; `busy`: the app is working (the header passes its mods-loading state; preview runs count anywhere). */
-export default function Wordmark({ height, busy = false, className = '' }: { height: number; busy?: boolean; className?: string }) {
-  const previews = usePreviewBatch()   // every hook on every render: `busy || usePreviewBatch()` skipped it while busy
-  const live = busy || previews !== null
-  const id = useId().replace(/:/g, '')   // the filter and the mask need ids unique on the page (header and Credits at once)
+/** `height` in px */
+export default function Wordmark({ height, className = '' }: { height: number; className?: string }) {
   const glyphs = (items: Glyph[]) => items.map(([x, d]) => <path key={x} transform={`translate(${x} 0)`} d={d} />)
   const letters = `translate(${-LEFT} ${TOP}) scale(1 -1)`
   return (
-    <svg className={`wm${live ? ' is-live' : ''} ${className}`} viewBox={`0 0 ${W} ${H}`} height={height} width={(height * W) / H}
+    <svg className={`wm ${className}`} viewBox={`0 0 ${W} ${H}`} height={height} width={(height * W) / H}
       role="img" aria-label="repakxtra">
-      <defs>
-        {/* Blur the blobs into each other, then bend the result along low, stretched noise: flowing streaks */}
-        <filter id={`${id}f`} filterUnits="userSpaceOnUse" x={BOX.x} y={BOX.y} width={BOX.w} height={BOX.h} colorInterpolationFilters="sRGB">
-          <feGaussianBlur stdDeviation="80" result="soft" />
-          <feTurbulence type="fractalNoise" baseFrequency="0.0022 0.0045" numOctaves="2" seed="7" result="noise" />
-          <feDisplacementMap in="soft" in2="noise" scale="460" xChannelSelector="R" yChannelSelector="G" />
-        </filter>
-        <mask id={`${id}m`} maskUnits="userSpaceOnUse" x={BOX.x} y={BOX.y} width={BOX.w} height={BOX.h}>
-          <g transform={letters} fill="#fff">{glyphs(XTRA)}</g>
-        </mask>
-      </defs>
       <g className="wm-repak" transform={letters}>{glyphs(REPAK)}</g>
-      <g mask={`url(#${id}m)`}>
-        <rect className="wm-base" x={BOX.x} y={BOX.y} width={BOX.w} height={BOX.h} />
-        <g filter={`url(#${id}f)`}>
-          {BLOBS.map(([cx, cy, rx, ry, tilt, c], i) => (
-            <g key={i} transform={`translate(${cx} ${cy}) rotate(${tilt})`}>
-              <ellipse className={`wm-blob wm-blob${i + 1} wm-c${c}`} rx={rx} ry={ry} />
-            </g>
-          ))}
-        </g>
-      </g>
+      <g className="wm-xtra" transform={letters}>{glyphs(XTRA)}</g>
     </svg>
   )
 }
