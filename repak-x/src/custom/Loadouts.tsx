@@ -13,6 +13,7 @@ import { isTyping } from './hotkeys'
 import { plural } from './modName'
 import { OnDot } from './loadoutBits'
 import { savedItem } from './storageCarryOver'
+import { type Verdict, verdictOf } from './brokenMods'
 
 export type LoadoutProps = {
   mods: Mod[]            // every installed mod
@@ -166,6 +167,8 @@ export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], ve
   switching = true
   try {
     const wasOn = readLoadouts().filter(o => o.id !== l.id && isActive(o, p.mods))
+    // Mods that will not work or may crash, read before the switch renames their files
+    const flagged = verb === 'on' ? changes.map(m => verdictOf(m.path)).filter((v): v is Verdict => Boolean(v)) : []
     const failed = await flipMods(changes)
     await p.reload()
     const flipped = new Set(changes.filter(m => !failed.includes(m)).map(m => m.path))
@@ -180,6 +183,10 @@ export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], ve
       if (alsoOff.length) p.alert.info(`${alsoOff.map(o => o.name).join(', ')} also off`, `${alsoOff.length === 1 ? 'It shares' : 'They share'} mods with ${l.name}.`)
       return
     }
+    const risky = flagged.filter(v => v.kind === 'risky').map(v => modKey(v.path))
+    const broken = flagged.filter(v => v.kind === 'broken').map(v => modKey(v.path))
+    if (risky.length) p.alert.warning('May crash the game', `${risky.join(', ')} ${risky.length === 1 ? 'is a Blueprint mod' : 'are Blueprint mods'} from before the last game update. If the game crashes, turn ${risky.length === 1 ? 'it' : 'them'} off and look for an updated version.`, { duration: 15000 })
+    if (broken.length) p.alert.warning('Will not work in this game version', `${broken.join(', ')} ${broken.length === 1 ? 'replaces' : 'replace'} game files an update renamed or removed.`, { duration: 15000 })
     const mine = looksOf(p, l)
     for (const o of wasOn) {
       const both = [...looksOf(p, o)].filter(h => mine.has(h))

@@ -18,6 +18,7 @@ export type Loadout = {
   mediaType?: 'image' | 'video'
   mediaRev?: number       // set when a file is stored in IndexedDB (loadoutMedia.ts); bumps on change
   hotkey?: number         // 1 to 9: Ctrl+N toggles it, set in its page's More menu; unpinned loadouts have no hotkey
+  muted?: boolean         // its animation previews play without their emote sound on hover (the card's speaker button)
 }
 
 const STORAGE = 'repakxtra.loadouts'
@@ -286,6 +287,20 @@ export const placed = (list: Loadout[], id: string, group: string, beside?: { id
   else { const last = rest.map(l => inGroup(l, moved.label)).lastIndexOf(true); at = last >= 0 ? last + 1 : rest.length }
   return [...rest.slice(0, at), moved, ...rest.slice(at)]
 }
+/** The Hero view's drag: the loadout moved before or after another one, its collection kept. Pure. */
+export const movedBeside = (list: Loadout[], id: string, beside?: { id: string; after: boolean }) => {
+  const from = list.findIndex(l => l.id === id)
+  if (from < 0 || !beside || beside.id === id) return list
+  const rest = list.filter(l => l.id !== id)
+  const at = rest.findIndex(l => l.id === beside.id)
+  if (at < 0) return list
+  const to = at + (beside.after ? 1 : 0)
+  return [...rest.slice(0, to), list[from], ...rest.slice(to)]
+}
+export const moveLoadout = (id: string, beside?: { id: string; after: boolean }) => {
+  const list = readLoadouts(), next = movedBeside(list, id, beside)
+  if (next !== list) writeLoadouts(next)
+}
 export const placeLoadout = (id: string, group: string, beside?: { id: string; after: boolean }) => {
   const list = readLoadouts(), next = placed(list, id, group, beside)
   if (next !== list) writeLoadouts(next)
@@ -351,6 +366,10 @@ window.addEventListener('keydown', e => {
 })
 
 if (import.meta.env.DEV) {
+  { const L = (id: string, label = 'Other') => ({ id, name: id, label, scope: [], on: [] })
+    const list = [L('a', 'X'), L('b'), L('c', 'Y'), L('d')]
+    console.assert(movedBeside(list, 'd', { id: 'b', after: false }).map(l => l.id).join() === 'a,d,b,c', 'hero drag: moves before its neighbour')
+    console.assert(movedBeside(list, 'a', { id: 'd', after: true }).map(l => l.label).join() === 'Other,Y,Other,X', 'hero drag: collections kept') }
   { // drag and drop on Home
     const L = (id: string, label: string) => ({ id, name: id, label, scope: [], on: [] }) as Loadout
     const order = (xs: Loadout[]) => xs.map(x => `${x.id}:${x.label}`).join()

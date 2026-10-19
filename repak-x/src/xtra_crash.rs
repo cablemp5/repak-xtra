@@ -25,7 +25,7 @@ pub fn xtra_newest_crash() -> Option<NewestCrash> {
 /// One spelling per game asset: the UE path (`Game/...`) without its extension or object name, lower case.
 /// "/Game/Marvel/X/SK_A.SK_A", "Marvel/Content/Marvel/X/SK_A.uasset" and "../../../Marvel/Content/Marvel/X/SK_A.uexp"
 /// all become "game/marvel/x/sk_a".
-fn asset_key(raw: &str) -> String {
+pub(crate) fn asset_key(raw: &str) -> String {
     let path = crate::asset_explorer::normalize_asset_path(raw.trim());
     let (dir, name) = path.rsplit_once('/').map(|(d, n)| (Some(d), n)).unwrap_or((None, path.as_str()));
     let name = name.split('.').next().unwrap_or(name);
@@ -42,7 +42,7 @@ fn holds_asset(files: &[String], asset: &str) -> bool {
 }
 
 /// A mod's file list, on or off: the .utoc next to it (IoStore) or the .pak itself.
-fn mod_files(path: &std::path::Path) -> Vec<String> {
+pub(crate) fn mod_files(path: &std::path::Path) -> Vec<String> {
     let utoc = path.with_extension("utoc");
     if utoc.exists() {
         return crate::utoc_utils::read_utoc(&utoc).into_iter().map(|e| e.file_path).collect();

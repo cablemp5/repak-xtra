@@ -78,14 +78,16 @@ function restingRect(el: HTMLElement, zoom: number) {
  *  Within the card's own collection it takes that card's slot (the others shift by one); coming from another, it goes
  *  before or after that card by which half the pointer is on, or after the last one once past it. undefined: over its
  *  own slot or outside every collection, so the spot stays. */
-function spotAt(x: number, y: number, dragId: string, zoom: number): Spot | undefined {
+function spotAt(x: number, y: number, dragId: string, zoom: number, ownGroupOnly: boolean): Spot | undefined {
   let section: HTMLElement | null = null
   for (const el of document.elementsFromPoint(x, y)) {
     if (el.closest('.lo-drag-ghost')) continue
-    if (el.closest('[data-drop-new]')) return { newCollection: true }
+    if (el.closest('[data-drop-new]')) return ownGroupOnly ? undefined : { newCollection: true }
     if ((section = el.closest<HTMLElement>('[data-group]'))) break
   }
   if (!section) return undefined
+  // Hero view: a card's hero comes from its mods, so it only moves within its own hero's row
+  if (ownGroupOnly && !section.querySelector(`.lo-card[data-loadout="${CSS.escape(dragId)}"]`)) return undefined
   const group = section.dataset.group!
   const cards = [...section.querySelectorAll<HTMLElement>('.lo-card[data-loadout]')]
   const others = cards.filter(c => c.dataset.loadout !== dragId)
@@ -109,17 +111,19 @@ function spotAt(x: number, y: number, dragId: string, zoom: number): Spot | unde
 const same = (a: Spot | null, b: Spot | null) => JSON.stringify(a) === JSON.stringify(b)
 const motionOff = () => document.documentElement.dataset.motion === 'off' || matchMedia('(prefers-reduced-motion: reduce)').matches
 
-/** onMove: the spot changed (re-render the order); onDrop: released on a spot, or null when cancelled. */
-export function useCardDrag({ zoom, scroller, onMove, onDrop }: {
+/** onMove: the spot changed (re-render the order); onDrop: released on a spot, or null when cancelled. ownGroupOnly:
+ *  a card stays in its own group (the Hero view), reordered there only. */
+export function useCardDrag({ zoom, scroller, onMove, onDrop, ownGroupOnly = false }: {
   zoom: number; scroller: HTMLElement | null; onMove: (id: string, spot: Spot | null) => void; onDrop: (id: string, spot: Spot | null) => void
+  ownGroupOnly?: boolean
 }) {
   const [dragId, setDragId] = useState<string | null>(null)
-  const live = useRef({ zoom, scroller, onMove, onDrop })
-  live.current = { zoom, scroller, onMove, onDrop }
+  const live = useRef({ zoom, scroller, onMove, onDrop, ownGroupOnly })
+  live.current = { zoom, scroller, onMove, onDrop, ownGroupOnly }
 
   const onPointerDown = (e: React.PointerEvent<HTMLElement>, id: string) => {
     // Controls on the card keep their own job; the image and the free parts of the card pick it up
-    if (e.button !== 0 || dragId || (e.target as Element).closest('input, textarea, label, .lo-icon, .lo-expand, .lo-media-arrow, [role="switch"]')) return
+    if (e.button !== 0 || dragId || (e.target as Element).closest('input, textarea, label, .lo-icon, .lo-expand, .lo-media-arrow, .lo-media-mute, [role="switch"]')) return
     const card = e.currentTarget
     const startX = e.clientX, startY = e.clientY
     let x = startX, y = startY, started = false, spot: Spot | null = null, frame = 0, dirty = false
@@ -141,7 +145,7 @@ export function useCardDrag({ zoom, scroller, onMove, onDrop }: {
       ghost.style.transform = `translate(${gx}px, ${gy}px) rotate(${tilt.toFixed(2)}deg)`
     }
     const track = () => {
-      const s = spotAt(x, y, id, live.current.zoom)
+      const s = spotAt(x, y, id, live.current.zoom, live.current.ownGroupOnly)
       if (s === undefined || same(s, spot)) return
       const forward = spot && 'index' in spot && 'index' in s && s.group === spot.group ? s.index > spot.index : true
       spot = s
@@ -190,12 +194,17 @@ export function useCardDrag({ zoom, scroller, onMove, onDrop }: {
     /** The copy glides onto the card's slot (where it landed, or back where it was), then the card shows again. */
     const land = (made: Spot | null) => {
       const g = ghost
+      let done = false
       const finish = () => {
-        g?.remove()
+        if (done) return
+        done = true
         // Every card on screen has entered by now: un-hiding them must not start their entrance
         document.querySelectorAll<HTMLElement>('.lo-card').forEach(c => { c.dataset.in = '1' })
         document.documentElement.classList.remove('is-dragging-card')
         setDragId(null)
+        // The card shows again first and the copy over it goes once that is on screen: removed in the same frame, a
+        // quick drop showed neither for a frame (the flicker)
+        requestAnimationFrame(() => requestAnimationFrame(() => g?.remove()))
       }
       if (!g || motionOff()) { finish(); return }
       requestAnimationFrame(() => requestAnimationFrame(() => { // after the new order is on screen
@@ -211,14 +220,19 @@ export function useCardDrag({ zoom, scroller, onMove, onDrop }: {
         g.style.transform = `translate(${r.left}px, ${r.top}px)`
         g.classList.remove('is-lifted')
         g.classList.add(made ? 'is-landing' : 'is-returning')
-        setTimeout(finish, LAND)
+        // Done when the glide is: a timer of the same length can fire a frame early, with the copy short of the slot
+        g.addEventListener('transitionend', e => { if (e.target === g && e.propertyName === 'transform') finish() })
+        setTimeout(finish, LAND + 120)
       }))
     }
-    const end = (drop: boolean) => {
+    const detach = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
       window.removeEventListener('pointercancel', cancel)
       window.removeEventListener('keydown', esc, true)
+    }
+    const end = (drop: boolean) => {
+      detach()
       if (!started) return
       cancelAnimationFrame(frame)
       // The release's click must not open the card's page (nor play the click sound)

@@ -73,7 +73,7 @@ export default function FilterPanel(p: Props) {
   )
 
   return (
-    <div className="filter-panel">
+    <div className="filter-panel" data-tour="filters">
       <div className="fp-head">
         <span className="fp-title">Filters</span>
         {active > 0 && (
