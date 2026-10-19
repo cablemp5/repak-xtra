@@ -2,7 +2,7 @@
 // Settings > General. A shortcut already on the desktop is never replaced, so the button then says it is there.
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { Check, MonitorUp } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { useAlert } from '../components/AlertHandler'
 
 /** Whether repakxtra.lnk is on the desktop (null while asking), and the button that makes it. */
@@ -34,7 +34,7 @@ export function ShortcutButton({ s, className = 'lo-text-btn' }: { s: ReturnType
     ? <span className="shortcut-done"><Check size={14} /> On the desktop</span>
     : <button type="button" className={className} disabled={s.exists === null || s.busy} onClick={s.create}
         title="Puts a repakxtra shortcut on your desktop (an existing one is never replaced)">
-        <MonitorUp size={14} /> {s.busy ? 'Creating…' : 'Create desktop shortcut'}
+        {s.busy ? 'Creating…' : 'Create desktop shortcut'}
       </button>
 }
 

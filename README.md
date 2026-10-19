@@ -147,7 +147,7 @@ want until it says **All resolved**.
 | --- | --- |
 | `F1` | Show every shortcut |
 | `L` | Switch between Loadouts and the Library |
-| `Ctrl+1` to `Ctrl+9` | Turn the loadout with that number in the Library sidebar on or off |
+| `Ctrl+1` to `Ctrl+9` | Turn the loadout pinned to that number on or off (pick it in More > Hotkey on the loadout's page) |
 | `Ctrl+G` | Launch the game |
 | `Ctrl+O` | Install PAKs or archives |
 | `S` | Cycle Sigeon through Off and the installed configs |
@@ -226,7 +226,7 @@ switch, then launch it again with `Ctrl+G`), and while Repak X is closed (both c
 
 Rendered previews need the preview kit and [Blender](https://www.blender.org/download/) (free).
 **Setup > Mod previews** downloads the newest kit from GitHub and installs Blender if it's missing; a kit zip picked
-with **From file…** or dropped on the window installs too. It shows where your kit came from and checks GitHub for
+with **Install from file…** or dropped on the window installs too. It shows where your kit came from and checks GitHub for
 updates. Without either, **Capture in game** on a loadout's page uses a screenshot of the hero instead.
 
 </details>
