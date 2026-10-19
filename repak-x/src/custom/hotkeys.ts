@@ -50,7 +50,7 @@ export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
     title: 'Loadouts and Sigeon',
     items: [
       { keys: ['L'], action: 'Switch between Loadouts and Library' },
-      { keys: ['Ctrl', '1–9'], action: 'Turn loadout 1–9 on/off (sidebar numbers)' },
+      { keys: ['Ctrl', '1–9'], action: 'Turn the loadout pinned to 1–9 on/off (its page: More > Hotkey)' },
       { keys: ['F2'], action: 'Rename the focused loadout card' },
       { keys: ['Ctrl', 'V'], action: 'Paste an image onto the card under the mouse' },
       { keys: ['Ctrl', 'Scroll'], action: 'Change the card size on Loadouts' },

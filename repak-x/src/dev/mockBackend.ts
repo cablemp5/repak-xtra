@@ -198,7 +198,10 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         return 'C:\\Program Files\\Blender Foundation\\Blender 5.2\\blender.exe'
       })()
       case 'set_game_path': if (fresh) data.gamePath = String(args?.path ?? ''); return String(args?.path ?? '')
-      case 'auto_detect_game_path': if (fresh) data.gamePath = freshGame; return freshGame
+      // localStorage 'mock.noGame' = '1': the search finds nothing (an Epic install or a moved folder), like the backend's error
+      case 'auto_detect_game_path':
+        if (localStorage.getItem('mock.noGame') === '1') throw 'Could not auto-detect Marvel Rivals installation'
+        if (fresh) data.gamePath = freshGame; return freshGame
       case 'previews_doctor': return localStorage.getItem('mock.doctor') === 'fail'
         ? { ok: false, problems: ["The game's Paks folder was not found (REPAKXTRA_PAKS is not set)."] } : { ok: true, problems: [] }
       // Capture: the game counts as open while window.__mockGameRunning is set; captures fail (no game to picture)

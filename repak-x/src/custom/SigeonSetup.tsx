@@ -1,6 +1,7 @@
 // repakxtra: Sigeon V2 setup, opened from the header while Sigeon reads "not configured" (no SigeonLoader.asi in the
-// Sigeon folder). Where to buy it, the signature bypass it loads through and the folder its files stay in; the editor
-// takes over from there (a config and its license key).
+// Sigeon folder). Four numbered steps, the guided setup's own rows (FirstRun.tsx Step: a check once done, the action on
+// the right): where to buy it, the signature bypass it loads through, the folder its files stay in, then the editor
+// (a config and its license key).
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
@@ -8,13 +9,19 @@ import { ExternalLink, FolderOpen, SlidersHorizontal } from 'lucide-react'
 import { open as pickFolder } from '@tauri-apps/plugin-dialog'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import type { useAlert } from '../components/AlertHandler'
+import { Step } from './FirstRun'
 
 type Storage = { path: string; default: boolean; loader: boolean }
 type Bypass = { state: 'installed' | 'disabled' | 'partial' | 'other' | 'missing' }
 
 const STORE = 'https://oinkerhub.com/CABLE'
-const BYPASS_LABEL: Record<Bypass['state'], string> = {
-  installed: 'Installed', disabled: 'Off', partial: 'Incomplete', other: 'Different version', missing: 'Not installed',
+/** What the bypass step says in each state: the state itself, then what to do */
+const BYPASS_TEXT: Record<Bypass['state'], string> = {
+  installed: 'Installed. Sigeon loads through it, like every mod.',
+  disabled: 'Installed but turned off. Turn it on so Sigeon and your mods load.',
+  partial: 'Part of it is missing. Repair puts the missing files back.',
+  other: 'A different loader or bypass is installed. Setup shows it and can install the one that comes with repakxtra.',
+  missing: 'Sigeon loads through it, like every mod. It comes with repakxtra.',
 }
 
 export default function SigeonSetup({ alert, onClose, onEdit }: { alert: ReturnType<typeof useAlert>; onClose: () => void; onEdit: () => void }) {
@@ -57,6 +64,7 @@ export default function SigeonSetup({ alert, onClose, onEdit }: { alert: ReturnT
 
   const b = typeof bypass === 'object' ? bypass : null
   const ready = Boolean(storage?.loader)
+  const fixable = b?.state === 'missing' || b?.state === 'partial' || b?.state === 'disabled'
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -70,69 +78,35 @@ export default function SigeonSetup({ alert, onClose, onEdit }: { alert: ReturnT
           <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
 
-        <div className="modal-body su-body">
-          <section className="su-card">
-            <div className="su-card-head">
-              <div>
-                <h3><span className="ss-num">1</span>Get Sigeon V2</h3>
-                <p>Sold on Oinker Hub. You get a download with SigeonLoader.asi in it, and your license key by email.</p>
-              </div>
-            </div>
-            <div className="su-actions">
-              <button type="button" className="lo-text-btn" onClick={() => openUrl(STORE).catch(() => window.open(STORE, '_blank'))}>
-                <ExternalLink size={14} /> Buy it at oinkerhub.com/CABLE
-              </button>
-            </div>
-          </section>
+        <ol className="modal-body fr-steps ss-steps">
+          {/* Having the loader means it was bought: the store link steps aside */}
+          <Step n={1} done={ready} title="Get Sigeon V2"
+            action={!ready && <button type="button" className="lo-text-btn" onClick={() => openUrl(STORE).catch(() => window.open(STORE, '_blank'))}>
+              <ExternalLink size={14} /> Buy at oinkerhub.com/CABLE</button>}>
+            <p>{ready ? 'Downloaded. Your license key came by email.' : 'Sold on Oinker Hub. You get a download with SigeonLoader.asi in it, and your license key by email.'}</p>
+          </Step>
 
-          <section className="su-card">
-            <div className="su-card-head">
-              <div>
-                <h3><span className="ss-num">2</span>Signature bypass</h3>
-                <p>Sigeon loads through it, like every mod. It comes with repakxtra.</p>
-              </div>
-              <span className={`su-chip is-${b?.state ?? 'missing'}`}>{b ? BYPASS_LABEL[b.state] : bypass ? 'Unknown' : 'Checking…'}</span>
-            </div>
-            {typeof bypass === 'string' && <p className="su-note">{bypass}</p>}
-            {(b?.state === 'missing' || b?.state === 'partial' || b?.state === 'disabled') && (
-              <div className="su-actions">
-                <button type="button" className="btn-primary su-main" disabled={busy} onClick={() => fixBypass(b.state === 'disabled' ? 'enable' : 'install')}>
-                  {busy ? 'Working…' : b.state === 'disabled' ? 'Turn on' : b.state === 'partial' ? 'Repair' : 'Install'}
-                </button>
-              </div>
-            )}
-          </section>
+          <Step n={2} done={b?.state === 'installed'} title="Signature bypass"
+            action={fixable && <button type="button" className="btn-primary" disabled={busy} onClick={() => fixBypass(b!.state === 'disabled' ? 'enable' : 'install')}>
+              {busy ? 'Working…' : b!.state === 'disabled' ? 'Turn on' : b!.state === 'partial' ? 'Repair' : 'Install'}</button>}>
+            <p>{typeof bypass === 'string' ? `Could not check it: ${bypass}` : b ? BYPASS_TEXT[b.state] : 'Checking…'}</p>
+          </Step>
 
-          <section className="su-card">
-            <div className="su-card-head">
-              <div>
-                <h3><span className="ss-num">3</span>Sigeon folder</h3>
-                <p>Unzip the download into a folder you keep, like Desktop\Sigeon V2, and choose it. Leave the files there: repakxtra copies the loader and the config you pick into the game.</p>
-              </div>
-              <span className={`su-chip ${ready ? 'is-installed' : 'is-missing'}`}>{!storage ? 'Checking…' : ready ? 'Found' : 'Not found'}</span>
-            </div>
-            {storage && <p className="su-meta"><code>{storage.path}</code>{!ready && ' has no SigeonLoader.asi.'}</p>}
-            <div className="su-actions">
-              <button type="button" className={ready ? 'lo-text-btn' : 'btn-primary su-main'} onClick={choose}>
-                <FolderOpen size={14} /> {ready ? 'Change folder' : 'Choose folder'}
-              </button>
-            </div>
-          </section>
+          <Step n={3} done={ready} title="Sigeon folder"
+            action={<button type="button" className={ready ? 'lo-text-btn' : 'btn-primary'} onClick={choose}>
+              {ready ? 'Change…' : <><FolderOpen size={14} /> Choose folder</>}</button>}>
+            {ready
+              ? <p>Found in <code>{storage!.path}</code>. Leave the files there: repakxtra copies the loader and the config you pick into the game.</p>
+              : <p>Unzip the download into a folder you keep, like Desktop\Sigeon V2, and choose it.
+                  {storage && <> <code>{storage.path}</code> has no SigeonLoader.asi.</>}</p>}
+          </Step>
 
-          <section className="su-card">
-            <div className="su-card-head">
-              <div>
-                <h3><span className="ss-num">4</span>Config and license key</h3>
-                <p>Make a config in the editor, then paste your license key into it in Notepad. Your key stays in that file: repakxtra never shows it.</p>
-              </div>
-            </div>
-            <div className="su-actions">
-              <button type="button" className="btn-primary su-main" disabled={!ready} onClick={onEdit} title={ready ? undefined : 'Choose the Sigeon folder first'}>
-                <SlidersHorizontal size={14} /> Open the editor
-              </button>
-            </div>
-          </section>
-        </div>
+          <Step n={4} done={false} title="Config and license key"
+            action={<button type="button" className="btn-primary" disabled={!ready} onClick={onEdit}><SlidersHorizontal size={14} /> Open the editor</button>}>
+            <p>Make a config in the editor, then paste your license key into it in Notepad. Your key stays in that file: repakxtra never shows it.
+              {!ready && ' Choose the Sigeon folder first.'}</p>
+          </Step>
+        </ol>
       </motion.div>
     </div>
   )

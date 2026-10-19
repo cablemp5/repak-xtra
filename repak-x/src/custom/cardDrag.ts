@@ -38,6 +38,10 @@ export const snapshotCards = (root: HTMLElement | null) => new Map(movers(root).
  *  All positions are read first and written after, so the page is laid out once, not once per card. Inside the card
  *  grids, screen distances are divided by the cards' CSS zoom (custom/cardZoom.ts) to become the card's own units. */
 export function playFlip(root: HTMLElement | null, before: Map<string, DOMRect>, zoom: number) {
+  // Slides still running from the last change (a fast drag) stop first, so each card's new place is measured where it
+  // rests; measured mid-slide, the old slide's offset would count twice and the card would jump
+  const sliding = movers(root).filter(el => el.style.transition)
+  for (const el of sliding) el.style.transition = 'none'
   const moves = movers(root).flatMap(el => {
     const was = before.get(keyOf(el))
     if (!was) return []
@@ -45,6 +49,7 @@ export function playFlip(root: HTMLElement | null, before: Map<string, DOMRect>,
     const dx = (was.left - now.left) / z, dy = (was.top - now.top) / z
     return Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5 ? [] : [{ el, dx, dy }]
   })
+  for (const el of sliding) if (!moves.some(m => m.el === el)) el.style.transition = '' // it was already at rest
   if (!moves.length) return
   for (const { el, dx, dy } of moves) {
     el.style.transition = 'none'
@@ -196,7 +201,12 @@ export function useCardDrag({ zoom, scroller, onMove, onDrop }: {
       requestAnimationFrame(() => requestAnimationFrame(() => { // after the new order is on screen
         const slot = document.querySelector<HTMLElement>(`.lo-card[data-loadout="${CSS.escape(id)}"]`)
         if (!slot) { finish(); return }
+        // A quick drop finds the (hidden) slot still sliding to its place: it goes there at once, so the copy aims at
+        // where the card will rest, not at a point partway that the card would then jump from
+        slot.style.transition = 'none'
+        slot.style.transform = ''
         const r = slot.getBoundingClientRect()
+        slot.style.transition = ''
         g.style.transition = `transform ${LAND}ms var(--drag-slide-ease)`
         g.style.transform = `translate(${r.left}px, ${r.top}px)`
         g.classList.remove('is-lifted')

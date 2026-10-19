@@ -8,7 +8,7 @@ import { open as pick } from '@tauri-apps/plugin-dialog'
 import { motion } from 'framer-motion'
 import { Check, Upload } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
-import { BlenderTrust, DoctorProblems, InstallStatus, KitProgressBar } from './SetupPanel'
+import { DoctorProblems, InstallStatus } from './SetupPanel'
 import { isKitZip, usePreviewKit } from './previewKit'
 import { OFF_EXT } from './offFiles'
 import Wordmark from './Wordmark'
@@ -24,12 +24,13 @@ const openUrl = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.
 /** A fresh install: neither this screen nor the old tour was ever shown. */
 const firstLaunch = () => !localStorage.getItem(SEEN) && !localStorage.getItem('hasSeenOnboarding')
 
-function Step({ n, done, title, optional, wide, children, action }: {
+/** One numbered step: its number (a check once done), title, text and its action on the right. Sigeon's setup uses it too. */
+export function Step({ n, done, title, optional, wide, children, action }: {
   n: number; done: boolean; title: string; optional?: boolean; wide?: boolean; children: React.ReactNode; action?: React.ReactNode
 }) {
   return (
     <li className={`fr-step${done ? ' is-done' : ''}${wide ? ' is-wide' : ''}`}>
-      <span className="fr-num" aria-hidden="true">{done ? <Check size={14} /> : n}</span>
+      <span className="fr-num" aria-hidden="true">{done ? <Check size={16} strokeWidth={2.5} /> : n}</span>
       <div className="fr-text">
         <h3>{title}{optional && <span className="fr-optional">Optional</span>}</h3>
         {children}
@@ -111,7 +112,7 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
     : bypass?.state === 'disabled' ? 'Installed but turned off. Mods that need it will not load.'
     : bypass?.state === 'other' ? 'A different loader or bypass is installed. Installing keeps it next to the new one as a .repakxtra-backup file.'
     : bypass?.state === 'partial' ? 'Part of it is missing. Repair puts the missing files back.'
-    : 'Lets the game load mods that replace its files. Every mod needs it. It comes with repakxtra; Setup shows why it is safe.'
+    : 'Lets the game load mods that replace its files. Every mod needs it. It comes with repakxtra, and Setup shows why it is safe.'
   const kitReady = Boolean(kit.kit?.version && kit.kit?.blender)
   const noGame = !gamePath
 
@@ -122,7 +123,7 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
         <div className="modal-header fr-head">
           <div>
             <h2 className="fr-welcome">Welcome to <Wordmark height={17} /></h2>
-            <p className="su-sub">Get Marvel Rivals ready for mods. Steps 1 to 3 make mods work; close the game first.</p>
+            <p className="su-sub">Get Marvel Rivals ready for mods. Steps 1 to 3 make mods work. Close the game first.</p>
           </div>
           <button className="modal-close" onClick={close} aria-label="Close">×</button>
         </div>
@@ -133,7 +134,7 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
               ? <><button type="button" className="btn-primary" disabled={Boolean(busy)} onClick={() => run('find', onAutoDetect)}>{busy === 'find' ? 'Looking…' : 'Find it'}</button>
                   <button type="button" className="lo-text-btn" onClick={() => onBrowse()}>Browse…</button></>
               : <button type="button" className="lo-text-btn" onClick={() => onBrowse()}>Change</button>}>
-            <p>{noGame ? 'Not found yet. Find it looks in Steam and the usual places; Browse picks the folder yourself.' : <>Mods go to <code title={gamePath}>{where}</code></>}</p>
+            <p>{noGame ? 'Not found yet. Find it looks in your Steam libraries. Browse picks the folder yourself.' : <>Mods go to <code title={gamePath}>{where}</code></>}</p>
           </Step>
 
           <Step n={2} done={bypassOn} title="Install the signature bypass"
@@ -154,12 +155,10 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
           </Step>
 
           <Step n={4} done={kitReady && kit.doctor?.ok !== false} optional title="Mod previews"
-            action={kit.progress?.stage === 'unpack' || kit.progress?.stage === 'blender' ? <InstallStatus p={kit.progress} /> : !kitReady && <button type="button" className="lo-text-btn" disabled={Boolean(kit.busy) || (kit.latest === null && !kit.kit?.version)} onClick={() => kit.setUp()}
+            action={!kitReady && (kit.progress?.stage === 'unpack' || kit.progress?.stage === 'blender') ? <InstallStatus p={kit.progress} /> : !kitReady && <button type="button" className="lo-text-btn" disabled={Boolean(kit.busy) || (kit.latest === null && !kit.kit?.version)} onClick={() => kit.setUp()}
               title={kit.latest === null ? 'No kit published yet: drop a kit zip on the window' : 'Downloads the preview kit and installs Blender if it is missing (Windows asks for admin rights once)'}>
               {kit.busy === 'setup' ? 'Setting up…' : 'Set up previews'}</button>}>
             <p>{kitReady ? 'Ready. A loadout page renders its preview.' : `Renders of your mods and loadouts, and clips of animation mods. Downloads the preview kit${kit.latest?.size ? ` (${Math.round(kit.latest.size / 1048576)} MB)` : ''} and uses Blender (installed for you if missing).`}</p>
-            {!kitReady && kit.kit && !kit.kit.blender && <BlenderTrust />}
-            <KitProgressBar p={kit.progress} />
             <DoctorProblems d={kit.doctor} />
           </Step>
 
@@ -170,10 +169,9 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
 
           <Step n={6} done={false} wide title="Add your first mods">
             <div className="fr-drop">
-              <Upload size={18} aria-hidden="true" />
-              <span>Drop .pak, .pak.off, .zip, .rar or .7z files, or mod folders, anywhere on this window. Drop zips as they are: no need to extract.</span>
+              <span className="fr-drop-text">Drop .pak, .pak.off, .zip, .rar or .7z files, or mod folders, anywhere on this window. Drop zips as they are: no need to extract.</span>
               <span className="fr-drop-actions">
-                <button type="button" className="lo-text-btn" disabled={noGame} onClick={addFiles}>Choose files…</button>
+                <button type="button" className="lo-text-btn" disabled={noGame} onClick={addFiles}><Upload size={14} aria-hidden="true" /> Choose files…</button>
                 <a onClick={() => openUrl(NEXUS)}>Find mods on Nexus Mods</a>
               </span>
             </div>
