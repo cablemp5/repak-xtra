@@ -6,7 +6,7 @@
 // quiet link in the footer, not a checkbox to find.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, ChevronDown, Pencil, X } from 'lucide-react'
+import { Check, ChevronDown, ImagePlus, Pencil, Plus, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import Checkbox from '../components/ui/Checkbox'
 import CustomDropdown from '../components/CustomDropdown'
@@ -14,7 +14,7 @@ import bundledHeroes from '../data/character_data.json'
 import { type CharacterDataEntry, FALLBACK_HERO_ID, resolveHeroImage, useHeroImages } from '../utils/heroImages'
 import { commitInstallLoadout, setInstallDraft, startingLoadouts } from './installLoadout'
 import { optionsOn } from './InstallAdvanced'
-import { OTHER, useGroups, useLoadouts } from './loadoutStore'
+import { OTHER, addGroup, useGroups, useLoadouts } from './loadoutStore'
 import { useMediaUrl } from './loadoutMedia'
 import { installsPlain } from './uiPrefs'
 import { PreviewsUnavailable, usePreviewsAvailable } from './previews'
@@ -98,8 +98,9 @@ export function suggestName(mods: { name: string; character: string | null }[]) 
 }
 
 /** New loadout or Add to one, said in words above the name with a small chevron (a quiet menu, not a boxed dropdown).
- *  Esc closes the menu, not the dialog. */
-function TargetPicker({ options, value, onChange }: { options: { value: string; label: string }[]; value: string; onChange: (v: string) => void }) {
+ *  The menu has New loadout on top, then a line and the loadouts to add to (long names cut short). Esc closes the
+ *  menu, not the dialog. */
+function TargetPicker({ options, value, onChange }: { options: { value: string; label: string; name?: string }[]; value: string; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false)
   const wrap = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -127,11 +128,15 @@ function TargetPicker({ options, value, onChange }: { options: { value: string; 
       </button>
       {open && (
         <div className="sigeon-menu ip-target-menu" role="menu" aria-label="Which loadout">
-          {options.map(o => (
-            <button key={o.value} type="button" role="menuitemradio" aria-checked={o.value === value} className="sigeon-item"
-              onClick={() => { onChange(o.value); setOpen(false) }}>
-              <span>{o.label}</span>{o.value === value && <Check size={14} aria-hidden="true" />}
-            </button>
+          {options.map((o, i) => (
+            <div key={o.value} className="ip-target-group">
+              {i === 1 && <><div className="ip-target-sep" role="separator" /><div className="ip-target-head">Add to a loadout</div></>}
+              <button type="button" role="menuitemradio" aria-checked={o.value === value} className={`sigeon-item${i === 0 ? ' is-new' : ''}`}
+                title={o.name ?? o.label} onClick={() => { onChange(o.value); setOpen(false) }}>
+                {i === 0 && <Plus size={14} aria-hidden="true" />}
+                <span className="ip-target-name">{o.name ?? o.label}</span>{o.value === value && <Check size={14} aria-hidden="true" />}
+              </button>
+            </div>
           ))}
         </div>
       )}
@@ -157,6 +162,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
   const [name, setName] = useState<string | null>(null) // null: untouched, the suggested name shows (and follows the mods)
   const titleRef = useRef<HTMLInputElement>(null)
   const [label, setLabel] = useState(OTHER)
+  const [naming, setNaming] = useState(false) // the collection picker's + New collection: a name field in its place
   const [preview, setPreview] = useState(true)
   const [open, setOpen] = useState<Set<string>>(new Set()) // mod rows showing their details, by path
   // A second drop while open adds to the list: rows already here keep what was typed or switched
@@ -236,7 +242,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
     return () => window.removeEventListener('keydown', keys)
   })
 
-  const targetOptions = [{ value: NEW, label: 'New loadout' }, ...loadouts.map(l => ({ value: l.id, label: `Add to ${l.name}` }))]
+  const targetOptions = [{ value: NEW, label: 'New loadout' }, ...loadouts.map(l => ({ value: l.id, label: `Add to ${l.name}`, name: l.name }))]
   const hybridPair = mods.length > 1 && mods.some(m => m.contains_uassets !== false) && mods.some(m => m.contains_raw_assets && m.contains_uassets === false)
 
   return (
@@ -259,9 +265,9 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
               {existing && (existing.mediaRev || existing.image)
                 ? <Cover id={existing.id} rev={existing.mediaRev} image={existing.image} />
                 : <>
-                    {coverShape && <span className="ip-cover-shape" style={{ maskImage: `url(${coverShape})`, WebkitMaskImage: `url(${coverShape})` }} />}
+                    {willPreview && coverShape && <span className="ip-cover-shape" style={{ maskImage: `url(${coverShape})`, WebkitMaskImage: `url(${coverShape})` }} />}
                     <span className="ip-cover-note">
-                      {willPreview ? 'Preview renders after installing' : 'Add a picture on the loadout page'}
+                      {willPreview ? 'Preview renders after installing' : <><ImagePlus size={22} aria-hidden="true" /><span>Add a picture on the loadout page</span></>}
                     </span>
                   </>}
             </div>
@@ -281,12 +287,18 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
                 {count} {count === 1 ? 'mod' : 'mods'} installing into {where.length === 1 ? <>your <code className="ip-folder">{whereText}</code> folder</> : whereText}
               </>}</p>
               <div className="ip-settings">
+                {/* a div, not a label: a label passes a click on a menu item back to the trigger, which opened the list again */}
                 {into === NEW && (
-                  <label className="ip-setting">
+                  <div className="ip-setting">
                     <span>Collection</span>
-                    <CustomDropdown options={[...groups.map(g => ({ value: g, label: g })), { value: OTHER, label: 'No collection (Other)' }]}
-                      value={groups.includes(label) ? label : OTHER} onChange={(v: string) => setLabel(v)} />
-                  </label>
+                    {naming
+                      ? <input className="ip-coll-name" autoFocus placeholder="New collection" aria-label="New collection name" spellCheck={false}
+                          onBlur={e => { if (e.target.value.trim()) setLabel(addGroup(e.target.value)); setNaming(false) }}
+                          onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { e.currentTarget.value = ''; e.currentTarget.blur() } }} />
+                      : <CustomDropdown options={[...groups.map(g => ({ value: g, label: g })), { value: OTHER, label: 'No collection (Other)' }]}
+                          value={groups.includes(label) ? label : OTHER} onChange={(v: string) => setLabel(v)}
+                          onAddNew={() => setNaming(true)} addNewLabel="+ New collection" />}
+                  </div>
                 )}
                 {canGenerate
                   ? <Checkbox checked={preview} onChange={(v: boolean) => setPreview(v)} size="sm" color="primary" className="ip-check">
@@ -366,7 +378,6 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
                               </div>
                             )}
                           </div>
-                          <span className="ip-file" title={mod.path}>{mod.path.split(/[/\\]/).pop()}</span>
                           <div className="ip-switches">
                             <Switch size="sm" color="primary" checked={s.obfuscate} onChange={(v: boolean) => update(i, { obfuscate: v })}
                               className={`install-toggle obfuscate-toggle${s.obfuscate ? ' active' : ''}`} title="Encrypts the IoStore with the game's AES key to block FModel extraction">

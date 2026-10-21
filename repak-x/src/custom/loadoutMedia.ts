@@ -1,5 +1,5 @@
 // repakxtra: loadout card media (image, GIF or video) stored in IndexedDB, which takes files far
-// larger than localStorage can. One blob per loadout id.
+// larger than localStorage can. One blob per loadout id, and one for its in-game capture (captureKey).
 import { useEffect, useState } from 'react'
 
 const MAX_BYTES = 300 * 1024 * 1024
@@ -115,7 +115,8 @@ export async function sweepOrphanMedia(keep: Set<string>): Promise<void> {
   const store = tx.objectStore('media')
   return new Promise((resolve, reject) => {
     const req = store.getAllKeys()
-    req.onsuccess = () => { for (const k of req.result) if (!keep.has(String(k))) store.delete(k) }
+    // a loadout's capture ("<id>#capture") lives as long as its loadout
+    req.onsuccess = () => { for (const k of req.result) if (!keep.has(String(k).split('#')[0])) store.delete(k) }
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error ?? req.error)
     tx.onabort = () => reject(tx.error ?? req.error)

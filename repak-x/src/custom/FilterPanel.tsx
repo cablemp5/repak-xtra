@@ -1,8 +1,12 @@
 // repakxtra: sidebar filters as T3-style rows. Heroes with portrait and count (skins expand under
-// their hero), types with a color dot and count. Everything is multi-select; one Clear resets both.
+// their hero), types with a color dot and count, then Nexus (installed from Nexus Mods, nexusSource.tsx) and Project
+// Galacta with their logos. Everything is multi-select; one Clear resets both.
 import { useMemo, useState } from 'react'
 import { Check, ChevronRight } from 'lucide-react'
 import { resolveHeroImage, useHeroImages } from '../utils/heroImages'
+import { NEXUS_TYPE, sourceOf, useNexusVersion } from './nexusSource'
+import { useUiPref } from './uiPrefs'
+import nexusLogo from './logos/nexus.png'
 
 type Details = { character_name?: string; category?: string }
 type Props = {
@@ -17,6 +21,7 @@ type Props = {
 }
 
 const COLLAPSED_HEROES = 6
+const GALACTA = 'Project Galacta'   // an additional category the classifier appends ("Skin [Project Galacta]")
 const SPECIAL: Record<string, string> = { __multi: 'Multiple heroes', __generic: 'No Hero' }
 
 /** The Library title's filter line: a hero picked whole reads as just the hero; skins show only when picked one by one */
@@ -32,6 +37,9 @@ const toggled = (set: Set<string>, ids: string[]) => {
 
 export default function FilterPanel(p: Props) {
   useHeroImages()
+  const nexusVersion = useNexusVersion()
+  const showNexus = useUiPref('nexus')   // Settings > Optional controls hides the Nexus tag, and with it this filter
+  const nexusCount = useMemo(() => Object.keys(p.modDetails || {}).filter(path => sourceOf(path)).length, [p.modDetails, nexusVersion]) // eslint-disable-line react-hooks/exhaustive-deps
   const [showAllHeroes, setShowAllHeroes] = useState(false)
   const [openHero, setOpenHero] = useState<string | null>(null)
 
@@ -121,10 +129,14 @@ export default function FilterPanel(p: Props) {
         () => p.setSelectedCharacters(toggled(p.selectedCharacters, [s])), <span className="fp-avatar fp-avatar-empty" />))}
 
       <div className="fp-section-label">Types</div>
-      {p.availableCategories.map(cat =>
+      {p.availableCategories.filter(cat => cat !== GALACTA).map(cat =>
         row(cat, cat, typeCounts[cat], p.selectedCategories.has(cat),
           () => p.setSelectedCategories(toggled(p.selectedCategories, [cat])),
           <span className={`fp-dot ${cat.toLowerCase().replace(/\s+/g, '-')}-badge`} />))}
+      {showNexus && nexusCount > 0 && row(NEXUS_TYPE, NEXUS_TYPE, nexusCount, p.selectedCategories.has(NEXUS_TYPE),
+        () => p.setSelectedCategories(toggled(p.selectedCategories, [NEXUS_TYPE])), <img src={nexusLogo} alt="" className="fp-logo" />)}
+      {p.availableCategories.includes(GALACTA) && row(GALACTA, GALACTA, typeCounts[GALACTA], p.selectedCategories.has(GALACTA),
+        () => p.setSelectedCategories(toggled(p.selectedCategories, [GALACTA])), <i className="fp-logo pg-logo" aria-hidden="true" />)}
     </div>
   )
 }

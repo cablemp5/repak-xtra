@@ -3,7 +3,7 @@
 // view (header tabs, or L). On = its mods on, Off = its mods off; other mods and loadouts are never touched.
 import { type CSSProperties, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useStableCallback } from '../hooks/useStableCallback'
-import { ChevronDown, ChevronUp, FolderPlus, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, FolderPlus, Pencil, Plus, Trash2, WandSparkles } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo, runChanges } from './Loadouts'
 import LoadoutPage from './LoadoutPage'
@@ -14,10 +14,10 @@ import { CardZoomControl, useCardZoom, useWheelZoom } from './cardZoom'
 import { type Spot, playFlip, snapshotCards, useCardDrag } from './cardDrag'
 import { prepareMedia, putMedia } from './loadoutMedia'
 import { plural } from './modName'
-import { MatrixLoader, Num } from './motion'
+import { Num } from './motion'
 import { PreviewsUnavailable, dismissPreviewSummary, generateAllLoadouts, loadoutHasPreview, stopPreviews, usePreviewFailureToast, usePreviewsAvailable, usePreviewBatch, usePreviewSummary, usePreviewVersion } from './previews'
 import {
-  type Loadout, type Mod, OTHER, addGroup, changesToTurnOff, changesToTurnOn, deleteGroup, displayName, groupKey,
+  type Loadout, type Mod, OTHER, addGroup, captureKey, changesToTurnOff, changesToTurnOn, deleteGroup, displayName, groupKey,
   inGroup, isActive, modKey, moveGroup, moveLoadout, movedBeside, nextLoadoutName, openLoadout, patchLoadout, placeLoadout, placed, readLoadouts, renameGroup,
   setView, snapshotLoadout, sweepMediaOnce, useGroups, useLoadouts, useOpenLoadout, useView, writeLoadouts,
 } from './loadoutStore'
@@ -26,6 +26,18 @@ import { useUpstreamWatch } from './upstream'
 
 type GroupBy = 'group' | 'hero'
 const GROUP_BY_KEY = 'repakxtra.loadoutGroupBy'
+const FOLDED_KEY = 'repakxtra.foldedGroups' // collections and hero groups shown as just their heading ("group:<key>", "hero:<name>")
+const readFolded = () => { try { return new Set<string>(JSON.parse(savedItem(FOLDED_KEY) || '[]')) } catch { return new Set<string>() } }
+
+/** The chevron before a group's name: folds its cards away, or shows them again. */
+function FoldButton({ name, folded, onFold }: { name: string; folded: boolean; onFold: () => void }) {
+  return (
+    <button type="button" className="lo-icon lo-group-fold" aria-expanded={!folded} onClick={onFold}
+      aria-label={folded ? `Show ${name}` : `Collapse ${name}`} title={folded ? 'Show its loadouts' : 'Collapse'}>
+      {folded ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
+    </button>
+  )
+}
 const NO_HERO = 'No Hero'
 
 /** The hero most of the given mods belong to, or undefined when none has a detected hero. */
@@ -56,8 +68,9 @@ function byHero(list: Loadout[], heroOfL: (l: Loadout) => string) {
 /** A collection's header on Home (groups are called collections in the interface): its name with an always-visible
  *  pencil (or double-click) to rename, its count, and on hover or focus Move up, Move down and Delete (with Undo). Other
  *  is not a real collection, so it has none of these. */
-function GroupHead({ p, name, count, at, total, editing, setEditing }: {
+function GroupHead({ p, name, count, at, total, editing, setEditing, folded, onFold }: {
   p: LoadoutProps; name: string; count: number; at: number; total: number; editing: boolean; setEditing: (g: string | null) => void
+  folded: boolean; onFold: () => void
 }) {
   const [draft, setDraft] = useState(name)
   const real = groupKey(name) !== groupKey(OTHER)
@@ -70,6 +83,7 @@ function GroupHead({ p, name, count, at, total, editing, setEditing }: {
   }
   return (
     <h3 className="lo-group-head" data-flip={`head:${groupKey(name)}`}>
+      <FoldButton name={name} folded={folded} onFold={onFold} />
       {editing && real
         ? <input className="lo-rename lo-group-rename" autoFocus value={draft} aria-label="Collection name"
             onFocus={e => e.target.select()} onChange={e => setDraft(e.target.value)} onBlur={() => done(true)}
@@ -127,7 +141,7 @@ const LoadoutCard = memo(function LoadoutCard({ p, l, groupBy, canGenerate, busy
       onKeyDown={e => { if (e.key === 'F2' && !isTyping(e.target)) { e.preventDefault(); onStartRename(l) } }}
       onMouseEnter={() => { hovered.current = l.id }} onMouseLeave={() => { if (hovered.current === l.id) hovered.current = null }}>
       <CardMedia p={p} l={l} onClick={() => openLoadout(l.id)} title={`Open ${l.name}`}
-        emptyText={canGenerate ? 'No preview yet. Open it to generate one, or hover and paste an image.' : 'No picture yet. Hover and paste an image, or open it to add one.'} />
+        emptyText={canGenerate ? 'No preview yet. Open it to generate one or type text, or hover and paste an image.' : 'No picture yet. Hover and paste an image, or open it to add one or type text.'} />
       <div className="lo-card-body">
         <div className="lo-card-title">
           {renaming ? (
@@ -180,6 +194,13 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   const [editingGroup, setEditingGroup] = useState<string | null>(null)
   const [groupBy, setGroupByState] = useState<GroupBy>(() => (savedItem(GROUP_BY_KEY) === 'hero' ? 'hero' : 'group'))
   const setGroupBy = (g: GroupBy) => { localStorage.setItem(GROUP_BY_KEY, g); setGroupByState(g) }
+  const [folded, setFolded] = useState(readFolded)
+  const fold = (id: string) => setFolded(prev => {
+    const next = new Set(prev)
+    if (!next.delete(id)) next.add(id)
+    localStorage.setItem(FOLDED_KEY, JSON.stringify([...next]))
+    return next
+  })
   const fileRef = useRef<HTMLInputElement>(null)
   const [genMenu, setGenMenu] = useState(false)
   const canGenerate = usePreviewsAvailable()
@@ -233,12 +254,13 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     ;(edit || newRef.current)?.focus()
   })
 
-  /** Stores the loadout's picture; false (with the reason shown) when it could not be saved. */
-  const setMedia = async (id: string, file: Blob) => {
+  /** Stores the loadout's own picture, or its in-game capture (its own slot), and shows it on the card; false (with the
+   *  reason shown) when it could not be saved. */
+  const setMedia = async (id: string, file: Blob, as: 'image' | 'capture' = 'image') => {
     try {
       const { blob, type } = await prepareMedia(file)
-      await putMedia(id, blob)
-      patchLoadout(id, { mediaType: type, mediaRev: Date.now(), image: undefined })
+      await putMedia(as === 'capture' ? captureKey(id) : id, blob)
+      patchLoadout(id, as === 'capture' ? { captureRev: Date.now(), cover: 'capture' } : { mediaType: type, mediaRev: Date.now(), image: undefined, cover: 'image' })
       return true
     } catch (e) {
       p.alert.warning('Media not saved', e instanceof Error ? e.message : String(e))
@@ -314,12 +336,12 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   }
 
   /** Generate all: with no previews yet it just starts; otherwise it asks whether to redo the ones already made. */
-  const withPreview = loadouts.filter(l => loadoutHasPreview(l) || l.mediaRev || l.image).length // its own image counts: the menu then offers to keep it
+  const withPreview = loadouts.filter(loadoutHasPreview).length
   const generate = async (which: 'missing' | 'all') => {
     setGenMenu(false)
     const { count, error } = await generateAllLoadouts(loadouts, p.mods, which)
     if (error) p.alert.warning('Previews not started', error)
-    else if (!count) p.alert.info('Nothing to generate', 'Every loadout with installed mods already has a preview or its own image.')
+    else if (!count) p.alert.info('Nothing to generate', 'Every loadout with installed mods already has a preview.')
     else p.alert.success('Previews queued', `${plural(count, 'loadout')}, one after another.`)
   }
 
@@ -365,14 +387,14 @@ export default function LoadoutsScreen(p: LoadoutProps) {
         {hidden}
         <div className="lo-body">
           <LoadoutPage p={p} l={open} busy={busy === open.id} onToggle={on => toggle(open, on)} onBack={closePage}
-            onPickMedia={() => pickMedia(open.id)} onSetMedia={image => setMedia(open.id, image)} />
+            onPickMedia={() => pickMedia(open.id)} onSetMedia={image => setMedia(open.id, image)} onSetCapture={image => setMedia(open.id, image, 'capture')} />
         </div>
       </div>
     )
   }
 
   return (
-    <div className="lo-screen" aria-label="Loadouts" style={{ '--lo-card-zoom': cardZoom } as CSSProperties}>
+    <div className="lo-screen" aria-label="Loadouts" data-small={cardZoom < 0.8 || undefined} style={{ '--lo-card-zoom': cardZoom } as CSSProperties}>
       {hidden}
       <header className="lo-screen-head">
         <div>
@@ -394,7 +416,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
               aria-expanded={withPreview > 0 ? genMenu : undefined}
               title="Render a preview for every loadout, one after another (each card shows its progress)"
               onClick={() => (withPreview > 0 ? setGenMenu(v => !v) : generate('all'))}>
-              <Sparkles size={14} /> Generate all previews
+              <WandSparkles size={14} /> Generate all previews
             </button>
             {genMenu && (
               <div className="sigeon-menu lo-gen-menu" role="menu">
@@ -416,8 +438,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
       </header>
       {batch && (
         <div className="lo-batch" role="status">
-          <MatrixLoader />
-          <span className="lo-batch-what"><span className="t-shimmer">Generating preview</span><b>{batch.name}</b></span>
+          <span className="lo-batch-what"><span className="t-shimmer">Generating previews</span><b>{batch.name}</b></span>
           {batch.jobs > 1 && <span className="lo-batch-left">{batch.job} of {batch.jobs}</span>}
           <button type="button" className="lo-text-btn lo-batch-stop run-stop-btn" onClick={stopPreviews} disabled={batch.stopping}
             title={batch.left ? 'Stop now and clear the queue' : 'Stop now'}>
@@ -437,7 +458,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
         {loadouts.length === 0 && (
           <div className="lo-first-run">
             <h3>No loadouts yet</h3>
-            <p>A loadout is a set of mods you switch on and off together, like one look, one VFX color or one emote wheel.</p>
+            <p>A loadout is a set of mods you switch on and off together, like one look, one VFX color or one hero's full set of mods.</p>
             <div className="lo-first-actions">
               <button type="button" className="lo-text-btn is-primary" onClick={createFromOn} disabled={!p.mods.some(m => m.enabled)}
                 title={p.mods.some(m => m.enabled) ? undefined : 'No mods are on right now'}>
@@ -448,14 +469,19 @@ export default function LoadoutsScreen(p: LoadoutProps) {
           </div>
         )}
 
-        {groups.map(([group, list], gi) => (
+        {groups.map(([group, list], gi) => {
+          const foldId = groupBy === 'group' ? `group:${groupKey(group)}` : `hero:${group}`
+          const isFolded = folded.has(foldId) && drag.dragId === null // a drag opens every group, so a card can land in any
+          return (
           // A collection lights up while a card from another one would land in it
-          <section className={`lo-group ${groupBy === 'group' && drag.dragId && spot && 'group' in spot && groupKey(spot.group) === groupKey(group) && groupKey(dragFrom ?? '') !== groupKey(group) ? 'is-drop' : ''}`}
+          <section className={`lo-group ${groupBy === 'group' && drag.dragId && spot && 'group' in spot && groupKey(spot.group) === groupKey(group) && groupKey(dragFrom ?? '') !== groupKey(group) ? 'is-drop' : ''}${isFolded ? ' is-folded' : ''}`}
             key={groupKey(group)} data-group={group}>
             {groupBy === 'group'
-              ? <GroupHead p={p} name={group} count={list.length} at={gi} total={savedGroups.length}
+              ? <GroupHead p={p} name={group} count={list.length} at={gi} total={savedGroups.length} folded={isFolded} onFold={() => fold(foldId)}
                   editing={editingGroup !== null && groupKey(editingGroup) === groupKey(group)} setEditing={setEditingGroup} />
-              : <h3 className="lo-group-head" data-flip={`head:${group}`}><span className="lo-group-name">{group}</span><span className="lo-group-count"><Num id={`hero-${group}`} value={list.length} /></span></h3>}
+              : <h3 className="lo-group-head" data-flip={`head:${group}`}><FoldButton name={group} folded={isFolded} onFold={() => fold(foldId)} />
+                  <span className="lo-group-name">{group}</span><span className="lo-group-count"><Num id={`hero-${group}`} value={list.length} /></span></h3>}
+            {isFolded ? null : <>
             {list.length === 0 && <p className="lo-group-empty">Empty. Drag a loadout card here, or pick this collection on a loadout's page.</p>}
             <div className="lo-grid">
               {list.map(l => (
@@ -464,8 +490,10 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                   onPick={pickCard} onToggle={toggleCard} onStartRename={startRename} onDraft={setDraft} onCommit={commitCard} onCancelRename={cancelRename} />
               ))}
             </div>
+            </>}
           </section>
-        ))}
+          )
+        })}
 
         {loadouts.length > 0 && (
           <div className="lo-grid">
@@ -482,7 +510,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
               <button type="button" className="lo-card-add" onClick={createEmpty}>
                 <span className="lo-card-add-icon"><Plus size={20} /></span>
                 <span className="lo-card-add-title">New loadout</span>
-                <small>Start empty, then add mods to it</small>
+                <small>Start empty, add mods later</small>
               </button>
             </div>
           </div>

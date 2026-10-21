@@ -12,14 +12,14 @@ export const TOUR_STEPS: TourStep[] = [
   {
     target: '[data-tour="view-tabs"]',
     title: 'Loadouts and Library',
-    description: 'A loadout is a set of mods you switch on and off together: one look, one VFX color, one emote wheel. The Library lists every installed mod. L switches between the two.',
+    description: "A loadout is a set of mods you switch on and off together: one look, one VFX color, one hero's full set of mods. The Library lists every installed mod. L switches between the two.",
     placement: 'bottom',
     onEnter: home,
   },
   {
     target: '[data-tour="new-loadout"]',
     title: 'Make a loadout',
-    description: 'Start one here and add mods on its page. Or select mods in the Library and press +. Installing mods saves them as a new loadout too, unless you untick it.',
+    description: 'Start one here and add mods on its page. Or select mods in the Library and pick Add to loadout in the bar below them. Installing mods saves them as a new loadout too, unless you pick Install without a loadout.',
     placement: 'bottom',
     onEnter: home,
   },
@@ -33,7 +33,7 @@ export const TOUR_STEPS: TourStep[] = [
   {
     target: '[data-tour="new-collection"]',
     title: 'Collections',
-    description: "A collection is a named shelf for loadouts that belong together, like Panther looks or Emotes. Make one here, then drag cards onto it or pick it on a loadout's page. Loadouts in no collection sit under Other. The pencil renames it, and Collection | Hero sorts the cards by hero instead.",
+    description: "A collection is a named shelf for loadouts that belong together, like Panther looks or VFX colors. Make one here, then drag cards onto it or pick it on a loadout's page. Loadouts in no collection sit under Other. The pencil renames it, and Collection | Hero sorts the cards by hero instead.",
     placement: 'bottom',
     onEnter: home,
   },

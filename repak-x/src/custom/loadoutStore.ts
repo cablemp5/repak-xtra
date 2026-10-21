@@ -19,7 +19,26 @@ export type Loadout = {
   mediaRev?: number       // set when a file is stored in IndexedDB (loadoutMedia.ts); bumps on change
   hotkey?: number         // 1 to 9: Ctrl+N toggles it, set in its page's More menu; unpinned loadouts have no hotkey
   muted?: boolean         // its animation previews play without their emote sound on hover (the card's speaker button)
+  caption?: string        // words shown big on its card while it has no picture or preview (typed on its page)
+  captionIcon?: string    // a Lucide icon above those words (captionStyle.tsx CAPTION_ICONS)
+  captionColor?: string   // their color, one of captionStyle.tsx's swatches; white without one
+  captureRev?: number     // an in-game capture, stored apart from its own image (loadoutMedia.ts under captureKey(id))
+  cover?: Cover           // which of its pictures its card shows (the page's Cover switch); unset: the first it has
 }
+
+/** A card's picture sources. Each keeps its own slot, so making one never replaces another: the card shows the one
+ *  picked (cover), or the first it has. */
+export type Cover = 'preview' | 'capture' | 'image' | 'text'
+export const COVERS: Cover[] = ['preview', 'capture', 'image', 'text']
+/** The media key of a loadout's in-game capture (its own image is under its id). */
+export const captureKey = (id: string) => `${id}#capture`
+/** Which sources hold something; `preview` comes from previews.tsx (previewMade). Pure. */
+export const coverFills = (l: Loadout, preview: boolean): Record<Cover, boolean> =>
+  ({ preview, capture: Boolean(l.captureRev), image: Boolean(l.mediaRev || l.image), text: Boolean(l.caption?.trim() || l.captionIcon) })
+/** The source a card shows: the picked one while it holds something, else the first that does (own image first, as
+ *  before covers existed), or null for an empty card. Pure. */
+export const pickCover = (l: Loadout, fills: Record<Cover, boolean>): Cover | null =>
+  l.cover && fills[l.cover] ? l.cover : (['image', 'capture', 'preview', 'text'] as Cover[]).find(c => fills[c]) ?? null
 
 const STORAGE = 'repakxtra.loadouts'
 const listeners = new Set<() => void>()
@@ -366,6 +385,10 @@ window.addEventListener('keydown', e => {
 })
 
 if (import.meta.env.DEV) {
+  const base: Loadout = { id: 'a', name: 'a', label: 'Other', scope: [], on: [] }
+  console.assert(pickCover({ ...base, cover: 'text', caption: 'Hi', mediaRev: 1 }, coverFills({ ...base, caption: 'Hi', mediaRev: 1 }, true)) === 'text', 'pickCover: the picked source wins')
+  console.assert(pickCover({ ...base, cover: 'capture', mediaRev: 1 }, coverFills({ ...base, mediaRev: 1 }, true)) === 'image', 'pickCover: an empty pick falls back, own image first')
+  console.assert(pickCover(base, coverFills(base, false)) === null, 'pickCover: nothing to show')
   { const L = (id: string, label = 'Other') => ({ id, name: id, label, scope: [], on: [] })
     const list = [L('a', 'X'), L('b'), L('c', 'Y'), L('d')]
     console.assert(movedBeside(list, 'd', { id: 'b', after: false }).map(l => l.id).join() === 'a,d,b,c', 'hero drag: moves before its neighbour')

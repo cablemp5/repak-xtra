@@ -5,12 +5,12 @@ import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
 import { Check, ChevronRight, Copy, ExternalLink, ListChecks, ShieldCheck, Wrench } from 'lucide-react'
 import { open as pickFile } from '@tauri-apps/plugin-dialog'
-import { type Doctor, type KitProgress, isNewerKit, progressShare, progressText, usePreviewKit } from './previewKit'
+import { type Doctor, isNewerKit, usePreviewKit } from './previewKit'
+import { BypassTrack, GalactaTrack, KitTrack, useFinished } from './installTrack'
 import Checkbox from '../components/ui/Checkbox'
 import CustomDropdown from '../components/CustomDropdown'
 import type { useAlert } from '../components/AlertHandler'
 import { savedItem } from './storageCarryOver'
-import { MatrixLoader } from './motion'
 import CopySetupReport from './CopySetupReport'
 import { noteGalactaCheck } from './setupReport'
 import { useDialogFocus } from './dialogFocus'
@@ -75,27 +75,6 @@ function Changelog({ g, title, onClose, product = 'Project Galacta' }: {
 }
 
 const BLENDER = 'https://www.blender.org/download/'
-
-/** The kit's download: the dot loader and how much ("38 MB of 108 MB") over a thin bar. Unpacking and Blender's
- *  install show in their own rows instead (InstallStatus). */
-export function KitProgressBar({ p }: { p: KitProgress | null }) {
-  if (!p || p.stage === 'unpack' || p.stage === 'blender') return null
-  const share = progressShare(p)
-  return (
-    <div className="su-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={share === null ? undefined : Math.round(share * 100)}>
-      <span className="su-progress-text"><MatrixLoader size={12} />{progressText(p)}</span>
-      <span className="su-progress-track"><i style={share === null ? undefined : { width: `${share * 100}%` }} className={share === null ? 'is-indeterminate' : ''} /></span>
-    </div>
-  )
-}
-
-/** The kit unpacking or Blender installing: the blue dot loader and what is happening ("Unpacking", winget's step and
- *  its percent), in place of that part's state (Setup's Preview kit or Blender row, the guided setup's step action). */
-export function InstallStatus({ p }: { p: KitProgress | null }) {
-  if (p?.stage !== 'unpack' && p?.stage !== 'blender') return null
-  const text = progressText(p)
-  return <span className="su-install-status" role="status" title={text}><MatrixLoader size={11} /><span>{text}</span></span>
-}
 
 /** Why Blender is safe to install, where it comes from, and its real download page: closed to one line ("Is Blender safe?",
  *  like the bypass's "Is it safe?"), the full note opens under it. A click, not a hover, so it works from the keyboard and
@@ -168,12 +147,12 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
           <PartMark ok={kitOk} />
           <div className="su-part-text">
             <b>Preview kit</b>
-            {k.progress?.stage === 'unpack' ? <InstallStatus p={k.progress} /> : <span>
+            <span>
               {!kit ? 'Checking…' : kit.version ? [`v${kit.version}`, from].filter(Boolean).join(' · ') : `Not installed${size ? ` · ${size} MB on GitHub` : ''}`}
               {latest && <> · <button type="button" className="su-link" onClick={() => setNotes("What's new")}>{update ? `v${latest.version} on GitHub` : `What's new in v${latest.version}`}</button></>}
               {/* After Check for updates: what GitHub has, here rather than in a toast (Minimal toasts would hide that) */}
               {k.checked && busy !== 'check' && (latest === null ? ' · No kit on GitHub yet' : kit?.version && latest && !update ? <> · <span className="su-ok">Up to date</span></> : null)}
-            </span>}
+            </span>
           </div>
           <span className="su-part-links">
             <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => k.check()} title="Ask GitHub for the newest preview kit">
@@ -189,7 +168,7 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
           <PartMark ok={Boolean(kit?.blender)} />
           <div className="su-part-text">
             <b>Blender</b>
-            {k.progress?.stage === 'blender' ? <InstallStatus p={k.progress} /> : <span>{kit?.blender ? blenderLine : 'Not installed'}</span>}
+            <span>{kit?.blender ? blenderLine : 'Not installed'}</span>
           </div>
           <span className="su-part-links">
             {kit && !kit.blender && <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => k.installBlender()} title="Installs Blender with winget">Install</button>}
@@ -198,7 +177,7 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
         </li>
       </ul>
       {(kit && !kit.blender || installingBlender) && <BlenderTrust />}
-      <KitProgressBar p={k.progress} />
+      <KitTrack plan={k.plan} p={k.progress} done={k.finished ?? undefined} />
       <DoctorProblems d={k.doctor} />
       {(missing || update || (k.doctor?.ok && !busy)) && <div className="su-actions">
         {(missing || update) && (
@@ -234,6 +213,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   const trap = useDialogFocus() // focus inside, Tab stays inside, back to the opener on close
   const [notes, setNotes] = useState<string | null>(null)
   const [armed, setArmed] = useState(false) // Galacta's Remove asks for a second click
+  const { finished, finish } = useFinished() // an install that just finished, said in its card for a moment
 
   // Opened from a grayed-out Generate button: straight to the Mod previews card (its top, so it can still grow as it loads)
   useEffect(() => { if (focus === 'previews') document.querySelector('.su-previews')?.scrollIntoView({ block: 'start' }) }, [focus])
@@ -261,6 +241,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
     setConfirmOff(null)
     const s = await invoke<Bypass>('setup_bypass', { action })
     setBypass(s)
+    if (action === 'install' || action === 'enable') finish(action)
     alert.success('Signature bypass', { install: 'Installed. Mods load from the next game launch.', enable: 'On again.',
       disable: 'Off. Mods that need it will not load.', remove: 'Removed.' }[action])
   })
@@ -273,6 +254,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
     const wasInstalled = Boolean(galacta?.installed)
     const g = remember(await invoke<Galacta>('setup_galacta_install', { folder: folder === HERE ? null : folder }))
     setGalacta(g)
+    finish('install-galacta')
     setNotes(wasInstalled ? `Updated to ${g.latest}` : `Installed ${g.latest}`)   // what changed, right away
   })
   // The Library's undoable delete: the .pak with its .ucas and .utoc (or the switched-off .bak_repak) go to the trash
@@ -339,6 +321,8 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
               {(b?.state === 'installed' || b?.state === 'disabled') && <button type="button" className="lo-text-btn" disabled={Boolean(busy)}
                 onClick={() => (b.sigeon_on ? setConfirmOff('remove') : act('remove'))}>Remove</button>}
             </div>
+            <BypassTrack on={busy === 'install' || busy === 'enable'}
+              done={finished === 'install' ? 'Installed. Mods load from the next game launch.' : finished === 'enable' ? 'On again. Mods load from the next game launch.' : undefined} />
             <div className="t-acc-panel" data-open={safety} ref={el => el?.toggleAttribute('inert', !safety)}>
               <div className="t-acc-panel-inner">
                 <div className="su-safety">
@@ -394,6 +378,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                 </span>
               </li>
             </ul>
+            <GalactaTrack on={busy === 'install-galacta'} done={finished === 'install-galacta' ? `Project Galacta ${galacta?.latest ?? ''} is in your mods folder`.replace('  ', ' ') : undefined} />
             {/* Install or update, and where to: only when one is offered */}
             {(!g?.installed || g.up_to_date === false) && (
               <div className="su-actions">

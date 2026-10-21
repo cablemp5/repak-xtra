@@ -159,7 +159,9 @@ pub fn get_preview_audio(key: String, emote: String) -> Result<tauri::ipc::Respo
 /// One line of the generator's output as (event, key): "PREVIEW <key>" after writing a PNG, "PREVIEW_NONE <key>" when
 /// there is nothing to show, "PREVIEW_IN <key>" for a mod the loadout's combined render shows, "PREVIEW_FAIL <key>" when
 /// it failed (its last good preview stays), "PREVIEW_WARN <key>" when a mod could not be read (encrypted with a key
-/// other than the game's, so a render would not show it), and "PREVIEW_BUSY" (no key) when another generator holds the lock.
+/// other than the game's, so a render would not show it), "PREVIEW_STAGE <step>" for what it is doing now (read, mount,
+/// unpack, export, materials, pose, render, finish, ui, vfx, anim, sound), and "PREVIEW_BUSY" (no key) when another
+/// generator holds the lock.
 fn parse_line(line: &str) -> Option<(&'static str, Option<String>)> {
     if line.trim() == "PREVIEW_BUSY" {
         return Some(("mod-previews-busy", None));
@@ -169,6 +171,7 @@ fn parse_line(line: &str) -> Option<(&'static str, Option<String>)> {
         ("PREVIEW_IN ", "mod-preview-in"),
         ("PREVIEW_FAIL ", "mod-preview-failed"),
         ("PREVIEW_WARN ", "mod-preview-warn"),
+        ("PREVIEW_STAGE ", "mod-preview-stage"),
         ("PREVIEW ", "mod-preview-ready"),
     ]
     .into_iter()
@@ -178,7 +181,7 @@ fn parse_line(line: &str) -> Option<(&'static str, Option<String>)> {
 /// Renders previews for the given mods (`jobs` = [folder, mod key] pairs) one after another in the background,
 /// replacing existing ones. With `set` (a loadout), its character mods render once together as <set>.png.
 /// Progress: `mod-preview-ready` / `mod-preview-none` / `mod-preview-in` (shown in the set's render) /
-/// `mod-preview-failed` per mod or set, `mod-previews-busy` when another generator (a manual run, or one an earlier
+/// `mod-preview-failed` per mod or set, `mod-preview-stage` (what it is doing now), `mod-previews-busy` when another generator (a manual run, or one an earlier
 /// app session left going) holds its lock, `mod-previews-done` (ok) at the end. Ok(false) = this app runs one already.
 /// Unchanged mods and sets report their existing result without rendering; `force` (Regenerate) renders them anyway.
 /// The generator alone owns its lock and the cancel file (it clears a stale Stop once it holds the lock).
@@ -445,6 +448,7 @@ mod tests {
         assert_eq!(parse_line("PREVIEW_NONE A"), Some(("mod-preview-none", k("A"))));
         assert_eq!(parse_line("PREVIEW_WARN loadout-1"), Some(("mod-preview-warn", k("loadout-1"))));
         assert_eq!(parse_line("PREVIEW_IN A"), Some(("mod-preview-in", k("A"))));
+        assert_eq!(parse_line("PREVIEW_STAGE render"), Some(("mod-preview-stage", k("render"))));
         assert_eq!(parse_line("PREVIEW A_v2\r"), Some(("mod-preview-ready", k("A_v2"))));
         assert_eq!(parse_line("# A: character (12 s)"), None);
     }

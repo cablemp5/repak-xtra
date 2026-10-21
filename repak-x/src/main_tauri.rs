@@ -8798,6 +8798,7 @@ fn main() {
             xtra_crash::xtra_crash_suspects, // repakxtra: crash suspects
             xtra_broken::xtra_broken_mods, // repakxtra: broken mods
             xtra_nexus::xtra_nexus_sources, // repakxtra: Nexus source
+            xtra_nexus::xtra_nexus_downloads, // repakxtra: Nexus downloads still in Downloads, for the one-time scan
             xtra_nexus::xtra_install_paks, // repakxtra: the paks an install puts in place, for loadouts made at install
             xtra_previews::get_preview_emotes, // repakxtra: emote sounds over animation previews
             xtra_previews::get_preview_audio,

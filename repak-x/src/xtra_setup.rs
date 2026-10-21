@@ -10,7 +10,7 @@ use std::fs;
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 const LOADER: &str = "dsound.dll";
 const BYPASS: &str = "MarvelRivalsUTOCSignatureBypass.asi";
@@ -245,7 +245,24 @@ fn chrono_stamp() -> String {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs().to_string()).unwrap_or_default()
 }
 
-async fn latest_release() -> Result<(String, String, String, String, Vec<u8>), String> {
+/// Galacta's install progress for Setup and the guided setup (`galacta-progress`): "check" (asking GitHub), "download"
+/// (bytes so far of `total`, 0 when unknown), "install" (writing the files).
+#[derive(Clone, Serialize)]
+struct GalactaProgress {
+    stage: &'static str,
+    done: u64,
+    total: u64,
+}
+
+fn tell(app: Option<&AppHandle>, stage: &'static str, done: u64, total: u64) {
+    if let Some(app) = app {
+        let _ = app.emit("galacta-progress", GalactaProgress { stage, done, total });
+    }
+}
+
+/// The newest release and its mod zip (downloaded once per tag). With `app`, says how the download goes.
+async fn latest_release(app: Option<&AppHandle>) -> Result<(String, String, String, String, Vec<u8>), String> {
+    tell(app, "check", 0, 0);
     let client = reqwest::Client::new();
     let json: serde_json::Value = client
         .get(GALACTA_API)
@@ -272,9 +289,20 @@ async fn latest_release() -> Result<(String, String, String, String, Vec<u8>), S
     let zip = match fs::read(&cache).ok().filter(|b| zip_files(b).is_ok()) {
         Some(b) => b,
         None => {
-            let b = client.get(&url).header("User-Agent", "repakxtra").send().await
-                .and_then(|r| r.error_for_status()).map_err(|e| format!("Download failed: {e}"))?
-                .bytes().await.map_err(|e| format!("Download failed: {e}"))?.to_vec();
+            let mut resp = client.get(&url).header("User-Agent", "repakxtra").send().await
+                .and_then(|r| r.error_for_status()).map_err(|e| format!("Download failed: {e}"))?;
+            let total = resp.content_length().unwrap_or(0);
+            let mut b = Vec::with_capacity(total.min(1 << 28) as usize);
+            let mut told = 0u64;
+            tell(app, "download", 0, total);
+            while let Some(chunk) = resp.chunk().await.map_err(|e| format!("Download failed: {e}"))? {
+                b.extend_from_slice(&chunk);
+                let done = b.len() as u64;
+                if done - told >= 1 << 18 || done == total {
+                    told = done;
+                    tell(app, "download", done, total);
+                }
+            }
             zip_files(&b)?;
             let _ = fs::create_dir_all(setup_dir());
             let _ = fs::write(&cache, &b);
@@ -298,7 +326,7 @@ pub async fn setup_galacta_status(online: bool, state: State<'_, Arc<Mutex<crate
     let (dir, disabled) = galacta_local(&mods);
     let mut s = GalactaStatus { installed: dir.as_ref().map(|d| d.display().to_string()), disabled, latest: None, published: None, notes: None, url: None, up_to_date: None };
     if online {
-        let (tag, published, notes, url, zip) = latest_release().await?;
+        let (tag, published, notes, url, zip) = latest_release(None).await?;
         let files = zip_files(&zip)?;
         s.up_to_date = dir.as_ref().map(|d| matches(d, &files));
         (s.latest, s.published, s.notes, s.url) = (Some(tag), Some(published), Some(notes), Some(url));
@@ -308,7 +336,7 @@ pub async fn setup_galacta_status(online: bool, state: State<'_, Arc<Mutex<crate
 
 /// Installs the latest release into `folder` (a ~mods subfolder; empty = ~mods itself, or where it already is).
 #[tauri::command]
-pub async fn setup_galacta_install(folder: Option<String>, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<GalactaStatus, String> {
+pub async fn setup_galacta_install(app: AppHandle, folder: Option<String>, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<GalactaStatus, String> {
     crate::xtra_identity::upstream_guard()?; // both apps change the game's files: not while Repak X is open
     if crate::is_game_process_running() {
         return Err("Marvel Rivals is running. Close it first.".into());
@@ -317,8 +345,9 @@ pub async fn setup_galacta_install(folder: Option<String>, state: State<'_, Arc<
     if !mods.is_dir() {
         return Err("Set the game mods path in Settings first".into());
     }
-    let (_, _, _, _, zip) = latest_release().await?;
+    let (_, _, _, _, zip) = latest_release(Some(&app)).await?;
     let files = zip_files(&zip)?;
+    tell(Some(&app), "install", 0, 0);
     let target = match folder.filter(|f| !f.trim().is_empty()) {
         // a subfolder by its relative path ("A/B"), never "..", a drive or an absolute path
         Some(f) if Path::new(&f).components().all(|c| matches!(c, std::path::Component::Normal(_))) => mods.join(f),
