@@ -11,13 +11,19 @@ import Checkbox from '../components/ui/Checkbox'
 import { setSoundOn, unlockSound } from './sounds'
 import { savedItem } from './storageCarryOver'
 
-const PREFS = [
+// `on`: shown until switched off (the rest start hidden). Stored as '1' or '0' once changed.
+const PREFS: { key: string; label: string; on?: boolean }[] = [
   { key: 'priority', label: 'Show load priority counter on mods' },
   { key: 'asset-explorer', label: 'Show Asset Explorer button' },
   { key: 'share', label: 'Show Share button' },
   { key: 'tools', label: 'Show Tools button' },
+  { key: 'sigeon', label: 'Show Sigeon button', on: true },
+  { key: 'nexus', label: 'Show a Nexus tag on mods installed from Nexus Mods', on: true },
+  { key: 'broken', label: 'Show Broken mod warnings and the Broken tab', on: true },
   { key: 'mod-size', label: 'Show mod file sizes' }, // shown in Settings > Mods view (ModSizeSetting), not Optional controls
-] as const
+  { key: 'quick-organize', label: 'Show Quick Organize when dropping files on the window' }, // shown under Installing mods
+]
+const OWN_PLACE = ['mod-size', 'quick-organize'] // switches drawn in their own section, not Optional controls
 
 // 100% draws the app at the webview's 120% (what was the old 125% step, a little smaller); the rest scale from there.
 // A new key: everyone starts at the new 100%, the old repakxtra.uiScale is no longer read.
@@ -35,7 +41,7 @@ const TAGS_OFF_KEY = 'repakxtra.tagsOff' // tag features hidden by default: '0' 
 const storageKey = (key: string) => `repakxtra.show.${key}`
 const listeners = new Set<() => void>()
 
-const isOn = (key: string) => savedItem(storageKey(key)) === '1'
+const isOn = (key: string) => { const v = savedItem(storageKey(key)); return v === null ? Boolean(PREFS.find(p => p.key === key)?.on) : v === '1' }
 const getScale = () => { const s = Number(savedItem(SCALE_KEY)); return SCALES.includes(s) ? s : 100 }
 const tagsHidden = () => savedItem(HIDE_TAGS_KEY) === '1'
 const soundOn = () => savedItem(SOUND_KEY) !== '0'
@@ -96,7 +102,9 @@ const subscribe = (l: () => void) => {
 }
 
 /** Whether a show/hide pref is on, re-rendering when it changes (e.g. 'mod-size'). */
-export const useUiPref = (key: (typeof PREFS)[number]['key']) => useSyncExternalStore(subscribe, () => isOn(key))
+export const useUiPref = (key: string) => useSyncExternalStore(subscribe, () => isOn(key))
+/** Broken mod warnings are on (Settings > Optional controls): read where a hook cannot be (runChanges' toasts). */
+export const brokenShown = () => isOn('broken')
 
 /** Settings > Mods view: file sizes on mod rows (applies right away, like the other switches here in uiPrefs). */
 export function ModSizeSetting() {
@@ -247,6 +255,12 @@ export default function UiSettings() {
             </Checkbox>
             <p className="setting-subtext">The install window starts on Install without a loadout. Save as a loadout stays one click away in it.</p>
           </div>
+          <div className="setting-item">
+            <Checkbox checked={isOn('quick-organize')} onChange={(checked: boolean) => update(storageKey('quick-organize'), checked ? '1' : '0')}>
+              <span>Show Quick Organize when dropping files on the window</span>
+            </Checkbox>
+            <p className="setting-subtext">A second panel beside Install while you drag files in, for dropping them straight into a folder without the install window.</p>
+          </div>
         </div>
       </div>
       <div className="setting-section">
@@ -258,7 +272,7 @@ export default function UiSettings() {
             </Checkbox>
             <p className="setting-subtext">Hides tags on mods, the tag filter, the tags show/hide button, the Tags button for selected mods and Assign Tag. Your tags are kept.</p>
           </div>
-          {PREFS.map(({ key, label }, i) => key !== 'mod-size' && (
+          {PREFS.map(({ key, label }, i) => !OWN_PLACE.includes(key) && (
             <div className="setting-item" key={key}>
               <Checkbox checked={snapshot[i] === '1'} onChange={(checked: boolean) => update(storageKey(key), checked ? '1' : '0')}>
                 <span>{label}</span>

@@ -1,6 +1,7 @@
-// repakxtra: the first-launch setup. One screen, top to bottom: the game folder, the signature bypass, Project Galacta,
-// mod previews (optional), then the first mods. It opens once on repakxtra's first launch, and again
-// from Setup > Guided setup. Closing it, or dropping mods on the window, marks it seen; the tour is offered at the end.
+// repakxtra: the first-launch setup. On the first launch it opens on what loadouts are (WelcomeIntro.tsx), then one
+// screen, top to bottom: the game folder, the signature bypass, Project Galacta, mod previews (optional), then the
+// first mods. Setup > Guided setup opens it again on the steps. Closing it, or dropping mods on the window, marks it
+// seen; the tour is offered at the end.
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
@@ -8,10 +9,12 @@ import { open as pick } from '@tauri-apps/plugin-dialog'
 import { motion } from 'framer-motion'
 import { Check, Upload } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
-import { DoctorProblems, InstallStatus } from './SetupPanel'
+import { DoctorProblems } from './SetupPanel'
+import { BypassTrack, GalactaTrack, KitTrack, useFinished } from './installTrack'
 import { isKitZip, usePreviewKit } from './previewKit'
 import { OFF_EXT } from './offFiles'
 import Wordmark from './Wordmark'
+import WelcomeIntro from './WelcomeIntro'
 import { ShortcutButton, useShortcut } from './shortcut'
 
 type Alert = ReturnType<typeof useAlert>
@@ -50,17 +53,19 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
   onStartTour: () => void
 }) {
   const [open, setOpen] = useState(firstLaunch)
+  const [intro, setIntro] = useState(firstLaunch) // the first page, about loadouts: first launch only, or "Why loadouts?"
   const [bypass, setBypass] = useState<Bypass | null>(null)
   const [bypassError, setBypassError] = useState<string | null>(null)
   const [galacta, setGalacta] = useState<Galacta | null>(null)
   const asked = useRef(0) // the newest status check: answers to an older one (another game folder) are dropped
   const [busy, setBusy] = useState<string | null>(null)
+  const { finished, finish } = useFinished() // a step that just installed, said in it for a moment
   const kit = usePreviewKit(alert)
   const shortcut = useShortcut()
   const detected = useRef(false)
 
   useEffect(() => {
-    const show = () => setOpen(true)
+    const show = () => { setIntro(false); setOpen(true) }
     window.addEventListener('repakxtra-first-run', show)
     return () => window.removeEventListener('repakxtra-first-run', show)
   }, [])
@@ -91,7 +96,7 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
 
   const run = async (what: string, f: () => Promise<void>) => {
     setBusy(what)
-    try { await f() } catch (e) { alert.warning('Setup', String(e)) } finally { setBusy(null) }
+    try { await f(); finish(what) } catch (e) { alert.warning('Setup', String(e)) } finally { setBusy(null) }
   }
   const installBypass = () => run('bypass', async () => {
     setBypass(await invoke<Bypass>('setup_bypass', { action: bypass?.state === 'disabled' ? 'enable' : 'install' }))
@@ -121,10 +126,14 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
     <div className="modal-overlay fr-overlay" onClick={close}>
       <motion.div className="modal-content fr-modal" role="dialog" aria-label="Set up repakxtra" onClick={e => e.stopPropagation()}
         initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }}>
+        {intro ? <>
+          <button className="modal-close fr-intro-close" onClick={close} aria-label="Close">×</button>
+          <WelcomeIntro onNext={() => setIntro(false)} onSkip={close} />
+        </> : <>
         <div className="modal-header fr-head">
           <div>
             <h2 className="fr-welcome">Welcome to <Wordmark height={17} /></h2>
-            <p className="su-sub">Get Marvel Rivals ready for mods. Steps 1 to 3 make mods work. Close the game first.</p>
+            <p className="su-sub">Get Marvel Rivals ready for mods. Steps 1 to 3 make mods work. Close the game first. <button type="button" className="su-link" onClick={() => setIntro(true)}>Why loadouts?</button></p>
           </div>
           <button className="modal-close" onClick={close} aria-label="Close">×</button>
         </div>
@@ -145,6 +154,7 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
                   title={noGame ? 'Find the game first' : undefined}>
                   {busy === 'bypass' ? 'Installing…' : bypass?.state === 'disabled' ? 'Turn on' : bypass?.state === 'partial' ? 'Repair' : 'Install'}</button>}>
             <p>{bypassError ? `Could not check it: ${bypassError}` : bypassText}</p>
+            <BypassTrack on={busy === 'bypass'} done={finished === 'bypass' ? 'Installed. Mods load from the next game launch.' : undefined} />
           </Step>
 
           <Step n={3} done={galactaOn} title="Install Project Galacta"
@@ -153,13 +163,15 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
             <p>{galacta?.installed && !galactaOn ? 'Installed but switched off. Turn it on in the Library.'
               : galactaOn ? 'Installed. Loads more types of mods and lets you toggle mods in game.'
               : 'Needed by most skin mods: loads more types of mods and lets you toggle mods in game.'}</p>
+            <GalactaTrack on={busy === 'galacta'} done={finished === 'galacta' ? 'Project Galacta is in your mods folder' : undefined} />
           </Step>
 
           <Step n={4} done={kitReady && kit.doctor?.ok !== false} optional title="Mod previews"
-            action={!kitReady && (kit.progress?.stage === 'unpack' || kit.progress?.stage === 'blender') ? <InstallStatus p={kit.progress} /> : !kitReady && <button type="button" className="lo-text-btn" disabled={Boolean(kit.busy) || (kit.latest === null && !kit.kit?.version)} onClick={() => kit.setUp()}
+            action={!kitReady && !kit.plan && <button type="button" className="lo-text-btn" disabled={Boolean(kit.busy) || (kit.latest === null && !kit.kit?.version)} onClick={() => kit.setUp()}
               title={kit.latest === null ? 'No kit published yet: drop a kit zip on the window' : 'Downloads the preview kit and installs Blender if it is missing (Windows asks for admin rights once)'}>
               {kit.busy === 'setup' ? 'Setting up…' : 'Set up previews'}</button>}>
-            <p>{kitReady ? 'Ready. A loadout page renders its preview.' : `Renders of your mods and loadouts, and clips of animation mods. Downloads the preview kit${kit.latest?.size ? ` (${Math.round(kit.latest.size / 1048576)} MB)` : ''} and uses Blender (installed for you if missing).`}</p>
+            <p>{kitReady ? 'Ready. A loadout page renders its preview.' : `Renders of your mods and loadouts. Downloads the preview kit${kit.latest?.size ? ` (${Math.round(kit.latest.size / 1048576)} MB)` : ''} and uses Blender (installed for you if missing).`}</p>
+            <KitTrack plan={kit.plan} p={kit.progress} done={kit.finished ?? undefined} />
             <DoctorProblems d={kit.doctor} />
           </Step>
 
@@ -184,6 +196,7 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
           <button type="button" className="lo-text-btn" onClick={() => { close(); onStartTour() }}>Take the 1-minute tour</button>
           <button type="button" className="btn-primary" onClick={close}>Done</button>
         </div>
+        </>}
       </motion.div>
     </div>
   )

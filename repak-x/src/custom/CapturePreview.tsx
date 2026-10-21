@@ -3,8 +3,9 @@
 // Ctrl+Shift+X in the game, or Capture now here (repakxtra switches to the game, takes it and comes back).
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
-import { Camera, RotateCcw } from 'lucide-react'
+import { Camera, Lock, RotateCcw } from 'lucide-react'
 import { MatrixLoader } from './motion'
 import { playShutter, primeShutter } from './sounds'
 import type { LoadoutProps } from './Loadouts'
@@ -143,13 +144,22 @@ function CaptureDialog({ p, l, hero, onUse, onClose }: {
 }
 
 /** The loadout page's button: shown for loadouts with a Mesh or Texture mod, usable while Marvel Rivals runs. */
-export function CaptureButton({ p, l, onUse }: { p: LoadoutProps; l: Loadout; onUse: (blob: Blob) => Promise<boolean> }) {
+/** Whether a capture fits the loadout (it holds a skin, mesh or texture mod) and whose picture it takes. */
+export function captureTarget(p: LoadoutProps, l: Loadout) {
   const byKey = new Map(p.mods.map(m => [modKey(m.path), m]))
   const details = [...new Set(l.on.map(displayName))].map(k => byKey.get(k)).map(m => (m ? p.modDetails?.[m.path] : undefined))
   const visual = details.filter(d => [d?.category, ...getAdditionalCategories(d)].some(c => VISUAL.has(c ?? '')))
   // "Black Panther - Skin" -> "Black Panther", from a skin mod first
   const hero = [...visual, ...details].map(d => d?.character_name?.split(' - ')[0].trim()).find(n => n && !n.startsWith('Multiple'))
-  const show = visual.length > 0
+  return { show: visual.length > 0, hero }
+}
+
+/** note (an empty card): whether the game is open, as a status pill, then a line on where the picture comes from or that
+ *  the game must be open first. While it is closed the button shows a lock and reads as unavailable. */
+export function CaptureButton({ p, l, onUse, className = 'lo-text-btn', label = 'Capture preview in game', note = false }: {
+  p: LoadoutProps; l: Loadout; onUse: (blob: Blob) => Promise<boolean>; className?: string; label?: string; note?: boolean
+}) {
+  const { show, hero } = captureTarget(p, l)
   const [running, setRunning] = useState(false)
   const [open, setOpen] = useState(false)
   useEffect(() => {
@@ -163,13 +173,18 @@ export function CaptureButton({ p, l, onUse }: { p: LoadoutProps; l: Loadout; on
   if (!show) return null
   return (
     <>
+      {note && <>
+        <span className={`cap-status${running ? ' is-on' : ''}`} role="status"><i aria-hidden="true" />{running ? 'Game open' : 'Game closed'}</span>
+        <small>{running ? "Go to the hero's Overview or Cosmetics screen in Marvel Rivals" : "Open Marvel Rivals, then go to the hero's Overview or Cosmetics screen"}</small>
+      </>}
       {/* aria-disabled, not disabled: a click while the game is closed says why instead of doing nothing */}
-      <button type="button" className="lo-text-btn" aria-disabled={!running}
+      <button type="button" className={className} aria-disabled={!running}
         onClick={() => { if (!running) { p.alert.warning('Open Marvel Rivals first', 'Capture takes its picture from the game window.'); return } primeShutter(); setOpen(true) }}
         title={running ? `Take a picture of ${hero ?? 'the hero'} in Marvel Rivals for this loadout's image` : 'Open Marvel Rivals first'}>
-        <Camera size={14} /> Capture preview in game
+        {running ? <Camera size={14} /> : <Lock size={14} />} {label}
       </button>
-      {open && <CaptureDialog p={p} l={l} hero={hero} onUse={onUse} onClose={() => setOpen(false)} />}
+      {/* on the page itself: the button can sit in the card's hover corner, which hides (and lets clicks through) when not hovered */}
+      {open && createPortal(<CaptureDialog p={p} l={l} hero={hero} onUse={onUse} onClose={() => setOpen(false)} />, document.body)}
     </>
   )
 }
