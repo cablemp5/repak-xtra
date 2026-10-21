@@ -33,14 +33,16 @@ you do not need to unzip it.
 3. **Close Marvel Rivals** if it is open.
 4. **Open repakxtra.** Double-click `repakxtra.exe` in the folder. If Windows says "Windows protected your PC", click
    **More info**, then **Run anyway**.
-5. **Follow the welcome screen.** It opens by itself the first time.
+5. **Follow the welcome screen.** It opens by itself the first time and starts with what loadouts are. Click
+   **Set up repakxtra** for the steps.
    - **Find the game** usually has a blue check already. If not, click **Find it**.
    - **Install the signature bypass:** click **Install**. Without it, the game does not load mods.
    - **Install Project Galacta:** click **Install**. Most skin mods need it.
    - **Mod previews** and **Desktop shortcut** are optional. You can skip them for now.
 6. **Add your mod.** Drag the mod file from your Downloads folder onto the repakxtra window and drop it on
    **Install Mods**. You can also click **Choose files...** under **Add your first mods** and pick it.
-7. **Click Install 1 mod.** Leave the switches as they are; they are for special mods.
+7. **Click Install and save loadout.** It installs the mod and saves it as a loadout too (see below). Leave
+   **Advanced** as it is; it is for special mods.
 8. **Check that it is on.** Click **Library** at the top. Your mod is in the list with a blue switch, which means on.
 9. **Play.** Click **Launch Game**. The mod loads when the game starts.
 
@@ -61,13 +63,14 @@ in the game.
    downloads the free preview kit (about 110 MB) and installs Blender, the free program that draws the pictures. If
    Windows asks whether to allow changes, click **Yes**. When it says **Ready**, close Setup.
 2. **Install a mod** as in the steps above: drag the file onto the window and drop it on **Install Mods** (or click
-   **PAK** in the Library and pick it), then click **Install 1 mod**.
+   **PAK** in the Library and pick it). To make the loadout yourself, click **Install without a loadout**.
+   (**Install and save loadout** does steps 3 to 6 for you.)
 3. **Make a loadout.** Click **Loadouts** at the top, then **New loadout**.
 4. **Name it.** Type a name, like `Ultimate`, and press **Enter**.
 5. **Add your mod.** Under **Add mods**, type part of the mod's name in the search box, then click the **+** next to it.
    It moves up to **In this loadout**.
-6. **Make its picture.** Click **Generate previews**. The picture shows up on the left when it is ready; this can take
-   a minute or two, and you can keep using the app while it works.
+6. **Make its picture.** Click **Generate previews** on the card at the left. The picture shows up there when it is
+   ready; this can take a minute or two, and you can keep using the app while it works.
 7. **Turn it on.** Click **Loadouts** at the top left of the page to go back. Click the switch on your loadout's card:
    blue turns all its mods on, grey turns them off. Mods that are not in the loadout stay as they are.
 
@@ -79,30 +82,38 @@ in the game.
 - One click turns a set of mods on or off. Loadouts are independent, and you are warned when two that are on change the same hero.
 - Collections or a view by hero. Drag a card to reorder it, move it to another collection or start a new one with it; the
   pencils rename loadouts and collections. **−** and **+** in the header (or `Ctrl` + scroll) change the card size.
-- Make one from the Library selection, the right-click menu, the sidebar or while installing. Undo for every removal.
+- Make one from the Library selection, the right-click menu or while installing. Undo for every removal.
 - On a loadout's page: add and remove mods, rename a mod, turn single mods on or off, and **More > Export as zip** (every
   mod's files in one zip, named after the loadout). Mods installed from the page join the loadout, and mods deleted
   from the Library show a red **Deleted** tag. Changes save as you make them.
-- The Library sidebar lists them for quick switching, the ones that are on first.
+- Pick what the card shows under it on the loadout's page: the rendered **Preview**, a **Capture** from the game, your
+  own **Image** (or GIF or video), or **Text**, a title with an icon and a color. Each one is kept, so you can switch
+  back any time.
+- Pin a loadout to `Ctrl+1` to `Ctrl+9` (More > Hotkey on its page) to switch it from anywhere.
 
 **Previews**
 - Character mods render on the hero in the lobby pose, using the mods' real materials. A loadout's mods render together.
 - Heroes with forms get one picture per form the mod changes (Magik and Darkchylde, Hulk's three); cards page through them.
 - Animations get a looping clip, VFX mods a palette of the colors they change, UI mods an icon sheet, sound mods a list.
-  When a loadout has an emote's sound mod, hovering the emote's clip plays its sound.
-- **Generate all previews** queues every loadout. Mods with nothing to show are marked "No preview possible".
-- **Capture in game:** on a loadout's page, click **Capture preview in game**, switch to the hero's Overview or Cosmetics
-  screen in the game, then press `Ctrl+Shift+X` to use a screenshot instead.
+  When a loadout has an emote's sound mod, hovering the emote's clip plays its sound (each card can mute it).
+- Mods that put another skin on a hero's default through the skin table render as that skin.
+- **Generate all previews** queues every loadout, and each card says what it is doing while it renders. Mods with
+  nothing to show are marked "Nothing to render".
+- **Capture in game:** with the game open, pick **Capture** under a loadout's card and click **Capture screenshot**,
+  switch to the hero's Overview or Cosmetics screen in the game, then press `Ctrl+Shift+X`.
 
 > [!NOTE]
 > Rendered previews need the preview kit and [Blender](https://www.blender.org/download/) (free). **Setup > Mod previews** installs both.
 
-**Library:** hero and type filters, double-click to rename. Deleted mods (and a mod's old version when it is updated, or a folder's mods when the folder is deleted) wait 7 days in **Settings > Recently deleted**
+**Library:** hero and type filters (Nexus and Project Galacta mods too), double-click to rename. Deleted mods (and a mod's old version when it is updated, or a folder's mods when the folder is deleted) wait 7 days in **Settings > Recently deleted**
 (Undo right after a delete, Restore any time before). Mods that are on and clash with another mod that is on get a red
 **Conflict** badge, and **Check Conflicts** shows a red dot while any do; it groups the clashing mods and says what they
 replace ("These 3 mods replace Black Panther's materials"); **Keep this one** on a mod turns the others in its group off,
-with Undo. Mods installed from a Nexus Mods download show their source in mod details ("Nexus 12890, uploaded Sep 13,
-2026" with **Open page**), read from the download's file name. File sizes are a setting (**Settings > Interface > Mods view**).
+with Undo. Mods installed from a Nexus Mods download get an orange **Nexus** tag that opens their page, and their source
+in mod details ("Nexus 12890, uploaded Sep 13, 2026" with **Open page**), read from the download's file name. On its
+first launch repakxtra finds the source of mods you installed earlier from the Nexus downloads still in your Downloads
+folder. Project Galacta mods get a magenta tag. File sizes are a setting (**Settings > Interface > Mods view**), and
+**Settings > Interface > Optional controls** hides the Nexus tag, the Broken warnings and the Sigeon button.
 
 **Installing:** drop zips, rars and 7zs as they are, no need to extract. `.pak.off`, `.utoc.off` and `.ucas.off` files
 (how RivalsFPS turns mods off, and how they often get shared) install like any other mod, each set as one mod, on.
@@ -113,7 +124,7 @@ with Undo. Mods installed from a Nexus Mods download show their source in mod de
 channel, with no folder paths or user name. Audio and UI mods say in their details when they only look broken
 (cooldown sounds in the practice range, icons under Sigeon).
 
-**Setup:** the signature bypass ships inside the app (with an "Is it safe?" report), Project Galacta installs and updates in one click, and the preview kit and Blender install from here.
+**Setup:** the signature bypass ships inside the app (with an "Is it safe?" report), Project Galacta installs and updates in one click, and the preview kit and Blender install from here. Every install shows its steps as it goes.
 
 **Sigeon V2 Editor:** create and edit configs and console overrides, and switch configs from the header. Your license key is never shown, and saving keeps its line as it was.
 
@@ -151,7 +162,7 @@ want until it says **All resolved**.
 | `Ctrl+G` | Launch the game |
 | `Ctrl+O` | Install PAKs or archives |
 | `S` | Cycle Sigeon through Off and the installed configs |
-| `Ctrl+Shift+X` (in game) | [Capture the loadout's image](#features), once **Capture preview in game** is open |
+| `Ctrl+Shift+X` (in game) | [Capture the loadout's picture](#features), once **Capture screenshot** is open |
 
 ## Screenshots
 
@@ -227,7 +238,7 @@ switch, then launch it again with `Ctrl+G`), and while Repak X is closed (both c
 Rendered previews need the preview kit and [Blender](https://www.blender.org/download/) (free).
 **Setup > Mod previews** downloads the newest kit from GitHub and installs Blender if it's missing; a kit zip picked
 with **Install from file…** or dropped on the window installs too. It shows where your kit came from and checks GitHub for
-updates. Without either, **Capture in game** on a loadout's page uses a screenshot of the hero instead.
+updates. Without either, the **Capture** cover on a loadout's page uses a screenshot of the hero instead.
 
 </details>
 
@@ -284,7 +295,10 @@ one mod and installs it on. Your original files stay as they were.
 <br>
 
 Mods installed from a Nexus Mods download keep its mod id and upload date, read from the download's file name: mod
-details shows "Nexus 12890, uploaded Sep 13, 2026" and **Open page**. Mods from anywhere else show nothing there.
+details shows "Nexus 12890, uploaded Sep 13, 2026" and **Open page**, and the Library shows a **Nexus** tag on the mod
+(**Settings > Interface > Optional controls** hides it and its filter). On its first launch repakxtra also checks the
+Nexus downloads in your Downloads folder, so mods installed before keep their source. Mods from anywhere else show
+nothing there.
 
 </details>
 

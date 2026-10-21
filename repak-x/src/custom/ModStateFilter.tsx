@@ -2,6 +2,7 @@
 // installed game version or may crash (custom/brokenMods.ts).
 import { useEffect } from 'react'
 import { useBrokenVersion, verdictOf } from './brokenMods'
+import { useUiPref } from './uiPrefs'
 
 export type ModState = 'all' | 'enabled' | 'disabled' | 'broken'
 
@@ -17,7 +18,8 @@ type Props = {
 export default function ModStateFilter({ value, onChange, mods }: Props) {
   useBrokenVersion()
   const enabled = mods.filter(m => m.enabled).length
-  const broken = mods.filter(m => verdictOf(m.path)).length
+  const shown = useUiPref('broken') // Settings can hide the Broken tab and badges
+  const broken = shown ? mods.filter(m => verdictOf(m.path)).length : 0
   // the last broken mod fixed or removed: back to every mod rather than an empty list
   useEffect(() => { if (value === 'broken' && broken === 0) onChange('all') }, [value, broken]) // eslint-disable-line react-hooks/exhaustive-deps
   const options: [ModState, string, number][] = [

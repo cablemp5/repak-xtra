@@ -1,0 +1,87 @@
+/* repakxtra: the welcome screen's first page (custom/WelcomeIntro.tsx). Three looping demos in CSS. Each element's own
+   style is its finished state, so with Animations off (theme.css zeroes every animation) each demo shows its result. */
+.fr-modal { position: relative; }
+.fr-intro-close.modal-close { position: absolute; top: 14px; right: 14px; z-index: 2; }
+.wi { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
+.wi-head { padding: 24px 26px 6px; }
+.wi-title { display: flex; align-items: baseline; gap: 0.28em; margin: 0; font: 800 28px/1.15 var(--font-primary); letter-spacing: -0.025em; color: var(--text-primary); }
+.wi-title .wm { align-self: baseline; transform: translateY(18.5%); }
+.wi-lede { margin: 10px 0 0; max-width: 60ch; font-size: 13.5px; line-height: 1.55; color: var(--text-secondary); }
+
+.wi-demos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 18px 26px 4px; }
+.wi-demo { margin: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.wi-stage { position: relative; height: 178px; display: grid; place-items: center; overflow: hidden; border-radius: 12px;
+  border: 1px solid var(--panel-border); background: radial-gradient(120% 90% at 50% 0%, rgba(255, 255, 255, 0.05), transparent 70%), var(--bg-dark); }
+.wi-demo figcaption { display: flex; flex-direction: column; gap: 3px; }
+.wi-demo figcaption b { font-size: 13.5px; font-weight: 700; color: var(--text-primary); }
+.wi-demo figcaption span { font-size: 12px; line-height: 1.45; color: var(--text-secondary); }
+
+/* A loadout card in miniature */
+.wi-card { width: 108px; border-radius: 9px; overflow: hidden; border: 1px solid var(--panel-border); background: var(--bg-darker); }
+.wi-card-img { position: relative; aspect-ratio: 1358 / 1920; background: var(--bg-dark); overflow: hidden; }
+.wi-shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.wi-card-body { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 7px; }
+.wi-card-body b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9.5px; font-weight: 700; color: var(--text-primary); }
+
+/* A switch, on by default; .is-off or the demo's keyframes turn it off */
+.wi-switch { position: relative; flex: none; width: 24px; height: 14px; border-radius: 999px; background: var(--accent-primary); }
+.wi-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: #fff; transform: translateX(10px); }
+
+/* 1. See the look first: the card renders (dark, a light band sweeping), then its picture fades in */
+.wi-reveal .wi-shot { animation: wi-shot 6s ease-in-out infinite; }
+.wi-render { position: absolute; inset: 0; display: grid; place-items: center; overflow: hidden; background: rgba(6, 7, 9, 0.7); opacity: 0;
+  animation: wi-render 6s ease-in-out infinite; }
+.wi-render::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.09), transparent);
+  animation: lo-skel-sweep 1.6s ease-in-out infinite; }
+.wi-render span { position: relative; z-index: 1; font-size: 10px; font-weight: 600; color: var(--text-primary); }
+@keyframes wi-shot { 0%, 42% { opacity: 0; filter: blur(8px); } 56%, 92% { opacity: 1; filter: blur(0); } 100% { opacity: 0; filter: blur(8px); } }
+@keyframes wi-render { 0%, 40% { opacity: 1; } 52%, 100% { opacity: 0; } }
+
+/* 2. One switch, the whole set: the switch flips and every row of the set lights up after it */
+.wi-set { display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 10px; padding: 14px; place-items: initial; }
+.wi-set-head { display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; color: var(--text-primary); }
+.wi-set ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.wi-set li { display: flex; align-items: center; gap: 8px; height: 22px; padding: 0 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.035);
+  font-size: 11px; color: var(--text-primary); animation: wi-row 5s ease infinite; animation-delay: calc(var(--i) * 0.12s); }
+.wi-set li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wi-set li small { font-size: 10px; color: var(--text-secondary); }
+.wi-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #3ecf6e; animation: wi-dot 5s ease infinite; animation-delay: inherit; }
+.wi-set .wi-switch { animation: wi-track 5s ease infinite; }
+.wi-set .wi-switch::after { animation: wi-knob 5s ease infinite; }
+@keyframes wi-track { 0%, 16% { background: rgba(255, 255, 255, 0.18); } 22%, 78% { background: var(--accent-primary); } 84%, 100% { background: rgba(255, 255, 255, 0.18); } }
+@keyframes wi-knob { 0%, 16% { transform: none; } 22%, 78% { transform: translateX(10px); } 84%, 100% { transform: none; } }
+@keyframes wi-dot { 0%, 22% { background: rgba(255, 255, 255, 0.22); } 28%, 80% { background: #3ecf6e; } 86%, 100% { background: rgba(255, 255, 255, 0.22); } }
+@keyframes wi-row { 0%, 22% { color: var(--text-secondary); } 28%, 80% { color: var(--text-primary); } 86%, 100% { color: var(--text-secondary); } }
+
+/* 3. Swap sets in a click: one card on, then the other */
+.wi-swap { display: flex; gap: 8px; justify-content: center; align-items: center; }
+.wi-swap .wi-card { width: 96px; animation: wi-on 6s ease infinite; }
+.wi-swap .wi-b { animation-name: wi-off; opacity: 0.5; }
+.wi-swap .wi-switch { animation: wi-track-a 6s ease infinite; }
+.wi-swap .wi-switch::after { animation: wi-knob-a 6s ease infinite; }
+.wi-swap .wi-b .wi-switch { animation-name: wi-track-b; background: rgba(255, 255, 255, 0.18); }
+.wi-swap .wi-b .wi-switch::after { animation-name: wi-knob-b; transform: none; }
+@keyframes wi-on { 0%, 44% { opacity: 1; border-color: color-mix(in srgb, var(--accent-primary), transparent 40%); } 52%, 94% { opacity: 0.5; border-color: var(--panel-border); } 100% { opacity: 1; border-color: color-mix(in srgb, var(--accent-primary), transparent 40%); } }
+@keyframes wi-off { 0%, 44% { opacity: 0.5; border-color: var(--panel-border); } 52%, 94% { opacity: 1; border-color: color-mix(in srgb, var(--accent-primary), transparent 40%); } 100% { opacity: 0.5; border-color: var(--panel-border); } }
+@keyframes wi-track-a { 0%, 44% { background: var(--accent-primary); } 50%, 94% { background: rgba(255, 255, 255, 0.18); } 100% { background: var(--accent-primary); } }
+@keyframes wi-knob-a { 0%, 44% { transform: translateX(10px); } 50%, 94% { transform: none; } 100% { transform: translateX(10px); } }
+@keyframes wi-track-b { 0%, 46% { background: rgba(255, 255, 255, 0.18); } 52%, 94% { background: var(--accent-primary); } 100% { background: rgba(255, 255, 255, 0.18); } }
+@keyframes wi-knob-b { 0%, 46% { transform: none; } 52%, 94% { transform: translateX(10px); } 100% { transform: none; } }
+
+/* Tags and loadouts side by side */
+.wi-vs { margin: 18px 26px 20px; border: 1px solid var(--panel-border); border-radius: 12px; overflow: hidden; font-size: 12.5px; }
+.wi-vs > div { display: grid; grid-template-columns: 1.1fr 1fr 1fr; gap: 12px; padding: 8px 14px; border-top: 1px solid var(--panel-border); }
+.wi-vs > div:first-child { border-top: none; background: rgba(255, 255, 255, 0.025); font-size: 11.5px; font-weight: 600; color: var(--text-secondary); }
+.wi-vs > div:first-child span:last-child { color: color-mix(in srgb, var(--accent-primary), white 35%); }
+.wi-vs [role="rowheader"] { color: var(--text-secondary); }
+.wi-vs [role="cell"] { color: var(--text-secondary); }
+.wi-vs [role="cell"]:last-child { color: var(--text-primary); font-weight: 600; }
+
+.wi-next { display: inline-flex !important; align-items: center; gap: 6px; min-width: 0 !important; padding: 0 14px !important; }
+
+@media (max-width: 640px) {
+  .wi-demos { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wi *, .wi *::before, .wi *::after { animation: none !important; }
+}

@@ -7,12 +7,12 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { ListPlus, Sparkles, X } from 'lucide-react'
+import { CircleStop, ListPlus, WandSparkles, X } from 'lucide-react'
 import { play } from 'cuelume'
 import { useAlert } from '../components/AlertHandler'
-import { modKey, patchLoadout, readLoadouts } from './loadoutStore'
-import { deleteMedia, getMedia } from './loadoutMedia'
-import { MatrixLoader, revealOnLoad } from './motion'
+import { type Loadout, coverFills, modKey, patchLoadout, pickCover, readLoadouts } from './loadoutStore'
+import { revealOnLoad } from './motion'
+import { EGG_MS, stepEgg, stepText } from './previewStages'
 import { plural } from './modName'
 
 const NOTHING = 'Nothing to show for this mod: previews cover skins, meshes, textures, animations, UI icons, VFX colors and sounds.'
@@ -38,15 +38,11 @@ const failureListeners = new Set<(f: Failure) => void>()
 /** Opens Setup at its Mod previews card (SetupPanel.tsx listens). */
 export const openPreviewSetup = () => window.dispatchEvent(new CustomEvent('repakxtra-open-setup', { detail: 'previews' }))
 const loadoutOf = (setKey: string) => readLoadouts().find(x => previewSetKey(x.id) === setKey)
-/** The loadout's own image as its run starts (its stored revision, or the legacy data URL), or null without one. */
-const ownImageOf = (setKey?: string) => { const l = setKey ? loadoutOf(setKey) : undefined; return l ? (l.mediaRev ?? l.image ?? null) : null }
-/** A loadout's generated previews take the place of its own pasted or uploaded image (the image is deleted): only the
- *  image it had when the run started, so one added during the run stays. */
-const replaceOwnImage = (setKey: string, had: string | number | null) => {
+/** A finished render: its loadout's card shows the preview when asked for (show: generated from its page or for a new
+ *  install), or when the card had nothing else to show. Its image, capture and text all stay, one click away. */
+const showPreviewCover = (setKey: string, show: boolean) => {
   const l = loadoutOf(setKey)
-  if (!l || had === null || (l.mediaRev ?? l.image ?? null) !== had) return
-  deleteMedia(l.id)
-  patchLoadout(l.id, { image: undefined, mediaRev: undefined, mediaType: undefined })
+  if (l && l.cover !== 'preview' && (show || pickCover(l, coverFills(l, false)) === null)) patchLoadout(l.id, { cover: 'preview' })
 }
 const covers = new Map<string, Covers & { rev: number }>() // loadout render key -> the mods it shows and the mods it was rendered for
 // Shared caches, so a card that remounts (Home -> page -> Home) shows its image at once without reading it again.
@@ -66,7 +62,7 @@ const dropCached = (key: string) => {
 }
 /** What a run is for: its mods, the loadout's combined render key (if any), a name to show ("Electric Blue"), and
  *  force (Regenerate: render even when nothing changed). */
-type Job = { paths: string[]; set?: string; name: string; force?: boolean }
+type Job = { paths: string[]; set?: string; name: string; force?: boolean; show?: boolean }
 type QueuedJob = Job & { id: string }
 /** A job's identity: its loadout render key, else its mods in any order. The name is for display only (a loadout can be
  *  renamed mid-run). Pure. */
@@ -77,7 +73,7 @@ let active = false // a run was accepted and its done event has not arrived yet
 let batchDone = 0  // jobs finished since the queue was last empty, for Home's "3 of 21"
 type SetResult = 'ok' | 'none' | 'failed' | undefined
 let run = { id: '', total: 0, made: 0, none: 0, failed: 0, stopping: false, summary: '', set: undefined as string | undefined, name: '', setResult: undefined as SetResult, busy: '',
-  ownImage: null as string | number | null }
+  show: false, step: undefined as string | undefined }
 let version = 0
 const listeners = new Set<() => void>()
 const notify = () => { version++; listeners.forEach(l => l()) }
@@ -107,6 +103,11 @@ listen<string>('mod-preview-ready', e => {
   markNone(e.payload, false)
   if (active && e.payload === run.set) run.setResult = 'ok'
   if (active && pending.delete(e.payload)) run.made++
+  notify()
+}).catch(() => undefined)
+listen<string>('mod-preview-stage', e => { // what the generator is doing now (previewStages.ts)
+  if (!active || run.step === e.payload) return
+  run.step = e.payload
   notify()
 }).catch(() => undefined)
 listen<string>('mod-preview-in', e => { // shown in the loadout's combined render instead of its own
@@ -168,8 +169,8 @@ listen<boolean>('mod-previews-done', e => {
   const summary = run.busy || (stoppedEarly ? 'Stopped' : e.payload || run.made || run.none || run.failed ? parts.filter(Boolean).join(' · ') : FAILED)
   const stopped = run.stopping
   run = { ...run, stopping: false, summary }
-  // Previews made for a loadout replace the image pasted or uploaded for it (not on Stop: the user ended it)
-  if (run.set && !stopped && (run.setResult === 'ok' || run.made > 0)) replaceOwnImage(run.set, run.ownImage)
+  // Previews made for a loadout become what its card shows when asked for (not on Stop: the user ended it)
+  if (run.set && !stopped && (run.setResult === 'ok' || run.made > 0)) showPreviewCover(run.set, run.show)
   if (!run.busy && (failed || run.setResult === 'failed')) failureListeners.forEach(f => f({ name: run.name, failed, setFailed: run.setResult === 'failed' }))
   play(run.busy ? 'warning' : stoppedEarly ? 'close' : run.made && !failed && run.setResult !== 'failed' ? 'ready' : run.made ? 'warning' : 'error')
   batchDone++
@@ -185,7 +186,11 @@ export const hasPreview = (key: string) => revs.has(key)
 export const previewSetKey = (loadoutId: string) => `loadout-${loadoutId}`
 /** A loadout has previews when its combined render exists or any of its mods has its own (loadouts of only VFX, UI or
  *  sound mods never get a combined render). */
-export const loadoutHasPreview = (l: { id: string; on: string[] }) => hasPreview(previewSetKey(l.id)) || l.on.some(k => hasPreview(modKey(k))) || noPreviewPossible(l)
+export const loadoutHasPreview = (l: { id: string; on: string[] }) => previewMade(l) || noPreviewPossible(l)
+/** A loadout's previews exist: its combined render, or any of its mods' own. */
+export const previewMade = (l: { id: string; on: string[] }) => hasPreview(previewSetKey(l.id)) || l.on.some(k => hasPreview(modKey(k)))
+/** What a loadout's card shows (loadoutStore.ts pickCover), with its previews as they are now. */
+export const coverOf = (l: Loadout) => pickCover(l, coverFills(l, previewMade(l)))
 /** Every mod of the loadout rendered with nothing to show (sounds, unknown types): there is no preview to make. */
 export const noPreviewPossible = (l: { on: string[] }) => l.on.length > 0 && l.on.every(k => none.has(modKey(k)))
 /** A loadout's combined render: the mods it shows and the mods it was rendered for; undefined while there is none
@@ -288,7 +293,7 @@ const start = async (job: QueuedJob): Promise<string | null> => {
   jobs.forEach(([, k]) => { pending.add(k); outcome.delete(k) })
   if (job.set) outcome.delete(job.set)
   run = { id: job.id, total: jobs.length, made: 0, none: 0, failed: 0, stopping: false, summary: '', set: job.set, name: job.name, setResult: undefined, busy: '',
-    ownImage: ownImageOf(job.set) }
+    show: Boolean(job.show), step: undefined }
   notify()
   try {
     if (await invoke<boolean>('generate_mod_previews', { jobs, set: job.set ?? null, force: Boolean(job.force) })) return null
@@ -310,6 +315,22 @@ export function usePreviewState(set: string) {
   if (running() && run.set === set) return { kind: 'running' as const, done: doneOf(), total: run.total }
   const at = queue.findIndex(q => q.set === set)
   return at >= 0 ? { kind: 'queued' as const, at: at + 1 } : null
+}
+
+/** While `on`: the step the generator reports for the current mod, in words ("Rendering in Blender"); a step that rolls
+ *  an easter egg shows it first, for EGG_MS (custom/previewStages.ts). Empty while off. */
+export function usePreviewStage(on: boolean) {
+  usePreviewVersion()
+  const seed = on ? `${run.id}:${doneOf()}:${run.step}` : ''
+  const egg = run.step ? stepEgg(seed) : null
+  const [eggDone, setEggDone] = useState('')
+  useEffect(() => {
+    if (!egg) return
+    const id = setTimeout(() => setEggDone(seed), EGG_MS)
+    return () => clearTimeout(id)
+  }, [egg, seed])
+  if (!on) return ''
+  return run.stopping ? 'Stopping…' : egg && eggDone !== seed ? egg : stepText(run.step)
 }
 
 /** What waits behind the run: loadouts, selections, or "preview jobs" when the queue holds both. */
@@ -334,15 +355,13 @@ export function usePreviewSummary() {
 export const dismissPreviewSummary = () => { run.summary = ''; notify() }
 
 /** Queues every loadout that has installed mods (one combined render each, one after another). `missing`: only the
- *  loadouts with no preview yet; `all`: every one, rendered again even when nothing changed. Returns how many, or the
- *  reason the first could not start (then nothing is queued). */
-export async function generateAllLoadouts(loadouts: { id: string; name: string; on: string[]; mediaRev?: number; image?: string }[], mods: { path: string }[], which: 'missing' | 'all' = 'all') {
+ *  loadouts with no preview yet; `all`: every one, rendered again even when nothing changed. A card already showing its
+ *  image, capture or text keeps showing it (showPreviewCover). Returns how many, or the reason the first could not
+ *  start (then nothing is queued). */
+export async function generateAllLoadouts(loadouts: { id: string; name: string; on: string[] }[], mods: { path: string }[], which: 'missing' | 'all' = 'all') {
   const byKey = new Map(mods.map(m => [modKey(m.path), m.path]))
-  // a loadout with its own pasted or uploaded image has a picture: "only missing" must not replace (delete) it. Only the
-  // image in this copy counts: pictures are not shared between copies, the loadout's mediaRev is
-  const own = await Promise.all(loadouts.map(l => (l.mediaRev ? getMedia(l.id).then(Boolean, () => false) : Boolean(l.image))))
   const jobs = loadouts
-    .filter((l, i) => which === 'all' || !(loadoutHasPreview(l) || own[i]))
+    .filter(l => which === 'all' || !loadoutHasPreview(l))
     .map(l => ({ paths: l.on.map(k => byKey.get(modKey(k))).filter((x): x is string => Boolean(x)), set: previewSetKey(l.id), name: l.name, force: which === 'all' }))
     .filter(j => j.paths.length > 0)
   const started = jobs.map(generatePreviews) // all asked for in this tick: the first starts, the rest queue behind it
@@ -385,7 +404,7 @@ export function PreviewsUnavailable({ className, label }: { className: string; l
     <button type="button" className={`${className} is-unavailable`} onClick={openPreviewSetup}
       aria-label={`${label}: needs the preview kit. Set it up in Setup`}
       title="Previews need the preview kit and Blender (both free). Click to set them up in Setup > Mod previews.">
-      <Sparkles size={16} /><span className="bulk-btn-label">{label}</span><span className="setup-chip">Set up</span>
+      <WandSparkles size={16} /><span className="bulk-btn-label">{label}</span><span className="setup-chip">Set up</span>
     </button>
   )
 }
@@ -411,6 +430,7 @@ export function ModPreview({ path }: { path: string }) {
   const queued = queue.some(q => q.id === id)
   const message = outcome.get(key)
   const forms = formKeys(key)
+  const stage = usePreviewStage(busy)
   return (
     <div className="detail-section mod-preview">
       {url && (
@@ -424,8 +444,8 @@ export function ModPreview({ path }: { path: string }) {
         <button type="button" className="mod-preview-btn" disabled={busy}
           onClick={() => (queued ? unqueue(id) : ask(alert, { paths: [path], name: key, force: Boolean(url) }))}
           title={queued ? 'Remove from the preview queue' : running() ? `Queue it: previews for ${run.name} are generating` : 'Render this mod on its character in the lobby look (about 10 to 40 seconds)'}>
-          {queued ? <X size={14} /> : running() && !busy ? <ListPlus size={14} /> : <Sparkles size={14} />}
-          {busy ? <Shimmer text="Generating preview" /> : queued ? 'Queued' : running() ? 'Queue preview' : url ? 'Regenerate preview' : 'Generate preview'}
+          {queued ? <X size={14} /> : running() && !busy ? <ListPlus size={14} /> : <WandSparkles size={14} />}
+          {busy ? <Shimmer text={stage || 'Generating preview'} /> : queued ? 'Queued' : running() ? 'Queue preview' : url ? 'Regenerate preview' : 'Generate preview'}
         </button>
         {running() && !busy && <span className="mod-preview-note">Generating <Shimmer text={progressText()} /></span>}
         {!running() && message && <span className="mod-preview-note">{message}</span>}
@@ -453,23 +473,26 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
   const n = new Set(paths.map(modKey)).size
   // A loadout that already has its preview: the button renders it again, even when nothing changed
   const again = Boolean(set && (hasPreview(set) || paths.some(p => hasPreview(modKey(p)))))
-  const job: Job = { paths, set, name: name ?? `${n} selected mod${n === 1 ? '' : 's'}`, force: again }
+  const job: Job = { paths, set, name: name ?? `${n} selected mod${n === 1 ? '' : 's'}`, force: again, show: Boolean(set) }
   const text = again ? label.replace(/^Generate/, 'Regenerate') : label
   if (!canGenerate) return <PreviewsUnavailable className={className} label={label} />
   const id = jobId(job)
   if (running() && run.id === id) {
     // What it is doing (the dot loader and "2 of 9"), and Stop as its own button beside it
-    const stopBtn = (
-      <button type="button" className={`${className} run-stop-btn`} onClick={stop} disabled={run.stopping}
-        title={queue.length ? `Stop now, and clear the ${queue.length} queued` : 'Stop now'}>
-        <span className="stop-glyph" aria-hidden="true" />{stopOnly ? (run.stopping ? 'Stopping…' : 'Stop generating previews') : 'Stop'}
-      </button>
-    )
+    // On a loadout page's card (stopOnly) a chip like its others: the stop icon and one word
+    const stopBtn = stopOnly
+      ? <button type="button" className={className} onClick={stop} disabled={run.stopping}
+          title={queue.length ? `Stop generating previews, and clear the ${queue.length} queued` : 'Stop generating previews'}>
+          <CircleStop size={13} aria-hidden="true" />{run.stopping ? 'Stopping…' : 'Stop'}
+        </button>
+      : <button type="button" className={`${className} run-stop-btn`} onClick={stop} disabled={run.stopping}
+          title={queue.length ? `Stop now, and clear the ${queue.length} queued` : 'Stop now'}>
+          <span className="stop-glyph" aria-hidden="true" />Stop
+        </button>
     if (stopOnly) return stopBtn
     return (
       <span className="run-group">
         <span className={`${className} is-running`} role="status">
-          <MatrixLoader size={12} />
           {run.stopping ? 'Stopping…' : <Shimmer text={`Generating ${doneOf()} of ${run.total}`} />}
         </span>
         {stopBtn}
@@ -495,7 +518,7 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
   return (
     <button type="button" className={className} disabled={n === 0} onClick={() => ask(alert, job)}
       title={run.summary ? `Last run: ${run.summary}` : again ? `Render this loadout's previews again (about 20 seconds per mod)` : `Render previews for these ${n} mods (about 20 seconds each)`}>
-      <Sparkles size={16} />
+      <WandSparkles size={16} />
       <span className="bulk-btn-label">{text}</span>
       {n > 0 && <span className="bulk-num">{n}</span>}
     </button>

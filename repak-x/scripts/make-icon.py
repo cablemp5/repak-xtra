@@ -1,4 +1,4 @@
-"""repakxtra's app icon: the logo's lowercase x (custom/Wordmark.tsx), Geist Mono 600, in the logo's solid color, centered on
+"""repakxtra's app icon: the logo's lowercase x (custom/Wordmark.tsx), Geist 800, in the logo's solid color, centered on
 transparency. With --mesh it is filled with the logo's old mesh gradient instead (the long tilted color blobs that cross
 the logo's x, blurred into each other and bent along smooth noise, over the base color; custom/WordmarkMesh.tsx). Writes icons/RepakIcon.png (512) and icons/RepakIcon.ico (16 to
 256), which tauri.conf.json bundles into the exe: the taskbar, the window and the desktop shortcut all show it. Colors are
@@ -14,8 +14,8 @@ from PIL import Image, ImageDraw
 
 HERE = Path(__file__).resolve().parents[1]
 # Wordmark.tsx's x (font units, y up)
-X = [(40, 0), (233, 274), (50, 534), (180, 534), (301, 355), (419, 534), (551, 534), (369, 272),
-     (560, 0), (429, 0), (301, 193), (172, 0)]   # Geist Mono 600's x
+X = [(45, 0), (233, 272), (47, 540), (247, 540), (345, 386), (441, 540), (645, 540), (459, 272),
+     (648, 0), (448, 0), (349, 160), (249, 0)]   # Geist 800's x
 SOLID, TEST_SOLID = '#346bf1', '#12c85a'   # theme.css .wm --wm-xtra, and its test-build color
 BLUES = ['#2a4bff', '#00e1ff', '#6a3dff', '#1d8bff']   # theme.css .wm: --wm-base, then --wm-c1..3
 GREENS = ['#12c85a', '#b6ff2e', '#00d4b0', '#00e070']  # its test-build colors
@@ -24,7 +24,7 @@ GREENS = ['#12c85a', '#b6ff2e', '#00d4b0', '#00e070']  # its test-build colors
 BLOBS = [(2820, 160, 360, 120, -28, 1), (3120, 600, 380, 110, 22, 2), (3400, 220, 340, 120, 35, 3),
          (3700, 700, 360, 110, -18, 1), (3960, 150, 380, 120, -30, 2), (4200, 520, 340, 110, 40, 3),
          (4480, 180, 360, 120, 18, 1), (4720, 660, 360, 120, -26, 2), (4980, 300, 300, 120, 30, 3)]
-X0, BASELINE = 2805, 725   # the x's glyph origin in the logo's viewBox (offset 2845 minus LEFT 40)
+X0, BASELINE = 2800, 725   # the x's glyph origin in the logo's viewBox (offset 2840 minus LEFT 40)
 BLUR, WARP = 80, 460       # Wordmark.tsx's feGaussianBlur stdDeviation and feDisplacementMap scale (viewBox units)
 WAVE = (455, 222)          # its noise's wavelengths across and down (1 / baseFrequency)
 SPREAD = 2.2              # the icon's x shows this much of the mesh around its center: the logo's x alone holds one or two

@@ -1,6 +1,7 @@
 //! repakxtra: where a mod came from, read off the archive's name when it is a Nexus Mods download
 //! (see parse for its two name formats). Nothing is fetched; other names give nothing. Also lists the paks an install
-//! source holds (install_paks).
+//! source holds (install_paks), and the Nexus downloads still in the Downloads folder, so mods installed before the
+//! source was recorded get theirs once (nexusSource.tsx scanDownloads).
 
 use regex_lite::Regex;
 use serde::Serialize;
@@ -87,6 +88,27 @@ pub async fn xtra_nexus_sources(paths: Vec<String>) -> Result<Vec<Option<NexusSo
     .map_err(|e| e.to_string())
 }
 
+/// Every Nexus-named archive directly in `dir`, each with the paks inside. Other files are skipped unread.
+fn nexus_archives_in(dir: &std::path::Path) -> Vec<NexusSource> {
+    let Ok(read) = std::fs::read_dir(dir) else { return Vec::new() };
+    read.filter_map(Result::ok)
+        .filter_map(|e| {
+            let path = e.path().to_string_lossy().into_owned();
+            let s = parse(&path)?;
+            let paks = pak_stems(&archive_entries(&path));
+            (!paks.is_empty()).then_some(NexusSource { paks, ..s })
+        })
+        .collect()
+}
+
+/// The Nexus downloads in this user's Downloads folder (empty when there is none).
+#[tauri::command]
+pub async fn xtra_nexus_downloads() -> Result<Vec<NexusSource>, String> {
+    tauri::async_runtime::spawn_blocking(|| dirs::download_dir().map(|d| nexus_archives_in(&d)).unwrap_or_default())
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// The pak names each install source puts in place (without .pak): an archive or folder installs every pak inside under
 /// the pak's own name, not the source's, so a loadout made at install looks the mods up by these (installLoadout.tsx).
 /// A lone .pak gives its own name.
@@ -155,6 +177,23 @@ mod tests {
         }
         w.finish().unwrap();
         assert_eq!(pak_stems(&archive_entries(path.to_str().unwrap())), vec!["A_9999999_P".to_string()]);
+    }
+
+    #[test]
+    fn finds_the_nexus_downloads_in_a_folder() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        for name in ["Mod_77_2_2026-01-01T00-00Z_x.zip", "Other mod.zip", "Empty_78_1_2026-01-01T00-00Z_y.zip"] {
+            let mut w = zip::ZipWriter::new(std::fs::File::create(dir.path().join(name)).unwrap());
+            if !name.starts_with("Empty") {
+                w.start_file("A_9999999_P.pak", zip::write::SimpleFileOptions::default()).unwrap();
+                w.write_all(b"x").unwrap();
+            }
+            w.finish().unwrap();
+        }
+        let found = nexus_archives_in(dir.path());
+        assert_eq!(found.len(), 1, "only the Nexus name with a pak inside");
+        assert_eq!((found[0].id, found[0].paks.clone()), (77, vec!["A_9999999_P".to_string()]));
     }
 
     #[test]

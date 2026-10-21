@@ -86,7 +86,7 @@ export async function playEmoteSound(sound: Sound, loopSeconds: number) {
   node.buffer = loopSeconds > 0 ? fitted(b, loopSeconds) : b
   node.loop = loopSeconds > 0
   const gain = ctx.createGain()
-  gain.gain.value = 0.7
+  gain.gain.value = 0.6 // 60%: a hover preview, quieter than the game
   node.connect(gain).connect(ctx.destination)
   node.start()
   playing = node

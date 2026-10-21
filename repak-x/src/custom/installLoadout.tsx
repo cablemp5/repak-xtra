@@ -187,7 +187,7 @@ export async function finishInstallLoadout(installed: Installed[], alert: Return
   const missing = landed.filter(l => !found(l)).length
   alert.success(`Loadout ${job.name} created`, `${keys.length} mod${keys.length === 1 ? '' : 's'}${missing ? `; ${missing} could not be found` : ''}.${job.preview ? ' Generating its preview.' : ''}`)
   if (!job.preview) return
-  const error = await generatePreviews({ paths: onDisk.map(m => m.path), set: previewSetKey(id), name: job.name })
+  const error = await generatePreviews({ paths: onDisk.map(m => m.path), set: previewSetKey(id), name: job.name, show: true })
   if (error) alert.warning('Preview not started', error)
 }
 

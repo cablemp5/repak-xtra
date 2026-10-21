@@ -20,18 +20,30 @@
 .ip-cover-note { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 0 10px; text-align: center; font-size: 11.5px; line-height: 1.35; color: var(--text-secondary); }
 .ip-cover.is-preview .ip-cover-note { color: var(--text-primary); }
+/* No preview coming: no hero shape, the add-a-picture icon (as on an empty loadout card) over white bold words */
+.ip-cover:not(.is-preview) .ip-cover-note { gap: 8px; color: var(--text-primary); font-weight: 700; }
+.ip-cover:not(.is-preview) .ip-cover-note svg.lucide { opacity: 0.85; }
 
 .ip-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; justify-content: center; }
 /* New loadout or Add to: plain words with a chevron, lit on hover, opening a small menu */
 .ip-target { position: relative; align-self: flex-start; margin-left: -6px; }
-.ip-target-btn { display: inline-flex !important; align-items: center; gap: 4px; height: 24px !important; min-height: 0 !important; padding: 0 6px !important;
-  border: none !important; border-radius: 6px !important; background: transparent !important; cursor: pointer;
-  font-size: 12px !important; font-weight: 600 !important; letter-spacing: 0.01em; color: var(--text-secondary) !important;
+.ip-target-btn { display: inline-flex !important; align-items: center; gap: 5px; height: 30px !important; min-height: 0 !important; padding: 0 8px !important;
+  border: none !important; border-radius: 7px !important; background: transparent !important; cursor: pointer; max-width: 100%;
+  font-size: 14px !important; font-weight: 600 !important; letter-spacing: 0.01em; color: var(--text-secondary) !important;
   transition: color 0.15s ease, background 0.15s ease; }
 .ip-target-btn:hover, .ip-target-btn[aria-expanded="true"] { color: var(--text-primary) !important; background: var(--quiet-hover) !important; }
-.ip-target-btn svg.lucide { width: 14px !important; height: 14px !important; opacity: 0.8; transition: transform 0.15s ease; }
+.ip-target-btn svg.lucide { flex: none; width: 16px !important; height: 16px !important; opacity: 0.8; transition: transform 0.15s ease; }
 .ip-target-btn[aria-expanded="true"] svg.lucide { transform: rotate(180deg); }
-.sigeon-menu.ip-target-menu { top: calc(100% + 4px); left: 0; right: auto; width: 240px; max-height: 260px; overflow-y: auto; transform-origin: top left; z-index: 20; }
+.sigeon-menu.ip-target-menu { top: calc(100% + 4px); left: 0; right: auto; width: 260px; max-height: 300px; overflow-y: auto; transform-origin: top left; z-index: 20; }
+/* New loadout on top with its plus, then a line and a small heading over the loadouts to add to; long names end in ... */
+.ip-target-menu .sigeon-item { justify-content: flex-start !important; gap: 8px; }
+.ip-target-menu .sigeon-item .ip-target-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.ip-target-menu .sigeon-item svg.lucide { flex: none; }
+.ip-target-menu .sigeon-item.is-new { font-weight: 600 !important; }
+.ip-target-sep { height: 1px; margin: 4px 6px; background: var(--panel-border); }
+.ip-target-head { padding: 6px 10px 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary); opacity: 0.8; }
+.ip-coll-name { height: 30px; width: 180px; padding: 0 10px; border-radius: var(--quiet-radius); border: 1px solid rgba(255, 255, 255, 0.16);
+  background: var(--field-bg); color: var(--text-primary); font: 500 12.5px var(--font-primary); outline: none; }
 .ip-modal .custom-dropdown-trigger { height: 30px !important; min-height: 0 !important; font-size: 12.5px !important; }
 .ip-title-wrap { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .ip-title { min-width: 0; margin: 0 -9px; padding: 2px 8px; font: 800 26px/1.2 var(--font-primary); letter-spacing: -0.02em; color: var(--text-primary);
@@ -42,7 +54,7 @@ input.ip-title:focus { border-color: rgba(255, 255, 255, 0.16); background: var(
 .ip-title.is-static { margin: 0; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ip-pen { flex: none; margin-left: 6px; width: 28px; height: 28px !important; color: var(--text-secondary) !important; }
 .ip-pen:hover { color: var(--text-primary) !important; }
-.ip-meta { margin: 0; font-size: 12.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ip-meta { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ip-settings { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; margin-top: 4px; }
 .ip-setting { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
 .ip-check span { font-size: 13px; font-weight: 500; color: var(--text-primary); }
@@ -97,7 +109,7 @@ input.ip-title:focus { border-color: rgba(255, 255, 255, 0.16); background: var(
   padding: 0 8px !important; border-radius: 6px !important; font-size: 12px !important; font-weight: 500 !important; line-height: 1 !important; white-space: nowrap; }
 .ip-badges .character-badge img { width: 16px; height: 16px; border-radius: 4px; object-fit: cover; margin: 0 !important; }
 
-/* A row's details: file name and folder, the source file, then the four switches */
+/* A row's details: file name and folder, then the four switches */
 .ip-details { display: flex; flex-direction: column; gap: 10px; padding: 2px 14px 14px; }
 .ip-detail-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
 .ip-name-wrap { flex: 1 1 260px; min-width: 0; display: flex; align-items: center; height: 30px; border-radius: var(--quiet-radius); background: var(--field-bg);
@@ -111,7 +123,6 @@ input.ip-title:focus { border-color: rgba(255, 255, 255, 0.16); background: var(
 .ip-field { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .ip-label { font-size: 12px; color: var(--text-secondary); flex: none; }
 .ip-field .custom-dropdown-container { min-width: 160px; max-width: 260px; }
-.ip-file { font: 11.5px var(--font-mono); color: var(--text-secondary); opacity: 0.75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* The four switches, each in its own color as on the Library install card */
 .ip-switches { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -134,7 +145,7 @@ input.ip-title:focus { border-color: rgba(255, 255, 255, 0.16); background: var(
 .ip-foot { display: flex; align-items: center; gap: 10px; padding: 12px 22px !important; border-top: 1px solid var(--panel-border); }
 /* Install without a loadout: a real (quiet) button on the left, away from Cancel and Install */
 .lo-text-btn.ip-plain { margin-right: auto; }
-.ip-folder { font: 12px var(--font-mono); color: var(--text-primary); }
+.ip-folder { font: 600 12px var(--font-mono); color: var(--text-primary); }
 .ip-foot .btn-primary { width: auto !important; flex: none; min-width: 112px; height: 32px !important; min-height: 0 !important;
   padding: 0 16px !important; font-size: 13px !important; font-weight: 600 !important; border-radius: 8px !important; }
 

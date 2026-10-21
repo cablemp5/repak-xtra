@@ -56,8 +56,9 @@ import ModStateFilter, { matchesState, type ModState } from './custom/ModStateFi
 import './custom/keyboardClickables'
 import { dialogOpen } from './custom/hotkeys' // repakxtra: extra shortcuts
 import FilterPanel, { filterScope } from './custom/FilterPanel'
-import Loadouts, { AddToLoadoutField, LoadoutMenuItems } from './custom/Loadouts'
+import LoadoutHotkeys, { AddToLoadoutField, LoadoutMenuItems } from './custom/Loadouts'
 import LoadoutsScreen, { ViewTabs } from './custom/LoadoutsScreen'
+import ViewModeMenu from './custom/ViewModeMenu' // repakxtra: view buttons folded into one when narrow
 import { modKey, renameModKey } from './custom/loadoutStore' // repakxtra
 import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
@@ -134,7 +135,7 @@ import SharingPanel from './components/SharingPanel'
 import Wordmark from './custom/Wordmark' // repakxtra: the logo
 import ConflictsPanel from './custom/ConflictsPanel' // repakxtra: in place of Repak X's ClashPanel (grouped, in words)
 import { keepThisOne } from './custom/keepOne' // repakxtra: Keep this one
-import { recordSources, renameSource } from './custom/nexusSource' // repakxtra: Nexus source
+import { NEXUS_TYPE, recordSources, renameSource, sourceOf, useNexusScan } from './custom/nexusSource' // repakxtra: Nexus source
 import { stageOffFiles } from './custom/offFiles' // repakxtra: .pak.off files
 import CrashSuspects, { previousCrashes, withSuspects } from './custom/CrashSuspects' // repakxtra: crash suspects
 
@@ -404,6 +405,7 @@ function App() {
   const [isLogDrawerOpen, setIsLogDrawerOpen] = useState(false)
   useConflictWatch(mods) // repakxtra
   useBrokenWatch(mods) // repakxtra
+  useNexusScan(mods) // repakxtra: Nexus sources for mods installed before they were recorded, once
   useBrokenVersion() // repakxtra: the Broken filter re-runs when the verdicts land
   const conflictCount = useConflictCount() // repakxtra
   reportSource.get = () => ({ mods, modDetails, launcherType, gamePath }) // repakxtra: setup report
@@ -2066,7 +2068,7 @@ function App() {
     setSelectedCategories(prev => {
       const next = new Set<string>()
       for (const v of prev) {
-        if (validCats.has(v)) next.add(v)
+        if (validCats.has(v) || v === NEXUS_TYPE) next.add(v) // repakxtra: Nexus is a filter, not a detected type
       }
       return next
     })
@@ -3060,7 +3062,8 @@ function App() {
         const mainCatMatch = d.category && selectedCategories.has(d.category)
         const adds = getAdditionalCategories(d)
         const addCatMatch = adds.some((cat: string) => selectedCategories.has(cat))
-        if (!mainCatMatch && !addCatMatch) return false
+        const nexusMatch = selectedCategories.has(NEXUS_TYPE) && Boolean(sourceOf(mod.path)) // repakxtra: the Nexus type filter
+        if (!mainCatMatch && !addCatMatch && !nexusMatch) return false
       }
 
       if (hasCharFilter) {
@@ -3891,7 +3894,7 @@ function App() {
           <ModularLogo size={50} className="repak-icon" />
           <div className="header-title-group">
             <h1 className="font-logo"><Wordmark height={22} /></h1>{/* repakxtra: the logo */}
-            <span className="version">{versionTag(version)}</span>{/* repakxtra */}
+            <span className="version">{versionTag()}</span>{/* repakxtra */}
           </div>
         </div>
         <ViewTabs />{/* repakxtra: Home | Library */}
@@ -4020,6 +4023,9 @@ function App() {
           reload={loadMods}
           alert={alert}
         />
+        {/* repakxtra: Ctrl+1..9 switches pinned loadouts on every view (custom/Loadouts.tsx) */}
+        <LoadoutHotkeys mods={mods} scopeMods={folderMods} scopeLabel="all mods" blocked={gameRunning && !bypassGameRunningLock}
+          isBlocked={undoBlocked} reload={loadMods} alert={alert} modDetails={modDetails} />
         {/* Main Action Bar */}
         <div className="main-action-bar">
           <div className="search-wrapper" data-tour="search-bar">
@@ -4113,17 +4119,6 @@ function App() {
           >
             {/* Left Sidebar - Folders */}
             <div className="left-sidebar" data-tour="folder-sidebar">
-              {/* repakxtra: saved loadouts (custom/Loadouts.tsx) */}
-              <Loadouts
-                mods={mods}
-                scopeMods={folderMods}
-                scopeLabel={[...selectedCharacters, ...selectedCategories].join(', ') || 'all mods'}
-                blocked={gameRunning && !bypassGameRunningLock}
-                isBlocked={undoBlocked} /* repakxtra: live game lock for Undo */
-                reload={loadMods}
-                alert={alert}
-                selected={[...selectedMods]} /* repakxtra: + makes a loadout of the selection */
-              />
               {/* Filters Section */}
               <div
                 className="sidebar-filters"
@@ -4245,17 +4240,24 @@ function App() {
                       </button>
                     )}
                   </div>
+                  {/* repakxtra: the view buttons as one menu when the header is narrow (theme.css swaps them) */}
+                  <ViewModeMenu value={viewMode} onChange={(m) => handleViewModeChange(m as typeof viewMode)} modes={[
+                    { id: 'grid', label: 'Grid', icon: <GridViewIcon fontSize="small" /> },
+                    { id: 'compact', label: 'Compact grid', icon: <ViewModuleIcon fontSize="small" /> },
+                    { id: 'list', label: 'List', icon: <ViewListIcon fontSize="small" /> },
+                    ...(showExperimental ? [{ id: 'list-compact', label: 'Compact list', icon: <ViewHeadlineIcon fontSize="small" /> }] : []),
+                  ]} />
                   <div className="divider-vertical" />
                   <button
                     onClick={toggleRightPanel}
-                    className={`btn-ghost ${isRightPanelOpen ? 'active' : ''}`} /* repakxtra: lit while the details panel is open */
+                    className={`btn-ghost btn-square ${isRightPanelOpen ? 'active' : ''}`} /* repakxtra: lit while the details panel is open */
                     aria-pressed={isRightPanelOpen}
                     title={isRightPanelOpen ? "Collapse Details" : "Expand Details"}
                   >
                     <ViewSidebarIcon fontSize="small" style={{ transform: isRightPanelOpen ? 'none' : 'rotate(180deg)' }} />
                   </button>
                   <div className="divider-vertical" />
-                  <button onClick={loadMods} className="btn-ghost" title="Refresh list">
+                  <button onClick={loadMods} className="btn-ghost btn-square" title="Refresh list">
                     <RefreshIcon fontSize="small" />
                   </button>
                 </div>

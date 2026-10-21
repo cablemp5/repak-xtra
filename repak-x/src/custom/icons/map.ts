@@ -20,7 +20,7 @@ export const REACT_ICONS: Record<string, Record<string, string>> = {
     MdExtension: 'Puzzle', MdInstallDesktop: 'MonitorDown', MdMinimize: 'Minus', MdOpenInNew: 'ExternalLink',
     MdRemoveModerator: 'ShieldOff',
   },
-  ri: { RiDeleteBin2Fill: 'Trash2', RiFileZipFill: 'FileArchive', RiGraduationCapFill: 'GraduationCap', RiSparkling2Fill: 'Sparkles' },
+  ri: { RiDeleteBin2Fill: 'Trash2', RiFileZipFill: 'FileArchive', RiGraduationCapFill: 'GraduationCap', RiSparkling2Fill: 'WandSparkles' },
   vsc: {
     VscCheck: 'Check', VscChevronDown: 'ChevronDown', VscChevronRight: 'ChevronRight', VscClearAll: 'ListX',
     VscClose: 'X', VscFile: 'File', VscFolder: 'Folder', VscFolderOpened: 'FolderOpen', VscLibrary: 'Library',

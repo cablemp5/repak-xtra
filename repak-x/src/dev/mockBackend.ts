@@ -254,6 +254,8 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         }
         return out
       }
+      // xtra_nexus.rs install_paks: the pak names each install source holds (a dropped .pak is itself)
+      case 'xtra_install_paks': return (args?.paths ?? []).map((p: string) => { const m = p.match(/([^\\/]+)\.pak$/i); return m ? [m[1]] : [] })
       case 'xtra_nexus_sources': return (args?.paths ?? []).map((p: string) => { // same rule as xtra_nexus.rs
         const file = p.split(/[\\/]/).pop()!
         const m = file.match(/^(.+)[_ ](\d+)[_ ]([0-9A-Za-z.-]+)[_ ](\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})Z[_ ][0-9A-Za-z]+\.(zip|rar|7z)$/i)

@@ -1,19 +1,17 @@
-// repakxtra: the Library sidebar's quick view of saved loadouts (state lives in loadoutStore.ts). A row turns its loadout
-// on or off (as does Ctrl+N for a loadout pinned to N on its page); loadouts that are on, then partly on, list first.
-// Its arrow opens the loadout's page, where everything else (rename, reorder, delete) lives.
-import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from 'react'
-import { ArrowUpRight, Check, ListPlus, Plus } from 'lucide-react'
+// repakxtra: loadout pieces the Library uses (state lives in loadoutStore.ts): the selection bar's Add to loadout, the
+// right-click Add to loadout items, switching with its guards (runChanges), and Ctrl+N for a loadout pinned to N.
+import { useEffect, useRef } from 'react'
+import { Check, ListPlus } from 'lucide-react'
 import CustomDropdown from '../components/CustomDropdown'
 import type { useAlert } from '../components/AlertHandler'
 import {
-  type Loadout, type Mod, changesToTurnOff, changesToTurnOn, deleteLoadout, flipMods, hotkeyOf, hotkeySlots, isActive, modKey,
-  nextLoadoutName, openLoadout, patchLoadout, readLoadouts, snapshotLoadout, useLoadouts, withMods, writeLoadouts,
+  type Loadout, type Mod, changesToTurnOff, changesToTurnOn, deleteLoadout, flipMods, hotkeySlots, isActive, modKey,
+  nextLoadoutName, openLoadout, patchLoadout, readLoadouts, useLoadouts, withMods, writeLoadouts,
 } from './loadoutStore'
 import { isTyping } from './hotkeys'
 import { plural } from './modName'
-import { OnDot } from './loadoutBits'
-import { savedItem } from './storageCarryOver'
 import { type Verdict, verdictOf } from './brokenMods'
+import { brokenShown } from './uiPrefs'
 
 export type LoadoutProps = {
   mods: Mod[]            // every installed mod
@@ -25,34 +23,6 @@ export type LoadoutProps = {
   alert: ReturnType<typeof useAlert>
   modDetails?: Record<string, { character_name?: string | null; category?: string | null; additional_categories?: string[]; mod_type?: string } | undefined>
   selected?: string[]    // paths picked in the Library: + makes a loadout of exactly these
-}
-
-const HEIGHT_KEY = 'repakxtra.loadoutsHeight'
-
-/** Drag to set the sidebar list's height (same grip as the filters/folders handle); saved across starts. */
-function useListHeight() {
-  const [height, setHeight] = useState<number | null>(() => Number(savedItem(HEIGHT_KEY)) || null)
-  const [dragging, setDragging] = useState(false)
-  const start = (e: ReactMouseEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    const startY = e.clientY
-    const startH = (e.currentTarget.previousElementSibling as HTMLElement).offsetHeight
-    let last = startH
-    setDragging(true)
-    const move = (ev: MouseEvent) => {
-      last = Math.max(48, Math.min(window.innerHeight - 260, startH + ev.clientY - startY))
-      setHeight(last)
-    }
-    const end = () => {
-      setDragging(false)
-      localStorage.setItem(HEIGHT_KEY, String(last))
-      document.removeEventListener('mousemove', move)
-      document.removeEventListener('mouseup', end)
-    }
-    document.addEventListener('mousemove', move)
-    document.addEventListener('mouseup', end)
-  }
-  return { height, dragging, start }
 }
 
 /** A new loadout holding exactly these mods (all of them on), named "Loadout N". */
@@ -168,7 +138,7 @@ export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], ve
   try {
     const wasOn = readLoadouts().filter(o => o.id !== l.id && isActive(o, p.mods))
     // Mods that will not work or may crash, read before the switch renames their files
-    const flagged = verb === 'on' ? changes.map(m => verdictOf(m.path)).filter((v): v is Verdict => Boolean(v)) : []
+    const flagged = verb === 'on' && brokenShown() ? changes.map(m => verdictOf(m.path)).filter((v): v is Verdict => Boolean(v)) : []
     const failed = await flipMods(changes)
     await p.reload()
     const flipped = new Set(changes.filter(m => !failed.includes(m)).map(m => m.path))
@@ -205,106 +175,30 @@ export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], ve
   }
 }
 
-export default function Loadouts(p: LoadoutProps) {
+/** Ctrl+1..9 toggles the loadout pinned to that number (an active loadout turns off, any other turns on). Mounted
+ *  once by App, on every view; it draws nothing (the Library's sidebar list it lived in is gone). */
+export default function LoadoutHotkeys(p: LoadoutProps) {
   const loadouts = useLoadouts()
-  const size = useListHeight()
-  const [naming, setNaming] = useState(false)
-  const [name, setName] = useState('')
-  const [busy, setBusy] = useState<string | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-  useEffect(() => { if (naming) inputRef.current?.focus() }, [naming])
-
-  const picked = p.selected ?? []
-  // Selected mods: exactly those. Nothing selected: the shown mods that are on.
-  const save = () => {
-    const trimmed = name.trim()
-    if (trimmed && picked.length) createFromMods(picked, trimmed)
-    else if (trimmed) writeLoadouts([...readLoadouts(), snapshotLoadout({ id: crypto.randomUUID(), name: trimmed }, p.scopeMods)])
-    setNaming(false)
-    setName('')
-  }
-
-  // A row (and Ctrl+N) toggles: an active loadout turns off, any other turns on
+  const busy = useRef(false)
   const apply = async (l: Loadout) => {
-    setBusy(l.id)
-    if (isActive(l, p.mods)) await runChanges(p, l, changesToTurnOff(l, p.mods), 'off')
-    else {
-      await runChanges(p, l, changesToTurnOn(l, p.mods), 'on')
-    }
-    setBusy(null)
+    busy.current = true
+    try {
+      if (isActive(l, p.mods)) await runChanges(p, l, changesToTurnOff(l, p.mods), 'off')
+      else await runChanges(p, l, changesToTurnOn(l, p.mods), 'on')
+    } finally { busy.current = false }
   }
-
-  // Ctrl+1..9 toggles the loadout pinned to that number
-  const latest = useRef({ loadouts, apply, busy })
-  latest.current = { loadouts, apply, busy }
+  const latest = useRef({ loadouts, apply })
+  latest.current = { loadouts, apply }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.ctrlKey || e.shiftKey || e.altKey || !/^[1-9]$/.test(e.key) || isTyping(e.target) || document.querySelector('.modal-overlay')) return
       const l = hotkeySlots(latest.current.loadouts).get(Number(e.key))
-      if (!l || latest.current.busy) return
+      if (!l || busy.current) return
       e.preventDefault()
       latest.current.apply(l)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
-
-  return (
-    <>
-    <div className="loadouts" style={size.height ? { height: size.height, maxHeight: 'none' } : undefined}>
-      <div className="fp-head">
-        <span className="fp-title">Loadouts</span>
-        <span className="lo-head-actions">
-          <button type="button" className="lo-icon" onClick={() => setNaming(true)}
-            title={picked.length ? `Save the ${plural(picked.length, 'selected mod')} as a loadout` : 'Save the mods that are on as a loadout'}
-            aria-label={picked.length ? `Save the ${plural(picked.length, 'selected mod')} as a loadout` : 'Save the mods that are on as a loadout'}>
-            <Plus size={15} />
-          </button>
-        </span>
-      </div>
-
-      {loadouts.length === 0 && !naming && (
-        <p className="lo-empty">No loadouts yet. Select mods (or turn on the ones you want) and press + to save them as one.</p>
-      )}
-
-      {loadouts
-        .map((l, i) => {
-          const onNow = changesToTurnOff(l, p.mods).length // its mods that are on right now
-          const pending = changesToTurnOn(l, p.mods).length
-          return { l, i, onNow, pending, rank: isActive(l, p.mods) ? 0 : onNow ? 1 : 2 }
-        })
-        .sort((a, b) => a.rank - b.rank || a.i - b.i)
-        .map(({ l, onNow, pending, rank }, at, rows) => {
-          const n = hotkeyOf(l, loadouts)
-          const hotkey = n ? ` (Ctrl+${n})` : ''
-          const none = onNow + pending === 0 // none of its mods is installed
-          const what = none ? `${l.name} has no installed mods` : rank === 0 ? `Turn ${l.name} off` : rank === 1 ? `Turn on the rest of ${l.name} (${pending} more)` : `Turn ${l.name} on`
-          return (
-            <div className={`fp-row-wrap lo-row${rank === 0 ? ' is-on' : rank === 1 ? ' is-some' : ''}${none ? ' is-empty' : ''}${at > 0 && rows[at - 1].rank < 2 && rank === 2 ? ' is-first-off' : ''}`} key={l.id}>
-              <button type="button" className="fp-row" disabled={busy !== null} onClick={() => apply(l)} title={what + hotkey}
-                aria-label={what} aria-pressed={rank === 0}>
-                <span className={`fp-lead${busy === l.id ? ' is-busy' : ''}`}><OnDot on={onNow} of={onNow + pending} /></span>
-                <span className="fp-label">{l.name}</span>
-                {/* the number Ctrl+N toggles; unpinned rows have none */}
-                <span className="lo-num">{n ?? ''}</span>
-              </button>
-              <button type="button" className="lo-icon lo-hover" title={`Open ${l.name}`} aria-label={`Open ${l.name}`} onClick={() => openLoadout(l.id)}>
-                <ArrowUpRight size={14} />
-              </button>
-            </div>
-          )
-        })}
-
-      {naming && (
-        <div className="lo-new">
-          <input ref={inputRef} value={name} placeholder="Loadout name" onChange={e => setName(e.target.value)}
-            onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') save(); if (e.key === 'Escape') { setNaming(false); setName('') } }}
-            onBlur={save} />
-          <p className="lo-hint">{picked.length ? `Holds the ${plural(picked.length, 'selected mod')}.` : `Holds the shown mods that are on (${p.scopeLabel}).`}</p>
-        </div>
-      )}
-    </div>
-    <div className={`vertical-resizer lo-resizer ${size.dragging ? 'resizing' : ''}`} onMouseDown={size.start} />
-    </>
-  )
+  return null
 }

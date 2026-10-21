@@ -11,14 +11,14 @@ import { CardMedia, ModRow, OnDot, typeClass } from './loadoutBits'
 import { deleteMedia } from './loadoutMedia'
 import CustomDropdown from '../components/CustomDropdown'
 import {
-  type Loadout, type Mod, OTHER, loadoutable, addGroup, addModToLoadout, displayName, duplicateLoadout, groupKey, setLoadoutGroup,
+  type Loadout, type Mod, OTHER, loadoutable, addGroup, captureKey, addModToLoadout, displayName, duplicateLoadout, groupKey, setLoadoutGroup,
   useGroups, hotkeyOf, hotkeySlots, isActive, modKey, openLoadout, patchLoadout, pinHotkey, readLoadouts, removeModFromLoadout,
   renameModKey, repakXOpen, takeFresh, useLoadouts,
 } from './loadoutStore'
 import { plural } from './modName'
 import { SwapText } from './motion'
 import { GeneratePreviewsButton, previewSetKey } from './previews'
-import { CaptureButton } from './CapturePreview'
+import { CaptureButton, captureTarget } from './CapturePreview'
 
 const PAGE = 60
 
@@ -116,7 +116,7 @@ function MoreMenu({ items, danger, l, loadouts }: { items: MoreItem[]; danger: M
 /** Windows file names cannot hold these; the zip is named after the loadout. */
 const fileName = (name: string) => name.replace(/[<>:"/\\|?*]+/g, '_').trim() || 'loadout'
 
-export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia, onSetMedia }: {
+export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia, onSetMedia, onSetCapture }: {
   p: LoadoutProps
   l: Loadout
   busy: boolean
@@ -124,6 +124,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
   onBack: () => void
   onPickMedia: () => void
   onSetMedia: (image: Blob) => Promise<boolean>
+  onSetCapture: (image: Blob) => Promise<boolean>
 }) {
   const [name, setName] = useState(l.name)
   const nameRef = useRef<HTMLInputElement>(null)
@@ -133,7 +134,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
   const [q, setQ] = useState('')
   const [type, setType] = useState<string | null>(null)
   const [limit, setLimit] = useState(PAGE)
-  const [sort, setSort] = useState<'name' | 'newest'>('name')
+  const [sort, setSort] = useState<'name' | 'newest'>('newest')
   const [exporting, setExporting] = useState(false)
   useEffect(() => { setName(l.name) }, [l.id, l.name])
   // A loadout just made opens with its name selected, so making one starts with naming it
@@ -219,6 +220,8 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
   }
 
   const removeImage = () => { deleteMedia(l.id); patchLoadout(l.id, { image: undefined, mediaRev: undefined, mediaType: undefined }) }
+  const removeCapture = () => { deleteMedia(captureKey(l.id)); patchLoadout(l.id, { captureRev: undefined }) }
+  const target = captureTarget(p, l)
 
   const commit = () => {
     const n = name.trim()
@@ -233,9 +236,10 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
       </button>
 
       <div className="lp-top">
-        {/* The picture card holds both ways to fill it: click for an image, or its Generate previews button */}
-        <CardMedia p={p} l={l} className="lp-media" onClick={onPickMedia} onRemoveImage={removeImage}
+        {/* The picture card and its Cover switch: Preview, Capture, Image or Text, each with its own way to fill it */}
+        <CardMedia p={p} l={l} className="lp-media" onClick={onPickMedia} onRemoveImage={removeImage} onRemoveCapture={removeCapture}
           title={hasMedia ? 'Change image or video (or paste one)' : 'Add an image, GIF or video (or paste one)'}
+          capture={{ ...target, button: (className, label, note) => <CaptureButton p={p} l={l} onUse={onSetCapture} className={className} label={label} note={note} /> }}
           generate={className => <GeneratePreviewsButton className={className} label="Generate previews" set={previewSetKey(l.id)} name={l.name} stopOnly
             paths={mine.map(k => byKey.get(k)?.path).filter((x): x is string => Boolean(x))} />} />
         <div className="lp-info">
@@ -269,7 +273,6 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
                 {!busy && present > 0 && <OnDot on={onNow} of={present} />}
               </span>
             </label>
-            <CaptureButton p={p} l={l} onUse={onSetMedia} />
             {/* The rest are occasional: one menu instead of a wrapping row of equal buttons */}
             <MoreMenu items={[
               { label: 'Duplicate', onClick: () => openLoadout(duplicateLoadout(l).id, true) },
