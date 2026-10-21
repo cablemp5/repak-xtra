@@ -33,7 +33,7 @@ export const TOUR_STEPS: TourStep[] = [
   {
     target: '[data-tour="new-collection"]',
     title: 'Collections',
-    description: "A collection is a named shelf for loadouts that belong together, like Panther looks or VFX colors. Make one here, then drag cards onto it or pick it on a loadout's page. Loadouts in no collection sit under Other. The pencil renames it, and Collection | Hero sorts the cards by hero instead.",
+    description: "A collection is a named shelf for loadouts that belong together, like Panther looks or VFX colors. Make one here, then drag cards onto it or pick it on a loadout's page. Loadouts in no collection sit under Unsorted. The pencil renames it, and Collection | Hero sorts the cards by hero instead.",
     placement: 'bottom',
     onEnter: home,
   },
@@ -54,7 +54,7 @@ export const TOUR_STEPS: TourStep[] = [
   {
     target: '[data-tour="mod-state"]',
     title: 'On, off, broken',
-    description: 'All, Enabled and Disabled show mods by their switch. Broken appears when a mod will not work in this game version or may crash it: hover its badge for why. Ctrl+F searches by name.',
+    description: 'All, On and Off show mods by their switch. Broken appears when a mod will not work in this game version or may crash it: hover its badge for why. Ctrl+F searches by name.',
     placement: 'bottom',
     onEnter: () => setView('library'),
   },

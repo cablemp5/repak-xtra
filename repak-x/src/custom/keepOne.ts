@@ -12,7 +12,7 @@ export type KeepDeps = { alert: ReturnType<typeof useAlert>; isBlocked: () => bo
 /** A mod's path without its on/off extension: the same mod before and after a switch. */
 const stem = (p: string) => p.replace(/\.(pak|bak_repak|pak_disabled)$/i, '').toLowerCase()
 const name = (p: string) => displayName(modKey(p))
-const GAME_RUNNING = ['Game Running', 'Cannot toggle mods while game is running.'] as const
+export const GAME_RUNNING = ['Game Running', 'Cannot toggle mods while game is running.'] as const
 
 /** Switches every mod in `mods`; if any is refused, switches the done ones back and returns the refusal. */
 async function flipAll(mods: Mod[]) {
@@ -41,7 +41,7 @@ export async function turnOffWithUndo(d: KeepDeps, mods: Mod[], title: string, t
     duration: 10000,
     action: {
       label: 'Undo', onClick: async () => {
-        if (d.isBlocked()) { d.alert.warning('Game running', 'Undo waits until the game is closed.'); return }
+        if (d.isBlocked()) { d.alert.warning('Game Running', 'Undo waits until the game is closed.'); return }
         let now: Mod[]
         try { now = await invoke<Mod[]>('get_pak_files') } catch (e) { d.alert.warning('Undo not possible yet', `The mod list could not be read: ${String(e)}`); return }
         d.alert.dismissAlert(id)

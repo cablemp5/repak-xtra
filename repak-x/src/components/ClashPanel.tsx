@@ -98,7 +98,7 @@ const ClashPanel = ({ clashes, mods = [], onSetPriority, onToggleMod, onClose }:
                                             const isDisabled = mod?.enabled === false
                                             return (
                                                 <div key={stemOf(path)} className={`clash-mod-row ${isDisabled ? 'disabled' : ''}`}>
-                                                    <span className="clash-mod-badge">{isDisabled ? 'Disabled' : 'Conflicting'}</span>
+                                                    <span className="clash-mod-badge">{isDisabled ? 'Off' : 'Conflicting'}</span>
                                                     <span className="clash-mod-name" title={currentPath}>
                                                         {stemOf(currentPath.split(/[/\\]/).pop() || '')}
                                                     </span>

@@ -2,7 +2,7 @@
 // Settings > General. A shortcut already on the desktop is never replaced, so the button then says it is there.
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { Check } from 'lucide-react'
+import { Check, Monitor } from 'lucide-react'
 import { useAlert } from '../components/AlertHandler'
 
 /** Whether repakxtra.lnk is on the desktop (null while asking), and the button that makes it. */
@@ -43,7 +43,7 @@ export function ShortcutSetting() {
   const s = useShortcut()
   return (
     <div className="setting-section">
-      <h3>Desktop shortcut</h3>
+      <h3 className="setting-icon-label"><Monitor size={18} aria-hidden="true" />Desktop shortcut</h3>
       <div className="setting-group shortcut-setting">
         <p className="setting-hint">Start repakxtra from your desktop. An existing repakxtra shortcut stays as it is.</p>
         <ShortcutButton s={s} className="action-btn" />

@@ -1,43 +1,30 @@
 // repakxtra: install progress for Setup and the guided setup (FirstRun.tsx), one look for every install: the signature
-// bypass, Project Galacta, the preview kit and Blender. It sits in the card or step it belongs to and shows the steps
-// (done, now, next), what is happening now with how far along it is, and one bar. A finished install says so for a
-// moment in green before the card's own state takes over.
+// bypass, Project Galacta, the preview kit and Blender. One status line in the card or step it belongs to (cable's pick,
+// 2026-10-21, in place of step dots and a bar): a small spinner, what is happening now, and how far along it is
+// ("38 MB of 108 MB · 35%", or "step 2 of 3" while the size is unknown). A finished install says so for a moment in
+// green before the card's own state takes over.
 import { useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { Check } from 'lucide-react'
 import type { KitProgress } from './previewKit'
+import { SwapText } from './motion'
 
 const DONE_MS = 2400
 const MB = (n: number) => (n >= 100 * 1048576 ? `${Math.round(n / 1048576)} MB` : `${(n / 1048576).toFixed(1)} MB`)
 const amountOf = (done: number, total: number) => (total ? `${MB(done)} of ${MB(total)}` : done ? MB(done) : undefined)
 
-/** An install's progress: steps (the one at `at` is going), what is happening, how far ("38 MB of 108 MB"), the bar
- *  (`share` 0 to 1, or sliding while unknown), or `done` (the finished line). */
+/** An install's status line: what is happening (`text`), how far ("38 MB of 108 MB", `share` 0 to 1), which of the
+ *  `steps` it is on (`at`), or `done` (the finished line). */
 export function InstallTrack({ steps = [], at = 0, text, amount, share, done }: {
   steps?: string[]; at?: number; text: string; amount?: string; share: number | null; done?: string
 }) {
   const pct = share === null ? null : Math.round(Math.min(1, Math.max(0, share)) * 100)
+  const far = [amount, pct !== null && `${pct}%`].filter(Boolean).join(' · ') || (steps.length > 1 ? `step ${at + 1} of ${steps.length}` : '')
   return (
     <div className={`su-track${done ? ' is-done' : ''}`} role="status" aria-live="polite">
-      {steps.length > 1 && (
-        <ol className="su-steps">
-          {steps.map((s, i) => {
-            const state = done || i < at ? 'is-done' : i === at ? 'is-now' : ''
-            return (
-              <li key={s} className={state} aria-current={state === 'is-now' ? 'step' : undefined}>
-                <i>{state === 'is-done' ? <Check size={11} strokeWidth={3} /> : i + 1}</i><span>{s}</span>
-              </li>
-            )
-          })}
-        </ol>
-      )}
-      <div className="su-track-line">
-        <span className="su-track-text">{done ? <><Check size={14} strokeWidth={2.75} aria-hidden="true" />{done}</> : text}</span>
-        {!done && (amount || pct !== null) && <span className="su-track-amount">{[amount, pct !== null && `${pct}%`].filter(Boolean).join(' · ')}</span>}
-      </div>
-      <span className="su-track-bar" role="progressbar" aria-label={done ?? text} aria-valuemin={0} aria-valuemax={100} aria-valuenow={done ? 100 : pct ?? undefined}>
-        <i className={!done && pct === null ? 'is-indeterminate' : ''} style={done || pct === null ? undefined : { '--share': Math.max(pct, 2) / 100 } as React.CSSProperties} />
-      </span>
+      {done ? <Check size={14} strokeWidth={2.75} aria-hidden="true" /> : <i className="su-spin" aria-hidden="true" />}
+      <span className="su-track-text"><SwapText text={done ?? text} /></span>{/* transitions.dev: Text states swap, each new step rises in */}
+      {!done && far && <span className="su-track-amount">{far}</span>}
     </div>
   )
 }

@@ -18,6 +18,7 @@ import { FALLBACK_HERO_ID, resolveHeroImage, useHeroImages } from '../utils/hero
 import { useUiPref } from '../custom/uiPrefs' // repakxtra: file sizes beside the type tag
 import './ModsList.css'
 import { useTypeHint } from '../custom/typeHints' // repakxtra
+import { holdKeys } from '../custom/holdKeys' // repakxtra
 import './ModDetailsPanel.css'
 
 type CharacterDataEntry = {
@@ -200,17 +201,14 @@ const ModItem = memo(function ModItem({
         )
     }
 
-    const startDeleteHold = (e: React.MouseEvent<HTMLButtonElement> | React.TouchEvent<HTMLButtonElement>) => {
+    const startDeleteHold = (e: React.PointerEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLElement>) => {
         e.stopPropagation()
+        if (!holdToDelete) return // repakxtra: without hold, Delete acts on click (release, Enter or Space), see clickDelete
         if (gameRunning) {
             onDeleteBlocked?.()
             return
         }
-        const shouldPermanentDelete = 'shiftKey' in e && Boolean(e.shiftKey)
-        if (!holdToDelete) {
-            requestDelete(shouldPermanentDelete)
-            return
-        }
+        const shouldPermanentDelete = e.shiftKey
         setIsDeleteHolding(true)
         holdTimeoutRef.current = setTimeout(() => {
             requestDelete(shouldPermanentDelete)
@@ -218,13 +216,24 @@ const ModItem = memo(function ModItem({
         }, 2000)
     }
 
-    const cancelDeleteHold = (e?: React.MouseEvent<HTMLButtonElement> | React.TouchEvent<HTMLButtonElement>) => {
+    const cancelDeleteHold = (e?: React.SyntheticEvent) => {
         e?.stopPropagation()
         if (holdTimeoutRef.current) {
             clearTimeout(holdTimeoutRef.current)
             holdTimeoutRef.current = null
         }
         setIsDeleteHolding(false)
+    }
+
+    // repakxtra: a click fires on release, so a press can still slide off, and Enter or Space fire it too
+    const clickDelete = (e: React.MouseEvent<HTMLButtonElement>) => {
+        e.stopPropagation()
+        if (holdToDelete) return
+        if (gameRunning) {
+            onDeleteBlocked?.()
+            return
+        }
+        requestDelete(e.shiftKey)
     }
 
     // Inline rename handlers
@@ -500,16 +509,16 @@ const ModItem = memo(function ModItem({
                             </span>
                         </Tooltip>
                     )}
-                    {/* repakxtra: on, and clashing with another enabled mod (same priority, same files) */}
+                    {/* Type badge at end for list view */}
+                    {!isCardView && sizeTag}
+                    {/* repakxtra: on, and clashing with another enabled mod (same priority, same files), right of the file size */}
                     {conflicting && <span className="mod-type-badge conflict-badge" title="Conflicts with another enabled mod: Check Conflicts shows which">Conflict</span>}
                     {verdict && <span className={`mod-type-badge broken-badge is-${verdict.kind}`} title={verdict.reason}>{verdict.kind === 'broken' ? 'Broken' : 'May crash'}</span>}
-                    <NexusTag path={mod.path} />{/* repakxtra: installed from Nexus Mods (custom/nexusSource.tsx) */}
+                    <NexusTag path={mod.path} />{/* repakxtra: installed from Nexus Mods (custom/nexusSource.tsx), right of the file size */}
                     {/* repakxtra: Project Galacta compatible mods (xtra_classify.rs) */}
                     {typeof modDetails?.mod_type === 'string' && /\[[^\]]*Project Galacta[^\]]*\]$/.test(modDetails.mod_type) && (
                         <span className="mod-type-badge pg-badge" title="Project Galacta compatible: pick it per skin in the Galacta Companion App"><i className="tag-logo pg-logo" aria-hidden="true" />Galacta</span>
                     )}
-                    {/* Type badge at end for list view */}
-                    {!isCardView && sizeTag}
                     {showModType && category && !isCardView && (
                         <span className={`mod-type-badge category-badge ${category.toLowerCase().replace(/\s+/g, '-')}-badge`} title={typeHint}>
                             {category}
@@ -546,7 +555,9 @@ const ModItem = memo(function ModItem({
                         onPointerUp={cancelDeleteHold}
                         onPointerLeave={cancelDeleteHold}
                         onPointerCancel={cancelDeleteHold}
-                        aria-label={holdToDelete ? "Hold to delete mod" : "Delete mod"}
+                        onClick={clickDelete}
+                        {...holdKeys(holdToDelete, startDeleteHold, cancelDeleteHold)}
+                        aria-label={holdToDelete ? `Hold to delete ${cleanName}` : `Delete ${cleanName}`}
                         title={holdToDelete ? "Hold 2s to delete" : "Click to delete"}
                     >
                         <RiDeleteBin2Fill size={18} />

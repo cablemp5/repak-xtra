@@ -11,7 +11,7 @@ import { CardMedia, ModRow, OnDot, typeClass } from './loadoutBits'
 import { deleteMedia } from './loadoutMedia'
 import CustomDropdown from '../components/CustomDropdown'
 import {
-  type Loadout, type Mod, OTHER, loadoutable, addGroup, captureKey, addModToLoadout, displayName, duplicateLoadout, groupKey, setLoadoutGroup,
+  type Loadout, type Mod, OTHER, OTHER_LABEL, loadoutable, addGroup, captureKey, addModToLoadout, displayName, duplicateLoadout, groupKey, setLoadoutGroup,
   useGroups, hotkeyOf, hotkeySlots, isActive, modKey, openLoadout, patchLoadout, pinHotkey, readLoadouts, removeModFromLoadout,
   renameModKey, repakXOpen, takeFresh, useLoadouts,
 } from './loadoutStore'
@@ -186,7 +186,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
     const from = modKey(mod.path)
     const next = to.trim()
     if (!next || next === displayName(from)) return
-    if (p.isBlocked()) { p.alert.warning('Game running', 'Mods cannot be renamed while the game is running.'); return }
+    if (p.isBlocked()) { p.alert.warning('Game Running', 'Cannot rename mods while game is running.'); return }
     try {
       const path = await invoke<string>('rename_mod', { modPath: mod.path, newName: next })
       renameModKey(from, modKey(path))
@@ -256,9 +256,10 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
             <span>Collection</span>
             {newGroup === null
               ? <CustomDropdown
-                  options={[...groups.map(g => ({ value: g, label: g })), { value: OTHER, label: 'No collection (Other)' }, { value: '__new', label: '+ New collection…' }]}
+                  options={[...groups.map(g => ({ value: g, label: g })), { value: OTHER, label: OTHER_LABEL }]}
                   value={group ?? OTHER}
-                  onChange={(v: string) => (v === '__new' ? setNewGroup('') : setLoadoutGroup(l.id, v))} />
+                  onChange={(v: string) => setLoadoutGroup(l.id, v)}
+                  onAddNew={() => setNewGroup('')} addNewLabel="+ New collection" />
               : <input autoFocus value={newGroup} placeholder="New collection name" aria-label="New collection name" onChange={e => setNewGroup(e.target.value)}
                   onBlur={() => { if (newGroup.trim()) setLoadoutGroup(l.id, addGroup(newGroup.trim())); setNewGroup(null) }}
                   onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setNewGroup(null) }} />}

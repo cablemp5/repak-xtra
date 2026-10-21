@@ -27,6 +27,7 @@ export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
       { keys: ['Enter'], action: 'Open mod details' },
       { keys: ['F2'], action: 'Rename mod' },
       { keys: ['Del'], action: 'Delete selected mods (Undo for 10 s)' },
+      { keys: ['Shift', 'F10'], action: 'Open the right-click menu for the selected mod (or the Menu key)' },
       { keys: ['C'], action: 'Check conflicts' },
       { keys: ['Shift', 'Click'], action: 'Select a range of mods' },
       { keys: ['Shift', 'Ctrl', 'Click'], action: 'Deselect a range of mods' },
@@ -36,8 +37,8 @@ export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
     title: 'View',
     items: [
       { keys: ['1'], action: 'Show all mods' },
-      { keys: ['2'], action: 'Show enabled mods' },
-      { keys: ['3'], action: 'Show disabled mods' },
+      { keys: ['2'], action: 'Show mods that are on' },
+      { keys: ['3'], action: 'Show mods that are off' },
       { keys: ['V'], action: 'Cycle list / grid / compact grid' },
       { keys: ['X'], action: 'Clear hero and type filters' },
       { keys: ['T'], action: 'Show / hide tags on mods' },
@@ -83,10 +84,18 @@ window.addEventListener('keydown', e => {
 
   if (e.ctrlKey && !e.shiftKey && !e.altKey) {
     if (key === 'g') click('[data-tour="launch-btn"]')
-    else if (key === 'o') click('[title="Install PAKs or Archives"]')
+    else if (key === 'o') click('[data-tour="install-btn"]')
     return
   }
   if (e.ctrlKey || e.altKey || e.metaKey || dialogOpen()) return
+
+  // Shift+F10 or the Menu key opens the right-click menu for the selected mod: the browser fires it on the focused
+  // element, and arrow keys leave focus on the page, so focus the selected row's name first
+  if (key === 'contextmenu' || (key === 'f10' && e.shiftKey)) {
+    const row = document.querySelector('.mod-card.viewing')
+    if (row && !row.contains(document.activeElement)) row.querySelector<HTMLElement>('.mod-name-button')?.focus()
+    return
+  }
 
   switch (key) {
     case '/':

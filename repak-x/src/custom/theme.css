@@ -147,10 +147,14 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
   box-shadow: none !important;
   min-height: 38px;
 }
-.search-wrapper:focus-within { border-color: rgba(255, 255, 255, 0.2) !important; box-shadow: none !important; }
+.search-wrapper:focus-within { border-color: color-mix(in srgb, var(--text-primary), transparent 50%) !important; box-shadow: none !important; }
 .main-search-input { background: transparent !important; border: none !important; font-size: 14px; }
 .custom-dropdown-trigger { font-size: 13px !important; font-weight: 500 !important; }
 .custom-dropdown-trigger:hover { background: var(--bg-dark) !important; }
+/* The dropdown arrow upstream draws as a background image: the background shorthands above wiped it and left its 40px
+   of right padding empty (the Sort button's gap). Drawn again, in the secondary grey */
+.custom-dropdown-trigger, .custom-dropdown-trigger:hover { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%238f8f8f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important; background-position: right 12px center !important; background-size: 16px 16px !important; }
 .custom-dropdown-icon svg { color: var(--text-secondary) !important; }
 [aria-label="add mods button group"] { box-shadow: none !important; border-radius: var(--quiet-radius) !important; }
 [aria-label="add mods button group"] .MuiButton-root {
@@ -172,6 +176,23 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 [aria-label="add mods button group"] .MuiButton-root { justify-content: flex-start !important; gap: 8px; min-width: 0 !important; line-height: 1 !important; }
 [aria-label="add mods button group"] .MuiButton-root svg.lucide { width: 16px !important; height: 16px !important; margin: 0 !important; flex: none; }
 
+/* The Library's Install (custom/InstallButton.tsx): the page's one primary action, in the app's primary blue like Done
+   and Install elsewhere, at the action bar's 40px and radius. One control: the words pick mod files, the arrow end
+   (split by a faint line) opens Install a folder */
+.install-btn { position: relative; display: inline-flex; height: 40px; flex: none; border-radius: var(--quiet-radius); background: var(--accent-primary);
+  box-sizing: border-box; transition: background 0.15s ease; }
+.install-btn:hover { background: color-mix(in srgb, var(--accent-primary), white 8%); }
+.install-btn > button { display: inline-flex; align-items: center; gap: 8px; height: 100%; background: transparent !important; border: none !important;
+  color: #fff !important; font: 600 13px var(--font-primary); cursor: pointer; min-height: 0 !important; }
+.install-btn > button:hover, .install-btn-more[aria-expanded="true"] { background: rgba(255, 255, 255, 0.08) !important; }
+.install-btn-main { padding: 0 10px 0 14px !important; border-radius: var(--quiet-radius) 0 0 var(--quiet-radius) !important; }
+.install-btn-more { width: 32px; justify-content: center; padding: 0 !important; border-radius: 0 var(--quiet-radius) var(--quiet-radius) 0 !important;
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.22) !important; }
+.install-btn svg { flex: none; width: 16px !important; height: 16px !important; color: #fff !important; }
+.install-btn-menu { width: 250px; }
+.install-btn-menu .sigeon-item { gap: 8px; }
+.install-btn-menu small { margin-left: auto; color: var(--text-secondary); }
+
 /* ---------- panels ---------- */
 .left-sidebar, .center-header {
   background: var(--panel-bg) !important;
@@ -190,17 +211,14 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 /* ---------- filter panel (custom/FilterPanel.tsx) ---------- */
 .sidebar-filters { padding: 10px 8px 6px !important; overflow-y: auto; }
 .filter-panel { display: flex; flex-direction: column; gap: 1px; }
-.fp-head { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 6px; }
+/* The head keeps one height (30px, room for Clear) with or without it, so picking a filter never moves the list under it */
+.fp-head { display: flex; align-items: center; justify-content: space-between; min-height: 30px; padding: 0 6px 6px; box-sizing: border-box; }
 .fp-title, .sidebar-header h3 { font-size: 13px !important; font-weight: 600 !important; color: var(--text-primary) !important; }
-.fp-clear {
-  padding: 2px 8px !important;
-  border: none !important;
-  border-radius: 6px !important;
-  background: var(--quiet-active) !important;
-  color: var(--text-primary) !important;
-  font-size: 12px !important;
-}
-.fp-clear:hover { background: var(--bg-lighter) !important; }
+/* Clear: a small quiet pill (the app's 36px button floor made it a tall grey block) */
+.fp-clear { display: inline-flex !important; align-items: center; gap: 4px; height: 22px !important; min-height: 0 !important; padding: 0 9px !important;
+  border: 1px solid var(--panel-border) !important; border-radius: 999px !important; background: transparent !important;
+  color: var(--text-secondary) !important; font-size: 12px !important; font-weight: 500 !important; line-height: 1 !important; }
+.fp-clear:hover { color: var(--text-primary) !important; background: var(--quiet-hover) !important; }
 .fp-section-label { padding: 10px 6px 4px; font-size: 11px; font-weight: 500; color: var(--text-secondary); }
 .fp-row-wrap { display: flex; align-items: center; gap: 2px; }
 .fp-row {
@@ -286,8 +304,27 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
   .center-header > .header-title { display: contents; }
   .center-header .header-title h2 { order: 0; flex: 1 1 0; min-width: 0; }
   .center-header > .header-actions { order: 1; }
-  .center-header .header-title .mod-state-filter { order: 2; flex: 0 0 auto; margin: 0; }
+  .center-header .header-title .mod-state { order: 2; flex: 0 0 auto; margin: 0; }
 }
+/* The state filter folded into its menu (custom/ModStateFilter.tsx folds it when the tabs would not fit): the title,
+   the menu and the buttons keep to one row at any width, the title giving way with an ellipsis */
+.center-header:has(.mod-state.is-folded) { flex-wrap: nowrap !important; }
+.center-header:has(.mod-state.is-folded) > .header-title { display: flex !important; flex: 1 1 auto; min-width: 0; }
+.center-header:has(.mod-state.is-folded) .header-title h2 { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.center-header:has(.mod-state.is-folded) > .header-actions { flex: none; }
+.center-header:has(.mod-state.is-folded) .header-title-name { flex-shrink: 0; }   /* the folder name stays whole, the filter part shortens */
+.mod-state { position: relative; display: inline-flex; }
+.mod-state.is-folded .mod-state-filter { position: absolute; visibility: hidden; pointer-events: none; }   /* kept for its width and the 1/2/3 keys */
+/* Folding and unfolding cross over softly (a short fade and settle), not a jump */
+/* transitions.dev: Icon swap. The tabs and their menu trade places with a short blur-in */
+.mod-state-btn, .mod-state.is-unfolding .mod-state-filter { animation: t-swap-in var(--icon-swap-dur) var(--icon-swap-ease) backwards; }
+.mod-state-btn { display: inline-flex !important; align-items: center; gap: 6px; height: 32px !important; min-height: 0 !important; padding: 0 8px 0 10px !important;
+  font-size: 13px !important; font-weight: 500 !important; color: var(--text-primary) !important; white-space: nowrap; }
+.mod-state-btn.is-broken, .mod-state-menu .sigeon-item.is-broken { color: #f5d342 !important; }
+.mod-state-btn svg { color: var(--text-secondary); }
+.mod-state-menu { left: 0; right: auto; width: 180px; }
+.mod-state-menu .sigeon-item { gap: 8px; }
+.mod-state-menu .sigeon-item .mod-state-count { margin-left: auto; }
 .btn-ghost {
   border-radius: var(--quiet-radius) !important;
   border-color: var(--panel-border) !important;
@@ -425,10 +462,14 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
   font-size: 13px;
 }
 .context-menu-item { border-radius: 6px; }
-.context-menu-item:hover { background: var(--quiet-active) !important; color: var(--text-primary) !important; }
+.context-menu-item:hover, .app .context-menu-item:focus-visible { background: var(--quiet-active) !important; color: var(--text-primary) !important; outline: none !important; }
+/* A picked hero in the hero filter: the accent, never upstream's red */
+.hero-filter-base.active { background: color-mix(in srgb, var(--accent-primary), transparent 85%) !important; border-left-color: var(--accent-primary) !important; }
+/* The keyboard opens a submenu with Right or Enter (custom/menuKeys.ts) */
+.context-menu-item.kb-open > .submenu { display: block; }
 /* Delete is the one red word in the menu */
 .context-menu-item.danger, .context-menu-item.danger span { color: #f2555a !important; }
-.context-menu-item.danger:hover { background: rgba(242, 85, 90, 0.1) !important; }
+.context-menu-item.danger:hover, .app .context-menu-item.danger:focus-visible { background: rgba(242, 85, 90, 0.1) !important; }
 .context-menu-separator { background: rgba(255, 255, 255, 0.07) !important; }
 
 .settings-modal, .modal-content {
@@ -483,6 +524,8 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 html:not([data-show-priority]) .mod-card .number-input-container { display: none !important; }
 html:not([data-show-share]) [data-tour="sharing-btn"] { display: none !important; }
 html:not([data-show-tools]) [data-tour="tools-btn"] { display: none !important; }
+html:not([data-show-vfx-updater]) [data-tour="vfx-updater-btn"] { display: none !important; }
+html:not([data-show-conflicts]) .mod-type-badge.conflict-badge, html:not([data-show-conflicts]) .conflict-dot { display: none !important; }   /* Settings > On each mod */
 html:not([data-show-asset-explorer]) .btn-asset-explorer,
 html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { display: none !important; }
 html:not([data-show-sigeon]) .header .sigeon { display: none !important; }
@@ -551,24 +594,19 @@ html:not([data-show-quick-organize]) .dropzone-container { max-width: 720px; }
 /* ---------- new mod types and the Galacta badge ---------- */
 .material-badge { --badge-dot: #e2b07a; }
 .data-badge { --badge-dot: #94a3b8; }
-/* The Nexus and Galacta tags: the type tags' size, each in its own color with its logo in front (Nexus orange,
-   Galacta magenta, its white logo tinted by a mask) */
-.mod-type-badge.nexus-badge, .mod-type-badge.pg-badge { gap: 5px; padding: 1px 8px 1px 6px !important; }
-.mod-type-badge.nexus-badge { --tag: #f5913b; background: color-mix(in srgb, var(--tag), transparent 90%) !important;
-  border: 1px solid color-mix(in srgb, var(--tag), transparent 55%) !important; color: var(--tag) !important;
-  font-size: 11px !important; font-weight: 600 !important; cursor: pointer; height: 22px !important; min-height: 0 !important; }
-.mod-type-badge.nexus-badge:hover { background: color-mix(in srgb, var(--tag), transparent 80%) !important; }
+/* The Nexus and Galacta tags: one step above the type tags, well below the mod name. The logo keeps its brand color
+   (Nexus orange, Galacta magenta, its white logo tinted by a mask); the words are the type tags' grey with a hint of that
+   color, on a faint tint and a tinted hairline. Hover brings the color up. */
+.mod-type-badge.nexus-badge, .mod-type-badge.pg-badge { --tag: #f5913b; gap: 5px; padding: 1px 8px 1px 6px !important;
+  background: color-mix(in srgb, var(--tag), transparent 94%) !important; border: 1px solid color-mix(in srgb, var(--tag), transparent 72%) !important;
+  color: color-mix(in srgb, var(--tag) 30%, var(--text-secondary)) !important; font-size: 11px !important; font-weight: 500 !important; }
+.mod-type-badge.pg-badge { --tag: #ec5fe0; }
+.mod-type-badge.nexus-badge { cursor: pointer; height: 22px !important; min-height: 0 !important; transition: background 0.15s ease, color 0.15s ease; }
+.mod-type-badge.nexus-badge:hover { background: color-mix(in srgb, var(--tag), transparent 86%) !important; color: color-mix(in srgb, var(--tag) 60%, var(--text-primary)) !important; }
+.mod-type-badge.nexus-badge .tag-logo, .mod-type-badge.pg-badge .tag-logo { color: var(--tag); }
 [data-theme="light"] .mod-type-badge.nexus-badge { --tag: #b85a0c; }
 .tag-logo { flex: none; width: 13px; height: 13px; }
 .pg-logo { background: currentColor; -webkit-mask: url('./logos/galacta.png') center / contain no-repeat; mask: url('./logos/galacta.png') center / contain no-repeat; }
-.mod-type-badge.pg-badge {
-  --tag: #ec5fe0;
-  background: color-mix(in srgb, var(--tag), transparent 90%) !important;
-  border: 1px solid color-mix(in srgb, var(--tag), transparent 55%) !important;
-  color: var(--tag) !important;
-  font-size: 11px !important;
-  font-weight: 600 !important;
-}
 [data-theme="light"] .mod-type-badge.pg-badge { --tag: #a3229a; }
 .ui-scale button { font-variant-numeric: tabular-nums; }
 
@@ -617,30 +655,41 @@ html:not([data-show-quick-organize]) .dropzone-container { max-width: 720px; }
 .lo-card-image img { width: 100%; height: 100%; object-fit: cover; display: block; transition: opacity 0.15s ease; }
 .lo-card-image:hover img { opacity: 0.8; }
 .lo-card-placeholder {
-  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
-  color: var(--text-secondary); font-size: 12px;
+  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  color: var(--text-secondary); font-size: 13.5px; line-height: 1.4; text-wrap: balance;
 }
 .lo-card-image:hover .lo-card-placeholder { color: var(--text-primary); }
-.lo-card-placeholder svg.lucide { width: 22px !important; height: 22px !important; }
+.lo-card-placeholder svg.lucide { width: 28px !important; height: 28px !important; }
 .lo-card-body { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px 10px; }
 .lo-card-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .lo-card-title h3 { margin: 0; font-size: 15px; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lo-card-meta { margin: 0; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-/* New loadout card: the size of a real card, an outlined plus that fills with the accent on hover */
-.lo-card-new { border: 1.5px dashed rgba(255, 255, 255, 0.12) !important; background: transparent !important; justify-content: center;
-  display: flex !important; flex-direction: column; min-height: 300px; transition: border-color 160ms ease, background 160ms ease; }
-.lo-card-new:hover { border-color: color-mix(in srgb, var(--accent-primary), transparent 45%) !important; background: color-mix(in srgb, var(--accent-primary), transparent 95%) !important; }
+/* New loadout card (cable, 2026-10-21): the old dashed slot on the new card grid. Hover brightens the dashes and the
+   icon (white, never the accent) and lifts the icon a little */
+/* An open slot, not a loadout: no surface, a dashed outline drawn as an SVG (a CSS dashed border cannot set its dash
+   length): 9px dashes with round ends, 7px gaps, 1.5px thick (half the stroke falls outside the box) */
+.lo-card-new { display: flex !important; flex-direction: column; border: none !important; border-radius: 12px !important;
+  background: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='12' ry='12' stroke='rgba(255,255,255,0.16)' stroke-width='3' stroke-dasharray='9%2c 7' stroke-linecap='round'/%3e%3c/svg%3e") !important; transition: background 160ms ease; }
+.lo-card-new:hover, .lo-card-new:focus-within { background: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='12' ry='12' stroke='rgba(255,255,255,0.34)' stroke-width='3' stroke-dasharray='9%2c 7' stroke-linecap='round'/%3e%3c/svg%3e"), rgba(255, 255, 255, 0.02) !important; }   /* white, not the accent */
 .lo-card-new .lo-new { padding: 16px; }
 .lo-card-add {
-  flex: 1; width: 100%; height: auto !important; display: flex !important; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-  border: none !important; background: transparent !important; color: var(--text-secondary) !important; font-size: 13px !important; cursor: pointer;
+  width: 100%; height: auto !important; min-height: 0 !important; padding: 0 0 6% !important; display: flex !important; flex-direction: column; align-items: stretch;
+  justify-content: center;   /* the plus and words as one group, a touch above the middle (its optical center) */
+  border: none !important; border-radius: 0 !important; background: transparent !important; color: var(--text-secondary) !important; font-size: 13px !important;
+  cursor: pointer;
 }
-.lo-card-add-icon { display: grid; place-items: center; width: 48px; height: 48px; margin-bottom: 8px; border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.16); color: var(--text-secondary); transition: background 160ms ease, border-color 160ms ease, color 160ms ease; }
-.lo-card-new:hover .lo-card-add-icon { background: var(--accent-primary); border-color: var(--accent-primary); color: #fff; }
-.lo-card-add-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
-.lo-card-add small { font-size: 12px; color: var(--text-secondary); }
-.lo-card-add svg.lucide { width: 20px !important; height: 20px !important; }
+/* From the cards: the corners and the name's bold. From the old slot: dashed, no surface, everything centered */
+.lo-card-add-media { display: grid; place-items: center; width: 100%; margin-bottom: 16px; }
+.lo-card-add-body { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 0 16px; min-width: 0; }
+.lo-card-add-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%;
+  border: none; color: var(--text-secondary);   /* no outline or disc: the icon alone, it brightens and lifts on hover */
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform var(--acc-expand) var(--acc-ease); }
+.lo-card-new:hover .lo-card-add-icon, .lo-card-add:focus-visible .lo-card-add-icon { color: var(--text-primary); transform: translateY(-2px); }
+.lo-card-add-title { display: block; max-width: 100%; min-height: 24px; margin: 0; font-size: 18px; font-weight: 700; line-height: 24px; letter-spacing: -0.01em; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lo-card-add .lo-card-meta { display: block; max-width: 100%; margin-top: 6px !important; font-size: 14px; line-height: 20px;
+  white-space: normal; overflow: visible; text-overflow: clip; text-wrap: balance; }   /* wraps on narrow cards (a status line is one line, this is not) */
+.lo-card-add svg.lucide { width: 30px !important; height: 30px !important; stroke-width: 1.75; }   /* the copy-plus icon (a new card) alone, no circle */
+@media (prefers-reduced-motion: reduce) { .lo-card-add-icon { transition: none; } }
 /* Generate all previews: its choice menu hangs under the button */
 .lo-gen { position: relative; }
 .lo-gen-menu { left: 0; right: auto; min-width: 270px; z-index: 30; }
@@ -683,6 +732,13 @@ html:not([data-show-quick-organize]) .dropzone-container { max-width: 720px; }
   background: var(--quiet-active) !important; color: var(--text-primary) !important; font-weight: 400 !important;
 }
 .custom-dropdown-item.add-new { color: var(--text-secondary) !important; }
+/* "+ New ..." and its line stay pinned at the menu's foot, so a long list (a dozen loadouts) never scrolls them out of
+   sight. Both are opaque, and the line's shadow covers the gap around it, so the list scrolls cleanly under them */
+.custom-dropdown-separator:has(+ .custom-dropdown-item.add-new) { position: sticky; bottom: 37px; z-index: 1; opacity: 1; flex: none;   /* the menu is a flex column: a long list squeezed the line to 0px */
+ 
+  background: linear-gradient(rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.08)), var(--bg-dark); box-shadow: 0 0 0 6px var(--bg-dark); }
+.custom-dropdown-item.add-new { position: sticky; bottom: 0; z-index: 1; flex: none; background: var(--bg-dark) !important; box-shadow: 0 5px 0 0 var(--bg-dark); }
+.custom-dropdown-item.add-new:hover, .app .custom-dropdown-item.add-new:focus-visible { background: linear-gradient(var(--quiet-hover), var(--quiet-hover)), var(--bg-dark) !important; }
 
 /* Label and count read as two things: the count sits in its own small chip */
 .mod-state-count {
@@ -698,7 +754,7 @@ html:not([data-show-quick-organize]) .dropzone-container { max-width: 720px; }
 .lo-row .lo-hover { display: none; }
 .lo-row:hover .lo-hover, .lo-row:focus-within .lo-hover { display: inline-flex; }
 .sidebar-filters { padding: 12px 8px 8px !important; }
-.fp-head { padding: 0 6px 8px !important; }
+.fp-head { padding: 0 6px 2px !important; min-height: 24px !important; }   /* tight under Filters, still the same height with or without Clear (22px) */
 
 /* Loadout cards: mods list, media, actions */
 .lo-sep { margin: 0 6px; opacity: 0.6; }
@@ -740,7 +796,7 @@ html:not([data-show-quick-organize]) .dropzone-container { max-width: 720px; }
   height: 36px !important; font-size: 13px !important; padding: 0 12px !important;
   background: var(--input-bg) !important; border: 1px solid var(--input-border) !important; border-radius: var(--quiet-radius) !important;
 }
-.vfx-input-group input:focus { border-color: rgba(255, 255, 255, 0.2) !important; box-shadow: none !important; }
+.vfx-input-group input:focus { border-color: color-mix(in srgb, var(--text-primary), transparent 50%) !important; box-shadow: none !important; }
 .vfx-input-group button, .btn-secondary, .vfx-cancel-btn {
   height: 36px !important; padding: 0 14px !important; font-size: 13px !important; font-weight: 500 !important;
   background: transparent !important; border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important;
@@ -974,12 +1030,13 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 .bulk-num { font-variant-numeric: tabular-nums; }
 .bulk-field .custom-dropdown-menu { min-width: 220px; }
 
-@container bulkbar (max-width: 900px) {
-  .bulk-field { flex: 0 0 34px !important; min-width: 0 !important; max-width: 34px !important; }
+/* One breakpoint for every action (cable, 2026-10-21): above it all show their words, below it all are icons */
+@container bulkbar (max-width: 780px) {
+  .bulk-field { flex: 0 0 36px !important; min-width: 0 !important; max-width: 36px !important; }
   .bulk-field .custom-dropdown-trigger { padding: 0 !important; justify-content: center !important; background-image: none !important; }
   .bulk-field .custom-dropdown-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
-@container bulkbar (max-width: 720px) {
+@container bulkbar (max-width: 780px) {
   .bulk-btn-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
 
@@ -1027,7 +1084,7 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
 .view-tabs button[aria-selected="true"] { background: var(--bg-lighter) !important; color: var(--text-primary) !important; }
 
 /* Mod rows (New strip, loadout page): switch, type code, name, actions */
-.mod-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--panel-border); border-radius: 10px; overflow: hidden; }
+.mod-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--panel-border); border-radius: 10px; overflow: visible; }   /* visible: a row's Add to loadout menu opens past the list's edge */
 .mod-row { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 4px 10px 4px 12px; font-size: 13px; color: var(--text-secondary); }
 .mod-row + .mod-row { border-top: 1px solid var(--panel-border); }
 .mod-row.is-on { color: var(--text-primary); }
@@ -1166,7 +1223,7 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
 .lp-media .lo-card-image { border-bottom: none !important; }
 .lo-media-arrow {
   position: absolute; top: 50%; transform: translateY(-50%); z-index: 1;
-  width: 30px; height: 30px; padding: 0 !important; border-radius: 50% !important;
+  width: 30px !important; height: 30px !important; min-width: 0 !important; min-height: 0 !important; padding: 0 !important; border-radius: 50% !important;   /* a circle: the app's 36px button floor made it an oval */
   display: grid; place-items: center;
   background: rgba(10, 11, 14, 0.62) !important; border: 1px solid rgba(255, 255, 255, 0.12) !important; color: var(--text-primary);
   opacity: 0; transition: opacity 0.15s ease, background 0.15s ease;
@@ -1176,10 +1233,12 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
 .lo-media:hover .lo-media-arrow, .lo-media-arrow:focus-visible { opacity: 1; }
 .lo-media-arrow:hover { background: rgba(10, 11, 14, 0.85) !important; }
 .lo-media-arrow svg.lucide { width: 16px !important; height: 16px !important; }
+/* The preview's type (bottom left): as tall as the speaker in the other corner (28px), the same 6px from the edges */
 .lo-media-label {
-  position: absolute; left: 8px; bottom: 8px; pointer-events: none;
-  padding: 3px 8px; border-radius: 999px; font-size: 11px; font-variant-numeric: tabular-nums;
-  background: rgba(10, 11, 14, 0.62); color: var(--text-secondary);
+  position: absolute; left: 6px; bottom: 6px; pointer-events: none; height: 28px; box-sizing: border-box;
+  display: inline-flex; align-items: center; padding: 0 10px; border-radius: 999px; font-size: 12px; font-variant-numeric: tabular-nums;
+  background: rgba(10, 11, 14, 0.62); color: #fff;   /* white on the dark pill, like the arrows and speaker icons */
+  border: 1px solid rgba(255, 255, 255, 0.12);   /* the arrows' and speaker's outline */
 }
 
 /* ---------- motion: recipes from transitions.dev (free library), with its motion tokens. Settings > Interface >
@@ -1455,6 +1514,9 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .lo-batch-left { flex: none; padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--text-primary), transparent 92%);
   color: var(--text-secondary); font-size: 11.5px; font-variant-numeric: tabular-nums; }
 .lo-batch-stop { margin-left: auto; height: 30px !important; flex: none; }
+/* While previews run, Stop shows only when the line is hovered or focused (cable, 2026-10-21). The finished line's Dismiss always shows */
+.lo-batch:not(.is-summary) .lo-batch-stop { opacity: 0; transition: opacity 0.15s ease; }
+.lo-batch:not(.is-summary):hover .lo-batch-stop, .lo-batch:not(.is-summary) .lo-batch-stop:focus-visible { opacity: 1; }
 .lo-batch .lo-batch-left { margin-left: auto; }
 .lo-batch-left + .lo-batch-stop { margin-left: 0; }
 /* After a run: its result, quiet, until the next run or Dismiss */
@@ -1474,6 +1536,10 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
   background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.07) 50%, transparent 100%);
   transform: translateX(-100%); animation: lo-skel-sweep 1.6s ease-in-out infinite; }
 @keyframes lo-skel-sweep { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+/* The hero's shape behind the status while a preview renders, the sweep passing over it. An older picture steps aside */
+.lo-media:has(.lo-skel-shape) .lo-card-image img, .lo-media:has(.lo-skel-shape) .lo-media-multi { visibility: hidden; }
+.lo-skel-shape { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.08) 55%, rgba(255, 255, 255, 0) 100%);
+  mask-size: cover; mask-position: center bottom; mask-repeat: no-repeat; -webkit-mask-size: cover; -webkit-mask-position: center bottom; -webkit-mask-repeat: no-repeat; }
 .lo-skel-label { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 7px;
   font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text-secondary); text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8); }
 .lo-media.is-running .lo-skel-label { color: var(--text-primary); flex-direction: column; gap: 3px; padding: 0 12px; text-align: center; }
@@ -1728,6 +1794,9 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .fr-modal { width: min(720px, 94vw) !important; max-width: none !important; max-height: 90vh; display: flex; flex-direction: column; padding: 0 !important; }
 .fr-head { padding: 18px 22px !important; border-bottom: 1px solid var(--panel-border); align-items: flex-start; }
 .fr-head h2 { margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+/* Set up mods (all three steps in one click) sits in the head, left of the close button, until they are done */
+.fr-head .fr-all { margin: 0 12px 0 auto; align-self: center; flex: none; width: auto !important; height: 34px !important; min-height: 0 !important; padding: 0 16px !important;
+  border-radius: var(--quiet-radius) !important; font-size: 13px !important; font-weight: 600 !important; display: inline-flex !important; align-items: center; }
 .fr-steps { list-style: none; margin: 0; overflow-y: auto; padding: 4px 22px !important; display: flex; flex-direction: column; }
 .fr-modal .fr-steps, .ss-modal .fr-steps { gap: 0; }   /* .modal-body's 2rem section gap stacked on every step's padding */
 .fr-step { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--panel-border); }
@@ -1762,44 +1831,16 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .fr-foot .su-sub { margin: 0 auto 0 0; }
 
 /* Preview kit: what the PC check found missing (Setup and the first-launch setup) */
-/* Install progress (installTrack.tsx), in the card or step it belongs to: the steps (done in green, the current one in
-   blue, the rest quiet), what is happening with how far along it is, and one bar. A finished install turns green and
-   says so for a moment. The bar's fill carries a slow sheen so a long step still reads as moving */
-.su-track { display: flex; flex-direction: column; gap: 10px; margin-top: 2px; padding: 12px 14px 14px; border-radius: 10px;
-  background: color-mix(in srgb, var(--accent-primary), transparent 94%); border: 1px solid color-mix(in srgb, var(--accent-primary), transparent 74%);
-  transition: background 0.3s ease, border-color 0.3s ease; }
-.su-track.is-done { background: color-mix(in srgb, #3ecf6e, transparent 93%); border-color: color-mix(in srgb, #3ecf6e, transparent 70%); }
-.su-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 11.5px; color: var(--text-secondary); }
-.su-steps li { display: flex; align-items: center; gap: 6px; }
-.su-steps li + li::before { content: ''; width: 16px; height: 1px; background: color-mix(in srgb, var(--text-secondary), transparent 60%); }
-.su-steps i { flex: none; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; font: 600 10.5px/1 var(--font-primary);
-  font-style: normal; border: 1px solid color-mix(in srgb, var(--text-secondary), transparent 50%); transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease; }
-.su-steps li.is-now { color: var(--text-primary); }
-.su-steps li.is-now i { background: var(--accent-primary); border-color: var(--accent-primary); color: #fff; }
-.su-steps li.is-done i { background: #3ecf6e; border-color: #3ecf6e; color: #07130b; }
-.su-track-line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
-.su-track-text { display: inline-flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: 13px; font-weight: 600; color: var(--text-primary); }
-.su-track.is-done .su-track-text svg { color: #3ecf6e; flex: none; }
-.su-track-amount { flex: none; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-.su-track-bar { position: relative; display: block; height: 6px; border-radius: 999px; overflow: hidden; background: rgba(255, 255, 255, 0.08); }
-.su-track-bar i { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; background: var(--accent-primary);
-  transform-origin: left center; transform: scaleX(var(--share, 0)); transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), background 0.3s ease; }
-.su-track-bar i::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.32), transparent);
-  transform: translateX(-100%); animation: su-sheen 1.6s ease-in-out infinite; }
-.su-track-bar i.is-indeterminate { right: auto; width: 32%; transform: none; animation: su-slide 1.2s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
-.su-track-bar i.is-indeterminate::after { display: none; }
-.su-track.is-done .su-track-bar i { --share: 1; right: 0; width: auto; background: #3ecf6e; animation: none; }
-.su-track.is-done .su-track-bar i::after { display: none; }
-@keyframes su-slide { from { transform: translateX(-100%); } to { transform: translateX(313%); } }
-@keyframes su-sheen { to { transform: translateX(100%); } }
-[data-theme="light"] .su-track-bar { background: rgba(0, 0, 0, 0.08); }
-/* Setup itself shows no bar (cable's call): the steps, the words and the amount carry it, and the current step's dot
-   pulses so a long download still reads as moving. The guided setup keeps its bar */
-.su-modal .su-track-bar { display: none; }
-.su-modal .su-steps li.is-now i { animation: su-pulse 1.4s ease-in-out infinite; }
-@keyframes su-pulse { 50% { opacity: 0.5; } }
-@media (prefers-reduced-motion: reduce) { .su-track-bar i, .su-track-bar i::after, .su-modal .su-steps li.is-now i { animation: none !important; } }
+/* Install progress (installTrack.tsx): one status line, no box and no bar. A small spinner, what is happening in the
+   primary color, how far along in grey after it. A finished install turns its words green with a check for a moment */
+.su-track { display: flex; align-items: center; gap: 8px; min-width: 0; margin-top: 6px; font-size: 12.5px; }
+.su-spin { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid color-mix(in srgb, var(--text-secondary), transparent 65%);
+  border-top-color: var(--text-primary); animation: su-spin 0.8s linear infinite; }
+.su-track-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: var(--text-primary); }
+.su-track-amount { flex: none; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.su-track.is-done, .su-track.is-done .su-track-text { color: #3ecf6e; }
+.su-track.is-done svg { flex: none; color: #3ecf6e; }
+@media (prefers-reduced-motion: reduce) { .su-spin { animation-duration: 2.4s; } }
 .su-problems { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .su-problems li { font-size: 12.5px; line-height: 1.5; color: var(--text-primary); padding-left: 14px; position: relative; }
 .su-problems li::before { content: ''; position: absolute; left: 2px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: #e3a008; }
@@ -1836,9 +1877,7 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 
 /* A loadout whose mods have nothing to render: two short lines, large enough to read on a small card */
 .lo-card-placeholder small { font-size: 11px; opacity: 0.7; }
-.lo-card-placeholder.is-none { gap: 6px; }
-.lo-card-placeholder.is-none > span { font-size: 15px; font-weight: 600; color: var(--text-primary); }
-.lo-card-placeholder.is-none small { font-size: 13px; font-weight: 400; opacity: 1; line-height: 1.4; text-align: center; padding: 0 16px; text-wrap: balance; }
+/* No render possible reads like No preview yet (same size and weight), its icon a cancel sign */
 
 /* A loadout's VFX mods: their swatches share one slide, side by side */
 .lo-media-multi { display: grid; grid-template-columns: repeat(2, 1fr); grid-auto-rows: 1fr; width: 100%; height: 100%; }
@@ -1950,7 +1989,7 @@ html[data-motion="off"] .t-matrix i { animation: none; opacity: 0.6; }
    (cable asked: a dot on Check conflicts, a badge on each clashing mod that is on) ---------- */
 .app .main-search-input:focus-visible { outline: none !important; }
 .main-action-bar .search-wrapper { background: var(--field-bg) !important; border-color: var(--panel-border) !important; }
-.main-action-bar .search-wrapper:focus-within { border-color: rgba(255, 255, 255, 0.16) !important; }
+.main-action-bar .search-wrapper:focus-within { border-color: color-mix(in srgb, var(--text-primary), transparent 50%) !important; }
 .main-action-bar .search-wrapper > svg { width: 16px !important; height: 16px !important; color: var(--text-secondary) !important; opacity: 0.8; }
 .main-search-input { font-size: 13.5px !important; }
 .main-search-input::placeholder { color: var(--text-secondary) !important; opacity: 0.8; }
@@ -1982,7 +2021,7 @@ html[data-motion="off"] .t-matrix i { animation: none; opacity: 0.6; }
 .install-mod-card__pill { background: transparent !important; border: 1px solid var(--panel-border) !important; color: var(--text-secondary) !important; font-weight: 500 !important; }
 .install-mod-card .mod-name-input { background: var(--field-bg) !important; border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important;
   height: 32px; padding: 0 10px !important; max-width: 260px; outline: none !important; box-shadow: none !important; }
-.install-mod-card .mod-name-input:focus { border-color: rgba(255, 255, 255, 0.16) !important; }
+.install-mod-card .mod-name-input:focus { border-color: color-mix(in srgb, var(--text-primary), transparent 50%) !important; }
 .install-mod-card__tags { border-top: 1px solid var(--panel-border) !important; padding-top: 12px !important; }
 .install-mod-card__footer { border-top: 1px solid var(--panel-border) !important; padding-top: 12px !important; gap: 8px !important;
   align-items: stretch !important; justify-content: stretch !important; }
@@ -2052,14 +2091,13 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
 /* Add mods list: a mod that is on says so with a green badge the size of its type badge */
 .mod-row .mod-type-badge.category-badge.on-badge { --badge-dot: #3ecf6e; color: #3ecf6e !important;
   background: color-mix(in srgb, #3ecf6e, transparent 90%) !important; border-color: color-mix(in srgb, #3ecf6e, transparent 62%) !important; }
+.mod-row .mod-type-badge.category-badge.on-badge::before { display: none !important; }   /* the green tag says On by itself, no dot */
 /* New loadout card: an unseen real card underneath sets its size; the plus and words fill it */
 .lo-grid .lo-card.lo-card-new { position: relative; display: block !important; min-height: 0 !important; }
 .lo-card-new .lo-card-ghost { visibility: hidden; display: flex; flex-direction: column; }
 .lo-card-new .lo-card-add { position: absolute; inset: 0; }
-/* Its words read like the "Nothing to render" card's: the grid's card zoom (0.7 by default) shrank them to 10 and 8 px */
-.lo-card-add-title { font-size: 15px; }
-.lo-card-add small { font-size: 13px; text-wrap: balance; }
-.lo-screen .lo-grid .lo-card-add-title, .lo-screen .lo-grid .lo-card-add small { zoom: max(1, calc(0.85 / var(--lo-card-zoom, 1))); }
+/* Its name and plus take the counter zoom a card name and placeholder icon get (its status line is a .lo-card-meta already) */
+.lo-screen .lo-grid .lo-card-add-title, .lo-screen .lo-grid .lo-card-add-icon { zoom: max(1, calc(0.8 / var(--lo-card-zoom, 1))); }
 /* A preview's caption ("Mesh + Texture + Material · 1/4", "Older render") shows on hover, with the arrows */
 .lo-media-label { opacity: 0; transition: opacity 0.15s ease; }
 .lo-media:hover .lo-media-label, .lo-media:focus-within .lo-media-label { opacity: 1; }
@@ -2106,7 +2144,8 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
 .install-mod-card .install-toggle .install-toggle__label { color: color-mix(in srgb, var(--tile, #888), white 30%) !important; font-size: 13px !important; line-height: 1.3; }
 .install-mod-card .install-toggle .install-toggle__hint { font-size: 12px !important; line-height: 1.4; }
 .install-mod-card .install-toggle__text { gap: 2px !important; }
-.install-mod-card .install-toggle .repakx-switch-control { margin-right: 12px !important; }
+.install-mod-card .install-toggle .repakx-switch-control { margin-right: 0 !important; }   /* 12px each side of the switch: the tile's padding before it, the gap after */
+.install-mod-card .install-toggle { gap: 12px !important; }
 /* the tile is the switch's own label element (label.repakx-switch.install-toggle) */
 .install-mod-card .install-toggle.repakx-switch.checked .repakx-switch-track { background: var(--tile) !important; }
 .install-mod-card .install-toggle.locked { opacity: 0.5 !important; }
@@ -2176,6 +2215,7 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
 /* ---------- batch 2, group 3: Library, Recently deleted, Settings type scale, VFX Updater title ---------- */
 /* File size: plain text at the type tag's 11px, just left of it */
 .mod-size-tag { flex: none; font-size: 11px; font-weight: 500; line-height: 1; color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mod-tags-row .mod-size-tag { margin-right: 6px; }   /* the size reads apart from the tags after it (12px in all) */
 /* VFX Updater (WIP): the WIP in gray beside the white title */
 .vfx-header h1 .vfx-wip { color: var(--text-secondary) !important; font-weight: 600 !important; }
 /* Settings, one type scale: section titles 14px; every row label, field, choice and button 13px; notes 12.5px gray
@@ -2195,6 +2235,10 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
 /* A switch row's icon sits in the checkbox's 22px column, so its words and note line up with the checkbox rows' */
 .settings-content .setting-toggle-label { display: inline-flex !important; align-items: center; gap: 8px !important; }
 .settings-content .setting-toggle-label svg { width: 16px !important; height: 16px !important; margin: 0 3px; flex: none; color: var(--text-secondary) !important; }
+/* One center line for the row: the icon on the words' cap height (1px up), the switch without its 8px bottom margin */
+.settings-content .setting-toggle-label svg { position: relative; top: -1px; }
+.settings-content .setting-toggle-actions { align-items: center !important; }
+.settings-content .setting-toggle-actions .repakx-switch { margin: 0 !important; }
 .settings-content .setting-toggle-actions > span { font-size: 12px !important; font-weight: 500 !important; font-style: normal !important;
   text-shadow: none !important; opacity: 1 !important; color: var(--text-secondary) !important; }
 .settings-content .setting-item:has(.setting-toggle-label) > .setting-subtext { padding-left: 30px !important; }
@@ -2332,9 +2376,10 @@ html[data-motion] .hold-delete.holding::after { transition-duration: 2s !importa
 /* Zoomed far out, a card's words would shrink with it: the words alone stop at 80% of their size (a counter zoom; the
    switch keeps the card's scale, so the name keeps its room), and the rename pencil steps aside for the name */
 .lo-screen .lo-grid .lo-card-name h3, .lo-screen .lo-grid .lo-card-meta, .lo-screen .lo-grid .lo-expand, .lo-screen .lo-grid .lo-skel-label,
+.lo-screen .lo-grid .lo-media-arrow, .lo-screen .lo-grid .lo-media-label, .lo-screen .lo-grid .lo-media-mute,
 .lo-screen .lo-grid .lo-card-placeholder:not(.lo-card-caption) > span { zoom: max(1, calc(0.8 / var(--lo-card-zoom, 1))); }
 /* "Nothing to render" stays readable on small cards: both lines undo most of the card size (85%), not only the title */
-.lo-screen .lo-grid .lo-card-placeholder.is-none > span, .lo-screen .lo-grid .lo-card-placeholder.is-none > small { zoom: max(1, calc(0.85 / var(--lo-card-zoom, 1))); }
+.lo-screen .lo-grid .lo-card-placeholder:not(.lo-card-caption) > svg { zoom: max(1, calc(0.8 / var(--lo-card-zoom, 1))); }   /* the icon shrinks no further than the words */
 .lo-screen[data-small] .lo-grid .lo-card-pen { display: none; }
 .lo-zoom { display: inline-flex; align-items: center; gap: 2px; margin-right: 6px; }
 .lo-zoom-value { min-width: 44px; height: 26px; padding: 0 4px; border: none; border-radius: 6px; background: none;
@@ -2344,7 +2389,7 @@ html[data-motion] .hold-delete.holding::after { transition-duration: 2s !importa
 
 /* Selection bar (cable, 2026-10-17): each control as wide as its words (no reserved chevron space beside the text),
    Delete red like the right-click menu's */
-@container bulkbar (min-width: 901px) {   /* narrower, the 900px rule above folds them to icons */
+@container bulkbar (min-width: 781px) {   /* narrower, the 780px rule above folds them to icons */
   .bulk-field { flex: 0 0 auto; min-width: 0; max-width: none; }
   .bulk-field .custom-dropdown-trigger { width: auto; padding: 0 0.65rem !important; background-image: none !important; gap: 6px; }
   .bulk-field .custom-dropdown-text { overflow: visible; text-overflow: clip; }
@@ -2356,16 +2401,17 @@ html[data-motion] .hold-delete.holding::after { transition-duration: 2s !importa
 /* ---------- Text fields never get the blue focus ring (cable, 2026-10-17). The app-wide ring (.app :focus-visible) is for
    buttons, links and switches; every text field, now and added later, shows focus as a lighter hairline instead, in every
    window. Matched by element type, so a new field needs no class of its own. Boxes that hold a field (a search or rename
-   box) do the same while the field inside has focus. ---------- */
+   box) do the same while the field inside has focus. The hairline is bright enough (about 4:1 against the resting
+   border) to find the focused field at a glance (cable, 2026-10-21). ---------- */
 :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="button"], [type="submit"], [type="reset"], [type="color"], [type="file"], [type="image"]), textarea, select, [contenteditable="true"]):is(:focus, :focus-visible) {
   outline: none !important;
   box-shadow: none !important;
-  border-color: color-mix(in srgb, var(--text-primary), transparent 72%) !important;
+  border-color: color-mix(in srgb, var(--text-primary), transparent 50%) !important;
 }
 :is(.rename-input-wrapper, .combined-input-group, .search-wrapper, .tail-input, .lp-search):focus-within {
   outline: none !important;
   box-shadow: none !important;
-  border-color: color-mix(in srgb, var(--text-primary), transparent 72%) !important;
+  border-color: color-mix(in srgb, var(--text-primary), transparent 50%) !important;
 }
 /* A loadout page's More menu: Delete in red, like the Library's right-click Delete (cable, 2026-10-17) */
 .lp-more-menu .sigeon-item.is-danger { color: #f2555a !important; }
@@ -2434,7 +2480,7 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 
 /* Loadout page picture card: empty, it says both ways to fill it ("Click to add an image, or paste one, or" over its
    Generate previews button). The text lets clicks through to the card; only the button takes its own. With a picture,
-   the same button (Regenerate, or Stop while it runs) sits in the top left corner on hover. */
+   the same button (Regenerate, or Stop while it runs) sits in the bottom left corner on hover. */
 .lo-media-cta { position: absolute; inset: 0; z-index: 1; pointer-events: none; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 6px; padding: 0 14px; text-align: center; color: var(--text-secondary); font-size: 12.5px; }
 .lo-media-cta > span { color: var(--text-primary); font-weight: 500; font-size: 13px; }
@@ -2453,21 +2499,26 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 .lo-card-image.is-still { cursor: default; }
 
 /* Loadout page: the picture over its Cover switch, one column. The switch is what the card shows everywhere: four
-   sources as a 2 by 2 set of tiles (icon and word), one picked; an empty source reads dimmer, so its tile reads as "add one" */
+   sources as separate tiles (icon and word, cable's pick). Every tile is the same grey with a clear border (an empty
+   source is not unavailable, picking it adds one), and the picked one is lifted: filled, brighter border, white. */
 .lp-cover { width: 220px; flex: none; display: flex; flex-direction: column; gap: 10px; }
 .lp-cover .lp-media { width: 100% !important; }
 .cover-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .cover-tab { display: flex !important; align-items: center; justify-content: center; gap: 7px; height: 34px !important; min-height: 0 !important;
-  padding: 0 12px !important; border: 1px solid var(--panel-border) !important; border-radius: 9px !important; background: transparent !important;
+  padding: 0 12px !important; border: 1px solid rgba(255, 255, 255, 0.12) !important; border-radius: 9px !important; background: transparent !important;
   color: var(--text-secondary) !important; font-size: 12.5px !important; font-weight: 500 !important; white-space: nowrap;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
 .cover-tab svg.lucide { width: 14px !important; height: 14px !important; }
 .cover-tab:hover { color: var(--text-primary) !important; background: var(--quiet-hover) !important; }
-.cover-tab[aria-checked="true"] { color: var(--text-primary) !important; background: var(--bg-lighter) !important; border-color: rgba(255, 255, 255, 0.22) !important; }
-.cover-tab:not(.is-filled):not([aria-checked="true"]) { color: color-mix(in srgb, var(--text-secondary), transparent 35%) !important; }
+.cover-tab[aria-checked="true"] { color: var(--text-primary) !important; background: var(--bg-lighter) !important; border-color: rgba(255, 255, 255, 0.32) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45); }
 [data-theme="light"] .cover-tab[aria-checked="true"] { border-color: rgba(0, 0, 0, 0.22) !important; }
-.lo-media-gen { position: absolute; top: 8px; left: 8px; right: 44px; z-index: 2; display: flex; opacity: 0; transition: opacity 0.15s ease; }
-.lo-media:hover .lo-media-gen, .lo-media-gen:focus-within, .lo-media-gen.is-busy { opacity: 1; }
+/* Redo and Edit text sit in the bottom left on hover (the page shows no type tag) */
+.lo-media-gen { position: absolute; bottom: 6px; left: 6px; right: 40px; z-index: 2; display: flex; opacity: 0; transition: opacity 0.15s ease; }
+/* No type tag on a loadout's page (cable, 2026-10-21), and none on any card while a new preview renders */
+.lp-media .lo-media-label { display: none !important; }
+.lo-media.is-running .lo-media-label, .lo-media.is-queued .lo-media-label { display: none; }
+.lo-media:hover .lo-media-gen, .lo-media-gen:focus-within { opacity: 1; }   /* Stop too shows only on hover while a preview renders (cable, 2026-10-21) */
 .lo-media-chip { display: inline-flex !important; align-items: center; gap: 6px; min-width: 0; height: 28px !important; min-height: 0 !important;
   padding: 0 10px !important; border-radius: 999px !important; font-size: 12px !important; font-weight: 500 !important; white-space: nowrap;
   background: rgba(10, 11, 14, 0.72) !important; border: 1px solid rgba(255, 255, 255, 0.12) !important; color: var(--text-primary) !important; }
@@ -2491,21 +2542,19 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 /* The words being typed sit where they will show: centered on an opaque card (field-sizing grows the field with them),
    the icon above, the icon and color bar along the bottom */
 .lo-caption-wrap { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
-  padding: 14px 14px 52px; box-sizing: border-box; border: 1px solid rgba(255, 255, 255, 0.16); border-radius: inherit; background: var(--bg-dark); }
+  padding: 14px 14px 52px; box-sizing: border-box; border: none; border-radius: inherit; background: var(--bg-darkest); }   /* the page's black, not grey, and no second outline over the card's own */
 .lo-caption-wrap svg.lo-cap-icon { flex: none; width: 56px; height: 56px; color: var(--cap, var(--text-primary)); stroke-width: 1.75; }
-/* The words sit as they will show, the placeholder in the same type but dim. An underline as wide as the words marks
-   them as the part to type in, brighter on hover and while typing */
+/* The words sit as they will show, the placeholder in the same type but dim, with no underline (cable, 2026-10-21) */
 .lo-caption-edit { field-sizing: content; width: auto; min-width: 4ch; max-width: 100%; max-height: 100%; resize: none; padding: 2px 2px 6px; box-sizing: border-box;
-  display: block; border: none; border-bottom: 2px solid rgba(255, 255, 255, 0.14); border-radius: 0; background: transparent; outline: none; box-shadow: none !important;
+  display: block; border: none; border-radius: 0; background: transparent; outline: none; box-shadow: none !important;
   color: var(--cap, var(--text-primary)); font: 800 22px/1.15 var(--font-primary); letter-spacing: -0.02em; text-align: center; cursor: text;
   transition: border-color 0.15s ease; }
-.lo-caption-edit:hover { border-bottom-color: rgba(255, 255, 255, 0.3); }
-.lo-caption-edit:focus { border-bottom-color: color-mix(in srgb, var(--cap, #ffffff), transparent 35%); }
-[data-theme="light"] .lo-caption-edit { border-bottom-color: rgba(0, 0, 0, 0.18); }
 .lo-caption-edit::placeholder { color: rgba(255, 255, 255, 0.28); }
+/* Empty, the field is as wide as "Type a title" and starts at its left, so the caret sits at the start of the words */
+.lo-caption-edit:placeholder-shown { text-align: left; }
 [data-theme="light"] .lo-caption-edit::placeholder { color: rgba(0, 0, 0, 0.3); }
 /* Icon and color: one flat row along the card's bottom, split from the words by a hairline */
-.cap-bar { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 6px; padding: 8px 12px 8px 8px;
+.cap-bar { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 6px; padding: 8px 12px 8px 8px; border-top: none !important;
   border-top: 1px solid rgba(255, 255, 255, 0.07); }
 .cap-icon-btn { flex: none; display: inline-flex !important; align-items: center; gap: 4px; height: 28px !important; min-height: 0 !important; padding: 0 6px 0 8px !important;
   border-radius: 7px !important; border: none !important; background: transparent !important; font-size: 12px !important; font-weight: 500 !important;
@@ -2542,10 +2591,111 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 
 /* An animation card's speaker (bottom right): mutes that loadout's emote sound on hover, the clip still plays. Shown on
    hover like the arrows, and always while muted so the state is visible */
-.lo-media-mute { position: absolute; right: 6px; bottom: 6px; z-index: 2; width: 28px; height: 28px !important; min-height: 0 !important; padding: 0 !important;
-  display: grid; place-items: center; background: transparent !important; border: none !important; color: var(--text-primary) !important;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.85)); opacity: 0; transition: opacity 0.15s ease, color 0.15s ease; }   /* no circle: the icon alone, shaded to read on any image */
+.lo-media-mute { position: absolute; right: 6px; bottom: 6px; z-index: 2; width: 28px !important; height: 28px !important; min-width: 0 !important; min-height: 0 !important;
+  padding: 0 !important; box-sizing: border-box; display: grid; place-items: center; border-radius: 50% !important;   /* the arrows' dark circle, as tall as the type label */
+  background: rgba(10, 11, 14, 0.62) !important; border: 1px solid rgba(255, 255, 255, 0.12) !important; color: var(--text-primary) !important;
+  opacity: 0; transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease; }
 .lo-media:hover .lo-media-mute, .lo-media-mute:focus-visible, .lo-media-mute.is-muted { opacity: 1; }
 .lo-media-mute.is-muted { color: var(--text-secondary) !important; }
-.lo-media-mute:hover { color: #fff !important; }
+.lo-media-mute:hover { color: #fff !important; background: rgba(10, 11, 14, 0.85) !important; }
 .lo-media-mute svg.lucide { width: 16px !important; height: 16px !important; }
+
+/* ---------- A clearer type scale ---------- */
+/* Type steps: page title 22, panel title 18, a section 16 (Settings), then 13 for rows and labels */
+.center-header .header-title h2 { font-size: 18px !important; font-weight: 700 !important; letter-spacing: -0.01em; }
+.settings-content .setting-section h3 { font-size: 16px !important; letter-spacing: -0.01em !important; margin-bottom: 4px !important; }
+/* Settings save as they change: a quiet note where Cancel and Save were */
+.settings-live-footer { justify-content: space-between !important; align-items: center; }
+.settings-live-note { font-size: 12.5px; color: var(--text-secondary); }
+
+/* ---------- Numbers in a colored bubble: one centering rule for all of them (the conflicts count, the All / On / Off
+   counts, a collection's count, the setup step numbers, the selection numbers). Grid centering inside a set height
+   (line-height 1 leaves no half-leading to push the digit up) and tabular digits, so a 1 sits in the middle of its
+   slot instead of left of it. ---------- */
+:is(.cf-count, .mod-state-count, .lo-group-count, .fr-num) { display: inline-grid !important; grid-auto-flow: column; place-items: center;
+  place-content: center; line-height: 1 !important; font-variant-numeric: tabular-nums; box-sizing: border-box; }
+.cf-count { height: 22px; min-width: 22px; padding: 0 7px !important; }
+.mod-state-count { height: 18px; min-width: 22px; padding: 0 6px !important; }
+.lo-group-count { height: 18px; min-width: 20px; }
+
+/* ---------- The Library's selection bar (cable, 2026-10-21): a drawer that slides out from under the All / On / Off
+   header, its top tucked behind the header so it reads as the header's extension. The header's own surface and border,
+   the count as "Selected" with its number in the All / On / Off pill, every action the app's outlined button, Delete in
+   red. custom/selectionScroll.ts keeps the row you clicked under the cursor as it opens ---------- */
+.center-header { position: relative; z-index: 2; }   /* above the drawer, so its top hides behind the header */
+.bulk-actions-toolbar { --tuck: 11px; position: relative !important; z-index: 1; flex: none; box-sizing: border-box;
+  height: calc(52px + var(--tuck)); margin: calc(-1 * var(--tuck)) 14px 0 !important; padding: var(--tuck) 8px 0 16px !important; gap: 12px !important;
+  border-radius: 0 0 10px 10px !important; background: var(--panel-bg) !important; border: 1px solid var(--panel-border) !important;
+  border-top: none !important; box-shadow: none !important; align-items: flex-end !important;
+  transition: height var(--acc-expand) var(--acc-ease), display var(--acc-expand) allow-discrete; }
+/* transitions.dev Accordion: it grows out of the header and folds back into it. Its buttons ride its bottom edge, the
+   header hides what is above that, and the list moves with it (its height changes, so selectionScroll.ts follows) */
+.bulk-actions-toolbar > * { margin-bottom: 8px !important; }
+.bulk-actions-toolbar.inactive { height: var(--tuck); pointer-events: none; transition-duration: var(--acc-collapse); }
+@starting-style { .bulk-actions-toolbar:not(.inactive) { height: var(--tuck); } }
+.bulk-actions-toolbar .selection-info { align-items: center !important; gap: 6px !important; }
+.bulk-count-label { order: -1; max-width: none !important; margin: 0 !important; font-size: 13px !important; font-weight: 500 !important;
+  line-height: 20px !important; opacity: 1 !important; color: var(--text-primary) !important; }
+.bulk-count-label::first-letter { text-transform: uppercase; }   /* reads "Selected 3", screen readers still hear "3 selected" */
+.bulk-count { min-width: 0 !important; height: auto !important; padding: 0 !important; margin-right: 10px; background: none !important; }
+.bulk-count-value { display: inline-grid; place-items: center; box-sizing: border-box; height: 18px; min-width: 22px; padding: 0 6px;
+  border-radius: 999px; background: rgba(255, 255, 255, 0.12); color: var(--text-primary); font-size: 11px; font-weight: 600; line-height: 1;
+  font-variant-numeric: tabular-nums; transform: none !important; }
+.bulk-actions-toolbar svg { width: 16px !important; height: 16px !important; flex: none; color: currentColor !important; opacity: 1 !important; stroke-width: 2; }
+.bulk-actions-toolbar .btn-ghost, .bulk-actions-toolbar .bulk-field .custom-dropdown-trigger { height: 36px !important; min-height: 0 !important;
+  gap: 7px !important; padding: 0 11px !important; border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important;
+  background: transparent !important; box-shadow: none !important; color: var(--text-secondary) !important; font-size: 13px !important; font-weight: 500 !important; }
+.bulk-actions-toolbar .btn-ghost:hover:not(:disabled), .bulk-actions-toolbar .custom-dropdown-trigger:hover { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
+.bulk-actions-toolbar .btn-ghost:disabled { opacity: 0.4 !important; }
+.bulk-actions-toolbar .bulk-field .custom-dropdown-icon { opacity: 1 !important; font-size: 0 !important; }
+/* the Move and Add to loadout menus sit in a 30px wrapper: give it the buttons' 36px so they line up with the rest */
+.bulk-actions-toolbar .bulk-field, .bulk-actions-toolbar .bulk-field .custom-dropdown-container { height: 36px !important; display: flex; align-items: center; }
+.bulk-actions-toolbar .bulk-controls { gap: 6px !important; }
+.bulk-actions-toolbar .bulk-toggle-group { border: none !important; background: none !important; gap: 6px; height: 36px; }
+.bulk-actions-toolbar .bulk-delete > span { gap: 7px !important; }
+.btn-ghost.danger.bulk-delete, .btn-ghost.danger.bulk-delete:hover { color: #f2555a !important; border-color: color-mix(in srgb, #f2555a, transparent 60%) !important; }
+.btn-ghost.danger.bulk-delete:hover { background: color-mix(in srgb, #f2555a, transparent 90%) !important; }
+/* Library: a little air between the Filters / Folders column and the mods panel (they shared a border) */
+.content-wrapper { gap: 10px; }
+/* The mod list sits further left: its checkboxes line up under the panel title ("All Mods", 14px in), not 26px */
+.center-panel .mod-list-grid { padding-left: 4px !important; padding-right: 8px !important; padding-top: 6px !important; }   /* and close under the header */
+/* Settings: a setting that belongs to the one above it (Moving hero art under Animations), set in under it and dimmed while that one is off */
+.setting-sub { margin: 10px 0 0 30px; }
+.setting-sub.is-off { opacity: 0.45; pointer-events: none; }
+/* A Settings heading with its icon (every section): the icon before the words, grey, one size */
+.setting-icon-label { display: inline-flex; align-items: center; gap: 8px; }
+.setting-icon-label svg { flex: none; width: 18px !important; height: 18px !important; color: var(--text-secondary) !important; }
+
+/* ---------- The Library's view: always the one menu (custom/ViewModeMenu.tsx, the view in use on its button), as it was
+   only when the header was narrow. The row of four buttons stays in the page unseen for the V key ---------- */
+.center-header .view-switcher-slot { display: none !important; }
+.center-header .view-menu { display: block !important; }
+/* Reset to defaults: the one destructive button in Settings, in the danger red (cable, 2026-10-21) */
+.settings-reset-btn { color: #f2555a !important; border-color: color-mix(in srgb, #f2555a, transparent 60%) !important; }
+.settings-reset-btn:hover { background: color-mix(in srgb, #f2555a, transparent 90%) !important; }
+.settings-reset-btn.is-confirm { background: #f2555a !important; border-color: #f2555a !important; color: #fff !important; }
+/* A collection's name folds it on click, like its arrow */
+.lo-group-name[role="heading"] { cursor: pointer; user-select: none; }
+.lo-group-name[role="heading"]:hover { color: var(--text-primary); }
+/* A locked button on an empty card (nothing to render or capture) reads as unavailable and does nothing */
+.lo-media-cta .lo-text-btn[aria-disabled="true"] { cursor: not-allowed; }
+
+/* ---------- transitions.dev recipes on this round's features (the tokens above, html[data-motion="off"] stops them) ---------- */
+/* Menu dropdown: the right-click menu and its submenus, the Library's Install and All/On/Off menus (the last two are
+   sigeon-menus, which already open this way) */
+.context-menu { transform-origin: top left; animation: t-dropdown-open var(--dropdown-open-dur) var(--dropdown-ease) backwards; }
+.context-menu-item:hover > .submenu, .context-menu-item.kb-open > .submenu { transform-origin: top left; animation: t-dropdown-open var(--dropdown-open-dur) var(--dropdown-ease) backwards; }
+.mod-state-menu { transform-origin: top left; }
+/* Text states swap: the filters' Clear pill, and Reset's confirm step */
+.fp-clear, .settings-reset-btn { animation: t-text-in var(--text-swap-dur) var(--text-swap-ease) backwards; }
+/* Skeleton reveal: the hero's silhouette fades in behind a render's status, and the install tile's note crosses over
+   when Render preview is switched */
+.lo-skel-shape, .ip-cover-shape { animation: t-swap-in var(--reveal-dur) var(--reveal-ease) backwards; }
+.ip-cover-after, .ip-cover-note { animation: t-swap-in var(--icon-swap-dur) var(--icon-swap-ease) backwards; }
+/* A setting set in under another (Moving hero art) dims and brightens on the Toggle clock */
+.setting-sub { transition: opacity var(--toggle-dur) var(--tabs-ease); }
+@media (prefers-reduced-motion: reduce) {
+  .context-menu, .context-menu .submenu, .bulk-actions-toolbar, .fp-clear, .settings-reset-btn, .lo-skel-shape, .ip-cover-shape,
+  .ip-cover-after, .ip-cover-note, .mod-state-btn, .mod-state-filter { animation: none !important; }
+  .setting-sub, .bulk-actions-toolbar { transition: none !important; }
+}

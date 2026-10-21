@@ -139,11 +139,17 @@ function OnboardingTour({ isOpen, onClose }: OnboardingTourProps) {
             el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
         }
 
-        const frame = requestAnimationFrame(() => {
-            requestAnimationFrame(updatePositions)
-        })
+        // repakxtra: the view switch slides in (250ms) and the scroll is smooth, so the target moves for a while after
+        // this: follow it every frame until it settles, then on resize, scroll and its own size changes
+        let frame = 0
+        const until = performance.now() + 900
+        const follow = () => { updatePositions(); if (performance.now() < until) frame = requestAnimationFrame(follow) }
+        frame = requestAnimationFrame(follow)
+        const ro = new ResizeObserver(() => updatePositions())
+        if (el) ro.observe(el)
+        window.addEventListener('scroll', updatePositions, true)
 
-        return () => cancelAnimationFrame(frame)
+        return () => { cancelAnimationFrame(frame); ro.disconnect(); window.removeEventListener('scroll', updatePositions, true) }
     }, [isOpen, currentStep, step, updatePositions])
 
     useEffect(() => {
