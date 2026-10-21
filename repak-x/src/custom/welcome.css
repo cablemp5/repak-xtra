@@ -8,13 +8,13 @@
 .wi-title .wm { align-self: baseline; transform: translateY(18.5%); }
 .wi-lede { margin: 10px 0 0; max-width: 60ch; font-size: 13.5px; line-height: 1.55; color: var(--text-secondary); }
 
-.wi-demos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 18px 26px 4px; }
+.wi-demos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 18px 26px 26px; }   /* room above the footer line now the table is gone */
 .wi-demo { margin: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .wi-stage { position: relative; height: 178px; display: grid; place-items: center; overflow: hidden; border-radius: 12px;
   border: 1px solid var(--panel-border); background: radial-gradient(120% 90% at 50% 0%, rgba(255, 255, 255, 0.05), transparent 70%), var(--bg-dark); }
 .wi-demo figcaption { display: flex; flex-direction: column; gap: 3px; }
 .wi-demo figcaption b { font-size: 13.5px; font-weight: 700; color: var(--text-primary); }
-.wi-demo figcaption span { font-size: 12px; line-height: 1.45; color: var(--text-secondary); }
+.wi-demo figcaption span { font-size: 12px; line-height: 1.45; color: var(--text-secondary); text-wrap: pretty; }
 
 /* A loadout card in miniature */
 .wi-card { width: 108px; border-radius: 9px; overflow: hidden; border: 1px solid var(--panel-border); background: var(--bg-darker); }
@@ -68,14 +68,6 @@
 @keyframes wi-track-b { 0%, 46% { background: rgba(255, 255, 255, 0.18); } 52%, 94% { background: var(--accent-primary); } 100% { background: rgba(255, 255, 255, 0.18); } }
 @keyframes wi-knob-b { 0%, 46% { transform: none; } 52%, 94% { transform: translateX(10px); } 100% { transform: none; } }
 
-/* Tags and loadouts side by side */
-.wi-vs { margin: 18px 26px 20px; border: 1px solid var(--panel-border); border-radius: 12px; overflow: hidden; font-size: 12.5px; }
-.wi-vs > div { display: grid; grid-template-columns: 1.1fr 1fr 1fr; gap: 12px; padding: 8px 14px; border-top: 1px solid var(--panel-border); }
-.wi-vs > div:first-child { border-top: none; background: rgba(255, 255, 255, 0.025); font-size: 11.5px; font-weight: 600; color: var(--text-secondary); }
-.wi-vs > div:first-child span:last-child { color: color-mix(in srgb, var(--accent-primary), white 35%); }
-.wi-vs [role="rowheader"] { color: var(--text-secondary); }
-.wi-vs [role="cell"] { color: var(--text-secondary); }
-.wi-vs [role="cell"]:last-child { color: var(--text-primary); font-weight: 600; }
 
 .wi-next { display: inline-flex !important; align-items: center; gap: 6px; min-width: 0 !important; padding: 0 14px !important; }
 

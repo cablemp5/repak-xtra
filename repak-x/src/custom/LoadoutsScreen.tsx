@@ -3,7 +3,7 @@
 // view (header tabs, or L). On = its mods on, Off = its mods off; other mods and loadouts are never touched.
 import { type CSSProperties, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useStableCallback } from '../hooks/useStableCallback'
-import { ChevronDown, ChevronRight, ChevronUp, FolderPlus, Pencil, Plus, Trash2, WandSparkles } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, CopyPlus, FolderPlus, Pencil, Plus, Trash2, WandSparkles } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo, runChanges } from './Loadouts'
 import LoadoutPage from './LoadoutPage'
@@ -17,7 +17,7 @@ import { plural } from './modName'
 import { Num } from './motion'
 import { PreviewsUnavailable, dismissPreviewSummary, generateAllLoadouts, loadoutHasPreview, stopPreviews, usePreviewFailureToast, usePreviewsAvailable, usePreviewBatch, usePreviewSummary, usePreviewVersion } from './previews'
 import {
-  type Loadout, type Mod, OTHER, addGroup, captureKey, changesToTurnOff, changesToTurnOn, deleteGroup, displayName, groupKey,
+  type Loadout, type Mod, OTHER, OTHER_LABEL, addGroup, captureKey, changesToTurnOff, changesToTurnOn, deleteGroup, displayName, groupKey,
   inGroup, isActive, modKey, moveGroup, moveLoadout, movedBeside, nextLoadoutName, openLoadout, patchLoadout, placeLoadout, placed, readLoadouts, renameGroup,
   setView, snapshotLoadout, sweepMediaOnce, useGroups, useLoadouts, useOpenLoadout, useView, writeLoadouts,
 } from './loadoutStore'
@@ -73,23 +73,27 @@ function GroupHead({ p, name, count, at, total, editing, setEditing, folded, onF
   folded: boolean; onFold: () => void
 }) {
   const [draft, setDraft] = useState(name)
+  const foldTimer = useRef<ReturnType<typeof setTimeout>>()
   const real = groupKey(name) !== groupKey(OTHER)
   const done = (save: boolean) => { if (save) renameGroup(name, draft); setEditing(null) }
   const remove = () => {
     const undo = deleteGroup(name)
-    const id = p.alert.info(`Deleted collection ${name}`, count ? `Its ${plural(count, 'loadout')} moved to Other.` : 'It was empty.', {
+    const id = p.alert.info(`Deleted collection ${name}`, count ? `Its ${plural(count, 'loadout')} moved to ${OTHER_LABEL}.` : 'It was empty.', {
       duration: 10000, action: { label: 'Undo', onClick: () => { p.alert.dismissAlert(id); undo() } },
     })
   }
   return (
-    <h3 className="lo-group-head" data-flip={`head:${groupKey(name)}`}>
-      <FoldButton name={name} folded={folded} onFold={onFold} />
+    <div className="lo-group-head" data-flip={`head:${groupKey(name)}`}>{/* a div: only the name below is the heading, not its buttons */}
+      <FoldButton name={real ? name : OTHER_LABEL} folded={folded} onFold={onFold} />
       {editing && real
         ? <input className="lo-rename lo-group-rename" autoFocus value={draft} aria-label="Collection name"
             onFocus={e => e.target.select()} onChange={e => setDraft(e.target.value)} onBlur={() => done(true)}
             onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') done(true); if (e.key === 'Escape') { setDraft(name); done(false) } }} />
-        : <span className="lo-group-name" onDoubleClick={() => { if (real) { setDraft(name); setEditing(name) } }}
-            title={real ? `${name} (double-click to rename)` : 'Loadouts without a collection'}>{name}</span>}
+        : <span className="lo-group-name" role="heading" aria-level={3}
+            // a click folds it like the arrow, a double-click renames: the fold waits a moment so a double-click is only the rename
+            onClick={() => { clearTimeout(foldTimer.current); if (!real) onFold(); else foldTimer.current = setTimeout(onFold, 220) }}
+            onDoubleClick={() => { clearTimeout(foldTimer.current); if (real) { setDraft(name); setEditing(name) } }}
+            title={real ? `${name} (click to ${folded ? 'show' : 'collapse'}, double-click to rename)` : `Loadouts in no collection (click to ${folded ? 'show' : 'collapse'})`}>{real ? name : OTHER_LABEL}</span>}
       {real && !editing && (
         <button type="button" className="lo-icon lo-group-pen" aria-label={`Rename ${name}`} title="Rename collection" onClick={() => { setDraft(name); setEditing(name) }}><Pencil size={13} /></button>
       )}
@@ -98,10 +102,10 @@ function GroupHead({ p, name, count, at, total, editing, setEditing, folded, onF
         <span className="lo-group-tools">
           <button type="button" className="lo-icon" aria-label={`Move ${name} up`} title="Move up" disabled={at === 0} onClick={() => moveGroup(name, -1)}><ChevronUp size={14} /></button>
           <button type="button" className="lo-icon" aria-label={`Move ${name} down`} title="Move down" disabled={at === total - 1} onClick={() => moveGroup(name, 1)}><ChevronDown size={14} /></button>
-          <button type="button" className="lo-icon" aria-label={`Delete collection ${name}`} title="Delete collection (its loadouts move to Other)" onClick={remove}><Trash2 size={13} /></button>
+          <button type="button" className="lo-icon" aria-label={`Delete collection ${name}`} title={`Delete collection (its loadouts move to ${OTHER_LABEL})`} onClick={remove}><Trash2 size={13} /></button>
         </span>
       )}
-    </h3>
+    </div>
   )
 }
 
@@ -399,7 +403,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
       <header className="lo-screen-head">
         <div>
           <h2>Loadouts</h2>
-          {loadouts.length < 3 && <p>Switch a set of mods on or off together. Other mods stay as they are.</p>}
+          {loadouts.length < 3 && <p>Switch a set of mods on or off together. Other mods stay as they are. To install mods, drop .pak or .zip files anywhere or use Install.</p>}
         </div>
         <div className="lo-head-tools">
           <button type="button" ref={newRef} className="lo-text-btn" data-tour="new-loadout" onClick={createEmpty} title="A new empty loadout, opened to add mods to it">
@@ -438,7 +442,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
       </header>
       {batch && (
         <div className="lo-batch" role="status">
-          <span className="lo-batch-what"><span className="t-shimmer">Generating previews</span><b>{batch.name}</b></span>
+          <span className="lo-batch-what"><span className="t-shimmer">Generating previews for {batch.name}</span></span>{/* one line, one shimmer, the name in it */}
           {batch.jobs > 1 && <span className="lo-batch-left">{batch.job} of {batch.jobs}</span>}
           <button type="button" className="lo-text-btn lo-batch-stop run-stop-btn" onClick={stopPreviews} disabled={batch.stopping}
             title={batch.left ? 'Stop now and clear the queue' : 'Stop now'}>
@@ -479,8 +483,8 @@ export default function LoadoutsScreen(p: LoadoutProps) {
             {groupBy === 'group'
               ? <GroupHead p={p} name={group} count={list.length} at={gi} total={savedGroups.length} folded={isFolded} onFold={() => fold(foldId)}
                   editing={editingGroup !== null && groupKey(editingGroup) === groupKey(group)} setEditing={setEditingGroup} />
-              : <h3 className="lo-group-head" data-flip={`head:${group}`}><FoldButton name={group} folded={isFolded} onFold={() => fold(foldId)} />
-                  <span className="lo-group-name">{group}</span><span className="lo-group-count"><Num id={`hero-${group}`} value={list.length} /></span></h3>}
+              : <div className="lo-group-head" data-flip={`head:${group}`}><FoldButton name={group} folded={isFolded} onFold={() => fold(foldId)} />
+                  <span className="lo-group-name" role="heading" aria-level={3} onClick={() => fold(foldId)} title={`Click to ${isFolded ? 'show' : 'collapse'}`}>{group}</span><span className="lo-group-count"><Num id={`hero-${group}`} value={list.length} /></span></div>}
             {isFolded ? null : <>
             {list.length === 0 && <p className="lo-group-empty">Empty. Drag a loadout card here, or pick this collection on a loadout's page.</p>}
             <div className="lo-grid">
@@ -507,10 +511,13 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                   <div className="lo-card-actions"><span className="lo-expand">&nbsp;</span></div>
                 </div>
               </div>
+              {/* laid out like a real card: the plus where a preview goes, the name and status line below it */}
               <button type="button" className="lo-card-add" onClick={createEmpty}>
-                <span className="lo-card-add-icon"><Plus size={20} /></span>
-                <span className="lo-card-add-title">New loadout</span>
-                <small>Start empty, add mods later</small>
+                <span className="lo-card-add-media"><span className="lo-card-add-icon"><CopyPlus size={20} /></span></span>
+                <span className="lo-card-add-body">
+                  <span className="lo-card-add-title">New loadout</span>
+                  <small className="lo-card-meta">Start empty, add mods later</small>
+                </span>
               </button>
             </div>
           </div>

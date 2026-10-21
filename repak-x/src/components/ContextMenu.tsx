@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useLayoutEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { IoLayersSharp } from "react-icons/io5"
 import './ContextMenu.css'
+import { holdKeys } from '../custom/holdKeys' // repakxtra
+import { useMenuKeys } from '../custom/menuKeys' // repakxtra
 
 type ModRecord = {
   path: string
@@ -108,14 +110,10 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
     setAdjustedPos(prev => (prev.x === newX && prev.y === newY ? prev : { x: newX, y: newY }))
   }, [x, y])
 
-  const handleDeleteDown = (e: React.MouseEvent) => {
+  const handleDeleteDown = (e: React.SyntheticEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (!holdToDelete) {
-      onDelete()
-      onClose()
-      return
-    }
+    if (!holdToDelete) return // repakxtra: without hold, Delete acts on click (release, Enter or Space), see deleteProps
     setIsDeleting(true)
     deleteTimeoutRef.current = setTimeout(() => {
       onDelete()
@@ -123,11 +121,21 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
     }, 2000)
   }
 
-  const handleDeleteUp = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
+  const handleDeleteUp = (e?: React.SyntheticEvent) => {
+    e?.preventDefault()
+    e?.stopPropagation()
     setIsDeleting(false)
     if (deleteTimeoutRef.current) clearTimeout(deleteTimeoutRef.current)
+  }
+
+  // repakxtra: the Delete item's handlers, shared by the folder and mod menus
+  const deleteProps = {
+    onPointerDown: handleDeleteDown, // pointer events, so a pen holds too
+    onPointerUp: handleDeleteUp,
+    onPointerLeave: handleDeleteUp,
+    onPointerCancel: handleDeleteUp,
+    onClick: () => { if (!holdToDelete) { onDelete(); onClose() } },
+    ...(holdToDelete ? holdKeys(true, handleDeleteDown, handleDeleteUp) : {}), // without hold, the menu's Enter clicks it
   }
 
   const handleRenameClick = (e: React.MouseEvent) => {
@@ -141,8 +149,8 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
   // measure it and switch to bottom-anchored / right-anchored placement if
   // needed. Runs on every enter so it stays correct when the parent menu
   // is opened in different spots.
-  const handleSubmenuEnter = (e: React.MouseEvent<HTMLDivElement>) => {
-    const trigger = e.currentTarget
+  const handleSubmenuEnter = (e: React.MouseEvent<HTMLDivElement>) => placeSubmenu(e.currentTarget)
+  const placeSubmenu = (trigger: HTMLElement) => { // repakxtra: also called by the keyboard (custom/menuKeys.ts)
     const submenu = trigger.querySelector<HTMLElement>(':scope > .submenu')
     if (!submenu) return
 
@@ -191,11 +199,13 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
     }
   }
 
+  const onMenuKeyDown = useMenuKeys(menuRef, onClose, placeSubmenu) // repakxtra
+
   if (folder && folder.is_root) {
     // The root folder can't be renamed, moved, or deleted, so it only gets
     // the two actions that make sense for it.
     return (
-      <div ref={menuRef} className="context-menu" style={{ top: adjustedPos.y, left: adjustedPos.x }} onClick={(e) => e.stopPropagation()}>
+      <div ref={menuRef} className="context-menu" style={{ top: adjustedPos.y, left: adjustedPos.x }} onClick={(e) => e.stopPropagation()} onKeyDown={onMenuKeyDown}>
         <div className="context-menu-header">{folder.name}</div>
         <div className="context-menu-item" onClick={async () => {
           try {
@@ -243,7 +253,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
     const canMoveToRoot = currentParentId !== null
 
     return (
-      <div ref={menuRef} className="context-menu" style={{ top: adjustedPos.y, left: adjustedPos.x }} onClick={(e) => e.stopPropagation()}>
+      <div ref={menuRef} className="context-menu" style={{ top: adjustedPos.y, left: adjustedPos.x }} onClick={(e) => e.stopPropagation()} onKeyDown={onMenuKeyDown}>
         <div className="context-menu-header">{folder.name}</div>
         <div className="context-menu-item" onClick={async () => {
           try {
@@ -319,10 +329,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
         <div className="context-menu-separator" />
         <div
           className={`context-menu-item danger ${isDeleting ? 'holding' : ''}`}
-          onPointerDown={handleDeleteDown} /* repakxtra: pointer events, so a pen holds too */
-          onPointerUp={handleDeleteUp}
-          onPointerLeave={handleDeleteUp}
-          onPointerCancel={handleDeleteUp}
+          {...deleteProps}
         >
           <div className="danger-bg" />
           <span style={{ position: 'relative', zIndex: 2 }}>{!holdToDelete ? 'Delete Folder' : isDeleting ? 'Hold to delete...' : 'Delete Folder (Hold 2s)'}</span>
@@ -334,7 +341,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
   if (!mod) return null
 
   return (
-    <div ref={menuRef} className="context-menu" style={{ top: adjustedPos.y, left: adjustedPos.x }} onClick={(e) => e.stopPropagation()}>
+    <div ref={menuRef} className="context-menu" style={{ top: adjustedPos.y, left: adjustedPos.x }} onClick={(e) => e.stopPropagation()} onKeyDown={onMenuKeyDown}>
       <div className="context-menu-header">{mod.custom_name || mod.path.split(/[/\\]/).pop()}</div>
 
       <div className="context-menu-item submenu-trigger tag-submenu" onMouseEnter={handleSubmenuEnter}>{/* repakxtra: class, hidden with Hide tag features */}
@@ -418,7 +425,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
       <div className="context-menu-separator" />
 
       <div className="context-menu-item" onClick={() => { onToggle(); onClose(); }}>
-        {mod.enabled ? 'Disable' : 'Enable'}
+        {mod.enabled ? 'Turn off' : 'Turn on'}{/* repakxtra: On/Off, as on the switches */}
       </div>
 
       <div className="context-menu-item" onClick={handleRenameClick}>
@@ -429,10 +436,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
 
       <div
         className={`context-menu-item danger ${isDeleting ? 'holding' : ''}`}
-        onPointerDown={handleDeleteDown} /* repakxtra: pointer events, so a pen holds too */
-        onPointerUp={handleDeleteUp}
-        onPointerLeave={handleDeleteUp}
-        onPointerCancel={handleDeleteUp}
+        {...deleteProps}
       >
         <div className="danger-bg" />
         <span style={{ position: 'relative', zIndex: 2 }}>{!holdToDelete ? 'Delete' : isDeleting ? 'Hold to delete...' : 'Delete (Hold 2s)'}</span>

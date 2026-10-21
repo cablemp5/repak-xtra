@@ -52,9 +52,13 @@ import PromiseTransitionLoader from './components/PromiseTransitionLoader'
 import { AuroraText } from './components/ui/AuroraText'
 import { AlertProvider, useAlert } from './components/AlertHandler'
 import { offerUndoDelete, type TrashedMod } from './custom/undoDelete'
+import { holdKeys } from './custom/holdKeys' // repakxtra
+import InstallButton from './custom/InstallButton' // repakxtra
+import { Num } from './custom/motion' // repakxtra
 import ModStateFilter, { matchesState, type ModState } from './custom/ModStateFilter'
 import './custom/keyboardClickables'
 import { dialogOpen } from './custom/hotkeys' // repakxtra: extra shortcuts
+import './custom/selectionScroll' // repakxtra: the clicked row stays put when the selection bar opens
 import FilterPanel, { filterScope } from './custom/FilterPanel'
 import LoadoutHotkeys, { AddToLoadoutField, LoadoutMenuItems } from './custom/Loadouts'
 import LoadoutsScreen, { ViewTabs } from './custom/LoadoutsScreen'
@@ -95,7 +99,6 @@ import ModularLogo from './components/ui/ModularLogo'
 import HeroFilterDropdown from './components/HeroFilterDropdown'
 import CustomDropdown from './components/CustomDropdown'
 import ShortcutsHelpModal from './components/ShortcutsHelpModal'
-import AddModSplitButton from './components/AddModSplitButton'
 import OnboardingTour from './components/OnboardingTour'
 
 // Utility functions
@@ -462,6 +465,7 @@ function App() {
   const undoBlocked = () => gameRunningRef.current && !bypassRef.current // repakxtra
   const lastSelectedModIndex = useRef<number | null>(null) // For Shift+click range selection
   const filteredModsRef = useRef<ModRecord[]>([]) // Keep in sync with filteredMods for selection handler
+  const loadModsSeq = useRef(0) // repakxtra: the newest loadMods call, so a slow older one cannot overwrite it
   const clashScopeModPath = useRef<string | null>(null) // null = global clashes, path = single-mod scope
   const safeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const filtersResizeRef = useRef({ startY: 0, startHeight: 0 })
@@ -1072,7 +1076,7 @@ function App() {
       // Try to call backend
       await invoke('set_parallel_processing', { enabled });
 
-      setStatus(enabled ? 'Parallel processing set to Boost mode' : 'Parallel processing set to Normal mode');
+      setStatus(enabled ? 'Faster processing on' : 'Faster processing off'); // repakxtra: the setting's own name
     } catch (error) {
       console.warn('Backend command for parallel processing failed (expected):', error);
       // We don't revert state here because this is a placeholder feature on frontend
@@ -1144,9 +1148,11 @@ function App() {
 
   const handleContextMenu = (e: React.MouseEvent, mod: ModRecord) => {
     e.preventDefault()
+    // repakxtra: Shift+F10 or the Menu key (not a right click) opens it under the row's name
+    const row = e.button !== 2 ? e.currentTarget.getBoundingClientRect() : null
     setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
+      x: row ? row.left + 16 : e.clientX,
+      y: row ? row.top + Math.min(row.height, 40) : e.clientY,
       mod
     })
   }
@@ -1180,6 +1186,7 @@ function App() {
   // Bulk Delete Handlers
   const handleBulkDelete = async () => {
     if (selectedMods.size === 0) return
+    if (gameRunning && !bypassGameRunningLock) { stableDeleteBlocked(); return } // repakxtra: the same lock as one mod's Delete
 
     try {
       setStatus(`Deleting ${selectedMods.size} mods...`)
@@ -1226,13 +1233,10 @@ function App() {
     }
   }
 
-  const handleBulkDeleteDown = (e: React.MouseEvent<HTMLElement>) => {
+  const handleBulkDeleteDown = (e: React.PointerEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>) => {
     e.preventDefault()
     e.stopPropagation()
-    if (!holdToDelete) {
-      handleBulkDelete()
-      return
-    }
+    if (!holdToDelete) return // repakxtra: without hold, Delete acts on click (release, Enter or Space)
     setIsDeletingBulk(true)
     deleteBulkTimeoutRef.current = setTimeout(() => {
       handleBulkDelete()
@@ -1240,9 +1244,9 @@ function App() {
     }, 2000)
   }
 
-  const handleBulkDeleteUp = (e: React.MouseEvent<HTMLElement>) => {
-    e.preventDefault()
-    e.stopPropagation()
+  const handleBulkDeleteUp = (e?: React.SyntheticEvent) => {
+    e?.preventDefault()
+    e?.stopPropagation()
     setIsDeletingBulk(false)
     if (deleteBulkTimeoutRef.current) clearTimeout(deleteBulkTimeoutRef.current)
   }
@@ -1276,7 +1280,7 @@ function App() {
         }
       }
 
-      setStatus(`${enable ? 'Enabled' : 'Disabled'} ${count} mods.`)
+      setStatus(`Turned ${enable ? 'on' : 'off'} ${count} mods.`)
       const refreshedMods = await loadMods()
 
       // Re-map selection to new paths (extension changes on toggle)
@@ -1900,6 +1904,9 @@ function App() {
   }
 
   const loadMods = async (): Promise<ModRecord[]> => {
+    // repakxtra: several loads can overlap (an install, its loadout, previews and the watcher each reload). Only the newest
+    // may set the list: an older scan answering late put the pre-install list back, hiding a mod just installed
+    const mine = ++loadModsSeq.current
     try {
       console.log('Loading mods...')
       setIsModsLoading(true)
@@ -1908,6 +1915,7 @@ function App() {
 
       const modList = await invoke('get_pak_files') as any
       console.log('Loaded mods:', modList)
+      if (mine !== loadModsSeq.current) return modList as ModRecord[] // a newer load is on its way, with the newer list
       setMods(modList)
       setStatus(`Loading ${modList.length} mod(s) details...`)
 
@@ -4093,11 +4101,7 @@ function App() {
             <TagsToggle tags={allTags} mods={mods} alert={alert} /* repakxtra: shown or hidden in words, Delete all tags */
               onChanged={async () => { setFilterTag(''); await loadMods(); await loadTags() }} />
 
-            <AddModSplitButton
-              data-tour="add-mod-btn"
-              onAddFiles={(files: string[]) => handleFileDrop(files)}
-              onAddFolder={(folders: string[]) => handleFileDrop(folders)}
-            />
+            <InstallButton onAddFiles={handleFileDrop} onAddFolder={handleFileDrop} />{/* repakxtra: in place of PAK | Folder */}
           </div>
         </div>
 
@@ -4208,6 +4212,7 @@ function App() {
                     {conflictCount > 0 && <i className="conflict-dot" aria-label={`${conflictCount} enabled mods conflict`} />}{/* repakxtra */}
                   </button>
                   <div className="divider-vertical" />
+                  <div className="view-switcher-slot">{/* repakxtra: holds one button's room, the views open over it on hover */}
                   <div className="view-switcher">
                     <button
                       onClick={() => handleViewModeChange('grid')}
@@ -4230,22 +4235,22 @@ function App() {
                     >
                       <ViewListIcon fontSize="small" />
                     </button>
-                    {showExperimental && (
-                      <button
-                        onClick={() => handleViewModeChange('list-compact')}
-                        className={`btn-icon-small ${viewMode === 'list-compact' ? 'active' : ''}`}
-                        title="Compact List View (Experimental)"
-                      >
-                        <ViewHeadlineIcon fontSize="small" />
-                      </button>
-                    )}
+                    {/* repakxtra: always offered (Settings no longer hides it) */}
+                    <button
+                      onClick={() => handleViewModeChange('list-compact')}
+                      className={`btn-icon-small ${viewMode === 'list-compact' ? 'active' : ''}`}
+                      title="Compact List View"
+                    >
+                      <ViewHeadlineIcon fontSize="small" />
+                    </button>
+                  </div>
                   </div>
                   {/* repakxtra: the view buttons as one menu when the header is narrow (theme.css swaps them) */}
                   <ViewModeMenu value={viewMode} onChange={(m) => handleViewModeChange(m as typeof viewMode)} modes={[
                     { id: 'grid', label: 'Grid', icon: <GridViewIcon fontSize="small" /> },
                     { id: 'compact', label: 'Compact grid', icon: <ViewModuleIcon fontSize="small" /> },
                     { id: 'list', label: 'List', icon: <ViewListIcon fontSize="small" /> },
-                    ...(showExperimental ? [{ id: 'list-compact', label: 'Compact list', icon: <ViewHeadlineIcon fontSize="small" /> }] : []),
+                    { id: 'list-compact', label: 'Compact list', icon: <ViewHeadlineIcon fontSize="small" /> },
                   ]} />
                   <div className="divider-vertical" />
                   <button
@@ -4261,12 +4266,12 @@ function App() {
                     <RefreshIcon fontSize="small" />
                   </button>
                 </div>
-              </div>
+                </div>
 
               {/* Bulk Actions Toolbar */}
               <div className={`bulk-actions-toolbar ${selectedMods.size === 0 ? 'inactive' : ''}`}>
                 <div className="selection-info">
-                  <span className="bulk-count"><span className="bulk-count-value">{selectedMods.size}</span></span>
+                  <span className="bulk-count"><span className="bulk-count-value"><Num id="bulk-count" value={selectedMods.size} /></span></span>{/* repakxtra: transitions.dev Number pop-in */}
                   <span className="bulk-count-label">selected</span>
                   <button onClick={() => {
                     const allPaths = filteredMods.map(m => m.path)
@@ -4343,20 +4348,20 @@ function App() {
                           className="btn-ghost left"
                           style={{ height: '100%', opacity: allEnabled ? 0.4 : 1 }}
                           disabled={selectedMods.size === 0 || allEnabled}
-                          title={allEnabled ? 'All selected mods are already enabled' : `Enable ${disabledCount} disabled mod${disabledCount !== 1 ? 's' : ''}`}
+                          title={allEnabled ? 'All selected mods are already on' : `Turn on ${disabledCount} mod${disabledCount !== 1 ? 's' : ''} that ${disabledCount !== 1 ? 'are' : 'is'} off`}
                         >
                           <ToggleOnIcon fontSize="small" style={{ color: accentColor }} />
-                          <span className="bulk-btn-label">Enable</span>
+                          <span className="bulk-btn-label">Turn on</span>
                         </button>
                         <button
                           onClick={() => handleBulkToggle(false)}
                           className="btn-ghost right"
                           style={{ height: '100%', opacity: allDisabled ? 0.4 : 1 }}
                           disabled={selectedMods.size === 0 || allDisabled}
-                          title={allDisabled ? 'All selected mods are already disabled' : `Disable ${enabledCount} enabled mod${enabledCount !== 1 ? 's' : ''}`}
+                          title={allDisabled ? 'All selected mods are already off' : `Turn off ${enabledCount} mod${enabledCount !== 1 ? 's' : ''} that ${enabledCount !== 1 ? 'are' : 'is'} on`}
                         >
                           <ToggleOffIcon fontSize="small" style={{ opacity: 0.7 }} />
-                          <span className="bulk-btn-label">Disable</span>
+                          <span className="bulk-btn-label">Turn off</span>
                         </button>
                       </div>
                     )
@@ -4368,6 +4373,8 @@ function App() {
                     onPointerUp={handleBulkDeleteUp}
                     onPointerLeave={handleBulkDeleteUp}
                     onPointerCancel={handleBulkDeleteUp}
+                    onClick={() => { if (!holdToDelete) handleBulkDelete() }}
+                    {...holdKeys(holdToDelete, handleBulkDeleteDown, handleBulkDeleteUp)}
                     title={holdToDelete ? "Hold 2s to delete selected mods" : "Click to delete selected mods"}
                   >
                     <div className="danger-bg" />

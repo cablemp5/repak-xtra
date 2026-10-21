@@ -103,6 +103,20 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
     window.dispatchEvent(new Event('bypass-changed')) // the Setup button's dot
   })
   const installGalacta = () => run('galacta', async () => { setGalacta(await invoke<Galacta>('setup_galacta_install', { folder: null })) })
+  // One click for the three steps mods need, in order, each step showing its own progress as it goes (cable,
+  // 2026-10-21: setup as frictionless as possible). A step already done is skipped
+  const setUpAll = async () => {
+    try {
+      if (!gamePath) { setBusy('find'); await onAutoDetect() }
+      if (bypass?.state !== 'installed') {
+        setBusy('bypass')
+        setBypass(await invoke<Bypass>('setup_bypass', { action: bypass?.state === 'disabled' ? 'enable' : 'install' }))
+        window.dispatchEvent(new Event('bypass-changed'))
+        finish('bypass')
+      }
+      if (!galacta?.installed) { setBusy('galacta'); setGalacta(await invoke<Galacta>('setup_galacta_install', { folder: null })); finish('galacta') }
+    } catch (e) { alert.warning('Setup', String(e)) } finally { setBusy(null) }
+  }
   const addFiles = async () => {
     const got = await pick({ multiple: true, title: 'Mods to install', filters: [{ name: 'Mod files', extensions: ['pak', 'zip', 'rar', '7z', OFF_EXT] }] }).catch(() => null)
     const paths = Array.isArray(got) ? got : got ? [got] : []
@@ -118,9 +132,10 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
     : bypass?.state === 'disabled' ? 'Installed but turned off. Mods that need it will not load.'
     : bypass?.state === 'other' ? 'A different loader or bypass is installed. Installing keeps it next to the new one as a .repakxtra-backup file.'
     : bypass?.state === 'partial' ? 'Part of it is missing. Repair puts the missing files back.'
-    : 'Lets the game load mods that replace its files. Every mod needs it. It comes with repakxtra, and Setup shows why it is safe.'
+    : 'Lets the game load mods. Every mod needs it, and Setup shows why it is safe.'
   const kitReady = Boolean(kit.kit?.version && kit.kit?.blender)
   const noGame = !gamePath
+  const coreDone = !noGame && bypassOn && galactaOn
 
   return (
     <div className="modal-overlay fr-overlay" onClick={close}>
@@ -133,8 +148,14 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
         <div className="modal-header fr-head">
           <div>
             <h2 className="fr-welcome">Welcome to <Wordmark height={17} /></h2>
-            <p className="su-sub">Get Marvel Rivals ready for mods. Steps 1 to 3 make mods work. Close the game first. <button type="button" className="su-link" onClick={() => setIntro(true)}>Why loadouts?</button></p>
+            <p className="su-sub">{coreDone ? 'Mods are ready to go. Add some below.' : 'Three steps get mods working. Close the game first.'} <button type="button" className="su-link" onClick={() => setIntro(true)}>Why loadouts?</button></p>
           </div>
+          {!coreDone && (
+            <button type="button" className="btn-primary fr-all" disabled={Boolean(busy) || (bypass === null && !bypassError)} onClick={setUpAll}
+              title="Finds the game, installs the signature bypass and Project Galacta, one after another">
+              {busy ? 'Setting up…' : 'Set up mods'}
+            </button>
+          )}
           <button className="modal-close" onClick={close} aria-label="Close">×</button>
         </div>
 
@@ -143,8 +164,8 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
             action={noGame
               ? <><button type="button" className="btn-primary" disabled={Boolean(busy)} onClick={() => run('find', onAutoDetect)}>{busy === 'find' ? 'Looking…' : 'Find it'}</button>
                   <button type="button" className="lo-text-btn" onClick={() => onBrowse()}>Browse…</button></>
-              : <button type="button" className="lo-text-btn" onClick={() => onBrowse()}>Change</button>}>
-            <p>{noGame ? 'Not found yet. Find it looks in your Steam libraries. Browse picks the folder yourself.' : <>Mods go to <code title={gamePath}>{where}</code></>}</p>
+              : null /* found: nothing to do here (Settings > General changes the folder) */}>
+            <p>{noGame ? 'Not found yet. Find it searches your Steam libraries.' : <>Found. Mods go to <code title={gamePath}>{where}</code></>}</p>
           </Step>
 
           <Step n={2} done={bypassOn} title="Install the signature bypass"
@@ -161,8 +182,8 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
             action={!galacta?.installed && <button type="button" className="btn-primary" disabled={noGame || Boolean(busy)} onClick={installGalacta}
               title={noGame ? 'Find the game first' : 'Downloads the newest release from GitHub'}>{busy === 'galacta' ? 'Installing…' : 'Install'}</button>}>
             <p>{galacta?.installed && !galactaOn ? 'Installed but switched off. Turn it on in the Library.'
-              : galactaOn ? 'Installed. Loads more types of mods and lets you toggle mods in game.'
-              : 'Needed by most skin mods: loads more types of mods and lets you toggle mods in game.'}</p>
+              : galactaOn ? 'Installed.'
+              : 'Most skin mods need it. It also lets you switch mods in game.'}</p>
             <GalactaTrack on={busy === 'galacta'} done={finished === 'galacta' ? 'Project Galacta is in your mods folder' : undefined} />
           </Step>
 
@@ -170,19 +191,19 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
             action={!kitReady && !kit.plan && <button type="button" className="lo-text-btn" disabled={Boolean(kit.busy) || (kit.latest === null && !kit.kit?.version)} onClick={() => kit.setUp()}
               title={kit.latest === null ? 'No kit published yet: drop a kit zip on the window' : 'Downloads the preview kit and installs Blender if it is missing (Windows asks for admin rights once)'}>
               {kit.busy === 'setup' ? 'Setting up…' : 'Set up previews'}</button>}>
-            <p>{kitReady ? 'Ready. A loadout page renders its preview.' : `Renders of your mods and loadouts. Downloads the preview kit${kit.latest?.size ? ` (${Math.round(kit.latest.size / 1048576)} MB)` : ''} and uses Blender (installed for you if missing).`}</p>
+            <p>{kitReady ? 'Ready.' : `Pictures of your loadouts, rendered on your PC${kit.latest?.size ? ` (a ${Math.round(kit.latest.size / 1048576)} MB download, plus Blender)` : ''}.`}</p>
             <KitTrack plan={kit.plan} p={kit.progress} done={kit.finished ?? undefined} />
             <DoctorProblems d={kit.doctor} />
           </Step>
 
           <Step n={5} done={Boolean(shortcut.exists)} optional title="Desktop shortcut"
             action={!shortcut.exists && <ShortcutButton s={shortcut} />}>
-            <p>{shortcut.exists ? 'On your desktop. Settings > General can make one again later.' : 'Start repakxtra from your desktop. You can also make one later in Settings > General.'}</p>
+            <p>{shortcut.exists ? 'On your desktop.' : 'Start repakxtra from your desktop.'}</p>
           </Step>
 
           <Step n={6} done={false} wide title="Add your first mods">
             <div className="fr-drop">
-              <span className="fr-drop-text">Drop .pak, .pak.off, .zip, .rar or .7z files, or mod folders, anywhere on this window. Drop zips as they are: no need to extract.</span>
+              <span className="fr-drop-text">Drop mod files or zips anywhere on this window. No need to unzip.</span>
               <span className="fr-drop-actions">
                 <button type="button" className="lo-text-btn" disabled={noGame} onClick={addFiles}><Upload size={14} aria-hidden="true" /> Choose files…</button>
                 <a onClick={() => openUrl(NEXUS)}>Find mods on Nexus Mods</a>

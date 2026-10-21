@@ -7,18 +7,28 @@
 export const EGG_MS = 2600
 
 /** What each of the generator's steps does, in its order for a skin. */
+// The words say what the step really does (2026-10-21: "mount" is a file copy, the game loads during export, and
+// "finish" sizes and saves the image). Keys a newer kit may print are here already, so it needs no app update.
 const STEPS: Record<string, string> = {
   read: 'Reading the mod files',
-  mount: 'Loading the mods over the game',
+  mount: 'Copying the mod files',
   unpack: 'Unpacking an encrypted mod',
-  export: 'Exporting the model and textures',
-  materials: 'Working out the materials',
+  skins: "Listing the game's skins",
+  table: 'Reading the skin table',
+  export: 'Loading the game and exporting the model',
+  materials: 'Reading the material settings',
   pose: 'Getting the lobby pose',
+  blender: 'Loading the model into Blender',
+  shading: 'Building the materials',
   render: 'Rendering in Blender',
-  finish: 'Adding the glow',
+  glow: 'Rendering the glow',
+  finish: 'Finishing the image',
   ui: 'Reading the UI images',
   vfx: 'Comparing the effect colors',
+  clips: 'Reading the animation clips',
+  rig: 'Exporting the clips and the model',
   anim: 'Rendering the animation',
+  webp: 'Saving the animation',
   sound: 'Reading the sound banks',
 }
 const UNKNOWN = 'Generating the preview'

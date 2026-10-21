@@ -1,7 +1,7 @@
 // repakxtra: the welcome screen's first page (FirstRun.tsx shows it on the first launch, and from "Why loadouts?" on
-// its setup page). What loadouts give over sorting mods with tags, in three small looping demos (welcome.css) with
-// real previews the app made (covers/welcome): a loadout's preview, one switch for a whole set, and swapping between
-// sets. Animations off: each demo shows its finished state.
+// its setup page). Loadouts in one line and three small looping demos (welcome.css) with real previews the app made
+// (covers/welcome): a loadout's preview, one switch for a whole set, and swapping between sets. Kept short on purpose
+// (cable, 2026-10-21): a newcomer reads it at a glance. Animations off: each demo shows its finished state.
 import { ArrowRight } from 'lucide-react'
 import Wordmark from './Wordmark'
 import './welcome.css'
@@ -26,7 +26,7 @@ export default function WelcomeIntro({ onNext, onSkip }: { onNext: () => void; o
     <div className="wi">
       <div className="wi-head">
         <h2 className="wi-title">Welcome to <Wordmark height={26} /></h2>
-        <p className="wi-lede">Your mods, in loadouts. A loadout is a set of mods that go together, like a skin with its effects, icons and sounds. It has a picture, and one switch turns the whole set on or off.</p>
+        <p className="wi-lede">Group mods into loadouts. One switch turns a whole look on or off.</p>
       </div>
 
       <div className="wi-demos">
@@ -36,7 +36,7 @@ export default function WelcomeIntro({ onNext, onSkip }: { onNext: () => void; o
               <span className="wi-render"><span>Rendering</span></span>
             </MiniCard>
           </div>
-          <figcaption><b>See the look first</b><span>Each loadout gets a preview of how it looks in game, made on your PC. Or paste your own picture.</span></figcaption>
+          <figcaption><b>See it first</b><span>A preview of the look, made on your PC.</span></figcaption>
         </figure>
 
         <figure className="wi-demo">
@@ -48,7 +48,7 @@ export default function WelcomeIntro({ onNext, onSkip }: { onNext: () => void; o
               ))}
             </ul>
           </div>
-          <figcaption><b>One switch, the whole set</b><span>Skin, effects, icons and textures turn on together. Every other mod stays as it is.</span></figcaption>
+          <figcaption><b>One switch</b><span>Skin, effects and icons turn on together.</span></figcaption>
         </figure>
 
         <figure className="wi-demo">
@@ -56,19 +56,11 @@ export default function WelcomeIntro({ onNext, onSkip }: { onNext: () => void; o
             <MiniCard name="Ultimate" src={ultimate} className="wi-a" />
             <MiniCard name="Godspeed" src={godspeed} className="wi-b" />
           </div>
-          <figcaption><b>Swap sets in a click</b><span>Flip from one look to the next. Pin a loadout to Ctrl+1 to switch it without looking.</span></figcaption>
+          <figcaption><b>Swap in a click</b><span>Flip between looks, or pin one to Ctrl+1.</span></figcaption>
         </figure>
       </div>
 
-      <div className="wi-vs" role="table" aria-label="Tags and loadouts">
-        <div role="row"><span role="columnheader" /><span role="columnheader">Tags in Repak X</span><span role="columnheader">Loadouts</span></div>
-        <div role="row"><span role="rowheader">What it does</span><span role="cell">Says what a mod is</span><span role="cell">Switches a set of mods</span></div>
-        <div role="row"><span role="rowheader">Turning a look on</span><span role="cell">Find and flip each mod</span><span role="cell">One switch</span></div>
-        <div role="row"><span role="rowheader">Seeing it</span><span role="cell">A name in a list</span><span role="cell">A preview picture</span></div>
-      </div>
-
       <div className="modal-footer fr-foot">
-        <span className="su-sub">Tags still work here too.</span>
         <button type="button" className="lo-text-btn" onClick={onSkip}>Skip setup</button>
         <button type="button" className="btn-primary wi-next" onClick={onNext}>Set up repakxtra <ArrowRight size={15} /></button>
       </div>

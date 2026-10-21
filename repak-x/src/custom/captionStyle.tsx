@@ -21,7 +21,7 @@ export const CAPTION_ICONS: Record<string, [Icon, string]> = {
 }
 /** Swatches for the words and icon (no red: the app keeps red for warnings). White is the default. Six fit one row on
  *  the page's card; a color saved from an older, longer list still shows, with no swatch picked. */
-export const CAPTION_COLORS = ['#ffffff', '#ffb648', '#3ecf6e', '#5cc8ff', '#9d7bff', '#ff7ad9']
+export const CAPTION_COLORS = ['#ffffff', '#3ecf6e', '#5cc8ff', '#9d7bff', '#ff7ad9'] // no yellow (cable, 2026-10-21): a card already set to it keeps it
 
 /** The loadout's icon, or nothing (an unknown name draws nothing). */
 export function CaptionIcon({ name, className }: { name?: string; className?: string }) {

@@ -6,7 +6,7 @@
 // quiet link in the footer, not a checkbox to find.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, ChevronDown, ImagePlus, Pencil, Plus, X } from 'lucide-react'
+import { Camera, Check, ChevronDown, ImagePlus, Pencil, Plus, Type, WandSparkles, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import Checkbox from '../components/ui/Checkbox'
 import CustomDropdown from '../components/CustomDropdown'
@@ -14,8 +14,9 @@ import bundledHeroes from '../data/character_data.json'
 import { type CharacterDataEntry, FALLBACK_HERO_ID, resolveHeroImage, useHeroImages } from '../utils/heroImages'
 import { commitInstallLoadout, setInstallDraft, startingLoadouts } from './installLoadout'
 import { optionsOn } from './InstallAdvanced'
-import { OTHER, addGroup, useGroups, useLoadouts } from './loadoutStore'
+import { OTHER, OTHER_LABEL, addGroup, useGroups, useLoadouts } from './loadoutStore'
 import { useMediaUrl } from './loadoutMedia'
+import { silhouetteOf } from './silhouettes'
 import { installsPlain } from './uiPrefs'
 import { PreviewsUnavailable, usePreviewsAvailable } from './previews'
 // Not for this dialog: the dropdown, switch tile and button styles other dialogs share (they loaded with InstallModPanel)
@@ -23,8 +24,6 @@ import '../components/InstallModPanel.css'
 import './install.css'
 // Each hero's default skin as a shape (rendered once by the preview kit's renderer, Claude Assisted Mods
 // Misc/previews/cover_test/heroes.py), shown on the cover until the loadout's own preview exists
-const SILHOUETTES = import.meta.glob<string>('./covers/silhouettes/*.webp', { eager: true, query: '?url', import: 'default' })
-const silhouetteOf = (heroId?: string) => (heroId ? SILHOUETTES[`./covers/silhouettes/${heroId}.webp`] : undefined)
 
 type Folder = { id: string; name: string; is_root?: boolean }
 type ModInput = {
@@ -191,6 +190,8 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
   const parsed = mods.map(m => parseModType(m.mod_type))
   const picked = mods.map((_, i) => i).filter(i => settings[i]?.enabled !== false)
   const count = picked.length
+  // The cover's hero: the one the picked mods share, else the first picked mod's (a mod of no hero: no shape)
+  const coverShape = silhouetteOf(picked.map(i => parsed[i].character?.split(' - ')[0]).find(h => h && !h.startsWith('Multiple')))
   const suggestion = suggestName(picked.map(i => ({ name: settings[i]?.customName || plainName(mods[i].mod_name), character: parsed[i].character })))
   const existing = target === NEW || target === NONE ? undefined : loadouts.find(l => l.id === target)
   const into = target === NONE ? NONE : existing?.id ?? NEW // a loadout deleted while the dialog was open: back to a new one
@@ -198,9 +199,6 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
   const where = [...new Set(picked.map(i => folderOf(settings[i])))]
   const whereText = where.length === 1 ? folderOptions.find(o => o.value === where[0])?.label ?? where[0] : `${where.length} folders`
   const willPreview = preview && canGenerate
-  // The cover's hero: the one the picked mods share, else the first picked mod's (a mod of no hero: no shape)
-  const coverHeroName = (picked.map(i => parsed[i].character?.split(' - ')[0]).find(h => h && !h.startsWith('Multiple')))
-  const coverShape = silhouetteOf(heroes.find(h => h.name === coverHeroName)?.id)
 
   // What Install does with the loadout, handed to App's install flow (commitInstallLoadout) when Install is pressed
   useEffect(() => {
@@ -266,9 +264,14 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
                 ? <Cover id={existing.id} rev={existing.mediaRev} image={existing.image} />
                 : <>
                     {willPreview && coverShape && <span className="ip-cover-shape" style={{ maskImage: `url(${coverShape})`, WebkitMaskImage: `url(${coverShape})` }} />}
-                    <span className="ip-cover-note">
-                      {willPreview ? 'Preview renders after installing' : <><ImagePlus size={22} aria-hidden="true" /><span>Add a picture on the loadout page</span></>}
-                    </span>
+                    {willPreview
+                      // the hero's shape with a quiet note in its middle: its icon over two short lines
+                      ? <span className="ip-cover-after"><WandSparkles size={14} aria-hidden="true" /><span>Renders</span><span>after install</span></span>
+                      // no render: the other ways to give it a cover, which its page has
+                      : <span className="ip-cover-note">
+                          <span className="ip-cover-ways" aria-hidden="true"><Camera size={15} /><ImagePlus size={15} /><Type size={15} /></span>
+                          <span>Capture, image or text on its page</span>
+                        </span>}
                   </>}
             </div>
             <div className="ip-info">
@@ -295,7 +298,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
                       ? <input className="ip-coll-name" autoFocus placeholder="New collection" aria-label="New collection name" spellCheck={false}
                           onBlur={e => { if (e.target.value.trim()) setLabel(addGroup(e.target.value)); setNaming(false) }}
                           onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { e.currentTarget.value = ''; e.currentTarget.blur() } }} />
-                      : <CustomDropdown options={[...groups.map(g => ({ value: g, label: g })), { value: OTHER, label: 'No collection (Other)' }]}
+                      : <CustomDropdown options={[...groups.map(g => ({ value: g, label: g })), { value: OTHER, label: OTHER_LABEL }]}
                           value={groups.includes(label) ? label : OTHER} onChange={(v: string) => setLabel(v)}
                           onAddNew={() => setNaming(true)} addNewLabel="+ New collection" />}
                   </div>
@@ -366,7 +369,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
                         <div className="ip-details">
                           <div className="ip-detail-row">
                             <label className="ip-name-wrap">
-                              <input className="ip-name" value={s.customName} placeholder={plainName(mod.mod_name)} aria-label="Mod file name" spellCheck={false}
+                              <input className="ip-name" value={s.customName} placeholder="Enter a mod name" title={`Leave empty to keep ${plainName(mod.mod_name)}`} aria-label="Mod name" spellCheck={false}
                                 onChange={e => update(i, { customName: e.target.value })} />
                               <span className="ip-suffix" title="Every installed mod ends in its load priority">_9999999_P</span>
                             </label>

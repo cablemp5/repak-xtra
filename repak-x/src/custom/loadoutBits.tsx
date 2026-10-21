@@ -1,6 +1,6 @@
 // repakxtra: small pieces shared by Home (LoadoutsScreen.tsx), the loadout page and the New strip.
 import { useEffect, useRef, useState } from 'react'
-import { Camera, ChevronLeft, ChevronRight, Image as ImageIcon, ImagePlus, Pencil, Type, Volume2, VolumeX, WandSparkles, X } from 'lucide-react'
+import { Ban, Camera, ChevronLeft, ChevronRight, Image as ImageIcon, ImagePlus, Lock, Pencil, Type, Volume2, VolumeX, WandSparkles, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import type { LoadoutProps } from './Loadouts'
 import { useMediaUrl } from './loadoutMedia'
@@ -10,7 +10,9 @@ import { revealOnLoad } from './motion'
 import { formKeys, hasPreview, noPreviewPossible, previewMade, previewSetKey, useCovers, usePreviewStage, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
 import { playEmoteSound, stopEmoteSound, useEmoteSound, webpSeconds } from './emoteSound'
 import { useVerdict } from './brokenMods'
+import { GAME_RUNNING } from './keepOne'
 import { CaptionIcon, CaptionStyleBar } from './captionStyle'
+import { loadoutHero, silhouetteOf } from './silhouettes'
 
 /** The home screen's badge color class for a mod type (theme.css *-badge sets --badge-dot). */
 export const typeClass = (category?: string | null) => `${(category || 'unknown').toLowerCase().replace(/\s+/g, '-')}-badge`
@@ -97,6 +99,8 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   const state = usePreviewState(previewSetKey(l.id))
   const working = state && (cover === 'preview' || cover === null) ? state : null // a card showing another source stays put
   const stage = usePreviewStage(working?.kind === 'running')
+  // While it renders the hero's shape sits behind the status, under the shimmer, in place of any older picture
+  const shape = working ? silhouetteOf(loadoutHero(l.on, p.mods, p.modDetails)) : undefined
   const caption = l.caption?.trim() || ''
   const [typing, setTyping] = useState(false)
   const words = cover === 'text' && fills.text
@@ -105,14 +109,18 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   const impossible = noPreviewPossible(l)
   const saveCaption = (text: string) => { setTyping(false); if (text.trim() !== caption) patchLoadout(l.id, { caption: text.trim() || undefined }) }
   const clearCaption = () => { setTyping(false); patchLoadout(l.id, { caption: undefined, captionIcon: undefined, captionColor: undefined }) }
-  const pick = (c: Cover) => { setTyping(false); setIndex(0); if (l.cover !== c) patchLoadout(l.id, { cover: c }) }
+  // picking Text goes straight into its field, the cursor in it ready to type (also when the field was already showing)
+  const captionRef = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => { if (typing) captionRef.current?.focus() }, [typing, cover])
+  const pick = (c: Cover) => { setTyping(c === 'text'); setIndex(0); if (l.cover !== c) patchLoadout(l.id, { cover: c }) }
   const tint = l.captionColor ? { '--cap': l.captionColor } as React.CSSProperties : undefined
   // An animation slide whose emote has a sound in this loadout: while hovered, the clip restarts (a fresh copy of its
   // image) and the sound plays once the restarted clip is on screen (custom/emoteSound.ts). The restart belongs to the
   // slide it was made for: paging ends it and its sound, and paging onto such a slide while hovered starts its own
   const slideKey = slide?.keys ? undefined : slide?.key || undefined
   const sound = useEmoteSound(slideKey, [...new Set(l.on.map(displayName))])
-  const audible = l.muted ? null : sound // muted: the clip still plays, without its sound and its restart
+  // muted: the clip still plays, without its sound and its restart. While a new preview renders: no sound at all
+  const audible = l.muted || working ? null : sound
   const [restart, setRestart] = useState<{ key: string; url: string; seconds: number } | null>(null)
   const hovering = useRef(false)
   const shownKey = useRef(slideKey)
@@ -131,10 +139,12 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
     }).catch(() => undefined)
   }
   useEffect(() => { dropRestart(); startRestart() }, [slideKey, src, audible?.key, audible?.emote]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => () => { if (hovering.current) stopEmoteSound() }, []) // this card's sound ends with it, no other card's
+  // The sound waits for a deliberate hover (HOVER_MS): sliding the cursor across a card plays nothing
+  const hoverTimer = useRef<ReturnType<typeof setTimeout>>()
+  useEffect(() => () => { clearTimeout(hoverTimer.current); if (hovering.current) stopEmoteSound() }, []) // this card's sound ends with it, no other card's
   const live = restart && restart.key === slideKey ? restart : null
-  const enter = () => { hovering.current = true; startRestart() }
-  const leave = () => { hovering.current = false; dropRestart() }
+  const enter = () => { hovering.current = true; clearTimeout(hoverTimer.current); hoverTimer.current = setTimeout(startRestart, HOVER_MS) }
+  const leave = () => { hovering.current = false; clearTimeout(hoverTimer.current); dropRestart() }
 
   // On the page a click on the card does what its source is for: choose a file, or edit the text
   const cardClick = !page || cover === 'image' ? onClick : words ? () => setTyping(true) : undefined
@@ -151,6 +161,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
           blurs in when it lands (revealOnLoad). One sign of work, the sweep, with what the render is doing written on it */}
       {working && (
         <span className="lo-skel" role="status">
+          {shape && <span className="lo-skel-shape" aria-hidden="true" style={{ maskImage: `url(${shape})`, WebkitMaskImage: `url(${shape})` }} />}
           <span className="lo-skel-label">
             {working.kind === 'running'
               ? <span className="lo-skel-stage" key={stage}>{stage}</span>
@@ -166,8 +177,8 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
           : !src
             ? page ? <span className="lo-card-placeholder" />
               : impossible
-                ? <span className="lo-card-placeholder is-none"><span>Nothing to render</span><small>Open it to add a picture or text</small></span>
-                : <span className="lo-card-placeholder"><ImagePlus size={22} /><span>{emptyText}</span></span>
+                ? <span className="lo-card-placeholder is-none"><Ban size={28} aria-hidden="true" /><span>No render possible. Open it to type text, or hover and paste an image.</span></span>
+                : <span className="lo-card-placeholder"><ImagePlus size={28} aria-hidden="true" /><span>{emptyText}</span></span>
           : slide?.keys
             ? <span className="lo-media-multi">{slide.keys.map(k => <SlideImage key={k} k={k} />)}</span>
           : video
@@ -175,7 +186,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
             : <img key={src} src={live?.url ?? src} alt="" className={src === warm ? 'is-loaded' : undefined}
                 onLoad={e => { revealOnLoad(e); if (audible && live && hovering.current && e.currentTarget.src === live.url) playEmoteSound(audible, live.seconds) }} />}
       </button>
-      {slides.length > 1 && (
+      {slides.length > 1 && !working && ( /* no paging while a new preview renders */
         <>
           <button type="button" className="lo-media-arrow is-prev" title="Previous preview" aria-label="Previous preview" onClick={() => { setPaged(true); setIndex(at - 1) }}>
             <ChevronLeft size={16} />
@@ -187,27 +198,30 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
         </>
       )}
       {slides.length === 1 && slide.older && <span className="lo-media-label">{slide.label}</span>}
-      {/* The page's empty source: its one way to fill it, and a line on what that does. The button carries the icon
-          and the action, so nothing above it repeats them */}
+      {/* The page's empty source, one build for every option (cable, 2026-10-21): a line on what it does, then its one
+          button with an icon. An option that cannot work here says why, its button locked (as Capture is while the game
+          is closed) */}
       {page && empty && !working && !editing && (
         <div className="lo-media-cta">
           {cover === 'preview' && (impossible
-            ? <><span>Nothing to render</span><small>Use Capture, Image or Text instead</small></>
-            : <><small>Renders this loadout on its hero, on this PC</small>{generate!(ctaButton)}</>)}
+            ? <><small>Nothing in this loadout can be rendered.</small>
+                <button type="button" className={ctaButton} aria-disabled="true" title="Nothing to render: try Capture, Image or Text"><Lock size={14} aria-hidden="true" /> Generate previews</button></>
+            : <><small>Renders this loadout on its hero, on this PC.</small>{generate!(ctaButton)}</>)}
           {cover === 'capture' && (capture?.show
             ? capture.button(ctaButton, 'Capture screenshot', true)
-            : <><span>Nothing to capture</span><small>Capture needs a skin, mesh or texture mod in this loadout.</small></>)}
+            : <><small>Capture needs a skin, mesh or texture mod in this loadout.</small>
+                <button type="button" className={ctaButton} aria-disabled="true" title="Nothing to capture: try Image or Text"><Lock size={14} aria-hidden="true" /> Capture screenshot</button></>)}
+          {/* the same build as Preview and Capture: a line on what it does, then its button */}
           {cover === 'image' && <>
-            <ImagePlus size={22} aria-hidden="true" />
-            <span>Add an image, GIF or video</span>
-            <small>Click here, or paste one</small>
+            <small>Shows your own picture, GIF or video on the card. You can also paste one.</small>
+            <button type="button" className={ctaButton} onClick={onClick}><ImagePlus size={14} aria-hidden="true" /> Choose an image</button>
           </>}
         </div>
       )}
       {editing && (
         <div className="lo-caption-wrap" style={tint}>
           <CaptionIcon name={l.captionIcon} className="lo-cap-icon" />
-          <textarea className="lo-caption-edit" autoFocus={typing} defaultValue={caption} maxLength={80} placeholder="Type a title"
+          <textarea ref={captionRef} className="lo-caption-edit" autoFocus={typing} defaultValue={caption} maxLength={80} placeholder="Type a title"
             aria-label={`Text on ${l.name}'s card`} spellCheck={false} onFocus={e => e.currentTarget.select()}
             onBlur={e => saveCaption(e.currentTarget.value)}
             onKeyDown={e => {
@@ -233,7 +247,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
           <X size={14} />
         </button>
       )}
-      {sound && (
+      {sound && !working && ( /* the speaker steps aside while it renders */
         <button type="button" className={`lo-media-mute${l.muted ? ' is-muted' : ''}`} aria-pressed={Boolean(l.muted)}
           title={l.muted ? `Play ${l.name}'s emote sound on hover` : `Mute ${l.name}'s emote sound (the animation still plays)`}
           aria-label={l.muted ? `Unmute ${l.name}` : `Mute ${l.name}`}
@@ -247,10 +261,12 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   return (
     <div className="lp-cover">
       {media}
-      {/* What the card shows, everywhere: one source at a time. An empty source reads dimmer */}
+      {/* What the card shows, everywhere: one source at a time, picked from four */}
       <div className="cover-tabs" role="radiogroup" aria-label="The card shows">
         {COVERS.map(c => {
-          const Icon = COVER_ICON[c]
+          // a source that cannot work for this loadout shows a lock, as Capture does while the game is closed
+          const locked = (c === 'preview' && impossible) || (c === 'capture' && capture && !capture.show)
+          const Icon = locked ? Lock : COVER_ICON[c]
           return (
             <button key={c} type="button" role="radio" aria-checked={cover === c} className={`cover-tab${fills[c] ? ' is-filled' : ''}`} onClick={() => pick(c)}
               title={`${fills[c] ? 'Show' : 'Add'} ${COVER_WHAT[c]} on the card`}>
@@ -262,6 +278,9 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
     </div>
   )
 }
+
+/** How long the pointer rests on an animation card before its emote sound plays. */
+const HOVER_MS = 250
 
 /** One preview of a slide that shows several (a loadout's VFX swatches). */
 function SlideImage({ k }: { k: string }) {
@@ -279,7 +298,7 @@ export function OnDot({ on, of }: { on: number; of: number }) {
 /** Turns single mods on or off from Home, with the same game-running guard as loadouts. */
 export async function toggleMod(p: LoadoutProps, mod: Mod) {
   if (p.blocked) {
-    p.alert.warning('Game Running', 'Cannot toggle mods while game is running.')
+    p.alert.warning(...GAME_RUNNING)
     return
   }
   const failed = await flipMods([mod])

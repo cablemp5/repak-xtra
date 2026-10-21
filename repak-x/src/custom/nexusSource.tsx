@@ -107,7 +107,7 @@ export function NexusSourceLine({ path }: { path: string }) {
   )
 }
 
-/** The Library row's Nexus tag (Settings > Optional controls hides it): a click opens the mod's Nexus page. */
+/** The Library row's Nexus tag (Settings > On each mod hides it): a click opens the mod's Nexus page. */
 export function NexusTag({ path }: { path: string }) {
   const s = useSource(path)
   if (!s) return null

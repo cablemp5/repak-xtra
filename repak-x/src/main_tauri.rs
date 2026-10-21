@@ -705,7 +705,9 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
             };
 
             let modified_date = std::fs::metadata(path)
-                .and_then(|m| m.modified())
+                // repakxtra: the later of created and modified: a copy into ~mods keeps the archive's old modified date,
+                // but its created date is the install, so Newest First puts a fresh install on top
+                .and_then(|m| m.modified().map(|t| m.created().map_or(t, |c| c.max(t))))
                 .and_then(|t| {
                     t.duration_since(std::time::UNIX_EPOCH)
                         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
@@ -858,7 +860,9 @@ async fn get_pak_files_in_folder(
             };
 
             let modified_date = std::fs::metadata(path)
-                .and_then(|m| m.modified())
+                // repakxtra: the later of created and modified: a copy into ~mods keeps the archive's old modified date,
+                // but its created date is the install, so Newest First puts a fresh install on top
+                .and_then(|m| m.modified().map(|t| m.created().map_or(t, |c| c.max(t))))
                 .and_then(|t| {
                     t.duration_since(std::time::UNIX_EPOCH)
                         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
