@@ -1,18 +1,18 @@
 // repakxtra: Home's "New this week" strip. Mods added or changed in the last 7 days that no loadout turns on, newest
 // first (older loose mods live in the Library), each with an on/off
-// switch and "Add to loadout". When a loadout holds an older version of the same mod (same name, lower _vN) the row
+// switch and "Add to loadout" (or a new loadout holding just that mod, named after it). When a loadout holds an older version of the same mod (same name, lower _vN) the row
 // offers "Replace v10 in <loadout>": one click swaps it in that loadout (and turns the old file off and the new one on
 // when the old one was on), with Undo. The row stays while another loadout still holds an older version.
 import { useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { ArrowRightLeft } from 'lucide-react'
 import CustomDropdown from '../components/CustomDropdown'
-import type { LoadoutProps } from './Loadouts'
+import { type LoadoutProps, createFromMods } from './Loadouts'
 import { ModRow } from './loadoutBits'
 import { Num } from './motion'
 import {
   type Loadout, type Mod, addModToLoadout, displayName, flipMods, loadoutable, modKey, olderVersionIn, patchLoadout, readLoadouts,
-  replaceInLoadout, sameMembership, useLoadouts, versionOf,
+  openLoadout, replaceInLoadout, sameMembership, useLoadouts, versionOf,
 } from './loadoutStore'
 
 const SHOWN = 6
@@ -64,7 +64,7 @@ export default function NewStrip(p: LoadoutProps) {
         // Undo can run after Home opened a loadout page (this strip unmounted): it reads the game lock and the files
         // fresh, and leaves the toast up when it cannot act yet
         label: 'Undo', onClick: async () => {
-          const wait = () => p.alert.warning('Game running', 'Undo waits until the game is closed.')
+          const wait = () => p.alert.warning('Game Running', 'Undo waits until the game is closed.')
           if (p.isBlocked()) return wait()
           let current: Mod[]
           try {
@@ -108,16 +108,21 @@ export default function NewStrip(p: LoadoutProps) {
                   <ArrowRightLeft size={13} /> Replace v{versionOf(old)?.n} in {l.name}
                 </button>
               ))}
-              {loadouts.length > 0 && (
-                <div className="row-add-to">
-                  <CustomDropdown
-                    options={loadouts.map(l => ({ value: l.id, label: l.name }))}
-                    value=""
-                    placeholder="Add to loadout"
-                    onChange={(id: string) => { const l = readLoadouts().find(x => x.id === id); if (l) { addModToLoadout(l, k); p.alert.success(`Added to ${l.name}`, k) } }}
-                  />
-                </div>
-              )}
+              <div className="row-add-to">
+                <CustomDropdown
+                  options={loadouts.map(l => ({ value: l.id, label: l.name }))}
+                  value=""
+                  placeholder="Add to loadout"
+                  addNewLabel="+ New loadout"
+                  onAddNew={() => {
+                    const l = createFromMods([m.path], k)
+                    const id = p.alert.success(`${l.name} created`, 'With this mod. Rename it on its page.', {
+                      action: { label: 'Open', onClick: () => { p.alert.dismissAlert(id); openLoadout(l.id, true) } },
+                    })
+                  }}
+                  onChange={(id: string) => { const l = readLoadouts().find(x => x.id === id); if (l) { addModToLoadout(l, k); p.alert.success(`Added to ${l.name}`, k) } }}
+                />
+              </div>
             </ModRow>
           )
         })}

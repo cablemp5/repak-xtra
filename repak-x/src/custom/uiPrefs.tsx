@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { invoke } from '@tauri-apps/api/core'
-import { ChevronDown, EyeOff, Tags, Trash2 } from 'lucide-react'
+import { ChevronDown, Download, EyeOff, PanelTop, Tags, Trash2, Volume2, ZoomIn } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import { MotionGlobalConfig } from 'framer-motion'
 import Checkbox from '../components/ui/Checkbox'
@@ -12,18 +12,20 @@ import { setSoundOn, unlockSound } from './sounds'
 import { savedItem } from './storageCarryOver'
 
 // `on`: shown until switched off (the rest start hidden). Stored as '1' or '0' once changed.
-const PREFS: { key: string; label: string; on?: boolean }[] = [
-  { key: 'priority', label: 'Show load priority counter on mods' },
-  { key: 'asset-explorer', label: 'Show Asset Explorer button' },
-  { key: 'share', label: 'Show Share button' },
-  { key: 'tools', label: 'Show Tools button' },
-  { key: 'sigeon', label: 'Show Sigeon button', on: true },
-  { key: 'nexus', label: 'Show a Nexus tag on mods installed from Nexus Mods', on: true },
-  { key: 'broken', label: 'Show Broken mod warnings and the Broken tab', on: true },
-  { key: 'mod-size', label: 'Show mod file sizes' }, // shown in Settings > Mods view (ModSizeSetting), not Optional controls
+// `group`: the Settings section it is drawn in (Header buttons, On each mod), or its own place elsewhere.
+const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod' }[] = [
+  { key: 'vfx-updater', label: 'VFX Updater', on: true, group: 'header' },
+  { key: 'sigeon', label: 'Sigeon', on: true, group: 'header' },
+  { key: 'asset-explorer', label: 'Asset Explorer', group: 'header' },
+  { key: 'share', label: 'Share', group: 'header' },
+  { key: 'tools', label: 'Tools', group: 'header' },
+  { key: 'mod-size', label: 'File size', group: 'mod' },
+  { key: 'priority', label: 'Load priority counter', group: 'mod' },
+  { key: 'nexus', label: 'Nexus tag on mods installed from Nexus Mods', on: true, group: 'mod' },
+  { key: 'broken', label: 'Broken and May crash warnings, and the Broken tab', on: true, group: 'mod' },
+  { key: 'conflicts', label: 'Conflict warnings (the badge, and the dot on Check Conflicts)', on: true, group: 'mod' },
   { key: 'quick-organize', label: 'Show Quick Organize when dropping files on the window' }, // shown under Installing mods
 ]
-const OWN_PLACE = ['mod-size', 'quick-organize'] // switches drawn in their own section, not Optional controls
 
 // 100% draws the app at the webview's 120% (what was the old 125% step, a little smaller); the rest scale from there.
 // A new key: everyone starts at the new 100%, the old repakxtra.uiScale is no longer read.
@@ -103,20 +105,8 @@ const subscribe = (l: () => void) => {
 
 /** Whether a show/hide pref is on, re-rendering when it changes (e.g. 'mod-size'). */
 export const useUiPref = (key: string) => useSyncExternalStore(subscribe, () => isOn(key))
-/** Broken mod warnings are on (Settings > Optional controls): read where a hook cannot be (runChanges' toasts). */
+/** Broken mod warnings are on (Settings > On each mod): read where a hook cannot be (runChanges' toasts). */
 export const brokenShown = () => isOn('broken')
-
-/** Settings > Mods view: file sizes on mod rows (applies right away, like the other switches here in uiPrefs). */
-export function ModSizeSetting() {
-  const on = useUiPref('mod-size')
-  return (
-    <div className="setting-item">
-      <Checkbox checked={on} onChange={(checked: boolean) => update(storageKey('mod-size'), checked ? '1' : '0')}>
-        <span>Show mod file sizes</span>
-      </Checkbox>
-    </div>
-  )
-}
 
 /** Show or hide the custom tag chips on mods (T, or the button next to the tag filter). */
 export const toggleTags = () => update(HIDE_TAGS_KEY, tagsHidden() ? '0' : '1')
@@ -147,7 +137,7 @@ async function deleteAllTags(tags: string[], mods: TagMod[], onChanged: () => Pr
 }
 
 /** Tags shown or hidden on mods, said in words (T toggles too); the arrow holds Delete all tags. */
-/** Hide tag features (Settings, on by default): no tags on mods, no tag filter, Tags button or Assign Tag. */
+/** Tags off (Settings > On each mod > Tags, off by default): no tags on mods, no tag filter, Tags button or Assign Tag. */
 export const useTagsOff = () => useSyncExternalStore(subscribe, tagsOff)
 
 export function TagsToggle(props: Parameters<typeof TagsToggleButton>[0]) {
@@ -205,82 +195,124 @@ function TagsToggleButton({ tags, mods, onChanged, alert }: {
   )
 }
 
-export default function UiSettings() {
-  const snapshot = useSyncExternalStore(subscribe, () => PREFS.map(p => (isOn(p.key) ? 1 : 0)).join('') + '|' + getScale() + '|' + soundOn() + motionOn() + minimalToasts() + installsPlain())
+/** One show/hide pref as a checkbox (applies right away, in every window). */
+function PrefBox({ k, label }: { k: string; label: string }) {
+  const on = useSyncExternalStore(subscribe, () => isOn(k))
+  return (
+    <div className="setting-item">
+      <Checkbox checked={on} onChange={(checked: boolean) => update(storageKey(k), checked ? '1' : '0')}><span>{label}</span></Checkbox>
+    </div>
+  )
+}
+const useAll = () => useSyncExternalStore(subscribe, () => PREFS.map(p => (isOn(p.key) ? 1 : 0)).join('') + '|' + getScale() + '|' + soundOn() + motionOn() + minimalToasts() + installsPlain() + tagsOff())
+
+/** Settings > Interface, top: UI scale. */
+export function UiScaleSection() {
+  useAll()
   const scale = getScale()
   return (
-    <>
-      <div className="setting-section">
-        <h3>UI scale</h3>
-        <p className="setting-subtext">UI scale, sound, motion, pop-ups, installing, optional controls and file sizes apply right away; Save and Cancel cover the rest.</p>
-        <div className="setting-group">
-          <div className="mod-state-filter ui-scale" role="group" aria-label="UI scale">
-            {SCALES.map(s => (
-              <button key={s} type="button" aria-pressed={scale === s} onClick={() => update(SCALE_KEY, String(s))}>
-                {s}%
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-      <div className="setting-section">
-        <h3>Sound, motion and pop-ups</h3>
-        <div className="setting-group">
-          <div className="setting-item">
-            <Checkbox checked={soundOn()} onChange={(checked: boolean) => { update(SOUND_KEY, checked ? '1' : '0'); if (checked) unlockSound() }}>
-              <span>Sound effects</span>
-            </Checkbox>
-            <p className="setting-subtext">Mechanical click sounds on clicks, typing, switches, menus, page changes and alerts, and an emote's sound when you hover its animation preview.</p>
-          </div>
-          <div className="setting-item">
-            <Checkbox checked={motionOn()} onChange={(checked: boolean) => update(MOTION_KEY, checked ? '1' : '0')}>
-              <span>Animations</span>
-            </Checkbox>
-            <p className="setting-subtext">Page slides, menus, switches and pop-ups. Off stops every animation in the app, including the extra animations below.</p>
-          </div>
-          <div className="setting-item">
-            <Checkbox checked={minimalToasts()} onChange={(checked: boolean) => update(MINIMAL_TOASTS_KEY, checked ? '1' : '0')}>
-              <span>Fewer pop-ups</span>
-            </Checkbox>
-            <p className="setting-subtext">Skips the small messages that pop up in the bottom corner after everyday actions like switching loadouts, installing mods or generating previews. Errors, warnings, updates and deletions you can undo still pop up.</p>
-          </div>
-        </div>
-      </div>
-      <div className="setting-section">
-        <h3>Installing mods</h3>
-        <div className="setting-group">
-          <div className="setting-item">
-            <Checkbox checked={installsPlain()} onChange={(checked: boolean) => update(PLAIN_INSTALL_KEY, checked ? '1' : '0')}>
-              <span>Install mods without a loadout by default (classic Repak X installer)</span>
-            </Checkbox>
-            <p className="setting-subtext">The install window starts on Install without a loadout. Save as a loadout stays one click away in it.</p>
-          </div>
-          <div className="setting-item">
-            <Checkbox checked={isOn('quick-organize')} onChange={(checked: boolean) => update(storageKey('quick-organize'), checked ? '1' : '0')}>
-              <span>Show Quick Organize when dropping files on the window</span>
-            </Checkbox>
-            <p className="setting-subtext">A second panel beside Install while you drag files in, for dropping them straight into a folder without the install window.</p>
-          </div>
-        </div>
-      </div>
-      <div className="setting-section">
-        <h3>Optional controls</h3>
-        <div className="setting-group">
-          <div className="setting-item">
-            <Checkbox checked={tagsOff()} onChange={(checked: boolean) => update(TAGS_OFF_KEY, checked ? '1' : '0')}>
-              <span>Hide tag features</span>
-            </Checkbox>
-            <p className="setting-subtext">Hides tags on mods, the tag filter, the tags show/hide button, the Tags button for selected mods and Assign Tag. Your tags are kept.</p>
-          </div>
-          {PREFS.map(({ key, label }, i) => !OWN_PLACE.includes(key) && (
-            <div className="setting-item" key={key}>
-              <Checkbox checked={snapshot[i] === '1'} onChange={(checked: boolean) => update(storageKey(key), checked ? '1' : '0')}>
-                <span>{label}</span>
-              </Checkbox>
-            </div>
+    <div className="setting-section">
+      <h3 className="setting-icon-label"><ZoomIn size={18} aria-hidden="true" />UI scale</h3>
+      <div className="setting-group">
+        <div className="mod-state-filter ui-scale" role="group" aria-label="UI scale">
+          {SCALES.map(s => (
+            <button key={s} type="button" aria-pressed={scale === s} onClick={() => update(SCALE_KEY, String(s))}>{s}%</button>
           ))}
         </div>
       </div>
+    </div>
+  )
+}
+
+/** Sound, motion and pop-ups. `extra` is the card animations setting (App state), drawn under Animations. */
+export function MotionSection({ extra }: { extra?: React.ReactNode }) {
+  useAll()
+  return (
+    <div className="setting-section">
+      <h3 className="setting-icon-label"><Volume2 size={18} aria-hidden="true" />Sound, motion and pop-ups</h3>
+      <div className="setting-group">
+        <div className="setting-item">
+          <Checkbox checked={soundOn()} onChange={(checked: boolean) => { update(SOUND_KEY, checked ? '1' : '0'); if (checked) unlockSound() }}>
+            <span>Sound effects</span>
+          </Checkbox>
+          <p className="setting-subtext">Click sounds on buttons, typing, switches and alerts, and an emote's sound when you hover its preview.</p>
+        </div>
+        <div className="setting-item">
+          <Checkbox checked={motionOn()} onChange={(checked: boolean) => update(MOTION_KEY, checked ? '1' : '0')}>
+            <span>Animations</span>
+          </Checkbox>
+          <p className="setting-subtext">Page slides, menus, switches and pop-ups. Off stops every animation in the app.</p>
+          {extra && <div className={`setting-sub${motionOn() ? '' : ' is-off'}`}>{extra}</div>}
+        </div>
+        <div className="setting-item">
+          <Checkbox checked={minimalToasts()} onChange={(checked: boolean) => update(MINIMAL_TOASTS_KEY, checked ? '1' : '0')}>
+            <span>Fewer pop-ups</span>
+          </Checkbox>
+          <p className="setting-subtext">Skips the small messages after everyday actions like switching loadouts or installing mods. Errors, warnings, updates and deletions you can undo still show.</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Installing mods. */
+export function InstallingSection() {
+  useAll()
+  return (
+    <div className="setting-section">
+      <h3 className="setting-icon-label"><Download size={18} aria-hidden="true" />Installing mods</h3>
+      <div className="setting-group">
+        <div className="setting-item">
+          <Checkbox checked={installsPlain()} onChange={(checked: boolean) => update(PLAIN_INSTALL_KEY, checked ? '1' : '0')}>
+            <span>Install mods without a loadout by default (classic Repak X installer)</span>
+          </Checkbox>
+          <p className="setting-subtext">The install window starts on Install without a loadout. Save as a loadout stays one click away in it.</p>
+        </div>
+        <div className="setting-item">
+          <Checkbox checked={isOn('quick-organize')} onChange={(checked: boolean) => update(storageKey('quick-organize'), checked ? '1' : '0')}>
+            <span>Show Quick Organize when dropping files on the window</span>
+          </Checkbox>
+          <p className="setting-subtext">A second panel beside Install while you drag files in, for dropping them straight into a folder.</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Header buttons: the optional buttons at the top of the window. */
+export function HeaderButtonsSection() {
+  useAll()
+  return (
+    <div className="setting-section">
+      <h3 className="setting-icon-label"><PanelTop size={18} aria-hidden="true" />Header buttons</h3>
+      <div className="setting-group">
+        <p className="setting-hint">Which of the optional buttons show at the top of the window.</p>
+        {PREFS.filter(p => p.group === 'header').map(p => <PrefBox key={p.key} k={p.key} label={p.label} />)}
+      </div>
+    </div>
+  )
+}
+
+/** The show/hide prefs drawn in On each mod (the App-state ones come first, passed in by SettingsPanel), and tags. */
+export function ModPrefs() {
+  useAll()
+  return (
+    <>
+      {PREFS.filter(p => p.group === 'mod').map(p => <PrefBox key={p.key} k={p.key} label={p.label} />)}
+      <div className="setting-item">
+        <Checkbox checked={!tagsOff()} onChange={(checked: boolean) => update(TAGS_OFF_KEY, checked ? '0' : '1')}>
+          <span>Tags</span>
+        </Checkbox>
+        <p className="setting-subtext">Tags on mods, the tag filter, the tags button and Assign Tag. Off keeps your tags, just out of sight.</p>
+      </div>
     </>
   )
+}
+
+/** Every Interface setting kept in this file back to how it starts (App's own ones are reset by SettingsPanel). */
+export function resetUiPrefs() {
+  for (const p of PREFS) localStorage.removeItem(storageKey(p.key))
+  for (const k of [SCALE_KEY, SOUND_KEY, MOTION_KEY, MINIMAL_TOASTS_KEY, PLAIN_INSTALL_KEY, TAGS_OFF_KEY, HIDE_TAGS_KEY]) localStorage.removeItem(k)
+  apply()
+  listeners.forEach(l => l())
 }

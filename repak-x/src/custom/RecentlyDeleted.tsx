@@ -59,7 +59,7 @@ export default function RecentlyDeleted() {
 
   return (
     <div className="setting-section">
-      <h3>Recently deleted</h3>
+      <h3 className="setting-icon-label"><Trash2 size={18} aria-hidden="true" />Recently deleted</h3>
       <p className="setting-subtext">Deleted mods stay here for 7 days, then they are deleted for good. Restore puts a mod back where it was.</p>
       <div className="setting-group">
         {items === null

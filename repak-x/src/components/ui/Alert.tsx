@@ -97,7 +97,7 @@ export function Alert({
   return (
     <div
       className={`toast-item ${color} ${variant} ${className}`}
-      role="alert"
+      role={color === 'danger' ? 'alert' : 'status'} /* repakxtra: only errors interrupt a screen reader, the rest wait their turn */
       {...props}
     >
       {startContent && (

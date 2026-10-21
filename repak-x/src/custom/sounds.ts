@@ -26,7 +26,10 @@ export function cueFor(target: Element): Cue | null {
   if (el.closest('.lp-back')) return ['navigate', { direction: 'back' }]
   if (el.closest('.view-tabs')) return ['navigate', { direction: el.textContent === 'Loadouts' ? 'back' : 'forward' }]
   if (el.matches('.custom-dropdown-trigger')) return el.classList.contains('open') ? ['close', { emphasis: 'subtle' }] : ['open']
-  if (el.matches('[role="tab"], [role="option"], .custom-dropdown-item') || el.closest('.mod-state-filter')) return ['select']
+  // any other menu button (Install's arrow, All/On/Off, the view menu, More): open and close like the dropdowns
+  if (el.matches('[aria-haspopup]')) return el.getAttribute('aria-expanded') === 'true' ? ['close', { emphasis: 'subtle' }] : ['open']
+  if (el.matches('[role="tab"], [role="option"], [role="menuitemradio"], .custom-dropdown-item') || el.closest('.mod-state-filter')) return ['select']
+  if (el.matches('.bulk-delete')) return ['close', { emphasis: 'strong' }] // its title says "Click to delete", not "Delete"
   const label = `${el.getAttribute('title') ?? ''} ${el.getAttribute('aria-label') ?? ''}`.trim()
   if (/^(delete|remove)\b/i.test(label)) return ['close', { emphasis: 'strong' }]
   if (/^(close|cancel|dismiss)\b/i.test(label) || el.matches('.modal-close, .close-btn')) return ['close']

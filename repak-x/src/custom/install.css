@@ -20,9 +20,14 @@
 .ip-cover-note { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 0 10px; text-align: center; font-size: 11.5px; line-height: 1.35; color: var(--text-secondary); }
 .ip-cover.is-preview .ip-cover-note { color: var(--text-primary); }
-/* No preview coming: no hero shape, the add-a-picture icon (as on an empty loadout card) over white bold words */
-.ip-cover:not(.is-preview) .ip-cover-note { gap: 8px; color: var(--text-primary); font-weight: 700; }
-.ip-cover:not(.is-preview) .ip-cover-note svg.lucide { opacity: 0.85; }
+/* A preview coming: the hero's shape, and a quiet centered note on it (icon, then Renders / after install) */
+.ip-cover-after { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  text-align: center; font-size: 11.5px; font-weight: 500; line-height: 1.3; color: var(--text-secondary); }
+.ip-cover-after svg.lucide { width: 14px !important; height: 14px !important; margin-bottom: 4px; color: var(--text-secondary); }
+/* No preview coming: the three other covers its page offers, as icons over one line */
+.ip-cover:not(.is-preview) .ip-cover-note { gap: 8px; color: var(--text-secondary); font-weight: 500; }
+.ip-cover-ways { display: inline-flex; gap: 8px; color: var(--text-secondary); }   /* the same grey as the wand when a preview is coming */
+.ip-cover-ways svg.lucide { width: 15px !important; height: 15px !important; }
 
 .ip-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; justify-content: center; }
 /* New loadout or Add to: plain words with a chevron, lit on hover, opening a small menu */
@@ -137,7 +142,8 @@ input.ip-title:focus { border-color: rgba(255, 255, 255, 0.16); background: var(
 .ip-switches .install-toggle .install-toggle__label { color: color-mix(in srgb, var(--tile, #888), white 30%) !important; font-size: 13px !important; line-height: 1.3; white-space: normal; }
 .ip-switches .install-toggle .install-toggle__hint { font-size: 12px !important; line-height: 1.4; }
 .ip-switches .install-toggle__text { gap: 2px !important; }
-.ip-switches .install-toggle .repakx-switch-control { margin-right: 12px !important; }
+.ip-switches .install-toggle .repakx-switch-control { margin-right: 0 !important; }   /* the label's own gap (12px) is the only space after the switch: 12px each side */
+.ip-switches .install-toggle { gap: 12px !important; }
 .ip-switches .install-toggle.repakx-switch.checked .repakx-switch-track { background: var(--tile) !important; }
 .ip-switches .install-toggle.locked { opacity: 0.5 !important; }
 .ip-switches .install-toggle :focus-visible { outline: 2px solid color-mix(in srgb, var(--tile, #888), white 25%) !important; outline-offset: 2px !important; }

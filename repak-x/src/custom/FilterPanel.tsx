@@ -6,6 +6,7 @@ import { Check, ChevronRight } from 'lucide-react'
 import { resolveHeroImage, useHeroImages } from '../utils/heroImages'
 import { NEXUS_TYPE, sourceOf, useNexusVersion } from './nexusSource'
 import { useUiPref } from './uiPrefs'
+import { loadoutable, modKey } from './loadoutStore'
 import nexusLogo from './logos/nexus.png'
 
 type Details = { character_name?: string; category?: string }
@@ -38,7 +39,7 @@ const toggled = (set: Set<string>, ids: string[]) => {
 export default function FilterPanel(p: Props) {
   useHeroImages()
   const nexusVersion = useNexusVersion()
-  const showNexus = useUiPref('nexus')   // Settings > Optional controls hides the Nexus tag, and with it this filter
+  const showNexus = useUiPref('nexus')   // Settings > On each mod hides the Nexus tag, and with it this filter
   const nexusCount = useMemo(() => Object.keys(p.modDetails || {}).filter(path => sourceOf(path)).length, [p.modDetails, nexusVersion]) // eslint-disable-line react-hooks/exhaustive-deps
   const [showAllHeroes, setShowAllHeroes] = useState(false)
   const [openHero, setOpenHero] = useState<string | null>(null)
@@ -46,8 +47,9 @@ export default function FilterPanel(p: Props) {
   const { heroes, typeCounts } = useMemo(() => {
     const counts: Record<string, number> = {}
     const types: Record<string, number> = {}
-    for (const d of Object.values(p.modDetails || {})) {
-      if (d?.character_name) counts[d.character_name] = (counts[d.character_name] || 0) + 1
+    for (const [path, d] of Object.entries(p.modDetails || {})) {
+      // the Project Galacta mod itself names the Galacta hero: it alone does not make Galacta a hero to filter by
+      if (d?.character_name && loadoutable(modKey(path))) counts[d.character_name] = (counts[d.character_name] || 0) + 1
       // main category plus the additive ones upstream appends as "... [Blueprint, Project Galacta]"
       const extra = (d as { mod_type?: string })?.mod_type?.match(/\[([^\]]+)\]$/)?.[1].split(', ') ?? []
       for (const cat of new Set([d?.category, ...extra])) if (cat) types[cat] = (types[cat] || 0) + 1
@@ -60,7 +62,7 @@ export default function FilterPanel(p: Props) {
       if (c !== base) g.skins.push(c)
       g.count += counts[c] || 0
     }
-    const list = Object.values(groups).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    const list = Object.values(groups).filter(g => g.count > 0 || g.name !== 'Galacta').sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
     return { heroes: list, typeCounts: types }
   }, [p.availableCharacters, p.modDetails])
 

@@ -112,8 +112,8 @@ replace ("These 3 mods replace Black Panther's materials"); **Keep this one** on
 with Undo. Mods installed from a Nexus Mods download get an orange **Nexus** tag that opens their page, and their source
 in mod details ("Nexus 12890, uploaded Sep 13, 2026" with **Open page**), read from the download's file name. On its
 first launch repakxtra finds the source of mods you installed earlier from the Nexus downloads still in your Downloads
-folder. Project Galacta mods get a magenta tag. File sizes are a setting (**Settings > Interface > Mods view**), and
-**Settings > Interface > Optional controls** hides the Nexus tag, the Broken warnings and the Sigeon button.
+folder. Project Galacta mods get a magenta tag. File sizes are a setting (**Settings > Interface > On each mod**), and
+**Settings > Interface > On each mod** hides the Nexus tag and the Broken and Conflict warnings, and **Header buttons** hides Sigeon.
 
 **Installing:** drop zips, rars and 7zs as they are, no need to extract. `.pak.off`, `.utoc.off` and `.ucas.off` files
 (how RivalsFPS turns mods off, and how they often get shared) install like any other mod, each set as one mod, on.
@@ -296,7 +296,7 @@ one mod and installs it on. Your original files stay as they were.
 
 Mods installed from a Nexus Mods download keep its mod id and upload date, read from the download's file name: mod
 details shows "Nexus 12890, uploaded Sep 13, 2026" and **Open page**, and the Library shows a **Nexus** tag on the mod
-(**Settings > Interface > Optional controls** hides it and its filter). On its first launch repakxtra also checks the
+(**Settings > Interface > On each mod** hides it and its filter). On its first launch repakxtra also checks the
 Nexus downloads in your Downloads folder, so mods installed before keep their source. Mods from anywhere else show
 nothing there.
 

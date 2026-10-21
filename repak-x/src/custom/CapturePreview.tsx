@@ -154,8 +154,9 @@ export function captureTarget(p: LoadoutProps, l: Loadout) {
   return { show: visual.length > 0, hero }
 }
 
-/** note (an empty card): whether the game is open, as a status pill, then a line on where the picture comes from or that
- *  the game must be open first. While it is closed the button shows a lock and reads as unavailable. */
+/** note (an empty card): a line on where the picture comes from or that the game must be open first, with a Game open
+ *  pill over it once the game runs (no pill while it is closed, cable 2026-10-21). While it is closed the button shows a
+ *  lock and reads as unavailable. */
 export function CaptureButton({ p, l, onUse, className = 'lo-text-btn', label = 'Capture preview in game', note = false }: {
   p: LoadoutProps; l: Loadout; onUse: (blob: Blob) => Promise<boolean>; className?: string; label?: string; note?: boolean
 }) {
@@ -174,8 +175,8 @@ export function CaptureButton({ p, l, onUse, className = 'lo-text-btn', label = 
   return (
     <>
       {note && <>
-        <span className={`cap-status${running ? ' is-on' : ''}`} role="status"><i aria-hidden="true" />{running ? 'Game open' : 'Game closed'}</span>
-        <small>{running ? "Go to the hero's Overview or Cosmetics screen in Marvel Rivals" : "Open Marvel Rivals, then go to the hero's Overview or Cosmetics screen"}</small>
+        {running && <span className="cap-status is-on" role="status"><i aria-hidden="true" />Game open</span>}
+        <small>{running ? "Go to the hero's Overview or Cosmetics screen in Marvel Rivals." : "Open Marvel Rivals, then go to the hero's Overview or Cosmetics screen."}</small>
       </>}
       {/* aria-disabled, not disabled: a click while the game is closed says why instead of doing nothing */}
       <button type="button" className={className} aria-disabled={!running}

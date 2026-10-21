@@ -234,6 +234,8 @@ export const groupKey = (label: string) => (label || '').trim().toLowerCase()
 /** Loadout groups are their own ordered list (repakxtra.groups), so a group exists before it holds a loadout and keeps its
  *  place. A loadout's label names its group; OTHER means none and always shows last. */
 export const OTHER = 'Other'
+/** What the interface calls OTHER, the loadouts in no collection (cable, 2026-10-21). The stored value stays 'Other'. */
+export const OTHER_LABEL = 'Unsorted'
 const GROUPS = 'repakxtra.groups'
 const readGroupList = (): string[] => JSON.parse(savedItem(GROUPS) || '[]')
 const writeGroupList = (groups: string[]) => { localStorage.setItem(GROUPS, JSON.stringify(groups)); notify() }

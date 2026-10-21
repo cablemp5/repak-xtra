@@ -7,7 +7,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { CircleStop, ListPlus, WandSparkles, X } from 'lucide-react'
+import { ListPlus, WandSparkles, X } from 'lucide-react'
 import { play } from 'cuelume'
 import { useAlert } from '../components/AlertHandler'
 import { type Loadout, coverFills, modKey, patchLoadout, pickCover, readLoadouts } from './loadoutStore'
@@ -101,7 +101,8 @@ listen<string>('mod-preview-ready', e => {
   revs.set(e.payload, (revs.get(e.payload) ?? 0) + 1)
   outcome.delete(e.payload)
   markNone(e.payload, false)
-  if (active && e.payload === run.set) run.setResult = 'ok'
+  // The loadout's own render is done: its card shows it now, not after the mods it does not cover render one by one
+  if (active && e.payload === run.set) { run.setResult = 'ok'; if (!run.stopping) showPreviewCover(run.set, run.show) }
   if (active && pending.delete(e.payload)) run.made++
   notify()
 }).catch(() => undefined)
@@ -309,10 +310,12 @@ const startNext = () => {
   while (!running() && (next = queue.shift())) start(next)
 }
 
-/** Where a loadout's combined render stands: rendering now (mod done of total), waiting (1 = up next), or neither. */
+/** Where a loadout's combined render stands: rendering now (mod done of total), waiting (1 = up next), or neither.
+ *  Once its own render lands the card is done, though the run goes on for mods the render does not show (an emote, a
+ *  UI or sound mod): their steps are not this card's work. */
 export function usePreviewState(set: string) {
   usePreviewVersion()
-  if (running() && run.set === set) return { kind: 'running' as const, done: doneOf(), total: run.total }
+  if (running() && run.set === set && run.setResult !== 'ok') return { kind: 'running' as const, done: doneOf(), total: run.total }
   const at = queue.findIndex(q => q.set === set)
   return at >= 0 ? { kind: 'queued' as const, at: at + 1 } : null
 }
@@ -330,7 +333,9 @@ export function usePreviewStage(on: boolean) {
     return () => clearTimeout(id)
   }, [egg, seed])
   if (!on) return ''
-  return run.stopping ? 'Stopping…' : egg && eggDone !== seed ? egg : stepText(run.step)
+  // every line trails off ("Rendering in Blender…"): it is still going
+  const line = run.stopping ? 'Stopping' : egg && eggDone !== seed ? egg : stepText(run.step)
+  return line.endsWith('…') ? line : `${line}…`
 }
 
 /** What waits behind the run: loadouts, selections, or "preview jobs" when the queue holds both. */
@@ -479,11 +484,11 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
   const id = jobId(job)
   if (running() && run.id === id) {
     // What it is doing (the dot loader and "2 of 9"), and Stop as its own button beside it
-    // On a loadout page's card (stopOnly) a chip like its others: the stop icon and one word
+    // On a loadout page's card (stopOnly) a chip like its others: the small stop square and one word
     const stopBtn = stopOnly
       ? <button type="button" className={className} onClick={stop} disabled={run.stopping}
           title={queue.length ? `Stop generating previews, and clear the ${queue.length} queued` : 'Stop generating previews'}>
-          <CircleStop size={13} aria-hidden="true" />{run.stopping ? 'Stopping…' : 'Stop'}
+          <span className="stop-glyph" aria-hidden="true" />{run.stopping ? 'Stopping…' : 'Stop'}
         </button>
       : <button type="button" className={`${className} run-stop-btn`} onClick={stop} disabled={run.stopping}
           title={queue.length ? `Stop now, and clear the ${queue.length} queued` : 'Stop now'}>

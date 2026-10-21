@@ -16,7 +16,7 @@ export function offerUndoDelete(alert: ReturnType<typeof useAlert>, entries: Tra
       label: 'Undo',
       onClick: async () => {
         if (blocked()) {
-          alert.warning('Game running', 'Undo waits until the game is closed.')
+          alert.warning('Game Running', 'Undo waits until the game is closed.')
           return
         }
         alert.dismissAlert(id)

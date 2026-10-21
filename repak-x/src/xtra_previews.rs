@@ -159,9 +159,10 @@ pub fn get_preview_audio(key: String, emote: String) -> Result<tauri::ipc::Respo
 /// One line of the generator's output as (event, key): "PREVIEW <key>" after writing a PNG, "PREVIEW_NONE <key>" when
 /// there is nothing to show, "PREVIEW_IN <key>" for a mod the loadout's combined render shows, "PREVIEW_FAIL <key>" when
 /// it failed (its last good preview stays), "PREVIEW_WARN <key>" when a mod could not be read (encrypted with a key
-/// other than the game's, so a render would not show it), "PREVIEW_STAGE <step>" for what it is doing now (read, mount,
-/// unpack, export, materials, pose, render, finish, ui, vfx, anim, sound), and "PREVIEW_BUSY" (no key) when another
-/// generator holds the lock.
+/// other than the game's, so a render would not show it), "PREVIEW_STAGE <step>" for what it is doing now (kit v8: read,
+/// mount, unpack, export, materials, pose, render, finish, ui, vfx, anim, sound; kit v9 adds skins, table, blender,
+/// shading, glow, clips, rig and webp, with Blender's own steps passed on as it renders; custom/previewStages.ts has the
+/// words), and "PREVIEW_BUSY" (no key) when another generator holds the lock.
 fn parse_line(line: &str) -> Option<(&'static str, Option<String>)> {
     if line.trim() == "PREVIEW_BUSY" {
         return Some(("mod-previews-busy", None));

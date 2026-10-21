@@ -12,6 +12,7 @@ import { isTyping } from './hotkeys'
 import { plural } from './modName'
 import { type Verdict, verdictOf } from './brokenMods'
 import { brokenShown } from './uiPrefs'
+import { GAME_RUNNING } from './keepOne'
 
 export type LoadoutProps = {
   mods: Mod[]            // every installed mod
@@ -107,7 +108,7 @@ export function deleteWithUndo(p: LoadoutProps, l: Loadout) {
   })
 }
 
-let switching = false // one loadout switch at a time, whether from the sidebar, Ctrl+N, a card or a page
+let switching = '' // the loadout being switched: one at a time, whether from the sidebar, Ctrl+N, a card or a page
 
 /** Heroes whose look (a Mesh or Texture mod) the loadout changes. */
 const looksOf = (p: LoadoutProps, l: Loadout) => {
@@ -125,16 +126,19 @@ const looksOf = (p: LoadoutProps, l: Loadout) => {
  *  one), and which other loadouts went off because they shared mods with this one. */
 export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], verb: 'on' | 'off') {
   if (p.blocked) {
-    p.alert.warning('Game running', 'Mods cannot be switched while the game is running.')
+    p.alert.warning(...GAME_RUNNING)
     return
   }
-  if (switching) return
+  if (switching) {
+    p.alert.info('One switch at a time', `${switching} is still switching. Try ${l.name} again in a moment.`)
+    return
+  }
   if (changes.length === 0) {
     const installed = changesToTurnOn(l, p.mods).length + changesToTurnOff(l, p.mods).length
     p.alert.info('Nothing to switch', installed ? `${l.name}'s mods are already ${verb}.` : `${l.name} has no installed mods.`)
     return
   }
-  switching = true
+  switching = l.name || 'A loadout'
   try {
     const wasOn = readLoadouts().filter(o => o.id !== l.id && isActive(o, p.mods))
     // Mods that will not work or may crash, read before the switch renames their files
@@ -171,7 +175,7 @@ export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], ve
       })
     }
   } finally {
-    switching = false
+    switching = ''
   }
 }
 
