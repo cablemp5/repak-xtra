@@ -54,7 +54,6 @@ import { AlertProvider, useAlert } from './components/AlertHandler'
 import { offerUndoDelete, type TrashedMod } from './custom/undoDelete'
 import { holdKeys } from './custom/holdKeys' // repakxtra
 import InstallButton from './custom/InstallButton' // repakxtra
-import HeaderMore from './custom/HeaderMore' // repakxtra: the header's More menu
 import { Num } from './custom/motion' // repakxtra
 import ModStateFilter, { matchesState, type ModState } from './custom/ModStateFilter'
 import './custom/keyboardClickables'
@@ -427,10 +426,11 @@ function App() {
   useBrokenVersion() // repakxtra: the Broken filter re-runs when the verdicts land
   const conflictCount = useConflictCount() // repakxtra
   reportSource.get = () => ({ mods, modDetails, launcherType, gamePath }) // repakxtra: setup report
-  // repakxtra: Show all, beside the Library's title: every folder, no hero, type, tag or on/off filter and no search. Checked
+  // repakxtra: Show all, beside the Library's title: every folder, no hero, type or tag filter and no search (the All / On /
+  // Off / Broken switch beside it is its own control and stays). Checked
   // mods, the viewed mod and the details panel stay. The Library tab and L keep everything (custom/LoadoutsScreen.tsx ViewTabs)
   const showAll = () => {
-    setSelectedFolderId('all'); setSelectedCharacters(new Set()); setSelectedCategories(new Set()); setFilterTag(''); setModState('all')
+    setSelectedFolderId('all'); setSelectedCharacters(new Set()); setSelectedCategories(new Set()); setFilterTag('')
     setLocalSearch(''); debouncedSetSearch(''); setSearchQuery('')
     let list = document.querySelector<HTMLElement>('.center-panel .mod-list-grid')
     while (list && list.scrollHeight <= list.clientHeight) list = list.parentElement
@@ -4055,13 +4055,6 @@ function App() {
           >
             <FaToolbox size={20} /> Tools
           </button>
-          {/* repakxtra: every optional shortcut stays reachable here, pinned or not (custom/HeaderMore.tsx) */}
-          <HeaderMore items={[
-            { label: 'Share', icon: <IoMdWifi size={16} />, run: () => setPanel('sharing', true) },
-            { label: 'Tools', icon: <FaToolbox size={16} />, run: () => setPanel('tools', true) },
-            { label: 'Asset Explorer', icon: <VscListTree size={16} />, run: openAssetExplorerWindow },
-            { label: 'VFX Updater', icon: <GiLightningTrio size={16} />, run: () => openVfxUpdaterWindow() },
-          ]} />
           <button
             onClick={() => setPanel('settings', true)}
             className="btn-settings"
@@ -4084,7 +4077,6 @@ function App() {
           isBlocked={undoBlocked} /* repakxtra: live game lock for Undo */
           reload={loadMods}
           alert={alert}
-          onInstallFiles={handleFileDrop} /* repakxtra: Home's Install, the Library's install path */
         />
         {/* repakxtra: Ctrl+1..9 switches pinned loadouts on every view (custom/Loadouts.tsx) */}
         <LoadoutHotkeys mods={mods} scopeMods={folderMods} scopeLabel="all mods" blocked={gameRunning && !bypassGameRunningLock}
@@ -4248,9 +4240,9 @@ function App() {
                       <span className="header-title-scope" title={filterScope(selectedCharacters, selectedCategories)}> · {filterScope(selectedCharacters, selectedCategories)}</span>
                     )}
                   </h2>
-                  {(selectedFolderId !== 'all' || selectedCharacters.size > 0 || selectedCategories.size > 0 || filterTag || modState !== 'all' || localSearch) && ( /* repakxtra: the deliberate reset */
+                  {(selectedFolderId !== 'all' || selectedCharacters.size > 0 || selectedCategories.size > 0 || filterTag || localSearch) && ( /* repakxtra: the deliberate reset */
                     <button type="button" className="btn-ghost lib-show-all" onClick={showAll}
-                      title="Every mod again: all folders, no hero, type, tag or on and off filter, no search. Checked mods stay checked">Show all</button>
+                      title="Every mod again: all folders, no hero, type or tag filter, no search. Checked mods stay checked">Show all</button>
                   )}
                   <ModStateFilter value={modState} onChange={setModState} mods={folderMods} />
                 </div>

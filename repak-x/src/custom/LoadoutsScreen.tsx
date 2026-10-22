@@ -8,7 +8,6 @@ import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo, runChanges } from './Loadouts'
 import LoadoutPage from './LoadoutPage'
 import NewStrip from './NewStrip'
-import InstallButton from './InstallButton'
 import { matchesLoadout } from './homeSearch'
 import { isTyping } from './hotkeys'
 import { modalOpen } from './dialogFocus'
@@ -187,8 +186,7 @@ const LoadoutCard = memo(function LoadoutCard({ p, l, groupBy, canGenerate, busy
   )
 })
 
-/** `onInstallFiles`: the Library's install path (App.tsx handleFileDrop), for the Install button in Home's header. */
-export default function LoadoutsScreen(p: LoadoutProps & { onInstallFiles?: (paths: string[]) => void }) {
+export default function LoadoutsScreen(p: LoadoutProps) {
   const view = useView()
   const loadouts = useLoadouts()
   // Search: kept while a loadout's page is open, so Back returns to the same results
@@ -444,23 +442,23 @@ export default function LoadoutsScreen(p: LoadoutProps & { onInstallFiles?: (pat
             {loadouts.length > 0 && (
               <label className="lp-search lo-search">
                 <Search size={14} aria-hidden="true" />
-                <input ref={searchRef} value={query} placeholder="Search loadouts" aria-label="Search loadouts by name or collection" onChange={e => search(e.target.value)}
+                <input ref={searchRef} value={query} placeholder="Search loadouts..." aria-label="Search loadouts by name or collection" onChange={e => search(e.target.value)}
                   onKeyDown={e => { e.stopPropagation(); if (e.key === 'Escape') search('') }} />
                 {query && <button type="button" className="lo-icon" aria-label="Clear search" title="Clear search" onClick={clearSearch}><X size={13} /></button>}
               </label>
             )}
             <span className="xtra-sr-only" role="status">{said}</span>
           </div>
-          {loadouts.length < 3 && <p>Switch a set of mods on or off together. Other mods stay as they are. To install mods, use Install or drop .pak or .zip files anywhere.</p>}
+          {loadouts.length < 3 && <p>Switch a set of mods on or off together. Other mods stay as they are. To install mods, drop .pak or .zip files anywhere or use Install.</p>}
         </div>
         <div className="lo-head-tools">
           <button type="button" ref={newRef} className="lo-text-btn" data-tour="new-loadout" onClick={createEmpty} title="A new empty loadout, opened to add mods to it">
             <Plus size={14} /> New loadout
           </button>
           {/* Also a drop target: a card dropped here starts a new collection, named right away */}
-          <button type="button" className={`lo-text-btn${spot && 'newCollection' in spot ? ' is-drop' : ''}`} data-tour="new-collection" onClick={newGroup}
+          <button type="button" className={`lo-text-btn${spot && 'newCollection' in spot ? ' is-drop' : drag.dragId ? ' is-drop-ready' : ''}`} data-tour="new-collection" onClick={newGroup}
             data-drop-new title="A new collection: a named shelf for loadouts that belong together (drag cards onto it, or a card onto this button)">
-            <FolderPlus size={14} /> {drag.dragId ? 'Drop for a new collection' : 'New collection'}
+            <FolderPlus size={14} /> New collection
           </button>
           {!canGenerate && <PreviewsUnavailable className="lo-text-btn" label="Generate all previews" />}
           {canGenerate && <div className="lo-gen" ref={genRef}>
@@ -497,7 +495,6 @@ export default function LoadoutsScreen(p: LoadoutProps & { onInstallFiles?: (pat
             <button type="button" aria-pressed={groupBy === 'group'} onClick={() => setGroupBy('group')} title="Your collections">Collection</button>
             <button type="button" aria-pressed={groupBy === 'hero'} onClick={() => setGroupBy('hero')}>Hero</button>
           </div>
-          {p.onInstallFiles && <InstallButton tour={false} onAddFiles={p.onInstallFiles} onAddFolder={p.onInstallFiles} />}
         </div>
       </header>
       <div className="lo-body" ref={setCardsEl}>
