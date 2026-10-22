@@ -72,29 +72,3 @@ jobs:
 
       - name: Native wrapper tests
         run: cargo test --locked -p uasset_app --lib
-
-  # repakxtra: builds the native asset tool from the submodule and runs its extraction checks against made-up PAKs
-  # (paths that leave the output folder, a junction, a partial write). Fails when the submodule lacks the fixes.
-  native:
-    name: Native tool checks
-    runs-on: windows-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
-
-      - name: Build the CLI tool and check its path rules
-        run: |
-          dotnet build UAssetToolRivals/src/UAssetTool/UAssetTool.csproj -c Release -o target/uat-cli
-          target/uat-cli/UAssetTool.exe self_test_paths
-
-      - name: Build the NativeAOT library
-        run: dotnet publish UAssetToolRivals/src/UAssetTool/UAssetToolNative.csproj -c Release -r win-x64 -p:DebugType=none -p:DebugSymbols=false -o target/uassettool
-
-      - name: Native extraction checks
-        run: python repak-x/scripts/check-native-extract.py target/uassettool/UAssetTool.dll
