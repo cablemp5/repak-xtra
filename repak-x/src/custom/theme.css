@@ -71,6 +71,8 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 .app .mod-name-button:focus-visible { outline-offset: 0 !important; border-radius: 4px; }
 /* A dialog that takes focus itself (tabIndex -1, so keys reach it) gets no ring: a ring round the whole box reads as an error border */
 .app [role="dialog"][tabindex="-1"]:focus-visible { outline: none !important; }
+/* Read by screen readers, never seen: dialog names, toast announcements (toastA11y.tsx), a mod's folder beside a twin name */
+.xtra-sr-only { position: absolute !important; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
 /* ---------- header ---------- */
 .titlebar, .header {
@@ -377,6 +379,10 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 /* ---------- mod rows ---------- */
 .mod-card .hold-delete { display: none; }
 .mod-list-grid.view-list { gap: 0 !important; }
+/* Stands in for the rows a long list does not mount (custom/virtualRows.ts): a whole row of a grid */
+.mod-list-spacer { grid-column: 1 / -1; flex: none; pointer-events: none; }
+/* the browser's scroll anchoring would move the list each time a spacer above the rows changes height */
+.mod-list-grid:has(> .mod-list-spacer) { overflow-anchor: none; }
 .mod-list-grid.view-list .mod-card {
   min-height: 40px !important;
   padding: 4px 10px !important;
@@ -642,7 +648,7 @@ html:not([data-show-quick-organize]) .dropzone-container { max-width: 720px; }
   animation: lo-screen-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 @keyframes lo-screen-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .lo-screen { animation: none; } }
+html[data-motion="off"] .lo-screen { animation: none; }
 .lo-screen-head {
   display: flex; align-items: center; justify-content: space-between; gap: 24px;
   padding: 22px 28px 18px;
@@ -707,7 +713,7 @@ html:not([data-show-quick-organize]) .dropzone-container { max-width: 720px; }
 .lo-card-add .lo-card-meta { display: block; max-width: 100%; margin-top: 6px !important; font-size: 14px; line-height: 20px;
   white-space: normal; overflow: visible; text-overflow: clip; text-wrap: balance; }   /* wraps on narrow cards (a status line is one line, this is not) */
 .lo-card-add svg.lucide { width: 30px !important; height: 30px !important; stroke-width: 1.75; }   /* the copy-plus icon (a new card) alone, no circle */
-@media (prefers-reduced-motion: reduce) { .lo-card-add-icon { transition: none; } }
+html[data-motion="off"] .lo-card-add-icon { transition: none; }
 /* Generate all previews: its choice menu hangs under the button */
 .lo-gen { position: relative; }
 .lo-gen-menu { left: 0; right: auto; min-width: 270px; z-index: 30; }
@@ -1173,6 +1179,14 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
 .lp-search input { flex: 1; min-width: 0; height: 100%; padding: 0 !important; background: transparent !important; border: none !important;
   outline: none !important; box-shadow: none !important; color: var(--text-primary); font: 13px var(--font-primary); }
 .lp-search svg.lucide { width: 14px !important; height: 14px !important; }
+/* Home's search beside its title, the same quiet field (custom/LoadoutsScreen.tsx) */
+.lo-title-row { display: flex; align-items: center; gap: 14px; }
+/* Home's header: the title block and the tools share one row when there is room, else the tools wrap below it */
+.lo-screen-head { flex-wrap: wrap; row-gap: 12px; }
+.lo-screen-head > :first-child { flex: 1 1 auto; min-width: 0; }
+.lo-head-tools { flex-wrap: wrap; row-gap: 8px; margin-left: auto; }
+.lo-search { width: 220px; padding-right: 4px; }
+.lo-search .lo-icon { width: 22px; height: 22px !important; }
 .lp-types { display: flex; flex-wrap: wrap; gap: 4px; }
 .lp-types button { display: inline-flex !important; align-items: center; gap: 6px; height: 28px !important; min-height: 0 !important; padding: 0 10px !important;
   border: 1px solid var(--panel-border) !important; border-radius: 999px !important; background: transparent !important;
@@ -1297,11 +1311,8 @@ html[data-view="library"] .view-tabs::before { transform: translateX(calc(100% +
 @keyframes t-swap-in { from { opacity: 0; filter: blur(var(--icon-swap-blur)); } }
 .lo-media.is-paged .lo-card-image img { animation: t-swap-in var(--icon-swap-dur) var(--icon-swap-ease) backwards; }
 
-@media (prefers-reduced-motion: reduce) {
-  .lo-screen-head, .lo-body, .lp, .custom-dropdown-menu, .lo-media img,
-  html .container > .main-action-bar, html .container > .main-panels { animation: none !important; }
-  .view-tabs::before, .view-tabs button, .repakx-switch-thumb { transition: none !important; }
-}
+html[data-motion="off"] .lo-screen-head, html[data-motion="off"] .lo-body, html[data-motion="off"] .lp, html[data-motion="off"] .custom-dropdown-menu, html[data-motion="off"] .lo-media img, html[data-motion="off"] .container > .main-action-bar, html[data-motion="off"] .container > .main-panels { animation: none !important; }
+html[data-motion="off"] .view-tabs::before, html[data-motion="off"] .view-tabs button, html[data-motion="off"] .repakx-switch-thumb { transition: none !important; }
 html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="off"] *::after {
   animation-duration: 0s !important; animation-delay: 0s !important; transition-duration: 0s !important; transition-delay: 0s !important;
   scroll-behavior: auto !important;
@@ -1319,7 +1330,7 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
   animation: t-shimmer var(--shimmer-dur) var(--shimmer-ease) infinite;
 }
 @keyframes t-shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0% 0; } }
-@media (prefers-reduced-motion: reduce) { .t-shimmer { animation: none !important; background-position: 50% 0; } }
+html[data-motion="off"] .t-shimmer { animation: none !important; background-position: 50% 0; }
 .is-queued { color: var(--text-primary) !important; }   /* no accent outline on a queued card or its button (cable, 2026-10-17) */
 
 /* ---------- more motion from transitions.dev (free library). html[data-motion="off"] stops all of it. ---------- */
@@ -1371,10 +1382,8 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 /* transitions.dev: Menu dropdown. The Sigeon menu opens like the other menus */
 .sigeon-menu { transform-origin: top right; animation: t-dropdown-open var(--dropdown-open-dur) var(--dropdown-ease) backwards; }
 
-@media (prefers-reduced-motion: reduce) {
-  .lo-card, .mod-row, .t-num-pop, .t-text-in, .sigeon-menu, .lp-more-view { animation: none !important; }
-  .t-acc-panel, .t-acc-panel-inner, .t-icon-swap .t-icon, .lo-card-image img, .mod-preview-frame img { transition: none !important; }
-}
+html[data-motion="off"] .lo-card, html[data-motion="off"] .mod-row, html[data-motion="off"] .t-num-pop, html[data-motion="off"] .t-text-in, html[data-motion="off"] .sigeon-menu, html[data-motion="off"] .lp-more-view { animation: none !important; }
+html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner, html[data-motion="off"] .t-icon-swap .t-icon, html[data-motion="off"] .lo-card-image img, html[data-motion="off"] .mod-preview-frame img { transition: none !important; }
 
 /* Install panel: Save as a loadout (2+ mods), left of Cancel / Install */
 .install-actions { align-items: center; }
@@ -1549,7 +1558,7 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 /* What the render is doing: each new line fades up in place */
 .lo-skel-stage { font-size: 12.5px; font-weight: 600; line-height: 1.3; animation: lo-stage-in 0.35s ease-out both; }
 @keyframes lo-stage-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .lo-skel, .lo-media.is-running .lo-skel::after, .lo-skel-label .run-spin { animation: none !important; } }
+html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .lo-skel::after, html[data-motion="off"] .lo-skel-label .run-spin { animation: none !important; }
 
 /* ---------- Sigeon config editor (SigeonEditor.tsx): configs on the left, one config's settings on the right ---------- */
 .sigeon-edit { border-top: 1px solid var(--panel-border) !important; margin-top: 4px !important; border-radius: 0 0 6px 6px !important; }
@@ -1707,6 +1716,8 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .settings-content .setting-group label.repakx-checkbox { min-height: 32px; padding-top: 0 !important; padding-bottom: 0 !important; }
 .settings-content .mod-state-filter.ui-scale { align-self: flex-start; width: auto !important; }
 .settings-content .setting-group:has(> .ui-scale) { align-items: flex-start; }
+/* Animations: System / On / Off beside its name (uiPrefs.tsx MotionSection) */
+.settings-content .setting-motion { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--text-primary); }
 
 /* Sigeon V2 Editor: the folder picker, the license notice, sliders without a box around them, one row rhythm */
 .sg-folder { margin-top: auto; padding-top: 14px; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--panel-border); }
@@ -1742,6 +1753,9 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
   .lp-cover { grid-column: 1; grid-row: 2 / span 3; width: auto; position: sticky; top: 0; }
   .lp-info { grid-column: 2; grid-row: 2; padding-top: 0; }
   .lp > .lp-section { grid-column: 2; min-width: 0; }
+  /* An empty loadout with no picture of any kind has no cover column: Add mods sits right under the name */
+  .lp.is-bare { grid-template-columns: minmax(0, 1fr); }
+  .lp.is-bare .lp-info, .lp.is-bare > .lp-section { grid-column: 1; }
 }
 .lo-grid .lo-card.lo-card-new { min-height: 300px !important; }   /* .lo-card min-height: max-content comes later */
 
@@ -1820,6 +1834,7 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .fr-step:has(+ .fr-divider) { border-bottom: none; }
 .fr-progress { font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .fr-optional { padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--text-secondary); background: var(--bg-lighter); }
+.fr-recommended { color: var(--accent-primary); background: color-mix(in srgb, var(--accent-primary), transparent 86%); }   /* Mod previews: worth doing, unlike the Optional extras */
 .fr-action { display: flex; align-items: center; gap: 8px; }
 .fr-text .fr-drop { margin-top: 8px; }
 .fr-action .btn-primary, .fr-foot .btn-primary { width: auto !important; flex: none; min-width: 84px; height: 32px !important; min-height: 0 !important;
@@ -1848,7 +1863,7 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .su-track-amount { flex: none; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .su-track.is-done, .su-track.is-done .su-track-text { color: #3ecf6e; }
 .su-track.is-done svg { flex: none; color: #3ecf6e; }
-@media (prefers-reduced-motion: reduce) { .su-spin { animation-duration: 2.4s; } }
+html[data-motion="off"] .su-spin { animation-duration: 2.4s; }
 .su-problems { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .su-problems li { font-size: 12.5px; line-height: 1.5; color: var(--text-primary); padding-left: 14px; position: relative; }
 .su-problems li::before { content: ''; position: absolute; left: 2px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: #e3a008; }
@@ -1908,7 +1923,7 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .t-matrix i { border-radius: 30%; background: currentColor; opacity: 0.18; animation: t-matrix 1.4s ease-in-out infinite; }
 @keyframes t-matrix { 0%, 100% { opacity: 0.18; } 45% { opacity: 1; } 70% { opacity: 0.35; } }
 html[data-motion="off"] .t-matrix i { animation: none; opacity: 0.6; }
-@media (prefers-reduced-motion: reduce) { .t-matrix i { animation: none; opacity: 0.6; } }
+html[data-motion="off"] .t-matrix i { animation: none; opacity: 0.6; }
 
 /* Library filters: a hero's skins sit indented under it on a guide line, each row with room around its highlight */
 .filter-panel .fp-skins > .t-acc-panel-inner .fp-row-wrap { margin: 0 26px 0 15px; padding: 1px 0 1px 8px; border-left: 1px solid var(--panel-border); }
@@ -1946,7 +1961,7 @@ html[data-motion="off"] .t-matrix i { animation: none; opacity: 0.6; }
 .lo-row .fp-row:disabled { cursor: progress; }
 .lo-row .fp-lead.is-busy .lo-on-dot { animation: lo-busy 0.9s ease-in-out infinite alternate; }
 @keyframes lo-busy { to { opacity: 0.25; } }
-@media (prefers-reduced-motion: reduce) { .lo-row .fp-lead.is-busy .lo-on-dot { animation: none; } }
+html[data-motion="off"] .lo-row .fp-lead.is-busy .lo-on-dot { animation: none; }
 .lo-row.is-first-off { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--panel-border); }
 .lo-row .fp-row[aria-pressed="true"]:not(:hover) { background: transparent !important; }
 .lo-row > .lo-hover { display: inline-flex; opacity: 0; transition: opacity 0.12s ease; } /* keeps its space: the numbers never shift */
@@ -2108,7 +2123,7 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
 .lo-card-new .lo-card-ghost { visibility: hidden; display: flex; flex-direction: column; }
 .lo-card-new .lo-card-add { position: absolute; inset: 0; }
 /* Its name and plus take the counter zoom a card name and placeholder icon get (its status line is a .lo-card-meta already) */
-.lo-screen .lo-grid .lo-card-add-title, .lo-screen .lo-grid .lo-card-add-icon { zoom: max(1, calc(0.8 / var(--lo-card-zoom, 1))); }
+:is(.lo-screen .lo-grid, .lo-drag-ghost-inner) :is(.lo-card-add-title, .lo-card-add-icon) { zoom: max(1, calc(0.8 / var(--lo-card-zoom, 1))); }
 /* A preview's caption ("Mesh + Texture + Material · 1/4", "Older render") shows on hover, with the arrows */
 .lo-media-label { opacity: 0; transition: opacity 0.15s ease; }
 .lo-media:hover .lo-media-label, .lo-media:focus-within .lo-media-label { opacity: 1; }
@@ -2385,13 +2400,13 @@ html[data-motion] .hold-delete.holding::after { transition-duration: 2s !importa
 /* Card size on Home (custom/cardZoom.tsx): the cards' own zoom, apart from the app's UI scale */
 .lo-screen .lo-grid { zoom: var(--lo-card-zoom, 1); }
 /* Zoomed far out, a card's words would shrink with it: the words alone stop at 80% of their size (a counter zoom; the
-   switch keeps the card's scale, so the name keeps its room), and the rename pencil steps aside for the name */
-.lo-screen .lo-grid .lo-card-name h3, .lo-screen .lo-grid .lo-card-meta, .lo-screen .lo-grid .lo-expand, .lo-screen .lo-grid .lo-skel-label,
-.lo-screen .lo-grid .lo-media-arrow, .lo-screen .lo-grid .lo-media-label, .lo-screen .lo-grid .lo-media-mute,
-.lo-screen .lo-grid .lo-card-placeholder:not(.lo-card-caption) > span { zoom: max(1, calc(0.8 / var(--lo-card-zoom, 1))); }
+   switch keeps the card's scale, so the name keeps its room), and the rename pencil steps aside for the name. The
+   picked-up copy (.lo-drag-ghost-inner, cardDrag.ts) carries the same zoom and small flag, so it looks the same. */
+:is(.lo-screen .lo-grid, .lo-drag-ghost-inner) :is(.lo-card-name h3, .lo-card-meta, .lo-expand, .lo-skel-label, .lo-media-arrow,
+  .lo-media-label, .lo-media-mute, .lo-card-placeholder:not(.lo-card-caption) > span) { zoom: max(1, calc(0.8 / var(--lo-card-zoom, 1))); }
 /* "Nothing to render" stays readable on small cards: both lines undo most of the card size (85%), not only the title */
-.lo-screen .lo-grid .lo-card-placeholder:not(.lo-card-caption) > svg { zoom: max(1, calc(0.8 / var(--lo-card-zoom, 1))); }   /* the icon shrinks no further than the words */
-.lo-screen[data-small] .lo-grid .lo-card-pen { display: none; }
+:is(.lo-screen .lo-grid, .lo-drag-ghost-inner) .lo-card-placeholder:not(.lo-card-caption) > svg { zoom: max(1, calc(0.8 / var(--lo-card-zoom, 1))); }   /* the icon shrinks no further than the words */
+.lo-screen[data-small] .lo-grid .lo-card-pen, .lo-drag-ghost-inner[data-small] .lo-card-pen { display: none; }
 .lo-zoom { display: inline-flex; align-items: center; gap: 2px; margin-right: 6px; }
 .lo-zoom-value { min-width: 44px; height: 26px; padding: 0 4px; border: none; border-radius: 6px; background: none;
   color: var(--text-secondary); font: 600 12px var(--font-primary); font-variant-numeric: tabular-nums; cursor: pointer; }
@@ -2463,7 +2478,6 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
   background: color-mix(in srgb, var(--accent-primary), transparent 93%); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-primary), transparent 62%);
   opacity: 0; transform: scale(0.99); transition: opacity 160ms ease, transform 160ms var(--page-slide-ease); }
 .lo-group.is-drop::before { opacity: 1; transform: none; }
-.lo-text-btn.is-drop { border-color: color-mix(in srgb, var(--accent-primary), transparent 40%) !important; background: color-mix(in srgb, var(--accent-primary), transparent 88%) !important; }
 .app .custom-dropdown-item:focus-visible { outline-offset: -2px !important; } /* the focused option of a dropdown (arrow keys): its ring inside the menu */
 /* F1: keys never wrap inside or between their caps (a long action used to squeeze Ctrl + 1–9 onto two lines) */
 .shortcut-keys { flex-shrink: 0; white-space: nowrap; }
@@ -2705,8 +2719,5 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 .ip-cover-after, .ip-cover-note { animation: t-swap-in var(--icon-swap-dur) var(--icon-swap-ease) backwards; }
 /* A setting set in under another (Moving hero art) dims and brightens on the Toggle clock */
 .setting-sub { transition: opacity var(--toggle-dur) var(--tabs-ease); }
-@media (prefers-reduced-motion: reduce) {
-  .context-menu, .context-menu .submenu, .bulk-actions-toolbar, .fp-clear, .settings-reset-btn, .lo-skel-shape, .ip-cover-shape,
-  .ip-cover-after, .ip-cover-note, .mod-state-btn, .mod-state-filter { animation: none !important; }
-  .setting-sub, .bulk-actions-toolbar { transition: none !important; }
-}
+html[data-motion="off"] .context-menu, html[data-motion="off"] .context-menu .submenu, html[data-motion="off"] .bulk-actions-toolbar, html[data-motion="off"] .fp-clear, html[data-motion="off"] .settings-reset-btn, html[data-motion="off"] .lo-skel-shape, html[data-motion="off"] .ip-cover-shape, html[data-motion="off"] .ip-cover-after, html[data-motion="off"] .ip-cover-note, html[data-motion="off"] .mod-state-btn, html[data-motion="off"] .mod-state-filter { animation: none !important; }
+html[data-motion="off"] .setting-sub, html[data-motion="off"] .bulk-actions-toolbar { transition: none !important; }

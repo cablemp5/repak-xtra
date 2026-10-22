@@ -38,7 +38,7 @@ pub async fn merge_mods_for_hybrid(
                 // Extract pak
                 let msg = format!("[Merge] Extracting PAK file: {} to {}", p.display(), persisted_temp_path.display());
                 let _ = window.emit("install_log", &msg);
-                match uasset_toolkit::extract_pak_all(
+                match crate::xtra_extract::extract_pak_all(
                     p.to_str().unwrap_or_default(),
                     persisted_temp_path.to_str().unwrap_or_default(),
                     Some(crate::install_mod::AES_KEY_HEX)

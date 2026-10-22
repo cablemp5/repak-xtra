@@ -3,7 +3,7 @@
 // again.
 import { invoke } from '@tauri-apps/api/core'
 import type { useAlert } from '../components/AlertHandler'
-import { displayName, flipMods, modKey } from './loadoutStore'
+import { flipMods, nameKey } from './loadoutStore'
 import { plural } from './modName'
 
 type Mod = { path: string; enabled?: boolean }
@@ -11,7 +11,7 @@ export type KeepDeps = { alert: ReturnType<typeof useAlert>; isBlocked: () => bo
 
 /** A mod's path without its on/off extension: the same mod before and after a switch. */
 const stem = (p: string) => p.replace(/\.(pak|bak_repak|pak_disabled)$/i, '').toLowerCase()
-const name = (p: string) => displayName(modKey(p))
+const name = nameKey
 export const GAME_RUNNING = ['Game Running', 'Cannot toggle mods while game is running.'] as const
 
 /** Switches every mod in `mods`; if any is refused, switches the done ones back and returns the refusal. */

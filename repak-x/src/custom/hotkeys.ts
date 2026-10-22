@@ -3,6 +3,7 @@
 // SigeonControl.tsx, zoom in uiPrefs.tsx. The ones below drive existing buttons, so they follow
 // the same rules (game-running locks, confirmations) as clicking.
 import { toggleTags } from './uiPrefs'
+import { modalOpen } from './dialogFocus'
 
 export type Shortcut = { keys: string[]; action: string }
 export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
@@ -67,13 +68,15 @@ export const isTyping = (target: EventTarget | null) => {
   return Boolean(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable))
 }
 
-/** A dialog (Settings, Tools, help) is open, or Home is showing: the Library's plain-letter shortcuts pause. */
-export const dialogOpen = () => Boolean(document.querySelector('.modal-overlay')) || document.documentElement.dataset.view === 'home'
+/** A dialog is open (dialogFocus.ts MODAL: Settings, Sharing, Tools, help...), or Home is showing: the Library's
+ *  plain-letter shortcuts pause. */
+export const dialogOpen = () => modalOpen() || document.documentElement.dataset.view === 'home'
 
 const VIEWS = ['List View', 'Compact List View', 'Grid View', 'Compact Grid View'] // the four view buttons, in the menu's order
 
 window.addEventListener('keydown', e => {
-  if (e.defaultPrevented || isTyping(e.target)) return
+  // A dialog owns the keyboard, Ctrl+G and Ctrl+O included; an IME finishing a word is not a shortcut
+  if (e.defaultPrevented || e.isComposing || isTyping(e.target) || modalOpen()) return
   const click = (selector: string) => {
     const el = document.querySelector<HTMLElement>(selector)
     if (!el) return

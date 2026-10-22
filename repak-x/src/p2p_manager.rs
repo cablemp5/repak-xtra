@@ -258,7 +258,13 @@ impl UnifiedP2PManager {
         info!("[P2P] Starting share: {} ({} files)", name, paths.len());
 
         // Create mod pack metadata
-        let pack = crate::p2p_sharing::create_mod_pack(name.clone(), desc, &paths, creator)?;
+        // repakxtra: hashing reads every file, so it runs on a blocking thread instead of the async executor
+        let (pack_name, pack_paths) = (name.clone(), paths.clone());
+        let pack = tokio::task::spawn_blocking(move || {
+            crate::p2p_sharing::create_mod_pack(pack_name, desc, &pack_paths, creator)
+        })
+        .await
+        .map_err(|e| P2PError::FileError(format!("Hashing stopped: {}", e)))??;
 
         // Create TCP P2P server (binds port, generates encryption key)
         let server = crate::p2p_sharing::P2PServer::new(pack, paths)?;
@@ -566,39 +572,22 @@ impl UnifiedP2PManager {
             loop {
                 tokio::time::sleep(Duration::from_millis(250)).await;
 
-                // Try to read from the active client's progress handle
+                // repakxtra: the download thread alone sets the final status. This task copies live progress only while
+                // the entry exists and is still running, and stops once it is gone (Stop) or final, so a stale client
+                // snapshot can never turn Failed back into Connecting.
+                let terminal = |s: &TransferStatus| {
+                    matches!(s, TransferStatus::Completed | TransferStatus::Failed(_) | TransferStatus::Cancelled)
+                };
+                let mut downloads = dl2.lock();
+                let Some(d) = downloads.get_mut(&c2) else { break };
+                if terminal(&d.progress.status) {
+                    break;
+                }
                 let handle = active_progress_for_sync.lock().ok().and_then(|g| g.clone());
-                if let Some(h) = handle {
-                    if let Ok(prog) = h.lock().map(|p| p.clone()) {
-                        let is_done = matches!(
-                            prog.status,
-                            TransferStatus::Completed
-                                | TransferStatus::Failed(_)
-                                | TransferStatus::Cancelled
-                        );
-                        if let Some(d) = dl2.lock().get_mut(&c2) {
-                            d.progress = prog;
-                        }
-                        if is_done {
-                            break;
-                        }
-                    }
-                } else {
-                    // No client yet - check if download already finished/failed
-                    let done = dl2
-                        .lock()
-                        .get(&c2)
-                        .map(|d| {
-                            matches!(
-                                d.progress.status,
-                                TransferStatus::Completed
-                                    | TransferStatus::Failed(_)
-                                    | TransferStatus::Cancelled
-                            )
-                        })
-                        .unwrap_or(true);
-                    if done {
-                        break;
+                if let Some(prog) = handle.and_then(|h| h.lock().ok().map(|p| p.clone())) {
+                    // a client that just ended (its own final status) is between attempts: keep the thread's view
+                    if !terminal(&prog.status) {
+                        d.progress = prog;
                     }
                 }
             }

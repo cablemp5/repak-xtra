@@ -2,7 +2,7 @@
 // its trash id; this toast puts exactly those deletions back.
 import { invoke } from '@tauri-apps/api/core'
 import type { useAlert } from '../components/AlertHandler'
-import { modKey as displayName } from './loadoutStore'
+import { nameKey as displayName } from './loadoutStore'
 
 export type TrashedMod = { id: string; path: string }
 

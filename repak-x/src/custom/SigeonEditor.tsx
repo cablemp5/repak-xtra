@@ -1,6 +1,6 @@
 // repakxtra: Sigeon V2 config editor (backend: xtra_sigeon.rs). Each SigeonLoader.<preset>.ini in the Sigeon folder
 // is edited as its own lines, so its notes, order and license line stay as they are; the license never reaches this file.
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
 import { Copy, FileText, FolderOpen, KeyRound, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
@@ -8,6 +8,7 @@ import { open as pickFolder } from '@tauri-apps/plugin-dialog'
 import Switch from '../components/ui/Switch'
 import CustomDropdown from '../components/CustomDropdown'
 import type { useAlert } from '../components/AlertHandler'
+import { ownsTop, useDialogFocus } from './dialogFocus'
 
 export type Line =
   | { kind: 'blank' }
@@ -100,6 +101,9 @@ export const addEntry = (ls: Line[], sectionAt: number, key: string, value: stri
 }
 
 const same = (a?: Line[], b?: Line[]) => JSON.stringify(a) === JSON.stringify(b)
+/** What asking to close does (Esc, ×, a click beside the editor): a clean editor closes, a changed one asks first, and
+ *  asking again while it asks goes back to editing. Only the Discard button throws drafts away, so no repeated key does. */
+export const closeStep = (dirty: boolean, asking: boolean): 'close' | 'ask' | 'keep' => (!dirty ? 'close' : asking ? 'keep' : 'ask')
 const KEY_OK = /^[A-Za-z0-9!._\-/:+]{1,128}$/ // + and - are UE's add and remove-line prefixes (+TextureLODGroups)
 const NAME_OK = /^[A-Za-z0-9_-]{1,32}$/
 
@@ -114,6 +118,11 @@ if (import.meta.env.DEV) {
   const more = addEntry(sample, 4, 'r.DetailMode', '1')
   console.assert((more[7] as { key: string }).key === 'r.DetailMode' && more[8].kind === 'blank', 'override before trailing blanks')
   console.assert(more.filter(l => l.kind === 'license').length === 1, 'license line untouched')
+  console.assert(closeStep(false, false) === 'close', 'close: nothing changed, it closes')
+  console.assert(closeStep(true, false) === 'ask' && closeStep(true, true) === 'keep', 'close: changed, it asks, and asking again keeps editing')
+  { let asking = false, discarded = false // Esc pressed three times on a changed editor
+    for (let i = 0; i < 3; i++) { const step = closeStep(true, asking); if (step === 'close') discarded = true; asking = step === 'ask' }
+    console.assert(!discarded && asking, 'close: repeated Esc never discards the drafts') }
 }
 
 export default function SigeonEditor({ alert, onClose }: { alert: Alert; onClose: () => void }) {
@@ -127,6 +136,8 @@ export default function SigeonEditor({ alert, onClose }: { alert: Alert; onClose
   const [adding, setAdding] = useState<Record<number, { key: string; value: string }>>({})
   const [busy, setBusy] = useState(false)
   const [leaving, setLeaving] = useState(false)
+  const focus = useDialogFocus()
+  const beforeAsk = useRef<HTMLElement | null>(null) // the control to go back to from Unsaved changes
 
   const load = async (keep?: string) => {
     invoke<Storage>('sigeon_storage').then(setStorage).catch(() => {})
@@ -146,7 +157,11 @@ export default function SigeonEditor({ alert, onClose }: { alert: Alert; onClose
   }, [])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !document.querySelector('.custom-dropdown-menu')) { e.stopPropagation(); close() } // an open dropdown takes Esc first
+      // An open dropdown, a dialog above this one and the name field take Esc first
+      if (e.key === 'Escape' && !e.isComposing && !document.querySelector('.custom-dropdown-menu') && ownsTop(focus.ref.current)) {
+        e.stopPropagation()
+        if (naming) setNaming(null); else close()
+      }
       if (e.key.toLowerCase() === 's' && e.ctrlKey) { e.preventDefault(); save() }
     }
     window.addEventListener('keydown', onKey, true)
@@ -161,7 +176,22 @@ export default function SigeonEditor({ alert, onClose }: { alert: Alert; onClose
   const inUse = status?.state === pick
   const knownKeys = useMemo(() => [...new Set(Object.values(saved).flat().flatMap(l => l.kind === 'entry' ? [l.key] : []))].sort(), [saved])
 
-  const close = () => { if (anyDirty && !leaving) setLeaving(true); else onClose() }
+  const close = () => {
+    const step = closeStep(anyDirty, leaving)
+    if (step === 'close') return onClose()
+    if (step === 'keep') return keepEditing()
+    beforeAsk.current = document.activeElement as HTMLElement | null
+    setLeaving(true)
+    requestAnimationFrame(() => focus.ref.current?.querySelector<HTMLElement>('.sg-keep')?.focus()) // the safe answer first
+  }
+  const keepEditing = () => {
+    setLeaving(false)
+    // Back to the control in use before the question, else Save
+    requestAnimationFrame(() => {
+      const back = beforeAsk.current
+      ;(back?.isConnected && focus.ref.current?.contains(back) ? back : focus.ref.current?.querySelector<HTMLElement>('.sg-save:not(:disabled)') ?? focus.ref.current)?.focus()
+    })
+  }
 
   const save = async () => {
     if (!pick || !lines || !dirty(pick) || busy) return
@@ -255,10 +285,11 @@ export default function SigeonEditor({ alert, onClose }: { alert: Alert; onClose
 
   return (
     <div className="modal-overlay" onClick={close}>
-      <motion.div className="modal-content sg-modal" role="dialog" aria-label="Sigeon V2 Editor" onClick={e => e.stopPropagation()}
+      <motion.div ref={focus.ref} onKeyDown={focus.onKeyDown} tabIndex={-1} className="modal-content sg-modal" role="dialog" aria-modal="true" aria-labelledby="sg-title"
+        onClick={e => e.stopPropagation()}
         initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.15 }}>
         <div className="modal-header">
-          <h2>Sigeon V2 Editor</h2>
+          <h2 id="sg-title">Sigeon V2 Editor</h2>
           <button className="modal-close" onClick={close} aria-label="Close">×</button>
         </div>
 
@@ -450,7 +481,7 @@ export default function SigeonEditor({ alert, onClose }: { alert: Alert; onClose
           {leaving ? (
             <>
               <span className="sg-leave">Unsaved changes in {Object.keys(drafts).filter(dirty).map(label).join(', ')}.</span>
-              <button type="button" className="lo-text-btn" onClick={() => setLeaving(false)}>Keep editing</button>
+              <button type="button" className="lo-text-btn sg-keep" onClick={keepEditing}>Keep editing</button>
               <button type="button" className="lo-text-btn" onClick={onClose}>Discard</button>
             </>
           ) : (

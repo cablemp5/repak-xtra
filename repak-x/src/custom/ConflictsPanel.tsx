@@ -7,7 +7,7 @@ import { Check, ChevronRight } from 'lucide-react'
 import NumberInput from '../components/ui/NumberInput'
 import Switch from '../components/ui/Switch'
 import { resolveHeroImage, useHeroImages } from '../utils/heroImages'
-import { modKey } from './loadoutStore'
+import { nameKey } from './loadoutStore'
 import { ModName, plural } from './modName'
 import { useDialogFocus } from './dialogFocus'
 
@@ -20,7 +20,7 @@ export type ConflictGroup = { mods: string[]; files: string[] }
 /** A mod's path without its on/off extension: the same mod before and after a switch. */
 const stemOf = (p: string) => p.replace(/\.(pak|bak_repak|pak_disabled)$/i, '')
 /** The same mod after a switch or a priority change too (its 9s and a leading !): its name alone. */
-const sameMod = (p: string) => modKey(p).replace(/^!/, '').toLowerCase()
+const sameMod = (p: string) => nameKey(p).replace(/^!/, '').toLowerCase()
 
 /** A group is resolved once no two of its mods that are still on share a priority: one left on, or each at its own. */
 export const resolved = (g: ConflictGroup, find: (path: string) => Mod | undefined) => {
@@ -128,7 +128,7 @@ function Group({ g, heroes, find, done, onSetPriority, onToggleMod, onKeep }: {
           const mod = find(path)
           const now = mod?.path ?? path
           const on = mod?.enabled !== false
-          const name = modKey(now)
+          const name = nameKey(now)
           const othersOn = g.mods.map(find).filter((m): m is Mod => Boolean(m && m !== mod && m.enabled !== false))
           return (
             <li key={stemOf(path)} className={`cf-mod${on ? '' : ' is-off'}`}>

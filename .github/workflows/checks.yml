@@ -1,5 +1,5 @@
 # repakxtra: the checks every pull request into main must pass before it can merge (typecheck, frontend build,
-# Rust tests). Also runs on pushes to main so the branch's own state stays visible.
+# self-checks, Rust tests). Also runs on pushes to main so the branch's own state stays visible.
 name: Checks
 
 on:
@@ -40,6 +40,11 @@ jobs:
         working-directory: repak-x
         run: npx tsc --noEmit -p .
 
+      # repakxtra: runs the console.assert self-checks in src (dev-only in the app) and fails on any miss
+      - name: Frontend self-checks
+        working-directory: repak-x
+        run: npm run test:unit
+
       # The Rust app embeds the built frontend, so it is built before the tests
       - name: Build frontend
         working-directory: repak-x
@@ -63,4 +68,7 @@ jobs:
       - name: Rust tests
         env:
           SKIP_UASSET_TOOL_BUILD: '1'   # the .NET asset tool is only needed to package, not to test
-        run: cargo test -p repak-x --bin REPAK-X
+        run: cargo test --locked -p repak-x --bin REPAK-X
+
+      - name: Native wrapper tests
+        run: cargo test --locked -p uasset_app --lib

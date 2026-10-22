@@ -37,7 +37,7 @@ pub fn extract_pak_to_dir(pak: &InstallableMod, install_dir: PathBuf) -> Result<
 
     fs::create_dir_all(&install_dir).map_err(|e| format!("Failed to create output dir: {}", e))?;
 
-    uasset_toolkit::extract_pak_all(
+    crate::xtra_extract::extract_pak_all(
         pak.mod_path.to_str().unwrap_or_default(),
         install_dir.to_str().unwrap_or_default(),
         Some(AES_KEY_HEX),
@@ -79,6 +79,9 @@ pub fn create_repak_from_pak_fast(
         pak.mod_path.display()
     );
     info!("[CreateRepakFast] Output base: {}", output_base.display());
+
+    // repakxtra: the tool unpacks the PAK itself here, so its paths are checked first (xtra_extract.rs)
+    crate::xtra_extract::check_pak(&pak.mod_path.to_string_lossy(), Some(AES_KEY_HEX))?;
 
     let result = uasset_toolkit::create_mod_iostore_from_pak(
         &output_base.to_string_lossy(),

@@ -20,6 +20,7 @@ import './ModsList.css'
 import { useTypeHint } from '../custom/typeHints' // repakxtra
 import { holdKeys } from '../custom/holdKeys' // repakxtra
 import { heroLabel } from '../custom/silhouettes' // repakxtra
+import { useRowWindow } from '../custom/virtualRows' // repakxtra: long lists mount only the rows near the viewport
 import './ModDetailsPanel.css'
 
 type CharacterDataEntry = {
@@ -613,9 +614,17 @@ export default function ModsList({
         seenStems.add(stem)
         return stem
     }
+    // repakxtra: keys over the whole list (a slice must not change them), and the mounted slice (custom/virtualRows.ts).
+    // A row being renamed or with a field in use (rename, priority) stays mounted while scrolled away.
+    const keys = mods.map(m => keyOf(m.path))
+    const wrapRef = useRef<HTMLDivElement>(null)
+    const [editing, setEditing] = useState<string | null>(null)
+    const indexOf = (path?: string | null) => (path ? mods.findIndex(m => m.path === path) : -1)
+    const win = useRowWindow(wrapRef, mods.length, viewMode, indexOf(selectedMod?.path), selectedMod?.path ?? '', [indexOf(renamingModPath), indexOf(document.activeElement?.tagName === 'INPUT' ? editing : null)])
 
     return (
-        <div className="mods-list-wrapper">
+        <div className="mods-list-wrapper" ref={wrapRef}
+            onFocusCapture={e => { const t = e.target as HTMLElement; const next = t.tagName === 'INPUT' ? t.closest('.mod-card')?.getAttribute('data-mod-path') ?? null : null; if (next !== editing) setEditing(next) }}>
             <div
                 key={viewMode}
                 ref={gridRef}
@@ -628,12 +637,13 @@ export default function ModsList({
                             <p>No mods found in this folder.</p>
                         </div>
                     )
-                ) : (
-                    mods.map((mod: ModRecord) => {
+                ) : (<>
+                    {win.top > 0 && <div className="mod-list-spacer" aria-hidden="true" style={{ height: win.top }} />}
+                    {mods.slice(win.start, win.end).map((mod: ModRecord, i) => {
                         const details = modDetails?.[mod.path]
                         return (
                             <ModItem
-                                key={keyOf(mod.path)}
+                                key={keys[win.start + i]}
                                 mod={mod}
                                 isViewing={selectedMod?.path === mod.path}
                                 isChecked={selectedMods.has(mod.path)}
@@ -663,8 +673,9 @@ export default function ModsList({
                                 modDetails={details}
                             />
                         )
-                    })
-                )}
+                    })}
+                    {win.bottom > 0 && <div className="mod-list-spacer" aria-hidden="true" style={{ height: win.bottom }} />}
+                </>)}
             </div>
         </div>
     )

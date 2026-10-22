@@ -345,13 +345,11 @@
     opacity: 1;
 }
 
-@media (prefers-reduced-motion: reduce) {
-
-    :root:not([data-animations="off"]) .mod-card.has-hero-bg .mod-card-hero-bg,
-    :root:not([data-animations="off"]) .mod-card.has-hero-bg .mod-card-hero-bg::before,
-    :root:not([data-animations="off"]) .mod-card.has-hero-bg .mod-card-hero-bg::after {
-        animation: none;
-    }
+/* repakxtra: Settings > Animations (System follows the OS) decides, so an explicit On wins over the OS */
+:root[data-motion="off"]:not([data-animations="off"]) .mod-card.has-hero-bg .mod-card-hero-bg,
+:root[data-motion="off"]:not([data-animations="off"]) .mod-card.has-hero-bg .mod-card-hero-bg::before,
+:root[data-motion="off"]:not([data-animations="off"]) .mod-card.has-hero-bg .mod-card-hero-bg::after {
+    animation: none;
 }
 
 /* Disabled mods: black & white hero bg (always on; only the fade is animated) */
@@ -411,11 +409,10 @@
     pointer-events: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
-    :root:not([data-animations="off"]) .mod-list-grid .mod-card,
-    :root:not([data-animations="off"]) .mod-list-grid .mod-card.mod-leaving {
-        animation: none;
-    }
+/* repakxtra: Settings > Animations (System follows the OS) decides, so an explicit On wins over the OS */
+:root[data-motion="off"]:not([data-animations="off"]) .mod-list-grid .mod-card,
+:root[data-motion="off"]:not([data-animations="off"]) .mod-list-grid .mod-card.mod-leaving {
+    animation: none;
 }
 
 /* Hero icon inline (for list view - before mod name) */

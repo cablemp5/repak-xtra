@@ -9,7 +9,7 @@ import { Plus, X } from 'lucide-react'
 import Checkbox from '../components/ui/Checkbox'
 import type { useAlert } from '../components/AlertHandler'
 import { normalizeModBaseName } from '../utils/format'
-import { type Mod, modKey, openLoadout, openLoadoutId, readLoadouts, useLoadouts, withMods, writeLoadouts } from './loadoutStore'
+import { type Mod, displayName, memberName, modKey, nameKey, openLoadout, openLoadoutId, readLoadouts, useLoadouts, withMods, writeLoadouts } from './loadoutStore'
 import { plural } from './modName'
 import { PreviewsUnavailable, generatePreviews, previewSetKey, usePreviewsAvailable } from './previews'
 
@@ -108,9 +108,9 @@ export function InstallToLoadouts({ ids, onChange }: { ids: string[]; onChange: 
   )
 }
 
-/** The installed file's loadout key, the same name App's install flow gives the file (normalizeModBaseName). */
+/** The installed file's name, the same name App's install flow gives the file (normalizeModBaseName). */
 export const installedKey = (m: { customName?: string; mod_name?: string }) =>
-  modKey(`${normalizeModBaseName(m.customName || m.mod_name || 'Unnamed_Mod')}.pak`)
+  nameKey(`${normalizeModBaseName(m.customName || m.mod_name || 'Unnamed_Mod')}.pak`)
 
 type Installed = { path?: string; customName?: string; mod_name?: string; loadouts?: string[] }
 type Landed = { keys: string[]; loadouts?: string[] }
@@ -123,10 +123,11 @@ export const looseKey = (key: string) => key.toLowerCase().replace(/[^a-z0-9]/g,
  *  installs its paks under their own names, not the archive's). */
 const landedKeys = (m: Installed, paks: string[] = []) => [...new Set([installedKey(m), ...paks.map(p => installedKey({ mod_name: p }))])]
 
-/** The on-disk keys an install source landed under: its expected names matched loosely against the mods folder, or
- *  (one source installed, nothing matched) the files that are new since the install started. Pure. */
+/** The on-disk member keys an install source landed under: its expected names matched loosely against the mods
+ *  folder's (a file new since the install started wins a name two folders hold), or (one source installed, nothing
+ *  matched) the files that are new since the install started. Pure. */
 export const resolveLanded = (expected: string[], onDisk: Set<string>, fresh: string[]) => {
-  const byLoose = new Map([...onDisk].map(k => [looseKey(k), k]))
+  const byLoose = new Map([...onDisk, ...fresh].map(k => [looseKey(memberName(k)), k]))
   const keys = [...new Set(expected.map(k => byLoose.get(looseKey(k))).filter((k): k is string => Boolean(k)))]
   return keys.length ? keys : fresh
 }
@@ -170,7 +171,7 @@ export async function finishInstallLoadout(installed: Installed[], alert: Return
   if ('into' in job) { // the mods joined an existing loadout above: render its preview again with them in it
     const into = readLoadouts().find(l => l.id === job.into)
     if (!into || !job.preview) return
-    const keys = new Set(into.on.map(modKey))
+    const keys = new Set(into.on.map(displayName))
     const error = await generatePreviews({ paths: all.filter(m => keys.has(modKey(m.path))).map(m => m.path), set: previewSetKey(into.id), name: into.name, force: true })
     if (error) alert.warning('Preview not started', error)
     return
@@ -201,8 +202,9 @@ if (import.meta.env.DEV) {
   // a Nexus zip with one pak lands under the pak's name, not the archive's
   const zip = landedKeys({ mod_name: 'Mialygosa Magik 1.3.1 12984 5 2026-09-21T17-38Z YLrVJSM1X' }, ['MialygosaMagik_9999999_P'])
   // the backend keeps "+" and spaces that the predicted name drops (bp-inferno-king_mesh+matSwap...)
-  const disk = new Set(['bp-inferno-king_mesh+matSwap_outline_noPG_v11', 'Other'])
-  console.assert(resolveLanded([installedKey({ mod_name: 'bp-inferno-king_mesh+matSwap_outline_noPG_v11.pak' })], disk, []).join() === 'bp-inferno-king_mesh+matSwap_outline_noPG_v11', 'a + in the name still matches')
-  console.assert(resolveLanded(['Nothing_like_it'], disk, ['New_File']).join() === 'New_File', 'no name match: the new files count')
-  console.assert(zip.includes('MialygosaMagik') && joinsByLoadout([{ keys: zip, loadouts: ['x'] }], new Set(['MialygosaMagik'])).get('x')?.join() === 'MialygosaMagik', 'an archive is found by its paks')
+  const disk = new Set(['|bp-inferno-king_mesh+matSwap_outline_noPG_v11', 'skins|Other', '|Other'])
+  console.assert(resolveLanded([installedKey({ mod_name: 'bp-inferno-king_mesh+matSwap_outline_noPG_v11.pak' })], disk, []).join() === '|bp-inferno-king_mesh+matSwap_outline_noPG_v11', 'a + in the name still matches')
+  console.assert(resolveLanded(['Nothing_like_it'], disk, ['|New_File']).join() === '|New_File', 'no name match: the new files count')
+  console.assert(resolveLanded(['Other'], disk, ['skins|Other']).join() === 'skins|Other', 'a name in two folders: the new file is the one installed')
+  console.assert(zip.includes('MialygosaMagik') && resolveLanded(zip, new Set(['|MialygosaMagik']), []).join() === '|MialygosaMagik', 'an archive is found by its paks')
 }

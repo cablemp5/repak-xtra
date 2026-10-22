@@ -11,7 +11,7 @@ import { type LoadoutProps, createFromMods } from './Loadouts'
 import { ModRow } from './loadoutBits'
 import { Num } from './motion'
 import {
-  type Loadout, type Mod, addModToLoadout, displayName, flipMods, loadoutable, modKey, olderVersionIn, patchLoadout, readLoadouts,
+  type Loadout, type Mod, addModToLoadout, displayName, flipMods, loadoutable, modKey, nameKey, olderVersionIn, patchLoadout, readLoadouts,
   openLoadout, replaceInLoadout, sameMembership, useLoadouts, versionOf,
 } from './loadoutStore'
 
@@ -52,7 +52,7 @@ export default function NewStrip(p: LoadoutProps) {
     if (swap.length) await p.reload()
     const was = { [oldKey]: oldOn, [newKey]: newOn }
     const oldV = `v${versionOf(oldKey)?.n}`, newV = `v${versionOf(newKey)?.n}`
-    const text = failed.length ? `Could not switch ${failed.map(m => modKey(m.path)).join(', ')}; ${l.name} now lists ${newV}.`
+    const text = failed.length ? `Could not switch ${failed.map(m => nameKey(m.path)).join(', ')}; ${l.name} now lists ${newV}.`
       : oldOn && blocked ? `${l.name} now lists ${newV}; the game is running, so no files were switched.`
       : oldOn && newOn ? `${newV} was already on; ${oldV} is off.`
       : oldOn ? `${newV} is on, ${oldV} is off.`
@@ -82,7 +82,7 @@ export default function NewStrip(p: LoadoutProps) {
           if (!back.length) return
           const stuck = await flipMods(back)
           await p.reload()
-          if (stuck.length) p.alert.warning('Undo incomplete', `${l.name} lists ${oldV} again, but ${stuck.map(m => modKey(m.path)).join(', ')} could not be switched back.`)
+          if (stuck.length) p.alert.warning('Undo incomplete', `${l.name} lists ${oldV} again, but ${stuck.map(m => nameKey(m.path)).join(', ')} could not be switched back.`)
         },
       },
     })
@@ -104,7 +104,7 @@ export default function NewStrip(p: LoadoutProps) {
             <ModRow key={k} p={p} k={k} mod={m} onToggle>
               {offers.slice(0, 2).map(({ l, old }) => (
                 <button key={l.id} type="button" className="row-action is-offer" onClick={() => replace(l, old, m)}
-                  title={`Put ${k} in ${l.name} in place of ${old}`}>
+                  title={`Put ${nameKey(m.path)} in ${l.name} in place of ${nameKey(old)}`}>
                   <ArrowRightLeft size={13} /> Replace v{versionOf(old)?.n} in {l.name}
                 </button>
               ))}
@@ -115,12 +115,12 @@ export default function NewStrip(p: LoadoutProps) {
                   placeholder="Add to loadout"
                   addNewLabel="+ New loadout"
                   onAddNew={() => {
-                    const l = createFromMods([m.path], k)
+                    const l = createFromMods([m.path], nameKey(m.path))
                     const id = p.alert.success(`${l.name} created`, 'With this mod. Rename it on its page.', {
                       action: { label: 'Open', onClick: () => { p.alert.dismissAlert(id); openLoadout(l.id, true) } },
                     })
                   }}
-                  onChange={(id: string) => { const l = readLoadouts().find(x => x.id === id); if (l) { addModToLoadout(l, k); p.alert.success(`Added to ${l.name}`, k) } }}
+                  onChange={(id: string) => { const l = readLoadouts().find(x => x.id === id); if (l) { addModToLoadout(l, k); p.alert.success(`Added to ${l.name}`, nameKey(m.path)) } }}
                 />
               </div>
             </ModRow>

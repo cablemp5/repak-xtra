@@ -5,7 +5,7 @@
 
 use serde::Serialize;
 use std::fs;
-use std::io::{Cursor, Read};
+use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter};
 
@@ -125,26 +125,54 @@ pub async fn preview_kit_latest() -> Result<Option<KitRelease>, String> {
     Ok(pick_release(&list))
 }
 
-/// Unpacks a kit zip into `dir` (replacing what is there) through a side folder, so a bad zip leaves the old kit, and
-/// records where it came from (`from`) in the side folder first: a kit in place always says its source.
+/// Kit size limits, about 8x the v9 kit (117 MB zip, 1,408 files, 263 MB unpacked, largest file 69 MB). The sizes a
+/// zip declares are not trusted: bytes are counted as they are written.
+const MAX_DOWNLOAD: u64 = 1 << 30;
+const MAX_ENTRIES: usize = 20_000;
+const MAX_ENTRY_BYTES: u64 = 512 << 20;
+const MAX_TOTAL_BYTES: u64 = 2 << 30;
+
+#[cfg(test)]
 fn unpack(zip: &[u8], dir: &Path, from: &str) -> Result<String, String> {
-    let mut archive = zip::ZipArchive::new(Cursor::new(zip)).map_err(|e| format!("Not a zip: {e}"))?;
+    unpack_from(std::io::Cursor::new(zip), dir, from)
+}
+
+/// Unpacks a kit zip into `dir` (replacing what is there) through a side folder, so a bad zip leaves the old kit, and
+/// records where it came from (`from`) in the side folder first: a kit in place always says its source. repakxtra:
+/// each file streams to disk (never a whole file in memory), within the limits above.
+fn unpack_from(zip: impl Read + Seek, dir: &Path, from: &str) -> Result<String, String> {
+    let mut archive = zip::ZipArchive::new(zip).map_err(|e| format!("Not a zip: {e}"))?;
+    if archive.len() > MAX_ENTRIES {
+        return Err(format!("That zip holds {} files, more than a preview kit can ({MAX_ENTRIES}).", archive.len()));
+    }
     let side = dir.with_extension("new");
     let _ = fs::remove_dir_all(&side);
-    for i in 0..archive.len() {
-        let mut f = archive.by_index(i).map_err(|e| e.to_string())?;
-        let Some(rel) = f.enclosed_name() else { continue }; // never outside the kit folder
-        let to = side.join(&rel);
-        if f.is_dir() {
-            fs::create_dir_all(&to).map_err(|e| e.to_string())?;
-            continue;
+    let written = (|| -> Result<(), String> {
+        let mut total = 0u64;
+        for i in 0..archive.len() {
+            let f = archive.by_index(i).map_err(|e| e.to_string())?;
+            let Some(rel) = f.enclosed_name() else { continue }; // never outside the kit folder
+            let to = side.join(&rel);
+            if f.is_dir() {
+                fs::create_dir_all(&to).map_err(|e| e.to_string())?;
+                continue;
+            }
+            if let Some(parent) = to.parent() {
+                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            let mut out = fs::File::create(&to).map_err(|e| format!("Could not write {}: {e}", rel.display()))?;
+            let n = std::io::copy(&mut f.take(MAX_ENTRY_BYTES + 1), &mut out)
+                .map_err(|e| format!("Could not write {}: {e}", rel.display()))?;
+            total += n;
+            if n > MAX_ENTRY_BYTES || total > MAX_TOTAL_BYTES {
+                return Err(format!("That zip unpacks to more than a preview kit can ({} stopped it).", rel.display()));
+            }
         }
-        if let Some(parent) = to.parent() {
-            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        }
-        let mut bytes = Vec::with_capacity(f.size() as usize);
-        f.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
-        fs::write(&to, bytes).map_err(|e| format!("Could not write {}: {e}", rel.display()))?;
+        Ok(())
+    })();
+    if let Err(e) = written {
+        let _ = fs::remove_dir_all(&side);
+        return Err(e);
     }
     let Some(version) = installed(&side) else {
         let _ = fs::remove_dir_all(&side);
@@ -170,22 +198,25 @@ struct Progress {
     text: Option<String>,
 }
 
-/// Downloads the kit zip, reporting about every megabyte.
-async fn download(app: &AppHandle, url: &str) -> Result<Vec<u8>, String> {
+/// Downloads the kit zip to `to` (an app-owned file, not memory), reporting about every megabyte.
+async fn download(app: &AppHandle, url: &str, to: &Path) -> Result<(), String> {
     let mut resp = reqwest::Client::new().get(url).header("User-Agent", "repakxtra").send().await
         .and_then(|r| r.error_for_status()).map_err(|e| format!("Download failed: {e}"))?;
     let total = resp.content_length().unwrap_or(0);
-    let mut bytes = Vec::with_capacity(total.min(1 << 30) as usize); // a wrong length never reserves more than 1 GB
-    let mut told = 0u64;
+    let mut file = fs::File::create(to).map_err(|e| format!("Could not save the download: {e}"))?;
+    let (mut done, mut told) = (0u64, 0u64);
     while let Some(chunk) = resp.chunk().await.map_err(|e| format!("Download failed: {e}"))? {
-        bytes.extend_from_slice(&chunk);
-        let done = bytes.len() as u64;
+        done += chunk.len() as u64;
+        if done > MAX_DOWNLOAD {
+            return Err("The download is larger than a preview kit can be.".into());
+        }
+        file.write_all(&chunk).map_err(|e| format!("Could not save the download: {e}"))?;
         if done - told >= 1 << 20 || done == total {
             told = done;
             let _ = app.emit("preview-kit-progress", Progress { stage: "download", done, total, text: None });
         }
     }
-    Ok(bytes)
+    Ok(())
 }
 
 /// Installs the kit from `file` (a zip picked or dropped by hand) or, without one, from the newest GitHub release.
@@ -194,17 +225,31 @@ pub async fn preview_kit_install(app: AppHandle, file: Option<String>) -> Result
     // Owned from before the download until the kit is in place: no render, check or second install meanwhile
     let hold = crate::xtra_previews::reserve("kit").map_err(crate::xtra_previews::busy_text)?;
     let from = if file.is_some() { "file" } else { "github" };
+    fs::create_dir_all(crate::app_dir()).map_err(|e| e.to_string())?;
+    let downloaded = crate::app_dir().join("preview-kit-download.zip");
     let zip = match file {
-        Some(f) => fs::read(&f).map_err(|e| format!("Could not read {f}: {e}"))?,
+        Some(f) => PathBuf::from(f),
         None => {
             let release = preview_kit_latest().await?.ok_or("No preview kit has been published yet.")?;
-            download(&app, &release.asset).await?
+            let got = download(&app, &release.asset, &downloaded).await;
+            if let Err(e) = got {
+                let _ = fs::remove_file(&downloaded);
+                return Err(e);
+            }
+            downloaded.clone()
         }
     };
     let _ = app.emit("preview-kit-progress", Progress { stage: "unpack", done: 0, total: 0, text: None });
-    fs::create_dir_all(crate::app_dir()).map_err(|e| e.to_string())?;
     // Thousands of files: off the async runtime
-    tauri::async_runtime::spawn_blocking(move || { let _hold = hold; unpack(&zip, &kit_dir(), from) }).await.map_err(|e| e.to_string())?
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let _hold = hold;
+        let file = fs::File::open(&zip).map_err(|e| format!("Could not read {}: {e}", zip.display()))?;
+        unpack_from(std::io::BufReader::new(file), &kit_dir(), from)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    let _ = fs::remove_file(&downloaded);
+    result
 }
 
 /// Installs Blender with winget (Windows' package manager: the official BlenderFoundation.Blender package; Blender's own
@@ -333,7 +378,44 @@ pub fn preview_kit_set_blender(path: Option<String>) -> Result<Option<String>, S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    use std::io::Cursor;
+
+    #[test]
+    fn a_zip_that_unpacks_past_the_limit_is_refused_and_the_old_kit_stays() {
+        let dir = std::env::temp_dir().join(format!("kit-limit-{}", std::process::id())).join("preview-kit");
+        let _ = fs::remove_dir_all(dir.parent().unwrap());
+        unpack(&kit_zip(&[]), &dir, "github").unwrap();
+        // 600 MB of zeros compresses to well under a megabyte
+        let mut w = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let o = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        for (n, b) in [("kit.json", &br#"{"version": "9"}"#[..]), ("python/python.exe", b"py"), ("previews/mod_previews.py", b"#")] {
+            w.start_file(n, o).unwrap();
+            w.write_all(b).unwrap();
+        }
+        w.start_file("big.bin", o).unwrap();
+        let block = vec![0u8; 1 << 20];
+        for _ in 0..600 {
+            w.write_all(&block).unwrap();
+        }
+        let bomb = w.finish().unwrap().into_inner();
+        assert!(bomb.len() < 2 << 20, "the fixture stays small: {} bytes", bomb.len());
+        assert!(unpack(&bomb, &dir, "file").is_err());
+        assert_eq!(installed(&dir).as_deref(), Some("2"), "the old kit stays");
+        assert!(!dir.with_extension("new").exists(), "no side folder is left behind");
+        let _ = fs::remove_dir_all(dir.parent().unwrap());
+    }
+
+    /// REPAKXTRA_KIT_ZIP=<path of a kit zip> cargo test -p repak-x --bin REPAK-X a_real_kit -- --ignored
+    #[test]
+    #[ignore]
+    fn a_real_kit_unpacks_within_the_limits() {
+        let zip = std::env::var("REPAKXTRA_KIT_ZIP").expect("set REPAKXTRA_KIT_ZIP");
+        let dir = std::env::temp_dir().join(format!("kit-real-{}", std::process::id())).join("preview-kit");
+        let _ = fs::remove_dir_all(dir.parent().unwrap());
+        let file = std::io::BufReader::new(fs::File::open(zip).unwrap());
+        assert!(unpack_from(file, &dir, "file").is_ok());
+        let _ = fs::remove_dir_all(dir.parent().unwrap());
+    }
 
     #[test]
     fn reads_wingets_download_bar_and_percent() {
