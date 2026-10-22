@@ -40,7 +40,8 @@ try { Expand-Archive -LiteralPath $zip -DestinationPath $extracted -Force }
 catch { Fail "The update could not be unpacked, so nothing was changed. Download it from github.com/cablemp5/repak-xtra/releases" }
 
 # A zip with one top folder holding the app is used from inside that folder
-$src = $extracted
+# Its long path, as Get-ChildItem reports files: a short (8.3) temp path like RUNNER~1 would cut the wrong length below
+$src = (Get-Item -LiteralPath $extracted).FullName
 $dirs = @(Get-ChildItem -LiteralPath $extracted -Directory)
 if ($dirs.Count -eq 1 -and @(Get-ChildItem -LiteralPath $dirs[0].FullName -File | Where-Object { $_.Extension -in '.exe', '.dll' }).Count -gt 0) {
     $src = $dirs[0].FullName
@@ -164,10 +165,13 @@ mod tests {
         // a process that already exited, so the wait ends at once (PID 0 is Windows' Idle process, which never does)
         let mut gone = std::process::Command::new("cmd").args(["/c", "exit"]).spawn().unwrap();
         gone.wait().unwrap();
+        // the update folder by another spelling than Windows lists it (CI's temp is a short 8.3 path, RUNNER~1): the script
+        // must still copy each file to its own place
+        let alias = temp.join("..").join("update");
         let ok = powershell(APPLY_ZIP)
             .env("RX_PID", gone.id().to_string())
-            .env("RX_ZIP", &zip)
-            .env("RX_TEMP", &temp)
+            .env("RX_ZIP", alias.join("repak-xtra-v9.9.9-windows.zip"))
+            .env("RX_TEMP", &alias)
             .env("RX_APP", &app)
             .env("RX_EXE", app.join("repakxtra.exe"))
             .env("RX_TEST", "1")
