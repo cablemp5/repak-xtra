@@ -12,7 +12,7 @@ import { stopEmoteSound } from './emoteSound'
 
 /** Where a dragged card would land: a collection and its place among that collection's other cards (0 = first), or
  *  a new collection. One spot has one value, so moving within it changes nothing. */
-export type Spot = { group: string; index: number } | { newCollection: true }
+export type Spot = { group: string; index: number }
 
 const START = 6     // px the pointer moves before a press becomes a drag (less stays a click)
 const EDGE = 72     // px from the list's top or bottom edge where it scrolls
@@ -82,7 +82,6 @@ function spotAt(x: number, y: number, dragId: string, zoom: number, ownGroupOnly
   let section: HTMLElement | null = null
   for (const el of document.elementsFromPoint(x, y)) {
     if (el.closest('.lo-drag-ghost')) continue
-    if (el.closest('[data-drop-new]')) return ownGroupOnly ? undefined : { newCollection: true }
     if ((section = el.closest<HTMLElement>('[data-group]'))) break
   }
   if (!section) return undefined
@@ -244,7 +243,6 @@ export function useCardDrag({ zoom, scroller, onMove, onDrop, ownGroupOnly = fal
       setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 0)
       const made = drop ? spot : null
       if (!made) cue('navigate', { direction: 'back', emphasis: 'subtle' })
-      else if ('newCollection' in made) cue('success', { emphasis: 'subtle' })
       else cue('close', { emphasis: 'subtle' })
       live.current.onDrop(id, made)
       land(made)

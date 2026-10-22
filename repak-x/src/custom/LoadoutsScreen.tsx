@@ -239,8 +239,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
       flipFrom.current = snapshotCards(cardsEl)
       setSpot(null)
       if (!s) return
-      if ('newCollection' in s) { const name = addGroup(); placeLoadout(id, name); setGroupBy('group'); setEditingGroup(name) }
-      else if (groupBy === 'hero') moveLoadout(id, besideOf(id, s))
+      if (groupBy === 'hero') moveLoadout(id, besideOf(id, s))
       else placeLoadout(id, s.group, besideOf(id, s))
     },
   })
@@ -455,9 +454,8 @@ export default function LoadoutsScreen(p: LoadoutProps) {
           <button type="button" ref={newRef} className="lo-text-btn" data-tour="new-loadout" onClick={createEmpty} title="A new empty loadout, opened to add mods to it">
             <Plus size={14} /> New loadout
           </button>
-          {/* Also a drop target: a card dropped here starts a new collection, named right away */}
-          <button type="button" className={`lo-text-btn${spot && 'newCollection' in spot ? ' is-drop' : drag.dragId ? ' is-drop-ready' : ''}`} data-tour="new-collection" onClick={newGroup}
-            data-drop-new title="A new collection: a named shelf for loadouts that belong together (drag cards onto it, or a card onto this button)">
+          <button type="button" className="lo-text-btn" data-tour="new-collection" onClick={newGroup}
+            title="A new collection: a named shelf for loadouts that belong together (drag cards onto it)">
             <FolderPlus size={14} /> New collection
           </button>
           {!canGenerate && <PreviewsUnavailable className="lo-text-btn" label="Generate all previews" />}
