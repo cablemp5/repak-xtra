@@ -53,7 +53,6 @@ const soundOn = () => savedItem(SOUND_KEY) !== '0'
  *  index.html repeats this for the splash, before any module runs. */
 export const resolveMotion = (saved: string | null, osReduce: boolean) => saved === '1' ? true : saved === '0' ? false : !osReduce
 const reduceQuery = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null
-const motionChoice = (): 'system' | 'on' | 'off' => { const v = savedItem(MOTION_KEY); return v === '1' ? 'on' : v === '0' ? 'off' : 'system' }
 const motionOn = () => resolveMotion(savedItem(MOTION_KEY), !!reduceQuery?.matches)
 const minimalToasts = () => savedItem(MINIMAL_TOASTS_KEY) === '1'
 const tagsOff = () => savedItem(TAGS_OFF_KEY) !== '0'
@@ -98,7 +97,7 @@ window.addEventListener('keydown', e => {
 })
 // Other windows (Asset Explorer, VFX Updater) pick up changes made in Settings
 window.addEventListener('storage', e => { if (e.key?.startsWith('repakxtra.')) { apply(); listeners.forEach(l => l()) } })
-// Animations on System: every window follows a Windows change while it runs (this module lives as long as the window)
+// Animations not chosen yet: every window follows a Windows change while it runs (this module lives as long as the window)
 reduceQuery?.addEventListener('change', () => { apply(); listeners.forEach(l => l()) })
 
 const update = (key: string, value: string) => {
@@ -213,7 +212,7 @@ function PrefBox({ k, label }: { k: string; label: string }) {
     </div>
   )
 }
-const useAll = () => useSyncExternalStore(subscribe, () => PREFS.map(p => (isOn(p.key) ? 1 : 0)).join('') + '|' + getScale() + '|' + soundOn() + motionChoice() + motionOn() + !!reduceQuery?.matches + minimalToasts() + installsPlain() + tagsOff())
+const useAll = () => useSyncExternalStore(subscribe, () => PREFS.map(p => (isOn(p.key) ? 1 : 0)).join('') + '|' + getScale() + '|' + soundOn() + motionOn() +minimalToasts() + installsPlain() + tagsOff())
 
 /** Settings > Interface, top: UI scale. */
 export function UiScaleSection() {
@@ -247,15 +246,10 @@ export function MotionSection({ extra }: { extra?: React.ReactNode }) {
           <p className="setting-subtext">Click sounds on buttons, typing, switches and alerts, and an emote's sound when you hover its preview.</p>
         </div>
         <div className="setting-item">
-          <div className="setting-motion">
+          <Checkbox checked={motionOn()} onChange={(checked: boolean) => update(MOTION_KEY, checked ? '1' : '0')}>
             <span>Animations</span>
-            <div className="mod-state-filter ui-scale" role="group" aria-label="Animations">
-              {([['system', 'System', 'system'], ['on', 'On', '1'], ['off', 'Off', '0']] as const).map(([v, t, saved]) => (
-                <button key={v} type="button" aria-pressed={motionChoice() === v} onClick={() => update(MOTION_KEY, saved)}>{t}</button>
-              ))}
-            </div>
-          </div>
-          <p className="setting-subtext">Page slides, menus, switches and pop-ups. System follows the Windows animation effects setting (now {reduceQuery?.matches ? 'off' : 'on'}). Off stops every animation in the app.</p>
+          </Checkbox>
+          <p className="setting-subtext">Page slides, menus, switches and pop-ups. Unchecked stops every animation in the app. Until you change it, it follows the Windows animation effects setting.</p>
           {extra && <div className={`setting-sub${motionOn() ? '' : ' is-off'}`}>{extra}</div>}
         </div>
         <div className="setting-item">
