@@ -7,6 +7,8 @@ import { resolveHeroImage, useHeroImages } from '../utils/heroImages'
 import { NEXUS_TYPE, sourceOf, useNexusVersion } from './nexusSource'
 import { useUiPref } from './uiPrefs'
 import { loadoutable, modKey } from './loadoutStore'
+import { heroLabel } from './silhouettes'
+import { savedItem } from './storageCarryOver'
 import nexusLogo from './logos/nexus.png'
 
 type Details = { character_name?: string; category?: string }
@@ -22,12 +24,13 @@ type Props = {
 }
 
 const COLLAPSED_HEROES = 6
+const CLOSED_KEY = 'repakxtra.filters.closed' // the sections folded shut, kept between runs
 const GALACTA = 'Project Galacta'   // an additional category the classifier appends ("Skin [Project Galacta]")
 const SPECIAL: Record<string, string> = { __multi: 'Multiple heroes', __generic: 'No Hero' }
 
 /** The Library title's filter line: a hero picked whole reads as just the hero; skins show only when picked one by one */
 export const filterScope = (chars: Set<string>, cats: Set<string>) =>
-  [...[...chars].filter(c => !(c.includes(' - ') && chars.has(c.split(' - ')[0]))).map(c => SPECIAL[c] ?? c), ...cats].join(', ')
+  [...[...chars].filter(c => !(c.includes(' - ') && chars.has(c.split(' - ')[0]))).map(c => SPECIAL[c] ?? heroLabel(c)), ...cats].join(', ')
 
 const toggled = (set: Set<string>, ids: string[]) => {
   const next = new Set(set)
@@ -43,6 +46,29 @@ export default function FilterPanel(p: Props) {
   const nexusCount = useMemo(() => Object.keys(p.modDetails || {}).filter(path => sourceOf(path)).length, [p.modDetails, nexusVersion]) // eslint-disable-line react-hooks/exhaustive-deps
   const [showAllHeroes, setShowAllHeroes] = useState(false)
   const [openHero, setOpenHero] = useState<string | null>(null)
+  const [closed, setClosed] = useState<Set<string>>(() => { try { return new Set(JSON.parse(savedItem(CLOSED_KEY) || '[]')) } catch { return new Set() } })
+  const fold = (id: string) => setClosed(prev => {
+    const next = new Set(prev)
+    if (!next.delete(id)) next.add(id)
+    localStorage.setItem(CLOSED_KEY, JSON.stringify([...next]))
+    return next
+  })
+  /** A section's label folds it open or shut (transitions.dev Accordion). Shut, it still shows how many of its filters are
+   *  on, so a hidden filter is never a surprise. */
+  const section = (id: string, label: string, picked: number, body: React.ReactNode) => {
+    const open = !closed.has(id)
+    return (
+      <>
+        <button type="button" className="fp-section-label fp-section-btn" aria-expanded={open} onClick={() => fold(id)}>
+          {label}{!open && picked > 0 && <span className="fp-section-picked">{picked} on</span>}
+          <ChevronRight size={14} className="fp-section-caret" aria-hidden="true" />
+        </button>
+        <div className="t-acc-panel" data-open={open} ref={el => el?.toggleAttribute('inert', !open)}>
+          <div className="t-acc-panel-inner">{body}</div>
+        </div>
+      </>
+    )
+  }
 
   const { heroes, typeCounts } = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -83,7 +109,7 @@ export default function FilterPanel(p: Props) {
   )
 
   return (
-    <div className="filter-panel" data-tour="filters">
+    <div className="filter-panel">
       <div className="fp-head">
         <span className="fp-title">Filters</span>
         {active > 0 && (
@@ -93,7 +119,7 @@ export default function FilterPanel(p: Props) {
         )}
       </div>
 
-      <div className="fp-section-label">Heroes</div>
+      {section('heroes', 'Heroes', p.selectedCharacters.size, <>
       {visibleHeroes.map(h => {
         const ids = [h.name, ...h.skins]
         const pressed = ids.some(id => p.selectedCharacters.has(id))
@@ -101,17 +127,17 @@ export default function FilterPanel(p: Props) {
         const isOpen = openHero === h.name
         return (
           <div key={h.name}>
-            {row(h.name, h.name, h.count, pressed, () => p.setSelectedCharacters(toggled(p.selectedCharacters, ids)),
+            {row(h.name, heroLabel(h.name), h.count, pressed, () => p.setSelectedCharacters(toggled(p.selectedCharacters, ids)),
               img ? <img src={img} alt="" className="fp-avatar" /> : <span className="fp-avatar fp-avatar-empty" />,
               h.skins.length > 0 && (
-                <button type="button" className="fp-expand" aria-expanded={isOpen} aria-label={`${h.name} skins`}
+                <button type="button" className="fp-expand" aria-expanded={isOpen} aria-label={`${heroLabel(h.name)} skins`}
                   onClick={() => setOpenHero(isOpen ? null : h.name)}>
                   <ChevronRight size={14} />
                 </button>
               ))}
             {h.skins.length > 0 && (
               // transitions.dev: Accordion. Height grows from 0fr to 1fr, no measuring
-              <div className="t-acc-panel" data-open={isOpen} ref={el => el?.toggleAttribute("inert", !isOpen)}>
+              <div className="t-acc-panel fp-skins" data-open={isOpen} ref={el => el?.toggleAttribute("inert", !isOpen)}>
                 <div className="t-acc-panel-inner">
                   {h.skins.map(s =>
                     row(s, s.split(' - ')[1], undefined, p.selectedCharacters.has(s),
@@ -129,8 +155,9 @@ export default function FilterPanel(p: Props) {
       )}
       {specials.map(s => row(s, SPECIAL[s], undefined, p.selectedCharacters.has(s),
         () => p.setSelectedCharacters(toggled(p.selectedCharacters, [s])), <span className="fp-avatar fp-avatar-empty" />))}
+      </>)}
 
-      <div className="fp-section-label">Types</div>
+      {section('types', 'Types', p.selectedCategories.size, <>
       {p.availableCategories.filter(cat => cat !== GALACTA).map(cat =>
         row(cat, cat, typeCounts[cat], p.selectedCategories.has(cat),
           () => p.setSelectedCategories(toggled(p.selectedCategories, [cat])),
@@ -139,6 +166,7 @@ export default function FilterPanel(p: Props) {
         () => p.setSelectedCategories(toggled(p.selectedCategories, [NEXUS_TYPE])), <img src={nexusLogo} alt="" className="fp-logo" />)}
       {p.availableCategories.includes(GALACTA) && row(GALACTA, GALACTA, typeCounts[GALACTA], p.selectedCategories.has(GALACTA),
         () => p.setSelectedCategories(toggled(p.selectedCategories, [GALACTA])), <i className="fp-logo pg-logo" aria-hidden="true" />)}
+      </>)}
     </div>
   )
 }

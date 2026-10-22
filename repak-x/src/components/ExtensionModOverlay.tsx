@@ -568,10 +568,10 @@ const ExtensionModOverlay = ({
                                         className="btn-new-folder"
                                         onClick={handleNewFolder}
                                         disabled={isCreatingFolder}
-                                        title="Create new folder"
+                                        title="New folder"
                                     >
                                         <VscNewFolder />
-                                        {isCreatingFolder ? 'Creating...' : 'New Folder'}
+                                        {isCreatingFolder ? 'Creating...' : 'New folder'}
                                     </button>
                                 </div>
 

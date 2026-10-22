@@ -78,7 +78,7 @@ export function KitTrack({ plan, p, done }: { plan: string[] | null; p: KitProgr
   const at = p ? Math.max(0, steps.indexOf(KIT_STEP[p.stage])) : 0
   const stage = p?.stage ?? (steps[0] === 'Blender' ? 'blender' : steps[0] === 'Unpack' ? 'unpack' : 'download')
   const text = stage === 'download' ? 'Downloading the preview kit' : stage === 'unpack' ? 'Unpacking the kit'
-    : stage === 'check' ? 'Checking this PC can render' : p?.text || 'Installing Blender'
+    : stage === 'check' ? 'Checking this PC can render' : p?.text?.replace(/https?:\/\/\S*\/([^/\s]+)/g, '$1') || 'Installing Blender'   // winget's "Downloading https://…/blender.msi": just the file
   const share = !p || !p.total || p.stage === 'unpack' || p.stage === 'check' ? null : p.total === 100 ? p.done / 100 : p.done / p.total
   return (
     <InstallTrack steps={steps} at={at} text={text} done={plan ? undefined : done} share={share}

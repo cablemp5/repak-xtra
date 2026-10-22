@@ -210,6 +210,9 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 
 /* ---------- filter panel (custom/FilterPanel.tsx) ---------- */
 .sidebar-filters { padding: 10px 8px 6px !important; overflow-y: auto; }
+/* Until the divider is dragged, Filters takes the room it needs and Folders the rest (at least its first two rows). The old
+   35vh cap hid Types below the fold while Folders sat mostly empty */
+.sidebar-filters.auto ~ .folder-list { flex: 1 1 auto; min-height: 76px; }
 .filter-panel { display: flex; flex-direction: column; gap: 1px; }
 /* The head keeps one height (30px, room for Clear) with or without it, so picking a filter never moves the list under it */
 .fp-head { display: flex; align-items: center; justify-content: space-between; min-height: 30px; padding: 0 6px 6px; box-sizing: border-box; }
@@ -220,6 +223,15 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
   color: var(--text-secondary) !important; font-size: 12px !important; font-weight: 500 !important; line-height: 1 !important; }
 .fp-clear:hover { color: var(--text-primary) !important; background: var(--quiet-hover) !important; }
 .fp-section-label { padding: 10px 6px 4px; font-size: 11px; font-weight: 500; color: var(--text-secondary); }
+/* Heroes and Types fold shut from their label: the whole line is the button, its chevron at the right edge in line with
+   the hero rows' skin chevrons, turned down while open */
+.fp-section-btn { display: flex !important; align-items: center; gap: 6px; width: 100%; height: auto !important; min-height: 0 !important;
+  margin: 0 !important; border: none !important; border-radius: 6px !important; background: transparent !important; cursor: pointer;
+  color: var(--text-secondary) !important; font-size: 11px !important; font-weight: 500 !important; text-align: left; justify-content: flex-start !important; }
+.fp-section-btn:hover { color: var(--text-primary) !important; }
+.fp-section-caret { margin-left: auto; margin-right: 5px; transition: transform var(--acc-chevron, 150ms) var(--acc-ease, ease); }
+.fp-section-btn[aria-expanded="true"] .fp-section-caret { transform: rotate(90deg); }
+.fp-section-picked { padding: 0 6px; border-radius: 999px; background: var(--quiet-active); color: var(--text-primary); font-size: 10.5px; line-height: 16px; }
 .fp-row-wrap { display: flex; align-items: center; gap: 2px; }
 .fp-row {
   flex: 1;
@@ -467,6 +479,9 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 .hero-filter-base.active { background: color-mix(in srgb, var(--accent-primary), transparent 85%) !important; border-left-color: var(--accent-primary) !important; }
 /* The keyboard opens a submenu with Right or Enter (custom/menuKeys.ts) */
 .context-menu-item.kb-open > .submenu { display: block; }
+/* Submenu items on one line ("Show in Asset Explorer" wrapped at the 160px minimum) */
+.context-menu .submenu { width: max-content; max-width: 320px; }
+.context-menu .submenu > .context-menu-item { white-space: nowrap; }
 /* Delete is the one red word in the menu */
 .context-menu-item.danger, .context-menu-item.danger span { color: #f2555a !important; }
 .context-menu-item.danger:hover, .app .context-menu-item.danger:focus-visible { background: rgba(242, 85, 90, 0.1) !important; }
@@ -563,6 +578,9 @@ html:not([data-show-quick-organize]) .dropzone-container { max-width: 720px; }
   background: transparent !important; color: var(--text-secondary) !important;
 }
 .lo-icon:hover { background: var(--quiet-active) !important; color: var(--text-primary) !important; }
+/* Fitts: the small icon buttons (24px and less) keep their look, their clickable area reaches about 30px */
+.lo-icon, .number-btn { position: relative; }
+.lo-icon::after, .number-btn::after { content: ''; position: absolute; inset: -3px; }
 .lo-dot { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--text-secondary); }
 .lo-active { color: var(--accent-primary); }
 .lo-empty, .lo-hint { margin: 2px 6px 4px; font-size: 12px; line-height: 1.45; color: var(--text-secondary); }
@@ -694,6 +712,11 @@ html:not([data-show-quick-organize]) .dropzone-container { max-width: 720px; }
 .lo-gen { position: relative; }
 .lo-gen-menu { left: 0; right: auto; min-width: 270px; z-index: 30; }
 .lo-gen-menu .sigeon-item small { margin-left: auto; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+/* A running preview run's menu: which loadout and the step it is on, a line, then Stop */
+.lo-gen-status { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px 10px; margin-bottom: 4px; border-bottom: 1px solid var(--panel-border);
+  font-size: 12.5px; color: var(--text-secondary); }
+.lo-gen-status b { font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lo-gen-stop { display: inline-flex; align-items: center; gap: 8px; }
 
 /* ---------- round 7 fixes ---------- */
 /* Scrollbars: thin thumb, no arrow buttons (scrollbar-width would bring the arrows back) */
@@ -1500,28 +1523,8 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .toast-count-badge { height: 28px; display: inline-flex; align-items: center; padding: 0 10px !important; border-radius: 999px !important;
   background: #161616 !important; border: 1px solid rgba(255, 255, 255, 0.12); font-size: 12px !important; color: var(--text-secondary) !important; }
 
-/* ---------- preview batches: Home status line, card skeletons (transitions.dev Skeleton loader) ---------- */
+/* ---------- preview batches: card skeletons (transitions.dev Skeleton loader) ---------- */
 :root { --pulse-dur: 1000ms; --pulse-min: 0.5; --skel-tone: rgba(255, 255, 255, 0.07); }
-/* One quiet line (cable, 2026-10-17, tidied 2026-10-19): "Generating previews" shimmering and the loadout's name on
-   the left, how far along and Stop together on the right. No dot loader (the cards' sweep is the sign of work), no
-   progress line */
-.lo-batch { display: flex; align-items: center; gap: 10px; margin: 14px 22px 4px; padding: 4px 4px 4px 14px; min-height: 40px;
-  border-radius: 10px; background: color-mix(in srgb, var(--text-primary), transparent 96%); border: 1px solid var(--panel-border);
-  font-size: 13px; color: var(--text-secondary); }
-.lo-batch .t-matrix { flex: none; }
-.lo-batch-what { display: flex; align-items: baseline; gap: 6px; min-width: 0; overflow: hidden; white-space: nowrap; }
-.lo-batch-what b { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 600; color: var(--text-primary); }
-.lo-batch-left { flex: none; padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--text-primary), transparent 92%);
-  color: var(--text-secondary); font-size: 11.5px; font-variant-numeric: tabular-nums; }
-.lo-batch-stop { margin-left: auto; height: 30px !important; flex: none; }
-/* While previews run, Stop shows only when the line is hovered or focused (cable, 2026-10-21). The finished line's Dismiss always shows */
-.lo-batch:not(.is-summary) .lo-batch-stop { opacity: 0; transition: opacity 0.15s ease; }
-.lo-batch:not(.is-summary):hover .lo-batch-stop, .lo-batch:not(.is-summary) .lo-batch-stop:focus-visible { opacity: 1; }
-.lo-batch .lo-batch-left { margin-left: auto; }
-.lo-batch-left + .lo-batch-stop { margin-left: 0; }
-/* After a run: its result, quiet, until the next run or Dismiss */
-.lo-batch.is-summary { background: var(--field-bg); border-color: var(--border-color);
-  color: var(--text-secondary); }
 /* The card: its image darkens and blurs under a shimmer while the render runs or waits, its status written on it */
 .lo-media.is-running .lo-card-image img, .lo-media.is-queued .lo-card-image img { opacity: 0.3; filter: blur(10px); }
 .lo-media.is-running .lo-card-placeholder, .lo-media.is-queued .lo-card-placeholder { visibility: hidden; }
@@ -1640,7 +1643,8 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .su-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .su-actions .btn-primary { width: auto !important; flex: none; }
 .su-main { min-width: 96px; }
-.su-safety-btn { margin-right: auto; }   /* on the left: the buttons after it go right */
+.su-actions .su-safety-btn { font-size: 12px; }
+.su-actions .su-safety-btn:not(:first-child) { margin-left: 8px; }   /* beside the main button, a link's quiet look */
 .su-safety-btn .su-caret { transition: transform 150ms ease; }
 .su-safety-btn[aria-expanded="true"] .su-caret { transform: rotate(90deg); }
 .su-spin { animation: su-spin 0.9s linear infinite; }
@@ -1811,6 +1815,10 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 .fr-text p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }
 .fr-text code { font: 12px var(--font-mono); color: var(--text-primary); }
 .fr-step.is-done .fr-text h3 { color: var(--text-secondary); }
+/* The guided setup's "Optional" label between the first mods and the extras, and its "1 of 3 done" */
+.fr-divider { padding: 18px 0 2px; font-size: 11px; font-weight: 500; color: var(--text-secondary); }   /* the sidebar's section label look (.fp-section-label) */
+.fr-step:has(+ .fr-divider) { border-bottom: none; }
+.fr-progress { font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .fr-optional { padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--text-secondary); background: var(--bg-lighter); }
 .fr-action { display: flex; align-items: center; gap: 8px; }
 .fr-text .fr-drop { margin-top: 8px; }
@@ -1903,10 +1911,10 @@ html[data-motion="off"] .t-matrix i { animation: none; opacity: 0.6; }
 @media (prefers-reduced-motion: reduce) { .t-matrix i { animation: none; opacity: 0.6; } }
 
 /* Library filters: a hero's skins sit indented under it on a guide line, each row with room around its highlight */
-.filter-panel .t-acc-panel-inner .fp-row-wrap { margin: 0 26px 0 15px; padding: 1px 0 1px 8px; border-left: 1px solid var(--panel-border); }
-.filter-panel .t-acc-panel-inner .fp-row-wrap:first-child { padding-top: 3px; }
-.filter-panel .t-acc-panel-inner .fp-row-wrap:last-child { padding-bottom: 4px; }
-.filter-panel .t-acc-panel-inner .fp-lead { display: none; }
+.filter-panel .fp-skins > .t-acc-panel-inner .fp-row-wrap { margin: 0 26px 0 15px; padding: 1px 0 1px 8px; border-left: 1px solid var(--panel-border); }
+.filter-panel .fp-skins > .t-acc-panel-inner .fp-row-wrap:first-child { padding-top: 3px; }
+.filter-panel .fp-skins > .t-acc-panel-inner .fp-row-wrap:last-child { padding-bottom: 4px; }
+.filter-panel .fp-skins > .t-acc-panel-inner .fp-lead { display: none; }
 
 /* Install panel card: one type scale (13px text, 12px labels and hints), labels in sentence case like the rest */
 .install-mod-card .field-label { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 500; color: var(--text-secondary); }
@@ -1996,6 +2004,9 @@ html[data-motion="off"] .t-matrix i { animation: none; opacity: 0.6; }
 /* Mod file size: in the tags row, left of the type tag (ModsList.tsx sizeTag); the actions row's own size stays hidden */
 .mod-actions-row .mod-size { display: none !important; }
 .btn-check-conflicts { position: relative; }
+/* Conflicts on: the button names them ("2 conflicting") at every header width, not only as a red dot on an icon */
+.center-header .header-actions .btn-check-conflicts:has(.has-conflicts) { gap: 6px !important; padding-left: 10px !important; padding-right: 12px !important; }
+.center-header .header-actions .btn-check-conflicts .btn-label.has-conflicts { display: inline !important; max-width: 9rem !important; opacity: 1 !important; }
 .conflict-dot { background: #f2555a; --dot-ring: var(--bg-darker); }   /* the Library toolbar behind it */
 /* Attention dots (Setup, Check Conflicts) sit on their button's top-right corner like a notification badge, centered on
    the corner, with a ring in the color behind them */
@@ -2615,7 +2626,7 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 :is(.cf-count, .mod-state-count, .lo-group-count, .fr-num) { display: inline-grid !important; grid-auto-flow: column; place-items: center;
   place-content: center; line-height: 1 !important; font-variant-numeric: tabular-nums; box-sizing: border-box; }
 .cf-count { height: 22px; min-width: 22px; padding: 0 7px !important; }
-.mod-state-count { height: 18px; min-width: 22px; padding: 0 6px !important; }
+.mod-state-count { height: 18px; min-width: 22px; padding: 4px 6px 0 !important; }   /* Geist's digits sit high in an 11px line: 4px on top centers their ink (measured) */
 .lo-group-count { height: 18px; min-width: 20px; }
 
 /* ---------- The Library's selection bar (cable, 2026-10-21): a drawer that slides out from under the All / On / Off

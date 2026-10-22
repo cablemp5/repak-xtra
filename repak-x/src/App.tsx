@@ -36,7 +36,7 @@ import { GiLightningTrio } from "react-icons/gi"
 import Checkbox from './components/ui/Checkbox'
 import ModDetailsPanel from './components/ModDetailsPanel'
 import ModsList from './components/ModsList'
-import FileTree from './components/FileTree'
+// repakxtra: FileTree now only renders inside ModDetailsPanel
 import FolderTree from './components/FolderTree'
 import ContextMenu from './components/ContextMenu'
 import LogDrawer from './components/LogDrawer'
@@ -270,6 +270,16 @@ type AppSettings = {
   bypassGameRunningLock: boolean
   launcherType: 'steam' | 'epic'
   enableAnimations: boolean
+}
+
+/** repakxtra: fades the static splash (index.html) out once, whichever comes first: the mod list or the 3 s fallback. */
+const hideSplash = () => {
+  const splash = document.getElementById('splash-screen')
+  if (!splash || splash.dataset.hiding) return
+  splash.dataset.hiding = '1'
+  splash.style.transition = 'opacity 0.3s ease-out'
+  splash.style.opacity = '0'
+  setTimeout(() => splash.remove(), 300)
 }
 
 function App() {
@@ -844,6 +854,7 @@ function App() {
     } catch (error) {
       console.error('Parse error:', error)
       setStatus(`Error parsing dropped items: ${error}`)
+      alert.error('Could not read the dropped files', String(error)) // repakxtra: a toast, not only the log bar's status line
     }
   }
   const handleMergeHybrid = async (path1: string, path2: string) => {
@@ -855,6 +866,7 @@ function App() {
     } catch (error) {
       console.error('Failed to merge mods:', error)
       setStatus(`Error merging hybrid mods: ${error}`)
+      alert.error('Could not merge the mods', String(error)) // repakxtra: a toast, not only the log bar's status line
     }
   }
 
@@ -868,11 +880,12 @@ function App() {
         const result = await invoke('check_mod_clashes') as any
         setClashes(result)
         setPanel('clash', true)
-        setStatus(`Found ${result.length} clashes`)
+        setStatus(`Found ${result.length} ${result.length === 1 ? 'clash' : 'clashes'}`) // repakxtra: one clash, not 1 clashes
         console.debug('[Conflicts] Global conflict check completed', { count: Array.isArray(result) ? result.length : 0 })
       })
     } catch (error) {
       setStatus('Error checking clashes: ' + error)
+      alert.error('Conflict check failed', String(error)) // repakxtra: a toast, not only the log bar's status line
       uiLog.error('Conflicts', `Conflict check failed: ${error}`)
     }
   }
@@ -1016,6 +1029,7 @@ function App() {
       })
     } catch (error) {
       setStatus('Error checking mod conflicts: ' + error)
+      alert.error('Conflict check failed', String(error)) // repakxtra: a toast, not only the log bar's status line
       console.error('[Conflicts] Single-mod conflict check failed:', error)
     }
   }
@@ -1065,6 +1079,7 @@ function App() {
       }
     } catch (error) {
       setStatus('Error setting priority: ' + error)
+      alert.error('Priority not changed', String(error)) // repakxtra: a toast, not only the log bar's status line
     }
   }
 
@@ -1917,6 +1932,7 @@ function App() {
       console.log('Loaded mods:', modList)
       if (mine !== loadModsSeq.current) return modList as ModRecord[] // a newer load is on its way, with the newer list
       setMods(modList)
+      requestAnimationFrame(hideSplash) // repakxtra: after the list paints
       setStatus(`Loading ${modList.length} mod(s) details...`)
 
       // Also check the base game's Paks folder for Project Galacta, in case it
@@ -1933,11 +1949,15 @@ function App() {
         invoke('discord_set_managing_mods', { modCount: modList.length }).catch(console.warn);
       }
 
-      setStatus(`Loaded ${modList.length} mod(s)`)
+      // repakxtra: the count the Library's All tab shows, which leaves Project Galacta out (it lives in Setup)
+      // shortcut: matched by its pak name, not its files (those land in modDetails later), so a renamed Galacta still counts
+      const listed = modList.filter((m: ModRecord) => !/projectgalacta/i.test(m.path.split(/[\\/]/).pop() ?? '')).length
+      setStatus(`Loaded ${listed} mod${listed === 1 ? '' : 's'}`)
       return modList as ModRecord[]
     } catch (error) {
       uiLog.error('Mods', `Could not load the mod list: ${error}`)
       setStatus('Error loading mods: ' + error)
+      alert.error('Could not load mods', String(error)) // repakxtra: a toast, not only the log bar's status line
       return []
     } finally {
       setIsModsLoading(false)
@@ -2142,6 +2162,7 @@ function App() {
       }
     } catch (error) {
       setStatus('Error setting game path: ' + error)
+      alert.error('Game folder not set', String(error)) // repakxtra: a toast, not only the log bar's status line
     }
   }
 
@@ -2164,6 +2185,7 @@ function App() {
       }
     } catch (error) {
       setStatus('Error selecting mods: ' + error)
+      alert.error('Could not open the files', String(error)) // repakxtra: a toast, not only the log bar's status line
     }
   }
 
@@ -2446,7 +2468,7 @@ function App() {
     // No confirmation prompt needed here, the hold-to-delete button handles the intent
 
     try {
-      await invoke('delete_folder', { id: folderId })
+      const trashIds = await invoke<string[] | null>('delete_folder', { id: folderId })
       if (selectedFolderId === folderId) {
         setSelectedFolderId('all')
       }
@@ -2477,6 +2499,9 @@ function App() {
       await loadFolders()
       await loadMods()
       setStatus('Folder deleted')
+      // repakxtra: Undo puts its mods (and so the folder) back, as for mods
+      const name = folders.find(f => f.id === folderId)?.name ?? folderId.split('/').pop()
+      offerUndoDelete(alert, (trashIds ?? []).map(id => ({ id, path: '' })), async () => { await loadFolders(); await loadMods() }, undoBlocked, `folder ${name}`)
     } catch (error) {
       setStatus('Error deleting folder: ' + error)
     }
@@ -2656,6 +2681,7 @@ function App() {
       await loadTags()
     } catch (error) {
       setStatus('Error adding tag: ' + error)
+      alert.error('Tag not added', String(error)) // repakxtra: a toast, not only the log bar's status line
     }
   }
 
@@ -2672,6 +2698,7 @@ function App() {
       await loadTags()
     } catch (error) {
       setStatus(`Error: ${error}`)
+      alert.error('Tag not added', String(error)) // repakxtra: a toast, not only the log bar's status line
     }
   }
 
@@ -2687,6 +2714,7 @@ function App() {
       await loadTags()
     } catch (error) {
       setStatus(`Error assigning tag: ${error}`)
+      alert.error('Tag not added', String(error)) // repakxtra: a toast, not only the log bar's status line
     }
   }
 
@@ -2702,6 +2730,7 @@ function App() {
       await loadTags()
     } catch (error) {
       setStatus(`Error removing tag: ${error}`)
+      alert.error('Tag not removed', String(error)) // repakxtra: a toast, not only the log bar's status line
     }
   }
 
@@ -2746,6 +2775,7 @@ function App() {
       await loadTags()
     } catch (error) {
       setStatus(`Error removing tag: ${error}`)
+      alert.error('Tag not removed', String(error)) // repakxtra: a toast, not only the log bar's status line
     }
   }
 
@@ -3345,7 +3375,13 @@ function App() {
     // Use promise toast for loading state and result
     // The backend spawns threads and returns immediately, so we need to wait
     // for the install_complete event to know when installation is actually done
-    alert.promise(
+    // repakxtra: the toast fills with the backend's percent, so the wait shows where it is, not only in the log bar
+    let installToast = -1
+    const unlistenToastProgress = listen('install_progress', (event: any) => {
+      const pct = Math.max(0, Math.min(100, Math.round(Number(event.payload) || 0)))
+      if (installToast >= 0) alert.updateToast(installToast, { progressValue: pct, description: `${pct}% · ${modCount} mod${modCount > 1 ? 's' : ''}` })
+    })
+    installToast = alert.promise(
       (async () => {
         // Create a promise that resolves when install_complete event fires
         const installCompletePromise = new Promise<void>((resolve, reject) => {
@@ -3434,7 +3470,7 @@ function App() {
         }
 
         return { count: modCount }
-      })(),
+      })().finally(() => { unlistenToastProgress.then(u => u()) }),
       {
         loading: {
           title: 'Installing Mods',
@@ -3442,11 +3478,13 @@ function App() {
         },
         success: (result) => ({
           title: 'Installation Complete',
-          description: `Successfully installed ${result.count} mod${result.count > 1 ? 's' : ''}`
+          description: `Successfully installed ${result.count} mod${result.count > 1 ? 's' : ''}`,
+          progressValue: undefined, // repakxtra: back to the auto-dismiss bar
         }),
         error: (err) => ({
           title: 'Installation Failed',
-          description: String(err)
+          description: String(err),
+          progressValue: undefined,
         })
       }
     )
@@ -3653,13 +3691,11 @@ function App() {
   };
 
   // Remove static splash screen
+  // repakxtra: once the mod list is in (loadMods calls hideSplash), so the first screen is not a page of "Loading mods…"
+  // under a fading splash. 3 s at most, for a slow or failed load.
   useEffect(() => {
-    const splash = document.getElementById('splash-screen');
-    if (splash) {
-      splash.style.transition = 'opacity 0.4s ease-out';
-      splash.style.opacity = '0';
-      setTimeout(() => splash.remove(), 400);
-    }
+    const t = setTimeout(hideSplash, 3000);
+    return () => clearTimeout(t);
   }, []);
 
   return (
@@ -3796,7 +3832,7 @@ function App() {
         return (
           <InputPromptModal
             isOpen={!!newFolderPrompt}
-            title={promptPathCount > 0 ? "Create Folder & Install" : newFolderPrompt?.parentId ? `Create Folder in ${newFolderPrompt.parentId.split('/').pop()}` : "Create New Folder"}
+            title={promptPathCount > 0 ? "New folder and install" : newFolderPrompt?.parentId ? `New folder in ${newFolderPrompt.parentId.split('/').pop()}` : "New folder"}
             placeholder="Enter folder name..."
             confirmText={promptPathCount > 0 ? "Create & Install" : "Create"}
             onConfirm={handleNewFolderConfirm}
@@ -3820,7 +3856,7 @@ function App() {
 
       <InputPromptModal
         isOpen={!!newTagPrompt}
-        title="Create New Tag"
+        title="New tag"
         placeholder="Enter tag name..."
         confirmText="Create"
         icon={<FaTag />}
@@ -3833,7 +3869,7 @@ function App() {
 
       <InputPromptModal
         isOpen={!!newFolderFromInstall}
-        title="Create New Folder"
+        title="New folder"
         placeholder="Enter folder name..."
         confirmText="Create"
         onConfirm={(name) => {
@@ -3939,6 +3975,7 @@ function App() {
                 setTimeout(() => setLaunchSuccess(false), 3000)
               } catch (error) {
                 setStatus('Error launching game: ' + error)
+                alert.error('Game did not launch', String(error)) // repakxtra: a toast, not only the log bar's status line
               }
             }}
           >
@@ -4095,7 +4132,7 @@ function App() {
                   await invoke('add_tag_to_catalog', { tag: trimmed })
                 }
               })}
-              addNewLabel="+ Create Tag"
+              addNewLabel="+ New tag"
               onDeleteOption={handleDeleteTagFromCatalog}
             />}
             <TagsToggle tags={allTags} mods={mods} alert={alert} /* repakxtra: shown or hidden in words, Delete all tags */
@@ -4125,8 +4162,9 @@ function App() {
             <div className="left-sidebar" data-tour="folder-sidebar">
               {/* Filters Section */}
               <div
-                className="sidebar-filters"
-                style={filtersHeight !== null ? { height: `${filtersHeight}px` } : { maxHeight: '35vh' }}
+                className={`sidebar-filters${filtersHeight === null ? ' auto' : ''}`} /* repakxtra: until dragged, Filters and Folders share the column by content (theme.css) */
+                data-tour="filters" /* repakxtra: the tour outlines the visible box, not the whole scrolled list */
+                style={filtersHeight !== null ? { height: `${filtersHeight}px` } : { flex: '0 1 auto', minHeight: 120 }}
               >
                 {/* repakxtra: redesigned filters (custom/FilterPanel.tsx) */}
                 <FilterPanel
@@ -4148,7 +4186,7 @@ function App() {
               <div className="sidebar-header">
                 <h3>Folders</h3>
                 <div className="sidebar-header-actions">
-                  <button onClick={() => handleCreateFolder({ parentId: selectedFolderId !== 'all' ? selectedFolderId : undefined })} className="btn-icon" title="New Folder">
+                  <button onClick={() => handleCreateFolder({ parentId: selectedFolderId !== 'all' ? selectedFolderId : undefined })} className="btn-icon" title="New folder">
                     <CreateNewFolderIcon fontSize="small" />
                   </button>
                 </div>
@@ -4206,10 +4244,11 @@ function App() {
                   </button>
                   <div className="divider-vertical" />
                   <button onClick={handleCheckClashes} className="btn-ghost btn-check-conflicts"
-                    title={conflictCount ? `${conflictCount} enabled mods conflict: check which` : 'Check for conflicts'}>
+                    title={conflictCount ? `${conflictCount === 1 ? 'A group of enabled mods conflicts' : `${conflictCount} groups of enabled mods conflict`}: check which` : 'Check for conflicts'}>
                     <IoLayersSharp className="warning-icon" style={{ color: 'var(--accent-primary)', width: '18px', height: '18px' }} />
-                    <span className="btn-label">Check Conflicts</span>
-                    {conflictCount > 0 && <i className="conflict-dot" aria-label={`${conflictCount} enabled mods conflict`} />}{/* repakxtra */}
+                    {/* repakxtra: says how many while there are any, in words, even where the label otherwise folds away (theme.css) */}
+                    <span className={`btn-label${conflictCount ? ' has-conflicts' : ''}`}>{conflictCount ? `${conflictCount} ${conflictCount === 1 ? 'conflict' : 'conflicts'}` : 'Check Conflicts'}</span>
+                    {conflictCount > 0 && <i className="conflict-dot" aria-label={`${conflictCount} ${conflictCount === 1 ? 'conflict' : 'conflicts'}`} />}{/* repakxtra */}
                   </button>
                   <div className="divider-vertical" />
                   <div className="view-switcher-slot">{/* repakxtra: holds one button's room, the views open over it on hover */}
@@ -4327,7 +4366,7 @@ function App() {
                           }
                         }
                       })}
-                      addNewLabel="+ New Tag"
+                      addNewLabel="+ New tag"
                       alwaysShowDeleteIcon={true}
                     />
                   </div>}
@@ -4460,11 +4499,7 @@ function App() {
                     onShowInAssetExplorer={() => handleShowInAssetExplorer([selectedMod.path])}
                   />
                 </div>
-
-                <div className="selected-mod-contents">
-                  <h3>Contents</h3>
-                  <FileTree files={selectedMod.file_contents || selectedMod.files || selectedMod.file_list || []} />
-                </div>
+                {/* repakxtra: the second Contents tree is gone, ModDetailsPanel's File Contents already lists the same files */}
               </div>
             ) : (
               <div className="no-selection">

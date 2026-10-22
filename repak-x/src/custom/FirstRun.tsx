@@ -1,6 +1,6 @@
 // repakxtra: the first-launch setup. On the first launch it opens on what loadouts are (WelcomeIntro.tsx), then one
-// screen, top to bottom: the game folder, the signature bypass, Project Galacta, mod previews (optional), then the
-// first mods. Setup > Guided setup opens it again on the steps. Closing it, or dropping mods on the window, marks it
+// screen, top to bottom: the game folder, the signature bypass, Project Galacta, the first mods, then under Optional mod
+// previews and the desktop shortcut. Setup > Guided setup opens it again on the steps. Closing it, or dropping mods on the window, marks it
 // seen; the tour is offered at the end.
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
@@ -136,6 +136,7 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
   const kitReady = Boolean(kit.kit?.version && kit.kit?.blender)
   const noGame = !gamePath
   const coreDone = !noGame && bypassOn && galactaOn
+  const coreCount = [!noGame, bypassOn, galactaOn].filter(Boolean).length // the three steps mods need, shown as "1 of 3 done"
 
   return (
     <div className="modal-overlay fr-overlay" onClick={close}>
@@ -148,7 +149,7 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
         <div className="modal-header fr-head">
           <div>
             <h2 className="fr-welcome">Welcome to <Wordmark height={17} /></h2>
-            <p className="su-sub">{coreDone ? 'Mods are ready to go. Add some below.' : 'Three steps get mods working. Close the game first.'} <button type="button" className="su-link" onClick={() => setIntro(true)}>Why loadouts?</button></p>
+            <p className="su-sub">{coreDone ? 'Mods are ready to go. Add some below.' : <>Three steps get mods working: <b className="fr-progress">{coreCount} of 3 done</b>. Close the game first.</>} <button type="button" className="su-link" onClick={() => setIntro(true)}>Why loadouts?</button></p>
           </div>
           {!coreDone && (
             <button type="button" className="btn-primary fr-all" disabled={Boolean(busy) || (bypass === null && !bypassError)} onClick={setUpAll}
@@ -187,21 +188,7 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
             <GalactaTrack on={busy === 'galacta'} done={finished === 'galacta' ? 'Project Galacta is in your mods folder' : undefined} />
           </Step>
 
-          <Step n={4} done={kitReady && kit.doctor?.ok !== false} optional title="Mod previews"
-            action={!kitReady && !kit.plan && <button type="button" className="lo-text-btn" disabled={Boolean(kit.busy) || (kit.latest === null && !kit.kit?.version)} onClick={() => kit.setUp()}
-              title={kit.latest === null ? 'No kit published yet: drop a kit zip on the window' : 'Downloads the preview kit and installs Blender if it is missing (Windows asks for admin rights once)'}>
-              {kit.busy === 'setup' ? 'Setting up…' : 'Set up previews'}</button>}>
-            <p>{kitReady ? 'Ready.' : `Pictures of your loadouts, rendered on your PC${kit.latest?.size ? ` (a ${Math.round(kit.latest.size / 1048576)} MB download, plus Blender)` : ''}.`}</p>
-            <KitTrack plan={kit.plan} p={kit.progress} done={kit.finished ?? undefined} />
-            <DoctorProblems d={kit.doctor} />
-          </Step>
-
-          <Step n={5} done={Boolean(shortcut.exists)} optional title="Desktop shortcut"
-            action={!shortcut.exists && <ShortcutButton s={shortcut} />}>
-            <p>{shortcut.exists ? 'On your desktop.' : 'Start repakxtra from your desktop.'}</p>
-          </Step>
-
-          <Step n={6} done={false} wide title="Add your first mods">
+          <Step n={4} done={false} wide title="Add your first mods">
             <div className="fr-drop">
               <span className="fr-drop-text">Drop mod files or zips anywhere on this window. No need to unzip.</span>
               <span className="fr-drop-actions">
@@ -210,12 +197,29 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
               </span>
             </div>
           </Step>
+          {/* the goal (your first mods) right after the three steps it needs, the extras under their own label */}
+          <li className="fr-divider" aria-hidden="true">Optional</li>
+          <Step n={5} done={kitReady && kit.doctor?.ok !== false} title="Mod previews"
+            action={!kitReady && !kit.plan && <button type="button" className="lo-text-btn" disabled={Boolean(kit.busy) || (kit.latest === null && !kit.kit?.version)} onClick={() => kit.setUp()}
+              title={kit.latest === null ? 'No kit published yet: drop a kit zip on the window' : 'Downloads the preview kit and installs Blender if it is missing (Windows asks for admin rights once)'}>
+              {kit.busy === 'setup' ? 'Setting up…' : 'Set up previews'}</button>}>
+            <p>{kitReady ? 'Ready.' : `Pictures of your loadouts, rendered on your PC${kit.latest?.size ? ` (a ${Math.round(kit.latest.size / 1048576)} MB download, plus Blender)` : ''}.`}</p>
+            <KitTrack plan={kit.plan} p={kit.progress} done={kit.finished ?? undefined} />
+            <DoctorProblems d={kit.doctor} />
+          </Step>
+
+          <Step n={6} done={Boolean(shortcut.exists)} title="Desktop shortcut"
+            action={!shortcut.exists && <ShortcutButton s={shortcut} />}>
+            <p>{shortcut.exists ? 'On your desktop.' : 'Start repakxtra from your desktop.'}</p>
+          </Step>
+
         </ol>
 
         <div className="modal-footer fr-foot">
           <span className="su-sub">Open this again from Setup &gt; Guided setup.</span>
           <button type="button" className="lo-text-btn" onClick={() => { close(); onStartTour() }}>Take the 1-minute tour</button>
-          <button type="button" className="btn-primary" onClick={close}>Done</button>
+          {/* Done once mods can load. Before that, leaving is "Finish later" and quieter, so it never outshines the steps */}
+          <button type="button" className={coreDone ? 'btn-primary' : 'lo-text-btn'} onClick={close}>{coreDone ? 'Done' : 'Finish later'}</button>
         </div>
         </>}
       </motion.div>

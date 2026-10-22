@@ -6,10 +6,11 @@ import { modKey as displayName } from './loadoutStore'
 
 export type TrashedMod = { id: string; path: string }
 
-/** `blocked` is read on click, so a game start (or bypass change) after the delete still counts. */
-export function offerUndoDelete(alert: ReturnType<typeof useAlert>, entries: TrashedMod[], reload: () => Promise<unknown>, blocked: () => boolean) {
+/** `blocked` is read on click, so a game start (or bypass change) after the delete still counts. `label` names what was
+ *  deleted when it is not mods by path (a folder: its files' deletions, path unused). */
+export function offerUndoDelete(alert: ReturnType<typeof useAlert>, entries: TrashedMod[], reload: () => Promise<unknown>, blocked: () => boolean, label?: string) {
   if (entries.length === 0) return
-  const what = entries.length === 1 ? displayName(entries[0].path) : `${entries.length} mods`
+  const what = label ?? (entries.length === 1 ? displayName(entries[0].path) : `${entries.length} mods`)
   const id = alert.info(`Deleted ${what}`, 'Kept for 7 days in Settings > Recently deleted.', {
     duration: 10000,
     action: {

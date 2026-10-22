@@ -6,7 +6,7 @@
 // quiet link in the footer, not a checkbox to find.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Camera, Check, ChevronDown, ImagePlus, Pencil, Plus, Type, WandSparkles, X } from 'lucide-react'
+import { Camera, ChevronDown, ImagePlus, Pencil, Type, WandSparkles, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import Checkbox from '../components/ui/Checkbox'
 import CustomDropdown from '../components/CustomDropdown'
@@ -97,8 +97,8 @@ export function suggestName(mods: { name: string; character: string | null }[]) 
 }
 
 /** New loadout or Add to one, said in words above the name with a small chevron (a quiet menu, not a boxed dropdown).
- *  The menu has New loadout on top, then a line and the loadouts to add to (long names cut short). Esc closes the
- *  menu, not the dialog. */
+ *  The menu is drawn like the Collection dropdown: the loadouts to add to (long names cut short, the picked one a soft
+ *  fill), then a line and + New loadout at the foot. Esc closes the menu, not the dialog. */
 function TargetPicker({ options, value, onChange }: { options: { value: string; label: string; name?: string }[]; value: string; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false)
   const wrap = useRef<HTMLDivElement>(null)
@@ -127,13 +127,12 @@ function TargetPicker({ options, value, onChange }: { options: { value: string; 
       </button>
       {open && (
         <div className="sigeon-menu ip-target-menu" role="menu" aria-label="Which loadout">
-          {options.map((o, i) => (
+          {[...options.slice(1), options[0]].map((o, i, all) => (
             <div key={o.value} className="ip-target-group">
-              {i === 1 && <><div className="ip-target-sep" role="separator" /><div className="ip-target-head">Add to a loadout</div></>}
-              <button type="button" role="menuitemradio" aria-checked={o.value === value} className={`sigeon-item${i === 0 ? ' is-new' : ''}`}
+              {i === all.length - 1 && all.length > 1 && <div className="ip-target-sep" role="separator" />}
+              <button type="button" role="menuitemradio" aria-checked={o.value === value} className={`sigeon-item${o === options[0] ? ' is-new' : ''}`}
                 title={o.name ?? o.label} onClick={() => { onChange(o.value); setOpen(false) }}>
-                {i === 0 && <Plus size={14} aria-hidden="true" />}
-                <span className="ip-target-name">{o.name ?? o.label}</span>{o.value === value && <Check size={14} aria-hidden="true" />}
+                <span className="ip-target-name">{o === options[0] ? `+ ${o.label}` : o.name ?? o.label}</span>
               </button>
             </div>
           ))}

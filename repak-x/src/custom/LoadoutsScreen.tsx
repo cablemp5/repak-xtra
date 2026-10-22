@@ -15,7 +15,7 @@ import { type Spot, playFlip, snapshotCards, useCardDrag } from './cardDrag'
 import { prepareMedia, putMedia } from './loadoutMedia'
 import { plural } from './modName'
 import { Num } from './motion'
-import { PreviewsUnavailable, dismissPreviewSummary, generateAllLoadouts, loadoutHasPreview, stopPreviews, usePreviewFailureToast, usePreviewsAvailable, usePreviewBatch, usePreviewSummary, usePreviewVersion } from './previews'
+import { PreviewsUnavailable, dismissPreviewSummary, generateAllLoadouts, loadoutHasPreview, stopPreviews, usePreviewFailureToast, usePreviewsAvailable, usePreviewBatch, usePreviewStage, usePreviewSummary, usePreviewVersion } from './previews'
 import {
   type Loadout, type Mod, OTHER, OTHER_LABEL, addGroup, captureKey, changesToTurnOff, changesToTurnOn, deleteGroup, displayName, groupKey,
   inGroup, isActive, modKey, moveGroup, moveLoadout, movedBeside, nextLoadoutName, openLoadout, patchLoadout, placeLoadout, placed, readLoadouts, renameGroup,
@@ -194,6 +194,8 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   const [draft, setDraft] = useState('')
   const savedGroups = useGroups()
   const batch = usePreviewBatch()
+  const stage = usePreviewStage(Boolean(batch)) // the generator's step now, in the running Generate button's menu
+  const runJobs = useRef(0) // how many loadouts the run that just ended rendered, for its toast
   const lastRun = usePreviewSummary()
   const [editingGroup, setEditingGroup] = useState<string | null>(null)
   const [groupBy, setGroupByState] = useState<GroupBy>(() => (savedItem(GROUP_BY_KEY) === 'hero' ? 'hero' : 'group'))
@@ -312,6 +314,20 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     window.addEventListener('keydown', esc, true)
     return () => { document.removeEventListener('mousedown', close); window.removeEventListener('keydown', esc, true) }
   }, [genMenu])
+  // A preview run lives in the Generate all previews button (its count, and Stop in its menu), not in a row of its own.
+  // Its menu closes when a run starts or ends, so it never shows the other menu's choices by surprise
+  useEffect(() => setGenMenu(false), [Boolean(batch)]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (batch) runJobs.current = Math.max(runJobs.current, batch.jobs) }, [batch?.jobs]) // eslint-disable-line react-hooks/exhaustive-deps
+  // When the whole run has ended: its result as a toast (once), unless a failure toast already said it
+  useEffect(() => {
+    if (batch || !lastRun) return
+    const jobs = runJobs.current
+    runJobs.current = 0
+    dismissPreviewSummary()
+    if (/failed/.test(lastRun)) return
+    if (/made/.test(lastRun)) p.alert.success('Previews done', jobs > 1 ? `${plural(jobs, 'loadout')} rendered.` : `${lastRun}.`)
+    else p.alert.info(lastRun === 'Stopped' ? 'Previews stopped' : 'Previews', `${lastRun}.`)
+  }, [batch, lastRun]) // eslint-disable-line react-hooks/exhaustive-deps
   if (view !== 'home') return null
 
   const toggle = async (l: Loadout, on: boolean) => {
@@ -416,13 +432,24 @@ export default function LoadoutsScreen(p: LoadoutProps) {
           </button>
           {!canGenerate && <PreviewsUnavailable className="lo-text-btn" label="Generate all previews" />}
           {canGenerate && <div className="lo-gen" ref={genRef}>
-            <button type="button" className="lo-text-btn" disabled={loadouts.length === 0} aria-haspopup={withPreview > 0 ? 'menu' : undefined}
-              aria-expanded={withPreview > 0 ? genMenu : undefined}
-              title="Render a preview for every loadout, one after another (each card shows its progress)"
-              onClick={() => (withPreview > 0 ? setGenMenu(v => !v) : generate('all'))}>
-              <WandSparkles size={14} /> Generate all previews
+            {/* While a run goes: how far it is (shimmering), and its menu has the step it is on and Stop */}
+            <button type="button" className="lo-text-btn" disabled={loadouts.length === 0 && !batch} aria-haspopup={batch || withPreview > 0 ? 'menu' : undefined}
+              aria-expanded={batch || withPreview > 0 ? genMenu : undefined}
+              title={batch ? `Generating previews for ${batch.name}` : 'Render a preview for every loadout, one after another (each card shows its progress)'}
+              onClick={() => (batch || withPreview > 0 ? setGenMenu(v => !v) : generate('all'))}>
+              <WandSparkles size={14} />
+              {batch ? <span className="t-shimmer">{batch.jobs > 1 ? `Previews ${batch.job} of ${batch.jobs}` : 'Generating preview'}</span> : 'Generate all previews'}
             </button>
-            {genMenu && (
+            {genMenu && batch && (
+              <div className="sigeon-menu lo-gen-menu" role="menu">
+                <div className="lo-gen-status" role="status"><b>{batch.name}</b><span>{stage || 'Starting…'}</span></div>
+                <button type="button" role="menuitem" className="sigeon-item run-stop-btn" disabled={batch.stopping} onClick={() => { setGenMenu(false); stopPreviews() }}
+                  title={batch.left ? 'Stop now and clear the queue' : 'Stop now'}>
+                  <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />{batch.stopping ? 'Stopping…' : batch.left ? 'Stop all' : 'Stop'}</span>
+                </button>
+              </div>
+            )}
+            {genMenu && !batch && (
               <div className="sigeon-menu lo-gen-menu" role="menu">
                 <button type="button" role="menuitem" className="sigeon-item" disabled={withPreview === loadouts.length} onClick={() => generate('missing')}>
                   <span>Only the ones without a preview</span><small>{loadouts.length - withPreview}</small>
@@ -440,23 +467,6 @@ export default function LoadoutsScreen(p: LoadoutProps) {
           </div>
         </div>
       </header>
-      {batch && (
-        <div className="lo-batch" role="status">
-          <span className="lo-batch-what"><span className="t-shimmer">Generating previews for {batch.name}</span></span>{/* one line, one shimmer, the name in it */}
-          {batch.jobs > 1 && <span className="lo-batch-left">{batch.job} of {batch.jobs}</span>}
-          <button type="button" className="lo-text-btn lo-batch-stop run-stop-btn" onClick={stopPreviews} disabled={batch.stopping}
-            title={batch.left ? 'Stop now and clear the queue' : 'Stop now'}>
-            <span className="stop-glyph" aria-hidden="true" />{batch.stopping ? 'Stopping…' : batch.left ? 'Stop all' : 'Stop'}
-          </button>
-        </div>
-      )}
-      {!batch && lastRun && (
-        <div className="lo-batch is-summary" role="status">
-          <span>Last preview run: {lastRun}</span>
-          <button type="button" className="lo-text-btn lo-batch-stop" onClick={dismissPreviewSummary}>Dismiss</button>
-        </div>
-      )}
-
       <div className="lo-body" ref={setCardsEl}>
 
         {loadouts.length === 0 && (
@@ -464,11 +474,13 @@ export default function LoadoutsScreen(p: LoadoutProps) {
             <h3>No loadouts yet</h3>
             <p>A loadout is a set of mods you switch on and off together, like one look, one VFX color or one hero's full set of mods.</p>
             <div className="lo-first-actions">
-              <button type="button" className="lo-text-btn is-primary" onClick={createFromOn} disabled={!p.mods.some(m => m.enabled)}
-                title={p.mods.some(m => m.enabled) ? undefined : 'No mods are on right now'}>
-                Make one from the {p.mods.filter(m => m.enabled).length} mods that are on now
-              </button>
-              <button type="button" className="lo-text-btn" onClick={createEmpty}>Start an empty one</button>
+              {/* only when some mods are on: "the 0 mods that are on now" offered a button that could do nothing */}
+              {p.mods.some(m => m.enabled) && (
+                <button type="button" className="lo-text-btn is-primary" onClick={createFromOn}>
+                  Make one from the {plural(p.mods.filter(m => m.enabled).length, 'mod')} that {p.mods.filter(m => m.enabled).length === 1 ? 'is' : 'are'} on now
+                </button>
+              )}
+              <button type="button" className={`lo-text-btn${p.mods.some(m => m.enabled) ? '' : ' is-primary'}`} onClick={createEmpty}>Start an empty one</button>
             </div>
           </div>
         )}
