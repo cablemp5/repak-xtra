@@ -7,7 +7,7 @@ import { motion } from 'framer-motion'
 import Checkbox from '../components/ui/Checkbox'
 import { detectHeroesWithData } from '../utils/heroes'
 import { type KeepDeps, turnOffWithUndo } from './keepOne'
-import { displayName, modKey } from './loadoutStore'
+import { nameKey } from './loadoutStore'
 import { ModName, plural } from './modName'
 
 type Mod = { path: string; enabled?: boolean }
@@ -52,7 +52,7 @@ export async function findSuspects(p: CrashPayload, on: Mod[], details: Record<s
   return p.character_id ? heroSuspects(on, details, heroes, p.character_id) : []
 }
 
-const name = (p: string) => displayName(modKey(p))
+const name = nameKey
 
 /** Mounted once in App: opens on See suspects. */
 export default function CrashSuspects({ deps, mods, details, heroes }: {

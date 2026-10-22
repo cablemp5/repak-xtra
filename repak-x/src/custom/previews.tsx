@@ -10,7 +10,7 @@ import { listen } from '@tauri-apps/api/event'
 import { ListPlus, WandSparkles, X } from 'lucide-react'
 import { play } from 'cuelume'
 import { useAlert } from '../components/AlertHandler'
-import { type Loadout, coverFills, modKey, patchLoadout, pickCover, readLoadouts } from './loadoutStore'
+import { type Loadout, coverFills, displayName, memberName, modKey, nameKey, patchLoadout, pickCover, readLoadouts } from './loadoutStore'
 import { revealOnLoad } from './motion'
 import { EGG_MS, stepEgg, stepText } from './previewStages'
 import { plural } from './modName'
@@ -66,8 +66,8 @@ type Job = { paths: string[]; set?: string; name: string; force?: boolean; show?
 type QueuedJob = Job & { id: string }
 /** A job's identity: its loadout render key, else its mods in any order. The name is for display only (a loadout can be
  *  renamed mid-run). Pure. */
-export const jobId = (j: { paths: string[]; set?: string }) => j.set ?? `mods:${JSON.stringify([...new Set(j.paths.map(modKey))].sort())}`
-const keysOf = (j: Job) => [...new Set(j.paths.map(modKey)), ...(j.set ? [j.set] : [])]
+export const jobId = (j: { paths: string[]; set?: string }) => j.set ?? `mods:${JSON.stringify([...new Set(j.paths.map(nameKey))].sort())}`
+const keysOf = (j: Job) => [...new Set(j.paths.map(nameKey)), ...(j.set ? [j.set] : [])]
 const queue: QueuedJob[] = []
 let active = false // a run was accepted and its done event has not arrived yet
 let batchDone = 0  // jobs finished since the queue was last empty, for Home's "3 of 21"
@@ -189,11 +189,13 @@ export const previewSetKey = (loadoutId: string) => `loadout-${loadoutId}`
  *  sound mods never get a combined render). */
 export const loadoutHasPreview = (l: { id: string; on: string[] }) => previewMade(l) || noPreviewPossible(l)
 /** A loadout's previews exist: its combined render, or any of its mods' own. */
-export const previewMade = (l: { id: string; on: string[] }) => hasPreview(previewSetKey(l.id)) || l.on.some(k => hasPreview(modKey(k)))
+export const previewMade = (l: { id: string; on: string[] }) => hasPreview(previewSetKey(l.id)) || l.on.some(k => namesOf(k).some(hasPreview))
 /** What a loadout's card shows (loadoutStore.ts pickCover), with its previews as they are now. */
 export const coverOf = (l: Loadout) => pickCover(l, coverFills(l, previewMade(l)))
 /** Every mod of the loadout rendered with nothing to show (sounds, unknown types): there is no preview to make. */
-export const noPreviewPossible = (l: { on: string[] }) => l.on.length > 0 && l.on.every(k => none.has(modKey(k)))
+export const noPreviewPossible = (l: { on: string[] }) => l.on.length > 0 && l.on.every(k => namesOf(k).some(n => none.has(n)))
+/** The preview names a loadout member may be cached under (previews are by file name, which keeps a priority-zero "!"). */
+const namesOf = (k: string) => { const n = memberName(k); return n.startsWith('!') ? [n] : [n, `!${n}`] }
 /** A loadout's combined render: the mods it shows and the mods it was rendered for; undefined while there is none
  *  (or until it is read, once per revision). */
 export function useCovers(setKey: string): Covers | undefined {
@@ -288,7 +290,7 @@ const refuse = (job: Job, reason: string) => {
 /** Starts a run; returns an error message, or null once started. Sets `active` before its first await, so jobs asked
  *  for in the same tick queue behind it. */
 const start = async (job: QueuedJob): Promise<string | null> => {
-  const jobs = [...new Map(job.paths.map(p => [modKey(p), [p.replace(/[/\\][^/\\]+$/, ''), modKey(p)] as [string, string]])).values()]
+  const jobs = [...new Map(job.paths.map(p => [nameKey(p), [p.replace(/[/\\][^/\\]+$/, ''), nameKey(p)] as [string, string]])).values()]
   if (jobs.length === 0) return null
   active = true
   jobs.forEach(([, k]) => { pending.add(k); outcome.delete(k) })
@@ -367,7 +369,7 @@ export async function generateAllLoadouts(loadouts: { id: string; name: string; 
   const byKey = new Map(mods.map(m => [modKey(m.path), m.path]))
   const jobs = loadouts
     .filter(l => which === 'all' || !loadoutHasPreview(l))
-    .map(l => ({ paths: l.on.map(k => byKey.get(modKey(k))).filter((x): x is string => Boolean(x)), set: previewSetKey(l.id), name: l.name, force: which === 'all' }))
+    .map(l => ({ paths: l.on.map(k => byKey.get(displayName(k))).filter((x): x is string => Boolean(x)), set: previewSetKey(l.id), name: l.name, force: which === 'all' }))
     .filter(j => j.paths.length > 0)
   const started = jobs.map(generatePreviews) // all asked for in this tick: the first starts, the rest queue behind it
   const error = (await Promise.all(started)).find(Boolean) ?? null
@@ -428,7 +430,7 @@ const ask = async (alert: ReturnType<typeof useAlert>, job: Job) => {
 export function ModPreview({ path }: { path: string }) {
   const alert = useAlert()
   const canGenerate = usePreviewsAvailable()
-  const key = modKey(path)
+  const key = nameKey(path)
   const url = usePreviewUrl(key)
   const id = jobId({ paths: [path] })
   const busy = pending.has(key)
@@ -477,7 +479,7 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
   const canGenerate = usePreviewsAvailable()
   const n = new Set(paths.map(modKey)).size
   // A loadout that already has its preview: the button renders it again, even when nothing changed
-  const again = Boolean(set && (hasPreview(set) || paths.some(p => hasPreview(modKey(p)))))
+  const again = Boolean(set && (hasPreview(set) || paths.some(p => hasPreview(nameKey(p)))))
   const job: Job = { paths, set, name: name ?? `${n} selected mod${n === 1 ? '' : 's'}`, force: again, show: Boolean(set) }
   const text = again ? label.replace(/^Generate/, 'Regenerate') : label
   if (!canGenerate) return <PreviewsUnavailable className={className} label={label} />

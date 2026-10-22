@@ -4,7 +4,7 @@ import { Ban, Camera, ChevronLeft, ChevronRight, Image as ImageIcon, ImagePlus, 
 import Switch from '../components/ui/Switch'
 import type { LoadoutProps } from './Loadouts'
 import { useMediaUrl } from './loadoutMedia'
-import { COVERS, type Cover, type Loadout, type Mod, captureKey, coverFills, displayName, flipMods, modKey, patchLoadout, pickCover } from './loadoutStore'
+import { COVERS, type Cover, type Loadout, type Mod, captureKey, coverFills, displayName, flipMods, memberName, modKey, nameKey, patchLoadout, pickCover } from './loadoutStore'
 import { ModName } from './modName'
 import { revealOnLoad } from './motion'
 import { formKeys, hasPreview, noPreviewPossible, previewMade, previewSetKey, useCovers, usePreviewStage, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
@@ -31,8 +31,11 @@ function usePreviewSlides(p: LoadoutProps, l: Loadout) {
   const set = previewSetKey(l.id)
   const info = useCovers(set)
   const byKey = new Map(p.mods.map(m => [modKey(m.path), m]))
-  const categoryOf = (k: string) => { const m = byKey.get(k); return (m && p.modDetails?.[m.path]?.category) || undefined }
-  const mine = [...new Set(l.on.map(displayName))]
+  // Previews are cached by name (nameKey), not by member key: each member's preview is its mod's, by that mod's name
+  const members = [...new Set(l.on.map(displayName))]
+  const byName = new Map(members.map(k => { const m = byKey.get(k); return [m ? nameKey(m.path) : memberName(k), m] as const }))
+  const categoryOf = (k: string) => { const m = byName.get(k); return (m && p.modDetails?.[m.path]?.category) || undefined }
+  const mine = [...byName.keys()]
   const covered = (info?.covers ?? []).filter(k => mine.includes(k))
   const keys = mine.filter(k => hasPreview(k) && !covered.includes(k))
     .sort((a, b) => rank(categoryOf(a)) - rank(categoryOf(b)))
@@ -44,18 +47,19 @@ function usePreviewSlides(p: LoadoutProps, l: Loadout) {
     return k === g[0] ? [{ key: k, keys: g, label: `${g.length} ${categoryOf(k)}` }] : []
   })
   if (hasPreview(set)) {
-    const installed = new Set(mine.filter(k => byKey.has(k)))
+    const installed = new Set(mine.filter(k => byName.get(k)))
     const older = info !== undefined && !(info.members && info.members.length === installed.size && info.members.every(k => installed.has(k)))
     const kinds = [...new Set(covered.map(categoryOf).filter((c): c is string => Boolean(c)))].sort((a, b) => rank(a) - rank(b))
     slides.unshift({ key: set, label: older ? 'Older render' : kinds.join(' + ') || 'Character', older }) // e.g. "Mesh + Texture + Material"
   }
   // A hero with forms (Magik and Darkchylde, Hulk's three): each other form's image follows its first; a shared slide
   // (several Material mods) gets one more shared slide with their other forms
-  return slides.flatMap((s): Slide[] => {
+  const all = slides.flatMap((s): Slide[] => {
     if (!s.keys) return [s, ...formKeys(s.key).map((k, i) => ({ key: k, label: `${s.label} · form ${i + 2}`, older: s.older }))]
     const more = s.keys.flatMap(formKeys)
     return more.length ? [s, { key: more[0], keys: more, label: `${s.label} · other forms` }] : [s]
   })
+  return [all, mine] as [Slide[], string[]] // mine: the members' preview names (the emote sound looks them up)
 }
 
 /** What the card's Cover switch calls each source, and its icon. */
@@ -82,7 +86,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   const ownUrl = useMediaUrl(l.id, l.mediaRev)
   const own = ownUrl ?? l.image
   const shot = useMediaUrl(captureKey(l.id), l.captureRev)
-  const previewSlides = usePreviewSlides(p, l)
+  const [previewSlides, previewNames] = usePreviewSlides(p, l)
   const fills = coverFills(l, previewMade(l))
   const auto = pickCover(l, fills)
   // the page shows the picked source even while empty (with its way to fill it); Home shows what there is
@@ -118,7 +122,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   // image) and the sound plays once the restarted clip is on screen (custom/emoteSound.ts). The restart belongs to the
   // slide it was made for: paging ends it and its sound, and paging onto such a slide while hovered starts its own
   const slideKey = slide?.keys ? undefined : slide?.key || undefined
-  const sound = useEmoteSound(slideKey, [...new Set(l.on.map(displayName))])
+  const sound = useEmoteSound(slideKey, previewNames)
   // muted: the clip still plays, without its sound and its restart. While a new preview renders: no sound at all
   const audible = l.muted || working ? null : sound
   const [restart, setRestart] = useState<{ key: string; url: string; seconds: number } | null>(null)
@@ -302,15 +306,17 @@ export async function toggleMod(p: LoadoutProps, mod: Mod) {
     return
   }
   const failed = await flipMods([mod])
-  if (failed.length) p.alert.warning('Not switched', failed.reason ?? `${displayName(mod.path.split(/[/\\]/).pop() || mod.path)} could not be switched.`)
+  if (failed.length) p.alert.warning('Not switched', failed.reason ?? `${nameKey(mod.path)} could not be switched.`)
   await p.reload()
 }
 
 /** One mod row: name, type, then the optional on/off switch (on the right, like the Library) and any trailing actions.
  *  With onRename, the pencil (or a double-click on the name) renames the mod's files. */
-export function ModRow({ p, k, mod, onToggle, onRename, children }: {
+export function ModRow({ p, k: key, mod, onToggle, onRename, unsure, children }: {
   p: LoadoutProps; k: string; mod?: Mod; onToggle?: boolean; onRename?: (mod: Mod, name: string) => void; children?: React.ReactNode
+  unsure?: boolean // not installed under its key, but installed mods could be it: the row offers them (LoadoutPage)
 }) {
+  const k = mod ? nameKey(mod.path) : memberName(key) // the name it shows: the file's own, "!" included
   const category = mod && p.modDetails?.[mod.path]?.category
   const verdict = useVerdict(mod?.path ?? '') // Broken or May crash, as in the Library
   const [draft, setDraft] = useState<string | null>(null)
@@ -320,7 +326,7 @@ export function ModRow({ p, k, mod, onToggle, onRename, children }: {
   const finish = () => { if (!cancelled.current && draft !== null && mod && onRename) onRename(mod, draft); setDraft(null) }
   return (
     <li className={`mod-row ${mod ? (mod.enabled ? 'is-on' : '') : 'is-missing'}`}
-      title={draft !== null || mod ? undefined : 'Not installed anymore'}>{/* an installed row's badge and switch already say its type and state */}
+      title={draft !== null || mod ? undefined : unsure ? 'Pick the installed mod this loadout means' : 'Not installed anymore'}>{/* an installed row's badge and switch already say its type and state */}
       {draft !== null
         ? <input className="mod-row-rename" autoFocus value={draft} aria-label={`New name for ${k}`} onFocus={e => e.target.select()}
             onChange={e => setDraft(e.target.value)} onBlur={finish}
@@ -339,7 +345,9 @@ export function ModRow({ p, k, mod, onToggle, onRename, children }: {
       {onToggle && (mod
         ? <Switch size="sm" color="primary" checked={Boolean(mod.enabled)} title={mod.enabled ? `Turn ${k} off` : `Turn ${k} on`}
             aria-label={mod.enabled ? `Turn ${k} off` : `Turn ${k} on`} onChange={() => toggleMod(p, mod)} />
-        : <span className="mod-type-badge category-badge deleted-badge" title="This mod was deleted: it is no longer installed">Deleted</span>)}
+        : unsure
+          ? <span className="mod-type-badge category-badge unknown-badge" title="Installed mods in other folders have this name: pick one">Which one?</span>
+          : <span className="mod-type-badge category-badge deleted-badge" title="This mod was deleted: it is no longer installed">Deleted</span>)}
       {children}
     </li>
   )
