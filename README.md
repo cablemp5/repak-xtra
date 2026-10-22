@@ -38,7 +38,10 @@ you do not need to unzip it.
    - **Find the game** usually has a blue check already. If not, click **Find it**.
    - **Install the signature bypass:** click **Install**. Without it, the game does not load mods.
    - **Install Project Galacta:** click **Install**. Most skin mods need it.
-   - **Mod previews** and **Desktop shortcut** are optional. You can skip them for now.
+   - **Mod previews** is recommended: click **Set up previews** and every mod and loadout gets a picture of how it
+     looks in the game. It downloads the free preview kit (about 110 MB) and installs Blender; if Windows asks whether
+     to allow changes, click **Yes**.
+   - **Desktop shortcut** is optional.
 6. **Add your mod.** Drag the mod file from your Downloads folder onto the repakxtra window and drop it on
    **Install Mods**. You can also click **Choose files...** under **Add your first mods** and pick it.
 7. **Click Install and save loadout.** It installs the mod and saves it as a loadout too (see below). Leave
@@ -59,11 +62,12 @@ in **Settings > Recently deleted** in case you want it back.
 A loadout is a group of mods with one switch, like one look for a hero. It gets a picture of what the mods look like
 in the game.
 
-1. **Set up previews (only once).** Click **Setup** at the top. Under **Mod previews**, click **Set up previews**. It
-   downloads the free preview kit (about 110 MB) and installs Blender, the free program that draws the pictures. If
-   Windows asks whether to allow changes, click **Yes**. When it says **Ready**, close Setup.
+1. **Set up previews (only once).** Skip this if you did it on the welcome screen. Otherwise click **Setup** at the
+   top and, under **Mod previews**, click **Set up previews**. It downloads the free preview kit (about 110 MB) and
+   installs Blender, the free program that draws the pictures. If Windows asks whether to allow changes, click **Yes**.
+   When it says **Ready**, close Setup.
 2. **Install a mod** as in the steps above: drag the file onto the window and drop it on **Install Mods** (or click
-   **PAK** in the Library and pick it). To make the loadout yourself, click **Install without a loadout**.
+   **Install** in the Library and pick it). To make the loadout yourself, click **Install without a loadout**.
    (**Install and save loadout** does steps 3 to 6 for you.)
 3. **Make a loadout.** Click **Loadouts** at the top, then **New loadout**.
 4. **Name it.** Type a name, like `Ultimate`, and press **Enter**.
@@ -80,9 +84,13 @@ in the game.
 
 **Loadouts**
 - One click turns a set of mods on or off. Loadouts are independent, and you are warned when two that are on change the same hero.
-- Collections or a view by hero. Drag a card to reorder it, move it to another collection or start a new one with it; the
-  pencils rename loadouts and collections. **−** and **+** in the header (or `Ctrl` + scroll) change the card size.
-- Make one from the Library selection, the right-click menu or while installing. Undo for every removal.
+- Collections or a view by hero. Drag a card to reorder it or move it to another collection; the pencils rename
+  loadouts and collections. **−** and **+** in the header (or `Ctrl` + scroll) change the card size, and **Search
+  loadouts...** finds one by name or collection.
+- Make one from the Library selection, the right-click menu or while installing. Undo for every removal, and a deleted
+  loadout waits 7 days in **Settings > Recently deleted** with its cover.
+- A loadout remembers each mod by its folder and name, so changing a mod's priority keeps it in the loadout, and two
+  mods with the same name in different folders stay apart.
 - On a loadout's page: add and remove mods, rename a mod, turn single mods on or off, and **More > Export as zip** (every
   mod's files in one zip, named after the loadout). Mods installed from the page join the loadout, and mods deleted
   from the Library show a red **Deleted** tag. Changes save as you make them.
@@ -105,9 +113,11 @@ in the game.
 > [!NOTE]
 > Rendered previews need the preview kit and [Blender](https://www.blender.org/download/) (free). **Setup > Mod previews** installs both.
 
-**Library:** hero and type filters (Nexus and Project Galacta mods too), double-click to rename. Deleted mods (and a mod's old version when it is updated, or a folder's mods when the folder is deleted) wait 7 days in **Settings > Recently deleted**
-(Undo right after a delete, Restore any time before). Mods that are on and clash with another mod that is on get a red
-**Conflict** badge, and **Check Conflicts** shows a red dot while any do; it groups the clashing mods and says what they
+**Library:** hero and type filters (Nexus and Project Galacta mods too), double-click to rename, and the arrow keys
+move through the list. Switching to Loadouts and back keeps your search, filters and checked mods; **Show all** clears
+the filters. Libraries of thousands of mods stay quick. Deleted mods (and a mod's old version when it is updated, or a folder's mods when the folder is deleted) wait 7 days in **Settings > Recently deleted**
+(Undo right after a delete, Restore any time before). Mods that are on and clash with another mod that is on (a PAK and an IoStore mod
+that replace the same asset count too) get a red **Conflict** badge, and **Check Conflicts** shows a red dot while any do; it groups the clashing mods and says what they
 replace ("These 3 mods replace Black Panther's materials"); **Keep this one** on a mod turns the others in its group off,
 with Undo. Mods installed from a Nexus Mods download get an orange **Nexus** tag that opens their page, and their source
 in mod details ("Nexus 12890, uploaded Sep 13, 2026" with **Open page**), read from the download's file name. On its
@@ -115,7 +125,8 @@ first launch repakxtra finds the source of mods you installed earlier from the N
 folder. Project Galacta mods get a magenta tag. File sizes are a setting (**Settings > Interface > On each mod**), and
 **Settings > Interface > On each mod** hides the Nexus tag and the Broken and Conflict warnings, and **Header buttons** hides Sigeon.
 
-**Installing:** drop zips, rars and 7zs as they are, no need to extract. `.pak.off`, `.utoc.off` and `.ucas.off` files
+**Installing:** drop zips, rars and 7zs as they are, no need to extract. Reinstalling or updating a mod builds the
+new version first and keeps the old one in **Recently deleted**, so a failed install leaves your mod as it was. `.pak.off`, `.utoc.off` and `.ucas.off` files
 (how RivalsFPS turns mods off, and how they often get shared) install like any other mod, each set as one mod, on.
 
 **When something breaks:** a crash alert's **See suspects** lists the mods that were on and hold the asset that crashed
@@ -368,10 +379,12 @@ Pull requests into `main` must pass **Typecheck, build and test** (`.github/work
 cd repak-x
 npm ci
 npx tsc --noEmit -p .
+npm run test:unit   # the interface's self-checks
 npm run build
 cd ..
 $env:SKIP_UASSET_TOOL_BUILD = '1'
-cargo test -p repak-x --bin REPAK-X
+cargo test --locked -p repak-x --bin REPAK-X
+cargo test --locked -p uasset_app --lib
 ```
 
 ### Browser preview
