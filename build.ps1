@@ -90,6 +90,16 @@ if ($Release) {
     } finally { Remove-Item $check -Recurse -Force -ErrorAction SilentlyContinue }
     $hash = (Get-FileHash $zip).Hash.ToLower()
     Write-Host "Packed: $zip (SHA-256 $hash)" -ForegroundColor Green
+    # Signed for the in-app updater (repak-x\scripts\release-signing.ps1): once the app has a release key built in, it
+    # refuses an update without a matching signature, so a release must not go out unsigned
+    $sig = "$zip.sig.json"
+    Remove-Item $sig -ErrorAction SilentlyContinue
+    $hasKey = (Get-Content repak-x\src\release-key.xml -Raw -ErrorAction SilentlyContinue) -match '<RSAKeyValue>'
+    if ($hasKey) {
+        Run { & powershell -NoProfile -ExecutionPolicy Bypass -File repak-x\scripts\release-signing.ps1 -Sign -Zip $zip -Version $ver }
+    } else {
+        Write-Host 'No release key in repak-x\src\release-key.xml yet: this release is unsigned (see release-signing.ps1 -NewKey).' -ForegroundColor Yellow
+    }
     # Release notes (cable's format, 2026-10-17): a Downloads table (the zip and its checksum) and a Changelog of short
     # lines from release-notes\v<ver>.md. No version bump line, generated "What's changed", PR or author lines
     $name = Split-Path $zip -Leaf
@@ -106,7 +116,8 @@ if ($Release) {
     [IO.File]::WriteAllText((Join-Path $PWD $notes), ($body -join "`n") + "`n")
     Write-Host "Notes: $notes" -ForegroundColor Green
     # On the clipboard as one line: a wrapped terminal line copied by hand can pick up a line break and fail to parse
-    $publish = "gh release create v$ver $zip $sum -R cablemp5/repak-xtra --target main --latest --title `"repak-xtra $ver`" --notes-file $notes"
+    $assets = if (Test-Path $sig) { "$zip $sum $sig" } else { "$zip $sum" }
+    $publish = "gh release create v$ver $assets -R cablemp5/repak-xtra --target main --latest --title `"repak-xtra $ver`" --notes-file $notes"
     Set-Clipboard -Value $publish
     Write-Host 'The publish command is on the clipboard: paste it and press Enter:'
     Write-Host "  $publish"

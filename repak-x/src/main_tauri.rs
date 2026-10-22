@@ -6262,6 +6262,22 @@ async fn download_update(
 
     info!("Update downloaded to: {:?}", download_path);
 
+    // repakxtra: the release's signature file sits next to the zip (checked in apply_update, right before it is used)
+    if crate::xtra_update::signing_required() {
+        let sig = client
+            .get(format!("{asset_url}.sig.json"))
+            .header("User-Agent", "repakxtra")
+            .send()
+            .await
+            .and_then(|r| r.error_for_status())
+            .map_err(|e| format!("This release has no signature, so it cannot be applied ({e}). Download it from github.com/cablemp5/repak-xtra/releases"))?
+            .bytes()
+            .await
+            .map_err(|e| format!("Could not download the update's signature: {e}"))?;
+        std::fs::write(temp_dir.join(format!("{asset_name}.sig.json")), &sig)
+            .map_err(|e| format!("Could not save the update's signature: {e}"))?;
+    }
+
     // Emit completion progress
     let progress = UpdateDownloadProgress {
         downloaded_bytes: downloaded,
@@ -6314,6 +6330,13 @@ async fn apply_update(downloaded_path: String, window: Window) -> Result<(), Str
     // this version (v0.5.0 first shipped a tar named .zip): refused here, while the app is still open to say so
     if is_zip {
         crate::xtra_update::check_update_zip(&download_path)?;
+        // repakxtra: signed by the release key, for this file, newer than this version (xtra_update::verify_release)
+        let mut sig_path = download_path.clone().into_os_string();
+        sig_path.push(".sig.json");
+        let sig = std::fs::read_to_string(&sig_path).unwrap_or_default();
+        crate::xtra_update::verify_release(&download_path, &sig, crate::xtra_update::version())?;
+    } else if crate::xtra_update::signing_required() {
+        return Err("Only a signed release zip can be applied. Download it from github.com/cablemp5/repak-xtra/releases".to_string());
     }
 
     // Use runtime OS detection to create the appropriate updater script
