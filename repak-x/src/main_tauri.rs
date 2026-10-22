@@ -21,6 +21,7 @@ mod xtra_crash; // repakxtra: crash facts for the setup report, crash suspects
 mod xtra_broken; // repakxtra: mods that will not work in the installed game version
 mod xtra_nexus; // repakxtra: Nexus source from archive names
 mod xtra_offfiles; // repakxtra: .pak.off files install like .pak
+mod xtra_bundle; // repakxtra: a mod's pak/utoc/ucas found and moved as one set
 mod character_data;
 mod crash_monitor;
 mod discord_presence;
@@ -30,10 +31,7 @@ mod ip_obfuscation;
 mod merge_command;
 mod p2p_libp2p;
 mod p2p_manager;
-mod p2p_protocol;
-mod p2p_security;
 mod p2p_sharing;
-mod p2p_stream;
 mod toast_events;
 mod uasset_api_integration;
 mod uasset_detection;
@@ -646,26 +644,7 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
         // Check for .pak, .bak_repak, and .pak_disabled files
         if ext == Some("pak") || ext == Some("bak_repak") || ext == Some("pak_disabled") {
             let is_enabled = ext == Some("pak");
-            let utoc_path = if ext == Some("pak") || ext == Some("pak_disabled") {
-                let candidate = path.with_extension("utoc");
-                if candidate.exists() {
-                    Some(candidate)
-                } else {
-                    None
-                }
-            } else {
-                let enabled_pak_path = PathBuf::from(
-                    path.to_string_lossy()
-                        .trim_end_matches(".bak_repak")
-                        .to_string(),
-                );
-                let candidate = enabled_pak_path.with_extension("utoc");
-                if candidate.exists() {
-                    Some(candidate)
-                } else {
-                    None
-                }
-            };
+            let utoc_path = Some(crate::xtra_bundle::companion(&path, "utoc")).filter(|p| p.exists()); // repakxtra: keeps dots in the name
 
             // Determine which folder this mod is in
             let root_folder_name = game_path
@@ -810,26 +789,7 @@ async fn get_pak_files_in_folder(
         // Check for .pak, .bak_repak, and .pak_disabled files
         if ext == Some("pak") || ext == Some("bak_repak") || ext == Some("pak_disabled") {
             let is_enabled = ext == Some("pak");
-            let utoc_path = if ext == Some("pak") || ext == Some("pak_disabled") {
-                let candidate = path.with_extension("utoc");
-                if candidate.exists() {
-                    Some(candidate)
-                } else {
-                    None
-                }
-            } else {
-                let enabled_pak_path = PathBuf::from(
-                    path.to_string_lossy()
-                        .trim_end_matches(".bak_repak")
-                        .to_string(),
-                );
-                let candidate = enabled_pak_path.with_extension("utoc");
-                if candidate.exists() {
-                    Some(candidate)
-                } else {
-                    None
-                }
-            };
+            let utoc_path = Some(crate::xtra_bundle::companion(&path, "utoc")).filter(|p| p.exists()); // repakxtra: keeps dots in the name
 
             // Determine which folder this mod is in
             let root_folder_name = game_path
@@ -981,18 +941,18 @@ async fn set_mod_priority(
         return Err("A mod with this priority already exists".to_string());
     }
 
-    // Rename main file
-    std::fs::rename(&path, &new_path).map_err(|e| format!("Failed to rename mod: {}", e))?;
-
-    // Rename associated files (.utoc, .ucas)
-    let exts = ["utoc", "ucas"];
-    for ext in exts {
-        let old_f = path.with_extension(ext);
+    // repakxtra: the pak and its .utoc/.ucas move as one set; a taken companion name or a locked file changes nothing
+    let mut moves = vec![(path.clone(), new_path.clone())];
+    for ext in ["utoc", "ucas"] {
+        let old_f = crate::xtra_bundle::companion(&path, ext);
+        let new_f = crate::xtra_bundle::companion(&new_path, ext);
         if old_f.exists() {
-            let new_f = new_path.with_extension(ext);
-            let _ = std::fs::rename(old_f, new_f);
+            moves.push((old_f, new_f));
+        } else if new_f.exists() {
+            return Err(format!("{} already exists", new_f.display()));
         }
     }
+    crate::xtra_bundle::move_all(&moves).map_err(|e| format!("Failed to rename mod: {}", e))?;
 
     // Invalidate cache for old path
     {
@@ -4940,19 +4900,7 @@ async fn extract_mod_assets_inner(
     if extension == "pak" || extension == "bak_repak" {
         // Check if there's a .utoc file with the same name - if so, use IoStore extraction
         // Handle .bak_repak (disabled mod) by stripping .bak_repak then .pak to get base name
-        let base_path = if extension == "bak_repak" {
-            let name = path
-                .file_name()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_default();
-            let base_name = name.trim_end_matches(".bak_repak").trim_end_matches(".pak");
-            path.parent()
-                .map(|p| p.join(base_name))
-                .unwrap_or_else(|| PathBuf::from(base_name))
-        } else {
-            path.with_extension("")
-        };
-        let utoc_path = base_path.with_extension("utoc");
+        let utoc_path = crate::xtra_bundle::companion(&path, "utoc"); // repakxtra: keeps dots in the name
         if utoc_path.exists() {
             log::info!("Detected IoStore mod (has .utoc alongside .pak/.bak_repak), using IoStore extraction");
             path = utoc_path;

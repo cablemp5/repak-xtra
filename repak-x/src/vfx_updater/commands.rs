@@ -272,9 +272,8 @@ pub async fn vfx_copy_uasset_files(
             .map_err(|e| format!("[VFX] Failed to copy {}: {}", source_path, e))?;
 
         // Copy companion files (.uexp, .ubulk, .uptnl) if they exist
-        let stem = source.with_extension("");
         for ext in &["uexp", "ubulk", "uptnl"] {
-            let companion = stem.with_extension(ext);
+            let companion = source.with_extension(ext); // repakxtra: one extension, so dots in the name stay
             if companion.exists() {
                 let dest_companion = Path::new(&dest_base_dir).join(rel_path.with_extension(ext));
                 std::fs::copy(&companion, &dest_companion).ok();

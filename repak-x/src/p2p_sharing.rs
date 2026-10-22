@@ -386,10 +386,8 @@ pub fn create_mod_pack(
 
         // Check for IoStore companion files
         let mut iostore_files = Vec::new();
-        let base_path = path.with_extension("");
-
         for ext in &["ucas", "utoc"] {
-            let companion = base_path.with_extension(ext);
+            let companion = crate::xtra_bundle::companion(path, ext); // repakxtra: keeps dots in the name
             if companion.exists() {
                 let comp_meta = fs::metadata(&companion).map_err(|e| {
                     P2PError::FileError(format!("Failed to get companion metadata: {}", e))
@@ -519,9 +517,8 @@ impl P2PServer {
                 path_map.insert(key, path.clone());
 
                 // Also add IoStore files
-                let base_path = path.with_extension("");
                 for ext in &["ucas", "utoc"] {
-                    let companion = base_path.with_extension(ext);
+                    let companion = crate::xtra_bundle::companion(&path, ext); // repakxtra: keeps dots in the name
                     if companion.exists() {
                         if let Some(comp_name) = companion.file_name().and_then(|n| n.to_str()) {
                             path_map.insert(comp_name.to_string(), companion);
