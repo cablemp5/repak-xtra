@@ -294,10 +294,10 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       // localStorage 'mock.clashes': a JSON list of { file_path, mod_paths } to show conflicts (custom/conflicts.ts)
       case 'check_mod_clashes': return JSON.parse(localStorage.getItem('mock.clashes') || '[]')
       // localStorage 'mock.broken' = '1' marks the first mod Broken and the second May crash (xtra_broken.rs reads the game's files)
-      // 'mock.broken' = 'vfx' marks every mod with VFX in its name Needs VFX fix instead (custom/vfx/VfxNotice.tsx shows)
+      // 'mock.broken' = 'vfx' marks every mod with VFX in its name Needs VFX update instead (custom/vfx/VfxNotice.tsx shows)
       case 'xtra_broken_mods':
         if (localStorage.getItem('mock.broken') === 'vfx') return (args?.modPaths ?? []).filter((p: string) => /vfx/i.test(p) && !/_UPDATED_/i.test(p)).map((path: string) => ({ path, kind: 'vfx',
-          reason: 'A game update changed 381 of the game files this VFX mod replaces, so its effects may look wrong or crash the game. Fix VFX mods rebuilds it on the new game files.' }))
+          reason: 'A game update changed 381 of the game files this VFX mod replaces, so its effects may look wrong or crash the game. The VFX Updater rebuilds it on the new game files.' }))
         return localStorage.getItem('mock.broken') ? (args?.modPaths ?? []).slice(0, 2).map((path: string, i: number) => ({ path,
           kind: i ? 'risky' : 'broken', reason: i ? 'A Blueprint mod installed before the last game update.' : 'None of the 3 game files it replaces exist in this game version.' })) : []
       case 'xtra_game_build': return { updated: Math.floor(Date.now() / 1000) - 3600 * 5, cl: 3962284 }
@@ -342,7 +342,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         return mod?.enabled ?? null
       }
       default: {
-        const vfx = mockVfx(cmd, args) // the Fix VFX mods window's commands
+        const vfx = mockVfx(cmd, args) // the VFX Updater window's commands
         if (vfx !== undefined) return vfx
         console.debug('[mockBackend] unhandled', cmd, args)
         return null
@@ -351,7 +351,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
   }, { shouldMockEvents: true })
 }
 
-// The Fix VFX mods window (custom/vfx/) in the browser: a fake run with materials to rebuild, Niagara systems that pass
+// The VFX Updater window (custom/vfx/) in the browser: a fake run with materials to rebuild, Niagara systems that pass
 // through, one asset the tool cannot read, one the game lacks and one parameter the game dropped. window.__vfxStep sets
 // the ms each tool step takes (400). localStorage 'mock.vfxFail' = part of a mod's name makes its extraction fail.
 const vfxFiles = new Map<string, string>()

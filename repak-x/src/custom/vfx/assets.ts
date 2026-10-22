@@ -1,4 +1,4 @@
-// repakxtra: what Fix VFX mods carries from a mod's asset JSON onto the game's (UAssetAPI JSON from UAssetTool's to_json).
+// repakxtra: what the VFX Updater carries from a mod's asset JSON onto the game's (UAssetAPI JSON from UAssetTool's to_json).
 // Material instances: every Scalar, Vector and Texture parameter entry, matched by its ParameterInfo (name, association,
 // index) and copied whole. A texture parameter points into the asset's import table, so the texture's imports (and their
 // names) are added to the game's JSON when it does not import that texture yet. Blueprints and data tables: color

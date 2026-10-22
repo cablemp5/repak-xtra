@@ -8526,7 +8526,7 @@ fn main() {
             xtra_crash::xtra_newest_crash, // repakxtra: setup report
             xtra_crash::xtra_crash_suspects, // repakxtra: crash suspects
             xtra_broken::xtra_broken_mods, // repakxtra: broken mods
-            xtra_vfx::xtra_vfx_dirs, // repakxtra: Fix VFX mods
+            xtra_vfx::xtra_vfx_dirs, // repakxtra: VFX Updater
             xtra_vfx::xtra_vfx_detect,
             xtra_vfx::xtra_vfx_place,
             xtra_vfx::xtra_game_build,

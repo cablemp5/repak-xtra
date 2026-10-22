@@ -1,4 +1,4 @@
-// repakxtra: Fix VFX mods, one mod at a time: rebuilds a VFX mod's materials and blueprints from the installed game's own
+// repakxtra: the VFX Updater, one mod at a time: rebuilds a VFX mod's materials and blueprints from the installed game's own
 // files and carries the mod's edits onto them (assets.ts), so a game update that changed those files no longer breaks it.
 // Started from the upstream VFX Updater's usePipeline; its Rust steps (vfx_updater/) do the UAssetTool work.
 //   1 Extract the mod, read each asset's type (Niagara systems, textures and meshes by name: they always pass through)
@@ -14,7 +14,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { DEFAULT_FILTER, type ColorFilter } from './filter'
 import { type ColorProp, type ModParam, applyColor, isMaterialInstance, portParam, readColors, readModParams } from './assets'
 
-export const STEPS = ['Extract mod', 'Convert mod', 'Read edits', 'Game files', 'Convert game files', 'Carry edits', 'Rebuild assets', 'Pack'] as const
+export const STEPS = ['Reading the mod', 'Opening its materials', 'Finding its edits', "Reading the game's files", "Opening the game's files", 'Carrying the edits over', 'Rebuilding the assets', 'Packing the update'] as const
 
 export type AssetKind = 'updated' | 'same' | 'added' | 'passed' | 'unreadable' | 'failed'
 export type AssetResult = { name: string; path: string; kind: AssetKind; detail: string }
@@ -134,7 +134,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     if (keep.length) await invoke('vfx_copy_uasset_files', { sourcePaths: keep, sourceBaseDir: dirs.modExtract, destBaseDir: dirs.finalUassets })
     if (!editable.length) {
       report.status = 'nothing'
-      report.error = 'Nothing to fix: the mod has no materials or blueprints to rebuild.'
+      report.error = 'Nothing to update: the mod has no materials or blueprints to rebuild.'
       return report
     }
     // convert only these, in place (the extract's list names every asset)
@@ -247,8 +247,8 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     if (!report.counts.updated && !report.counts.added) {
       report.status = 'nothing'
       report.error = report.counts.same
-        ? 'Nothing to fix: every material and blueprint already matches the game, so the original works as it is.'
-        : 'Nothing to fix: none of its materials or blueprints could be rebuilt.'
+        ? 'Nothing to update: every material and blueprint already matches the game, so the original works as it is.'
+        : 'Nothing to update: none of its materials or blueprints could be rebuilt.'
       return report
     }
 
@@ -262,7 +262,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       report.output = report.placed.fixed
     }
     report.status = 'fixed'
-    log(`Fixed: ${fileName(report.output)}`, 'success')
+    log(`Updated: ${fileName(report.output)}`, 'success')
   } catch (e) {
     if (e instanceof Cancelled) { report.status = 'cancelled'; report.error = 'Cancelled.' }
     else { report.status = 'failed'; report.error = String(e instanceof Error ? e.message : e).replace(/^\[VFX\]\s*/, ''); log(report.error, 'error') }

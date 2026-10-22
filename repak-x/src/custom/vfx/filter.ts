@@ -1,4 +1,4 @@
-// repakxtra: which names Fix VFX mods carries over. Includes pick the color properties of blueprints and data tables
+// repakxtra: which names the VFX Updater carries over. Includes pick the color properties of blueprints and data tables
 // (a name containing any of them), excludes are never carried, material parameters included. Edited in the VFX window's
 // Color names, saved as repakxtra.vfx.filter (so the dev copy shares it). The defaults are the upstream updater's lists.
 export type ColorFilter = { includes: string[]; excludes: string[] }

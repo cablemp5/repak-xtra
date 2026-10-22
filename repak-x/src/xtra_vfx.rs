@@ -1,4 +1,4 @@
-//! repakxtra: Fix VFX mods (custom/vfx/), on top of the upstream VFX Updater's UAssetTool steps (vfx_updater/).
+//! repakxtra: the VFX Updater (custom/vfx/), on top of the upstream VFX Updater's UAssetTool steps (vfx_updater/).
 //! Adds what the frontend's pipeline needs beyond them: a fresh temp folder per run, a cache of the game's own assets per
 //! game build (every mod of a batch reuses one extraction), type detection that names what it could not read, placing the
 //! fixed mod beside the original (on or off like it, the original turned off, an older fixed copy to Recently deleted),
@@ -278,7 +278,7 @@ fn game_build(paks: &Path) -> GameBuild {
     GameBuild { updated: containers.iter().map(|c| c.2).max().unwrap_or(0), cl }
 }
 
-/// The installed game's last update and build, for the Fix VFX mods notice and the USMAP check.
+/// The installed game's last update and build, for the Update VFX mods notice and the USMAP check.
 #[tauri::command]
 pub fn xtra_game_build(state: State<'_, Arc<Mutex<AppState>>>) -> GameBuild {
     let mods = state.lock().unwrap().game_path.clone();

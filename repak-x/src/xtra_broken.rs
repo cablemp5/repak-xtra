@@ -3,7 +3,7 @@
 //! - broken: every game asset the mod replaces is gone from the game (an update renamed or removed it), so the mod
 //!   changes nothing. The game's own asset list is read once per game build and kept in memory.
 //! - vfx: a VFX mod made before a game update that rewrote game files it replaces (on or off). Its effects can look wrong
-//!   or crash the game until it is rebuilt on the new files (custom/vfx/, Fix VFX mods).
+//!   or crash the game until it is rebuilt on the new files (custom/vfx/, the VFX Updater).
 //! - risky: a Blueprint mod installed before the last game update (on or off: the warning matters before it goes on). Blueprint mods carry whole game classes, and an
 //!   update that changes a class layout makes the game crash on them.
 
@@ -144,7 +144,7 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
             path: path.to_string(),
             kind: "vfx",
             reason: format!(
-                "A game update changed {changed} of the game files this VFX mod replaces, so its effects may look wrong or crash the game. Fix VFX mods rebuilds it on the new game files."
+                "A game update changed {changed} of the game files this VFX mod replaces, so its effects may look wrong or crash the game. The VFX Updater rebuilds it on the new game files."
             ),
         });
     }

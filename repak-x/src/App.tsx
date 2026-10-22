@@ -70,7 +70,7 @@ import { setModsRoot } from './custom/loadoutIdentity' // repakxtra
 import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
 import { useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
-import { fixInVfxWindow } from './custom/vfx/handoff' // repakxtra: Fix VFX mods
+import { fixInVfxWindow } from './custom/vfx/handoff' // repakxtra: the VFX Updater window
 import VfxNotice from './custom/vfx/VfxNotice' // repakxtra: the game updated, VFX mods to fix
 import { newDefaultsOnce } from './custom/uiPrefs' // repakxtra
 import { reportSource } from './custom/setupReport' // repakxtra: Copy setup report reads the live list
@@ -543,7 +543,7 @@ function App() {
 
   const alert = useAlert();
 
-  // repakxtra: the Fix VFX mods window (custom/vfx/), a mod handed over when given
+  // repakxtra: the VFX Updater window (custom/vfx/), a mod handed over when given
   const openVfxUpdaterWindow = (modUtocPath?: string | null) =>
     fixInVfxWindow(modUtocPath ? [modUtocPath] : [], false).catch(e => console.error('[VFX] Window error:', e))
 
@@ -4002,13 +4002,13 @@ function App() {
           <button
             className="btn-settings btn-vfx"
             data-tour="vfx-updater-btn"
-            title="Fix VFX mods after a game update"
+            title="Open Repak VFX Updater"
             onClick={async () => {
               await openVfxUpdaterWindow()
             }}
           >
             <GiLightningTrio style={{ marginRight: '6px' }} />
-            <span>Fix VFX</span>{/* repakxtra: the Fix VFX mods window */}
+            <span>VFX Updater</span>
           </button>
 
           <SigeonControl alert={alert} />{/* repakxtra */}
