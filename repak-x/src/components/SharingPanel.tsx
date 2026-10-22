@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useId, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -21,6 +21,7 @@ import Checkbox from './ui/Checkbox';
 import FolderTree from './FolderTree';
 import TailInput from './ui/TailInput';
 import './SharingPanel.css';
+import { useDialogFocus } from '../custom/dialogFocus'; // repakxtra
 
 import { useAlert } from './AlertHandler';
 
@@ -68,6 +69,17 @@ type SharingPanelProps = {
 
 export default function SharingPanel({ onClose, gamePath, installedMods, selectedMods, folders = [] }: SharingPanelProps) {
   const alert = useAlert();
+  const focus = useDialogFocus(); // repakxtra: a modal dialog, focus inside, Tab stays inside
+  const fid = useId(); // repakxtra: ids tying each field to its label
+  // repakxtra: how many mods show each name, so a checkbox for a name used twice also says its folder
+  const nameCount = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const m of installedMods) {
+      const n = m.custom_name || (m.path.split(/[/\\]/).pop() || '').replace(/_\d+_P/g, '').replace(/\.pak$/i, '').replace(/\.bak_repak$/i, '');
+      counts.set(n, (counts.get(n) ?? 0) + 1);
+    }
+    return counts;
+  }, [installedMods]);
   const [activeTab, setActiveTab] = useState('share'); // 'share' or 'receive'
   // const [error, setError] = useState(''); // Removed local error state in favor of toasts
 
@@ -366,6 +378,8 @@ export default function SharingPanel({ onClose, gamePath, installedMods, selecte
     <div className="p2p-overlay">
       <motion.div
         className="p2p-modal"
+        role="dialog" aria-modal="true" aria-labelledby={`${fid}-title`} // repakxtra
+        ref={focus.ref} onKeyDown={focus.onKeyDown} tabIndex={-1}
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
@@ -374,9 +388,9 @@ export default function SharingPanel({ onClose, gamePath, installedMods, selecte
         <div className="p2p-header">
           <div className="p2p-title">
             <WifiIcon className="p2p-icon" />
-            <h2>Mod Sharing</h2>
+            <h2 id={`${fid}-title`}>Mod Sharing</h2>
           </div>
-          <button onClick={onClose} className="btn-icon-close">
+          <button onClick={onClose} className="btn-icon-close" aria-label="Close">
             <CloseIcon />
           </button>
         </div>
@@ -407,7 +421,7 @@ export default function SharingPanel({ onClose, gamePath, installedMods, selecte
                     <div className="share-left-col">
                       <div className="mod-selection-list">
                         <div className="mod-list-header">
-                          <label>Select Mods to Share ({selectedModPaths.size})</label>
+                          <label id={`${fid}-mods`}>Select Mods to Share ({selectedModPaths.size})</label>
                           <div className="search-box">
                             <SearchIcon fontSize="small" className="search-icon" />
                             <input
@@ -415,29 +429,35 @@ export default function SharingPanel({ onClose, gamePath, installedMods, selecte
                               value={searchTerm}
                               onChange={(e) => setSearchTerm(e.target.value)}
                               placeholder="Search mods..."
+                              aria-label="Search mods"
                             />
                           </div>
                         </div>
-                        <div className="mod-list-scroll">
+                        <div className="mod-list-scroll" role="group" aria-labelledby={`${fid}-mods`}>
                           {installedMods.filter((mod) => {
                             const filename = mod.path.split(/[/\\]/).pop();
                             const name = mod.custom_name || (filename || '').replace(/_\d+_P/g, '').replace(/\.pak$/i, '').replace(/\.bak_repak$/i, '');
                             return name.toLowerCase().includes(searchTerm.toLowerCase());
-                          }).map((mod) => {
+                          }).map((mod, i) => {
                             const filename = mod.path.split(/[/\\]/).pop();
                             const displayName = mod.custom_name || (filename || '').replace(/_\d+_P/g, '').replace(/\.pak$/i, '').replace(/\.bak_repak$/i, '');
+                            const twin = (nameCount.get(displayName) ?? 0) > 1; // repakxtra
                             return (
                               <div
                                 key={mod.path}
                                 className={`mod-select-item ${selectedModPaths.has(mod.path) ? 'selected' : ''}`}
-                                onClick={() => toggleModSelection(mod.path)}
+                                // repakxtra: the checkbox toggles itself (its label passes clicks to it), the rest of the row here: once either way
+                                onClick={(e) => { if (!(e.target as Element).closest('.repakx-checkbox')) toggleModSelection(mod.path); }}
                               >
                                 <Checkbox
                                   checked={selectedModPaths.has(mod.path)}
+                                  onChange={() => toggleModSelection(mod.path)}
+                                  aria-labelledby={`${fid}-mod-${i}`}
                                   size="sm"
                                 />
-                                <span className="mod-name">
+                                <span className="mod-name" id={`${fid}-mod-${i}`}>
                                   {displayName}
+                                  {twin && <span className="xtra-sr-only">, in {mod.path.split(/[/\\]/).slice(-2, -1)[0]}</span>}
                                 </span>
                               </div>
                             )
@@ -448,8 +468,9 @@ export default function SharingPanel({ onClose, gamePath, installedMods, selecte
 
                     <div className="share-right-col">
                       <div className="form-group">
-                        <label>Pack Name</label>
+                        <label htmlFor={`${fid}-pack`}>Pack Name</label>
                         <input
+                          id={`${fid}-pack`}
                           type="text"
                           value={packName}
                           onChange={(e) => setPackName(e.target.value)}
@@ -458,8 +479,9 @@ export default function SharingPanel({ onClose, gamePath, installedMods, selecte
                         />
                       </div>
                       <div className="form-group">
-                        <label>Description (Optional)</label>
+                        <label htmlFor={`${fid}-desc`}>Description (Optional)</label>
                         <textarea
+                          id={`${fid}-desc`}
                           value={packDesc}
                           onChange={(e) => setPackDesc(e.target.value)}
                           placeholder="Describe what's in this pack..."
@@ -467,8 +489,9 @@ export default function SharingPanel({ onClose, gamePath, installedMods, selecte
                         />
                       </div>
                       <div className="form-group">
-                        <label>Creator Name (Optional)</label>
+                        <label htmlFor={`${fid}-creator`}>Creator Name (Optional)</label>
                         <input
+                          id={`${fid}-creator`}
                           type="text"
                           value={creatorName}
                           onChange={(e) => setCreatorName(e.target.value)}
@@ -506,6 +529,7 @@ export default function SharingPanel({ onClose, gamePath, installedMods, selecte
                         onClick={() => copyToClipboard(getConnectionString())}
                         className={`btn-copy ${copied ? 'copied' : ''}`}
                         title="Copy to clipboard"
+                        aria-label="Copy the share code"
                       >
                         {copied ? <CheckIcon /> : <CopyIcon />}
                       </button>
@@ -545,9 +569,11 @@ export default function SharingPanel({ onClose, gamePath, installedMods, selecte
               {!isReceiving && !receiveComplete ? (
                 <>
                   <div className="form-group">
-                    <label>Enter Share Code</label>
+                    <label htmlFor={`${fid}-code`}>Enter Share Code</label>
                     <div className="input-with-validation">
                       <input
+                        id={`${fid}-code`}
+                        aria-invalid={isValidCode === false}
                         type="text"
                         value={connectionString}
                         onChange={(e) => setConnectionString(e.target.value)}
@@ -560,8 +586,9 @@ export default function SharingPanel({ onClose, gamePath, installedMods, selecte
                   </div>
 
                   <div className="form-group">
-                    <label>Your Name (Optional)</label>
+                    <label htmlFor={`${fid}-name`}>Your Name (Optional)</label>
                     <input
+                      id={`${fid}-name`}
                       type="text"
                       value={clientName}
                       onChange={(e) => setClientName(e.target.value)}
@@ -571,10 +598,10 @@ export default function SharingPanel({ onClose, gamePath, installedMods, selecte
                   </div>
 
                   <div className="form-group">
-                    <label>Save To</label>
+                    <label id={`${fid}-dest`} htmlFor={`${fid}-dest-path`}>Save To</label>
                     <div className="receive-folder-picker">
                       {folders.length > 0 && (
-                        <div className="receive-folder-tree" role="tree" aria-label="Destination folders">
+                        <div className="receive-folder-tree" role="tree" aria-labelledby={`${fid}-dest`} aria-describedby={`${fid}-dest-note`}>
                           <FolderTree
                             folders={folders}
                             selectedFolderId={receiveFolderId || ''}
@@ -592,6 +619,7 @@ export default function SharingPanel({ onClose, gamePath, installedMods, selecte
 
                       {folders.length === 0 && (
                         <TailInput
+                          id={`${fid}-dest-path`}
                           value={gamePath || ''}
                           placeholder="Game mods folder (default)"
                           className="p2p-input"
@@ -599,7 +627,7 @@ export default function SharingPanel({ onClose, gamePath, installedMods, selecte
                         />
                       )}
                     </div>
-                    <p style={{ fontSize: '0.8rem', opacity: 0.5, marginTop: '0.25rem' }}>
+                    <p id={`${fid}-dest-note`} style={{ fontSize: '0.8rem', opacity: 0.5, marginTop: '0.25rem' }}>
                       {receiveFolderId ? `Selected destination: ${receiveFolderId}` : 'Defaults to your game mods folder'}
                     </p>
                   </div>

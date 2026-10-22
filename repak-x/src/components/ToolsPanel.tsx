@@ -15,6 +15,7 @@ import { uiLog } from '../utils/uiLog';
 import pgIconUrl from '../assets/tools/PG_icon.webp';
 import './SettingsPanel.css'; // Reuse the same styles
 import './ToolsPanel.css';
+import { useDialogFocus } from '../custom/dialogFocus'; // repakxtra
 
 /** Project Galacta's icon, tinted with the current theme accent color via CSS masking. */
 function ProjectGalactaIcon() {
@@ -54,6 +55,7 @@ type ToolCardConfig = {
 };
 
 export default function ToolsPanel({ onClose, onOpenAssetExplorer, projectGalactaMod, onToggleProjectGalacta }: ToolsPanelProps) {
+    const focus = useDialogFocus(); // repakxtra
     const [isUpdatingChars, setIsUpdatingChars] = useState(false);
     const [charUpdateStatus, setCharUpdateStatus] = useState('');
     const [isSkippingLauncher, setIsSkippingLauncher] = useState(false);
@@ -364,16 +366,18 @@ export default function ToolsPanel({ onClose, onOpenAssetExplorer, projectGalact
             <div className="modal-overlay" onClick={onClose}>
                 <motion.div
                     className="modal-content settings-modal tools-modal"
+                    role="dialog" aria-modal="true" aria-labelledby="tools-title" // repakxtra: a modal dialog, focus inside, Tab stays inside
+                    ref={focus.ref} onKeyDown={focus.onKeyDown} tabIndex={-1}
                     onClick={(e) => e.stopPropagation()}
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.15 }}
                 >
                     <div className="modal-header">
-                        <h2>
+                        <h2 id="tools-title">
                             <FaToolbox size={20} /> Tools
                         </h2>
-                        <button className="modal-close" onClick={onClose}>×</button>
+                        <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
                     </div>
 
                     <div className="modal-body">

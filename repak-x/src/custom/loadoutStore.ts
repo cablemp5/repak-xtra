@@ -6,6 +6,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { sweepOrphanMedia } from './loadoutMedia'
 import { savedItem } from './storageCarryOver'
 import { isTyping } from './hotkeys'
+import { modalOpen } from './dialogFocus'
 
 export type Mod = { path: string; enabled?: boolean; modified_date?: number }
 export type Loadout = {
@@ -381,7 +382,7 @@ export const openLoadoutId = () => (view === 'home' ? openId : null)
 window.addEventListener('keydown', e => {
   if (e.key.toLowerCase() !== 'l' || e.ctrlKey || e.altKey || e.metaKey || isTyping(e.target)) return
   if (!document.querySelector('.view-tabs')) return
-  if (document.querySelector('.modal-overlay')) return // Settings or another dialog is open
+  if (modalOpen()) return // Settings, Sharing or another dialog is open
   e.preventDefault()
   setView(view === 'home' ? 'library' : 'home')
 })

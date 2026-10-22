@@ -58,6 +58,7 @@ import { Num } from './custom/motion' // repakxtra
 import ModStateFilter, { matchesState, type ModState } from './custom/ModStateFilter'
 import './custom/keyboardClickables'
 import { dialogOpen } from './custom/hotkeys' // repakxtra: extra shortcuts
+import { modalOpen, topModal } from './custom/dialogFocus' // repakxtra: one "a dialog is open" contract for every shortcut
 import './custom/selectionScroll' // repakxtra: the clicked row stays put when the selection bar opens
 import FilterPanel, { filterScope } from './custom/FilterPanel'
 import LoadoutHotkeys, { AddToLoadoutField, LoadoutMenuItems } from './custom/Loadouts'
@@ -3175,6 +3176,9 @@ function App() {
         e.preventDefault()
         return
       }
+      // repakxtra: an IME finishing a word is no shortcut, and a dialog owns the keyboard: only Esc (it closes the dialog)
+      // and Ctrl+R (reload) get past it, never the Library's keys behind it
+      if (e.isComposing || (modalOpen() && key !== 'escape' && !(ctrl && key === 'r' && !shift))) return
       // Ctrl+R - Full React reinit
       else if (ctrl && key === 'r' && !shift) {
         e.preventDefault()
@@ -3198,12 +3202,14 @@ function App() {
       }
       // Escape - Close panels or deselect
       else if (key === 'escape') {
+        if (topModal()?.matches('.input-prompt-overlay')) return // repakxtra: a name prompt (over Install, say) closes only itself
         if (panels.shortcuts) setPanel('shortcuts', false)
         else if (panels.settings) setPanel('settings', false)
         else if (panels.tools) setPanel('tools', false)
         else if (panels.sharing) setPanel('sharing', false)
         else if (panels.install) setPanel('install', false)
         else if (panels.clash) setPanel('clash', false)
+        else if (modalOpen()) return // repakxtra: another dialog takes its own Esc, the Library behind it keeps its selection
         else if (selectedMod) setSelectedMod(null)
         else if (selectedMods.size > 0) setSelectedMods(new Set()) // repakxtra: Esc clears the selection, as F1 says
       }

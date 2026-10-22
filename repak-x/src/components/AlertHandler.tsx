@@ -5,6 +5,8 @@ import { Check, X } from 'lucide-react'; // repakxtra: a plain check for success
 import './ui/Alert.css';
 import { alertSound } from '../custom/sounds' // repakxtra
 import { quietToast } from '../custom/uiPrefs' // repakxtra
+import { ToastAnnouncer, clockElapsed, holdClock, survivor, type ToastClock } from '../custom/toastA11y' // repakxtra
+import { focusInto, topModal } from '../custom/dialogFocus' // repakxtra
 
 // Toast Icons
 type ToastColor = 'success' | 'danger' | 'warning' | 'info' | 'default' | 'crash' | 'primary' | 'secondary';
@@ -267,6 +269,7 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
                 onDismissAll={dismissAllAlerts}
                 placement={placement}
             />
+            <ToastAnnouncer toasts={toasts} />{/* repakxtra: results read out once, failures at once */}
         </AlertContext.Provider>
     );
 }
@@ -311,11 +314,47 @@ function getAnimationVariants(placement: string) {
 
 // Toast Container - renders all active toasts with card stacking
 function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts: Toast[]; onDismiss: (id: number) => void; onDismissAll: () => void; placement: string }) {
-    const [isHovered, setIsHovered] = useState(false);
+    const [isPointer, setIsHovered] = useState(false);
+    const [hasFocus, setHasFocus] = useState(false); // repakxtra: keyboard focus fans the stack out too
+    const isHovered = isPointer || hasFocus;
     const maxVisible = 3; // Show max 3 stacked cards
 
     // Get the most recent toasts (reverse so newest is first)
     const recentToasts = [...toasts].reverse().slice(0, maxVisible);
+
+    // repakxtra: a focused toast that goes (Close, Undo, Clear all) hands focus to the toast now in its place, else back
+    // to where focus came from, else into the open dialog. Never when focus has moved on by itself
+    const focusedId = useRef<number | null>(null);
+    const cameFrom = useRef<HTMLElement | null>(null);
+    const order = useRef<number[]>([]);
+    useEffect(() => {
+        const before = order.current;
+        const now = [...toasts].reverse().map(t => t.id);
+        order.current = now;
+        const gone = focusedId.current;
+        if (gone === null || now.includes(gone)) return;
+        const active = document.activeElement;
+        if (active && active !== document.body && !active.closest(`[data-toast-id="${gone}"]`)) return;
+        focusedId.current = null;
+        const next = survivor(before, now, gone);
+        const target = next === null ? null : document.querySelector<HTMLElement>(`[data-toast-id="${next}"] button`);
+        const back = cameFrom.current;
+        if (target) target.focus();
+        else if (back?.isConnected && !back.closest('[inert]')) back.focus();
+        else { const top = topModal(); if (top) focusInto(top); }
+    }, [toasts]);
+    const onFocus = (e: React.FocusEvent<HTMLDivElement>) => {
+        const toast = (e.target as HTMLElement).closest<HTMLElement>('[data-toast-id]');
+        focusedId.current = toast ? Number(toast.dataset.toastId) : null;
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) cameFrom.current = e.relatedTarget as HTMLElement | null;
+        setHasFocus(true);
+    };
+    const onBlur = (e: React.FocusEvent<HTMLDivElement>) => {
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+        // Moved on by itself, or clicked away while that toast stays: not a toast that went
+        if (e.relatedTarget || toasts.some(t => t.id === focusedId.current)) focusedId.current = null;
+        setHasFocus(false);
+    };
 
     // repakxtra: fanned out on hover, each toast sits 8px past the real height of the ones in front of it (a fixed
     // 100px step left big gaps under short toasts)
@@ -332,6 +371,7 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
             className={`toast-container ${placement}`}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
+            onFocus={onFocus} onBlur={onBlur} // repakxtra
         >
             {/* Wrapper for stacked cards - relative positioned to contain absolutes */}
             <div
@@ -396,30 +436,22 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
     }, [toast.id, onHeight]);
     const [progress, setProgress] = useState(100);
     const [isPaused, setIsPaused] = useState(false);
-    const elapsedTimeRef = useRef(0); // Track total elapsed time across pauses
-    const lastStartTimeRef = useRef(Date.now()); // Track when current interval started
+    const [hasFocus, setHasFocus] = useState(false); // repakxtra: focus in the toast holds its timer, like the pointer
+    const held = isPaused || hasFocus;
+    const clock = useRef<ToastClock>({ elapsed: 0, since: null }); // repakxtra: time run so far, kept across holds
 
     const { id, title, description, color, variant, icon, hideIcon, duration, endContent, action, isLoading, progressValue } = toast;
 
     // Only the front toast (index 0) should auto-dismiss
     const shouldAutoDismiss = index === 0;
 
-    // Handle auto-dismiss with progress
+    // Handle auto-dismiss with progress (repakxtra: held while hovered or focused, either one)
     useEffect(() => {
-        if (!shouldAutoDismiss || duration <= 0) return;
-
-        if (isPaused) {
-            // When paused, save the elapsed time
-            return;
-        }
-
-        // When resuming or starting, record the start time
-        lastStartTimeRef.current = Date.now();
+        if (!shouldAutoDismiss || duration <= 0 || held) return;
+        clock.current = holdClock(clock.current, false, Date.now());
 
         const interval = setInterval(() => {
-            const currentElapsed = Date.now() - lastStartTimeRef.current;
-            const totalElapsed = elapsedTimeRef.current + currentElapsed;
-            const remaining = Math.max(0, 100 - (totalElapsed / duration) * 100);
+            const remaining = Math.max(0, 100 - (clockElapsed(clock.current, Date.now()) / duration) * 100);
             setProgress(remaining);
 
             if (remaining <= 0) {
@@ -430,10 +462,9 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
 
         return () => {
             clearInterval(interval);
-            // Save elapsed time when cleanup happens (pausing)
-            elapsedTimeRef.current += Date.now() - lastStartTimeRef.current;
+            clock.current = holdClock(clock.current, true, Date.now());
         };
-    }, [id, duration, isPaused, onDismiss, shouldAutoDismiss]);
+    }, [id, duration, held, onDismiss, shouldAutoDismiss]);
 
     // Get the appropriate icon
     const getIcon = () => {
@@ -503,6 +534,9 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
             }}
             onMouseEnter={() => setIsPaused(true)}
             onMouseLeave={() => setIsPaused(false)}
+            onFocus={() => setHasFocus(true)} // repakxtra
+            onBlur={(e: React.FocusEvent<HTMLDivElement>) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setHasFocus(false); }}
+            data-toast-id={id}
         >
             {!hideIcon && (
                 <div className="toast-icon">

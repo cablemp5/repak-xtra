@@ -9,6 +9,7 @@ import { type LoadoutProps, deleteWithUndo, runChanges } from './Loadouts'
 import LoadoutPage from './LoadoutPage'
 import NewStrip from './NewStrip'
 import { isTyping } from './hotkeys'
+import { modalOpen } from './dialogFocus'
 import { CardMedia, OnDot } from './loadoutBits'
 import { CardZoomControl, useCardZoom, useWheelZoom } from './cardZoom'
 import { type Spot, playFlip, snapshotCards, useCardDrag } from './cardDrag'
@@ -288,11 +289,11 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     if (view !== 'home') return
     // Esc on a loadout page goes back to the cards (a text field, an open menu or a dialog takes its own Esc first)
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && openRef.current && !isTyping(e.target) && !document.querySelector('.modal-overlay, [role="menu"], .custom-dropdown-menu')) { e.stopPropagation(); closePage() }
+      if (e.key === 'Escape' && openRef.current && !isTyping(e.target) && !modalOpen() && !document.querySelector('[role="menu"], .custom-dropdown-menu')) { e.stopPropagation(); closePage() }
     }
     // Ctrl+V with an image, GIF or video sets the open loadout's media, or the hovered card's
     const onPaste = (e: ClipboardEvent) => {
-      if (isTyping(e.target)) return
+      if (isTyping(e.target) || modalOpen()) return // a dialog is open: the cards behind it keep their media
       const file = [...(e.clipboardData?.files ?? [])].find(f => /^(image|video)\//.test(f.type))
       if (!file) return
       e.preventDefault()

@@ -9,6 +9,7 @@ import {
   nextLoadoutName, openLoadout, patchLoadout, readLoadouts, useLoadouts, withMods, writeLoadouts,
 } from './loadoutStore'
 import { isTyping } from './hotkeys'
+import { modalOpen } from './dialogFocus'
 import { plural } from './modName'
 import { type Verdict, verdictOf } from './brokenMods'
 import { brokenShown } from './uiPrefs'
@@ -195,7 +196,7 @@ export default function LoadoutHotkeys(p: LoadoutProps) {
   latest.current = { loadouts, apply }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!e.ctrlKey || e.shiftKey || e.altKey || !/^[1-9]$/.test(e.key) || isTyping(e.target) || document.querySelector('.modal-overlay')) return
+      if (!e.ctrlKey || e.shiftKey || e.altKey || !/^[1-9]$/.test(e.key) || isTyping(e.target) || modalOpen()) return
       const l = hotkeySlots(latest.current.loadouts).get(Number(e.key))
       if (!l || busy.current) return
       e.preventDefault()

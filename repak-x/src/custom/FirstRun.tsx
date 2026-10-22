@@ -16,6 +16,7 @@ import { OFF_EXT } from './offFiles'
 import Wordmark from './Wordmark'
 import WelcomeIntro from './WelcomeIntro'
 import { ShortcutButton, useShortcut } from './shortcut'
+import { ownsTop, useDialogFocus } from './dialogFocus'
 
 type Alert = ReturnType<typeof useAlert>
 type Bypass = { state: 'installed' | 'disabled' | 'partial' | 'other' | 'missing' }
@@ -63,6 +64,7 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
   const kit = usePreviewKit(alert)
   const shortcut = useShortcut()
   const detected = useRef(false)
+  const focus = useDialogFocus(open) // focus inside, Tab stays inside, back to the opener on close
 
   useEffect(() => {
     const show = () => { setIntro(false); setOpen(true) }
@@ -88,7 +90,7 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
       const paths = Array.isArray(e.payload) ? e.payload : e.payload?.paths ?? []
       if (!(paths.length === 1 && isKitZip(paths[0]))) close()
     })
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape' && !document.querySelector('.su-changelog-overlay')) { e.stopPropagation(); close() } }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.isComposing && ownsTop(focus.ref.current)) { e.stopPropagation(); close() } } // a changelog above it takes Esc first
     window.addEventListener('keydown', esc, true)
     return () => { asked.current++; off.then(f => f()).catch(() => undefined); window.removeEventListener('keydown', esc, true) }
   }, [open, gamePath])
@@ -140,7 +142,8 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
 
   return (
     <div className="modal-overlay fr-overlay" onClick={close}>
-      <motion.div className="modal-content fr-modal" role="dialog" aria-label="Set up repakxtra" onClick={e => e.stopPropagation()}
+      <motion.div ref={focus.ref} onKeyDown={focus.onKeyDown} tabIndex={-1} className="modal-content fr-modal" role="dialog" aria-modal="true" aria-label="Set up repakxtra"
+        onClick={e => e.stopPropagation()}
         initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }}>
         {intro ? <>
           <button className="modal-close fr-intro-close" onClick={close} aria-label="Close">×</button>
