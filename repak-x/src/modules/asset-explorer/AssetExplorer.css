@@ -528,6 +528,33 @@
     padding: 4px 0;
 }
 
+/* repakxtra: the list is one Tab stop; the active row carries the focus ring
+   instead of the whole pane (U09) */
+.ae-tree-scroll:focus {
+    outline: none;
+}
+
+.ae-tree-scroll:focus .ae-row.is-active {
+    outline: 1px solid var(--accent-primary);
+    outline-offset: -1px;
+}
+
+.ae-row-menu .context-menu-item:focus-visible {
+    background: var(--quiet-active) !important;
+    color: var(--text-primary) !important;
+    outline: none !important;
+}
+
+/* Read by screen readers, never drawn */
+.ae-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
 .ae-tree-empty {
     padding: 2rem;
     text-align: center;

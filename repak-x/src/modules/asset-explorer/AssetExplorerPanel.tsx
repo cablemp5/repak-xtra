@@ -363,6 +363,7 @@ export default function AssetExplorerPanel() {
 
     return (
         <div className="ae-root">
+            {/* repakxtra: icon-only buttons carry an aria-label, so their name survives the tooltip taking the title */}
             <div className="ae-toolbar">
                 <div className="ae-search">
                     <VscSearch className="ae-search-icon" />
@@ -370,10 +371,11 @@ export default function AssetExplorerPanel() {
                         value={rawQuery}
                         onChange={e => setRawQuery(e.target.value)}
                         placeholder="Search assets… (include a / to search full paths)"
+                        aria-label="Search assets"
                         spellCheck={false}
                     />
                     {rawQuery && (
-                        <button className="ae-search-clear" onClick={() => setRawQuery('')} title="Clear search">
+                        <button className="ae-search-clear" onClick={() => setRawQuery('')} title="Clear search" aria-label="Clear search">
                             <VscClose />
                         </button>
                     )}
@@ -386,6 +388,7 @@ export default function AssetExplorerPanel() {
                             className={`ae-view-btn ${viewMode === mode.id ? 'active' : ''}`}
                             onClick={() => setViewMode(mode.id)}
                             title={mode.hint}
+                            aria-pressed={viewMode === mode.id}
                         >
                             {mode.icon}
                             <span>{mode.label}</span>
@@ -400,6 +403,7 @@ export default function AssetExplorerPanel() {
                                 className="ae-icon-btn"
                                 onClick={() => setExpanded(allFolderIds(tree))}
                                 title="Expand all folders"
+                                aria-label="Expand all folders"
                             >
                                 <VscExpandAll />
                             </button>
@@ -407,6 +411,7 @@ export default function AssetExplorerPanel() {
                                 className="ae-icon-btn"
                                 onClick={() => setExpanded(new Set())}
                                 title="Collapse all folders"
+                                aria-label="Collapse all folders"
                             >
                                 <VscCollapseAll />
                             </button>
@@ -416,12 +421,13 @@ export default function AssetExplorerPanel() {
                         className={`ae-icon-btn ${refreshing ? 'is-busy' : ''}`}
                         onClick={refresh}
                         title="Rescan all mods"
+                        aria-label="Rescan all mods"
                     >
                         <VscRefresh />
                     </button>
 
                     <div className="ae-export">
-                        <button className="ae-icon-btn" onClick={() => setExportOpen(o => !o)} title="Export">
+                        <button className="ae-icon-btn" onClick={() => setExportOpen(o => !o)} title="Export" aria-label="Export" aria-expanded={exportOpen}>
                             <FiDownload />
                             <FiChevronDown className="ae-export-caret" />
                         </button>
@@ -805,7 +811,7 @@ function AssetDetail({ node, index, conflicting, onClose, onRevealMod }: AssetDe
         <div className="ae-detail-inner">
             <div className="ae-detail-header">
                 <h3>Asset</h3>
-                <button className="ae-icon-btn" onClick={onClose} title="Close"><VscClose /></button>
+                <button className="ae-icon-btn" onClick={onClose} title="Close" aria-label="Close asset details"><VscClose /></button>
             </div>
 
             <div className="ae-detail-section">

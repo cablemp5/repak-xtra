@@ -75,6 +75,9 @@ export type FlatRow = {
     key: string
     depth: number
     node: TreeNode
+    /** repakxtra: 1-based place among its siblings and their count, for aria-posinset/aria-setsize (only a slice is mounted) */
+    pos: number
+    size: number
 }
 
 export type Filters = {
@@ -397,13 +400,14 @@ export function flattenTree(root: FolderNode, expanded: Set<string>): FlatRow[] 
     const out: FlatRow[] = []
 
     const walk = (node: FolderNode, depth: number) => {
-        for (const folder of node.folders) {
-            out.push({ key: folder.id, depth, node: folder })
+        const size = node.folders.length + node.files.length
+        node.folders.forEach((folder, i) => {
+            out.push({ key: folder.id, depth, node: folder, pos: i + 1, size })
             if (expanded.has(folder.id)) walk(folder, depth + 1)
-        }
-        for (const file of node.files) {
-            out.push({ key: file.id, depth, node: file })
-        }
+        })
+        node.files.forEach((file, i) => {
+            out.push({ key: file.id, depth, node: file, pos: node.folders.length + i + 1, size })
+        })
     }
 
     walk(root, 0)

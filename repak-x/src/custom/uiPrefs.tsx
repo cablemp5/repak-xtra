@@ -34,7 +34,9 @@ const BASE_ZOOM = 1.2
 const SCALE_KEY = 'repakxtra.uiScale2'
 const HIDE_TAGS_KEY = 'repakxtra.hideTags' // tags show by default, so this one stores the hidden state
 const SOUND_KEY = 'repakxtra.sound'   // on by default: '0' = off
-const MOTION_KEY = 'repakxtra.motion' // on by default: '0' = off
+// unset or 'system' = follow Windows (System), '1' = on, '0' = off. System is saved, not removed: storageCarryOver would
+// copy an old-prefix '0' back over a missing key at the next start.
+const MOTION_KEY = 'repakxtra.motion'
 const MINIMAL_TOASTS_KEY = 'repakxtra.minimalToasts' // off by default: '1' = on (shown as Fewer pop-ups)
 const DEFAULTS_KEY = 'repakxtra.defaults.v2'
 const PLAIN_INSTALL_KEY = 'repakxtra.install.plain' // off by default: '1' = the install dialog starts without a loadout
@@ -47,7 +49,12 @@ const isOn = (key: string) => { const v = savedItem(storageKey(key)); return v =
 const getScale = () => { const s = Number(savedItem(SCALE_KEY)); return SCALES.includes(s) ? s : 100 }
 const tagsHidden = () => savedItem(HIDE_TAGS_KEY) === '1'
 const soundOn = () => savedItem(SOUND_KEY) !== '0'
-const motionOn = () => savedItem(MOTION_KEY) !== '0'
+/** Animations on: a saved '1' or '0' is the user's choice, anything else follows the OS reduce motion setting.
+ *  index.html repeats this for the splash, before any module runs. */
+export const resolveMotion = (saved: string | null, osReduce: boolean) => saved === '1' ? true : saved === '0' ? false : !osReduce
+const reduceQuery = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null
+const motionChoice = (): 'system' | 'on' | 'off' => { const v = savedItem(MOTION_KEY); return v === '1' ? 'on' : v === '0' ? 'off' : 'system' }
+const motionOn = () => resolveMotion(savedItem(MOTION_KEY), !!reduceQuery?.matches)
 const minimalToasts = () => savedItem(MINIMAL_TOASTS_KEY) === '1'
 const tagsOff = () => savedItem(TAGS_OFF_KEY) !== '0'
 /** Settings > Install mods without a loadout: the install dialog opens on Install without a loadout. */
@@ -91,6 +98,8 @@ window.addEventListener('keydown', e => {
 })
 // Other windows (Asset Explorer, VFX Updater) pick up changes made in Settings
 window.addEventListener('storage', e => { if (e.key?.startsWith('repakxtra.')) { apply(); listeners.forEach(l => l()) } })
+// Animations on System: every window follows a Windows change while it runs (this module lives as long as the window)
+reduceQuery?.addEventListener('change', () => { apply(); listeners.forEach(l => l()) })
 
 const update = (key: string, value: string) => {
   localStorage.setItem(key, value)
@@ -204,7 +213,7 @@ function PrefBox({ k, label }: { k: string; label: string }) {
     </div>
   )
 }
-const useAll = () => useSyncExternalStore(subscribe, () => PREFS.map(p => (isOn(p.key) ? 1 : 0)).join('') + '|' + getScale() + '|' + soundOn() + motionOn() + minimalToasts() + installsPlain() + tagsOff())
+const useAll = () => useSyncExternalStore(subscribe, () => PREFS.map(p => (isOn(p.key) ? 1 : 0)).join('') + '|' + getScale() + '|' + soundOn() + motionChoice() + motionOn() + !!reduceQuery?.matches + minimalToasts() + installsPlain() + tagsOff())
 
 /** Settings > Interface, top: UI scale. */
 export function UiScaleSection() {
@@ -238,10 +247,15 @@ export function MotionSection({ extra }: { extra?: React.ReactNode }) {
           <p className="setting-subtext">Click sounds on buttons, typing, switches and alerts, and an emote's sound when you hover its preview.</p>
         </div>
         <div className="setting-item">
-          <Checkbox checked={motionOn()} onChange={(checked: boolean) => update(MOTION_KEY, checked ? '1' : '0')}>
+          <div className="setting-motion">
             <span>Animations</span>
-          </Checkbox>
-          <p className="setting-subtext">Page slides, menus, switches and pop-ups. Off stops every animation in the app.</p>
+            <div className="mod-state-filter ui-scale" role="group" aria-label="Animations">
+              {([['system', 'System', 'system'], ['on', 'On', '1'], ['off', 'Off', '0']] as const).map(([v, t, saved]) => (
+                <button key={v} type="button" aria-pressed={motionChoice() === v} onClick={() => update(MOTION_KEY, saved)}>{t}</button>
+              ))}
+            </div>
+          </div>
+          <p className="setting-subtext">Page slides, menus, switches and pop-ups. System follows the Windows animation effects setting (now {reduceQuery?.matches ? 'off' : 'on'}). Off stops every animation in the app.</p>
           {extra && <div className={`setting-sub${motionOn() ? '' : ' is-off'}`}>{extra}</div>}
         </div>
         <div className="setting-item">
@@ -328,4 +342,10 @@ export function resetUiPrefs() {
   for (const k of [SCALE_KEY, SOUND_KEY, MOTION_KEY, MINIMAL_TOASTS_KEY, PLAIN_INSTALL_KEY, TAGS_OFF_KEY, HIDE_TAGS_KEY]) localStorage.removeItem(k)
   apply()
   listeners.forEach(l => l())
+}
+
+if (import.meta.env.DEV) {
+  console.assert(resolveMotion(null, false) === true && resolveMotion(null, true) === false, 'unset Animations follows the OS reduce motion setting')
+  console.assert(resolveMotion('1', true) === true && resolveMotion('0', false) === false, 'a saved 1 or 0 overrides the OS')
+  console.assert(resolveMotion('junk', true) === false, 'an unknown saved value counts as System')
 }

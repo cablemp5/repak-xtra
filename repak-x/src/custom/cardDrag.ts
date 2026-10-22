@@ -109,7 +109,7 @@ function spotAt(x: number, y: number, dragId: string, zoom: number, ownGroupOnly
 }
 
 const same = (a: Spot | null, b: Spot | null) => JSON.stringify(a) === JSON.stringify(b)
-const motionOff = () => document.documentElement.dataset.motion === 'off' || matchMedia('(prefers-reduced-motion: reduce)').matches
+const motionOff = () => document.documentElement.dataset.motion === 'off' // uiPrefs resolves System from the OS setting
 
 /** onMove: the spot changed (re-render the order); onDrop: released on a spot, or null when cancelled. ownGroupOnly:
  *  a card stays in its own group (the Hero view), reordered there only. */

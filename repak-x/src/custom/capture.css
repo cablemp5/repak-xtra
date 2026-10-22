@@ -39,7 +39,7 @@
   0% { box-shadow: 0 0 0 0 rgba(62, 207, 110, 0.55); }
   100% { box-shadow: 0 0 0 6px rgba(62, 207, 110, 0); }
 }
-@media (prefers-reduced-motion: reduce) { .cp-dot { animation: none; } }
+html[data-motion="off"] .cp-dot { animation: none; }
 .cp-modal .cp-link {
   display: inline; padding: 0 !important; border: none !important; background: none !important; cursor: pointer; height: auto !important; min-height: 0 !important; line-height: inherit;
   font-size: inherit; font-weight: 500; color: color-mix(in srgb, var(--accent-primary), white 30%) !important;
