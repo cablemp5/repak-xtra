@@ -24,6 +24,7 @@ mod xtra_offfiles; // repakxtra: .pak.off files install like .pak
 mod xtra_bundle; // repakxtra: a mod's pak/utoc/ucas found and moved as one set
 mod xtra_updater; // repakxtra: applies an update without string-built shell commands
 mod xtra_conflicts; // repakxtra: conflict comparison by normalized asset path, cached file lists
+mod xtra_extract; // repakxtra: unpacks only archives whose paths stay inside the output folder
 mod character_data;
 mod crash_monitor;
 mod discord_presence;
@@ -1420,7 +1421,7 @@ async fn parse_dropped_files(
 
                                 if let Some(ref uasset_temp) = uasset_temp_dir {
                                     // Extract PAK to temp dir using UAssetTool
-                                    let _ = uasset_toolkit::extract_pak_all(
+                                    let _ = crate::xtra_extract::extract_pak_all(
                                         entry_path.to_str().unwrap_or_default(),
                                         uasset_temp.path().to_str().unwrap_or_default(),
                                         Some(crate::install_mod::AES_KEY_HEX),
@@ -1666,7 +1667,7 @@ async fn parse_dropped_files(
                         let uasset_temp_dir = tempfile::tempdir().ok();
 
                         if let Some(ref uasset_temp) = uasset_temp_dir {
-                            let _ = uasset_toolkit::extract_pak_all(
+                            let _ = crate::xtra_extract::extract_pak_all(
                                 path.to_str().unwrap_or_default(),
                                 uasset_temp.path().to_str().unwrap_or_default(),
                                 Some(crate::install_mod::AES_KEY_HEX),
@@ -4832,7 +4833,7 @@ async fn extract_pak_to_destination(mod_path: String, dest_path: String) -> Resu
 
     std::fs::create_dir_all(&to_create).map_err(|e| e.to_string())?;
 
-    uasset_toolkit::extract_pak_all(
+    crate::xtra_extract::extract_pak_all(
         pak_path.to_str().unwrap_or_default(),
         to_create.to_str().unwrap_or_default(),
         Some(crate::install_mod::AES_KEY_HEX),
@@ -4942,7 +4943,7 @@ async fn extract_mod_assets_inner(
                 },
             );
 
-            let file_count = uasset_toolkit::extract_iostore(
+            let file_count = crate::xtra_extract::extract_iostore(
                 &path.to_string_lossy(),
                 &output_dir.to_string_lossy(),
                 None, // Use default AES key
@@ -5008,7 +5009,7 @@ async fn extract_mod_assets_inner(
             );
 
             // repakxtra: completion counts what was written, not the file list read beforehand
-            let extracted = uasset_toolkit::extract_pak_all(
+            let extracted = crate::xtra_extract::extract_pak_all(
                 path.to_str().unwrap_or_default(),
                 output_dir.to_str().unwrap_or_default(),
                 Some(crate::install_mod::AES_KEY_HEX),
@@ -5078,7 +5079,7 @@ async fn extract_mod_assets_inner(
             );
 
             // repakxtra: completion counts what was written, not the file list read beforehand
-            let extracted = uasset_toolkit::extract_pak_all(
+            let extracted = crate::xtra_extract::extract_pak_all(
                 path.to_str().unwrap_or_default(),
                 output_dir.to_str().unwrap_or_default(),
                 Some(crate::install_mod::AES_KEY_HEX),
@@ -5823,7 +5824,7 @@ fn recompress_pak_file(pak_path: &Path) -> Result<u64, String> {
     let temp_path = temp_dir.path();
 
     // Extract PAK to temp dir
-    uasset_toolkit::extract_pak_all(
+    crate::xtra_extract::extract_pak_all(
         pak_path.to_str().unwrap_or_default(),
         temp_path.to_str().unwrap_or_default(),
         Some(crate::install_mod::AES_KEY_HEX),
