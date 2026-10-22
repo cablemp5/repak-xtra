@@ -16,6 +16,18 @@ const data: any = Object.values(fixtures)[0] ?? {
 // takes the preview kit away too.
 const fresh = localStorage.getItem('mock.fresh') === '1'
 const held: any[] = fresh ? data.mods.splice(0) : []
+// localStorage 'mock.mods' = N: a library of N mods, the snapshot's repeated under numbered names (Library speed checks)
+const many = Number(localStorage.getItem('mock.mods') || 0)
+if (many > 0 && data.mods.length) {
+  const base = data.mods.slice()
+  data.mods = Array.from({ length: many }, (_, i) => {
+    const m = base[i % base.length]
+    if (i < base.length) return m
+    const path = m.path.replace(/((_\d+_P)?\.(pak|bak_repak|pak_disabled))$/i, ` ${i}$1`)
+    data.details[path] ??= data.details[m.path]
+    return { ...m, path, custom_name: m.custom_name ? `${m.custom_name} ${i}` : m.custom_name }
+  })
+}
 const freshGame = data.gamePath
 if (fresh) data.gamePath = ''
 // localStorage 'mock.slow' = ms: installs take about that long and report progress like the real ones (README demos)
@@ -192,6 +204,11 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       })()
       case 'preview_kit_remove': localStorage.setItem('mock.noPreviews', '1'); localStorage.removeItem('mock.kit'); return null
       case 'preview_kit_set_blender': return args?.path ?? null
+      // Desktop shortcut: localStorage 'mock.shortcut' = '1' once made (a fresh PC has none)
+      case 'shortcut_status': return { exists: localStorage.getItem('mock.shortcut') === '1' }
+      case 'shortcut_create': localStorage.setItem('mock.shortcut', '1'); return null
+      case 'plugin:window|is_maximized': return false   // polled every second: answered, so the console stays readable
+      case 'get_ui_log_backlog': return []
       case 'preview_kit_install_blender': return (async () => {
         for (const text of ['Found Blender [BlenderFoundation.Blender] Version 5.2.0', 'Downloading https://download.blender.org/release/Blender5.2/blender-5.2.0-windows-x64.msi', 'Successfully installed'])
           if (slow()) { emit('preview-kit-progress', { stage: 'blender', done: 0, total: 0, text }); await wait(0.7) }

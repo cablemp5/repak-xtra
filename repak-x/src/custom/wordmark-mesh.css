@@ -23,7 +23,6 @@
 @keyframes wm-flow2 { to { transform: translate(-420px, -90px) rotate(-18deg) scale(0.85, 1.25); } }
 @keyframes wm-flow3 { to { transform: translate(160px, 260px) rotate(30deg) scale(1.15, 1.1); } }
 html[data-motion="off"] .wm .wm-blob, html[data-animations="off"] .wm .wm-blob { animation: none !important; }
-@media (prefers-reduced-motion: reduce) { .wm .wm-blob { animation: none !important; } }
 /* dev and test copies */
 :root[data-build="test"] .wm { --wm-base: #12c85a; --wm-c1: #b6ff2e; --wm-c2: #00d4b0; --wm-c3: #00e070; }   /* lime, teal and green: no dark base, it muddied the mesh */
 :root[data-build="dev"] .wm { --wm-base: #ff7a00; --wm-c1: #ffd000; --wm-c2: #ff9500; --wm-c3: #ff5a14; }

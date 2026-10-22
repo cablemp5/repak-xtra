@@ -5,7 +5,7 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { ExternalLink } from 'lucide-react'
-import { modKey } from './loadoutStore'
+import { nameKey } from './loadoutStore'
 import { installedKey } from './installLoadout'
 import { savedItem } from './storageCarryOver'
 import nexusLogo from './logos/nexus.png'
@@ -25,7 +25,7 @@ const write = (s: Store) => { localStorage.setItem(STORAGE, JSON.stringify(s)); 
 export const NEXUS_TYPE = 'Nexus'
 
 export const pageUrl = (id: number) => `https://www.nexusmods.com/marvelrivals/mods/${id}`
-export const sourceOf = (path: string): NexusSource | undefined => read()[norm(modKey(path))]
+export const sourceOf = (path: string): NexusSource | undefined => read()[norm(nameKey(path))]
 
 /** After an install: each mod from a Nexus-named archive gets its source (an archive's paks all get the same one).
  *  Kept under the name the install panel showed and under each pak's own name: an archive holding one pak installs it
@@ -58,7 +58,7 @@ export function useNexusScan(mods: { path: string }[]) {
     scanning = true
     invoke<Found[]>('xtra_nexus_downloads').then(found => {
       localStorage.setItem(SCANNED, '1')
-      const installed = new Set(mods.map(m => norm(modKey(m.path))))
+      const installed = new Set(mods.map(m => norm(nameKey(m.path))))
       const store = read(), had = new Set(Object.keys(store))
       let changed = false
       for (const { paks = [], ...s } of [...found].sort((a, b) => a.uploaded - b.uploaded)) { // newest last, so it wins
@@ -118,5 +118,5 @@ export function NexusTag({ path }: { path: string }) {
 }
 
 if (import.meta.env.DEV) {
-  console.assert(norm(modKey('C:/m/~mods/Pucci_Skin_9999999_P.bak_repak')) === norm(installedKey({ mod_name: 'Pucci_Skin_9999999_P' })), 'installed and listed keys match')
+  console.assert(norm(nameKey('C:/m/~mods/Pucci_Skin_9999999_P.bak_repak')) === norm(installedKey({ mod_name: 'Pucci_Skin_9999999_P' })), 'installed and listed keys match')
 }

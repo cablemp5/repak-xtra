@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { save as pickSavePath } from '@tauri-apps/plugin-dialog'
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, Ellipsis, Pencil, Plus, Search, X } from 'lucide-react'
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Ellipsis, ImagePlus, Pencil, Plus, Search, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo } from './Loadouts'
 import { CardMedia, ModRow, OnDot, typeClass } from './loadoutBits'
@@ -13,11 +13,12 @@ import CustomDropdown from '../components/CustomDropdown'
 import {
   type Loadout, type Mod, OTHER, OTHER_LABEL, loadoutable, addGroup, captureKey, addModToLoadout, displayName, duplicateLoadout, groupKey, setLoadoutGroup,
   useGroups, hotkeyOf, hotkeySlots, isActive, modKey, openLoadout, patchLoadout, pinHotkey, readLoadouts, removeModFromLoadout,
-  renameModKey, repakXOpen, takeFresh, useLoadouts,
+  renameModKey, repakXOpen, takeFresh, useLoadouts, coverFills, memberName, nameKey, pickMember,
 } from './loadoutStore'
+import { candidatesFor, keysByName, memberFolder } from './loadoutIdentity'
 import { plural } from './modName'
 import { SwapText } from './motion'
-import { GeneratePreviewsButton, previewSetKey } from './previews'
+import { GeneratePreviewsButton, previewMade, previewSetKey } from './previews'
 import { CaptureButton, captureTarget } from './CapturePreview'
 
 const PAGE = 60
@@ -136,26 +137,39 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
   const [limit, setLimit] = useState(PAGE)
   const [sort, setSort] = useState<'name' | 'newest'>('newest')
   const [exporting, setExporting] = useState(false)
+  const searchRef = useRef<HTMLInputElement>(null)
+  const freshId = useRef<string | null>(null) // just made: Enter on its name goes on to Search mods to add
+  const [showCover, setShowCover] = useState(false)
   useEffect(() => { setName(l.name) }, [l.id, l.name])
   // A loadout just made opens with its name selected, so making one starts with naming it
-  useEffect(() => { if (takeFresh(l.id)) { nameRef.current?.focus(); nameRef.current?.select() } }, [l.id])
+  useEffect(() => { if (takeFresh(l.id)) { freshId.current = l.id; nameRef.current?.focus(); nameRef.current?.select() } }, [l.id])
+  useEffect(() => { setShowCover(false) }, [l.id])
+  useEffect(() => { if (showCover) document.querySelector<HTMLElement>('.lp .cover-tab[aria-checked="true"]')?.focus() }, [showCover])
 
   const byKey = new Map(p.mods.map(m => [modKey(m.path), m]))
-  const mine = [...new Set(l.on.map(displayName))].sort((a, b) => a.localeCompare(b))
+  const byName = (a: string, b: string) => memberName(a).localeCompare(memberName(b)) || a.localeCompare(b)
+  const mine = [...new Set(l.on.map(displayName))].sort(byName)
   const inLoadout = new Set(mine)
   const categoryOf = (k: string) => { const m = byKey.get(k); return (m && p.modDetails?.[m.path]?.category) || 'Unknown' }
   const age = (k: string) => byKey.get(k)?.modified_date ?? 0
   const others = [...byKey.keys()].filter(k => !inLoadout.has(k) && loadoutable(k))
-    .sort((a, b) => (sort === 'newest' ? age(b) - age(a) : 0) || a.localeCompare(b))
-  const missing = mine.filter(k => !byKey.has(k))
+    .sort((a, b) => (sort === 'newest' ? age(b) - age(a) : 0) || byName(a, b))
+  // A member with no installed mod: one to pick when installed mods could be it (a name saved before folders counted
+  // that two folders hold, or a mod moved while the app was closed), else missing
+  const installedByName = keysByName(byKey.keys())
+  const choices = new Map(mine.filter(k => !byKey.has(k)).map(k => [k, candidatesFor(k, installedByName).filter(c => !inLoadout.has(c))]))
+  const missing = mine.filter(k => !byKey.has(k) && !choices.get(k)?.length)
+  const unsure = mine.filter(k => choices.get(k)?.length)
   const types = [...new Set(others.map(categoryOf))].sort()
   const needle = q.trim().toLowerCase()
-  const matches = others.filter(k => (!needle || k.toLowerCase().includes(needle)) && (!type || categoryOf(k) === type))
+  const matches = others.filter(k => (!needle || memberName(k).toLowerCase().includes(needle)) && (!type || categoryOf(k) === type))
   const active = isActive(l, p.mods)
   const onNow = mine.filter(k => byKey.get(k)?.enabled).length
-  const present = mine.length - missing.length
+  const present = mine.length - missing.length - unsure.length
   const switchTitle = present === 0 ? 'No installed mods' : active ? `Turn ${l.name}'s mods off` : `Turn ${l.name}'s mods on`
   const hasMedia = Boolean(l.mediaRev || l.image)
+  // No mods and no picture of any kind: no cover card, so Add mods comes first (Customize cover brings it)
+  const bare = mine.length === 0 && !showCover && !Object.values(coverFills(l, previewMade(l))).some(Boolean)
   const group = groups.find(g => groupKey(g) === groupKey(l.label))
 
   /** Undo adds the removed mods back to the loadout as it is now, so mods added meanwhile stay. */
@@ -166,7 +180,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
   /** Remove one mod, with Undo. */
   const removeWithUndo = (k: string) => {
     removeModFromLoadout(l, k)
-    const id = p.alert.info(`Removed from ${l.name}`, k, {
+    const id = p.alert.info(`Removed from ${l.name}`, memberName(k), {
       duration: 10000,
       action: { label: 'Undo', onClick: () => { p.alert.dismissAlert(id); addBack([k]) } },
     })
@@ -185,7 +199,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
   const renameMod = async (mod: Mod, to: string) => {
     const from = modKey(mod.path)
     const next = to.trim()
-    if (!next || next === displayName(from)) return
+    if (!next || next === nameKey(mod.path)) return
     if (p.isBlocked()) { p.alert.warning('Game Running', 'Cannot rename mods while game is running.'); return }
     try {
       const path = await invoke<string>('rename_mod', { modPath: mod.path, newName: next })
@@ -228,24 +242,42 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
     if (n && n !== l.name) patchLoadout(l.id, { name: n })
     else setName(l.name)
   }
+  /** Adding or removing a row's mod takes the row (and its focused button) away: focus goes to the same button on the
+   *  next row, or to Search mods to add when it was the last. */
+  const keepFocus = (e: React.MouseEvent<HTMLElement>, act: () => void) => {
+    const button = e.currentTarget, row = button.closest('li')
+    const next = (row?.nextElementSibling ?? row?.previousElementSibling)?.querySelector<HTMLElement>(`.${[...button.classList].join('.')}`)
+    const had = document.activeElement === button
+    act()
+    if (had) requestAnimationFrame(() => (next?.isConnected ? next : searchRef.current)?.focus())
+  }
+  /** A candidate's folder as spelled on disk (keys keep it lowercase). */
+  const folderName = (k: string) => {
+    const f = memberFolder(k), parts = byKey.get(k)?.path.split(/[/\\]/).slice(0, -1)
+    return !f ? 'the mods folder' : parts ? parts.slice(-f.split('/').length).join('/') : f
+  }
 
   return (
-    <div className="lp">
+    <div className={`lp${bare ? ' is-bare' : ''}`}>
       <button type="button" className="lo-text-btn lp-back" onClick={onBack} title="Back to all loadouts (Esc)">
         <ArrowLeft size={14} /> Loadouts
       </button>
 
       <div className="lp-top">
         {/* The picture card and its Cover switch: Preview, Capture, Image or Text, each with its own way to fill it */}
-        <CardMedia p={p} l={l} className="lp-media" onClick={onPickMedia} onRemoveImage={removeImage} onRemoveCapture={removeCapture}
+        {!bare && <CardMedia p={p} l={l} className="lp-media" onClick={onPickMedia} onRemoveImage={removeImage} onRemoveCapture={removeCapture}
           title={hasMedia ? 'Change image or video (or paste one)' : 'Add an image, GIF or video (or paste one)'}
           capture={{ ...target, button: (className, label, note) => <CaptureButton p={p} l={l} onUse={onSetCapture} className={className} label={label} note={note} /> }}
           generate={className => <GeneratePreviewsButton className={className} label="Generate previews" set={previewSetKey(l.id)} name={l.name} stopOnly
-            paths={mine.map(k => byKey.get(k)?.path).filter((x): x is string => Boolean(x))} />} />
+            paths={mine.map(k => byKey.get(k)?.path).filter((x): x is string => Boolean(x))} />} />}
         <div className="lp-info">
           <span className="lp-name-wrap">
             <input ref={nameRef} className="lp-name" value={name} title="Rename" aria-label="Loadout name" onChange={e => setName(e.target.value)} onBlur={commit}
-              onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setName(l.name) }} />{/* Esc cancels: blurring here would save the typed text */}
+              onKeyDown={e => {
+                e.stopPropagation()
+                if (e.key === 'Enter') { (e.target as HTMLInputElement).blur(); if (freshId.current === l.id) { freshId.current = null; searchRef.current?.focus() } }
+                if (e.key === 'Escape') setName(l.name)
+              }} />{/* Esc cancels: blurring here would save the typed text */}
             <button type="button" className="lo-icon lp-pen" title="Rename loadout" aria-label="Rename loadout" onClick={() => { nameRef.current?.focus(); nameRef.current?.select() }}>
               <Pencil size={14} />
             </button>
@@ -280,35 +312,46 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
               { label: exporting ? 'Exporting…' : 'Export as zip', onClick: exportZip, disabled: exporting },
               ...(missing.length ? [{ label: `Remove ${plural(missing.length, 'missing mod')}`, onClick: dropMissing }] : []),
               ...(hasMedia ? [{ label: 'Remove image', onClick: removeImage }] : []),
-            ]} l={l} loadouts={loadouts} danger={{ label: 'Delete', danger: true, onClick: () => { deleteWithUndo(p, l); onBack() } }} />
+            ]} l={l} loadouts={loadouts} danger={{ label: 'Delete', danger: true, onClick: () => { if (deleteWithUndo(p, l)) onBack() } }} />
+            {bare && (
+              <button type="button" className="lo-text-btn" onClick={() => setShowCover(true)} title="Pick a preview, capture, image or text for its card">
+                <ImagePlus size={14} /> Customize cover
+              </button>
+            )}
           </div>
         </div>
       </div>
 
-      <section className="lp-section">
+      {/* Empty: no In this loadout yet, so Add mods sits under the name. Its section keeps its place in the page when the
+          first mod comes in above it, so the focused row and the search stay */}
+      {mine.length > 0 && <section className="lp-section">
         <h2 className="lo-group-head">In this loadout<span className="lo-group-count">{mine.length}</span>
-          {missing.length > 0 && <span className="lp-head-note">{missing.length} not installed</span>}</h2>
-        {mine.length === 0
-          ? <p className="lp-empty">No mods yet. Add some from the list below.</p>
-          : (
-            <ul className="mod-rows">
-              {mine.map(k => (
-                <ModRow key={k} p={p} k={k} mod={byKey.get(k)} onToggle onRename={renameMod}>
-                  <button type="button" className="lo-icon row-remove" title={`Remove ${k} from ${l.name}`} aria-label={`Remove ${k} from ${l.name}`} onClick={() => removeWithUndo(k)}>
-                    <X size={14} />
-                  </button>
-                </ModRow>
+          {missing.length > 0 && <span className="lp-head-note">{missing.length} not installed</span>}
+          {unsure.length > 0 && <span className="lp-head-note">{plural(unsure.length, 'mod')} to pick</span>}</h2>
+        <ul className="mod-rows">
+          {mine.map(k => (
+            <ModRow key={k} p={p} k={k} mod={byKey.get(k)} onToggle onRename={renameMod} unsure={Boolean(choices.get(k)?.length)}>
+              {choices.get(k)?.slice(0, 3).map(c => (
+                <button key={c} type="button" className="row-action is-offer" onClick={() => pickMember(l, k, c)}
+                  title={`${l.name} means the ${memberName(c)} in ${folderName(c)}`}>
+                  Use the one in {folderName(c)}
+                </button>
               ))}
-            </ul>
-          )}
-      </section>
+              <button type="button" className="lo-icon row-remove" title={`Remove ${memberName(k)} from ${l.name}`} aria-label={`Remove ${memberName(k)} from ${l.name}`} onClick={e => keepFocus(e, () => removeWithUndo(k))}>
+                <X size={14} />
+              </button>
+            </ModRow>
+          ))}
+        </ul>
+      </section>}
 
       <section className="lp-section">
-        <h2 className="lo-group-head">Add mods<span className="lo-group-count">{matches.length}</span></h2>
+        <h2 className="lo-group-head">Add mods<span className="lo-group-count">{matches.length}</span>
+          {mine.length === 0 && <span className="lp-head-note">No mods in {l.name} yet</span>}</h2>
         <div className="lp-filters">
           <label className="lp-search">
             <Search size={14} />
-            <input value={q} placeholder="Search mods" aria-label="Search mods to add" onChange={e => { setQ(e.target.value); setLimit(PAGE) }}
+            <input ref={searchRef} value={q} placeholder="Search mods" aria-label="Search mods to add" onChange={e => { setQ(e.target.value); setLimit(PAGE) }}
               onKeyDown={e => { e.stopPropagation(); if (e.key === 'Escape') setQ('') }} />
           </label>
           <div className="mod-state-filter lp-sort" role="group" aria-label="Sort mods to add">
@@ -330,7 +373,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
             <ul className="mod-rows">
               {matches.slice(0, limit).map(k => (
                 <ModRow key={k} p={p} k={k} mod={byKey.get(k)} onRename={renameMod}>
-                  <button type="button" className="lo-icon row-add" onClick={() => addModToLoadout(l, k)} title={`Add ${k} to ${l.name}`} aria-label={`Add ${k} to ${l.name}`}>
+                  <button type="button" className="lo-icon row-add" onClick={e => keepFocus(e, () => addModToLoadout(l, k))} title={`Add ${memberName(k)} to ${l.name}`} aria-label={`Add ${memberName(k)} to ${l.name}`}>
                     <Plus size={14} />
                   </button>
                 </ModRow>

@@ -3,9 +3,12 @@
 // It also remembers the mods shown when it was saved (its scope), unused for now. Stored in localStorage.
 import { useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { sweepOrphanMedia } from './loadoutMedia'
+import { deleteMedia, sweepOrphanMedia } from './loadoutMedia'
 import { savedItem } from './storageCarryOver'
 import { isTyping } from './hotkeys'
+import { modalOpen } from './dialogFocus'
+import { canonKey, isMemberKey, keysByName, memberKey, memberName, movesBetween, nameKey, resolveKeys } from './loadoutIdentity'
+export { memberName, nameKey } from './loadoutIdentity'
 
 export type Mod = { path: string; enabled?: boolean; modified_date?: number }
 export type Loadout = {
@@ -62,29 +65,102 @@ export const writeLoadouts = (list: Loadout[]) => {
 }
 export const patchLoadout = (id: string, patch: Partial<Loadout>) =>
   writeLoadouts(readLoadouts().map(l => (l.id === id ? { ...l, ...patch } : l)))
-/** Removes the loadout and returns a function that puts it back in the same spot. Its image or video stays stored
- *  for the rest of the session; sweepMediaOnce drops it at the next start. */
-export const deleteLoadout = (id: string) => {
-  const list = readLoadouts()
+/** A deleted loadout, kept 7 days like a deleted mod (Settings > Recently deleted): the whole loadout (its media stays
+ *  in IndexedDB under its id), when it was deleted and goes for good (ms), and its place in the list. Stored as
+ *  {v: 1, items} under DELETED, a repakxtra.* key, so the dev copy shares it (devStorage.ts). */
+export type DeletedLoadout = { loadout: Loadout; deleted: number; expires: number; at: number }
+const DELETED = 'repakxtra.deletedLoadouts'
+export const KEEP_DELETED_MS = 7 * 24 * 3600 * 1000
+type KV = Pick<Storage, 'getItem' | 'setItem'>
+const LIVE: KV = { getItem: savedItem, setItem: (k, v) => localStorage.setItem(k, v) }
+/** The stored deleted loadouts. Throws on anything unreadable, so nothing deletes, restores or sweeps over it. Pure. */
+export const parseDeleted = (json: string | null): DeletedLoadout[] => {
+  if (!json) return []
+  const v = JSON.parse(json)
+  const ok = v?.v === 1 && Array.isArray(v.items) && v.items.every((r: DeletedLoadout) =>
+    typeof r?.loadout?.id === 'string' && r.loadout.id && Array.isArray(r.loadout.on) && typeof r.expires === 'number')
+  if (!ok) throw new Error('The deleted loadouts list is unreadable')
+  return v.items
+}
+const putDeleted = (store: KV, items: DeletedLoadout[]) => store.setItem(DELETED, JSON.stringify({ v: 1, items }))
+
+/** Delete: the record is written before the loadout leaves the list. A failure before that keeps it live (the caller
+ *  says so); a failure in between leaves both, and the live one wins (reconcileDeleted). Throws on failure. */
+export function moveToDeleted(store: KV, id: string, now = Date.now()) {
+  const list = decode(store.getItem(STORAGE) || '[]'), items = parseDeleted(store.getItem(DELETED))
   const at = list.findIndex(l => l.id === id)
-  if (at < 0) return () => undefined
-  const removed = list[at]
-  writeLoadouts(list.filter(l => l.id !== id))
-  return () => {
-    const now = readLoadouts()
-    if (now.some(l => l.id === id)) return
-    now.splice(Math.min(at, now.length), 0, removed)
-    writeLoadouts(now)
+  if (at < 0) return false
+  putDeleted(store, [...items.filter(r => r.loadout.id !== id), { loadout: list[at], deleted: now, expires: now + KEEP_DELETED_MS, at }])
+  store.setItem(STORAGE, JSON.stringify(list.filter(l => l.id !== id)))
+  return true
+}
+
+/** What a restore did: unsorted (its collection is gone), lostHotkey (another loadout holds that Ctrl+N now), already
+ *  (a live loadout has its id: kept as it is). */
+export type Restored = { name: string; unsorted?: boolean; lostHotkey?: number; already?: boolean }
+/** Restore: the loadout is written back (at its old place, mods untouched, so missing ones stay missing) before its
+ *  record goes, so a failure in between leaves both and the live one wins. Throws on failure; null when not found. */
+export function restoreFromDeleted(store: KV, id: string): Restored | null {
+  const list = decode(store.getItem(STORAGE) || '[]'), items = parseDeleted(store.getItem(DELETED))
+  const rec = items.find(r => r.loadout.id === id)
+  if (!rec) return null
+  const out: Restored = { name: rec.loadout.name }
+  if (list.some(l => l.id === id)) out.already = true
+  else {
+    let l = rec.loadout
+    const groups: string[] = [...JSON.parse(store.getItem(GROUPS) || '[]'), ...list.map(x => x.label)]
+    if (groupKey(l.label) !== groupKey(OTHER) && !groups.some(g => groupKey(g) === groupKey(l.label))) { l = { ...l, label: OTHER }; out.unsorted = true }
+    if (l.hotkey && list.some(x => x.hotkey === l.hotkey)) { out.lostHotkey = l.hotkey; l = { ...l, hotkey: undefined } }
+    const next = [...list]
+    next.splice(Math.min(rec.at, next.length), 0, l)
+    store.setItem(STORAGE, JSON.stringify(next))
   }
+  putDeleted(store, items.filter(r => r !== rec))
+  return out
+}
+
+/** Drops expired records and copies of live loadouts (an interrupted delete or restore); returns the records kept.
+ *  Writes only when something changed. Throws when unreadable. */
+export function reconcileDeleted(store: KV, now = Date.now()) {
+  const live = new Set(decode(store.getItem(STORAGE) || '[]').map(l => l.id)), items = parseDeleted(store.getItem(DELETED))
+  const kept = items.filter(r => r.expires > now && !live.has(r.loadout.id))
+  if (kept.length !== items.length) putDeleted(store, kept)
+  return kept
+}
+
+/** Removes the loadout, keeping it 7 days in Recently deleted; returns the Undo (the same restore). Throws, leaving
+ *  the loadout as it was, when it cannot be kept (storage full, unreadable record list). */
+export const deleteLoadout = (id: string) => {
+  try { moveToDeleted(LIVE, id) } finally { notify() }
+  return () => restoreLoadout(id)
+}
+export const restoreLoadout = (id: string) => {
+  try { return restoreFromDeleted(LIVE, id) } finally { sessionIds.add(id); notify() }
+}
+/** Delete for good: the records go, then their media (a live loadout's own media stays). */
+export function forgetDeleted(ids: string[]) {
+  const items = parseDeleted(LIVE.getItem(DELETED)), live = new Set(readLoadouts().map(l => l.id))
+  try { putDeleted(LIVE, items.filter(r => !ids.includes(r.loadout.id))) } finally { notify() }
+  for (const id of ids.filter(i => !live.has(i))) { deleteMedia(id); deleteMedia(captureKey(id)) }
+}
+/** Deleted loadouts not expired and not live, newest first; null while the list is unreadable. */
+export const useDeletedLoadouts = (): DeletedLoadout[] | null => {
+  const json = useSyncExternalStore(subscribe, () => savedItem(DELETED))
+  const live = new Set(useLoadouts().map(l => l.id))
+  try {
+    const now = Date.now()
+    return parseDeleted(json).filter(r => r.expires > now && !live.has(r.loadout.id)).sort((a, b) => b.deleted - a.deleted)
+  } catch { return null }
 }
 
 export const useLoadouts = (): Loadout[] =>
   decode(useSyncExternalStore(subscribe, () => savedItem(STORAGE) || '[]'))
 
 let swept = false
-/** Once per start, from Home (the main window only): deletes stored media whose loadout no longer exists. The ids are
- *  read before anything is awaited and the set stays live, so loadouts made or deleted meanwhile keep their media.
- *  Anything unreadable skips the cleanup rather than counting as "no loadouts". */
+/** Once per start, from Home (the main window only): deletes stored media whose loadout no longer exists, live or in
+ *  Recently deleted (expired records go first). The ids are read before anything is awaited and the set stays live,
+ *  so loadouts made or deleted meanwhile keep their media. Anything unreadable skips the cleanup rather than counting
+ *  as "no loadouts". */
 export function sweepMediaOnce() {
   if (swept) return
   swept = true
@@ -92,22 +168,51 @@ export function sweepMediaOnce() {
     const list: unknown = JSON.parse(savedItem(STORAGE) || '[]')
     if (!Array.isArray(list) || !list.every(l => typeof l?.id === 'string' && l.id)) return
     list.forEach(l => sessionIds.add(l.id))
+    reconcileDeleted(LIVE).forEach(r => sessionIds.add(r.loadout.id))
   } catch {
     return
   }
   sweepOrphanMedia(sessionIds).catch(e => console.warn('Loadout media sweep skipped:', e))
 }
 
-/** Strips the _9999999_P priority suffix so a key survives priority changes (same as the backend's tag key). */
-const normKey = (key: string) => key.replace(/(_\d+_P)+$/i, '')
+let lastKeys: string[] | null = null
+const BACKUP = 'repakxtra.loadouts.backupV1'
+const hasLegacy = (l: Loadout) => [...l.on, ...l.scope].some(k => !isMemberKey(k))
+/** App calls this with each fresh mod list, before showing it. Saved members (live and deleted loadouts) follow mods
+ *  moved to another folder since the last list, and legacy name-only members with exactly one installed match become
+ *  member keys (loadoutIdentity.ts resolveKeys). Before the first legacy member changes, the list is copied once to
+ *  BACKUP (without inline images, which stay in the list). Data from an older copy (devStorage.ts) is migrated again
+ *  on its next list, and that write is the newest save. An empty list (a failed scan) changes nothing. */
+export function syncLoadoutKeys(mods: Mod[]) {
+  const keys = mods.map(m => modKey(m.path))
+  const moved = lastKeys ? movesBetween(lastKeys, keys) : new Map<string, string>()
+  lastKeys = keys
+  if (!keys.length) return
+  const byName = keysByName(keys)
+  try {
+    const list = readLoadouts(), next = list.map(l => resolveKeys(l, byName, moved))
+    if (next.some((l, i) => l !== list[i])) {
+      if (list.some(hasLegacy) && !localStorage.getItem(BACKUP)) localStorage.setItem(BACKUP, JSON.stringify(list.map(l => ({ ...l, image: undefined }))))
+      writeLoadouts(next)
+    }
+    const items = parseDeleted(LIVE.getItem(DELETED))
+    const fixed = items.map(r => { const l = resolveKeys(r.loadout, byName, moved); return l === r.loadout ? r : { ...r, loadout: l } })
+    if (fixed.some((r, i) => r !== items[i])) { putDeleted(LIVE, fixed); notify() }
+  } catch (e) {
+    console.warn('Loadout members not updated:', e) // left as they were; the next list tries again
+  }
+}
 
-/** Same mod across enable/disable and priority renames: file name without extension or priority suffix. */
-export const modKey = (path: string) =>
-  normKey((path.split(/[/\\]/).pop() || path).replace(/(\.pak)?(\.bak_repak|\.pak_disabled)?$/i, '').replace(/_disabled$/i, ''))
+/** A stored key in its one spelling (loadoutIdentity.ts canonKey): what modKey gives for the same mod. */
+const normKey = canonKey
+
+/** The loadout member key of a mod path (loadoutIdentity.ts): its folder and name, the same through on/off and every
+ *  priority. Display names and preview keys use nameKey. */
+export const modKey = memberKey
 
 /** Mods a loadout may hold: not the Project Galacta loader, which every Galacta mod needs on (a loadout switching it
  *  off would break all the others). */
-export const loadoutable = (key: string) => !/^!?projectgalacta$/i.test(normKey(key))
+export const loadoutable = (key: string) => !/^!?projectgalacta$/i.test(memberName(key))
 
 /** Stored keys normalized, so loadouts saved before the suffix was dropped still match. */
 const keySet = (keys: string[]) => new Set(keys.map(normKey))
@@ -159,13 +264,24 @@ export const renameKeyIn = (list: Loadout[], oldKey: string, newKey: string): Lo
 }
 /** A renamed mod stays in its loadouts. */
 export const renameModKey = (oldKey: string, newKey: string) => {
-  if (normKey(oldKey) !== normKey(newKey)) writeLoadouts(renameKeyIn(readLoadouts(), oldKey, newKey))
+  if (normKey(oldKey) === normKey(newKey)) return
+  writeLoadouts(renameKeyIn(readLoadouts(), oldKey, newKey))
+  try { // and in Recently deleted, so a restored loadout still finds it
+    const items = parseDeleted(LIVE.getItem(DELETED))
+    const moved = renameKeyIn(items.map(r => r.loadout), oldKey, newKey)
+    putDeleted(LIVE, items.map((r, i) => ({ ...r, loadout: moved[i] })))
+  } catch (e) { console.warn('Deleted loadouts not renamed:', e) }
+}
+/** The user's pick for a member that is ambiguous or no longer found: that installed mod from now on (on and scope). */
+export const pickMember = (l: Loadout, oldKey: string, newKey: string) => {
+  const [next] = renameKeyIn([l], oldKey, newKey)
+  patchLoadout(l.id, { on: next.on, scope: next.scope })
 }
 
 /** Same mods (on and scope), ignoring order, duplicates and priority suffixes. Pure. */
-const memberKey = (keys: string[]) => [...keySet(keys)].sort().join('\n')
+const membersSig = (keys: string[]) => [...keySet(keys)].sort().join('\n')
 export const sameMembership = (a: Pick<Loadout, 'on' | 'scope'>, b: Pick<Loadout, 'on' | 'scope'>) =>
-  memberKey(a.on) === memberKey(b.on) && memberKey(a.scope) === memberKey(b.scope)
+  membersSig(a.on) === membersSig(b.on) && membersSig(a.scope) === membersSig(b.scope)
 
 /** "Loadout N" with the lowest N no loadout uses (any case). Pure. */
 export const nextLoadoutName = (names: string[]) => {
@@ -181,7 +297,7 @@ export const removeModFromLoadout = (l: Loadout, key: string) =>
 
 /** "slug_type_..._v10" -> { base: "slug_type_...", n: 10 }; undefined without a trailing _vN. */
 export const versionOf = (key: string) => {
-  const m = normKey(key).match(/^(.*)_v(\d+)$/i)
+  const m = memberName(key).match(/^(.*)_v(\d+)$/i)
   return m ? { base: m[1], n: Number(m[2]) } : undefined
 }
 
@@ -195,11 +311,11 @@ export const olderVersionIn = (l: Loadout, key: string) => {
 /** Swaps one key for another in the loadout (on list, and scope so the loadout keeps managing it). */
 export const replaceInLoadout = (l: Loadout, oldKey: string, newKey: string) =>
   patchLoadout(l.id, {
-    on: l.on.map(k => (normKey(k) === normKey(oldKey) ? normKey(newKey) : k)),
+    on: [...new Set(l.on.map(k => (normKey(k) === normKey(oldKey) ? normKey(newKey) : k)))],
     scope: keySet(l.scope).has(normKey(newKey)) ? l.scope : [...l.scope, normKey(newKey)],
   })
 
-/** Readable mod name from its key: drops the _9999999_P priority suffix. */
+/** A stored key in the spelling modKey gives, for matching (LoadoutsScreen.tsx). Text shows memberName. */
 export const displayName = normKey
 
 /** The backend's refusal while Repak X is open (xtra_identity.rs upstream_guard), or null for any other error. */
@@ -381,7 +497,7 @@ export const openLoadoutId = () => (view === 'home' ? openId : null)
 window.addEventListener('keydown', e => {
   if (e.key.toLowerCase() !== 'l' || e.ctrlKey || e.altKey || e.metaKey || isTyping(e.target)) return
   if (!document.querySelector('.view-tabs')) return
-  if (document.querySelector('.modal-overlay')) return // Settings or another dialog is open
+  if (modalOpen()) return // Settings, Sharing or another dialog is open
   e.preventDefault()
   setView(view === 'home' ? 'library' : 'home')
 })
@@ -414,10 +530,53 @@ if (import.meta.env.DEV) {
     const twice = [L('a', 2), L('b', 2)]
     console.assert(hotkeyOf(twice[0], twice) === 2 && hotkeyOf(twice[1], twice) === undefined, 'a doubled number goes to the first')
   }
-  // The one rule that ties a loadout to a file, whatever state the file is in (mod_previews.py mod_key must agree)
+  // The name rule behind every key, whatever state the file is in (mod_previews.py mod_key must agree with nameKey);
+  // the member key adds the folder (here the mods folder itself)
   for (const [path, key] of [['C:/m/~mods/X_9999999_P.pak', 'X'], ['X_9999999_P.bak_repak', 'X'], ['X_9999999_P.pak.bak_repak', 'X'],
     ['X_9999999_P.pak_disabled', 'X'], ['X_disabled', 'X'], ['bp-lime-vfx_vfx_noPG_v2_9999999_P.pak', 'bp-lime-vfx_vfx_noPG_v2'], ['B_P.pak', 'B_P']])
-    console.assert(modKey(path) === key, `modKey(${path}) = ${modKey(path)}, expected ${key}`)
+    console.assert(nameKey(path) === key && modKey(path) === `|${key}`, `nameKey(${path}) = ${nameKey(path)}, modKey ${modKey(path)}, expected ${key}`)
+  { // a member key survives priority 1 -> 0 -> 1, and same-named mods in two folders are two mods
+    const at = (p: string, enabled = true): Mod => ({ path: `C:/G/~mods/${p}`, enabled })
+    const lo: Loadout = { id: 's', name: 'S', label: OTHER, ...withMods({ on: [], scope: [] }, [modKey(at('A/Skin_9999999_P.pak').path)]) }
+    console.assert(changesToTurnOn(lo, [at('A/!Skin.pak', false), at('B/!Skin.pak', false)]).map(m => m.path).join() === 'C:/G/~mods/A/!Skin.pak', 'priority 0 is the same mod, the other folder is not')
+    console.assert(isActive(lo, [at('A/Skin_9999999_P.pak'), at('B/Skin_9999999_P.pak', false)]), 'back at priority 1: still the one mod')
+    console.assert(changesToTurnOn({ ...lo, on: ['Skin'] }, [at('A/Skin.pak', false), at('B/Skin.pak', false)]).length === 0, 'an unresolved legacy name switches nothing')
+    const picked = renameKeyIn([{ ...lo, on: ['Skin'], scope: ['Skin'] }], 'Skin', 'b|Skin')[0]
+    console.assert(picked.on.join() === 'b|Skin' && picked.scope.join() === 'b|Skin', 'picking a member swaps on and scope')
+  }
+  { // deleted loadouts: write order, failures, expiry and restore collisions, on a stand-in store
+    const fake = (data: Record<string, string>, failOn?: string): KV & { data: Record<string, string> } => ({
+      data, getItem: k => data[k] ?? null, setItem: (k, v) => { if (k === failOn) throw new Error('full'); data[k] = v },
+    })
+    const L2 = (id: string, extra: Partial<Loadout> = {}): Loadout => ({ id, name: id, label: OTHER, on: ['|M'], scope: ['|M'], ...extra })
+    const ids = (s: KV) => decode(s.getItem(STORAGE) || '[]').map(l => l.id).join()
+    const kept = (s: KV) => parseDeleted(s.getItem(DELETED)).map(r => r.loadout.id).join()
+    const full = fake({ [STORAGE]: JSON.stringify([L2('a'), L2('b')]) }, DELETED)
+    let threw = false
+    try { moveToDeleted(full, 'a') } catch { threw = true }
+    console.assert(threw && ids(full) === 'a,b', 'no room for the record: the loadout stays live')
+    const half = fake({ [STORAGE]: JSON.stringify([L2('a'), L2('b')]) }, STORAGE)
+    try { moveToDeleted(half, 'a') } catch { /* the second write failed */ }
+    console.assert(ids(half) === 'a,b' && kept(half) === 'a' && reconcileDeleted(half).length === 0 && kept(half) === '', 'interrupted delete: the live one wins, its copy goes')
+    const s = fake({ [STORAGE]: JSON.stringify([L2('a', { hotkey: 2, label: 'Gone' }), L2('b'), L2('c')]), [GROUPS]: '["Kept"]' })
+    moveToDeleted(s, 'a', 1000)
+    console.assert(ids(s) === 'b,c' && kept(s) === 'a', 'delete keeps a record')
+    s.setItem(STORAGE, JSON.stringify([L2('b', { hotkey: 2 }), L2('c')]))
+    const r = restoreFromDeleted(s, 'a')
+    const back = decode(s.getItem(STORAGE)!)
+    console.assert(r?.unsorted && r.lostHotkey === 2 && back[0].id === 'a' && back[0].label === OTHER && !back[0].hotkey && back[1].hotkey === 2 && kept(s) === '', 'restore: old place, Unsorted when its collection is gone, no hotkey stealing')
+    console.assert(back[0].on.join() === '|M' && restoreFromDeleted(s, 'a') === null, 'members untouched, a second restore is a no-op')
+    moveToDeleted(s, 'c', 1000)
+    s.setItem(STORAGE, JSON.stringify([...decode(s.getItem(STORAGE)!), L2('c', { name: 'new c' })]))
+    const dup = restoreFromDeleted(s, 'c')
+    console.assert(dup?.already === true && decode(s.getItem(STORAGE)!).filter(l => l.id === 'c').map(l => l.name).join() === 'new c' && kept(s) === '', 'duplicate id: the live loadout is kept')
+    moveToDeleted(s, 'b', 1000)
+    console.assert(reconcileDeleted(s, 1000 + KEEP_DELETED_MS - 1).length === 1 && reconcileDeleted(s, 1000 + KEEP_DELETED_MS).length === 0 && kept(s) === '', 'records expire after 7 days')
+    const bad = fake({ [STORAGE]: '[]', [DELETED]: '{"v":1,"items":[{}]}' })
+    threw = false
+    try { reconcileDeleted(bad) } catch { threw = true }
+    console.assert(threw, 'an unreadable record list stops the cleanup')
+  }
   const L = (on: string[], scope = on): Loadout => ({ id: 'a', name: 'A', label: OTHER, on, scope })
   const [r] = renameKeyIn([L(['Old_9999999_P', 'B'])], 'Old', 'New')
   console.assert(r.on.join() === 'New,B' && r.scope.join() === 'New,B', `renameKeyIn rename: ${r.on}`)

@@ -138,10 +138,7 @@ impl SyncToolkit {
     /// Low-level FFI call: send a raw JSON request envelope and return the raw JSON
     /// response string. Serializes concurrent calls into the native tool via `call_lock`.
     fn invoke_raw(&self, request_json: &str) -> Result<String> {
-        log::info!(
-            "[SyncToolkit] Invoking native: {}...",
-            &request_json[..std::cmp::min(200, request_json.len())]
-        );
+        log::info!("[SyncToolkit] Invoking native: {}...", log_preview(request_json));
 
         // JSON text never contains an interior NUL, but guard anyway rather than panic.
         let c_request = CString::new(request_json)
@@ -1032,15 +1029,18 @@ pub fn extract_pak_all(file_path: &str, output_path: &str, aes_key: Option<&str>
         aes_key: aes_key.map(|s| s.to_string()),
     };
     let response = toolkit.send_request(&request)?;
-    if !response.success {
-        anyhow::bail!("Failed to extract PAK: {}", response.message);
-    }
     let data = response.data.unwrap_or(serde_json::json!({}));
-    let count = data
-        .get("extracted_count")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as usize;
-    Ok(count)
+    let count = |k: &str| data.get(k).and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+    // repakxtra: a write that failed is an error even from an older tool that still says success
+    if !response.success || count("failed_count") > 0 {
+        anyhow::bail!(
+            "Failed to extract PAK ({} extracted, {} failed): {}",
+            count("extracted_count"),
+            count("failed_count"),
+            response.message
+        );
+    }
+    Ok(count("extracted_count"))
 }
 
 /// Create a PAK file from a list of files (using global singleton)
@@ -1075,4 +1075,29 @@ pub struct IoStoreListResult {
     pub package_count: usize,
     pub container_name: String,
     pub files: Vec<String>,
+}
+
+/// First 200 bytes of a request for the log, cut back to a character boundary so a
+/// multibyte path character can't panic the slice.
+fn log_preview(s: &str) -> &str {
+    let mut end = s.len().min(200);
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::log_preview;
+
+    #[test]
+    fn log_preview_never_splits_a_character() {
+        let long = format!("{}é{}", "a".repeat(199), "b".repeat(50));
+        assert_eq!(log_preview(&long), "a".repeat(199));
+        assert_eq!(log_preview(""), "");
+        assert_eq!(log_preview("{\"a\":1}"), "{\"a\":1}");
+        let cjk = format!("{{\"file_path\":\"{}\"}}", "模組".repeat(80));
+        assert!(log_preview(&cjk).len() <= 200);
+    }
 }

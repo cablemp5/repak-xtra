@@ -12,7 +12,7 @@ import { stopEmoteSound } from './emoteSound'
 
 /** Where a dragged card would land: a collection and its place among that collection's other cards (0 = first), or
  *  a new collection. One spot has one value, so moving within it changes nothing. */
-export type Spot = { group: string; index: number } | { newCollection: true }
+export type Spot = { group: string; index: number }
 
 const START = 6     // px the pointer moves before a press becomes a drag (less stays a click)
 const EDGE = 72     // px from the list's top or bottom edge where it scrolls
@@ -82,7 +82,6 @@ function spotAt(x: number, y: number, dragId: string, zoom: number, ownGroupOnly
   let section: HTMLElement | null = null
   for (const el of document.elementsFromPoint(x, y)) {
     if (el.closest('.lo-drag-ghost')) continue
-    if (el.closest('[data-drop-new]')) return ownGroupOnly ? undefined : { newCollection: true }
     if ((section = el.closest<HTMLElement>('[data-group]'))) break
   }
   if (!section) return undefined
@@ -109,7 +108,7 @@ function spotAt(x: number, y: number, dragId: string, zoom: number, ownGroupOnly
 }
 
 const same = (a: Spot | null, b: Spot | null) => JSON.stringify(a) === JSON.stringify(b)
-const motionOff = () => document.documentElement.dataset.motion === 'off' || matchMedia('(prefers-reduced-motion: reduce)').matches
+const motionOff = () => document.documentElement.dataset.motion === 'off' // uiPrefs resolves System from the OS setting
 
 /** onMove: the spot changed (re-render the order); onDrop: released on a spot, or null when cancelled. ownGroupOnly:
  *  a card stays in its own group (the Hero view), reordered there only. */
@@ -178,6 +177,9 @@ export function useCardDrag({ zoom, scroller, onMove, onDrop, ownGroupOnly = fal
       const inner = document.createElement('div')
       inner.className = 'lo-drag-ghost-inner'
       Object.assign(inner.style, { zoom: String(z), width: `${r.width / z}px`, height: `${r.height / z}px` })
+      // the Home grid's counter zoom for the words (theme.css) reads these, so the copy's text matches the card's
+      inner.style.setProperty('--lo-card-zoom', String(z))
+      if (card.closest('.lo-screen[data-small]')) inner.dataset.small = ''
       inner.appendChild(card.cloneNode(true))
       ghost.appendChild(inner)
       document.body.appendChild(ghost)
@@ -241,7 +243,6 @@ export function useCardDrag({ zoom, scroller, onMove, onDrop, ownGroupOnly = fal
       setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 0)
       const made = drop ? spot : null
       if (!made) cue('navigate', { direction: 'back', emphasis: 'subtle' })
-      else if ('newCollection' in made) cue('success', { emphasis: 'subtle' })
       else cue('close', { emphasis: 'subtle' })
       live.current.onDrop(id, made)
       land(made)

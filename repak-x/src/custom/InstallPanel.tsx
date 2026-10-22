@@ -19,6 +19,7 @@ import { useMediaUrl } from './loadoutMedia'
 import { silhouetteOf } from './silhouettes'
 import { installsPlain } from './uiPrefs'
 import { PreviewsUnavailable, usePreviewsAvailable } from './previews'
+import { useDialogFocus } from './dialogFocus'
 // Not for this dialog: the dropdown, switch tile and button styles other dialogs share (they loaded with InstallModPanel)
 import '../components/InstallModPanel.css'
 import './install.css'
@@ -85,6 +86,17 @@ function parseModType(modType?: string) {
 
 /** The name a mod reads as: its file name without the extension and the load priority suffix. */
 export const plainName = (name = '') => name.replace(/\.(pak|off|zip|rar|7z)$/i, '').replace(/\.pak$/i, '').replace(/_\d+_P$/i, '')
+
+/** Pure: a name field's value once Enter commits it: trimmed, and empty means the suggested name (null). */
+export const committedName = (v: string) => v.trim() || null
+/** Enter in a name field commits the name and stays there: it never installs (only the Install button does). An IME
+ *  finishing a word with Enter is left alone. */
+const enterCommits = (commit: () => void) => (e: React.KeyboardEvent<HTMLInputElement>) => {
+  if (e.key !== 'Enter' || e.nativeEvent.isComposing) return
+  e.preventDefault()
+  e.stopPropagation()
+  commit()
+}
 
 const badge = (s: string) => `${s.toLowerCase().replace(/\s+/g, '-')}-badge`
 
@@ -224,34 +236,23 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
     onInstall(out)
   }
 
-  useEffect(() => {
-    const keys = (e: KeyboardEvent) => {
-      if (e.key !== 'Enter') return
-      const el = document.activeElement as HTMLElement | null
-      const tag = el?.tagName.toLowerCase()
-      // Enter in a name field installs, like the Install button; anywhere else it is the focused control's own Enter
-      if ((tag === 'input' || tag === 'textarea') && !el?.matches('.ip-name, .ip-title')) return
-      if (tag === 'button' && !el?.classList.contains('ip-install')) return
-      e.preventDefault()
-      install()
-    }
-    window.addEventListener('keydown', keys) // Esc: App closes the dialog
-    return () => window.removeEventListener('keydown', keys)
-  })
+  // Esc: App closes the dialog. Enter is each control's own: the Install button installs, a name field commits its name
+  const focus = useDialogFocus() // focus inside, Tab stays inside, back to the opener on close
 
   const targetOptions = [{ value: NEW, label: 'New loadout' }, ...loadouts.map(l => ({ value: l.id, label: `Add to ${l.name}`, name: l.name }))]
   const hybridPair = mods.length > 1 && mods.some(m => m.contains_uassets !== false) && mods.some(m => m.contains_raw_assets && m.contains_uassets === false)
 
   return (
     <div className="modal-overlay ip-overlay">
-      <motion.div className="modal-content ip-modal" role="dialog" aria-modal="true" aria-labelledby="ip-title"
+      <motion.div ref={focus.ref} onKeyDown={focus.onKeyDown} tabIndex={-1} className="modal-content ip-modal" role="dialog" aria-modal="true" aria-labelledby="ip-heading"
         initial={{ opacity: 0, y: 8, scale: 0.99 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}>
+        <h2 id="ip-heading" className="xtra-sr-only">Install mods</h2>{/* the dialog's name: the visible title is a field to type in */}
         <button type="button" className="modal-close ip-close" onClick={onCancel} aria-label="Close">×</button>
 
         {into === NONE ? (
           // No loadout: a plain install into the Library, one click back to saving it as a loadout
           <header className="ip-plain-head">
-            <h2 id="ip-title" className="ip-title is-static">Install {count === 1 ? 'a mod' : `${count} mods`}</h2>
+            <h2 className="ip-title is-static">Install {count === 1 ? 'a mod' : `${count} mods`}</h2>
             <p className="ip-meta">Into the Library only. No loadout is made or changed.</p>
             <button type="button" className="lo-text-btn ip-back" onClick={() => setTarget(NEW)}>Save as a loadout instead</button>
           </header>
@@ -277,14 +278,14 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
               <TargetPicker options={targetOptions} value={into} onChange={setTarget} />
               {into === NEW
                 ? <span className="ip-title-wrap">
-                    <input ref={titleRef} id="ip-title" className="ip-title" value={name ?? suggestion} aria-label="Loadout name" spellCheck={false}
-                      onChange={e => setName(e.target.value)} />
+                    <input ref={titleRef} className="ip-title" value={name ?? suggestion} aria-label="Loadout name" spellCheck={false}
+                      onChange={e => setName(e.target.value)} onKeyDown={enterCommits(() => setName(n => (n === null ? null : committedName(n))))} />
                     <button type="button" className="lo-icon ip-pen" title="Rename the loadout" aria-label="Rename the loadout"
                       onClick={() => { titleRef.current?.focus(); titleRef.current?.select() }}>
                       <Pencil size={15} />
                     </button>
                   </span>
-                : <h2 id="ip-title" className="ip-title is-static">{loadoutName}</h2>}
+                : <h2 className="ip-title is-static">{loadoutName}</h2>}
               <p className="ip-meta">{count === 0 ? 'No mods picked' : <>
                 {count} {count === 1 ? 'mod' : 'mods'} installing into {where.length === 1 ? <>your <code className="ip-folder">{whereText}</code> folder</> : whereText}
               </>}</p>
@@ -369,7 +370,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
                           <div className="ip-detail-row">
                             <label className="ip-name-wrap">
                               <input className="ip-name" value={s.customName} placeholder="Enter a mod name" title={`Leave empty to keep ${plainName(mod.mod_name)}`} aria-label="Mod name" spellCheck={false}
-                                onChange={e => update(i, { customName: e.target.value })} />
+                                onChange={e => update(i, { customName: e.target.value })} onKeyDown={enterCommits(() => update(i, { customName: committedName(s.customName) ?? '' }))} />
                               <span className="ip-suffix" title="Every installed mod ends in its load priority">_9999999_P</span>
                             </label>
                             {folders.length > 0 && (
@@ -449,4 +450,5 @@ if (import.meta.env.DEV) {
   console.assert(suggestName([{ name: 'A', character: null }]) === 'A', 'one mod: its name')
   console.assert(suggestName([{ name: 'A', character: 'Black Panther - Galactic' }, { name: 'B', character: 'Black Panther' }]) === 'Black Panther', 'shared hero')
   console.assert(suggestName([{ name: 'A', character: 'Hulk' }, { name: 'B', character: 'Black Panther' }]) === 'New loadout', 'mixed heroes')
+  console.assert(committedName('  Mine ') === 'Mine' && committedName('   ') === null, 'Enter commits a trimmed name, empty goes back to the suggestion')
 }

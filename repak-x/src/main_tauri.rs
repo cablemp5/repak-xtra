@@ -21,6 +21,10 @@ mod xtra_crash; // repakxtra: crash facts for the setup report, crash suspects
 mod xtra_broken; // repakxtra: mods that will not work in the installed game version
 mod xtra_nexus; // repakxtra: Nexus source from archive names
 mod xtra_offfiles; // repakxtra: .pak.off files install like .pak
+mod xtra_bundle; // repakxtra: a mod's pak/utoc/ucas found and moved as one set
+mod xtra_updater; // repakxtra: applies an update without string-built shell commands
+mod xtra_conflicts; // repakxtra: conflict comparison by normalized asset path, cached file lists
+mod xtra_extract; // repakxtra: unpacks only archives whose paths stay inside the output folder
 mod character_data;
 mod crash_monitor;
 mod discord_presence;
@@ -30,10 +34,7 @@ mod ip_obfuscation;
 mod merge_command;
 mod p2p_libp2p;
 mod p2p_manager;
-mod p2p_protocol;
-mod p2p_security;
 mod p2p_sharing;
-mod p2p_stream;
 mod toast_events;
 mod uasset_api_integration;
 mod uasset_detection;
@@ -633,7 +634,7 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
     let mut mods = Vec::new();
 
     // Scan root ~mods directory and all subdirectories recursively (no depth limit)
-    for entry in WalkDir::new(&game_path).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::not_staging) /* repakxtra */.filter_map(|e| e.ok()) {
         let path = entry.path();
 
         // Skip directories themselves
@@ -646,26 +647,7 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
         // Check for .pak, .bak_repak, and .pak_disabled files
         if ext == Some("pak") || ext == Some("bak_repak") || ext == Some("pak_disabled") {
             let is_enabled = ext == Some("pak");
-            let utoc_path = if ext == Some("pak") || ext == Some("pak_disabled") {
-                let candidate = path.with_extension("utoc");
-                if candidate.exists() {
-                    Some(candidate)
-                } else {
-                    None
-                }
-            } else {
-                let enabled_pak_path = PathBuf::from(
-                    path.to_string_lossy()
-                        .trim_end_matches(".bak_repak")
-                        .to_string(),
-                );
-                let candidate = enabled_pak_path.with_extension("utoc");
-                if candidate.exists() {
-                    Some(candidate)
-                } else {
-                    None
-                }
-            };
+            let utoc_path = Some(crate::xtra_bundle::companion(&path, "utoc")).filter(|p| p.exists()); // repakxtra: keeps dots in the name
 
             // Determine which folder this mod is in
             let root_folder_name = game_path
@@ -810,26 +792,7 @@ async fn get_pak_files_in_folder(
         // Check for .pak, .bak_repak, and .pak_disabled files
         if ext == Some("pak") || ext == Some("bak_repak") || ext == Some("pak_disabled") {
             let is_enabled = ext == Some("pak");
-            let utoc_path = if ext == Some("pak") || ext == Some("pak_disabled") {
-                let candidate = path.with_extension("utoc");
-                if candidate.exists() {
-                    Some(candidate)
-                } else {
-                    None
-                }
-            } else {
-                let enabled_pak_path = PathBuf::from(
-                    path.to_string_lossy()
-                        .trim_end_matches(".bak_repak")
-                        .to_string(),
-                );
-                let candidate = enabled_pak_path.with_extension("utoc");
-                if candidate.exists() {
-                    Some(candidate)
-                } else {
-                    None
-                }
-            };
+            let utoc_path = Some(crate::xtra_bundle::companion(&path, "utoc")).filter(|p| p.exists()); // repakxtra: keeps dots in the name
 
             // Determine which folder this mod is in
             let root_folder_name = game_path
@@ -981,18 +944,18 @@ async fn set_mod_priority(
         return Err("A mod with this priority already exists".to_string());
     }
 
-    // Rename main file
-    std::fs::rename(&path, &new_path).map_err(|e| format!("Failed to rename mod: {}", e))?;
-
-    // Rename associated files (.utoc, .ucas)
-    let exts = ["utoc", "ucas"];
-    for ext in exts {
-        let old_f = path.with_extension(ext);
+    // repakxtra: the pak and its .utoc/.ucas move as one set; a taken companion name or a locked file changes nothing
+    let mut moves = vec![(path.clone(), new_path.clone())];
+    for ext in ["utoc", "ucas"] {
+        let old_f = crate::xtra_bundle::companion(&path, ext);
+        let new_f = crate::xtra_bundle::companion(&new_path, ext);
         if old_f.exists() {
-            let new_f = new_path.with_extension(ext);
-            let _ = std::fs::rename(old_f, new_f);
+            moves.push((old_f, new_f));
+        } else if new_f.exists() {
+            return Err(format!("{} already exists", new_f.display()));
         }
     }
+    crate::xtra_bundle::move_all(&moves).map_err(|e| format!("Failed to rename mod: {}", e))?;
 
     // Invalidate cache for old path
     {
@@ -1458,7 +1421,7 @@ async fn parse_dropped_files(
 
                                 if let Some(ref uasset_temp) = uasset_temp_dir {
                                     // Extract PAK to temp dir using UAssetTool
-                                    let _ = uasset_toolkit::extract_pak_all(
+                                    let _ = crate::xtra_extract::extract_pak_all(
                                         entry_path.to_str().unwrap_or_default(),
                                         uasset_temp.path().to_str().unwrap_or_default(),
                                         Some(crate::install_mod::AES_KEY_HEX),
@@ -1704,7 +1667,7 @@ async fn parse_dropped_files(
                         let uasset_temp_dir = tempfile::tempdir().ok();
 
                         if let Some(ref uasset_temp) = uasset_temp_dir {
-                            let _ = uasset_toolkit::extract_pak_all(
+                            let _ = crate::xtra_extract::extract_pak_all(
                                 path.to_str().unwrap_or_default(),
                                 uasset_temp.path().to_str().unwrap_or_default(),
                                 Some(crate::install_mod::AES_KEY_HEX),
@@ -2151,7 +2114,7 @@ async fn inspect_archive_mods(path: String, window: Window) -> Result<Vec<Archiv
     let mut entries: Vec<ArchiveModEntry> = Vec::new();
     let mut seen_stems: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
 
-    for entry in WalkDir::new(&scan_root).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(&scan_root).into_iter().filter_entry(crate::xtra_bundle::not_staging) /* repakxtra */.filter_map(|e| e.ok()) {
         let entry_path = entry.path();
         let entry_ext = entry_path
             .extension()
@@ -3579,11 +3542,11 @@ async fn update_mod(
 
     info!("Preserved install subfolder: {}", install_subfolder);
 
-    // Migrate the old mod's custom tags
+    // Migrate the old mod's custom tags (repakxtra: moved only once the new version is in place)
+    let old_key = get_mod_key(&actual_old_path);
     let old_custom_tags = {
-        let mut state_guard = state.lock().unwrap();
-        let old_key = get_mod_key(&actual_old_path);
-        state_guard.mod_tags.remove(&old_key).unwrap_or_default()
+        let state_guard = state.lock().unwrap();
+        state_guard.mod_tags.get(&old_key).cloned().unwrap_or_default()
     };
 
     // (Deprecated old metadata)
@@ -3607,51 +3570,13 @@ async fn update_mod(
         .unwrap_or_else(|| "Unknown".to_string());
 
     // ========================================================================
-    // Step 2: Delete the old mod files
+    // Step 2 (repakxtra): nothing is deleted up front. The install below builds the new version in a private folder
+    // and swaps it in, moving a same-named old copy to Recently deleted. A new version under a different name leaves
+    // the old one in place until the install succeeded (step 4 moves it then).
     // ========================================================================
-
-    info!("Deleting old mod files...");
-    let trash = xtra_trash::reserve(None)?; // repakxtra: the replaced version goes to Recently deleted, not gone for good
-
-    // Delete main file
-    let mut old_deleted = false;
-    if actual_old_path.exists() {
-        if let Err(e) = xtra_trash::discard(&trash, &actual_old_path) { // repakxtra
-            warn!("Failed to delete old mod file: {}", e);
-        } else {
-            old_deleted = true;
-            info!("Deleted old mod file: {:?}", actual_old_path);
-        }
-    }
-
-    // Delete associated IoStore files (.ucas and .utoc)
-    // Base path is always the .pak version
-    let base_pak_path = if was_disabled {
-        let path_str = actual_old_path.to_string_lossy();
-        let clean = path_str
-            .trim_end_matches(".bak_repak")
-            .trim_end_matches("_disabled");
-        if clean.ends_with(".pak") {
-            PathBuf::from(clean)
-        } else {
-            PathBuf::from(format!("{}.pak", clean))
-        }
-    } else {
-        actual_old_path.clone()
-    };
-
-    for ext in &["ucas", "utoc"] {
-        let companion_path = base_pak_path.with_extension(ext);
-        if companion_path.exists() {
-            if let Err(e) = xtra_trash::discard(&trash, &companion_path) { // repakxtra
-                warn!("Failed to delete .{} file: {}", ext, e);
-            } else {
-                info!("Deleted associated .{} file: {:?}", ext, companion_path);
-            }
-        }
-    }
-
-    xtra_trash::release_if_empty(&trash); // repakxtra: nothing was there to keep
+    let old_files: Vec<PathBuf> = std::iter::once(actual_old_path.clone())
+        .chain(crate::xtra_bundle::existing_companions(&actual_old_path))
+        .collect();
 
     // ========================================================================
     // Step 3: Install the new mod
@@ -3751,10 +3676,27 @@ async fn update_mod(
             .join(&new_mod_filename)
     };
 
+    // repakxtra: a new version under another name left the old files where they were: they go to Recently deleted now
+    let mut old_deleted = old_files.iter().all(|p| !p.exists());
+    let leftover: Vec<&PathBuf> = old_files.iter().filter(|p| p.exists()).collect();
+    if !leftover.is_empty() {
+        match xtra_trash::reserve(None) {
+            Ok(trash) => {
+                old_deleted = leftover.iter().all(|p| xtra_trash::discard(&trash, p).is_ok());
+                xtra_trash::release_if_empty(&trash);
+            }
+            Err(e) => warn!("Failed to move the old version aside: {}", e),
+        }
+        if !old_deleted {
+            warn!("The old version is still installed next to the new one");
+        }
+    }
+
     {
         let mut state_guard = state.lock().unwrap();
         let new_key = get_mod_key(&new_mod_path);
         if !old_custom_tags.is_empty() {
+            state_guard.mod_tags.remove(&old_key);
             state_guard.mod_tags.insert(new_key, old_custom_tags);
             let _ = save_state(&state_guard);
         }
@@ -4243,6 +4185,7 @@ async fn get_folders(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<ModFo
     for entry in WalkDir::new(game_path)
         .min_depth(1)
         .into_iter()
+        .filter_entry(crate::xtra_bundle::not_staging) // repakxtra: install/receive staging is not a folder
         .filter_map(|e| e.ok())
     {
         let path = entry.path();
@@ -4890,7 +4833,7 @@ async fn extract_pak_to_destination(mod_path: String, dest_path: String) -> Resu
 
     std::fs::create_dir_all(&to_create).map_err(|e| e.to_string())?;
 
-    uasset_toolkit::extract_pak_all(
+    crate::xtra_extract::extract_pak_all(
         pak_path.to_str().unwrap_or_default(),
         to_create.to_str().unwrap_or_default(),
         Some(crate::install_mod::AES_KEY_HEX),
@@ -4940,19 +4883,7 @@ async fn extract_mod_assets_inner(
     if extension == "pak" || extension == "bak_repak" {
         // Check if there's a .utoc file with the same name - if so, use IoStore extraction
         // Handle .bak_repak (disabled mod) by stripping .bak_repak then .pak to get base name
-        let base_path = if extension == "bak_repak" {
-            let name = path
-                .file_name()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_default();
-            let base_name = name.trim_end_matches(".bak_repak").trim_end_matches(".pak");
-            path.parent()
-                .map(|p| p.join(base_name))
-                .unwrap_or_else(|| PathBuf::from(base_name))
-        } else {
-            path.with_extension("")
-        };
-        let utoc_path = base_path.with_extension("utoc");
+        let utoc_path = crate::xtra_bundle::companion(&path, "utoc"); // repakxtra: keeps dots in the name
         if utoc_path.exists() {
             log::info!("Detected IoStore mod (has .utoc alongside .pak/.bak_repak), using IoStore extraction");
             path = utoc_path;
@@ -5012,7 +4943,7 @@ async fn extract_mod_assets_inner(
                 },
             );
 
-            let file_count = uasset_toolkit::extract_iostore(
+            let file_count = crate::xtra_extract::extract_iostore(
                 &path.to_string_lossy(),
                 &output_dir.to_string_lossy(),
                 None, // Use default AES key
@@ -5077,7 +5008,8 @@ async fn extract_mod_assets_inner(
                 },
             );
 
-            uasset_toolkit::extract_pak_all(
+            // repakxtra: completion counts what was written, not the file list read beforehand
+            let extracted = crate::xtra_extract::extract_pak_all(
                 path.to_str().unwrap_or_default(),
                 output_dir.to_str().unwrap_or_default(),
                 Some(crate::install_mod::AES_KEY_HEX),
@@ -5095,6 +5027,7 @@ async fn extract_mod_assets_inner(
                 );
                 e.to_string()
             })?;
+            let file_count = extracted;
 
             let _ = window.emit(
                 "extraction_progress",
@@ -5145,7 +5078,8 @@ async fn extract_mod_assets_inner(
                 },
             );
 
-            uasset_toolkit::extract_pak_all(
+            // repakxtra: completion counts what was written, not the file list read beforehand
+            let extracted = crate::xtra_extract::extract_pak_all(
                 path.to_str().unwrap_or_default(),
                 output_dir.to_str().unwrap_or_default(),
                 Some(crate::install_mod::AES_KEY_HEX),
@@ -5163,6 +5097,7 @@ async fn extract_mod_assets_inner(
                 );
                 e.to_string()
             })?;
+            let file_count = extracted;
 
             let _ = window.emit(
                 "extraction_progress",
@@ -5673,7 +5608,7 @@ async fn recompress_mods(
 
     // Collect all .pak files
     let mut pak_files: Vec<PathBuf> = Vec::new();
-    for entry in WalkDir::new(&game_path).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::not_staging) /* repakxtra */.filter_map(|e| e.ok()) {
         let path = entry.path();
         if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("pak") {
             pak_files.push(path.to_path_buf());
@@ -5889,7 +5824,7 @@ fn recompress_pak_file(pak_path: &Path) -> Result<u64, String> {
     let temp_path = temp_dir.path();
 
     // Extract PAK to temp dir
-    uasset_toolkit::extract_pak_all(
+    crate::xtra_extract::extract_pak_all(
         pak_path.to_str().unwrap_or_default(),
         temp_path.to_str().unwrap_or_default(),
         Some(crate::install_mod::AES_KEY_HEX),
@@ -6211,7 +6146,11 @@ async fn download_update(
     info!("Starting update download from: {}", asset_url);
 
     // Create temp directory for the update
-    let temp_dir = std::env::temp_dir().join("repakxtra_update"); // repakxtra: not Repak X's
+    let temp_dir = crate::xtra_updater::update_dir(); // repakxtra: not Repak X's
+    // repakxtra: the name comes from the release listing: one plain file name, so the download stays in temp_dir
+    if !crate::p2p_sharing::safe_file_name(&asset_name) {
+        return Err(format!("Unexpected update file name: {asset_name}"));
+    }
     if temp_dir.exists() {
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
@@ -6351,10 +6290,8 @@ async fn download_update(
 async fn apply_update(downloaded_path: String, window: Window) -> Result<(), String> {
     info!("Applying update from: {}", downloaded_path);
 
-    let download_path = PathBuf::from(&downloaded_path);
-    if !download_path.exists() {
-        return Err("Downloaded update file not found".to_string());
-    }
+    // repakxtra: only a file this app downloaded into its own update folder, never any path the page passes
+    let download_path = crate::xtra_updater::owned_download(Path::new(&downloaded_path))?;
 
     // Get the current exe path and directory
     let exe_path =
@@ -6383,192 +6320,14 @@ async fn apply_update(downloaded_path: String, window: Window) -> Result<(), Str
 
     // Use runtime OS detection to create the appropriate updater script
     if cfg!(target_os = "windows") {
-        // Windows: Create .bat script
-        let updater_script_path = std::env::temp_dir().join("repakxtra_updater.bat"); // repakxtra: not Repak X's
-
-        let script_content = if is_zip {
-            format!(
-                r#"@echo off
-title RepakX Updater
-echo ============================================
-echo RepakX Portable Update
-echo ============================================
-echo.
-echo Waiting for RepakX to close...
-timeout /t 2 /nobreak >nul
-
-:waitloop
-tasklist /FI "PID eq {pid}" /NH 2>NUL | find /I "{exe_name}">NUL
-if "%ERRORLEVEL%"=="0" (
-    echo Still running, waiting...
-    timeout /t 1 /nobreak >nul
-    goto waitloop
-)
-
-echo RepakX closed. Starting update...
-echo.
-
-echo Extracting update archive...
-cd /d "{temp_dir}"
-
-:: Ensure extracted directory exists
-if not exist "{temp_dir}\extracted" mkdir "{temp_dir}\extracted"
-
-:: Use PowerShell to extract the ZIP
-powershell -NoProfile -Command "$ErrorActionPreference = 'Stop'; Expand-Archive -LiteralPath '{zip_path}' -DestinationPath '{temp_dir}\extracted' -Force" 2>nul
-if %ERRORLEVEL% NEQ 0 (
-    echo ERROR: Failed to extract update archive!
-    echo Please extract manually from: "{zip_path}"
-    echo To: "{app_dir}"
-    pause
-    exit /b 1
-)
-
-:: Check if extraction created a single subfolder (common with GitHub releases)
-set "EXTRACTED_DIR="
-set "FOLDER_COUNT=0"
-for /d %%i in ("{temp_dir}\extracted\*") do (
-    set "EXTRACTED_DIR=%%i"
-    set /a FOLDER_COUNT+=1
-)
-
-:: If exactly one subfolder exists and it contains an exe or dll, use that folder
-if "%FOLDER_COUNT%"=="1" (
-    if exist "%EXTRACTED_DIR%\*.exe" (
-        echo Found nested folder: "%EXTRACTED_DIR%"
-    ) else if exist "%EXTRACTED_DIR%\*.dll" (
-        echo Found nested folder: "%EXTRACTED_DIR%"
-    ) else (
-        set "EXTRACTED_DIR={temp_dir}\extracted"
-    )
-) else (
-    set "EXTRACTED_DIR={temp_dir}\extracted"
-)
-
-echo Source: "%EXTRACTED_DIR%"
-echo Destination: "{app_dir}"
-echo.
-
-:: repakxtra: the update must hold the app; otherwise nothing is copied and this version opens again, saying why
-if not exist "%EXTRACTED_DIR%\*.exe" (
-    echo ERROR: The update archive holds no app, so nothing was changed.
-    echo Download the release by hand from https://github.com/cablemp5/repak-xtra/releases
-    start "" "{exe_path}"
-    pause
-    exit /b 1
-)
-
-echo Copying new files...
-xcopy /E /Y /I /Q "%EXTRACTED_DIR%\*" "{app_dir}\" >nul
-if %ERRORLEVEL% NEQ 0 (
-    echo ERROR: Failed to copy update files!
-    echo Please copy manually from: "%EXTRACTED_DIR%"
-    echo To: "{app_dir}"
-    pause
-    exit /b 1
-)
-
-:: Remove stale artifacts that should not ship (legacy ue4-dds-tools, debug symbols, stale executables)
-if exist "{app_dir}\uassettool\ue4-dds-tools" rd /s /q "{app_dir}\uassettool\ue4-dds-tools" 2>nul
-del /q "{app_dir}\uassettool\*.pdb" 2>nul
-
-:: Flattening migration guard: the new layout places UAssetTool.dll at the root and removes the
-:: uassettool folder. Remove the old uassettool folder ONLY when the incoming
-:: release ships the exact marker (UAssetTool.dll) at the root AND no longer ships the folder.
-:: Hardcode the marker name -- NEVER match *.dll, because Oodle (oo2core/oodle*) DLLs also live
-:: in this folder and a wildcard would falsely "detect AOT" and delete a still-needed UAssetTool.exe.
-if exist "%EXTRACTED_DIR%\UAssetTool.dll" (
-    if not exist "%EXTRACTED_DIR%\uassettool" (
-        if exist "{app_dir}\uassettool" rd /s /q "{app_dir}\uassettool" 2>nul
-    )
-)
-
-:: These are always-wrong locations (never the resolved tool path) -- safe to clean unconditionally
-if exist "{app_dir}\UAssetTool.exe" del /f /q "{app_dir}\UAssetTool.exe" 2>nul
-if exist "{app_dir}\tools\UAssetTool.exe" del /f /q "{app_dir}\tools\UAssetTool.exe" 2>nul
-if exist "{app_dir}\tools\uassettool\UAssetTool.exe" del /f /q "{app_dir}\tools\uassettool\UAssetTool.exe" 2>nul
-
-echo Cleaning up temporary files...
-rd /s /q "{temp_dir}" 2>nul
-
-echo.
-echo ============================================
-echo Update complete!
-echo ============================================
-echo.
-echo Launching RepakX...
-timeout /t 2 /nobreak >nul
-start "" "{exe_path}"
-
-:: Self-delete and exit cleanly
-(goto) 2>nul & del "%~f0" & exit
-"#,
-                exe_name = exe_name,
-                pid = std::process::id(), // repakxtra: wait for this process only
-                temp_dir = download_path
-                    .parent()
-                    .unwrap_or(&std::env::temp_dir())
-                    .to_string_lossy()
-                    .replace('/', "\\"),
-                zip_path = download_path.to_string_lossy().replace('/', "\\"),
-                app_dir = app_dir.to_string_lossy().replace('/', "\\"),
-                exe_path = exe_path.to_string_lossy().replace('/', "\\"),
-            )
+        // repakxtra: a fixed PowerShell script gets every path through environment variables (xtra_updater.rs), so
+        // no folder name can change the command, and a failed copy puts the old files back
+        if is_zip {
+            crate::xtra_updater::launch_zip(&download_path, app_dir, &exe_path)?;
         } else {
-            format!(
-                r#"@echo off
-title RepakX Updater
-echo Waiting for RepakX to close...
-timeout /t 2 /nobreak >nul
-
-:waitloop
-tasklist /FI "PID eq {pid}" /NH 2>NUL | find /I "{exe_name}">NUL
-if "%ERRORLEVEL%"=="0" (
-    timeout /t 1 /nobreak >nul
-    goto waitloop
-)
-
-echo Running installer...
-start /wait "" "{installer_path}"
-
-echo Cleaning up...
-del "{installer_path}"
-
-:: Self-delete and exit cleanly
-(goto) 2>nul & del "%~f0" & exit
-"#,
-                exe_name = exe_name,
-                pid = std::process::id(), // repakxtra: wait for this process only
-                installer_path = download_path.to_string_lossy().replace('/', "\\"),
-            )
-        };
-
-        std::fs::write(&updater_script_path, &script_content)
-            .map_err(|e| format!("Failed to write updater script: {}", e))?;
-
-        info!(
-            "Created Windows updater script at: {:?}",
-            updater_script_path
-        );
-
-        // Launch the updater script
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x08000000;
-
-            std::process::Command::new("cmd")
-                .args([
-                    "/C",
-                    "start",
-                    "/MIN",
-                    "RepakX Updater",
-                    &updater_script_path.to_string_lossy(),
-                ])
-                .creation_flags(CREATE_NO_WINDOW)
-                .spawn()
-                .map_err(|e| format!("Failed to launch updater: {}", e))?;
+            crate::xtra_updater::launch_installer(&download_path)?;
         }
+        let _ = exe_name;
     } else if cfg!(target_os = "linux") {
         // Linux: Create .sh script
         let linux_script_path = std::env::temp_dir().join("repakxtra_updater.sh"); // repakxtra
@@ -7660,7 +7419,7 @@ async fn get_asset_explorer_index(
     let mut failed: Vec<AssetExplorerFailure> = Vec::new();
     let mut total_assets = 0usize;
 
-    for entry in WalkDir::new(&game_path).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::not_staging) /* repakxtra */.filter_map(|e| e.ok()) {
         let path = entry.path();
         if path.is_dir() {
             continue;
@@ -7795,13 +7554,19 @@ async fn check_mod_clashes(
     quiet: Option<bool>,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<Vec<ModClash>, String> {
-    use std::collections::HashMap;
-    let quiet = quiet == Some(true); // repakxtra: the background check (custom/conflicts.ts) stays out of Logs
-
-    let started = std::time::Instant::now();
     // repakxtra: only the path under the lock: the scan below no longer holds every other command up (it runs by itself
-    // in the background whenever enabled mods change)
-    let game_path = &state.lock().unwrap().game_path.clone();
+    // in the background whenever enabled mods change). It reads files and calls the native tool, so it runs on a
+    // blocking thread, one scan at a time (a second request waits, then mostly hits the file-list cache).
+    static ONE_SCAN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    let game_path = state.lock().unwrap().game_path.clone();
+    let _turn = ONE_SCAN.lock().await;
+    tokio::task::spawn_blocking(move || scan_mod_clashes(quiet == Some(true), &game_path))
+        .await
+        .map_err(|e| format!("Conflict check stopped: {e}"))?
+}
+
+fn scan_mod_clashes(quiet: bool, game_path: &Path) -> Result<Vec<ModClash>, String> {
+    let started = std::time::Instant::now();
 
     if !quiet { // repakxtra
     ui_log::info("Conflicts", "Checking enabled mods for file conflicts...");
@@ -7812,18 +7577,10 @@ async fn check_mod_clashes(
         return Err("Game path does not exist".to_string());
     }
 
-    // Structure to hold mod info for clash detection
-    #[derive(Clone)]
-    struct ModInfo {
-        path: PathBuf,
-        priority: usize,
-        files: Vec<String>, // List of files inside this mod
-    }
-
-    let mut mods_info: Vec<ModInfo> = Vec::new();
+    let mut mods_info: Vec<crate::xtra_conflicts::Container> = Vec::new();
 
     // Scan all enabled mods
-    for entry in WalkDir::new(&game_path).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::not_staging) /* repakxtra */.filter_map(|e| e.ok()) {
         let path = entry.path();
 
         if path.is_dir() {
@@ -7864,18 +7621,17 @@ async fn check_mod_clashes(
         utoc_path.set_extension("utoc");
         let is_iostore = utoc_path.exists();
 
-        // Get file list
-        let files: Vec<String> = if is_iostore {
-            use crate::utoc_utils::read_utoc;
-            read_utoc(&utoc_path)
-                .iter()
-                .map(|entry| entry.file_path.clone())
-                .collect()
-        } else {
-            match uasset_toolkit::list_pak_files(
-                path.to_str().unwrap_or_default(),
-                Some(crate::install_mod::AES_KEY_HEX),
-            ) {
+        // Get file list (repakxtra: cached until the container changes)
+        let listed = crate::xtra_conflicts::files_cached(path, is_iostore.then_some(utoc_path.as_path()), || {
+            if is_iostore {
+                Ok(crate::utoc_utils::read_utoc(&utoc_path).iter().map(|entry| entry.file_path.clone()).collect())
+            } else {
+                uasset_toolkit::list_pak_files(path.to_str().unwrap_or_default(), Some(crate::install_mod::AES_KEY_HEX))
+                    .map_err(|e| e.to_string())
+            }
+        });
+        let files = {
+            match listed {
                 Ok(f) => f,
                 Err(e) => {
                     if !quiet { ui_log::warn( // repakxtra
@@ -7891,7 +7647,7 @@ async fn check_mod_clashes(
             }
         };
 
-        mods_info.push(ModInfo {
+        mods_info.push(crate::xtra_conflicts::Container {
             path: path.to_path_buf(),
             priority,
             files,
@@ -7901,56 +7657,21 @@ async fn check_mod_clashes(
     let analyzed = mods_info.len();
     if !quiet { ui_log::debug("Conflicts", format!("Analyzed {} enabled mod(s)", analyzed)); } // repakxtra
 
-    // Don't group by character - instead, compare all mods at the same priority level
-    // Group by priority first
-    let mut by_priority: HashMap<usize, Vec<ModInfo>> = HashMap::new();
-
-    for mod_info in mods_info {
-        by_priority
-            .entry(mod_info.priority)
-            .or_insert_with(Vec::new)
-            .push(mod_info);
-    }
-
-    // Find clashes: same priority and overlapping files
+    // repakxtra: same priority and overlapping assets, compared by normalized path (xtra_conflicts::find)
     let mut clashes: Vec<ModClash> = Vec::new();
     use std::collections::HashSet;
 
-    for (priority, same_priority_mods) in by_priority {
-        if same_priority_mods.len() < 2 {
-            continue;
-        }
-
-        info!(
-            "Checking priority {} with {} mods",
-            priority,
-            same_priority_mods.len()
-        );
-
-        // Compare each pair of mods at this priority level
-        for i in 0..same_priority_mods.len() {
-            for j in (i + 1)..same_priority_mods.len() {
-                let mod1 = &same_priority_mods[i];
-                let mod2 = &same_priority_mods[j];
-
-                // Convert file lists to HashSets for efficient intersection
-                let files1: HashSet<&String> = mod1.files.iter().collect();
-                let files2: HashSet<&String> = mod2.files.iter().collect();
-
-                // Find overlapping files, excluding metadata files like 'patched_files'
-                let overlapping_files: Vec<String> = files1
-                    .intersection(&files2)
-                    .filter(|f| !f.ends_with("patched_files") && !f.contains("/patched_files"))
-                    .map(|s| (*s).clone())
-                    .collect();
-
-                if !overlapping_files.is_empty() {
+    for (i, j, overlapping_files) in crate::xtra_conflicts::find(&mods_info) {
+        let (mod1, mod2) = (&mods_info[i], &mods_info[j]);
+        let priority = mod1.priority;
+        {
+            {
+                {
                     // Found a clash! These two mods modify the same files
                     let mod_paths = vec![
                         mod1.path.to_string_lossy().to_string(),
                         mod2.path.to_string_lossy().to_string(),
                     ];
-
                     // Build a description showing which characters are affected
                     let mut affected_characters = HashSet::new();
 
@@ -8102,7 +7823,7 @@ async fn check_single_mod_conflicts(
     let mut conflicts: Vec<SingleModConflict> = Vec::new();
 
     // Scan all other enabled mods
-    for entry in WalkDir::new(&game_path).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::not_staging) /* repakxtra */.filter_map(|e| e.ok()) {
         let path = entry.path();
 
         if path.is_dir() {
@@ -8617,6 +8338,8 @@ fn main() {
     character_data::refresh_cache();
 
     let state = Arc::new(Mutex::new(load_state()));
+    // repakxtra: a half-built install or receive from a run that was closed midway is never left for the game to load
+    crate::xtra_bundle::sweep_staging(&state.lock().unwrap().game_path);
     let watcher_state = WatcherState {
         watcher: Mutex::new(None),
         last_event_time: Mutex::new(std::time::Instant::now()),

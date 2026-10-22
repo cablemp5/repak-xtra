@@ -75,6 +75,4 @@
 @media (max-width: 640px) {
   .wi-demos { grid-template-columns: minmax(0, 1fr); }
 }
-@media (prefers-reduced-motion: reduce) {
-  .wi *, .wi *::before, .wi *::after { animation: none !important; }
-}
+html[data-motion="off"] .wi *, html[data-motion="off"] .wi *::before, html[data-motion="off"] .wi *::after { animation: none !important; }

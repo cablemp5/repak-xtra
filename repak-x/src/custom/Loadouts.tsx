@@ -6,9 +6,11 @@ import CustomDropdown from '../components/CustomDropdown'
 import type { useAlert } from '../components/AlertHandler'
 import {
   type Loadout, type Mod, changesToTurnOff, changesToTurnOn, deleteLoadout, flipMods, hotkeySlots, isActive, modKey,
-  nextLoadoutName, openLoadout, patchLoadout, readLoadouts, useLoadouts, withMods, writeLoadouts,
+  nameKey, nextLoadoutName, openLoadout, patchLoadout, readLoadouts, useLoadouts, withMods, writeLoadouts,
 } from './loadoutStore'
+import { canonKey } from './loadoutIdentity'
 import { isTyping } from './hotkeys'
+import { modalOpen } from './dialogFocus'
 import { plural } from './modName'
 import { type Verdict, verdictOf } from './brokenMods'
 import { brokenShown } from './uiPrefs'
@@ -86,7 +88,7 @@ export function LoadoutMenuItems({ paths, alert, close }: { paths: string[]; ale
       {loadouts.length > 0 && <div className="context-menu-separator" />}
       <div className="scrollable-menu-list" style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }}>
         {loadouts.map(l => {
-          const has = keys.every(k => l.on.some(o => modKey(o) === k))
+          const has = keys.every(k => l.on.some(o => canonKey(o) === k))
           return (
             <div key={l.id} className={`context-menu-item${has ? ' is-disabled' : ''}`} onClick={() => !has && addTo(l)}
               title={has ? `Already in ${l.name}` : undefined}>
@@ -99,20 +101,29 @@ export function LoadoutMenuItems({ paths, alert, close }: { paths: string[]; ale
   )
 }
 
-/** Delete with a 10 s Undo, like deleting a mod. */
+/** Delete with a 10 s Undo, like deleting a mod: it waits 7 days in Settings > Recently deleted. False when it could
+ *  not be kept there (then it is not deleted). */
 export function deleteWithUndo(p: LoadoutProps, l: Loadout) {
-  const restore = deleteLoadout(l.id)
-  const id = p.alert.info(`Deleted ${l.name}`, 'Its mods were not changed.', {
+  let restore: () => unknown
+  try { restore = deleteLoadout(l.id) } catch (e) {
+    p.alert.warning(`${l.name} not deleted`, `It could not be kept in Recently deleted, so it stays. ${String(e)}`)
+    return false
+  }
+  const id = p.alert.info(`Deleted ${l.name}`, 'Its mods were not changed. Kept for 7 days in Settings > Recently deleted.', {
     duration: 10000,
-    action: { label: 'Undo', onClick: () => { p.alert.dismissAlert(id); restore() } },
+    action: { label: 'Undo', onClick: () => {
+      p.alert.dismissAlert(id)
+      try { restore() } catch (e) { p.alert.warning(`${l.name} not restored`, String(e)) }
+    } },
   })
+  return true
 }
 
 let switching = '' // the loadout being switched: one at a time, whether from the sidebar, Ctrl+N, a card or a page
 
 /** Heroes whose look (a Mesh or Texture mod) the loadout changes. */
 const looksOf = (p: LoadoutProps, l: Loadout) => {
-  const on = new Set(l.on.map(modKey))
+  const on = new Set(l.on.map(canonKey))
   const heroes = new Set<string>()
   for (const m of p.mods) {
     const d = p.modDetails?.[m.path]
@@ -148,7 +159,7 @@ export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], ve
     const flipped = new Set(changes.filter(m => !failed.includes(m)).map(m => m.path))
     const after = p.mods.map(m => (flipped.has(m.path) ? { ...m, enabled: !m.enabled } : m))
     if (failed.length) {
-      p.alert.warning(`${l.name} partly ${verb}`, failed.reason ?? `Could not switch ${failed.map(m => modKey(m.path)).join(', ')}. Close anything using those files, then try again.`)
+      p.alert.warning(`${l.name} partly ${verb}`, failed.reason ?? `Could not switch ${failed.map(m => nameKey(m.path)).join(', ')}. Close anything using those files, then try again.`)
     } else {
       p.alert.success(`${l.name} ${verb}`, `${plural(changes.length, 'mod')} switched.`)
     }
@@ -157,15 +168,15 @@ export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], ve
       if (alsoOff.length) p.alert.info(`${alsoOff.map(o => o.name).join(', ')} also off`, `${alsoOff.length === 1 ? 'It shares' : 'They share'} mods with ${l.name}.`)
       return
     }
-    const risky = flagged.filter(v => v.kind === 'risky').map(v => modKey(v.path))
-    const broken = flagged.filter(v => v.kind === 'broken').map(v => modKey(v.path))
+    const risky = flagged.filter(v => v.kind === 'risky').map(v => nameKey(v.path))
+    const broken = flagged.filter(v => v.kind === 'broken').map(v => nameKey(v.path))
     if (risky.length) p.alert.warning('May crash the game', `${risky.join(', ')} ${risky.length === 1 ? 'is a Blueprint mod' : 'are Blueprint mods'} from before the last game update. If the game crashes, turn ${risky.length === 1 ? 'it' : 'them'} off and look for an updated version.`, { duration: 15000 })
     if (broken.length) p.alert.warning('Will not work in this game version', `${broken.join(', ')} ${broken.length === 1 ? 'replaces' : 'replace'} game files an update renamed or removed.`, { duration: 15000 })
     const mine = looksOf(p, l)
     for (const o of wasOn) {
       const both = [...looksOf(p, o)].filter(h => mine.has(h))
       if (!both.length) continue
-      const keep = new Set(l.on.map(modKey))
+      const keep = new Set(l.on.map(canonKey))
       const id = p.alert.warning(`${o.name} is also on`, `It changes ${both.join(', ')} too, and the game shows only one look.`, {
         duration: 12000,
         action: {
@@ -195,7 +206,7 @@ export default function LoadoutHotkeys(p: LoadoutProps) {
   latest.current = { loadouts, apply }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!e.ctrlKey || e.shiftKey || e.altKey || !/^[1-9]$/.test(e.key) || isTyping(e.target) || document.querySelector('.modal-overlay')) return
+      if (!e.ctrlKey || e.shiftKey || e.altKey || !/^[1-9]$/.test(e.key) || isTyping(e.target) || modalOpen()) return
       const l = hotkeySlots(latest.current.loadouts).get(Number(e.key))
       if (!l || busy.current) return
       e.preventDefault()

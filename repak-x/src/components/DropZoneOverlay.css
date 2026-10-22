@@ -377,11 +377,9 @@
     animation: dropzone-border-spin 7.4s linear infinite;
 }
 
-@media (prefers-reduced-motion: reduce) {
-
-    :root:not([data-animations="off"]) .dropzone-card,
-    :root:not([data-animations="off"]) .dropzone-card.active,
-    :root:not([data-animations="off"]) .dropzone-card .zone-icon {
-        animation: none;
-    }
+/* repakxtra: Settings > Animations (System follows the OS) decides, so an explicit On wins over the OS */
+:root[data-motion="off"]:not([data-animations="off"]) .dropzone-card,
+:root[data-motion="off"]:not([data-animations="off"]) .dropzone-card.active,
+:root[data-motion="off"]:not([data-animations="off"]) .dropzone-card .zone-icon {
+    animation: none;
 }

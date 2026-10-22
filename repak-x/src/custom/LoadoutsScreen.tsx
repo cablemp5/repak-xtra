@@ -3,12 +3,14 @@
 // view (header tabs, or L). On = its mods on, Off = its mods off; other mods and loadouts are never touched.
 import { type CSSProperties, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useStableCallback } from '../hooks/useStableCallback'
-import { ChevronDown, ChevronRight, ChevronUp, CopyPlus, FolderPlus, Pencil, Plus, Trash2, WandSparkles } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, CopyPlus, FolderPlus, Pencil, Plus, Search, Trash2, WandSparkles, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo, runChanges } from './Loadouts'
 import LoadoutPage from './LoadoutPage'
 import NewStrip from './NewStrip'
+import { matchesLoadout } from './homeSearch'
 import { isTyping } from './hotkeys'
+import { modalOpen } from './dialogFocus'
 import { CardMedia, OnDot } from './loadoutBits'
 import { CardZoomControl, useCardZoom, useWheelZoom } from './cardZoom'
 import { type Spot, playFlip, snapshotCards, useCardDrag } from './cardDrag'
@@ -109,15 +111,15 @@ function GroupHead({ p, name, count, at, total, editing, setEditing, folded, onF
   )
 }
 
-/** Home | Library switch for the app header. Its own class: the 1/2/3 hotkeys click the first .mod-state-filter. A tab
- *  always lands on its home: Loadouts on the cards (not a loadout page left open), Library on every mod with no folder,
- *  filter, search or details panel (App.tsx listens). L flips between the two and keeps where each was. */
+/** Home | Library switch for the app header. Its own class: the 1/2/3 hotkeys click the first .mod-state-filter. The
+ *  Loadouts tab lands on the cards (not a loadout page left open). The Library tab and L keep the Library as it was
+ *  (search, filters, folder, checked and viewed mods, scroll): its Show all button is the deliberate reset (App.tsx). */
 export function ViewTabs() {
   const view = useView()
   return (
     <div className="view-tabs" role="tablist" aria-label="View" data-tour="view-tabs">
       <button type="button" role="tab" aria-selected={view === 'home'} onClick={() => { openLoadout(null); setView('home') }} title="Loadouts and new mods (L)">Loadouts</button>
-      <button type="button" role="tab" aria-selected={view === 'library'} onClick={() => { setView('library'); window.dispatchEvent(new Event('repakxtra-library-home')) }}
+      <button type="button" role="tab" aria-selected={view === 'library'} onClick={() => setView('library')}
         title="Every mod, with filters and folders (L)">Library</button>
     </div>
   )
@@ -187,6 +189,17 @@ const LoadoutCard = memo(function LoadoutCard({ p, l, groupBy, canGenerate, busy
 export default function LoadoutsScreen(p: LoadoutProps) {
   const view = useView()
   const loadouts = useLoadouts()
+  // Search: kept while a loadout's page is open, so Back returns to the same results
+  const [query, setQuery] = useState('')
+  const q = query.trim()
+  const matching = useMemo(() => (q ? loadouts.filter(l => matchesLoadout(l, q)) : loadouts), [loadouts, q])
+  const [said, setSaid] = useState('') // the result count for screen readers, once typing pauses
+  useEffect(() => {
+    const t = setTimeout(() => setSaid(!q ? '' : matching.length ? `${plural(matching.length, 'loadout')} found` : 'No loadouts found'), 700)
+    return () => clearTimeout(t)
+  }, [q, matching.length])
+  const scrollBefore = useRef(0) // where the cards were before a search, for when it is cleared
+  const searchRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const openId = useOpenLoadout()
   const setOpenId = openLoadout
@@ -226,8 +239,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
       flipFrom.current = snapshotCards(cardsEl)
       setSpot(null)
       if (!s) return
-      if ('newCollection' in s) { const name = addGroup(); placeLoadout(id, name); setGroupBy('group'); setEditingGroup(name) }
-      else if (groupBy === 'hero') moveLoadout(id, besideOf(id, s))
+      if (groupBy === 'hero') moveLoadout(id, besideOf(id, s))
       else placeLoadout(id, s.group, besideOf(id, s))
     },
   })
@@ -278,7 +290,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
 
   // The cards' handlers keep one identity, so a card re-renders only when its own data changes (a drag reorders the
   // cards on every step; re-rendering all of them made it stutter)
-  const pickCard = useStableCallback((e: React.PointerEvent<HTMLElement>, id: string) => drag.onPointerDown(e, id))
+  const pickCard = useStableCallback((e: React.PointerEvent<HTMLElement>, id: string) => { if (!q) drag.onPointerDown(e, id) }) // no reordering a filtered view
   const toggleCard = useStableCallback((l: Loadout, on: boolean) => toggle(l, on))
   const startRename = useStableCallback((l: Loadout) => { setDraft(l.name); setRenaming(l.id) })
   const commitCard = useStableCallback((l: Loadout) => commitRename(l))
@@ -288,11 +300,11 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     if (view !== 'home') return
     // Esc on a loadout page goes back to the cards (a text field, an open menu or a dialog takes its own Esc first)
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && openRef.current && !isTyping(e.target) && !document.querySelector('.modal-overlay, [role="menu"], .custom-dropdown-menu')) { e.stopPropagation(); closePage() }
+      if (e.key === 'Escape' && openRef.current && !isTyping(e.target) && !modalOpen() && !document.querySelector('[role="menu"], .custom-dropdown-menu')) { e.stopPropagation(); closePage() }
     }
     // Ctrl+V with an image, GIF or video sets the open loadout's media, or the hovered card's
     const onPaste = (e: ClipboardEvent) => {
-      if (isTyping(e.target)) return
+      if (isTyping(e.target) || modalOpen()) return // a dialog is open: the cards behind it keep their media
       const file = [...(e.clipboardData?.files ?? [])].find(f => /^(image|video)\//.test(f.type))
       if (!file) return
       e.preventDefault()
@@ -387,11 +399,17 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     const members = ((groupBy === 'hero' ? heroGroups(loadouts) : grouped(loadouts)).find(([g]) => groupKey(g) === groupKey(s.group))?.[1] ?? []).filter(l => l.id !== id)
     return s.index < members.length ? { id: members[s.index].id, after: false } : members.length ? { id: members[members.length - 1].id, after: true } : undefined
   }
-  // While a card is dragged, the order it would make if dropped now
-  const shown = !(drag.dragId && spot && 'group' in spot) ? loadouts
+  // While a card is dragged, the order it would make if dropped now (a search shows only its matches, and no drag)
+  const shown = q ? matching : !(drag.dragId && spot && 'group' in spot) ? loadouts
     : groupBy === 'hero' ? movedBeside(loadouts, drag.dragId, besideOf(drag.dragId, spot))
     : placed(loadouts, drag.dragId, spot.group, besideOf(drag.dragId, spot))
-  const groups: [string, Loadout[]][] = groupBy === 'hero' ? heroGroups(shown) : grouped(shown)
+  const groups: [string, Loadout[]][] = (groupBy === 'hero' ? heroGroups(shown) : grouped(shown)).filter(([, list]) => !q || list.length > 0)
+  const search = (v: string) => {
+    if (!q && v.trim()) scrollBefore.current = cardsEl?.scrollTop ?? 0
+    else if (q && !v.trim()) requestAnimationFrame(() => cardsEl?.scrollTo({ top: scrollBefore.current }))
+    setQuery(v)
+  }
+  const clearSearch = () => { search(''); searchRef.current?.focus() } // its button goes away: focus stays in the search
   const newGroup = () => { setGroupBy('group'); setEditingGroup(addGroup()) }
 
   const hidden = (
@@ -418,17 +436,27 @@ export default function LoadoutsScreen(p: LoadoutProps) {
       {hidden}
       <header className="lo-screen-head">
         <div>
-          <h2>Loadouts</h2>
+          <div className="lo-title-row">
+            <h2>Loadouts</h2>
+            {loadouts.length > 0 && (
+              <label className="lp-search lo-search">
+                <Search size={14} aria-hidden="true" />
+                <input ref={searchRef} value={query} placeholder="Search loadouts..." aria-label="Search loadouts by name or collection" onChange={e => search(e.target.value)}
+                  onKeyDown={e => { e.stopPropagation(); if (e.key === 'Escape') search('') }} />
+                {query && <button type="button" className="lo-icon" aria-label="Clear search" title="Clear search" onClick={clearSearch}><X size={13} /></button>}
+              </label>
+            )}
+            <span className="xtra-sr-only" role="status">{said}</span>
+          </div>
           {loadouts.length < 3 && <p>Switch a set of mods on or off together. Other mods stay as they are. To install mods, drop .pak or .zip files anywhere or use Install.</p>}
         </div>
         <div className="lo-head-tools">
           <button type="button" ref={newRef} className="lo-text-btn" data-tour="new-loadout" onClick={createEmpty} title="A new empty loadout, opened to add mods to it">
             <Plus size={14} /> New loadout
           </button>
-          {/* Also a drop target: a card dropped here starts a new collection, named right away */}
-          <button type="button" className={`lo-text-btn${spot && 'newCollection' in spot ? ' is-drop' : ''}`} data-tour="new-collection" onClick={newGroup}
-            data-drop-new title="A new collection: a named shelf for loadouts that belong together (drag cards onto it, or a card onto this button)">
-            <FolderPlus size={14} /> {drag.dragId ? 'Drop for a new collection' : 'New collection'}
+          <button type="button" className="lo-text-btn" data-tour="new-collection" onClick={newGroup}
+            title="A new collection: a named shelf for loadouts that belong together (drag cards onto it)">
+            <FolderPlus size={14} /> New collection
           </button>
           {!canGenerate && <PreviewsUnavailable className="lo-text-btn" label="Generate all previews" />}
           {canGenerate && <div className="lo-gen" ref={genRef}>
@@ -485,15 +513,22 @@ export default function LoadoutsScreen(p: LoadoutProps) {
           </div>
         )}
 
-        {groups.map(([group, list], gi) => {
+        {q && groups.length === 0 && (
+          <div className="lo-first-run">
+            <p>No loadouts match “{q}”.</p>
+            <div className="lo-first-actions"><button type="button" className="lo-text-btn" onClick={clearSearch}>Clear search</button></div>
+          </div>
+        )}
+
+        {groups.map(([group, list]) => {
           const foldId = groupBy === 'group' ? `group:${groupKey(group)}` : `hero:${group}`
-          const isFolded = folded.has(foldId) && drag.dragId === null // a drag opens every group, so a card can land in any
+          const isFolded = folded.has(foldId) && drag.dragId === null && !q // a drag or a search opens every group (the saved folding stays)
           return (
           // A collection lights up while a card from another one would land in it
           <section className={`lo-group ${groupBy === 'group' && drag.dragId && spot && 'group' in spot && groupKey(spot.group) === groupKey(group) && groupKey(dragFrom ?? '') !== groupKey(group) ? 'is-drop' : ''}${isFolded ? ' is-folded' : ''}`}
             key={groupKey(group)} data-group={group}>
             {groupBy === 'group'
-              ? <GroupHead p={p} name={group} count={list.length} at={gi} total={savedGroups.length} folded={isFolded} onFold={() => fold(foldId)}
+              ? <GroupHead p={p} name={group} count={list.length} at={savedGroups.findIndex(g => groupKey(g) === groupKey(group))} total={savedGroups.length} folded={isFolded} onFold={() => fold(foldId)}
                   editing={editingGroup !== null && groupKey(editingGroup) === groupKey(group)} setEditing={setEditingGroup} />
               : <div className="lo-group-head" data-flip={`head:${group}`}><FoldButton name={group} folded={isFolded} onFold={() => fold(foldId)} />
                   <span className="lo-group-name" role="heading" aria-level={3} onClick={() => fold(foldId)} title={`Click to ${isFolded ? 'show' : 'collapse'}`}>{group}</span><span className="lo-group-count"><Num id={`hero-${group}`} value={list.length} /></span></div>}
