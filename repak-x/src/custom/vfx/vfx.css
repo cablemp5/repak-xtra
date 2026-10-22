@@ -1,56 +1,53 @@
-/* repakxtra: the VFX Updater window (VfxUpdaterWindow.tsx), on Settings' type scale: section titles 14px with 16px icons,
-   labels 13px, notes 12.5px gray, flat sections split by hairlines, 32px quiet buttons, blue only for Update. */
+/* repakxtra: the VFX Updater window (VfxUpdaterWindow.tsx), built from the Loadout page's parts: lo-group-head headings
+   with a count pill, mod-rows lists, lp-empty's dashed row, su-part rows with su-link actions, lo-icon buttons. Only what
+   those parts do not cover is styled here: a row that wraps to show progress and a report, the drop state, the pills. */
 .vf-window { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .vf-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.vf-head { padding: 16px 24px 14px; border-bottom: 1px solid var(--panel-border); }
-.vf-head h1 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; color: var(--text-primary); }
-.vf-head h1 svg { color: var(--text-secondary); }
-.vf-head p { margin: 4px 0 0; font-size: 12.5px; color: var(--text-secondary); }
-.vf-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 24px 20px; }
+.vf-body { flex: 1; min-height: 0; overflow-y: auto; padding: 22px 24px 24px; display: flex; flex-direction: column; gap: 26px; }
+.vf-body .lp-section .lo-group-head { font-size: 13px; }
+.vf-head-tool { margin-left: auto; align-self: center; }
+.vf-hint { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 
-.vf-section { padding: 18px 0; display: flex; flex-direction: column; gap: 12px; }
-.vf-section + .vf-section { border-top: 1px solid var(--panel-border); }
-.vf-section h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 2px; font-size: 14px; font-weight: 600; letter-spacing: -0.005em; color: var(--text-primary); }
-.vf-section h3 svg { flex: none; color: var(--text-secondary); }
-.vf-section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.vf-hint { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }
-.vf-actions { display: flex; gap: 8px; flex: none; }
-.vf-section .lo-text-btn { flex: none; }
+/* the empty list takes dropped files: the dashed row brightens to the accent while files hang over the window */
+.vf-drop { line-height: 1.5; text-wrap: pretty; transition: border-color 150ms ease, color 150ms ease, background 150ms ease; }
+.vf-panel.is-over .vf-drop, .vf-panel.is-over .vf-rows {
+  border-color: color-mix(in srgb, var(--accent-primary), transparent 40%); color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent-primary), transparent 94%);
+}
+.vf-rows { transition: border-color 150ms ease, background 150ms ease; }
 
-/* the mods */
-.vf-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--panel-border); }
-.vf-item { padding: 8px 0; border-bottom: 1px solid var(--panel-border); animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; }
-.vf-item-head { display: flex; align-items: center; gap: 12px; min-height: 28px; }
-.vf-item-name {
-  flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-start !important; gap: 6px; height: 28px; padding: 0 !important;
-  border: none !important; background: none !important; color: var(--text-primary) !important; font-size: 13px !important; font-weight: 500 !important;
+/* a mod's row: name, state, remove, then (full width) its progress or report */
+.vf-row { flex-wrap: wrap; color: var(--text-primary); padding-right: 8px; }
+.vf-row-name {
+  flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-start !important; gap: 6px; height: 32px; padding: 0 !important;
+  border: none !important; background: none !important; color: var(--text-primary) !important; font-size: 13px !important; font-weight: 600 !important;
   text-align: left; cursor: pointer;
 }
-.vf-item-name:disabled { cursor: default; opacity: 1; }
-.vf-item-name > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vf-caret { flex: none; color: var(--text-secondary); transition: transform 0.15s ease; }
-[aria-expanded="true"] > .vf-caret, [aria-expanded="true"] .vf-caret { transform: rotate(180deg); }
-.vf-status { display: inline-flex; align-items: center; gap: 5px; flex: none; font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.vf-row-name:disabled { cursor: default; opacity: 1; }
+.vf-row-name > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vf-caret { flex: none; color: var(--text-secondary); transition: transform var(--acc-chevron) var(--acc-ease); }
+.vf-row-name[aria-expanded="true"] .vf-caret { transform: rotate(180deg); }
+.vf-row-name:hover .vf-caret, .vf-row-name:focus-visible .vf-caret { color: var(--text-primary); }
+.vf-status { flex: none; font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .vf-status.is-running { color: var(--text-primary); }
-.vf-status.is-fixed svg { color: #3ecf6e; }
-.vf-status.is-failed, .vf-status.is-cancelled { color: #f5d342; }
-.vf-remove {
-  display: grid; place-items: center; width: 28px; height: 28px; padding: 0 !important; flex: none; border: none !important; border-radius: var(--quiet-radius);
-  background: none !important; color: var(--text-secondary) !important; cursor: pointer;
-}
-.vf-remove:hover { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
+.vf-pill { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1;
+  color: var(--text-secondary); background: var(--quiet-active); }
+.vf-pill.is-fixed { color: #3ecf6e; background: color-mix(in srgb, #3ecf6e, transparent 88%); }
+.vf-pill.is-failed, .vf-pill.is-cancelled { color: #f5d342; background: color-mix(in srgb, #f5d342, transparent 88%); }
+.vf-remove-gap { width: 24px; flex: none; }   /* holds the remove button's place while a run forbids removing */
 
-/* a mod while it runs: the app's progress bar (the update dialog's), the step and what it is on */
-.vf-progress { padding: 6px 0 2px; }
+/* running: the app's thin progress bar (the update dialog's), the step and what it is on */
+.vf-progress { flex-basis: 100%; padding: 2px 0 6px; }
 .vf-bar { height: 4px; border-radius: 999px; overflow: hidden; background: var(--bg-lighter); }
-.vf-bar i { display: block; height: 100%; background: var(--accent-primary); transition: width 0.4s ease; }
+.vf-bar i { display: block; height: 100%; background: var(--accent-primary); transition: width 0.4s var(--acc-ease); }
 .vf-step { margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12.5px; color: var(--text-primary); }
 .vf-step > span:last-child:not(:first-child) { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 
-/* a mod's report */
-.vf-report { padding: 6px 0 4px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
-.vf-note { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); overflow-wrap: anywhere; }
-.vf-note code, .vf-file code { font: 12px var(--font-mono); color: var(--text-primary); }
+/* a mod's report, under its row */
+.vf-row-panel { flex-basis: 100%; }
+.vf-report { padding: 2px 0 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.vf-note { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); overflow-wrap: anywhere; text-wrap: pretty; }
+.vf-note code { font: 12px var(--font-mono); color: var(--text-primary); }
 .vf-warnings { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; align-self: stretch; }
 .vf-warnings li { position: relative; padding-left: 14px; font-size: 12.5px; line-height: 1.5; color: var(--text-primary); overflow-wrap: anywhere; }
 .vf-warnings li::before { content: ''; position: absolute; left: 2px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: #f5d342; }
@@ -58,34 +55,34 @@
 .vf-counts { margin: 0; align-self: stretch; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .vf-counts b { color: var(--text-primary); font-weight: 600; }
 .vf-counts .is-failed b, .vf-counts .is-unreadable b { color: #f5d342; }
-.vf-assets-toggle { margin-left: auto; font-size: 12.5px; }
+.vf-assets-toggle { margin-left: auto; font-size: 12.5px !important; color: var(--text-secondary) !important; }
+.vf-assets-toggle:hover { color: var(--text-primary) !important; }
 .vf-report > .t-acc-panel { align-self: stretch; }
-.vf-group h4 { margin: 10px 0 4px; font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
+.vf-assets { margin-top: 4px; padding: 8px 12px; border-radius: 8px; background: var(--bg-dark); }
+.vf-group h4 { margin: 8px 0 4px; font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
+.vf-group:first-child h4 { margin-top: 0; }
 .vf-group h4 span { margin-left: 4px; color: var(--text-secondary); font-weight: 500; }
 .vf-group ul { margin: 0; padding: 0; list-style: none; }
 .vf-group li { display: grid; grid-template-columns: minmax(140px, 38%) 1fr; gap: 12px; padding: 3px 0; font-size: 12px; line-height: 1.45; }
 .vf-asset { font: 12px var(--font-mono); color: var(--text-primary); overflow-wrap: anywhere; }
 .vf-detail { color: var(--text-secondary); overflow-wrap: anywhere; }
 
-.vf-check { display: flex; flex-direction: column; gap: 2px; }
+.vf-check { display: flex; flex-direction: column; gap: 2px; margin-top: 12px; }
 .vf-check .repakx-checkbox-label, .vf-check .repakx-checkbox-label > span { font-size: 13px !important; font-weight: 450 !important; color: var(--text-primary) !important; }
 .vf-check .vf-hint { padding-left: 26px; }
 
-/* USMAP */
-.vf-file { margin: 0; display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; color: var(--text-secondary); }
-.vf-file code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vf-warn { margin: 0; display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }
+/* USMAP: one Setup-style part row */
+.vf-usmap { min-height: 52px; padding: 8px 12px 8px 14px; }
+.vf-usmap .su-part-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12.5px var(--font-mono); }
+.vf-warn { margin: 10px 0 0; display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 .vf-warn svg { flex: none; margin-top: 2px; color: #f5d342; }
 
-/* folding sections: Color names, Log */
-.vf-fold-head {
-  display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; width: 100%; height: auto !important; padding: 0 !important;
-  border: none !important; background: none !important; text-align: left; cursor: pointer; color: inherit !important;
-}
-.vf-fold-head > span:first-child { min-width: 0; }
-.vf-fold-head .vf-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400 !important; color: var(--text-secondary) !important; }
-.vf-fold-aside { display: inline-flex; align-items: center; gap: 8px; flex: none; font-size: 12.5px; color: var(--text-secondary); }
-.vf-names { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; }
+/* folding groups: Color names, Log */
+.vf-fold.is-folded .lo-group-head { margin-bottom: 0; }
+.vf-fold-name { cursor: pointer; user-select: none; }
+.vf-fold.is-folded .vf-fold-name { color: var(--text-secondary); }
+.vf-fold.is-folded .vf-fold-name:hover { color: var(--text-primary); }
+.vf-names { display: flex; flex-direction: column; gap: 12px; }
 .vf-names label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-primary); }
 .vf-names input {
   height: 34px; padding: 0 10px; font: 12.5px var(--font-mono); color: var(--text-primary);
@@ -93,12 +90,13 @@
 }
 .vf-names input:focus { border-color: color-mix(in srgb, var(--text-primary), transparent 50%); }
 .vf-names .su-link { margin-left: 4px; }
-.vf-log { margin: 14px 0 0; max-height: 220px; overflow-y: auto; font: 12px/1.6 var(--font-mono); color: var(--text-secondary); }
-.vf-log span { color: color-mix(in srgb, var(--text-secondary), transparent 35%); }
+.vf-log { max-height: 220px; overflow-y: auto; padding: 8px 12px; border-radius: 8px; background: var(--bg-dark); font: 12px/1.6 var(--font-mono); color: var(--text-secondary); }
+.vf-log span { color: var(--text-secondary); margin-right: 4px; }   /* the time: the same gray as the line, not dimmer (12px needs 4.5:1) */
+.vf-log .is-warning span, .vf-log .is-success span, .vf-log .is-error span { color: inherit; opacity: 0.7; }
 .vf-log .is-error { color: var(--text-primary); font-weight: 600; }
 .vf-log .is-warning { color: #f5a524; }
 .vf-log .is-success { color: #46a758; }
-.vf-copy-log { margin: 10px 0 0; }
+.vf-copy-log { margin-top: 10px; }
 
 .vf-foot { display: flex; align-items: center; gap: 8px; padding: 12px 24px; border-top: 1px solid var(--panel-border); }
 .vf-state { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -106,8 +104,7 @@
   height: 32px !important; min-height: 0 !important; padding: 0 16px !important; font-size: 13px !important; border-radius: var(--quiet-radius) !important;
   display: inline-flex !important; align-items: center; gap: 4px; width: auto !important; flex: none;
 }
-html[data-motion="off"] .vf-item { animation: none; }
-html[data-motion="off"] .vf-bar i { transition: none; }
+html[data-motion="off"] .vf-bar i, html[data-motion="off"] .vf-caret, html[data-motion="off"] .vf-drop, html[data-motion="off"] .vf-rows { transition: none; }
 
 /* the main window's notice after a game update (VfxNotice.tsx) */
 .vfx-notice {

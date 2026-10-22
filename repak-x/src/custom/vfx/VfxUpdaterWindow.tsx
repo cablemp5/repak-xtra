@@ -1,14 +1,14 @@
 // repakxtra: the VFX Updater window (route vfx-updater), in place of the upstream VFX Updater's panel: updates one VFX mod
-// or a list of them (pipeline.ts). Built like Settings: flat sections split by hairlines, each with an icon and title,
-// checkbox rows with a note, a footer with the state on the left and the action on the right. Each mod shows its step
-// and a progress bar while it runs, then its report: what was rebuilt, what was kept and why, and where the update went
-// (beside the original, which goes off). A failed or cancelled mod can be tried again. Cancel waits for the step in
-// flight (UAssetTool cannot be interrupted) and says so. The main window hands mods over (handoff.ts) and swaps the
-// originals for the updates in loadouts (VfxNotice.tsx).
+// or a list of them (pipeline.ts). Built from the Loadout page's parts: group headings with a count pill, mods as rows
+// in a hairline list, a dashed empty row that takes dropped .utoc files, link actions on the USMAP row, folding groups
+// for the rarely touched Color names and Log. Each mod shows its step and a progress bar while it runs, then its report:
+// what was rebuilt, what was kept and why, and where the update went (beside the original, which goes off). A failed or
+// cancelled mod can be tried again. Cancel waits for the step in flight (UAssetTool cannot be interrupted) and says so.
+// The main window hands mods over (handoff.ts) and swaps the originals for the updates in loadouts (VfxNotice.tsx).
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, emitTo, listen } from '@tauri-apps/api/event'
-import { AlertTriangle, Check, ChevronDown, Copy, FileCog, Layers, Palette, Plus, RotateCcw, ScrollText, Sparkles, X } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, ChevronRight, Copy, Plus, RotateCcw, X } from 'lucide-react'
 import TitleBar from '../../components/TitleBar'
 import Checkbox from '../../components/ui/Checkbox'
 import { Num, SwapText } from '../motion'
@@ -31,6 +31,8 @@ const plural = (n: number, word: string, many = `${word}s`) => `${n.toLocaleStri
 /** A folded panel's content: out of reach of Tab and screen readers (the React 18 types this app uses lack inert). */
 const folded = (hidden: boolean) => (hidden ? { inert: true } : {}) as object
 const usmapCl = (name?: string | null) => Number(name?.match(/-(\d{6,})\+/)?.[1]) || null
+/** Dropped files the updater can take: a mod's .utoc, or its .pak / .bak_repak (the .utoc beside it is read). */
+const droppable = (p: string) => /\.(utoc|pak|bak_repak)$/i.test(p)
 
 const STATUS: Record<Status, string> = { waiting: 'Waiting', running: 'Updating', fixed: 'Updated', nothing: 'Nothing to update', failed: 'Failed', cancelled: 'Cancelled' }
 const KIND_ORDER: AssetKind[] = ['failed', 'unreadable', 'added', 'updated', 'same', 'passed']
@@ -58,7 +60,7 @@ function Report({ r, onRetry, busy }: { r: VfxReport; onRetry: () => void; busy:
           {r.placed?.turnedOff ? ', and the original is off.' : '.'}{r.placed?.replaced ? ' The previous update is in Recently deleted.' : ''}</p>
         : r.error && <p className="vf-note">{r.error}</p>}
       {(r.status === 'failed' || r.status === 'cancelled') && (
-        <button type="button" className="lo-text-btn vf-retry" disabled={busy} onClick={onRetry}><RotateCcw size={14} aria-hidden="true" /> Try again</button>
+        <button type="button" className="row-action" disabled={busy} onClick={onRetry}><RotateCcw size={13} aria-hidden="true" /> Try again</button>
       )}
       {r.warnings.length > 0 && <ul className="vf-warnings" aria-label="Warnings">
         {warnings.map((w, i) => <li key={i}>{w}</li>)}
@@ -68,16 +70,18 @@ function Report({ r, onRetry, busy }: { r: VfxReport; onRetry: () => void; busy:
         <p className="vf-counts">
           {groups.map(([k, list]) => <span key={k} className={`is-${k}`}>{KIND_LABEL[k]} <b>{list.length.toLocaleString()}</b></span>)}
           <span>{(r.ms / 1000).toFixed(1)} s</span>
-          <button type="button" className="su-link vf-assets-toggle" aria-expanded={assets} onClick={() => setAssets(v => !v)}>{assets ? 'Hide assets' : 'Show assets'}</button>
+          <button type="button" className="cf-files-btn vf-assets-toggle" aria-expanded={assets} onClick={() => setAssets(v => !v)}>
+            {plural(r.assets.length, 'asset')} <ChevronRight size={12} className="cf-caret" aria-hidden="true" />
+          </button>
         </p>
         <div className="t-acc-panel" data-open={assets}>
           <div className="t-acc-panel-inner" {...folded(!assets)}>
-            {assets && groups.map(([k, list]) => (
+            {assets && <div className="vf-assets">{groups.map(([k, list]) => (
               <div key={k} className="vf-group">
                 <h4>{KIND_LABEL[k]} <span>{list.length.toLocaleString()}</span></h4>
                 <ul>{list.map(a => <li key={a.path}><span className="vf-asset">{a.name}</span><span className="vf-detail">{a.detail}</span></li>)}</ul>
               </div>
-            ))}
+            ))}</div>}
           </div>
         </div>
       </>}
@@ -88,41 +92,44 @@ function Report({ r, onRetry, busy }: { r: VfxReport; onRetry: () => void; busy:
 function Row({ item, open, onToggle, onRemove, onRetry, busy }: { item: Item; open: boolean; onToggle: () => void; onRemove: () => void; onRetry: () => void; busy: boolean }) {
   const running = item.status === 'running'
   const step = item.step ?? 0
+  const name = modName(item.path)
   return (
-    <li className={`vf-item is-${item.status}`}>
-      <div className="vf-item-head">
-        <button type="button" className="vf-item-name" onClick={onToggle} aria-expanded={item.report ? open : undefined} disabled={!item.report} title={item.path}>
-          <span>{modName(item.path)}</span>
-          {item.report && <ChevronDown size={14} className="vf-caret" aria-hidden="true" />}
-        </button>
-        <span className={`vf-status is-${item.status}`}>
-          {item.status === 'fixed' && <Check size={14} strokeWidth={2.5} aria-hidden="true" />}
-          <SwapText text={running && step ? `Step ${step} of ${STEPS.length}` : STATUS[item.status]} />
-        </span>
-        {!running && !busy && <button type="button" className="vf-remove" onClick={onRemove} aria-label={`Remove ${modName(item.path)} from the list`} title="Remove from the list"><X size={14} /></button>}
-      </div>
+    <li className={`mod-row vf-row is-${item.status}`}>
+      <button type="button" className="vf-row-name" onClick={onToggle} aria-expanded={item.report ? open : undefined} disabled={!item.report} title={item.path}>
+        <span>{name}</span>
+        {item.report && <ChevronDown size={14} className="vf-caret" aria-hidden="true" />}
+      </button>
+      {item.status === 'fixed' || item.status === 'nothing' || item.status === 'failed' || item.status === 'cancelled'
+        ? <span className={`vf-pill is-${item.status}`}>{item.status === 'fixed' && <Check size={12} strokeWidth={2.5} aria-hidden="true" />}{STATUS[item.status]}</span>
+        : <span className={`vf-status is-${item.status}`}><SwapText text={running && step ? `Step ${step} of ${STEPS.length}` : STATUS[item.status]} /></span>}
+      {!running && !busy
+        ? <button type="button" className="lo-icon row-remove" onClick={onRemove} aria-label={`Remove ${name} from the list`} title="Remove from the list"><X size={14} /></button>
+        : <span className="vf-remove-gap" aria-hidden="true" />}
       {running && step ? (
         <div className="vf-progress">
-          <div className="vf-bar" role="progressbar" aria-valuenow={step} aria-valuemin={0} aria-valuemax={STEPS.length} aria-label={`${modName(item.path)} progress`}>
+          <div className="vf-bar" role="progressbar" aria-valuenow={step} aria-valuemin={0} aria-valuemax={STEPS.length} aria-label={`${name} progress`}>
             <i style={{ width: `${((step - 0.5) / STEPS.length) * 100}%` }} />
           </div>
           <p className="vf-step" aria-live="polite"><SwapText text={STEPS[step - 1]} />{item.sub ? <span>{item.sub}</span> : null}</p>
         </div>
       ) : null}
-      {item.report && <div className="t-acc-panel" data-open={open}><div className="t-acc-panel-inner" {...folded(!open)}><Report r={item.report} onRetry={onRetry} busy={busy} /></div></div>}
+      {item.report && <div className="t-acc-panel vf-row-panel" data-open={open}><div className="t-acc-panel-inner" {...folded(!open)}><Report r={item.report} onRetry={onRetry} busy={busy} /></div></div>}
     </li>
   )
 }
 
-/** A section that folds: Color names, Log. */
-function Fold({ icon, title, hint, aside, children }: { icon: React.ReactNode; title: string; hint: string; aside?: React.ReactNode; children: React.ReactNode }) {
+/** A group that folds away to its heading, as a collection does on the Loadouts screen. */
+function Fold({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
   return (
-    <section className="vf-section">
-      <button type="button" className="vf-fold-head" aria-expanded={open} onClick={() => setOpen(v => !v)}>
-        <span><h3>{icon}{title}</h3><p className="vf-hint">{hint}</p></span>
-        <span className="vf-fold-aside">{aside}<ChevronDown size={16} className="vf-caret" aria-hidden="true" /></span>
-      </button>
+    <section className={`lp-section vf-fold${open ? '' : ' is-folded'}`}>
+      <h2 className="lo-group-head">
+        <button type="button" className="lo-icon lo-group-fold" aria-expanded={open} onClick={() => setOpen(v => !v)} aria-label={open ? `Collapse ${title}` : `Show ${title}`}>
+          {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+        </button>
+        <span className="lo-group-name vf-fold-name" onClick={() => setOpen(v => !v)}>{title}</span>
+        {aside && <span className="lp-head-note">{aside}</span>}
+      </h2>
       <div className="t-acc-panel" data-open={open}><div className="t-acc-panel-inner" {...folded(!open)}>{children}</div></div>
     </section>
   )
@@ -140,8 +147,9 @@ function ColorNames() {
   const reset = () => { resetFilter(); setF(DEFAULT_FILTER); setText({ includes: DEFAULT_FILTER.includes.join(', '), excludes: DEFAULT_FILTER.excludes.join(', ') }) }
   const custom = JSON.stringify(f) !== JSON.stringify(DEFAULT_FILTER)
   return (
-    <Fold icon={<Palette size={16} aria-hidden="true" />} title="Color names" hint="Which blueprint and data table colors carry over. Material parameters always do." aside={custom ? 'Custom' : 'Default'}>
+    <Fold title="Color names" aside={custom ? 'Custom' : 'Default'}>
       <div className="vf-names">
+        <p className="vf-hint">Which blueprint and data table colors carry over, by name. Material parameters always do, except excluded names.</p>
         <label>Carry names containing<input value={text.includes} onChange={e => save({ ...text, includes: e.target.value })} spellCheck={false} /></label>
         <label>Never carry names containing<input value={text.excludes} onChange={e => save({ ...text, excludes: e.target.value })} spellCheck={false} /></label>
         <p className="vf-hint">Separate words with commas. Case does not matter.{custom && <> <button type="button" className="su-link" onClick={reset}>Reset to defaults</button></>}</p>
@@ -162,6 +170,7 @@ export function VfxUpdaterPanel() {
   const [turnOff, setTurnOff] = useState(() => localStorage.getItem(TURN_OFF) !== '0')
   const [busy, setBusy] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+  const [over, setOver] = useState(false) // files dragged over the window
   const [logs, setLogs] = useState<Log[]>([])
   const [copied, setCopied] = useState<string | null>(null)
   const cancel = useRef(false)
@@ -213,6 +222,23 @@ export function VfxUpdaterPanel() {
     if (h) take(h)
     return onHandoff(take)
   }, [add])
+
+  // files dropped on the window (Tauri's drag events, as the main window's installs)
+  useEffect(() => {
+    const uns = [
+      listen('tauri://drag-enter', () => setOver(true)),
+      listen('tauri://drag-leave', () => setOver(false)),
+      listen('tauri://drag-cancelled', () => setOver(false)),
+      listen<{ paths?: string[] }>('tauri://drag-drop', e => {
+        setOver(false)
+        const paths: string[] = Array.isArray(e.payload) ? e.payload : e.payload?.paths ?? []
+        const mods = paths.filter(droppable)
+        if (mods.length) add(mods)
+        if (paths.length > mods.length) addLog(`${plural(paths.length - mods.length, 'dropped file')} skipped: only .utoc mods (or their .pak) can be updated.`, 'warning')
+      }),
+    ]
+    return () => { uns.forEach(u => u.then(f => f())) }
+  }, [add, addLog])
 
   // Rust steps report inside the step (types read so far)
   useEffect(() => {
@@ -291,35 +317,33 @@ export function VfxUpdaterPanel() {
 
   const todo = items.filter(i => i.status !== 'fixed' && i.status !== 'nothing').length
   const done = items.filter(i => i.report).length
+  const updated = items.filter(i => i.status === 'fixed').length
   const runningAt = items.findIndex(i => i.status === 'running')
   const cl = usmapCl(usmapInfo?.filename ?? (usmap ? fileName(usmap) : null))
   const behind = cl && build?.cl && cl < build.cl
+  const usmapState = checking ? 'Checking for a newer one…' : !usmap ? 'None chosen' : usmapOk === false ? 'File missing' : usmapInfo?.upToDate || usmapInfo?.updated ? 'Up to date' : 'Ready'
   const state = cancelling ? 'Cancelling. The current step finishes first.'
     : busy ? `Updating ${runningAt + 1} of ${items.length}…`
-      : lock ?? (done ? `${plural(items.filter(i => i.status === 'fixed').length, 'mod')} updated` : '')
+      : lock ?? (done ? `${plural(updated, 'mod')} updated${done > updated ? `, ${done - updated} not` : ''}` : '')
 
   return (
-    <div className="vf-panel">
-      <header className="vf-head">
-        <h1><Sparkles size={18} aria-hidden="true" />VFX Updater</h1>
-        <p>Rebuilds VFX mods on the installed game's files after an update, keeping their colors.</p>
-      </header>
-
+    <div className={`vf-panel${over ? ' is-over' : ''}`}>
       <div className="vf-body">
-        <section className="vf-section">
-          <div className="vf-section-head">
-            <span><h3><Layers size={16} aria-hidden="true" />Mods</h3>
-              <p className="vf-hint">{items.length ? plural(items.length, 'mod') : 'Add a mod\'s .utoc, or use Update VFX mods in the Library after a game update.'}</p></span>
-            <button type="button" className="lo-text-btn" disabled={busy} onClick={browseMods}><Plus size={14} /> Add mods</button>
-          </div>
-          {items.length > 0 && <ul className="vf-list">
-            {items.map(item => (
-              <Row key={item.path} item={item} busy={busy} open={open.has(item.path)}
-                onToggle={() => setOpen(o => { const n = new Set(o); n.has(item.path) ? n.delete(item.path) : n.add(item.path); return n })}
-                onRemove={() => setItems(list => list.filter(i => i.path !== item.path))}
-                onRetry={() => { patch(item.path, { status: 'waiting', report: undefined }); void run([item.path]) }} />
-            ))}
-          </ul>}
+        <section className="lp-section">
+          <h2 className="lo-group-head">Mods<span className="lo-group-count">{items.length}</span>
+            {busy && runningAt >= 0 && <span className="lp-head-note">updating {runningAt + 1} of {items.length}</span>}
+            <button type="button" className="lo-text-btn vf-head-tool" disabled={busy} onClick={browseMods}><Plus size={14} /> Add mods</button>
+          </h2>
+          {items.length === 0
+            ? <p className="lp-empty vf-drop">Drop a mod's .utoc here, or Add mods. After a game update, Update VFX mods in the Library sends every VFX mod that needs it here.</p>
+            : <ul className="mod-rows vf-rows">
+              {items.map(item => (
+                <Row key={item.path} item={item} busy={busy} open={open.has(item.path)}
+                  onToggle={() => setOpen(o => { const n = new Set(o); n.has(item.path) ? n.delete(item.path) : n.add(item.path); return n })}
+                  onRemove={() => setItems(list => list.filter(i => i.path !== item.path))}
+                  onRetry={() => { patch(item.path, { status: 'waiting', report: undefined }); void run([item.path]) }} />
+              ))}
+            </ul>}
           <div className="vf-check">
             <Checkbox size="sm" checked={turnOff} isDisabled={busy} disabled={busy} onChange={(v: boolean) => { setTurnOff(v); localStorage.setItem(TURN_OFF, v ? '1' : '0') }}>
               Turn off the originals
@@ -328,27 +352,29 @@ export function VfxUpdaterPanel() {
           </div>
         </section>
 
-        <section className="vf-section">
-          <div className="vf-section-head">
-            <span><h3><FileCog size={16} aria-hidden="true" />USMAP</h3>
-              <p className="vf-hint">The game's property layout, kept up to date from rivals-depot.</p></span>
-            <span className="vf-actions">
-              <button type="button" className="lo-text-btn" disabled={checking || busy} onClick={() => usmapCheck(true)} title="Download the newest USMAP from rivals-depot and use it">Fetch latest</button>
-              <button type="button" className="lo-text-btn" disabled={busy} onClick={browseUsmap}>Browse…</button>
-            </span>
-          </div>
-          <p className="vf-file">
-            <code title={usmap ?? undefined}>{usmap ? fileName(usmap) : 'No USMAP chosen'}</code>
-            <span>{checking ? 'Checking for a newer one…' : usmapOk === false ? 'File missing' : [usmapInfo?.version, usmapInfo?.commitDate].filter(Boolean).join(' · ')}</span>
-          </p>
+        <section className="lp-section">
+          <h2 className="lo-group-head">USMAP<span className="lp-head-note">{usmapState}</span></h2>
+          <ul className="mod-rows">
+            <li className="su-part vf-usmap">
+              <span className={`su-part-mark${usmapOk ? ' is-ok' : ''}`} role="img" aria-label={usmapOk ? 'Ready' : 'Missing'}>{usmapOk && <Check size={14} strokeWidth={2.5} />}</span>
+              <span className="su-part-text">
+                <b title={usmap ?? undefined}>{usmap ? fileName(usmap) : 'No USMAP chosen'}</b>
+                <span>{[usmapInfo?.version, usmapInfo?.commitDate].filter(Boolean).join(' · ') || 'The game\'s property layout, from rivals-depot or a file'}</span>
+              </span>
+              <span className="su-part-links">
+                <button type="button" className="su-link" disabled={checking || busy} onClick={() => usmapCheck(true)} title="Download the newest USMAP from rivals-depot and use it">Fetch latest</button>
+                <button type="button" className="su-link" disabled={busy} onClick={browseUsmap}>Browse…</button>
+              </span>
+            </li>
+          </ul>
           {behind ? <p className="vf-warn"><AlertTriangle size={14} aria-hidden="true" />This USMAP ({cl}) is older than the game ({build!.cl}). Updates usually still work after a small patch. If they fail, wait for rivals-depot to publish a newer one.</p> : null}
         </section>
 
         <ColorNames />
 
-        <Fold icon={<ScrollText size={16} aria-hidden="true" />} title="Log" hint={logs.length ? logs[logs.length - 1].text : 'Nothing yet.'}>
-          <div className="vf-log" role="log">{logs.map((l, i) => <div key={i} className={`is-${l.type}`}><span>{l.time}</span> {l.text}</div>)}</div>
-          {logs.length > 0 && <button type="button" className="lo-text-btn vf-copy-log" onClick={() => copy('log')}><Copy size={14} /> {copied === 'log' ? 'Copied' : 'Copy log'}</button>}
+        <Fold title="Log" aside={logs.length ? plural(logs.length, 'line') : 'Nothing yet'}>
+          <div className="vf-log" role="log">{logs.length ? logs.map((l, i) => <div key={i} className={`is-${l.type}`}><span>{l.time}</span> {l.text}</div>) : <span>Nothing yet. Each step of an update writes a line here.</span>}</div>
+          {logs.length > 0 && <button type="button" className="row-action vf-copy-log" onClick={() => copy('log')}><Copy size={13} /> {copied === 'log' ? 'Copied' : 'Copy log'}</button>}
         </Fold>
       </div>
 
