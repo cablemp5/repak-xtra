@@ -633,7 +633,7 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
     let mut mods = Vec::new();
 
     // Scan root ~mods directory and all subdirectories recursively (no depth limit)
-    for entry in WalkDir::new(&game_path).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::not_staging) /* repakxtra */.filter_map(|e| e.ok()) {
         let path = entry.path();
 
         // Skip directories themselves
@@ -2113,7 +2113,7 @@ async fn inspect_archive_mods(path: String, window: Window) -> Result<Vec<Archiv
     let mut entries: Vec<ArchiveModEntry> = Vec::new();
     let mut seen_stems: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
 
-    for entry in WalkDir::new(&scan_root).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(&scan_root).into_iter().filter_entry(crate::xtra_bundle::not_staging) /* repakxtra */.filter_map(|e| e.ok()) {
         let entry_path = entry.path();
         let entry_ext = entry_path
             .extension()
@@ -4184,6 +4184,7 @@ async fn get_folders(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<ModFo
     for entry in WalkDir::new(game_path)
         .min_depth(1)
         .into_iter()
+        .filter_entry(crate::xtra_bundle::not_staging) // repakxtra: install/receive staging is not a folder
         .filter_map(|e| e.ok())
     {
         let path = entry.path();
@@ -5606,7 +5607,7 @@ async fn recompress_mods(
 
     // Collect all .pak files
     let mut pak_files: Vec<PathBuf> = Vec::new();
-    for entry in WalkDir::new(&game_path).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::not_staging) /* repakxtra */.filter_map(|e| e.ok()) {
         let path = entry.path();
         if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("pak") {
             pak_files.push(path.to_path_buf());
@@ -7440,7 +7441,7 @@ async fn get_asset_explorer_index(
     let mut failed: Vec<AssetExplorerFailure> = Vec::new();
     let mut total_assets = 0usize;
 
-    for entry in WalkDir::new(&game_path).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::not_staging) /* repakxtra */.filter_map(|e| e.ok()) {
         let path = entry.path();
         if path.is_dir() {
             continue;
@@ -7601,7 +7602,7 @@ fn scan_mod_clashes(quiet: bool, game_path: &Path) -> Result<Vec<ModClash>, Stri
     let mut mods_info: Vec<crate::xtra_conflicts::Container> = Vec::new();
 
     // Scan all enabled mods
-    for entry in WalkDir::new(&game_path).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::not_staging) /* repakxtra */.filter_map(|e| e.ok()) {
         let path = entry.path();
 
         if path.is_dir() {
@@ -7844,7 +7845,7 @@ async fn check_single_mod_conflicts(
     let mut conflicts: Vec<SingleModConflict> = Vec::new();
 
     // Scan all other enabled mods
-    for entry in WalkDir::new(&game_path).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::not_staging) /* repakxtra */.filter_map(|e| e.ok()) {
         let path = entry.path();
 
         if path.is_dir() {

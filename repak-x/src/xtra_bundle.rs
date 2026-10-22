@@ -118,6 +118,11 @@ pub fn staging_dir(parent: &Path, tag: &str) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
+/// For WalkDir::filter_entry over the mods folder: skips staging folders, so a half-built install never lists as a mod.
+pub fn not_staging(e: &walkdir::DirEntry) -> bool {
+    !(e.file_type().is_dir() && e.file_name().to_string_lossy().starts_with(".repakxtra-"))
+}
+
 /// Removes staging folders a closed or crashed run left under `mods` (one level of subfolders deep), so the game
 /// never loads a half-built copy. Only names `staging_dir` makes are touched; the replaced files are in the trash.
 pub fn sweep_staging(mods: &Path) {
