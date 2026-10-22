@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { invoke } from '@tauri-apps/api/core'
-import { ChevronDown, Download, EyeOff, PanelTop, Tags, Trash2, Volume2, ZoomIn } from 'lucide-react'
+import { ChevronDown, Download, EyeOff, PanelTop, Tags, Trash2, TriangleAlert, Volume2, ZoomIn } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import { MotionGlobalConfig } from 'framer-motion'
 import Checkbox from '../components/ui/Checkbox'
@@ -13,7 +13,7 @@ import { savedItem } from './storageCarryOver'
 
 // `on`: shown until switched off (the rest start hidden). Stored as '1' or '0' once changed.
 // `group`: the Settings section it is drawn in (Header buttons, On each mod), or its own place elsewhere.
-const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod' }[] = [
+const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod' | 'warn' }[] = [
   { key: 'vfx-updater', label: 'VFX Updater', on: true, group: 'header' },
   { key: 'sigeon', label: 'Sigeon', on: true, group: 'header' },
   { key: 'asset-explorer', label: 'Asset Explorer', group: 'header' },
@@ -22,8 +22,8 @@ const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod
   { key: 'mod-size', label: 'File size', group: 'mod' },
   { key: 'priority', label: 'Load priority counter', group: 'mod' },
   { key: 'nexus', label: 'Nexus tag on mods installed from Nexus Mods', on: true, group: 'mod' },
-  { key: 'broken', label: 'Broken and May crash warnings, and the Broken tab', on: true, group: 'mod' },
-  { key: 'conflicts', label: 'Conflict warnings (the badge, and the dot on Check Conflicts)', on: true, group: 'mod' },
+  { key: 'broken', label: 'Broken and May crash warnings, and the Problems tab', on: true, group: 'warn' },
+  { key: 'conflicts', label: 'Conflict warnings (the badge, and the count on Check Conflicts)', on: true, group: 'warn' },
   { key: 'quick-organize', label: 'Show Quick Organize when dropping files on the window' }, // shown under Installing mods
 ]
 
@@ -306,6 +306,19 @@ export function ModPrefs() {
         <p className="setting-subtext">Tags on mods, the tag filter, the tags button and Assign Tag. Off keeps your tags, just out of sight.</p>
       </div>
     </>
+  )
+}
+
+/** Warnings: the show/hide prefs that flag a mod (Broken, May crash, conflicts), their own section under On each mod. */
+export function WarningPrefs() {
+  useAll()
+  return (
+    <div className="setting-section">
+      <h3 className="setting-icon-label"><TriangleAlert size={18} aria-hidden="true" />Warnings</h3>
+      <div className="setting-group">
+        {PREFS.filter(p => p.group === 'warn').map(p => <PrefBox key={p.key} k={p.key} label={p.label} />)}
+      </div>
+    </div>
   )
 }
 

@@ -44,9 +44,15 @@
 .ip-target-menu .sigeon-item { justify-content: flex-start !important; gap: 8px; }
 .ip-target-menu .sigeon-item .ip-target-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .ip-target-menu .sigeon-item svg.lucide { flex: none; }
-.ip-target-menu .sigeon-item.is-new { font-weight: 600 !important; }
+/* Like the Collection dropdown: names in the quiet color, the picked one brighter on a soft fill, no blue; + New
+   loadout muted at the foot under a line. Keyboard focus is the hover fill, not a ring */
+.ip-target-menu .sigeon-item { color: var(--text-secondary) !important; }
+.ip-target-menu .sigeon-item:hover:not(:disabled), .ip-target-menu .sigeon-item:focus-visible { background: var(--quiet-hover) !important; color: var(--text-primary) !important; outline: none !important; }
+.ip-target-menu .sigeon-item[aria-checked="true"] { color: var(--text-primary) !important; }
+.ip-target-menu .sigeon-item[aria-checked="true"]:focus-visible { background: var(--quiet-active) !important; }
 .ip-target-sep { height: 1px; margin: 4px 6px; background: var(--panel-border); }
-.ip-target-head { padding: 6px 10px 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary); opacity: 0.8; }
+/* + New loadout and its line stay pinned at the foot while the loadouts scroll, like the Collection dropdown's + New collection */
+.ip-target-menu .ip-target-group:last-child:not(:first-child) { position: sticky; bottom: -4px; padding-bottom: 4px; margin-bottom: -4px; background: var(--bg-dark); }
 .ip-coll-name { height: 30px; width: 180px; padding: 0 10px; border-radius: var(--quiet-radius); border: 1px solid rgba(255, 255, 255, 0.16);
   background: var(--field-bg); color: var(--text-primary); font: 500 12.5px var(--font-primary); outline: none; }
 .ip-modal .custom-dropdown-trigger { height: 30px !important; min-height: 0 !important; font-size: 12.5px !important; }

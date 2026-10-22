@@ -107,13 +107,22 @@ const PartMark = ({ ok }: { ok: boolean }) => (
   <span className={`su-part-mark${ok ? ' is-ok' : ''}`} role="img" aria-label={ok ? 'Installed' : 'Not installed'}>{ok && <Check size={14} strokeWidth={2.5} />}</span>
 )
 
+/** A Remove (or a Turn off with a side effect) asks here, in its card: what happens, then Cancel and the action itself. */
+const ConfirmRow = ({ text, yes, onYes, onNo }: { text: string; yes: string; onYes: () => void; onNo: () => void }) => (
+  <div className="su-confirm" role="alert">
+    <span>{text}</span>
+    <button type="button" className="lo-text-btn" onClick={onNo}>Cancel</button>
+    <button type="button" className="lo-text-btn" onClick={onYes}>{yes}</button>
+  </div>
+)
+
 /** The preview kit: what this PC needs to render mod previews (xtra_kit.rs, shared logic in previewKit.tsx). Its two
  *  parts, the kit and Blender, are one row each with their state and links; one main button sets up what is missing. */
 function PreviewKitCard({ alert }: { alert: Alert }) {
   const k = usePreviewKit(alert)
   const { kit, latest, busy, update } = k
   const [notes, setNotes] = useState<string | null>(null)
-  const [armed, setArmed] = useState(false) // Remove asks for a second click
+  const [asking, setAsking] = useState(false) // Remove asks first
   useEffect(() => { k.peek() }, [])   // the newest kit and its notes, so Set up says what it gets
   const fromFile = async () => {
     const f = await pickFile({ title: 'The preview kit zip', filters: [{ name: 'Preview kit', extensions: ['zip'] }] }).catch(() => null)
@@ -159,9 +168,8 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
               {busy === 'check' ? 'Checking…' : 'Check for updates'}
             </button>
             <button type="button" className="su-link" disabled={Boolean(busy)} onClick={fromFile} title="Install a preview kit zip (or drop one on the window)">Install from file…</button>
-            {kit?.version && <button type="button" className="su-link" disabled={Boolean(busy)} onBlur={() => setArmed(false)}
-              onClick={() => { if (armed) { setArmed(false); k.remove() } else setArmed(true) }}
-              title="Deletes the kit. It downloads again from here.">{armed ? 'Click again to remove' : 'Remove'}</button>}
+            {kit?.version && <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => setAsking(true)}
+              title="Deletes the kit. It downloads again from here.">Remove</button>}
           </span>
         </li>
         <li className="su-part">
@@ -176,17 +184,19 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
           </span>
         </li>
       </ul>
+      {asking && kit?.version && <ConfirmRow text="Remove the preview kit? It downloads again from here." yes="Remove"
+        onYes={() => { setAsking(false); k.remove() }} onNo={() => setAsking(false)} />}
       {(kit && !kit.blender || installingBlender) && <BlenderTrust />}
       <KitTrack plan={k.plan} p={k.progress} done={k.finished ?? undefined} />
       <DoctorProblems d={k.doctor} />
-      {(missing || update || (k.doctor?.ok && !busy)) && <div className="su-actions">
+      {(missing || update || (k.doctor?.ok && !busy && !k.finished)) && <div className="su-actions">
         {(missing || update) && (
           <button type="button" className="btn-primary su-main" disabled={Boolean(busy) || (!kit?.version && latest === null)} onClick={() => k.setUp()}
             title={update ? 'Downloads the newest kit from GitHub' : 'Installs what is missing: the kit (from GitHub) and Blender (with winget), then checks this PC'}>
             {busy === 'setup' ? (installingBlender ? 'Installing Blender…' : k.progress ? 'Installing kit…' : 'Setting up…') : busy === 'blender' ? 'Installing Blender…' : update ? `Update to v${latest!.version}` : 'Set up previews'}
           </button>
         )}
-        {k.doctor?.ok && !busy && <span className="su-meta su-ok">This PC can make previews</span>}
+        {k.doctor?.ok && !busy && !k.finished && <span className="su-meta su-ok">This PC can make previews</span>}{/* not twice: the finished line says it first */}
       </div>}
       {notes && latest && <Changelog product="Preview kit" g={{ latest: `v${latest.version}`, published: latest.published, notes: latest.notes, url: latest.url }}
         title={notes} onClose={() => setNotes(null)} />}
@@ -212,7 +222,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   const [safety, setSafety] = useState(false)
   const trap = useDialogFocus() // focus inside, Tab stays inside, back to the opener on close
   const [notes, setNotes] = useState<string | null>(null)
-  const [armed, setArmed] = useState(false) // Galacta's Remove asks for a second click
+  const [askGalacta, setAskGalacta] = useState(false) // Galacta's Remove asks first
   const { finished, finish } = useFinished() // an install that just finished, said in its card for a moment
 
   // Opened from a grayed-out Generate button: straight to the Mod previews card (its top, so it can still grow as it loads)
@@ -259,7 +269,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   })
   // The Library's undoable delete: the .pak with its .ucas and .utoc (or the switched-off .bak_repak) go to the trash
   const removeGalacta = () => run('remove-galacta', async () => {
-    setArmed(false)
+    setAskGalacta(false)
     const path = `${galacta!.installed}\\${GALACTA_PAK}`, trashId = crypto.randomUUID()
     await invoke('delete_mod', { path, trashId })
     const refresh = () => invoke<Galacta>('setup_galacta_status', { online: false }).then(setGalacta)
@@ -270,7 +280,11 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
 
   const b = bypass
   const g = galacta
-  const offWarning = b?.sigeon_on && confirmOff
+  const bypassOn = b?.state === 'installed' || b?.state === 'disabled'
+  const bypassLine = !b ? 'Checking…' : {
+    missing: 'Not installed', installed: `In ${b.files[0]?.place ?? 'the game folder'}`, disabled: 'Off, its files stay in place',
+    partial: `${b.files.filter(f => f.found === 'same').length} of ${b.files.length} files there`, other: 'A different loader or bypass is there',
+  }[b.state]
   const galactaState = !g?.installed ? 'Not installed' : g.up_to_date === false ? 'Update available' : g.up_to_date ? 'Up to date' : g.disabled ? 'Installed, off' : 'Installed'
   const where = g?.installed?.replace(/^.*[\\/]~mods/i, '~mods') ?? ''
 
@@ -298,31 +312,40 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
               <span className={`su-chip is-${b?.state ?? 'missing'}`}>{b ? BYPASS_LABEL[b.state] : 'Checking…'}</span>
             </div>
             {b?.state === 'other' && <p className="su-note">A different loader or bypass is installed. Installing keeps it next to the new one as a .repakxtra-backup file.</p>}
-            {offWarning && (
-              <div className="su-confirm" role="alert">
-                <span>Sigeon loads through the same loader, so it turns off too.</span>
-                <button type="button" className="lo-text-btn" onClick={() => setConfirmOff(null)}>Cancel</button>
-                <button type="button" className="lo-text-btn" onClick={() => act(confirmOff!)}>{confirmOff === 'remove' ? 'Remove anyway' : 'Turn off anyway'}</button>
-              </div>
-            )}
-            {/* Is it safe? on the left, the bypass's own buttons on the right */}
+            {/* One part row like Galacta's and the preview kit's: its state, Turn off and Remove as links on the right */}
+            <ul className="su-parts">
+              <li className="su-part">
+                <PartMark ok={b?.state === 'installed'} />
+                <div className="su-part-text">
+                  <b>Loader and bypass</b>
+                  <span>{bypassLine}</span>
+                </div>
+                {bypassOn && <span className="su-part-links">
+                  {b.state === 'installed' && <button type="button" className="su-link" disabled={Boolean(busy)}
+                    onClick={() => (b.sigeon_on ? setConfirmOff('disable') : act('disable'))}>Turn off</button>}
+                  <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => setConfirmOff('remove')}>Remove</button>
+                </span>}
+              </li>
+            </ul>
+            {confirmOff && <ConfirmRow yes={confirmOff === 'remove' ? 'Remove' : 'Turn off anyway'} onYes={() => act(confirmOff)} onNo={() => setConfirmOff(null)}
+              text={confirmOff === 'disable' ? 'Sigeon loads through the same loader, so it turns off too.'
+                : `Remove the loader and bypass? Mods stop loading${b?.sigeon_on ? ', and Sigeon turns off too' : ''}.`} />}
+            {/* its progress above the buttons, like Galacta's and the preview kit's */}
+            <BypassTrack on={busy === 'install' || busy === 'enable'}
+              done={finished === 'install' ? 'Installed. Mods load from the next game launch.' : finished === 'enable' ? 'On again. Mods load from the next game launch.' : undefined} />
+            {/* The main button on the left like every card's, Is it safe? after it */}
             <div className="su-actions">
-              <button type="button" className="lo-text-btn su-safety-btn" aria-expanded={safety} onClick={() => setSafety(v => !v)}>
-                <ShieldCheck size={14} /> Is it safe? <ChevronRight size={14} className="su-caret" />
-              </button>
-              {b?.state !== 'installed' && b?.state !== 'disabled' && (
+              {!bypassOn && (
                 <button type="button" className="btn-primary su-main" disabled={!b || Boolean(busy)} onClick={() => act('install')}>
                   {busy === 'install' ? 'Installing…' : b?.state === 'missing' ? 'Install' : 'Repair'}
                 </button>
               )}
-              {b?.state === 'installed' && <button type="button" className="lo-text-btn" disabled={Boolean(busy)}
-                onClick={() => (b.sigeon_on ? setConfirmOff('disable') : act('disable'))}>Turn off</button>}
               {b?.state === 'disabled' && <button type="button" className="btn-primary su-main" disabled={Boolean(busy)} onClick={() => act('enable')}>Turn on</button>}
-              {(b?.state === 'installed' || b?.state === 'disabled') && <button type="button" className="lo-text-btn" disabled={Boolean(busy)}
-                onClick={() => (b.sigeon_on ? setConfirmOff('remove') : act('remove'))}>Remove</button>}
+              {/* drawn like the preview card's Is Blender safe? */}
+              <button type="button" className="su-trust-btn su-safety-btn" aria-expanded={safety} onClick={() => setSafety(v => !v)}>
+                <ShieldCheck size={13} aria-hidden="true" /> Is it safe? <ChevronRight size={13} className="su-caret" aria-hidden="true" />
+              </button>
             </div>
-            <BypassTrack on={busy === 'install' || busy === 'enable'}
-              done={finished === 'install' ? 'Installed. Mods load from the next game launch.' : finished === 'enable' ? 'On again. Mods load from the next game launch.' : undefined} />
             <div className="t-acc-panel" data-open={safety} ref={el => el?.toggleAttribute('inert', !safety)}>
               <div className="t-acc-panel-inner">
                 <div className="su-safety">
@@ -372,12 +395,13 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                   <button type="button" className="su-link" disabled={Boolean(busy)} onClick={check} title="Ask GitHub for the newest Project Galacta">
                     {busy === 'check' ? 'Checking…' : 'Check for updates'}
                   </button>
-                  {g?.installed && <button type="button" className="su-link" disabled={Boolean(busy)} onBlur={() => setArmed(false)}
-                    onClick={() => { if (armed) removeGalacta(); else setArmed(true) }}
-                    title="Moves it to Settings > Recently deleted for 7 days">{armed ? 'Click again to remove' : 'Remove'}</button>}
+                  {g?.installed && <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => setAskGalacta(true)}
+                    title="Moves it to Recently deleted for 7 days">Remove</button>}
                 </span>
               </li>
             </ul>
+            {askGalacta && g?.installed && <ConfirmRow text="Remove Project Galacta? It goes to Recently deleted for 7 days." yes="Remove"
+              onYes={removeGalacta} onNo={() => setAskGalacta(false)} />}
             <GalactaTrack on={busy === 'install-galacta'} done={finished === 'install-galacta' ? `Project Galacta ${galacta?.latest ?? ''} is in your mods folder`.replace('  ', ' ') : undefined} />
             {/* Install or update, and where to: only when one is offered */}
             {(!g?.installed || g.up_to_date === false) && (

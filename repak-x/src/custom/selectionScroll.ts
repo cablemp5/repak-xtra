@@ -24,6 +24,11 @@ const roomOf = (bar: HTMLElement) => {
 document.addEventListener('pointerdown', e => {
   clicked = e.target instanceof Element ? e.target.closest<HTMLElement>('.center-panel .mod-card') : null
 }, true)
+// Space or Enter on a focused row checks it with no pointer press: that row is the one to keep in view
+document.addEventListener('keydown', e => {
+  if (e.key !== ' ' && e.key !== 'Enter') return
+  clicked = document.activeElement?.closest<HTMLElement>('.center-panel .mod-card') ?? null
+}, true)
 
 const ro = new ResizeObserver(() => {
   if (!watched) return

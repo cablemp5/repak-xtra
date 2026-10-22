@@ -12,6 +12,7 @@ import './ModDetailsPanel.css'
 import { ModPreview } from '../custom/previews' // repakxtra
 import { ModName } from '../custom/modName' // repakxtra
 import { NexusSourceLine } from '../custom/nexusSource' // repakxtra
+import { heroLabel } from '../custom/silhouettes' // repakxtra
 import { TypeHint, useTypeHint } from '../custom/typeHints' // repakxtra
 
 type CharacterDataEntry = {
@@ -204,7 +205,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
                     {getHeroImage(details.character_name, characterData, details.character_id) && (
                       <img src={getHeroImage(details.character_name, characterData, details.character_id)} alt="" />
                     )}
-                    {details.character_name}
+                    {heroLabel(details.character_name)}{/* repakxtra: no bracketed game name */}
                   </div>
                 )}
                 {details.mod_type?.startsWith('Multiple Heroes') && (
@@ -260,7 +261,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
                 {(details.is_iostore || details.is_hybrid || details.is_encrypted) && (
                   <div style={{ display: 'flex', gap: '0' }}>
                     {details.is_iostore && (
-                      <div className="iostore-badge" style={{ borderTopRightRadius: details.is_hybrid || details.is_encrypted ? '0' : '4px', borderBottomRightRadius: details.is_hybrid || details.is_encrypted ? '0' : '4px' }}>IO Store Bundle</div>
+                      <div className="iostore-badge" style={{ borderTopRightRadius: details.is_hybrid || details.is_encrypted ? '0' : '4px', borderBottomRightRadius: details.is_hybrid || details.is_encrypted ? '0' : '4px' }}>IoStore bundle</div>
                     )}
                     {details.is_hybrid && (
                       <div className="hybrid-badge" style={{
@@ -278,7 +279,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
                         color: '#4CAF50',
                         border: '1px solid rgba(76, 175, 80, 0.35)',
                         borderLeft: details.is_iostore ? 'none' : '1px solid rgba(76, 175, 80, 0.35)'
-                      }} title="Contains both IO Store assets and Legacy Pak raw assets">Hybrid</div>
+                      }} title="Contains both IoStore assets and Legacy PAK raw assets">Hybrid</div>
                     )}
                     {details.is_encrypted && (
                       <div className="encrypted-badge" style={{

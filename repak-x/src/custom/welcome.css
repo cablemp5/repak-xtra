@@ -27,10 +27,11 @@
 .wi-switch { position: relative; flex: none; width: 24px; height: 14px; border-radius: 999px; background: var(--accent-primary); }
 .wi-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: #fff; transform: translateX(10px); }
 
-/* 1. See the look first: the card renders (dark, a light band sweeping), then its picture fades in */
-.wi-reveal .wi-shot { animation: wi-shot 6s ease-in-out infinite; }
+/* 1. See the look first: the card renders (dark, a light band sweeping), then its picture fades in. The loop starts
+   on the finished picture (56% in), so the first thing a newcomer sees is a preview, not a dark "Rendering" box */
+.wi-reveal .wi-shot { animation: wi-shot 6s ease-in-out -3.36s infinite; }
 .wi-render { position: absolute; inset: 0; display: grid; place-items: center; overflow: hidden; background: rgba(6, 7, 9, 0.7); opacity: 0;
-  animation: wi-render 6s ease-in-out infinite; }
+  animation: wi-render 6s ease-in-out -3.36s infinite; }
 .wi-render::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.09), transparent);
   animation: lo-skel-sweep 1.6s ease-in-out infinite; }
 .wi-render span { position: relative; z-index: 1; font-size: 10px; font-weight: 600; color: var(--text-primary); }

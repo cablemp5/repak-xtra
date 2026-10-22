@@ -19,6 +19,7 @@ import { useUiPref } from '../custom/uiPrefs' // repakxtra: file sizes beside th
 import './ModsList.css'
 import { useTypeHint } from '../custom/typeHints' // repakxtra
 import { holdKeys } from '../custom/holdKeys' // repakxtra
+import { heroLabel } from '../custom/silhouettes' // repakxtra
 import './ModDetailsPanel.css'
 
 type CharacterDataEntry = {
@@ -370,7 +371,7 @@ const ModItem = memo(function ModItem({
                             src={heroImage}
                             alt=""
                             className="mod-hero-icon-inline"
-                            title={characterName || 'Unknown Hero'}
+                            title={characterName ? heroLabel(characterName) /* repakxtra */ : 'Unknown Hero'}
                         />
                     )
                 )}
@@ -454,7 +455,7 @@ const ModItem = memo(function ModItem({
                                 <img src={heroImage} alt="" className="mod-hero-icon-badge" />
                             </Tooltip>
                         ) : (
-                            <Tooltip title={characterName || 'Unknown Hero'}>
+                            <Tooltip title={characterName ? heroLabel(characterName) /* repakxtra */ : 'Unknown Hero'}>
                                 <img src={heroImage} alt="" className="mod-hero-icon-badge" />
                             </Tooltip>
                         )
@@ -538,7 +539,7 @@ const ModItem = memo(function ModItem({
                         disabled={gameRunning}
                     />
                     <div className="mod-switch-wrapper" onClick={(e) => e.stopPropagation()} >
-                        <Switch title={mod.enabled ? 'Disable mod' : 'Enable mod'} aria-label={mod.enabled ? `Turn ${cleanName} off` : `Turn ${cleanName} on`}
+                        <Switch title={mod.enabled ? 'Turn off' : 'Turn on'} aria-label={mod.enabled ? `Turn ${cleanName} off` : `Turn ${cleanName} on`}
                             size="sm"
                             color="primary"
                             checked={mod.enabled}
