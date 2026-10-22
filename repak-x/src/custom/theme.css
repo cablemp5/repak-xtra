@@ -2126,7 +2126,7 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
 .lo-card-new .lo-card-ghost { visibility: hidden; display: flex; flex-direction: column; }
 .lo-card-new .lo-card-add { position: absolute; inset: 0; }
 /* Its name and plus take the counter zoom a card name and placeholder icon get (its status line is a .lo-card-meta already) */
-.lo-screen .lo-grid .lo-card-add-title, .lo-screen .lo-grid .lo-card-add-icon { zoom: max(1, calc(0.8 / var(--lo-card-zoom, 1))); }
+:is(.lo-screen .lo-grid, .lo-drag-ghost-inner) :is(.lo-card-add-title, .lo-card-add-icon) { zoom: max(1, calc(0.8 / var(--lo-card-zoom, 1))); }
 /* A preview's caption ("Mesh + Texture + Material · 1/4", "Older render") shows on hover, with the arrows */
 .lo-media-label { opacity: 0; transition: opacity 0.15s ease; }
 .lo-media:hover .lo-media-label, .lo-media:focus-within .lo-media-label { opacity: 1; }
@@ -2403,13 +2403,13 @@ html[data-motion] .hold-delete.holding::after { transition-duration: 2s !importa
 /* Card size on Home (custom/cardZoom.tsx): the cards' own zoom, apart from the app's UI scale */
 .lo-screen .lo-grid { zoom: var(--lo-card-zoom, 1); }
 /* Zoomed far out, a card's words would shrink with it: the words alone stop at 80% of their size (a counter zoom; the
-   switch keeps the card's scale, so the name keeps its room), and the rename pencil steps aside for the name */
-.lo-screen .lo-grid .lo-card-name h3, .lo-screen .lo-grid .lo-card-meta, .lo-screen .lo-grid .lo-expand, .lo-screen .lo-grid .lo-skel-label,
-.lo-screen .lo-grid .lo-media-arrow, .lo-screen .lo-grid .lo-media-label, .lo-screen .lo-grid .lo-media-mute,
-.lo-screen .lo-grid .lo-card-placeholder:not(.lo-card-caption) > span { zoom: max(1, calc(0.8 / var(--lo-card-zoom, 1))); }
+   switch keeps the card's scale, so the name keeps its room), and the rename pencil steps aside for the name. The
+   picked-up copy (.lo-drag-ghost-inner, cardDrag.ts) carries the same zoom and small flag, so it looks the same. */
+:is(.lo-screen .lo-grid, .lo-drag-ghost-inner) :is(.lo-card-name h3, .lo-card-meta, .lo-expand, .lo-skel-label, .lo-media-arrow,
+  .lo-media-label, .lo-media-mute, .lo-card-placeholder:not(.lo-card-caption) > span) { zoom: max(1, calc(0.8 / var(--lo-card-zoom, 1))); }
 /* "Nothing to render" stays readable on small cards: both lines undo most of the card size (85%), not only the title */
-.lo-screen .lo-grid .lo-card-placeholder:not(.lo-card-caption) > svg { zoom: max(1, calc(0.8 / var(--lo-card-zoom, 1))); }   /* the icon shrinks no further than the words */
-.lo-screen[data-small] .lo-grid .lo-card-pen { display: none; }
+:is(.lo-screen .lo-grid, .lo-drag-ghost-inner) .lo-card-placeholder:not(.lo-card-caption) > svg { zoom: max(1, calc(0.8 / var(--lo-card-zoom, 1))); }   /* the icon shrinks no further than the words */
+.lo-screen[data-small] .lo-grid .lo-card-pen, .lo-drag-ghost-inner[data-small] .lo-card-pen { display: none; }
 .lo-zoom { display: inline-flex; align-items: center; gap: 2px; margin-right: 6px; }
 .lo-zoom-value { min-width: 44px; height: 26px; padding: 0 4px; border: none; border-radius: 6px; background: none;
   color: var(--text-secondary); font: 600 12px var(--font-primary); font-variant-numeric: tabular-nums; cursor: pointer; }

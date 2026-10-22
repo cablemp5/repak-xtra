@@ -178,6 +178,9 @@ export function useCardDrag({ zoom, scroller, onMove, onDrop, ownGroupOnly = fal
       const inner = document.createElement('div')
       inner.className = 'lo-drag-ghost-inner'
       Object.assign(inner.style, { zoom: String(z), width: `${r.width / z}px`, height: `${r.height / z}px` })
+      // the Home grid's counter zoom for the words (theme.css) reads these, so the copy's text matches the card's
+      inner.style.setProperty('--lo-card-zoom', String(z))
+      if (card.closest('.lo-screen[data-small]')) inner.dataset.small = ''
       inner.appendChild(card.cloneNode(true))
       ghost.appendChild(inner)
       document.body.appendChild(ghost)
