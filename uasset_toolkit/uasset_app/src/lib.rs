@@ -1029,15 +1029,18 @@ pub fn extract_pak_all(file_path: &str, output_path: &str, aes_key: Option<&str>
         aes_key: aes_key.map(|s| s.to_string()),
     };
     let response = toolkit.send_request(&request)?;
-    if !response.success {
-        anyhow::bail!("Failed to extract PAK: {}", response.message);
-    }
     let data = response.data.unwrap_or(serde_json::json!({}));
-    let count = data
-        .get("extracted_count")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as usize;
-    Ok(count)
+    let count = |k: &str| data.get(k).and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+    // repakxtra: a write that failed is an error even from an older tool that still says success
+    if !response.success || count("failed_count") > 0 {
+        anyhow::bail!(
+            "Failed to extract PAK ({} extracted, {} failed): {}",
+            count("extracted_count"),
+            count("failed_count"),
+            response.message
+        );
+    }
+    Ok(count("extracted_count"))
 }
 
 /// Create a PAK file from a list of files (using global singleton)

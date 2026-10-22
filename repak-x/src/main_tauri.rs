@@ -5025,7 +5025,8 @@ async fn extract_mod_assets_inner(
                 },
             );
 
-            uasset_toolkit::extract_pak_all(
+            // repakxtra: completion counts what was written, not the file list read beforehand
+            let extracted = uasset_toolkit::extract_pak_all(
                 path.to_str().unwrap_or_default(),
                 output_dir.to_str().unwrap_or_default(),
                 Some(crate::install_mod::AES_KEY_HEX),
@@ -5043,6 +5044,7 @@ async fn extract_mod_assets_inner(
                 );
                 e.to_string()
             })?;
+            let file_count = extracted;
 
             let _ = window.emit(
                 "extraction_progress",
@@ -5093,7 +5095,8 @@ async fn extract_mod_assets_inner(
                 },
             );
 
-            uasset_toolkit::extract_pak_all(
+            // repakxtra: completion counts what was written, not the file list read beforehand
+            let extracted = uasset_toolkit::extract_pak_all(
                 path.to_str().unwrap_or_default(),
                 output_dir.to_str().unwrap_or_default(),
                 Some(crate::install_mod::AES_KEY_HEX),
@@ -5111,6 +5114,7 @@ async fn extract_mod_assets_inner(
                 );
                 e.to_string()
             })?;
+            let file_count = extracted;
 
             let _ = window.emit(
                 "extraction_progress",
