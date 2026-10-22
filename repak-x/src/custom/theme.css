@@ -1716,8 +1716,6 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .settings-content .setting-group label.repakx-checkbox { min-height: 32px; padding-top: 0 !important; padding-bottom: 0 !important; }
 .settings-content .mod-state-filter.ui-scale { align-self: flex-start; width: auto !important; }
 .settings-content .setting-group:has(> .ui-scale) { align-items: flex-start; }
-/* Animations: System / On / Off beside its name (uiPrefs.tsx MotionSection) */
-.settings-content .setting-motion { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--text-primary); }
 
 /* Sigeon V2 Editor: the folder picker, the license notice, sliders without a box around them, one row rhythm */
 .sg-folder { margin-top: auto; padding-top: 14px; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--panel-border); }
