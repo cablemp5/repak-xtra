@@ -30,14 +30,14 @@ const openUrl = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.
 const firstLaunch = () => !localStorage.getItem(SEEN)
 
 /** One numbered step: its number (a check once done), title, text and its action on the right. Sigeon's setup uses it too. */
-export function Step({ n, done, title, optional, wide, children, action }: {
-  n: number; done: boolean; title: string; optional?: boolean; wide?: boolean; children: React.ReactNode; action?: React.ReactNode
+export function Step({ n, done, title, optional, recommended, wide, children, action }: {
+  n: number; done: boolean; title: string; optional?: boolean; recommended?: boolean; wide?: boolean; children: React.ReactNode; action?: React.ReactNode
 }) {
   return (
     <li className={`fr-step${done ? ' is-done' : ''}${wide ? ' is-wide' : ''}`}>
       <span className="fr-num" aria-hidden="true">{done ? <Check size={16} strokeWidth={2.5} /> : n}</span>
       <div className="fr-text">
-        <h3>{title}{optional && <span className="fr-optional">Optional</span>}</h3>
+        <h3>{title}{optional && <span className="fr-optional">Optional</span>}{recommended && !done && <span className="fr-optional fr-recommended">Recommended</span>}</h3>
         {children}
       </div>
       {action && <div className="fr-action">{action}</div>}
@@ -200,17 +200,17 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
               </span>
             </div>
           </Step>
-          {/* the goal (your first mods) right after the three steps it needs, the extras under their own label */}
-          <li className="fr-divider" aria-hidden="true">Optional</li>
-          <Step n={5} done={kitReady && kit.doctor?.ok !== false} title="Mod previews"
-            action={!kitReady && !kit.plan && <button type="button" className="lo-text-btn" disabled={Boolean(kit.busy) || (kit.latest === null && !kit.kit?.version)} onClick={() => kit.setUp()}
+          {/* Previews right after your first mods, above the extras: without them loadouts and mods are only names */}
+          <Step n={5} done={kitReady && kit.doctor?.ok !== false} title="Mod previews" recommended
+            action={!kitReady && !kit.plan && <button type="button" className="btn-primary" disabled={Boolean(kit.busy) || (kit.latest === null && !kit.kit?.version)} onClick={() => kit.setUp()}
               title={kit.latest === null ? 'No kit published yet: drop a kit zip on the window' : 'Downloads the preview kit and installs Blender if it is missing (Windows asks for admin rights once)'}>
               {kit.busy === 'setup' ? 'Setting up…' : 'Set up previews'}</button>}>
-            <p>{kitReady ? 'Ready.' : `Pictures of your loadouts, rendered on your PC${kit.latest?.size ? ` (a ${Math.round(kit.latest.size / 1048576)} MB download, plus Blender)` : ''}.`}</p>
+            <p>{kitReady ? 'Ready.' : `See every mod and loadout as a picture of how it looks in game, not just a file name. Rendered on your PC${kit.latest?.size ? ` (a ${Math.round(kit.latest.size / 1048576)} MB download, plus Blender)` : ''}.`}</p>
             <KitTrack plan={kit.plan} p={kit.progress} done={kit.finished ?? undefined} />
             <DoctorProblems d={kit.doctor} />
           </Step>
 
+          <li className="fr-divider" aria-hidden="true">Optional</li>
           <Step n={6} done={Boolean(shortcut.exists)} title="Desktop shortcut"
             action={!shortcut.exists && <ShortcutButton s={shortcut} />}>
             <p>{shortcut.exists ? 'On your desktop.' : 'Start repakxtra from your desktop.'}</p>

@@ -1834,6 +1834,7 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .fr-step:has(+ .fr-divider) { border-bottom: none; }
 .fr-progress { font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .fr-optional { padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--text-secondary); background: var(--bg-lighter); }
+.fr-recommended { color: var(--accent-primary); background: color-mix(in srgb, var(--accent-primary), transparent 86%); }   /* Mod previews: worth doing, unlike the Optional extras */
 .fr-action { display: flex; align-items: center; gap: 8px; }
 .fr-text .fr-drop { margin-top: 8px; }
 .fr-action .btn-primary, .fr-foot .btn-primary { width: auto !important; flex: none; min-width: 84px; height: 32px !important; min-height: 0 !important;
