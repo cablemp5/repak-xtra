@@ -13,6 +13,8 @@ pub struct VfxSettings {
     pub usmap_filename: Option<String>,
     /// ETag from last GitHub Contents API response (for conditional requests)
     pub usmap_etag: Option<String>,
+    /// repakxtra: commit date of the managed USMAP, so a check that finds it current makes no second GitHub call
+    pub usmap_commit_date: Option<String>,
     // game_paks_path and aes_key grabbed from RX settings at runtime
 }
 
@@ -23,6 +25,7 @@ impl Default for VfxSettings {
             usmap_sha: None,
             usmap_filename: None,
             usmap_etag: None,
+            usmap_commit_date: None, // repakxtra
         }
     }
 }

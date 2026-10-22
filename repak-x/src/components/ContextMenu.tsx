@@ -435,7 +435,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
         For modders…
         <div className="submenu">
           <div className="context-menu-item" onClick={() => { if (onSendToVfxUpdater) onSendToVfxUpdater(mod); onClose(); }}>
-            Send to VFX Updater
+            Fix VFX mod{/* repakxtra: the Fix VFX mods window (custom/vfx/) */}
           </div>
           {onShowInAssetExplorer && (
             <div className="context-menu-item" onClick={() => { onShowInAssetExplorer(mod); onClose(); }}>

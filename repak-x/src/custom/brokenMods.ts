@@ -1,10 +1,12 @@
 // repakxtra: mods that will not work in the installed game version (xtra_broken.rs decides), checked quietly in the
-// background whenever the installed mods change. A mod row shows a Broken or May crash badge with the reason, and the
+// background whenever the installed mods change. A mod row shows a Broken, Needs VFX fix or May crash badge with the reason, and the
 // Library's All / Enabled / Disabled switch gains Broken while any are.
 import { useEffect, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 
-export type Verdict = { path: string; kind: 'broken' | 'risky'; reason: string }
+export type Verdict = { path: string; kind: 'broken' | 'vfx' | 'risky'; reason: string }
+/** A verdict's badge text. */
+export const verdictLabel = (kind: Verdict['kind']) => (kind === 'broken' ? 'Broken' : kind === 'vfx' ? 'Needs VFX fix' : 'May crash')
 
 /** One spelling per file: slashes and case may differ between the mod list and the backend. */
 const norm = (path: string) => path.replace(/\//g, '\\').toLowerCase()

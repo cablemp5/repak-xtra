@@ -88,7 +88,8 @@ pub async fn run_vfx_uat_request(
 ) -> Result<VfxUatResponse, String> {
     let request_json = serde_json::to_string(request)
         .map_err(|e| format!("[VFX] Failed to serialize request: {}", e))?;
-    vfx_debug(&format!("UAT request: {}", request_json));
+    // repakxtra: the action and size, not the whole request or response: they list every file, and each line is flushed
+    vfx_debug(&format!("UAT request: {} ({} bytes)", request.action, request_json.len()));
 
     let response_json =
         tokio::task::spawn_blocking(move || uasset_toolkit::invoke_json(&request_json))
@@ -104,12 +105,9 @@ pub async fn run_vfx_uat_request(
     })?;
 
     vfx_debug(&format!(
-        "UAT response: success={}, message={}",
-        response.success, response.message
+        "UAT response: success={}, message={} ({} bytes)",
+        response.success, response.message, response_json.len()
     ));
-    if let Some(data) = &response.data {
-        vfx_debug(&format!("UAT response data: {}", data));
-    }
     Ok(response)
 }
 
@@ -582,9 +580,10 @@ pub async fn extract_vanilla_assets(
     // The deps stay on disk for schema resolution but are not themselves converted:
     // uasset_list.txt narrows the next step back down to the assets that were asked for.
     let base = Path::new(output_dir);
-    let lowered_patterns: Vec<String> = normalized_patterns
+    // repakxtra: the exact assets asked for: a substring match also took dependencies whose names start the same (M_Foo_02)
+    let lowered_patterns: std::collections::HashSet<String> = normalized_patterns
         .iter()
-        .map(|p| p.replace('\\', "/").to_lowercase())
+        .map(|p| p.replace('\\', "/").trim_start_matches('/').to_lowercase())
         .collect();
 
     let mut requested = Vec::new();
@@ -597,7 +596,7 @@ pub async fn extract_vanilla_assets(
             .unwrap_or_else(|_| asset.clone());
 
         let lowered = relative.to_lowercase();
-        if !lowered_patterns.iter().any(|p| lowered.contains(p)) {
+        if !lowered_patterns.contains(lowered.strip_suffix(".uasset").unwrap_or(&lowered).trim_start_matches('/')) {
             continue;
         }
 

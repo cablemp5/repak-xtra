@@ -533,10 +533,15 @@ pub async fn vfx_check_usmap_update(force: bool) -> Result<VfxUsmapUpdateResult,
                 .usmap_filename
                 .as_deref()
                 .and_then(extract_usmap_build_number);
-            let commit_date = if let Some(file_name) = settings.usmap_filename.as_deref() {
-                fetch_usmap_commit_date(&client, file_name).await
-            } else {
-                None
+            // repakxtra: the date saved with the file, fetched (and saved) only when missing
+            let commit_date = match (settings.usmap_commit_date.clone(), settings.usmap_filename.clone()) {
+                (Some(date), _) => Some(date),
+                (None, Some(file_name)) => {
+                    settings.usmap_commit_date = fetch_usmap_commit_date(&client, &file_name).await;
+                    let _ = write_vfx_settings_internal(&settings);
+                    settings.usmap_commit_date.clone()
+                }
+                _ => None,
             };
 
             vfx_info("USMAP already up to date (304 Not Modified)");
@@ -652,7 +657,12 @@ async fn apply_listing(
         });
     }
 
-    let commit_date = fetch_usmap_commit_date(&client, &latest_name).await;
+    // repakxtra: reuse the saved date while the latest file is the one it belongs to
+    let commit_date = match &settings.usmap_commit_date {
+        Some(date) if settings.usmap_filename.as_deref() == Some(latest_name.as_str()) => Some(date.clone()),
+        _ => fetch_usmap_commit_date(&client, &latest_name).await,
+    };
+    settings.usmap_commit_date = commit_date.clone();
 
     // Determine whether the user is currently using a managed path or a
     // custom one. Don't overwrite a custom file silently.

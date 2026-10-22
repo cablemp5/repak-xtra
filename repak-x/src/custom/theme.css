@@ -2608,7 +2608,7 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 .mod-type-badge.broken-badge { color: #f5d342 !important; border: 1px solid color-mix(in srgb, #f5d342, transparent 55%) !important; cursor: help; font-size: 11px !important; font-weight: 600 !important; }
 [data-theme="light"] .mod-type-badge.broken-badge, [data-theme="light"] .mod-state-filter button.is-broken, [data-theme="light"] .mod-state-filter button.is-broken .mod-state-count { color: #7f6900 !important; }
 .mod-type-badge.broken-badge.is-broken { background: color-mix(in srgb, #f5d342, transparent 88%) !important; }
-.mod-type-badge.broken-badge.is-risky { background: transparent !important; }
+.mod-type-badge.broken-badge.is-risky, .mod-type-badge.broken-badge.is-vfx { background: transparent !important; }
 .mod-state-filter button.is-broken { color: #f5d342; }
 .mod-state-filter button.is-broken .mod-state-count { color: #f5d342; }
 

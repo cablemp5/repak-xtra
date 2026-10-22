@@ -10,7 +10,7 @@ import NumberInput from './ui/NumberInput'
 import { toTagArray } from '../utils/tags'
 import { formatFileSize } from '../utils/format'
 import { useIsConflicting } from '../custom/conflicts' // repakxtra
-import { useVerdict } from '../custom/brokenMods' // repakxtra
+import { useVerdict, verdictLabel } from '../custom/brokenMods' // repakxtra
 import { NexusTag } from '../custom/nexusSource' // repakxtra
 import { detectHeroesWithData } from '../utils/heroes'
 import { useHoverTextReveal } from '../hooks/useHoverTextReveal'
@@ -515,7 +515,7 @@ const ModItem = memo(function ModItem({
                     {!isCardView && sizeTag}
                     {/* repakxtra: on, and clashing with another enabled mod (same priority, same files), right of the file size */}
                     {conflicting && <span className="mod-type-badge conflict-badge" title="Conflicts with another enabled mod: Check Conflicts shows which">Conflict</span>}
-                    {verdict && <span className={`mod-type-badge broken-badge is-${verdict.kind}`} title={verdict.reason}>{verdict.kind === 'broken' ? 'Broken' : 'May crash'}</span>}
+                    {verdict && <span className={`mod-type-badge broken-badge is-${verdict.kind}`} title={verdict.reason}>{verdictLabel(verdict.kind)}</span>}
                     <NexusTag path={mod.path} />{/* repakxtra: installed from Nexus Mods (custom/nexusSource.tsx), right of the file size */}
                     {/* repakxtra: Project Galacta compatible mods (xtra_classify.rs) */}
                     {typeof modDetails?.mod_type === 'string' && /\[[^\]]*Project Galacta[^\]]*\]$/.test(modDetails.mod_type) && (

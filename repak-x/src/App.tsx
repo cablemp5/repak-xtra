@@ -70,6 +70,8 @@ import { setModsRoot } from './custom/loadoutIdentity' // repakxtra
 import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
 import { useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
+import { fixInVfxWindow } from './custom/vfx/handoff' // repakxtra: Fix VFX mods
+import VfxNotice from './custom/vfx/VfxNotice' // repakxtra: the game updated, VFX mods to fix
 import { newDefaultsOnce } from './custom/uiPrefs' // repakxtra
 import { reportSource } from './custom/setupReport' // repakxtra: Copy setup report reads the live list
 import { finishInstallLoadout } from './custom/installLoadout'
@@ -128,7 +130,6 @@ const AURORA_PALETTES: Record<string, string[]> = {
   '#FF96BC': ['#FF96BC', '#f472b6', '#c084fc', '#fda4af'], // Pink: soft pastel tones
 };
 
-const VFX_UPDATER_MOD_PREFILL_KEY = 'repakx:vfxUpdater:modPath'
 const ASSET_EXPLORER_FOCUS_MOD_KEY = 'repakx:assetExplorer:focusModPath'
 
 import TitleBar from './components/TitleBar'
@@ -542,36 +543,9 @@ function App() {
 
   const alert = useAlert();
 
-  const openVfxUpdaterWindow = async (modUtocPath?: string | null) => {
-    if (modUtocPath) {
-      localStorage.setItem(VFX_UPDATER_MOD_PREFILL_KEY, modUtocPath)
-    }
-
-    try {
-      const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
-      const existing = await WebviewWindow.getByLabel('vfx-updater')
-      if (existing) {
-        await existing.setFocus()
-        return
-      }
-
-      const vfxWindow = new WebviewWindow('vfx-updater', {
-        url: '/vfx-updater',
-        title: 'VFX Updater (WIP)', // repakxtra: the window's title bar matches its heading
-        width: 650,
-        height: 750,
-        center: true,
-        resizable: false,
-        decorations: false,
-      })
-
-      vfxWindow.once('tauri://error', (e) => {
-        console.error('[VFX] Failed to create window:', e)
-      })
-    } catch (e) {
-      console.error('[VFX] Window error:', e)
-    }
-  }
+  // repakxtra: the Fix VFX mods window (custom/vfx/), a mod handed over when given
+  const openVfxUpdaterWindow = (modUtocPath?: string | null) =>
+    fixInVfxWindow(modUtocPath ? [modUtocPath] : [], false).catch(e => console.error('[VFX] Window error:', e))
 
   const openAssetExplorerWindow = async () => {
     try {
@@ -4028,13 +4002,13 @@ function App() {
           <button
             className="btn-settings btn-vfx"
             data-tour="vfx-updater-btn"
-            title="Open Repak VFX Updater"
+            title="Fix VFX mods after a game update"
             onClick={async () => {
               await openVfxUpdaterWindow()
             }}
           >
             <GiLightningTrio style={{ marginRight: '6px' }} />
-            <span>VFX Updater</span>
+            <span>Fix VFX</span>{/* repakxtra: the Fix VFX mods window */}
           </button>
 
           <SigeonControl alert={alert} />{/* repakxtra */}
@@ -4067,6 +4041,7 @@ function App() {
       </header>
 
       <div className="container">
+        <VfxNotice mods={mods} reload={loadMods} />{/* repakxtra: the game updated, VFX mods to fix */}
         {/* repakxtra: Home view (custom/LoadoutsScreen.tsx); the action bar and panels below are the Library */}
         <LoadoutsScreen
           mods={mods}

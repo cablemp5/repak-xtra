@@ -25,6 +25,7 @@ mod xtra_bundle; // repakxtra: a mod's pak/utoc/ucas found and moved as one set
 mod xtra_updater; // repakxtra: applies an update without string-built shell commands
 mod xtra_conflicts; // repakxtra: conflict comparison by normalized asset path, cached file lists
 mod xtra_extract; // repakxtra: unpacks only archives whose paths stay inside the output folder
+mod xtra_vfx; // repakxtra: VFX fixing after game updates
 mod character_data;
 mod crash_monitor;
 mod discord_presence;
@@ -8525,6 +8526,10 @@ fn main() {
             xtra_crash::xtra_newest_crash, // repakxtra: setup report
             xtra_crash::xtra_crash_suspects, // repakxtra: crash suspects
             xtra_broken::xtra_broken_mods, // repakxtra: broken mods
+            xtra_vfx::xtra_vfx_dirs, // repakxtra: Fix VFX mods
+            xtra_vfx::xtra_vfx_detect,
+            xtra_vfx::xtra_vfx_place,
+            xtra_vfx::xtra_game_build,
             xtra_nexus::xtra_nexus_sources, // repakxtra: Nexus source
             xtra_nexus::xtra_nexus_downloads, // repakxtra: Nexus downloads still in Downloads, for the one-time scan
             xtra_nexus::xtra_install_paks, // repakxtra: the paks an install puts in place, for loadouts made at install
