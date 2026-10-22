@@ -67,6 +67,37 @@ pub fn move_all(moves: &[(PathBuf, PathBuf)]) -> Result<(), String> {
     Ok(())
 }
 
+/// Puts each new file (`staged` -> `dest`) in place as one step. Files already at a `dest` go to Recently deleted first
+/// (returned: that deletion's trash id), so a replaced mod can be restored. If anything fails, the old files are put
+/// back and the staged files stay where they were.
+pub fn replace_all(moves: &[(PathBuf, PathBuf)]) -> Result<Option<String>, String> {
+    let old: Vec<&PathBuf> = moves.iter().map(|(_, d)| d).filter(|d| d.exists()).collect();
+    if old.is_empty() {
+        return move_all(moves).map(|_| None);
+    }
+    replace_with(moves, &old, &crate::xtra_trash::reserve(None)?)
+}
+
+fn replace_with(moves: &[(PathBuf, PathBuf)], old: &[&PathBuf], dir: &Path) -> Result<Option<String>, String> {
+    let put_back = |done: &[&PathBuf]| {
+        for d in done.iter().rev() {
+            let _ = crate::xtra_trash::put_back(dir, d);
+        }
+        crate::xtra_trash::release_if_empty(dir);
+    };
+    for (i, d) in old.iter().enumerate() {
+        if let Err(e) = crate::xtra_trash::discard(dir, d) {
+            put_back(&old[..i]);
+            return Err(format!("Could not move the old {} aside: {}", d.display(), e));
+        }
+    }
+    if let Err(e) = move_all(moves) {
+        put_back(old);
+        return Err(e);
+    }
+    Ok(dir.file_name().map(|n| n.to_string_lossy().to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -112,6 +143,38 @@ mod tests {
         assert!(move_all(&moves).is_err());
         assert!(d.join("A_9999999_P.pak").exists() && !d.join("A_99999999_P.pak").exists());
         assert_eq!(fs::read(d.join("A_99999999_P.ucas")).unwrap(), b"A_99999999_P.ucas");
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn replace_keeps_the_old_files_in_the_trash_and_puts_them_back_on_failure() {
+        let d = tmp("replace");
+        let trash = d.join("trash");
+        fs::create_dir_all(&trash).unwrap();
+        fs::create_dir_all(d.join("stage")).unwrap();
+        fs::write(d.join("M.pak"), b"old").unwrap();
+        fs::write(d.join("stage").join("M.pak.part"), b"new").unwrap();
+        fs::write(d.join("stage").join("M.utoc.part"), b"new").unwrap();
+        let moves = vec![
+            (d.join("stage").join("M.pak.part"), d.join("M.pak")),
+            (d.join("stage").join("M.utoc.part"), d.join("M.utoc")),
+        ];
+        let old = [&d.join("M.pak")];
+        assert!(replace_with(&moves, &old, &trash).is_ok());
+        assert_eq!(fs::read(d.join("M.pak")).unwrap(), b"new");
+        assert_eq!(fs::read(trash.join("M.pak")).unwrap(), b"old");
+
+        // a failing move (the folder for the second file is missing) leaves the old file installed
+        let trash2 = d.join("trash2");
+        fs::create_dir_all(&trash2).unwrap();
+        fs::write(d.join("stage").join("M.pak.part"), b"newer").unwrap();
+        let bad = vec![
+            (d.join("stage").join("M.pak.part"), d.join("M.pak")),
+            (d.join("stage").join("gone.part"), d.join("M.ucas")),
+        ];
+        assert!(replace_with(&bad, &[&d.join("M.pak")], &trash2).is_err());
+        assert_eq!(fs::read(d.join("M.pak")).unwrap(), b"new");
+        assert!(d.join("stage").join("M.pak.part").exists());
         let _ = fs::remove_dir_all(&d);
     }
 

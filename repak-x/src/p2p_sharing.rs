@@ -857,8 +857,33 @@ impl P2PClient {
         self.stop_flag.store(true, Ordering::SeqCst);
     }
 
-    /// Connect and download all mods to the specified directory
+    /// Connect and download all mods to the specified directory. repakxtra: every exit leaves a final status in the
+    /// progress handle (Completed, Failed or Cancelled), so a poller never shows a stale "Connecting".
     pub fn download_pack(
+        &self,
+        output_dir: &Path,
+        client_name: Option<String>,
+    ) -> P2PResult<ShareableModPack> {
+        let result = self.download_pack_inner(output_dir, client_name);
+        let mut progress = self.progress.lock().unwrap();
+        progress.status = match &result {
+            Ok(_) => TransferStatus::Completed,
+            Err(P2PError::Cancelled) => TransferStatus::Cancelled,
+            Err(e) => TransferStatus::Failed(e.to_string()),
+        };
+        result
+    }
+
+    fn cancelled(&self) -> bool {
+        self.stop_flag.load(Ordering::SeqCst)
+    }
+
+    /// A read error after Cancel was pressed is the cancel, not a network failure.
+    fn or_cancelled(&self, e: P2PError) -> P2PError {
+        if self.cancelled() { P2PError::Cancelled } else { e }
+    }
+
+    fn download_pack_inner(
         &self,
         output_dir: &Path,
         client_name: Option<String>,
@@ -877,8 +902,10 @@ impl P2PClient {
         stream
             .set_nodelay(true)
             .map_err(|e| P2PError::NetworkError(format!("Failed to set nodelay: {}", e)))?;
+        // repakxtra: short read timeouts so a stalled read notices Cancel within a second (receive_full keeps the
+        // overall 120 s idle limit)
         stream
-            .set_read_timeout(Some(Duration::from_secs(120)))
+            .set_read_timeout(Some(READ_POLL))
             .map_err(|e| P2PError::NetworkError(format!("Failed to set timeout: {}", e)))?;
         stream
             .set_write_timeout(Some(Duration::from_secs(120)))
@@ -898,7 +925,7 @@ impl P2PClient {
         send_encrypted_message(&mut stream, &self.encryption_key, &hello)?;
 
         // Receive welcome
-        let welcome_data = read_encrypted_message(&mut stream, &self.encryption_key)?;
+        let welcome_data = self.read_message(&mut stream)?;
         let welcome: P2PMessage = bincode::deserialize(&welcome_data)
             .map_err(|e| P2PError::ProtocolError(format!("Invalid welcome: {}", e)))?;
 
@@ -926,25 +953,17 @@ impl P2PClient {
 
         info!("Connected to share: {}", pack_info.name);
 
+        // repakxtra: the sender chooses every name and size, so the whole pack is checked before anything is written
+        let files = plan_receive(&pack_info)?;
+        let total_bytes: u64 = files.iter().map(|f| f.size).sum();
+
         // Brief pause to let relay tunnel stabilize before file requests
         std::thread::sleep(Duration::from_millis(500));
-
-        // Calculate total files and bytes
-        let mut total_files = 0usize;
-        let mut total_bytes = 0u64;
-        for mod_info in &pack_info.mods {
-            total_files += 1;
-            total_bytes += mod_info.size;
-            for io_file in &mod_info.iostore_files {
-                total_files += 1;
-                total_bytes += io_file.size;
-            }
-        }
 
         // Update progress
         {
             let mut progress = self.progress.lock().unwrap();
-            progress.total_files = total_files;
+            progress.total_files = files.len();
             progress.total_bytes = total_bytes;
             progress.status = TransferStatus::Transferring;
         }
@@ -954,72 +973,81 @@ impl P2PClient {
             P2PError::FileError(format!("Failed to create output directory: {}", e))
         })?;
 
-        // Download each file
-        let mut files_completed = 0usize;
-        let mut bytes_transferred = 0u64;
-
-        for mod_info in &pack_info.mods {
-            if self.stop_flag.load(Ordering::SeqCst) {
-                return Err(P2PError::Cancelled);
-            }
-
-            // Download main .pak file
-            let downloaded_bytes =
-                self.download_file(&mut stream, &mod_info.filename, &mod_info.hash, output_dir)?;
-            bytes_transferred += downloaded_bytes;
-            files_completed += 1;
-
-            {
-                let mut progress = self.progress.lock().unwrap();
-                progress.files_completed = files_completed;
-                progress.bytes_transferred = bytes_transferred;
-            }
-
-            // Download IoStore files
-            for io_file in &mod_info.iostore_files {
-                if self.stop_flag.load(Ordering::SeqCst) {
-                    return Err(P2PError::Cancelled);
-                }
-
-                let io_filename = mod_info
-                    .filename
-                    .replace(".pak", &format!(".{}", io_file.extension));
-
-                let downloaded_bytes =
-                    self.download_file(&mut stream, &io_filename, &io_file.hash, output_dir)?;
-                bytes_transferred += downloaded_bytes;
-                files_completed += 1;
-
-                {
-                    let mut progress = self.progress.lock().unwrap();
-                    progress.files_completed = files_completed;
-                    progress.bytes_transferred = bytes_transferred;
-                }
-            }
-        }
-
-        // Send goodbye
-        let goodbye = P2PMessage::Goodbye;
-        send_encrypted_message(&mut stream, &self.encryption_key, &goodbye)?;
-
-        // Update progress
-        {
-            let mut progress = self.progress.lock().unwrap();
-            progress.status = TransferStatus::Completed;
-        }
+        // repakxtra: files arrive in a private folder as .part (the game only loads .pak/.utoc/.ucas) and replace the
+        // installed mod only after every file arrived and matched its size and hash
+        let staging = output_dir.join(format!(
+            ".repakxtra-incoming-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_nanos())
+        ));
+        fs::create_dir(&staging)
+            .map_err(|e| P2PError::FileError(format!("Failed to create a receive folder: {}", e)))?;
+        let result = self.receive_into(&mut stream, &files, &staging, output_dir);
+        let _ = fs::remove_dir_all(&staging);
+        result?;
 
         info!("Download completed: {} files", pack_info.mods.len());
         Ok(pack_info)
     }
 
-    /// Download a single file
+    fn receive_into(
+        &self,
+        stream: &mut TcpStream,
+        files: &[IncomingFile],
+        staging: &Path,
+        output_dir: &Path,
+    ) -> P2PResult<()> {
+        let mut bytes_transferred = 0u64;
+        for (i, file) in files.iter().enumerate() {
+            if self.cancelled() {
+                return Err(P2PError::Cancelled);
+            }
+            let staged = staging.join(format!("{}.part", file.name));
+            bytes_transferred += self.download_file(stream, file, &staged, bytes_transferred)?;
+            let mut progress = self.progress.lock().unwrap();
+            progress.files_completed = i + 1;
+            progress.bytes_transferred = bytes_transferred;
+        }
+
+        // Send goodbye
+        let goodbye = P2PMessage::Goodbye;
+        send_encrypted_message(stream, &self.encryption_key, &goodbye)?;
+
+        // Past this point the move into the mods folder finishes or undoes itself; Cancel no longer applies
+        if self.cancelled() {
+            return Err(P2PError::Cancelled);
+        }
+        {
+            let mut progress = self.progress.lock().unwrap();
+            progress.status = TransferStatus::Verifying;
+        }
+        let moves: Vec<(PathBuf, PathBuf)> = files
+            .iter()
+            .map(|f| (staging.join(format!("{}.part", f.name)), output_dir.join(&f.name)))
+            .collect();
+        match crate::xtra_bundle::replace_all(&moves) {
+            Ok(Some(trash_id)) => info!("Replaced files are in Recently deleted ({})", trash_id),
+            Ok(None) => {}
+            Err(e) => return Err(P2PError::FileError(e)),
+        }
+        Ok(())
+    }
+
+    fn read_message(&self, stream: &mut TcpStream) -> P2PResult<Vec<u8>> {
+        read_encrypted_message_with(stream, &self.encryption_key, Some(&*self.stop_flag), CLIENT_MAX_MESSAGE)
+            .map_err(|e| self.or_cancelled(e))
+    }
+
+    /// Downloads one file to `staged` (a new file), checking each chunk's name, offset and the declared size.
     fn download_file(
         &self,
         stream: &mut TcpStream,
-        filename: &str,
-        expected_hash: &str,
-        output_dir: &Path,
+        file: &IncomingFile,
+        staged: &Path,
+        bytes_before: u64,
     ) -> P2PResult<u64> {
+        let filename = file.name.as_str();
         // Update progress
         {
             let mut progress = self.progress.lock().unwrap();
@@ -1032,78 +1060,82 @@ impl P2PClient {
         };
         send_encrypted_message(stream, &self.encryption_key, &request)?;
 
-        // Create output file
-        let output_path = output_dir.join(filename);
-        let file = File::create(&output_path)
+        let out = File::options()
+            .write(true)
+            .create_new(true)
+            .open(staged)
             .map_err(|e| P2PError::FileError(format!("Failed to create file: {}", e)))?;
-        let mut writer = BufWriter::new(file);
+        let mut writer = BufWriter::new(out);
         let mut hasher = Sha256::new();
         let mut total_received = 0u64;
 
-        // Receive chunks
+        // Chunks until TransferComplete (a zero-byte file has no chunk at all)
         loop {
-            let chunk_data = read_encrypted_message(stream, &self.encryption_key)?;
-            let msg: P2PMessage = bincode::deserialize(&chunk_data)
+            if self.cancelled() {
+                return Err(P2PError::Cancelled);
+            }
+            let data = self.read_message(stream)?;
+            let msg: P2PMessage = bincode::deserialize(&data)
                 .map_err(|e| P2PError::ProtocolError(format!("Invalid chunk: {}", e)))?;
 
             match msg {
                 P2PMessage::FileChunk {
-                    filename: _,
-                    offset: _,
+                    filename: chunk_name,
+                    offset,
                     data,
-                    is_last,
+                    is_last: _,
                 } => {
+                    if chunk_name != filename || offset != total_received {
+                        return Err(P2PError::ProtocolError(format!(
+                            "Unexpected chunk for {} at {} while receiving {} at {}",
+                            chunk_name, offset, filename, total_received
+                        )));
+                    }
+                    let after = total_received
+                        .checked_add(data.len() as u64)
+                        .filter(|n| *n <= file.size)
+                        .ok_or_else(|| {
+                            P2PError::ValidationError(format!("{} is larger than the {} bytes it announced", filename, file.size))
+                        })?;
                     hasher.update(&data);
                     writer
                         .write_all(&data)
                         .map_err(|e| P2PError::FileError(format!("Failed to write: {}", e)))?;
-                    total_received += data.len() as u64;
+                    total_received = after;
+                    {
+                        let mut progress = self.progress.lock().unwrap();
+                        progress.bytes_transferred = bytes_before + total_received;
+                    }
 
                     // Send ACK
                     let ack = P2PMessage::Ack;
                     send_encrypted_message(stream, &self.encryption_key, &ack)?;
-
-                    if is_last {
-                        break;
+                }
+                P2PMessage::TransferComplete { filename: done_name, hash } => {
+                    writer
+                        .flush()
+                        .map_err(|e| P2PError::FileError(format!("Failed to flush: {}", e)))?;
+                    let computed_hash = hex::encode(hasher.finalize());
+                    if done_name != filename || total_received != file.size {
+                        return Err(P2PError::ValidationError(format!(
+                            "{} ended at {} of {} bytes",
+                            filename, total_received, file.size
+                        )));
                     }
+                    if computed_hash != hash || computed_hash != file.hash {
+                        return Err(P2PError::ValidationError(format!(
+                            "Hash mismatch for {}: expected {}, got {}",
+                            filename, file.hash, computed_hash
+                        )));
+                    }
+                    break;
                 }
                 P2PMessage::Error { message } => {
-                    // Clean up partial file
-                    drop(writer);
-                    let _ = fs::remove_file(&output_path);
                     return Err(P2PError::ProtocolError(message));
                 }
                 _ => {
                     return Err(P2PError::ProtocolError("Unexpected message".to_string()));
                 }
-            }
-        }
-
-        writer
-            .flush()
-            .map_err(|e| P2PError::FileError(format!("Failed to flush: {}", e)))?;
-
-        // Receive transfer complete and verify hash
-        let complete_data = read_encrypted_message(stream, &self.encryption_key)?;
-        let complete: P2PMessage = bincode::deserialize(&complete_data)
-            .map_err(|e| P2PError::ProtocolError(format!("Invalid complete message: {}", e)))?;
-
-        match complete {
-            P2PMessage::TransferComplete { filename: _, hash } => {
-                let computed_hash = hex::encode(hasher.finalize());
-                if computed_hash != hash || computed_hash != expected_hash {
-                    // Hash mismatch - delete the file
-                    let _ = fs::remove_file(&output_path);
-                    return Err(P2PError::ValidationError(format!(
-                        "Hash mismatch for {}: expected {}, got {}",
-                        filename, expected_hash, computed_hash
-                    )));
-                }
-            }
-            _ => {
-                return Err(P2PError::ProtocolError(
-                    "Expected TransferComplete".to_string(),
-                ));
             }
         }
 
@@ -1113,6 +1145,85 @@ impl P2PClient {
         );
         Ok(total_received)
     }
+}
+
+/// repakxtra: one file of an incoming pack, after its name and size were checked.
+#[derive(Debug, Clone, PartialEq)]
+pub struct IncomingFile {
+    pub name: String,
+    pub size: u64,
+    pub hash: String,
+}
+
+/// Most files one pack may hold, and most bytes in total (MAX_FILE_SIZE still caps each file).
+const MAX_PACK_FILES: usize = 3000;
+const MAX_PACK_BYTES: u64 = 64 * 1024 * 1024 * 1024;
+/// Largest message a receiver reads: a 1 MB chunk plus framing, or a pack description.
+const CLIENT_MAX_MESSAGE: usize = 16 * 1024 * 1024;
+const READ_POLL: Duration = Duration::from_secs(1);
+const READ_IDLE_LIMIT: Duration = Duration::from_secs(120);
+
+/// A file name a sender may use: one plain name Windows accepts (no folders, drive, stream, device name or trailing
+/// dot or space), so joining it to the mods folder can only name a file directly inside it.
+pub fn safe_file_name(name: &str) -> bool {
+    const RESERVED: [&str; 22] = [
+        "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
+        "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+    ];
+    let stem = name.split('.').next().unwrap_or("").to_ascii_lowercase();
+    !name.is_empty()
+        && name.len() <= 200
+        && name != "."
+        && name != ".."
+        && !name.ends_with('.')
+        && !name.ends_with(' ')
+        && !name.chars().any(|c| c.is_control() || "/\\:*?\"<>|".contains(c))
+        && !RESERVED.contains(&stem.as_str())
+}
+
+/// Checks a whole pack before anything is written and lists its files in download order: each mod is one .pak with
+/// at most one .utoc and one .ucas of the same name, sizes fit the limits, and no two names are the same file on
+/// Windows (case-insensitive).
+pub fn plan_receive(pack: &ShareableModPack) -> P2PResult<Vec<IncomingFile>> {
+    let bad = |m: String| Err(P2PError::ValidationError(m));
+    let mut files = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut total = 0u64;
+    for m in &pack.mods {
+        if !safe_file_name(&m.filename) || !m.filename.to_ascii_lowercase().ends_with(".pak") {
+            return bad(format!("The share has a file name that is not allowed: {:?}", m.filename));
+        }
+        let mut exts = Vec::new();
+        let mut list = vec![IncomingFile { name: m.filename.clone(), size: m.size, hash: m.hash.clone() }];
+        for io in &m.iostore_files {
+            let ext = io.extension.to_ascii_lowercase();
+            if !(ext == "utoc" || ext == "ucas") || exts.contains(&ext) {
+                return bad(format!("{} has an unexpected companion file: {:?}", m.filename, io.extension));
+            }
+            exts.push(ext.clone());
+            let name = crate::xtra_bundle::companion(Path::new(&m.filename), &ext)
+                .to_string_lossy()
+                .to_string();
+            list.push(IncomingFile { name, size: io.size, hash: io.hash.clone() });
+        }
+        for f in list {
+            if f.size > MAX_FILE_SIZE {
+                return bad(format!("{} is too large ({} bytes)", f.name, f.size));
+            }
+            if !seen.insert(f.name.to_lowercase()) {
+                return bad(format!("The share lists {} twice", f.name));
+            }
+            total = match total.checked_add(f.size) {
+                Some(t) if t <= MAX_PACK_BYTES => t,
+                _ => return bad("The share is larger than a receive allows".to_string()),
+            };
+            files.push(f);
+        }
+    }
+    if files.len() > MAX_PACK_FILES {
+        return bad(format!("The share has {} files, more than {}", files.len(), MAX_PACK_FILES));
+    }
+    Ok(files)
 }
 
 // ============================================================================
@@ -1155,27 +1266,50 @@ fn send_encrypted_message<T: Serialize>(
 
 /// Read an encrypted message from the stream
 fn read_encrypted_message(stream: &mut TcpStream, key: &[u8; 32]) -> P2PResult<Vec<u8>> {
-    // Read and verify magic bytes (manual loop for better diagnostics)
-    let mut magic = [0u8; 4];
-    let mut total_read = 0usize;
-    while total_read < 4 {
-        match stream.read(&mut magic[total_read..]) {
+    read_encrypted_message_with(stream, key, None, 100 * 1024 * 1024)
+}
+
+/// repakxtra: fills `buf`, treating read timeouts as polls: returns Cancelled once `stop` is set and gives up after
+/// READ_IDLE_LIMIT without a byte. With no stop flag a timeout is an error, as before.
+fn receive_full(stream: &mut TcpStream, buf: &mut [u8], stop: Option<&AtomicBool>, what: &str) -> P2PResult<()> {
+    let mut filled = 0usize;
+    let mut idle_since = std::time::Instant::now();
+    while filled < buf.len() {
+        if stop.is_some_and(|s| s.load(Ordering::SeqCst)) {
+            return Err(P2PError::Cancelled);
+        }
+        match stream.read(&mut buf[filled..]) {
             Ok(0) => {
                 return Err(P2PError::NetworkError(format!(
-                    "Connection closed after reading {}/4 magic bytes (got {:?})",
-                    total_read,
-                    &magic[..total_read]
-                )));
+                    "Connection closed after reading {}/{} bytes of {}",
+                    filled,
+                    buf.len(),
+                    what
+                )))
             }
-            Ok(n) => total_read += n,
-            Err(e) => {
-                return Err(P2PError::NetworkError(format!(
-                    "Read error after {}/4 magic bytes: {}",
-                    total_read, e
-                )));
+            Ok(n) => {
+                filled += n;
+                idle_since = std::time::Instant::now();
             }
+            Err(e)
+                if stop.is_some()
+                    && matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut)
+                    && idle_since.elapsed() < READ_IDLE_LIMIT => {}
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e) => return Err(P2PError::NetworkError(format!("Failed to read {}: {}", what, e))),
         }
     }
+    Ok(())
+}
+
+fn read_encrypted_message_with(
+    stream: &mut TcpStream,
+    key: &[u8; 32],
+    stop: Option<&AtomicBool>,
+    max_len: usize,
+) -> P2PResult<Vec<u8>> {
+    let mut magic = [0u8; 4];
+    receive_full(stream, &mut magic, stop, "magic bytes")?;
 
     if &magic != MAGIC_BYTES {
         return Err(P2PError::ProtocolError(format!(
@@ -1186,21 +1320,16 @@ fn read_encrypted_message(stream: &mut TcpStream, key: &[u8; 32]) -> P2PResult<V
 
     // Read length
     let mut len_bytes = [0u8; 4];
-    stream
-        .read_exact(&mut len_bytes)
-        .map_err(|e| P2PError::NetworkError(format!("Failed to read length: {}", e)))?;
+    receive_full(stream, &mut len_bytes, stop, "length")?;
     let len = u32::from_be_bytes(len_bytes) as usize;
 
-    if len > 100 * 1024 * 1024 {
-        // 100MB max message size
+    if len > max_len {
         return Err(P2PError::ProtocolError("Message too large".to_string()));
     }
 
     // Read encrypted data
     let mut encrypted = vec![0u8; len];
-    stream
-        .read_exact(&mut encrypted)
-        .map_err(|e| P2PError::NetworkError(format!("Failed to read data: {}", e)))?;
+    receive_full(stream, &mut encrypted, stop, "data")?;
 
     // Decrypt
     decrypt_data(key, &encrypted)
@@ -1394,5 +1523,203 @@ mod tests {
         assert_eq!(key, parsed_key);
         assert_eq!(ip, parsed_ip);
         assert_eq!(port, parsed_port);
+    }
+
+    // repakxtra: loopback receives through the real P2PClient. Every file lives in a fresh temp folder; servers listen
+    // on 127.0.0.1 port 0 only.
+
+    fn tmp(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("repakxtra-p2p-{}-{}", tag, std::process::id()));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    fn sha(data: &[u8]) -> String {
+        hex::encode(Sha256::digest(data))
+    }
+
+    fn one_mod(name: &str, data: &[u8]) -> ShareableModPack {
+        ShareableModPack {
+            name: "t".into(),
+            description: String::new(),
+            mods: vec![ShareableMod { filename: name.into(), size: data.len() as u64, hash: sha(data), iostore_files: vec![] }],
+            created_at: 0,
+            creator: None,
+        }
+    }
+
+    /// A sender that follows `script` after the handshake: it gets the stream and the key.
+    fn fake_sender<F>(pack: ShareableModPack, script: F) -> (String, [u8; 32])
+    where
+        F: FnOnce(&mut TcpStream, &[u8; 32]) + Send + 'static,
+    {
+        let key = generate_encryption_key();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        thread::spawn(move || {
+            let (mut s, _) = listener.accept().unwrap();
+            let _hello = read_encrypted_message(&mut s, &key).unwrap();
+            let welcome = P2PMessage::Welcome { protocol_version: PROTOCOL_VERSION, pack_info: pack };
+            send_encrypted_message(&mut s, &key, &welcome).unwrap();
+            script(&mut s, &key);
+        });
+        (addr, key)
+    }
+
+    fn send_chunk(s: &mut TcpStream, key: &[u8; 32], name: &str, offset: u64, data: &[u8]) {
+        let chunk = P2PMessage::FileChunk { filename: name.into(), offset, data: data.to_vec(), is_last: true };
+        send_encrypted_message(s, key, &chunk).unwrap();
+        let _ = read_encrypted_message(s, key);
+    }
+
+    #[test]
+    fn plan_receive_refuses_names_that_leave_the_folder() {
+        for bad in ["../outside.pak", "..\\outside.pak", "C:\\x.pak", "a/b.pak", "x.pak:stream", "CON.pak", "x.pak.", "x.txt", ""] {
+            assert!(plan_receive(&one_mod(bad, b"x")).is_err(), "accepted {:?}", bad);
+        }
+        let mut dup = one_mod("A.pak", b"x");
+        dup.mods.push(dup.mods[0].clone());
+        dup.mods[1].filename = "a.PAK".into();
+        assert!(plan_receive(&dup).is_err(), "case-equivalent duplicate");
+        let mut io = one_mod("Skin.v2_9999999_P.pak", b"x");
+        io.mods[0].iostore_files = vec![
+            IoStoreFile { extension: "utoc".into(), size: 1, hash: sha(b"t") },
+            IoStoreFile { extension: "ucas".into(), size: 1, hash: sha(b"c") },
+        ];
+        let names: Vec<String> = plan_receive(&io).unwrap().into_iter().map(|f| f.name).collect();
+        assert_eq!(names, ["Skin.v2_9999999_P.pak", "Skin.v2_9999999_P.utoc", "Skin.v2_9999999_P.ucas"]);
+        io.mods[0].iostore_files[1].extension = "exe".into();
+        assert!(plan_receive(&io).is_err(), "unknown companion extension");
+    }
+
+    #[test]
+    fn a_traversal_name_writes_nothing() {
+        let d = tmp("traversal");
+        let mods = d.join("mods");
+        fs::create_dir_all(&mods).unwrap();
+        fs::write(d.join("outside.pak"), b"sentinel").unwrap();
+        let (addr, key) = fake_sender(one_mod("../outside.pak", b"evil"), |s, k| {
+            // a sender that answers anyway: the receiver must never ask
+            if read_encrypted_message(s, k).is_ok() {
+                send_chunk(s, k, "../outside.pak", 0, b"evil");
+            }
+        });
+        let client = P2PClient::new(key, addr);
+        assert!(matches!(client.download_pack(&mods, None), Err(P2PError::ValidationError(_))));
+        assert_eq!(fs::read(d.join("outside.pak")).unwrap(), b"sentinel");
+        assert!(matches!(client.get_progress().status, TransferStatus::Failed(_)));
+        assert_eq!(fs::read_dir(&mods).unwrap().count(), 0, "no staging folder left behind");
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn more_bytes_than_announced_are_refused_and_the_old_file_stays() {
+        let d = tmp("oversize");
+        fs::write(d.join("M.pak"), b"original").unwrap();
+        let mut pack = one_mod("M.pak", b"x");
+        pack.mods[0].size = 1;
+        let (addr, key) = fake_sender(pack, |s, k| {
+            let _ = read_encrypted_message(s, k);
+            send_chunk(s, k, "M.pak", 0, b"thirteen bytes");
+        });
+        let client = P2PClient::new(key, addr);
+        assert!(matches!(client.download_pack(&d, None), Err(P2PError::ValidationError(_))));
+        assert_eq!(fs::read(d.join("M.pak")).unwrap(), b"original");
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_disconnect_mid_file_leaves_the_installed_mod_untouched() {
+        let d = tmp("disconnect");
+        fs::write(d.join("M.pak"), b"original").unwrap();
+        let data = vec![7u8; 64];
+        let (addr, key) = fake_sender(one_mod("M.pak", &data), |s, k| {
+            let _ = read_encrypted_message(s, k);
+            let chunk = P2PMessage::FileChunk { filename: "M.pak".into(), offset: 0, data: vec![7u8; 32], is_last: false };
+            send_encrypted_message(s, k, &chunk).unwrap();
+            // drop the connection halfway
+        });
+        let client = P2PClient::new(key, addr);
+        assert!(client.download_pack(&d, None).is_err());
+        assert_eq!(fs::read(d.join("M.pak")).unwrap(), b"original");
+        assert_eq!(fs::read_dir(&d).unwrap().count(), 1, "only the original file remains");
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn cancel_ends_a_stalled_read_within_two_seconds() {
+        let d = tmp("cancel");
+        let (addr, key) = fake_sender(one_mod("M.pak", b"data"), |s, k| {
+            let _ = read_encrypted_message(s, k);
+            thread::sleep(Duration::from_secs(10)); // never answers
+        });
+        let client = P2PClient::new(key, addr);
+        let stop = client.get_stop_flag();
+        let started = std::time::Instant::now();
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(800));
+            stop.store(true, Ordering::SeqCst);
+        });
+        assert!(matches!(client.download_pack(&d, None), Err(P2PError::Cancelled)));
+        assert!(started.elapsed() < Duration::from_millis(800) + Duration::from_secs(2), "took {:?}", started.elapsed());
+        assert_eq!(client.get_progress().status, TransferStatus::Cancelled);
+        assert!(!d.join("M.pak").exists());
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_refused_connection_ends_failed() {
+        let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port(); // closed again at once
+        let client = P2PClient::new(generate_encryption_key(), format!("127.0.0.1:{}", port));
+        assert!(client.download_pack(&tmp("refused"), None).is_err());
+        assert!(matches!(client.get_progress().status, TransferStatus::Failed(_)));
+    }
+
+    #[test]
+    fn a_dotted_iostore_bundle_round_trips_through_the_real_sender() {
+        let d = tmp("roundtrip");
+        let (src, dst) = (d.join("src"), d.join("dst"));
+        fs::create_dir_all(&src).unwrap();
+        fs::create_dir_all(&dst).unwrap();
+        fs::write(src.join("Skin.v2_9999999_P.pak"), b"pak").unwrap();
+        fs::write(src.join("Skin.v2_9999999_P.utoc"), b"utoc").unwrap();
+        fs::write(src.join("Skin.v2_9999999_P.ucas"), vec![9u8; CHUNK_SIZE + 5]).unwrap(); // two chunks
+        fs::write(src.join("Skin.ucas"), b"unrelated").unwrap();
+        let paths = vec![src.join("Skin.v2_9999999_P.pak")];
+        let pack = create_mod_pack("t".into(), String::new(), &paths, None).unwrap();
+        assert_eq!(pack.mods[0].iostore_files.len(), 2);
+        let mut path_map = HashMap::new();
+        for n in ["Skin.v2_9999999_P.pak", "Skin.v2_9999999_P.utoc", "Skin.v2_9999999_P.ucas"] {
+            path_map.insert(n.to_string(), src.join(n));
+        }
+        let key = generate_encryption_key();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let server = P2PServer {
+            listener: None,
+            session: ShareSession {
+                share_code: String::new(), encryption_key: String::new(), local_ip: String::new(), obfuscated_ip: String::new(),
+                port: 0, connection_string: String::new(), obfuscated_connection_string: String::new(), active: true,
+            },
+            mod_pack: pack,
+            mod_paths: path_map,
+            encryption_key: key,
+            stop_flag: Arc::new(AtomicBool::new(false)),
+            active_connections: Arc::new(Mutex::new(0)),
+        };
+        thread::spawn(move || {
+            let (s, a) = listener.accept().unwrap();
+            let _ = server.handle_connection(s, a);
+        });
+        let client = P2PClient::new(key, addr);
+        let got = client.download_pack(&dst, None).unwrap();
+        assert_eq!(got.mods.len(), 1);
+        assert_eq!(fs::read(dst.join("Skin.v2_9999999_P.utoc")).unwrap(), b"utoc");
+        assert_eq!(fs::read(dst.join("Skin.v2_9999999_P.ucas")).unwrap().len(), CHUNK_SIZE + 5);
+        assert!(!dst.join("Skin.ucas").exists());
+        assert_eq!(fs::read_dir(&dst).unwrap().count(), 3, "no staging folder left behind");
+        assert_eq!(client.get_progress().status, TransferStatus::Completed);
+        let _ = fs::remove_dir_all(&d);
     }
 }

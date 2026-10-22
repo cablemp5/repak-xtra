@@ -100,6 +100,15 @@ pub fn discard(dir: &Path, path: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Undoes one `discard`: moves the file back to `path` and drops its record. Used when a replacement that trashed the
+/// old files fails before the new ones are in place.
+pub fn put_back(dir: &Path, path: &Path) -> io::Result<()> {
+    let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    move_file(&dir.join(&name), path)?;
+    let _ = fs::remove_file(dir.join(format!("{name}.from")));
+    Ok(())
+}
+
 /// Deleting a mods subfolder: every file in it (and in its subfolders) goes to the trash first, one deletion per folder
 /// so files with the same name in two folders never collide, then the empty folders go. A file that cannot move stops it
 /// before any folder is removed; what already moved can be restored from Recently deleted. Returns the deletions' ids, so
