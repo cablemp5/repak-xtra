@@ -22,6 +22,7 @@ mod xtra_broken; // repakxtra: mods that will not work in the installed game ver
 mod xtra_nexus; // repakxtra: Nexus source from archive names
 mod xtra_offfiles; // repakxtra: .pak.off files install like .pak
 mod xtra_bundle; // repakxtra: a mod's pak/utoc/ucas found and moved as one set
+mod xtra_updater; // repakxtra: applies an update without string-built shell commands
 mod character_data;
 mod crash_monitor;
 mod discord_presence;
@@ -6142,7 +6143,11 @@ async fn download_update(
     info!("Starting update download from: {}", asset_url);
 
     // Create temp directory for the update
-    let temp_dir = std::env::temp_dir().join("repakxtra_update"); // repakxtra: not Repak X's
+    let temp_dir = crate::xtra_updater::update_dir(); // repakxtra: not Repak X's
+    // repakxtra: the name comes from the release listing: one plain file name, so the download stays in temp_dir
+    if !crate::p2p_sharing::safe_file_name(&asset_name) {
+        return Err(format!("Unexpected update file name: {asset_name}"));
+    }
     if temp_dir.exists() {
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
@@ -6282,10 +6287,8 @@ async fn download_update(
 async fn apply_update(downloaded_path: String, window: Window) -> Result<(), String> {
     info!("Applying update from: {}", downloaded_path);
 
-    let download_path = PathBuf::from(&downloaded_path);
-    if !download_path.exists() {
-        return Err("Downloaded update file not found".to_string());
-    }
+    // repakxtra: only a file this app downloaded into its own update folder, never any path the page passes
+    let download_path = crate::xtra_updater::owned_download(Path::new(&downloaded_path))?;
 
     // Get the current exe path and directory
     let exe_path =
@@ -6314,192 +6317,14 @@ async fn apply_update(downloaded_path: String, window: Window) -> Result<(), Str
 
     // Use runtime OS detection to create the appropriate updater script
     if cfg!(target_os = "windows") {
-        // Windows: Create .bat script
-        let updater_script_path = std::env::temp_dir().join("repakxtra_updater.bat"); // repakxtra: not Repak X's
-
-        let script_content = if is_zip {
-            format!(
-                r#"@echo off
-title RepakX Updater
-echo ============================================
-echo RepakX Portable Update
-echo ============================================
-echo.
-echo Waiting for RepakX to close...
-timeout /t 2 /nobreak >nul
-
-:waitloop
-tasklist /FI "PID eq {pid}" /NH 2>NUL | find /I "{exe_name}">NUL
-if "%ERRORLEVEL%"=="0" (
-    echo Still running, waiting...
-    timeout /t 1 /nobreak >nul
-    goto waitloop
-)
-
-echo RepakX closed. Starting update...
-echo.
-
-echo Extracting update archive...
-cd /d "{temp_dir}"
-
-:: Ensure extracted directory exists
-if not exist "{temp_dir}\extracted" mkdir "{temp_dir}\extracted"
-
-:: Use PowerShell to extract the ZIP
-powershell -NoProfile -Command "$ErrorActionPreference = 'Stop'; Expand-Archive -LiteralPath '{zip_path}' -DestinationPath '{temp_dir}\extracted' -Force" 2>nul
-if %ERRORLEVEL% NEQ 0 (
-    echo ERROR: Failed to extract update archive!
-    echo Please extract manually from: "{zip_path}"
-    echo To: "{app_dir}"
-    pause
-    exit /b 1
-)
-
-:: Check if extraction created a single subfolder (common with GitHub releases)
-set "EXTRACTED_DIR="
-set "FOLDER_COUNT=0"
-for /d %%i in ("{temp_dir}\extracted\*") do (
-    set "EXTRACTED_DIR=%%i"
-    set /a FOLDER_COUNT+=1
-)
-
-:: If exactly one subfolder exists and it contains an exe or dll, use that folder
-if "%FOLDER_COUNT%"=="1" (
-    if exist "%EXTRACTED_DIR%\*.exe" (
-        echo Found nested folder: "%EXTRACTED_DIR%"
-    ) else if exist "%EXTRACTED_DIR%\*.dll" (
-        echo Found nested folder: "%EXTRACTED_DIR%"
-    ) else (
-        set "EXTRACTED_DIR={temp_dir}\extracted"
-    )
-) else (
-    set "EXTRACTED_DIR={temp_dir}\extracted"
-)
-
-echo Source: "%EXTRACTED_DIR%"
-echo Destination: "{app_dir}"
-echo.
-
-:: repakxtra: the update must hold the app; otherwise nothing is copied and this version opens again, saying why
-if not exist "%EXTRACTED_DIR%\*.exe" (
-    echo ERROR: The update archive holds no app, so nothing was changed.
-    echo Download the release by hand from https://github.com/cablemp5/repak-xtra/releases
-    start "" "{exe_path}"
-    pause
-    exit /b 1
-)
-
-echo Copying new files...
-xcopy /E /Y /I /Q "%EXTRACTED_DIR%\*" "{app_dir}\" >nul
-if %ERRORLEVEL% NEQ 0 (
-    echo ERROR: Failed to copy update files!
-    echo Please copy manually from: "%EXTRACTED_DIR%"
-    echo To: "{app_dir}"
-    pause
-    exit /b 1
-)
-
-:: Remove stale artifacts that should not ship (legacy ue4-dds-tools, debug symbols, stale executables)
-if exist "{app_dir}\uassettool\ue4-dds-tools" rd /s /q "{app_dir}\uassettool\ue4-dds-tools" 2>nul
-del /q "{app_dir}\uassettool\*.pdb" 2>nul
-
-:: Flattening migration guard: the new layout places UAssetTool.dll at the root and removes the
-:: uassettool folder. Remove the old uassettool folder ONLY when the incoming
-:: release ships the exact marker (UAssetTool.dll) at the root AND no longer ships the folder.
-:: Hardcode the marker name -- NEVER match *.dll, because Oodle (oo2core/oodle*) DLLs also live
-:: in this folder and a wildcard would falsely "detect AOT" and delete a still-needed UAssetTool.exe.
-if exist "%EXTRACTED_DIR%\UAssetTool.dll" (
-    if not exist "%EXTRACTED_DIR%\uassettool" (
-        if exist "{app_dir}\uassettool" rd /s /q "{app_dir}\uassettool" 2>nul
-    )
-)
-
-:: These are always-wrong locations (never the resolved tool path) -- safe to clean unconditionally
-if exist "{app_dir}\UAssetTool.exe" del /f /q "{app_dir}\UAssetTool.exe" 2>nul
-if exist "{app_dir}\tools\UAssetTool.exe" del /f /q "{app_dir}\tools\UAssetTool.exe" 2>nul
-if exist "{app_dir}\tools\uassettool\UAssetTool.exe" del /f /q "{app_dir}\tools\uassettool\UAssetTool.exe" 2>nul
-
-echo Cleaning up temporary files...
-rd /s /q "{temp_dir}" 2>nul
-
-echo.
-echo ============================================
-echo Update complete!
-echo ============================================
-echo.
-echo Launching RepakX...
-timeout /t 2 /nobreak >nul
-start "" "{exe_path}"
-
-:: Self-delete and exit cleanly
-(goto) 2>nul & del "%~f0" & exit
-"#,
-                exe_name = exe_name,
-                pid = std::process::id(), // repakxtra: wait for this process only
-                temp_dir = download_path
-                    .parent()
-                    .unwrap_or(&std::env::temp_dir())
-                    .to_string_lossy()
-                    .replace('/', "\\"),
-                zip_path = download_path.to_string_lossy().replace('/', "\\"),
-                app_dir = app_dir.to_string_lossy().replace('/', "\\"),
-                exe_path = exe_path.to_string_lossy().replace('/', "\\"),
-            )
+        // repakxtra: a fixed PowerShell script gets every path through environment variables (xtra_updater.rs), so
+        // no folder name can change the command, and a failed copy puts the old files back
+        if is_zip {
+            crate::xtra_updater::launch_zip(&download_path, app_dir, &exe_path)?;
         } else {
-            format!(
-                r#"@echo off
-title RepakX Updater
-echo Waiting for RepakX to close...
-timeout /t 2 /nobreak >nul
-
-:waitloop
-tasklist /FI "PID eq {pid}" /NH 2>NUL | find /I "{exe_name}">NUL
-if "%ERRORLEVEL%"=="0" (
-    timeout /t 1 /nobreak >nul
-    goto waitloop
-)
-
-echo Running installer...
-start /wait "" "{installer_path}"
-
-echo Cleaning up...
-del "{installer_path}"
-
-:: Self-delete and exit cleanly
-(goto) 2>nul & del "%~f0" & exit
-"#,
-                exe_name = exe_name,
-                pid = std::process::id(), // repakxtra: wait for this process only
-                installer_path = download_path.to_string_lossy().replace('/', "\\"),
-            )
-        };
-
-        std::fs::write(&updater_script_path, &script_content)
-            .map_err(|e| format!("Failed to write updater script: {}", e))?;
-
-        info!(
-            "Created Windows updater script at: {:?}",
-            updater_script_path
-        );
-
-        // Launch the updater script
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x08000000;
-
-            std::process::Command::new("cmd")
-                .args([
-                    "/C",
-                    "start",
-                    "/MIN",
-                    "RepakX Updater",
-                    &updater_script_path.to_string_lossy(),
-                ])
-                .creation_flags(CREATE_NO_WINDOW)
-                .spawn()
-                .map_err(|e| format!("Failed to launch updater: {}", e))?;
+            crate::xtra_updater::launch_installer(&download_path)?;
         }
+        let _ = exe_name;
     } else if cfg!(target_os = "linux") {
         // Linux: Create .sh script
         let linux_script_path = std::env::temp_dir().join("repakxtra_updater.sh"); // repakxtra
