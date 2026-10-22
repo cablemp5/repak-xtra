@@ -211,6 +211,7 @@ export default function SharingPanel({ onClose, gamePath, installedMods, selecte
       return;
     }
     setCalculatingPreview(true);
+    let stale = false; // repakxtra: a slower answer for an older selection never replaces a newer one
     const timeout = setTimeout(async () => {
       try {
         const preview = await invoke<PackPreview>('p2p_create_mod_pack_preview', {
@@ -219,14 +220,14 @@ export default function SharingPanel({ onClose, gamePath, installedMods, selecte
           modPaths: Array.from(selectedModPaths),
           creator: creatorName
         });
-        setPackPreview(preview);
+        if (!stale) setPackPreview(preview);
       } catch (err) {
         console.error("Preview failed", err);
       } finally {
-        setCalculatingPreview(false);
+        if (!stale) setCalculatingPreview(false);
       }
     }, 300);
-    return () => clearTimeout(timeout);
+    return () => { stale = true; clearTimeout(timeout) };
   }, [selectedModPaths]);
 
   const handleStartSharing = async () => {

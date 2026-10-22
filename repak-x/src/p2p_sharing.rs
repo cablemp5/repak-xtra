@@ -432,22 +432,29 @@ pub struct PackPreview {
     pub file_count: usize,
 }
 
-/// Creates a lightweight preview of a mod pack (total size and file count)
+/// Creates a lightweight preview of a mod pack (total size and file count). repakxtra: sizes come from file metadata
+/// only, so changing the selection never reads the files (create_mod_pack hashes them once, when sharing starts).
 pub fn create_mod_pack_preview(
-    name: String,
-    description: String,
+    _name: String,
+    _description: String,
     mod_paths: &[PathBuf],
-    creator: Option<String>,
+    _creator: Option<String>,
 ) -> P2PResult<PackPreview> {
-    let pack = create_mod_pack(name, description, mod_paths, creator)?;
     let mut total_size = 0u64;
     let mut file_count = 0usize;
-    for m in &pack.mods {
-        total_size += m.size;
+    for path in mod_paths {
+        let meta = fs::metadata(path)
+            .map_err(|e| P2PError::FileError(format!("File not found: {} ({})", path.display(), e)))?;
+        if meta.len() > MAX_FILE_SIZE {
+            return Err(P2PError::FileError(format!("File too large: {} ({} bytes)", path.display(), meta.len())));
+        }
+        total_size += meta.len();
         file_count += 1;
-        for io in &m.iostore_files {
-            total_size += io.size;
-            file_count += 1;
+        for ext in ["ucas", "utoc"] {
+            if let Ok(m) = fs::metadata(crate::xtra_bundle::companion(path, ext)) {
+                total_size += m.len();
+                file_count += 1;
+            }
         }
     }
     Ok(PackPreview {
@@ -1665,6 +1672,17 @@ mod tests {
         assert!(started.elapsed() < Duration::from_millis(800) + Duration::from_secs(2), "took {:?}", started.elapsed());
         assert_eq!(client.get_progress().status, TransferStatus::Cancelled);
         assert!(!d.join("M.pak").exists());
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn preview_counts_companions_from_metadata() {
+        let d = tmp("preview");
+        fs::write(d.join("A.v2.pak"), vec![0u8; 10]).unwrap();
+        fs::write(d.join("A.v2.utoc"), vec![0u8; 5]).unwrap();
+        fs::write(d.join("A.ucas"), vec![0u8; 99]).unwrap(); // not A.v2's
+        let p = create_mod_pack_preview(String::new(), String::new(), &[d.join("A.v2.pak")], None).unwrap();
+        assert_eq!((p.file_count, p.total_size), (2, 15));
         let _ = fs::remove_dir_all(&d);
     }
 

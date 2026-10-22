@@ -258,7 +258,13 @@ impl UnifiedP2PManager {
         info!("[P2P] Starting share: {} ({} files)", name, paths.len());
 
         // Create mod pack metadata
-        let pack = crate::p2p_sharing::create_mod_pack(name.clone(), desc, &paths, creator)?;
+        // repakxtra: hashing reads every file, so it runs on a blocking thread instead of the async executor
+        let (pack_name, pack_paths) = (name.clone(), paths.clone());
+        let pack = tokio::task::spawn_blocking(move || {
+            crate::p2p_sharing::create_mod_pack(pack_name, desc, &pack_paths, creator)
+        })
+        .await
+        .map_err(|e| P2PError::FileError(format!("Hashing stopped: {}", e)))??;
 
         // Create TCP P2P server (binds port, generates encryption key)
         let server = crate::p2p_sharing::P2PServer::new(pack, paths)?;
