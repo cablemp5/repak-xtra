@@ -468,7 +468,7 @@ const DropZoneOverlay = ({
                             <div className="zone-icon">
                                 <MdInstallDesktop />
                             </div>
-                            <h2>Install Mods</h2>
+                            <h2>Install mods</h2>
                             <p>Drop files here to open the install panel with full configuration options for legacy .pak files from UE or single-pak old mods.</p>
                             <div className="zone-hint">
                                 Supports .pak, .pak.off, .zip, .rar, .7z, folders{/* repakxtra: .pak.off, and zips as they are */}
@@ -505,7 +505,7 @@ const DropZoneOverlay = ({
                                 data-dropzone="new-folder"
                             >
                                 <VscNewFolder />
-                                <span>{hoveredZone === 'new-folder' ? 'Drop to create new folder' : 'Drop here → New Folder'}</span>
+                                <span>{hoveredZone === 'new-folder' ? 'Drop to create new folder' : 'Drop here for a new folder'}</span>
                             </div>
 
                             <div className="folder-tree-wrapper">

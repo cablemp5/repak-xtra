@@ -203,8 +203,8 @@ export default function ToolsPanel({ onClose, onOpenAssetExplorer, projectGalact
             uiLog.info('Tools', `Signature bypass is now ${newStatus.toLowerCase()}`);
             setSigBypasserStatusMsg(
                 newStatus === 'Enabled'
-                    ? 'Sig Bypasser enabled'
-                    : 'Sig Bypasser disabled'
+                    ? 'Signature bypass on'
+                    : 'Signature bypass off'
             );
         } catch (error) {
             uiLog.error('Tools', `Could not toggle the signature bypass: ${error}`);
@@ -267,15 +267,15 @@ export default function ToolsPanel({ onClose, onOpenAssetExplorer, projectGalact
         {
             id: 'sig-bypasser',
             icon: MdRemoveModerator,
-            title: 'Sig Bypasser',
+            title: 'Signature bypass',
             description: 'Toggles the signature checks bypass.',
             onClick: handleToggleSigBypasser,
             busy: isTogglingSigBypasser,
             disabled: isTogglingSigBypasser || sigBypasserState === 'NotInstalled',
             state: sigBypasserState === 'Enabled'
-                ? { tone: 'on', label: 'Enabled' }
+                ? { tone: 'on', label: 'On' }
                 : sigBypasserState === 'Disabled'
-                    ? { tone: 'off', label: 'Disabled' }
+                    ? { tone: 'off', label: 'Off' }
                     : { tone: 'unknown', label: 'Not Installed' },
             message: sigBypasserStatusMsg
         },
@@ -290,8 +290,8 @@ export default function ToolsPanel({ onClose, onOpenAssetExplorer, projectGalact
             state: !projectGalactaMod
                 ? { tone: 'unknown', label: 'Not Found' }
                 : projectGalactaMod.enabled
-                    ? { tone: 'on', label: 'Enabled' }
-                    : { tone: 'off', label: 'Disabled' },
+                    ? { tone: 'on', label: 'On' }
+                    : { tone: 'off', label: 'Off' },
             message: galactaStatusMsg
         },
         {
@@ -303,8 +303,8 @@ export default function ToolsPanel({ onClose, onOpenAssetExplorer, projectGalact
             busy: isSkippingLauncher,
             disabled: isSkippingLauncher,
             state: isLauncherPatchEnabled
-                ? { tone: 'on', label: 'Enabled' }
-                : { tone: 'off', label: 'Disabled' },
+                ? { tone: 'on', label: 'On' }
+                : { tone: 'off', label: 'Off' },
             message: skipLauncherStatus
         },
         {
@@ -432,7 +432,7 @@ export default function ToolsPanel({ onClose, onOpenAssetExplorer, projectGalact
                             className="btn-primary"
                             style={{ padding: '0.4rem 1rem', fontSize: '0.9rem', minWidth: 'auto' }}
                         >
-                            Close
+                            Done
                         </button>
                     </div>
                 </motion.div>

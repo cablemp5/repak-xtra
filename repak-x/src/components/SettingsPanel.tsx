@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AnimatedThemeToggler } from './ui/AnimatedThemeToggler'
 import Checkbox from './ui/Checkbox'
-import { UiScaleSection, MotionSection, InstallingSection, HeaderButtonsSection, ModPrefs, resetUiPrefs } from '../custom/uiPrefs' // repakxtra
+import { UiScaleSection, MotionSection, InstallingSection, HeaderButtonsSection, ModPrefs, WarningPrefs, resetUiPrefs } from '../custom/uiPrefs' // repakxtra
 import RecentlyDeleted from '../custom/RecentlyDeleted' // repakxtra: Settings > Recently deleted
 import { useDialogFocus } from '../custom/dialogFocus' // repakxtra
 import TailInput from './ui/TailInput'
@@ -13,7 +13,8 @@ import {
   MdTune,
   MdPalette,
   MdHelpOutline,
-  MdRestoreFromTrash
+  MdRestoreFromTrash,
+  MdViewList
 } from "react-icons/md"
 import { FaDiscord, FaSteam } from "react-icons/fa"
 import { CgPerformance } from "react-icons/cg"
@@ -41,6 +42,7 @@ const ACCENT_COLORS = {
 const CATEGORIES = [
   { id: 'general', label: 'General', icon: MdTune },
   { id: 'interface', label: 'Interface', icon: MdPalette },
+  { id: 'library', label: 'Library', icon: MdViewList }, // repakxtra: Interface's mod and Library settings, its own page
   { id: 'trash', label: 'Recently deleted', icon: MdRestoreFromTrash }, // repakxtra
   { id: 'help', label: 'Help & Community', icon: MdHelpOutline }
 ] as const;
@@ -127,6 +129,15 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
     set(v)
     onSave({ [key]: v } as Partial<SettingsPayload>)
   }
+
+  // repakxtra: one Reset for the Interface and Library pages, at the end of each (it resets both)
+  const resetSection = <ResetInterface onReset={() => {
+    resetUiPrefs()
+    onSave({ hideSuffix: true, autoOpenDetails: false, showHeroIcons: true, showHeroBg: true, showModType: true,
+      showSubfolderMods: true, enableAnimations: true, holdToDelete: false, bypassGameRunningLock: false })
+    setHideSuffix(true); setAutoOpenDetails(false); setShowHeroIcons(true); setShowHeroBg(true); setShowModType(true)
+    setShowSubfolderMods(true); setEnableAnimations(true); setHoldToDelete(false); setBypassGameRunningLock(false)
+  }} />
 
   // Sync local state with props when opening/changing
   useEffect(() => {
@@ -344,10 +355,16 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                     <p className="setting-subtext">The hero art behind mods drifts slowly, and the drop zones pulse while you drag files in.</p>
                   </div>
                 } />
-                <InstallingSection />
                 <HeaderButtonsSection />
                 {/* repakxtra: no Theme section (dark only, accent fixed to the title's blue) */}
+                {resetSection}
+              </>
+            )}
 
+            {/* repakxtra: Library, split from Interface so neither page holds 26 switches */}
+            {activeCategory === 'library' && (
+              <>
+                <InstallingSection />
                 <div className="setting-section">{/* repakxtra: every badge and tag on a mod, in one place */}
                   <h3 className="setting-icon-label"><LuTags size={18} aria-hidden="true" />On each mod</h3>
                   <div className="setting-group">
@@ -369,6 +386,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                     <ModPrefs />
                   </div>
                 </div>
+                <WarningPrefs />{/* repakxtra */}
 
                 <div className="setting-section">
                   <h3 className="setting-icon-label"><LuLibrary size={18} aria-hidden="true" />Library</h3>
@@ -423,13 +441,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                     </div>
                   </div>
                 </div>
-                <ResetInterface onReset={() => {
-                  resetUiPrefs()
-                  onSave({ hideSuffix: true, autoOpenDetails: false, showHeroIcons: true, showHeroBg: true, showModType: true,
-                    showSubfolderMods: true, enableAnimations: true, holdToDelete: false, bypassGameRunningLock: false })
-                  setHideSuffix(true); setAutoOpenDetails(false); setShowHeroIcons(true); setShowHeroBg(true); setShowModType(true)
-                  setShowSubfolderMods(true); setEnableAnimations(true); setHoldToDelete(false); setBypassGameRunningLock(false)
-                }} />
+                {resetSection}
               </>
             )}
 
@@ -501,7 +513,7 @@ function ResetInterface({ onReset }: { onReset: () => void }) {
     <div className="setting-section">
       <h3 className="setting-icon-label"><LuRotateCcw size={18} aria-hidden="true" />Reset</h3>
       <div className="setting-group">
-        <p className="setting-hint">Puts every setting on this page back to how repakxtra starts. Your mods folder, launcher, loadouts and mods stay as they are.</p>
+        <p className="setting-hint">Puts every setting on the Interface and Library pages back to how repakxtra starts. Your mods folder, launcher, loadouts and mods stay as they are.</p>
         <div style={{ display: 'flex', gap: 8 }}>
           {!sure
             ? <button type="button" className="action-btn settings-reset-btn" onClick={() => setSure(true)}><LuRotateCcw size={15} aria-hidden="true" /> Reset to defaults</button>

@@ -4369,7 +4369,7 @@ async fn delete_folder(
     id: String,
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
-) -> Result<(), String> {
+) -> Result<Vec<String>, String> { // repakxtra: the trash ids of its files, for Undo
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let state = state.lock().unwrap();
     let game_path = &state.game_path;
@@ -4421,13 +4421,14 @@ async fn delete_folder(
         return Err(error_msg);
     }
 
-    if let Err(e) = xtra_trash::discard_tree(&folder_path) { // repakxtra: its mods go to Recently deleted (plain path: shown there)
-        let error_msg = format!("Failed to delete folder: {}", e);
-        toast_events::emit_folder_delete_failed(&window, &error_msg);
-        return Err(error_msg);
+    match xtra_trash::discard_tree(&folder_path) { // repakxtra: its mods go to Recently deleted (plain path: shown there)
+        Ok(ids) => Ok(ids),
+        Err(e) => {
+            let error_msg = format!("Failed to delete folder: {}", e);
+            toast_events::emit_folder_delete_failed(&window, &error_msg);
+            Err(error_msg)
+        }
     }
-
-    Ok(())
 }
 
 #[tauri::command]

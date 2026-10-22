@@ -117,7 +117,7 @@ const ClashPanel = ({ clashes, mods = [], onSetPriority, onToggleMod, onClose }:
                                                     {mod && onToggleMod && (
                                                         <div className="clash-toggle-wrapper">
                                                             <Switch
-                                                                title={isDisabled ? 'Enable mod' : 'Disable mod'}
+                                                                title={isDisabled ? 'Turn on' : 'Turn off'}
                                                                 size="sm"
                                                                 color="primary"
                                                                 checked={!isDisabled}

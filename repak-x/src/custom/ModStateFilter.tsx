@@ -1,4 +1,4 @@
-// repakxtra: All / On / Off switch next to the list title, plus Broken while any mod will not work in the
+// repakxtra: All / On / Off switch next to the list title, plus Problems (Broken and May crash) while any mod will not work in the
 // installed game version or may crash (custom/brokenMods.ts). When the tabs would not fit beside the title (a filter
 // lengthens it, or the sidebar or details panel narrows the header) they fold into one menu, like the view buttons, so
 // the header keeps to one row. The tabs stay in the page unseen then: the 1/2/3 keys still click them, and their width
@@ -19,7 +19,7 @@ type Props = {
   mods: { path: string; enabled?: boolean }[]
 }
 
-const BROKEN_TITLE = 'Mods that will not work in this game version, or may crash it. Hover a badge for why'
+const BROKEN_TITLE = 'Mods marked Broken (will not work in this game version) or May crash. Hover a badge for why'
 
 /** Whether the tabs fit beside the header's title and buttons, measured live. */
 function useFolded(tabs: React.RefObject<HTMLDivElement | null>) {
@@ -56,7 +56,7 @@ function useFolded(tabs: React.RefObject<HTMLDivElement | null>) {
 export default function ModStateFilter({ value, onChange, mods }: Props) {
   useBrokenVersion()
   const enabled = mods.filter(m => m.enabled).length
-  const shown = useUiPref('broken') // Settings can hide the Broken tab and badges
+  const shown = useUiPref('broken') // Settings can hide the Problems tab and badges
   const broken = shown ? mods.filter(m => verdictOf(m.path)).length : 0
   // the last broken mod fixed or removed: back to every mod rather than an empty list
   useEffect(() => { if (value === 'broken' && broken === 0) onChange('all') }, [value, broken]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -64,7 +64,7 @@ export default function ModStateFilter({ value, onChange, mods }: Props) {
     ['all', 'All', mods.length],
     ['enabled', 'On', enabled],
     ['disabled', 'Off', mods.length - enabled],
-    ...(broken ? [['broken', 'Broken', broken] as [ModState, string, number]] : []),
+    ...(broken ? [['broken', 'Problems', broken] as [ModState, string, number]] : []),
   ]
   const tabs = useRef<HTMLDivElement>(null)
   const folded = useFolded(tabs)

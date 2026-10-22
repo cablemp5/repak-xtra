@@ -102,13 +102,16 @@ pub fn discard(dir: &Path, path: &Path) -> io::Result<()> {
 
 /// Deleting a mods subfolder: every file in it (and in its subfolders) goes to the trash first, one deletion per folder
 /// so files with the same name in two folders never collide, then the empty folders go. A file that cannot move stops it
-/// before any folder is removed; what already moved can be restored from Recently deleted.
-pub fn discard_tree(folder: &Path) -> Result<(), String> {
-    discard_tree_in(&trash_dir(), folder)?;
-    fs::remove_dir_all(folder).map_err(|e| e.to_string())
+/// before any folder is removed; what already moved can be restored from Recently deleted. Returns the deletions' ids, so
+/// the frontend's Undo can put the whole folder back (restore recreates the folders the files came from).
+pub fn discard_tree(folder: &Path) -> Result<Vec<String>, String> {
+    let mut ids = Vec::new();
+    discard_tree_in(&trash_dir(), folder, &mut ids)?;
+    fs::remove_dir_all(folder).map_err(|e| e.to_string())?;
+    Ok(ids)
 }
 
-fn discard_tree_in(root: &Path, folder: &Path) -> Result<(), String> {
+fn discard_tree_in(root: &Path, folder: &Path, ids: &mut Vec<String>) -> Result<(), String> {
     // file_type() does not follow links: a junction or symlink inside is never walked into (its target may be outside
     // ~mods); remove_dir_all later removes only the link itself
     let mut files = Vec::new();
@@ -122,12 +125,13 @@ fn discard_tree_in(root: &Path, folder: &Path) -> Result<(), String> {
     }
     if !files.is_empty() {
         let dir = reserve_in(root, None)?;
+        ids.push(dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default());
         for f in &files {
             discard(&dir, f).map_err(|e| format!("{}: {e}", f.display()))?;
         }
     }
     for sub in &subs {
-        discard_tree_in(root, sub)?;
+        discard_tree_in(root, sub, ids)?;
     }
     Ok(())
 }
@@ -395,11 +399,13 @@ mod tests {
         let (mods, root, base) = roots("tree");
         put(&mods.join("Hulk/A_9999999_P.pak"), b"1");
         put(&mods.join("Hulk/Old/A_9999999_P.pak"), b"22"); // same name in a subfolder
-        discard_tree_in(&root, &mods.join("Hulk")).unwrap();
+        let mut ids = Vec::new();
+        discard_tree_in(&root, &mods.join("Hulk"), &mut ids).unwrap();
         fs::remove_dir_all(mods.join("Hulk")).unwrap();
         let list = list_in(&root);
         assert_eq!(list.len(), 2, "one deletion per folder: {list:?}");
-        restore_from(&root, &list.iter().map(|t| t.id.clone()).collect::<Vec<_>>()).unwrap();
+        assert_eq!(ids.len(), 2, "every deletion's id comes back for Undo");
+        restore_from(&root, &ids).unwrap();
         assert_eq!(fs::read(mods.join("Hulk/Old/A_9999999_P.pak")).unwrap(), b"22", "restored into the folder it was deleted from");
         assert!(mods.join("Hulk/A_9999999_P.pak").exists());
         let _ = fs::remove_dir_all(base);
@@ -413,7 +419,7 @@ mod tests {
         put(&mods.join("Hulk/A.pak"), b"a");
         let made = std::process::Command::new("cmd").args(["/C", "mklink", "/J"]).arg(mods.join("Hulk").join("link")).arg(base.join("outside")).output().unwrap();
         assert!(made.status.success(), "mklink /J failed");
-        discard_tree_in(&root, &mods.join("Hulk")).unwrap();
+        discard_tree_in(&root, &mods.join("Hulk"), &mut Vec::new()).unwrap();
         fs::remove_dir_all(mods.join("Hulk")).unwrap();
         assert!(base.join("outside/Keep.pak").exists(), "the junction's target is outside the folder and stays");
         assert_eq!(list_in(&root).len(), 1);

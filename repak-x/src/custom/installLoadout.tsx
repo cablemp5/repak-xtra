@@ -9,7 +9,7 @@ import { Plus, X } from 'lucide-react'
 import Checkbox from '../components/ui/Checkbox'
 import type { useAlert } from '../components/AlertHandler'
 import { normalizeModBaseName } from '../utils/format'
-import { type Mod, modKey, openLoadoutId, readLoadouts, useLoadouts, withMods, writeLoadouts } from './loadoutStore'
+import { type Mod, modKey, openLoadout, openLoadoutId, readLoadouts, useLoadouts, withMods, writeLoadouts } from './loadoutStore'
 import { plural } from './modName'
 import { PreviewsUnavailable, generatePreviews, previewSetKey, usePreviewsAvailable } from './previews'
 
@@ -185,7 +185,9 @@ export async function finishInstallLoadout(installed: Installed[], alert: Return
   const id = crypto.randomUUID()
   writeLoadouts([...readLoadouts(), { id, name: job.name, label: job.label || 'Other', scope: keys, on: keys }])
   const missing = landed.filter(l => !found(l)).length
-  alert.success(`Loadout ${job.name} created`, `${keys.length} mod${keys.length === 1 ? '' : 's'}${missing ? `; ${missing} could not be found` : ''}.${job.preview ? ' Generating its preview.' : ''}`)
+  // the end of an install: one click to the new loadout's page (its switch, mods and preview)
+  alert.success(`Loadout ${job.name} created`, `${keys.length} mod${keys.length === 1 ? '' : 's'}${missing ? `. ${missing} could not be found` : ''}.${job.preview ? ' Generating its preview.' : ''}`,
+    { duration: 10000, action: { label: 'Open', onClick: () => openLoadout(id) } })
   if (!job.preview) return
   const error = await generatePreviews({ paths: onDisk.map(m => m.path), set: previewSetKey(id), name: job.name, show: true })
   if (error) alert.warning('Preview not started', error)

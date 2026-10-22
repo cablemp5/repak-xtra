@@ -855,7 +855,7 @@ function AssetDetail({ node, index, conflicting, onClose, onRevealMod }: AssetDe
                             {mod.character_name && (
                                 <div><span>Character</span><span>{mod.character_name}</span></div>
                             )}
-                            <div><span>Format</span><span>{mod.is_iostore ? 'IO Store' : 'Legacy PAK'}</span></div>
+                            <div><span>Format</span><span>{mod.is_iostore ? 'IoStore' : 'Legacy PAK'}</span></div>
                             <div><span>Size</span><span>{formatFileSize(mod.total_size)}</span></div>
                             <div><span>Priority</span><span>{mod.priority}</span></div>
                         </div>

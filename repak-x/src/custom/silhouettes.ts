@@ -4,8 +4,10 @@ import bundledHeroes from '../data/character_data.json'
 import { modKey } from './loadoutStore'
 
 const SILHOUETTES = import.meta.glob<string>('./covers/silhouettes/*.webp', { eager: true, query: '?url', import: 'default' })
-// Names compare without a bracketed part or case: the classifier says "Iron Fist (lin Lie)" where the hero list says "Iron Fist"
-const norm = (name: string) => name.replace(/\s*\(.*\)\s*$/, '').trim().toLowerCase()
+/** A hero's name as shown: the classifier says "Iron Fist (lin Lie)" (the game's own name in brackets) where the hero list says "Iron Fist" */
+export const heroLabel = (name: string) => name.replace(/\s*\([^)]*\)\s*$/, '').trim()
+// Names compare without a bracketed part or case
+const norm = (name: string) => heroLabel(name).toLowerCase()
 const idOf = new Map((bundledHeroes as { name: string; id: string }[]).map(h => [norm(h.name), h.id]))
 
 /** The silhouette for a hero by name ("Black Panther", "Iron Fist (lin Lie)"), or undefined. */

@@ -271,7 +271,7 @@ export default function CreditsPanel({ onClose, version }: CreditsPanelProps) {
 
                 <div className="modal-footer">
                     <button onClick={onClose} className="btn-primary">
-                        Close
+                        Done
                     </button>
                 </div>
             </motion.div>
