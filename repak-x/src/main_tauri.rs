@@ -23,6 +23,7 @@ mod xtra_nexus; // repakxtra: Nexus source from archive names
 mod xtra_offfiles; // repakxtra: .pak.off files install like .pak
 mod xtra_bundle; // repakxtra: a mod's pak/utoc/ucas found and moved as one set
 mod xtra_updater; // repakxtra: applies an update without string-built shell commands
+mod xtra_conflicts; // repakxtra: conflict comparison by normalized asset path, cached file lists
 mod character_data;
 mod crash_monitor;
 mod discord_presence;
@@ -7551,13 +7552,19 @@ async fn check_mod_clashes(
     quiet: Option<bool>,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<Vec<ModClash>, String> {
-    use std::collections::HashMap;
-    let quiet = quiet == Some(true); // repakxtra: the background check (custom/conflicts.ts) stays out of Logs
-
-    let started = std::time::Instant::now();
     // repakxtra: only the path under the lock: the scan below no longer holds every other command up (it runs by itself
-    // in the background whenever enabled mods change)
-    let game_path = &state.lock().unwrap().game_path.clone();
+    // in the background whenever enabled mods change). It reads files and calls the native tool, so it runs on a
+    // blocking thread, one scan at a time (a second request waits, then mostly hits the file-list cache).
+    static ONE_SCAN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    let game_path = state.lock().unwrap().game_path.clone();
+    let _turn = ONE_SCAN.lock().await;
+    tokio::task::spawn_blocking(move || scan_mod_clashes(quiet == Some(true), &game_path))
+        .await
+        .map_err(|e| format!("Conflict check stopped: {e}"))?
+}
+
+fn scan_mod_clashes(quiet: bool, game_path: &Path) -> Result<Vec<ModClash>, String> {
+    let started = std::time::Instant::now();
 
     if !quiet { // repakxtra
     ui_log::info("Conflicts", "Checking enabled mods for file conflicts...");
@@ -7568,15 +7575,7 @@ async fn check_mod_clashes(
         return Err("Game path does not exist".to_string());
     }
 
-    // Structure to hold mod info for clash detection
-    #[derive(Clone)]
-    struct ModInfo {
-        path: PathBuf,
-        priority: usize,
-        files: Vec<String>, // List of files inside this mod
-    }
-
-    let mut mods_info: Vec<ModInfo> = Vec::new();
+    let mut mods_info: Vec<crate::xtra_conflicts::Container> = Vec::new();
 
     // Scan all enabled mods
     for entry in WalkDir::new(&game_path).into_iter().filter_map(|e| e.ok()) {
@@ -7620,18 +7619,17 @@ async fn check_mod_clashes(
         utoc_path.set_extension("utoc");
         let is_iostore = utoc_path.exists();
 
-        // Get file list
-        let files: Vec<String> = if is_iostore {
-            use crate::utoc_utils::read_utoc;
-            read_utoc(&utoc_path)
-                .iter()
-                .map(|entry| entry.file_path.clone())
-                .collect()
-        } else {
-            match uasset_toolkit::list_pak_files(
-                path.to_str().unwrap_or_default(),
-                Some(crate::install_mod::AES_KEY_HEX),
-            ) {
+        // Get file list (repakxtra: cached until the container changes)
+        let listed = crate::xtra_conflicts::files_cached(path, is_iostore.then_some(utoc_path.as_path()), || {
+            if is_iostore {
+                Ok(crate::utoc_utils::read_utoc(&utoc_path).iter().map(|entry| entry.file_path.clone()).collect())
+            } else {
+                uasset_toolkit::list_pak_files(path.to_str().unwrap_or_default(), Some(crate::install_mod::AES_KEY_HEX))
+                    .map_err(|e| e.to_string())
+            }
+        });
+        let files = {
+            match listed {
                 Ok(f) => f,
                 Err(e) => {
                     if !quiet { ui_log::warn( // repakxtra
@@ -7647,7 +7645,7 @@ async fn check_mod_clashes(
             }
         };
 
-        mods_info.push(ModInfo {
+        mods_info.push(crate::xtra_conflicts::Container {
             path: path.to_path_buf(),
             priority,
             files,
@@ -7657,56 +7655,21 @@ async fn check_mod_clashes(
     let analyzed = mods_info.len();
     if !quiet { ui_log::debug("Conflicts", format!("Analyzed {} enabled mod(s)", analyzed)); } // repakxtra
 
-    // Don't group by character - instead, compare all mods at the same priority level
-    // Group by priority first
-    let mut by_priority: HashMap<usize, Vec<ModInfo>> = HashMap::new();
-
-    for mod_info in mods_info {
-        by_priority
-            .entry(mod_info.priority)
-            .or_insert_with(Vec::new)
-            .push(mod_info);
-    }
-
-    // Find clashes: same priority and overlapping files
+    // repakxtra: same priority and overlapping assets, compared by normalized path (xtra_conflicts::find)
     let mut clashes: Vec<ModClash> = Vec::new();
     use std::collections::HashSet;
 
-    for (priority, same_priority_mods) in by_priority {
-        if same_priority_mods.len() < 2 {
-            continue;
-        }
-
-        info!(
-            "Checking priority {} with {} mods",
-            priority,
-            same_priority_mods.len()
-        );
-
-        // Compare each pair of mods at this priority level
-        for i in 0..same_priority_mods.len() {
-            for j in (i + 1)..same_priority_mods.len() {
-                let mod1 = &same_priority_mods[i];
-                let mod2 = &same_priority_mods[j];
-
-                // Convert file lists to HashSets for efficient intersection
-                let files1: HashSet<&String> = mod1.files.iter().collect();
-                let files2: HashSet<&String> = mod2.files.iter().collect();
-
-                // Find overlapping files, excluding metadata files like 'patched_files'
-                let overlapping_files: Vec<String> = files1
-                    .intersection(&files2)
-                    .filter(|f| !f.ends_with("patched_files") && !f.contains("/patched_files"))
-                    .map(|s| (*s).clone())
-                    .collect();
-
-                if !overlapping_files.is_empty() {
+    for (i, j, overlapping_files) in crate::xtra_conflicts::find(&mods_info) {
+        let (mod1, mod2) = (&mods_info[i], &mods_info[j]);
+        let priority = mod1.priority;
+        {
+            {
+                {
                     // Found a clash! These two mods modify the same files
                     let mod_paths = vec![
                         mod1.path.to_string_lossy().to_string(),
                         mod2.path.to_string_lossy().to_string(),
                     ];
-
                     // Build a description showing which characters are affected
                     let mut affected_characters = HashSet::new();
 
