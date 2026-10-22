@@ -3539,11 +3539,11 @@ async fn update_mod(
 
     info!("Preserved install subfolder: {}", install_subfolder);
 
-    // Migrate the old mod's custom tags
+    // Migrate the old mod's custom tags (repakxtra: moved only once the new version is in place)
+    let old_key = get_mod_key(&actual_old_path);
     let old_custom_tags = {
-        let mut state_guard = state.lock().unwrap();
-        let old_key = get_mod_key(&actual_old_path);
-        state_guard.mod_tags.remove(&old_key).unwrap_or_default()
+        let state_guard = state.lock().unwrap();
+        state_guard.mod_tags.get(&old_key).cloned().unwrap_or_default()
     };
 
     // (Deprecated old metadata)
@@ -3567,51 +3567,13 @@ async fn update_mod(
         .unwrap_or_else(|| "Unknown".to_string());
 
     // ========================================================================
-    // Step 2: Delete the old mod files
+    // Step 2 (repakxtra): nothing is deleted up front. The install below builds the new version in a private folder
+    // and swaps it in, moving a same-named old copy to Recently deleted. A new version under a different name leaves
+    // the old one in place until the install succeeded (step 4 moves it then).
     // ========================================================================
-
-    info!("Deleting old mod files...");
-    let trash = xtra_trash::reserve(None)?; // repakxtra: the replaced version goes to Recently deleted, not gone for good
-
-    // Delete main file
-    let mut old_deleted = false;
-    if actual_old_path.exists() {
-        if let Err(e) = xtra_trash::discard(&trash, &actual_old_path) { // repakxtra
-            warn!("Failed to delete old mod file: {}", e);
-        } else {
-            old_deleted = true;
-            info!("Deleted old mod file: {:?}", actual_old_path);
-        }
-    }
-
-    // Delete associated IoStore files (.ucas and .utoc)
-    // Base path is always the .pak version
-    let base_pak_path = if was_disabled {
-        let path_str = actual_old_path.to_string_lossy();
-        let clean = path_str
-            .trim_end_matches(".bak_repak")
-            .trim_end_matches("_disabled");
-        if clean.ends_with(".pak") {
-            PathBuf::from(clean)
-        } else {
-            PathBuf::from(format!("{}.pak", clean))
-        }
-    } else {
-        actual_old_path.clone()
-    };
-
-    for ext in &["ucas", "utoc"] {
-        let companion_path = base_pak_path.with_extension(ext);
-        if companion_path.exists() {
-            if let Err(e) = xtra_trash::discard(&trash, &companion_path) { // repakxtra
-                warn!("Failed to delete .{} file: {}", ext, e);
-            } else {
-                info!("Deleted associated .{} file: {:?}", ext, companion_path);
-            }
-        }
-    }
-
-    xtra_trash::release_if_empty(&trash); // repakxtra: nothing was there to keep
+    let old_files: Vec<PathBuf> = std::iter::once(actual_old_path.clone())
+        .chain(crate::xtra_bundle::existing_companions(&actual_old_path))
+        .collect();
 
     // ========================================================================
     // Step 3: Install the new mod
@@ -3711,10 +3673,27 @@ async fn update_mod(
             .join(&new_mod_filename)
     };
 
+    // repakxtra: a new version under another name left the old files where they were: they go to Recently deleted now
+    let mut old_deleted = old_files.iter().all(|p| !p.exists());
+    let leftover: Vec<&PathBuf> = old_files.iter().filter(|p| p.exists()).collect();
+    if !leftover.is_empty() {
+        match xtra_trash::reserve(None) {
+            Ok(trash) => {
+                old_deleted = leftover.iter().all(|p| xtra_trash::discard(&trash, p).is_ok());
+                xtra_trash::release_if_empty(&trash);
+            }
+            Err(e) => warn!("Failed to move the old version aside: {}", e),
+        }
+        if !old_deleted {
+            warn!("The old version is still installed next to the new one");
+        }
+    }
+
     {
         let mut state_guard = state.lock().unwrap();
         let new_key = get_mod_key(&new_mod_path);
         if !old_custom_tags.is_empty() {
+            state_guard.mod_tags.remove(&old_key);
             state_guard.mod_tags.insert(new_key, old_custom_tags);
             let _ = save_state(&state_guard);
         }
@@ -8569,6 +8548,8 @@ fn main() {
     character_data::refresh_cache();
 
     let state = Arc::new(Mutex::new(load_state()));
+    // repakxtra: a half-built install or receive from a run that was closed midway is never left for the game to load
+    crate::xtra_bundle::sweep_staging(&state.lock().unwrap().game_path);
     let watcher_state = WatcherState {
         watcher: Mutex::new(None),
         last_event_time: Mutex::new(std::time::Instant::now()),

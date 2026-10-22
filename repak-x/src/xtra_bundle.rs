@@ -71,7 +71,18 @@ pub fn move_all(moves: &[(PathBuf, PathBuf)]) -> Result<(), String> {
 /// (returned: that deletion's trash id), so a replaced mod can be restored. If anything fails, the old files are put
 /// back and the staged files stay where they were.
 pub fn replace_all(moves: &[(PathBuf, PathBuf)]) -> Result<Option<String>, String> {
-    let old: Vec<&PathBuf> = moves.iter().map(|(_, d)| d).filter(|d| d.exists()).collect();
+    replace_all_retiring(moves, &[])
+}
+
+/// `replace_all`, also moving `retire` (other files of the replaced mod, such as its off copy or another priority's
+/// name) to the same Recently deleted entry.
+pub fn replace_all_retiring(moves: &[(PathBuf, PathBuf)], retire: &[PathBuf]) -> Result<Option<String>, String> {
+    let mut old: Vec<&PathBuf> = moves.iter().map(|(_, d)| d).filter(|d| d.exists()).collect();
+    for r in retire {
+        if r.exists() && !old.iter().any(|o| same_name(o, r)) {
+            old.push(r);
+        }
+    }
     if old.is_empty() {
         return move_all(moves).map(|_| None);
     }
@@ -96,6 +107,33 @@ fn replace_with(moves: &[(PathBuf, PathBuf)], old: &[&PathBuf], dir: &Path) -> R
         return Err(e);
     }
     Ok(dir.file_name().map(|n| n.to_string_lossy().to_string()))
+}
+
+/// A new private folder inside `parent` for files that are not ready yet (same drive, so moving them in is a rename).
+/// Its name starts with a dot and `sweep_staging` removes leftovers from a run that was closed midway.
+pub fn staging_dir(parent: &Path, tag: &str) -> Result<PathBuf, String> {
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+    let dir = parent.join(format!(".repakxtra-{}-{}-{}", tag, std::process::id(), t));
+    fs::create_dir(&dir).map_err(|e| format!("Could not create {}: {}", dir.display(), e))?;
+    Ok(dir)
+}
+
+/// Removes staging folders a closed or crashed run left under `mods` (one level of subfolders deep), so the game
+/// never loads a half-built copy. Only names `staging_dir` makes are touched; the replaced files are in the trash.
+pub fn sweep_staging(mods: &Path) {
+    let is_staging = |n: &str| ["installing", "incoming"].iter().any(|t| n.starts_with(&format!(".repakxtra-{}-", t)));
+    let mut dirs = vec![mods.to_path_buf()];
+    if let Ok(rd) = fs::read_dir(mods) {
+        dirs.extend(rd.flatten().filter(|e| e.file_type().map_or(false, |t| t.is_dir())).map(|e| e.path()));
+    }
+    for d in dirs {
+        for e in fs::read_dir(&d).into_iter().flatten().flatten() {
+            let name = e.file_name().to_string_lossy().to_string();
+            if is_staging(&name) && e.file_type().map_or(false, |t| t.is_dir()) {
+                let _ = fs::remove_dir_all(e.path());
+            }
+        }
+    }
 }
 
 #[cfg(test)]

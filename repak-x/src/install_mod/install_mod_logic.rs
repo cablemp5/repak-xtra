@@ -144,9 +144,11 @@ fn ensure_mod_not_locked(output_dir: &Path, base_name: &str) -> Result<(), Strin
     Ok(())
 }
 
-/// Clean up any existing variants of a mod file (.bak_repak, .pak_disabled) before installing
-/// This prevents duplicate entries when reinstalling a toggled-off mod
-fn cleanup_existing_mod_variants(output_dir: &Path, base_name: &str) {
+/// The installed files a (re)install of `base_name` replaces: its on and off copies (.bak_repak, .pak_disabled), its
+/// IoStore files, and copies of the same mod under another priority suffix. repakxtra: this only lists them. The
+/// install builds the new files first and `install_staged` moves these to Recently deleted as it swaps the new ones in.
+fn existing_mod_variants(output_dir: &Path, base_name: &str) -> Vec<PathBuf> {
+    let mut found = Vec::new();
     let variants = [
         format!("{}.pak", base_name),
         format!("{}.bak_repak", base_name),
@@ -156,18 +158,11 @@ fn cleanup_existing_mod_variants(output_dir: &Path, base_name: &str) {
     for variant in &variants {
         let path = output_dir.join(variant);
         if path.exists() {
-            info!("Cleaning up existing mod variant: {}", path.display());
-            if let Err(e) = fs::remove_file(&path) {
-                warn!(
-                    "Failed to remove existing variant {}: {}",
-                    path.display(),
-                    e
-                );
-            }
+            found.push(path);
         }
     }
 
-    // Also clean up IoStore variants if they exist
+    // Also the IoStore variants
     let iostore_extensions = ["utoc", "ucas"];
     for ext in &iostore_extensions {
         let variants = [
@@ -178,14 +173,7 @@ fn cleanup_existing_mod_variants(output_dir: &Path, base_name: &str) {
         for variant in &variants {
             let path = output_dir.join(variant);
             if path.exists() {
-                info!("Cleaning up existing IoStore variant: {}", path.display());
-                if let Err(e) = fs::remove_file(&path) {
-                    warn!(
-                        "Failed to remove existing variant {}: {}",
-                        path.display(),
-                        e
-                    );
-                }
+                found.push(path);
             }
         }
     }
@@ -196,12 +184,12 @@ fn cleanup_existing_mod_variants(output_dir: &Path, base_name: &str) {
     // would show up as a duplicate entry rather than as a second mod.
     let (_, clean_base, _) = split_mod_name(base_name);
     if clean_base.is_empty() {
-        return;
+        return found;
     }
 
     let entries = match fs::read_dir(output_dir) {
         Ok(e) => e,
-        Err(_) => return,
+        Err(_) => return found,
     };
 
     for entry in entries.flatten() {
@@ -222,19 +210,31 @@ fn cleanup_existing_mod_variants(output_dir: &Path, base_name: &str) {
             continue;
         }
 
-        let path = entry.path();
-        info!(
-            "Cleaning up same-mod variant with a different priority suffix: {}",
-            path.display()
-        );
-        if let Err(e) = fs::remove_file(&path) {
-            warn!(
-                "Failed to remove existing variant {}: {}",
-                path.display(),
-                e
-            );
-        }
+        found.push(entry.path());
     }
+    found
+}
+
+/// repakxtra: installs without ever leaving the mod missing. `build` writes the new files into a private folder; only
+/// when it succeeds are they swapped in, with the replaced copy (`existing_mod_variants`) moved to Recently deleted in
+/// the same step. A failed build or swap leaves the installed copy exactly as it was.
+fn install_staged(output_dir: &Path, base: &str, build: impl FnOnce(&Path) -> Result<(), String>) -> Result<(), String> {
+    let staging = crate::xtra_bundle::staging_dir(output_dir, "installing")?;
+    let result = build(&staging).and_then(|_| {
+        let moves: Vec<(PathBuf, PathBuf)> = fs::read_dir(&staging)
+            .map_err(|e| e.to_string())?
+            .flatten()
+            .filter(|e| e.file_type().map_or(false, |t| t.is_file()))
+            .map(|e| (e.path(), output_dir.join(e.file_name())))
+            .collect();
+        if moves.is_empty() {
+            return Err("The install produced no files".to_string());
+        }
+        let old = existing_mod_variants(output_dir, base);
+        crate::xtra_bundle::replace_all_retiring(&moves, &old).map(|_| ())
+    });
+    let _ = fs::remove_dir_all(&staging);
+    result
 }
 
 /// Recursively copy a directory and all its contents to a destination
@@ -343,10 +343,9 @@ pub fn install_mods_in_viewport(
             // Create the subfolder if it doesn't exist
             if !subfolder_path.exists() {
                 if let Err(e) = fs::create_dir_all(&subfolder_path) {
-                    error!(
-                        "Failed to create subfolder '{}': {}",
-                        installable_mod.install_subfolder, e
-                    );
+                    let msg = format!("Failed to create subfolder '{}': {}", installable_mod.install_subfolder, e);
+                    error!("{}", msg);
+                    results.push(ModInstallResult { mod_name: installable_mod.mod_name.clone(), success: false, error: Some(msg) });
                     continue;
                 }
                 info!("Created install subfolder: {}", subfolder_path.display());
@@ -406,7 +405,6 @@ pub fn install_mods_in_viewport(
                 });
                 continue;
             }
-            cleanup_existing_mod_variants(&output_directory, &base);
             let dests = vec![
                 (pak_path, format!("{}.pak", base)),
                 (utoc_path, format!("{}.utoc", base)),
@@ -414,17 +412,28 @@ pub fn install_mods_in_viewport(
             ];
 
             let mut copy_errors: Vec<String> = Vec::new();
-            for (src, dest_name) in dests {
-                crate::install_mod::write_install_debug(&format!(
-                    "  Copying {} -> {}",
-                    src.display(),
-                    dest_name
-                ));
-                if let Err(e) = std::fs::copy(&src, output_directory.join(&dest_name)) {
-                    error!("Unable to copy file {:?}: {:?}", src, e);
-                    crate::install_mod::write_install_debug(&format!("  ERROR copying: {}", e));
-                    copy_errors.push(format!("copy {}: {}", src.display(), e));
+            let staged = install_staged(&output_directory, &base, |staging| {
+                for (src, dest_name) in dests {
+                    crate::install_mod::write_install_debug(&format!(
+                        "  Copying {} -> {}",
+                        src.display(),
+                        dest_name
+                    ));
+                    if let Err(e) = std::fs::copy(&src, staging.join(&dest_name)) {
+                        error!("Unable to copy file {:?}: {:?}", src, e);
+                        crate::install_mod::write_install_debug(&format!("  ERROR copying: {}", e));
+                        copy_errors.push(format!("copy {}: {}", src.display(), e));
+                    }
                 }
+                if copy_errors.is_empty() { Ok(()) } else { Err(copy_errors.join("; ")) }
+            });
+            if let Err(e) = staged {
+                results.push(ModInstallResult {
+                    mod_name: installable_mod.mod_name.clone(),
+                    success: false,
+                    error: Some(e),
+                });
+                continue;
             }
             // Record tags for pickup by main app
             record_installed_tags(&base, &installable_mod.custom_tags);
@@ -459,14 +468,11 @@ pub fn install_mods_in_viewport(
                 });
                 continue;
             }
-            cleanup_existing_mod_variants(&output_directory, &base);
-
             // Use optimized path: UAssetTool extracts PAK internally, no Rust-side temp dir
-            match pak_files::create_repak_from_pak_fast(
-                installable_mod,
-                output_directory.clone(),
-                installed_mods_ptr,
-            ) {
+            let staged = install_staged(&output_directory, &base, |staging| {
+                pak_files::create_repak_from_pak_fast(installable_mod, staging.to_path_buf(), installed_mods_ptr)
+            });
+            match staged {
                 Err(e) => {
                     error!("Failed to create repak from pak: {}", e);
                     crate::install_mod::write_install_debug(&format!("  ERROR repak: {}", e));
@@ -498,11 +504,12 @@ pub fn install_mods_in_viewport(
             );
             let base = normalize_mod_base_name(&installable_mod.mod_name, BASE_MOD_NINES);
 
-            // Clean up any existing variants before installing
-            cleanup_existing_mod_variants(&output_directory, &base);
-
             let dest = output_directory.join(format!("{}.pak", &base));
-            match std::fs::copy(&installable_mod.mod_path, &dest) {
+            let src = installable_mod.mod_path.clone();
+            let file_name = format!("{}.pak", &base);
+            match install_staged(&output_directory, &base, |staging| {
+                std::fs::copy(&src, staging.join(&file_name)).map(|_| ()).map_err(|e| e.to_string())
+            }) {
                 Ok(_) => {
                     record_installed_tags(&base, &installable_mod.custom_tags);
                     installed_mods_ptr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -537,8 +544,6 @@ pub fn install_mods_in_viewport(
                 });
                 continue;
             }
-            cleanup_existing_mod_variants(&output_directory, &base);
-
             // Copy source directory to temp dir to avoid modifying original files
             let temp_dir = match tempfile::tempdir() {
                 Ok(dir) => dir,
@@ -569,12 +574,9 @@ pub fn install_mods_in_viewport(
             }
             info!("Copied mod files to temp directory for processing");
 
-            let res = convert_to_iostore_directory(
-                installable_mod,
-                output_directory.clone(),
-                temp_path,
-                installed_mods_ptr,
-            );
+            let res = install_staged(&output_directory, &base, |staging| {
+                convert_to_iostore_directory(installable_mod, staging.to_path_buf(), temp_path, installed_mods_ptr)
+            });
             // temp_dir is automatically cleaned up when it goes out of scope
             match res {
                 Err(e) => {
@@ -692,7 +694,7 @@ mod tests {
     }
 
     #[test]
-    fn cleanup_removes_other_priority_suffixes_of_same_mod() {
+    fn variants_list_other_priority_suffixes_of_same_mod() {
         let dir = tempfile::tempdir().unwrap();
         let stale = dir.path().join("Foo_99999999_P.pak");
         let stale_utoc = dir.path().join("Foo_99999999_P.utoc");
@@ -701,10 +703,25 @@ mod tests {
         fs::write(&stale_utoc, b"x").unwrap();
         fs::write(&other, b"x").unwrap();
 
-        cleanup_existing_mod_variants(dir.path(), "Foo_9999999_P");
+        let found = existing_mod_variants(dir.path(), "Foo_9999999_P");
 
-        assert!(!stale.exists(), "stale duplicate should be removed");
-        assert!(!stale_utoc.exists(), "stale companion should be removed");
-        assert!(other.exists(), "a different mod must be left alone");
+        assert!(found.contains(&stale), "stale duplicate is replaced");
+        assert!(found.contains(&stale_utoc), "stale companion is replaced");
+        assert!(!found.contains(&other), "a different mod must be left alone");
+        assert!(stale.exists(), "listing never deletes");
+    }
+
+    #[test]
+    fn a_failed_build_leaves_the_installed_mod_and_no_staging() {
+        let dir = tempfile::tempdir().unwrap();
+        let old = dir.path().join("Foo_9999999_P.pak");
+        fs::write(&old, b"old").unwrap();
+        let r = install_staged(dir.path(), "Foo_9999999_P", |staging| {
+            fs::write(staging.join("Foo_9999999_P.pak"), b"half").unwrap();
+            Err("conversion failed".to_string())
+        });
+        assert!(r.is_err());
+        assert_eq!(fs::read(&old).unwrap(), b"old");
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1, "staging folder removed");
     }
 }

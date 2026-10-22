@@ -982,14 +982,7 @@ impl P2PClient {
 
         // repakxtra: files arrive in a private folder as .part (the game only loads .pak/.utoc/.ucas) and replace the
         // installed mod only after every file arrived and matched its size and hash
-        let staging = output_dir.join(format!(
-            ".repakxtra-incoming-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |d| d.as_nanos())
-        ));
-        fs::create_dir(&staging)
-            .map_err(|e| P2PError::FileError(format!("Failed to create a receive folder: {}", e)))?;
+        let staging = crate::xtra_bundle::staging_dir(output_dir, "incoming").map_err(P2PError::FileError)?;
         let result = self.receive_into(&mut stream, &files, &staging, output_dir);
         let _ = fs::remove_dir_all(&staging);
         result?;
