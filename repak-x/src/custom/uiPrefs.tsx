@@ -293,14 +293,14 @@ export function InstallingSection() {
   )
 }
 
-/** Header buttons: the optional buttons at the top of the window. */
+/** Header buttons: which optional shortcuts are pinned at the top of the window (HeaderMore.tsx keeps them all reachable). */
 export function HeaderButtonsSection() {
   useAll()
   return (
     <div className="setting-section">
       <h3 className="setting-icon-label"><PanelTop size={18} aria-hidden="true" />Header buttons</h3>
       <div className="setting-group">
-        <p className="setting-hint">Which of the optional buttons show at the top of the window.</p>
+        <p className="setting-hint">Pins shortcuts as buttons of their own at the top of the window (Asset Explorer sits above the Library list). Share, Tools, Asset Explorer and VFX Updater stay in the header's More menu either way.</p>
         {PREFS.filter(p => p.group === 'header').map(p => <PrefBox key={p.key} k={p.key} label={p.label} />)}
       </div>
     </div>

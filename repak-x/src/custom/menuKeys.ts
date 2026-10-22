@@ -3,10 +3,11 @@ import { cue } from './sounds'
 
 // Keyboard use for the Library's right-click menu (components/ContextMenu.tsx): it opens with the first item focused,
 // arrows move, Right/Enter open a submenu, Left goes back, Enter or Space picks, Tab or Esc close, and focus returns
-// to where it was. Applied to the DOM so the menu's markup stays as upstream wrote it.
+// to where it was. Applied to the DOM so the menu's markup stays as upstream wrote it. The header's More menu
+// (HeaderMore.tsx) uses it too, with the quiet menu look (.sigeon-menu, .sigeon-item).
 
-const ITEM = '.context-menu-item'
-const LEVEL = '.context-menu, .submenu'
+const ITEM = '.context-menu-item, .sigeon-item'
+const LEVEL = '.context-menu, .submenu, .sigeon-menu'
 
 const levelOf = (el: Element) => el.parentElement?.closest<HTMLElement>(LEVEL) ?? null
 const itemsIn = (level: HTMLElement) =>

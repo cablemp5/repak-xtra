@@ -5,8 +5,9 @@ import { ChevronDown, FolderPlus } from 'lucide-react'
 import { OFF_EXT } from './offFiles'
 
 /** The Library's install control, in place of upstream's PAK | Folder pair: Install picks mod files (Ctrl+O), the arrow
- *  beside it holds Install a folder for raw or uasset mods. Dropping files or folders on the window still works. */
-export default function InstallButton({ onAddFiles, onAddFolder }: { onAddFiles: (files: string[]) => void; onAddFolder: (folders: string[]) => void }) {
+ *  beside it holds Install a folder for raw or uasset mods. Dropping files or folders on the window still works. Home has
+ *  one too (`tour` false): the tour and Ctrl+O use the Library's, which works from either view. */
+export default function InstallButton({ onAddFiles, onAddFolder, tour = true }: { onAddFiles: (files: string[]) => void; onAddFolder: (folders: string[]) => void; tour?: boolean }) {
   const [open, setOpen] = useState(false)
   const wrap = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -29,8 +30,8 @@ export default function InstallButton({ onAddFiles, onAddFolder }: { onAddFiles:
   }
 
   return (
-    <div className="install-btn" ref={wrap} data-tour="add-mod-btn">
-      <button type="button" className="install-btn-main" data-tour="install-btn" onClick={() => choose(false)}
+    <div className="install-btn" ref={wrap} data-tour={tour ? 'add-mod-btn' : undefined}>
+      <button type="button" className="install-btn-main" data-tour={tour ? 'install-btn' : undefined} onClick={() => choose(false)}
         title="Install mods (Ctrl+O). You can also drop .pak, .zip, .rar or .7z files anywhere on the window">
         <GrInstall size={16} /> Install
       </button>

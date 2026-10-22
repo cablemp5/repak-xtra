@@ -7,6 +7,10 @@ let watched: HTMLElement | null = null
 let lastRoom = 0
 let lastShown = false // the Library was on screen at the last change: a view switch is not the bar opening
 let clicked: HTMLElement | null = null // the mod row the pointer last pressed (the click that opened or closed the bar)
+// The bar opened or closed since the Library was last hidden. Showing the Library again replays the bar's opening,
+// which is no checked change: the list kept its place (the Library tab and L keep the scroll) and must not move
+let lastActive = false
+let toggled = false
 
 const list = () => document.querySelector<HTMLElement>('.center-panel .mod-list-grid')
 
@@ -37,7 +41,11 @@ const ro = new ResizeObserver(() => {
   lastRoom = room
   const el = list()
   const shown = Boolean(el && el.getClientRects().length)
-  if (el && moved && shown && lastShown) {
+  const active = !watched.classList.contains('inactive')
+  if (active !== lastActive) toggled = true
+  lastActive = active
+  if (!shown) toggled = false
+  if (el && moved && shown && lastShown && toggled) {
     let by = moved
     if (moved > 0 && clicked?.isConnected) {
       // scrolling by `by` lifts the row `by` back up: it may go no higher than the list's (new) top edge
@@ -56,6 +64,7 @@ const attach = () => {
   if (watched) ro.unobserve(watched)
   watched = bar
   lastRoom = roomOf(bar)
+  lastActive = !bar.classList.contains('inactive')
   lastShown = Boolean(list()?.getClientRects().length)
   ro.observe(bar)
 }

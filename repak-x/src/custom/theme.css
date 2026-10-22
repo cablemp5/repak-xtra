@@ -379,6 +379,10 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 /* ---------- mod rows ---------- */
 .mod-card .hold-delete { display: none; }
 .mod-list-grid.view-list { gap: 0 !important; }
+/* Stands in for the rows a long list does not mount (custom/virtualRows.ts): a whole row of a grid */
+.mod-list-spacer { grid-column: 1 / -1; flex: none; pointer-events: none; }
+/* the browser's scroll anchoring would move the list each time a spacer above the rows changes height */
+.mod-list-grid:has(> .mod-list-spacer) { overflow-anchor: none; }
 .mod-list-grid.view-list .mod-card {
   min-height: 40px !important;
   padding: 4px 10px !important;
@@ -861,6 +865,10 @@ html[data-motion="off"] .lo-card-add-icon { transition: none; }
 
 /* ---------- Sigeon switch (custom/SigeonControl.tsx) ---------- */
 .sigeon { position: relative; }
+.header-more { position: relative; }   /* the header's More menu (custom/HeaderMore.tsx) */
+.header-more-btn, .header-more-label { gap: 6px !important; display: inline-flex; align-items: center; }
+/* a narrow window: just the dots, so the logo keeps its room (the name stays: aria-label, title) */
+@media (max-width: 1150px) { .header-more-label { display: none; } .header-actions-right .header-more-btn { padding: 0 8px !important; } .header-actions-right { padding-left: 2px; } }
 .sigeon-btn { gap: 6px !important; }
 .sigeon-state { color: var(--text-secondary); font-weight: 500; }
 .sigeon-btn.is-on .sigeon-state { color: color-mix(in srgb, var(--accent-primary), white 35%); }
@@ -1175,6 +1183,14 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
 .lp-search input { flex: 1; min-width: 0; height: 100%; padding: 0 !important; background: transparent !important; border: none !important;
   outline: none !important; box-shadow: none !important; color: var(--text-primary); font: 13px var(--font-primary); }
 .lp-search svg.lucide { width: 14px !important; height: 14px !important; }
+/* Home's search beside its title, the same quiet field (custom/LoadoutsScreen.tsx) */
+.lo-title-row { display: flex; align-items: center; gap: 14px; }
+/* Home's header: the title block and the tools share one row when there is room, else the tools wrap below it */
+.lo-screen-head { flex-wrap: wrap; row-gap: 12px; }
+.lo-screen-head > :first-child { flex: 1 1 auto; min-width: 0; }
+.lo-head-tools { flex-wrap: wrap; row-gap: 8px; margin-left: auto; }
+.lo-search { width: 220px; padding-right: 4px; }
+.lo-search .lo-icon { width: 22px; height: 22px !important; }
 .lp-types { display: flex; flex-wrap: wrap; gap: 4px; }
 .lp-types button { display: inline-flex !important; align-items: center; gap: 6px; height: 28px !important; min-height: 0 !important; padding: 0 10px !important;
   border: 1px solid var(--panel-border) !important; border-radius: 999px !important; background: transparent !important;
@@ -1741,6 +1757,9 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
   .lp-cover { grid-column: 1; grid-row: 2 / span 3; width: auto; position: sticky; top: 0; }
   .lp-info { grid-column: 2; grid-row: 2; padding-top: 0; }
   .lp > .lp-section { grid-column: 2; min-width: 0; }
+  /* An empty loadout with no picture of any kind has no cover column: Add mods sits right under the name */
+  .lp.is-bare { grid-template-columns: minmax(0, 1fr); }
+  .lp.is-bare .lp-info, .lp.is-bare > .lp-section { grid-column: 1; }
 }
 .lo-grid .lo-card.lo-card-new { min-height: 300px !important; }   /* .lo-card min-height: max-content comes later */
 

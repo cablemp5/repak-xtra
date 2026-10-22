@@ -54,17 +54,20 @@ import { AlertProvider, useAlert } from './components/AlertHandler'
 import { offerUndoDelete, type TrashedMod } from './custom/undoDelete'
 import { holdKeys } from './custom/holdKeys' // repakxtra
 import InstallButton from './custom/InstallButton' // repakxtra
+import HeaderMore from './custom/HeaderMore' // repakxtra: the header's More menu
 import { Num } from './custom/motion' // repakxtra
 import ModStateFilter, { matchesState, type ModState } from './custom/ModStateFilter'
 import './custom/keyboardClickables'
 import { dialogOpen } from './custom/hotkeys' // repakxtra: extra shortcuts
 import { modalOpen, topModal } from './custom/dialogFocus' // repakxtra: one "a dialog is open" contract for every shortcut
 import './custom/selectionScroll' // repakxtra: the clicked row stays put when the selection bar opens
+import { focusRow, relink, useLibraryFocus } from './custom/libraryFocus' // repakxtra: keyboard focus follows the viewed mod
 import FilterPanel, { filterScope } from './custom/FilterPanel'
 import LoadoutHotkeys, { AddToLoadoutField, LoadoutMenuItems } from './custom/Loadouts'
 import LoadoutsScreen, { ViewTabs } from './custom/LoadoutsScreen'
 import ViewModeMenu from './custom/ViewModeMenu' // repakxtra: view buttons folded into one when narrow
-import { modKey, renameModKey } from './custom/loadoutStore' // repakxtra
+import { modKey, nameKey, renameModKey, syncLoadoutKeys } from './custom/loadoutStore' // repakxtra
+import { setModsRoot } from './custom/loadoutIdentity' // repakxtra
 import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
 import { useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
@@ -347,6 +350,7 @@ function App() {
   };
 
   const [gamePath, setGamePath] = useState('')
+  useEffect(() => setModsRoot(gamePath), [gamePath]) // repakxtra: loadout member keys are relative to the mods folder
   const [mods, setMods] = useState<ModRecord[]>([])
   const [folders, setFolders] = useState<FolderRecord[]>([])
   const [loading, setLoading] = useState(false)
@@ -423,19 +427,16 @@ function App() {
   useBrokenVersion() // repakxtra: the Broken filter re-runs when the verdicts land
   const conflictCount = useConflictCount() // repakxtra
   reportSource.get = () => ({ mods, modDetails, launcherType, gamePath }) // repakxtra: setup report
-  useEffect(() => { // repakxtra: the Library tab lands on its home view (custom/LoadoutsScreen.tsx ViewTabs)
-    const home = () => {
-      setSelectedFolderId('all'); setSelectedCharacters(new Set()); setSelectedCategories(new Set()); setFilterTag(''); setModState('all')
-      setLocalSearch(''); debouncedSetSearch(''); setSearchQuery(''); setSelectedMod(null)
-      setSelectedMods(new Set()); lastSelectedModIndex.current = null
-      if (isRightPanelOpen) { setLastPanelWidth(leftPanelWidth); setLeftPanelWidth(100); setIsRightPanelOpen(false) } // as its own close does
-      let list = document.querySelector<HTMLElement>('.mod-list-grid')
-      while (list && list.scrollHeight <= list.clientHeight) list = list.parentElement
-      list?.scrollTo({ top: 0 })
-    }
-    window.addEventListener('repakxtra-library-home', home)
-    return () => window.removeEventListener('repakxtra-library-home', home)
-  }, [debouncedSetSearch, isRightPanelOpen, leftPanelWidth])
+  // repakxtra: Show all, beside the Library's title: every folder, no hero, type, tag or on/off filter and no search. Checked
+  // mods, the viewed mod and the details panel stay. The Library tab and L keep everything (custom/LoadoutsScreen.tsx ViewTabs)
+  const showAll = () => {
+    setSelectedFolderId('all'); setSelectedCharacters(new Set()); setSelectedCategories(new Set()); setFilterTag(''); setModState('all')
+    setLocalSearch(''); debouncedSetSearch(''); setSearchQuery('')
+    let list = document.querySelector<HTMLElement>('.center-panel .mod-list-grid')
+    while (list && list.scrollHeight <= list.clientHeight) list = list.parentElement
+    list?.scrollTo({ top: 0 })
+    if (document.activeElement?.matches('.lib-show-all:focus-visible')) searchInputRef.current?.focus() // the button goes away with what it reset
+  }
   useEffect(() => { // repakxtra: a preview failure toast's Open logs
     const open = () => setIsLogDrawerOpen(true)
     window.addEventListener('repakxtra-open-logs', open)
@@ -1932,6 +1933,7 @@ function App() {
       const modList = await invoke('get_pak_files') as any
       console.log('Loaded mods:', modList)
       if (mine !== loadModsSeq.current) return modList as ModRecord[] // a newer load is on its way, with the newer list
+      syncLoadoutKeys(modList) // repakxtra: loadout members follow moved mods and old saves migrate, before the list shows
       setMods(modList)
       requestAnimationFrame(hideSplash) // repakxtra: after the list paints
       setStatus(`Loading ${modList.length} mod(s) details...`)
@@ -2793,7 +2795,7 @@ function App() {
     try {
       const newPath = await invoke('rename_mod', { modPath, newName }) as string
       renameModKey(modKey(modPath), modKey(newPath)) // repakxtra: loadouts follow the rename
-      renameSource(modKey(modPath), modKey(newPath)) // repakxtra: so does its Nexus source
+      renameSource(nameKey(modPath), nameKey(newPath)) // repakxtra: so does its Nexus source
       setStatus(`Renamed to "${newName}"`)
       if (selectedMod?.path === modPath) setSelectedMod({ ...selectedMod, path: newPath }) // repakxtra: details read the new file, not the old path
       const refreshed = await loadMods()
@@ -3157,6 +3159,12 @@ function App() {
 
   // Keep filteredModsRef in sync for Shift+click range selection
   filteredModsRef.current = filteredMods
+  useLibraryFocus(filteredMods, viewMode, selectedMod?.path ?? null, setSelectedMod) // repakxtra: focus survives filters, sorts, deletes and view switches
+  useEffect(() => { // repakxtra: checked and viewed mods follow their files after a change made elsewhere (Home), removed ones drop
+    const paths = mods.map(m => m.path)
+    setSelectedMods(prev => { const now = relink(prev, paths); return now ? new Set(now) : prev })
+    setSelectedMod(prev => { const now = prev && relink([prev.path], paths); return now ? mods.find(m => m.path === now[0]) ?? null : prev })
+  }, [mods])
 
   // Keyboard shortcuts handler (must be after filteredMods is defined)
   useEffect(() => {
@@ -3276,14 +3284,10 @@ function App() {
           else if (key === 'arrowright') newIndex = Math.min(filteredMods.length - 1, currentIndex + 1)
         }
 
-        // repakxtra: a clicked row's button keeps focus, so Enter would open that row again instead of the selected one
-        const focused = document.activeElement as HTMLElement | null
-        if (focused?.closest('.mod-card')) focused.blur()
-        if (newIndex !== currentIndex && newIndex >= 0 && newIndex < filteredMods.length) {
-          setSelectedMod(filteredMods[newIndex])
-        } else if (currentIndex === -1 && filteredMods.length > 0) {
-          setSelectedMod(filteredMods[0])
-        }
+        // repakxtra: focus moves with the viewed mod, so Enter and Space act on the row on show (custom/libraryFocus.ts)
+        const next = filteredMods[newIndex] ?? filteredMods[0]
+        if (next.path !== selectedMod?.path) setSelectedMod(next)
+        focusRow(next.path)
       }
       // Delete - delete the checked mods, or the viewed one (undoable, repakxtra)
       else if (key === 'delete' && (selectedMods.size > 0 || selectedMod)) {
@@ -4051,6 +4055,13 @@ function App() {
           >
             <FaToolbox size={20} /> Tools
           </button>
+          {/* repakxtra: every optional shortcut stays reachable here, pinned or not (custom/HeaderMore.tsx) */}
+          <HeaderMore items={[
+            { label: 'Share', icon: <IoMdWifi size={16} />, run: () => setPanel('sharing', true) },
+            { label: 'Tools', icon: <FaToolbox size={16} />, run: () => setPanel('tools', true) },
+            { label: 'Asset Explorer', icon: <VscListTree size={16} />, run: openAssetExplorerWindow },
+            { label: 'VFX Updater', icon: <GiLightningTrio size={16} />, run: () => openVfxUpdaterWindow() },
+          ]} />
           <button
             onClick={() => setPanel('settings', true)}
             className="btn-settings"
@@ -4073,6 +4084,7 @@ function App() {
           isBlocked={undoBlocked} /* repakxtra: live game lock for Undo */
           reload={loadMods}
           alert={alert}
+          onInstallFiles={handleFileDrop} /* repakxtra: Home's Install, the Library's install path */
         />
         {/* repakxtra: Ctrl+1..9 switches pinned loadouts on every view (custom/Loadouts.tsx) */}
         <LoadoutHotkeys mods={mods} scopeMods={folderMods} scopeLabel="all mods" blocked={gameRunning && !bypassGameRunningLock}
@@ -4236,6 +4248,10 @@ function App() {
                       <span className="header-title-scope" title={filterScope(selectedCharacters, selectedCategories)}> · {filterScope(selectedCharacters, selectedCategories)}</span>
                     )}
                   </h2>
+                  {(selectedFolderId !== 'all' || selectedCharacters.size > 0 || selectedCategories.size > 0 || filterTag || modState !== 'all' || localSearch) && ( /* repakxtra: the deliberate reset */
+                    <button type="button" className="btn-ghost lib-show-all" onClick={showAll}
+                      title="Every mod again: all folders, no hero, type, tag or on and off filter, no search. Checked mods stay checked">Show all</button>
+                  )}
                   <ModStateFilter value={modState} onChange={setModState} mods={folderMods} />
                 </div>
                 <div className="header-actions" data-tour="header-actions">
