@@ -9,7 +9,7 @@ export const REACT_ICONS: Record<string, Record<string, string>> = {
   fa: { FaExchangeAlt: 'ArrowLeftRight', FaTag: 'Tag', FaTerminal: 'Terminal', FaUsers: 'Users' },
   fa6: { FaSort: 'ArrowUpDown', FaTag: 'Tag', FaToolbox: 'Wrench' },
   fi: { FiChevronDown: 'ChevronDown', FiDownload: 'Download', FiExternalLink: 'ExternalLink', FiHeart: 'Heart', FiSearch: 'Search', FiX: 'X' },
-  gi: { GiLightningTrio: 'Blend' }, // VFX Updater: mixing colors (cable's pick, 2026-10-21)
+  gi: { GiLightningTrio: 'Atom' }, // VFX Updater: particles in orbit, like a particle system (cable's pick, 2026-10-23)
   gr: { GrClose: 'X', GrInstall: 'Download' },
   io: { IoIosSettings: 'Settings', IoIosSkipForward: 'SkipForward', IoMdWarning: 'TriangleAlert', IoMdWifi: 'Wifi' },
   io5: { IoLayersSharp: 'Layers', IoWarningOutline: 'TriangleAlert' },

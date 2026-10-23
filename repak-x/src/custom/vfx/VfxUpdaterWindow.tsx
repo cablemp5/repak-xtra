@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, emitTo, listen } from '@tauri-apps/api/event'
-import { AlertTriangle, Check, ChevronDown, ChevronRight, Copy, RotateCcw, Search, X } from 'lucide-react'
+import { AlertTriangle, Archive, Check, ChevronDown, ChevronRight, Copy, Map as MapIcon, Palette, RefreshCw, RotateCcw, ScrollText, Search, Tag, X } from 'lucide-react'
 import TitleBar from '../../components/TitleBar'
 import Checkbox from '../../components/ui/Checkbox'
 import { Num, SwapText } from '../motion'
@@ -34,15 +34,17 @@ const KEEP_NAME = 'repakxtra.vfx.keepName' // '0': updates end in _UPDATED
 const ORIGINALS = 'repakxtra.vfx.originals' // what happens to an original: off, trash or keep
 type Naming = 'broken' | 'updated'
 type Originals = 'off' | 'trash' | 'keep'
-const NAMING_HINT: Record<Naming, string> = {
-  broken: 'The update takes the mod\'s name, so loadouts and tags stay on the working copy. The original is renamed to end in _BROKEN.',
-  updated: 'The update is named to end in _UPDATED, and loadouts move to it. The original keeps its name.',
+const NAMING_NOTE: Record<Naming, string> = {
+  broken: 'Loadouts and tags stay on the update. The original is renamed to end in _BROKEN.',
+  updated: 'The update ends in _UPDATED, and loadouts move to it.',
 }
-const ORIGINALS_HINT: Record<Originals, string> = {
-  off: 'The original stays in the mods folder, turned off. Both copies change the same game files, so only one should be on.',
-  trash: 'The original goes to Recently deleted, turned off. Restore it from Settings > Recently deleted within 7 days.',
-  keep: 'The original stays as it was. If it is on, turn one of the two off before playing.',
+const ORIGINALS_NOTE: Record<Originals, string> = {
+  off: 'Kept in the mods folder, turned off, so only the update loads.',
+  trash: 'Turned off and moved to Recently deleted. Restore it in Settings within 7 days.',
+  keep: 'Left as they are. If one is on, turn it or its update off before playing.',
 }
+/** A rivals-depot USMAP's release, from its file name (5.3.2-3939753+++depot_marvel+S10.5_release-Marvel.usmap). */
+const usmapRelease = (name?: string | null) => name?.match(/\+([^+]+?)-Marvel\.usmap$/i)?.[1]?.replace(/_/g, ' ') ?? null
 const ADVANCED = 'repakxtra.vfx.advanced' // Advanced opens the way it was last left, as the install card's
 const FOLDED = 'repakxtra.vfx.folded' // the groups folded away, as a list of ids
 const SORT = 'repakxtra.vfx.sort' // A to Z or Newest, as a loadout's Add mods
@@ -183,6 +185,32 @@ function Group({ title, count, tone, open, onFold, all, none, busy, onPick, chil
   )
 }
 
+/** One part of Advanced, built like a Settings section: an icon and heading (with its state), what it is for in one
+ *  line, then its control. */
+function Section({ icon, title, state, about, children }: { icon: React.ReactNode; title: string; state?: React.ReactNode; about?: string; children: React.ReactNode }) {
+  return (
+    <section className="vf-set">
+      <h3>{icon}{title}{state ? <span className="vf-set-state">{state}</span> : null}</h3>
+      {about && <p className="vf-set-about">{about}</p>}
+      {children}
+    </section>
+  )
+}
+
+/** A choice of a few, the width of the section: Settings' Launcher switch. What the picked one does goes under it. */
+function Seg<T extends string>({ label, value, options, disabled, onChange, note }: {
+  label: string; value: T; options: [T, string][]; disabled: boolean; onChange: (v: T) => void; note: string
+}) {
+  return (
+    <>
+      <div className="mod-state-filter vf-seg" role="group" aria-label={label}>
+        {options.map(([v, text]) => <button key={v} type="button" aria-pressed={value === v} disabled={disabled} onClick={() => onChange(v)}>{text}</button>)}
+      </div>
+      <p className="vf-set-note">{note}</p>
+    </>
+  )
+}
+
 function ColorNames() {
   const [f, setF] = useState<ColorFilter>(readFilter)
   const [text, setText] = useState({ includes: f.includes.join(', '), excludes: f.excludes.join(', ') })
@@ -195,30 +223,14 @@ function ColorNames() {
   const reset = () => { resetFilter(); setF(DEFAULT_FILTER); setText({ includes: DEFAULT_FILTER.includes.join(', '), excludes: DEFAULT_FILTER.excludes.join(', ') }) }
   const custom = JSON.stringify(f) !== JSON.stringify(DEFAULT_FILTER)
   return (
-    <div className="vf-sub">
-      <h3>Color names<span>{custom ? 'Custom' : 'Default'}</span></h3>
+    <Section icon={<Palette size={15} aria-hidden="true" />} title="Color names" state={custom ? 'Custom' : 'Default'}
+      about="Which blueprint and data table colors carry over. Material parameters always do.">
       <div className="vf-names">
-        <p className="vf-hint">Which blueprint and data table colors carry over, by name. Material parameters always do, except excluded names.</p>
         <label>Carry names containing<input value={text.includes} onChange={e => save({ ...text, includes: e.target.value })} spellCheck={false} /></label>
         <label>Never carry names containing<input value={text.excludes} onChange={e => save({ ...text, excludes: e.target.value })} spellCheck={false} /></label>
-        <p className="vf-hint">Separate words with commas. Case does not matter.{custom && <> <button type="button" className="su-link" onClick={reset}>Reset to defaults</button></>}</p>
       </div>
-    </div>
-  )
-}
-
-/** One choice of a few, for Advanced: its label, the sort's segmented control, and what the picked one does under it. */
-function Choice<T extends string>({ label, value, options, disabled, onChange, hint }: {
-  label: string; value: T; options: [T, string][]; disabled: boolean; onChange: (v: T) => void; hint: string
-}) {
-  return (
-    <div className="vf-choice" role="group" aria-label={label}>
-      <span className="vf-choice-label">{label}</span>
-      <div className="mod-state-filter vf-choice-seg">
-        {options.map(([v, text]) => <button key={v} type="button" aria-pressed={value === v} disabled={disabled} onClick={() => onChange(v)}>{text}</button>)}
-      </div>
-      <p className="vf-hint">{hint}</p>
-    </div>
+      <p className="vf-set-note">Separate words with commas. Case does not matter.{custom && <> <button type="button" className="su-link" onClick={reset}>Reset to defaults</button></>}</p>
+    </Section>
   )
 }
 
@@ -547,46 +559,43 @@ export function VfxUpdaterPanel() {
           <div className="t-acc-panel" data-open={advanced}>
             <div className="t-acc-panel-inner" {...folded(!advanced)}>
               <div className="vf-adv-body">
-                <div className="vf-sub">
-                  <h3>Updates</h3>
-                  <div className="vf-options">
-                    <Choice label="Names" value={naming} disabled={busy} hint={NAMING_HINT[naming]}
-                      options={[['broken', 'Originals end in _BROKEN'], ['updated', 'Updates end in _UPDATED']]}
-                      onChange={v => { setNaming(v); localStorage.setItem(KEEP_NAME, v === 'broken' ? '1' : '0') }} />
-                    <Choice label="Originals" value={originals} disabled={busy} hint={ORIGINALS_HINT[originals]}
-                      options={[['off', 'Turn off'], ['trash', 'Move to Recently deleted'], ['keep', 'Leave as they are']]}
-                      onChange={v => { setOriginals(v); localStorage.setItem(ORIGINALS, v) }} />
-                  </div>
-                </div>
+                <Section icon={<Tag size={15} aria-hidden="true" />} title="Names" about="Which copy keeps the mod's name after an update.">
+                  <Seg label="Names" value={naming} disabled={busy} note={NAMING_NOTE[naming]}
+                    options={[['broken', 'The update keeps it'], ['updated', 'The original keeps it']]}
+                    onChange={v => { setNaming(v); localStorage.setItem(KEEP_NAME, v === 'broken' ? '1' : '0') }} />
+                </Section>
 
-                <div className="vf-sub">
-                  <h3>USMAP<span>{behind && !usmapMissing && !checking ? 'Older than the game' : usmapState}</span></h3>
-                  <p className="vf-hint vf-usmap-about">The game's property layout, which updates read the game's files with. From rivals-depot on GitHub.</p>
-                  <ul className="su-parts vf-usmap">
-                    <li className="su-part">
-                      <span className={`su-part-mark${usmapOk ? ' is-ok' : ''}`} role="img" aria-label={usmapOk ? 'Ready' : 'Missing'}>{usmapOk && <Check size={14} strokeWidth={2.5} />}</span>
-                      <div className="su-part-text">
-                        <b title={usmap ?? undefined}>{usmap ? fileName(usmap) : 'No USMAP chosen'}</b>
-                        <span>{[usmapInfo?.version, usmapInfo?.commitDate, cl && `build ${cl}`].filter(Boolean).join(' · ') || 'Check for updates downloads the newest, or browse for a file'}</span>
-                      </div>
-                      <span className="su-part-links">
-                        <button type="button" className="su-link" disabled={checking || busy} onClick={() => usmapCheck(true)} title="Download the newest USMAP from rivals-depot and use it">
-                          {checking ? 'Checking…' : 'Check for updates'}
-                        </button>
-                        <button type="button" className="su-link" disabled={busy} onClick={browseUsmap} title="Use a .usmap file from this PC">Browse…</button>
-                      </span>
-                    </li>
-                  </ul>
-                  {behind ? <p className="vf-warn"><AlertTriangle size={14} aria-hidden="true" />The game is on build {build!.cl}. Updates usually still work after a small patch. If they fail, wait for rivals-depot to publish a newer USMAP.</p> : null}
-                </div>
+                <Section icon={<Archive size={15} aria-hidden="true" />} title="Originals" about="What happens to a mod once its update is in.">
+                  <Seg label="Originals" value={originals} disabled={busy} note={ORIGINALS_NOTE[originals]}
+                    options={[['off', 'Turn off'], ['trash', 'Move to Recently deleted'], ['keep', 'Leave as they are']]}
+                    onChange={v => { setOriginals(v); localStorage.setItem(ORIGINALS, v) }} />
+                </Section>
+
+                <Section icon={<MapIcon size={15} aria-hidden="true" />} title="USMAP"
+                  state={<span className={behind && !usmapMissing && !checking ? 'is-warn' : usmapMissing ? 'is-warn' : ''}>{behind && !usmapMissing && !checking ? 'Older than the game' : usmapState}</span>}
+                  about="The game's property layout. Updates read the game's files with it.">
+                  <div className="vf-usmap">
+                    <span className={`su-part-mark${usmapOk ? ' is-ok' : ''}`} role="img" aria-label={usmapOk ? 'Ready' : 'Missing'}>{usmapOk && <Check size={14} strokeWidth={2.5} />}</span>
+                    <div className="su-part-text">
+                      <b title={usmap ?? undefined}>{usmap ? usmapRelease(fileName(usmap)) ?? fileName(usmap) : 'No USMAP chosen'}</b>
+                      <span>{usmap ? [cl && `Build ${cl}`, usmapInfo?.commitDate].filter(Boolean).join(' · ') || fileName(usmap) : 'Check for updates downloads the newest from rivals-depot'}</span>
+                    </div>
+                    <span className="su-part-links">
+                      <button type="button" className="su-link" disabled={checking || busy} onClick={() => usmapCheck(true)} title="Download the newest USMAP from rivals-depot and use it">
+                        {checking ? 'Checking…' : 'Check for updates'}
+                      </button>
+                      <button type="button" className="su-link" disabled={busy} onClick={browseUsmap} title="Use a .usmap file from this PC">Browse…</button>
+                    </span>
+                  </div>
+                  {behind ? <p className="vf-warn"><AlertTriangle size={14} aria-hidden="true" /><span>The game is on build {build!.cl}. Updates usually still work after a small patch. If they fail, check for updates again later.</span></p> : null}
+                </Section>
 
                 <ColorNames />
 
-                <div className="vf-sub">
-                  <h3>Log<span>{logs.length ? plural(logs.length, 'line') : 'Nothing yet'}</span></h3>
+                <Section icon={<ScrollText size={15} aria-hidden="true" />} title="Log" state={logs.length ? plural(logs.length, 'line') : undefined}>
                   <div className="vf-log" role="log">{logs.length ? logs.map((l, i) => <div key={i} className={`is-${l.type}`}><span>{l.time}</span> {l.text}</div>) : <span>Each step of an update writes a line here.</span>}</div>
                   {logs.length > 0 && <button type="button" className="row-action vf-copy-log" onClick={() => copy('log')}><Copy size={13} /> {copied === 'log' ? 'Copied' : 'Copy log'}</button>}
-                </div>
+                </Section>
               </div>
             </div>
           </div>
@@ -601,7 +610,7 @@ export function VfxUpdaterPanel() {
         {busy
           ? <button type="button" className="lo-text-btn" disabled={cancelling} onClick={stop} aria-label="Cancel updating">{cancelling ? 'Cancelling…' : 'Cancel'}</button>
           : <button type="button" className="btn-primary" disabled={Boolean(lock) || !todo} onClick={() => run()}>
-              {todo ? <>Update <Num id="vf-todo" value={todo} /> {todo === 1 ? 'mod' : 'mods'}</> : 'Update'}
+              <RefreshCw size={14} aria-hidden="true" />{todo ? <>Update <Num id="vf-todo" value={todo} /> {todo === 1 ? 'mod' : 'mods'}</> : 'Update'}
             </button>}
       </footer>
     </div>

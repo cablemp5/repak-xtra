@@ -98,34 +98,34 @@
 
 /* Updates: each choice is a settings row, its label at the left, a compact segmented control at the right, and what the
    picked one does right under the control (close to what it explains, apart from the next row) */
-.vf-options { display: flex; flex-direction: column; gap: 18px; }
-.vf-choice { display: grid; grid-template-columns: 84px minmax(0, 1fr); column-gap: 16px; row-gap: 6px; align-items: center; }
-.vf-choice-label { grid-column: 1; font-size: 13px; font-weight: 500; color: var(--text-secondary); }
-.vf-choice-seg { grid-column: 2; justify-self: start; flex-wrap: wrap; }
-.vf-choice-seg button { height: 26px !important; min-height: 0 !important; padding: 0 10px !important; display: inline-flex !important; align-items: center; }
-.vf-choice .vf-hint { grid-column: 2; }
 
-/* USMAP: Setup's part row between hairlines, as in the Setup window */
-.vf-usmap-about { margin: 0 0 12px; }
-.vf-usmap.su-parts { border: none; border-radius: 0; border-top: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); }
-.vf-usmap .su-part { padding: 8px 0; }
-.vf-usmap .su-part-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vf-warn { margin: 10px 0 0; display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 .vf-warn svg { flex: none; margin-top: 2px; color: #f5d342; }
 
-/* Advanced: the install card's fold (.ia) under the lists, each part apart under its own heading */
+/* Advanced: the install card's fold (.ia) under the lists. Its parts are Settings sections: an icon and heading, one
+   line on what it is for, the control, a short note; a hairline between parts, the same rhythm in each */
 .vf-adv { margin-top: -8px; padding-top: 12px; }   /* the divider halfway: 12px above, 12px below */
 .vf-adv-title { margin: 0; font: inherit; }
 .vf-adv-title > .ia-toggle { gap: 8px; height: 32px !important; margin-left: -2px; font-size: 13px !important; font-weight: 600 !important; color: var(--text-primary) !important; }   /* a heading like the groups' */
 .vf-adv-title > .ia-toggle .ia-caret { color: var(--text-secondary); }
-.vf-adv-body { display: flex; flex-direction: column; padding: 8px 0 2px; }
-.vf-sub { padding: 20px 0; }
-.vf-sub + .vf-sub { border-top: 1px solid var(--panel-border); }
-.vf-sub:last-child { padding-bottom: 4px; }
-.vf-sub > h3 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 16px; font-size: 13px; font-weight: 600; color: var(--text-primary); }
-.vf-sub > h3:has(+ .vf-hint), .vf-sub > h3:has(+ .vf-names) { margin-bottom: 8px; }   /* a heading's own description sits close */
-.vf-sub > h3 span { font-size: 12.5px; font-weight: 400; letter-spacing: 0; color: var(--text-secondary); }
-.vf-names { display: flex; flex-direction: column; gap: 12px; }
+.vf-adv-body { display: flex; flex-direction: column; padding: 4px 0 0 0; }
+.vf-set { padding: 18px 0 20px; }
+.vf-set + .vf-set { border-top: 1px solid var(--panel-border); }
+.vf-set > h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.vf-set > h3 > svg { flex: none; color: var(--text-secondary); }
+.vf-set-state { margin-left: 2px; font-size: 12.5px; font-weight: 400; color: var(--text-secondary); }
+.vf-set-state .is-warn { color: #f5d342; }
+.vf-set > h3 + :not(.vf-set-about) { margin-top: 12px; }   /* a part without a description line (Log) keeps the same gap */
+.vf-set-about { margin: 4px 0 12px; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.vf-set-note { margin: 8px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+/* a choice of a few: Settings' Launcher switch, equal parts across the section */
+.vf-seg { display: flex !important; width: 100%; max-width: 560px; }
+.vf-seg button { flex: 1 1 0; min-width: 0; height: 32px !important; min-height: 0 !important; padding: 0 10px !important; display: inline-flex !important; align-items: center; justify-content: center; white-space: nowrap; font-size: 12.5px !important; }
+/* USMAP: Setup's part row, between hairlines */
+.vf-usmap { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 0; border-top: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); }
+.vf-usmap .su-part-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vf-set .vf-warn { margin-top: 10px; }
+.vf-names { display: flex; flex-direction: column; gap: 12px; }   /* Color names: two labelled fields */
 .vf-names label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-primary); }
 .vf-names input {
   height: 34px; padding: 0 10px; font: 12.5px var(--font-mono); color: var(--text-primary);
@@ -145,9 +145,10 @@
 .vf-policy .su-link { margin-left: 2px; }
 .vf-state { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vf-foot .btn-primary {
-  height: 32px !important; min-height: 0 !important; padding: 0 16px !important; font-size: 13px !important; border-radius: var(--quiet-radius) !important;
+  height: 32px !important; min-height: 0 !important; padding: 0 16px 0 14px !important; font-size: 13px !important; border-radius: var(--quiet-radius) !important;
   display: inline-flex !important; align-items: center; gap: 4px; width: auto !important; flex: none;
 }
+.vf-foot .btn-primary svg { margin-right: 4px; }
 html[data-motion="off"] .vf-bar i, html[data-motion="off"] .vf-caret, html[data-motion="off"] .vf-grp-caret { transition: none; }
 
 /* the main window's notice after a game update (VfxNotice.tsx) */
