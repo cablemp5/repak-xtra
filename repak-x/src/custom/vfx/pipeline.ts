@@ -20,7 +20,7 @@ export const STEPS = ['Reading the mod', 'Opening its materials', 'Finding its e
 export type AssetKind = 'updated' | 'same' | 'added' | 'passed' | 'unreadable' | 'failed'
 export type AssetResult = { name: string; path: string; kind: AssetKind; detail: string }
 export type VfxStatus = 'fixed' | 'nothing' | 'failed' | 'cancelled'
-export type Placed = { fixed: string; original: string; turnedOff: boolean; replaced: boolean }
+export type Placed = { fixed: string; original: string; turnedOff: boolean; replaced: boolean; trashed?: boolean }
 export type VfxReport = {
   mod: string
   name: string
@@ -46,6 +46,8 @@ export type FixOptions = {
   turnOffOriginal?: boolean
   /** The update takes the mod's name and the original becomes <name>_BROKEN (the default). Off: the update is <name>_UPDATED. */
   keepName?: boolean
+  /** The original goes to Recently deleted (off, so a restore never clashes with the update) */
+  trashOriginal?: boolean
   filter?: ColorFilter
   log?: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void
   onStep?: (s: { step: number; title: string }) => void
@@ -261,7 +263,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     const utoc = await invoke<string>('vfx_pack_to_iostore', { usmapPath: o.usmapPath, inputDir: dirs.finalUassets, outputBase: base, allowedAssets: manifest })
     if (o.outputDir) report.output = utoc
     else {
-      report.placed = await invoke<Placed>('xtra_vfx_place', { source: o.modPath, stagedBase: base, turnOffOriginal: o.turnOffOriginal ?? true, keepName: o.keepName ?? true })
+      report.placed = await invoke<Placed>('xtra_vfx_place', { source: o.modPath, stagedBase: base, turnOffOriginal: o.turnOffOriginal ?? true, keepName: o.keepName ?? true, trashOriginal: o.trashOriginal ?? false })
       report.output = report.placed.fixed
     }
     report.status = 'fixed'

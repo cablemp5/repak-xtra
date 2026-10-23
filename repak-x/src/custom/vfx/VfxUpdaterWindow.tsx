@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, emitTo, listen } from '@tauri-apps/api/event'
-import { AlertTriangle, Check, ChevronDown, ChevronRight, Copy, Layers, RotateCcw, Search, X } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, ChevronRight, Copy, RotateCcw, Search, X } from 'lucide-react'
 import TitleBar from '../../components/TitleBar'
 import Checkbox from '../../components/ui/Checkbox'
 import { Num, SwapText } from '../motion'
@@ -29,8 +29,20 @@ type Log = { time: string; text: string; type: string }
 type Usmap = { updated: boolean; upToDate: boolean; skipped: boolean; localPath?: string | null; filename?: string | null; version?: string | null; buildNumber?: number | null; commitDate?: string | null; message: string }
 type GameBuild = { updated: number; cl?: number | null }
 
-const TURN_OFF = 'repakxtra.vfx.turnOff'
-const KEEP_NAME = 'repakxtra.vfx.keepName'
+const TURN_OFF = 'repakxtra.vfx.turnOff' // before Originals had three choices: '0' left them on
+const KEEP_NAME = 'repakxtra.vfx.keepName' // '0': updates end in _UPDATED
+const ORIGINALS = 'repakxtra.vfx.originals' // what happens to an original: off, trash or keep
+type Naming = 'broken' | 'updated'
+type Originals = 'off' | 'trash' | 'keep'
+const NAMING_HINT: Record<Naming, string> = {
+  broken: 'The update takes the mod\'s name, so loadouts and tags stay on the working copy. The original is renamed to end in _BROKEN.',
+  updated: 'The update is named to end in _UPDATED, and loadouts move to it. The original keeps its name.',
+}
+const ORIGINALS_HINT: Record<Originals, string> = {
+  off: 'The original stays in the mods folder, turned off. Both copies change the same game files, so only one should be on.',
+  trash: 'The original goes to Recently deleted, turned off. Restore it from Settings > Recently deleted within 7 days.',
+  keep: 'The original stays as it was. If it is on, turn one of the two off before playing.',
+}
 const ADVANCED = 'repakxtra.vfx.advanced' // Advanced opens the way it was last left, as the install card's
 const FOLDED = 'repakxtra.vfx.folded' // the groups folded away, as a list of ids
 const SORT = 'repakxtra.vfx.sort' // A to Z or Newest, as a loadout's Add mods
@@ -53,7 +65,8 @@ function placedText(r: VfxReport) {
   if (!p) return r.output ? `Saved as ${fileName(r.output)}.` : ''
   const kept = fileName(p.original).replace(/\.[^.]+$/, '')
   const renamed = /_BROKEN((_\d+)?_P)?$/i.test(kept)
-  return (renamed ? `The update has the mod's name. The original is now ${kept}${p.turnedOff ? ', off' : ''}.` : `Saved as ${fileName(p.fixed)}${p.turnedOff ? ', and the original is off' : ''}.`)
+  const gone = p.trashed ? `${kept}, in Recently deleted` : `${kept}${p.turnedOff ? ', off' : ''}`
+  return (renamed ? `The update has the mod's name. The original is now ${gone}.` : `Saved as ${fileName(p.fixed)}${p.trashed ? ', and the original is in Recently deleted' : p.turnedOff ? ', and the original is off' : ''}.`)
     + (p.replaced ? ' An earlier copy is in Recently deleted.' : '')
 }
 
@@ -122,7 +135,7 @@ function Row({ mod, loadouts, run, needs, picked, open, busy, onPick, onToggle, 
       </Checkbox>
       {loadouts.length > 0 && (
         <span className="vf-loadouts" title={`In ${loadouts.join(', ')}`}>
-          <Layers size={12} aria-hidden="true" /><span>{loadouts[0]}</span>{loadouts.length > 1 && <b>+{loadouts.length - 1}</b>}
+          <i>In</i><span>{loadouts[0]}</span>{loadouts.length > 1 && <b>+{loadouts.length - 1}</b>}
         </span>
       )}
       {mod.enabled && <span className="mod-type-badge category-badge on-badge" title="This mod is on now">On</span>}
@@ -189,11 +202,16 @@ function ColorNames() {
   )
 }
 
-/** A checkbox with its hint under it, for Advanced. */
-function Option({ checked, disabled, onChange, label, hint }: { checked: boolean; disabled: boolean; onChange: (v: boolean) => void; label: string; hint: string }) {
+/** One choice of a few, for Advanced: its label, the sort's segmented control, and what the picked one does under it. */
+function Choice<T extends string>({ label, value, options, disabled, onChange, hint }: {
+  label: string; value: T; options: [T, string][]; disabled: boolean; onChange: (v: T) => void; hint: string
+}) {
   return (
-    <div className="vf-check">
-      <Checkbox size="sm" checked={checked} isDisabled={disabled} disabled={disabled} onChange={onChange}>{label}</Checkbox>
+    <div className="vf-choice" role="group" aria-label={label}>
+      <span className="vf-choice-label">{label}</span>
+      <div className="mod-state-filter vf-choice-seg">
+        {options.map(([v, text]) => <button key={v} type="button" aria-pressed={value === v} disabled={disabled} onClick={() => onChange(v)}>{text}</button>)}
+      </div>
       <p className="vf-hint">{hint}</p>
     </div>
   )
@@ -215,8 +233,12 @@ export function VfxUpdaterPanel() {
   const [usmapInfo, setUsmapInfo] = useState<Usmap | null>(null)
   const [usmapOk, setUsmapOk] = useState<boolean | null>(null)
   const [checking, setChecking] = useState(true)
-  const [turnOff, setTurnOff] = useState(() => localStorage.getItem(TURN_OFF) !== '0')
-  const [keepName, setKeepName] = useState(() => localStorage.getItem(KEEP_NAME) !== '0')
+  const [naming, setNaming] = useState<Naming>(() => (localStorage.getItem(KEEP_NAME) === '0' ? 'updated' : 'broken'))
+  const [originals, setOriginals] = useState<Originals>(() => {
+    const v = localStorage.getItem(ORIGINALS)
+    return v === 'off' || v === 'trash' || v === 'keep' ? v : localStorage.getItem(TURN_OFF) === '0' ? 'keep' : 'off'
+  })
+  const keepName = naming === 'broken'
   const [advanced, setAdvanced] = useState(() => localStorage.getItem(ADVANCED) === '1')
   const [busy, setBusy] = useState(false)
   const [cancelling, setCancelling] = useState(false)
@@ -342,7 +364,7 @@ export function VfxUpdaterPanel() {
       patch(key, { status: 'running', step: 1 })
       addLog(`Updating ${mod.name}`)
       const r = await fixVfxMod({
-        modPath: mod.utoc, usmapPath: usmap, gamePaksPath: paks, turnOffOriginal: turnOff, keepName, filter,
+        modPath: mod.utoc, usmapPath: usmap, gamePaksPath: paks, turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash', keepName, filter,
         log: addLog, cancelled: () => cancel.current,
         onStep: s => patch(key, { step: s.step, sub: undefined }),
         onProgress: (_, __, message) => patch(key, { sub: message }),
@@ -357,7 +379,7 @@ export function VfxUpdaterPanel() {
     if (fixed) await emit('mods_dir_changed').catch(() => {})
     cue(failed ? 'error' : 'success', { emphasis: 'subtle' })
     setBusy(false); setCancelling(false)
-  }, [picked, usmap, paks, turnOff, keepName, addLog])
+  }, [picked, usmap, paks, originals, keepName, addLog])
 
   // the Library's notice starts the update as soon as the list and the USMAP are ready
   useEffect(() => {
@@ -461,12 +483,12 @@ export function VfxUpdaterPanel() {
                 <div className="vf-sub">
                   <h3>Updates</h3>
                   <div className="vf-options">
-                    <Option checked={keepName} disabled={busy} label="Keep the mod's name on the update"
-                      onChange={v => { setKeepName(v); localStorage.setItem(KEEP_NAME, v ? '1' : '0') }}
-                      hint={keepName ? 'The original is renamed to end in _BROKEN, so loadouts and tags keep the working copy.' : 'The update is named to end in _UPDATED, and the original keeps its name.'} />
-                    <Option checked={turnOff} disabled={busy} label="Turn off the originals"
-                      onChange={v => { setTurnOff(v); localStorage.setItem(TURN_OFF, v ? '1' : '0') }}
-                      hint="Both copies change the same game files, so only one should be on." />
+                    <Choice label="Names" value={naming} disabled={busy} hint={NAMING_HINT[naming]}
+                      options={[['broken', 'Originals end in _BROKEN'], ['updated', 'Updates end in _UPDATED']]}
+                      onChange={v => { setNaming(v); localStorage.setItem(KEEP_NAME, v === 'broken' ? '1' : '0') }} />
+                    <Choice label="Originals" value={originals} disabled={busy} hint={ORIGINALS_HINT[originals]}
+                      options={[['off', 'Turn off'], ['trash', 'Move to Recently deleted'], ['keep', 'Leave as they are']]}
+                      onChange={v => { setOriginals(v); localStorage.setItem(ORIGINALS, v) }} />
                   </div>
                 </div>
 

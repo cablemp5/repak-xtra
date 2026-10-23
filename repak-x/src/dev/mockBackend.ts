@@ -416,7 +416,7 @@ function mockVfx(cmd: string, args: any): unknown {
       const [, base, prio = ''] = stem.match(/^(.*?)((?:_\d+)?_P)?$/i) ?? [stem, stem]
       const keep = args.keepName !== false
       const fixed = keep ? `${dir}\\${stem}.pak` : `${dir}\\${base}_UPDATED_9999999_P.pak`
-      return { fixed, original: `${dir}\\${keep ? `${base}_BROKEN${prio}` : stem}.bak_repak`, turnedOff: Boolean(args.turnOffOriginal), replaced: false }
+      return { fixed, original: `${dir}\\${keep ? `${base}_BROKEN${prio}` : stem}.bak_repak`, turnedOff: Boolean(args.turnOffOriginal || args.trashOriginal), replaced: false, trashed: Boolean(args.trashOriginal) }
     }
     default: return undefined
   }
