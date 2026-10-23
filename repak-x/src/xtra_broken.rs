@@ -172,9 +172,19 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
         let base = |p: &Path| p.with_extension("").to_string_lossy().to_lowercase();
         let installed_mods: HashSet<String> = mod_paths.iter().map(|p| base(Path::new(p))).collect();
         // an update beside it: <name>_UPDATED next to the original, or the original renamed <name>_BROKEN next to the update
+        // each folder's stems, so an _UPDATED name that takes the priority (two originals that would clash) is found
+        let mut by_dir: HashMap<PathBuf, HashSet<String>> = HashMap::new();
+        for p in &mod_paths {
+            let p = Path::new(p);
+            if let (Some(d), Some(s)) = (p.parent(), p.file_stem()) {
+                by_dir.entry(d.to_path_buf()).or_default().insert(s.to_string_lossy().to_lowercase());
+            }
+        }
+        let none = HashSet::new();
         let has_fix = |path: &Path| {
             let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-            [crate::xtra_vfx::fixed_stem(&stem), crate::xtra_vfx::unbroken_stem(&stem)]
+            let siblings = path.parent().and_then(|d| by_dir.get(d)).unwrap_or(&none);
+            [crate::xtra_vfx::fixed_stem_among(&stem, siblings), crate::xtra_vfx::unbroken_stem(&stem)]
                 .iter()
                 .any(|fixed| !fixed.eq_ignore_ascii_case(&stem) && installed_mods.contains(&base(&path.with_file_name(format!("{fixed}.pak")))))
         };

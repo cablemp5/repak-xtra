@@ -2614,6 +2614,7 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 .vfx-dot { position: absolute; top: -4px; right: -4px; width: 9px; height: 9px; border-radius: 50%; pointer-events: none;
   background: #f5d342; box-shadow: 0 0 0 2px var(--bg-darkest); animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; }
 html[data-motion="off"] .vfx-dot { animation: none; }
+[data-theme="light"] .vfx-dot { background: #9a7d00; }   /* 3:1 on the light header */
 .mod-state-filter button.is-broken { color: #f5d342; }
 .mod-state-filter button.is-broken .mod-state-count { color: #f5d342; }
 

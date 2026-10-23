@@ -20,7 +20,7 @@ export const STEPS = ['Reading the mod', 'Opening its materials', 'Finding its e
 export type AssetKind = 'updated' | 'same' | 'added' | 'passed' | 'unreadable' | 'failed'
 export type AssetResult = { name: string; path: string; kind: AssetKind; detail: string }
 export type VfxStatus = 'fixed' | 'nothing' | 'failed' | 'cancelled'
-export type Placed = { fixed: string; original: string; turnedOff: boolean; replaced: boolean; trashed?: boolean }
+export type Placed = { fixed: string; original: string; turnedOff: boolean; replaced: boolean; trashed?: boolean; warning?: string | null }
 export type VfxReport = {
   mod: string
   name: string
@@ -115,7 +115,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     // ---- 1: extract and sort ----
     enter(1)
     const runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-    const dirs = await invoke<Dirs>('xtra_vfx_dirs', { gamePaks: o.gamePaksPath, runId })
+    const dirs = await invoke<Dirs>('xtra_vfx_dirs', { gamePaks: o.gamePaksPath, runId, usmapPath: o.usmapPath }) // the game files' cache is per USMAP too
     const extracted = await invoke<string[]>('vfx_extract_mod_assets', { gamePaks: o.gamePaksPath, modPath: o.modPath, outputDir: dirs.modExtract })
     check()
     if (!extracted.length) throw new Error('No assets could be read from the mod. Check the game folder in Setup and that the mod is a .utoc mod.')
@@ -138,6 +138,10 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     }
     if (keep.length) await invoke('vfx_copy_uasset_files', { sourcePaths: keep, sourceBaseDir: dirs.modExtract, destBaseDir: dirs.finalUassets })
     if (!editable.length) {
+      if (report.counts.unreadable) {
+        report.error = `${plural(report.counts.unreadable, 'asset')} could not be read, so it is not known whether ${report.counts.unreadable === 1 ? 'it needs' : 'they need'} rebuilding. Check the USMAP in Advanced, then try again.`
+        return report // failed: Try again stays
+      }
       report.status = 'nothing'
       report.error = 'Nothing to update: the mod has no materials or blueprints to rebuild.'
       return report
@@ -250,10 +254,15 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       if (built.length < expected) warn(`Only ${built.length} of ${expected} assets are in the rebuilt mod.`)
     }
     if (!report.counts.updated && !report.counts.added) {
-      report.status = 'nothing'
-      report.error = report.counts.same
-        ? 'Nothing to update: every material and blueprint already matches the game, so the original works as it is.'
-        : 'Nothing to update: none of its materials or blueprints could be rebuilt.'
+      // only a mod whose every material and blueprint was read and matches the game is known to work as it is
+      const failedN = report.assets.filter(a => a.kind === 'failed').length
+      if (report.counts.same && !failedN && !report.counts.unreadable) {
+        report.status = 'nothing'
+        report.error = 'Nothing to update: every material and blueprint already matches the game, so the original works as it is.'
+      } else {
+        const why = [failedN && plural(failedN, 'material or blueprint', 'materials and blueprints') + ' could not be rebuilt', report.counts.unreadable && plural(report.counts.unreadable, 'asset') + ' could not be read'].filter(Boolean).join(', and ')
+        report.error = `Not updated: ${why || 'none of its materials or blueprints could be rebuilt'}. Check the USMAP in Advanced, then try again.`
+      }
       return report
     }
 
@@ -265,6 +274,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     else {
       report.placed = await invoke<Placed>('xtra_vfx_place', { source: o.modPath, stagedBase: base, turnOffOriginal: o.turnOffOriginal ?? true, keepName: o.keepName ?? true, trashOriginal: o.trashOriginal ?? false })
       report.output = report.placed.fixed
+      if (report.placed.warning) warn(report.placed.warning)
     }
     report.status = 'fixed'
     log(`Updated: ${fileName(report.output)}`, 'success')

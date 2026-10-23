@@ -15,14 +15,16 @@
 .vf-body .vf-filters { flex-wrap: nowrap; align-items: stretch; margin: 0; }
 .vf-body .vf-search { flex: 1; width: auto; min-width: 0; height: auto; padding: 0 6px 0 12px; gap: 10px; }
 .vf-search input { font-size: 13.5px !important; }
+.vf-search input::placeholder { color: var(--text-secondary); opacity: 1; }
 .vf-search-clear { flex: none; width: 26px; height: 26px !important; min-height: 0 !important; }
 
 /* a group: its heading folds it away (the Loadouts screen's collections), Select all sits at the far end */
 .vf-grp-head { display: flex; align-items: center; gap: 12px; height: 32px; margin-bottom: 8px; }
 .vf-grp.is-folded .vf-grp-head { margin-bottom: 0; }
-.vf-grp-fold { flex: 1; min-width: 0; display: flex !important; align-items: center; justify-content: flex-start !important; gap: 8px; height: 32px !important; min-height: 0 !important;
+.vf-grp-title { flex: 1; min-width: 0; margin: 0; font: inherit; }
+.vf-grp-fold { width: 100%; min-width: 0; display: flex !important; align-items: center; justify-content: flex-start !important; gap: 8px; height: 32px !important; min-height: 0 !important;
   padding: 0 !important; margin-left: -2px; border: none !important; background: none !important; cursor: pointer; text-align: left; color: var(--text-secondary) !important; }
-.vf-grp-fold h2 { margin: 0; font-size: 13px; font-weight: 600; color: var(--text-primary); }   /* a Loadouts collection's name */
+.vf-grp-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }   /* a Loadouts collection's name */
 .vf-grp-fold:hover .vf-grp-caret, .vf-grp-fold:focus-visible .vf-grp-caret { color: var(--text-primary); }
 .vf-grp-caret { flex: none; transition: transform var(--acc-chevron) var(--acc-ease); }
 .vf-grp-fold[aria-expanded="true"] .vf-grp-caret { transform: rotate(90deg); }
@@ -30,7 +32,7 @@
   font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-secondary); background: var(--quiet-active); }
 /* Needs an update: its count in the problem yellow, as the Library's Needs VFX update tag */
 .vf-grp.is-needs .vf-grp-count { color: #f5d342; background: color-mix(in srgb, #f5d342, transparent 86%); }
-[data-theme="light"] .vf-grp.is-needs .vf-grp-count { color: #7f6900; }
+[data-theme="light"] .vf-grp.is-needs .vf-grp-count { color: #574800; }
 .vf-selects { flex: none; display: inline-flex; gap: 2px; }
 .vf-select { flex: none; height: 28px !important; min-height: 0 !important; padding: 0 10px !important; border: none !important; border-radius: var(--quiet-radius) !important;
   background: none !important; font-size: 12.5px !important; font-weight: 500 !important; color: var(--text-secondary) !important; cursor: pointer; }
@@ -113,13 +115,14 @@
 
 /* Advanced: the install card's fold (.ia) under the lists, each part apart under its own heading */
 .vf-adv { margin-top: -8px; padding-top: 12px; }   /* the divider halfway: 12px above, 12px below */
-.vf-adv > .ia-toggle { gap: 8px; height: 32px !important; margin-left: -2px; font-size: 13px !important; font-weight: 600 !important; color: var(--text-primary) !important; }   /* a heading like the groups' */
-.vf-adv > .ia-toggle .ia-caret { color: var(--text-secondary); }
+.vf-adv-title { margin: 0; font: inherit; }
+.vf-adv-title > .ia-toggle { gap: 8px; height: 32px !important; margin-left: -2px; font-size: 13px !important; font-weight: 600 !important; color: var(--text-primary) !important; }   /* a heading like the groups' */
+.vf-adv-title > .ia-toggle .ia-caret { color: var(--text-secondary); }
 .vf-adv-body { display: flex; flex-direction: column; padding: 8px 0 2px; }
 .vf-sub { padding: 20px 0; }
 .vf-sub + .vf-sub { border-top: 1px solid var(--panel-border); }
 .vf-sub:last-child { padding-bottom: 4px; }
-.vf-sub > h3 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 16px; font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.vf-sub > h3 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 16px; font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .vf-sub > h3:has(+ .vf-hint), .vf-sub > h3:has(+ .vf-names) { margin-bottom: 8px; }   /* a heading's own description sits close */
 .vf-sub > h3 span { font-size: 12.5px; font-weight: 400; letter-spacing: 0; color: var(--text-secondary); }
 .vf-names { display: flex; flex-direction: column; gap: 12px; }
@@ -139,6 +142,7 @@
 .vf-copy-log { margin-top: 10px; }
 
 .vf-foot { display: flex; align-items: center; gap: 8px; padding: 12px 24px; border-top: 1px solid var(--panel-border); }
+.vf-policy .su-link { margin-left: 2px; }
 .vf-state { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vf-foot .btn-primary {
   height: 32px !important; min-height: 0 !important; padding: 0 16px !important; font-size: 13px !important; border-radius: var(--quiet-radius) !important;
@@ -161,3 +165,10 @@ html[data-motion="off"] .vf-bar i, html[data-motion="off"] .vf-caret, html[data-
 }
 .vfx-notice .lo-text-btn { flex: none; white-space: nowrap; }
 html[data-motion="off"] .vfx-notice { animation: none; }
+
+/* light theme: the problem yellow and success green, darkened (text 4.5:1, marks 3:1 on the light window) */
+[data-theme="light"] .vf-pill.is-fixed, [data-theme="light"] .vf-log .is-success { color: #166236 !important; }
+[data-theme="light"] .vf-pill.is-failed, [data-theme="light"] .vf-pill.is-cancelled, [data-theme="light"] .vf-status.is-cancelled,
+[data-theme="light"] .vf-counts .is-failed b, [data-theme="light"] .vf-counts .is-unreadable b, [data-theme="light"] .vf-log .is-warning { color: #665400 !important; }
+[data-theme="light"] .vf-warn svg, [data-theme="light"] .vfx-notice-icon { color: #9a7d00; }
+[data-theme="light"] .vf-warnings li::before { background: #9a7d00; }

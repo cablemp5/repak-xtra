@@ -122,14 +122,14 @@ function Report({ r, onRetry, busy }: { r: VfxReport; onRetry: () => void; busy:
 
 /** A VFX mod: its tick, name, the loadouts holding it and its On badge, and once it ran its step, progress or result. Why it
  *  needs an update is its tooltip. */
-function Row({ mod, loadouts, run, needs, picked, open, busy, onPick, onToggle, onRetry }: {
-  mod: Mod; loadouts: string[]; run?: Run; needs?: string; picked: boolean; open: boolean; busy: boolean; onPick: (v: boolean) => void; onToggle: () => void; onRetry: () => void
+function Row({ mod, rowKey, loadouts, run, needs, picked, open, busy, onPick, onToggle, onRetry }: {
+  mod: Mod; rowKey: string; loadouts: string[]; run?: Run; needs?: string; picked: boolean; open: boolean; busy: boolean; onPick: (v: boolean) => void; onToggle: () => void; onRetry: () => void
 }) {
   const status = run?.status
   const running = status === 'running'
   const step = run?.step ?? 0
   return (
-    <li className={`mod-row vf-row${status ? ` is-${status}` : ''}${picked ? ' is-picked' : ''}`} title={needs}>
+    <li className={`mod-row vf-row${status ? ` is-${status}` : ''}${picked ? ' is-picked' : ''}`} title={needs} data-key={rowKey}>
       <Checkbox size="sm" className="vf-pick" checked={picked} isDisabled={busy} disabled={busy} onChange={onPick} title={mod.path}>
         <span className="vf-row-name">{mod.name}</span>
       </Checkbox>
@@ -166,11 +166,13 @@ function Group({ title, count, tone, open, onFold, all, none, busy, onPick, chil
   return (
     <section className={`vf-grp${tone ? ` is-${tone}` : ''}${open ? '' : ' is-folded'}`}>
       <div className="vf-grp-head">
-        <button type="button" className="vf-grp-fold" aria-expanded={open} onClick={onFold}>
-          <ChevronRight size={15} className="vf-grp-caret" aria-hidden="true" />
-          <h2>{title}</h2>
-          <span className="vf-grp-count">{count}</span>
-        </button>
+        <h2 className="vf-grp-title">
+          <button type="button" className="vf-grp-fold" aria-expanded={open} onClick={onFold}>
+            <ChevronRight size={15} className="vf-grp-caret" aria-hidden="true" />
+            <span className="vf-grp-name">{title}</span>
+            <span className="vf-grp-count">{count}</span>
+          </button>
+        </h2>
         <span className="vf-selects">
           <button type="button" className="vf-select" disabled={busy || all} onClick={() => onPick(true)}>Select all</button>
           <button type="button" className="vf-select" disabled={busy || none} onClick={() => onPick(false)}>Clear</button>
@@ -248,11 +250,16 @@ export function VfxUpdaterPanel() {
   const [logs, setLogs] = useState<Log[]>([])
   const [copied, setCopied] = useState<string | null>(null)
   const [batch, setBatch] = useState<string[]>([]) // the run in progress, in order
+  const [reload, setReload] = useState(0)
+  const [loadError, setLoadError] = useState<string | null>(null) // the mods folder could not be read (the last list stays)
+  const [checkError, setCheckError] = useState(false) // which mods need an update could not be checked
+  const [scan, setScan] = useState<{ done: number; total: number } | null>(null) // the first read, mod by mod
   const [, bump] = useState(0)
   const cancel = useRef(false)
   const seeded = useRef(false) // the mods that need an update are ticked once, when the list first arrives
   const handed = useRef<{ paths: string[]; start: boolean } | null>(null) // mods the main window sent, ticked once the list is in
-  const pendingStart = useRef(false)
+  const autoRun = useRef<string[] | null>(null) // exactly the mods the Library's notice sent, updated as soon as possible
+  const groupOf = useRef(new Map<string, string>()) // each shown mod's group, so a run can unfold where it works
   const runsRef = useRef(runs)
   runsRef.current = runs
   const modsRef = useRef(mods)
@@ -284,25 +291,34 @@ export function VfxUpdaterPanel() {
     return () => { live = false }
   }, [usmap, usmapInfo])
 
-  // the mods folder's VFX mods and which need an update, again after each run (an updated mod no longer does)
+  // the mods folder's VFX mods and which need an update, again after each run (an updated mod no longer does). A folder
+  // that cannot be read keeps the last list and says so with Try again, never an empty "no VFX mods"
   useEffect(() => {
     if (busy) return
     let live = true
+    setLoadError(null)
     invoke<Mod[]>('xtra_vfx_mods')
       .then(async list => {
-        const verdicts = await invoke<Verdict[]>('xtra_broken_mods', { modPaths: list.map(m => m.path) }).catch(() => [] as Verdict[])
+        let verdicts: Verdict[] = [], failed = false
+        try { verdicts = await invoke<Verdict[]>('xtra_broken_mods', { modPaths: list.map(m => m.path) }) } catch (e) { failed = true; addLog(`Could not check which mods need an update: ${e}`, 'warning') }
         if (!live) return
         const n = new Map(verdicts.filter(v => v.kind === 'vfx').map(v => [norm(v.path), v.reason]))
         setMods(list)
         setNeeds(n)
-        if (!seeded.current) {
+        setCheckError(failed)
+        if (!seeded.current && !failed) {
           seeded.current = true
           pick(list.filter(m => n.has(norm(m.path))).map(m => norm(m.utoc)), true)
         }
       })
-      .catch(e => { if (live) { setMods([]); addLog(`Could not read the mods folder: ${e}`, 'error') } })
+      .catch(e => { if (live) { setLoadError(String(e)); setMods(m => m ?? []); addLog(`Could not read the mods folder: ${e}`, 'error') } })
+      .finally(() => { if (live) setScan(null) })
     return () => { live = false }
-  }, [busy, addLog])
+  }, [busy, reload, addLog])
+  useEffect(() => {
+    const un = listen<{ done: number; total: number }>('vfx_mods_progress', e => setScan(e.payload))
+    return () => { un.then(f => f()) }
+  }, [])
 
   // mods handed over by the main window: ticked (once the list is in), and updated at once from the Library's notice
   useEffect(() => {
@@ -320,7 +336,7 @@ export function VfxUpdaterPanel() {
     seeded.current = true
     pick(keys, true)
     if (keys.length < want.size) addLog(`${plural(want.size - keys.length, 'mod')} sent here ${want.size - keys.length === 1 ? 'is' : 'are'} not a VFX mod in the mods folder.`, 'warning')
-    if (h.start && keys.length) pendingStart.current = true
+    if (h.start && keys.length) autoRun.current = [...new Set([...(autoRun.current ?? []), ...keys])] // these, not whatever else is ticked
   })
 
   // Rust steps report inside the step (types read so far)
@@ -346,6 +362,7 @@ export function VfxUpdaterPanel() {
     const { open: choose } = await import('@tauri-apps/plugin-dialog')
     const p = await choose({ multiple: false, filters: [{ name: 'USMAP', extensions: ['usmap'] }] })
     if (typeof p !== 'string') return
+    setUsmapInfo(null) // its version, date and Up to date described the downloaded file, not this one
     setUsmap(p)
     const current = await invoke<Record<string, unknown>>('vfx_get_settings').catch(() => ({}))
     await invoke('vfx_save_settings', { settings: { ...current, usmapPath: p } }).catch(() => {}) // keeps the auto-update bookkeeping
@@ -357,6 +374,10 @@ export function VfxUpdaterPanel() {
     const byKey = new Map((modsRef.current ?? []).map(m => [norm(m.utoc), m]))
     const todo = (keys ?? [...picked].filter(k => !isDone(runsRef.current[k]?.status))).filter(k => byKey.has(k))
     if (!todo.length || !usmap || !paks) return
+    // the run in view: a search that hides a mod clears, and the groups it works in unfold
+    const where = new Set(todo.map(k => groupOf.current.get(k)))
+    if (where.has(undefined)) setQ('')
+    setFoldedIds(f => { const n = f.filter(id => !where.has(id)); if (n.length !== f.length) localStorage.setItem(FOLDED, JSON.stringify(n)); return n })
     setBusy(true); setBatch(todo); cancel.current = false
     todo.forEach(k => patch(k, { status: 'waiting', step: undefined, sub: undefined, report: undefined }))
     const filter = readFilter()
@@ -378,16 +399,36 @@ export function VfxUpdaterPanel() {
       if (r.status !== 'fixed' || todo.length === 1) setOpen(o => new Set(o).add(key)) // problems open, a batch's updates stay folded
       // the main window reloads and moves loadouts from the original to the update (a no-op when the update kept the name)
       if (r.placed) await emitTo('main', FIXED_EVENT, { from: r.placed.original, to: r.placed.fixed, swap: true } satisfies Fixed).catch(() => {})
+      // an update named _UPDATED is a new file and its original leaves the list: its result moves with it
+      const moved = r.placed ? norm(utocOf(r.placed.fixed)) : key
+      if (moved !== key) {
+        setRuns(rs => { const { [key]: v, ...rest } = rs; return v ? { ...rest, [moved]: v } : rs })
+        setOpen(o => { if (!o.has(key)) return o; const n = new Set(o); n.delete(key); n.add(moved); return n })
+        setBatch(b => b.map(x => (x === key ? moved : x)))
+      }
     }
     if (fixed) await emit('mods_dir_changed').catch(() => {})
     cue(failed ? 'error' : 'success', { emphasis: 'subtle' })
     setBusy(false); setCancelling(false)
   }, [picked, usmap, paks, originals, keepName, addLog])
 
-  // the Library's notice starts the update as soon as the list and the USMAP are ready
+  // the Library's notice updates exactly the mods it sent, as soon as the list and the USMAP are ready (after a run in
+  // progress)
   useEffect(() => {
-    if (pendingStart.current && mods && !lock && !busy && picked.size) { pendingStart.current = false; void run() }
-  }, [mods, lock, busy, picked, run])
+    if (autoRun.current && mods && !lock && !busy) { const keys = autoRun.current; autoRun.current = null; void run(keys) }
+  }, [mods, lock, busy, run])
+
+  // the mod being updated stays in view
+  const runningKey = batch.find(k => runs[k]?.status === 'running')
+  useEffect(() => {
+    if (runningKey) document.querySelector(`[data-key="${CSS.escape(runningKey)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [runningKey])
+
+  const showAdvanced = (on: boolean) => {
+    setAdvanced(on)
+    localStorage.setItem(ADVANCED, on ? '1' : '0')
+    if (on) setTimeout(() => document.querySelector('.vf-adv')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 60)
+  }
 
   const stop = () => { cancel.current = true; setCancelling(true); addLog('Cancelling after the current step…', 'warning') }
   const copy = async (what: 'report' | 'log') => {
@@ -410,6 +451,7 @@ export function VfxUpdaterPanel() {
     return { id, title, mods: ms, count, keys, all: keys.length > 0 && keys.every(k => picked.has(k)), none: !keys.some(k => picked.has(k)) }
   }
   const needing = shown.filter(first)
+  groupOf.current = new Map(shown.map(m => [norm(m.utoc), first(m) ? 'needs' : 'rest']))
   const groups = [
     group('needs', 'Needs an update', needing, needing.filter(m => needsOf(m) && !isDone(runs[norm(m.utoc)]?.status)).length),
     group('rest', needing.length ? 'Other VFX mods' : 'VFX mods', shown.filter(m => !first(m))),
@@ -420,13 +462,19 @@ export function VfxUpdaterPanel() {
   const runningAt = batch.findIndex(k => runs[k]?.status === 'running')
   const reports = Object.values(runs).filter(r => r.report)
   const updated = reports.filter(r => r.status === 'fixed').length
-  const cl = usmapCl(usmapInfo?.filename ?? (usmap ? fileName(usmap) : null))
+  const cl = usmapCl(usmap ? fileName(usmap) : null) // the file in use, not the last download
   const behind = cl && build?.cl && cl < build.cl
   const usmapState = checking ? 'Checking for a newer one…' : !usmap ? 'None chosen' : usmapOk === false ? 'File missing' : usmapInfo?.upToDate || usmapInfo?.updated ? 'Up to date' : 'Ready'
   const usmapMissing = !checking && (!usmap || usmapOk === false)
+  const runningMod = runningKey ? (mods ?? []).find(m => norm(m.utoc) === runningKey) : undefined
+  const runningStep = runningKey ? runs[runningKey]?.step : undefined
   const state = cancelling ? 'Cancelling. The current step finishes first.'
-    : busy ? `Updating ${runningAt + 1} of ${batch.length}…`
+    : busy ? `Updating ${runningAt + 1} of ${batch.length}${runningMod ? `: ${runningMod.name}` : ''}${runningStep ? `, step ${runningStep} of ${STEPS.length}` : '…'}`
       : lock ?? (reports.length ? `${plural(updated, 'mod')} updated${reports.length > updated ? `, ${reports.length - updated} not` : ''}` : todo ? '' : 'Tick the mods to update')
+  // what Update will do to the files, beside the button, so a choice made once in Advanced is never a surprise
+  const policy = naming === 'broken'
+    ? { off: 'Originals get _BROKEN and turn off', trash: 'Originals get _BROKEN and go to Recently deleted', keep: 'Originals get _BROKEN and stay as they are' }[originals]
+    : { off: 'Updates get _UPDATED, originals turn off', trash: 'Updates get _UPDATED, originals go to Recently deleted', keep: 'Updates get _UPDATED, originals stay as they are' }[originals]
 
   return (
     <div className="vf-panel">
@@ -445,10 +493,24 @@ export function VfxUpdaterPanel() {
             </div>
           </div>
         )}
+        {loadError && (
+          <p className="vf-warn" role="alert">
+            <AlertTriangle size={14} aria-hidden="true" />
+            <span>The mods folder could not be read{mods?.length ? ', so this is the list from before' : ''}. {loadError.replace(/[.!]?\s*$/, '.')}{' '}
+              <button type="button" className="su-link" disabled={busy} onClick={() => setReload(n => n + 1)}>Try again</button></span>
+          </p>
+        )}
+        {checkError && !loadError && (
+          <p className="vf-warn" role="alert">
+            <AlertTriangle size={14} aria-hidden="true" />
+            <span>Which mods need an update could not be checked, so none are marked.{' '}
+              <button type="button" className="su-link" disabled={busy} onClick={() => setReload(n => n + 1)}>Try again</button></span>
+          </p>
+        )}
         {mods === null
-          ? <p className="lp-empty">Reading the mods folder…</p>
+          ? <p className="lp-empty" aria-live="polite">Reading the mods folder{scan ? `: ${scan.done} of ${plural(scan.total, 'mod')}` : '…'}</p>
           : shown.length === 0
-            ? <p className="lp-empty">{needle ? `No VFX mods match “${q.trim()}”.` : 'No VFX mods in the mods folder. Mods the Library shows as VFX appear here.'}</p>
+            ? (loadError && !needle ? null : <p className="lp-empty">{needle ? `No VFX mods match “${q.trim()}”.` : 'No VFX mods in the mods folder. Mods the Library shows as VFX appear here.'}</p>)
             : <div className="vf-groups">{groups.map(g => g.mods.length > 0 && (
               <Group key={g.id} title={g.title} count={g.count} tone={g.id === 'needs' ? 'needs' : undefined} busy={busy} all={g.all} none={g.none}
                 open={Boolean(needle) || !foldedIds.includes(g.id)} onFold={() => fold(g.id)} onPick={on => pick(g.keys, on)}>
@@ -456,7 +518,7 @@ export function VfxUpdaterPanel() {
                   {g.mods.map(m => {
                     const key = norm(m.utoc)
                     return (
-                      <Row key={key} mod={m} loadouts={inLoadouts(m)} run={runs[key]} needs={needsOf(m)} picked={picked.has(key)} open={open.has(key)} busy={busy}
+                      <Row key={key} rowKey={key} mod={m} loadouts={inLoadouts(m)} run={runs[key]} needs={needsOf(m)} picked={picked.has(key)} open={open.has(key)} busy={busy}
                         onPick={v => pick([key], v)}
                         onToggle={() => setOpen(o => { const n = new Set(o); n.has(key) ? n.delete(key) : n.add(key); return n })}
                         onRetry={() => void run([key])} />
@@ -476,10 +538,12 @@ export function VfxUpdaterPanel() {
         )}
 
         <section className={`ia vf-adv${advanced ? ' is-open' : ''}`}>
-          <button type="button" className="ia-toggle" aria-expanded={advanced} onClick={() => { setAdvanced(!advanced); localStorage.setItem(ADVANCED, advanced ? '0' : '1') }}>
-            <ChevronRight size={15} className="ia-caret" aria-hidden="true" />
-            Advanced
-          </button>
+          <h2 className="vf-adv-title">
+            <button type="button" className="ia-toggle" aria-expanded={advanced} onClick={() => showAdvanced(!advanced)}>
+              <ChevronRight size={15} className="ia-caret" aria-hidden="true" />
+              Advanced
+            </button>
+          </h2>
           <div className="t-acc-panel" data-open={advanced}>
             <div className="t-acc-panel-inner" {...folded(!advanced)}>
               <div className="vf-adv-body">
@@ -530,7 +594,9 @@ export function VfxUpdaterPanel() {
       </div>
 
       <footer className="vf-foot">
-        <span className="vf-state" aria-live="polite">{state}</span>
+        {state
+          ? <span className="vf-state" aria-live="polite">{state}</span>
+          : <span className="vf-state vf-policy">{policy}. <button type="button" className="su-link" onClick={() => showAdvanced(true)}>Change</button></span>}
         {reports.length > 0 && !busy && <button type="button" className="lo-text-btn" onClick={() => copy('report')}><Copy size={14} /> {copied === 'report' ? 'Copied' : 'Copy report'}</button>}
         {busy
           ? <button type="button" className="lo-text-btn" disabled={cancelling} onClick={stop} aria-label="Cancel updating">{cancelling ? 'Cancelling…' : 'Cancel'}</button>
