@@ -109,6 +109,17 @@ fn game_assets(paks: &Path) -> Option<Arc<GameAssets>> {
     Some(set)
 }
 
+/// Of `files` (paths inside a mod), those whose game copy an update rewrote after `since` (seconds): cooked for an
+/// older game build. None when the game's files cannot be read (no game folder above `mods_dir`).
+pub(crate) fn rewritten_since(mods_dir: &Path, files: &[String], since: u64) -> Option<Vec<String>> {
+    let game = game_assets(&paks_dir(mods_dir)?)?;
+    Some(stale_in(&game, files, since))
+}
+
+fn stale_in(game: &GameAssets, files: &[String], since: u64) -> Vec<String> {
+    files.iter().filter(|f| is_package(f) && game.get(&match_key(f)).is_some_and(|at| *at > since)).cloned().collect()
+}
+
 /// The facts about one mod that judge reads.
 struct Facts<'a> {
     files: &'a [String],
@@ -275,6 +286,17 @@ mod tests {
         assert_eq!(judge("m.pak", &Facts { vfx: true, ..facts(&files, 150) }, 200, &game()), None);
         assert_eq!(judge("m.pak", &Facts { vfx: false, ..facts(&files, 50) }, 200, &game()), None, "only VFX mods");
         assert_eq!(judge("m.pak", &Facts { fixed: true, ..vfx(50) }, 200, &game()).map(|j| j.kind), Some("risky"), "fixed already: its copy is judged instead");
+    }
+
+    #[test]
+    fn stale_files_are_those_the_game_rewrote_after_the_mod() {
+        let files = vec![
+            "Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uasset".to_string(),
+            "Marvel/Content/Marvel/VFX/NS_ModOnly.uasset".to_string(),
+            "Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uexp".to_string(),
+        ];
+        assert_eq!(stale_in(&game(), &files, 50), vec![files[0].clone()], "older than the game's copy, packages only");
+        assert!(stale_in(&game(), &files, 150).is_empty(), "made after the game's copy");
     }
 
     /// Manual check on a real game: REPAKXTRA_PAKS=<...\Content\Paks> cargo test real_game -- --ignored --nocapture

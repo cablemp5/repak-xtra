@@ -382,6 +382,7 @@ function mockVfx(cmd: string, args: any): unknown {
       vfxLock = { token: args.token, window: 'main', name: args.name ?? null }; emit('vfx_lock_changed', vfxLock); return true
     case 'xtra_vfx_release': if (vfxLock?.token === args.token) vfxLock = null; emit('vfx_lock_changed', vfxLock); return null
     case 'xtra_vfx_lock': return vfxLock
+    case 'xtra_vfx_stale': return [] // the mock's mods are all current
     case 'vfx_save_settings': return null
     case 'vfx_check_usmap_update': return vfxStep().then(() => ({ updated: false, upToDate: true, skipped: false, localPath: VFX_USMAP,
       filename: '5.3.2-3939753+++depot_marvel+S10.5_release-Marvel.usmap', version: 'S10.5_release', buildNumber: 3939753, commitDate: '2026-10-16', message: 'USMAP is up to date' }))

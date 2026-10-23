@@ -110,6 +110,21 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
   const check = () => { if (o.cancelled?.()) throw new Cancelled() }
   const asset = (path: string, kind: AssetKind, detail: string) => { report.assets.push({ name: stem(path), path, kind, detail }); if (kind in report.counts) report.counts[kind as keyof typeof report.counts]++ }
   const warn = (w: string) => { report.warnings.push(w); log(w, 'warning') }
+  // what is copied as it is must still fit the game: a Niagara system cooked before a patch renumbered its properties
+  // crashes it (3962284), and the updater cannot rebuild those, so such a mod is not placed
+  const refuseStale = async (paths: string[], rel: (p: string) => string) => {
+    if (!paths.length) return false
+    const stale = new Set((await invoke<string[]>('xtra_vfx_stale', { modPath: o.modPath, files: paths.map(rel) })).map(assetKey))
+    if (!stale.size) return false
+    for (const a of report.assets) if (stale.has(assetKey(rel(a.path)))) {
+      if (a.kind === 'passed') report.counts.passed--
+      a.kind = 'failed'; a.detail = 'Made for an older game build. The VFX Updater cannot rebuild this kind of asset, and the game can crash on it.'
+    }
+    const first = stem(paths.find(p => stale.has(assetKey(rel(p))))!)
+    report.error = `Not updated: ${plural(stale.size, 'file')} it cannot rebuild (such as ${first}) ${stale.size === 1 ? 'was' : 'were'} made for an older game build, and the game can crash on ${stale.size === 1 ? 'it' : 'them'}. The mod was not changed. Look for an updated version from its author.`
+    log(report.error, 'warning')
+    return true
+  }
 
   try {
     // ---- 1: extract and sort ----
@@ -136,6 +151,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       else if (!d && !PASS_BY_NAME.test(fileName(p))) asset(p, 'unreadable', 'Its type could not be read. Kept as it was.')
       else asset(p, 'passed', d?.class ? `${d.class}, kept as it was.` : 'Kept as it was.')
     }
+    if (await refuseStale(keep, rel)) return report // failed: the mod stays as it was
     if (keep.length) await invoke('vfx_copy_uasset_files', { sourcePaths: keep, sourceBaseDir: dirs.modExtract, destBaseDir: dirs.finalUassets })
     if (!editable.length) {
       if (report.counts.unreadable) {
@@ -175,6 +191,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     if (notMine.size) {
       const pass = editable.filter(p => notMine.has(assetKey(rel(p))))
       pass.forEach(p => asset(p, 'passed', `${maybe.get(assetKey(rel(p))) || 'Not a material'}, kept as it was.`))
+      if (await refuseStale(pass, rel)) return report
       await invoke('vfx_copy_uasset_files', { sourcePaths: pass, sourceBaseDir: dirs.modExtract, destBaseDir: dirs.finalUassets })
       keep.push(...pass)
       editable = editable.filter(p => !notMine.has(assetKey(rel(p))))

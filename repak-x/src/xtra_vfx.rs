@@ -643,6 +643,23 @@ pub fn xtra_game_build(state: State<'_, Arc<Mutex<AppState>>>) -> GameBuild {
     mods.ancestors().find(|p| p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("Paks"))).map(game_build).unwrap_or_default()
 }
 
+/// Of `files` (paths inside the mod at `mod_path`), those whose game copy an update rewrote after the mod was written.
+/// The updater copies Niagara systems and other assets it cannot rebuild as they are, and one still cooked for the old
+/// game can crash it (Niagara properties renumbered in 3962284), so a run with any of these is not placed.
+/// shortcut: "written" is the mod file's date, so a mod reinstalled after the update looks current; read the packages'
+/// cook build instead if they ever carry one.
+fn stale(mod_path: &str, files: &[String]) -> Result<Vec<String>, String> {
+    let path = Path::new(mod_path);
+    let written = std::fs::metadata(path).and_then(|m| m.modified()).map_err(|e| format!("{}: {e}", path.display()))?;
+    let written = written.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    Ok(path.parent().and_then(|dir| crate::xtra_broken::rewritten_since(dir, files, written)).unwrap_or_default())
+}
+
+#[tauri::command]
+pub async fn xtra_vfx_stale(mod_path: String, files: Vec<String>) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || stale(&mod_path, &files)).await.map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -860,7 +877,8 @@ mod tests {
             }
             "vfx_check_usmap_update" => json!(c::vfx_check_usmap_update(a.get("force").and_then(Value::as_bool).unwrap_or(false)).await?),
             "xtra_vfx_dirs" => json!(make_dirs(&s(a, "gamePaks"), &s(a, "runId"), &s(a, "usmapPath"))?),
-            "xtra_vfx_detect" => json!(detect(&s(a, "usmapPath"), &list(a, "paths"), p).await?),
+            "xtra_vfx_stale" => json!(stale(&s(a, "modPath"), &list(a, "files"))?),
+            "xtra_vfx_detect" =>json!(detect(&s(a, "usmapPath"), &list(a, "paths"), p).await?),
             _ => return Err(format!("unknown command {cmd}")),
         })
     }
