@@ -13,6 +13,13 @@ export const FIXED_EVENT = 'repakxtra:vfx-fixed'
 
 export const sendToVfx = (paths: string[], start: boolean) => localStorage.setItem(KEY, JSON.stringify({ paths, start, at: Date.now() } satisfies Handoff))
 
+/** The VFX window asks the main window to open a loadout's page (VfxNotice.tsx listens there), and brings it forward. */
+export const OPEN_LOADOUT_EVENT = 'repakxtra:open-loadout'
+export async function openLoadoutInMain(id: string) {
+  const { emitTo } = await import('@tauri-apps/api/event')
+  await emitTo('main', OPEN_LOADOUT_EVENT, id).catch(() => {})
+}
+
 /** Opens the VFX window, or brings it forward. */
 export async function openVfxWindow() {
   const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow')

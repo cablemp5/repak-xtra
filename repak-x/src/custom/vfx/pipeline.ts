@@ -167,7 +167,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
         if (report.placed.warning) warn(report.placed.warning)
       }
       report.status = 'fixed'
-      log(`${report.counts.left ? 'Partly updated' : 'Updated'}: ${fileName(report.output)}`, 'success')
+      log(`${report.counts.left ? 'Partially updated' : 'Updated'}: ${fileName(report.output)}`, 'success')
     }
 
     if (!editable.length) {
