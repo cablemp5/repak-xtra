@@ -71,7 +71,7 @@ import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
 import { useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
 import { fixInVfxWindow } from './custom/vfx/handoff' // repakxtra: the VFX Updater window
-import VfxNotice from './custom/vfx/VfxNotice' // repakxtra: the game updated, VFX mods to fix
+import VfxNotice, { VfxDot } from './custom/vfx/VfxNotice' // repakxtra: the game updated, VFX mods to fix
 import { newDefaultsOnce } from './custom/uiPrefs' // repakxtra
 import { reportSource } from './custom/setupReport' // repakxtra: Copy setup report reads the live list
 import { finishInstallLoadout } from './custom/installLoadout'
@@ -4009,6 +4009,7 @@ function App() {
           >
             <GiLightningTrio style={{ marginRight: '6px' }} />
             <span>VFX Updater</span>
+            <VfxDot mods={mods} />{/* repakxtra: VFX mods need an update */}
           </button>
 
           <SigeonControl alert={alert} />{/* repakxtra */}

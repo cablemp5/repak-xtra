@@ -16,6 +16,14 @@ import './vfx.css'
 type Mod = { path: string; utoc_path?: string | null }
 const DISMISSED = 'repakxtra.vfxNotice' // the game update (seconds) Not now was pressed for
 
+/** The orange dot on the header's VFX Updater button while any mod needs a VFX update (hidden with the problem badges). */
+export function VfxDot({ mods }: { mods: Mod[] }) {
+  useBrokenVersion()
+  const shown = useUiPref('broken')
+  const n = mods.filter(m => verdictOf(m.path)?.kind === 'vfx').length
+  return shown && n ? <span className="vfx-dot" role="img" aria-label={`${n} VFX ${n === 1 ? 'mod needs' : 'mods need'} an update`} /> : null
+}
+
 export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () => void }) {
   useBrokenVersion()
   const shown = useUiPref('broken') // Settings can hide problem badges, this goes with them

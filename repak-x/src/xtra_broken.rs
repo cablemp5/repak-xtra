@@ -114,7 +114,7 @@ struct Facts<'a> {
     files: &'a [String],
     galacta: bool,
     vfx: bool,
-    /// its fixed copy (<name>_UPDATED_9999999_P) sits beside it: the copy is judged, not the original again
+    /// its update sits beside it (<name>_UPDATED_9999999_P, or this is <name>_BROKEN beside <name>): the update is judged, not the original again
     fixed: bool,
     has_blueprint: bool,
     /// when the mod's file was written (seconds)
@@ -171,10 +171,12 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
         let game_updated = game_containers(&paks).iter().map(|c| c.2).max().unwrap_or(0);
         let base = |p: &Path| p.with_extension("").to_string_lossy().to_lowercase();
         let installed_mods: HashSet<String> = mod_paths.iter().map(|p| base(Path::new(p))).collect();
+        // an update beside it: <name>_UPDATED next to the original, or the original renamed <name>_BROKEN next to the update
         let has_fix = |path: &Path| {
             let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-            let fixed = crate::xtra_vfx::fixed_stem(&stem);
-            !fixed.eq_ignore_ascii_case(&stem) && installed_mods.contains(&base(&path.with_file_name(format!("{fixed}.pak"))))
+            [crate::xtra_vfx::fixed_stem(&stem), crate::xtra_vfx::unbroken_stem(&stem)]
+                .iter()
+                .any(|fixed| !fixed.eq_ignore_ascii_case(&stem) && installed_mods.contains(&base(&path.with_file_name(format!("{fixed}.pak")))))
         };
         mod_paths
             .iter()

@@ -2609,6 +2609,14 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 [data-theme="light"] .mod-type-badge.broken-badge, [data-theme="light"] .mod-state-filter button.is-broken, [data-theme="light"] .mod-state-filter button.is-broken .mod-state-count { color: #7f6900 !important; }
 .mod-type-badge.broken-badge.is-broken { background: color-mix(in srgb, #f5d342, transparent 88%) !important; }
 .mod-type-badge.broken-badge.is-risky, .mod-type-badge.broken-badge.is-vfx { background: transparent !important; }
+/* Needs VFX update: the VFX type's orange (.vfx-badge's dot), so it reads as a VFX job, not a broken mod */
+.mod-type-badge.broken-badge.is-vfx { color: oklch(0.72 0.16 50) !important; border-color: color-mix(in oklch, oklch(0.72 0.16 50), transparent 55%) !important; }
+[data-theme="light"] .mod-type-badge.broken-badge.is-vfx { color: oklch(0.55 0.16 50) !important; }
+/* the header's VFX Updater button: an orange dot while VFX mods need an update (custom/vfx/VfxNotice.tsx) */
+.btn-vfx { position: relative; }
+.vfx-dot { position: absolute; top: -4px; right: -4px; width: 9px; height: 9px; border-radius: 50%; pointer-events: none;
+  background: oklch(0.72 0.16 50); box-shadow: 0 0 0 2px var(--bg-darkest); animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; }
+html[data-motion="off"] .vfx-dot { animation: none; }
 .mod-state-filter button.is-broken { color: #f5d342; }
 .mod-state-filter button.is-broken .mod-state-count { color: #f5d342; }
 

@@ -300,6 +300,10 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
           reason: 'A game update changed 381 of the game files this VFX mod replaces, so its effects may look wrong or crash the game. The VFX Updater rebuilds it on the new game files.' }))
         return localStorage.getItem('mock.broken') ? (args?.modPaths ?? []).slice(0, 2).map((path: string, i: number) => ({ path,
           kind: i ? 'risky' : 'broken', reason: i ? 'A Blueprint mod installed before the last game update.' : 'None of the 3 game files it replaces exist in this game version.' })) : []
+      // the VFX Updater's list: mods with VFX in their name stand in for the VFX type (no originals with an update beside them)
+      case 'xtra_vfx_mods': return data.mods.filter((m: any) => /vfx/i.test(m.path) && !/_BROKEN(_\d+)?_P\./i.test(m.path)).map((m: any) => ({
+        path: m.path, utoc: m.utoc_path || m.path.replace(/\.(pak|bak_repak)$/i, '.utoc'), enabled: m.enabled, hero: m.character_name ?? null,
+        name: m.custom_name || m.path.split(/[\\/]/).pop().replace(/\.[^.]+$/, '').replace(/(_\d+)?_P$/i, '') }))
       case 'xtra_game_build': return { updated: Math.floor(Date.now() / 1000) - 3600 * 5, cl: 3962284 }
       // Installing: the file picker returns two fake paks, install adds them to the library and reports done. A folder
       // pick (the Sigeon folder) returns an unzipped Sigeon download.
@@ -408,9 +412,11 @@ function mockVfx(cmd: string, args: any): unknown {
     case 'vfx_convert_json_to_uassets': return vfxStep().then(() => vfxAssets(args.outputDir))
     case 'vfx_pack_to_iostore': return vfxStep().then(() => `${args.outputBase}.utoc`)
     case 'xtra_vfx_place': {
-      const dir = String(args.source).replace(/[\/][^\/]*$/, ''), stem = String(args.source).split(/[\/]/).pop()!.replace(/\.utoc$/i, '')
-      const fixed = `${dir}\\${stem.replace(/(_\d+)?_P$/i, '')}_UPDATED_9999999_P.pak`
-      return { fixed, original: `${dir}\\${stem}.bak_repak`, turnedOff: Boolean(args.turnOffOriginal), replaced: false }
+      const dir = String(args.source).replace(/[\\/][^\\/]*$/, ''), stem = String(args.source).split(/[\\/]/).pop()!.replace(/\.utoc$/i, '')
+      const [, base, prio = ''] = stem.match(/^(.*?)((?:_\d+)?_P)?$/i) ?? [stem, stem]
+      const keep = args.keepName !== false
+      const fixed = keep ? `${dir}\\${stem}.pak` : `${dir}\\${base}_UPDATED_9999999_P.pak`
+      return { fixed, original: `${dir}\\${keep ? `${base}_BROKEN${prio}` : stem}.bak_repak`, turnedOff: Boolean(args.turnOffOriginal), replaced: false }
     }
     default: return undefined
   }

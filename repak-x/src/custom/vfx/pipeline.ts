@@ -8,7 +8,8 @@
 //   5 Those to JSON
 //   6 Carry the edits over. An asset the game does not have is the mod's own and stays as it was.
 //   7 Edited JSON back to assets
-//   8 Pack, then put the fix beside the original (on or off like it, the original off: xtra_vfx_place)
+//   8 Pack, then put the fix in the mod's place: it takes the mod's name, on or off like it, and the original is renamed
+//     <name>_BROKEN and turned off (xtra_vfx_place)
 // Never throws: the report says what happened, asset by asset.
 import { invoke } from '@tauri-apps/api/core'
 import { DEFAULT_FILTER, type ColorFilter } from './filter'
@@ -43,6 +44,8 @@ export type FixOptions = {
   /** Pack into this folder and stop there (the benchmark). Without it the fix goes beside the original. */
   outputDir?: string
   turnOffOriginal?: boolean
+  /** The update takes the mod's name and the original becomes <name>_BROKEN (the default). Off: the update is <name>_UPDATED. */
+  keepName?: boolean
   filter?: ColorFilter
   log?: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void
   onStep?: (s: { step: number; title: string }) => void
@@ -258,7 +261,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     const utoc = await invoke<string>('vfx_pack_to_iostore', { usmapPath: o.usmapPath, inputDir: dirs.finalUassets, outputBase: base, allowedAssets: manifest })
     if (o.outputDir) report.output = utoc
     else {
-      report.placed = await invoke<Placed>('xtra_vfx_place', { source: o.modPath, stagedBase: base, turnOffOriginal: o.turnOffOriginal ?? true })
+      report.placed = await invoke<Placed>('xtra_vfx_place', { source: o.modPath, stagedBase: base, turnOffOriginal: o.turnOffOriginal ?? true, keepName: o.keepName ?? true })
       report.output = report.placed.fixed
     }
     report.status = 'fixed'

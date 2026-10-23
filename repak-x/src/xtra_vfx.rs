@@ -4,7 +4,7 @@
 //! fixed mod beside the original (on or off like it, the original turned off, an older fixed copy to Recently deleted),
 //! and the installed game's build.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -143,23 +143,45 @@ pub async fn xtra_vfx_detect(window: Window, usmap_path: String, paths: Vec<Stri
     detect(&usmap_path, &paths, &TauriVfxProgressSink::new(&window)).await
 }
 
-/// `<name>_UPDATED_9999999_P` for a mod's file stem: the name without its priority suffix (and without an earlier
-/// _UPDATED, so fixing a fixed mod keeps its name), spaces as underscores.
-pub(crate) fn fixed_stem(stem: &str) -> String {
-    let mut b = stem.trim().to_string();
-    // "_<digits>_P" or "_P" at the end
+/// A mod's file stem split before its priority suffix ("_<digits>_P" or "_P"): ("A", "_9999999_P").
+fn split_priority(stem: &str) -> (&str, &str) {
+    let b = stem.trim();
     let cut = b.rfind('_').filter(|&i| b[i + 1..].eq_ignore_ascii_case("P")).map(|i| {
         let head = &b[..i];
         head.rfind('_').filter(|&j| j + 1 < i && head[j + 1..].bytes().all(|c| c.is_ascii_digit())).unwrap_or(i)
     });
-    if let Some(cut) = cut {
-        b.truncate(cut);
+    let cut = cut.unwrap_or(b.len());
+    (&b[..cut], &b[cut..])
+}
+
+/// The name without a trailing `marker` (case aside).
+fn strip_marker<'a>(name: &'a str, marker: &str) -> &'a str {
+    let n = marker.len();
+    if name.len() > n && name.is_char_boundary(name.len() - n) && name[name.len() - n..].eq_ignore_ascii_case(marker) {
+        &name[..name.len() - n]
+    } else {
+        name
     }
-    if b.len() > 8 && b.is_char_boundary(b.len() - 8) && b[b.len() - 8..].eq_ignore_ascii_case("_UPDATED") {
-        b.truncate(b.len() - 8);
-    }
+}
+
+/// `<name>_UPDATED_9999999_P` for a mod's file stem: the name without its priority suffix (and without an earlier
+/// _UPDATED, so fixing a fixed mod keeps its name), spaces as underscores.
+pub(crate) fn fixed_stem(stem: &str) -> String {
+    let b = strip_marker(split_priority(stem).0, "_UPDATED");
     let b = b.trim().split_whitespace().collect::<Vec<_>>().join("_");
     format!("{b}_UPDATED_9999999_P")
+}
+
+/// `<name>_BROKEN<priority>`: the name the original takes when its update keeps the mod's own name.
+pub(crate) fn broken_stem(stem: &str) -> String {
+    let (b, p) = split_priority(stem);
+    format!("{}_BROKEN{p}", strip_marker(b, "_BROKEN"))
+}
+
+/// The mod's own name for a `_BROKEN` original (the name its update has), or the name itself.
+pub(crate) fn unbroken_stem(stem: &str) -> String {
+    let (b, p) = split_priority(stem);
+    format!("{}{p}", strip_marker(b, "_BROKEN"))
 }
 
 const MOD_EXTS: [&str; 5] = ["pak", "bak_repak", "pak_disabled", "utoc", "ucas"];
@@ -177,20 +199,25 @@ pub struct Placed {
     replaced: bool,
 }
 
-/// Puts a packed fix (`staged_base` + .utoc/.ucas/.pak) beside the mod it was made from (`source`, its .utoc), named
-/// fixed_stem, on or off like the source. With `turn_off_original` an original that was on goes off (its .pak becomes
-/// .bak_repak). A file already holding that name goes to Recently deleted first. Tags carry over.
-fn place(source: &Path, staged_base: &Path, turn_off_original: bool, trash_root: &Path) -> Result<(Placed, String, String), String> {
+/// Puts a packed fix (`staged_base` + .utoc/.ucas/.pak) beside the mod it was made from (`source`, its .utoc), on or off
+/// like the source. With `keep_name` (the default) the fix takes the mod's own name and the original is renamed
+/// `<name>_BROKEN` (broken_stem), so loadouts and tags keep pointing at the working copy. Without it the fix is named
+/// fixed_stem (`_UPDATED`) and the original keeps its name. With `turn_off_original` an original that was on goes off
+/// (its .pak becomes .bak_repak). Files already holding either name go to Recently deleted first (an older update, an
+/// older broken copy). Returns the names tags should carry over to.
+fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: bool, trash_root: &Path) -> Result<(Placed, String, Vec<String>), String> {
     let dir = source.parent().ok_or("The mod has no folder")?;
     let stem = source.file_stem().ok_or("The mod has no name")?.to_string_lossy().to_string();
-    let on = dir.join(format!("{stem}.pak"));
-    let off = dir.join(format!("{stem}.bak_repak"));
-    let was_on = on.exists();
-    let target = fixed_stem(&stem);
-    let same = target.eq_ignore_ascii_case(&stem);
-    let turn_off = turn_off_original && was_on && !same;
-    if turn_off && off.exists() {
-        return Err(format!("Both an on and an off copy of {stem} are in the mods folder. Delete one of them, then fix it again."));
+    let files = |s: &str| MOD_EXTS.iter().map(|x| dir.join(format!("{s}.{x}"))).filter(|p| p.exists()).collect::<Vec<_>>();
+    let was_on = dir.join(format!("{stem}.pak")).exists();
+    // where the fix goes, and where the original ends up
+    let (target, kept) = if keep_name { (unbroken_stem(&stem), broken_stem(&stem)) } else { (fixed_stem(&stem), stem.clone()) };
+    let eq = |a: &str, b: &str| a.eq_ignore_ascii_case(b);
+    // updating an _UPDATED copy without keep_name: the new update replaces it
+    let replace = eq(&target, &kept);
+    let turn_off = turn_off_original && was_on && !replace;
+    if was_on && dir.join(format!("{stem}.bak_repak")).exists() {
+        return Err(format!("Both an on and an off copy of {stem} are in the mods folder. Delete one of them, then update it again."));
     }
     let staged = |x: &str| PathBuf::from(format!("{}.{x}", staged_base.to_string_lossy()));
     for x in ["utoc", "ucas", "pak"] {
@@ -199,10 +226,20 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, trash_root:
         }
     }
 
-    let existing: Vec<PathBuf> = MOD_EXTS.iter().map(|x| dir.join(format!("{target}.{x}"))).filter(|p| p.exists()).collect();
+    // what stands in the way: the names the fix and the original move to, unless the original is already there
+    let mut existing = Vec::new();
+    for s in if replace { vec![&target] } else { vec![&target, &kept] } {
+        if replace || !eq(s, &stem) {
+            existing.extend(files(s));
+        }
+    }
     let trash = if existing.is_empty() { None } else { Some(crate::xtra_trash::reserve_in(trash_root, None)?) };
     let mut trashed = Vec::new();
-    let undo = |trashed: &[PathBuf]| {
+    let mut renamed: Vec<(PathBuf, PathBuf)> = Vec::new();
+    let undo = |trashed: &[PathBuf], renamed: &[(PathBuf, PathBuf)]| {
+        for (from, to) in renamed.iter().rev() {
+            let _ = std::fs::rename(to, from);
+        }
         if let Some(t) = &trash {
             for p in trashed {
                 let _ = crate::xtra_trash::put_back(t, p);
@@ -212,10 +249,25 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, trash_root:
     };
     for p in &existing {
         if let Err(e) = crate::xtra_trash::discard(trash.as_ref().unwrap(), p) {
-            undo(&trashed);
+            undo(&trashed, &renamed);
             return Err(format!("Could not move {} to Recently deleted: {e}", p.display()));
         }
         trashed.push(p.clone());
+    }
+
+    // the original to its new name, and off
+    for from in if replace { Vec::new() } else { files(&stem) } {
+        let x = from.extension().map(|x| x.to_string_lossy().to_string()).unwrap_or_default();
+        let x = if turn_off && x.eq_ignore_ascii_case("pak") { "bak_repak".to_string() } else { x };
+        let to = dir.join(format!("{kept}.{x}"));
+        if to == from {
+            continue;
+        }
+        if let Err(e) = std::fs::rename(&from, &to) {
+            undo(&trashed, &renamed);
+            return Err(format!("Could not rename the original {}: {e}", from.display()));
+        }
+        renamed.push((from, to));
     }
 
     let main = dir.join(format!("{target}.{}", if was_on { "pak" } else { "bak_repak" }));
@@ -225,34 +277,74 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, trash_root:
             for (_, done) in &moves[..i] {
                 let _ = std::fs::remove_file(done);
             }
-            undo(&trashed);
+            undo(&trashed, &renamed);
             return Err(format!("Could not put the fixed mod in place: {e}"));
         }
     }
 
-    let original = if turn_off {
-        std::fs::rename(&on, &off).map_err(|e| format!("The fixed mod is in place, but the original could not be turned off: {e}"))?;
-        off
-    } else if was_on {
-        on
-    } else {
-        off
-    };
+    let original = if replace { main.clone() } else { dir.join(format!("{kept}.{}", if was_on && !turn_off { "pak" } else { "bak_repak" })) };
     let p = |p: &Path| p.to_string_lossy().to_string();
-    Ok((Placed { fixed: p(&main), original: p(&original), turned_off: turn_off, replaced: !existing.is_empty() }, stem, target))
+    let placed = Placed { fixed: p(&main), original: p(&original), turned_off: turn_off, replaced: !existing.is_empty() };
+    Ok((placed, stem, vec![target, kept]))
 }
 
 #[tauri::command]
-pub fn xtra_vfx_place(source: String, staged_base: String, turn_off_original: bool, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Placed, String> {
+pub fn xtra_vfx_place(source: String, staged_base: String, turn_off_original: bool, keep_name: Option<bool>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Placed, String> {
     crate::xtra_identity::upstream_guard()?;
-    let (placed, from, to) = place(Path::new(&source), Path::new(&staged_base), turn_off_original, &crate::xtra_trash::trash_dir())?;
+    let (placed, from, to) = place(Path::new(&source), Path::new(&staged_base), turn_off_original, keep_name.unwrap_or(true), &crate::xtra_trash::trash_dir())?;
     let mut s = state.lock().unwrap();
     let key = |stem: &str| crate::get_mod_key(Path::new(&format!("{stem}.pak")));
     if let Some(tags) = s.mod_tags.get(&key(&from)).cloned() {
-        s.mod_tags.entry(key(&to)).or_insert(tags);
+        for t in &to {
+            s.mod_tags.entry(key(t)).or_insert_with(|| tags.clone());
+        }
         let _ = crate::save_state(&s);
     }
     Ok(placed)
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct VfxMod {
+    /// The mod's main file (.pak, or .bak_repak when it is off)
+    path: String,
+    utoc: String,
+    enabled: bool,
+    /// Its name in the Library (a custom name, or the file's)
+    name: String,
+    hero: Option<String>,
+}
+
+/// The mods folder's VFX mods (the Library's VFX type) the VFX Updater can update: IoStore mods, no originals with an update
+/// beside them (<name>_BROKEN, or <name> next to <name>_UPDATED). Details come from the Library's cache, so after the first look this is quick.
+#[tauri::command]
+pub async fn xtra_vfx_mods(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<VfxMod>, String> {
+    let mods = crate::get_pak_files(state.clone()).await?;
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let stems: HashSet<String> = mods.iter().filter_map(|m| Some(m.path.file_stem()?.to_string_lossy().to_lowercase())).collect();
+        mods.into_iter()
+            .filter_map(|m| {
+                let utoc = m.utoc_path.clone()?;
+                let stem = m.path.file_stem()?.to_string_lossy().to_string();
+                // an original whose update sits beside it: <name>_BROKEN, or <name> next to <name>_UPDATED from before
+                let fixed = fixed_stem(&stem);
+                if !unbroken_stem(&stem).eq_ignore_ascii_case(&stem) || (!fixed.eq_ignore_ascii_case(&stem) && stems.contains(&fixed.to_lowercase())) {
+                    return None;
+                }
+                let details = crate::compute_mod_details(&m.path, &state).ok()?;
+                (details.category == "VFX").then(|| VfxMod {
+                    name: m.custom_name.clone().filter(|n| !n.trim().is_empty()).unwrap_or_else(|| split_priority(&stem).0.to_string()),
+                    hero: m.character_name.clone(),
+                    path: m.path.to_string_lossy().to_string(),
+                    utoc: utoc.to_string_lossy().to_string(),
+                    enabled: m.enabled,
+                })
+            })
+            .collect()
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[derive(Serialize, Debug, Default)]
@@ -303,6 +395,16 @@ mod tests {
     }
 
     #[test]
+    fn broken_names_keep_the_priority_and_one_marker() {
+        assert_eq!(broken_stem("BlueColoredVFX_9999999_P"), "BlueColoredVFX_BROKEN_9999999_P");
+        assert_eq!(broken_stem("BlueColoredVFX_BROKEN_9999999_P"), "BlueColoredVFX_BROKEN_9999999_P");
+        assert_eq!(broken_stem("bp-lime_P"), "bp-lime_BROKEN_P");
+        assert_eq!(broken_stem("Plain"), "Plain_BROKEN");
+        assert_eq!(unbroken_stem("BlueColoredVFX_BROKEN_9999999_P"), "BlueColoredVFX_9999999_P");
+        assert_eq!(unbroken_stem("BlueColoredVFX_9999999_P"), "BlueColoredVFX_9999999_P");
+    }
+
+    #[test]
     fn kinds_match_the_upstream_mapping() {
         assert_eq!(kind_of("MaterialInstanceConstant"), "material_instance");
         assert_eq!(kind_of("BlueprintGeneratedClass"), "blueprint");
@@ -337,8 +439,8 @@ mod tests {
             touch(&mods.join(format!("A_9999999_P.{x}")), "old");
             touch(&root.join(format!("stage/out.{x}")), "new");
         }
-        let (placed, from, to) = place(&mods.join("A_9999999_P.utoc"), &root.join("stage/out"), true, &root.join("trash")).unwrap();
-        assert_eq!((from.as_str(), to.as_str()), ("A_9999999_P", "A_UPDATED_9999999_P"));
+        let (placed, from, to) = place(&mods.join("A_9999999_P.utoc"), &root.join("stage/out"), true, false, &root.join("trash")).unwrap();
+        assert_eq!((from.as_str(), to[0].as_str()), ("A_9999999_P", "A_UPDATED_9999999_P"));
         assert!(placed.turned_off && !placed.replaced);
         assert!(mods.join("A_UPDATED_9999999_P.pak").exists(), "on, like the original was");
         assert!(mods.join("A_9999999_P.bak_repak").exists() && !mods.join("A_9999999_P.pak").exists(), "the original is off");
@@ -348,11 +450,53 @@ mod tests {
         for x in ["utoc", "ucas", "pak"] {
             touch(&root.join(format!("stage/out.{x}")), "newer");
         }
-        let (placed, ..) = place(&mods.join("A_9999999_P.utoc"), &root.join("stage/out"), true, &root.join("trash")).unwrap();
+        let (placed, ..) = place(&mods.join("A_9999999_P.utoc"), &root.join("stage/out"), true, false, &root.join("trash")).unwrap();
         assert!(!placed.turned_off && placed.replaced, "the previous fix went to Recently deleted");
         assert!(mods.join("A_UPDATED_9999999_P.bak_repak").exists() && !mods.join("A_UPDATED_9999999_P.pak").exists());
         assert_eq!(std::fs::read_to_string(mods.join("A_UPDATED_9999999_P.ucas")).unwrap(), "newer");
         assert_eq!(std::fs::read_dir(root.join("trash")).unwrap().count(), 1, "the old fix is in the trash given, never the app's");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn place_keeps_the_name_on_the_update_and_renames_the_original_broken() {
+        let root = std::env::temp_dir().join(format!("xvfx-keep-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let mods = root.join("mods");
+        let stage = |text: &str| {
+            for x in ["utoc", "ucas", "pak"] {
+                touch(&root.join(format!("stage/out.{x}")), text);
+            }
+        };
+        for x in ["pak", "utoc", "ucas"] {
+            touch(&mods.join(format!("A_9999999_P.{x}")), "old");
+        }
+        stage("new");
+        let (placed, from, to) = place(&mods.join("A_9999999_P.utoc"), &root.join("stage/out"), true, true, &root.join("trash")).unwrap();
+        assert_eq!((from.as_str(), to.join(",").as_str()), ("A_9999999_P", "A_9999999_P,A_BROKEN_9999999_P"));
+        assert!(placed.turned_off && !placed.replaced);
+        assert_eq!(std::fs::read_to_string(mods.join("A_9999999_P.pak")).unwrap(), "new", "the update has the name, on like the original");
+        assert_eq!(std::fs::read_to_string(mods.join("A_9999999_P.ucas")).unwrap(), "new");
+        assert_eq!(std::fs::read_to_string(mods.join("A_BROKEN_9999999_P.bak_repak")).unwrap(), "old", "the original is renamed and off");
+        assert_eq!(std::fs::read_to_string(mods.join("A_BROKEN_9999999_P.utoc")).unwrap(), "old");
+        assert!(!mods.join("A_BROKEN_9999999_P.pak").exists());
+        assert!(placed.original.ends_with("A_BROKEN_9999999_P.bak_repak"));
+
+        // updating the update again: the older broken copy goes to Recently deleted, the newest original is kept
+        stage("newer");
+        let (placed, ..) = place(&mods.join("A_9999999_P.utoc"), &root.join("stage/out"), true, true, &root.join("trash")).unwrap();
+        assert!(placed.replaced);
+        assert_eq!(std::fs::read_to_string(mods.join("A_9999999_P.pak")).unwrap(), "newer");
+        assert_eq!(std::fs::read_to_string(mods.join("A_BROKEN_9999999_P.bak_repak")).unwrap(), "new");
+
+        // updating the broken copy: it stays where it is, the update in its name goes to Recently deleted
+        stage("newest");
+        let (placed, ..) = place(&mods.join("A_BROKEN_9999999_P.utoc"), &root.join("stage/out"), true, true, &root.join("trash")).unwrap();
+        assert!(placed.replaced && !placed.turned_off, "the broken copy was off already");
+        assert_eq!(std::fs::read_to_string(mods.join("A_9999999_P.bak_repak")).unwrap(), "newest", "off, like the copy it was made from");
+        assert!(!mods.join("A_9999999_P.pak").exists(), "the earlier update is in Recently deleted");
+        assert_eq!(std::fs::read_to_string(mods.join("A_BROKEN_9999999_P.bak_repak")).unwrap(), "new");
+        assert_eq!(std::fs::read_dir(root.join("trash")).unwrap().count(), 2);
         let _ = std::fs::remove_dir_all(&root);
     }
 
