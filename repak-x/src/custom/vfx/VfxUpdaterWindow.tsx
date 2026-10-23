@@ -135,7 +135,7 @@ function Row({ mod, loadouts, run, needs, picked, open, busy, onPick, onToggle, 
       </Checkbox>
       {loadouts.length > 0 && (
         <span className="vf-loadouts" title={`In ${loadouts.join(', ')}`}>
-          <i>In</i><span>{loadouts[0]}</span>{loadouts.length > 1 && <b>+{loadouts.length - 1}</b>}
+          <span>{loadouts[0]}</span>{loadouts.length > 1 && <b>+{loadouts.length - 1}</b>}
         </span>
       )}
       {mod.enabled && <span className="mod-type-badge category-badge on-badge" title="This mod is on now">On</span>}
@@ -160,8 +160,8 @@ function Row({ mod, loadouts, run, needs, picked, open, busy, onPick, onToggle, 
 
 /** A group of mods that folds away to its heading, as a collection does on the Loadouts screen. Its heading holds the
  *  fold, the name and count, and Select all / Clear for the group. */
-function Group({ title, count, tone, open, onFold, all, busy, onPickAll, children }: {
-  title: string; count: number; tone?: 'needs'; open: boolean; onFold: () => void; all: boolean; busy: boolean; onPickAll: () => void; children: React.ReactNode
+function Group({ title, count, tone, open, onFold, all, none, busy, onPick, children }: {
+  title: string; count: number; tone?: 'needs'; open: boolean; onFold: () => void; all: boolean; none: boolean; busy: boolean; onPick: (on: boolean) => void; children: React.ReactNode
 }) {
   return (
     <section className={`vf-grp${tone ? ` is-${tone}` : ''}${open ? '' : ' is-folded'}`}>
@@ -171,7 +171,10 @@ function Group({ title, count, tone, open, onFold, all, busy, onPickAll, childre
           <h2>{title}</h2>
           <span className="vf-grp-count">{count}</span>
         </button>
-        <button type="button" className="vf-select" disabled={busy} onClick={onPickAll}>{all ? 'Clear' : 'Select all'}</button>
+        <span className="vf-selects">
+          <button type="button" className="vf-select" disabled={busy || all} onClick={() => onPick(true)}>Select all</button>
+          <button type="button" className="vf-select" disabled={busy || none} onClick={() => onPick(false)}>Clear</button>
+        </span>
       </div>
       <div className="t-acc-panel" data-open={open}><div className="t-acc-panel-inner" {...folded(!open)}>{children}</div></div>
     </section>
@@ -404,7 +407,7 @@ export function VfxUpdaterPanel() {
   const first = (m: Mod) => Boolean(needsOf(m) || runs[norm(m.utoc)])
   const group = (id: string, title: string, ms: Mod[], count = ms.length) => {
     const keys = ms.map(m => norm(m.utoc))
-    return { id, title, mods: ms, count, keys, all: keys.length > 0 && keys.every(k => picked.has(k)) }
+    return { id, title, mods: ms, count, keys, all: keys.length > 0 && keys.every(k => picked.has(k)), none: !keys.some(k => picked.has(k)) }
   }
   const needing = shown.filter(first)
   const groups = [
@@ -447,8 +450,8 @@ export function VfxUpdaterPanel() {
           : shown.length === 0
             ? <p className="lp-empty">{needle ? `No VFX mods match “${q.trim()}”.` : 'No VFX mods in the mods folder. Mods the Library shows as VFX appear here.'}</p>
             : groups.map(g => g.mods.length > 0 && (
-              <Group key={g.id} title={g.title} count={g.count} tone={g.id === 'needs' ? 'needs' : undefined} busy={busy} all={g.all}
-                open={Boolean(needle) || !foldedIds.includes(g.id)} onFold={() => fold(g.id)} onPickAll={() => pick(g.keys, !g.all)}>
+              <Group key={g.id} title={g.title} count={g.count} tone={g.id === 'needs' ? 'needs' : undefined} busy={busy} all={g.all} none={g.none}
+                open={Boolean(needle) || !foldedIds.includes(g.id)} onFold={() => fold(g.id)} onPick={on => pick(g.keys, on)}>
                 <ul className="mod-rows vf-rows">
                   {g.mods.map(m => {
                     const key = norm(m.utoc)

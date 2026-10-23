@@ -14,37 +14,38 @@
 .vf-search-clear { flex: none; width: 26px; height: 26px !important; min-height: 0 !important; }
 
 /* a group: its heading folds it away (the Loadouts screen's collections), Select all sits at the far end */
-.vf-grp-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.vf-grp-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
 .vf-grp.is-folded .vf-grp-head { margin-bottom: 0; }
 .vf-grp-fold { flex: 1; min-width: 0; display: flex !important; align-items: center; justify-content: flex-start !important; gap: 8px; height: 30px !important; min-height: 0 !important;
   padding: 0 !important; margin-left: -2px; border: none !important; background: none !important; cursor: pointer; text-align: left; color: var(--text-secondary) !important; }
-.vf-grp-fold h2 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--text-primary); }
+.vf-grp-fold h2 { margin: 0; font-size: 13px; font-weight: 600; color: var(--text-primary); }   /* a Loadouts collection's name */
 .vf-grp-fold:hover .vf-grp-caret, .vf-grp-fold:focus-visible .vf-grp-caret { color: var(--text-primary); }
 .vf-grp-caret { flex: none; transition: transform var(--acc-chevron) var(--acc-ease); }
 .vf-grp-fold[aria-expanded="true"] .vf-grp-caret { transform: rotate(90deg); }
-.vf-grp-count { min-width: 22px; height: 20px; padding: 0 7px; display: inline-grid; place-items: center; border-radius: 999px;
-  font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-secondary); background: var(--quiet-active); }
+.vf-grp-count { min-width: 20px; height: 18px; padding: 0 6px; display: inline-grid; place-items: center; border-radius: 999px;
+  font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-secondary); background: var(--quiet-active); }
 /* Needs an update: its count in the problem yellow, as the Library's Needs VFX update tag */
 .vf-grp.is-needs .vf-grp-count { color: #f5d342; background: color-mix(in srgb, #f5d342, transparent 86%); }
 [data-theme="light"] .vf-grp.is-needs .vf-grp-count { color: #7f6900; }
+.vf-selects { flex: none; display: inline-flex; gap: 2px; }
 .vf-select { flex: none; height: 28px !important; min-height: 0 !important; padding: 0 10px !important; border: none !important; border-radius: var(--quiet-radius) !important;
   background: none !important; font-size: 12.5px !important; font-weight: 500 !important; color: var(--text-secondary) !important; cursor: pointer; }
 .vf-select:hover:not(:disabled) { color: var(--text-primary) !important; background: var(--quiet-active) !important; }
+.vf-select:disabled { opacity: 0.4; cursor: default; }
 
 /* a mod's row, as compact as the Library's: the whole name ticks it, the loadouts holding it, its badges and state at the
    right, then (full width) progress or report */
-.vf-rows > .vf-row { flex-wrap: wrap; min-height: 42px; padding: 0 12px; gap: 8px; color: var(--text-primary); }
-.vf-pick { flex: 1; min-width: 0; min-height: 42px; display: flex !important; align-items: center; gap: 12px !important; cursor: pointer; }
+.vf-rows > .vf-row { flex-wrap: wrap; min-height: 40px; padding: 0 12px; gap: 8px; color: var(--text-primary); }
+.vf-pick { flex: 1; min-width: 0; min-height: 40px; display: flex !important; align-items: center; gap: 12px !important; cursor: pointer; }
 .vf-pick .repakx-checkbox-label { min-width: 0; flex: 1; display: flex; }
-.vf-row-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 600; color: var(--text-primary); }
+.vf-row-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .vf-row:not(.is-picked) .vf-row-name { font-weight: 400; color: var(--text-secondary); }
 .vf-row:not(.is-picked):hover .vf-row-name { color: var(--text-primary); }
 /* the loadouts holding it: a quiet tag the size of the Library's, the first name and how many more */
-.vf-loadouts { flex: 0 1 auto; min-width: 0; max-width: 34%; display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px;
+.vf-loadouts { flex: 0 1 auto; min-width: 0; max-width: 34%; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px;
   border: 1px solid var(--panel-border); border-radius: 6px; font-size: 11.5px; font-weight: 500; color: var(--text-secondary); }
-.vf-loadouts i { flex: none; font-style: normal; font-weight: 400; }
 .vf-loadouts span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vf-loadouts b { flex: none; font-weight: 600; color: var(--text-primary); }
+.vf-loadouts b { flex: none; font-weight: 500; color: var(--text-secondary); }
 .vf-status { flex: none; font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .vf-status.is-running { color: var(--text-primary); }
 .vf-status.is-cancelled { color: #f5d342; }
@@ -106,7 +107,7 @@
 
 /* Advanced: the install card's fold (.ia) under the lists, each part apart under its own heading */
 .vf-adv { padding-top: 16px; }
-.vf-adv > .ia-toggle { gap: 8px; font-size: 15px !important; font-weight: 600 !important; letter-spacing: -0.01em; color: var(--text-primary) !important; }   /* a heading like the groups' */
+.vf-adv > .ia-toggle { gap: 8px; font-size: 13px !important; font-weight: 600 !important; color: var(--text-primary) !important; }   /* a heading like the groups' */
 .vf-adv > .ia-toggle .ia-caret { color: var(--text-secondary); }
 .vf-adv-body { display: flex; flex-direction: column; padding: 8px 0 2px; }
 .vf-sub { padding: 20px 0; }
