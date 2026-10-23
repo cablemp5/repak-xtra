@@ -155,7 +155,8 @@ button.vf-assets-toggle:hover { color: var(--text-primary) !important; }
   border: 1px solid color-mix(in srgb, #f5d342, transparent 70%); background: color-mix(in srgb, #f5d342, transparent 94%); }
 .vf-behind p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 .vf-behind b { font-weight: 600; color: #f5d342; }
-.su-part-mark.is-behind { color: #f5d342; border-color: color-mix(in srgb, #f5d342, transparent 55%); }
+.su-part-mark.is-behind { color: #f5d342; }
+.su-part-mark.is-behind::before { display: none; } /* the warning icon takes the empty circle's place */
 [data-theme="light"] .vf-behind b, [data-theme="light"] .su-part-mark.is-behind { color: #665400; }
 .vf-names { display: flex; flex-direction: column; gap: 12px; }   /* Color names: two labelled fields */
 .vf-names label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-primary); }

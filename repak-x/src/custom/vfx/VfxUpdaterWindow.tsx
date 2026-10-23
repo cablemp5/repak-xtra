@@ -689,7 +689,7 @@ export function VfxUpdaterPanel() {
       <footer className="vf-foot">
         {state
           ? <span className="vf-state" aria-live="polite">{state}</span>
-          : partialTodo ? <span className="vf-state vf-policy"><b className="vf-partial-n">{partialTodo === todo ? (todo === 1 ? 'It' : `All ${todo}`) : `${partialTodo} of ${todo}`}</b> will only partly update. Their old Niagara files are left out, and the originals are kept.</span>
+          : partialTodo ? <span className="vf-state vf-policy"><b className="vf-partial-n">{partialTodo === todo ? (todo === 1 ? 'It' : `All ${todo}`) : `${partialTodo} of ${todo}`}</b> will only partly update, without {partialTodo === 1 ? 'its' : 'their'} old Niagara files.</span>
           : <span className="vf-state vf-policy">{policy}. <button type="button" className="su-link" onClick={() => showAdvanced(true)}>Change</button></span>}
         {reports.length > 0 && !busy && <button type="button" className="lo-text-btn" onClick={() => copy('report')}><Copy size={14} /> {copied === 'report' ? 'Copied' : 'Copy report'}</button>}
         {busy
