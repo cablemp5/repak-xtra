@@ -48,7 +48,13 @@
 .vf-row:not(.is-picked) .vf-row-name { font-weight: 400; color: var(--text-secondary); }
 .vf-row:not(.is-picked):hover .vf-row-name { color: var(--text-primary); }
 /* the loadouts holding it: a quiet tag the size of the Library's, the first name and how many more */
-.vf-loadouts { flex: 0 1 auto; min-width: 0; max-width: 34%; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px;
+/* will only partly update (old Niagara files left out): the Library's Needs VFX update badge look, so it reads as that kind
+   of warning; the footer says it once more for the picked mods */
+.vf-partial { flex: none; height: 22px; display: inline-flex; align-items: center; padding: 0 7px; border-radius: 6px; font-size: 11px; font-weight: 600;
+  color: #f5d342; border: 1px solid color-mix(in srgb, #f5d342, transparent 55%); cursor: help; white-space: nowrap; }
+.vf-partial-n { font-weight: 500; color: #f5d342; }
+[data-theme="light"] .vf-partial, [data-theme="light"] .vf-partial-n { color: #665400; }
+.vf-loadouts {flex: 0 1 auto; min-width: 0; max-width: 34%; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px;
   border: 1px solid var(--panel-border); border-radius: 6px; font-size: 11.5px; font-weight: 500; color: var(--text-secondary); }
 .vf-loadouts span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vf-loadouts i { flex: none; font-style: normal; font-weight: 400; color: var(--text-secondary); }

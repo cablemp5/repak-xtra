@@ -296,8 +296,10 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       // localStorage 'mock.broken' = '1' marks the first mod Broken and the second May crash (xtra_broken.rs reads the game's files)
       // 'mock.broken' = 'vfx' marks every mod with VFX in its name Needs VFX update instead (custom/vfx/VfxNotice.tsx shows)
       case 'xtra_broken_mods':
-        if (localStorage.getItem('mock.broken') === 'vfx') return (args?.modPaths ?? []).filter((p: string) => /vfx/i.test(p) && !/_UPDATED_/i.test(p)).map((path: string) => ({ path, kind: 'vfx',
-          reason: 'A game update changed 381 of the game files this VFX mod replaces, so its effects may look wrong or crash the game. The VFX Updater rebuilds it on the new game files.' }))
+        // with 'mock.vfxStale' some also have 6 Niagara files the update rewrote (a partial update, mockStale)
+        if (localStorage.getItem('mock.broken') === 'vfx') return (args?.modPaths ?? []).filter((p: string) => /vfx/i.test(p) && !/_UPDATED_|_PARTIAL_|_ORIGINAL_/i.test(p)).map((path: string) => ({ path, kind: 'vfx',
+          reason: 'A game update changed 381 of the game files this VFX mod replaces, so its effects may look wrong or crash the game. The VFX Updater rebuilds it on the new game files.',
+          ...(mockStale(path) ? { staleNiagara: 6 } : {}) }))
         return localStorage.getItem('mock.broken') ? (args?.modPaths ?? []).slice(0, 2).map((path: string, i: number) => ({ path,
           kind: i ? 'risky' : 'broken', reason: i ? 'A Blueprint mod installed before the last game update.' : 'None of the 3 game files it replaces exist in this game version.' })) : []
       // the VFX Updater's list: mods with VFX in their name stand in for the VFX type (no originals with an update beside them)
@@ -361,6 +363,8 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
 // tool cannot read (which now fails the mod: an unread asset may be one that needed rebuilding). 'mock.vfxStale' makes its
 // Niagara systems older than the game's, so they are left out (a partial update).
 const vfxFiles = new Map<string, string>()
+/** 'mock.vfxStale': the mods (by any of their files) whose Niagara systems are older than the game's, about half of them */
+const mockStale = (path: string) => Boolean(localStorage.getItem('mock.vfxStale')) && path.replace(/\.[^.\\/]+$/, '').length % 2 === 0
 const vfxStep = () => new Promise(r => setTimeout(r, mock.__vfxStep ?? 400))
 const vfxEntry = (name: string, v: number) => ({ Name: '0', Value: [{ Name: 'ParameterInfo', Value: [{ Name: 'Name', Value: name }] },
   { Name: 'ParameterValue', StructType: 'LinearColor', Value: [{ Name: 'ParameterValue', Value: { R: v, G: v / 2, B: 1, A: 1 } }] }] })
@@ -383,7 +387,7 @@ function mockVfx(cmd: string, args: any): unknown {
       vfxLock = { token: args.token, window: 'main', name: args.name ?? null }; emit('vfx_lock_changed', vfxLock); return true
     case 'xtra_vfx_release': if (vfxLock?.token === args.token) vfxLock = null; emit('vfx_lock_changed', vfxLock); return null
     case 'xtra_vfx_lock': return vfxLock
-    case 'xtra_vfx_stale': return localStorage.getItem('mock.vfxStale') ? (args.files as string[]).filter(f => /NS_/.test(f)) : []
+    case 'xtra_vfx_stale': return mockStale(String(args.modPath)) ? (args.files as string[]).filter(f => /NS_/.test(f)) : []
     case 'vfx_save_settings': return null
     case 'vfx_check_usmap_update': return vfxStep().then(() => ({ updated: false, upToDate: true, skipped: false, localPath: VFX_USMAP,
       filename: '5.3.2-3939753+++depot_marvel+S10.5_release-Marvel.usmap', version: 'S10.5_release', buildNumber: 3939753, commitDate: '2026-10-16', message: 'USMAP is up to date' }))
@@ -424,9 +428,11 @@ function mockVfx(cmd: string, args: any): unknown {
     case 'xtra_vfx_place': {
       const dir = String(args.source).replace(/[\\/][^\\/]*$/, ''), stem = String(args.source).split(/[\\/]/).pop()!.replace(/\.utoc$/i, '')
       const [, base, prio = ''] = stem.match(/^(.*?)((?:_\d+)?_P)?$/i) ?? [stem, stem]
-      const keep = args.keepName !== false
+      const keep = args.keepName !== false, partial = Boolean(args.partial)
+      const source = `${dir}\\${stem}.pak`
+      if (partial) return { fixed: `${dir}\\${base}_PARTIAL${prio}.pak`, source, original: `${dir}\\${base}_ORIGINAL${prio}.bak_repak`, turnedOff: true, replaced: false, trashed: false }
       const fixed = keep ? `${dir}\\${stem}.pak` : `${dir}\\${base}_UPDATED_9999999_P.pak`
-      return { fixed, original: `${dir}\\${keep ? `${base}_BROKEN${prio}` : stem}.bak_repak`, turnedOff: Boolean(args.turnOffOriginal || args.trashOriginal), replaced: false, trashed: Boolean(args.trashOriginal) }
+      return { fixed, source, original: `${dir}\\${keep ? `${base}_BROKEN${prio}` : stem}.bak_repak`, turnedOff: Boolean(args.turnOffOriginal || args.trashOriginal), replaced: false, trashed: Boolean(args.trashOriginal) }
     }
     default: return undefined
   }

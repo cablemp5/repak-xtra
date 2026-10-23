@@ -53,7 +53,7 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
     })
     if (r.status === 'fixed' && r.placed) {
       // a new name (_UPDATED) moves the loadouts that held the original; with the name kept they already hold the update
-      renameModKey(modKey(r.placed.original), modKey(r.placed.fixed))
+      renameModKey(modKey(r.placed.source), modKey(r.placed.fixed))
       await emit('mods_dir_changed').catch(() => {})
       await reload()
     }
@@ -71,8 +71,8 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
 function resultToast(r: VfxReport, name: string, alert: Alert) {
   const show = { label: 'Show report', onClick: () => { sendReport(r); void openVfxWindow() } }
   if (r.status === 'fixed' && r.placed) {
-    const where = r.placed.trashed ? 'The original is in Recently deleted.' : r.placed.turnedOff ? 'The original is off.' : ''
     const warned = r.warnings.length, left = r.counts.left
+    const where = left ? 'The original is off and kept for a full update later.' : r.placed.trashed ? 'The original is in Recently deleted.' : r.placed.turnedOff ? 'The original is off.' : ''
     alert.showAlert({
       color: warned || left ? 'warning' : 'success', duration: warned || left ? 0 : 6000, title: `${left ? 'Partly updated' : 'Updated'} ${name}`, action: show,
       description: [

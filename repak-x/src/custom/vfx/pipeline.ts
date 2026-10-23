@@ -20,7 +20,7 @@ export const STEPS = ['Reading the mod', 'Opening its materials', 'Finding its e
 export type AssetKind = 'updated' | 'same' | 'added' | 'passed' | 'left' | 'unreadable' | 'failed'
 export type AssetResult = { name: string; path: string; kind: AssetKind; detail: string }
 export type VfxStatus = 'fixed' | 'nothing' | 'failed' | 'cancelled'
-export type Placed = { fixed: string; original: string; turnedOff: boolean; replaced: boolean; trashed?: boolean; warning?: string | null }
+export type Placed = { fixed: string; source: string; original: string; turnedOff: boolean; replaced: boolean; trashed?: boolean; warning?: string | null }
 export type VfxReport = {
   mod: string
   name: string
@@ -162,7 +162,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       const utoc = await invoke<string>('vfx_pack_to_iostore', { usmapPath: o.usmapPath, inputDir: dirs.finalUassets, outputBase: base, allowedAssets: manifest })
       if (o.outputDir) report.output = utoc
       else {
-        report.placed = await invoke<Placed>('xtra_vfx_place', { source: o.modPath, stagedBase: base, turnOffOriginal: o.turnOffOriginal ?? true, keepName: o.keepName ?? true, trashOriginal: o.trashOriginal ?? false })
+        report.placed = await invoke<Placed>('xtra_vfx_place', { source: o.modPath, stagedBase: base, turnOffOriginal: o.turnOffOriginal ?? true, keepName: o.keepName ?? true, trashOriginal: o.trashOriginal ?? false, partial: report.counts.left > 0 })
         report.output = report.placed.fixed
         if (report.placed.warning) warn(report.placed.warning)
       }
