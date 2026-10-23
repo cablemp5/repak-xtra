@@ -294,8 +294,17 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       // localStorage 'mock.clashes': a JSON list of { file_path, mod_paths } to show conflicts (custom/conflicts.ts)
       case 'check_mod_clashes': return JSON.parse(localStorage.getItem('mock.clashes') || '[]')
       // localStorage 'mock.broken' = '1' marks the first mod Broken and the second May crash (xtra_broken.rs reads the game's files)
-      case 'xtra_broken_mods': return localStorage.getItem('mock.broken') ? (args?.modPaths ?? []).slice(0, 2).map((path: string, i: number) => ({ path,
-        kind: i ? 'risky' : 'broken', reason: i ? 'A Blueprint mod installed before the last game update.' : 'None of the 3 game files it replaces exist in this game version.' })) : []
+      // 'mock.broken' = 'vfx' marks every mod with VFX in its name Needs VFX update instead (custom/vfx/VfxNotice.tsx shows)
+      case 'xtra_broken_mods':
+        if (localStorage.getItem('mock.broken') === 'vfx') return (args?.modPaths ?? []).filter((p: string) => /vfx/i.test(p) && !/_UPDATED_/i.test(p)).map((path: string) => ({ path, kind: 'vfx',
+          reason: 'A game update changed 381 of the game files this VFX mod replaces, so its effects may look wrong or crash the game. The VFX Updater rebuilds it on the new game files.' }))
+        return localStorage.getItem('mock.broken') ? (args?.modPaths ?? []).slice(0, 2).map((path: string, i: number) => ({ path,
+          kind: i ? 'risky' : 'broken', reason: i ? 'A Blueprint mod installed before the last game update.' : 'None of the 3 game files it replaces exist in this game version.' })) : []
+      // the VFX Updater's list: mods with VFX in their name stand in for the VFX type (no originals with an update beside them)
+      case 'xtra_vfx_mods': return { problems: [], mods: data.mods.filter((m: any) => /vfx/i.test(m.path) && !/_BROKEN(_\d+)?_P\./i.test(m.path)).map((m: any) => ({
+        path: m.path, utoc: m.utoc_path || m.path.replace(/\.(pak|bak_repak)$/i, '.utoc'), enabled: m.enabled, hero: m.character_name ?? null, modified: m.modified_date ?? 0,
+        name: m.custom_name || m.path.split(/[\\/]/).pop().replace(/\.[^.]+$/, '').replace(/(_\d+)?_P$/i, '') })) }
+      case 'xtra_game_build': return { updated: Math.floor(Date.now() / 1000) - 3600 * 5, cl: 3962284 }
       // Installing: the file picker returns two fake paks, install adds them to the library and reports done. A folder
       // pick (the Sigeon folder) returns an unzipped Sigeon download.
       case 'plugin:dialog|open':
@@ -336,9 +345,87 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         if (mod) mod.enabled = !mod.enabled
         return mod?.enabled ?? null
       }
-      default:
+      default: {
+        const vfx = mockVfx(cmd, args) // the VFX Updater window's commands
+        if (vfx !== undefined) return vfx
         console.debug('[mockBackend] unhandled', cmd, args)
         return null
+      }
     }
   }, { shouldMockEvents: true })
+}
+
+// The VFX Updater window (custom/vfx/) in the browser: a fake run with materials to rebuild, Niagara systems that pass
+// through, one the game lacks and one parameter the game dropped. window.__vfxStep sets the ms each tool step takes (400).
+// localStorage 'mock.vfxFail' = part of a mod's name makes its extraction fail; 'mock.vfxUnreadable' adds an asset the
+// tool cannot read (which now fails the mod: an unread asset may be one that needed rebuilding).
+const vfxFiles = new Map<string, string>()
+const vfxStep = () => new Promise(r => setTimeout(r, mock.__vfxStep ?? 400))
+const vfxEntry = (name: string, v: number) => ({ Name: '0', Value: [{ Name: 'ParameterInfo', Value: [{ Name: 'Name', Value: name }] },
+  { Name: 'ParameterValue', StructType: 'LinearColor', Value: [{ Name: 'ParameterValue', Value: { R: v, G: v / 2, B: 1, A: 1 } }] }] })
+const vfxJson = (game: boolean, i: number) => JSON.stringify({ NameMap: [], Imports: [{ ObjectName: 'MaterialInstanceConstant', ClassName: 'Class', OuterIndex: -2 }, { ObjectName: '/Script/Engine', ClassName: 'Package', OuterIndex: 0 }],
+  Exports: [{ ObjectName: `MI_${i}`, ClassIndex: -1, Data: [{ Name: 'VectorParameterValues', Value: [vfxEntry('Glow_Color', game ? 1 : 0.2), ...(game && i === 3 ? [] : [vfxEntry('Rim_Tint', game ? 0.5 : 0.9)])] }] }] })
+const vfxAssets = (dir: string) => [
+  ...Array.from({ length: 24 }, (_, i) => `${dir}/Marvel/Content/Marvel/VFX/Materials/Characters/1026/MI_1026_Glow_${String(i).padStart(2, '0')}.uasset`),
+  ...Array.from({ length: 6 }, (_, i) => `${dir}/Marvel/Content/Marvel/VFX/Particles/NS_1026_Burst_${i}.uasset`),
+  ...(localStorage.getItem('mock.vfxUnreadable') ? [`${dir}/Marvel/Content/Marvel/VFX/Materials/Characters/1026/MI_1026_Broken.uasset`] : []),
+  `${dir}/Marvel/Content/Marvel/VFX/Materials/Characters/1026/MI_1026_ModOwn.uasset`]
+let vfxLock: { token: string; window: string; name?: string | null } | null = null
+const VFX_USMAP = 'C:\\Users\\you\\AppData\\Roaming\\Repak-X\\usmap\\5.3.2-3939753+++depot_marvel+S10.5_release-Marvel.usmap'
+function mockVfx(cmd: string, args: any): unknown {
+  const dirOf = (k: string) => `C:/Temp/xvfx/${k}`
+  switch (cmd) {
+    case 'vfx_get_settings': return { usmapPath: VFX_USMAP }
+    // the run lock (xtra_vfx.rs): one window in the browser, so a holder and a change event are enough
+    case 'xtra_vfx_claim':
+      if (vfxLock && vfxLock.token !== args.token) return false
+      vfxLock = { token: args.token, window: 'main', name: args.name ?? null }; emit('vfx_lock_changed', vfxLock); return true
+    case 'xtra_vfx_release': if (vfxLock?.token === args.token) vfxLock = null; emit('vfx_lock_changed', vfxLock); return null
+    case 'xtra_vfx_lock': return vfxLock
+    case 'vfx_save_settings': return null
+    case 'vfx_check_usmap_update': return vfxStep().then(() => ({ updated: false, upToDate: true, skipped: false, localPath: VFX_USMAP,
+      filename: '5.3.2-3939753+++depot_marvel+S10.5_release-Marvel.usmap', version: 'S10.5_release', buildNumber: 3939753, commitDate: '2026-10-16', message: 'USMAP is up to date' }))
+    case 'vfx_usmap_exists': return true
+    case 'xtra_vfx_dirs': return { modExtract: dirOf('mod_extract'), modJson: dirOf('mod_json'), editedJson: dirOf('edited_json'), finalUassets: dirOf('final'), stage: dirOf('stage'),
+      vanillaExtract: dirOf('vanilla_extract'), vanillaJson: dirOf('vanilla_json'), vanillaIndex: dirOf('vanilla/index.json') }
+    case 'vfx_extract_mod_assets':
+      return vfxStep().then(() => {
+        const fail = localStorage.getItem('mock.vfxFail')
+        if (fail && String(args?.modPath).includes(fail)) throw '[VFX] Extract mod assets failed: Failed to read container: the .utoc is not an IoStore container'
+        return vfxAssets(args.outputDir)
+      })
+    case 'xtra_vfx_detect': return vfxStep().then(() => {
+      emit('vfx_progress', { stage: 'Reading asset types', step: 1, current: args.paths.length, total: args.paths.length, message: `Read ${args.paths.length} of ${args.paths.length} asset types` })
+      return Object.fromEntries(args.paths.map((p: string) => [p, /Broken/.test(p) ? { kind: 'other', class: null, error: 'Unversioned properties cannot be serialized without valid mappings' }
+        : { kind: 'material_instance', class: 'MaterialInstanceConstant', error: null }]))
+    })
+    case 'vfx_copy_uasset_files': return []
+    case 'vfx_write_json_file': vfxFiles.set(args.path, args.content); return null
+    case 'vfx_read_json_file': {
+      if (vfxFiles.has(args.path)) return vfxFiles.get(args.path)
+      if (/index\.json$/.test(args.path)) throw 'Failed to read JSON file: not found'
+      const i = Number(args.path.match(/_(\d+)\.json$/)?.[1] ?? 0)
+      return vfxJson(args.path.includes('vanilla_json'), i)
+    }
+    case 'vfx_convert_uassets_to_json': return vfxStep().then(() => {
+      const list = (vfxFiles.get(`${args.inputDir}/uasset_list.txt`) ?? '').split('\n').filter(Boolean)
+      const names = list.length ? list : vfxAssets('').map(p => p.slice(1).replace(/\.uasset$/, '')).filter(p => !/NS_|Broken|ModOwn/.test(p))
+      return names.map(n => `${args.outputDir}/${n}.json`)
+    })
+    case 'vfx_extract_vanilla_assets': return vfxStep().then(() => {
+      const found = args.filterPatterns.filter((p: string) => !/ModOwn/.test(p))
+      vfxFiles.set(`${args.outputDir}/uasset_list.txt`, found.join('\n'))
+      return found.map((p: string) => `${args.outputDir}/${p}.uasset`)
+    })
+    case 'vfx_convert_json_to_uassets': return vfxStep().then(() => vfxAssets(args.outputDir))
+    case 'vfx_pack_to_iostore': return vfxStep().then(() => `${args.outputBase}.utoc`)
+    case 'xtra_vfx_place': {
+      const dir = String(args.source).replace(/[\\/][^\\/]*$/, ''), stem = String(args.source).split(/[\\/]/).pop()!.replace(/\.utoc$/i, '')
+      const [, base, prio = ''] = stem.match(/^(.*?)((?:_\d+)?_P)?$/i) ?? [stem, stem]
+      const keep = args.keepName !== false
+      const fixed = keep ? `${dir}\\${stem}.pak` : `${dir}\\${base}_UPDATED_9999999_P.pak`
+      return { fixed, original: `${dir}\\${keep ? `${base}_BROKEN${prio}` : stem}.bak_repak`, turnedOff: Boolean(args.turnOffOriginal || args.trashOriginal), replaced: false, trashed: Boolean(args.trashOriginal) }
+    }
+    default: return undefined
+  }
 }

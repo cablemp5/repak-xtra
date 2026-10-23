@@ -9,7 +9,7 @@ import { ModName } from './modName'
 import { revealOnLoad } from './motion'
 import { formKeys, hasPreview, noPreviewPossible, previewMade, previewSetKey, useCovers, usePreviewStage, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
 import { playEmoteSound, stopEmoteSound, useEmoteSound, webpSeconds } from './emoteSound'
-import { useVerdict } from './brokenMods'
+import { useVerdict, verdictLabel } from './brokenMods'
 import { GAME_RUNNING } from './keepOne'
 import { CaptionIcon, CaptionStyleBar } from './captionStyle'
 import { loadoutHero, silhouetteOf } from './silhouettes'
@@ -326,6 +326,7 @@ export function ModRow({ p, k: key, mod, onToggle, onRename, unsure, children }:
   const finish = () => { if (!cancelled.current && draft !== null && mod && onRename) onRename(mod, draft); setDraft(null) }
   return (
     <li className={`mod-row ${mod ? (mod.enabled ? 'is-on' : '') : 'is-missing'}`}
+      onContextMenu={mod && p.onModContextMenu ? e => p.onModContextMenu!(e, mod, canRename ? begin : undefined) : undefined}
       title={draft !== null || mod ? undefined : unsure ? 'Pick the installed mod this loadout means' : 'Not installed anymore'}>{/* an installed row's badge and switch already say its type and state */}
       {draft !== null
         ? <input className="mod-row-rename" autoFocus value={draft} aria-label={`New name for ${k}`} onFocus={e => e.target.select()}
@@ -340,7 +341,7 @@ export function ModRow({ p, k: key, mod, onToggle, onRename, unsure, children }:
             )}
           </span>}
       {!onToggle && mod?.enabled && <span className="mod-type-badge category-badge on-badge" title="This mod is on now">On</span>}
-      {verdict && <span className={`mod-type-badge broken-badge is-${verdict.kind}`} title={verdict.reason}>{verdict.kind === 'broken' ? 'Broken' : 'May crash'}</span>}
+      {verdict && <span className={`mod-type-badge broken-badge is-${verdict.kind}`} title={verdict.reason}>{verdictLabel(verdict.kind)}</span>}
       <span className={`mod-type-badge category-badge ${typeClass(category)}`}>{category ?? 'Unknown'}</span>
       {onToggle && (mod
         ? <Switch size="sm" color="primary" checked={Boolean(mod.enabled)} title={mod.enabled ? `Turn ${k} off` : `Turn ${k} on`}

@@ -1102,6 +1102,14 @@ html[data-view="home"] .container > .config-warning { display: none !important; 
 .lo-screen { position: relative !important; inset: auto !important; z-index: auto !important; animation: none !important;
   flex: 1 1 auto; min-height: 0; background: transparent !important; border: 1px solid var(--panel-border); border-radius: 10px; }
 .lo-screen-head { padding: 18px 22px 14px; }
+/* Generate all previews with several in the queue: a thin bar along the top edge (inside the corners) fills as the queue
+   goes, with the app's shimmer sweep (transitions.dev: Shimmer), like the VFX Updater's bars */
+.lo-gen-bar { position: absolute; top: 0; left: 10px; right: 10px; height: 2px; z-index: 2; overflow: hidden; pointer-events: none; border-radius: 0 0 2px 2px; }
+.lo-gen-bar i { display: block; height: 100%; transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-primary) 38%, color-mix(in srgb, var(--accent-primary), white 45%) 50%,
+    var(--accent-primary) 62%, var(--accent-primary) 100%) 0 0 / 250% 100% no-repeat;
+  animation: t-shimmer var(--shimmer-dur, 2s) var(--shimmer-ease, linear) infinite; }
+html[data-motion="off"] .lo-gen-bar i { transition: none; animation: none; }
 .lo-body { padding: 18px 22px 28px; }
 
 /* Home | Library tabs in the header */
@@ -2608,7 +2616,13 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 .mod-type-badge.broken-badge { color: #f5d342 !important; border: 1px solid color-mix(in srgb, #f5d342, transparent 55%) !important; cursor: help; font-size: 11px !important; font-weight: 600 !important; }
 [data-theme="light"] .mod-type-badge.broken-badge, [data-theme="light"] .mod-state-filter button.is-broken, [data-theme="light"] .mod-state-filter button.is-broken .mod-state-count { color: #7f6900 !important; }
 .mod-type-badge.broken-badge.is-broken { background: color-mix(in srgb, #f5d342, transparent 88%) !important; }
-.mod-type-badge.broken-badge.is-risky { background: transparent !important; }
+.mod-type-badge.broken-badge.is-risky, .mod-type-badge.broken-badge.is-vfx { background: transparent !important; }
+/* the header's VFX Updater button: a yellow dot (the Needs VFX update tag's) while VFX mods need an update (custom/vfx/VfxNotice.tsx) */
+.btn-vfx { position: relative; }
+.vfx-dot { position: absolute; top: -4px; right: -4px; width: 9px; height: 9px; border-radius: 50%; pointer-events: none;
+  background: #f5d342; box-shadow: 0 0 0 2px var(--bg-darkest); animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; }
+html[data-motion="off"] .vfx-dot { animation: none; }
+[data-theme="light"] .vfx-dot { background: #9a7d00; }   /* 3:1 on the light header */
 .mod-state-filter button.is-broken { color: #f5d342; }
 .mod-state-filter button.is-broken .mod-state-count { color: #f5d342; }
 
