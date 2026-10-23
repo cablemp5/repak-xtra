@@ -449,7 +449,7 @@ export function VfxUpdaterPanel() {
           ? <p className="lp-empty">Reading the mods folder…</p>
           : shown.length === 0
             ? <p className="lp-empty">{needle ? `No VFX mods match “${q.trim()}”.` : 'No VFX mods in the mods folder. Mods the Library shows as VFX appear here.'}</p>
-            : groups.map(g => g.mods.length > 0 && (
+            : <div className="vf-groups">{groups.map(g => g.mods.length > 0 && (
               <Group key={g.id} title={g.title} count={g.count} tone={g.id === 'needs' ? 'needs' : undefined} busy={busy} all={g.all} none={g.none}
                 open={Boolean(needle) || !foldedIds.includes(g.id)} onFold={() => fold(g.id)} onPick={on => pick(g.keys, on)}>
                 <ul className="mod-rows vf-rows">
@@ -464,7 +464,7 @@ export function VfxUpdaterPanel() {
                   })}
                 </ul>
               </Group>
-            ))}
+            ))}</div>}
 
         {usmapMissing && (
           <p className="vf-warn">
@@ -477,7 +477,7 @@ export function VfxUpdaterPanel() {
 
         <section className={`ia vf-adv${advanced ? ' is-open' : ''}`}>
           <button type="button" className="ia-toggle" aria-expanded={advanced} onClick={() => { setAdvanced(!advanced); localStorage.setItem(ADVANCED, advanced ? '0' : '1') }}>
-            <ChevronRight size={14} className="ia-caret" aria-hidden="true" />
+            <ChevronRight size={15} className="ia-caret" aria-hidden="true" />
             Advanced
           </button>
           <div className="t-acc-panel" data-open={advanced}>

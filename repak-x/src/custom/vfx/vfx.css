@@ -3,7 +3,11 @@
    Advanced fold. Styled here: the group headings, a row that ticks and wraps to show progress and a report, its result pill. */
 .vf-window { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .vf-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.vf-body { flex: 1; min-height: 0; overflow-y: auto; padding: 24px 28px 32px; display: flex; flex-direction: column; gap: 28px; }
+/* one rhythm: 20px between the search, the groups and Advanced; folded groups stack 4px apart, an open one keeps 16px
+   below its list; every heading row is 32px, so the chevrons and names line up down the window */
+.vf-body { flex: 1; min-height: 0; overflow-y: auto; padding: 24px 28px 32px; display: flex; flex-direction: column; gap: 20px; }
+.vf-groups { display: flex; flex-direction: column; gap: 4px; }
+.vf-grp:not(.is-folded) + .vf-grp { margin-top: 16px; }
 .vf-body > * { flex-shrink: 0; }   /* a long list scrolls, nothing in it is squeezed */
 .vf-hint { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 
@@ -14,9 +18,9 @@
 .vf-search-clear { flex: none; width: 26px; height: 26px !important; min-height: 0 !important; }
 
 /* a group: its heading folds it away (the Loadouts screen's collections), Select all sits at the far end */
-.vf-grp-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.vf-grp-head { display: flex; align-items: center; gap: 12px; height: 32px; margin-bottom: 8px; }
 .vf-grp.is-folded .vf-grp-head { margin-bottom: 0; }
-.vf-grp-fold { flex: 1; min-width: 0; display: flex !important; align-items: center; justify-content: flex-start !important; gap: 8px; height: 30px !important; min-height: 0 !important;
+.vf-grp-fold { flex: 1; min-width: 0; display: flex !important; align-items: center; justify-content: flex-start !important; gap: 8px; height: 32px !important; min-height: 0 !important;
   padding: 0 !important; margin-left: -2px; border: none !important; background: none !important; cursor: pointer; text-align: left; color: var(--text-secondary) !important; }
 .vf-grp-fold h2 { margin: 0; font-size: 13px; font-weight: 600; color: var(--text-primary); }   /* a Loadouts collection's name */
 .vf-grp-fold:hover .vf-grp-caret, .vf-grp-fold:focus-visible .vf-grp-caret { color: var(--text-primary); }
@@ -106,8 +110,8 @@
 .vf-warn svg { flex: none; margin-top: 2px; color: #f5d342; }
 
 /* Advanced: the install card's fold (.ia) under the lists, each part apart under its own heading */
-.vf-adv { padding-top: 16px; }
-.vf-adv > .ia-toggle { gap: 8px; font-size: 13px !important; font-weight: 600 !important; color: var(--text-primary) !important; }   /* a heading like the groups' */
+.vf-adv { margin-top: -8px; padding-top: 12px; }   /* the divider halfway: 12px above, 12px below */
+.vf-adv > .ia-toggle { gap: 8px; height: 32px !important; margin-left: -2px; font-size: 13px !important; font-weight: 600 !important; color: var(--text-primary) !important; }   /* a heading like the groups' */
 .vf-adv > .ia-toggle .ia-caret { color: var(--text-secondary); }
 .vf-adv-body { display: flex; flex-direction: column; padding: 8px 0 2px; }
 .vf-sub { padding: 20px 0; }
