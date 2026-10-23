@@ -26,6 +26,7 @@ export type LoadoutProps = {
   alert: ReturnType<typeof useAlert>
   modDetails?: Record<string, { character_name?: string | null; category?: string | null; additional_categories?: string[]; mod_type?: string } | undefined>
   selected?: string[]    // paths picked in the Library: + makes a loadout of exactly these
+  onModContextMenu?: (e: React.MouseEvent, mod: Mod) => void // a mod row's right-click: the Library's menu (Update VFX and the rest)
 }
 
 /** A new loadout holding exactly these mods (all of them on), named "Loadout N". */

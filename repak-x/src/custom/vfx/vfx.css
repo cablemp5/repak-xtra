@@ -51,7 +51,7 @@
 .vf-loadouts { flex: 0 1 auto; min-width: 0; max-width: 34%; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px;
   border: 1px solid var(--panel-border); border-radius: 6px; font-size: 11.5px; font-weight: 500; color: var(--text-secondary); }
 .vf-loadouts span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vf-loadouts b { flex: none; font-weight: 500; color: var(--text-secondary); }
+.vf-loadouts b { flex: none; margin-left: 2px; font-weight: 500; color: var(--text-secondary); white-space: pre; }
 .vf-status { flex: none; font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .vf-status.is-running { color: var(--text-primary); }
 .vf-status.is-cancelled { color: #f5d342; }
@@ -66,11 +66,18 @@
 .vf-pill[aria-expanded="true"] .vf-caret { transform: rotate(180deg); }
 
 /* running: the app's thin progress bar (the update dialog's), the step and what it is on */
-.vf-progress { flex-basis: 100%; padding: 2px 0 6px; }
+/* running: under the name (lined up with it, past the tick), the app's thin bar, then the step and its own count. The
+   step count and the count inside the step are pills, so the numbers read apart from the words */
+.vf-progress { flex-basis: 100%; padding: 0 0 12px 28px; }
 .vf-bar { height: 4px; border-radius: 999px; overflow: hidden; background: var(--bg-lighter); }
 .vf-bar i { display: block; height: 100%; background: var(--accent-primary); transition: width 0.4s var(--acc-ease); }
-.vf-step { margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12.5px; color: var(--text-primary); }
-.vf-step > span:last-child:not(:first-child) { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.vf-step { margin: 8px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 12.5px; color: var(--text-secondary); }
+.vf-count { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 500;
+  font-variant-numeric: tabular-nums; color: var(--text-secondary); background: var(--quiet-active); }
+.vf-pill.is-running { cursor: default; color: color-mix(in srgb, var(--accent-primary), white 35%) !important; background: color-mix(in srgb, var(--accent-primary), transparent 84%) !important;
+  font-variant-numeric: tabular-nums; padding: 0 9px !important; }
+.vf-pill.is-running:hover { filter: none; }
+[data-theme="light"] .vf-pill.is-running { color: color-mix(in srgb, var(--accent-primary), black 25%) !important; }
 
 /* a mod's report, under its row */
 .vf-row-panel { flex-basis: 100%; }

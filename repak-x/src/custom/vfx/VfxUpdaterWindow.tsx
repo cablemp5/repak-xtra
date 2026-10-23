@@ -18,6 +18,7 @@ import { DEFAULT_FILTER, parseWords, readFilter, resetFilter, writeFilter, type 
 import { canonKey } from '../loadoutIdentity'
 import { modKey, useLoadouts } from '../loadoutStore'
 import { FIXED_EVENT, onHandoff, takeHandoff, utocOf, type Fixed } from './handoff'
+import { KEEP_NAME, ORIGINALS, claimRun, onRunChange, readNaming, readOriginals, releaseRun, runningElsewhere, type Naming, type Originals } from './prefs'
 import { STEPS, fixVfxMod, type AssetKind, type VfxReport } from './pipeline'
 import './vfx.css'
 
@@ -29,11 +30,7 @@ type Log = { time: string; text: string; type: string }
 type Usmap = { updated: boolean; upToDate: boolean; skipped: boolean; localPath?: string | null; filename?: string | null; version?: string | null; buildNumber?: number | null; commitDate?: string | null; message: string }
 type GameBuild = { updated: number; cl?: number | null }
 
-const TURN_OFF = 'repakxtra.vfx.turnOff' // before Originals had three choices: '0' left them on
-const KEEP_NAME = 'repakxtra.vfx.keepName' // '0': updates end in _UPDATED
-const ORIGINALS = 'repakxtra.vfx.originals' // what happens to an original: off, trash or keep
-type Naming = 'broken' | 'updated'
-type Originals = 'off' | 'trash' | 'keep'
+const OWNER = `window-${Math.random().toString(36).slice(2, 8)}` // this window, for the run lock (prefs.ts)
 const NAMING_NOTE: Record<Naming, string> = {
   broken: 'Loadouts and tags stay on the update. The original is renamed to end in _BROKEN.',
   updated: 'The update ends in _UPDATED, and loadouts move to it.',
@@ -137,7 +134,7 @@ function Row({ mod, rowKey, loadouts, run, needs, picked, open, busy, onPick, on
       </Checkbox>
       {loadouts.length > 0 && (
         <span className="vf-loadouts" title={`In ${loadouts.join(', ')}`}>
-          <span>{loadouts[0]}</span>{loadouts.length > 1 && <b>+{loadouts.length - 1}</b>}
+          <span>{loadouts[0]}</span>{loadouts.length > 1 && <b>{' '}+{loadouts.length - 1}</b>}
         </span>
       )}
       {mod.enabled && <span className="mod-type-badge category-badge on-badge" title="This mod is on now">On</span>}
@@ -146,13 +143,15 @@ function Row({ mod, rowKey, loadouts, run, needs, picked, open, busy, onPick, on
             {status === 'fixed' && <Check size={12} strokeWidth={2.5} aria-hidden="true" />}{STATUS[status!]}
             <ChevronDown size={12} className="vf-caret" aria-hidden="true" />
           </button>
-        : status && <span className={`vf-status is-${status}`}><SwapText text={running && step ? `Step ${step} of ${STEPS.length}` : STATUS[status]} /></span>}
+        : status && (running && step
+          ? <span className="vf-pill is-running"><SwapText text={`Step ${step} of ${STEPS.length}`} /></span>
+          : <span className={`vf-status is-${status}`}>{STATUS[status]}</span>)}
       {running && step ? (
         <div className="vf-progress">
           <div className="vf-bar" role="progressbar" aria-valuenow={step} aria-valuemin={0} aria-valuemax={STEPS.length} aria-label={`${mod.name} progress`}>
             <i style={{ width: `${((step - 0.5) / STEPS.length) * 100}%` }} />
           </div>
-          <p className="vf-step" aria-live="polite"><SwapText text={STEPS[step - 1]} />{run?.sub ? <span>{run.sub}</span> : null}</p>
+          <p className="vf-step" aria-live="polite"><SwapText text={STEPS[step - 1]} />{run?.sub ? <span className="vf-count">{run.sub}</span> : null}</p>
         </div>
       ) : null}
       {run?.report && <div className="t-acc-panel vf-row-panel" data-open={open}><div className="t-acc-panel-inner" {...folded(!open)}><Report r={run.report} onRetry={onRetry} busy={busy} /></div></div>}
@@ -250,11 +249,8 @@ export function VfxUpdaterPanel() {
   const [usmapInfo, setUsmapInfo] = useState<Usmap | null>(null)
   const [usmapOk, setUsmapOk] = useState<boolean | null>(null)
   const [checking, setChecking] = useState(true)
-  const [naming, setNaming] = useState<Naming>(() => (localStorage.getItem(KEEP_NAME) === '0' ? 'updated' : 'broken'))
-  const [originals, setOriginals] = useState<Originals>(() => {
-    const v = localStorage.getItem(ORIGINALS)
-    return v === 'off' || v === 'trash' || v === 'keep' ? v : localStorage.getItem(TURN_OFF) === '0' ? 'keep' : 'off'
-  })
+  const [naming, setNaming] = useState<Naming>(readNaming)
+  const [originals, setOriginals] = useState<Originals>(readOriginals)
   const keepName = naming === 'broken'
   const [advanced, setAdvanced] = useState(() => localStorage.getItem(ADVANCED) === '1')
   const [busy, setBusy] = useState(false)
@@ -351,6 +347,9 @@ export function VfxUpdaterPanel() {
     if (h.start && keys.length) autoRun.current = [...new Set([...(autoRun.current ?? []), ...keys])] // these, not whatever else is ticked
   })
 
+  // a right-click update in the main window holds the lock: Update waits for it (and says so)
+  useEffect(() => onRunChange(() => bump(n => n + 1)), [])
+
   // Rust steps report inside the step (types read so far)
   useEffect(() => {
     const un = listen<{ message: string }>('vfx_progress', e => {
@@ -380,7 +379,8 @@ export function VfxUpdaterPanel() {
     await invoke('vfx_save_settings', { settings: { ...current, usmapPath: p } }).catch(() => {}) // keeps the auto-update bookkeeping
   }
 
-  const lock = busy ? null : checking ? 'Checking for a newer USMAP…' : !usmap ? 'Choose a USMAP file in Advanced first' : usmapOk === false ? 'The USMAP file is missing' : !paks ? 'Set the game folder in Setup first' : null
+  const elsewhere = busy ? null : runningElsewhere(OWNER)
+  const lock = busy ? null : elsewhere ? `Updating ${elsewhere.name ?? 'a mod'} from the Library. Update waits for it.` : checking ? 'Checking for a newer USMAP…' : !usmap ? 'Choose a USMAP file in Advanced first' : usmapOk === false ? 'The USMAP file is missing' : !paks ? 'Set the game folder in Setup first' : null
 
   const run = useCallback(async (keys?: string[]) => {
     const byKey = new Map((modsRef.current ?? []).map(m => [norm(m.utoc), m]))
@@ -390,6 +390,7 @@ export function VfxUpdaterPanel() {
     const where = new Set(todo.map(k => groupOf.current.get(k)))
     if (where.has(undefined)) setQ('')
     setFoldedIds(f => { const n = f.filter(id => !where.has(id)); if (n.length !== f.length) localStorage.setItem(FOLDED, JSON.stringify(n)); return n })
+    if (!claimRun(OWNER)) { addLog('A mod is updating from the Library. Try again when it is done.', 'warning'); return }
     setBusy(true); setBatch(todo); cancel.current = false
     todo.forEach(k => patch(k, { status: 'waiting', step: undefined, sub: undefined, report: undefined }))
     const filter = readFilter()
@@ -397,12 +398,13 @@ export function VfxUpdaterPanel() {
     for (const key of todo) {
       if (cancel.current) { patch(key, { status: 'cancelled' }); continue }
       const mod = byKey.get(key)!
+      claimRun(OWNER, mod.name) // renewed for each mod and each step, so a closed window's lock goes stale
       patch(key, { status: 'running', step: 1 })
       addLog(`Updating ${mod.name}`)
       const r = await fixVfxMod({
         modPath: mod.utoc, usmapPath: usmap, gamePaksPath: paks, turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash', keepName, filter,
         log: addLog, cancelled: () => cancel.current,
-        onStep: s => patch(key, { step: s.step, sub: undefined }),
+        onStep: s => { claimRun(OWNER, mod.name); patch(key, { step: s.step, sub: undefined }) },
         onProgress: (_, __, message) => patch(key, { sub: message }),
       })
       patch(key, { status: r.status, report: r, sub: undefined })
@@ -420,6 +422,7 @@ export function VfxUpdaterPanel() {
       }
     }
     if (fixed) await emit('mods_dir_changed').catch(() => {})
+    releaseRun(OWNER)
     cue(failed ? 'error' : 'success', { emphasis: 'subtle' })
     setBusy(false); setCancelling(false)
   }, [picked, usmap, paks, originals, keepName, addLog])

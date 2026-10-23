@@ -326,6 +326,7 @@ export function ModRow({ p, k: key, mod, onToggle, onRename, unsure, children }:
   const finish = () => { if (!cancelled.current && draft !== null && mod && onRename) onRename(mod, draft); setDraft(null) }
   return (
     <li className={`mod-row ${mod ? (mod.enabled ? 'is-on' : '') : 'is-missing'}`}
+      onContextMenu={mod && p.onModContextMenu ? e => p.onModContextMenu!(e, mod) : undefined}
       title={draft !== null || mod ? undefined : unsure ? 'Pick the installed mod this loadout means' : 'Not installed anymore'}>{/* an installed row's badge and switch already say its type and state */}
       {draft !== null
         ? <input className="mod-row-rename" autoFocus value={draft} aria-label={`New name for ${k}`} onFocus={e => e.target.select()}
