@@ -33,7 +33,7 @@ type GameBuild = { updated: number; cl?: number | null }
 
 const NAMING_NOTE: Record<Naming, string> = {
   broken: 'Loadouts and tags stay on the update. The original is renamed to end in _BROKEN.',
-  updated: 'The update ends in _UPDATED, and loadouts move to it.',
+  updated: 'The update ends in _UPDATED, and loadouts move to it. Updating it again makes _UPDATED_V2, then V3.',
 }
 const ORIGINALS_NOTE: Record<Originals, string> = {
   off: 'Kept in the mods folder, turned off, so only the update loads.',

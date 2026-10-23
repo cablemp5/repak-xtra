@@ -84,7 +84,11 @@ export const PASS_BY_NAME = /^(NS|NE|T|SK|SM)_/i
  *  properties crashes the game (3962284). shortcut: by name prefix, like PASS_BY_NAME. */
 export const NIAGARA_BY_NAME = /^(NS_|NE_|CurveAtlas_)/i
 /** The upstream name: without its _<priority>_P suffix, spaces as underscores (xtra_vfx.rs fixed_stem matches). */
-export const fixedName = (modPath: string) => `${stem(modPath).replace(/(_\d+)?_P$/i, '').replace(/_UPDATED$/i, '').trim().replace(/\s+/g, '_')}_UPDATED_9999999_P`
+export const fixedName = (modPath: string) => {
+  const b = stem(modPath).replace(/(_\d+)?_P$/i, '').trim().replace(/\s+/g, '_')
+  const v = b.match(/^(.+)_UPDATED(?:_V(\d+))?$/i) // an update of an update is its next version
+  return v ? `${v[1]}_UPDATED_V${(Number(v[2]) || 1) + 1}_9999999_P` : `${b}_UPDATED_9999999_P`
+}
 
 async function mapLimit<T, R>(items: T[], limit: number, worker: (item: T, i: number) => Promise<R>): Promise<R[]> {
   const out = new Array<R>(items.length)
@@ -328,7 +332,8 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
 
 if (import.meta.env.DEV) {
   console.assert(fixedName('C:/m/BlueColoredVFX_9999999_P.utoc') === 'BlueColoredVFX_UPDATED_9999999_P', 'fixed name drops the priority')
-  console.assert(fixedName('C:/m/A b_UPDATED_9999999_P.utoc') === 'A_b_UPDATED_9999999_P', 'a fixed mod keeps one _UPDATED')
+  console.assert(fixedName('C:/m/A b_UPDATED_9999999_P.utoc') === 'A_b_UPDATED_V2_9999999_P', 'an update of an update is its next version')
+  console.assert(fixedName('C:/m/A_UPDATED_V2_9999999_P.utoc') === 'A_UPDATED_V3_9999999_P', 'then V3')
   console.assert(assetKey('/Marvel/Content/X/MI_A.json') === assetKey('Marvel\\Content\\X\\MI_A.uasset'), 'keys ignore slashes and extensions')
   console.assert(relativeTo('C:\\T\\a/B/c.uasset', 'c:/t/A/') === 'B/c.uasset', 'relative across slash styles')
   console.assert(PASS_BY_NAME.test('NS_Fire.uasset') && !PASS_BY_NAME.test('MI_NS_Fire.uasset'), 'only the prefix passes by name')
