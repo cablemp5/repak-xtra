@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { Sparkles } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import { useBrokenVersion, verdictOf } from '../brokenMods'
 import { modKey, renameModKey } from '../loadoutStore'
 import { useUiPref } from '../uiPrefs'
@@ -43,7 +43,7 @@ export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () =>
   const n = stale.length
   return (
     <div className="vfx-notice" role="status">
-      <Sparkles size={16} className="vfx-notice-icon" aria-hidden="true" />
+      <AlertTriangle size={16} className="vfx-notice-icon" aria-hidden="true" />
       <p><strong>The game updated on {when}.</strong> {n === 1 ? '1 VFX mod was' : `${n} VFX mods were`} made for the files it changed, so {n === 1 ? 'its' : 'their'} effects may look wrong or crash the game.</p>
       <button type="button" className="lo-text-btn" onClick={() => { localStorage.setItem(DISMISSED, String(updated)); setDismissed(String(updated)) }}>Not now</button>
       <button type="button" className="btn-primary" onClick={() => fixInVfxWindow(stale.map(m => m.utoc_path || utocOf(m.path)), true)}>Update VFX mods</button>

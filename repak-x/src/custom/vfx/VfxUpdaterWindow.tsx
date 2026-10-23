@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, emitTo, listen } from '@tauri-apps/api/event'
-import { AlertTriangle, Check, ChevronDown, ChevronRight, Copy, Plus, RotateCcw, Sparkles, X } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, ChevronRight, Copy, Plus, RotateCcw, X } from 'lucide-react'
 import TitleBar from '../../components/TitleBar'
 import Checkbox from '../../components/ui/Checkbox'
 import { Num, SwapText } from '../motion'
@@ -338,7 +338,7 @@ export function VfxUpdaterPanel() {
       <div className="vf-body">
         {suggest.length > 0 && !busy && (
           <div className="vfx-notice vf-suggest" role="status">
-            <Sparkles size={16} className="vfx-notice-icon" aria-hidden="true" />
+            <AlertTriangle size={16} className="vfx-notice-icon" aria-hidden="true" />
             <p><strong>{suggest.length === 1 ? '1 VFX mod needs' : `${suggest.length} VFX mods need`} an update.</strong>{' '}
               {build?.updated ? `The game update on ${new Date(build.updated * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : 'A game update'} changed the files {suggest.length === 1 ? 'it replaces' : 'they replace'}.</p>
             <button type="button" className="lo-text-btn" onClick={() => add(suggest)}><Plus size={14} aria-hidden="true" /> {suggest.length === 1 ? 'Add it' : `Add all ${suggest.length}`}</button>
