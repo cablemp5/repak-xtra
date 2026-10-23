@@ -313,6 +313,8 @@ pub struct VfxMod {
     /// Its name in the Library (a custom name, or the file's)
     name: String,
     hero: Option<String>,
+    /// When its file was written (seconds), for Newest first
+    modified: u64,
 }
 
 /// The mods folder's VFX mods (the Library's VFX type) the VFX Updater can update: IoStore mods, no originals with an update
@@ -339,6 +341,7 @@ pub async fn xtra_vfx_mods(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec
                     path: m.path.to_string_lossy().to_string(),
                     utoc: utoc.to_string_lossy().to_string(),
                     enabled: m.enabled,
+                    modified: m.modified_date,
                 })
             })
             .collect()

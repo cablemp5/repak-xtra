@@ -7,8 +7,9 @@
 .vf-body > * { flex-shrink: 0; }   /* a long list scrolls, nothing in it is squeezed */
 .vf-hint { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 
-/* search: the Add mods field, the whole width, with a clear button once there is something to clear */
-.vf-body .vf-search { width: 100%; height: 38px; padding: 0 6px 0 12px; gap: 10px; }
+/* search and sort: a loadout's Add mods row, the field taking the width, with a clear button once there is something to clear */
+.vf-body .vf-filters { flex-wrap: nowrap; align-items: stretch; margin: 0; }
+.vf-body .vf-search { flex: 1; width: auto; min-width: 0; height: auto; padding: 0 6px 0 12px; gap: 10px; }
 .vf-search input { font-size: 13.5px !important; }
 .vf-search-clear { flex: none; width: 26px; height: 26px !important; min-height: 0 !important; }
 
@@ -89,14 +90,15 @@
 .vf-detail { color: var(--text-secondary); overflow-wrap: anywhere; }
 
 .vf-options { display: flex; flex-direction: column; gap: 12px; }
-.vf-check { display: flex; flex-direction: column; gap: 2px; }
+.vf-check { display: flex; flex-direction: column; gap: 0; }
 .vf-check .repakx-checkbox-label, .vf-check .repakx-checkbox-label > span { font-size: 13px !important; font-weight: 450 !important; color: var(--text-primary) !important; }
-.vf-check .vf-hint { padding-left: 26px; }
+.vf-check .vf-hint { margin-top: -8px; padding-left: 25px; }   /* right under the label, at its text, as in Settings */
 
-/* USMAP: a Setup card, its part row between hairlines as in the Setup window */
-.vf-usmap-card .su-parts { border: none; border-radius: 0; border-top: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); }
-.vf-usmap-card .su-part { padding: 8px 0; }
-.vf-usmap-card .su-part-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* USMAP: Setup's part row between hairlines, as in the Setup window */
+.vf-usmap-about { margin: -6px 0 12px; }
+.vf-usmap.su-parts { border: none; border-radius: 0; border-top: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); }
+.vf-usmap .su-part { padding: 8px 0; }
+.vf-usmap .su-part-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vf-warn { margin: 10px 0 0; display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 .vf-warn svg { flex: none; margin-top: 2px; color: #f5d342; }
 

@@ -23,7 +23,7 @@ import './vfx.css'
 
 type Status = 'waiting' | 'running' | 'fixed' | 'nothing' | 'failed' | 'cancelled'
 type Run = { status: Status; step?: number; sub?: string; report?: VfxReport }
-type Mod = { path: string; utoc: string; enabled: boolean; name: string; hero?: string | null }
+type Mod = { path: string; utoc: string; enabled: boolean; name: string; hero?: string | null; modified?: number }
 type Verdict = { path: string; kind: string; reason: string }
 type Log = { time: string; text: string; type: string }
 type Usmap = { updated: boolean; upToDate: boolean; skipped: boolean; localPath?: string | null; filename?: string | null; version?: string | null; buildNumber?: number | null; commitDate?: string | null; message: string }
@@ -33,6 +33,7 @@ const TURN_OFF = 'repakxtra.vfx.turnOff'
 const KEEP_NAME = 'repakxtra.vfx.keepName'
 const ADVANCED = 'repakxtra.vfx.advanced' // Advanced opens the way it was last left, as the install card's
 const FOLDED = 'repakxtra.vfx.folded' // the groups folded away, as a list of ids
+const SORT = 'repakxtra.vfx.sort' // A to Z or Newest, as a loadout's Add mods
 const SEARCH_FROM = 8 // a search field once the list is longer than a glance
 const fileName = (p: string) => p.replace(/\\/g, '/').split('/').pop() ?? p
 const plural = (n: number, word: string, many = `${word}s`) => `${n.toLocaleString()} ${n === 1 ? word : many}`
@@ -204,6 +205,7 @@ export function VfxUpdaterPanel() {
   const [runs, setRuns] = useState<Record<string, Run>>({}) // by norm(utoc)
   const [picked, setPicked] = useState<Set<string>>(new Set()) // norm(utoc)
   const [q, setQ] = useState('')
+  const [sort, setSort] = useState<'name' | 'newest'>(() => (localStorage.getItem(SORT) === 'newest' ? 'newest' : 'name'))
   const [foldedIds, setFoldedIds] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(FOLDED) || '[]') } catch { return [] } })
   const loadouts = useLoadouts()
   const [open, setOpen] = useState<Set<string>>(new Set())
@@ -369,9 +371,11 @@ export function VfxUpdaterPanel() {
     setCopied(what); setTimeout(() => setCopied(null), 1500)
   }
 
-  // the list: mods that need an update first, then A to Z
+  // the list: mods that need an update first, then A to Z or newest first
   const needsOf = (m: Mod) => needs.get(norm(m.path))
-  const list = [...(mods ?? [])].sort((a, b) => Number(Boolean(needsOf(b))) - Number(Boolean(needsOf(a))) || a.name.localeCompare(b.name))
+  const order = (a: Mod, b: Mod) => (sort === 'newest' ? (b.modified ?? 0) - (a.modified ?? 0) : 0) || a.name.localeCompare(b.name)
+  const list = [...(mods ?? [])].sort((a, b) => Number(Boolean(needsOf(b))) - Number(Boolean(needsOf(a))) || order(a, b))
+  const sortBy = (v: 'name' | 'newest') => { setSort(v); localStorage.setItem(SORT, v) }
   const needle = q.trim().toLowerCase()
   const shown = needle ? list.filter(m => m.name.toLowerCase().includes(needle) || (m.hero ?? '').toLowerCase().includes(needle)) : list
   // two groups: the mods that need an update (and any updated this session, so a result stays where it was), the rest
@@ -403,12 +407,18 @@ export function VfxUpdaterPanel() {
     <div className="vf-panel">
       <div className="vf-body">
         {list.length > SEARCH_FROM && (
-          <label className="lp-search vf-search">
-            <Search size={15} aria-hidden="true" />
-            <input value={q} placeholder="Search VFX mods" aria-label="Search VFX mods" onChange={e => setQ(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Escape') setQ('') }} />
-            {q && <button type="button" className="lo-icon vf-search-clear" onClick={() => setQ('')} aria-label="Clear the search" title="Clear the search"><X size={14} /></button>}
-          </label>
+          <div className="lp-filters vf-filters">
+            <label className="lp-search vf-search">
+              <Search size={15} aria-hidden="true" />
+              <input value={q} placeholder="Search VFX mods" aria-label="Search VFX mods" onChange={e => setQ(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Escape') setQ('') }} />
+              {q && <button type="button" className="lo-icon vf-search-clear" onClick={() => setQ('')} aria-label="Clear the search" title="Clear the search"><X size={14} /></button>}
+            </label>
+            <div className="mod-state-filter lp-sort" role="group" aria-label="Sort VFX mods">
+              <button type="button" aria-pressed={sort === 'name'} onClick={() => sortBy('name')}>A to Z</button>
+              <button type="button" aria-pressed={sort === 'newest'} onClick={() => sortBy('newest')}>Newest</button>
+            </div>
+          </div>
         )}
         {mods === null
           ? <p className="lp-empty">Reading the mods folder…</p>
@@ -461,31 +471,24 @@ export function VfxUpdaterPanel() {
                 </div>
 
                 <div className="vf-sub">
-                  <section className="su-card vf-usmap-card">
-                    <div className="su-card-head">
-                      <div>
-                        <h3>USMAP</h3>
-                        <p>The game's property layout, which updates read the game's files with. From rivals-depot on GitHub.</p>
+                  <h3>USMAP<span>{behind && !usmapMissing && !checking ? 'Older than the game' : usmapState}</span></h3>
+                  <p className="vf-hint vf-usmap-about">The game's property layout, which updates read the game's files with. From rivals-depot on GitHub.</p>
+                  <ul className="su-parts vf-usmap">
+                    <li className="su-part">
+                      <span className={`su-part-mark${usmapOk ? ' is-ok' : ''}`} role="img" aria-label={usmapOk ? 'Ready' : 'Missing'}>{usmapOk && <Check size={14} strokeWidth={2.5} />}</span>
+                      <div className="su-part-text">
+                        <b title={usmap ?? undefined}>{usmap ? fileName(usmap) : 'No USMAP chosen'}</b>
+                        <span>{[usmapInfo?.version, usmapInfo?.commitDate, cl && `build ${cl}`].filter(Boolean).join(' · ') || 'Check for updates downloads the newest, or browse for a file'}</span>
                       </div>
-                      <span className={`su-chip ${usmapMissing ? 'is-missing' : 'is-installed'}`}>{behind && !usmapMissing && !checking ? 'Older than the game' : usmapState}</span>
-                    </div>
-                    <ul className="su-parts">
-                      <li className="su-part">
-                        <span className={`su-part-mark${usmapOk ? ' is-ok' : ''}`} role="img" aria-label={usmapOk ? 'Ready' : 'Missing'}>{usmapOk && <Check size={14} strokeWidth={2.5} />}</span>
-                        <div className="su-part-text">
-                          <b title={usmap ?? undefined}>{usmap ? fileName(usmap) : 'No USMAP chosen'}</b>
-                          <span>{[usmapInfo?.version, usmapInfo?.commitDate, cl && `build ${cl}`].filter(Boolean).join(' · ') || 'Check for updates downloads the newest, or browse for a file'}</span>
-                        </div>
-                        <span className="su-part-links">
-                          <button type="button" className="su-link" disabled={checking || busy} onClick={() => usmapCheck(true)} title="Download the newest USMAP from rivals-depot and use it">
-                            {checking ? 'Checking…' : 'Check for updates'}
-                          </button>
-                          <button type="button" className="su-link" disabled={busy} onClick={browseUsmap} title="Use a .usmap file from this PC">Browse…</button>
-                        </span>
-                      </li>
-                    </ul>
-                    {behind ? <p className="su-note">The game is on build {build!.cl}. Updates usually still work after a small patch. If they fail, wait for rivals-depot to publish a newer USMAP.</p> : null}
-                  </section>
+                      <span className="su-part-links">
+                        <button type="button" className="su-link" disabled={checking || busy} onClick={() => usmapCheck(true)} title="Download the newest USMAP from rivals-depot and use it">
+                          {checking ? 'Checking…' : 'Check for updates'}
+                        </button>
+                        <button type="button" className="su-link" disabled={busy} onClick={browseUsmap} title="Use a .usmap file from this PC">Browse…</button>
+                      </span>
+                    </li>
+                  </ul>
+                  {behind ? <p className="vf-warn"><AlertTriangle size={14} aria-hidden="true" />The game is on build {build!.cl}. Updates usually still work after a small patch. If they fail, wait for rivals-depot to publish a newer USMAP.</p> : null}
                 </div>
 
                 <ColorNames />
