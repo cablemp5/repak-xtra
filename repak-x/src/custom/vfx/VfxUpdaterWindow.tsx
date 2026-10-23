@@ -104,11 +104,13 @@ function Report({ r, onRetry, busy }: { r: VfxReport; onRetry: () => void; busy:
       </ul>}
       {groups.length > 0 && <>
         <div className="vf-stats">
-          {STAT_ORDER.map(k => [k, r.assets.filter(a => a.kind === k).length] as const).filter(([, n]) => n).map(([k, n]) => (
-            <span key={k} className={`vf-stat is-${k}`}><b>{n.toLocaleString()}</b> {KIND_STAT[k]}</span>
-          ))}
-          <span className="vf-stat is-time"><b>{took(r.ms)}</b></span>
-          <button type="button" className="vf-stat vf-assets-toggle" aria-expanded={assets} onClick={() => setAssets(v => !v)}>
+          <p className="vf-stat-line">
+            {STAT_ORDER.map(k => [k, r.assets.filter(a => a.kind === k).length] as const).filter(([, n]) => n).map(([k, n]) => (
+              <span key={k} className={`vf-stat is-${k}`}><b>{n.toLocaleString()}</b> {KIND_STAT[k]}</span>
+            ))}
+            <span className="vf-stat">{took(r.ms)}</span>
+          </p>
+          <button type="button" className="vf-assets-toggle" aria-expanded={assets} onClick={() => setAssets(v => !v)}>
             {assets ? 'Hide' : 'Show'} {plural(r.assets.length, 'asset')} <ChevronRight size={12} className="vf-assets-caret" aria-hidden="true" />
           </button>
         </div>
@@ -595,7 +597,6 @@ export function VfxUpdaterPanel() {
                 </Section>
 
                 <Section icon={<MapIcon size={15} aria-hidden="true" />} title="USMAP"
-                  state={<span className={behind && !usmapMissing && !checking ? 'is-warn' : usmapMissing ? 'is-warn' : ''}>{behind && !usmapMissing && !checking ? 'Older than the game' : usmapState}</span>}
                   about="The game's property layout. Updates read the game's files with it.">
                   <div className="vf-usmap">
                     <span className={`su-part-mark${usmapOk ? ' is-ok' : ''}`} role="img" aria-label={usmapOk ? 'Ready' : 'Missing'}>{usmapOk && <Check size={14} strokeWidth={2.5} />}</span>
