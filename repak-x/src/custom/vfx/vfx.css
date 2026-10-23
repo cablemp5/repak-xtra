@@ -63,6 +63,7 @@
 .vf-pill.is-fixed { color: #3ecf6e !important; background: color-mix(in srgb, #3ecf6e, transparent 88%) !important; }
 .vf-pill.is-failed, .vf-pill.is-cancelled { color: #f5d342 !important; background: color-mix(in srgb, #f5d342, transparent 88%) !important; }
 .vf-pill:hover { filter: brightness(1.15); }
+.vf-pill, .vf-status { animation: t-swap-in var(--icon-swap-dur) var(--icon-swap-ease) backwards; }
 .vf-caret { flex: none; opacity: 0.8; transition: transform var(--acc-chevron) var(--acc-ease); }
 .vf-pill[aria-expanded="true"] .vf-caret { transform: rotate(180deg); }
 
@@ -71,7 +72,11 @@
    step count and the count inside the step are pills, so the numbers read apart from the words */
 .vf-progress { flex-basis: 100%; padding: 0 0 12px 28px; }
 .vf-bar { height: 4px; border-radius: 999px; overflow: hidden; background: var(--bg-lighter); }
-.vf-bar i { display: block; height: 100%; background: var(--accent-primary); transition: width 0.4s var(--acc-ease); }
+/* the fill carries the app's shimmer sweep (transitions.dev: Shimmer), so a long step still reads as working */
+.vf-bar i, .vf-foot-bar i { display: block; height: 100%; transition: width 0.4s var(--acc-ease);
+  background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-primary) 38%, color-mix(in srgb, var(--accent-primary), white 45%) 50%,
+    var(--accent-primary) 62%, var(--accent-primary) 100%) 0 0 / 250% 100% no-repeat;
+  animation: t-shimmer var(--shimmer-dur, 2s) var(--shimmer-ease, linear) infinite; }
 .vf-step { margin: 8px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 12.5px; color: var(--text-secondary); }
 .vf-count { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 500;
   font-variant-numeric: tabular-nums; color: var(--text-secondary); background: var(--quiet-active); }
@@ -89,11 +94,20 @@
 .vf-warnings li { position: relative; padding-left: 14px; font-size: 12.5px; line-height: 1.5; color: var(--text-primary); overflow-wrap: anywhere; }
 .vf-warnings li::before { content: ''; position: absolute; left: 2px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: #f5d342; }
 .vf-warnings li.vf-more::before { display: none; }
-.vf-counts { margin: 0; align-self: stretch; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-.vf-counts b { color: var(--text-primary); font-weight: 600; }
-.vf-counts .is-failed b, .vf-counts .is-unreadable b { color: #f5d342; }
-.vf-assets-toggle { margin-left: auto; font-size: 12.5px !important; color: var(--text-secondary) !important; }
-.vf-assets-toggle:hover { color: var(--text-primary) !important; }
+.vf-stats { align-self: stretch; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.vf-stat { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 12px; color: var(--text-secondary);
+  background: var(--quiet-active); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vf-stat b { font-weight: 600; color: var(--text-primary); }
+.vf-stat.is-updated b { color: #3ecf6e; }
+.vf-stat.is-failed, .vf-stat.is-unreadable { background: color-mix(in srgb, #f5d342, transparent 88%); }
+.vf-stat.is-failed b, .vf-stat.is-unreadable b { color: #f5d342; }
+.vf-stat.is-time { background: none; padding: 0 4px; }
+/* the asset list's toggle: a pill like the numbers, at the far end, a real target */
+button.vf-assets-toggle { margin-left: auto; border: none !important; cursor: pointer; height: 24px !important; min-height: 0 !important; padding: 0 8px 0 10px !important;
+  font-size: 12px !important; color: var(--text-secondary) !important; background: var(--quiet-active) !important; }
+button.vf-assets-toggle:hover { color: var(--text-primary) !important; }
+.vf-assets-caret { transition: transform var(--acc-chevron) var(--acc-ease); }
+.vf-assets-toggle[aria-expanded="true"] .vf-assets-caret { transform: rotate(90deg); }
 .vf-report > .t-acc-panel { align-self: stretch; }
 .vf-assets { margin-top: 4px; padding: 8px 12px; border-radius: 8px; background: var(--bg-dark); }
 .vf-group h4 { margin: 8px 0 4px; font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
@@ -149,7 +163,8 @@
 .vf-log .is-success { color: #46a758; }
 .vf-copy-log { margin-top: 10px; }
 
-.vf-foot { display: flex; align-items: center; gap: 8px; padding: 12px 24px; border-top: 1px solid var(--panel-border); }
+.vf-foot-bar { position: absolute; left: 0; right: 0; top: -1px; height: 2px; overflow: hidden; background: transparent; }
+.vf-foot { position: relative; display: flex; align-items: center; gap: 8px; padding: 12px 24px; border-top: 1px solid var(--panel-border); }
 .vf-policy .su-link { margin-left: 2px; }
 .vf-state { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vf-foot .btn-primary {
@@ -157,7 +172,8 @@
   display: inline-flex !important; align-items: center; gap: 4px; width: auto !important; flex: none;
 }
 .vf-foot .btn-primary svg { margin-right: 4px; }
-html[data-motion="off"] .vf-bar i, html[data-motion="off"] .vf-caret, html[data-motion="off"] .vf-grp-caret { transition: none; }
+html[data-motion="off"] .vf-bar i, html[data-motion="off"] .vf-foot-bar i, html[data-motion="off"] .vf-caret, html[data-motion="off"] .vf-grp-caret, html[data-motion="off"] .vf-assets-caret { transition: none; animation: none; }
+html[data-motion="off"] .vf-pill, html[data-motion="off"] .vf-status { animation: none; }
 
 /* the main window's notice after a game update (VfxNotice.tsx) */
 .vfx-notice {
@@ -181,3 +197,5 @@ html[data-motion="off"] .vfx-notice { animation: none; }
 [data-theme="light"] .vf-counts .is-failed b, [data-theme="light"] .vf-counts .is-unreadable b, [data-theme="light"] .vf-log .is-warning { color: #665400 !important; }
 [data-theme="light"] .vf-warn svg, [data-theme="light"] .vfx-notice-icon { color: #9a7d00; }
 [data-theme="light"] .vf-warnings li::before { background: #9a7d00; }
+[data-theme="light"] .vf-stat.is-updated b { color: #166236; }
+[data-theme="light"] .vf-stat.is-failed b, [data-theme="light"] .vf-stat.is-unreadable b { color: #574800; }

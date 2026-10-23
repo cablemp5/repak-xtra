@@ -57,15 +57,21 @@ const isDone = (s?: Status) => s === 'fixed' || s === 'nothing'
 const STATUS: Record<Status, string> = { waiting: 'Waiting', running: 'Updating', fixed: 'Updated', nothing: 'Nothing to update', failed: 'Failed', cancelled: 'Cancelled' }
 const KIND_ORDER: AssetKind[] = ['failed', 'unreadable', 'added', 'updated', 'same', 'passed']
 const KIND_LABEL: Record<AssetKind, string> = { updated: 'Rebuilt', same: 'Match the game', added: 'The mod\'s own', passed: 'Kept as they were', unreadable: 'Could not be read', failed: 'Not updated' }
+/** The report's numbers: the count first, then what it counts */
+const KIND_STAT: Record<AssetKind, string> = { updated: 'rebuilt', same: 'match the game', added: 'the mod\'s own', passed: 'kept as they were', unreadable: 'unreadable', failed: 'not updated' }
+/** The numbers' order: what was rebuilt first, then any problem (yellow, so it stands out), then the rest */
+const STAT_ORDER: AssetKind[] = ['updated', 'failed', 'unreadable', 'added', 'same', 'passed']
+/** A run's length, read at a glance: 42 s, 1 min 24 s */
+const took = (ms: number) => { const sec = Math.round(ms / 1000); return sec < 60 ? `${sec} s` : `${Math.floor(sec / 60)} min${sec % 60 ? ` ${sec % 60} s` : ''}` }
+const bare = (path: string) => fileName(path).replace(/\.[^.]+$/, '').replace(/(_\d+)?_P$/i, '') // a mod's name, no priority suffix
 
 /** Where the update went, in words: the original's new name, or the update's own when it was named _UPDATED. */
 function placedText(r: VfxReport) {
   const p = r.placed
   if (!p) return r.output ? `Saved as ${fileName(r.output)}.` : ''
-  const kept = fileName(p.original).replace(/\.[^.]+$/, '')
-  const renamed = /_BROKEN((_\d+)?_P)?$/i.test(kept)
-  const gone = p.trashed ? `${kept}, in Recently deleted` : `${kept}${p.turnedOff ? ', off' : ''}`
-  return (renamed ? `The update has the mod's name. The original is now ${gone}.` : `Saved as ${fileName(p.fixed)}${p.trashed ? ', and the original is in Recently deleted' : p.turnedOff ? ', and the original is off' : ''}.`)
+  const kept = bare(p.original)
+  const where = p.trashed ? 'is in Recently deleted' : p.turnedOff ? 'is off' : 'is beside it'
+  return (/_BROKEN$/i.test(kept) ? `It kept the mod's name. The original, ${kept}, ${where}.` : `Saved as ${bare(p.fixed)}. The original ${where}.`)
     + (p.replaced ? ' An earlier copy is in Recently deleted.' : '')
 }
 
@@ -73,7 +79,7 @@ function placedText(r: VfxReport) {
 function reportText(r: VfxReport) {
   const lines = [`${r.name}: ${STATUS[r.status as Status] ?? r.status}${r.error ? `. ${r.error}` : ''}`]
   if (r.status === 'fixed') lines.push(`  ${placedText(r)}`)
-  lines.push(`  ${r.counts.updated} rebuilt with ${r.counts.changes} edits, ${r.counts.same} match the game, ${r.counts.added} the mod's own, ${r.counts.passed} kept, ${r.counts.unreadable} unreadable, ${(r.ms / 1000).toFixed(1)} s`)
+  lines.push(`  ${r.counts.updated} rebuilt with ${r.counts.changes} edits, ${r.counts.same} match the game, ${r.counts.added} the mod's own, ${r.counts.passed} kept, ${r.counts.unreadable} unreadable, ${took(r.ms)}`)
   r.warnings.forEach(w => lines.push(`  ! ${w}`))
   for (const k of KIND_ORDER) for (const a of r.assets.filter(x => x.kind === k)) lines.push(`  [${KIND_LABEL[k]}] ${a.name}: ${a.detail}`)
   return lines.join('\n')
@@ -97,13 +103,15 @@ function Report({ r, onRetry, busy }: { r: VfxReport; onRetry: () => void; busy:
         {r.warnings.length > 4 && <li className="vf-more"><button type="button" className="su-link" onClick={() => setAllWarnings(v => !v)}>{allWarnings ? 'Show fewer' : `Show all ${r.warnings.length}`}</button></li>}
       </ul>}
       {groups.length > 0 && <>
-        <p className="vf-counts">
-          {groups.map(([k, list]) => <span key={k} className={`is-${k}`}>{KIND_LABEL[k]} <b>{list.length.toLocaleString()}</b></span>)}
-          <span>{(r.ms / 1000).toFixed(1)} s</span>
-          <button type="button" className="cf-files-btn vf-assets-toggle" aria-expanded={assets} onClick={() => setAssets(v => !v)}>
-            {plural(r.assets.length, 'asset')} <ChevronRight size={12} className="cf-caret" aria-hidden="true" />
+        <div className="vf-stats">
+          {STAT_ORDER.map(k => [k, r.assets.filter(a => a.kind === k).length] as const).filter(([, n]) => n).map(([k, n]) => (
+            <span key={k} className={`vf-stat is-${k}`}><b>{n.toLocaleString()}</b> {KIND_STAT[k]}</span>
+          ))}
+          <span className="vf-stat is-time"><b>{took(r.ms)}</b></span>
+          <button type="button" className="vf-stat vf-assets-toggle" aria-expanded={assets} onClick={() => setAssets(v => !v)}>
+            {assets ? 'Hide' : 'Show'} {plural(r.assets.length, 'asset')} <ChevronRight size={12} className="vf-assets-caret" aria-hidden="true" />
           </button>
-        </p>
+        </div>
         <div className="t-acc-panel" data-open={assets}>
           <div className="t-acc-panel-inner" {...folded(!assets)}>
             {assets && <div className="vf-assets">{groups.map(([k, list]) => (
@@ -140,7 +148,7 @@ function Row({ mod, rowKey, loadouts, run, needs, picked, open, busy, onPick, on
       {mod.enabled && <span className="mod-type-badge category-badge on-badge" title="This mod is on now">On</span>}
       {run?.report
         ? <button type="button" className={`vf-pill is-${status}`} aria-expanded={open} onClick={onToggle} title={open ? 'Hide the report' : 'Show the report'}>
-            {status === 'fixed' && <Check size={12} strokeWidth={2.5} aria-hidden="true" />}{STATUS[status!]}
+            {STATUS[status!]}
             <ChevronDown size={12} className="vf-caret" aria-hidden="true" />
           </button>
         : status && (running && step
@@ -151,7 +159,7 @@ function Row({ mod, rowKey, loadouts, run, needs, picked, open, busy, onPick, on
           <div className="vf-bar" role="progressbar" aria-valuenow={step} aria-valuemin={0} aria-valuemax={STEPS.length} aria-label={`${mod.name} progress`}>
             <i style={{ width: `${((step - 0.5) / STEPS.length) * 100}%` }} />
           </div>
-          <p className="vf-step" aria-live="polite"><SwapText text={STEPS[step - 1]} />{run?.sub ? <span className="vf-count">{run.sub}</span> : null}</p>
+          <p className="vf-step" aria-live="polite"><SwapText text={STEPS[step - 1]} />{run?.sub ? <span className="vf-count"><SwapText text={run.sub} /></span> : null}</p>
         </div>
       ) : null}
       {run?.report && <div className="t-acc-panel vf-row-panel" data-open={open}><div className="t-acc-panel-inner" {...folded(!open)}><Report r={run.report} onRetry={onRetry} busy={busy} /></div></div>}
@@ -264,6 +272,7 @@ export function VfxUpdaterPanel() {
   const [logs, setLogs] = useState<Log[]>([])
   const [copied, setCopied] = useState<string | null>(null)
   const [batch, setBatch] = useState<string[]>([]) // the run in progress, in order
+  const [lastTook, setLastTook] = useState<number | null>(null) // how long the last batch ran, for its end line
   const [reload, setReload] = useState(0)
   const [loadError, setLoadError] = useState<string | null>(null) // the mods folder could not be read (the last list stays)
   const [checkError, setCheckError] = useState(false) // which mods need an update could not be checked
@@ -397,7 +406,8 @@ export function VfxUpdaterPanel() {
     if (where.has(undefined)) setQ('')
     setFoldedIds(f => { const n = f.filter(id => !where.has(id)); if (n.length !== f.length) localStorage.setItem(FOLDED, JSON.stringify(n)); return n })
     if (!claimRun(OWNER)) { addLog('A mod is updating from the Library. Try again when it is done.', 'warning'); return }
-    setBusy(true); setBatch(todo); cancel.current = false
+    setBusy(true); setBatch(todo); setLastTook(null); cancel.current = false
+    const startedAt = performance.now()
     todo.forEach(k => patch(k, { status: 'waiting', step: undefined, sub: undefined, report: undefined }))
     const filter = readFilter()
     let fixed = 0, failed = 0
@@ -429,7 +439,8 @@ export function VfxUpdaterPanel() {
     }
     if (fixed) await emit('mods_dir_changed').catch(() => {})
     releaseRun(OWNER)
-    cue(failed ? 'error' : 'success', { emphasis: 'subtle' })
+    setLastTook(performance.now() - startedAt)
+    cue(failed ? 'warning' : 'success', { emphasis: fixed > 1 ? undefined : 'subtle' }) // a problem is a warning, never an error sound
     setBusy(false); setCancelling(false)
   }, [picked, usmap, paks, originals, keepName, addLog])
 
@@ -491,7 +502,10 @@ export function VfxUpdaterPanel() {
   const runningStep = runningKey ? runs[runningKey]?.step : undefined
   const state = cancelling ? 'Cancelling. The current step finishes first.'
     : busy ? `Updating ${runningAt + 1} of ${batch.length}${runningMod ? `: ${runningMod.name}` : ''}${runningStep ? `, step ${runningStep} of ${STEPS.length}` : '…'}`
-      : lock ?? (reports.length ? `${plural(updated, 'mod')} updated${reports.length > updated ? `, ${reports.length - updated} not` : ''}` : todo ? '' : 'Tick the mods to update')
+      : lock ?? (reports.length ? `${updated === reports.length ? plural(updated, 'mod') : `${updated} of ${plural(reports.length, 'mod')}`} updated${lastTook ? ` in ${took(lastTook)}` : ''}` : todo ? '' : 'Tick the mods to update')
+  // the whole batch's progress, for the bar on top of the footer (each mod's own bar is in its row)
+  const finishedN = batch.filter(k => { const st = runs[k]?.status; return st && st !== 'waiting' && st !== 'running' }).length
+  const batchPct = batch.length ? ((finishedN + (runningStep ? (runningStep - 0.5) / STEPS.length : 0)) / batch.length) * 100 : 0
   // what Update will do to the files, beside the button, so a choice made once in Advanced is never a surprise
   const policy = naming === 'broken'
     ? { off: 'Originals get _BROKEN and turn off', trash: 'Originals get _BROKEN and go to Recently deleted', keep: 'Originals get _BROKEN and stay as they are' }[originals]
@@ -612,6 +626,7 @@ export function VfxUpdaterPanel() {
       </div>
 
       <footer className="vf-foot">
+        {busy && <div className="vf-foot-bar" role="progressbar" aria-label="All selected mods" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(batchPct)}><i style={{ width: `${batchPct}%` }} /></div>}
         {state
           ? <span className="vf-state" aria-live="polite">{state}</span>
           : <span className="vf-state vf-policy">{policy}. <button type="button" className="su-link" onClick={() => showAdvanced(true)}>Change</button></span>}
