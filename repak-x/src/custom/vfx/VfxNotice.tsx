@@ -1,6 +1,7 @@
 // repakxtra: after a game update, a strip above Home and the Library while VFX mods were made for the game files it
 // changed (xtra_broken.rs "vfx" verdicts, the Needs VFX update badge). Update VFX mods hands them all to the VFX Updater, which
-// fixes them at once and turns the originals off. Not now hides it until the next game update. It also listens for each
+// fixes them at once and turns the originals off. Not now hides it until the next game update (the VFX Updater still offers
+// them all as one Add). It also listens for each
 // fix the VFX window makes and swaps the original for the fix in every loadout, so a loadout turns on the fixed mod.
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'

@@ -77,11 +77,16 @@
 .vf-warn { margin: 10px 0 0; display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 .vf-warn svg { flex: none; margin-top: 2px; color: #f5d342; }
 
-/* folding groups: Color names, Log */
-.vf-fold.is-folded .lo-group-head { margin-bottom: 0; }
-.vf-fold-name { cursor: pointer; user-select: none; }
-.vf-fold.is-folded .vf-fold-name { color: var(--text-secondary); }
-.vf-fold.is-folded .vf-fold-name:hover { color: var(--text-primary); }
+/* the library's mods that need an update: the Library notice's strip, here with Add all */
+.vf-suggest { margin: 0; }
+.vf-suggest .lo-text-btn { flex: none; white-space: nowrap; }
+
+/* Advanced: the install card's fold (.ia), right under the list's option */
+.vf-adv .ia-on { color: var(--text-secondary); }
+.vf-adv .ia-on.is-warn { color: var(--text-primary); }   /* an older USMAP usually still works: brighter, not yellow */
+.vf-adv-body { display: flex; flex-direction: column; gap: 22px; padding: 16px 0 2px; }
+.vf-sub h3 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 10px; font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.vf-sub h3 span { font-size: 12px; font-weight: 400; color: var(--text-secondary); }
 .vf-names { display: flex; flex-direction: column; gap: 12px; }
 .vf-names label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-primary); }
 .vf-names input {

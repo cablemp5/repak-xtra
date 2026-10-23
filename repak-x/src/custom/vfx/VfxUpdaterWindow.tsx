@@ -1,14 +1,15 @@
 // repakxtra: the VFX Updater window (route vfx-updater), in place of the upstream VFX Updater's panel: updates one VFX mod
 // or a list of them (pipeline.ts). Built from the Loadout page's parts: group headings with a count pill, mods as rows
-// in a hairline list, a dashed empty row that takes dropped .utoc files, link actions on the USMAP row, folding groups
-// for the rarely touched Color names and Log. Each mod shows its step and a progress bar while it runs, then its report:
+// in a hairline list, a dashed empty row that takes dropped .utoc files. One flow from top to bottom: the library's mods
+// that need an update (one click adds them all), the list, its one option, then Advanced (USMAP, Color names, Log), which
+// stays folded unless the USMAP is missing, and the footer's Update. Each mod shows its step and a progress bar while it runs, then its report:
 // what was rebuilt, what was kept and why, and where the update went (beside the original, which goes off). A failed or
 // cancelled mod can be tried again. Cancel waits for the step in flight (UAssetTool cannot be interrupted) and says so.
 // The main window hands mods over (handoff.ts) and swaps the originals for the updates in loadouts (VfxNotice.tsx).
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, emitTo, listen } from '@tauri-apps/api/event'
-import { AlertTriangle, Check, ChevronDown, ChevronRight, Copy, Plus, RotateCcw, X } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, ChevronRight, Copy, Plus, RotateCcw, Sparkles, X } from 'lucide-react'
 import TitleBar from '../../components/TitleBar'
 import Checkbox from '../../components/ui/Checkbox'
 import { Num, SwapText } from '../motion'
@@ -25,6 +26,7 @@ type Usmap = { updated: boolean; upToDate: boolean; skipped: boolean; localPath?
 type GameBuild = { updated: number; cl?: number | null }
 
 const TURN_OFF = 'repakxtra.vfx.turnOff'
+const ADVANCED = 'repakxtra.vfx.advanced' // Advanced opens the way it was last left, as the install card's
 const fileName = (p: string) => p.replace(/\\/g, '/').split('/').pop() ?? p
 const modName = (p: string) => fileName(p).replace(/\.[^.]+$/, '').replace(/(_\d+)?_P$/i, '')
 const plural = (n: number, word: string, many = `${word}s`) => `${n.toLocaleString()} ${n === 1 ? word : many}`
@@ -33,6 +35,7 @@ const folded = (hidden: boolean) => (hidden ? { inert: true } : {}) as object
 const usmapCl = (name?: string | null) => Number(name?.match(/-(\d{6,})\+/)?.[1]) || null
 /** Dropped files the updater can take: a mod's .utoc, or its .pak / .bak_repak (the .utoc beside it is read). */
 const droppable = (p: string) => /\.(utoc|pak|bak_repak)$/i.test(p)
+const norm = (p: string) => p.replace(/\//g, '\\').toLowerCase()
 
 const STATUS: Record<Status, string> = { waiting: 'Waiting', running: 'Updating', fixed: 'Updated', nothing: 'Nothing to update', failed: 'Failed', cancelled: 'Cancelled' }
 const KIND_ORDER: AssetKind[] = ['failed', 'unreadable', 'added', 'updated', 'same', 'passed']
@@ -118,23 +121,6 @@ function Row({ item, open, onToggle, onRemove, onRetry, busy }: { item: Item; op
   )
 }
 
-/** A group that folds away to its heading, as a collection does on the Loadouts screen. */
-function Fold({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <section className={`lp-section vf-fold${open ? '' : ' is-folded'}`}>
-      <h2 className="lo-group-head">
-        <button type="button" className="lo-icon lo-group-fold" aria-expanded={open} onClick={() => setOpen(v => !v)} aria-label={open ? `Collapse ${title}` : `Show ${title}`}>
-          {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-        </button>
-        <span className="lo-group-name vf-fold-name" onClick={() => setOpen(v => !v)}>{title}</span>
-        {aside && <span className="lp-head-note">{aside}</span>}
-      </h2>
-      <div className="t-acc-panel" data-open={open}><div className="t-acc-panel-inner" {...folded(!open)}>{children}</div></div>
-    </section>
-  )
-}
-
 function ColorNames() {
   const [f, setF] = useState<ColorFilter>(readFilter)
   const [text, setText] = useState({ includes: f.includes.join(', '), excludes: f.excludes.join(', ') })
@@ -147,14 +133,15 @@ function ColorNames() {
   const reset = () => { resetFilter(); setF(DEFAULT_FILTER); setText({ includes: DEFAULT_FILTER.includes.join(', '), excludes: DEFAULT_FILTER.excludes.join(', ') }) }
   const custom = JSON.stringify(f) !== JSON.stringify(DEFAULT_FILTER)
   return (
-    <Fold title="Color names" aside={custom ? 'Custom' : 'Default'}>
+    <div className="vf-sub">
+      <h3>Color names<span>{custom ? 'Custom' : 'Default'}</span></h3>
       <div className="vf-names">
         <p className="vf-hint">Which blueprint and data table colors carry over, by name. Material parameters always do, except excluded names.</p>
         <label>Carry names containing<input value={text.includes} onChange={e => save({ ...text, includes: e.target.value })} spellCheck={false} /></label>
         <label>Never carry names containing<input value={text.excludes} onChange={e => save({ ...text, excludes: e.target.value })} spellCheck={false} /></label>
         <p className="vf-hint">Separate words with commas. Case does not matter.{custom && <> <button type="button" className="su-link" onClick={reset}>Reset to defaults</button></>}</p>
       </div>
-    </Fold>
+    </div>
   )
 }
 
@@ -172,6 +159,8 @@ export function VfxUpdaterPanel() {
   const [cancelling, setCancelling] = useState(false)
   const [over, setOver] = useState(false) // files dragged over the window
   const [logs, setLogs] = useState<Log[]>([])
+  const [flagged, setFlagged] = useState<string[]>([]) // the library's mods that need a VFX update (xtra_broken.rs), as .utoc paths
+  const [advanced, setAdvanced] = useState(() => localStorage.getItem(ADVANCED) === '1')
   const [copied, setCopied] = useState<string | null>(null)
   const cancel = useRef(false)
   const pendingStart = useRef(false)
@@ -239,6 +228,21 @@ export function VfxUpdaterPanel() {
     ]
     return () => { uns.forEach(u => u.then(f => f())) }
   }, [add, addLog])
+
+  // the library's mods that need a VFX update, so the Library's notice can be dismissed and they are still one click
+  // away here. Asked again after each run: a mod with an update beside it no longer needs one.
+  useEffect(() => {
+    if (busy) return
+    let live = true
+    invoke<{ path: string; utoc_path?: string | null }[]>('get_pak_files')
+      .then(mods => invoke<{ path: string; kind: string }[]>('xtra_broken_mods', { modPaths: mods.map(m => m.path) }).then(v => {
+        const vfx = new Set(v.filter(x => x.kind === 'vfx').map(x => norm(x.path)))
+        return mods.filter(m => vfx.has(norm(m.path))).map(m => m.utoc_path || utocOf(m.path))
+      }))
+      .then(p => { if (live) setFlagged(p) })
+      .catch(() => {})
+    return () => { live = false }
+  }, [busy])
 
   // Rust steps report inside the step (types read so far)
   useEffect(() => {
@@ -315,6 +319,9 @@ export function VfxUpdaterPanel() {
     setCopied(what); setTimeout(() => setCopied(null), 1500)
   }
 
+  const listed = new Set(items.map(i => norm(i.path)))
+  const suggest = flagged.filter(p => !listed.has(norm(p)))
+  const usmapMissing = !checking && (!usmap || usmapOk === false)
   const todo = items.filter(i => i.status !== 'fixed' && i.status !== 'nothing').length
   const done = items.filter(i => i.report).length
   const updated = items.filter(i => i.status === 'fixed').length
@@ -329,13 +336,22 @@ export function VfxUpdaterPanel() {
   return (
     <div className={`vf-panel${over ? ' is-over' : ''}`}>
       <div className="vf-body">
+        {suggest.length > 0 && !busy && (
+          <div className="vfx-notice vf-suggest" role="status">
+            <Sparkles size={16} className="vfx-notice-icon" aria-hidden="true" />
+            <p><strong>{suggest.length === 1 ? '1 VFX mod needs' : `${suggest.length} VFX mods need`} an update.</strong>{' '}
+              {build?.updated ? `The game update on ${new Date(build.updated * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : 'A game update'} changed the files {suggest.length === 1 ? 'it replaces' : 'they replace'}.</p>
+            <button type="button" className="lo-text-btn" onClick={() => add(suggest)}><Plus size={14} aria-hidden="true" /> {suggest.length === 1 ? 'Add it' : `Add all ${suggest.length}`}</button>
+          </div>
+        )}
+
         <section className="lp-section">
           <h2 className="lo-group-head">Mods<span className="lo-group-count">{items.length}</span>
             {busy && runningAt >= 0 && <span className="lp-head-note">updating {runningAt + 1} of {items.length}</span>}
             <button type="button" className="lo-text-btn vf-head-tool" disabled={busy} onClick={browseMods}><Plus size={14} /> Add mods</button>
           </h2>
           {items.length === 0
-            ? <p className="lp-empty vf-drop">Drop a mod's .utoc here, or Add mods. After a game update, Update VFX mods in the Library sends every VFX mod that needs it here.</p>
+            ? <p className="lp-empty vf-drop">Drop a mod's .utoc here, or Add mods.</p>
             : <ul className="mod-rows vf-rows">
               {items.map(item => (
                 <Row key={item.path} item={item} busy={busy} open={open.has(item.path)}
@@ -352,30 +368,53 @@ export function VfxUpdaterPanel() {
           </div>
         </section>
 
-        <section className="lp-section">
-          <h2 className="lo-group-head">USMAP<span className="lp-head-note">{usmapState}</span></h2>
-          <ul className="mod-rows">
-            <li className="su-part vf-usmap">
-              <span className={`su-part-mark${usmapOk ? ' is-ok' : ''}`} role="img" aria-label={usmapOk ? 'Ready' : 'Missing'}>{usmapOk && <Check size={14} strokeWidth={2.5} />}</span>
-              <span className="su-part-text">
-                <b title={usmap ?? undefined}>{usmap ? fileName(usmap) : 'No USMAP chosen'}</b>
-                <span>{[usmapInfo?.version, usmapInfo?.commitDate].filter(Boolean).join(' · ') || 'The game\'s property layout, from rivals-depot or a file'}</span>
-              </span>
-              <span className="su-part-links">
-                <button type="button" className="su-link" disabled={checking || busy} onClick={() => usmapCheck(true)} title="Download the newest USMAP from rivals-depot and use it">Fetch latest</button>
-                <button type="button" className="su-link" disabled={busy} onClick={browseUsmap}>Browse…</button>
-              </span>
-            </li>
-          </ul>
-          {behind ? <p className="vf-warn"><AlertTriangle size={14} aria-hidden="true" />This USMAP ({cl}) is older than the game ({build!.cl}). Updates usually still work after a small patch. If they fail, wait for rivals-depot to publish a newer one.</p> : null}
+        {usmapMissing && (
+          <p className="vf-warn">
+            <AlertTriangle size={14} aria-hidden="true" />
+            <span>{usmap ? 'The USMAP file is missing.' : 'No USMAP yet.'} Updates need the game's property layout.{' '}
+              <button type="button" className="su-link" disabled={checking || busy} onClick={() => usmapCheck(true)}>Fetch latest</button> or{' '}
+              <button type="button" className="su-link" disabled={busy} onClick={browseUsmap}>browse for one</button>.</span>
+          </p>
+        )}
+
+        <section className={`ia vf-adv${advanced ? ' is-open' : ''}`}>
+          <button type="button" className="ia-toggle" aria-expanded={advanced} onClick={() => { setAdvanced(!advanced); localStorage.setItem(ADVANCED, advanced ? '0' : '1') }}>
+            <ChevronRight size={14} className="ia-caret" aria-hidden="true" />
+            Advanced
+            {!advanced && <span className={`ia-on${behind ? ' is-warn' : ''}`}>{behind ? 'USMAP older than the game' : `USMAP ${usmapState.toLowerCase()}`}{logs.length ? ` · ${plural(logs.length, 'log line')}` : ''}</span>}
+          </button>
+          <div className="t-acc-panel" data-open={advanced}>
+            <div className="t-acc-panel-inner" {...folded(!advanced)}>
+              <div className="vf-adv-body">
+                <div className="vf-sub">
+                  <h3>USMAP<span>{usmapState}</span></h3>
+                  <ul className="mod-rows">
+                    <li className="su-part vf-usmap">
+                      <span className={`su-part-mark${usmapOk ? ' is-ok' : ''}`} role="img" aria-label={usmapOk ? 'Ready' : 'Missing'}>{usmapOk && <Check size={14} strokeWidth={2.5} />}</span>
+                      <span className="su-part-text">
+                        <b title={usmap ?? undefined}>{usmap ? fileName(usmap) : 'No USMAP chosen'}</b>
+                        <span>{[usmapInfo?.version, usmapInfo?.commitDate].filter(Boolean).join(' · ') || 'The game\'s property layout, from rivals-depot or a file'}</span>
+                      </span>
+                      <span className="su-part-links">
+                        <button type="button" className="su-link" disabled={checking || busy} onClick={() => usmapCheck(true)} title="Download the newest USMAP from rivals-depot and use it">Fetch latest</button>
+                        <button type="button" className="su-link" disabled={busy} onClick={browseUsmap}>Browse…</button>
+                      </span>
+                    </li>
+                  </ul>
+                  {behind ? <p className="vf-warn"><AlertTriangle size={14} aria-hidden="true" />This USMAP ({cl}) is older than the game ({build!.cl}). Updates usually still work after a small patch. If they fail, wait for rivals-depot to publish a newer one.</p> : null}
+                </div>
+
+                <ColorNames />
+
+                <div className="vf-sub">
+                  <h3>Log<span>{logs.length ? plural(logs.length, 'line') : 'Nothing yet'}</span></h3>
+                  <div className="vf-log" role="log">{logs.length ? logs.map((l, i) => <div key={i} className={`is-${l.type}`}><span>{l.time}</span> {l.text}</div>) : <span>Each step of an update writes a line here.</span>}</div>
+                  {logs.length > 0 && <button type="button" className="row-action vf-copy-log" onClick={() => copy('log')}><Copy size={13} /> {copied === 'log' ? 'Copied' : 'Copy log'}</button>}
+                </div>
+              </div>
+            </div>
+          </div>
         </section>
-
-        <ColorNames />
-
-        <Fold title="Log" aside={logs.length ? plural(logs.length, 'line') : 'Nothing yet'}>
-          <div className="vf-log" role="log">{logs.length ? logs.map((l, i) => <div key={i} className={`is-${l.type}`}><span>{l.time}</span> {l.text}</div>) : <span>Nothing yet. Each step of an update writes a line here.</span>}</div>
-          {logs.length > 0 && <button type="button" className="row-action vf-copy-log" onClick={() => copy('log')}><Copy size={13} /> {copied === 'log' ? 'Copied' : 'Copy log'}</button>}
-        </Fold>
       </div>
 
       <footer className="vf-foot">
