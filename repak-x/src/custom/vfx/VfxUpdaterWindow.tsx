@@ -57,12 +57,12 @@ const isDone = (s?: Status) => s === 'fixed' || s === 'nothing'
 const STATUS: Record<Status, string> = { waiting: 'Waiting', running: 'Updating', fixed: 'Updated', nothing: 'Nothing to update', failed: 'Failed', cancelled: 'Cancelled' }
 const KIND_ORDER: AssetKind[] = ['failed', 'unreadable', 'added', 'updated', 'same', 'passed']
 const KIND_LABEL: Record<AssetKind, string> = { updated: 'Rebuilt', same: 'Match the game', added: 'The mod\'s own', passed: 'Kept as they were', unreadable: 'Could not be read', failed: 'Not updated' }
-/** The report's numbers: the count first, then what it counts */
-const KIND_STAT: Record<AssetKind, string> = { updated: 'rebuilt', same: 'match the game', added: 'the mod\'s own', passed: 'kept as they were', unreadable: 'unreadable', failed: 'not updated' }
-/** The numbers' order: what was rebuilt first, then any problem (yellow, so it stands out), then the rest */
-const STAT_ORDER: AssetKind[] = ['updated', 'failed', 'unreadable', 'added', 'same', 'passed']
 /** A run's length, read at a glance: 42 s, 1 min 24 s */
-const took = (ms: number) => { const sec = Math.round(ms / 1000); return sec < 60 ? `${sec} s` : `${Math.floor(sec / 60)} min${sec % 60 ? ` ${sec % 60} s` : ''}` }
+const took = (ms: number) => {
+  const sec = Math.max(1, Math.round(ms / 1000)), min = Math.floor(sec / 60), rest = sec % 60
+  const unit = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+  return min ? `${unit(min, 'minute')}${rest ? ` ${unit(rest, 'second')}` : ''}` : unit(sec, 'second')
+}
 const bare = (path: string) => fileName(path).replace(/\.[^.]+$/, '').replace(/(_\d+)?_P$/i, '') // a mod's name, no priority suffix
 
 /** Where the update went, in words: the original's new name, or the update's own when it was named _UPDATED. */
@@ -104,12 +104,6 @@ function Report({ r, onRetry, busy }: { r: VfxReport; onRetry: () => void; busy:
       </ul>}
       {groups.length > 0 && <>
         <div className="vf-stats">
-          <p className="vf-stat-line">
-            {STAT_ORDER.map(k => [k, r.assets.filter(a => a.kind === k).length] as const).filter(([, n]) => n).map(([k, n]) => (
-              <span key={k} className={`vf-stat is-${k}`}><b>{n.toLocaleString()}</b> {KIND_STAT[k]}</span>
-            ))}
-            <span className="vf-stat">{took(r.ms)}</span>
-          </p>
           <button type="button" className="vf-assets-toggle" aria-expanded={assets} onClick={() => setAssets(v => !v)}>
             {assets ? 'Hide' : 'Show'} {plural(r.assets.length, 'asset')} <ChevronRight size={12} className="vf-assets-caret" aria-hidden="true" />
           </button>
@@ -148,6 +142,9 @@ function Row({ mod, rowKey, loadouts, run, needs, picked, open, busy, onPick, on
         </span>
       )}
       {mod.enabled && <span className="mod-type-badge category-badge on-badge" title="This mod is on now">On</span>}
+      {run?.report?.status === 'fixed' && (
+        <span className="vf-row-sum">{run.report.counts.updated.toLocaleString()}/{run.report.assets.length.toLocaleString()} rebuilt · {took(run.report.ms)}</span>
+      )}
       {run?.report
         ? <button type="button" className={`vf-pill is-${status}`} aria-expanded={open} onClick={onToggle} title={open ? 'Hide the report' : 'Show the report'}>
             {STATUS[status!]}

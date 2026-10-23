@@ -53,6 +53,8 @@
 .vf-loadouts span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vf-loadouts i { flex: none; font-style: normal; font-weight: 400; color: var(--text-secondary); }
 .vf-loadouts b { flex: none; margin-left: 2px; font-weight: 500; color: var(--text-secondary); white-space: pre; }
+/* a finished row's summary beside its result: plain gray, no weight (how much it rebuilt, how long it took) */
+.vf-row-sum { flex: none; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .vf-status { flex: none; font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .vf-status.is-running { color: var(--text-primary); }
 .vf-status.is-cancelled { color: #f5d342; }
@@ -94,14 +96,8 @@
 .vf-warnings li { position: relative; padding-left: 14px; font-size: 12.5px; line-height: 1.5; color: var(--text-primary); overflow-wrap: anywhere; }
 .vf-warnings li::before { content: ''; position: absolute; left: 2px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: #f5d342; }
 .vf-warnings li.vf-more::before { display: none; }
-/* a report's numbers: one line of text, each count bold and what it counts after it, dots between; a problem's count is
-   yellow. The asset list's toggle is a quiet link at the end of the line */
-.vf-stats { align-self: stretch; display: flex; align-items: center; gap: 12px; }
-.vf-stat-line { flex: 1; min-width: 0; margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-.vf-stat { white-space: nowrap; }
-.vf-stat + .vf-stat::before { content: '\00B7'; margin: 0 8px; color: var(--text-secondary); opacity: 0.6; }
-.vf-stat b { font-weight: 600; color: var(--text-primary); }
-.vf-stat.is-failed b, .vf-stat.is-unreadable b { color: #f5d342; }
+/* a report's asset list toggle, at the end of the report (its numbers are in the row's heading) */
+.vf-stats { align-self: stretch; display: flex; justify-content: flex-end; }
 button.vf-assets-toggle { flex: none; display: inline-flex !important; align-items: center; gap: 2px; border: none !important; background: none !important; cursor: pointer;
   height: 24px !important; min-height: 0 !important; padding: 0 !important; font-size: 12.5px !important; color: var(--text-secondary) !important; }
 button.vf-assets-toggle:hover { color: var(--text-primary) !important; }
@@ -195,4 +191,3 @@ html[data-motion="off"] .vfx-notice { animation: none; }
 [data-theme="light"] .vf-counts .is-failed b, [data-theme="light"] .vf-counts .is-unreadable b, [data-theme="light"] .vf-log .is-warning { color: #665400 !important; }
 [data-theme="light"] .vf-warn svg, [data-theme="light"] .vfx-notice-icon { color: #9a7d00; }
 [data-theme="light"] .vf-warnings li::before { background: #9a7d00; }
-[data-theme="light"] .vf-stat.is-failed b, [data-theme="light"] .vf-stat.is-unreadable b { color: #574800; }
