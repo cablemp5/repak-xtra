@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
-use tauri::{Emitter, State, Window};
+use tauri::{Emitter, Manager, State, Window};
 
 use crate::vfx_updater::models::VfxPipelineProgress;
 use crate::vfx_updater::progress::{TauriVfxProgressSink, VfxProgressSink};
@@ -27,6 +27,78 @@ fn build_hash(game_paks: &Path) -> String {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     key.hash(&mut h);
     format!("{:016x}", h.finish())
+}
+
+/// The one VFX run in progress, app-wide: the VFX Updater window's batch or a right-click update in the main window.
+/// Both share base_dir(), and a run clears the others' folders (make_dirs), so two must never overlap. Held in the
+/// backend so a claim is atomic across windows, kept until its owner lets go (no time limit: a long step stays held),
+/// and let go when the window that took it closes.
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct RunLock {
+    token: String,
+    window: String,
+    name: Option<String>,
+}
+static RUN: Mutex<Option<RunLock>> = Mutex::new(None);
+
+fn announce(app: &tauri::AppHandle) {
+    let held = RUN.lock().unwrap().clone();
+    let _ = app.emit("vfx_lock_changed", held);
+}
+
+/// Takes the run lock for `token` (one per run), or renews its name. False when another run holds it.
+#[tauri::command]
+pub fn xtra_vfx_claim(window: Window, token: String, name: Option<String>) -> bool {
+    let fresh = {
+        let mut run = RUN.lock().unwrap();
+        match run.as_mut() {
+            Some(l) if l.token != token => return false,
+            Some(l) => {
+                l.name = name;
+                false
+            }
+            None => {
+                *run = Some(RunLock { token: token.clone(), window: window.label().to_string(), name });
+                true
+            }
+        }
+    };
+    if fresh {
+        // a window closed mid-run lets go of its lock
+        let label = window.label().to_string();
+        let app = window.app_handle().clone();
+        window.on_window_event(move |e| {
+            if matches!(e, tauri::WindowEvent::Destroyed) {
+                let mut run = RUN.lock().unwrap();
+                if run.as_ref().is_some_and(|l| l.window == label) {
+                    *run = None;
+                    drop(run);
+                    announce(&app);
+                }
+            }
+        });
+    }
+    announce(window.app_handle());
+    true
+}
+
+/// Lets go of the run lock, if `token` holds it.
+#[tauri::command]
+pub fn xtra_vfx_release(window: Window, token: String) {
+    {
+        let mut run = RUN.lock().unwrap();
+        if run.as_ref().is_some_and(|l| l.token == token) {
+            *run = None;
+        }
+    }
+    announce(window.app_handle());
+}
+
+/// Who holds the run lock, if anyone.
+#[tauri::command]
+pub fn xtra_vfx_lock() -> Option<RunLock> {
+    RUN.lock().unwrap().clone()
 }
 
 #[derive(Serialize, Debug)]
@@ -205,17 +277,25 @@ pub(crate) fn fixed_stem_among(stem: &str, siblings: &HashSet<String>) -> String
         return plain; // an update itself
     }
     let me = stem.to_lowercase();
-    let clash = siblings.iter().any(|s| *s != me && {
-        let f = fixed_stem(s);
-        !f.eq_ignore_ascii_case(s) && f.eq_ignore_ascii_case(&plain)
-    });
-    if !clash {
+    let original = |s: &String| *s != me && !fixed_stem(s).eq_ignore_ascii_case(s); // another original, not an update
+    if !siblings.iter().any(|s| original(s) && fixed_stem(s).eq_ignore_ascii_case(&plain)) {
         return plain;
     }
-    let (b, p) = split_priority(stem);
-    let tag: String = p.chars().filter(|c| c.is_ascii_digit()).collect();
-    let b = strip_marker(b, "_UPDATED").trim().split_whitespace().collect::<Vec<_>>().join("_");
-    format!("{b}_{}_UPDATED_9999999_P", if tag.is_empty() { "0" } else { &tag })
+    // with the priority: A_100_P and A_200_P differ. Names that differ only in spaces and underscores (A B_100_P and
+    // A_B_100_P) still meet, so then the exact original name's hash goes in too
+    let tagged = |s: &str| {
+        let (b, p) = split_priority(s);
+        let tag: String = p.chars().filter(|c| c.is_ascii_digit()).collect();
+        let b = strip_marker(b, "_UPDATED").trim().split_whitespace().collect::<Vec<_>>().join("_");
+        format!("{b}_{}", if tag.is_empty() { "0" } else { &tag })
+    };
+    let mine = tagged(stem);
+    if !siblings.iter().any(|s| original(s) && tagged(s).eq_ignore_ascii_case(&mine)) {
+        return format!("{mine}_UPDATED_9999999_P");
+    }
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    stem.trim().hash(&mut h);
+    format!("{mine}_{:06x}_UPDATED_9999999_P", h.finish() & 0xff_ffff)
 }
 
 /// `<name>_BROKEN<priority>`: the name the original takes when its update keeps the mod's own name.
@@ -372,11 +452,14 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
     let finals = [(tmp("utoc"), dir.join(format!("{target}.utoc"))), (tmp("ucas"), dir.join(format!("{target}.ucas"))), (tmp("pak"), main.clone())];
     for (i, (from, to)) in finals.iter().enumerate() {
         if let Err(e) = std::fs::rename(from, to) {
-            for (t, done) in &finals[..i] {
-                let _ = std::fs::rename(done, t);
-            }
+            // the update's files already moved go back to their temporary names (and then away); one that cannot is named
+            let mut stuck: Vec<String> = finals[..i]
+                .iter()
+                .filter_map(|(t, done)| std::fs::rename(done, t).err().map(|re| format!("{} is still in the mods folder ({re})", done.display())))
+                .collect();
             drop_temps();
-            return Err(fail(format!("Could not put the update in place: {e}."), undo(&trashed, &renamed)));
+            stuck.extend(undo(&trashed, &renamed));
+            return Err(fail(format!("Could not put the update in place: {e}."), stuck));
         }
     }
 
@@ -446,6 +529,15 @@ pub fn xtra_vfx_place(source: String, staged_base: String, turn_off_original: bo
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
+pub struct VfxMods {
+    mods: Vec<VfxMod>,
+    /// What could not be read: folders the scan could not open, mods whose contents could not be read. Not empty means
+    /// the list may be missing mods
+    problems: Vec<String>,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct VfxMod {
     /// The mod's main file (.pak, or .bak_repak when it is off)
     path: String,
@@ -461,10 +553,19 @@ pub struct VfxMod {
 /// The mods folder's VFX mods (the Library's VFX type) the VFX Updater can update: IoStore mods, no originals with an update
 /// beside them (<name>_BROKEN, or <name> next to <name>_UPDATED). Details come from the Library's cache, so after the first look this is quick.
 #[tauri::command]
-pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<VfxMod>, String> {
+pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>>) -> Result<VfxMods, String> {
     let mods = crate::get_pak_files(state.clone()).await?;
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        // the Library's scan skips what it cannot open: walk again and keep those, so a partial list says so
+        let root = state.lock().unwrap().game_path.clone();
+        let mut problems: Vec<String> = walkdir::WalkDir::new(&root)
+            .into_iter()
+            .filter_entry(crate::xtra_bundle::not_staging)
+            .filter_map(|e| e.err())
+            .map(|e| e.path().map_or_else(|| e.to_string(), |p| format!("{}: {e}", p.display())))
+            .collect();
+        let unread = Mutex::new(Vec::<String>::new());
         // each folder's stems: an update counts only beside its own original
         let mut by_dir: HashMap<PathBuf, HashSet<String>> = HashMap::new();
         for m in &mods {
@@ -473,7 +574,8 @@ pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>
             }
         }
         let total = mods.len();
-        mods.into_iter()
+        let list = mods
+            .into_iter()
             .enumerate()
             .filter_map(|(i, m)| {
                 if i % 8 == 0 || i + 1 == total {
@@ -487,7 +589,13 @@ pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>
                 if !unbroken_stem(&stem).eq_ignore_ascii_case(&stem) || (!fixed.eq_ignore_ascii_case(&stem) && siblings.contains(&fixed.to_lowercase())) {
                     return None;
                 }
-                let details = crate::compute_mod_details(&m.path, &state).ok()?;
+                let details = match crate::compute_mod_details(&m.path, &state) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        unread.lock().unwrap().push(format!("{}: {e}", m.path.display()));
+                        return None;
+                    }
+                };
                 (details.category == "VFX").then(|| VfxMod {
                     name: m.custom_name.clone().filter(|n| !n.trim().is_empty()).unwrap_or_else(|| split_priority(&stem).0.to_string()),
                     hero: m.character_name.clone(),
@@ -497,7 +605,9 @@ pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>
                     modified: m.modified_date,
                 })
             })
-            .collect()
+            .collect::<Vec<_>>();
+        problems.extend(unread.into_inner().unwrap());
+        VfxMods { mods: list, problems }
     })
     .await
     .map_err(|e| e.to_string())
@@ -568,6 +678,10 @@ mod tests {
         assert_eq!(fixed_stem_among("A_200_P", &set(&["A_100_P", "A_200_P"])), "A_200_UPDATED_9999999_P");
         assert_eq!(fixed_stem_among("A_100_P", &set(&["A_100_P", "A_UPDATED_9999999_P"])), "A_UPDATED_9999999_P", "its earlier update is not a clash");
         assert_eq!(fixed_stem_among("A_100_UPDATED_9999999_P", &set(&["A_100_UPDATED_9999999_P", "A_200_P"])), "A_100_UPDATED_9999999_P", "an update keeps its name");
+        // names that differ only in a space and an underscore get the exact name's hash, so they still differ
+        let both = set(&["A B_100_P", "A_B_100_P"]);
+        let (x, y) = (fixed_stem_among("A B_100_P", &both), fixed_stem_among("A_B_100_P", &both));
+        assert!(x != y && x.starts_with("A_B_100_") && x.ends_with("_UPDATED_9999999_P"), "{x} {y}");
     }
 
     #[test]

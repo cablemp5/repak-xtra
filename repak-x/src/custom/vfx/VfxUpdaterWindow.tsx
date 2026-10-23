@@ -17,20 +17,20 @@ import { cue } from '../sounds'
 import { DEFAULT_FILTER, parseWords, readFilter, resetFilter, writeFilter, type ColorFilter } from './filter'
 import { canonKey } from '../loadoutIdentity'
 import { modKey, useLoadouts } from '../loadoutStore'
-import { FIXED_EVENT, onHandoff, takeHandoff, utocOf, type Fixed } from './handoff'
-import { KEEP_NAME, ORIGINALS, claimRun, onRunChange, readNaming, readOriginals, releaseRun, runningElsewhere, type Naming, type Originals } from './prefs'
+import { FIXED_EVENT, onHandoff, onReport, takeHandoff, takeReport, utocOf, type Fixed } from './handoff'
+import { KEEP_NAME, ORIGINALS, claimRun, newRunToken, onRunChange, readNaming, readOriginals, releaseRun, runLock, type Naming, type Originals, type RunLock } from './prefs'
 import { STEPS, fixVfxMod, type AssetKind, type VfxReport } from './pipeline'
 import './vfx.css'
 
 type Status = 'waiting' | 'running' | 'fixed' | 'nothing' | 'failed' | 'cancelled'
 type Run = { status: Status; step?: number; sub?: string; report?: VfxReport }
 type Mod = { path: string; utoc: string; enabled: boolean; name: string; hero?: string | null; modified?: number }
+type ModList = { mods: Mod[]; problems: string[] }
 type Verdict = { path: string; kind: string; reason: string }
 type Log = { time: string; text: string; type: string }
 type Usmap = { updated: boolean; upToDate: boolean; skipped: boolean; localPath?: string | null; filename?: string | null; version?: string | null; buildNumber?: number | null; commitDate?: string | null; message: string }
 type GameBuild = { updated: number; cl?: number | null }
 
-const OWNER = `window-${Math.random().toString(36).slice(2, 8)}` // this window, for the run lock (prefs.ts)
 const NAMING_NOTE: Record<Naming, string> = {
   broken: 'Loadouts and tags stay on the update. The original is renamed to end in _BROKEN.',
   updated: 'The update ends in _UPDATED, and loadouts move to it.',
@@ -277,6 +277,10 @@ export function VfxUpdaterPanel() {
   const [lastTook, setLastTook] = useState<number | null>(null) // how long the last batch ran, for its end line
   const [reload, setReload] = useState(0)
   const [loadError, setLoadError] = useState<string | null>(null) // the mods folder could not be read (the last list stays)
+  const [scanProblems, setScanProblems] = useState<string[]>([]) // folders or mods the last read could not open
+  const [held, setHeld] = useState<RunLock | null>(null) // who holds the run lock (prefs.ts), this window or another
+  const myToken = useRef<string | null>(null) // this window's run, while it holds the lock
+  const busyRef = useRef(false)
   const [checkError, setCheckError] = useState(false) // which mods need an update could not be checked
   const [scan, setScan] = useState<{ done: number; total: number } | null>(null) // the first read, mod by mod
   const [, bump] = useState(0)
@@ -322,14 +326,20 @@ export function VfxUpdaterPanel() {
     if (busy) return
     let live = true
     setLoadError(null)
-    invoke<Mod[]>('xtra_vfx_mods')
-      .then(async list => {
+    invoke<ModList>('xtra_vfx_mods')
+      .then(async ({ mods: fresh, problems }) => {
+        // a read that missed folders or mods keeps the list from before (when there is one), and says so with Try again
+        const list = problems.length && modsRef.current?.length ? modsRef.current : fresh
+        if (problems.length) addLog(`Part of the mods folder could not be read: ${problems.slice(0, 3).join('. ')}${problems.length > 3 ? ` and ${problems.length - 3} more` : ''}`, 'warning')
         let verdicts: Verdict[] = [], failed = false
         try { verdicts = await invoke<Verdict[]>('xtra_broken_mods', { modPaths: list.map(m => m.path) }) } catch (e) { failed = true; addLog(`Could not check which mods need an update: ${e}`, 'warning') }
         if (!live) return
         const n = new Map(verdicts.filter(v => v.kind === 'vfx').map(v => [norm(v.path), v.reason]))
         setMods(list)
+        setScanProblems(problems)
         setNeeds(n)
+        const present = new Set(list.map(m => norm(m.utoc)))
+        setPicked(p => { const kept = [...p].filter(k => present.has(k)); return kept.length === p.size ? p : new Set(kept) }) // an update elsewhere can rename or remove one
         setCheckError(failed)
         if (!seeded.current && !failed) {
           seeded.current = true
@@ -364,8 +374,31 @@ export function VfxUpdaterPanel() {
     if (h.start && keys.length) autoRun.current = [...new Set([...(autoRun.current ?? []), ...keys])] // these, not whatever else is ticked
   })
 
-  // a right-click update in the main window holds the lock: Update waits for it (and says so)
-  useEffect(() => onRunChange(() => bump(n => n + 1)), [])
+  // the run lock's holder: a right-click update in the main window makes Update wait (and say so), and its end frees it
+  useEffect(() => { void runLock().then(setHeld); return onRunChange(setHeld) }, [])
+  busyRef.current = busy
+
+  // an update elsewhere (a right-click update) changed the mods folder: read it again (this window's own runs reload
+  // when they end)
+  useEffect(() => {
+    const un = listen('mods_dir_changed', () => { if (!busyRef.current) setReload(n => n + 1) })
+    return () => { un.then(f => f()) }
+  }, [])
+
+  // a right-click update's report, opened from its toast (Show report): shown under its mod, open
+  useEffect(() => {
+    const show = (r: VfxReport) => {
+      const key = norm(utocOf(r.placed?.fixed ?? r.mod))
+      setRuns(rs => ({ ...rs, [key]: { status: r.status, report: r } }))
+      setOpen(o => new Set(o).add(key))
+      setFoldedIds(f => (f.includes('needs') ? f.filter(x => x !== 'needs') : f))
+      setReload(n => n + 1)
+      setTimeout(() => document.querySelector(`[data-key="${CSS.escape(key)}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 600)
+    }
+    const r = takeReport()
+    if (r) show(r)
+    return onReport(show)
+  }, [])
 
   // Rust steps report inside the step (types read so far)
   useEffect(() => {
@@ -396,18 +429,19 @@ export function VfxUpdaterPanel() {
     await invoke('vfx_save_settings', { settings: { ...current, usmapPath: p } }).catch(() => {}) // keeps the auto-update bookkeeping
   }
 
-  const elsewhere = busy ? null : runningElsewhere(OWNER)
-  const lock = busy ? null : elsewhere ? `Updating ${elsewhere.name ?? 'a mod'} from the Library. Update waits for it.` : checking ? 'Checking for a newer USMAP…' : !usmap ? 'Choose a USMAP file in Advanced first' : usmapOk === false ? 'The USMAP file is missing' : !paks ? 'Set the game folder in Setup first' : null
+  const elsewhere = busy || !held || held.token === myToken.current ? null : held
+  const lock = busy ? null : elsewhere ? `Updating ${elsewhere.name ?? 'a mod'} elsewhere. Update waits for it.` : checking ? 'Checking for a newer USMAP…' : !usmap ? 'Choose a USMAP file in Advanced first' : usmapOk === false ? 'The USMAP file is missing' : !paks ? 'Set the game folder in Setup first' : null
 
   const run = useCallback(async (keys?: string[]) => {
     const byKey = new Map((modsRef.current ?? []).map(m => [norm(m.utoc), m]))
     const todo = (keys ?? [...picked].filter(k => !isDone(runsRef.current[k]?.status))).filter(k => byKey.has(k))
     if (!todo.length || !usmap || !paks) return
-    // the run in view: a search that hides a mod clears, and the groups it works in unfold
-    const where = new Set(todo.map(k => groupOf.current.get(k)))
-    if (where.has(undefined)) setQ('')
-    setFoldedIds(f => { const n = f.filter(id => !where.has(id)); if (n.length !== f.length) localStorage.setItem(FOLDED, JSON.stringify(n)); return n })
-    if (!claimRun(OWNER)) { addLog('A mod is updating from the Library. Try again when it is done.', 'warning'); return }
+    const token = newRunToken()
+    if (!(await claimRun(token, byKey.get(todo[0])?.name))) { addLog('Another update is running. Try again when it is done.', 'warning'); return }
+    myToken.current = token
+    // the run in view: a search that hides a mod clears, and Needs an update unfolds (a mod with a run shows there)
+    if (todo.some(k => !groupOf.current.has(k))) setQ('')
+    setFoldedIds(f => { if (!f.includes('needs')) return f; const n = f.filter(id => id !== 'needs'); localStorage.setItem(FOLDED, JSON.stringify(n)); return n })
     setBusy(true); setBatch(todo); setLastTook(null); cancel.current = false
     const startedAt = performance.now()
     todo.forEach(k => patch(k, { status: 'waiting', step: undefined, sub: undefined, report: undefined }))
@@ -416,13 +450,13 @@ export function VfxUpdaterPanel() {
     for (const key of todo) {
       if (cancel.current) { patch(key, { status: 'cancelled' }); continue }
       const mod = byKey.get(key)!
-      claimRun(OWNER, mod.name) // renewed for each mod and each step, so a closed window's lock goes stale
+      void claimRun(token, mod.name) // the lock says which mod, for the other window's message
       patch(key, { status: 'running', step: 1 })
       addLog(`Updating ${mod.name}`)
       const r = await fixVfxMod({
         modPath: mod.utoc, usmapPath: usmap, gamePaksPath: paks, turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash', keepName, filter,
         log: addLog, cancelled: () => cancel.current,
-        onStep: s => { claimRun(OWNER, mod.name); patch(key, { step: s.step, sub: undefined }) },
+        onStep: s => patch(key, { step: s.step, sub: undefined }),
         onProgress: (_, __, message) => patch(key, { sub: message }),
       })
       patch(key, { status: r.status, report: r, sub: undefined })
@@ -440,7 +474,8 @@ export function VfxUpdaterPanel() {
       }
     }
     if (fixed) await emit('mods_dir_changed').catch(() => {})
-    releaseRun(OWNER)
+    await releaseRun(token)
+    myToken.current = null
     setLastTook(performance.now() - startedAt)
     cue(failed ? 'warning' : 'success', { emphasis: fixed > 1 ? undefined : 'subtle' }) // a problem is a warning, never an error sound
     setBusy(false); setCancelling(false)
@@ -504,7 +539,7 @@ export function VfxUpdaterPanel() {
   const runningStep = runningKey ? runs[runningKey]?.step : undefined
   const state = cancelling ? 'Cancelling. The current step finishes first.'
     : busy ? `Updating ${runningAt + 1} of ${batch.length}${runningMod ? `: ${runningMod.name}` : ''}${runningStep ? `, step ${runningStep} of ${STEPS.length}` : '…'}`
-      : lock ?? (reports.length ? `${updated === reports.length ? plural(updated, 'mod') : `${updated} of ${plural(reports.length, 'mod')}`} updated${lastTook ? ` in ${took(lastTook)}` : ''}` : todo ? '' : 'Tick the mods to update')
+      : lock ?? (todo ? '' : reports.length ? `${updated === reports.length ? plural(updated, 'mod') : `${updated} of ${plural(reports.length, 'mod')}`} updated${lastTook ? ` in ${took(lastTook)}` : ''}` : 'Tick the mods to update')
   // the whole batch's progress, for the bar on top of the footer (each mod's own bar is in its row)
   const finishedN = batch.filter(k => { const st = runs[k]?.status; return st && st !== 'waiting' && st !== 'running' }).length
   const batchPct = batch.length ? ((finishedN + (runningStep ? (runningStep - 0.5) / STEPS.length : 0)) / batch.length) * 100 : 0
@@ -534,6 +569,13 @@ export function VfxUpdaterPanel() {
           <p className="vf-warn" role="alert">
             <AlertTriangle size={14} aria-hidden="true" />
             <span>The mods folder could not be read{mods?.length ? ', so this is the list from before' : ''}. {loadError.replace(/[.!]?\s*$/, '.')}{' '}
+              <button type="button" className="su-link" disabled={busy} onClick={() => setReload(n => n + 1)}>Try again</button></span>
+          </p>
+        )}
+        {scanProblems.length > 0 && !loadError && (
+          <p className="vf-warn" role="alert">
+            <AlertTriangle size={14} aria-hidden="true" />
+            <span>Part of the mods folder could not be read, so some mods may be missing here. The Log names {scanProblems.length === 1 ? 'it' : `all ${scanProblems.length}`}.{' '}
               <button type="button" className="su-link" disabled={busy} onClick={() => setReload(n => n + 1)}>Try again</button></span>
           </p>
         )}

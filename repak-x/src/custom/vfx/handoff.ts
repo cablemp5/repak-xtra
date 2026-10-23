@@ -3,6 +3,8 @@
 // that is still opening reads it on mount and an open one hears it through the storage event. Not a repakxtra.* key:
 // devStorage would copy it to the shared file. The VFX window answers with repakxtra:vfx-fixed events for each fix
 // (VfxNotice.tsx swaps the original for the fix in loadouts).
+import type { VfxReport } from './pipeline'
+
 const KEY = 'repakxtra-vfx:queue'
 
 export type Handoff = { paths: string[]; start: boolean; at: number }
@@ -39,6 +41,22 @@ export function takeHandoff(): Handoff | null {
 
 export const onHandoff = (fn: (h: Handoff) => void) => {
   const listener = (e: StorageEvent) => { if (e.key === KEY && e.newValue) { const h = takeHandoff(); if (h) fn(h) } }
+  window.addEventListener('storage', listener)
+  return () => window.removeEventListener('storage', listener)
+}
+
+/** A right-click update's report (quick.ts), shown in the VFX window under its mod: Show report, or a failure's Open. */
+const REPORT = 'repakxtra-vfx:report'
+export const sendReport = (report: VfxReport) => localStorage.setItem(REPORT, JSON.stringify({ report, at: Date.now() }))
+/** The waiting report, taken (removed) so it is shown once. */
+export function takeReport(): VfxReport | null {
+  const raw = localStorage.getItem(REPORT)
+  if (!raw) return null
+  localStorage.removeItem(REPORT)
+  try { const r = JSON.parse(raw)?.report; return r && typeof r.mod === 'string' ? r as VfxReport : null } catch { return null }
+}
+export const onReport = (fn: (r: VfxReport) => void) => {
+  const listener = (e: StorageEvent) => { if (e.key === REPORT && e.newValue) { const r = takeReport(); if (r) fn(r) } }
   window.addEventListener('storage', listener)
   return () => window.removeEventListener('storage', listener)
 }

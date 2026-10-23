@@ -205,6 +205,8 @@ type ContextMenuState = {
   y: number
   mod?: ModRecord | null
   folder?: FolderRecord | null
+  fromLoadout?: boolean // repakxtra: opened on a loadout page's row: acts on that mod only, never the Library's selection
+  rename?: () => void // repakxtra: that row's own rename (the Library's list is not on screen)
 }
 
 type NewFolderPromptState = { paths: string[]; moveFolderId?: string; parentId?: string; moveModPaths?: string[] }
@@ -1158,6 +1160,8 @@ function App() {
     })
   }
 
+  // repakxtra: a loadout row's menu acts on that row alone, whatever is selected in the Library
+  const menuSelection = contextMenu?.fromLoadout ? new Set<string>() : selectedMods
   const closeContextMenu = () => {
     setContextMenu(null)
   }
@@ -4054,7 +4058,7 @@ function App() {
           isBlocked={undoBlocked} /* repakxtra: live game lock for Undo */
           reload={loadMods}
           alert={alert}
-          onModContextMenu={(e, m) => handleContextMenu(e, m as ModRecord)} /* repakxtra: a loadout page's rows open the Library's menu */
+          onModContextMenu={(e, m, rename) => { handleContextMenu(e, m as ModRecord); setContextMenu(c => c && { ...c, fromLoadout: true, rename }) }} /* repakxtra: a loadout page's rows open the Library's menu, for that row */
         />
         {/* repakxtra: Ctrl+1..9 switches pinned loadouts on every view (custom/Loadouts.tsx) */}
         <LoadoutHotkeys mods={mods} scopeMods={folderMods} scopeLabel="all mods" blocked={gameRunning && !bypassGameRunningLock}
@@ -4531,7 +4535,7 @@ function App() {
               // on the whole selection, matching the bulk toolbar. Previously it
               // moved only the clicked mod and left the rest selected, pointing
               // at paths that no longer existed.
-              if (selectedMods.has(contextMenu.mod.path)) {
+              if (menuSelection.has(contextMenu.mod.path)) {
                 handleAssignToFolder(folderId)
               } else {
                 handleMoveSingleMod(contextMenu.mod.path, folderId)
@@ -4542,8 +4546,8 @@ function App() {
               // Resolve which mods the move applies to here, the same way
               // onMoveTo does, so the selection rule lives in one place.
               if (options?.moveMods && contextMenu.mod) {
-                const targets = selectedMods.has(contextMenu.mod.path)
-                  ? Array.from(selectedMods)
+                const targets = menuSelection.has(contextMenu.mod.path)
+                  ? Array.from(menuSelection)
                   : [contextMenu.mod.path]
                 handleCreateFolder({ moveModPaths: targets })
                 return
@@ -4561,7 +4565,7 @@ function App() {
             onToggle={() => contextMenu.mod && handleToggleMod(contextMenu.mod.path)}
             loadoutMenu={contextMenu.mod ? (close => ( /* repakxtra: the right-clicked mod, or the selection it belongs to */
               <LoadoutMenuItems alert={alert} close={close}
-                paths={selectedMods.has(contextMenu.mod!.path) ? [...selectedMods] : [contextMenu.mod!.path]} />)) : undefined}
+                paths={menuSelection.has(contextMenu.mod!.path) ? [...menuSelection] : [contextMenu.mod!.path]} />)) : undefined}
             onRename={() => {
               if (contextMenu.mod) {
                 if (gameRunning && !bypassGameRunningLock) {
@@ -4571,7 +4575,8 @@ function App() {
                   )
                   return
                 }
-                setRenamingModPath(contextMenu.mod.path)
+                if (contextMenu.rename) contextMenu.rename() // repakxtra: a loadout row renames in place
+                else setRenamingModPath(contextMenu.mod.path)
               }
             }}
             onRenameFolder={() => {
@@ -4587,8 +4592,8 @@ function App() {
               if (!contextMenu.mod) return
               // Same selection rule as onMoveTo: acting on a mod inside the
               // current selection acts on the whole selection.
-              const targets = selectedMods.has(contextMenu.mod.path)
-                ? Array.from(selectedMods)
+              const targets = menuSelection.has(contextMenu.mod.path)
+                ? Array.from(menuSelection)
                 : [contextMenu.mod.path]
               handleShowInAssetExplorer(targets)
             }}
@@ -4597,7 +4602,7 @@ function App() {
             onDeleteTag={handleDeleteTagFromCatalog}
             gamePath={gamePath}
             holdToDelete={holdToDelete}
-            selectionCount={contextMenu.mod && selectedMods.has(contextMenu.mod.path) ? selectedMods.size : 0}
+            selectionCount={contextMenu.mod && menuSelection.has(contextMenu.mod.path) ? menuSelection.size : 0}
 
           />
         )

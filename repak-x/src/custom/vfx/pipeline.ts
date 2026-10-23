@@ -235,7 +235,10 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
           else if (res === 'missing') notes.push(`${c.label} is no longer in the game's file`)
         }
         notes.forEach(n => warn(`${stem(p)}: ${n}.`))
-        if (changed.length) {
+        if (!changed.length && notes.length) {
+          // its edits had nowhere to go: the game's file is not known to match the mod's
+          own.push(p); asset(p, 'failed', `Its edits could not be carried (${notes.slice(0, 2).join(', ')}${notes.length > 2 ? ', and more' : ''}): the mod's copy is kept, unfixed.`)
+        } else if (changed.length) {
           await invoke('vfx_write_json_file', { path: `${dirs.editedJson}/${jsonRel}`, content: JSON.stringify(json) })
           report.counts.changes += changed.length
           asset(p, 'updated', `Rebuilt on the game's file with ${plural(changed.length, 'edit')}: ${changed.slice(0, 6).join(', ')}${changed.length > 6 ? `, and ${changed.length - 6} more` : ''}.`)
@@ -246,6 +249,15 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     if (own.length) await invoke('vfx_copy_uasset_files', { sourcePaths: own, sourceBaseDir: dirs.modExtract, destBaseDir: dirs.finalUassets })
     log(`Rebuilt ${plural(report.counts.updated, 'asset')} with ${plural(report.counts.changes, 'edit')}, ${report.counts.same} match the game, ${report.counts.added} are the mod's own.`)
 
+    // an incomplete rebuild is not placed: one failed or unread asset may be the one that broke, so the mod stays as it was
+    const failedN = report.assets.filter(a => a.kind === 'failed').length
+    if (failedN || report.counts.unreadable) {
+      const why = [failedN && plural(failedN, 'material or blueprint', 'materials and blueprints') + ' could not be rebuilt', report.counts.unreadable && plural(report.counts.unreadable, 'asset') + ' could not be read'].filter(Boolean).join(', and ')
+      report.error = `Not updated: ${why}. The mod was not changed. Check the USMAP in Advanced, then try again.`
+      log(report.error, 'warning')
+      return report // failed: Try again stays
+    }
+
     // ---- 7: back to assets ----
     enter(7)
     if (report.counts.updated) {
@@ -254,15 +266,11 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       if (built.length < expected) warn(`Only ${built.length} of ${expected} assets are in the rebuilt mod.`)
     }
     if (!report.counts.updated && !report.counts.added) {
-      // only a mod whose every material and blueprint was read and matches the game is known to work as it is
-      const failedN = report.assets.filter(a => a.kind === 'failed').length
-      if (report.counts.same && !failedN && !report.counts.unreadable) {
+      // every material and blueprint was read and matches the game (anything else stopped above): it works as it is
+      if (report.counts.same) {
         report.status = 'nothing'
         report.error = 'Nothing to update: every material and blueprint already matches the game, so the original works as it is.'
-      } else {
-        const why = [failedN && plural(failedN, 'material or blueprint', 'materials and blueprints') + ' could not be rebuilt', report.counts.unreadable && plural(report.counts.unreadable, 'asset') + ' could not be read'].filter(Boolean).join(', and ')
-        report.error = `Not updated: ${why || 'none of its materials or blueprints could be rebuilt'}. Check the USMAP in Advanced, then try again.`
-      }
+      } else report.error = 'Not updated: none of its materials or blueprints could be rebuilt. Check the USMAP in Advanced, then try again.'
       return report
     }
 

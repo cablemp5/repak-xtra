@@ -301,9 +301,9 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         return localStorage.getItem('mock.broken') ? (args?.modPaths ?? []).slice(0, 2).map((path: string, i: number) => ({ path,
           kind: i ? 'risky' : 'broken', reason: i ? 'A Blueprint mod installed before the last game update.' : 'None of the 3 game files it replaces exist in this game version.' })) : []
       // the VFX Updater's list: mods with VFX in their name stand in for the VFX type (no originals with an update beside them)
-      case 'xtra_vfx_mods': return data.mods.filter((m: any) => /vfx/i.test(m.path) && !/_BROKEN(_\d+)?_P\./i.test(m.path)).map((m: any) => ({
+      case 'xtra_vfx_mods': return { problems: [], mods: data.mods.filter((m: any) => /vfx/i.test(m.path) && !/_BROKEN(_\d+)?_P\./i.test(m.path)).map((m: any) => ({
         path: m.path, utoc: m.utoc_path || m.path.replace(/\.(pak|bak_repak)$/i, '.utoc'), enabled: m.enabled, hero: m.character_name ?? null, modified: m.modified_date ?? 0,
-        name: m.custom_name || m.path.split(/[\\/]/).pop().replace(/\.[^.]+$/, '').replace(/(_\d+)?_P$/i, '') }))
+        name: m.custom_name || m.path.split(/[\\/]/).pop().replace(/\.[^.]+$/, '').replace(/(_\d+)?_P$/i, '') })) }
       case 'xtra_game_build': return { updated: Math.floor(Date.now() / 1000) - 3600 * 5, cl: 3962284 }
       // Installing: the file picker returns two fake paks, install adds them to the library and reports done. A folder
       // pick (the Sigeon folder) returns an unzipped Sigeon download.
@@ -356,8 +356,9 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
 }
 
 // The VFX Updater window (custom/vfx/) in the browser: a fake run with materials to rebuild, Niagara systems that pass
-// through, one asset the tool cannot read, one the game lacks and one parameter the game dropped. window.__vfxStep sets
-// the ms each tool step takes (400). localStorage 'mock.vfxFail' = part of a mod's name makes its extraction fail.
+// through, one the game lacks and one parameter the game dropped. window.__vfxStep sets the ms each tool step takes (400).
+// localStorage 'mock.vfxFail' = part of a mod's name makes its extraction fail; 'mock.vfxUnreadable' adds an asset the
+// tool cannot read (which now fails the mod: an unread asset may be one that needed rebuilding).
 const vfxFiles = new Map<string, string>()
 const vfxStep = () => new Promise(r => setTimeout(r, mock.__vfxStep ?? 400))
 const vfxEntry = (name: string, v: number) => ({ Name: '0', Value: [{ Name: 'ParameterInfo', Value: [{ Name: 'Name', Value: name }] },
@@ -367,13 +368,20 @@ const vfxJson = (game: boolean, i: number) => JSON.stringify({ NameMap: [], Impo
 const vfxAssets = (dir: string) => [
   ...Array.from({ length: 24 }, (_, i) => `${dir}/Marvel/Content/Marvel/VFX/Materials/Characters/1026/MI_1026_Glow_${String(i).padStart(2, '0')}.uasset`),
   ...Array.from({ length: 6 }, (_, i) => `${dir}/Marvel/Content/Marvel/VFX/Particles/NS_1026_Burst_${i}.uasset`),
-  `${dir}/Marvel/Content/Marvel/VFX/Materials/Characters/1026/MI_1026_Broken.uasset`,
+  ...(localStorage.getItem('mock.vfxUnreadable') ? [`${dir}/Marvel/Content/Marvel/VFX/Materials/Characters/1026/MI_1026_Broken.uasset`] : []),
   `${dir}/Marvel/Content/Marvel/VFX/Materials/Characters/1026/MI_1026_ModOwn.uasset`]
+let vfxLock: { token: string; window: string; name?: string | null } | null = null
 const VFX_USMAP = 'C:\\Users\\you\\AppData\\Roaming\\Repak-X\\usmap\\5.3.2-3939753+++depot_marvel+S10.5_release-Marvel.usmap'
 function mockVfx(cmd: string, args: any): unknown {
   const dirOf = (k: string) => `C:/Temp/xvfx/${k}`
   switch (cmd) {
     case 'vfx_get_settings': return { usmapPath: VFX_USMAP }
+    // the run lock (xtra_vfx.rs): one window in the browser, so a holder and a change event are enough
+    case 'xtra_vfx_claim':
+      if (vfxLock && vfxLock.token !== args.token) return false
+      vfxLock = { token: args.token, window: 'main', name: args.name ?? null }; emit('vfx_lock_changed', vfxLock); return true
+    case 'xtra_vfx_release': if (vfxLock?.token === args.token) vfxLock = null; emit('vfx_lock_changed', vfxLock); return null
+    case 'xtra_vfx_lock': return vfxLock
     case 'vfx_save_settings': return null
     case 'vfx_check_usmap_update': return vfxStep().then(() => ({ updated: false, upToDate: true, skipped: false, localPath: VFX_USMAP,
       filename: '5.3.2-3939753+++depot_marvel+S10.5_release-Marvel.usmap', version: 'S10.5_release', buildNumber: 3939753, commitDate: '2026-10-16', message: 'USMAP is up to date' }))

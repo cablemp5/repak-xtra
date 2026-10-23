@@ -8531,6 +8531,9 @@ fn main() {
             xtra_vfx::xtra_vfx_place,
             xtra_vfx::xtra_game_build,
             xtra_vfx::xtra_vfx_mods,
+            xtra_vfx::xtra_vfx_claim,
+            xtra_vfx::xtra_vfx_release,
+            xtra_vfx::xtra_vfx_lock,
             xtra_nexus::xtra_nexus_sources, // repakxtra: Nexus source
             xtra_nexus::xtra_nexus_downloads, // repakxtra: Nexus downloads still in Downloads, for the one-time scan
             xtra_nexus::xtra_install_paks, // repakxtra: the paks an install puts in place, for loadouts made at install
