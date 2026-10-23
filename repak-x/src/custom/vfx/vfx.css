@@ -73,7 +73,7 @@
 .vf-progress { flex-basis: 100%; margin-top: -8px; padding: 0 0 12px 28px; }   /* close under the name: the tick row is 40px tall, the name sits in its middle */
 .vf-bar { height: 4px; border-radius: 999px; overflow: hidden; background: var(--bg-lighter); }
 /* the fill carries the app's shimmer sweep (transitions.dev: Shimmer), so a long step still reads as working */
-.vf-bar i, .vf-foot-bar i { display: block; height: 100%; transition: width 0.4s var(--acc-ease);
+.vf-bar i { display: block; height: 100%; transition: width 0.4s var(--acc-ease);
   background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-primary) 38%, color-mix(in srgb, var(--accent-primary), white 45%) 50%,
     var(--accent-primary) 62%, var(--accent-primary) 100%) 0 0 / 250% 100% no-repeat;
   animation: t-shimmer var(--shimmer-dur, 2s) var(--shimmer-ease, linear) infinite; }
@@ -162,7 +162,6 @@ button.vf-assets-toggle:hover { color: var(--text-primary) !important; }
 .vf-log .is-success { color: #46a758; }
 .vf-copy-log { margin-top: 10px; }
 
-.vf-foot-bar { position: absolute; left: 0; right: 0; top: -1px; height: 2px; overflow: hidden; background: transparent; }
 .vf-foot { position: relative; display: flex; align-items: center; gap: 8px; padding: 12px 24px; border-top: 1px solid var(--panel-border); }
 .vf-policy .su-link { margin-left: 2px; }
 .vf-state { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -171,7 +170,7 @@ button.vf-assets-toggle:hover { color: var(--text-primary) !important; }
   display: inline-flex !important; align-items: center; gap: 4px; width: auto !important; flex: none;
 }
 .vf-foot .btn-primary svg { margin-right: 4px; }
-html[data-motion="off"] .vf-bar i, html[data-motion="off"] .vf-foot-bar i, html[data-motion="off"] .vf-caret, html[data-motion="off"] .vf-grp-caret, html[data-motion="off"] .vf-assets-caret { transition: none; animation: none; }
+html[data-motion="off"] .vf-bar i, html[data-motion="off"] .vf-caret, html[data-motion="off"] .vf-grp-caret, html[data-motion="off"] .vf-assets-caret { transition: none; animation: none; }
 html[data-motion="off"] .vf-pill, html[data-motion="off"] .vf-status { animation: none; }
 
 /* the main window's notice after a game update (VfxNotice.tsx) */

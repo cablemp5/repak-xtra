@@ -540,9 +540,7 @@ export function VfxUpdaterPanel() {
   const state = cancelling ? 'Cancelling. The current step finishes first.'
     : busy ? `Updating ${runningAt + 1} of ${batch.length}${runningMod ? `: ${runningMod.name}` : ''}${runningStep ? `, step ${runningStep} of ${STEPS.length}` : '…'}`
       : lock ?? (todo ? '' : reports.length ? `${updated === reports.length ? plural(updated, 'mod') : `${updated} of ${plural(reports.length, 'mod')}`} updated${lastTook ? ` in ${took(lastTook)}` : ''}` : 'Tick the mods to update')
-  // the whole batch's progress, for the bar on top of the footer (each mod's own bar is in its row)
-  const finishedN = batch.filter(k => { const st = runs[k]?.status; return st && st !== 'waiting' && st !== 'running' }).length
-  const batchPct = batch.length ? ((finishedN + (runningStep ? (runningStep - 0.5) / STEPS.length : 0)) / batch.length) * 100 : 0
+
   // what Update will do to the files, beside the button, so a choice made once in Advanced is never a surprise
   const policy = naming === 'broken'
     ? { off: 'Originals get _BROKEN and turn off', trash: 'Originals get _BROKEN and go to Recently deleted', keep: 'Originals get _BROKEN and stay as they are' }[originals]
@@ -669,7 +667,6 @@ export function VfxUpdaterPanel() {
       </div>
 
       <footer className="vf-foot">
-        {busy && <div className="vf-foot-bar" role="progressbar" aria-label="All selected mods" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(batchPct)}><i style={{ width: `${batchPct}%` }} /></div>}
         {state
           ? <span className="vf-state" aria-live="polite">{state}</span>
           : <span className="vf-state vf-policy">{policy}. <button type="button" className="su-link" onClick={() => showAdvanced(true)}>Change</button></span>}
