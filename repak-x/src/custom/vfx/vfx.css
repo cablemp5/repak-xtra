@@ -30,16 +30,20 @@
   background: none !important; font-size: 12.5px !important; font-weight: 500 !important; color: var(--text-secondary) !important; cursor: pointer; }
 .vf-select:hover:not(:disabled) { color: var(--text-primary) !important; background: var(--quiet-active) !important; }
 
-/* a mod's row: the whole name ticks it (a big target), then its badges and state, then (full width) progress or report */
-.vf-row { flex-wrap: wrap; min-height: 52px; padding: 6px 14px; color: var(--text-primary); }
-.vf-pick { flex: 1; min-width: 0; min-height: 40px; display: flex !important; align-items: center; gap: 12px !important; cursor: pointer; }
-.vf-pick .repakx-checkbox-label { min-width: 0; flex: 1; }
-.vf-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.vf-row-name, .vf-row-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vf-row-name { font-size: 13.5px; font-weight: 600; color: var(--text-primary); }
-.vf-row-meta { font-size: 12px; font-weight: 400; color: var(--text-secondary); }
-.vf-row:not(.is-picked) .vf-row-name { font-weight: 500; color: var(--text-secondary); }
+/* a mod's row, as compact as the Library's: the whole name ticks it, the loadouts holding it, its badges and state at the
+   right, then (full width) progress or report */
+.vf-rows > .vf-row { flex-wrap: wrap; min-height: 42px; padding: 0 12px; gap: 8px; color: var(--text-primary); }
+.vf-pick { flex: 1; min-width: 0; min-height: 42px; display: flex !important; align-items: center; gap: 12px !important; cursor: pointer; }
+.vf-pick .repakx-checkbox-label { min-width: 0; flex: 1; display: flex; }
+.vf-row-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 600; color: var(--text-primary); }
+.vf-row:not(.is-picked) .vf-row-name { font-weight: 400; color: var(--text-secondary); }
 .vf-row:not(.is-picked):hover .vf-row-name { color: var(--text-primary); }
+/* the loadouts holding it: a quiet tag the size of the Library's, the first name and how many more */
+.vf-loadouts { flex: 0 1 auto; min-width: 0; max-width: 34%; display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px;
+  border: 1px solid var(--panel-border); border-radius: 6px; font-size: 11.5px; font-weight: 500; color: var(--text-secondary); }
+.vf-loadouts svg { flex: none; }
+.vf-loadouts span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vf-loadouts b { flex: none; font-weight: 600; color: var(--text-primary); }
 .vf-status { flex: none; font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .vf-status.is-running { color: var(--text-primary); }
 .vf-status.is-cancelled { color: #f5d342; }
@@ -89,9 +93,10 @@
 .vf-check .repakx-checkbox-label, .vf-check .repakx-checkbox-label > span { font-size: 13px !important; font-weight: 450 !important; color: var(--text-primary) !important; }
 .vf-check .vf-hint { padding-left: 26px; }
 
-/* USMAP: one Setup-style part row */
-.vf-usmap { min-height: 52px; padding: 8px 12px 8px 14px; }
-.vf-usmap .su-part-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12.5px var(--font-mono); }
+/* USMAP: a Setup card, its part row between hairlines as in the Setup window */
+.vf-usmap-card .su-parts { border: none; border-radius: 0; border-top: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); }
+.vf-usmap-card .su-part { padding: 8px 0; }
+.vf-usmap-card .su-part-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vf-warn { margin: 10px 0 0; display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 .vf-warn svg { flex: none; margin-top: 2px; color: #f5d342; }
 
@@ -103,8 +108,8 @@
 .vf-sub { padding: 20px 0; }
 .vf-sub + .vf-sub { border-top: 1px solid var(--panel-border); }
 .vf-sub:last-child { padding-bottom: 4px; }
-.vf-sub h3 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 14px; font-size: 14px; font-weight: 600; color: var(--text-primary); }
-.vf-sub h3 span { font-size: 12.5px; font-weight: 400; letter-spacing: 0; color: var(--text-secondary); }
+.vf-sub > h3 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 14px; font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.vf-sub > h3 span { font-size: 12.5px; font-weight: 400; letter-spacing: 0; color: var(--text-secondary); }
 .vf-names { display: flex; flex-direction: column; gap: 12px; }
 .vf-names label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-primary); }
 .vf-names input {

@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, emitTo, listen } from '@tauri-apps/api/event'
-import { AlertTriangle, Check, ChevronDown, ChevronRight, Copy, RotateCcw, Search, X } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, ChevronRight, Copy, Layers, RotateCcw, Search, X } from 'lucide-react'
 import TitleBar from '../../components/TitleBar'
 import Checkbox from '../../components/ui/Checkbox'
 import { Num, SwapText } from '../motion'
@@ -117,11 +117,13 @@ function Row({ mod, loadouts, run, needs, picked, open, busy, onPick, onToggle, 
   return (
     <li className={`mod-row vf-row${status ? ` is-${status}` : ''}${picked ? ' is-picked' : ''}`} title={needs}>
       <Checkbox size="sm" className="vf-pick" checked={picked} isDisabled={busy} disabled={busy} onChange={onPick} title={mod.path}>
-        <span className="vf-row-text">
-          <span className="vf-row-name">{mod.name}</span>
-          {loadouts.length > 0 && <span className="vf-row-meta" title={`In ${loadouts.join(', ')}`}>In {loadouts.join(', ')}</span>}
-        </span>
+        <span className="vf-row-name">{mod.name}</span>
       </Checkbox>
+      {loadouts.length > 0 && (
+        <span className="vf-loadouts" title={`In ${loadouts.join(', ')}`}>
+          <Layers size={12} aria-hidden="true" /><span>{loadouts[0]}</span>{loadouts.length > 1 && <b>+{loadouts.length - 1}</b>}
+        </span>
+      )}
       {mod.enabled && <span className="mod-type-badge category-badge on-badge" title="This mod is on now">On</span>}
       {run?.report
         ? <button type="button" className={`vf-pill is-${status}`} aria-expanded={open} onClick={onToggle} title={open ? 'Hide the report' : 'Show the report'}>
@@ -459,21 +461,31 @@ export function VfxUpdaterPanel() {
                 </div>
 
                 <div className="vf-sub">
-                  <h3>USMAP<span>{usmapState}</span></h3>
-                  <ul className="mod-rows">
-                    <li className="su-part vf-usmap">
-                      <span className={`su-part-mark${usmapOk ? ' is-ok' : ''}`} role="img" aria-label={usmapOk ? 'Ready' : 'Missing'}>{usmapOk && <Check size={14} strokeWidth={2.5} />}</span>
-                      <span className="su-part-text">
-                        <b title={usmap ?? undefined}>{usmap ? fileName(usmap) : 'No USMAP chosen'}</b>
-                        <span>{[usmapInfo?.version, usmapInfo?.commitDate].filter(Boolean).join(' · ') || 'The game\'s property layout, from rivals-depot or a file'}</span>
-                      </span>
-                      <span className="su-part-links">
-                        <button type="button" className="su-link" disabled={checking || busy} onClick={() => usmapCheck(true)} title="Download the newest USMAP from rivals-depot and use it">Fetch latest</button>
-                        <button type="button" className="su-link" disabled={busy} onClick={browseUsmap}>Browse…</button>
-                      </span>
-                    </li>
-                  </ul>
-                  {behind ? <p className="vf-warn"><AlertTriangle size={14} aria-hidden="true" />This USMAP ({cl}) is older than the game ({build!.cl}). Updates usually still work after a small patch. If they fail, wait for rivals-depot to publish a newer one.</p> : null}
+                  <section className="su-card vf-usmap-card">
+                    <div className="su-card-head">
+                      <div>
+                        <h3>USMAP</h3>
+                        <p>The game's property layout, which updates read the game's files with. From rivals-depot on GitHub.</p>
+                      </div>
+                      <span className={`su-chip ${usmapMissing ? 'is-missing' : 'is-installed'}`}>{behind && !usmapMissing && !checking ? 'Older than the game' : usmapState}</span>
+                    </div>
+                    <ul className="su-parts">
+                      <li className="su-part">
+                        <span className={`su-part-mark${usmapOk ? ' is-ok' : ''}`} role="img" aria-label={usmapOk ? 'Ready' : 'Missing'}>{usmapOk && <Check size={14} strokeWidth={2.5} />}</span>
+                        <div className="su-part-text">
+                          <b title={usmap ?? undefined}>{usmap ? fileName(usmap) : 'No USMAP chosen'}</b>
+                          <span>{[usmapInfo?.version, usmapInfo?.commitDate, cl && `build ${cl}`].filter(Boolean).join(' · ') || 'Check for updates downloads the newest, or browse for a file'}</span>
+                        </div>
+                        <span className="su-part-links">
+                          <button type="button" className="su-link" disabled={checking || busy} onClick={() => usmapCheck(true)} title="Download the newest USMAP from rivals-depot and use it">
+                            {checking ? 'Checking…' : 'Check for updates'}
+                          </button>
+                          <button type="button" className="su-link" disabled={busy} onClick={browseUsmap} title="Use a .usmap file from this PC">Browse…</button>
+                        </span>
+                      </li>
+                    </ul>
+                    {behind ? <p className="su-note">The game is on build {build!.cl}. Updates usually still work after a small patch. If they fail, wait for rivals-depot to publish a newer USMAP.</p> : null}
+                  </section>
                 </div>
 
                 <ColorNames />
