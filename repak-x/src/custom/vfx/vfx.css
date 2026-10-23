@@ -94,15 +94,17 @@
 .vf-asset { font: 12px var(--font-mono); color: var(--text-primary); overflow-wrap: anywhere; }
 .vf-detail { color: var(--text-secondary); overflow-wrap: anywhere; }
 
-/* Updates: each choice is its label, the sort's segmented control, and what the picked one does */
+/* Updates: each choice is a settings row, its label at the left, a compact segmented control at the right, and what the
+   picked one does right under the control (close to what it explains, apart from the next row) */
 .vf-options { display: flex; flex-direction: column; gap: 18px; }
-.vf-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
-.vf-choice-label { font-size: 13px; font-weight: 500; color: var(--text-primary); }
-.vf-choice-seg { flex-wrap: wrap; }
-.vf-choice .vf-hint { margin-top: -2px; }
+.vf-choice { display: grid; grid-template-columns: 84px minmax(0, 1fr); column-gap: 16px; row-gap: 6px; align-items: center; }
+.vf-choice-label { grid-column: 1; font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+.vf-choice-seg { grid-column: 2; justify-self: start; flex-wrap: wrap; }
+.vf-choice-seg button { height: 26px !important; min-height: 0 !important; padding: 0 10px !important; display: inline-flex !important; align-items: center; }
+.vf-choice .vf-hint { grid-column: 2; }
 
 /* USMAP: Setup's part row between hairlines, as in the Setup window */
-.vf-usmap-about { margin: -6px 0 12px; }
+.vf-usmap-about { margin: 0 0 12px; }
 .vf-usmap.su-parts { border: none; border-radius: 0; border-top: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); }
 .vf-usmap .su-part { padding: 8px 0; }
 .vf-usmap .su-part-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -117,7 +119,8 @@
 .vf-sub { padding: 20px 0; }
 .vf-sub + .vf-sub { border-top: 1px solid var(--panel-border); }
 .vf-sub:last-child { padding-bottom: 4px; }
-.vf-sub > h3 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 14px; font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.vf-sub > h3 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 16px; font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.vf-sub > h3:has(+ .vf-hint), .vf-sub > h3:has(+ .vf-names) { margin-bottom: 8px; }   /* a heading's own description sits close */
 .vf-sub > h3 span { font-size: 12.5px; font-weight: 400; letter-spacing: 0; color: var(--text-secondary); }
 .vf-names { display: flex; flex-direction: column; gap: 12px; }
 .vf-names label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-primary); }
