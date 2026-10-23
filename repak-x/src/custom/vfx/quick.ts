@@ -4,6 +4,7 @@
 // whole report. It uses the window's choices (Advanced > Names and Originals) and its USMAP, and takes the backend run
 // lock (prefs.ts), so it never runs beside the window or beside another right-click update. When the update gets a new
 // name, the loadouts that held the original hold it.
+import { useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit } from '@tauri-apps/api/event'
 import type { useAlert } from '../../components/AlertHandler'
@@ -15,6 +16,16 @@ import { claimRun, newRunToken, readNaming, readOriginals, releaseRun, runLock }
 
 type Alert = ReturnType<typeof useAlert>
 let reserved = false // one right-click update at a time in this window, taken before anything is awaited
+
+// the mod a right-click update is working on (its path without the extension, so on and off match): its name shimmers
+// in the Library and on loadout pages while the toast follows the steps
+let updating: string | null = null
+const watchers = new Set<() => void>()
+const fileKey = (p: string) => p.replace(/\\/g, '/').replace(/\.[^./]+$/, '').toLowerCase()
+const setUpdating = (path: string | null) => { updating = path && fileKey(path); watchers.forEach(f => f()) }
+const watch = (f: () => void) => { watchers.add(f); return () => { watchers.delete(f) } }
+/** Whether a right-click update is working on the mod at `path` (any of its files). */
+export const useVfxUpdating = (path?: string | null) => useSyncExternalStore(watch, () => Boolean(path && updating === fileKey(path)))
 const fileName = (p: string) => p.replace(/\\/g, '/').split('/').pop() ?? p
 const nameOf = (p: string) => fileName(p).replace(/\.[^.]+$/, '').replace(/(_\d+)?_P$/i, '')
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
@@ -44,6 +55,7 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
       return
     }
     if (!(await claimRun(token, name))) { busy((await runLock())?.name); return }
+    setUpdating(mod.path)
     id = alert.showAlert({ color: 'default', title: `Updating ${name}`, description: `${STEPS[0]}…`, isLoading: true, duration: 0, progressValue: 0 })
     const originals = readOriginals(), naming = readNaming()
     const r = await fixVfxMod({
@@ -53,7 +65,7 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
     })
     if (r.status === 'fixed' && r.placed) {
       // a new name (_UPDATED) moves the loadouts that held the original; with the name kept they already hold the update
-      renameModKey(modKey(r.placed.original), modKey(r.placed.fixed))
+      renameModKey(modKey(r.placed.source), modKey(r.placed.fixed))
       await emit('mods_dir_changed').catch(() => {})
       await reload()
     }
@@ -61,6 +73,7 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
     id = null
     resultToast(r, name, alert)
   } finally {
+    setUpdating(null)
     if (id !== null) alert.dismissAlert(id)
     await releaseRun(token)
     reserved = false
@@ -71,11 +84,15 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
 function resultToast(r: VfxReport, name: string, alert: Alert) {
   const show = { label: 'Show report', onClick: () => { sendReport(r); void openVfxWindow() } }
   if (r.status === 'fixed' && r.placed) {
-    const where = r.placed.trashed ? 'The original is in Recently deleted.' : r.placed.turnedOff ? 'The original is off.' : ''
-    const warned = r.warnings.length
+    const warned = r.warnings.length, left = r.counts.left
+    const where = left ? 'The original is off and kept for a full update later.' : r.placed.trashed ? 'The original is in Recently deleted.' : r.placed.turnedOff ? 'The original is off.' : ''
     alert.showAlert({
-      color: warned ? 'warning' : 'success', duration: warned ? 0 : 6000, title: `Updated ${name}`, action: show,
-      description: [`Rebuilt ${plural(r.counts.updated, 'asset')}.`, where, warned ? `${plural(warned, 'warning')} in the report.` : ''].filter(Boolean).join(' '),
+      color: warned || left ? 'warning' : 'success', duration: warned || left ? 0 : 6000, title: `${left ? 'Partially updated' : 'Updated'} ${name}`, action: show,
+      description: [
+        r.counts.updated ? `Rebuilt ${plural(r.counts.updated, 'asset')}.` : '',
+        left ? `Left out ${plural(left, 'Niagara file')} made for an older game build, so those effects show their usual colors.` : '',
+        where, warned ? `${plural(warned, 'warning')} in the report.` : '',
+      ].filter(Boolean).join(' '),
     })
   } else if (r.status === 'nothing') {
     alert.showAlert({ color: 'default', duration: 6000, title: `${name} needs no update`, description: r.error ?? '' })

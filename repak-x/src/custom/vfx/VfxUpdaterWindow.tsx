@@ -17,7 +17,7 @@ import { cue } from '../sounds'
 import { DEFAULT_FILTER, parseWords, readFilter, resetFilter, writeFilter, type ColorFilter } from './filter'
 import { canonKey } from '../loadoutIdentity'
 import { modKey, useLoadouts } from '../loadoutStore'
-import { FIXED_EVENT, onHandoff, onReport, takeHandoff, takeReport, utocOf, type Fixed } from './handoff'
+import { FIXED_EVENT, onHandoff, openLoadoutInMain, onReport, takeHandoff, takeReport, utocOf, type Fixed } from './handoff'
 import { KEEP_NAME, ORIGINALS, claimRun, newRunToken, onRunChange, readNaming, readOriginals, releaseRun, runLock, type Naming, type Originals, type RunLock } from './prefs'
 import { STEPS, fixVfxMod, type AssetKind, type VfxReport } from './pipeline'
 import './vfx.css'
@@ -26,14 +26,14 @@ type Status = 'waiting' | 'running' | 'fixed' | 'nothing' | 'failed' | 'cancelle
 type Run = { status: Status; step?: number; sub?: string; report?: VfxReport }
 type Mod = { path: string; utoc: string; enabled: boolean; name: string; hero?: string | null; modified?: number }
 type ModList = { mods: Mod[]; problems: string[] }
-type Verdict = { path: string; kind: string; reason: string }
+type Verdict = { path: string; kind: string; reason: string; staleNiagara?: number }
 type Log = { time: string; text: string; type: string }
 type Usmap = { updated: boolean; upToDate: boolean; skipped: boolean; localPath?: string | null; filename?: string | null; version?: string | null; buildNumber?: number | null; commitDate?: string | null; message: string }
 type GameBuild = { updated: number; cl?: number | null }
 
 const NAMING_NOTE: Record<Naming, string> = {
   broken: 'Loadouts and tags stay on the update. The original is renamed to end in _BROKEN.',
-  updated: 'The update ends in _UPDATED, and loadouts move to it.',
+  updated: 'The update ends in _UPDATED, and loadouts move to it. Updating it again makes _UPDATED_V2, then V3.',
 }
 const ORIGINALS_NOTE: Record<Originals, string> = {
   off: 'Kept in the mods folder, turned off, so only the update loads.',
@@ -44,7 +44,7 @@ const ORIGINALS_NOTE: Record<Originals, string> = {
 const usmapRelease = (name?: string | null) => name?.match(/\+([^+]+?)-Marvel\.usmap$/i)?.[1]?.replace(/_/g, ' ') ?? null
 const ADVANCED = 'repakxtra.vfx.advanced' // Advanced opens the way it was last left, as the install card's
 const FOLDED = 'repakxtra.vfx.folded' // the groups folded away, as a list of ids
-const SORT = 'repakxtra.vfx.sort' // A to Z or Newest, as a loadout's Add mods
+const SORT = 'repakxtra.vfx.sort2' // A to Z or Newest (the default since 0.17.1, so a new key), as a loadout's Add mods
 const SEARCH_FROM = 8 // a search field once the list is longer than a glance
 const fileName = (p: string) => p.replace(/\\/g, '/').split('/').pop() ?? p
 const plural = (n: number, word: string, many = `${word}s`) => `${n.toLocaleString()} ${n === 1 ? word : many}`
@@ -55,8 +55,12 @@ const norm = (p: string) => p.replace(/\//g, '\\').toLowerCase()
 const isDone = (s?: Status) => s === 'fixed' || s === 'nothing'
 
 const STATUS: Record<Status, string> = { waiting: 'Waiting', running: 'Updating', fixed: 'Updated', nothing: 'Nothing to update', failed: 'Failed', cancelled: 'Cancelled' }
-const KIND_ORDER: AssetKind[] = ['failed', 'unreadable', 'added', 'updated', 'same', 'passed']
-const KIND_LABEL: Record<AssetKind, string> = { updated: 'Rebuilt', same: 'Match the game', added: 'The mod\'s own', passed: 'Kept as they were', unreadable: 'Could not be read', failed: 'Not updated' }
+const KIND_ORDER: AssetKind[] = ['failed', 'left', 'unreadable', 'added', 'updated', 'same', 'passed']
+const KIND_LABEL: Record<AssetKind, string> = { updated: 'Rebuilt', same: 'Match the game', added: 'The mod\'s own', passed: 'Kept as they were', left: 'Left out', unreadable: 'Could not be read', failed: 'Not updated' }
+/** An update that left out Niagara files made for an older game build: it works, without those effects' colors */
+const isPartial = (r?: VfxReport) => r?.status === 'fixed' && r.counts.left > 0
+const statusText = (r: VfxReport) => (isPartial(r) ? 'Partially updated' : STATUS[r.status])
+const leftText = (r: VfxReport) => `Left out ${plural(r.counts.left, 'Niagara file')} made for an older game build, so the game uses its own and ${r.counts.left === 1 ? 'that effect shows' : 'those effects show'} their usual colors.`
 /** A run's length, read at a glance: 42 s, 1 min 24 s */
 const took = (ms: number) => {
   const sec = Math.max(1, Math.round(ms / 1000)), min = Math.floor(sec / 60), rest = sec % 60
@@ -71,15 +75,17 @@ function placedText(r: VfxReport) {
   if (!p) return r.output ? `Saved as ${fileName(r.output)}.` : ''
   const kept = bare(p.original)
   const where = p.trashed ? 'is in Recently deleted' : p.turnedOff ? 'is off' : 'is beside it'
+  if (/_ORIGINAL$/i.test(kept)) return `Saved as ${bare(p.fixed)}. The original is off and kept as ${kept}, for a full update later.`
   return (/_BROKEN$/i.test(kept) ? `It kept the mod's name. The original, ${kept}, ${where}.` : `Saved as ${bare(p.fixed)}. The original ${where}.`)
     + (p.replaced ? ' An earlier copy is in Recently deleted.' : '')
 }
 
 /** One mod's report as plain text, for Copy report. */
 function reportText(r: VfxReport) {
-  const lines = [`${r.name}: ${STATUS[r.status as Status] ?? r.status}${r.error ? `. ${r.error}` : ''}`]
+  const lines = [`${r.name}: ${statusText(r)}${r.error ? `. ${r.error}` : ''}`]
   if (r.status === 'fixed') lines.push(`  ${placedText(r)}`)
-  lines.push(`  ${r.counts.updated} rebuilt with ${r.counts.changes} edits, ${r.counts.same} match the game, ${r.counts.added} the mod's own, ${r.counts.passed} kept, ${r.counts.unreadable} unreadable, ${took(r.ms)}`)
+  if (isPartial(r)) lines.push(`  ${leftText(r)}`)
+  lines.push(`  ${r.counts.updated} rebuilt with ${r.counts.changes} edits, ${r.counts.same} match the game, ${r.counts.added} the mod's own, ${r.counts.passed} kept, ${r.counts.left} left out, ${r.counts.unreadable} unreadable, ${took(r.ms)}`)
   r.warnings.forEach(w => lines.push(`  ! ${w}`))
   for (const k of KIND_ORDER) for (const a of r.assets.filter(x => x.kind === k)) lines.push(`  [${KIND_LABEL[k]}] ${a.name}: ${a.detail}`)
   return lines.join('\n')
@@ -93,7 +99,7 @@ function Report({ r, onRetry, busy }: { r: VfxReport; onRetry: () => void; busy:
   return (
     <div className="vf-report">
       {r.status === 'fixed'
-        ? <p className="vf-note">Rebuilt {plural(r.counts.updated, 'asset')} with {plural(r.counts.changes, 'edit')}. {placedText(r)}</p>
+        ? <p className="vf-note">{r.counts.updated ? `Rebuilt ${plural(r.counts.updated, 'asset')} with ${plural(r.counts.changes, 'edit')}. ` : ''}{isPartial(r) ? `${leftText(r)} ` : ''}{placedText(r)}</p>
         : r.error && <p className="vf-note">{r.error}</p>}
       {(r.status === 'failed' || r.status === 'cancelled') && (
         <button type="button" className="row-action" disabled={busy} onClick={onRetry}><RotateCcw size={13} aria-hidden="true" /> Try again</button>
@@ -125,8 +131,8 @@ function Report({ r, onRetry, busy }: { r: VfxReport; onRetry: () => void; busy:
 
 /** A VFX mod: its tick, name, the loadouts holding it and its On badge, and once it ran its step, progress or result. Why it
  *  needs an update is its tooltip. */
-function Row({ mod, rowKey, loadouts, run, needs, picked, open, busy, onPick, onToggle, onRetry }: {
-  mod: Mod; rowKey: string; loadouts: string[]; run?: Run; needs?: string; picked: boolean; open: boolean; busy: boolean; onPick: (v: boolean) => void; onToggle: () => void; onRetry: () => void
+function Row({ mod, rowKey, loadouts, run, needs, partial, picked, open, busy, onPick, onToggle, onRetry }: {
+  mod: Mod; rowKey: string; loadouts: { id: string; name: string }[]; run?: Run; needs?: string; partial?: number; picked: boolean; open: boolean; busy: boolean; onPick: (v: boolean) => void; onToggle: () => void; onRetry: () => void
 }) {
   const status = run?.status
   const running = status === 'running'
@@ -134,20 +140,24 @@ function Row({ mod, rowKey, loadouts, run, needs, picked, open, busy, onPick, on
   return (
     <li className={`mod-row vf-row${status ? ` is-${status}` : ''}${picked ? ' is-picked' : ''}`} title={needs} data-key={rowKey}>
       <Checkbox size="sm" className="vf-pick" checked={picked} isDisabled={busy} disabled={busy} onChange={onPick} title={mod.path}>
-        <span className="vf-row-name">{mod.name}</span>
+        <span className={`vf-row-name${running ? ' t-shimmer' : ''}`}>{mod.name}</span>
       </Checkbox>
+      {partial && !run?.report ? (
+        <span className="vf-partial" title={`${plural(partial, 'Niagara file')} ${partial === 1 ? 'was' : 'were'} made for an older game build. ${partial === 1 ? 'It' : 'They'} will be left out, so ${partial === 1 ? 'that effect shows' : 'those effects show'} the game's usual colors. The rest still updates, and the original is kept, off.`}>Partial</span>
+      ) : null}
       {loadouts.length > 0 && (
-        <span className="vf-loadouts" title={`In ${loadouts.join(', ')}`}>
-          <i>In</i><span>{loadouts[0]}</span>{loadouts.length > 1 && <b>{' '}+{loadouts.length - 1}</b>}
-        </span>
+        <button type="button" className="vf-loadouts" onClick={() => void openLoadoutInMain(loadouts[0].id)}
+          title={`Open ${loadouts[0].name} in repakxtra${loadouts.length > 1 ? `. Also in ${loadouts.slice(1).map(l => l.name).join(', ')}` : ''}`}>
+          <i>In</i><span>{loadouts[0].name}</span>{loadouts.length > 1 && <b>{' '}+{loadouts.length - 1}</b>}
+        </button>
       )}
       {mod.enabled && <span className="mod-type-badge category-badge on-badge" title="This mod is on now">On</span>}
       {run?.report?.status === 'fixed' && (
-        <span className="vf-row-sum">{run.report.counts.updated.toLocaleString()}/{run.report.assets.length.toLocaleString()} rebuilt · {took(run.report.ms)}</span>
+        <span className="vf-row-sum">{run.report.counts.updated.toLocaleString()}/{run.report.assets.length.toLocaleString()} rebuilt{run.report.counts.left ? ` · ${run.report.counts.left.toLocaleString()} left out` : ''} · {took(run.report.ms)}</span>
       )}
       {run?.report
-        ? <button type="button" className={`vf-pill is-${status}`} aria-expanded={open} onClick={onToggle} title={open ? 'Hide the report' : 'Show the report'}>
-            {STATUS[status!]}
+        ? <button type="button" className={`vf-pill is-${isPartial(run.report) ? 'partial' : status}`} aria-expanded={open} onClick={onToggle} title={open ? 'Hide the report' : 'Show the report'}>
+            {statusText(run.report)}
             <ChevronDown size={12} className="vf-caret" aria-hidden="true" />
           </button>
         : status && (running && step
@@ -249,10 +259,11 @@ function ColorNames() {
 export function VfxUpdaterPanel() {
   const [mods, setMods] = useState<Mod[] | null>(null)
   const [needs, setNeeds] = useState<Map<string, string>>(new Map()) // a mod's main file (norm) -> why it needs an update
+  const [stale, setStale] = useState<Map<string, number>>(new Map()) // a mod's .utoc (norm) -> its Niagara files an update will leave out
   const [runs, setRuns] = useState<Record<string, Run>>({}) // by norm(utoc)
   const [picked, setPicked] = useState<Set<string>>(new Set()) // norm(utoc)
   const [q, setQ] = useState('')
-  const [sort, setSort] = useState<'name' | 'newest'>(() => (localStorage.getItem(SORT) === 'newest' ? 'newest' : 'name'))
+  const [sort, setSort] = useState<'name' | 'newest'>(() => (localStorage.getItem(SORT) === 'name' ? 'name' : 'newest'))
   const [foldedIds, setFoldedIds] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(FOLDED) || '[]') } catch { return [] } })
   const loadouts = useLoadouts()
   const [open, setOpen] = useState<Set<string>>(new Set())
@@ -332,6 +343,8 @@ export function VfxUpdaterPanel() {
         try { verdicts = await invoke<Verdict[]>('xtra_broken_mods', { modPaths: list.map(m => m.path) }) } catch (e) { failed = true; addLog(`Could not check which mods need an update: ${e}`, 'warning') }
         if (!live) return
         const n = new Map(verdicts.filter(v => v.kind === 'vfx').map(v => [norm(v.path), v.reason]))
+        const utocs = new Map(list.map(m => [norm(m.path), norm(m.utoc)]))
+        setStale(new Map(verdicts.filter(v => v.kind === 'vfx' && v.staleNiagara && utocs.has(norm(v.path))).map(v => [utocs.get(norm(v.path))!, v.staleNiagara!])))
         setMods(list)
         setScanProblems(problems)
         setNeeds(n)
@@ -458,10 +471,10 @@ export function VfxUpdaterPanel() {
       })
       patch(key, { status: r.status, report: r, sub: undefined })
       if (r.status === 'fixed') { fixed++; pick([key], false) }
-      if (r.status === 'failed') failed++
+      if (r.status === 'failed' || isPartial(r)) failed++ // a partial update is a warning too
       if (r.status !== 'fixed' || todo.length === 1) setOpen(o => new Set(o).add(key)) // problems open, a batch's updates stay folded
       // the main window reloads and moves loadouts from the original to the update (a no-op when the update kept the name)
-      if (r.placed) await emitTo('main', FIXED_EVENT, { from: r.placed.original, to: r.placed.fixed, swap: true } satisfies Fixed).catch(() => {})
+      if (r.placed) await emitTo('main', FIXED_EVENT, { from: r.placed.source, to: r.placed.fixed, swap: true } satisfies Fixed).catch(() => {})
       // an update named _UPDATED is a new file and its original leaves the list: its result moves with it
       const moved = r.placed ? norm(utocOf(r.placed.fixed)) : key
       if (moved !== key) {
@@ -522,12 +535,14 @@ export function VfxUpdaterPanel() {
     group('needs', 'Needs an update', needing, needing.filter(m => needsOf(m) && !isDone(runs[norm(m.utoc)]?.status)).length),
     group('rest', needing.length ? 'Other VFX mods' : 'VFX mods', shown.filter(m => !first(m))),
   ]
-  const inLoadouts = (m: Mod) => { const k = canonKey(modKey(m.path)); return loadouts.filter(l => l.on.some(x => canonKey(x) === k)).map(l => l.name) }
+  const inLoadouts = (m: Mod) => { const k = canonKey(modKey(m.path)); return loadouts.filter(l => l.on.some(x => canonKey(x) === k)).map(l => ({ id: l.id, name: l.name })) }
   const fold = (id: string) => setFoldedIds(f => { const n = f.includes(id) ? f.filter(x => x !== id) : [...f, id]; localStorage.setItem(FOLDED, JSON.stringify(n)); return n })
   const todo = [...picked].filter(k => !isDone(runs[k]?.status)).length
   const runningAt = batch.findIndex(k => runs[k]?.status === 'running')
   const reports = Object.values(runs).filter(r => r.report)
   const updated = reports.filter(r => r.status === 'fixed').length
+  const partly = reports.filter(r => isPartial(r.report)).length
+  const partialTodo = [...picked].filter(k => !isDone(runs[k]?.status) && stale.has(k)).length
   const cl = usmapCl(usmap ? fileName(usmap) : null) // the file in use, not the last download
   const behind = cl && build?.cl && cl < build.cl
   const usmapState = checking ? 'Checking for a newer one…' : !usmap ? 'None chosen' : usmapOk === false ? 'File missing' : usmapInfo?.upToDate || usmapInfo?.updated ? 'Up to date' : 'Ready'
@@ -536,7 +551,7 @@ export function VfxUpdaterPanel() {
   const runningStep = runningKey ? runs[runningKey]?.step : undefined
   const state = cancelling ? 'Cancelling. The current step finishes first.'
     : busy ? `Updating ${runningAt + 1} of ${batch.length}${runningMod ? `: ${runningMod.name}` : ''}${runningStep ? `, step ${runningStep} of ${STEPS.length}` : '…'}`
-      : lock ?? (todo ? '' : reports.length ? `${updated === reports.length ? plural(updated, 'mod') : `${updated} of ${plural(reports.length, 'mod')}`} updated${lastTook ? ` in ${took(lastTook)}` : ''}` : 'Tick the mods to update')
+      : lock ?? (todo ? '' : reports.length ? `${updated === reports.length ? plural(updated, 'mod') : `${updated} of ${plural(reports.length, 'mod')}`} updated${partly ? ` (${partly === updated ? (updated === 1 ? 'partially' : 'all partially') : `${partly} partially`})` : ''}${lastTook ? ` in ${took(lastTook)}` : ''}` : 'Tick the mods to update')
 
   // what Update will do to the files, beside the button, so a choice made once in Advanced is never a surprise
   const policy = naming === 'broken'
@@ -592,7 +607,7 @@ export function VfxUpdaterPanel() {
                   {g.mods.map(m => {
                     const key = norm(m.utoc)
                     return (
-                      <Row key={key} rowKey={key} mod={m} loadouts={inLoadouts(m)} run={runs[key]} needs={needsOf(m)} picked={picked.has(key)} open={open.has(key)} busy={busy}
+                      <Row key={key} rowKey={key} mod={m} loadouts={inLoadouts(m)} run={runs[key]} needs={needsOf(m)} partial={stale.get(key)} picked={picked.has(key)} open={open.has(key)} busy={busy}
                         onPick={v => pick([key], v)}
                         onToggle={() => setOpen(o => { const n = new Set(o); n.has(key) ? n.delete(key) : n.add(key); return n })}
                         onRetry={() => void run([key])} />
@@ -636,10 +651,13 @@ export function VfxUpdaterPanel() {
                 <Section icon={<MapIcon size={15} aria-hidden="true" />} title="USMAP"
                   about="The game's property layout. Updates read the game's files with it.">
                   <div className="vf-usmap">
-                    <span className={`su-part-mark${usmapOk ? ' is-ok' : ''}`} role="img" aria-label={usmapOk ? 'Ready' : 'Missing'}>{usmapOk && <Check size={14} strokeWidth={2.5} />}</span>
+                    {/* older than the game: a warning mark, never the green check */}
+                    <span className={`su-part-mark${usmapOk && !behind ? ' is-ok' : ''}${usmapOk && behind ? ' is-behind' : ''}`} role="img" aria-label={!usmapOk ? 'Missing' : behind ? 'Older than the game' : 'Ready'}>
+                      {usmapOk && (behind ? <AlertTriangle size={13} strokeWidth={2.25} /> : <Check size={14} strokeWidth={2.5} />)}
+                    </span>
                     <div className="su-part-text">
                       <b title={usmap ?? undefined}>{usmap ? usmapRelease(fileName(usmap)) ?? fileName(usmap) : 'No USMAP chosen'}</b>
-                      <span>{usmap ? [cl && `Build ${cl}`, usmapInfo?.commitDate].filter(Boolean).join(' · ') || fileName(usmap) : 'Check for updates downloads the newest from rivals-depot'}</span>
+                      <span>{usmap ? [cl && `Build ${cl}`, behind ? `the game is on ${build!.cl}` : usmapInfo?.commitDate].filter(Boolean).join(' · ') || fileName(usmap) : 'Check for updates downloads the newest from rivals-depot'}</span>
                     </div>
                     <span className="su-part-links">
                       <button type="button" className="su-link" disabled={checking || busy} onClick={() => usmapCheck(true)} title="Download the newest USMAP from rivals-depot and use it">
@@ -648,7 +666,13 @@ export function VfxUpdaterPanel() {
                       <button type="button" className="su-link" disabled={busy} onClick={browseUsmap} title="Use a .usmap file from this PC">Browse…</button>
                     </span>
                   </div>
-                  {behind ? <p className="vf-warn"><AlertTriangle size={14} aria-hidden="true" /><span>The game is on build {build!.cl}. Updates usually still work after a small patch. If they fail, check for updates again later.</span></p> : null}
+                  {behind ? (
+                    <div className="vf-behind" role="note">
+                      <p><b>This USMAP does not match the game.</b> It is for build {cl}, and the game updated to build {build!.cl}.</p>
+                      <p>Until a USMAP for build {build!.cl} is out, VFX mods with Niagara effects can only partially update. Their materials are rebuilt, and Niagara files made for the old build are left out (marked Partial in the list). Those mods need the new USMAP for a full update.</p>
+                      <p>rivals-depot usually publishes one soon after a game update. Check for updates gets it.</p>
+                    </div>
+                  ) : null}
                 </Section>
 
                 <ColorNames />
@@ -666,6 +690,7 @@ export function VfxUpdaterPanel() {
       <footer className="vf-foot">
         {state
           ? <span className="vf-state" aria-live="polite">{state}</span>
+          : partialTodo ? <span className="vf-state vf-policy"><b className="vf-partial-n">{partialTodo === todo ? (todo === 1 ? 'It' : `All ${todo}`) : `${partialTodo} of ${todo}`}</b> will only partially update, without {partialTodo === 1 ? 'its' : 'their'} old Niagara files.</span>
           : <span className="vf-state vf-policy">{policy}. <button type="button" className="su-link" onClick={() => showAdvanced(true)}>Change</button></span>}
         {reports.length > 0 && !busy && <button type="button" className="lo-text-btn" onClick={() => copy('report')}><Copy size={14} /> {copied === 'report' ? 'Copied' : 'Copy report'}</button>}
         {busy
