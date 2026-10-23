@@ -59,8 +59,11 @@
 .vf-loadouts {flex: 0 1 auto; min-width: 0; max-width: 34%; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px;
   border: 1px solid var(--panel-border); border-radius: 6px; font-size: 11.5px; font-weight: 500; color: var(--text-secondary); }
 /* a button: opens that loadout's page in the main window */
-button.vf-loadouts { background: none; font-family: inherit; line-height: normal; cursor: pointer; transition: color 0.15s ease, border-color 0.15s ease; }
-button.vf-loadouts:hover { color: var(--text-primary); border-color: color-mix(in srgb, var(--text-primary), transparent 75%); }
+/* the tag's own size, not the app's 36px buttons, and a quiet hover: only the loadout's name brightens a little */
+button.vf-loadouts { min-height: 0; background: none; font-family: inherit; line-height: normal; cursor: pointer; transition: none; }
+button.vf-loadouts:hover:not(:disabled) { border-color: var(--panel-border); background: none; }
+button.vf-loadouts span { transition: color 0.15s ease; }
+button.vf-loadouts:hover span { color: color-mix(in srgb, var(--text-secondary), var(--text-primary) 45%); }
 button.vf-loadouts:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
 .vf-loadouts span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vf-loadouts i { flex: none; font-style: normal; font-weight: 400; color: var(--text-secondary); }
