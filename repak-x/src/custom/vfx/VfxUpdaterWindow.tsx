@@ -9,12 +9,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, emitTo, listen } from '@tauri-apps/api/event'
-import { AlertTriangle, Check, ChevronDown, ChevronRight, Copy, RotateCcw, Search } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, ChevronRight, Copy, RotateCcw, Search, X } from 'lucide-react'
 import TitleBar from '../../components/TitleBar'
 import Checkbox from '../../components/ui/Checkbox'
 import { Num, SwapText } from '../motion'
 import { cue } from '../sounds'
 import { DEFAULT_FILTER, parseWords, readFilter, resetFilter, writeFilter, type ColorFilter } from './filter'
+import { canonKey } from '../loadoutIdentity'
+import { modKey, useLoadouts } from '../loadoutStore'
 import { FIXED_EVENT, onHandoff, takeHandoff, utocOf, type Fixed } from './handoff'
 import { STEPS, fixVfxMod, type AssetKind, type VfxReport } from './pipeline'
 import './vfx.css'
@@ -30,6 +32,7 @@ type GameBuild = { updated: number; cl?: number | null }
 const TURN_OFF = 'repakxtra.vfx.turnOff'
 const KEEP_NAME = 'repakxtra.vfx.keepName'
 const ADVANCED = 'repakxtra.vfx.advanced' // Advanced opens the way it was last left, as the install card's
+const FOLDED = 'repakxtra.vfx.folded' // the groups folded away, as a list of ids
 const SEARCH_FROM = 8 // a search field once the list is longer than a glance
 const fileName = (p: string) => p.replace(/\\/g, '/').split('/').pop() ?? p
 const plural = (n: number, word: string, many = `${word}s`) => `${n.toLocaleString()} ${n === 1 ? word : many}`
@@ -103,9 +106,10 @@ function Report({ r, onRetry, busy }: { r: VfxReport; onRetry: () => void; busy:
   )
 }
 
-/** A VFX mod: its tick, name and On badge, and once it ran its step, progress or result. Why it needs an update is its tooltip. */
-function Row({ mod, run, needs, picked, open, busy, onPick, onToggle, onRetry }: {
-  mod: Mod; run?: Run; needs?: string; picked: boolean; open: boolean; busy: boolean; onPick: (v: boolean) => void; onToggle: () => void; onRetry: () => void
+/** A VFX mod: its tick, name, the loadouts holding it and its On badge, and once it ran its step, progress or result. Why it
+ *  needs an update is its tooltip. */
+function Row({ mod, loadouts, run, needs, picked, open, busy, onPick, onToggle, onRetry }: {
+  mod: Mod; loadouts: string[]; run?: Run; needs?: string; picked: boolean; open: boolean; busy: boolean; onPick: (v: boolean) => void; onToggle: () => void; onRetry: () => void
 }) {
   const status = run?.status
   const running = status === 'running'
@@ -113,7 +117,10 @@ function Row({ mod, run, needs, picked, open, busy, onPick, onToggle, onRetry }:
   return (
     <li className={`mod-row vf-row${status ? ` is-${status}` : ''}${picked ? ' is-picked' : ''}`} title={needs}>
       <Checkbox size="sm" className="vf-pick" checked={picked} isDisabled={busy} disabled={busy} onChange={onPick} title={mod.path}>
-        <span className="vf-row-label">{mod.name}</span>
+        <span className="vf-row-text">
+          <span className="vf-row-name">{mod.name}</span>
+          {loadouts.length > 0 && <span className="vf-row-meta" title={`In ${loadouts.join(', ')}`}>In {loadouts.join(', ')}</span>}
+        </span>
       </Checkbox>
       {mod.enabled && <span className="mod-type-badge category-badge on-badge" title="This mod is on now">On</span>}
       {run?.report
@@ -132,6 +139,26 @@ function Row({ mod, run, needs, picked, open, busy, onPick, onToggle, onRetry }:
       ) : null}
       {run?.report && <div className="t-acc-panel vf-row-panel" data-open={open}><div className="t-acc-panel-inner" {...folded(!open)}><Report r={run.report} onRetry={onRetry} busy={busy} /></div></div>}
     </li>
+  )
+}
+
+/** A group of mods that folds away to its heading, as a collection does on the Loadouts screen. Its heading holds the
+ *  fold, the name and count, and Select all / Clear for the group. */
+function Group({ title, count, tone, open, onFold, all, busy, onPickAll, children }: {
+  title: string; count: number; tone?: 'needs'; open: boolean; onFold: () => void; all: boolean; busy: boolean; onPickAll: () => void; children: React.ReactNode
+}) {
+  return (
+    <section className={`vf-grp${tone ? ` is-${tone}` : ''}${open ? '' : ' is-folded'}`}>
+      <div className="vf-grp-head">
+        <button type="button" className="vf-grp-fold" aria-expanded={open} onClick={onFold}>
+          <ChevronRight size={15} className="vf-grp-caret" aria-hidden="true" />
+          <h2>{title}</h2>
+          <span className="vf-grp-count">{count}</span>
+        </button>
+        <button type="button" className="vf-select" disabled={busy} onClick={onPickAll}>{all ? 'Clear' : 'Select all'}</button>
+      </div>
+      <div className="t-acc-panel" data-open={open}><div className="t-acc-panel-inner" {...folded(!open)}>{children}</div></div>
+    </section>
   )
 }
 
@@ -175,6 +202,8 @@ export function VfxUpdaterPanel() {
   const [runs, setRuns] = useState<Record<string, Run>>({}) // by norm(utoc)
   const [picked, setPicked] = useState<Set<string>>(new Set()) // norm(utoc)
   const [q, setQ] = useState('')
+  const [foldedIds, setFoldedIds] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(FOLDED) || '[]') } catch { return [] } })
+  const loadouts = useLoadouts()
   const [open, setOpen] = useState<Set<string>>(new Set())
   const [paks, setPaks] = useState<string | null>(null)
   const [build, setBuild] = useState<GameBuild | null>(null)
@@ -318,8 +347,8 @@ export function VfxUpdaterPanel() {
       if (r.status === 'fixed') { fixed++; pick([key], false) }
       if (r.status === 'failed') failed++
       if (r.status !== 'fixed' || todo.length === 1) setOpen(o => new Set(o).add(key)) // problems open, a batch's updates stay folded
-      // the main window reloads, and with _UPDATED names moves loadouts from the original to the update
-      if (r.placed) await emitTo('main', FIXED_EVENT, { from: r.placed.original, to: r.placed.fixed, swap: !keepName && turnOff } satisfies Fixed).catch(() => {})
+      // the main window reloads and moves loadouts from the original to the update (a no-op when the update kept the name)
+      if (r.placed) await emitTo('main', FIXED_EVENT, { from: r.placed.original, to: r.placed.fixed, swap: true } satisfies Fixed).catch(() => {})
     }
     if (fixed) await emit('mods_dir_changed').catch(() => {})
     cue(failed ? 'error' : 'success', { emphasis: 'subtle' })
@@ -354,6 +383,8 @@ export function VfxUpdaterPanel() {
     group('needs', 'Needs an update', needing, needing.filter(m => needsOf(m) && !isDone(runs[norm(m.utoc)]?.status)).length),
     group('rest', needing.length ? 'Other VFX mods' : 'VFX mods', shown.filter(m => !first(m))),
   ]
+  const inLoadouts = (m: Mod) => { const k = canonKey(modKey(m.path)); return loadouts.filter(l => l.on.some(x => canonKey(x) === k)).map(l => l.name) }
+  const fold = (id: string) => setFoldedIds(f => { const n = f.includes(id) ? f.filter(x => x !== id) : [...f, id]; localStorage.setItem(FOLDED, JSON.stringify(n)); return n })
   const todo = [...picked].filter(k => !isDone(runs[k]?.status)).length
   const runningAt = batch.findIndex(k => runs[k]?.status === 'running')
   const reports = Object.values(runs).filter(r => r.report)
@@ -371,9 +402,10 @@ export function VfxUpdaterPanel() {
       <div className="vf-body">
         {list.length > SEARCH_FROM && (
           <label className="lp-search vf-search">
-            <Search size={14} />
+            <Search size={15} aria-hidden="true" />
             <input value={q} placeholder="Search VFX mods" aria-label="Search VFX mods" onChange={e => setQ(e.target.value)}
               onKeyDown={e => { if (e.key === 'Escape') setQ('') }} />
+            {q && <button type="button" className="lo-icon vf-search-clear" onClick={() => setQ('')} aria-label="Clear the search" title="Clear the search"><X size={14} /></button>}
           </label>
         )}
         {mods === null
@@ -381,22 +413,20 @@ export function VfxUpdaterPanel() {
           : shown.length === 0
             ? <p className="lp-empty">{needle ? `No VFX mods match “${q.trim()}”.` : 'No VFX mods in the mods folder. Mods the Library shows as VFX appear here.'}</p>
             : groups.map(g => g.mods.length > 0 && (
-              <section key={g.id} className={`lp-section vf-group-${g.id}`}>
-                <h2 className="lo-group-head">{g.title}<span className="lo-group-count">{g.count}</span>
-                  <button type="button" className="lo-text-btn vf-head-tool" disabled={busy} onClick={() => pick(g.keys, !g.all)}>{g.all ? 'Clear' : 'Select all'}</button>
-                </h2>
+              <Group key={g.id} title={g.title} count={g.count} tone={g.id === 'needs' ? 'needs' : undefined} busy={busy} all={g.all}
+                open={Boolean(needle) || !foldedIds.includes(g.id)} onFold={() => fold(g.id)} onPickAll={() => pick(g.keys, !g.all)}>
                 <ul className="mod-rows vf-rows">
                   {g.mods.map(m => {
                     const key = norm(m.utoc)
                     return (
-                      <Row key={key} mod={m} run={runs[key]} needs={needsOf(m)} picked={picked.has(key)} open={open.has(key)} busy={busy}
+                      <Row key={key} mod={m} loadouts={inLoadouts(m)} run={runs[key]} needs={needsOf(m)} picked={picked.has(key)} open={open.has(key)} busy={busy}
                         onPick={v => pick([key], v)}
                         onToggle={() => setOpen(o => { const n = new Set(o); n.has(key) ? n.delete(key) : n.add(key); return n })}
                         onRetry={() => void run([key])} />
                     )
                   })}
                 </ul>
-              </section>
+              </Group>
             ))}
 
         {usmapMissing && (
@@ -479,4 +509,11 @@ export default function VfxUpdaterWindow() {
       <VfxUpdaterPanel />
     </div>
   )
+}
+
+if (import.meta.env.DEV) {
+  // an update that kept the name is the same loadout member as the original was, and its _BROKEN copy is not
+  const m = '~mods/Lime_9999999_P'
+  console.assert(canonKey(modKey(`${m}.bak_repak`)) === canonKey(modKey(`${m}.pak`)), 'loadouts hold the update under the original key')
+  console.assert(canonKey(modKey('~mods/Lime_BROKEN_9999999_P.bak_repak')) !== canonKey(modKey(`${m}.pak`)), 'the broken copy leaves its loadouts')
 }

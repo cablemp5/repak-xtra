@@ -16,7 +16,7 @@ import './vfx.css'
 type Mod = { path: string; utoc_path?: string | null }
 const DISMISSED = 'repakxtra.vfxNotice' // the game update (seconds) Not now was pressed for
 
-/** The orange dot on the header's VFX Updater button while any mod needs a VFX update (hidden with the problem badges). */
+/** The yellow dot on the header's VFX Updater button while any mod needs a VFX update (hidden with the problem badges). */
 export function VfxDot({ mods }: { mods: Mod[] }) {
   useBrokenVersion()
   const shown = useUiPref('broken')

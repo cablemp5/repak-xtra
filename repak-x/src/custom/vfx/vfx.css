@@ -1,22 +1,45 @@
-/* repakxtra: the VFX Updater window (VfxUpdaterWindow.tsx), built from the Loadout page's parts: lo-group-head headings
-   with a count pill, the Add mods list (mod-rows, lp-search), su-part rows with su-link actions, the install card's
-   Advanced fold. Only what those parts do not cover is styled here: a row that ticks, wraps to show progress and a report,
-   and its result pill. */
+/* repakxtra: the VFX Updater window (VfxUpdaterWindow.tsx), built from the app's parts: the Add mods list (mod-rows,
+   lp-search), folding groups like the Loadouts screen's collections, su-part rows with su-link actions, the install card's
+   Advanced fold. Styled here: the group headings, a row that ticks and wraps to show progress and a report, its result pill. */
 .vf-window { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .vf-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.vf-body { flex: 1; min-height: 0; overflow-y: auto; padding: 22px 24px 24px; display: flex; flex-direction: column; gap: 26px; }
+.vf-body { flex: 1; min-height: 0; overflow-y: auto; padding: 24px 28px 32px; display: flex; flex-direction: column; gap: 28px; }
 .vf-body > * { flex-shrink: 0; }   /* a long list scrolls, nothing in it is squeezed */
-.vf-body .lp-section .lo-group-head { font-size: 13px; }
-.vf-head-tool { margin-left: auto; align-self: center; }
 .vf-hint { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 
+/* search: the Add mods field, the whole width, with a clear button once there is something to clear */
+.vf-body .vf-search { width: 100%; height: 38px; padding: 0 6px 0 12px; gap: 10px; }
+.vf-search input { font-size: 13.5px !important; }
+.vf-search-clear { flex: none; width: 26px; height: 26px !important; min-height: 0 !important; }
+
+/* a group: its heading folds it away (the Loadouts screen's collections), Select all sits at the far end */
+.vf-grp-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.vf-grp.is-folded .vf-grp-head { margin-bottom: 0; }
+.vf-grp-fold { flex: 1; min-width: 0; display: flex !important; align-items: center; justify-content: flex-start !important; gap: 8px; height: 30px !important; min-height: 0 !important;
+  padding: 0 !important; margin-left: -2px; border: none !important; background: none !important; cursor: pointer; text-align: left; color: var(--text-secondary) !important; }
+.vf-grp-fold h2 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--text-primary); }
+.vf-grp-fold:hover .vf-grp-caret, .vf-grp-fold:focus-visible .vf-grp-caret { color: var(--text-primary); }
+.vf-grp-caret { flex: none; transition: transform var(--acc-chevron) var(--acc-ease); }
+.vf-grp-fold[aria-expanded="true"] .vf-grp-caret { transform: rotate(90deg); }
+.vf-grp-count { min-width: 22px; height: 20px; padding: 0 7px; display: inline-grid; place-items: center; border-radius: 999px;
+  font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-secondary); background: var(--quiet-active); }
+/* Needs an update: its count in the problem yellow, as the Library's Needs VFX update tag */
+.vf-grp.is-needs .vf-grp-count { color: #f5d342; background: color-mix(in srgb, #f5d342, transparent 86%); }
+[data-theme="light"] .vf-grp.is-needs .vf-grp-count { color: #7f6900; }
+.vf-select { flex: none; height: 28px !important; min-height: 0 !important; padding: 0 10px !important; border: none !important; border-radius: var(--quiet-radius) !important;
+  background: none !important; font-size: 12.5px !important; font-weight: 500 !important; color: var(--text-secondary) !important; cursor: pointer; }
+.vf-select:hover:not(:disabled) { color: var(--text-primary) !important; background: var(--quiet-active) !important; }
+
 /* a mod's row: the whole name ticks it (a big target), then its badges and state, then (full width) progress or report */
-.vf-row { flex-wrap: wrap; color: var(--text-primary); padding-right: 12px; }
-.vf-pick { flex: 1; min-width: 0; min-height: 40px; display: flex !important; align-items: center; cursor: pointer; }
-.vf-pick .repakx-checkbox-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: 13px !important; font-weight: 600 !important; color: var(--text-primary) !important; }
-.vf-row:not(.is-picked) .vf-pick .repakx-checkbox-label { font-weight: 500 !important; color: var(--text-secondary) !important; }
-.vf-row:not(.is-picked):hover .vf-pick .repakx-checkbox-label { color: var(--text-primary) !important; }
+.vf-row { flex-wrap: wrap; min-height: 52px; padding: 6px 14px; color: var(--text-primary); }
+.vf-pick { flex: 1; min-width: 0; min-height: 40px; display: flex !important; align-items: center; gap: 12px !important; cursor: pointer; }
+.vf-pick .repakx-checkbox-label { min-width: 0; flex: 1; }
+.vf-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.vf-row-name, .vf-row-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vf-row-name { font-size: 13.5px; font-weight: 600; color: var(--text-primary); }
+.vf-row-meta { font-size: 12px; font-weight: 400; color: var(--text-secondary); }
+.vf-row:not(.is-picked) .vf-row-name { font-weight: 500; color: var(--text-secondary); }
+.vf-row:not(.is-picked):hover .vf-row-name { color: var(--text-primary); }
 .vf-status { flex: none; font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .vf-status.is-running { color: var(--text-primary); }
 .vf-status.is-cancelled { color: #f5d342; }
@@ -29,9 +52,6 @@
 .vf-pill:hover { filter: brightness(1.15); }
 .vf-caret { flex: none; opacity: 0.8; transition: transform var(--acc-chevron) var(--acc-ease); }
 .vf-pill[aria-expanded="true"] .vf-caret { transform: rotate(180deg); }
-.vf-search { align-self: flex-start; margin-bottom: -8px; }
-/* Needs an update: its count in the VFX type's orange, as the Library's Needs VFX update tag */
-.vf-group-needs .lo-group-count { color: oklch(0.72 0.16 50); background: color-mix(in oklch, oklch(0.72 0.16 50), transparent 86%); }
 
 /* running: the app's thin progress bar (the update dialog's), the step and what it is on */
 .vf-progress { flex-basis: 100%; padding: 2px 0 6px; }
@@ -75,10 +95,16 @@
 .vf-warn { margin: 10px 0 0; display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 .vf-warn svg { flex: none; margin-top: 2px; color: #f5d342; }
 
-/* Advanced: the install card's fold (.ia), right under the list's option */
-.vf-adv-body { display: flex; flex-direction: column; gap: 22px; padding: 16px 0 2px; }
-.vf-sub h3 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 10px; font-size: 13px; font-weight: 600; color: var(--text-primary); }
-.vf-sub h3 span { font-size: 12px; font-weight: 400; color: var(--text-secondary); }
+/* Advanced: the install card's fold (.ia) under the lists, each part apart under its own heading */
+.vf-adv { padding-top: 16px; }
+.vf-adv > .ia-toggle { gap: 8px; font-size: 15px !important; font-weight: 600 !important; letter-spacing: -0.01em; color: var(--text-primary) !important; }   /* a heading like the groups' */
+.vf-adv > .ia-toggle .ia-caret { color: var(--text-secondary); }
+.vf-adv-body { display: flex; flex-direction: column; padding: 8px 0 2px; }
+.vf-sub { padding: 20px 0; }
+.vf-sub + .vf-sub { border-top: 1px solid var(--panel-border); }
+.vf-sub:last-child { padding-bottom: 4px; }
+.vf-sub h3 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 14px; font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.vf-sub h3 span { font-size: 12.5px; font-weight: 400; letter-spacing: 0; color: var(--text-secondary); }
 .vf-names { display: flex; flex-direction: column; gap: 12px; }
 .vf-names label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-primary); }
 .vf-names input {
@@ -101,7 +127,7 @@
   height: 32px !important; min-height: 0 !important; padding: 0 16px !important; font-size: 13px !important; border-radius: var(--quiet-radius) !important;
   display: inline-flex !important; align-items: center; gap: 4px; width: auto !important; flex: none;
 }
-html[data-motion="off"] .vf-bar i, html[data-motion="off"] .vf-caret { transition: none; }
+html[data-motion="off"] .vf-bar i, html[data-motion="off"] .vf-caret, html[data-motion="off"] .vf-grp-caret { transition: none; }
 
 /* the main window's notice after a game update (VfxNotice.tsx) */
 .vfx-notice {
@@ -111,7 +137,7 @@ html[data-motion="off"] .vf-bar i, html[data-motion="off"] .vf-caret { transitio
 }
 .vfx-notice p { flex: 1; min-width: 0; margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-secondary); }
 .vfx-notice strong { color: var(--text-primary); font-weight: 600; }
-.vfx-notice-icon { flex: none; color: oklch(0.72 0.16 50); }   /* the VFX type's orange, as the Needs VFX update tag */
+.vfx-notice-icon { flex: none; color: #f5d342; }
 .vfx-notice .btn-primary {
   height: 32px !important; min-height: 0 !important; padding: 0 14px !important; font-size: 13px !important; border-radius: var(--quiet-radius) !important;
   display: inline-flex !important; align-items: center; width: auto !important; flex: none; white-space: nowrap;

@@ -6,7 +6,7 @@
 const KEY = 'repakxtra-vfx:queue'
 
 export type Handoff = { paths: string[]; start: boolean; at: number }
-export type Fixed = { from: string; to: string; /** the original was replaced (Turn off the originals), so loadouts move to the fix */ swap: boolean }
+export type Fixed = { from: string; to: string; /** loadouts move from the original to the update (a no-op when the update kept the name) */ swap: boolean }
 export const FIXED_EVENT = 'repakxtra:vfx-fixed'
 
 export const sendToVfx = (paths: string[], start: boolean) => localStorage.setItem(KEY, JSON.stringify({ paths, start, at: Date.now() } satisfies Handoff))
