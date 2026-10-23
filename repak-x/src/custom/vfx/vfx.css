@@ -148,6 +148,13 @@ button.vf-assets-toggle:hover { color: var(--text-primary) !important; }
 .vf-usmap { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 0; border-top: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); }
 .vf-usmap .su-part-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vf-set .vf-warn { margin-top: 10px; }
+/* the USMAP is older than the game: a yellow-edged note under it, the mismatch first, then what it means for updates */
+.vf-behind { margin-top: 12px; padding: 12px 14px; border-radius: 10px; display: flex; flex-direction: column; gap: 6px;
+  border: 1px solid color-mix(in srgb, #f5d342, transparent 70%); background: color-mix(in srgb, #f5d342, transparent 94%); }
+.vf-behind p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.vf-behind b { font-weight: 600; color: #f5d342; }
+.su-part-mark.is-behind { color: #f5d342; border-color: color-mix(in srgb, #f5d342, transparent 55%); }
+[data-theme="light"] .vf-behind b, [data-theme="light"] .su-part-mark.is-behind { color: #665400; }
 .vf-names { display: flex; flex-direction: column; gap: 12px; }   /* Color names: two labelled fields */
 .vf-names label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-primary); }
 .vf-names input {

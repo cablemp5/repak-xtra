@@ -12,6 +12,7 @@ import { formatFileSize } from '../utils/format'
 import { useIsConflicting } from '../custom/conflicts' // repakxtra
 import { useVerdict, verdictLabel } from '../custom/brokenMods' // repakxtra
 import { NexusTag } from '../custom/nexusSource' // repakxtra
+import { useVfxUpdating } from '../custom/vfx/quick' // repakxtra
 import { detectHeroesWithData } from '../utils/heroes'
 import { useHoverTextReveal } from '../hooks/useHoverTextReveal'
 import { FALLBACK_HERO_ID, resolveHeroImage, useHeroImages } from '../utils/heroImages'
@@ -156,6 +157,7 @@ const ModItem = memo(function ModItem({
     useHeroImages()
     const conflicting = useIsConflicting(mod.path) && mod.enabled !== false // repakxtra: red Conflict badge, mods that are on (custom/conflicts.ts)
     const verdict = useVerdict(mod.path) // repakxtra: Broken or May crash badge (custom/brokenMods.ts)
+    const vfxUpdating = useVfxUpdating(mod.path) // repakxtra: a right-click VFX update is working on it (custom/vfx/quick.ts)
     const [isDeleteHolding, setIsDeleteHolding] = useState(false)
     const [isLeaving, setIsLeaving] = useState(false)
     const nameReveal = useHoverTextReveal(animationsEnabled)
@@ -416,7 +418,7 @@ const ModItem = memo(function ModItem({
                         >
                             <span ref={nameReveal.innerRef} className="mod-name-inner">
                                 {/* repakxtra: slug + tags + version chip (custom/modName.tsx) */}
-                                <ModName name={cleanName} />
+                                {vfxUpdating ? <span className="t-shimmer"><ModName name={cleanName} /></span> : <ModName name={cleanName} />}{/* repakxtra: a right-click VFX update shimmers it */}
                                 {shouldShowSuffix && <span className="mod-name-suffix">{suffix}</span>}
                             </span>
                         </span>

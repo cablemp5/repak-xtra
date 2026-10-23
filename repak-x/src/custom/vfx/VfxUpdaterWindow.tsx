@@ -650,10 +650,13 @@ export function VfxUpdaterPanel() {
                 <Section icon={<MapIcon size={15} aria-hidden="true" />} title="USMAP"
                   about="The game's property layout. Updates read the game's files with it.">
                   <div className="vf-usmap">
-                    <span className={`su-part-mark${usmapOk ? ' is-ok' : ''}`} role="img" aria-label={usmapOk ? 'Ready' : 'Missing'}>{usmapOk && <Check size={14} strokeWidth={2.5} />}</span>
+                    {/* older than the game: a warning mark, never the green check */}
+                    <span className={`su-part-mark${usmapOk && !behind ? ' is-ok' : ''}${usmapOk && behind ? ' is-behind' : ''}`} role="img" aria-label={!usmapOk ? 'Missing' : behind ? 'Older than the game' : 'Ready'}>
+                      {usmapOk && (behind ? <AlertTriangle size={13} strokeWidth={2.25} /> : <Check size={14} strokeWidth={2.5} />)}
+                    </span>
                     <div className="su-part-text">
                       <b title={usmap ?? undefined}>{usmap ? usmapRelease(fileName(usmap)) ?? fileName(usmap) : 'No USMAP chosen'}</b>
-                      <span>{usmap ? [cl && `Build ${cl}`, usmapInfo?.commitDate].filter(Boolean).join(' · ') || fileName(usmap) : 'Check for updates downloads the newest from rivals-depot'}</span>
+                      <span>{usmap ? [cl && `Build ${cl}`, behind ? `the game is on ${build!.cl}` : usmapInfo?.commitDate].filter(Boolean).join(' · ') || fileName(usmap) : 'Check for updates downloads the newest from rivals-depot'}</span>
                     </div>
                     <span className="su-part-links">
                       <button type="button" className="su-link" disabled={checking || busy} onClick={() => usmapCheck(true)} title="Download the newest USMAP from rivals-depot and use it">
@@ -662,7 +665,13 @@ export function VfxUpdaterPanel() {
                       <button type="button" className="su-link" disabled={busy} onClick={browseUsmap} title="Use a .usmap file from this PC">Browse…</button>
                     </span>
                   </div>
-                  {behind ? <p className="vf-warn"><AlertTriangle size={14} aria-hidden="true" /><span>The game is on build {build!.cl}. Updates usually still work after a small patch. If they fail, check for updates again later.</span></p> : null}
+                  {behind ? (
+                    <div className="vf-behind" role="note">
+                      <p><b>This USMAP does not match the game.</b> It is for build {cl}, and the game updated to build {build!.cl}.</p>
+                      <p>Until a USMAP for build {build!.cl} is out, VFX mods with Niagara effects can only partly update. Their materials are rebuilt, and Niagara files made for the old build are left out (marked Partial in the list). Those mods need the new USMAP for a full update.</p>
+                      <p>rivals-depot usually publishes one soon after a game update. Check for updates gets it.</p>
+                    </div>
+                  ) : null}
                 </Section>
 
                 <ColorNames />

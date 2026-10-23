@@ -10,6 +10,7 @@ import { revealOnLoad } from './motion'
 import { formKeys, hasPreview, noPreviewPossible, previewMade, previewSetKey, useCovers, usePreviewStage, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
 import { playEmoteSound, stopEmoteSound, useEmoteSound, webpSeconds } from './emoteSound'
 import { useVerdict, verdictLabel } from './brokenMods'
+import { useVfxUpdating } from './vfx/quick'
 import { GAME_RUNNING } from './keepOne'
 import { CaptionIcon, CaptionStyleBar } from './captionStyle'
 import { loadoutHero, silhouetteOf } from './silhouettes'
@@ -319,6 +320,7 @@ export function ModRow({ p, k: key, mod, onToggle, onRename, unsure, children }:
   const k = mod ? nameKey(mod.path) : memberName(key) // the name it shows: the file's own, "!" included
   const category = mod && p.modDetails?.[mod.path]?.category
   const verdict = useVerdict(mod?.path ?? '') // Broken or May crash, as in the Library
+  const vfxUpdating = useVfxUpdating(mod?.path) // a right-click VFX update is working on it: its name shimmers
   const [draft, setDraft] = useState<string | null>(null)
   const cancelled = useRef(false) // Esc: the blur that follows must not rename
   const canRename = Boolean(mod && onRename)
@@ -333,7 +335,7 @@ export function ModRow({ p, k: key, mod, onToggle, onRename, unsure, children }:
             onChange={e => setDraft(e.target.value)} onBlur={finish}
             onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { cancelled.current = true; e.currentTarget.blur() } }} />
         : <span className="mod-row-main">
-            <span className="mod-row-name" onDoubleClick={canRename ? begin : undefined}><ModName name={k} /></span>
+            <span className="mod-row-name" onDoubleClick={canRename ? begin : undefined}>{vfxUpdating ? <span className="t-shimmer"><ModName name={k} /></span> : <ModName name={k} />}</span>
             {canRename && (
               <button type="button" className="lo-icon row-rename" title={`Rename ${k} (renames its files)`} aria-label={`Rename ${k}`} onClick={begin}>
                 <Pencil size={13} />

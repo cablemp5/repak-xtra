@@ -4,6 +4,7 @@
 // whole report. It uses the window's choices (Advanced > Names and Originals) and its USMAP, and takes the backend run
 // lock (prefs.ts), so it never runs beside the window or beside another right-click update. When the update gets a new
 // name, the loadouts that held the original hold it.
+import { useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit } from '@tauri-apps/api/event'
 import type { useAlert } from '../../components/AlertHandler'
@@ -15,6 +16,16 @@ import { claimRun, newRunToken, readNaming, readOriginals, releaseRun, runLock }
 
 type Alert = ReturnType<typeof useAlert>
 let reserved = false // one right-click update at a time in this window, taken before anything is awaited
+
+// the mod a right-click update is working on (its path without the extension, so on and off match): its name shimmers
+// in the Library and on loadout pages while the toast follows the steps
+let updating: string | null = null
+const watchers = new Set<() => void>()
+const fileKey = (p: string) => p.replace(/\\/g, '/').replace(/\.[^./]+$/, '').toLowerCase()
+const setUpdating = (path: string | null) => { updating = path && fileKey(path); watchers.forEach(f => f()) }
+const watch = (f: () => void) => { watchers.add(f); return () => { watchers.delete(f) } }
+/** Whether a right-click update is working on the mod at `path` (any of its files). */
+export const useVfxUpdating = (path?: string | null) => useSyncExternalStore(watch, () => Boolean(path && updating === fileKey(path)))
 const fileName = (p: string) => p.replace(/\\/g, '/').split('/').pop() ?? p
 const nameOf = (p: string) => fileName(p).replace(/\.[^.]+$/, '').replace(/(_\d+)?_P$/i, '')
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
@@ -44,6 +55,7 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
       return
     }
     if (!(await claimRun(token, name))) { busy((await runLock())?.name); return }
+    setUpdating(mod.path)
     id = alert.showAlert({ color: 'default', title: `Updating ${name}`, description: `${STEPS[0]}…`, isLoading: true, duration: 0, progressValue: 0 })
     const originals = readOriginals(), naming = readNaming()
     const r = await fixVfxMod({
@@ -61,6 +73,7 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
     id = null
     resultToast(r, name, alert)
   } finally {
+    setUpdating(null)
     if (id !== null) alert.dismissAlert(id)
     await releaseRun(token)
     reserved = false
