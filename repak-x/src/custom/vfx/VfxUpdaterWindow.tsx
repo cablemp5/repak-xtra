@@ -159,7 +159,7 @@ function Row({ mod, rowKey, loadouts, run, needs, picked, open, busy, onPick, on
           <div className="vf-bar" role="progressbar" aria-valuenow={step} aria-valuemin={0} aria-valuemax={STEPS.length} aria-label={`${mod.name} progress`}>
             <i style={{ width: `${((step - 0.5) / STEPS.length) * 100}%` }} />
           </div>
-          <p className="vf-step" aria-live="polite"><SwapText text={STEPS[step - 1]} />{run?.sub ? <span className="vf-count"><SwapText text={run.sub} /></span> : null}</p>
+          <p className="vf-step" aria-live="polite"><SwapText text={STEPS[step - 1]} />{run?.sub ? <span className="vf-count">{run.sub}</span> : null}{/* plain: it changes many times a second, faster than a swap-in finishes */}</p>
         </div>
       ) : null}
       {run?.report && <div className="t-acc-panel vf-row-panel" data-open={open}><div className="t-acc-panel-inner" {...folded(!open)}><Report r={run.report} onRetry={onRetry} busy={busy} /></div></div>}
