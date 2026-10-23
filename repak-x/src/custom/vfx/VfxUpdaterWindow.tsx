@@ -134,7 +134,7 @@ function Row({ mod, rowKey, loadouts, run, needs, picked, open, busy, onPick, on
       </Checkbox>
       {loadouts.length > 0 && (
         <span className="vf-loadouts" title={`In ${loadouts.join(', ')}`}>
-          <span>{loadouts[0]}</span>{loadouts.length > 1 && <b>{' '}+{loadouts.length - 1}</b>}
+          <i>In</i><span>{loadouts[0]}</span>{loadouts.length > 1 && <b>{' '}+{loadouts.length - 1}</b>}
         </span>
       )}
       {mod.enabled && <span className="mod-type-badge category-badge on-badge" title="This mod is on now">On</span>}
@@ -228,7 +228,13 @@ function ColorNames() {
         <label>Carry names containing<input value={text.includes} onChange={e => save({ ...text, includes: e.target.value })} spellCheck={false} /></label>
         <label>Never carry names containing<input value={text.excludes} onChange={e => save({ ...text, excludes: e.target.value })} spellCheck={false} /></label>
       </div>
-      <p className="vf-set-note">Separate words with commas. Case does not matter.{custom && <> <button type="button" className="su-link" onClick={reset}>Reset to defaults</button></>}</p>
+      <p className="vf-set-note">Separate words with commas. Case does not matter.</p>
+      {/* the defaults are tuned for the game's materials: a change is easy to make and hard to notice going wrong */}
+      <p className="vf-warn">
+        <AlertTriangle size={14} aria-hidden="true" />
+        <span>Changing these is not advised. A wrong name can leave a mod's colors out of its update.{' '}
+          <button type="button" className="su-link" disabled={!custom} onClick={reset} title={custom ? undefined : 'These are the defaults'}>Reset to defaults</button></span>
+      </p>
     </Section>
   )
 }
