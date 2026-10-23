@@ -644,8 +644,8 @@ pub fn xtra_game_build(state: State<'_, Arc<Mutex<AppState>>>) -> GameBuild {
 }
 
 /// Of `files` (paths inside the mod at `mod_path`), those whose game copy an update rewrote after the mod was written.
-/// The updater copies Niagara systems and other assets it cannot rebuild as they are, and one still cooked for the old
-/// game can crash it (Niagara properties renumbered in 3962284), so a run with any of these is not placed.
+/// The updater copies Niagara files as they are, and one still cooked for the old game can crash it (Niagara properties
+/// renumbered in 3962284), so a run leaves these out of the update.
 /// shortcut: "written" is the mod file's date, so a mod reinstalled after the update looks current; read the packages'
 /// cook build instead if they ever carry one.
 fn stale(mod_path: &str, files: &[String]) -> Result<Vec<String>, String> {

@@ -55,8 +55,12 @@ const norm = (p: string) => p.replace(/\//g, '\\').toLowerCase()
 const isDone = (s?: Status) => s === 'fixed' || s === 'nothing'
 
 const STATUS: Record<Status, string> = { waiting: 'Waiting', running: 'Updating', fixed: 'Updated', nothing: 'Nothing to update', failed: 'Failed', cancelled: 'Cancelled' }
-const KIND_ORDER: AssetKind[] = ['failed', 'unreadable', 'added', 'updated', 'same', 'passed']
-const KIND_LABEL: Record<AssetKind, string> = { updated: 'Rebuilt', same: 'Match the game', added: 'The mod\'s own', passed: 'Kept as they were', unreadable: 'Could not be read', failed: 'Not updated' }
+const KIND_ORDER: AssetKind[] = ['failed', 'left', 'unreadable', 'added', 'updated', 'same', 'passed']
+const KIND_LABEL: Record<AssetKind, string> = { updated: 'Rebuilt', same: 'Match the game', added: 'The mod\'s own', passed: 'Kept as they were', left: 'Left out', unreadable: 'Could not be read', failed: 'Not updated' }
+/** An update that left out Niagara files made for an older game build: it works, without those effects' colors */
+const isPartial = (r?: VfxReport) => r?.status === 'fixed' && r.counts.left > 0
+const statusText = (r: VfxReport) => (isPartial(r) ? 'Partly updated' : STATUS[r.status])
+const leftText = (r: VfxReport) => `Left out ${plural(r.counts.left, 'Niagara file')} made for an older game build, so the game uses its own and ${r.counts.left === 1 ? 'that effect shows' : 'those effects show'} their usual colors.`
 /** A run's length, read at a glance: 42 s, 1 min 24 s */
 const took = (ms: number) => {
   const sec = Math.max(1, Math.round(ms / 1000)), min = Math.floor(sec / 60), rest = sec % 60
@@ -77,9 +81,10 @@ function placedText(r: VfxReport) {
 
 /** One mod's report as plain text, for Copy report. */
 function reportText(r: VfxReport) {
-  const lines = [`${r.name}: ${STATUS[r.status as Status] ?? r.status}${r.error ? `. ${r.error}` : ''}`]
+  const lines = [`${r.name}: ${statusText(r)}${r.error ? `. ${r.error}` : ''}`]
   if (r.status === 'fixed') lines.push(`  ${placedText(r)}`)
-  lines.push(`  ${r.counts.updated} rebuilt with ${r.counts.changes} edits, ${r.counts.same} match the game, ${r.counts.added} the mod's own, ${r.counts.passed} kept, ${r.counts.unreadable} unreadable, ${took(r.ms)}`)
+  if (isPartial(r)) lines.push(`  ${leftText(r)}`)
+  lines.push(`  ${r.counts.updated} rebuilt with ${r.counts.changes} edits, ${r.counts.same} match the game, ${r.counts.added} the mod's own, ${r.counts.passed} kept, ${r.counts.left} left out, ${r.counts.unreadable} unreadable, ${took(r.ms)}`)
   r.warnings.forEach(w => lines.push(`  ! ${w}`))
   for (const k of KIND_ORDER) for (const a of r.assets.filter(x => x.kind === k)) lines.push(`  [${KIND_LABEL[k]}] ${a.name}: ${a.detail}`)
   return lines.join('\n')
@@ -93,7 +98,7 @@ function Report({ r, onRetry, busy }: { r: VfxReport; onRetry: () => void; busy:
   return (
     <div className="vf-report">
       {r.status === 'fixed'
-        ? <p className="vf-note">Rebuilt {plural(r.counts.updated, 'asset')} with {plural(r.counts.changes, 'edit')}. {placedText(r)}</p>
+        ? <p className="vf-note">{r.counts.updated ? `Rebuilt ${plural(r.counts.updated, 'asset')} with ${plural(r.counts.changes, 'edit')}. ` : ''}{isPartial(r) ? `${leftText(r)} ` : ''}{placedText(r)}</p>
         : r.error && <p className="vf-note">{r.error}</p>}
       {(r.status === 'failed' || r.status === 'cancelled') && (
         <button type="button" className="row-action" disabled={busy} onClick={onRetry}><RotateCcw size={13} aria-hidden="true" /> Try again</button>
@@ -143,11 +148,11 @@ function Row({ mod, rowKey, loadouts, run, needs, picked, open, busy, onPick, on
       )}
       {mod.enabled && <span className="mod-type-badge category-badge on-badge" title="This mod is on now">On</span>}
       {run?.report?.status === 'fixed' && (
-        <span className="vf-row-sum">{run.report.counts.updated.toLocaleString()}/{run.report.assets.length.toLocaleString()} rebuilt · {took(run.report.ms)}</span>
+        <span className="vf-row-sum">{run.report.counts.updated.toLocaleString()}/{run.report.assets.length.toLocaleString()} rebuilt{run.report.counts.left ? ` · ${run.report.counts.left.toLocaleString()} left out` : ''} · {took(run.report.ms)}</span>
       )}
       {run?.report
-        ? <button type="button" className={`vf-pill is-${status}`} aria-expanded={open} onClick={onToggle} title={open ? 'Hide the report' : 'Show the report'}>
-            {STATUS[status!]}
+        ? <button type="button" className={`vf-pill is-${isPartial(run.report) ? 'partial' : status}`} aria-expanded={open} onClick={onToggle} title={open ? 'Hide the report' : 'Show the report'}>
+            {statusText(run.report)}
             <ChevronDown size={12} className="vf-caret" aria-hidden="true" />
           </button>
         : status && (running && step
@@ -458,7 +463,7 @@ export function VfxUpdaterPanel() {
       })
       patch(key, { status: r.status, report: r, sub: undefined })
       if (r.status === 'fixed') { fixed++; pick([key], false) }
-      if (r.status === 'failed') failed++
+      if (r.status === 'failed' || isPartial(r)) failed++ // a partial update is a warning too
       if (r.status !== 'fixed' || todo.length === 1) setOpen(o => new Set(o).add(key)) // problems open, a batch's updates stay folded
       // the main window reloads and moves loadouts from the original to the update (a no-op when the update kept the name)
       if (r.placed) await emitTo('main', FIXED_EVENT, { from: r.placed.original, to: r.placed.fixed, swap: true } satisfies Fixed).catch(() => {})
@@ -528,6 +533,7 @@ export function VfxUpdaterPanel() {
   const runningAt = batch.findIndex(k => runs[k]?.status === 'running')
   const reports = Object.values(runs).filter(r => r.report)
   const updated = reports.filter(r => r.status === 'fixed').length
+  const partly = reports.filter(r => isPartial(r.report)).length
   const cl = usmapCl(usmap ? fileName(usmap) : null) // the file in use, not the last download
   const behind = cl && build?.cl && cl < build.cl
   const usmapState = checking ? 'Checking for a newer one…' : !usmap ? 'None chosen' : usmapOk === false ? 'File missing' : usmapInfo?.upToDate || usmapInfo?.updated ? 'Up to date' : 'Ready'
@@ -536,7 +542,7 @@ export function VfxUpdaterPanel() {
   const runningStep = runningKey ? runs[runningKey]?.step : undefined
   const state = cancelling ? 'Cancelling. The current step finishes first.'
     : busy ? `Updating ${runningAt + 1} of ${batch.length}${runningMod ? `: ${runningMod.name}` : ''}${runningStep ? `, step ${runningStep} of ${STEPS.length}` : '…'}`
-      : lock ?? (todo ? '' : reports.length ? `${updated === reports.length ? plural(updated, 'mod') : `${updated} of ${plural(reports.length, 'mod')}`} updated${lastTook ? ` in ${took(lastTook)}` : ''}` : 'Tick the mods to update')
+      : lock ?? (todo ? '' : reports.length ? `${updated === reports.length ? plural(updated, 'mod') : `${updated} of ${plural(reports.length, 'mod')}`} updated${partly ? ` (${partly === updated ? (updated === 1 ? 'partly' : 'all partly') : `${partly} partly`})` : ''}${lastTook ? ` in ${took(lastTook)}` : ''}` : 'Tick the mods to update')
 
   // what Update will do to the files, beside the button, so a choice made once in Advanced is never a surprise
   const policy = naming === 'broken'

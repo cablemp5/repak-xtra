@@ -63,7 +63,7 @@
   border: none !important; border-radius: 999px !important; font-size: 12px !important; font-weight: 600 !important; line-height: 1; cursor: pointer;
   color: var(--text-secondary) !important; background: var(--quiet-active) !important; }
 .vf-pill.is-fixed { color: #3ecf6e !important; background: color-mix(in srgb, #3ecf6e, transparent 88%) !important; }
-.vf-pill.is-failed, .vf-pill.is-cancelled { color: #f5d342 !important; background: color-mix(in srgb, #f5d342, transparent 88%) !important; }
+.vf-pill.is-failed, .vf-pill.is-cancelled, .vf-pill.is-partial {color: #f5d342 !important; background: color-mix(in srgb, #f5d342, transparent 88%) !important; }
 .vf-pill:hover { filter: brightness(1.15); }
 .vf-pill, .vf-status { animation: t-swap-in var(--icon-swap-dur) var(--icon-swap-ease) backwards; }
 .vf-caret { flex: none; opacity: 0.8; transition: transform var(--acc-chevron) var(--acc-ease); }
@@ -187,7 +187,7 @@ html[data-motion="off"] .vfx-notice { animation: none; }
 
 /* light theme: the problem yellow and success green, darkened (text 4.5:1, marks 3:1 on the light window) */
 [data-theme="light"] .vf-pill.is-fixed, [data-theme="light"] .vf-log .is-success { color: #166236 !important; }
-[data-theme="light"] .vf-pill.is-failed, [data-theme="light"] .vf-pill.is-cancelled, [data-theme="light"] .vf-status.is-cancelled,
+[data-theme="light"] .vf-pill.is-failed, [data-theme="light"] .vf-pill.is-cancelled, [data-theme="light"] .vf-pill.is-partial,[data-theme="light"] .vf-status.is-cancelled,
 [data-theme="light"] .vf-counts .is-failed b, [data-theme="light"] .vf-counts .is-unreadable b, [data-theme="light"] .vf-log .is-warning { color: #665400 !important; }
 [data-theme="light"] .vf-warn svg, [data-theme="light"] .vfx-notice-icon { color: #9a7d00; }
 [data-theme="light"] .vf-warnings li::before { background: #9a7d00; }

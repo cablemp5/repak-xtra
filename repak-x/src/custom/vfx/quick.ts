@@ -72,10 +72,14 @@ function resultToast(r: VfxReport, name: string, alert: Alert) {
   const show = { label: 'Show report', onClick: () => { sendReport(r); void openVfxWindow() } }
   if (r.status === 'fixed' && r.placed) {
     const where = r.placed.trashed ? 'The original is in Recently deleted.' : r.placed.turnedOff ? 'The original is off.' : ''
-    const warned = r.warnings.length
+    const warned = r.warnings.length, left = r.counts.left
     alert.showAlert({
-      color: warned ? 'warning' : 'success', duration: warned ? 0 : 6000, title: `Updated ${name}`, action: show,
-      description: [`Rebuilt ${plural(r.counts.updated, 'asset')}.`, where, warned ? `${plural(warned, 'warning')} in the report.` : ''].filter(Boolean).join(' '),
+      color: warned || left ? 'warning' : 'success', duration: warned || left ? 0 : 6000, title: `${left ? 'Partly updated' : 'Updated'} ${name}`, action: show,
+      description: [
+        r.counts.updated ? `Rebuilt ${plural(r.counts.updated, 'asset')}.` : '',
+        left ? `Left out ${plural(left, 'Niagara file')} made for an older game build, so those effects show their usual colors.` : '',
+        where, warned ? `${plural(warned, 'warning')} in the report.` : '',
+      ].filter(Boolean).join(' '),
     })
   } else if (r.status === 'nothing') {
     alert.showAlert({ color: 'default', duration: 6000, title: `${name} needs no update`, description: r.error ?? '' })

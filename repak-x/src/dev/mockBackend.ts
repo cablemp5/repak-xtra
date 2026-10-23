@@ -358,7 +358,8 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
 // The VFX Updater window (custom/vfx/) in the browser: a fake run with materials to rebuild, Niagara systems that pass
 // through, one the game lacks and one parameter the game dropped. window.__vfxStep sets the ms each tool step takes (400).
 // localStorage 'mock.vfxFail' = part of a mod's name makes its extraction fail; 'mock.vfxUnreadable' adds an asset the
-// tool cannot read (which now fails the mod: an unread asset may be one that needed rebuilding).
+// tool cannot read (which now fails the mod: an unread asset may be one that needed rebuilding). 'mock.vfxStale' makes its
+// Niagara systems older than the game's, so they are left out (a partial update).
 const vfxFiles = new Map<string, string>()
 const vfxStep = () => new Promise(r => setTimeout(r, mock.__vfxStep ?? 400))
 const vfxEntry = (name: string, v: number) => ({ Name: '0', Value: [{ Name: 'ParameterInfo', Value: [{ Name: 'Name', Value: name }] },
@@ -382,7 +383,7 @@ function mockVfx(cmd: string, args: any): unknown {
       vfxLock = { token: args.token, window: 'main', name: args.name ?? null }; emit('vfx_lock_changed', vfxLock); return true
     case 'xtra_vfx_release': if (vfxLock?.token === args.token) vfxLock = null; emit('vfx_lock_changed', vfxLock); return null
     case 'xtra_vfx_lock': return vfxLock
-    case 'xtra_vfx_stale': return [] // the mock's mods are all current
+    case 'xtra_vfx_stale': return localStorage.getItem('mock.vfxStale') ? (args.files as string[]).filter(f => /NS_/.test(f)) : []
     case 'vfx_save_settings': return null
     case 'vfx_check_usmap_update': return vfxStep().then(() => ({ updated: false, upToDate: true, skipped: false, localPath: VFX_USMAP,
       filename: '5.3.2-3939753+++depot_marvel+S10.5_release-Marvel.usmap', version: 'S10.5_release', buildNumber: 3939753, commitDate: '2026-10-16', message: 'USMAP is up to date' }))

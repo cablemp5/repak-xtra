@@ -17,7 +17,7 @@ import { type ColorProp, type ModParam, applyColor, isMaterialInstance, portPara
 
 export const STEPS = ['Reading the mod', 'Opening its materials', 'Finding its edits', "Reading the game's files", "Opening the game's files", 'Carrying the edits over', 'Rebuilding the assets', 'Packing the update'] as const
 
-export type AssetKind = 'updated' | 'same' | 'added' | 'passed' | 'unreadable' | 'failed'
+export type AssetKind = 'updated' | 'same' | 'added' | 'passed' | 'left' | 'unreadable' | 'failed'
 export type AssetResult = { name: string; path: string; kind: AssetKind; detail: string }
 export type VfxStatus = 'fixed' | 'nothing' | 'failed' | 'cancelled'
 export type Placed = { fixed: string; original: string; turnedOff: boolean; replaced: boolean; trashed?: boolean; warning?: string | null }
@@ -32,7 +32,8 @@ export type VfxReport = {
   placed?: Placed
   assets: AssetResult[]
   warnings: string[]
-  counts: { updated: number; same: number; added: number; passed: number; unreadable: number; changes: number }
+  /** left: Niagara files made for an older game build, left out of the update (the game's own are used) */
+  counts: { updated: number; same: number; added: number; passed: number; left: number; unreadable: number; changes: number }
   ms: number
   steps: { step: number; ms: number }[]
 }
@@ -79,6 +80,9 @@ const stem = (p: string) => fileName(p).replace(/\.[^.]+$/, '')
  *  shortcut: trusts the prefix convention, an asset misnamed with one of these passes through unedited. */
 export const PASS_BY_NAME = /^(NS|NE|T|SK|SM)_/i
 
+/** Niagara systems, emitters and curve atlases: copied as they are, and one cooked before a patch that renumbered Niagara
+ *  properties crashes the game (3962284). shortcut: by name prefix, like PASS_BY_NAME. */
+export const NIAGARA_BY_NAME = /^(NS_|NE_|CurveAtlas_)/i
 /** The upstream name: without its _<priority>_P suffix, spaces as underscores (xtra_vfx.rs fixed_stem matches). */
 export const fixedName = (modPath: string) => `${stem(modPath).replace(/(_\d+)?_P$/i, '').replace(/_UPDATED$/i, '').trim().replace(/\s+/g, '_')}_UPDATED_9999999_P`
 
@@ -98,7 +102,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
   const log = o.log ?? (() => {})
   const t0 = performance.now()
   const report: VfxReport = { mod: o.modPath, name: stem(o.modPath).replace(/(_\d+)?_P$/i, ''), status: 'failed', assets: [], warnings: [],
-    counts: { updated: 0, same: 0, added: 0, passed: 0, unreadable: 0, changes: 0 }, ms: 0, steps: [] }
+    counts: { updated: 0, same: 0, added: 0, passed: 0, left: 0, unreadable: 0, changes: 0 }, ms: 0, steps: [] }
   let step = 0, stepAt = t0
   const enter = (n: number) => {
     if (o.cancelled?.()) throw new Cancelled()
@@ -110,21 +114,6 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
   const check = () => { if (o.cancelled?.()) throw new Cancelled() }
   const asset = (path: string, kind: AssetKind, detail: string) => { report.assets.push({ name: stem(path), path, kind, detail }); if (kind in report.counts) report.counts[kind as keyof typeof report.counts]++ }
   const warn = (w: string) => { report.warnings.push(w); log(w, 'warning') }
-  // what is copied as it is must still fit the game: a Niagara system cooked before a patch renumbered its properties
-  // crashes it (3962284), and the updater cannot rebuild those, so such a mod is not placed
-  const refuseStale = async (paths: string[], rel: (p: string) => string) => {
-    if (!paths.length) return false
-    const stale = new Set((await invoke<string[]>('xtra_vfx_stale', { modPath: o.modPath, files: paths.map(rel) })).map(assetKey))
-    if (!stale.size) return false
-    for (const a of report.assets) if (stale.has(assetKey(rel(a.path)))) {
-      if (a.kind === 'passed') report.counts.passed--
-      a.kind = 'failed'; a.detail = 'Made for an older game build. The VFX Updater cannot rebuild this kind of asset, and the game can crash on it.'
-    }
-    const first = stem(paths.find(p => stale.has(assetKey(rel(p))))!)
-    report.error = `Not updated: ${plural(stale.size, 'file')} it cannot rebuild (such as ${first}) ${stale.size === 1 ? 'was' : 'were'} made for an older game build, and the game can crash on ${stale.size === 1 ? 'it' : 'them'}. The mod was not changed. Look for an updated version from its author.`
-    log(report.error, 'warning')
-    return true
-  }
 
   try {
     // ---- 1: extract and sort ----
@@ -141,8 +130,8 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     const found = ask.length ? await invoke<Record<string, Detected>>('xtra_vfx_detect', { usmapPath: o.usmapPath, paths: ask }) : {}
     check()
     const types = new Map(Object.entries(found).map(([p, d]) => [assetKey(slash(p)), d]))
-    let editable: string[] = []
-    const keep: string[] = [], maybe = new Map<string, string>()
+    let editable: string[] = [], keep: string[] = []
+    const maybe = new Map<string, string>()
     for (const p of extracted) {
       const d = PASS_BY_NAME.test(fileName(p)) ? undefined : types.get(assetKey(slash(p)))
       if (d && d.kind !== 'other') { editable.push(p); if (d.kind === 'maybe') maybe.set(assetKey(rel(p)), d.class ?? ''); continue }
@@ -151,12 +140,46 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       else if (!d && !PASS_BY_NAME.test(fileName(p))) asset(p, 'unreadable', 'Its type could not be read. Kept as it was.')
       else asset(p, 'passed', d?.class ? `${d.class}, kept as it was.` : 'Kept as it was.')
     }
-    if (await refuseStale(keep, rel)) return report // failed: the mod stays as it was
+    // Niagara files a game update rewrote after the mod was made are still cooked for the old game and can crash it. The
+    // updater cannot rebuild them yet, so they are left out: the game uses its own, and the rest of the mod still updates
+    const niagara = keep.filter(p => NIAGARA_BY_NAME.test(fileName(p)))
+    const stale = new Set(niagara.length ? (await invoke<string[]>('xtra_vfx_stale', { modPath: o.modPath, files: niagara.map(rel) })).map(assetKey) : [])
+    if (stale.size) {
+      for (const a of report.assets) if (stale.has(assetKey(rel(a.path)))) {
+        report.counts.passed--; report.counts.left++
+        a.kind = 'left'; a.detail = 'Made for an older game build. Left out, so the game uses its own.'
+      }
+      keep = keep.filter(p => !stale.has(assetKey(rel(p))))
+      log(`Leaving out ${plural(stale.size, 'Niagara file')} made for an older game build.`, 'warning')
+    }
+    const allStale = `Not updated: everything it changes that the updater cannot rebuild is ${plural(report.counts.left, 'Niagara file')} made for an older game build, and the game can crash on them. Turn the mod off until its author updates it.`
     if (keep.length) await invoke('vfx_copy_uasset_files', { sourcePaths: keep, sourceBaseDir: dirs.modExtract, destBaseDir: dirs.finalUassets })
+
+    // ---- 8 (also reached early when only Niagara files were left out): pack and place ----
+    const packAndPlace = async () => {
+      enter(8)
+      const base = o.outputDir ? `${slash(o.outputDir)}/${fixedName(o.modPath)}` : `${dirs.stage}/fixed`
+      const utoc = await invoke<string>('vfx_pack_to_iostore', { usmapPath: o.usmapPath, inputDir: dirs.finalUassets, outputBase: base, allowedAssets: manifest })
+      if (o.outputDir) report.output = utoc
+      else {
+        report.placed = await invoke<Placed>('xtra_vfx_place', { source: o.modPath, stagedBase: base, turnOffOriginal: o.turnOffOriginal ?? true, keepName: o.keepName ?? true, trashOriginal: o.trashOriginal ?? false })
+        report.output = report.placed.fixed
+        if (report.placed.warning) warn(report.placed.warning)
+      }
+      report.status = 'fixed'
+      log(`${report.counts.left ? 'Partly updated' : 'Updated'}: ${fileName(report.output)}`, 'success')
+    }
+
     if (!editable.length) {
       if (report.counts.unreadable) {
         report.error = `${plural(report.counts.unreadable, 'asset')} could not be read, so it is not known whether ${report.counts.unreadable === 1 ? 'it needs' : 'they need'} rebuilding. Check the USMAP in Advanced, then try again.`
         return report // failed: Try again stays
+      }
+      if (report.counts.left) {
+        // nothing to rebuild, but the copy without its stale Niagara files no longer crashes the game
+        if (keep.length) await packAndPlace()
+        else report.error = allStale
+        return report
       }
       report.status = 'nothing'
       report.error = 'Nothing to update: the mod has no materials or blueprints to rebuild.'
@@ -191,7 +214,6 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     if (notMine.size) {
       const pass = editable.filter(p => notMine.has(assetKey(rel(p))))
       pass.forEach(p => asset(p, 'passed', `${maybe.get(assetKey(rel(p))) || 'Not a material'}, kept as it was.`))
-      if (await refuseStale(pass, rel)) return report
       await invoke('vfx_copy_uasset_files', { sourcePaths: pass, sourceBaseDir: dirs.modExtract, destBaseDir: dirs.finalUassets })
       keep.push(...pass)
       editable = editable.filter(p => !notMine.has(assetKey(rel(p))))
@@ -282,7 +304,8 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       const expected = keep.length + own.length + report.counts.updated
       if (built.length < expected) warn(`Only ${built.length} of ${expected} assets are in the rebuilt mod.`)
     }
-    if (!report.counts.updated && !report.counts.added) {
+    if (!report.counts.updated && !report.counts.added && !(report.counts.left && keep.length)) {
+      if (report.counts.left) { report.error = allStale; return report }
       // every material and blueprint was read and matches the game (anything else stopped above): it works as it is
       if (report.counts.same) {
         report.status = 'nothing'
@@ -291,18 +314,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       return report
     }
 
-    // ---- 8: pack and place ----
-    enter(8)
-    const base = o.outputDir ? `${slash(o.outputDir)}/${fixedName(o.modPath)}` : `${dirs.stage}/fixed`
-    const utoc = await invoke<string>('vfx_pack_to_iostore', { usmapPath: o.usmapPath, inputDir: dirs.finalUassets, outputBase: base, allowedAssets: manifest })
-    if (o.outputDir) report.output = utoc
-    else {
-      report.placed = await invoke<Placed>('xtra_vfx_place', { source: o.modPath, stagedBase: base, turnOffOriginal: o.turnOffOriginal ?? true, keepName: o.keepName ?? true, trashOriginal: o.trashOriginal ?? false })
-      report.output = report.placed.fixed
-      if (report.placed.warning) warn(report.placed.warning)
-    }
-    report.status = 'fixed'
-    log(`Updated: ${fileName(report.output)}`, 'success')
+    await packAndPlace()
   } catch (e) {
     if (e instanceof Cancelled) { report.status = 'cancelled'; report.error = 'Cancelled.' }
     else { report.status = 'failed'; report.error = String(e instanceof Error ? e.message : e).replace(/^\[VFX\]\s*/, ''); log(report.error, 'error') }
