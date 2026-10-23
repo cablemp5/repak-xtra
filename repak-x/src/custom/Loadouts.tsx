@@ -26,6 +26,7 @@ export type LoadoutProps = {
   alert: ReturnType<typeof useAlert>
   modDetails?: Record<string, { character_name?: string | null; category?: string | null; additional_categories?: string[]; mod_type?: string } | undefined>
   selected?: string[]    // paths picked in the Library: + makes a loadout of exactly these
+  onModContextMenu?: (e: React.MouseEvent, mod: Mod, rename?: () => void) => void // a mod row's right-click: the Library's menu for that row (rename: the row's own)
 }
 
 /** A new loadout holding exactly these mods (all of them on), named "Loadout N". */
@@ -170,6 +171,8 @@ export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], ve
     }
     const risky = flagged.filter(v => v.kind === 'risky').map(v => nameKey(v.path))
     const broken = flagged.filter(v => v.kind === 'broken').map(v => nameKey(v.path))
+    const vfx = flagged.filter(v => v.kind === 'vfx').map(v => nameKey(v.path))
+    if (vfx.length) p.alert.warning('Made for the old game files', `${vfx.join(', ')} ${vfx.length === 1 ? 'is a VFX mod' : 'are VFX mods'} from before the last game update. The VFX Updater (Update VFX mods at the top, or right-click > For modders > Send to VFX Updater) rebuilds ${vfx.length === 1 ? 'it' : 'them'}.`, { duration: 15000 })
     if (risky.length) p.alert.warning('May crash the game', `${risky.join(', ')} ${risky.length === 1 ? 'is a Blueprint mod' : 'are Blueprint mods'} from before the last game update. If the game crashes, turn ${risky.length === 1 ? 'it' : 'them'} off and look for an updated version.`, { duration: 15000 })
     if (broken.length) p.alert.warning('Will not work in this game version', `${broken.join(', ')} ${broken.length === 1 ? 'replaces' : 'replace'} game files an update renamed or removed.`, { duration: 15000 })
     const mine = looksOf(p, l)

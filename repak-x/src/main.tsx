@@ -5,7 +5,7 @@ import './dev/mockBackend' // repakxtra: fake backend for the browser preview, i
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
-import VfxUpdaterPage from './modules/vfx-updater/VfxUpdaterPage'
+import VfxUpdaterWindow from './custom/vfx/VfxUpdaterWindow' // repakxtra: in place of the upstream VFX Updater's page
 import AssetExplorerPage from './modules/asset-explorer/AssetExplorerPage'
 import './custom/theme.css' // repakxtra: theme for every window, last so it wins the cascade
 import './custom/uiPrefs' // repakxtra: UI scale and optional controls in every window
@@ -25,7 +25,7 @@ if (!rootElement) {
 // Adding one here also means adding it to SECONDARY_WINDOW_ROUTES in
 // index.html, which is what dismisses the splash overlay for them.
 const SECONDARY_WINDOWS: { route: string; view: () => JSX.Element }[] = [
-  { route: 'vfx-updater', view: () => <VfxUpdaterPage /> },
+  { route: 'vfx-updater', view: () => <VfxUpdaterWindow /> }, // repakxtra
   { route: 'asset-explorer', view: () => <AssetExplorerPage /> },
 ]
 

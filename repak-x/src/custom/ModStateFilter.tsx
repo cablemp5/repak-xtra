@@ -19,7 +19,7 @@ type Props = {
   mods: { path: string; enabled?: boolean }[]
 }
 
-const BROKEN_TITLE = 'Mods marked Broken (will not work in this game version) or May crash. Hover a badge for why'
+const BROKEN_TITLE = 'Mods marked Broken (will not work in this game version), Needs VFX update or May crash. Hover a badge for why'
 
 /** Whether the tabs fit beside the header's title and buttons, measured live. */
 function useFolded(tabs: React.RefObject<HTMLDivElement | null>) {

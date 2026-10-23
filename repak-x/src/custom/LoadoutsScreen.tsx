@@ -434,6 +434,12 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   return (
     <div className="lo-screen" aria-label="Loadouts" data-small={cardZoom < 0.8 || undefined} style={{ '--lo-card-zoom': cardZoom } as CSSProperties}>
       {hidden}
+      {/* several previews in a row: how far the whole queue is, along the top edge (each card shows its own) */}
+      {batch && batch.jobs > 1 && (
+        <div className="lo-gen-bar" role="progressbar" aria-label="Generating previews" aria-valuemin={0} aria-valuemax={batch.jobs} aria-valuenow={batch.job - 1}>
+          <i style={{ width: `${Math.min(100, ((batch.job - 1 + (batch.total ? batch.done / batch.total : 0)) / batch.jobs) * 100)}%` }} />
+        </div>
+      )}
       <header className="lo-screen-head">
         <div>
           <div className="lo-title-row">

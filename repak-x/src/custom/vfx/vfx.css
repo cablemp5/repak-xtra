@@ -1,0 +1,193 @@
+/* repakxtra: the VFX Updater window (VfxUpdaterWindow.tsx), built from the app's parts: the Add mods list (mod-rows,
+   lp-search), folding groups like the Loadouts screen's collections, su-part rows with su-link actions, the install card's
+   Advanced fold. Styled here: the group headings, a row that ticks and wraps to show progress and a report, its result pill. */
+.vf-window { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.vf-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* one rhythm: 20px between the search, the groups and Advanced; folded groups stack 4px apart, an open one keeps 16px
+   below its list; every heading row is 32px, so the chevrons and names line up down the window */
+.vf-body { flex: 1; min-height: 0; overflow-y: auto; padding: 24px 28px 32px; display: flex; flex-direction: column; gap: 20px; }
+.vf-groups { display: flex; flex-direction: column; gap: 4px; }
+.vf-grp:not(.is-folded) + .vf-grp { margin-top: 16px; }
+.vf-body > * { flex-shrink: 0; }   /* a long list scrolls, nothing in it is squeezed */
+.vf-hint { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+
+/* search and sort: a loadout's Add mods row, the field taking the width, with a clear button once there is something to clear */
+.vf-body .vf-filters { flex-wrap: nowrap; align-items: stretch; margin: 0; }
+.vf-body .vf-search { flex: 1; width: auto; min-width: 0; height: auto; padding: 0 6px 0 12px; gap: 10px; }
+.vf-search input { font-size: 13.5px !important; }
+.vf-search input::placeholder { color: var(--text-secondary); opacity: 1; }
+.vf-search-clear { flex: none; width: 26px; height: 26px !important; min-height: 0 !important; }
+
+/* a group: its heading folds it away (the Loadouts screen's collections), Select all sits at the far end */
+.vf-grp-head { display: flex; align-items: center; gap: 12px; height: 32px; margin-bottom: 8px; }
+.vf-grp.is-folded .vf-grp-head { margin-bottom: 0; }
+.vf-grp-title { flex: 1; min-width: 0; margin: 0; font: inherit; }
+.vf-grp-fold { width: 100%; min-width: 0; display: flex !important; align-items: center; justify-content: flex-start !important; gap: 8px; height: 32px !important; min-height: 0 !important;
+  padding: 0 !important; margin-left: -2px; border: none !important; background: none !important; cursor: pointer; text-align: left; color: var(--text-secondary) !important; }
+.vf-grp-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }   /* a Loadouts collection's name */
+.vf-grp-fold:hover .vf-grp-caret, .vf-grp-fold:focus-visible .vf-grp-caret { color: var(--text-primary); }
+.vf-grp-caret { flex: none; transition: transform var(--acc-chevron) var(--acc-ease); }
+.vf-grp-fold[aria-expanded="true"] .vf-grp-caret { transform: rotate(90deg); }
+.vf-grp-count { min-width: 20px; height: 18px; padding: 0 6px; display: inline-grid; place-items: center; border-radius: 999px;
+  font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-secondary); background: var(--quiet-active); }
+/* Needs an update: its count in the problem yellow, as the Library's Needs VFX update tag */
+.vf-grp.is-needs .vf-grp-count { color: #f5d342; background: color-mix(in srgb, #f5d342, transparent 86%); }
+[data-theme="light"] .vf-grp.is-needs .vf-grp-count { color: #574800; }
+.vf-selects { flex: none; display: inline-flex; gap: 2px; }
+.vf-select { flex: none; height: 28px !important; min-height: 0 !important; padding: 0 10px !important; border: none !important; border-radius: var(--quiet-radius) !important;
+  background: none !important; font-size: 12.5px !important; font-weight: 500 !important; color: var(--text-secondary) !important; cursor: pointer; }
+.vf-select:hover:not(:disabled) { color: var(--text-primary) !important; background: var(--quiet-active) !important; }
+.vf-select:disabled { opacity: 0.4; cursor: default; }
+
+/* a mod's row, as compact as the Library's: the whole name ticks it, the loadouts holding it, its badges and state at the
+   right, then (full width) progress or report */
+.vf-rows > .vf-row { flex-wrap: wrap; min-height: 40px; padding: 0 12px; gap: 8px; color: var(--text-primary); }
+.vf-pick { flex: 1; min-width: 0; min-height: 40px; display: flex !important; align-items: center; gap: 12px !important; cursor: pointer; }
+.vf-pick .repakx-checkbox-label { min-width: 0; flex: 1; display: flex; }
+.vf-row-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.vf-row:not(.is-picked) .vf-row-name { font-weight: 400; color: var(--text-secondary); }
+.vf-row:not(.is-picked):hover .vf-row-name { color: var(--text-primary); }
+/* the loadouts holding it: a quiet tag the size of the Library's, the first name and how many more */
+.vf-loadouts { flex: 0 1 auto; min-width: 0; max-width: 34%; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px;
+  border: 1px solid var(--panel-border); border-radius: 6px; font-size: 11.5px; font-weight: 500; color: var(--text-secondary); }
+.vf-loadouts span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vf-loadouts i { flex: none; font-style: normal; font-weight: 400; color: var(--text-secondary); }
+.vf-loadouts b { flex: none; margin-left: 2px; font-weight: 500; color: var(--text-secondary); white-space: pre; }
+/* a finished row's summary beside its result: plain gray, no weight (how much it rebuilt, how long it took) */
+.vf-row-sum { flex: none; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vf-status { flex: none; font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.vf-status.is-running { color: var(--text-primary); }
+.vf-status.is-cancelled { color: #f5d342; }
+/* the result, which opens the report: a pill button */
+.vf-pill { flex: none; display: inline-flex !important; align-items: center; gap: 4px; height: 24px !important; min-height: 0 !important; padding: 0 6px 0 9px !important;
+  border: none !important; border-radius: 999px !important; font-size: 12px !important; font-weight: 600 !important; line-height: 1; cursor: pointer;
+  color: var(--text-secondary) !important; background: var(--quiet-active) !important; }
+.vf-pill.is-fixed { color: #3ecf6e !important; background: color-mix(in srgb, #3ecf6e, transparent 88%) !important; }
+.vf-pill.is-failed, .vf-pill.is-cancelled { color: #f5d342 !important; background: color-mix(in srgb, #f5d342, transparent 88%) !important; }
+.vf-pill:hover { filter: brightness(1.15); }
+.vf-pill, .vf-status { animation: t-swap-in var(--icon-swap-dur) var(--icon-swap-ease) backwards; }
+.vf-caret { flex: none; opacity: 0.8; transition: transform var(--acc-chevron) var(--acc-ease); }
+.vf-pill[aria-expanded="true"] .vf-caret { transform: rotate(180deg); }
+
+/* running: the app's thin progress bar (the update dialog's), the step and what it is on */
+/* running: under the name (lined up with it, past the tick), the app's thin bar, then the step and its own count. The
+   step count and the count inside the step are pills, so the numbers read apart from the words */
+.vf-progress { flex-basis: 100%; margin-top: -8px; padding: 0 0 12px 28px; }   /* close under the name: the tick row is 40px tall, the name sits in its middle */
+.vf-bar { height: 4px; border-radius: 999px; overflow: hidden; background: var(--bg-lighter); }
+/* the fill carries the app's shimmer sweep (transitions.dev: Shimmer), so a long step still reads as working */
+.vf-bar i { display: block; height: 100%; transition: width 0.4s var(--acc-ease);
+  background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-primary) 38%, color-mix(in srgb, var(--accent-primary), white 45%) 50%,
+    var(--accent-primary) 62%, var(--accent-primary) 100%) 0 0 / 250% 100% no-repeat;
+  animation: t-shimmer var(--shimmer-dur, 2s) var(--shimmer-ease, linear) infinite; }
+.vf-step { margin: 8px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 12.5px; color: var(--text-secondary); }
+.vf-count { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 500;
+  font-variant-numeric: tabular-nums; color: var(--text-secondary); background: var(--quiet-active); }
+.vf-pill.is-running { height: 20px !important; padding: 0 7px !important; font-size: 11px !important; cursor: default; color: color-mix(in srgb, var(--accent-primary), white 35%) !important; background: color-mix(in srgb, var(--accent-primary), transparent 84%) !important;
+  font-variant-numeric: tabular-nums; }
+.vf-pill.is-running:hover { filter: none; }
+[data-theme="light"] .vf-pill.is-running { color: color-mix(in srgb, var(--accent-primary), black 25%) !important; }
+
+/* a mod's report, under its row */
+.vf-row-panel { flex-basis: 100%; }
+.vf-report { padding: 2px 0 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.vf-note { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); overflow-wrap: anywhere; text-wrap: pretty; }
+.vf-note code { font: 12px var(--font-mono); color: var(--text-primary); }
+.vf-warnings { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; align-self: stretch; }
+.vf-warnings li { position: relative; padding-left: 14px; font-size: 12.5px; line-height: 1.5; color: var(--text-primary); overflow-wrap: anywhere; }
+.vf-warnings li::before { content: ''; position: absolute; left: 2px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: #f5d342; }
+.vf-warnings li.vf-more::before { display: none; }
+/* a report's asset list toggle, at the end of the report (its numbers are in the row's heading) */
+.vf-stats { align-self: stretch; display: flex; justify-content: flex-end; }
+button.vf-assets-toggle { flex: none; display: inline-flex !important; align-items: center; gap: 2px; border: none !important; background: none !important; cursor: pointer;
+  height: 24px !important; min-height: 0 !important; padding: 0 !important; font-size: 12.5px !important; color: var(--text-secondary) !important; }
+button.vf-assets-toggle:hover { color: var(--text-primary) !important; }
+.vf-assets-caret { transition: transform var(--acc-chevron) var(--acc-ease); }
+.vf-assets-toggle[aria-expanded="true"] .vf-assets-caret { transform: rotate(90deg); }
+.vf-report > .t-acc-panel { align-self: stretch; }
+.vf-assets { margin-top: 4px; padding: 8px 12px; border-radius: 8px; background: var(--bg-dark); }
+.vf-group h4 { margin: 8px 0 4px; font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
+.vf-group:first-child h4 { margin-top: 0; }
+.vf-group h4 span { margin-left: 4px; color: var(--text-secondary); font-weight: 500; }
+.vf-group ul { margin: 0; padding: 0; list-style: none; }
+.vf-group li { display: grid; grid-template-columns: minmax(140px, 38%) 1fr; gap: 12px; padding: 3px 0; font-size: 12px; line-height: 1.45; }
+.vf-asset { font: 12px var(--font-mono); color: var(--text-primary); overflow-wrap: anywhere; }
+.vf-detail { color: var(--text-secondary); overflow-wrap: anywhere; }
+
+/* Updates: each choice is a settings row, its label at the left, a compact segmented control at the right, and what the
+   picked one does right under the control (close to what it explains, apart from the next row) */
+
+.vf-warn { margin: 10px 0 0; display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.vf-warn svg { flex: none; margin-top: 2px; color: #f5d342; }
+
+/* Advanced: the install card's fold (.ia) under the lists. Its parts are Settings sections: an icon and heading, one
+   line on what it is for, the control, a short note; a hairline between parts, the same rhythm in each */
+.vf-adv { margin-top: -8px; padding-top: 12px; }   /* the divider halfway: 12px above, 12px below */
+.vf-adv-title { margin: 0; font: inherit; }
+.vf-adv-title > .ia-toggle { gap: 8px; height: 32px !important; margin-left: -2px; font-size: 13px !important; font-weight: 600 !important; color: var(--text-primary) !important; }   /* a heading like the groups' */
+.vf-adv-title > .ia-toggle .ia-caret { color: var(--text-secondary); }
+.vf-adv-body { display: flex; flex-direction: column; padding: 4px 0 0 0; }
+.vf-set { padding: 18px 0 20px; }
+.vf-set + .vf-set { border-top: 1px solid var(--panel-border); }
+.vf-set > h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.vf-set > h3 > svg { flex: none; color: var(--text-secondary); }
+.vf-set-state { margin-left: 2px; font-size: 12.5px; font-weight: 400; color: var(--text-secondary); }
+.vf-set-state .is-warn { color: #f5d342; }
+.vf-set > h3 + :not(.vf-set-about) { margin-top: 12px; }   /* a part without a description line (Log) keeps the same gap */
+.vf-set-about { margin: 4px 0 12px; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.vf-set-note { margin: 8px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+/* a choice of a few: Settings' Launcher switch, equal parts across the section */
+.vf-seg { display: flex !important; width: 100%; max-width: 560px; }
+.vf-seg button { flex: 1 1 0; min-width: 0; height: 32px !important; min-height: 0 !important; padding: 0 10px !important; display: inline-flex !important; align-items: center; justify-content: center; white-space: nowrap; font-size: 12.5px !important; }
+/* USMAP: Setup's part row, between hairlines */
+.vf-usmap { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 0; border-top: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); }
+.vf-usmap .su-part-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vf-set .vf-warn { margin-top: 10px; }
+.vf-names { display: flex; flex-direction: column; gap: 12px; }   /* Color names: two labelled fields */
+.vf-names label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-primary); }
+.vf-names input {
+  height: 34px; padding: 0 10px; font: 12.5px var(--font-mono); color: var(--text-primary);
+  background: var(--input-bg); border: 1px solid var(--input-border); border-radius: var(--quiet-radius); outline: none;
+}
+.vf-names input:focus { border-color: color-mix(in srgb, var(--text-primary), transparent 50%); }
+.vf-names .su-link { margin-left: 4px; }
+.vf-log { max-height: 220px; overflow-y: auto; padding: 8px 12px; border-radius: 8px; background: var(--bg-dark); font: 12px/1.6 var(--font-mono); color: var(--text-secondary); }
+.vf-log span { color: var(--text-secondary); margin-right: 4px; }   /* the time: the same gray as the line, not dimmer (12px needs 4.5:1) */
+.vf-log .is-warning span, .vf-log .is-success span, .vf-log .is-error span { color: inherit; opacity: 0.7; }
+.vf-log .is-error { color: var(--text-primary); font-weight: 600; }
+.vf-log .is-warning { color: #f5a524; }
+.vf-log .is-success { color: #46a758; }
+.vf-copy-log { margin-top: 10px; }
+
+.vf-foot { position: relative; display: flex; align-items: center; gap: 8px; padding: 12px 24px; border-top: 1px solid var(--panel-border); }
+.vf-policy .su-link { margin-left: 2px; }
+.vf-state { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vf-foot .btn-primary {
+  height: 32px !important; min-height: 0 !important; padding: 0 16px 0 14px !important; font-size: 13px !important; border-radius: var(--quiet-radius) !important;
+  display: inline-flex !important; align-items: center; gap: 4px; width: auto !important; flex: none;
+}
+.vf-foot .btn-primary svg { margin-right: 4px; }
+html[data-motion="off"] .vf-bar i, html[data-motion="off"] .vf-caret, html[data-motion="off"] .vf-grp-caret, html[data-motion="off"] .vf-assets-caret { transition: none; animation: none; }
+html[data-motion="off"] .vf-pill, html[data-motion="off"] .vf-status { animation: none; }
+
+/* the main window's notice after a game update (VfxNotice.tsx) */
+.vfx-notice {
+  display: flex; align-items: center; gap: 12px; margin: 0 0 14px; padding: 10px 12px 10px 14px;
+  border: 1px solid var(--panel-border); border-radius: 12px; background: var(--panel-bg);
+  animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards;
+}
+.vfx-notice p { flex: 1; min-width: 0; margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-secondary); }
+.vfx-notice strong { color: var(--text-primary); font-weight: 600; }
+.vfx-notice-icon { flex: none; color: #f5d342; }
+.vfx-notice .btn-primary {
+  height: 32px !important; min-height: 0 !important; padding: 0 14px !important; font-size: 13px !important; border-radius: var(--quiet-radius) !important;
+  display: inline-flex !important; align-items: center; width: auto !important; flex: none; white-space: nowrap;
+}
+.vfx-notice .lo-text-btn { flex: none; white-space: nowrap; }
+html[data-motion="off"] .vfx-notice { animation: none; }
+
+/* light theme: the problem yellow and success green, darkened (text 4.5:1, marks 3:1 on the light window) */
+[data-theme="light"] .vf-pill.is-fixed, [data-theme="light"] .vf-log .is-success { color: #166236 !important; }
+[data-theme="light"] .vf-pill.is-failed, [data-theme="light"] .vf-pill.is-cancelled, [data-theme="light"] .vf-status.is-cancelled,
+[data-theme="light"] .vf-counts .is-failed b, [data-theme="light"] .vf-counts .is-unreadable b, [data-theme="light"] .vf-log .is-warning { color: #665400 !important; }
+[data-theme="light"] .vf-warn svg, [data-theme="light"] .vfx-notice-icon { color: #9a7d00; }
+[data-theme="light"] .vf-warnings li::before { background: #9a7d00; }

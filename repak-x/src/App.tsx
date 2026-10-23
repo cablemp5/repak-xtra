@@ -70,6 +70,9 @@ import { setModsRoot } from './custom/loadoutIdentity' // repakxtra
 import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
 import { useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
+import { fixInVfxWindow } from './custom/vfx/handoff' // repakxtra: the VFX Updater window
+import VfxNotice, { VfxDot } from './custom/vfx/VfxNotice' // repakxtra: the game updated, VFX mods to fix
+import { updateVfxModInPlace } from './custom/vfx/quick' // repakxtra: Update VFX in the right-click menu
 import { newDefaultsOnce } from './custom/uiPrefs' // repakxtra
 import { reportSource } from './custom/setupReport' // repakxtra: Copy setup report reads the live list
 import { finishInstallLoadout } from './custom/installLoadout'
@@ -128,7 +131,6 @@ const AURORA_PALETTES: Record<string, string[]> = {
   '#FF96BC': ['#FF96BC', '#f472b6', '#c084fc', '#fda4af'], // Pink: soft pastel tones
 };
 
-const VFX_UPDATER_MOD_PREFILL_KEY = 'repakx:vfxUpdater:modPath'
 const ASSET_EXPLORER_FOCUS_MOD_KEY = 'repakx:assetExplorer:focusModPath'
 
 import TitleBar from './components/TitleBar'
@@ -203,6 +205,8 @@ type ContextMenuState = {
   y: number
   mod?: ModRecord | null
   folder?: FolderRecord | null
+  fromLoadout?: boolean // repakxtra: opened on a loadout page's row: acts on that mod only, never the Library's selection
+  rename?: () => void // repakxtra: that row's own rename (the Library's list is not on screen)
 }
 
 type NewFolderPromptState = { paths: string[]; moveFolderId?: string; parentId?: string; moveModPaths?: string[] }
@@ -542,36 +546,9 @@ function App() {
 
   const alert = useAlert();
 
-  const openVfxUpdaterWindow = async (modUtocPath?: string | null) => {
-    if (modUtocPath) {
-      localStorage.setItem(VFX_UPDATER_MOD_PREFILL_KEY, modUtocPath)
-    }
-
-    try {
-      const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
-      const existing = await WebviewWindow.getByLabel('vfx-updater')
-      if (existing) {
-        await existing.setFocus()
-        return
-      }
-
-      const vfxWindow = new WebviewWindow('vfx-updater', {
-        url: '/vfx-updater',
-        title: 'VFX Updater (WIP)', // repakxtra: the window's title bar matches its heading
-        width: 650,
-        height: 750,
-        center: true,
-        resizable: false,
-        decorations: false,
-      })
-
-      vfxWindow.once('tauri://error', (e) => {
-        console.error('[VFX] Failed to create window:', e)
-      })
-    } catch (e) {
-      console.error('[VFX] Window error:', e)
-    }
-  }
+  // repakxtra: the VFX Updater window (custom/vfx/), a mod handed over when given
+  const openVfxUpdaterWindow = (modUtocPath?: string | null) =>
+    fixInVfxWindow(modUtocPath ? [modUtocPath] : [], false).catch(e => console.error('[VFX] Window error:', e))
 
   const openAssetExplorerWindow = async () => {
     try {
@@ -1183,6 +1160,8 @@ function App() {
     })
   }
 
+  // repakxtra: a loadout row's menu acts on that row alone, whatever is selected in the Library
+  const menuSelection = contextMenu?.fromLoadout ? new Set<string>() : selectedMods
   const closeContextMenu = () => {
     setContextMenu(null)
   }
@@ -4035,6 +4014,7 @@ function App() {
           >
             <GiLightningTrio style={{ marginRight: '6px' }} />
             <span>VFX Updater</span>
+            <VfxDot mods={mods} />{/* repakxtra: VFX mods need an update */}
           </button>
 
           <SigeonControl alert={alert} />{/* repakxtra */}
@@ -4067,6 +4047,7 @@ function App() {
       </header>
 
       <div className="container">
+        <VfxNotice mods={mods} reload={loadMods} />{/* repakxtra: the game updated, VFX mods to fix */}
         {/* repakxtra: Home view (custom/LoadoutsScreen.tsx); the action bar and panels below are the Library */}
         <LoadoutsScreen
           mods={mods}
@@ -4077,6 +4058,7 @@ function App() {
           isBlocked={undoBlocked} /* repakxtra: live game lock for Undo */
           reload={loadMods}
           alert={alert}
+          onModContextMenu={(e, m, rename) => { handleContextMenu(e, m as ModRecord); setContextMenu(c => c && { ...c, fromLoadout: true, rename }) }} /* repakxtra: a loadout page's rows open the Library's menu, for that row */
         />
         {/* repakxtra: Ctrl+1..9 switches pinned loadouts on every view (custom/Loadouts.tsx) */}
         <LoadoutHotkeys mods={mods} scopeMods={folderMods} scopeLabel="all mods" blocked={gameRunning && !bypassGameRunningLock}
@@ -4553,7 +4535,7 @@ function App() {
               // on the whole selection, matching the bulk toolbar. Previously it
               // moved only the clicked mod and left the rest selected, pointing
               // at paths that no longer existed.
-              if (selectedMods.has(contextMenu.mod.path)) {
+              if (menuSelection.has(contextMenu.mod.path)) {
                 handleAssignToFolder(folderId)
               } else {
                 handleMoveSingleMod(contextMenu.mod.path, folderId)
@@ -4564,8 +4546,8 @@ function App() {
               // Resolve which mods the move applies to here, the same way
               // onMoveTo does, so the selection rule lives in one place.
               if (options?.moveMods && contextMenu.mod) {
-                const targets = selectedMods.has(contextMenu.mod.path)
-                  ? Array.from(selectedMods)
+                const targets = menuSelection.has(contextMenu.mod.path)
+                  ? Array.from(menuSelection)
                   : [contextMenu.mod.path]
                 handleCreateFolder({ moveModPaths: targets })
                 return
@@ -4583,7 +4565,7 @@ function App() {
             onToggle={() => contextMenu.mod && handleToggleMod(contextMenu.mod.path)}
             loadoutMenu={contextMenu.mod ? (close => ( /* repakxtra: the right-clicked mod, or the selection it belongs to */
               <LoadoutMenuItems alert={alert} close={close}
-                paths={selectedMods.has(contextMenu.mod!.path) ? [...selectedMods] : [contextMenu.mod!.path]} />)) : undefined}
+                paths={menuSelection.has(contextMenu.mod!.path) ? [...menuSelection] : [contextMenu.mod!.path]} />)) : undefined}
             onRename={() => {
               if (contextMenu.mod) {
                 if (gameRunning && !bypassGameRunningLock) {
@@ -4593,7 +4575,8 @@ function App() {
                   )
                   return
                 }
-                setRenamingModPath(contextMenu.mod.path)
+                if (contextMenu.rename) contextMenu.rename() // repakxtra: a loadout row renames in place
+                else setRenamingModPath(contextMenu.mod.path)
               }
             }}
             onRenameFolder={() => {
@@ -4604,12 +4587,13 @@ function App() {
             onCheckConflicts={() => contextMenu.mod && handleCheckSingleModClashes(contextMenu.mod)}
             onUpdateMod={() => contextMenu.mod && handleInitiateUpdate(contextMenu.mod)}
             onSendToVfxUpdater={() => contextMenu.mod && handleSendToVfxUpdater(contextMenu.mod)}
+            onUpdateVfx={contextMenu.mod && modDetails[contextMenu.mod.path]?.category === 'VFX' ? (m => () => void updateVfxModInPlace(m, alert, loadMods))(contextMenu.mod) : undefined /* repakxtra */}
             onShowInAssetExplorer={() => {
               if (!contextMenu.mod) return
               // Same selection rule as onMoveTo: acting on a mod inside the
               // current selection acts on the whole selection.
-              const targets = selectedMods.has(contextMenu.mod.path)
-                ? Array.from(selectedMods)
+              const targets = menuSelection.has(contextMenu.mod.path)
+                ? Array.from(menuSelection)
                 : [contextMenu.mod.path]
               handleShowInAssetExplorer(targets)
             }}
@@ -4618,7 +4602,7 @@ function App() {
             onDeleteTag={handleDeleteTagFromCatalog}
             gamePath={gamePath}
             holdToDelete={holdToDelete}
-            selectionCount={contextMenu.mod && selectedMods.has(contextMenu.mod.path) ? selectedMods.size : 0}
+            selectionCount={contextMenu.mod && menuSelection.has(contextMenu.mod.path) ? menuSelection.size : 0}
 
           />
         )

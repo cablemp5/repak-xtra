@@ -12,7 +12,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const KEEP: Duration = Duration::from_secs(7 * 24 * 3600);
 
-fn trash_dir() -> PathBuf {
+pub(crate) fn trash_dir() -> PathBuf {
     crate::app_dir().join("trash")
 }
 
@@ -43,7 +43,7 @@ pub fn reserve(id: Option<String>) -> Result<PathBuf, String> {
     reserve_in(&trash_dir(), id)
 }
 
-fn reserve_in(root: &Path, id: Option<String>) -> Result<PathBuf, String> {
+pub(crate) fn reserve_in(root: &Path, id: Option<String>) -> Result<PathBuf, String> {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     if let Some(id) = &id {
         if !valid_id(id) {
