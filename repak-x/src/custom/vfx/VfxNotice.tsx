@@ -8,9 +8,9 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { AlertTriangle } from 'lucide-react'
 import { useBrokenVersion, verdictOf } from '../brokenMods'
-import { modKey, renameModKey } from '../loadoutStore'
+import { modKey, openLoadout, renameModKey } from '../loadoutStore'
 import { useUiPref } from '../uiPrefs'
-import { FIXED_EVENT, fixInVfxWindow, utocOf, type Fixed } from './handoff'
+import { FIXED_EVENT, OPEN_LOADOUT_EVENT, fixInVfxWindow, utocOf, type Fixed } from './handoff'
 import './vfx.css'
 
 type Mod = { path: string; utoc_path?: string | null }
@@ -42,6 +42,17 @@ export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () =>
     const un = listen<Fixed>(FIXED_EVENT, e => {
       if (e.payload?.swap) renameModKey(modKey(e.payload.from), modKey(e.payload.to))
       reloadRef.current()
+    })
+    return () => { un.then(f => f()) }
+  }, [])
+
+  // the VFX Updater's "In <loadout>" tag: that loadout's page, here, in front
+  useEffect(() => {
+    const un = listen<string>(OPEN_LOADOUT_EVENT, async e => {
+      openLoadout(e.payload)
+      const { getCurrentWindow } = await import('@tauri-apps/api/window')
+      const w = getCurrentWindow()
+      await w.unminimize().catch(() => {}); await w.setFocus().catch(() => {})
     })
     return () => { un.then(f => f()) }
   }, [])

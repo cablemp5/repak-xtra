@@ -47,9 +47,24 @@
 .vf-row-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .vf-row:not(.is-picked) .vf-row-name { font-weight: 400; color: var(--text-secondary); }
 .vf-row:not(.is-picked):hover .vf-row-name { color: var(--text-primary); }
+/* the mod being updated: its name shimmers (theme.css .t-shimmer), still cut with an ellipsis */
+.vf-row-name.t-shimmer { display: block; }
 /* the loadouts holding it: a quiet tag the size of the Library's, the first name and how many more */
-.vf-loadouts { flex: 0 1 auto; min-width: 0; max-width: 34%; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px;
+/* will only partly update (old Niagara files left out): the Library's Needs VFX update badge look, so it reads as that kind
+   of warning; the footer says it once more for the picked mods */
+.vf-partial { flex: none; height: 22px; display: inline-flex; align-items: center; padding: 0 7px; border-radius: 6px; font-size: 11px; font-weight: 600;
+  color: #f5d342; border: 1px solid color-mix(in srgb, #f5d342, transparent 55%); cursor: help; white-space: nowrap; }
+.vf-partial-n { font-weight: 500; color: #f5d342; }
+[data-theme="light"] .vf-partial, [data-theme="light"] .vf-partial-n { color: #665400; }
+.vf-loadouts {flex: 0 1 auto; min-width: 0; max-width: 34%; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px;
   border: 1px solid var(--panel-border); border-radius: 6px; font-size: 11.5px; font-weight: 500; color: var(--text-secondary); }
+/* a button: opens that loadout's page in the main window */
+/* the tag's own size, not the app's 36px buttons, and a quiet hover: only the loadout's name brightens a little */
+button.vf-loadouts { min-height: 0; background: none; font-family: inherit; line-height: normal; cursor: pointer; transition: none; }
+button.vf-loadouts:hover:not(:disabled) { border-color: var(--panel-border); background: none; }
+button.vf-loadouts span { transition: color 0.15s ease; }
+button.vf-loadouts:hover span { color: color-mix(in srgb, var(--text-secondary), var(--text-primary) 45%); }
+button.vf-loadouts:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
 .vf-loadouts span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vf-loadouts i { flex: none; font-style: normal; font-weight: 400; color: var(--text-secondary); }
 .vf-loadouts b { flex: none; margin-left: 2px; font-weight: 500; color: var(--text-secondary); white-space: pre; }
@@ -63,7 +78,7 @@
   border: none !important; border-radius: 999px !important; font-size: 12px !important; font-weight: 600 !important; line-height: 1; cursor: pointer;
   color: var(--text-secondary) !important; background: var(--quiet-active) !important; }
 .vf-pill.is-fixed { color: #3ecf6e !important; background: color-mix(in srgb, #3ecf6e, transparent 88%) !important; }
-.vf-pill.is-failed, .vf-pill.is-cancelled { color: #f5d342 !important; background: color-mix(in srgb, #f5d342, transparent 88%) !important; }
+.vf-pill.is-failed, .vf-pill.is-cancelled, .vf-pill.is-partial {color: #f5d342 !important; background: color-mix(in srgb, #f5d342, transparent 88%) !important; }
 .vf-pill:hover { filter: brightness(1.15); }
 .vf-pill, .vf-status { animation: t-swap-in var(--icon-swap-dur) var(--icon-swap-ease) backwards; }
 .vf-caret { flex: none; opacity: 0.8; transition: transform var(--acc-chevron) var(--acc-ease); }
@@ -142,6 +157,14 @@ button.vf-assets-toggle:hover { color: var(--text-primary) !important; }
 .vf-usmap { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 0; border-top: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); }
 .vf-usmap .su-part-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vf-set .vf-warn { margin-top: 10px; }
+/* the USMAP is older than the game: a yellow-edged note under it, the mismatch first, then what it means for updates */
+.vf-behind { margin-top: 12px; padding: 12px 14px; border-radius: 10px; display: flex; flex-direction: column; gap: 6px;
+  border: 1px solid color-mix(in srgb, #f5d342, transparent 70%); background: color-mix(in srgb, #f5d342, transparent 94%); }
+.vf-behind p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.vf-behind b { font-weight: 600; color: #f5d342; }
+.su-part-mark.is-behind { color: #f5d342; }
+.su-part-mark.is-behind::before { display: none; } /* the warning icon takes the empty circle's place */
+[data-theme="light"] .vf-behind b, [data-theme="light"] .su-part-mark.is-behind { color: #665400; }
 .vf-names { display: flex; flex-direction: column; gap: 12px; }   /* Color names: two labelled fields */
 .vf-names label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-primary); }
 .vf-names input {
@@ -187,7 +210,7 @@ html[data-motion="off"] .vfx-notice { animation: none; }
 
 /* light theme: the problem yellow and success green, darkened (text 4.5:1, marks 3:1 on the light window) */
 [data-theme="light"] .vf-pill.is-fixed, [data-theme="light"] .vf-log .is-success { color: #166236 !important; }
-[data-theme="light"] .vf-pill.is-failed, [data-theme="light"] .vf-pill.is-cancelled, [data-theme="light"] .vf-status.is-cancelled,
+[data-theme="light"] .vf-pill.is-failed, [data-theme="light"] .vf-pill.is-cancelled, [data-theme="light"] .vf-pill.is-partial,[data-theme="light"] .vf-status.is-cancelled,
 [data-theme="light"] .vf-counts .is-failed b, [data-theme="light"] .vf-counts .is-unreadable b, [data-theme="light"] .vf-log .is-warning { color: #665400 !important; }
 [data-theme="light"] .vf-warn svg, [data-theme="light"] .vfx-notice-icon { color: #9a7d00; }
 [data-theme="light"] .vf-warnings li::before { background: #9a7d00; }

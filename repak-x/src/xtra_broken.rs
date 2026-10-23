@@ -19,11 +19,26 @@ use crate::xtra_crash::asset_key;
 use crate::AppState;
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct Verdict {
     path: String,
     /// "broken" or "risky"
     kind: &'static str,
     reason: String,
+    /// For "vfx": its Niagara files (systems, emitters, curve atlases) the update rewrote. The VFX Updater cannot rebuild
+    /// them, so it leaves them out and the update is partial
+    #[serde(skip_serializing_if = "is_zero")]
+    stale_niagara: usize,
+}
+
+fn is_zero(n: &usize) -> bool {
+    *n == 0
+}
+
+/// A Niagara system, emitter or curve atlas, by its name (pipeline.ts NIAGARA_BY_NAME).
+fn is_niagara(key: &str) -> bool {
+    let name = key.rsplit('/').next().unwrap_or(key);
+    ["ns_", "ne_", "curveatlas_"].iter().any(|p| name.starts_with(p))
 }
 
 /// The game's Paks folder above a mods folder (~mods, or a subfolder of it).
@@ -109,6 +124,17 @@ fn game_assets(paks: &Path) -> Option<Arc<GameAssets>> {
     Some(set)
 }
 
+/// Of `files` (paths inside a mod), those whose game copy an update rewrote after `since` (seconds): cooked for an
+/// older game build. None when the game's files cannot be read (no game folder above `mods_dir`).
+pub(crate) fn rewritten_since(mods_dir: &Path, files: &[String], since: u64) -> Option<Vec<String>> {
+    let game = game_assets(&paks_dir(mods_dir)?)?;
+    Some(stale_in(&game, files, since))
+}
+
+fn stale_in(game: &GameAssets, files: &[String], since: u64) -> Vec<String> {
+    files.iter().filter(|f| is_package(f) && game.get(&match_key(f)).is_some_and(|at| *at > since)).cloned().collect()
+}
+
 /// The facts about one mod that judge reads.
 struct Facts<'a> {
     files: &'a [String],
@@ -135,10 +161,12 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
                 if n == 1 { "" } else { "s" },
                 if n == 1 { "it" } else { "them" }
             ),
+            stale_niagara: 0,
         });
     }
     // A VFX mod carries cooked copies of the game's materials and blueprints: an update that rewrote them leaves it stale
-    let changed = packages.iter().filter(|k| game.get(*k).is_some_and(|at| *at > m.installed)).count();
+    let stale: Vec<&String> = packages.iter().filter(|k| game.get(*k).is_some_and(|at| *at > m.installed)).collect();
+    let changed = stale.len();
     if m.vfx && !m.fixed && m.installed > 0 && changed > 0 {
         return Some(Verdict {
             path: path.to_string(),
@@ -146,6 +174,7 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
             reason: format!(
                 "A game update changed {changed} of the game files this VFX mod replaces, so its effects may look wrong or crash the game. The VFX Updater rebuilds it on the new game files."
             ),
+            stale_niagara: stale.iter().filter(|k| is_niagara(k)).count(),
         });
     }
     // On or off: the warning matters most before a loadout switches it on
@@ -154,6 +183,7 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
             path: path.to_string(),
             kind: "risky",
             reason: "A Blueprint mod installed before the last game update. Updates often change the game classes it carries, and the game can crash on it. Turn it off if the game crashes, and look for an updated version.".into(),
+            stale_niagara: 0,
         });
     }
     None
@@ -184,8 +214,11 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
         let has_fix = |path: &Path| {
             let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
             let siblings = path.parent().and_then(|d| by_dir.get(d)).unwrap_or(&none);
+            // and <name>_ORIGINAL beside its partial update (<name>_PARTIAL): kept for a full update later, not flagged now
+            let partial = crate::xtra_vfx::original_stem(&stem).eq_ignore_ascii_case(&stem).then(|| crate::xtra_vfx::partial_stem(&stem));
             [crate::xtra_vfx::fixed_stem_among(&stem, siblings), crate::xtra_vfx::unbroken_stem(&stem)]
                 .iter()
+                .chain(partial.iter())
                 .any(|fixed| !fixed.eq_ignore_ascii_case(&stem) && installed_mods.contains(&base(&path.with_file_name(format!("{fixed}.pak")))))
         };
         mod_paths
@@ -266,6 +299,17 @@ mod tests {
     }
 
     #[test]
+    fn a_vfx_verdict_counts_its_stale_niagara_files() {
+        let mut game = game();
+        for f in ["/Game/Marvel/VFX/NS_Burst.uasset", "/Game/Marvel/VFX/CurveAtlas_1026.uasset", "/Game/Marvel/VFX/MI_Glow.uasset"] {
+            game.insert(match_key(f), 100);
+        }
+        let files = v(&["Marvel/Content/Marvel/VFX/NS_Burst.uasset", "Marvel/Content/Marvel/VFX/CurveAtlas_1026.uasset", "Marvel/Content/Marvel/VFX/MI_Glow.uasset"]);
+        let verdict = judge("m.pak", &Facts { vfx: true, ..facts(&files, 50) }, 200, &game).unwrap();
+        assert_eq!((verdict.kind, verdict.stale_niagara), ("vfx", 2), "the material is rebuilt, the two Niagara files are left out");
+    }
+
+    #[test]
     fn a_vfx_mod_older_than_its_game_files_needs_a_fix() {
         let files = v(&[LIVE, "Marvel/Content/Marvel/VFX/NS_Own.uasset"]);
         let vfx = |installed| Facts { vfx: true, has_blueprint: true, ..facts(&files, installed) };
@@ -275,6 +319,17 @@ mod tests {
         assert_eq!(judge("m.pak", &Facts { vfx: true, ..facts(&files, 150) }, 200, &game()), None);
         assert_eq!(judge("m.pak", &Facts { vfx: false, ..facts(&files, 50) }, 200, &game()), None, "only VFX mods");
         assert_eq!(judge("m.pak", &Facts { fixed: true, ..vfx(50) }, 200, &game()).map(|j| j.kind), Some("risky"), "fixed already: its copy is judged instead");
+    }
+
+    #[test]
+    fn stale_files_are_those_the_game_rewrote_after_the_mod() {
+        let files = vec![
+            "Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uasset".to_string(),
+            "Marvel/Content/Marvel/VFX/NS_ModOnly.uasset".to_string(),
+            "Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uexp".to_string(),
+        ];
+        assert_eq!(stale_in(&game(), &files, 50), vec![files[0].clone()], "older than the game's copy, packages only");
+        assert!(stale_in(&game(), &files, 150).is_empty(), "made after the game's copy");
     }
 
     /// Manual check on a real game: REPAKXTRA_PAKS=<...\Content\Paks> cargo test real_game -- --ignored --nocapture

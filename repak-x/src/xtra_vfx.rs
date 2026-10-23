@@ -246,12 +246,35 @@ fn strip_marker<'a>(name: &'a str, marker: &str) -> &'a str {
     }
 }
 
-/// `<name>_UPDATED_9999999_P` for a mod's file stem: the name without its priority suffix (and without an earlier
-/// _UPDATED, so fixing a fixed mod keeps its name), spaces as underscores.
+/// A name without its priority suffix, split into the mod's own name and, for an update, its version: 1 for
+/// `<name>_UPDATED`, n for `<name>_UPDATED_V<n>`, None for an original.
+fn update_version(name: &str) -> (&str, Option<u32>) {
+    let l = name.to_ascii_lowercase();
+    if let Some(i) = l.rfind("_updated_v") {
+        if let Ok(n) = name[i + 10..].parse::<u32>() {
+            return (&name[..i], Some(n));
+        }
+    }
+    if l.ends_with("_updated") && name.len() > 8 {
+        return (&name[..name.len() - 8], Some(1));
+    }
+    (name, None)
+}
+
+/// Whether a mod's file stem is an update named by fixed_stem (`_UPDATED`, `_UPDATED_V2`, ...).
+fn is_update(stem: &str) -> bool {
+    update_version(split_priority(stem).0).1.is_some()
+}
+
+/// `<name>_UPDATED_9999999_P` for a mod's file stem: the name without its priority suffix, spaces as underscores. An
+/// update of an update is its next version: `<name>_UPDATED_V2_9999999_P`, then V3, so each one is kept apart.
 pub(crate) fn fixed_stem(stem: &str) -> String {
-    let b = strip_marker(split_priority(stem).0, "_UPDATED");
+    let (b, version) = update_version(split_priority(stem).0);
     let b = b.trim().split_whitespace().collect::<Vec<_>>().join("_");
-    format!("{b}_UPDATED_9999999_P")
+    match version {
+        None => format!("{b}_UPDATED_9999999_P"),
+        Some(n) => format!("{b}_UPDATED_V{}_9999999_P", n + 1),
+    }
 }
 
 /// The stems (lowercase) of the mod files in `dir`.
@@ -273,11 +296,11 @@ fn stems_in(dir: &Path) -> HashSet<String> {
 /// mod's update never takes the place of another's.
 pub(crate) fn fixed_stem_among(stem: &str, siblings: &HashSet<String>) -> String {
     let plain = fixed_stem(stem);
-    if plain.eq_ignore_ascii_case(stem) {
-        return plain; // an update itself
+    if is_update(stem) {
+        return plain; // an update's next version: named after it, no other original's name to clash with
     }
     let me = stem.to_lowercase();
-    let original = |s: &String| *s != me && !fixed_stem(s).eq_ignore_ascii_case(s); // another original, not an update
+    let original = |s: &String| *s != me && !is_update(s); // another original, not an update
     if !siblings.iter().any(|s| original(s) && fixed_stem(s).eq_ignore_ascii_case(&plain)) {
         return plain;
     }
@@ -310,13 +333,33 @@ pub(crate) fn unbroken_stem(stem: &str) -> String {
     format!("{}{p}", strip_marker(b, "_BROKEN"))
 }
 
-const MOD_EXTS: [&str; 5] = ["pak", "bak_repak", "pak_disabled", "utoc", "ucas"];
+/// The name without the markers an update gives (_BROKEN, _ORIGINAL, _PARTIAL), and its priority suffix.
+fn unmarked(stem: &str) -> (&str, &str) {
+    let (b, p) = split_priority(stem);
+    (["_BROKEN", "_ORIGINAL", "_PARTIAL"].iter().fold(b, |b, m| strip_marker(b, m)), p)
+}
+
+/// `<name>_PARTIAL<priority>`: an update that left out Niagara files made for an older game build.
+pub(crate) fn partial_stem(stem: &str) -> String {
+    let (b, p) = unmarked(stem);
+    format!("{b}_PARTIAL{p}")
+}
+
+/// `<name>_ORIGINAL<priority>`: the original beside a partial update, kept (off) for a full update once one is possible.
+pub(crate) fn original_stem(stem: &str) -> String {
+    let (b, p) = unmarked(stem);
+    format!("{b}_ORIGINAL{p}")
+}
+
+const MOD_EXTS: [&str; 5] =["pak", "bak_repak", "pak_disabled", "utoc", "ucas"];
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Placed {
     /// The fixed mod's .pak (on) or .bak_repak (off)
     fixed: String,
+    /// The original's main file before the update, for loadouts to move from
+    source: String,
     /// The original's main file now (its .bak_repak when it was turned off)
     original: String,
     /// The original was on and is now off
@@ -337,18 +380,29 @@ pub struct Placed {
 /// first; if it cannot, it stays (off) and `warning` says why. Files already holding either name go to Recently deleted
 /// first (an older update, an older broken copy). The update is copied into the mods folder under temporary names before
 /// anything else changes, so a copy that fails part way (a full disk) leaves the mod as it was; every later failure puts
-/// back what moved and names any file it could not. Returns the names tags should carry over to.
-fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: bool, trash_original: bool, trash_root: &Path) -> Result<(Placed, String, Vec<String>), String> {
+/// back what moved and names any file it could not. A `partial` update (Niagara files left out) is always
+/// `<name>_PARTIAL` and its original always stays, off, as `<name>_ORIGINAL`, whatever the naming and originals choices,
+/// so a full update can start from it later. Returns the names tags should carry over to.
+fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: bool, trash_original: bool, partial: bool, trash_root: &Path) -> Result<(Placed, String, Vec<String>), String> {
     let dir = source.parent().ok_or("The mod has no folder")?;
     let stem = source.file_stem().ok_or("The mod has no name")?.to_string_lossy().to_string();
     let files = |s: &str| MOD_EXTS.iter().map(|x| dir.join(format!("{s}.{x}"))).filter(|p| p.exists()).collect::<Vec<_>>();
     let was_on = dir.join(format!("{stem}.pak")).exists();
     // where the fix goes, and where the original ends up
-    let (target, kept) = if keep_name { (unbroken_stem(&stem), broken_stem(&stem)) } else { (fixed_stem_among(&stem, &stems_in(dir)), stem.clone()) };
+    let (target, kept) = if partial && partial_stem(&stem).eq_ignore_ascii_case(&stem) {
+        (stem.clone(), stem.clone()) // a partial update made again from itself: it replaces itself, _ORIGINAL stays as it is
+    } else if partial {
+        (partial_stem(&stem), original_stem(&stem))
+    } else if keep_name {
+        (unbroken_stem(&stem), broken_stem(&stem))
+    } else {
+        (fixed_stem_among(&stem, &stems_in(dir)), stem.clone())
+    };
+    let trash_original = trash_original && !partial;
     let eq = |a: &str, b: &str| a.eq_ignore_ascii_case(b);
-    // updating an _UPDATED copy without keep_name: the new update replaces it
+    // an update made again from itself (a _PARTIAL one): the new one replaces it
     let replace = eq(&target, &kept);
-    let turn_off = (turn_off_original || trash_original) && was_on && !replace;
+    let turn_off = (turn_off_original || trash_original || partial) && was_on && !replace;
     if was_on && dir.join(format!("{stem}.bak_repak")).exists() {
         return Err(format!("Both an on and an off copy of {stem} are in the mods folder. Delete one of them, then update it again."));
     }
@@ -502,12 +556,13 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
         }
     };
     let p = |p: &Path| p.to_string_lossy().to_string();
-    let placed = Placed { fixed: p(&main), original: p(&original), turned_off: turn_off, replaced: !existing.is_empty(), trashed, warning };
+    let source = dir.join(format!("{stem}.{}", if was_on { "pak" } else { "bak_repak" }));
+    let placed = Placed { fixed: p(&main), source: p(&source), original: p(&original), turned_off: turn_off, replaced: !existing.is_empty(), trashed, warning };
     Ok((placed, stem, vec![target, kept]))
 }
 
 #[tauri::command]
-pub fn xtra_vfx_place(source: String, staged_base: String, turn_off_original: bool, keep_name: Option<bool>, trash_original: Option<bool>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Placed, String> {
+pub fn xtra_vfx_place(source: String, staged_base: String, turn_off_original: bool, keep_name: Option<bool>, trash_original: Option<bool>, partial: Option<bool>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Placed, String> {
     crate::xtra_identity::upstream_guard()?;
     // renaming or replacing containers the game has loaded: not while it runs, as every other mod change
     let bypass = state.lock().map(|s| s.bypass_game_running_lock).unwrap_or(false);
@@ -515,7 +570,7 @@ pub fn xtra_vfx_place(source: String, staged_base: String, turn_off_original: bo
         return Err("Marvel Rivals is running. Close it, then update again. The mod was not changed.".into());
     }
     let trash_original = trash_original.unwrap_or(false);
-    let (placed, from, to) = place(Path::new(&source), Path::new(&staged_base), turn_off_original, keep_name.unwrap_or(true), trash_original, &crate::xtra_trash::trash_dir())?;
+    let (placed, from, to) = place(Path::new(&source), Path::new(&staged_base), turn_off_original, keep_name.unwrap_or(true), trash_original, partial.unwrap_or(false), &crate::xtra_trash::trash_dir())?;
     let mut s = state.lock().unwrap();
     let key = |stem: &str| crate::get_mod_key(Path::new(&format!("{stem}.pak")));
     if let Some(tags) = s.mod_tags.get(&key(&from)).cloned() {
@@ -643,6 +698,23 @@ pub fn xtra_game_build(state: State<'_, Arc<Mutex<AppState>>>) -> GameBuild {
     mods.ancestors().find(|p| p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("Paks"))).map(game_build).unwrap_or_default()
 }
 
+/// Of `files` (paths inside the mod at `mod_path`), those whose game copy an update rewrote after the mod was written.
+/// The updater copies Niagara files as they are, and one still cooked for the old game can crash it (Niagara properties
+/// renumbered in 3962284), so a run leaves these out of the update.
+/// shortcut: "written" is the mod file's date, so a mod reinstalled after the update looks current; read the packages'
+/// cook build instead if they ever carry one.
+fn stale(mod_path: &str, files: &[String]) -> Result<Vec<String>, String> {
+    let path = Path::new(mod_path);
+    let written = std::fs::metadata(path).and_then(|m| m.modified()).map_err(|e| format!("{}: {e}", path.display()))?;
+    let written = written.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    Ok(path.parent().and_then(|dir| crate::xtra_broken::rewritten_since(dir, files, written)).unwrap_or_default())
+}
+
+#[tauri::command]
+pub async fn xtra_vfx_stale(mod_path: String, files: Vec<String>) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || stale(&mod_path, &files)).await.map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -653,7 +725,10 @@ mod tests {
     #[test]
     fn fixed_names_drop_the_priority_and_keep_one_updated() {
         assert_eq!(fixed_stem("BlueColoredVFX_9999999_P"), "BlueColoredVFX_UPDATED_9999999_P");
-        assert_eq!(fixed_stem("BlueColoredVFX_UPDATED_9999999_P"), "BlueColoredVFX_UPDATED_9999999_P");
+        assert_eq!(fixed_stem("BlueColoredVFX_UPDATED_9999999_P"), "BlueColoredVFX_UPDATED_V2_9999999_P", "an update of an update is its next version");
+        assert_eq!(fixed_stem("BlueColoredVFX_UPDATED_V2_9999999_P"), "BlueColoredVFX_UPDATED_V3_9999999_P");
+        assert_eq!(fixed_stem("BlueColoredVFX_updated_v9_9999999_P"), "BlueColoredVFX_UPDATED_V10_9999999_P", "any case, past 9");
+        assert_eq!(fixed_stem("Mod_UPDATED_Vx_9999999_P"), "Mod_UPDATED_Vx_UPDATED_9999999_P", "not a version: an original's own name");
         assert_eq!(fixed_stem("bp-lime-vfx_vfx_noPG_v1_P"), "bp-lime-vfx_vfx_noPG_v1_UPDATED_9999999_P");
         assert_eq!(fixed_stem("My Mod 2"), "My_Mod_2_UPDATED_9999999_P");
         assert_eq!(fixed_stem("!JIRA_x_123_P"), "!JIRA_x_UPDATED_9999999_P");
@@ -677,7 +752,7 @@ mod tests {
         assert_eq!(fixed_stem_among("A_100_P", &set(&["A_100_P", "A_200_P"])), "A_100_UPDATED_9999999_P");
         assert_eq!(fixed_stem_among("A_200_P", &set(&["A_100_P", "A_200_P"])), "A_200_UPDATED_9999999_P");
         assert_eq!(fixed_stem_among("A_100_P", &set(&["A_100_P", "A_UPDATED_9999999_P"])), "A_UPDATED_9999999_P", "its earlier update is not a clash");
-        assert_eq!(fixed_stem_among("A_100_UPDATED_9999999_P", &set(&["A_100_UPDATED_9999999_P", "A_200_P"])), "A_100_UPDATED_9999999_P", "an update keeps its name");
+        assert_eq!(fixed_stem_among("A_100_UPDATED_9999999_P", &set(&["A_100_UPDATED_9999999_P", "A_200_P"])), "A_100_UPDATED_V2_9999999_P", "an update's next version");
         // names that differ only in a space and an underscore get the exact name's hash, so they still differ
         let both = set(&["A B_100_P", "A_B_100_P"]);
         let (x, y) = (fixed_stem_among("A B_100_P", &both), fixed_stem_among("A_B_100_P", &both));
@@ -699,7 +774,7 @@ mod tests {
         // a directory where the .pak's temporary copy must go makes that copy fail after the .utoc and .ucas moved
         std::fs::create_dir_all(mods.join("A_9999999_P.pak.repakxtra-tmp")).unwrap();
         std::fs::write(mods.join("A_9999999_P.pak.repakxtra-tmp").join("x"), "block").unwrap();
-        let err = place(&mods.join("A_9999999_P.utoc"), &root.join("stage/out"), true, true, false, &root.join("trash")).unwrap_err();
+        let err = place(&mods.join("A_9999999_P.utoc"), &root.join("stage/out"), true, true, false, false, &root.join("trash")).unwrap_err();
         assert!(err.contains("Nothing in the mods folder changed"), "{err}");
         for x in ["pak", "utoc", "ucas"] {
             assert_eq!(std::fs::read_to_string(mods.join(format!("A_9999999_P.{x}"))).unwrap(), "old", "the original is untouched");
@@ -744,7 +819,7 @@ mod tests {
             touch(&mods.join(format!("A_9999999_P.{x}")), "old");
             touch(&root.join(format!("stage/out.{x}")), "new");
         }
-        let (placed, from, to) = place(&mods.join("A_9999999_P.utoc"), &root.join("stage/out"), true, false, false, &root.join("trash")).unwrap();
+        let (placed, from, to) = place(&mods.join("A_9999999_P.utoc"), &root.join("stage/out"), true, false, false, false, &root.join("trash")).unwrap();
         assert_eq!((from.as_str(), to[0].as_str()), ("A_9999999_P", "A_UPDATED_9999999_P"));
         assert!(placed.turned_off && !placed.replaced);
         assert!(mods.join("A_UPDATED_9999999_P.pak").exists(), "on, like the original was");
@@ -755,7 +830,7 @@ mod tests {
         for x in ["utoc", "ucas", "pak"] {
             touch(&root.join(format!("stage/out.{x}")), "newer");
         }
-        let (placed, ..) = place(&mods.join("A_9999999_P.utoc"), &root.join("stage/out"), true, false, false, &root.join("trash")).unwrap();
+        let (placed, ..) = place(&mods.join("A_9999999_P.utoc"), &root.join("stage/out"), true, false, false, false, &root.join("trash")).unwrap();
         assert!(!placed.turned_off && placed.replaced, "the previous fix went to Recently deleted");
         assert!(mods.join("A_UPDATED_9999999_P.bak_repak").exists() && !mods.join("A_UPDATED_9999999_P.pak").exists());
         assert_eq!(std::fs::read_to_string(mods.join("A_UPDATED_9999999_P.ucas")).unwrap(), "newer");
@@ -777,7 +852,7 @@ mod tests {
             touch(&mods.join(format!("A_9999999_P.{x}")), "old");
         }
         stage("new");
-        let (placed, from, to) = place(&mods.join("A_9999999_P.utoc"), &root.join("stage/out"), true, true, false, &root.join("trash")).unwrap();
+        let (placed, from, to) = place(&mods.join("A_9999999_P.utoc"), &root.join("stage/out"), true, true, false, false, &root.join("trash")).unwrap();
         assert_eq!((from.as_str(), to.join(",").as_str()), ("A_9999999_P", "A_9999999_P,A_BROKEN_9999999_P"));
         assert!(placed.turned_off && !placed.replaced);
         assert_eq!(std::fs::read_to_string(mods.join("A_9999999_P.pak")).unwrap(), "new", "the update has the name, on like the original");
@@ -789,14 +864,14 @@ mod tests {
 
         // updating the update again: the older broken copy goes to Recently deleted, the newest original is kept
         stage("newer");
-        let (placed, ..) = place(&mods.join("A_9999999_P.utoc"), &root.join("stage/out"), true, true, false, &root.join("trash")).unwrap();
+        let (placed, ..) = place(&mods.join("A_9999999_P.utoc"), &root.join("stage/out"), true, true, false, false, &root.join("trash")).unwrap();
         assert!(placed.replaced);
         assert_eq!(std::fs::read_to_string(mods.join("A_9999999_P.pak")).unwrap(), "newer");
         assert_eq!(std::fs::read_to_string(mods.join("A_BROKEN_9999999_P.bak_repak")).unwrap(), "new");
 
         // updating the broken copy: it stays where it is, the update in its name goes to Recently deleted
         stage("newest");
-        let (placed, ..) = place(&mods.join("A_BROKEN_9999999_P.utoc"), &root.join("stage/out"), true, true, false, &root.join("trash")).unwrap();
+        let (placed, ..) = place(&mods.join("A_BROKEN_9999999_P.utoc"), &root.join("stage/out"), true, true, false, false, &root.join("trash")).unwrap();
         assert!(placed.replaced && !placed.turned_off, "the broken copy was off already");
         assert_eq!(std::fs::read_to_string(mods.join("A_9999999_P.bak_repak")).unwrap(), "newest", "off, like the copy it was made from");
         assert!(!mods.join("A_9999999_P.pak").exists(), "the earlier update is in Recently deleted");
@@ -814,7 +889,7 @@ mod tests {
             touch(&mods.join(format!("A_9999999_P.{x}")), "old");
             touch(&root.join(format!("stage/out.{x}")), "new");
         }
-        let (placed, ..) = place(&mods.join("A_9999999_P.utoc"), &root.join("stage/out"), false, true, true, &root.join("trash")).unwrap();
+        let (placed, ..) = place(&mods.join("A_9999999_P.utoc"), &root.join("stage/out"), false, true, true, false, &root.join("trash")).unwrap();
         assert!(placed.trashed && placed.turned_off, "trashed, and turned off first even without Turn off");
         assert_eq!(std::fs::read_to_string(mods.join("A_9999999_P.pak")).unwrap(), "new", "the update is in, on");
         assert!(!mods.join("A_BROKEN_9999999_P.bak_repak").exists() && !mods.join("A_BROKEN_9999999_P.utoc").exists(), "no original left in the mods folder");
@@ -822,6 +897,67 @@ mod tests {
         assert_eq!(entries.len(), 1, "one deletion in Recently deleted");
         let names: Vec<String> = std::fs::read_dir(entries[0].path()).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
         assert!(names.iter().any(|n| n == "A_BROKEN_9999999_P.bak_repak"), "it comes back off: {names:?}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn updating_an_update_makes_its_next_version_and_keeps_it() {
+        let root = std::env::temp_dir().join(format!("xvfx-version-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let mods = root.join("mods");
+        for x in ["pak", "utoc", "ucas"] {
+            touch(&mods.join(format!("A_UPDATED_9999999_P.{x}")), "v1");
+            touch(&root.join(format!("stage/out.{x}")), "v2");
+        }
+        let (placed, ..) = place(&mods.join("A_UPDATED_9999999_P.utoc"), &root.join("stage/out"), true, false, false, false, &root.join("trash")).unwrap();
+        assert!(placed.turned_off && !placed.replaced && placed.fixed.ends_with("A_UPDATED_V2_9999999_P.pak"));
+        assert_eq!(std::fs::read_to_string(mods.join("A_UPDATED_V2_9999999_P.pak")).unwrap(), "v2", "the new version, on");
+        assert_eq!(std::fs::read_to_string(mods.join("A_UPDATED_9999999_P.bak_repak")).unwrap(), "v1", "the earlier one, kept and off");
+
+        // a partial update made again from itself replaces itself and never touches its _ORIGINAL
+        for x in ["pak", "utoc", "ucas"] {
+            touch(&mods.join(format!("B_PARTIAL_9999999_P.{x}")), "p1");
+            touch(&root.join(format!("stage/out.{x}")), "p2");
+        }
+        touch(&mods.join("B_ORIGINAL_9999999_P.bak_repak"), "original");
+        let (placed, ..) = place(&mods.join("B_PARTIAL_9999999_P.utoc"), &root.join("stage/out"), true, true, true, true, &root.join("trash")).unwrap();
+        assert!(placed.replaced && !placed.trashed);
+        assert_eq!(std::fs::read_to_string(mods.join("B_PARTIAL_9999999_P.pak")).unwrap(), "p2");
+        assert_eq!(std::fs::read_to_string(mods.join("B_ORIGINAL_9999999_P.bak_repak")).unwrap(), "original");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_partial_update_keeps_its_original_off_beside_it() {
+        assert_eq!(partial_stem("A_9999999_P"), "A_PARTIAL_9999999_P");
+        assert_eq!(original_stem("A_BROKEN_9999999_P"), "A_ORIGINAL_9999999_P");
+        assert_eq!(partial_stem("A_ORIGINAL_9999999_P"), "A_PARTIAL_9999999_P");
+        let root = std::env::temp_dir().join(format!("xvfx-partial-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let mods = root.join("mods");
+        let stage = |text: &str| {
+            for x in ["utoc", "ucas", "pak"] {
+                touch(&root.join(format!("stage/out.{x}")), text);
+            }
+        };
+        for x in ["pak", "utoc", "ucas"] {
+            touch(&mods.join(format!("A_9999999_P.{x}")), "old");
+        }
+        stage("new");
+        // Recently deleted was asked for, and the update would keep the name: a partial one does neither
+        let (placed, from, to) = place(&mods.join("A_9999999_P.utoc"), &root.join("stage/out"), false, true, true, true, &root.join("trash")).unwrap();
+        assert_eq!((from.as_str(), to.join(",").as_str()), ("A_9999999_P", "A_PARTIAL_9999999_P,A_ORIGINAL_9999999_P"));
+        assert!(placed.turned_off && !placed.trashed && placed.source.ends_with("A_9999999_P.pak"));
+        assert_eq!(std::fs::read_to_string(mods.join("A_PARTIAL_9999999_P.pak")).unwrap(), "new", "the update, on like the original");
+        assert_eq!(std::fs::read_to_string(mods.join("A_ORIGINAL_9999999_P.bak_repak")).unwrap(), "old", "the original, kept and off");
+        assert!(!mods.join("A_9999999_P.pak").exists() && !root.join("trash").exists());
+
+        // again from the kept original (a later run): the earlier partial update goes, the original stays where it is
+        stage("newer");
+        let (placed, ..) = place(&mods.join("A_ORIGINAL_9999999_P.utoc"), &root.join("stage/out"), true, true, false, true, &root.join("trash")).unwrap();
+        assert!(placed.replaced && !placed.turned_off);
+        assert_eq!(std::fs::read_to_string(mods.join("A_PARTIAL_9999999_P.bak_repak")).unwrap(), "newer", "off, like the original it was made from");
+        assert_eq!(std::fs::read_to_string(mods.join("A_ORIGINAL_9999999_P.bak_repak")).unwrap(), "old");
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -860,7 +996,8 @@ mod tests {
             }
             "vfx_check_usmap_update" => json!(c::vfx_check_usmap_update(a.get("force").and_then(Value::as_bool).unwrap_or(false)).await?),
             "xtra_vfx_dirs" => json!(make_dirs(&s(a, "gamePaks"), &s(a, "runId"), &s(a, "usmapPath"))?),
-            "xtra_vfx_detect" => json!(detect(&s(a, "usmapPath"), &list(a, "paths"), p).await?),
+            "xtra_vfx_stale" => json!(stale(&s(a, "modPath"), &list(a, "files"))?),
+            "xtra_vfx_detect" =>json!(detect(&s(a, "usmapPath"), &list(a, "paths"), p).await?),
             _ => return Err(format!("unknown command {cmd}")),
         })
     }
