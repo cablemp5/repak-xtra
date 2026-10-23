@@ -140,7 +140,7 @@ function Row({ mod, rowKey, loadouts, run, needs, partial, picked, open, busy, o
   return (
     <li className={`mod-row vf-row${status ? ` is-${status}` : ''}${picked ? ' is-picked' : ''}`} title={needs} data-key={rowKey}>
       <Checkbox size="sm" className="vf-pick" checked={picked} isDisabled={busy} disabled={busy} onChange={onPick} title={mod.path}>
-        <span className="vf-row-name">{mod.name}</span>
+        <span className={`vf-row-name${running ? ' t-shimmer' : ''}`}>{mod.name}</span>
       </Checkbox>
       {partial && !run?.report ? (
         <span className="vf-partial" title={`${plural(partial, 'Niagara file')} ${partial === 1 ? 'was' : 'were'} made for an older game build. ${partial === 1 ? 'It' : 'They'} will be left out, so ${partial === 1 ? 'that effect shows' : 'those effects show'} the game's usual colors. The rest still updates, and the original is kept, off.`}>Partial</span>

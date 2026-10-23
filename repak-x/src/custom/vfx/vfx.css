@@ -47,6 +47,8 @@
 .vf-row-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .vf-row:not(.is-picked) .vf-row-name { font-weight: 400; color: var(--text-secondary); }
 .vf-row:not(.is-picked):hover .vf-row-name { color: var(--text-primary); }
+/* the mod being updated: its name shimmers (theme.css .t-shimmer), still cut with an ellipsis */
+.vf-row-name.t-shimmer { display: block; }
 /* the loadouts holding it: a quiet tag the size of the Library's, the first name and how many more */
 /* will only partly update (old Niagara files left out): the Library's Needs VFX update badge look, so it reads as that kind
    of warning; the footer says it once more for the picked mods */

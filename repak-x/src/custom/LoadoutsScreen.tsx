@@ -471,8 +471,9 @@ export default function LoadoutsScreen(p: LoadoutProps) {
               aria-expanded={batch || withPreview > 0 ? genMenu : undefined}
               title={batch ? `Generating previews for ${batch.name}` : 'Render a preview for every loadout, one after another (each card shows its progress)'}
               onClick={() => (batch || withPreview > 0 ? setGenMenu(v => !v) : generate('all'))}>
-              <WandSparkles size={14} />
-              {batch ? <span className="t-shimmer">{batch.jobs > 1 ? `Previews ${batch.job} of ${batch.jobs}` : 'Generating preview'}</span> : 'Generate all previews'}
+              {batch
+                ? <span className="lo-gen-label t-shimmer-all"><WandSparkles size={14} />{batch.jobs > 1 ? `Previews ${batch.job} of ${batch.jobs}` : 'Generating preview'}</span>
+                : <><WandSparkles size={14} />Generate all previews</>}
             </button>
             {genMenu && batch && (
               <div className="sigeon-menu lo-gen-menu" role="menu">

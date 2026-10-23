@@ -1339,6 +1339,18 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
 }
 @keyframes t-shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0% 0; } }
 html[data-motion="off"] .t-shimmer { animation: none !important; background-position: 50% 0; }
+/* The same sweep over an icon and its text together (an SVG cannot take the text gradient): the content in the bright
+   color under a moving mask, dimmer outside the band. Generate all previews while it runs. */
+.t-shimmer-all {
+  color: var(--text-primary);
+  -webkit-mask-image: linear-gradient(90deg, rgb(0 0 0 / 0.55) 0%, rgb(0 0 0 / 0.55) 38%, #000 50%, rgb(0 0 0 / 0.55) 62%, rgb(0 0 0 / 0.55) 100%);
+  mask-image: linear-gradient(90deg, rgb(0 0 0 / 0.55) 0%, rgb(0 0 0 / 0.55) 38%, #000 50%, rgb(0 0 0 / 0.55) 62%, rgb(0 0 0 / 0.55) 100%);
+  -webkit-mask-size: 250% 100%; mask-size: 250% 100%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  animation: t-shimmer-all var(--shimmer-dur) var(--shimmer-ease) infinite;
+}
+@keyframes t-shimmer-all { 0% { -webkit-mask-position: 100% 0; mask-position: 100% 0; } 100% { -webkit-mask-position: 0% 0; mask-position: 0% 0; } }
+html[data-motion="off"] .t-shimmer-all { animation: none !important; -webkit-mask-position: 50% 0; mask-position: 50% 0; }
+.lo-gen-label { display: inline-flex; align-items: center; gap: 6px; }
 .is-queued { color: var(--text-primary) !important; }   /* no accent outline on a queued card or its button (cable, 2026-10-17) */
 
 /* ---------- more motion from transitions.dev (free library). html[data-motion="off"] stops all of it. ---------- */
