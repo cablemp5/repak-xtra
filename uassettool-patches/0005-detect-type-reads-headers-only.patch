@@ -1,0 +1,22 @@
+diff --git a/src/UAssetTool/Program.cs b/src/UAssetTool/Program.cs
+index 99c1320..88d4f72 100644
+--- a/src/UAssetTool/Program.cs
++++ b/src/UAssetTool/Program.cs
+@@ -3714,8 +3714,16 @@ public partial class Program
+                             return;
+                         }
+ 
+-                        var asset = LoadAssetWithMappings(path, mappings);
++                        // repakxtra: the class comes from the export and import maps, so the export data is not read
++                        // (its failures were caught export by export anyway). Only the fallback looks at how exports
++                        // parsed: an "Unknown" is read again in full, as before
++                        var asset = new UAsset(path, EngineVersion.VER_UE5_3, mappings, CustomSerializationFlags.SkipLoadingExports) { UseSeparateBulkDataFiles = true };
+                         string assetType = DetectAssetType(asset);
++                        if (assetType == "Unknown")
++                        {
++                            asset = LoadAssetWithMappings(path, mappings);
++                            assetType = DetectAssetType(asset);
++                        }
+ 
+                         results[i] = new Dictionary<string, object?>
+                         {

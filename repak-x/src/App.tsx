@@ -72,7 +72,7 @@ import { useConflictCount, useConflictWatch } from './custom/conflicts' // repak
 import { useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
 import { fixInVfxWindow } from './custom/vfx/handoff' // repakxtra: the VFX Updater window
 import VfxNotice, { VfxDot } from './custom/vfx/VfxNotice' // repakxtra: the game updated, VFX mods to fix
-import { updateVfxModInPlace } from './custom/vfx/quick' // repakxtra: Update VFX in the right-click menu
+import { canUpdateVfx, checkVfxModInPlace, updateVfxModInPlace } from './custom/vfx/quick' // repakxtra: Update VFX in the right-click menu
 import { newDefaultsOnce } from './custom/uiPrefs' // repakxtra
 import { reportSource } from './custom/setupReport' // repakxtra: Copy setup report reads the live list
 import { finishInstallLoadout } from './custom/installLoadout'
@@ -4615,7 +4615,8 @@ function App() {
             onCheckConflicts={() => contextMenu.mod && handleCheckSingleModClashes(contextMenu.mod)}
             onUpdateMod={() => contextMenu.mod && handleInitiateUpdate(contextMenu.mod)}
             onSendToVfxUpdater={() => contextMenu.mod && handleSendToVfxUpdater(contextMenu.mod)}
-            onUpdateVfx={contextMenu.mod && modDetails[contextMenu.mod.path]?.category === 'VFX' ? (m => () => void updateVfxModInPlace(m, alert, loadMods))(contextMenu.mod) : undefined /* repakxtra */}
+            onUpdateVfx={contextMenu.mod && canUpdateVfx(modDetails[contextMenu.mod.path]) ? (m => () => void updateVfxModInPlace(m, alert, loadMods))(contextMenu.mod) : undefined /* repakxtra */}
+            onCheckVfx={contextMenu.mod && canUpdateVfx(modDetails[contextMenu.mod.path]) ? (m => () => void checkVfxModInPlace(m, alert, loadMods))(contextMenu.mod) : undefined /* repakxtra */}
             onShowInAssetExplorer={() => {
               if (!contextMenu.mod) return
               // Same selection rule as onMoveTo: acting on a mod inside the

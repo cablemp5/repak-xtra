@@ -16,6 +16,7 @@ pub fn extract_zip(zip_path: &str, output_dir: &str) -> io::Result<()> {
             }
             let mut outfile = File::create(&outpath)?;
             io::copy(&mut file, &mut outfile)?;
+            crate::xtra_made::keep_time(&outfile, crate::xtra_made::zip_time(file.last_modified())); // repakxtra: when it was packed
         }
     }
 

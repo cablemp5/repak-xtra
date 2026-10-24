@@ -41,6 +41,7 @@ type ContextMenuProps = {
   onUpdateMod?: () => void
   onSendToVfxUpdater?: (mod: ModRecord) => void
   onUpdateVfx?: () => void // repakxtra: a VFX mod, updated in place (custom/vfx/quick.ts)
+  onCheckVfx?: () => void // repakxtra: Check for VFX update (custom/vfx/quick.ts)
   onShowInAssetExplorer?: (mod: ModRecord) => void
   onExtractAssets?: (mod: ModRecord) => void
   allTags: string[]
@@ -51,7 +52,7 @@ type ContextMenuProps = {
   selectionCount?: number
 }
 
-const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMoveTo, onMoveFolderTo, onCreateFolder, folders, onDelete, onToggle, onRename, onRenameFolder, onCheckConflicts, loadoutMenu, onUpdateMod, onSendToVfxUpdater, onUpdateVfx, onShowInAssetExplorer, onExtractAssets, allTags, onDeleteTag, gamePath, holdToDelete = true, selectionCount = 0 }: ContextMenuProps) => {
+const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMoveTo, onMoveFolderTo, onCreateFolder, folders, onDelete, onToggle, onRename, onRenameFolder, onCheckConflicts, loadoutMenu, onUpdateMod, onSendToVfxUpdater, onUpdateVfx, onCheckVfx, onShowInAssetExplorer, onExtractAssets, allTags, onDeleteTag, gamePath, holdToDelete = true, selectionCount = 0 }: ContextMenuProps) => {
   const [isDeleting, setIsDeleting] = useState(false)
   const deleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
@@ -353,6 +354,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
         Rename
       </div>
       {onUpdateVfx && <div className="context-menu-item" onClick={() => { onUpdateVfx(); onClose(); }}>Update VFX</div>}{/* repakxtra */}
+      {onCheckVfx && <div className="context-menu-item" onClick={() => { onCheckVfx(); onClose(); }}>Check for VFX update</div>}{/* repakxtra */}
       <div className="context-menu-separator" />
       <div className="context-menu-item submenu-trigger" onMouseEnter={handleSubmenuEnter}>
         {selectionCount > 1 ? `Move ${selectionCount} mods to…` : 'Move to…'}

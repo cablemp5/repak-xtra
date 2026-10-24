@@ -217,7 +217,9 @@ async fn detect(usmap_path: &str, paths: &[String], progress: &dyn VfxProgressSi
     let tool = PathBuf::new(); // the in-process library ignores it
     let mut out = HashMap::new();
     let mut failed = None;
-    for (i, batch) in paths.chunks(100).enumerate() {
+    // repakxtra: each request reads the USMAP again (about 0.3 s), so a few large requests, not one per 100 files
+    const CHUNK: usize = 400;
+    for (i, batch) in paths.chunks(CHUNK).enumerate() {
         let request = VfxUatRequest { action: "detect_type", file_paths: Some(batch.to_vec()), usmap_path: Some(usmap_path), ..Default::default() };
         match run_vfx_uat_request(&tool, &request).await {
             Ok(r) if r.success => {
@@ -231,7 +233,7 @@ async fn detect(usmap_path: &str, paths: &[String], progress: &dyn VfxProgressSi
             Ok(r) => failed = Some(r.message),
             Err(e) => failed = Some(e),
         }
-        let done = ((i + 1) * 100).min(paths.len());
+        let done = ((i + 1) * CHUNK).min(paths.len());
         progress.emit(VfxPipelineProgress { stage: "Reading asset types".into(), step: 1, current: done, total: paths.len(), message: format!("Read {done} of {} asset types", paths.len()) });
     }
     // Nothing came back: say why, rather than treat every asset as one to pass through (the old silent no-op)
@@ -245,6 +247,18 @@ async fn detect(usmap_path: &str, paths: &[String], progress: &dyn VfxProgressSi
 #[tauri::command]
 pub async fn xtra_vfx_detect(window: Window, usmap_path: String, paths: Vec<String>) -> Result<HashMap<String, Detected>, String> {
     detect(&usmap_path, &paths, &TauriVfxProgressSink::new(&window)).await
+}
+
+/// The mods the VFX Updater offers: the Library's VFX type (material instances under /VFX/) and any other mod with a
+/// material instance, wherever it lives, like a skin's own body materials with glowing colors. The update rebuilds every
+/// material instance on the game's copy the same way, whatever its folder. Also the right-click Update VFX
+/// (custom/vfx/quick.ts canUpdateVfx, the same rule).
+pub(crate) fn updatable(category: &str, files: &[String]) -> bool {
+    category == "VFX"
+        || files.iter().any(|f| {
+            let name = f.replace('\\', "/").rsplit('/').next().unwrap_or_default().to_ascii_lowercase();
+            name.starts_with("mi_") && name.ends_with(".uasset")
+        })
 }
 
 /// A mod's file stem split before its priority suffix ("_<digits>_P" or "_P"): ("A", "_9999999_P").
@@ -641,6 +655,8 @@ pub struct VfxMod {
     modified: u64,
     /// It carries Niagara systems or emitters (the window's Niagara badge, and its time estimate)
     niagara: bool,
+    /// Not a VFX mod: listed for its material instances (a skin's glow), grouped apart in the window
+    materials: bool,
 }
 
 /// The mods folder's VFX mods (the Library's VFX type) the VFX Updater can update: IoStore mods, no originals with an update
@@ -689,7 +705,7 @@ pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>
                         return None;
                     }
                 };
-                (details.category == "VFX").then(|| VfxMod {
+                updatable(&details.category, &details.files).then(|| VfxMod {
                     name: m.custom_name.clone().filter(|n| !n.trim().is_empty()).unwrap_or_else(|| split_priority(&stem).0.to_string()),
                     hero: m.character_name.clone(),
                     path: m.path.to_string_lossy().to_string(),
@@ -700,6 +716,7 @@ pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>
                         let n = f.replace('\\', "/").rsplit('/').next().unwrap_or_default().to_ascii_lowercase();
                         (n.starts_with("ns_") || n.starts_with("ne_")) && n.ends_with(".uasset")
                     }),
+                    materials: details.category != "VFX",
                 })
             })
             .collect::<Vec<_>>();
@@ -748,13 +765,15 @@ pub fn xtra_game_build(state: State<'_, Arc<Mutex<AppState>>>) -> GameBuild {
 /// Of `files` (paths inside the mod at `mod_path`), those whose game copy an update rewrote after the mod was written.
 /// The updater copies Niagara files as they are, and one still cooked for the old game can crash it (Niagara properties
 /// renumbered in 3962284), so a run leaves these out of the update.
-/// shortcut: "written" is the mod file's date, so a mod reinstalled after the update looks current; read the packages'
+/// shortcut: "written" is the mod file's modified time, when the mod was made for installs since xtra_made.rs (an archive
+/// entry's packed time). An older install from an archive dates from its install, so it looks current; read the packages'
 /// cook build instead if they ever carry one.
-fn stale(mod_path: &str, files: &[String]) -> Result<Vec<String>, String> {
+fn stale(mod_path: &str, game_paks: &str, files: &[String]) -> Result<Vec<String>, String> {
     let path = Path::new(mod_path);
     let written = std::fs::metadata(path).and_then(|m| m.modified()).map_err(|e| format!("{}: {e}", path.display()))?;
     let written = written.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
-    Ok(path.parent().and_then(|dir| crate::xtra_broken::rewritten_since(dir, files, written)).unwrap_or_default())
+    // the game set in Setup, never one guessed from the mod's folder: a mod chosen from Downloads is checked too
+    Ok(crate::xtra_broken::rewritten_since(Path::new(game_paks), files, written).unwrap_or_default())
 }
 
 /// What an update of `mod_path` (a .utoc) starts from: a partial update lacks the Niagara files it left out, so its kept
@@ -774,8 +793,8 @@ pub fn xtra_vfx_source(mod_path: String) -> String {
 }
 
 #[tauri::command]
-pub async fn xtra_vfx_stale(mod_path: String, files: Vec<String>) -> Result<Vec<String>, String> {
-    tauri::async_runtime::spawn_blocking(move || stale(&mod_path, &files)).await.map_err(|e| e.to_string())?
+pub async fn xtra_vfx_stale(mod_path: String, game_paks: String, files: Vec<String>) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || stale(&mod_path, &game_paks, &files)).await.map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]
@@ -784,6 +803,17 @@ mod tests {
     use crate::vfx_updater::{commands as c, file_ops, logging, pipeline, progress::NoOpProgressSink};
     use serde_json::{json, Value};
     use std::io::{BufRead, Write};
+
+    #[test]
+    fn a_mod_with_material_instances_anywhere_can_be_updated() {
+        let files = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert!(updatable("VFX", &[]), "the Library's VFX type");
+        // a skin's own materials (MCU Black Aqua Shine): classed Texture, still material instances to rebuild
+        assert!(updatable("Texture", &files(&["Marvel/Content/Marvel/Characters/1026/1026800/Materials/MI_1026800_Body_01.uasset", "Marvel/Content/Marvel/Characters/1026/1026800/Texture/T_1026800_Head_D.uasset"])));
+        assert!(updatable("Mesh", &files(&["Marvel\\Content\\X\\mi_body.uasset"])), "any case, any slash");
+        assert!(!updatable("Texture", &files(&["Marvel/Content/X/T_Body_D.uasset", "Marvel/Content/X/MI_Body.uexp"])), "textures only, or a material's .uexp alone");
+        assert!(!updatable("Audio", &files(&["Marvel/Content/Audio/Mission_MI_01.bnk"])), "MI_ inside another name is not one");
+    }
 
     #[test]
     fn fixed_names_drop_the_priority_and_keep_one_updated() {
@@ -1074,7 +1104,7 @@ mod tests {
             "vfx_get_asset_classes" => json!(crate::vfx_updater::uasset_tool::batch_detect_asset_types(&tool, &s(a, "usmapPath"), &list(a, "uassetPaths"), p).await?),
             "vfx_copy_uasset_files" => json!(c::vfx_copy_uasset_files(list(a, "sourcePaths"), s(a, "sourceBaseDir"), s(a, "destBaseDir")).await?),
             "vfx_convert_uassets_to_json" => json!(pipeline::step_convert_mod_to_json(&tool, &s(a, "usmapPath"), &s(a, "inputDir"), &s(a, "outputDir"), p).await?),
-            "vfx_extract_vanilla_assets" => json!(pipeline::step_extract_vanilla_assets(&tool, &s(a, "gamePaks"), &s(a, "outputDir"), &list(a, "filterPatterns"), p).await?),
+            "vfx_extract_vanilla_assets" => json!(pipeline::step_extract_vanilla_assets(&tool, &s(a, "gamePaks"), &s(a, "outputDir"), &list(a, "filterPatterns"), &list(a, "noDeps"), p).await?),
             "vfx_read_json_file" => json!(c::vfx_read_json_file(s(a, "path")).await?),
             "vfx_write_json_file" => json!(c::vfx_write_json_file(s(a, "path"), s(a, "content")).await?),
             "vfx_convert_json_to_uassets" => json!(pipeline::step_convert_json_to_uassets(&tool, &s(a, "usmapPath"), &s(a, "inputDir"), &s(a, "outputDir"), p).await?),
@@ -1084,7 +1114,7 @@ mod tests {
             }
             "vfx_check_usmap_update" => json!(c::vfx_check_usmap_update(a.get("force").and_then(Value::as_bool).unwrap_or(false)).await?),
             "xtra_vfx_dirs" => json!(make_dirs(&s(a, "gamePaks"), &s(a, "runId"), &s(a, "usmapPath"))?),
-            "xtra_vfx_stale" => json!(stale(&s(a, "modPath"), &list(a, "files"))?),
+            "xtra_vfx_stale" => json!(stale(&s(a, "modPath"), &s(a, "gamePaks"), &list(a, "files"))?),
             "xtra_vfx_detect" =>json!(detect(&s(a, "usmapPath"), &list(a, "paths"), p).await?),
             "xtra_vfx_source" => json!(xtra_vfx_source(s(a, "modPath"))),
             "xtra_skin_table_hero" => json!(crate::xtra_builtins::table_hero(&s(a, "modPath"), Path::new(&s(a, "gamePaks"))).await?),

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AnimatedThemeToggler } from './ui/AnimatedThemeToggler'
 import Checkbox from './ui/Checkbox'
-import { UiScaleSection, MotionSection, InstallingSection, HeaderButtonsSection, ModPrefs, WarningPrefs, NewStripPref, resetUiPrefs } from '../custom/uiPrefs' // repakxtra
+import { UiScaleSection, MotionSection, InstallingSection, HeaderButtonsSection, ModPrefs, WarningPrefs, NewStripPref, BuiltinsPref, resetUiPrefs } from '../custom/uiPrefs' // repakxtra
 import RecentlyDeleted from '../custom/RecentlyDeleted' // repakxtra: Settings > Recently deleted
 import { useDialogFocus } from '../custom/dialogFocus' // repakxtra
 import TailInput from './ui/TailInput'
@@ -408,6 +408,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                       <p className="setting-subtext">Picking a folder also shows the mods in its subfolders.</p>
                     </div>
                     <NewStripPref />{/* repakxtra */}
+                    <BuiltinsPref />{/* repakxtra */}
                   </div>
                 </div>
 
