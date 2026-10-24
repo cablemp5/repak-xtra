@@ -94,7 +94,7 @@ button.vf-loadouts:focus-visible { outline: 2px solid var(--accent-primary); out
 /* running: the app's thin progress bar (the update dialog's), the step and what it is on */
 /* running: under the name (lined up with it, past the tick), the app's thin bar, then the step and its own count. The
    step count and the count inside the step are pills, so the numbers read apart from the words */
-.vf-progress { flex-basis: 100%; margin-top: -8px; padding: 0 0 12px 28px; }   /* close under the name: the tick row is 40px tall, the name sits in its middle */
+.vf-progress { flex-basis: 100%; min-width: 0; margin-top: -8px; padding: 0 0 12px 28px; }   /* close under the name: the tick row is 40px tall, the name sits in its middle */
 .vf-bar { height: 4px; border-radius: 999px; overflow: hidden; background: var(--bg-lighter); }
 /* the fill carries the app's shimmer sweep (transitions.dev: Shimmer), so a long step still reads as working */
 .vf-bar i { display: block; height: 100%; transition: width 0.4s var(--acc-ease);
