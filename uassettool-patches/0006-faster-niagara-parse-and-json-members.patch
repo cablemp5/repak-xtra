@@ -1,0 +1,162 @@
+diff --git a/src/UAssetAPI/PropertyTypes/Objects/ArrayPropertyData.cs b/src/UAssetAPI/PropertyTypes/Objects/ArrayPropertyData.cs
+index 80d13be..7b493b8 100644
+--- a/src/UAssetAPI/PropertyTypes/Objects/ArrayPropertyData.cs
++++ b/src/UAssetAPI/PropertyTypes/Objects/ArrayPropertyData.cs
+@@ -47,8 +47,10 @@ public class ArrayPropertyData : PropertyData<PropertyData[]>
+         }
+ 
+         FName arrayStructType = null;
++        UsmapArrayData arrayLookup = null; // repakxtra: for the elements' lookups (below)
+         if (reader.Asset.Mappings != null && ArrayType == null && reader.Asset.Mappings.TryGetPropertyData(Name, Ancestry, reader.Asset, out UsmapArrayData strucDat1))
+         {
++            arrayLookup = strucDat1;
+             ArrayType = FName.DefineDummy(reader.Asset, strucDat1.InnerType.Type.ToString());
+             if (strucDat1.InnerType is UsmapStructData strucDat2) arrayStructType = FName.DefineDummy(reader.Asset, strucDat2.StructType);
+         }
+@@ -148,6 +150,12 @@ public class ArrayPropertyData : PropertyData<PropertyData[]>
+             bool fits = numEntries < 0 || !reader.BaseStream.CanSeek || numEntries <= reader.BaseStream.Length - reader.BaseStream.Position;
+             var results = fits ? new PropertyData[numEntries] : null;
+             var grown = fits ? null : new List<PropertyData>();
++            // repakxtra: the elements' type lookups find this array by its name and ancestry: hand them this array's own
++            // answer to that lookup (made above), saved and restored around nested arrays
++            var (hintName, hintData) = (Usmap.ArrayHintName, Usmap.ArrayHintData);
++            if (arrayLookup != null) (Usmap.ArrayHintName, Usmap.ArrayHintData) = (Name, arrayLookup);
++            try
++            {
+             for (int i = 0; i < numEntries; i++)
+             {
+                 var entry = MainSerializer.TypeToClass(ArrayType, FName.DefineDummy(reader.Asset, i.ToString(), int.MinValue), Ancestry, Name, null, reader.Asset);
+@@ -156,6 +164,11 @@ public class ArrayPropertyData : PropertyData<PropertyData[]>
+                 if (entry is StructPropertyData data) data.StructType = arrayStructType == null ? FName.DefineDummy(reader.Asset, "Generic") : arrayStructType;
+                 entry.Read(reader, false, averageSizeEstimate, 0, PropertySerializationContext.Array);
+             }
++            }
++            finally
++            {
++                (Usmap.ArrayHintName, Usmap.ArrayHintData) = (hintName, hintData);
++            }
+ 
+             Value = fits ? results : grown.ToArray();
+         }
+diff --git a/src/UAssetAPI/JSON/UAssetContractResolver.cs b/src/UAssetAPI/JSON/UAssetContractResolver.cs
+index 366bcee..541c1e7 100644
+--- a/src/UAssetAPI/JSON/UAssetContractResolver.cs
++++ b/src/UAssetAPI/JSON/UAssetContractResolver.cs
+@@ -112,6 +112,87 @@ namespace UAssetAPI.JSON
+             return base.CreateContract(objectType);
+         }
+ 
++        /// <summary>
++        /// repakxtra: typed getters and setters for the members every property element carries (a Niagara system holds
++        /// tens of thousands of byte elements, each with about ten of them). Newtonsoft reaches members through
++        /// reflection under NativeAOT, which made writing them most of a decode. Same members, same values, same order.
++        /// </summary>
++        private interface IFieldBacked { System.Reflection.FieldInfo Field { set; } }
++
++        private sealed class Member<TObj, TVal> : IValueProvider, IFieldBacked
++        {
++            private readonly Func<TObj, TVal> get;
++            private readonly Action<TObj, TVal> set;
++            public System.Reflection.FieldInfo Field { private get; set; }
++            public Member(Func<TObj, TVal> get, Action<TObj, TVal> set) { this.get = get; this.set = set; }
++            public object GetValue(object target) => get((TObj)target);
++            // anything but the field's own type (a converter's boxed int 0 for a float, a null) goes through reflection as
++            // before, with its conversions
++            public void SetValue(object target, object value)
++            {
++                if (value is TVal v) set((TObj)target, v);
++                else Field.SetValue(target, value);
++            }
++        }
++
++        private static IValueProvider FastMember(System.Reflection.MemberInfo member)
++        {
++            var provider = FastMemberFor(member);
++            if (provider is IFieldBacked backed) backed.Field = (System.Reflection.FieldInfo)member;
++            return provider;
++        }
++
++        private static IValueProvider FastMemberFor(System.Reflection.MemberInfo member)
++        {
++            if (member is not System.Reflection.FieldInfo) return null;
++            if (member.DeclaringType == typeof(PropertyData))
++            {
++                switch (member.Name)
++                {
++                    case nameof(PropertyData.Name): return new Member<PropertyData, FName>(o => o.Name, (o, v) => o.Name = v);
++                    case nameof(PropertyData.ArrayIndex): return new Member<PropertyData, int>(o => o.ArrayIndex, (o, v) => o.ArrayIndex = v);
++                    case nameof(PropertyData.IsZero): return new Member<PropertyData, bool>(o => o.IsZero, (o, v) => o.IsZero = v);
++                    case nameof(PropertyData.PropertyTagFlags): return new Member<PropertyData, EPropertyTagFlags>(o => o.PropertyTagFlags, (o, v) => o.PropertyTagFlags = v);
++                    case nameof(PropertyData.PropertyTagExtensions): return new Member<PropertyData, EPropertyTagExtension>(o => o.PropertyTagExtensions, (o, v) => o.PropertyTagExtensions = v);
++                    case nameof(PropertyData.OverrideOperation): return new Member<PropertyData, EOverriddenPropertyOperation>(o => o.OverrideOperation, (o, v) => o.OverrideOperation = v);
++                    case nameof(PropertyData.bExperimentalOverridableLogic): return new Member<PropertyData, bool>(o => o.bExperimentalOverridableLogic, (o, v) => o.bExperimentalOverridableLogic = v);
++                }
++            }
++            else if (member.DeclaringType == typeof(BytePropertyData))
++            {
++                switch (member.Name)
++                {
++                    case nameof(BytePropertyData.ByteType): return new Member<BytePropertyData, BytePropertyType>(o => o.ByteType, (o, v) => o.ByteType = v);
++                    case nameof(BytePropertyData.EnumType): return new Member<BytePropertyData, FName>(o => o.EnumType, (o, v) => o.EnumType = v);
++                    case nameof(BytePropertyData.Value): return new Member<BytePropertyData, byte>(o => o.Value, (o, v) => o.Value = v);
++                    case nameof(BytePropertyData.EnumValue): return new Member<BytePropertyData, FName>(o => o.EnumValue, (o, v) => o.EnumValue = v);
++                }
++            }
++            else if (member.DeclaringType == typeof(FloatPropertyData) && member.Name == nameof(FloatPropertyData.Value))
++            {
++                return new Member<FloatPropertyData, float>(o => o.Value, (o, v) => o.Value = v);
++            }
++            return null;
++        }
++
++        protected override JsonProperty CreateProperty(System.Reflection.MemberInfo member, MemberSerialization memberSerialization)
++        {
++            JsonProperty property = base.CreateProperty(member, memberSerialization);
++            if (FastMember(member) is IValueProvider fast) property.ValueProvider = fast;
++            // the ShouldSerialize<Member> methods the base found by reflection, called directly
++            if (property.ShouldSerialize != null && member.DeclaringType == typeof(BytePropertyData))
++            {
++                if (member.Name == nameof(BytePropertyData.Value)) property.ShouldSerialize = o => ((BytePropertyData)o).ShouldSerializeValue();
++                else if (member.Name == nameof(BytePropertyData.EnumValue)) property.ShouldSerialize = o => ((BytePropertyData)o).ShouldSerializeEnumValue();
++            }
++            else if (property.ShouldSerialize != null && member.DeclaringType == typeof(PropertyData))
++            {
++                if (member.Name == nameof(PropertyData.OverrideOperation)) property.ShouldSerialize = o => ((PropertyData)o).ShouldSerializeOverrideOperation();
++                else if (member.Name == nameof(PropertyData.bExperimentalOverridableLogic)) property.ShouldSerialize = o => ((PropertyData)o).ShouldSerializebExperimentalOverridableLogic();
++            }
++            return property;
++        }
++
+         public UAssetContractResolver(Dictionary<FName, string> toBeFilled) : base()
+         {
+             ToBeFilled = toBeFilled;
+diff --git a/src/UAssetAPI/Unversioned/Usmap.cs b/src/UAssetAPI/Unversioned/Usmap.cs
+index f94e7c6..532f5d9 100644
+--- a/src/UAssetAPI/Unversioned/Usmap.cs
++++ b/src/UAssetAPI/Unversioned/Usmap.cs
+@@ -855,6 +855,11 @@ namespace UAssetAPI.Unversioned
+         /// <param name="asset">An asset to also search for schemas within.</param>
+         /// <param name="propDat">The property data.</param>
+         /// <returns>Whether or not the property data was successfully found.</returns>
++        /// <summary>repakxtra: the array ArrayPropertyData.Read is reading on this thread (its Name object) and its own lookup's
++        /// result, for its elements' lookups (TryGetPropertyData).</summary>
++        [ThreadStatic] internal static FName ArrayHintName;
++        [ThreadStatic] internal static UsmapArrayData ArrayHintData;
++
+         public bool TryGetPropertyData<T>(FName propertyName, AncestryInfo ancestry, UAsset asset, out T propDat) where T : UsmapPropertyData
+         {
+             propDat = null;
+@@ -864,7 +869,12 @@ namespace UAssetAPI.Unversioned
+             if (propertyName.IsDummy && int.TryParse(propertyName.Value.Value, out _))
+             {
+                 // this is actually an array member; try to find its parent array
+-                if (this.TryGetPropertyData(ancestry.Parent, ancestry.CloneWithoutParent(), asset, out UsmapArrayData arrDat))
++                // repakxtra: an element of the array being read (ArrayPropertyData.Read) takes the array's own answer to
++                // this same lookup (its name and ancestry), instead of repeating it once per element
++                UsmapArrayData arrDat = null;
++                bool isHinted = ArrayHintData != null && ReferenceEquals(ancestry.Parent, ArrayHintName);
++                if (isHinted) arrDat = ArrayHintData;
++                if (isHinted || this.TryGetPropertyData(ancestry.Parent, ancestry.CloneWithoutParent(), asset, out arrDat))
+                 {
+                     propDat = arrDat.InnerType as T;
+                     if (propDat != null) return true;

@@ -8,6 +8,7 @@ import { useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit } from '@tauri-apps/api/event'
 import type { useAlert } from '../../components/AlertHandler'
+import { verdictsChanged } from '../brokenMods'
 import { modKey, renameModKey } from '../loadoutStore'
 import { readFilter } from './filter'
 import { openVfxWindow, sendReport, utocOf } from './handoff'
@@ -29,6 +30,16 @@ export const useVfxUpdating = (path?: string | null) => useSyncExternalStore(wat
 const fileName = (p: string) => p.replace(/\\/g, '/').split('/').pop() ?? p
 const nameOf = (p: string) => fileName(p).replace(/\.[^.]+$/, '').replace(/(_\d+)?_P$/i, '')
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+
+/** Whether the VFX Updater can update a mod: VFX, or any mod with a material instance (MI_*.uasset), as
+ *  xtra_vfx.rs `updatable` decides (a skin's glow or shine material sorts as Mesh or Texture). */
+export const canUpdateVfx = (d?: { category?: string; files?: string[] } | null) =>
+  d?.category === 'VFX' || Boolean(d?.files?.some(f => /^mi_.*\.uasset$/i.test(fileName(f))))
+
+if (import.meta.env.DEV) {
+  console.assert(canUpdateVfx({ category: 'VFX' }) && canUpdateVfx({ category: 'Texture', files: ['Marvel\\Content\\X\\mi_Body_Glow.uasset'] }), 'VFX or a material instance')
+  console.assert(!canUpdateVfx({ category: 'Texture', files: ['a/T_Body.uasset', 'a/MI_Body.uexp', 'a/Mission_MI_01.bnk'] }) && !canUpdateVfx(undefined), 'no material instance')
+}
 
 /** The USMAP in use: the one set in the VFX Updater, or the newest from rivals-depot when it has none yet. */
 async function findUsmap(): Promise<string | null> {
@@ -69,6 +80,7 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
       await emit('mods_dir_changed').catch(() => {})
       await reload()
     }
+    if (r.status === 'nothing') await verdictsChanged() // its Needs VFX update flag goes (xtra_broken.rs)
     if (id !== null) alert.dismissAlert(id)
     id = null
     resultToast(r, name, alert)
@@ -101,4 +113,56 @@ function resultToast(r: VfxReport, name: string, alert: Alert) {
     // a problem is yellow, never red
     alert.showAlert({ color: 'warning', duration: 0, title: `${name} was not updated`, description: r.error ?? 'Something went wrong.', action: show })
   }
+}
+
+/** What Check for VFX update found (xtra_vfx_check.rs): the mod's material instances by the game version they were built for. */
+export type VfxCheck = { verdict: 'outdated' | 'current' | 'unknown' | 'none'; outdated: string[]; current: string[]; unknown: string[]; why?: 'empty' | 'unreadable' | 'elsewhere' | null }
+
+/** Why a check could not tell, for one material and for several, in words that never guess past what it saw. */
+const WHY = {
+  empty: ['carries no shader data of its own to compare', 'carry no shader data of their own to compare'],
+  unreadable: ["could not be compared, since the game's older files could not be read", "could not be compared, since the game's older files could not be read"],
+  elsewhere: ['matches no game version (the modder built it)', 'match no game version (the modder built them)'],
+} as const
+
+/** Checks one mod's materials against this game version and the earlier ones still in the game (its flag follows). */
+export async function checkVfxMod(path: string): Promise<VfxCheck> {
+  const usmap = await findUsmap()
+  if (!usmap) throw new Error('There is no USMAP yet. Open the VFX Updater to get one.')
+  return invoke<VfxCheck>('xtra_vfx_check', { modPath: path, usmapPath: usmap })
+}
+
+/** What a check means, in words: a toast's title and text (the VFX Updater's log uses them too). */
+export function checkWords(c: VfxCheck, name: string): { title: string; text: string; color: 'warning' | 'success' | 'default' } {
+  const all = c.outdated.length + c.current.length + c.unknown.length
+  if (c.verdict === 'outdated') return { color: 'warning', title: `${name} needs a VFX update`, text: `${c.outdated.length === all ? (all === 1 ? 'Its material is' : `All ${all} of its materials are`) : `${c.outdated.length} of its ${all} materials are`} still built for an earlier game version.` }
+  if (c.verdict === 'current') return { color: 'success', title: `${name} is up to date`, text: `${all === 1 ? 'Its material is' : `All ${all} of its materials are`} built for this game version.` }
+  if (c.verdict === 'unknown') {
+    const one = c.unknown.length === 1
+    return { color: 'default', title: `Not known if ${name} needs an update`, text: `${one ? 'Its material' : `${c.unknown.length} of its materials`} ${WHY[c.why ?? 'elsewhere'][one ? 0 : 1]}, so its date decides as before.` }
+  }
+  return { color: 'default', title: `${name} has nothing to check`, text: 'It has no material instances of the game\'s.' }
+}
+
+/** Right-click > Check for VFX update: one mod, with a toast while it runs and one for what it found. */
+export async function checkVfxModInPlace(mod: { path: string; utoc_path?: string | null }, alert: Alert, reload: () => unknown) {
+  const name = nameOf(mod.path)
+  const id = alert.showAlert({ color: 'default', title: `Checking ${name}`, description: 'Comparing its materials with this game version and the earlier ones.', isLoading: true, duration: 0 })
+  try {
+    const c = await checkVfxMod(mod.path)
+    alert.dismissAlert(id)
+    const w = checkWords(c, name)
+    const update = { label: 'Update VFX', onClick: () => { void updateVfxModInPlace(mod, alert, reload) } }
+    alert.showAlert({ color: w.color, duration: c.verdict === 'outdated' ? 0 : 6000, title: w.title, description: w.text, action: c.verdict === 'outdated' ? update : undefined })
+    await verdictsChanged() // its Needs VFX update flag follows the check
+  } catch (e) {
+    alert.dismissAlert(id)
+    alert.warning(`${name} was not checked`, String(e instanceof Error ? e.message : e))
+  }
+}
+
+if (import.meta.env.DEV) {
+  const said = (unknown: string[], why: VfxCheck['why']) => checkWords({ verdict: 'unknown', outdated: [], current: [], unknown, why }, 'A').text
+  console.assert(said(['e'], 'empty') === 'Its material carries no shader data of its own to compare, so its date decides as before.', 'one, no shader data')
+  console.assert(said(['a', 'b'], 'elsewhere').startsWith('2 of its materials match no game version (the modder built them)'), 'several, built by the modder')
 }

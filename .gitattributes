@@ -16,3 +16,6 @@ scripts/** linguist-vendored
 # repakxtra: the bundled signature bypass is compiled into the exe (include_bytes!), so it must be a real file in every checkout,
 # including CI and release builds that skip LFS (an LFS pointer would be embedded instead)
 repak-x/resources/utoc-bypass/dsound.dll -filter -diff -merge binary
+
+# repakxtra: applied to the UAssetToolRivals submodule by build.ps1 (uassettool-patches/apply.ps1), byte for byte as written
+uassettool-patches/*.patch -text

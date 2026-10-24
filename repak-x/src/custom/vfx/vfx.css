@@ -17,6 +17,7 @@
 .vf-search input { font-size: 13.5px !important; }
 .vf-search input::placeholder { color: var(--text-secondary); opacity: 1; }
 .vf-search-clear { flex: none; width: 26px; height: 26px !important; min-height: 0 !important; }
+.vf-body .vf-add { flex: none; margin-left: auto; height: auto !important; min-height: 32px !important; } /* as tall as the search beside it */
 
 /* a group: its heading folds it away (the Loadouts screen's collections), Select all sits at the far end */
 .vf-grp-head { display: flex; align-items: center; gap: 12px; height: 32px; margin-bottom: 8px; }
@@ -24,7 +25,7 @@
 .vf-grp-title { flex: 1; min-width: 0; margin: 0; font: inherit; }
 .vf-grp-fold { width: 100%; min-width: 0; display: flex !important; align-items: center; justify-content: flex-start !important; gap: 8px; height: 32px !important; min-height: 0 !important;
   padding: 0 !important; margin-left: -2px; border: none !important; background: none !important; cursor: pointer; text-align: left; color: var(--text-secondary) !important; }
-.vf-grp-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }   /* a Loadouts collection's name */
+.vf-grp-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }   /* a step above the 13px mod names and 12.5px notes */
 .vf-grp-fold:hover .vf-grp-caret, .vf-grp-fold:focus-visible .vf-grp-caret { color: var(--text-primary); }
 .vf-grp-caret { flex: none; transition: transform var(--acc-chevron) var(--acc-ease); }
 .vf-grp-fold[aria-expanded="true"] .vf-grp-caret { transform: rotate(90deg); }
@@ -56,10 +57,10 @@
 /* the loadouts holding it: a quiet tag the size of the Library's, the first name and how many more */
 /* will only partly update (old Niagara files left out): the Library's Needs VFX update badge look, so it reads as that kind
    of warning; the footer says it once more for the picked mods */
-.vf-partial { flex: none; height: 22px; display: inline-flex; align-items: center; padding: 0 7px; border-radius: 6px; font-size: 11px; font-weight: 600;
+.vf-partial, .vf-needs { flex: none; height: 22px; display: inline-flex; align-items: center; padding: 0 7px; border-radius: 6px; font-size: 11px; font-weight: 600;
   color: #f5d342; border: 1px solid color-mix(in srgb, #f5d342, transparent 55%); cursor: help; white-space: nowrap; }
 .vf-partial-n { font-weight: 500; color: #f5d342; }
-[data-theme="light"] .vf-partial, [data-theme="light"] .vf-partial-n { color: #665400; }
+[data-theme="light"] .vf-partial, [data-theme="light"] .vf-needs, [data-theme="light"] .vf-partial-n { color: #665400; }
 .vf-loadouts {flex: 0 1 auto; min-width: 0; max-width: 34%; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px;
   border: 1px solid var(--panel-border); border-radius: 6px; font-size: 11.5px; font-weight: 500; color: var(--text-secondary); }
 /* a button: opens that loadout's page in the main window */
@@ -74,13 +75,14 @@ button.vf-loadouts:focus-visible { outline: 2px solid var(--accent-primary); out
 .vf-loadouts b { flex: none; margin-left: 2px; font-weight: 500; color: var(--text-secondary); white-space: pre; }
 .vf-status { flex: none; font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .vf-status.is-running { color: var(--text-primary); }
-.vf-status.is-cancelled { color: #f5d342; }
+.vf-status.is-cancelled { color: var(--text-secondary); }
 /* the result, which opens the report: a pill button */
 .vf-pill { flex: none; display: inline-flex !important; align-items: center; gap: 4px; height: 24px !important; min-height: 0 !important; padding: 0 6px 0 9px !important;
   border: none !important; border-radius: 999px !important; font-size: 12px !important; font-weight: 600 !important; line-height: 1; cursor: pointer;
   color: var(--text-secondary) !important; background: var(--quiet-active) !important; }
 .vf-pill.is-fixed { color: #3ecf6e !important; background: color-mix(in srgb, #3ecf6e, transparent 88%) !important; }
-.vf-pill.is-failed, .vf-pill.is-cancelled, .vf-pill.is-partial {color: #f5d342 !important; background: color-mix(in srgb, #f5d342, transparent 88%) !important; }
+.vf-pill-icon { flex: none; margin-right: 2px; }   /* a failed one carries the warning mark, so it reads apart from Partial */
+.vf-pill.is-failed, .vf-pill.is-partial {color: #f5d342 !important; background: color-mix(in srgb, #f5d342, transparent 88%) !important; }
 .vf-pill:hover { filter: brightness(1.15); }
 .vf-pill, .vf-status { animation: t-swap-in var(--icon-swap-dur) var(--icon-swap-ease) backwards; }
 /* the label 2px down: on the pill's line Geist's capitals sit 2px above its middle (measured), the caret stays put */
@@ -144,7 +146,7 @@ button.vf-assets-toggle:hover { color: var(--text-primary) !important; }
    line on what it is for, the control, a short note; a hairline between parts, the same rhythm in each */
 .vf-adv { margin-top: -8px; padding-top: 12px; }   /* the divider halfway: 12px above, 12px below */
 .vf-adv-title { margin: 0; font: inherit; }
-.vf-adv-title > .ia-toggle { gap: 8px; height: 32px !important; margin-left: -2px; font-size: 13px !important; font-weight: 600 !important; color: var(--text-primary) !important; }   /* a heading like the groups' */
+.vf-adv-title > .ia-toggle { gap: 8px; height: 32px !important; margin-left: -2px; font-size: 14px !important; font-weight: 600 !important; color: var(--text-primary) !important; }   /* a heading like the groups' */
 .vf-adv-title > .ia-toggle .ia-caret { color: var(--text-secondary); }
 .vf-adv-body { display: flex; flex-direction: column; padding: 4px 0 0 0; }
 .vf-set { padding: 18px 0 20px; }
@@ -187,9 +189,13 @@ button.vf-assets-toggle:hover { color: var(--text-primary) !important; }
 .vf-log .is-success { color: #46a758; }
 .vf-copy-log { margin-top: 10px; }
 
-.vf-foot { position: relative; display: flex; align-items: center; gap: 8px; padding: 12px 24px; border-top: 1px solid var(--panel-border); }
-.vf-policy .su-link { margin-left: 2px; }
-.vf-state { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vf-foot { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 24px; border-top: 1px solid var(--panel-border); }
+/* the note has its own row above the buttons and wraps there: never cut off, never squeezed beside them */
+.vf-state { flex: 1 1 100%; min-width: 0; margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.vf-foot-actions { flex: none; margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.vf-spin { animation: vf-spin 1.1s linear infinite; }
+@keyframes vf-spin { to { transform: rotate(360deg); } }
+html[data-motion="off"] .vf-spin { animation: none; }
 .vf-foot .btn-primary {
   height: 32px !important; min-height: 0 !important; padding: 0 16px 0 14px !important; font-size: 13px !important; border-radius: var(--quiet-radius) !important;
   display: inline-flex !important; align-items: center; gap: 4px; width: auto !important; flex: none;
@@ -216,12 +222,13 @@ html[data-motion="off"] .vfx-notice { animation: none; }
 
 /* light theme: the problem yellow and success green, darkened (text 4.5:1, marks 3:1 on the light window) */
 [data-theme="light"] .vf-pill.is-fixed, [data-theme="light"] .vf-log .is-success { color: #166236 !important; }
-[data-theme="light"] .vf-pill.is-failed, [data-theme="light"] .vf-pill.is-cancelled, [data-theme="light"] .vf-pill.is-partial,[data-theme="light"] .vf-status.is-cancelled,
+[data-theme="light"] .vf-pill.is-failed, [data-theme="light"] .vf-pill.is-partial,
 [data-theme="light"] .vf-counts .is-failed b, [data-theme="light"] .vf-counts .is-unreadable b, [data-theme="light"] .vf-log .is-warning { color: #665400 !important; }
 [data-theme="light"] .vf-warn svg, [data-theme="light"] .vfx-notice-icon { color: #9a7d00; }
 [data-theme="light"] .vf-warnings li::before { background: #9a7d00; }
 
 /* a mod with Niagara effects (particle systems) */
+.vf-niagara:focus-visible, .vf-partial:focus-visible, .vf-needs:focus-visible { outline-offset: 1px !important; }
 .vf-niagara { flex: none; height: 22px; display: inline-flex; align-items: center; padding: 0 7px; border-radius: 6px; font-size: 11px; font-weight: 600;
   color: #b9a4ff; border: 1px solid color-mix(in srgb, #9b7bff, transparent 55%); cursor: help; white-space: nowrap; }
 [data-theme="light"] .vf-niagara { color: #5b3fc4; }

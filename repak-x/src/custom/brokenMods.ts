@@ -3,6 +3,7 @@
 // Library's All / Enabled / Disabled switch gains Broken while any are.
 import { useEffect, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { emit, listen } from '@tauri-apps/api/event'
 
 export type Verdict = { path: string; kind: 'broken' | 'vfx' | 'risky'; reason: string }
 /** A verdict's badge text. */
@@ -16,6 +17,11 @@ let verdicts = new Map<string, Verdict>()
 let version = 0
 const listeners = new Set<() => void>()
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
+
+/** What changes a verdict without changing a mod's file (Check for VFX update, Nothing to update, xtra_broken.rs's record):
+ *  any window sends it, the Library checks again. */
+export const VERDICTS_CHANGED = 'xtra-verdicts-changed'
+export const verdictsChanged = () => emit(VERDICTS_CHANGED).catch(() => {})
 
 /** Re-checks a moment after mods are added, removed or replaced (the first run after a game update reads the game's
  *  asset list, which takes a while: the badges appear when it is done). */
@@ -34,7 +40,8 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
         .then(found => { if (live && found) void check() })
         .catch(e => console.warn('[brokenMods] layout scan failed', e))
     }, 1500)
-    return () => { live = false; clearTimeout(t) }
+    const again = listen(VERDICTS_CHANGED, () => { void check() })
+    return () => { live = false; clearTimeout(t); void again.then(f => f()) }
   }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 

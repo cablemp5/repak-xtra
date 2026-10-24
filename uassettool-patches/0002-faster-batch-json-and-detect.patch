@@ -1,0 +1,122 @@
+diff --git a/src/UAssetAPI/UAsset.cs b/src/UAssetAPI/UAsset.cs
+index 08dafef..3b7f29b 100644
+--- a/src/UAssetAPI/UAsset.cs
++++ b/src/UAssetAPI/UAsset.cs
+@@ -3025,6 +3025,18 @@ namespace UAssetAPI
+             return JsonConvert.SerializeObject(this, jsonFormatting, jsonSettings);
+         }
+ 
++        /// <summary>
++        /// Serializes this asset as JSON straight into <paramref name="writer"/>, without building the whole text in memory
++        /// first (a large Niagara system is tens of MB of it).
++        /// </summary>
++        public void SerializeJson(TextWriter writer, Formatting jsonFormatting)
++        {
++            Info = "Serialized with UAssetAPI " + typeof(PropertyData).Assembly.GetName().Version + (string.IsNullOrEmpty(UAPUtils.CurrentCommit) ? "" : (" (" + UAPUtils.CurrentCommit + ")"));
++            var serializer = JsonSerializer.Create(jsonSettings);
++            serializer.Formatting = jsonFormatting;
++            serializer.Serialize(writer, this);
++        }
++
+         /// <summary>
+         /// Serializes an object as JSON.
+         /// </summary>
+diff --git a/src/UAssetTool/Program.cs b/src/UAssetTool/Program.cs
+index b7bdc4d..71e62fa 100644
+--- a/src/UAssetTool/Program.cs
++++ b/src/UAssetTool/Program.cs
+@@ -3585,45 +3585,47 @@ public partial class Program
+             if (hasBatch)
+             {
+                 Usmap? mappings = LoadMappings(effectiveUsmapPath);
+-                var results = new List<Dictionary<string, object?>>();
+-                
+-                foreach (var path in filePaths!)
++                // repakxtra: in parallel, as batch_to_json reads with shared mappings; the results keep the files' order
++                var results = new Dictionary<string, object?>[filePaths!.Count];
++
++                Parallel.For(0, filePaths.Count, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, i =>
+                 {
++                    string path = filePaths[i];
+                     try
+                     {
+                         if (!File.Exists(path))
+                         {
+-                            results.Add(new Dictionary<string, object?>
++                            results[i] = new Dictionary<string, object?>
+                             {
+                                 ["path"] = path,
+                                 ["asset_type"] = null,
+                                 ["error"] = "File not found"
+-                            });
+-                            continue;
++                            };
++                            return;
+                         }
+-                        
++
+                         var asset = LoadAssetWithMappings(path, mappings);
+                         string assetType = DetectAssetType(asset);
+-                        
+-                        results.Add(new Dictionary<string, object?>
++
++                        results[i] = new Dictionary<string, object?>
+                         {
+                             ["path"] = path,
+                             ["file_name"] = Path.GetFileName(path),
+                             ["asset_type"] = assetType
+-                        });
++                        };
+                     }
+                     catch (Exception ex)
+                     {
+-                        results.Add(new Dictionary<string, object?>
++                        results[i] = new Dictionary<string, object?>
+                         {
+                             ["path"] = path,
+                             ["asset_type"] = null,
+                             ["error"] = ex.Message
+-                        });
++                        };
+                     }
+-                }
+-                
+-                data["results"] = results;
++                });
++
++                data["results"] = results.ToList();
+                 data["total_files"] = filePaths.Count;
+             }
+             
+@@ -8103,10 +8105,6 @@ public partial class Program
+             {
+                 var asset = LoadAssetWithMappings(fp, mappings);
+                 PreloadReferencedAssetsForSchemas(asset);
+-                
+-                string jsonOutput = compact
+-                    ? CompactJsonSerializer.Serialize(asset)
+-                    : asset.SerializeJson(Newtonsoft.Json.Formatting.Indented);
+ 
+                 // Determine output path: preserve relative directory structure if basePath is set
+                 string jsonFileName;
+@@ -8123,8 +8121,18 @@ public partial class Program
+                 string? jsonDir = Path.GetDirectoryName(jsonOutputPath);
+                 if (!string.IsNullOrEmpty(jsonDir))
+                     Directory.CreateDirectory(jsonDir);
+-                File.WriteAllText(jsonOutputPath, jsonOutput, System.Text.Encoding.UTF8);
+-                
++                if (compact)
++                {
++                    File.WriteAllText(jsonOutputPath, CompactJsonSerializer.Serialize(asset), System.Text.Encoding.UTF8);
++                }
++                else
++                {
++                    // repakxtra: unindented, straight into the file (the same JSON to a parser, half the text, no copy of
++                    // it in memory). The UTF-8 mark as File.WriteAllText wrote it
++                    using var writer = new StreamWriter(jsonOutputPath, false, new System.Text.UTF8Encoding(true), 1 << 16);
++                    asset.SerializeJson(writer, Newtonsoft.Json.Formatting.None);
++                }
++
+                 Interlocked.Increment(ref successCount);
+             }
+             catch (Exception ex)

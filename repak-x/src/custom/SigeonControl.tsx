@@ -8,6 +8,7 @@ import type { useAlert } from '../components/AlertHandler'
 import { dialogOpen, isTyping } from './hotkeys'
 import SigeonEditor from './SigeonEditor'
 import SigeonSetup from './SigeonSetup'
+import { useUiPref } from './uiPrefs'
 
 type Status = { state: string; configured: boolean; presets: string[]; storage: string; plugins: string; game_running: boolean; problem?: string | null }
 
@@ -20,6 +21,7 @@ export default function SigeonControl({ alert }: { alert: ReturnType<typeof useA
   const [editing, setEditing] = useState(false)
   const [settingUp, setSettingUp] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
+  const shown = useUiPref('sigeon') // hidden in the header (the default): S does nothing either
 
   const refresh = () => invoke<Status>('sigeon_status').then(setStatus).catch(e => console.warn('[sigeon]', e))
 
@@ -32,6 +34,7 @@ export default function SigeonControl({ alert }: { alert: ReturnType<typeof useA
 
   // S cycles Off -> each preset -> Off
   useEffect(() => {
+    if (!shown) return
     const onKey = async (e: KeyboardEvent) => {
       if (e.key.toLowerCase() !== 's' || e.ctrlKey || e.altKey || e.metaKey || isTyping(e.target) || dialogOpen()) return
       e.preventDefault()
@@ -48,7 +51,7 @@ export default function SigeonControl({ alert }: { alert: ReturnType<typeof useA
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [shown])
 
   useEffect(() => {
     if (!open) return

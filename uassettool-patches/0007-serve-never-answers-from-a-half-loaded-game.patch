@@ -1,0 +1,46 @@
+diff --git a/src/UAssetTool/Program.cs b/src/UAssetTool/Program.cs
+index 0038356..8dae9d9 100644
+--- a/src/UAssetTool/Program.cs
++++ b/src/UAssetTool/Program.cs
+@@ -1433,11 +1433,18 @@ public partial class Program
+                         game = null;
+                         gameKey = null;
+                         game = LoadGameContainers(args[1], aesKeys, out bool complete);
+-                        // one that failed to load (a file Steam held a moment) serves this request as a one-shot run would,
+-                        // and is loaded again for the next
++                        // one that failed to load (a file Steam held a moment): this request runs as a one-shot run does
++                        // (its own fresh load), never on the half-loaded copy, and the next loads again. A half-loaded
++                        // copy without the script objects names every class __ScriptImport_<hash>__
+                         if (complete) gameKey = key;
++                        else
++                        {
++                            Console.Error.WriteLine("[serve] the game's containers loaded incompletely: this request loads its own");
++                            game.Dispose();
++                            game = null;
++                        }
+                     }
+-                    code = CliExtractIoStoreLegacy(args, game);
++                    code = game != null ? CliExtractIoStoreLegacy(args, game) : CliExtractIoStoreLegacy(args);
+                 }
+             }
+             catch (Exception ex)
+diff --git a/src/UAssetTool/ZenPackage/FZenPackageContext.cs b/src/UAssetTool/ZenPackage/FZenPackageContext.cs
+index 9d9fd97..e408cd6 100644
+--- a/src/UAssetTool/ZenPackage/FZenPackageContext.cs
++++ b/src/UAssetTool/ZenPackage/FZenPackageContext.cs
+@@ -155,6 +155,7 @@ public class FZenPackageContext : IDisposable
+                     catch (Exception ex)
+                     {
+                         SkippedLoadErrors++;
++                        Console.Error.WriteLine($"[FZenPackageContext] a container's name map could not be read: {ex.Message}");
+                     }
+                     break;
+                 }
+@@ -415,6 +416,7 @@ public class FZenPackageContext : IDisposable
+                 catch (Exception ex)
+                 {
+                     SkippedLoadErrors++;
++                    Console.Error.WriteLine($"[FZenPackageContext] the script objects could not be read: {ex.Message}");
+                 }
+             }
+         }

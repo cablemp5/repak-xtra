@@ -285,8 +285,9 @@ fn shape_differs(mod_json: &Value, game_json: &Value, mod_bytes: &[u8], game_byt
 // ---- the files around it ----
 
 fn read_json(p: &Path) -> Result<Value, String> {
-    let t = std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
-    serde_json::from_str(t.trim_start_matches('\u{feff}')).map_err(|e| format!("{}: {e}", p.display()))
+    // bytes, not a String: serde checks the UTF-8 as it parses, so the text is walked once
+    let b = std::fs::read(p).map_err(|e| format!("{}: {e}", p.display()))?;
+    serde_json::from_slice(b.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(&b)).map_err(|e| format!("{}: {e}", p.display()))
 }
 
 /// A legacy package as one stream: .uasset then .uexp (export offsets count from the .uasset's start).
@@ -332,8 +333,7 @@ async fn to_json(usmap: &str, input: &Path, output: &Path, progress: &dyn VfxPro
 
 /// The build in a depot USMAP's file name (`5.3.2-3962284+++depot_marvel+...usmap`).
 pub(crate) fn usmap_build(path: &str) -> Option<u64> {
-    let name = Path::new(path).file_name()?.to_string_lossy().to_string();
-    name.split_once('-')?.1.split_once('+')?.0.parse().ok()
+    crate::vfx_updater::commands::extract_usmap_build_number(&Path::new(path).file_name()?.to_string_lossy())
 }
 
 /// Whether the VFX Updater's USMAP is for the installed game's build (or newer): only then are the game's Niagara files
@@ -351,7 +351,7 @@ pub(crate) fn saved_usmap_matches(paks: &Path) -> bool {
     crate::vfx_updater::commands::saved_usmap_path().is_some_and(|u| Path::new(&u).is_file() && usmap_matches(&u, paks))
 }
 
-const DEPOT: &str = "https://api.github.com/repos/SpaceDepot/rivals-depot/contents/usmap?ref=main";
+use crate::vfx_updater::commands::USMAP_REPO_API as DEPOT;
 
 fn http(secs: u64) -> Result<reqwest::Client, String> {
     reqwest::Client::builder().timeout(std::time::Duration::from_secs(secs)).user_agent("RepakX-VFX-Updater").build().map_err(|e| e.to_string())
@@ -554,7 +554,7 @@ fn package_rel(file: &str) -> String {
 }
 
 /// The Niagara systems (NS_) among a mod's files that the game also has.
-fn probe_files(mods_dir: &Path, files: &[String]) -> Vec<String> {
+fn probe_files(paks: &Path, files: &[String]) -> Vec<String> {
     let ns: Vec<String> = files
         .iter()
         .filter(|f| {
@@ -563,7 +563,7 @@ fn probe_files(mods_dir: &Path, files: &[String]) -> Vec<String> {
         })
         .cloned()
         .collect();
-    crate::xtra_broken::rewritten_since(mods_dir, &ns, 0).unwrap_or_default()
+    crate::xtra_broken::rewritten_since(paks, &ns, 0).unwrap_or_default()
 }
 
 static SCANNING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -595,7 +595,7 @@ pub async fn xtra_vfx_layout_scan(mod_paths: Vec<String>, state: tauri::State<'_
         let st = state.clone();
         let details = tauri::async_runtime::spawn_blocking(move || crate::compute_mod_details(&path, &st).ok()).await.ok().flatten();
         let Some(d) = details.filter(|d| d.category == "VFX") else { continue };
-        let probes: Vec<String> = probe_files(&mods_dir, &d.files).iter().map(|f| package_rel(f)).collect();
+        let probes: Vec<String> = probe_files(&paks, &d.files).iter().map(|f| package_rel(f)).collect();
         if probes.is_empty() {
             cache.insert(key, false);
             continue;
@@ -620,13 +620,17 @@ pub async fn xtra_vfx_layout_scan(mod_paths: Vec<String>, state: tauri::State<'_
 /// current, because they are in an older layout (pipeline.ts). Cached like the scan.
 #[tauri::command]
 pub async fn xtra_vfx_old_layout(mod_path: String, game_paks: String, usmap_path: String, files: Vec<String>, mod_extract: Option<String>) -> Result<Vec<String>, String> {
+    // the background scan writes the same game cache (game_copies): its probe in flight finishes first, then it stops
+    // (it sees the run's lock) and waits for the next scan
+    let _scan = SCANNING.lock().await;
     let utoc = PathBuf::from(&mod_path);
     if !usmap_matches(&usmap_path, Path::new(&game_paks)) {
         return Ok(Vec::new());
     }
-    let mods_dir = utoc.parent().map(Path::to_path_buf).unwrap_or_default();
-    let have = crate::xtra_broken::rewritten_since(&mods_dir, &files, 0).unwrap_or_default();
-    let probes: Vec<String> = probe_files(&mods_dir, &have).iter().map(|f| package_rel(f)).collect();
+    // the game set in Setup, never one guessed from the mod's folder: a mod chosen from Downloads is checked too
+    let paks = Path::new(&game_paks);
+    let have = crate::xtra_broken::rewritten_since(paks, &files, 0).unwrap_or_default();
+    let probes: Vec<String> = probe_files(paks, &have).iter().map(|f| package_rel(f)).collect();
     if probes.is_empty() {
         return Ok(Vec::new());
     }
@@ -791,6 +795,7 @@ pub(crate) async fn run(game_paks: &str, usmap: &str, mod_extract: &Path, files:
 pub async fn xtra_vfx_niagara(window: Window, game_paks: String, usmap_path: String, mod_extract: String, files: Vec<String>, final_uassets: String, stage_dir: String, vanilla_extract: String) -> Result<NiagaraRun, String> {
     let vanilla = Path::new(&vanilla_extract).parent().map(Path::to_path_buf).ok_or("No cache folder")?;
     let work = Path::new(&stage_dir).join("niagara");
+    let _scan = SCANNING.lock().await; // as xtra_vfx_old_layout: never beside the background scan on the game cache
     run(&game_paks, &usmap_path, Path::new(&mod_extract), &files, Path::new(&final_uassets), &work, &vanilla, &TauriVfxProgressSink::new(&window)).await
 }
 

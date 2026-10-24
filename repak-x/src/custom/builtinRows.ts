@@ -3,6 +3,7 @@
 // renamed, deleted, given a priority or put in loadouts, so App.tsx and ModsList.tsx check isBuiltin before those.
 import { useEffect, useMemo } from 'react'
 import { type Builtin, builtinAbout, loadBuiltins, useBuiltins } from './BuiltinMods'
+import { useUiPref } from './uiPrefs'
 
 /** A built-in's file (its .pak under ~mods/.repakxtra-builtin), by path. */
 export const isBuiltin = (path: string) => /[\\/]\.repakxtra-builtin[\\/]/i.test(path)
@@ -19,10 +20,11 @@ export function builtinName(b: Pick<Builtin, 'id' | 'excluded'>, heroName: (id: 
 /** The Library's rows for the built-ins, shaped like mod records. */
 export function useBuiltinRows(heroName: (id: string) => string | undefined) {
   const { list } = useBuiltins()
+  const shown = useUiPref('builtins') // Settings > Library > Hide built-in mods
   useEffect(() => { if (!list.length) void loadBuiltins() }, [list.length])
-  return useMemo(() => list.map(b => ({
+  return useMemo(() => !shown ? [] : list.map(b => ({
     path: b.path, custom_name: builtinName(b, heroName), enabled: b.on, file_size: b.size, priority: 0, builtin: b.id,
-  })), [list, heroName])
+  })), [list, heroName, shown])
 }
 
 if (import.meta.env.DEV) {

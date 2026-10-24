@@ -1,0 +1,94 @@
+diff --git a/src/UAssetAPI/AssetBinaryReader.cs b/src/UAssetAPI/AssetBinaryReader.cs
+index 75026fd..7150f38 100644
+--- a/src/UAssetAPI/AssetBinaryReader.cs
++++ b/src/UAssetAPI/AssetBinaryReader.cs
+@@ -19,6 +19,30 @@ namespace UAssetAPI
+ 
+         }
+ 
++        /// <summary>
++        /// BinaryReader allocates the whole count before reading what is left, so a misread length asks for gigabytes.
++        /// Asks only for what is left: the same bytes come back.
++        /// </summary>
++        public override byte[] ReadBytes(int count)
++        {
++            if (count > 0 && BaseStream.CanSeek)
++            {
++                long left = BaseStream.Length - BaseStream.Position;
++                if (count > left) count = (int)Math.Max(left, 0);
++            }
++            return base.ReadBytes(count);
++        }
++
++        /// <summary>
++        /// Throws when <paramref name="count"/> items of at least <paramref name="minBytes"/> each cannot fit in what is
++        /// left of the stream: reading them would fail anyway, after allocating an array that size.
++        /// </summary>
++        public void EnsureFits(int count, int minBytes)
++        {
++            if (count < 0 || (BaseStream.CanSeek && (long)count * minBytes > BaseStream.Length - BaseStream.Position))
++                throw new EndOfStreamException($"{count} items do not fit in the {BaseStream.Length - BaseStream.Position} bytes left");
++        }
++
+         protected byte[] ReverseIfBigEndian(byte[] data)
+         {
+             if (!BitConverter.IsLittleEndian) Array.Reverse(data);
+diff --git a/src/UAssetAPI/PropertyTypes/Objects/ArrayPropertyData.cs b/src/UAssetAPI/PropertyTypes/Objects/ArrayPropertyData.cs
+index 438cd84..80d13be 100644
+--- a/src/UAssetAPI/PropertyTypes/Objects/ArrayPropertyData.cs
++++ b/src/UAssetAPI/PropertyTypes/Objects/ArrayPropertyData.cs
+@@ -1,5 +1,6 @@
+ ﻿using Newtonsoft.Json;
+ using System;
++using System.Collections.Generic;
+ using System.IO;
+ using UAssetAPI.PropertyTypes.Structs;
+ using UAssetAPI.UnrealTypes;
+@@ -142,16 +143,21 @@ public class ArrayPropertyData : PropertyData<PropertyData[]>
+             int averageSizeEstimate = (int)((leng1 - 4) / numEntries);
+             if (averageSizeEstimate <= 0) averageSizeEstimate = 1; // missing possible edge case where leng1 = 4 and numEntries = 2, may result is wrong size
+ 
+-            var results = new PropertyData[numEntries];
++            // a count larger than the bytes left is a misread (the reads below fail): grow a list instead of allocating
++            // an array that size first. Same reads, same elements
++            bool fits = numEntries < 0 || !reader.BaseStream.CanSeek || numEntries <= reader.BaseStream.Length - reader.BaseStream.Position;
++            var results = fits ? new PropertyData[numEntries] : null;
++            var grown = fits ? null : new List<PropertyData>();
+             for (int i = 0; i < numEntries; i++)
+             {
+-                results[i] = MainSerializer.TypeToClass(ArrayType, FName.DefineDummy(reader.Asset, i.ToString(), int.MinValue), Ancestry, Name, null, reader.Asset);
+-                results[i].Offset = reader.BaseStream.Position;
+-                if (results[i] is StructPropertyData data) data.StructType = arrayStructType == null ? FName.DefineDummy(reader.Asset, "Generic") : arrayStructType;
+-                results[i].Read(reader, false, averageSizeEstimate, 0, PropertySerializationContext.Array);
++                var entry = MainSerializer.TypeToClass(ArrayType, FName.DefineDummy(reader.Asset, i.ToString(), int.MinValue), Ancestry, Name, null, reader.Asset);
++                if (fits) results[i] = entry; else grown.Add(entry);
++                entry.Offset = reader.BaseStream.Position;
++                if (entry is StructPropertyData data) data.StructType = arrayStructType == null ? FName.DefineDummy(reader.Asset, "Generic") : arrayStructType;
++                entry.Read(reader, false, averageSizeEstimate, 0, PropertySerializationContext.Array);
+             }
+ 
+-            Value = results;
++            Value = fits ? results : grown.ToArray();
+         }
+     }
+ 
+diff --git a/src/UAssetAPI/UnrealTypes/Objects/Engine/Niagara/FNiagaraDataInterfaceGPUParamInfo.cs b/src/UAssetAPI/UnrealTypes/Objects/Engine/Niagara/FNiagaraDataInterfaceGPUParamInfo.cs
+index 17cb72b..d1edf01 100644
+--- a/src/UAssetAPI/UnrealTypes/Objects/Engine/Niagara/FNiagaraDataInterfaceGPUParamInfo.cs
++++ b/src/UAssetAPI/UnrealTypes/Objects/Engine/Niagara/FNiagaraDataInterfaceGPUParamInfo.cs
+@@ -21,6 +21,7 @@ public class FNiagaraDataInterfaceGeneratedFunction
+         InstanceName = reader.ReadFString();
+ 
+         int num = reader.ReadInt32();
++        reader.EnsureFits(num, 16); // two FNames each
+         Specifiers = new (FName, FName)[num];
+         for (int i = 0; i < num; i++)
+         {
+@@ -66,6 +67,7 @@ public class FNiagaraDataInterfaceGPUParamInfo
+         if (reader.Asset.GetCustomVersion<FNiagaraCustomVersion>() >= FNiagaraCustomVersion.AddGeneratedFunctionsToGPUParamInfo)
+         {
+             int num = reader.ReadInt32();
++            reader.EnsureFits(num, 16); // an FName, an FString and a count each
+             GeneratedFunctions = new FNiagaraDataInterfaceGeneratedFunction[num];
+             for (int i = 0; i < num; i++)
+             {

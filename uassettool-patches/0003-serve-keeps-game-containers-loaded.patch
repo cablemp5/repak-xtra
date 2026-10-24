@@ -1,0 +1,320 @@
+diff --git a/src/UAssetTool/Program.cs b/src/UAssetTool/Program.cs
+index 71e62fa..42c77ff 100644
+--- a/src/UAssetTool/Program.cs
++++ b/src/UAssetTool/Program.cs
+@@ -61,6 +61,7 @@ public partial class Program
+                 "create_mod_iostore" => CliCreateModIoStore(args),
+                 "extract_iostore" => CliExtractIoStore(args),
+                 "extract_iostore_legacy" => CliExtractIoStoreLegacy(args),
++                "serve" => CliServe(),
+                 "is_iostore_compressed" => CliIsIoStoreCompressed(args),
+                 "is_iostore_encrypted" => CliIsIoStoreEncrypted(args),
+                 "extract_script_objects" => CliExtractScriptObjects(args),
+@@ -1392,7 +1393,167 @@ public partial class Program
+     /// Extract IoStore packages to legacy .uasset/.uexp format using native C# conversion.
+     /// Usage: UAssetTool extract_iostore_legacy <utoc_path> <output_dir> [--script-objects <path>]
+     /// </summary>
+-    public static int CliExtractIoStoreLegacy(string[] args)
++    /// <summary>
++    /// repakxtra: extract_iostore_legacy requests one per stdin line (the arguments joined by \x1f, a character no Windows
++    /// path holds), each answered by "@@DONE &lt;exit code&gt;\x1f&lt;last log lines&gt;" on stdout. The game's containers are
++    /// loaded once and reused while their files are unchanged: a one-shot extract spends about 4 s on them. Each request
++    /// works on its own copy of the index, so a mod loaded by one never shows in the next, and the game's files are not
++    /// held open between requests. Exits when stdin closes or after 90 s without a request.
++    /// </summary>
++    private static int CliServe()
++    {
++        var protocol = Console.Out;
++        var lines = new System.Collections.Concurrent.BlockingCollection<string?>();
++        new Thread(() => { string? l; while ((l = Console.In.ReadLine()) != null) lines.Add(l); lines.Add(null); }) { IsBackground = true }.Start();
++        ZenPackage.FZenPackageContext? game = null;
++        string? gameKey = null;
++        while (lines.TryTake(out var line, TimeSpan.FromSeconds(90)) && line != null)
++        {
++            string[] args = line.Split('\x1f');
++            var log = new TailWriter(8);
++            Console.SetOut(log);
++            Console.SetError(log);
++            int code;
++            try
++            {
++                if (args.Length < 3 || args[0] != "extract_iostore_legacy") throw new ArgumentException("serve runs extract_iostore_legacy only");
++                var aesKeys = new List<string>();
++                for (int i = 3; i + 1 < args.Length; i++) if (args[i] == "--aes" || args[i] == "--aes-key") aesKeys.Add(args[++i]);
++                string key = GameKey(args[1], aesKeys);
++                if (!ZenPackage.FZenPackageContext.CloneIsComplete)
++                {
++                    // a context field the copy does not know (a newer upstream): each request loads its own, as one-shot
++                    code = CliExtractIoStoreLegacy(args);
++                }
++                else
++                {
++                    if (key != gameKey)
++                    {
++                        game?.Dispose();
++                        game = null;
++                        gameKey = null;
++                        game = LoadGameContainers(args[1], aesKeys, out bool complete);
++                        // one that failed to load (a file Steam held a moment) serves this request as a one-shot run would,
++                        // and is loaded again for the next
++                        if (complete) gameKey = key;
++                    }
++                    code = CliExtractIoStoreLegacy(args, game);
++                }
++            }
++            catch (Exception ex)
++            {
++                Console.Error.WriteLine($"Error: {ex.Message}");
++                code = 1;
++            }
++            protocol.WriteLine($"@@DONE {code}\x1f{string.Join('\x1f', log.Lines())}");
++            protocol.Flush();
++            // between requests (the caller already has its answer): give back what the request used, so an idle server
++            // holds only the game's index
++            System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
++            GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
++        }
++        game?.Dispose();
++        return 0;
++    }
++
++    /// <summary>What the loaded game containers depend on: the folder, each container's .utoc and .ucas (size and time
++    /// written), the keys.</summary>
++    private static string GameKey(string paksPath, List<string> aesKeys)
++    {
++        static string Stamp(string f) { var i = new FileInfo(f); return i.Exists ? $"{f}|{i.Length}|{i.LastWriteTimeUtc.Ticks}" : $"{f}|none"; }
++        var parts = Directory.GetFiles(paksPath, "*.utoc", SearchOption.TopDirectoryOnly).OrderBy(f => f)
++            .Select(f => Stamp(f) + "|" + Stamp(Path.ChangeExtension(f, ".ucas")));
++        return string.Join("\n", parts.Prepend(Path.GetFullPath(paksPath)).Concat(aesKeys));
++    }
++
++    /// <summary>The last lines written to it, for a failed request's message. Safe from several threads.</summary>
++    private sealed class TailWriter : TextWriter
++    {
++        private readonly int _keep;
++        private readonly Queue<string> _lines = new();
++        private readonly System.Text.StringBuilder _current = new();
++        public TailWriter(int keep) => _keep = keep;
++        public override System.Text.Encoding Encoding => System.Text.Encoding.UTF8;
++        public override void Write(char value)
++        {
++            lock (_lines)
++            {
++                if (value == '\n') { _lines.Enqueue(_current.ToString().TrimEnd('\r')); _current.Clear(); if (_lines.Count > _keep) _lines.Dequeue(); }
++                else _current.Append(value);
++            }
++        }
++        public override void Write(string? value) { if (value != null) lock (_lines) foreach (char c in value) Write(c); }
++        public override void WriteLine(string? value) { lock (_lines) { Write(value); Write('\n'); } }
++        public string[] Lines() { lock (_lines) return _lines.Concat(_current.Length > 0 ? new[] { _current.ToString() } : Array.Empty<string>()).Select(l => l.Replace('\x1f', ' ')).ToArray(); }
++    }
++
++    /// <summary>The game's global.utoc (with its script objects) and every other top-level container in the Paks folder.</summary>
++    private static ZenPackage.FZenPackageContext LoadGameContainers(string paksPath, List<string> aesKeys) => LoadGameContainers(paksPath, aesKeys, out _);
++
++    /// <summary><paramref name="complete"/>: every container loaded (one that failed is skipped with a warning).</summary>
++    private static ZenPackage.FZenPackageContext LoadGameContainers(string paksPath, List<string> aesKeys, out bool complete)
++    {
++        complete = true;
++        var context = new ZenPackage.FZenPackageContext();
++        try
++        {
++            // Set AES keys - use provided keys or default Marvel Rivals key
++            if (aesKeys.Count > 0)
++            {
++                foreach (var key in aesKeys)
++                    context.AddAesKey(key);
++            }
++            else
++            {
++                context.SetAesKey("0C263D8C22DCB085894899C3A3796383E9BF9DE0CBFB08C9BF2DEF2E84F29D74");
++            }
++
++            Console.WriteLine($"Loading game containers from: {paksPath}");
++
++            // Load global.utoc first for script objects
++            string globalPath = Path.Combine(paksPath, "global.utoc");
++            if (File.Exists(globalPath))
++            {
++                Console.WriteLine($"  Loading global.utoc...");
++                context.LoadContainer(globalPath);
++                context.LoadScriptObjectsFromContainer(0);
++            }
++
++            // Load other game containers (only top-level, not subfolders)
++            // Include optional chunks when extracting dependencies
++            var utocFiles = Directory.GetFiles(paksPath, "*.utoc", SearchOption.TopDirectoryOnly)
++                .Where(f => !f.EndsWith("global.utoc", StringComparison.OrdinalIgnoreCase))
++                .OrderBy(f => f)
++                .ToList();
++
++            Console.WriteLine($"  Loading {utocFiles.Count} game containers...");
++            foreach (var utocFile in utocFiles)
++            {
++                try
++                {
++                    context.LoadContainer(utocFile);
++                }
++                catch (Exception ex)
++                {
++                    Console.Error.WriteLine($"  Warning: Failed to load {Path.GetFileName(utocFile)}: {ex.Message}");
++                    complete = false;
++                }
++            }
++            // a read skipped while loading (a container's name map, the script objects): served, never kept
++            if (context.SkippedLoadErrors > 0 || (File.Exists(globalPath) && context.ScriptObjects == null)) complete = false;
++            return context;
++        }
++        catch
++        {
++            context.Dispose(); // the containers opened so far close their files
++            throw;
++        }
++    }
++
++    public static int CliExtractIoStoreLegacy(string[] args) => CliExtractIoStoreLegacy(args, null);
++
++    /// <summary>repakxtra: <paramref name="game"/>, the game's containers already loaded (serve), used through a copy.</summary>
++    public static int CliExtractIoStoreLegacy(string[] args, ZenPackage.FZenPackageContext? game)
+     {
+         if (args.Length < 3)
+         {
+@@ -1492,51 +1653,10 @@ public partial class Program
+         
+         try
+         {
+-            // Create package context for proper import resolution
+-            using var context = new ZenPackage.FZenPackageContext();
+-            
+-            // Set AES keys - use provided keys or default Marvel Rivals key
+-            if (aesKeys.Count > 0)
+-            {
+-                foreach (var key in aesKeys)
+-                    context.AddAesKey(key);
+-            }
+-            else
+-            {
+-                context.SetAesKey("0C263D8C22DCB085894899C3A3796383E9BF9DE0CBFB08C9BF2DEF2E84F29D74");
+-            }
+-            
+-            Console.WriteLine($"Loading game containers from: {paksPath}");
+-            
+-            // Load global.utoc first for script objects
+-            string globalPath = Path.Combine(paksPath, "global.utoc");
+-            if (File.Exists(globalPath))
+-            {
+-                Console.WriteLine($"  Loading global.utoc...");
+-                context.LoadContainer(globalPath);
+-                context.LoadScriptObjectsFromContainer(0);
+-            }
+-            
+-            // Load other game containers (only top-level, not subfolders)
+-            // Include optional chunks when extracting dependencies
+-            var utocFiles = Directory.GetFiles(paksPath, "*.utoc", SearchOption.TopDirectoryOnly)
+-                .Where(f => !f.EndsWith("global.utoc", StringComparison.OrdinalIgnoreCase))
+-                .OrderBy(f => f)
+-                .ToList();
+-            
+-            Console.WriteLine($"  Loading {utocFiles.Count} game containers...");
+-            foreach (var utocFile in utocFiles)
+-            {
+-                try
+-                {
+-                    context.LoadContainer(utocFile);
+-                }
+-                catch (Exception ex)
+-                {
+-                    Console.Error.WriteLine($"  Warning: Failed to load {Path.GetFileName(utocFile)}: {ex.Message}");
+-                }
+-            }
+-            
++            // Create package context for proper import resolution (repakxtra: the game's part loaded by LoadGameContainers,
++            // or copied from serve's)
++            using var context = game?.CloneShared() ?? LoadGameContainers(paksPath, aesKeys);
++
+             // Load global container first (for script objects) - explicit path overrides game path
+             if (!string.IsNullOrEmpty(globalUtocPath) && File.Exists(globalUtocPath))
+             {
+diff --git a/src/UAssetTool/ZenPackage/FZenPackageContext.cs b/src/UAssetTool/ZenPackage/FZenPackageContext.cs
+index c419465..9d9fd97 100644
+--- a/src/UAssetTool/ZenPackage/FZenPackageContext.cs
++++ b/src/UAssetTool/ZenPackage/FZenPackageContext.cs
+@@ -37,6 +37,9 @@ public class FZenPackageContext : IDisposable
+     public EIoContainerHeaderVersion ContainerHeaderVersion { get; private set; } = EIoContainerHeaderVersion.NoExportInfo;
+     
+     public int PackageCount => _packageIdToChunk.Count;
++    /// <summary>repakxtra: reads that failed and were skipped while loading (a name map, the script objects), so a
++    /// caller keeping the context (serve) can tell an incomplete load.</summary>
++    public int SkippedLoadErrors { get; private set; }
+     public int ContainerCount => _containers.Count;
+ 
+     private byte[]? _aesKey;
+@@ -151,6 +154,7 @@ public class FZenPackageContext : IDisposable
+                     }
+                     catch (Exception ex)
+                     {
++                        SkippedLoadErrors++;
+                     }
+                     break;
+                 }
+@@ -410,6 +414,7 @@ public class FZenPackageContext : IDisposable
+                 }
+                 catch (Exception ex)
+                 {
++                    SkippedLoadErrors++;
+                 }
+             }
+         }
+@@ -1020,6 +1025,52 @@ public class FZenPackageContext : IDisposable
+         _exportHashLookup.Clear();
+     }
+ 
++    /// <summary>
++    /// repakxtra: a context with this one's containers and index, for one request on top of loaded game containers
++    /// (Program.CliServe). The containers are shared (read-only once loaded, and their reads are thread-safe), every
++    /// index and cache is its own, so a mod container loaded into the copy never reaches this one. Disposing the copy
++    /// closes the shared containers' files, which reopen on the next read.
++    /// </summary>
++    /// <summary>repakxtra: the instance fields CloneShared accounts for (_loadLock is new per copy on purpose). A field an
++    /// upstream update adds is not copied: then serve stops reusing a loaded index (Program.CliServe), so output never
++    /// depends on the copy.</summary>
++    private static readonly HashSet<string> Cloned = new()
++    {
++        nameof(_containers), nameof(_packageCache), nameof(_loadLock), nameof(_packageIdToChunk), nameof(_priorityContainers),
++        nameof(_packageIdToPath), nameof(_packageIdToContainerPath), nameof(_vfsPathToPackageId), nameof(_mountToVfsRoot),
++        nameof(_packageExportHashes), nameof(_containerNameMaps), nameof(_exportHashLookup), nameof(_aesKey), nameof(_aesKeys),
++        "<ScriptObjects>k__BackingField", "<ContainerHeaderVersion>k__BackingField", "<SkippedLoadErrors>k__BackingField",
++    };
++    public static readonly bool CloneIsComplete = typeof(FZenPackageContext)
++        .GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
++        .All(f => Cloned.Contains(f.Name));
++
++    public FZenPackageContext CloneShared()
++    {
++        var c = new FZenPackageContext();
++        c._containers.AddRange(_containers);
++        foreach (var i in _priorityContainers) c._priorityContainers.Add(i);
++        // sized up front: four tables of about 583,000 entries each are copied per request
++        c._packageIdToChunk.EnsureCapacity(_packageIdToChunk.Count);
++        c._packageIdToPath.EnsureCapacity(_packageIdToPath.Count);
++        c._packageIdToContainerPath.EnsureCapacity(_packageIdToContainerPath.Count);
++        c._vfsPathToPackageId.EnsureCapacity(_vfsPathToPackageId.Count);
++        foreach (var kv in _packageIdToChunk) c._packageIdToChunk[kv.Key] = kv.Value;
++        foreach (var kv in _packageIdToPath) c._packageIdToPath[kv.Key] = kv.Value;
++        foreach (var kv in _packageIdToContainerPath) c._packageIdToContainerPath[kv.Key] = kv.Value;
++        foreach (var kv in _vfsPathToPackageId) c._vfsPathToPackageId[kv.Key] = kv.Value;
++        foreach (var kv in _mountToVfsRoot) c._mountToVfsRoot[kv.Key] = kv.Value;
++        foreach (var kv in _packageExportHashes) c._packageExportHashes[kv.Key] = kv.Value;
++        foreach (var kv in _containerNameMaps) c._containerNameMaps[kv.Key] = kv.Value;
++        foreach (var kv in _packageCache) c._packageCache[kv.Key] = kv.Value;
++        foreach (var kv in _exportHashLookup) c._exportHashLookup[kv.Key] = kv.Value;
++        c.ScriptObjects = ScriptObjects;
++        c.ContainerHeaderVersion = ContainerHeaderVersion;
++        c._aesKey = _aesKey;
++        c._aesKeys.AddRange(_aesKeys);
++        return c;
++    }
++
+     public void Dispose()
+     {
+         foreach (var container in _containers)

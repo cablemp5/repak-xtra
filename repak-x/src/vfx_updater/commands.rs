@@ -92,6 +92,7 @@ pub async fn vfx_extract_vanilla_assets(
     game_paks: String,
     output_dir: String,
     filter_patterns: Vec<String>,
+    no_deps: Option<Vec<String>>, // repakxtra: the material instances, extracted without dependencies
 ) -> Result<Vec<String>, String> {
     let tool_path = get_uasset_tool_path(&app)?;
     let progress = TauriVfxProgressSink::new(&window);
@@ -101,6 +102,7 @@ pub async fn vfx_extract_vanilla_assets(
         &game_paks,
         &output_dir,
         &filter_patterns,
+        &no_deps.unwrap_or_default(),
         &progress,
     )
     .await
@@ -347,7 +349,7 @@ pub fn vfx_save_settings(_app: AppHandle, settings: VfxSettings) -> Result<(), S
 // USMAP Auto-Update from rivals-depot
 // ============================================================================
 
-const USMAP_REPO_API: &str =
+pub(crate) const USMAP_REPO_API: &str = // repakxtra: pub(crate), the Niagara step lists older USMAPs here too
     "https://api.github.com/repos/SpaceDepot/rivals-depot/contents/usmap?ref=main";
 const USMAP_COMMITS_API_BASE: &str = "https://api.github.com/repos/SpaceDepot/rivals-depot/commits";
 
@@ -399,7 +401,7 @@ fn write_vfx_settings_internal(settings: &VfxSettings) -> Result<(), String> {
 /// Extract the build/changelist number from a depot usmap filename like
 /// `5.3.2-3484986+++depot_marvel+S7.5_release-Marvel.usmap`. Returns None if
 /// the pattern does not match.
-fn extract_usmap_build_number(name: &str) -> Option<u64> {
+pub(crate) fn extract_usmap_build_number(name: &str) -> Option<u64> { // repakxtra: pub(crate) for xtra_niagara
     let after_dash = name.split_once('-')?.1;
     let cl_part = after_dash.split_once('+')?.0;
     cl_part.parse::<u64>().ok()

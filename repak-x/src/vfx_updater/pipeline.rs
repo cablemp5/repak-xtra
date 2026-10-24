@@ -9,7 +9,7 @@ use super::logging::vfx_info;
 use super::models::{AssetClassInfo, VfxPipelineProgress, VfxTempDirectories};
 use super::progress::VfxProgressSink;
 use super::uasset_tool::{
-    convert_json_to_uassets, convert_uassets_to_json, extract_mod_assets, extract_vanilla_assets,
+    convert_json_to_uassets, convert_uassets_to_json, extract_mod_assets, extract_vanilla_assets_split,
     pack_to_iostore, run_vfx_uat_request, VfxUatRequest,
 };
 
@@ -75,10 +75,11 @@ pub async fn step_extract_vanilla_assets(
     game_paks: &str,
     output_dir: &str,
     filter_patterns: &[String],
+    no_deps: &[String], // repakxtra: extracted without their dependencies (uasset_tool.rs extract_vanilla_assets_split)
     progress: &dyn VfxProgressSink,
 ) -> Result<Vec<String>, String> {
     vfx_info("=== Step 4: Extract Vanilla Assets ===");
-    extract_vanilla_assets(tool_path, game_paks, output_dir, filter_patterns, progress).await
+    extract_vanilla_assets_split(tool_path, game_paks, output_dir, filter_patterns, no_deps, progress).await
 }
 
 /// Step 7: Convert edited JSON back to UAssets

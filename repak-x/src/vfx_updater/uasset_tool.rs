@@ -46,6 +46,9 @@ pub struct VfxUatRequest<'a> {
     /// Extract dependencies recursively, for `extract_iostore_legacy`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub with_deps: Option<bool>,
+    /// repakxtra: convert on 75% of the cores instead of 50%, for `create_mod_iostore`
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parallel: Option<bool>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -503,6 +506,29 @@ pub async fn extract_vanilla_assets(
     filter_patterns: &[String],
     progress: &dyn VfxProgressSink,
 ) -> Result<Vec<String>, String> {
+    extract_vanilla_assets_split(tool_path, game_paks, output_dir, filter_patterns, &[], progress).await
+}
+
+/// repakxtra: whether a legacy package (its .uasset, the header with the name map) names a class, struct or enum that
+/// another package defines: a Blueprint's generated class or a user-defined struct or enum. Their schemas come from that
+/// package on disk, so it is extracted with its dependencies. Conservative: a name that only appears in a string still
+/// counts (the extract then takes its dependencies, as before). A file that is not there needs nothing.
+fn uses_outside_schemas(uasset: &Path) -> bool {
+    const MARKERS: [&[u8]; 3] = [b"BlueprintGeneratedClass", b"UserDefinedStruct", b"UserDefinedEnum"];
+    fs::read(uasset).is_ok_and(|bytes| MARKERS.iter().any(|m| bytes.windows(m.len()).any(|w| w == *m)))
+}
+
+/// repakxtra: `no_deps`, the ones among `filter_patterns` extracted without their dependencies: a material instance's
+/// JSON is the same without them (1,263 checked across four VFX mods, only the list of referenced files not on disk
+/// differs), and the dependencies were most of the extract (3,386 files for 375 materials, 20.5 s against 5.7 s).
+pub async fn extract_vanilla_assets_split(
+    tool_path: &Path,
+    game_paks: &str,
+    output_dir: &str,
+    filter_patterns: &[String],
+    no_deps: &[String],
+    progress: &dyn VfxProgressSink,
+) -> Result<Vec<String>, String> {
     fs::create_dir_all(output_dir).map_err(|e| e.to_string())?;
 
     if filter_patterns.is_empty() {
@@ -557,22 +583,33 @@ pub async fn extract_vanilla_assets(
     // old temp-filter-file round-trip is no longer needed).
     // Deps on: to_json pulls property schemas off referenced assets on disk (UAsset
     // PullSchemasFromAnotherAsset), so imports missing from the tree degrade the JSON.
-    let request = VfxUatRequest {
-        action: "extract_iostore_legacy",
-        game_paks: Some(game_paks.to_string()),
-        output_path: Some(output_dir.to_string()),
-        filter_patterns: Some(package_patterns),
-        with_deps: Some(true),
-        ..Default::default()
+    let plain: std::collections::HashSet<String> = no_deps.iter().map(|p| to_package_path(p.replace('\\', "/").trim_end_matches(".uasset")).to_lowercase()).collect();
+    let (bare, deep): (Vec<(&String, String)>, Vec<(&String, String)>) =
+        normalized_patterns.iter().zip(package_patterns).partition(|(_, p)| plain.contains(&p.to_lowercase()));
+    let extract = |patterns: Vec<String>, with_deps: bool| async move {
+        if patterns.is_empty() {
+            return Ok(());
+        }
+        let request = VfxUatRequest {
+            action: "extract_iostore_legacy",
+            game_paks: Some(game_paks.to_string()),
+            output_path: Some(output_dir.to_string()),
+            filter_patterns: Some(patterns),
+            with_deps: Some(with_deps),
+            ..Default::default()
+        };
+        let response = run_vfx_uat_request(tool_path, &request).await?;
+        if !response.success {
+            return Err(format!("[VFX] Vanilla extraction failed: {}", response.message));
+        }
+        Ok(())
     };
-
-    let response = run_vfx_uat_request(tool_path, &request).await?;
-    if !response.success {
-        return Err(format!(
-            "[VFX] Vanilla extraction failed: {}",
-            response.message
-        ));
-    }
+    extract(deep.into_iter().map(|(_, p)| p).collect(), true).await?;
+    // repakxtra: one that turns out to use a class, struct or enum defined in another package (a Blueprint's) needs
+    // that package on disk for its schema: extracted again, with its dependencies
+    extract(bare.iter().map(|(_, p)| p.clone()).collect(), false).await?;
+    let needs: Vec<String> = bare.into_iter().filter(|(rel, _)| uses_outside_schemas(&Path::new(output_dir).join(format!("{rel}.uasset")))).map(|(_, p)| p).collect();
+    extract(needs, true).await?;
 
     let mut assets = Vec::new();
     find_uassets_recursive(Path::new(output_dir), Path::new(output_dir), &mut assets)?;
@@ -819,6 +856,7 @@ pub async fn pack_to_iostore(
         output_path: Some(output_base.clone()),
         input_dir: Some(pack_dir.clone()),
         compress: Some(true),
+        parallel: Some(true), // repakxtra: the packing is the only work running then
         ..Default::default()
     };
 
@@ -1086,4 +1124,23 @@ pub fn is_updatable_class(class_name: &str) -> bool {
             | "BlueprintGeneratedClass"
             | "WidgetBlueprintGeneratedClass"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_package_naming_a_blueprint_class_or_user_struct_keeps_its_dependencies() {
+        let dir = std::env::temp_dir().join(format!("xuat-schemas-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let file = |name: &str, body: &[u8]| { let p = dir.join(name); fs::write(&p, body).unwrap(); p };
+        // a name map holds its strings length-prefixed: the marker is found inside it
+        assert!(uses_outside_schemas(&file("bp.uasset", b"\x00\x18\x00\x00\x00BlueprintGeneratedClass\x00rest")));
+        assert!(uses_outside_schemas(&file("uds.uasset", b"..UserDefinedStruct..")));
+        assert!(uses_outside_schemas(&file("ude.uasset", b"..UserDefinedEnum..")));
+        assert!(!uses_outside_schemas(&file("mi.uasset", b"MaterialInstanceConstant /Script/Engine Texture2D")));
+        assert!(!uses_outside_schemas(&dir.join("missing.uasset")), "nothing extracted, nothing to add");
+        let _ = fs::remove_dir_all(&dir);
+    }
 }
