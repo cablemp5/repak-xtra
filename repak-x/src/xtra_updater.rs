@@ -36,16 +36,27 @@ $waitFor = [int]$env:RX_PID
 while (Get-Process -Id $waitFor -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 300 }
 
 # What the app started from its own folder (UAssetTool's command line, mid-extract) can outlive it and keeps its files in
-# use: it gets a moment to finish, then it is stopped. The folder by both names: the dist\repakxtra link and its target
-$roots = @((Get-Item -LiteralPath $app).FullName.TrimEnd('\') + '\')
-$linked = (Get-Item -LiteralPath $app).Target
-if ($linked) { $roots += @($linked | ForEach-Object { $_.TrimEnd('\') + '\' }) }
-function Left { @(Get-Process | Where-Object { $p = $_.Path; $p -and @($roots | Where-Object { $p.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count }) }
-$deadline = (Get-Date).AddSeconds($(if ($env:RX_WAIT) { [int]$env:RX_WAIT } else { 30 }))
-while (@(Left).Count -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 300 }
-$stop = @(Left)
-$stop | Stop-Process -Force -ErrorAction SilentlyContinue
-$stop | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
+# use: it gets a moment to finish, then it is stopped. The folder by both names: the dist\repakxtra link and its target.
+# Every path through Get-Item, which spells it out in full (a short 8.3 RUNNER~1 and its long name compare equal). Never
+# what stops an update: a failure here leaves the copy below to try
+try {
+    $long = { param($p) try { (Get-Item -LiteralPath $p -ErrorAction Stop).FullName } catch { $p } }
+    $roots = @((& $long $app).TrimEnd('\') + '\')
+    $linked = (Get-Item -LiteralPath $app).Target
+    if ($linked) { $roots += @($linked | ForEach-Object { (& $long $_).TrimEnd('\') + '\' }) }
+    function Left {
+        @(Get-Process | Where-Object {
+            $p = try { $_.Path } catch { $null }
+            if ($p) { $p = & $long $p }
+            $p -and @($roots | Where-Object { $p.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count
+        })
+    }
+    $deadline = (Get-Date).AddSeconds($(if ($env:RX_WAIT) { [int]$env:RX_WAIT } else { 30 }))
+    while (@(Left).Count -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 300 }
+    $stop = @(Left)
+    $stop | Stop-Process -Force -ErrorAction SilentlyContinue
+    $stop | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
+} catch { }
 
 $extracted = Join-Path $temp 'extracted'
 try { Expand-Archive -LiteralPath $zip -DestinationPath $extracted -Force }
