@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import type { ChangeEvent } from 'react'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
@@ -146,6 +146,8 @@ import { keepThisOne } from './custom/keepOne' // repakxtra: Keep this one
 import { NEXUS_TYPE, recordSources, renameSource, sourceOf, useNexusScan } from './custom/nexusSource' // repakxtra: Nexus source
 import { stageOffFiles } from './custom/offFiles' // repakxtra: .pak.off files
 import CrashSuspects, { previousCrashes, withSuspects } from './custom/CrashSuspects' // repakxtra: crash suspects
+import { revealBuiltin, toggleBuiltin, useBuiltins, watchBuiltins } from './custom/BuiltinMods' // repakxtra: built-in mods
+import { isBuiltin, useBuiltinRows } from './custom/builtinRows'
 
 type ModRecord = {
   path: string
@@ -370,6 +372,9 @@ function App() {
   const [filtersHeight, setFiltersHeight] = useState<number | null>(null)
   const [isFiltersResizing, setIsFiltersResizing] = useState(false)
   const [selectedMods, setSelectedMods] = useState<Set<string>>(new Set())
+  // repakxtra: the checked mods without the built-in rows (custom/builtinRows.ts): every file action (delete, move,
+  // tags, loadouts, sharing, the menu) uses this, only Enable and Disable reach a built-in, through its own switch
+  const selectedFiles = useMemo(() => new Set([...selectedMods].filter(p => !isBuiltin(p))), [selectedMods])
   const [showBulkActions, setShowBulkActions] = useState(false)
   const [newTagInput, setNewTagInput] = useState('')
   const [allTags, setAllTags] = useState<string[]>([])
@@ -450,6 +455,8 @@ function App() {
   const [clashes, setClashes] = useState<ClashRecord[]>([])
   const [launchSuccess, setLaunchSuccess] = useState(false)
   const [characterData, setCharacterData] = useState<CharacterDataEntry[]>(characterDataStatic as CharacterDataEntry[])
+  const { list: builtinList, busy: builtinBusy } = useBuiltins() // repakxtra: built-in mods, listed in the Library
+  const builtinHeroName = useCallback((id: string) => characterData.find(c => c.id === id)?.name, [characterData])
   const [isDragging, setIsDragging] = useState(false)
   const [dropTargetFolder, setDropTargetFolder] = useState<string | null>(null)
   const [renamingModPath, setRenamingModPath] = useState<string | null>(null) // Track which mod should start inline renaming
@@ -1079,6 +1086,7 @@ function App() {
   };
 
   const handleModSelect = (mod: ModRecord) => {
+    if (isBuiltin(mod.path)) { revealBuiltin(mod.builtin); return } // repakxtra: customized on Home
     const isViewed = selectedMod?.path === mod.path
     setSelectedMod(mod)
     if (!autoOpenDetails) return
@@ -1141,6 +1149,7 @@ function App() {
   }, [mods, isRightPanelOpen, lastPanelWidth])
 
   const handleContextMenu = (e: React.MouseEvent, mod: ModRecord) => {
+    if (isBuiltin(mod.path)) { e.preventDefault(); return } // repakxtra: no file actions on a built-in
     e.preventDefault()
     // repakxtra: Shift+F10 or the Menu key (not a right click) opens it under the row's name
     const row = e.button !== 2 ? e.currentTarget.getBoundingClientRect() : null
@@ -1161,7 +1170,7 @@ function App() {
   }
 
   // repakxtra: a loadout row's menu acts on that row alone, whatever is selected in the Library
-  const menuSelection = contextMenu?.fromLoadout ? new Set<string>() : selectedMods
+  const menuSelection = contextMenu?.fromLoadout ? new Set<string>() : selectedFiles
   const closeContextMenu = () => {
     setContextMenu(null)
   }
@@ -1181,15 +1190,18 @@ function App() {
 
   // Bulk Delete Handlers
   const handleBulkDelete = async () => {
-    if (selectedMods.size === 0) return
+    if (selectedFiles.size === 0) { // repakxtra: only built-ins checked: they are turned off, never deleted
+      if (selectedMods.size) alert.warning('Built-in mods are not deleted', 'Turn them off with their switch instead.')
+      return
+    }
     if (gameRunning && !bypassGameRunningLock) { stableDeleteBlocked(); return } // repakxtra: the same lock as one mod's Delete
 
     try {
-      setStatus(`Deleting ${selectedMods.size} mods...`)
+      setStatus(`Deleting ${selectedFiles.size} mods...`)
       setModLoadingProgress(-1)
       setIsModsLoading(true)
 
-      const modPaths = Array.from(selectedMods)
+      const modPaths = Array.from(selectedFiles)
       let deletedCount = 0
       const deletedPaths: TrashedMod[] = [] // repakxtra: one trash id per deletion
       let errors: string[] = []
@@ -1253,6 +1265,9 @@ function App() {
       return
     }
     const targetMods = mods.filter(m => selectedMods.has(m.path) && m.enabled !== enable)
+    // repakxtra: checked built-ins switch too (each rebuilds or removes its own files)
+    const builtinTargets = builtinList.filter(b => selectedMods.has(b.path) && b.on !== enable && !builtinBusy.has(b.id))
+    for (const b of builtinTargets) await toggleBuiltin(b.id, enable, alert)
     if (targetMods.length === 0) return
 
     try {
@@ -1471,6 +1486,7 @@ function App() {
 
     if (isFirstRun) {
       loadInitialData().then((modCount) => {
+        watchBuiltins() // repakxtra: rebuild built-in mods made for an older game build, now and while open
         invoke('get_app_settings')
           .then((settings: any) => {
             if (settings.enableDrp) {
@@ -2237,6 +2253,11 @@ function App() {
       )
       return
     }
+    if (isBuiltin(modPath)) { // repakxtra: the built-in's own switch (it rebuilds or removes its files), one change at a time
+      const b = builtinList.find(x => x.path.toLowerCase() === modPath.replace(/\.bak_repak$/i, '.pak').toLowerCase())
+      if (b && !builtinBusy.has(b.id)) await toggleBuiltin(b.id, !b.on, alert)
+      return
+    }
     // A toggle renames the file, so a second click before the list has reloaded
     // would send the old path. Keyed by stem, which survives the rename.
     const toggleKey = modPath.replace(/\.(pak|bak_repak|pak_disabled)$/i, '')
@@ -2592,7 +2613,7 @@ function App() {
       return
     }
 
-    if (selectedMods.size === 0) {
+    if (selectedFiles.size === 0) {
       setStatus('No mods selected')
       return
     }
@@ -2606,10 +2627,10 @@ function App() {
     setSelectedMod(null)
 
     try {
-      for (const modPath of selectedMods) {
+      for (const modPath of selectedFiles) {
         await invoke('assign_mod_to_folder', { modPath, folderId: effectiveFolderId })
       }
-      setStatus(`Moved ${selectedMods.size} mod(s) to folder!`)
+      setStatus(`Moved ${selectedFiles.size} mod(s) to folder!`)
       setSelectedMods(new Set())
       await loadMods()
       await loadFolders()
@@ -2668,13 +2689,13 @@ function App() {
   }
 
   const handleAddCustomTag = async () => {
-    if (!newTagInput.trim() || selectedMods.size === 0) return
+    if (!newTagInput.trim() || selectedFiles.size === 0) return
 
     try {
-      for (const modPath of selectedMods) {
+      for (const modPath of selectedFiles) {
         await invoke('add_custom_tag', { modPath, tag: newTagInput.trim() })
       }
-      setStatus(`Added tag "${newTagInput}" to ${selectedMods.size} mod(s)`)
+      setStatus(`Added tag "${newTagInput}" to ${selectedFiles.size} mod(s)`)
       setNewTagInput('')
       await loadMods()
       await loadTags()
@@ -2685,13 +2706,13 @@ function App() {
   }
 
   const handleBulkAssignTag = async (tag: string) => {
-    if (selectedMods.size === 0) return
+    if (selectedFiles.size === 0) return
 
     try {
-      for (const modPath of selectedMods) {
+      for (const modPath of selectedFiles) {
         await invoke('add_custom_tag', { modPath, tag })
       }
-      setStatus(`Assigned tag "${tag}" to ${selectedMods.size} mod(s)`)
+      setStatus(`Assigned tag "${tag}" to ${selectedFiles.size} mod(s)`)
       await loadMods()
       await loadTags()
     } catch (error) {
@@ -2701,13 +2722,13 @@ function App() {
   }
 
   const handleBulkRemoveTag = async (tag: string) => {
-    if (selectedMods.size === 0) return
+    if (selectedFiles.size === 0) return
 
     try {
-      for (const modPath of selectedMods) {
+      for (const modPath of selectedFiles) {
         await invoke('remove_custom_tag', { modPath, tag })
       }
-      setStatus(`Removed tag "${tag}" from ${selectedMods.size} mod(s)`)
+      setStatus(`Removed tag "${tag}" from ${selectedFiles.size} mod(s)`)
       await loadMods()
       await loadTags()
     } catch (error) {
@@ -3136,11 +3157,17 @@ function App() {
     }
   })
 
-  // Keep filteredModsRef in sync for Shift+click range selection
-  filteredModsRef.current = filteredMods
+  // repakxtra: the built-in mods head the list (custom/builtinRows.ts), unless a hero, type or tag filter or a folder
+  // narrows it: a search matches their names, the On / Off switch their state
+  const builtinRows = useBuiltinRows(builtinHeroName)
+  const libraryMods = selectedCharacters.size || selectedCategories.size || filterTag || selectedFolderId !== 'all' ? filteredMods
+    : [...builtinRows.filter(r => (!searchQuery || r.custom_name.toLowerCase().includes(searchQuery.toLowerCase())) && matchesState(modState)(r as ModRecord)), ...filteredMods]
+
+  // Keep filteredModsRef in sync for Shift+click range selection (repakxtra: the rows shown, built-ins too)
+  filteredModsRef.current = libraryMods
   useLibraryFocus(filteredMods, viewMode, selectedMod?.path ?? null, setSelectedMod) // repakxtra: focus survives filters, sorts, deletes and view switches
   useEffect(() => { // repakxtra: checked and viewed mods follow their files after a change made elsewhere (Home), removed ones drop
-    const paths = mods.map(m => m.path)
+    const paths = [...mods.map(m => m.path), ...builtinList.map(b => b.path)] // repakxtra: and the built-in rows
     setSelectedMods(prev => { const now = relink(prev, paths); return now ? new Set(now) : prev })
     setSelectedMod(prev => { const now = prev && relink([prev.path], paths); return now ? mods.find(m => m.path === now[0]) ?? null : prev })
   }, [mods])
@@ -3345,7 +3372,8 @@ function App() {
     setExpandedFolders(newExpanded)
   }
 
-  const handleInstallMods = async (modsWithSettings: InstallModPayload[]) => {
+  const handleInstallMods = async (sent: InstallModPayload[]) => {
+    const modsWithSettings = sent.filter(m => m.enabled !== false) // repakxtra: left-out archive mods go to the backend only, to be skipped
     setPanel('install', false)
     // Deliberately not cleared: the startup diagnostics above are exactly the
     // context a failed install needs, and wiping them here meant a bug report
@@ -3406,7 +3434,7 @@ function App() {
         })
 
         // Start the installation (returns immediately since backend spawns threads)
-        await invoke('install_mods', { mods: modsWithSettings })
+        await invoke('install_mods', { mods: sent }) // repakxtra: with the left-out ones
 
         // Wait for the actual installation to complete
         await installCompletePromise
@@ -3768,7 +3796,7 @@ function App() {
           onClose={() => setPanel('sharing', false)}
           gamePath={gamePath}
           installedMods={mods}
-          selectedMods={selectedMods}
+          selectedMods={selectedFiles}
           folders={folders}
         />
       )}
@@ -4309,7 +4337,7 @@ function App() {
                   <span className="bulk-count"><span className="bulk-count-value"><Num id="bulk-count" value={selectedMods.size} /></span></span>{/* repakxtra: transitions.dev Number pop-in */}
                   <span className="bulk-count-label">selected</span>
                   <button onClick={() => {
-                    const allPaths = filteredMods.map(m => m.path)
+                    const allPaths = libraryMods.map(m => m.path) // repakxtra: the built-in rows shown too
                     setSelectedMods(new Set(allPaths))
                   }} className="btn-ghost" title="Select all mods in view">
                     <span className="bulk-label-full">Select All</span>
@@ -4332,7 +4360,7 @@ function App() {
                         else handleAssignToFolder(val)
                       }}
                       placeholder="Move"
-                      disabled={selectedMods.size === 0}
+                      disabled={selectedFiles.size === 0}
                     />
                   </div>
 
@@ -4351,7 +4379,7 @@ function App() {
                         if (tag) handleBulkRemoveTag(tag)
                       }}
                       placeholder="Tags"
-                      disabled={selectedMods.size === 0}
+                      disabled={selectedFiles.size === 0}
                       onAddNew={() => setNewTagPrompt({
                         callback: async (tag) => {
                           const trimmed = tag.trim()
@@ -4368,10 +4396,10 @@ function App() {
                   </div>}
 
                   {/* repakxtra: add the selected mods to a loadout */}
-                  <AddToLoadoutField paths={[...selectedMods]} alert={alert} />
+                  <AddToLoadoutField paths={[...selectedFiles]} alert={alert} />
 
                   {(() => {
-                    const selMods = mods.filter(m => selectedMods.has(m.path))
+                    const selMods = [...mods, ...builtinRows].filter(m => selectedMods.has(m.path)) // repakxtra: every checked mod, shown or filtered out, built-ins too
                     const enabledCount = selMods.filter(m => m.enabled).length
                     const disabledCount = selMods.length - enabledCount
                     const allEnabled = disabledCount === 0
@@ -4422,7 +4450,7 @@ function App() {
               </div>
 
               <ModsList
-                mods={filteredMods}
+                mods={libraryMods}
                 viewMode={viewMode}
                 selectedMod={selectedMod}
                 selectedMods={selectedMods}

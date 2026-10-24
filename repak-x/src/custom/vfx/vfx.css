@@ -32,7 +32,11 @@
   font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-secondary); background: var(--quiet-active); }
 /* Needs an update: its count in the problem yellow, as the Library's Needs VFX update tag */
 .vf-grp.is-needs .vf-grp-count { color: #f5d342; background: color-mix(in srgb, #f5d342, transparent 86%); }
-[data-theme="light"] .vf-grp.is-needs .vf-grp-count { color: #574800; }
+/* Needs an update: its name takes its count's yellow. Updated: its count takes the Updated pill's green */
+.vf-grp.is-needs .vf-grp-name { color: #f5d342; }
+[data-theme="light"] .vf-grp.is-needs .vf-grp-count, [data-theme="light"] .vf-grp.is-needs .vf-grp-name { color: #574800; }
+.vf-grp.is-done .vf-grp-count { color: #3ecf6e; background: color-mix(in srgb, #3ecf6e, transparent 88%); }
+[data-theme="light"] .vf-grp.is-done .vf-grp-count { color: #166236; }
 .vf-selects { flex: none; display: inline-flex; gap: 2px; }
 .vf-select { flex: none; height: 28px !important; min-height: 0 !important; padding: 0 10px !important; border: none !important; border-radius: var(--quiet-radius) !important;
   background: none !important; font-size: 12.5px !important; font-weight: 500 !important; color: var(--text-secondary) !important; cursor: pointer; }
@@ -68,8 +72,6 @@ button.vf-loadouts:focus-visible { outline: 2px solid var(--accent-primary); out
 .vf-loadouts span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vf-loadouts i { flex: none; font-style: normal; font-weight: 400; color: var(--text-secondary); }
 .vf-loadouts b { flex: none; margin-left: 2px; font-weight: 500; color: var(--text-secondary); white-space: pre; }
-/* a finished row's summary beside its result: plain gray, no weight (how much it rebuilt, how long it took) */
-.vf-row-sum { flex: none; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .vf-status { flex: none; font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .vf-status.is-running { color: var(--text-primary); }
 .vf-status.is-cancelled { color: #f5d342; }
@@ -81,6 +83,8 @@ button.vf-loadouts:focus-visible { outline: 2px solid var(--accent-primary); out
 .vf-pill.is-failed, .vf-pill.is-cancelled, .vf-pill.is-partial {color: #f5d342 !important; background: color-mix(in srgb, #f5d342, transparent 88%) !important; }
 .vf-pill:hover { filter: brightness(1.15); }
 .vf-pill, .vf-status { animation: t-swap-in var(--icon-swap-dur) var(--icon-swap-ease) backwards; }
+/* the label 2px down: on the pill's line Geist's capitals sit 2px above its middle (measured), the caret stays put */
+.vf-pill-label { position: relative; top: 2px; }
 .vf-caret { flex: none; opacity: 0.8; transition: transform var(--acc-chevron) var(--acc-ease); }
 .vf-pill[aria-expanded="true"] .vf-caret { transform: rotate(180deg); }
 
@@ -95,7 +99,9 @@ button.vf-loadouts:focus-visible { outline: 2px solid var(--accent-primary); out
     var(--accent-primary) 62%, var(--accent-primary) 100%) 0 0 / 250% 100% no-repeat;
   animation: t-shimmer var(--shimmer-dur, 2s) var(--shimmer-ease, linear) infinite; }
 .vf-step { margin: 8px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 12.5px; color: var(--text-secondary); }
-.vf-count { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 500;
+/* a long path (Packing the update) cuts off with an ellipsis inside the pill, never past the row */
+/* 2px on top of an 18px line: on a plain 20px line Geist's capitals sit 1px above the pill's middle (measured) */
+.vf-count { display: inline-block; box-sizing: border-box; max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 18px; height: 20px; padding: 2px 8px 0; border-radius: 999px; font-size: 11.5px; font-weight: 500;
   font-variant-numeric: tabular-nums; color: var(--text-secondary); background: var(--quiet-active); }
 .vf-pill.is-running { height: 20px !important; padding: 0 7px !important; font-size: 11px !important; cursor: default; color: color-mix(in srgb, var(--accent-primary), white 35%) !important; background: color-mix(in srgb, var(--accent-primary), transparent 84%) !important;
   font-variant-numeric: tabular-nums; }
@@ -214,3 +220,9 @@ html[data-motion="off"] .vfx-notice { animation: none; }
 [data-theme="light"] .vf-counts .is-failed b, [data-theme="light"] .vf-counts .is-unreadable b, [data-theme="light"] .vf-log .is-warning { color: #665400 !important; }
 [data-theme="light"] .vf-warn svg, [data-theme="light"] .vfx-notice-icon { color: #9a7d00; }
 [data-theme="light"] .vf-warnings li::before { background: #9a7d00; }
+
+/* a mod with Niagara effects (particle systems) */
+.vf-niagara { flex: none; height: 22px; display: inline-flex; align-items: center; padding: 0 7px; border-radius: 6px; font-size: 11px; font-weight: 600;
+  color: #b9a4ff; border: 1px solid color-mix(in srgb, #9b7bff, transparent 55%); cursor: help; white-space: nowrap; }
+[data-theme="light"] .vf-niagara { color: #5b3fc4; }
+.vf-eta { font-weight: 600; color: var(--text-primary); }

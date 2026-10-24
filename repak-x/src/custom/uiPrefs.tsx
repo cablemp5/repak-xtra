@@ -25,6 +25,7 @@ const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod
   { key: 'broken', label: 'Broken and May crash warnings, and the Problems tab', on: true, group: 'warn' },
   { key: 'conflicts', label: 'Conflict warnings (the badge, and the count on Check Conflicts)', on: true, group: 'warn' },
   { key: 'quick-organize', label: 'Show Quick Organize when dropping files on the window' }, // shown under Installing mods
+  { key: 'new-strip', label: 'New this week on the Loadouts screen' }, // off by default (NewStripPref)
 ]
 
 // 100% draws the app at the webview's 120% (what was the old 125% step, a little smaller); the rest scale from there.
@@ -314,6 +315,19 @@ export function ModPrefs() {
         <p className="setting-subtext">Tags on mods, the tag filter, the tags button and Assign Tag. Off keeps your tags, just out of sight.</p>
       </div>
     </>
+  )
+}
+
+/** Settings > Library: Hide New this week, checked (hidden) until switched off. */
+export function NewStripPref() {
+  const shown = useUiPref('new-strip')
+  return (
+    <div className="setting-item">
+      <Checkbox checked={shown} onChange={(checked: boolean) => update(storageKey('new-strip'), checked ? '1' : '0')}>
+        <span>Show New this week on the Loadouts screen</span>
+      </Checkbox>
+      <p className="setting-subtext">The strip of mods added in the last 7 days that no loadout turns on.</p>
+    </div>
   )
 }
 

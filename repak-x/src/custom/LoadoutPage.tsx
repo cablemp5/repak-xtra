@@ -355,8 +355,8 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
               onKeyDown={e => { e.stopPropagation(); if (e.key === 'Escape') setQ('') }} />
           </label>
           <div className="mod-state-filter lp-sort" role="group" aria-label="Sort mods to add">
-            <button type="button" aria-pressed={sort === 'name'} onClick={() => setSort('name')}>A to Z</button>
             <button type="button" aria-pressed={sort === 'newest'} onClick={() => setSort('newest')}>Newest</button>
+            <button type="button" aria-pressed={sort === 'name'} onClick={() => setSort('name')}>A to Z</button>
           </div>
           <div className="lp-types" role="group" aria-label="Filter by type">
             <button type="button" aria-pressed={type === null} onClick={() => setType(null)}>All</button>

@@ -2,6 +2,8 @@
 fn main() {
     // Tauri build - handles icons and resources
     tauri_build::build();
+    // repakxtra: tauri-build only watches tauri.conf.json, so a new icon kept the old one in the exe until a clean build
+    println!("cargo:rerun-if-changed=icons/RepakIcon.ico");
 
     // Platform-specific build steps
     #[cfg(windows)]

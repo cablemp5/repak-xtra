@@ -10,7 +10,10 @@ import NumberInput from './ui/NumberInput'
 import { toTagArray } from '../utils/tags'
 import { formatFileSize } from '../utils/format'
 import { useIsConflicting } from '../custom/conflicts' // repakxtra
-import { useVerdict, verdictLabel } from '../custom/brokenMods' // repakxtra
+import { useVerdict } from '../custom/brokenMods' // repakxtra
+import { VerdictBadge } from '../custom/VerdictBadge' // repakxtra
+import { isBuiltin } from '../custom/builtinRows' // repakxtra
+import { BuiltinIcon, revealBuiltin, useBuiltins } from '../custom/BuiltinMods' // repakxtra
 import { NexusTag } from '../custom/nexusSource' // repakxtra
 import { useVfxUpdating } from '../custom/vfx/quick' // repakxtra
 import { detectHeroesWithData } from '../utils/heroes'
@@ -158,6 +161,8 @@ const ModItem = memo(function ModItem({
     const conflicting = useIsConflicting(mod.path) && mod.enabled !== false // repakxtra: red Conflict badge, mods that are on (custom/conflicts.ts)
     const verdict = useVerdict(mod.path) // repakxtra: Broken or May crash badge (custom/brokenMods.ts)
     const vfxUpdating = useVfxUpdating(mod.path) // repakxtra: a right-click VFX update is working on it (custom/vfx/quick.ts)
+    const builtin = isBuiltin(mod.path) // repakxtra: a built-in mod's row (custom/builtinRows.ts): no file actions
+    const builtinBusy = useBuiltins().busy.has(mod.builtin) // repakxtra: it is building, its name shimmers
     const [isDeleteHolding, setIsDeleteHolding] = useState(false)
     const [isLeaving, setIsLeaving] = useState(false)
     const nameReveal = useHoverTextReveal(animationsEnabled)
@@ -295,7 +300,7 @@ const ModItem = memo(function ModItem({
     }, [shouldStartRenaming])
 
     // Get hero image for background/badge (only if either icons or bg are enabled)
-    const heroImage = (showHeroIcons || showHeroBg) ? getHeroImage(characterName, characterData, modDetails?.character_id) : null
+    const heroImage = (showHeroIcons || showHeroBg) && !builtin ? getHeroImage(characterName, characterData, modDetails?.character_id) : null
     const isCardView = viewMode === 'grid' || viewMode === 'compact'
     const showSize = useUiPref('mod-size') // repakxtra
     const typeHint = useTypeHint(category) // repakxtra: badge tooltip for Audio, and UI under Sigeon
@@ -340,6 +345,7 @@ const ModItem = memo(function ModItem({
                         aria-label={`Select ${cleanName}`}
                     />
                 </div>
+                {builtin && (viewMode === 'list' || viewMode === 'list-compact') && <BuiltinIcon id={mod.builtin} />}{/* repakxtra */}
                 {/* Hero icon before name in list view */}
                 {heroImage && showHeroIcons && (viewMode === 'list' || viewMode === 'list-compact') && (
                     isMultiHero && heroesList.length > 0 ? (
@@ -406,10 +412,10 @@ const ModItem = memo(function ModItem({
                                 onSelect(mod)
                             }
                         }}
-                        onDoubleClick={startRename}
+                        onDoubleClick={builtin ? undefined : startRename}
                         onMouseEnter={nameReveal.onMouseEnter}
                         onMouseLeave={nameReveal.onMouseLeave}
-                        title={`${rawName} (double-click to rename)`}
+                        title={builtin ? `${rawName}: open it on Home to change it` : `${rawName} (double-click to rename)`}
                     >
                         <span
                             ref={nameReveal.containerRef}
@@ -418,7 +424,7 @@ const ModItem = memo(function ModItem({
                         >
                             <span ref={nameReveal.innerRef} className="mod-name-inner">
                                 {/* repakxtra: slug + tags + version chip (custom/modName.tsx) */}
-                                {vfxUpdating ? <span className="t-shimmer"><ModName name={cleanName} /></span> : <ModName name={cleanName} />}{/* repakxtra: a right-click VFX update shimmers it */}
+                                {vfxUpdating || builtinBusy ? <span className="t-shimmer"><ModName name={cleanName} /></span> : <ModName name={cleanName} />}{/* repakxtra: a right-click VFX update shimmers it */}
                                 {shouldShowSuffix && <span className="mod-name-suffix">{suffix}</span>}
                             </span>
                         </span>
@@ -427,7 +433,7 @@ const ModItem = memo(function ModItem({
             </div>
 
             {/* Hero icon + Mod Type Badge + Tags row */}
-            {((heroImage && showHeroIcons && isCardView) || (showModType && category) || tags.length > 0 || conflicting || showSize) ? (
+            {((heroImage && showHeroIcons && isCardView) || (showModType && category) || tags.length > 0 || conflicting || showSize || builtin || verdict /* repakxtra */) ? (
                 <div className="mod-tags-row">
                     {heroImage && showHeroIcons && isCardView && (
                         isMultiHero && heroesList.length > 0 ? (
@@ -517,7 +523,11 @@ const ModItem = memo(function ModItem({
                     {!isCardView && sizeTag}
                     {/* repakxtra: on, and clashing with another enabled mod (same priority, same files), right of the file size */}
                     {conflicting && <span className="mod-type-badge conflict-badge" title="Conflicts with another enabled mod: Check Conflicts shows which">Conflict</span>}
-                    {verdict && <span className={`mod-type-badge broken-badge is-${verdict.kind}`} title={verdict.reason}>{verdictLabel(verdict.kind)}</span>}
+                    {verdict && <VerdictBadge path={mod.path} verdict={verdict} />}
+                    {builtin && (
+                        <button type="button" className="mod-type-badge builtin-badge" title="Made by repakxtra from your game files. Open it on Home to change it"
+                            onClick={(e) => { e.stopPropagation(); revealBuiltin(mod.builtin) }}>Built-in</button>
+                    )}
                     <NexusTag path={mod.path} />{/* repakxtra: installed from Nexus Mods (custom/nexusSource.tsx), right of the file size */}
                     {/* repakxtra: Project Galacta compatible mods (xtra_classify.rs) */}
                     {typeof modDetails?.mod_type === 'string' && /\[[^\]]*Project Galacta[^\]]*\]$/.test(modDetails.mod_type) && (
@@ -534,18 +544,19 @@ const ModItem = memo(function ModItem({
             <div className="mod-actions-row">
                 <span className="mod-size">{formatFileSize(mod.file_size ?? 0)}</span>
                 <div className="actions-right">
-                    <NumberInput
+                    {!builtin && <NumberInput
                         value={mod.priority || 0}
                         min={0}
                         max={7}
                         onChange={(newPriority) => handleSetPriority(mod.path, newPriority)}
                         disabled={gameRunning}
-                    />
+                    />}
                     <div className="mod-switch-wrapper" onClick={(e) => e.stopPropagation()} >
                         <Switch title={mod.enabled ? 'Turn off' : 'Turn on'} aria-label={mod.enabled ? `Turn ${cleanName} off` : `Turn ${cleanName} on`}
                             size="sm"
                             color="primary"
                             checked={mod.enabled}
+                            isDisabled={builtinBusy /* repakxtra: a built-in building takes no second switch */}
                             onChange={(_, event) => {
                                 event?.stopPropagation()
                                 handleToggleMod(mod.path)
@@ -553,7 +564,7 @@ const ModItem = memo(function ModItem({
                             className="mod-switch"
                         />
                     </div>
-                    <button
+                    {!builtin && <button
                         className={`hold-delete ${isDeleteHolding ? 'holding' : ''}`}
                         onPointerDown={startDeleteHold} /* repakxtra: pointer events (mouse, pen and touch) in place of mouse + touch */
                         onPointerUp={cancelDeleteHold}
@@ -565,7 +576,7 @@ const ModItem = memo(function ModItem({
                         title={holdToDelete ? "Hold 2s to delete" : "Click to delete"}
                     >
                         <RiDeleteBin2Fill size={18} />
-                    </button>
+                    </button>}
                 </div>
             </div>
         </div>

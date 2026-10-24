@@ -24,12 +24,28 @@ import './vfx.css'
 
 type Status = 'waiting' | 'running' | 'fixed' | 'nothing' | 'failed' | 'cancelled'
 type Run = { status: Status; step?: number; sub?: string; report?: VfxReport }
-type Mod = { path: string; utoc: string; enabled: boolean; name: string; hero?: string | null; modified?: number }
+type Mod = { path: string; utoc: string; enabled: boolean; name: string; hero?: string | null; modified?: number; niagara?: boolean }
 type ModList = { mods: Mod[]; problems: string[] }
 type Verdict = { path: string; kind: string; reason: string; staleNiagara?: number }
 type Log = { time: string; text: string; type: string }
 type Usmap = { updated: boolean; upToDate: boolean; skipped: boolean; localPath?: string | null; filename?: string | null; version?: string | null; buildNumber?: number | null; commitDate?: string | null; message: string }
 type GameBuild = { updated: number; cl?: number | null }
+
+// How long updates took on this PC, the last 12 of each kind (with Niagara effects, without), for the time left
+const TIMES = 'repakxtra.vfx.times'
+type Times = { n: number[]; p: number[] }
+const readTimes = (): Times => { try { const t = JSON.parse(localStorage.getItem(TIMES) ?? ''); return { n: Array.isArray(t.n) ? t.n : [], p: Array.isArray(t.p) ? t.p : [] } } catch { return { n: [], p: [] } } }
+const average = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : undefined)
+function rememberTime(niagara: boolean, ms: number) {
+  const t = readTimes(), k = niagara ? 'n' : 'p'
+  t[k] = [...t[k], ms].slice(-12)
+  localStorage.setItem(TIMES, JSON.stringify(t))
+}
+// before this PC has updated any: the 2026-10-23 benchmark's averages (release build, 5 mods of each kind)
+const START = { n: 170_000, p: 62_000 }
+/** One mod's expected time: its kind's average on this PC, else the benchmark's. */
+const expected = (t: Times, niagara?: boolean) => average(niagara ? t.n : t.p) ?? (niagara ? START.n : START.p)
+const timeLeft = (ms: number) => (ms < 60_000 ? 'under a minute' : `about ${plural(Math.round(ms / 60_000), 'minute')}`)
 
 const NAMING_NOTE: Record<Naming, string> = {
   broken: 'Loadouts and tags stay on the update. The original is renamed to end in _BROKEN.',
@@ -61,6 +77,8 @@ const KIND_LABEL: Record<AssetKind, string> = { updated: 'Rebuilt', same: 'Match
 const isPartial = (r?: VfxReport) => r?.status === 'fixed' && r.counts.left > 0
 const statusText = (r: VfxReport) => (isPartial(r) ? 'Partially updated' : STATUS[r.status])
 const leftText = (r: VfxReport) => `Left out ${plural(r.counts.left, 'Niagara file')} made for an older game build, so the game uses its own and ${r.counts.left === 1 ? 'that effect shows' : 'those effects show'} their usual colors.`
+/** Niagara files the update could not carry with today's USMAP: the game's own effect, for good (still a full update). */
+const ownText = (r: VfxReport) => (r.counts.ownGame ? `${plural(r.counts.ownGame, 'Niagara file')} could not be carried, so ${r.counts.ownGame === 1 ? 'that effect shows' : 'those effects show'} the game's own colors.` : '')
 /** A run's length, read at a glance: 42 s, 1 min 24 s */
 const took = (ms: number) => {
   const sec = Math.max(1, Math.round(ms / 1000)), min = Math.floor(sec / 60), rest = sec % 60
@@ -85,6 +103,7 @@ function reportText(r: VfxReport) {
   const lines = [`${r.name}: ${statusText(r)}${r.error ? `. ${r.error}` : ''}`]
   if (r.status === 'fixed') lines.push(`  ${placedText(r)}`)
   if (isPartial(r)) lines.push(`  ${leftText(r)}`)
+  if (r.counts.ownGame) lines.push(`  ${ownText(r)}`)
   lines.push(`  ${r.counts.updated} rebuilt with ${r.counts.changes} edits, ${r.counts.same} match the game, ${r.counts.added} the mod's own, ${r.counts.passed} kept, ${r.counts.left} left out, ${r.counts.unreadable} unreadable, ${took(r.ms)}`)
   r.warnings.forEach(w => lines.push(`  ! ${w}`))
   for (const k of KIND_ORDER) for (const a of r.assets.filter(x => x.kind === k)) lines.push(`  [${KIND_LABEL[k]}] ${a.name}: ${a.detail}`)
@@ -99,7 +118,7 @@ function Report({ r, onRetry, busy }: { r: VfxReport; onRetry: () => void; busy:
   return (
     <div className="vf-report">
       {r.status === 'fixed'
-        ? <p className="vf-note">{r.counts.updated ? `Rebuilt ${plural(r.counts.updated, 'asset')} with ${plural(r.counts.changes, 'edit')}. ` : ''}{isPartial(r) ? `${leftText(r)} ` : ''}{placedText(r)}</p>
+        ? <p className="vf-note">{r.counts.updated ? `Rebuilt ${r.counts.updated.toLocaleString()} of ${plural(r.assets.length, 'asset')} with ${plural(r.counts.changes, 'edit')}. ` : ''}{isPartial(r) ? `${leftText(r)} ` : ''}{ownText(r) ? `${ownText(r)} ` : ''}{placedText(r)}</p>
         : r.error && <p className="vf-note">{r.error}</p>}
       {(r.status === 'failed' || r.status === 'cancelled') && (
         <button type="button" className="row-action" disabled={busy} onClick={onRetry}><RotateCcw size={13} aria-hidden="true" /> Try again</button>
@@ -141,7 +160,9 @@ function Row({ mod, rowKey, loadouts, run, needs, partial, picked, open, busy, o
     <li className={`mod-row vf-row${status ? ` is-${status}` : ''}${picked ? ' is-picked' : ''}`} title={needs} data-key={rowKey}>
       <Checkbox size="sm" className="vf-pick" checked={picked} isDisabled={busy} disabled={busy} onChange={onPick} title={mod.path}>
         <span className={`vf-row-name${running ? ' t-shimmer' : ''}`}>{mod.name}</span>
+        {mod.enabled && <span className="on-dot" role="img" aria-label="On now" title="This mod is on now" />}
       </Checkbox>
+      {mod.niagara && !partial && <span className="vf-niagara" title="Has Niagara effects (particle systems). When a game update changes them, the update rebuilds them on the new game files.">Niagara</span>}
       {partial && !run?.report ? (
         <span className="vf-partial" title={`${plural(partial, 'Niagara file')} ${partial === 1 ? 'was' : 'were'} made for an older game build. ${partial === 1 ? 'It' : 'They'} will be left out, so ${partial === 1 ? 'that effect shows' : 'those effects show'} the game's usual colors. The rest still updates, and the original is kept, off.`}>Partial</span>
       ) : null}
@@ -151,17 +172,13 @@ function Row({ mod, rowKey, loadouts, run, needs, partial, picked, open, busy, o
           <i>In</i><span>{loadouts[0].name}</span>{loadouts.length > 1 && <b>{' '}+{loadouts.length - 1}</b>}
         </button>
       )}
-      {mod.enabled && <span className="mod-type-badge category-badge on-badge" title="This mod is on now">On</span>}
-      {run?.report?.status === 'fixed' && (
-        <span className="vf-row-sum">{run.report.counts.updated.toLocaleString()}/{run.report.assets.length.toLocaleString()} rebuilt{run.report.counts.left ? ` · ${run.report.counts.left.toLocaleString()} left out` : ''} · {took(run.report.ms)}</span>
-      )}
       {run?.report
         ? <button type="button" className={`vf-pill is-${isPartial(run.report) ? 'partial' : status}`} aria-expanded={open} onClick={onToggle} title={open ? 'Hide the report' : 'Show the report'}>
-            {statusText(run.report)}
+            <span className="vf-pill-label">{statusText(run.report)}{run.report.status === 'fixed' ? ` in ${took(run.report.ms)}` : ''}</span>
             <ChevronDown size={12} className="vf-caret" aria-hidden="true" />
           </button>
         : status && (running && step
-          ? <span className="vf-pill is-running"><SwapText text={`Step ${step} of ${STEPS.length}`} /></span>
+          ? <span className="vf-pill is-running"><span className="vf-pill-label"><SwapText text={`Step ${step} of ${STEPS.length}`} /></span></span>
           : <span className={`vf-status is-${status}`}>{STATUS[status]}</span>)}
       {running && step ? (
         <div className="vf-progress">
@@ -179,7 +196,7 @@ function Row({ mod, rowKey, loadouts, run, needs, partial, picked, open, busy, o
 /** A group of mods that folds away to its heading, as a collection does on the Loadouts screen. Its heading holds the
  *  fold, the name and count, and Select all / Clear for the group. */
 function Group({ title, count, tone, open, onFold, all, none, busy, onPick, children }: {
-  title: string; count: number; tone?: 'needs'; open: boolean; onFold: () => void; all: boolean; none: boolean; busy: boolean; onPick: (on: boolean) => void; children: React.ReactNode
+  title: string; count: number; tone?: 'needs' | 'done'; open: boolean; onFold: () => void; all: boolean; none: boolean; busy: boolean; onPick: (on: boolean) => void; children: React.ReactNode
 }) {
   return (
     <section className={`vf-grp${tone ? ` is-${tone}` : ''}${open ? '' : ' is-folded'}`}>
@@ -298,10 +315,14 @@ export function VfxUpdaterPanel() {
   const autoRun = useRef<string[] | null>(null) // exactly the mods the Library's notice sent, updated as soon as possible
   const groupOf = useRef(new Map<string, string>()) // each shown mod's group, so a run can unfold where it works
   const runsRef = useRef(runs)
+  const orderRef = useRef<string[]>([]) // the list's order, top to bottom, for the order a batch runs in
+  const modStart = useRef(0) // when the mod updating now started
+  const [, tick] = useState(0) // the time left counts down while a batch runs
   runsRef.current = runs
   const modsRef = useRef(mods)
   modsRef.current = mods
 
+  useEffect(() => { if (!busy) return; const t = setInterval(() => tick(n => n + 1), 1000); return () => clearInterval(t) }, [busy])
   const addLog = useCallback((text: string, type = 'info') => setLogs(l => [...l.slice(-999), { time: new Date().toLocaleTimeString(), text, type }]), [])
   const patch = (key: string, p: Partial<Run>) => setRuns(r => ({ ...r, [key]: { ...(r[key] ?? { status: 'waiting' }), ...p } }))
   const pick = (keys: string[], on: boolean) => setPicked(s => { const n = new Set(s); keys.forEach(k => (on ? n.add(k) : n.delete(k))); return n })
@@ -444,7 +465,9 @@ export function VfxUpdaterPanel() {
 
   const run = useCallback(async (keys?: string[]) => {
     const byKey = new Map((modsRef.current ?? []).map(m => [norm(m.utoc), m]))
+    const rank = new Map(orderRef.current.map((k, i) => [k, i]))
     const todo = (keys ?? [...picked].filter(k => !isDone(runsRef.current[k]?.status))).filter(k => byKey.has(k))
+      .sort((a, b) => (rank.get(a) ?? Infinity) - (rank.get(b) ?? Infinity)) // top of the list first
     if (!todo.length || !usmap || !paks) return
     const token = newRunToken()
     if (!(await claimRun(token, byKey.get(todo[0])?.name))) { addLog('Another update is running. Try again when it is done.', 'warning'); return }
@@ -462,6 +485,7 @@ export function VfxUpdaterPanel() {
       const mod = byKey.get(key)!
       void claimRun(token, mod.name) // the lock says which mod, for the other window's message
       patch(key, { status: 'running', step: 1 })
+      modStart.current = performance.now()
       addLog(`Updating ${mod.name}`)
       const r = await fixVfxMod({
         modPath: mod.utoc, usmapPath: usmap, gamePaksPath: paks, turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash', keepName, filter,
@@ -470,6 +494,7 @@ export function VfxUpdaterPanel() {
         onProgress: (_, __, message) => patch(key, { sub: message }),
       })
       patch(key, { status: r.status, report: r, sub: undefined })
+      if (r.status !== 'cancelled' && r.ms > 0) rememberTime(r.assets.some(a => /^(NS|NE)_/i.test(a.name)), r.ms)
       if (r.status === 'fixed') { fixed++; pick([key], false) }
       if (r.status === 'failed' || isPartial(r)) failed++ // a partial update is a warning too
       if (r.status !== 'fixed' || todo.length === 1) setOpen(o => new Set(o).add(key)) // problems open, a batch's updates stay folded
@@ -523,17 +548,21 @@ export function VfxUpdaterPanel() {
   const sortBy = (v: 'name' | 'newest') => { setSort(v); localStorage.setItem(SORT, v) }
   const needle = q.trim().toLowerCase()
   const shown = needle ? list.filter(m => m.name.toLowerCase().includes(needle) || (m.hero ?? '').toLowerCase().includes(needle)) : list
-  // two groups: the mods that need an update (and any updated this session, so a result stays where it was), the rest
-  const first = (m: Mod) => Boolean(needsOf(m) || runs[norm(m.utoc)])
+  // three groups: the mods that need an update (with any that ran this session and did not update), the ones updated this
+  // session, the rest
+  const updatedNow = (m: Mod) => runs[norm(m.utoc)]?.status === 'fixed'
+  const first = (m: Mod) => !updatedNow(m) && Boolean(needsOf(m) || runs[norm(m.utoc)])
   const group = (id: string, title: string, ms: Mod[], count = ms.length) => {
     const keys = ms.map(m => norm(m.utoc))
     return { id, title, mods: ms, count, keys, all: keys.length > 0 && keys.every(k => picked.has(k)), none: !keys.some(k => picked.has(k)) }
   }
   const needing = shown.filter(first)
-  groupOf.current = new Map(shown.map(m => [norm(m.utoc), first(m) ? 'needs' : 'rest']))
+  const done = shown.filter(updatedNow)
+  groupOf.current = new Map(shown.map(m => [norm(m.utoc), updatedNow(m) ? 'updated' : first(m) ? 'needs' : 'rest']))
   const groups = [
     group('needs', 'Needs an update', needing, needing.filter(m => needsOf(m) && !isDone(runs[norm(m.utoc)]?.status)).length),
-    group('rest', needing.length ? 'Other VFX mods' : 'VFX mods', shown.filter(m => !first(m))),
+    group('updated', 'Updated', done),
+    group('rest', needing.length || done.length ? 'Other VFX mods' : 'VFX mods', shown.filter(m => !first(m) && !updatedNow(m))),
   ]
   const inLoadouts = (m: Mod) => { const k = canonKey(modKey(m.path)); return loadouts.filter(l => l.on.some(x => canonKey(x) === k)).map(l => ({ id: l.id, name: l.name })) }
   const fold = (id: string) => setFoldedIds(f => { const n = f.includes(id) ? f.filter(x => x !== id) : [...f, id]; localStorage.setItem(FOLDED, JSON.stringify(n)); return n })
@@ -542,15 +571,31 @@ export function VfxUpdaterPanel() {
   const reports = Object.values(runs).filter(r => r.report)
   const updated = reports.filter(r => r.status === 'fixed').length
   const partly = reports.filter(r => isPartial(r.report)).length
-  const partialTodo = [...picked].filter(k => !isDone(runs[k]?.status) && stale.has(k)).length
   const cl = usmapCl(usmap ? fileName(usmap) : null) // the file in use, not the last download
   const behind = cl && build?.cl && cl < build.cl
+  // old Niagara files are rebuilt once the USMAP matches the game: only a USMAP older than the game makes an update partial
+  const partialTodo = behind ? [...picked].filter(k => !isDone(runs[k]?.status) && stale.has(k)).length : 0
   const usmapState = checking ? 'Checking for a newer one…' : !usmap ? 'None chosen' : usmapOk === false ? 'File missing' : usmapInfo?.upToDate || usmapInfo?.updated ? 'Up to date' : 'Ready'
   const usmapMissing = !checking && (!usmap || usmapOk === false)
   const runningMod = runningKey ? (mods ?? []).find(m => norm(m.utoc) === runningKey) : undefined
   const runningStep = runningKey ? runs[runningKey]?.step : undefined
+  orderRef.current = [...list.filter(first), ...list.filter(m => !first(m))].map(m => norm(m.utoc))
+  const byUtoc = new Map((mods ?? []).map(m => [norm(m.utoc), m]))
+  const times = readTimes()
+  // while a batch runs: the mod in progress (its expected time less the time it has run) and the ones after it
+  const left = busy ? (() => {
+    const rest = batch.slice(runningAt + 1).map(k => expected(times, byUtoc.get(k)?.niagara))
+    const now = runningAt >= 0 ? expected(times, byUtoc.get(batch[runningAt])?.niagara) : 0
+    if (now === undefined || rest.some(x => x === undefined)) return undefined
+    return Math.max(0, now - (performance.now() - modStart.current)) + rest.reduce<number>((a, b) => a + (b ?? 0), 0)
+  })() : undefined
+  // before Update: what the ticked mods should take
+  const ahead = !busy && todo ? (() => {
+    const xs = [...picked].filter(k => !isDone(runs[k]?.status)).map(k => expected(times, byUtoc.get(k)?.niagara))
+    return xs.some(x => x === undefined) ? undefined : xs.reduce<number>((a, b) => a + (b ?? 0), 0)
+  })() : undefined
   const state = cancelling ? 'Cancelling. The current step finishes first.'
-    : busy ? `Updating ${runningAt + 1} of ${batch.length}${runningMod ? `: ${runningMod.name}` : ''}${runningStep ? `, step ${runningStep} of ${STEPS.length}` : '…'}`
+    : busy ? `Updating ${runningAt + 1} of ${batch.length}${runningMod ? `: ${runningMod.name}` : ''}${runningStep ? `, step ${runningStep} of ${STEPS.length}` : '…'}${left !== undefined ? `. ${timeLeft(left)} left` : ''}`
       : lock ?? (todo ? '' : reports.length ? `${updated === reports.length ? plural(updated, 'mod') : `${updated} of ${plural(reports.length, 'mod')}`} updated${partly ? ` (${partly === updated ? (updated === 1 ? 'partially' : 'all partially') : `${partly} partially`})` : ''}${lastTook ? ` in ${took(lastTook)}` : ''}` : 'Tick the mods to update')
 
   // what Update will do to the files, beside the button, so a choice made once in Advanced is never a surprise
@@ -570,8 +615,8 @@ export function VfxUpdaterPanel() {
               {q && <button type="button" className="lo-icon vf-search-clear" onClick={() => setQ('')} aria-label="Clear the search" title="Clear the search"><X size={14} /></button>}
             </label>
             <div className="mod-state-filter lp-sort" role="group" aria-label="Sort VFX mods">
-              <button type="button" aria-pressed={sort === 'name'} onClick={() => sortBy('name')}>A to Z</button>
               <button type="button" aria-pressed={sort === 'newest'} onClick={() => sortBy('newest')}>Newest</button>
+              <button type="button" aria-pressed={sort === 'name'} onClick={() => sortBy('name')}>A to Z</button>
             </div>
           </div>
         )}
@@ -601,13 +646,13 @@ export function VfxUpdaterPanel() {
           : shown.length === 0
             ? (loadError && !needle ? null : <p className="lp-empty">{needle ? `No VFX mods match “${q.trim()}”.` : 'No VFX mods in the mods folder. Mods the Library shows as VFX appear here.'}</p>)
             : <div className="vf-groups">{groups.map(g => g.mods.length > 0 && (
-              <Group key={g.id} title={g.title} count={g.count} tone={g.id === 'needs' ? 'needs' : undefined} busy={busy} all={g.all} none={g.none}
+              <Group key={g.id} title={g.title} count={g.count} tone={g.id === 'needs' ? 'needs' : g.id === 'updated' ? 'done' : undefined} busy={busy} all={g.all} none={g.none}
                 open={Boolean(needle) || !foldedIds.includes(g.id)} onFold={() => fold(g.id)} onPick={on => pick(g.keys, on)}>
                 <ul className="mod-rows vf-rows">
                   {g.mods.map(m => {
                     const key = norm(m.utoc)
                     return (
-                      <Row key={key} rowKey={key} mod={m} loadouts={inLoadouts(m)} run={runs[key]} needs={needsOf(m)} partial={stale.get(key)} picked={picked.has(key)} open={open.has(key)} busy={busy}
+                      <Row key={key} rowKey={key} mod={m} loadouts={inLoadouts(m)} run={runs[key]} needs={needsOf(m)} partial={behind ? stale.get(key) : undefined} picked={picked.has(key)} open={open.has(key)} busy={busy}
                         onPick={v => pick([key], v)}
                         onToggle={() => setOpen(o => { const n = new Set(o); n.has(key) ? n.delete(key) : n.add(key); return n })}
                         onRetry={() => void run([key])} />
@@ -691,7 +736,7 @@ export function VfxUpdaterPanel() {
         {state
           ? <span className="vf-state" aria-live="polite">{state}</span>
           : partialTodo ? <span className="vf-state vf-policy"><b className="vf-partial-n">{partialTodo === todo ? (todo === 1 ? 'It' : `All ${todo}`) : `${partialTodo} of ${todo}`}</b> will only partially update, without {partialTodo === 1 ? 'its' : 'their'} old Niagara files.</span>
-          : <span className="vf-state vf-policy">{policy}. <button type="button" className="su-link" onClick={() => showAdvanced(true)}>Change</button></span>}
+          : <span className="vf-state vf-policy">{ahead !== undefined && <b className="vf-eta">{timeLeft(ahead).replace(/^./, c => c.toUpperCase())} for {plural(todo, 'mod')}. </b>}{policy}. <button type="button" className="su-link" onClick={() => showAdvanced(true)}>Change</button></span>}
         {reports.length > 0 && !busy && <button type="button" className="lo-text-btn" onClick={() => copy('report')}><Copy size={14} /> {copied === 'report' ? 'Copied' : 'Copy report'}</button>}
         {busy
           ? <button type="button" className="lo-text-btn" disabled={cancelling} onClick={stop} aria-label="Cancel updating">{cancelling ? 'Cancelling…' : 'Cancel'}</button>

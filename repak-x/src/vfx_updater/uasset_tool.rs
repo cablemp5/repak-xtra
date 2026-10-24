@@ -86,6 +86,14 @@ pub async fn run_vfx_uat_request(
     _tool_path: &Path,
     request: &VfxUatRequest<'_>,
 ) -> Result<VfxUatResponse, String> {
+    // repakxtra: extracts through the tool's parallel command line when it ships beside the app (xtra_uat_cli.rs). One
+    // that fails (another copy starting at the same moment, a locked file) goes to the library below, as before
+    match crate::xtra_uat_cli::extract(request).await {
+        Some(Ok(r)) if r.success => return Ok(r),
+        Some(Ok(r)) => vfx_warn(&format!("Command-line extract failed, using the library: {}", r.message)),
+        Some(Err(e)) => vfx_warn(&format!("Command-line extract failed, using the library: {e}")),
+        None => {}
+    }
     let request_json = serde_json::to_string(request)
         .map_err(|e| format!("[VFX] Failed to serialize request: {}", e))?;
     // repakxtra: the action and size, not the whole request or response: they list every file, and each line is flushed
@@ -642,7 +650,7 @@ pub async fn extract_vanilla_assets(
 
 /// Extract-dir path back to the UE package path the extractor filters on — the inverse of
 /// the tool's ResolveGamePathToContent (`/Game/X` <-> `Marvel/Content/X`, other mounts as-is).
-fn to_package_path(relative_path: &str) -> String {
+pub(crate) fn to_package_path(relative_path: &str) -> String { // repakxtra: pub(crate) for xtra_niagara's extracts
     let p = relative_path.replace('\\', "/");
     let p = p.trim_start_matches('/');
     match p.strip_prefix("Marvel/Content/") {

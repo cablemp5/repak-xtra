@@ -120,8 +120,12 @@ type Landed = { keys: string[]; loadouts?: string[] }
 export const looseKey = (key: string) => key.toLowerCase().replace(/[^a-z0-9]/g, '')
 
 /** The keys an install source may land under: the name the panel showed, and each pak inside it (an archive or folder
- *  installs its paks under their own names, not the archive's). */
-const landedKeys = (m: Installed, paks: string[] = []) => [...new Set([installedKey(m), ...paks.map(p => installedKey({ mod_name: p }))])]
+ *  installs its paks under their own names, not the archive's). A row that is one pak of a multi-pak archive (its
+ *  mod_name is that pak's) keeps only its own pak: the archive's others may have been left out. */
+const landedKeys = (m: Installed, paks: string[] = []) => {
+  const own = paks.filter(p => looseKey(p) === looseKey(m.mod_name ?? ''))
+  return [...new Set([installedKey(m), ...(own.length ? own : paks).map(p => installedKey({ mod_name: p }))])]
+}
 
 /** The on-disk member keys an install source landed under: its expected names matched loosely against the mods
  *  folder's (a file new since the install started wins a name two folders hold), or (one source installed, nothing
@@ -207,4 +211,8 @@ if (import.meta.env.DEV) {
   console.assert(resolveLanded(['Nothing_like_it'], disk, ['|New_File']).join() === '|New_File', 'no name match: the new files count')
   console.assert(resolveLanded(['Other'], disk, ['skins|Other']).join() === 'skins|Other', 'a name in two folders: the new file is the one installed')
   console.assert(zip.includes('MialygosaMagik') && resolveLanded(zip, new Set(['|MialygosaMagik']), []).join() === '|MialygosaMagik', 'an archive is found by its paks')
+  // a zip of three paks with C left out: the kept rows never reach for C, even when an older C is on disk
+  const three = ['A_9999999_P', 'B_9999999_P', 'C_9999999_P']
+  const kept = [landedKeys({ mod_name: 'A_9999999_P' }, three), landedKeys({ mod_name: 'B_9999999_P' }, three)].flat()
+  console.assert(!kept.includes('C') && resolveLanded(kept, new Set(['|A', '|B', '|C']), []).join() === '|A,|B', 'a mod left out of an archive stays out of the loadout')
 }

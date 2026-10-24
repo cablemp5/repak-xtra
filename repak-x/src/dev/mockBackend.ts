@@ -83,6 +83,9 @@ const setCovers = new Map<string, { covers: string[]; members: string[] | null }
 // one entry per call. window.__previewStep sets the ms between events (600).
 const previewMode = (): string => (Array.isArray(mock.__previewMock) ? mock.__previewMock.shift() : mock.__previewMock) ?? 'ok'
 
+// repakxtra: the built-in mods' saved state (xtra_builtins.rs BuiltinView); heroes are the skin table's 10xx rows
+const builtins: any[] = ['force-default-skin', 'skip-intro-movies'].map(id => ({ id, on: false, excluded: [], current: false, active: false, heroes: [] as string[], path: `C:/Mock/Paks/~mods/.repakxtra-builtin/repakxtra-${id}_9999999_P.pak`, size: 150000 }))
+
 if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
   mockWindows('main')
   mockIPC((cmd, args: any) => {
@@ -105,6 +108,20 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         return null
       }
       case 'get_character_data': return data.characterData
+      // repakxtra: built-in mods (xtra_builtins.rs): a build takes a few seconds, like the real one's 10 to 25
+      case 'xtra_builtins_list': return structuredClone(builtins)
+      case 'xtra_builtins_refresh': return structuredClone(builtins)
+      case 'xtra_builtins_set': {
+        const b = builtins.find(x => x.id === args?.id)!
+        if (args?.excluded) b.excluded = args.excluded
+        if (args?.on !== undefined) b.on = args.on
+        if (!b.on) { b.current = b.active = false; return structuredClone(builtins) }
+        return new Promise(r => setTimeout(r, 2500)).then(() => {
+          Object.assign(b, { current: true, active: true, builtAt: Math.floor(Date.now() / 1000), error: undefined,
+            summary: b.id === 'skip-intro-movies' ? '12 startup logo videos turned off' : `${53 - b.excluded.length} heroes, ${697 - b.excluded.length * 13} skins set to default` })
+          return structuredClone(builtins)
+        })
+      }
       case 'get_mod_details': return data.details[args?.modPath] ?? null
       case 'plugin:webview|set_webview_zoom': // the browser has no webview zoom; CSS zoom stands in
         document.documentElement.style.zoom = String(args?.value ?? 1)
@@ -319,6 +336,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
           is_dir: false, contains_uassets: true, contains_raw_assets: false, auto_to_repak: false, file_size: 1048576 }))
       case 'install_mods':
         for (const m of args?.mods ?? []) {
+          if (m.enabled === false) continue // left out of an archive: the real backend skips it too
           const back = held.findIndex(x => baseName(x.path) === baseName(m.path ?? m.mod_name ?? ''))
           if (back >= 0) { // a snapshot mod held back by mock.fresh returns, on
             const old = held.splice(back, 1)[0], at = old.path.replace(/\.(bak_repak|pak_disabled)$/i, '.pak')
@@ -388,6 +406,12 @@ function mockVfx(cmd: string, args: any): unknown {
     case 'xtra_vfx_release': if (vfxLock?.token === args.token) vfxLock = null; emit('vfx_lock_changed', vfxLock); return null
     case 'xtra_vfx_lock': return vfxLock
     case 'xtra_vfx_stale': return mockStale(String(args.modPath)) ? (args.files as string[]).filter(f => /NS_/.test(f)) : []
+    case 'xtra_vfx_old_layout': return []
+    case 'xtra_vfx_layout_scan': return 0
+    case 'xtra_vfx_source': return String(args.modPath)
+    case 'xtra_skin_table_hero': return null
+    // the mock's USMAP is older than its game: Niagara files stay left out, as in a real run before a matching USMAP
+    case 'xtra_vfx_niagara': return { ready: false, why: 'The USMAP is older than the game', files: [] }
     case 'vfx_save_settings': return null
     case 'vfx_check_usmap_update': return vfxStep().then(() => ({ updated: false, upToDate: true, skipped: false, localPath: VFX_USMAP,
       filename: '5.3.2-3939753+++depot_marvel+S10.5_release-Marvel.usmap', version: 'S10.5_release', buildNumber: 3939753, commitDate: '2026-10-16', message: 'USMAP is up to date' }))

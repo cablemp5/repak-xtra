@@ -145,6 +145,8 @@ struct Facts<'a> {
     has_blueprint: bool,
     /// when the mod's file was written (seconds)
     installed: u64,
+    /// its Niagara files are in an older layout although it was written after the update (xtra_niagara.rs layout scan)
+    old_layout: bool,
 }
 
 /// The verdict for one mod, or None when it looks fine. Pure: the facts come in, the words go out.
@@ -167,6 +169,15 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
     // A VFX mod carries cooked copies of the game's materials and blueprints: an update that rewrote them leaves it stale
     let stale: Vec<&String> = packages.iter().filter(|k| game.get(*k).is_some_and(|at| *at > m.installed)).collect();
     let changed = stale.len();
+    if m.vfx && !m.fixed && m.old_layout {
+        let niagara = packages.iter().filter(|k| is_niagara(k) && game.contains_key(*k)).count();
+        return Some(Verdict {
+            path: path.to_string(),
+            kind: "vfx",
+            reason: "Its Niagara effects are in the layout of an older game build, although the file is newer than the last game update (an earlier update made with an old USMAP, or an old mod installed again). The game can crash on them. The VFX Updater rebuilds them on the new game files.".into(),
+            stale_niagara: niagara.max(1),
+        });
+    }
     if m.vfx && !m.fixed && m.installed > 0 && changed > 0 {
         return Some(Verdict {
             path: path.to_string(),
@@ -221,10 +232,27 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                 .chain(partial.iter())
                 .any(|fixed| !fixed.eq_ignore_ascii_case(&stem) && installed_mods.contains(&base(&path.with_file_name(format!("{fixed}.pak")))))
         };
+        // a partial update whose original was kept: once the USMAP matches the game, the original's Niagara files can be
+        // carried over too (xtra_niagara.rs), and updating the partial one starts from its original
+        let full_possible = crate::xtra_niagara::saved_usmap_matches(&paks);
+        let can_finish = |path: &Path| {
+            let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            full_possible
+                && crate::xtra_vfx::partial_stem(&stem).eq_ignore_ascii_case(&stem)
+                && installed_mods.contains(&base(&path.with_file_name(format!("{}.pak", crate::xtra_vfx::original_stem(&stem)))))
+        };
         mod_paths
             .iter()
             .filter_map(|p| {
                 let path = PathBuf::from(p);
+                if can_finish(&path) {
+                    return Some(Verdict {
+                        path: p.clone(),
+                        kind: "vfx",
+                        reason: "Updated without its Niagara effects while the USMAP was older than the game. The USMAP matches the game now, so the VFX Updater can try a full update from its kept original.".into(),
+                        stale_niagara: 0,
+                    });
+                }
                 let details = crate::compute_mod_details(&path, &state).ok()?;
                 let installed = std::fs::metadata(&path).and_then(|m| m.modified()).ok()?.duration_since(UNIX_EPOCH).ok()?.as_secs();
                 let facts = Facts {
@@ -234,6 +262,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                     fixed: has_fix(&path),
                     has_blueprint: details.has_blueprint,
                     installed,
+                    old_layout: details.category == "VFX" && crate::xtra_niagara::known_old_layout(&path),
                 };
                 judge(p, &facts, game_updated, &game)
             })
@@ -255,7 +284,7 @@ mod tests {
         files.iter().map(|s| s.to_string()).collect()
     }
     fn facts(files: &[String], installed: u64) -> Facts<'_> {
-        Facts { files, galacta: false, vfx: false, fixed: false, has_blueprint: false, installed }
+        Facts { files, galacta: false, vfx: false, fixed: false, has_blueprint: false, installed, old_layout: false }
     }
     const LIVE: &str = "Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uasset";
 
@@ -317,6 +346,7 @@ mod tests {
         assert_eq!((verdict.kind, verdict.reason.contains("changed 1 of")), ("vfx", true), "the VFX verdict wins over risky");
         assert_eq!(judge("m.pak", &vfx(150), 200, &game()).map(|j| j.kind), Some("risky"), "made after its files changed: only the Blueprint warning");
         assert_eq!(judge("m.pak", &Facts { vfx: true, ..facts(&files, 150) }, 200, &game()), None);
+        assert_eq!(judge("m.pak", &Facts { vfx: true, old_layout: true, ..facts(&files, 150) }, 200, &game()).map(|j| j.kind), Some("vfx"), "newer than the update, still in the old layout");
         assert_eq!(judge("m.pak", &Facts { vfx: false, ..facts(&files, 50) }, 200, &game()), None, "only VFX mods");
         assert_eq!(judge("m.pak", &Facts { fixed: true, ..vfx(50) }, 200, &game()).map(|j| j.kind), Some("risky"), "fixed already: its copy is judged instead");
     }
