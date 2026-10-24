@@ -25,6 +25,7 @@ export function cueFor(target: Element): Cue | null {
   if (el.closest('.lo-media-arrow')) return ['navigate', { direction: el.classList.contains('is-prev') ? 'back' : 'forward', emphasis: 'subtle' }]
   if (el.closest('.lp-back')) return ['navigate', { direction: 'back' }]
   if (el.closest('.view-tabs')) return ['navigate', { direction: el.textContent === 'Loadouts' ? 'back' : 'forward' }]
+  if (el.matches('.bi-pick')) return el.getAttribute('aria-expanded') === 'true' ? ['close', { emphasis: 'subtle' }] : ['open'] // Built-in hero picker
   if (el.matches('.custom-dropdown-trigger')) return el.classList.contains('open') ? ['close', { emphasis: 'subtle' }] : ['open']
   // any other menu button (Install's arrow, All/On/Off, the view menu, More): open and close like the dropdowns
   if (el.matches('[aria-haspopup]')) return el.getAttribute('aria-expanded') === 'true' ? ['close', { emphasis: 'subtle' }] : ['open']

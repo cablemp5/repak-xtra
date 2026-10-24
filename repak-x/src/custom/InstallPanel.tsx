@@ -5,6 +5,7 @@
 // one that exists (the mods join it: the default when installing from its page). Installing without a loadout is a
 // quiet link in the footer, not a checkbox to find.
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
 import { Camera, ChevronDown, ImagePlus, Pencil, Type, WandSparkles, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
@@ -13,7 +14,6 @@ import CustomDropdown from '../components/CustomDropdown'
 import bundledHeroes from '../data/character_data.json'
 import { type CharacterDataEntry, FALLBACK_HERO_ID, resolveHeroImage, useHeroImages } from '../utils/heroImages'
 import { commitInstallLoadout, setInstallDraft, startingLoadouts } from './installLoadout'
-import { optionsOn } from './InstallAdvanced'
 import { OTHER, OTHER_LABEL, addGroup, useGroups, useLoadouts } from './loadoutStore'
 import { useMediaUrl } from './loadoutMedia'
 import { silhouetteOf } from './silhouettes'
@@ -201,8 +201,22 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
   const parsed = mods.map(m => parseModType(m.mod_type))
   const picked = mods.map((_, i) => i).filter(i => settings[i]?.enabled !== false)
   const count = picked.length
+  // A skin table mod names no hero in its files: its table is read for the one hero whose skins it changes
+  // (xtra_skin_table_hero, a few seconds), and that hero's shape draws on the cover
+  const [tableHero, setTableHero] = useState<Record<string, string | null>>({})
+  useEffect(() => {
+    let live = true
+    mods.forEach((m, i) => {
+      if (parsed[i].character || m.path in tableHero) return
+      invoke<string | null>('xtra_skin_table_hero', { modPath: m.path })
+        .catch(() => null)
+        .then(id => { if (live) setTableHero(t => ({ ...t, [m.path]: id ? heroes.find(h => h.id === id)?.name ?? null : null })) })
+    })
+    return () => { live = false }
+  }, [mods]) // eslint-disable-line react-hooks/exhaustive-deps
+  const heroOf = (i: number) => parsed[i].character?.split(' - ')[0] ?? tableHero[mods[i].path] ?? undefined
   // The cover's hero: the one the picked mods share, else the first picked mod's (a mod of no hero: no shape)
-  const coverShape = silhouetteOf(picked.map(i => parsed[i].character?.split(' - ')[0]).find(h => h && !h.startsWith('Multiple')))
+  const coverShape = silhouetteOf(picked.map(heroOf).find(h => h && !h.startsWith('Multiple')))
   const suggestion = suggestName(picked.map(i => ({ name: settings[i]?.customName || plainName(mods[i].mod_name), character: parsed[i].character })))
   const existing = target === NEW || target === NONE ? undefined : loadouts.find(l => l.id === target)
   const into = target === NONE ? NONE : existing?.id ?? NEW // a loadout deleted while the dialog was open: back to a new one
@@ -220,6 +234,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
   const install = () => {
     if (count === 0) return
     const asLoadout = into !== NONE
+    const keptPaths = new Set(picked.map(i => mods[i].path))
     const out = mods
       .map((mod, i) => {
         const s = settings[i]
@@ -231,7 +246,9 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
           loadouts: asLoadout && into !== NEW ? [into] : [], // joining a loadout that exists: every mod joins it
         }
       })
-      .filter(m => m.enabled !== false)
+      // A mod left out of an archive that installs others still goes, switched off: the backend unpacks the whole
+      // archive and skips the switched-off ones by name (App drops them again before counting or saving loadouts)
+      .filter(m => m.enabled !== false || keptPaths.has(m.path))
     commitInstallLoadout()
     onInstall(out)
   }
@@ -337,7 +354,6 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
                 const portrait = resolveHeroImage(character, heroes, undefined, FALLBACK_HERO_ID) // no hero: the Library's own placeholder
                 const off = s.enabled === false
                 const isOpen = open.has(mod.path) && !off
-                const on = optionsOn(mod, s)
                 const shown = s.customName || plainName(mod.mod_name)
                 const noCooked = mod.contains_uassets === false || mod.contains_raw_assets === false
                 return (
@@ -348,7 +364,6 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
                         title={isOpen ? 'Hide its details' : 'File name, folder and install options'}>
                         {portrait ? <img className="ip-row-hero" src={portrait} alt="" title={character ?? undefined} /> : <span className="ip-row-hero" />}
                         <span className="ip-row-name">{shown}</span>
-                        {on.length > 0 && !isOpen && <span className="ip-row-on">{on.join(' · ')}</span>}
                       </button>
                       {mods.length > 1 && (off
                         ? <button type="button" className="lo-text-btn ip-add-back" onClick={() => update(i, { enabled: true })}>Add back</button>

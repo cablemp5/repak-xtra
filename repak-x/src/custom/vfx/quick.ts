@@ -91,6 +91,7 @@ function resultToast(r: VfxReport, name: string, alert: Alert) {
       description: [
         r.counts.updated ? `Rebuilt ${plural(r.counts.updated, 'asset')}.` : '',
         left ? `Left out ${plural(left, 'Niagara file')} made for an older game build, so those effects show their usual colors.` : '',
+        r.counts.ownGame ? `${plural(r.counts.ownGame, 'Niagara file')} could not be carried and ${r.counts.ownGame === 1 ? 'shows' : 'show'} the game's own colors.` : '',
         where, warned ? `${plural(warned, 'warning')} in the report.` : '',
       ].filter(Boolean).join(' '),
     })

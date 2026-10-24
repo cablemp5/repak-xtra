@@ -39,6 +39,13 @@ export const TOUR_STEPS: TourStep[] = [
     onEnter: home,
   },
   {
+    target: '.bi-section .lo-group-head',
+    title: 'Built-in mods',
+    description: 'Force default skin and Skip startup logos, made from your own game files. Both start off. Turn one on and it is rebuilt after every game update.',
+    placement: 'top',
+    onEnter: () => { home(); document.querySelector('.bi-section')?.scrollIntoView({ block: 'center' }) },
+  },
+  {
     target: '[data-tour="add-mod-btn"]',
     title: 'Add mods',
     description: 'Drop .pak, .zip, .rar or .7z files anywhere on the window, or press Install.',

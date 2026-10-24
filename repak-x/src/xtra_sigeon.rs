@@ -259,10 +259,19 @@ fn license_lines(text: &str) -> Vec<String> {
     text.lines().filter(|l| is_license(l.trim())).map(str::to_string).collect()
 }
 
+/// A config name is the middle of its file name (SigeonLoader.<name>.ini): anything Windows allows there, so a file
+/// made by hand ("base + clarity") opens too. Not empty, no spaces or dots at either end, no path or reserved
+/// characters, up to 48 characters, and not Off or Custom (the header's own states).
 fn valid_name(name: &str) -> Result<(), String> {
-    let ok = !name.is_empty() && name.len() <= 32 && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    let ok = !name.is_empty()
+        && name.chars().count() <= 48
+        && name.trim() == name
+        && !name.starts_with('.')
+        && !name.ends_with('.')
+        && !name.contains("..")
+        && !name.chars().any(|c| c.is_control() || "<>:\"/\\|?*".contains(c));
     if !ok || ["off", "custom"].contains(&name.to_ascii_lowercase().as_str()) {
-        return Err(format!("\"{name}\" can't be a config name: use letters, numbers, - or _ (up to 32)"));
+        return Err(format!("\"{name}\" can't be a config name: no / \\ : * ? \" < > |, up to 48 characters"));
     }
     Ok(())
 }
@@ -545,6 +554,18 @@ mod tests {
         assert!(save_preset(&storage, "high", &bad).is_err(), "a second license line can't be smuggled in");
         assert!(fs::read_to_string(storage.join("SigeonLoader.high.ini")).unwrap().contains("TEST-KEY-123"));
         let _ = fs::remove_dir_all(&storage);
+    }
+
+    #[test]
+    fn a_config_made_by_hand_with_spaces_opens() {
+        let storage = temp("handmade");
+        fs::write(storage.join("SigeonLoader.base + clarity.ini"), SAMPLE).unwrap();
+        assert_eq!(presets(&storage), ["base + clarity"]);
+        assert!(read_preset(&storage, "base + clarity").is_ok(), "every listed config opens");
+        for bad in ["", " x", "x ", ".x", "x.", "a..b", "a/b", "a\\b", "a:b", "a*b", "a?b", "a|b", "off", "Custom"] {
+            assert!(valid_name(bad).is_err(), "{bad:?}");
+        }
+        assert!(valid_name("high-v2 (comp)").is_ok());
     }
 
     #[test]

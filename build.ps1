@@ -49,6 +49,12 @@ if ($Release) {
 }
 
 Run { dotnet publish UAssetToolRivals/src/UAssetTool/UAssetToolNative.csproj -c Release -r win-x64 -p:DebugType=none -p:DebugSymbols=false -o target/uassettool }
+# UAssetTool's command line from the same source, native (no .NET install needed): the app runs it for IoStore extracts,
+# which it does in parallel where the library's JSON request goes one package at a time (xtra_uat_cli.rs, 2.8x faster).
+# The native link step looks for vswhere, which lives in the Visual Studio Installer folder
+$vsInstaller = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer'
+if ((Test-Path $vsInstaller) -and ($env:PATH -notlike "*$vsInstaller*")) { $env:PATH = "$vsInstaller;$env:PATH" }
+Run { dotnet publish UAssetToolRivals/src/UAssetTool/UAssetTool.csproj -c Release -r win-x64 -p:PublishAot=true -p:PublishSingleFile=false -p:IlcOptimizationPreference=Speed -p:DebugType=none -p:DebugSymbols=false -o target/uassettool-cli }
 Push-Location repak-x
 Run { npm install }
 # Test copies mark themselves (green "xtra", "test build" in the version line, a green taskbar icon from
@@ -66,6 +72,7 @@ New-Item -ItemType Directory -Force "$out\data" | Out-Null
 Copy-Item target\x86_64-pc-windows-msvc\release\REPAK-X.exe "$out\repakxtra.exe" -Force
 Copy-Item target\uassettool\* $out -Recurse -Force
 Remove-Item "$out\*.pdb", "$out\UAssetTool.exe", "$out\REPAK-X.exe" -ErrorAction SilentlyContinue
+Copy-Item target\uassettool-cli\UAssetTool.exe "$out\uassettool-cli.exe" -Force
 Copy-Item repak-x\src\data\character_data.json "$out\data" -Force
 if (-not $Test -and -not $Release) {
     # repoint dist\repakxtra at the build just made (rmdir removes only the link, never the folder it points to)
@@ -78,7 +85,7 @@ if ($Release) {
     # the app folder. By full path: from Git Bash, PATH finds GNU tar first, which ignores -a and writes a tar named .zip
     $zip = "dist\repak-xtra-v$ver-windows.zip"
     Remove-Item $zip -ErrorAction SilentlyContinue
-    Run { & "$env:SystemRoot\System32\tar.exe" -a -cf $zip -C $out repakxtra.exe UAssetTool.dll data }
+    Run { & "$env:SystemRoot\System32\tar.exe" -a -cf $zip -C $out repakxtra.exe UAssetTool.dll uassettool-cli.exe data }
     # Unpacked the way the in-app updater does (Windows PowerShell's Expand-Archive): the zip must give back the same app
     $check = Join-Path $env:TEMP "repakxtra-release-check-$PID"
     Remove-Item $check -Recurse -Force -ErrorAction SilentlyContinue

@@ -452,6 +452,14 @@ fn usmap_dir() -> PathBuf {
     vfx_app_dir().join("usmap")
 }
 
+// repakxtra: for the Niagara step (xtra_niagara.rs), which reads a mod's files with an older build's USMAP
+pub(crate) fn managed_usmap_dir() -> PathBuf {
+    usmap_dir()
+}
+pub(crate) fn saved_usmap_path() -> Option<String> {
+    read_vfx_settings_internal().usmap_path.filter(|p| !p.is_empty())
+}
+
 /// Whether the selected USMAP exists, so the UI can hold the pipeline until it does.
 #[tauri::command]
 pub fn vfx_usmap_exists(path: String) -> bool {

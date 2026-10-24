@@ -105,7 +105,8 @@ const same = (a?: Line[], b?: Line[]) => JSON.stringify(a) === JSON.stringify(b)
  *  asking again while it asks goes back to editing. Only the Discard button throws drafts away, so no repeated key does. */
 export const closeStep = (dirty: boolean, asking: boolean): 'close' | 'ask' | 'keep' => (!dirty ? 'close' : asking ? 'keep' : 'ask')
 const KEY_OK = /^[A-Za-z0-9!._\-/:+]{1,128}$/ // + and - are UE's add and remove-line prefixes (+TextureLODGroups)
-const NAME_OK = /^[A-Za-z0-9_-]{1,32}$/
+// a config's name is the middle of its file name: anything Windows allows (xtra_sigeon.rs valid_name agrees)
+const NAME_OK = /^(?![\s.])(?!.*[\s.]$)(?!.*\.\.)[^<>:"/\\|?*\x00-\x1f]{1,48}$/
 
 if (import.meta.env.DEV) {
   const sample: Line[] = [{ kind: 'license' }, { kind: 'entry', key: 'variant', value: 'high', on: true },
@@ -128,6 +129,7 @@ if (import.meta.env.DEV) {
 export default function SigeonEditor({ alert, onClose }: { alert: Alert; onClose: () => void }) {
   const [status, setStatus] = useState<Status | null>(null)
   const [saved, setSaved] = useState<Record<string, Line[]>>({})
+  const [unread, setUnread] = useState<Record<string, string>>({}) // configs in the list that could not be read, and why
   const [drafts, setDrafts] = useState<Record<string, Line[]>>({})
   const [pick, setPick] = useState<string | null>(null)
   const [naming, setNaming] = useState<{ mode: 'new' | 'copy' | 'rename'; value: string } | null>(null)
@@ -144,8 +146,10 @@ export default function SigeonEditor({ alert, onClose }: { alert: Alert; onClose
     const s = await invoke<Status>('sigeon_status').catch(() => null)
     setStatus(s)
     const names = s?.presets ?? []
-    const read = await Promise.all(names.map(n => invoke<Line[]>('sigeon_read', { preset: n }).then(ls => [n, ls] as const).catch(() => null)))
+    const failed: Record<string, string> = {}
+    const read = await Promise.all(names.map(n => invoke<Line[]>('sigeon_read', { preset: n }).then(ls => [n, ls] as const).catch(e => { failed[n] = String(e); return null })))
     setSaved(Object.fromEntries(read.filter(Boolean) as (readonly [string, Line[]])[]))
+    setUnread(failed)
     setPick(p => (keep && names.includes(keep) ? keep : p && names.includes(p) ? p : (s && names.includes(s.state) ? s.state : names[0] ?? null)))
   }
   useEffect(() => {
@@ -236,7 +240,7 @@ export default function SigeonEditor({ alert, onClose }: { alert: Alert; onClose
     if (!naming || (naming.mode !== 'new' && !pick)) return
     const name = naming.value.trim()
     if (!NAME_OK.test(name) || ['off', 'custom'].includes(name.toLowerCase())) {
-      alert.warning('Pick another name', 'Letters, numbers, - or _ (up to 32).')
+      alert.warning('Pick another name', 'Up to 48 characters, without / \\ : * ? " < > |, and no space or dot at either end.')
       return
     }
     try {
@@ -331,7 +335,14 @@ export default function SigeonEditor({ alert, onClose }: { alert: Alert; onClose
             <p className="sg-foot">License keys are typed into each config file (Open in Notepad) and never shown here.</p>
           </aside>
 
-          {!lines ? (
+          {!lines && pick && unread[pick] ? (
+            // listed but not readable: say so, never the empty state over a config that exists
+            <div className="sg-empty">
+              <h3>{pick} could not be opened</h3>
+              <p>{unread[pick].replace(/^Error:\s*/, '')}</p>
+              <button type="button" className="lo-text-btn" onClick={openInNotepad}>Open in Notepad</button>
+            </div>
+          ) : !lines ? (
             <div className="sg-empty">
               <h3>No Sigeon configs yet</h3>
               <p>{storage && !storage.loader

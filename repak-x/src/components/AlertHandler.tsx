@@ -522,7 +522,7 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
                 duration: 0.4,
                 ease: [0.22, 1, 0.36, 1]
             }}
-            className={`toast-item ${color} ${variant}`}
+            className={`toast-item ${color} ${variant}${isLoading || typeof progressValue === 'number' ? ' is-working' : ''}`} /* repakxtra: shimmer while it works */
             style={{
                 position: 'absolute',
                 bottom: isBottom ? 0 : 'auto',
