@@ -242,12 +242,101 @@ pub async fn xtra_vfx_check(mod_path: String, usmap_path: String, state: State<'
     check(Path::new(&mod_path), &usmap_path, &state).await
 }
 
+// ---- the same check in the background, for the date check's blind spot ----
+// A mod made before a game update but installed after it (or installed before xtra_made.rs kept made dates) reads as
+// current by date. After each game update the Library has these checked once each, in the background: one found built
+// for an older version gets its Needs VFX update flag, so the VFX Updater's one Update covers it too.
+
+fn scan_store() -> PathBuf {
+    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-vfx-check-scan.json")
+}
+
+/// Mods the background check has looked at: their .utoc (checked_key) -> (size, time written, game's last update then).
+type Scanned = HashMap<String, (u64, u64, u64)>;
+
+fn load_scanned(store: &Path) -> Scanned {
+    std::fs::read_to_string(store).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+}
+
+/// Whether the mod at `utoc` still needs a look: never checked as this file, or checked before the game's last update.
+fn needs_scan(done: &Scanned, utoc: &Path, game: u64) -> bool {
+    match crate::xtra_broken::file_stamp(utoc) {
+        Some((size, at)) => done.get(&crate::xtra_broken::checked_key(utoc)) != Some(&(size, at, game)),
+        None => false,
+    }
+}
+
+static SCAN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Checks the mods among `mod_paths` (the Library passes those the date check calls current) that have material
+/// instances, each once per file and game update, and returns how many were found outdated (their flag is set). Stops
+/// while an update runs (the next scan goes on from there), skipped while another runs or the USMAP is not the game's.
+#[tauri::command]
+pub async fn xtra_vfx_check_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<usize, String> {
+    let Ok(_one) = SCAN.try_lock() else { return Ok(0) };
+    let state = state.inner().clone();
+    let mods_dir = state.lock().unwrap().game_path.clone();
+    let Some(paks) = mods_dir.ancestors().find(|p| p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("Paks"))).map(Path::to_path_buf) else { return Ok(0) };
+    let Some(usmap) = crate::vfx_updater::commands::saved_usmap_path().filter(|u| Path::new(u).is_file() && crate::xtra_niagara::usmap_matches(u, &paks)) else { return Ok(0) };
+    let game = crate::xtra_broken::game_updated(&mods_dir);
+    let store = scan_store();
+    let mut done = load_scanned(&store);
+    let mut found = 0;
+    for p in mod_paths {
+        if crate::xtra_vfx::xtra_vfx_lock().is_some() {
+            break;
+        }
+        let path = PathBuf::from(&p);
+        let utoc = path.with_extension("utoc");
+        if !needs_scan(&done, &utoc, game) {
+            continue;
+        }
+        let (st, pc) = (state.clone(), path.clone());
+        let details = tauri::async_runtime::spawn_blocking(move || crate::compute_mod_details(&pc, &st).ok()).await.ok().flatten();
+        let has_mi = details.is_some_and(|d| d.files.iter().any(|f| {
+            let n = f.replace('\\', "/").rsplit('/').next().unwrap_or_default().to_ascii_lowercase();
+            n.starts_with("mi_") && n.ends_with(".uasset")
+        }));
+        if has_mi {
+            match check(&path, &usmap, &state).await {
+                Ok(c) if c.verdict == "outdated" => found += 1,
+                Ok(_) => {}
+                Err(e) => {
+                    log::warn!("[vfx check] {p}: {e}"); // tried again by the next scan
+                    continue;
+                }
+            }
+        }
+        if let Some((size, at)) = crate::xtra_broken::file_stamp(&utoc) {
+            done.insert(crate::xtra_broken::checked_key(&utoc), (size, at, game));
+            let _ = std::fs::write(&store, serde_json::to_string(&done).unwrap_or_default()); // each mod: a closed app keeps its progress
+        }
+    }
+    Ok(found)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn map(xs: &[(&str, &str)]) -> HashMap<String, String> {
         xs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+    }
+
+    #[test]
+    fn the_background_check_looks_once_per_file_and_game_update() {
+        let dir = tempfile::tempdir().unwrap();
+        let utoc = dir.path().join("Aqua_9999999_P.utoc");
+        std::fs::write(&utoc, b"toc").unwrap();
+        let (size, at) = crate::xtra_broken::file_stamp(&utoc).unwrap();
+        let mut done = Scanned::new();
+        assert!(needs_scan(&done, &utoc, 200), "never looked at");
+        done.insert(crate::xtra_broken::checked_key(&utoc), (size, at, 200));
+        assert!(!needs_scan(&done, &utoc, 200), "looked at, same file, same game");
+        assert!(needs_scan(&done, &utoc, 300), "the game updated since");
+        std::fs::write(&utoc, b"toc v2").unwrap();
+        assert!(needs_scan(&done, &utoc, 200), "the mod changed");
+        assert!(!needs_scan(&done, &dir.path().join("gone.utoc"), 200), "no file, nothing to look at");
     }
 
     #[test]

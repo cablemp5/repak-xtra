@@ -240,11 +240,11 @@ fn load_checked(store: &Path) -> HashMap<String, Checked> {
     std::fs::read_to_string(store).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
 }
 
-fn checked_key(utoc: &Path) -> String {
+pub(crate) fn checked_key(utoc: &Path) -> String {
     utoc.to_string_lossy().replace('\\', "/").to_lowercase()
 }
 
-fn file_stamp(utoc: &Path) -> Option<(u64, u64)> {
+pub(crate) fn file_stamp(utoc: &Path) -> Option<(u64, u64)> {
     let m = std::fs::metadata(utoc).ok()?;
     Some((m.len(), m.modified().ok()?.duration_since(UNIX_EPOCH).ok()?.as_secs()))
 }
@@ -263,10 +263,14 @@ fn remember_checked(store: &Path, utoc: &Path, game_updated: u64, outdated: bool
     std::fs::rename(&tmp, store).map_err(|e| e.to_string())
 }
 
+/// When the game was last updated (its newest container's time), for the mods folder `mods_dir`. 0 when not known.
+pub(crate) fn game_updated(mods_dir: &Path) -> u64 {
+    paks_dir(mods_dir).map_or(0, |p| game_containers(&p).iter().map(|c| c.2).max().unwrap_or(0))
+}
+
 /// What a check found about the mod at `utoc` (xtra_vfx_check.rs), kept until the mod or the game changes.
 pub(crate) fn record_check(mods_dir: &Path, utoc: &Path, outdated: bool) -> Result<(), String> {
-    let game_updated = paks_dir(mods_dir).map_or(0, |p| game_containers(&p).iter().map(|c| c.2).max().unwrap_or(0));
-    remember_checked(&checked_store(), utoc, game_updated, outdated)
+    remember_checked(&checked_store(), utoc, game_updated(mods_dir), outdated)
 }
 
 /// An update of `mod_path` said Nothing to update: Needs VFX update stops flagging it until the mod or the game changes.
