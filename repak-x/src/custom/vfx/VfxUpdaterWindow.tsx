@@ -34,12 +34,15 @@ type Log = { time: string; text: string; type: string }
 type Usmap = { updated: boolean; upToDate: boolean; skipped: boolean; localPath?: string | null; filename?: string | null; version?: string | null; buildNumber?: number | null; commitDate?: string | null; message: string }
 type GameBuild = { updated: number; cl?: number | null }
 
-// How long updates took on this PC, the last 12 of each kind (with Niagara effects, without), for the time left
-const TIMES = 'repakxtra.vfx.times'
+// How long updates took on this PC, the last 12 of each kind (with Niagara effects, without), for the time left. Its
+// own key since 0.20.0: runs from before the speed work (one of 409 s read as 110 minutes for 20 mods) never count
+const TIMES = 'repakxtra.vfx.times.v2'
 type Times = { n: number[]; p: number[] }
 const readTimes = (): Times => { try { const t = JSON.parse(localStorage.getItem(TIMES) ?? ''); return { n: Array.isArray(t.n) ? t.n : [], p: Array.isArray(t.p) ? t.p : [] } } catch { return { n: [], p: [] } } }
-const average = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : undefined)
+/** The middle run, once there are 3: one slow run (a cold cache, a busy PC) never sets the estimate alone. */
+const median = (xs: number[]) => (xs.length < 3 ? undefined : [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)])
 function rememberTime(niagara: boolean, ms: number) {
+  if (import.meta.env.DEV) return // the dev copy is a debug build, several times slower than the app
   const t = readTimes(), k = niagara ? 'n' : 'p'
   t[k] = [...t[k], ms].slice(-12)
   localStorage.setItem(TIMES, JSON.stringify(t))
@@ -47,8 +50,8 @@ function rememberTime(niagara: boolean, ms: number) {
 // before this PC has updated any: the 2026-10-24 benchmark's averages (release build, 5 mods of each kind, after the
 // speed work in docs/VFX-SPEED-2026-10-24.md)
 const START = { n: 30_000, p: 12_000 }
-/** One mod's expected time: its kind's average on this PC, else the benchmark's. */
-const expected = (t: Times, niagara?: boolean) => average(niagara ? t.n : t.p) ?? (niagara ? START.n : START.p)
+/** One mod's expected time: its kind's median on this PC (3 runs or more), else the benchmark's. */
+const expected = (t: Times, niagara?: boolean) => median(niagara ? t.n : t.p) ?? (niagara ? START.n : START.p)
 const timeLeft = (ms: number) => (ms < 60_000 ? 'under a minute' : `about ${plural(Math.round(ms / 60_000), 'minute')}`)
 
 const NAMING_NOTE: Record<Naming, string> = {
@@ -895,6 +898,9 @@ export default function VfxUpdaterWindow() {
 }
 
 if (import.meta.env.DEV) {
+  // the estimate: the benchmark until 3 runs, then the middle one (a slow outlier does not move it)
+  console.assert(expected({ n: [409_000], p: [] }, true) === START.n && expected({ n: [], p: [] }, false) === START.p, 'under 3 runs: the benchmark')
+  console.assert(expected({ n: [20_000, 409_000, 24_000], p: [] }, true) === 24_000, 'the middle run, not the average')
   // an update that kept the name is the same loadout member as the original was, and its _BROKEN copy is not
   const m = '~mods/Lime_9999999_P'
   console.assert(canonKey(modKey(`${m}.bak_repak`)) === canonKey(modKey(`${m}.pak`)), 'loadouts hold the update under the original key')
