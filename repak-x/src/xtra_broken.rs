@@ -4,6 +4,7 @@
 //!   changes nothing. The game's own asset list is read once per game build and kept in memory.
 //! - vfx: a VFX mod made before a game update that rewrote game files it replaces (on or off). Its effects can look wrong
 //!   or crash the game until it is rebuilt on the new files (custom/vfx/, the VFX Updater).
+//!   A material mod (a skin's material instances, xtra_vfx::updatable) gets it too, when the update rewrote one of those.
 //! - risky: a Blueprint mod installed before the last game update (on or off: the warning matters before it goes on). Blueprint mods carry whole game classes, and an
 //!   update that changes a class layout makes the game crash on them.
 
@@ -12,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::xtra_crash::asset_key;
@@ -39,6 +40,10 @@ fn is_zero(n: &usize) -> bool {
 fn is_niagara(key: &str) -> bool {
     let name = key.rsplit('/').next().unwrap_or(key);
     ["ns_", "ne_", "curveatlas_"].iter().any(|p| name.starts_with(p))
+}
+
+fn is_material_instance(key: &str) -> bool {
+    key.rsplit('/').next().unwrap_or(key).starts_with("mi_")
 }
 
 /// The game's Paks folder above a mods folder (~mods, or a subfolder of it).
@@ -125,9 +130,9 @@ fn game_assets(paks: &Path) -> Option<Arc<GameAssets>> {
 }
 
 /// Of `files` (paths inside a mod), those whose game copy an update rewrote after `since` (seconds): cooked for an
-/// older game build. None when the game's files cannot be read (no game folder above `mods_dir`).
-pub(crate) fn rewritten_since(mods_dir: &Path, files: &[String], since: u64) -> Option<Vec<String>> {
-    let game = game_assets(&paks_dir(mods_dir)?)?;
+/// older game build. None when the game's files in `paks` (its Paks folder) cannot be read.
+pub(crate) fn rewritten_since(paks: &Path, files: &[String], since: u64) -> Option<Vec<String>> {
+    let game = game_assets(paks)?;
     Some(stale_in(&game, files, since))
 }
 
@@ -140,10 +145,12 @@ struct Facts<'a> {
     files: &'a [String],
     galacta: bool,
     vfx: bool,
+    /// not a VFX mod, but it carries material instances the VFX Updater rebuilds (a skin's glow, xtra_vfx::updatable)
+    materials: bool,
     /// its update sits beside it (<name>_UPDATED_9999999_P, or this is <name>_BROKEN beside <name>): the update is judged, not the original again
     fixed: bool,
     has_blueprint: bool,
-    /// when the mod's file was written (seconds)
+    /// when the mod was made (seconds): its file's modified time, which installs set to the source's (xtra_made.rs)
     installed: u64,
     /// its Niagara files are in an older layout although it was written after the update (xtra_niagara.rs layout scan)
     old_layout: bool,
@@ -188,6 +195,19 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
             stale_niagara: stale.iter().filter(|k| is_niagara(k)).count(),
         });
     }
+    // A material mod: the updater rebuilds only its material instances, so a rewritten texture alone does not count
+    let stale_mi = stale.iter().filter(|k| is_material_instance(k)).count();
+    if m.materials && !m.fixed && m.installed > 0 && stale_mi > 0 {
+        return Some(Verdict {
+            path: path.to_string(),
+            kind: "vfx",
+            reason: format!(
+                "A game update changed {stale_mi} of the material instances this mod replaces, so its materials may look wrong. The VFX Updater rebuilds {} on the new game files.",
+                if stale_mi == 1 { "it" } else { "them" }
+            ),
+            stale_niagara: 0,
+        });
+    }
     // On or off: the warning matters most before a loadout switches it on
     if m.has_blueprint && m.installed > 0 && m.installed < game_updated {
         return Some(Verdict {
@@ -198,6 +218,62 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
         });
     }
     None
+}
+
+/// A mod an update found nothing to rebuild in (its report said Nothing to update), or one Check for VFX update looked at
+/// (xtra_vfx_check.rs): its .utoc's size and time then, and the game's last update then. Until one of them changes it is
+/// not flagged, or, when the check found it `outdated`, flagged whatever its date.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
+struct Checked {
+    size: u64,
+    modified: u64,
+    game: u64,
+    #[serde(default)]
+    outdated: bool,
+}
+
+fn checked_store() -> PathBuf {
+    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-vfx-checked.json")
+}
+
+fn load_checked(store: &Path) -> HashMap<String, Checked> {
+    std::fs::read_to_string(store).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+}
+
+fn checked_key(utoc: &Path) -> String {
+    utoc.to_string_lossy().replace('\\', "/").to_lowercase()
+}
+
+fn file_stamp(utoc: &Path) -> Option<(u64, u64)> {
+    let m = std::fs::metadata(utoc).ok()?;
+    Some((m.len(), m.modified().ok()?.duration_since(UNIX_EPOCH).ok()?.as_secs()))
+}
+
+/// What was found about `utoc` as the file it is now and in this game: Some(outdated), or None (nothing yet, or it changed).
+fn checked_now(store: &HashMap<String, Checked>, utoc: &Path, game_updated: u64) -> Option<bool> {
+    store.get(&checked_key(utoc)).filter(|c| file_stamp(utoc) == Some((c.size, c.modified)) && game_updated <= c.game).map(|c| c.outdated)
+}
+
+fn remember_checked(store: &Path, utoc: &Path, game_updated: u64, outdated: bool) -> Result<(), String> {
+    let (size, modified) = file_stamp(utoc).ok_or_else(|| format!("{} is not there", utoc.display()))?;
+    let mut all = load_checked(store);
+    all.insert(checked_key(utoc), Checked { size, modified, game: game_updated, outdated });
+    let tmp = store.with_extension("json.tmp");
+    std::fs::write(&tmp, serde_json::to_string(&all).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, store).map_err(|e| e.to_string())
+}
+
+/// What a check found about the mod at `utoc` (xtra_vfx_check.rs), kept until the mod or the game changes.
+pub(crate) fn record_check(mods_dir: &Path, utoc: &Path, outdated: bool) -> Result<(), String> {
+    let game_updated = paks_dir(mods_dir).map_or(0, |p| game_containers(&p).iter().map(|c| c.2).max().unwrap_or(0));
+    remember_checked(&checked_store(), utoc, game_updated, outdated)
+}
+
+/// An update of `mod_path` said Nothing to update: Needs VFX update stops flagging it until the mod or the game changes.
+#[tauri::command]
+pub fn xtra_vfx_no_update(mod_path: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
+    let mods_dir = state.lock().unwrap().game_path.clone();
+    record_check(&mods_dir, &Path::new(&mod_path).with_extension("utoc"), false)
 }
 
 /// The mods (of `mod_paths`) that will not work, or may crash, in the installed game. Empty when the game's assets
@@ -212,6 +288,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
         let game_updated = game_containers(&paks).iter().map(|c| c.2).max().unwrap_or(0);
         let base = |p: &Path| p.with_extension("").to_string_lossy().to_lowercase();
         let installed_mods: HashSet<String> = mod_paths.iter().map(|p| base(Path::new(p))).collect();
+        let checked = load_checked(&checked_store());
         // an update beside it: <name>_UPDATED next to the original, or the original renamed <name>_BROKEN next to the update
         // each folder's stems, so an _UPDATED name that takes the priority (two originals that would clash) is found
         let mut by_dir: HashMap<PathBuf, HashSet<String>> = HashMap::new();
@@ -253,13 +330,26 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                         stale_niagara: 0,
                     });
                 }
+                // a check found it built for an older game version: flagged whatever its date says
+                let found = checked_now(&checked, &path.with_extension("utoc"), game_updated);
+                if found == Some(true) && !has_fix(&path) {
+                    return Some(Verdict {
+                        path: p.clone(),
+                        kind: "vfx",
+                        reason: "Check for VFX update found its materials still built for an earlier game version, so they may look wrong. The VFX Updater rebuilds them on the new game files.".into(),
+                        stale_niagara: 0,
+                    });
+                }
                 let details = crate::compute_mod_details(&path, &state).ok()?;
                 let installed = std::fs::metadata(&path).and_then(|m| m.modified()).ok()?.duration_since(UNIX_EPOCH).ok()?.as_secs();
+                let vfx = details.category == "VFX";
                 let facts = Facts {
                     files: &details.files,
                     galacta: details.mod_type.contains("Project Galacta"),
-                    vfx: details.category == "VFX",
-                    fixed: has_fix(&path),
+                    vfx,
+                    materials: !vfx && crate::xtra_vfx::updatable(&details.category, &details.files),
+                    // an update found nothing to rebuild in it (this file, this game): judged like one with its fix beside it
+                    fixed: has_fix(&path) || found == Some(false),
                     has_blueprint: details.has_blueprint,
                     installed,
                     old_layout: details.category == "VFX" && crate::xtra_niagara::known_old_layout(&path),
@@ -284,7 +374,7 @@ mod tests {
         files.iter().map(|s| s.to_string()).collect()
     }
     fn facts(files: &[String], installed: u64) -> Facts<'_> {
-        Facts { files, galacta: false, vfx: false, fixed: false, has_blueprint: false, installed, old_layout: false }
+        Facts { files, galacta: false, vfx: false, materials: false, fixed: false, has_blueprint: false, installed, old_layout: false }
     }
     const LIVE: &str = "Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uasset";
 
@@ -349,6 +439,39 @@ mod tests {
         assert_eq!(judge("m.pak", &Facts { vfx: true, old_layout: true, ..facts(&files, 150) }, 200, &game()).map(|j| j.kind), Some("vfx"), "newer than the update, still in the old layout");
         assert_eq!(judge("m.pak", &Facts { vfx: false, ..facts(&files, 50) }, 200, &game()), None, "only VFX mods");
         assert_eq!(judge("m.pak", &Facts { fixed: true, ..vfx(50) }, 200, &game()).map(|j| j.kind), Some("risky"), "fixed already: its copy is judged instead");
+    }
+
+    #[test]
+    fn nothing_to_update_holds_until_the_mod_or_the_game_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let (store, utoc) = (dir.path().join("checked.json"), dir.path().join("Swap_9999999_P.utoc"));
+        std::fs::write(&utoc, b"toc").unwrap();
+        remember_checked(&store, &utoc, 200, false).unwrap();
+        let all = load_checked(&store);
+        assert_eq!(checked_now(&all, &utoc, 200), Some(false), "the same file, the same game");
+        assert_eq!(checked_now(&all, Path::new(&utoc.to_string_lossy().to_uppercase()), 200), Some(false), "any spelling of the path");
+        assert_eq!(checked_now(&all, &utoc, 300), None, "the game updated since");
+        remember_checked(&store, &utoc, 200, true).unwrap();
+        assert_eq!(checked_now(&load_checked(&store), &utoc, 200), Some(true), "a check found it outdated");
+        std::fs::write(&utoc, b"toc v2").unwrap();
+        assert_eq!(checked_now(&all, &utoc, 200), None, "the mod changed");
+    }
+
+    #[test]
+    fn a_material_mod_needs_a_fix_only_when_its_material_instances_changed() {
+        let mut game = game();
+        for f in ["/Game/Marvel/Characters/1026/1026800/Materials/MI_Body.uasset", "/Game/Marvel/Characters/1026/1026800/Texture/T_Body_D.uasset"] {
+            game.insert(match_key(f), 100);
+        }
+        let mi = "Marvel/Content/Marvel/Characters/1026/1026800/Materials/MI_Body.uasset";
+        let tex = "Marvel/Content/Marvel/Characters/1026/1026800/Texture/T_Body_D.uasset";
+        let skin = v(&[mi, tex]);
+        let verdict = judge("m.pak", &Facts { materials: true, ..facts(&skin, 50) }, 200, &game).unwrap();
+        assert_eq!((verdict.kind, verdict.reason.contains("changed 1 of the material instances")), ("vfx", true));
+        let textures = v(&[tex]);
+        assert_eq!(judge("m.pak", &Facts { materials: true, ..facts(&textures, 50) }, 200, &game), None, "a rewritten texture alone");
+        assert_eq!(judge("m.pak", &Facts { materials: true, ..facts(&skin, 150) }, 200, &game), None, "made after the update");
+        assert_eq!(judge("m.pak", &facts(&skin, 50), 200, &game), None, "not a material mod");
     }
 
     #[test]

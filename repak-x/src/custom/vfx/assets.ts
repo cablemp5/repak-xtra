@@ -74,6 +74,11 @@ export function resolveImport(json: Json, index: number): ObjectRef | undefined 
   return { package: pkg.ObjectName, object: obj.ObjectName, className: obj.ClassName, classPackage: obj.ClassPackage }
 }
 
+/** The packages an asset points at (its import map's top-level packages): its parent material, meshes, textures. */
+export function packageImports(json: Json): Set<string> {
+  return new Set((Array.isArray(json?.Imports) ? json.Imports : []).filter((i: Json) => i?.ClassName === 'Package' && i.OuterIndex === 0).map((i: Json) => String(i.ObjectName)))
+}
+
 /** The name map entry an FName string needs: UAssetAPI stores "T_Foo_2" as "T_Foo" plus a number (FName.FromStringFragments). */
 export function nameBase(value: string) {
   const m = value.match(/^(.+)_(\d+)$/)
@@ -271,4 +276,24 @@ if (import.meta.env.DEV) {
   console.assert((game.Exports[0].CreateBeforeSerializationDependencies as number[]).includes(at), 'the export depends on the new texture like the mod did')
   console.assert(portParam(game, p) === 'unchanged' && game.Imports.length === 6, 'a second port adds nothing')
   console.assert(nameBase('T_X_02') === 'T_X_02' && nameBase('T_X_2') === 'T_X' && nameBase('T_X_0') === 'T_X', 'name numbers follow FName rules')
+}
+
+/** Packages the mod's copy points at and the game's copy does not, other than textures its carried parameters name: edits
+ *  an update cannot carry (another parent material, mesh or material), so the mod's own copy has to stay.
+ *  shortcut: only new references count, a Blueprint's changed numbers or dropped references are not seen; diff the whole
+ *  export if mods ever rely on those. */
+export function uncarriedPackages(modPackages: Set<string>, game: Json, params: ModParam[]): string[] {
+  const have = packageImports(game)
+  const carried = new Set(params.flatMap(p => (p.texture && p.texture !== 'unportable' ? [p.texture.package] : [])))
+  return [...modPackages].filter(k => !have.has(k) && !carried.has(k))
+}
+
+if (import.meta.env.DEV) {
+  const pkg = (ObjectName: string) => ({ ObjectName, OuterIndex: 0, ClassName: 'Package', ClassPackage: '/Script/CoreUObject' })
+  const game = { Imports: [pkg('/Game/M/M_Body'), pkg('/Game/T/T_Body')] }
+  const recolor = packageImports({ Imports: [pkg('/Game/M/M_Body'), pkg('/Game/T/T_Body')] })
+  const swapped = packageImports({ Imports: [pkg('/Game/M/M_Glow'), pkg('/Game/T/T_Mine')] })
+  const mine = { list: 'TextureParameterValues', id: { name: 'Base' }, entry: {}, texture: { package: '/Game/T/T_Mine', object: 'T_Mine', className: 'Texture2D', classPackage: '/Script/Engine' } } as unknown as ModParam
+  console.assert(uncarriedPackages(recolor, game, []).length === 0, 'a recolor points where the game does')
+  console.assert(uncarriedPackages(swapped, game, [mine]).join() === '/Game/M/M_Glow', 'a new parent stays, a carried texture does not count')
 }

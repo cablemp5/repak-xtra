@@ -16,7 +16,7 @@
 // Never throws: the report says what happened, asset by asset.
 import { invoke } from '@tauri-apps/api/core'
 import { DEFAULT_FILTER, type ColorFilter } from './filter'
-import { type ColorProp, type ModParam, applyColor, isMaterialInstance, portParam, readColors, readModParams } from './assets'
+import { type ColorProp, type ModParam, applyColor, isMaterialInstance, packageImports, portParam, readColors, readModParams, uncarriedPackages } from './assets'
 
 export const STEPS = ['Reading the mod', 'Opening its materials', 'Finding its edits', "Reading the game's files", "Opening the game's files", 'Carrying the edits over', 'Rebuilding Niagara effects', 'Rebuilding the assets', 'Packing the update'] as const
 
@@ -65,7 +65,7 @@ export type FixOptions = {
 
 type Dirs = { modExtract: string; modJson: string; editedJson: string; finalUassets: string; stage: string; vanillaExtract: string; vanillaJson: string; vanillaIndex: string }
 type Detected = { kind: 'material_instance' | 'blueprint' | 'maybe' | 'other'; class: string | null; error: string | null }
-type VanillaIndex = { have: string[]; absent: string[] }
+type VanillaIndex = { have: string[] } // an older index's "absent" list is not read (see step 4)
 type NiagaraRun = { ready: boolean; why?: string | null; oldBuild?: number | null; files: { file: string; edits: number; error?: string | null }[] }
 
 class Cancelled extends Error {}
@@ -143,6 +143,10 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     log(`Read ${plural(extracted.length, 'asset')}. Reading the type of ${ask.length}.`)
     const found = ask.length ? await invoke<Record<string, Detected>>('xtra_vfx_detect', { usmapPath: o.usmapPath, paths: ask }) : {}
     check()
+    // a class read as __ScriptImport_<hash>__: the extract could not name the game's classes, so every material would
+    // read as something else and the run would wrongly find Nothing to update. xtra_uat_cli.rs already reads such an
+    // extract again one-shot: this is when that did not help either
+    if (Object.values(found).some(d => d.class?.startsWith('__ScriptImport_'))) throw new Error("The mod's files were read without the game's class names, so what to rebuild is not known. Try again")
     const types = new Map(Object.entries(found).map(([p, d]) => [assetKey(slash(p)), d]))
     let editable: string[] = [], keep: string[] = []
     const maybe = new Map<string, string>()
@@ -157,7 +161,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     // Niagara files a game update rewrote after the mod was made are still cooked for the old game and can crash it. They
     // are left out here (the game uses its own), and step 7 puts back each one it can rebuild
     const niagara = keep.filter(p => NIAGARA_BY_NAME.test(fileName(p)))
-    let staleList = niagara.length ? await invoke<string[]>('xtra_vfx_stale', { modPath: src, files: niagara.map(rel) }) : []
+    let staleList = niagara.length ? await invoke<string[]>('xtra_vfx_stale', { modPath: src, gamePaks: o.gamePaksPath, files: niagara.map(rel) }) : []
     // newer than the update but still in the old layout (an earlier update made with an old USMAP, an old mod installed
     // again): its date says current, so one of its Niagara systems is decoded to tell (xtra_niagara.rs)
     if (niagara.length && !staleList.length) {
@@ -240,7 +244,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
 
     // ---- 3: what to carry ----
     enter(3)
-    const edits = new Map<string, { params: ModParam[]; colors: ColorProp[] }>()
+    const edits = new Map<string, { params: ModParam[]; colors: ColorProp[]; packages: Set<string> }>()
     const notMine = new Set<string>()
     let read = 0
     await mapLimit(modJson, 6, async path => {
@@ -250,7 +254,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
         const json = JSON.parse(await invoke<string>('vfx_read_json_file', { path }))
         // a 'maybe' (its first export was user data) is edited only when it holds a material instance after all
         if (maybe.has(key) && !isMaterialInstance(json)) notMine.add(key)
-        else edits.set(key, { params: readModParams(json, filter), colors: readColors(json, filter) })
+        else edits.set(key, { params: readModParams(json, filter), colors: readColors(json, filter), packages: packageImports(json) })
       } catch (e) {
         warn(`${stem(path)}: could not read its JSON (${e}). The mod's copy is kept.`)
       }
@@ -268,15 +272,20 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
 
     // ---- 4: the game's own copies, cached per game build ----
     enter(4)
-    let index: VanillaIndex = { have: [], absent: [] }
+    let index: VanillaIndex = { have: [] }
     try { index = JSON.parse(await invoke<string>('vfx_read_json_file', { path: dirs.vanillaIndex })) } catch { /* first run on this game build */ }
-    const have = new Set(index.have), absent = new Set(index.absent)
+    // only what was extracted is kept between runs: a file one extract missed (a container Steam held a moment, a package
+    // that failed to convert) is asked for again next time, never saved as "not in the game" for the whole build
+    const have = new Set(index.have), absent = new Set<string>()
     const wanted = editable.map(p => assetKey(rel(p)))
     const missing = editable.filter((p, i) => !have.has(wanted[i]) && !absent.has(wanted[i]))
     let fresh: string[] = []
     if (missing.length) {
       log(`Extracting ${plural(missing.length, 'game file')} (${wanted.length - missing.length} already extracted).`)
-      const got = await invoke<string[]>('vfx_extract_vanilla_assets', { gamePaks: o.gamePaksPath, outputDir: dirs.vanillaExtract, filterPatterns: missing.map(p => rel(p).replace(/\.uasset$/i, '')) })
+      // material instances come without their dependencies: their JSON is the same, and those were most of the extract.
+      // Blueprints and the rest keep theirs (a parent class's properties can come from another asset)
+      const noDeps = missing.filter(p => types.get(assetKey(slash(p)))?.kind === 'material_instance').map(p => rel(p).replace(/\.uasset$/i, ''))
+      const got = await invoke<string[]>('vfx_extract_vanilla_assets', { gamePaks: o.gamePaksPath, outputDir: dirs.vanillaExtract, filterPatterns: missing.map(p => rel(p).replace(/\.uasset$/i, '')), noDeps })
       const asked = new Set(missing.map(p => assetKey(rel(p))))
       fresh = [...new Set(got.map(p => assetKey(relativeTo(p, dirs.vanillaExtract))).filter(k => asked.has(k)))]
       for (const k of asked) if (!fresh.includes(k)) absent.add(k)
@@ -290,12 +299,13 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
         .map(p => assetKey(relativeTo(p, dirs.vanillaJson))))
       fresh.filter(k => converted.has(k)).forEach(k => have.add(k))
     }
-    await invoke('vfx_write_json_file', { path: dirs.vanillaIndex, content: JSON.stringify({ have: [...have], absent: [...absent] }) })
+    const saveIndex = () => invoke('vfx_write_json_file', { path: dirs.vanillaIndex, content: JSON.stringify({ have: [...have] }) })
+    await saveIndex()
 
     // ---- 6: carry the edits ----
     enter(6)
     const own: string[] = []
-    let done = 0
+    let done = 0, lost = false, swapped = 0 // swapped: kept for references an update cannot carry
     await mapLimit(editable, 6, async p => {
       check()
       const r = rel(p), key = assetKey(r)
@@ -304,7 +314,17 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       const json = have.has(key) && e ? await invoke<string>('vfx_read_json_file', { path: `${dirs.vanillaJson}/${jsonRel}` }).then(JSON.parse).catch(() => null) : null
       if (absent.has(key)) { own.push(p); asset(p, 'added', 'Not in the game: the mod\'s own, kept as it was.') }
       else if (!e) { own.push(p); asset(p, 'failed', 'Its JSON could not be read: the mod\'s copy is kept, unfixed.') }
-      else if (!json) { own.push(p); asset(p, 'failed', 'The game\'s copy could not be read: the mod\'s copy is kept, unfixed.') }
+      else if (!json) {
+        // gone from the cache (a temp folder cleanup): extracted again by the next try, not trusted from the index
+        if (have.delete(key)) lost = true
+        own.push(p); asset(p, 'failed', 'The game\'s copy could not be read: the mod\'s copy is kept, unfixed.')
+      }
+      else if (uncarriedPackages(e.packages, json, e.params).length) {
+        // it points at another parent material, mesh or material than the game's: rebuilding it on the game's copy would
+        // lose that, so the mod's own copy stays (a skin's material swap, a Blueprint's mesh)
+        const extra = uncarriedPackages(e.packages, json, e.params).map(k => k.split('/').pop())
+        swapped++; own.push(p); asset(p, 'passed', `Kept as it was: it uses ${extra.slice(0, 2).join(', ')}${extra.length > 2 ? ` and ${extra.length - 2} more` : ''} where the game's file does not, which an update cannot carry.`)
+      }
       else {
         const changed: string[] = [], notes: string[] = []
         for (const prm of e.params) {
@@ -330,6 +350,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       }
       o.onProgress?.(++done, editable.length, `Carried ${done} of ${editable.length}`)
     })
+    if (lost) await saveIndex()
     if (own.length) await invoke('vfx_copy_uasset_files', { sourcePaths: own, sourceBaseDir: dirs.modExtract, destBaseDir: dirs.finalUassets })
     log(`Rebuilt ${plural(report.counts.updated, 'asset')} with ${plural(report.counts.changes, 'edit')}, ${report.counts.same} match the game, ${report.counts.added} are the mod's own.`)
 
@@ -351,12 +372,20 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       const expected = keep.length + own.length + report.counts.updated - niagaraUpdated
       if (built.length < expected) warn(`Only ${built.length} of ${expected} assets are in the rebuilt mod.`)
     }
+    // nothing rebuilt or left out, only kept: the "update" would be the original again, under a new name
+    if (swapped && !report.counts.updated && !report.counts.same && !report.counts.left && !niagaraDone) {
+      report.status = 'nothing'
+      report.error = "Nothing to update: its materials and blueprints use other materials or meshes than the game's, which an update cannot carry, so the original stays as it is."
+      return report
+    }
     if (!report.counts.updated && !report.counts.added && !niagaraDone && !((report.counts.left || report.counts.ownGame) && keep.length)) {
       if (report.counts.left || report.counts.ownGame) { report.error = allStale(); return report }
       // every material and blueprint was read and matches the game (anything else stopped above): it works as it is
-      if (report.counts.same) {
+      if (report.counts.same || swapped) {
         report.status = 'nothing'
-        report.error = 'Nothing to update: every material and blueprint already matches the game, so the original works as it is.'
+        report.error = swapped
+          ? "Nothing to update: its materials and blueprints use other materials or meshes than the game's, which an update cannot carry, so the original stays as it is."
+          : 'Nothing to update: every material and blueprint already matches the game, so the original works as it is.'
       } else report.error = 'Not updated: none of its materials or blueprints could be rebuilt. Check the USMAP in Advanced, then try again.'
       return report
     }
@@ -364,11 +393,17 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     await packAndPlace()
   } catch (e) {
     if (e instanceof Cancelled) { report.status = 'cancelled'; report.error = 'Cancelled.' }
-    else { report.status = 'failed'; report.error = String(e instanceof Error ? e.message : e).replace(/^\[VFX\]\s*/, ''); log(report.error, 'error') }
+    else {
+      // a tool's own message, said as what it is: the run stopped on it (Copy report keeps it word for word)
+      const why = String(e instanceof Error ? e.message : e).replace(/^\[VFX\]\s*/, '').replace(/[.!]?\s*$/, '')
+      report.status = 'failed'; report.error = `Stopped on an unexpected problem: ${why}.`; log(report.error, 'error')
+    }
   } finally {
     const now = performance.now()
     if (step) report.steps.push({ step, ms: now - stepAt })
     report.ms = now - t0
+    // here, where the early returns pass too: Needs VFX update stops flagging it until the mod or the game changes (xtra_broken.rs)
+    if (report.status === 'nothing') await invoke('xtra_vfx_no_update', { modPath: o.modPath }).catch(e => log(`Could not note that it needs nothing: ${e}`, 'warning'))
   }
   return report
 }

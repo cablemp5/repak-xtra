@@ -66,12 +66,14 @@ pub fn cleanup_vfx_temp_directories() -> Result<(), String> {
 /// Read a JSON file and return its contents as a string
 /// Strips UTF-8 BOM if present (UAssetTool sometimes outputs files with BOM)
 pub fn read_json_file(path: &str) -> Result<String, String> {
-    let content = fs::read_to_string(path)
+    let mut content = fs::read_to_string(path)
         .map_err(|e| format!("[VFX] Failed to read JSON file {}: {}", path, e))?;
 
-    // Strip UTF-8 BOM if present
-    let content = content.strip_prefix('\u{FEFF}').unwrap_or(&content);
-    Ok(content.to_string())
+    // Strip UTF-8 BOM if present (repakxtra: in place, not a second copy of a file that can be tens of MB)
+    if content.starts_with('\u{FEFF}') {
+        content.drain(..'\u{FEFF}'.len_utf8());
+    }
+    Ok(content)
 }
 
 /// Write content to a JSON file

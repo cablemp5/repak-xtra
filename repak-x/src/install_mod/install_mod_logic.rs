@@ -218,7 +218,9 @@ fn existing_mod_variants(output_dir: &Path, base_name: &str) -> Vec<PathBuf> {
 /// repakxtra: installs without ever leaving the mod missing. `build` writes the new files into a private folder; only
 /// when it succeeds are they swapped in, with the replaced copy (`existing_mod_variants`) moved to Recently deleted in
 /// the same step. A failed build or swap leaves the installed copy exactly as it was.
-fn install_staged(output_dir: &Path, base: &str, build: impl FnOnce(&Path) -> Result<(), String>) -> Result<(), String> {
+/// `source` is the mod being installed: its files keep when it was made (xtra_made.rs).
+fn install_staged(output_dir: &Path, base: &str, source: &Path, build: impl FnOnce(&Path) -> Result<(), String>) -> Result<(), String> {
+    let made = crate::xtra_made::made_at(source);
     let staging = crate::xtra_bundle::staging_dir(output_dir, "installing")?;
     let result = build(&staging).and_then(|_| {
         let moves: Vec<(PathBuf, PathBuf)> = fs::read_dir(&staging)
@@ -230,6 +232,7 @@ fn install_staged(output_dir: &Path, base: &str, build: impl FnOnce(&Path) -> Re
         if moves.is_empty() {
             return Err("The install produced no files".to_string());
         }
+        crate::xtra_made::stamp(&moves.iter().map(|(from, _)| from.as_path()).collect::<Vec<_>>(), made);
         let old = existing_mod_variants(output_dir, base);
         crate::xtra_bundle::replace_all_retiring(&moves, &old).map(|_| ())
     });
@@ -323,6 +326,7 @@ pub fn install_mods_in_viewport(
     let mut results: Vec<ModInstallResult> = Vec::with_capacity(mods.len());
 
     for installable_mod in mods.iter_mut() {
+        let source = installable_mod.mod_path.clone(); // repakxtra: its files keep when it was made (xtra_made.rs)
         if !installable_mod.enabled {
             // Nothing is written, but keep the name canonical for the UI.
             installable_mod.mod_name =
@@ -412,7 +416,7 @@ pub fn install_mods_in_viewport(
             ];
 
             let mut copy_errors: Vec<String> = Vec::new();
-            let staged = install_staged(&output_directory, &base, |staging| {
+            let staged = install_staged(&output_directory, &base, &source, |staging| {
                 for (src, dest_name) in dests {
                     crate::install_mod::write_install_debug(&format!(
                         "  Copying {} -> {}",
@@ -469,7 +473,7 @@ pub fn install_mods_in_viewport(
                 continue;
             }
             // Use optimized path: UAssetTool extracts PAK internally, no Rust-side temp dir
-            let staged = install_staged(&output_directory, &base, |staging| {
+            let staged = install_staged(&output_directory, &base, &source, |staging| {
                 pak_files::create_repak_from_pak_fast(installable_mod, staging.to_path_buf(), installed_mods_ptr)
             });
             match staged {
@@ -507,7 +511,7 @@ pub fn install_mods_in_viewport(
             let dest = output_directory.join(format!("{}.pak", &base));
             let src = installable_mod.mod_path.clone();
             let file_name = format!("{}.pak", &base);
-            match install_staged(&output_directory, &base, |staging| {
+            match install_staged(&output_directory, &base, &source, |staging| {
                 std::fs::copy(&src, staging.join(&file_name)).map(|_| ()).map_err(|e| e.to_string())
             }) {
                 Ok(_) => {
@@ -574,7 +578,7 @@ pub fn install_mods_in_viewport(
             }
             info!("Copied mod files to temp directory for processing");
 
-            let res = install_staged(&output_directory, &base, |staging| {
+            let res = install_staged(&output_directory, &base, &source, |staging| {
                 convert_to_iostore_directory(installable_mod, staging.to_path_buf(), temp_path, installed_mods_ptr)
             });
             // temp_dir is automatically cleaned up when it goes out of scope
@@ -716,7 +720,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let old = dir.path().join("Foo_9999999_P.pak");
         fs::write(&old, b"old").unwrap();
-        let r = install_staged(dir.path(), "Foo_9999999_P", |staging| {
+        let r = install_staged(dir.path(), "Foo_9999999_P", dir.path(), |staging| {
             fs::write(staging.join("Foo_9999999_P.pak"), b"half").unwrap();
             Err("conversion failed".to_string())
         });

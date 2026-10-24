@@ -5,6 +5,8 @@
 
 mod asset_explorer;
 mod xtra_classify; // repakxtra: extra mod types, Project Galacta check
+mod xtra_made; // repakxtra: installed mods keep when they were made (the Needs VFX update check)
+mod xtra_vfx_check; // repakxtra: Check for VFX update (built for this game version or an older one)
 mod xtra_sigeon; // repakxtra: Sigeon V2 switch
 mod xtra_setup; // repakxtra: Setup panel (signature bypass, Project Galacta)
 mod xtra_kit; // repakxtra: preview kit (previews on other PCs)
@@ -5939,12 +5941,16 @@ fn last_seen_version_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
         .join("Repak-X");
     let _ = std::fs::create_dir_all(&app_dir);
-    app_dir.join("last_seen_version.txt")
+    // repakxtra: its own marker. Repak X writes its version to last_seen_version.txt in the same folder, so sharing it
+    // re-showed What's new on every launch after either app had run
+    app_dir.join("repakxtra_last_seen_version.txt")
 }
 
 #[tauri::command]
 async fn get_last_seen_version() -> Result<String, String> {
-    let path = last_seen_version_path();
+    let mut path = last_seen_version_path();
+    // repakxtra: before its own marker existed, the shared one held the last version seen
+    if !path.exists() { path.set_file_name("last_seen_version.txt") }
     match std::fs::read_to_string(&path) {
         Ok(v) => Ok(v.trim().to_string()),
         // Absent file is the normal first-run case, not an error
@@ -5958,6 +5964,11 @@ async fn get_last_seen_version() -> Result<String, String> {
 #[tauri::command]
 async fn set_last_seen_version(version: String) -> Result<bool, String> {
     let path = last_seen_version_path();
+    // repakxtra: an older copy (stable after a newer dev or test build) never records or shows its older notes again
+    let parse = |v: &str| semver::Version::parse(v.trim().trim_start_matches('v')).ok();
+    if let (Some(seen), Some(now)) = (std::fs::read_to_string(&path).ok().and_then(|s| parse(&s)), parse(&version)) {
+        if seen > now { return Ok(false) }
+    }
     std::fs::write(&path, version.trim())
         .map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
     let written = std::fs::read_to_string(&path)
@@ -8530,6 +8541,8 @@ fn main() {
             xtra_crash::xtra_newest_crash, // repakxtra: setup report
             xtra_crash::xtra_crash_suspects, // repakxtra: crash suspects
             xtra_broken::xtra_broken_mods, // repakxtra: broken mods
+            xtra_broken::xtra_vfx_no_update, // repakxtra: Nothing to update stops the Needs VFX update flag
+            xtra_vfx_check::xtra_vfx_check, // repakxtra: Check for VFX update
             xtra_vfx::xtra_vfx_dirs, // repakxtra: VFX Updater
             xtra_vfx::xtra_vfx_detect,
             xtra_vfx::xtra_vfx_place,

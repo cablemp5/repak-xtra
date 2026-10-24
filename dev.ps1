@@ -12,9 +12,21 @@ $env:PATH = "$env:USERPROFILE\.cargo\bin;${env:ProgramFiles(x86)}\Microsoft Visu
 
 if (Get-Process repakxtra, REPAK-X -ErrorAction SilentlyContinue) { throw 'Close repakxtra first (stable or test): the app runs one copy at a time.' }
 # The backend copies UAssetTool from here into the debug folder (repak-x\build.rs); publish it once if it is missing
-if (-not (Test-Path target\uassettool\UAssetTool.dll)) {
-    dotnet publish UAssetToolRivals/src/UAssetTool/UAssetToolNative.csproj -c Release -r win-x64 -p:DebugType=none -p:DebugSymbols=false -o target/uassettool
-    if ($LASTEXITCODE -ne 0) { throw 'UAssetTool did not build.' }
+$uat = 'target\uassettool\UAssetTool.dll'
+$cli = 'target\uassettool-cli\UAssetTool.exe'
+# either one missing (a publish that failed halfway), or older than a patch (a new or changed fix)
+$stale = { param($f) -not (Test-Path $f) -or (Get-ChildItem uassettool-patches\*.patch | Where-Object LastWriteTime -gt (Get-Item $f).LastWriteTime) }
+if ((& $stale $uat) -or (& $stale $cli)) {
+    . .\uassettool-patches\apply.ps1 # with repakxtra's fixes, as build.ps1 builds it
+    Use-UatPatches {
+        Remove-Item UAssetToolRivals\src\UAssetTool\obj, UAssetToolRivals\src\UAssetTool\bin -Recurse -Force -ErrorAction SilentlyContinue
+        dotnet publish UAssetToolRivals/src/UAssetTool/UAssetToolNative.csproj -c Release -r win-x64 -p:DebugType=none -p:DebugSymbols=false -o target/uassettool
+        if ($LASTEXITCODE -ne 0) { throw 'UAssetTool did not build.' }
+        # its command line too (xtra_uat_cli.rs falls back to target\uassettool-cli), from the same patched source
+        Remove-Item UAssetToolRivals\src\UAssetTool\obj, UAssetToolRivals\src\UAssetTool\bin -Recurse -Force -ErrorAction SilentlyContinue
+        dotnet publish UAssetToolRivals/src/UAssetTool/UAssetTool.csproj -c Release -r win-x64 -p:PublishAot=true -p:TrimMode=partial -p:PublishSingleFile=false -p:IlcOptimizationPreference=Speed -p:DebugType=none -p:DebugSymbols=false -o target/uassettool-cli
+        if ($LASTEXITCODE -ne 0) { throw 'The UAssetTool command line did not build.' }
+    }
 }
 # repak-x\build.rs copies these only when it reruns, which an incremental dev build skips: put them beside the debug exe
 New-Item -ItemType Directory -Force target\debug\data | Out-Null

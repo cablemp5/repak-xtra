@@ -15,7 +15,7 @@ import { savedItem } from './storageCarryOver'
 // `group`: the Settings section it is drawn in (Header buttons, On each mod), or its own place elsewhere.
 const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod' | 'warn' }[] = [
   { key: 'vfx-updater', label: 'VFX Updater', on: true, group: 'header' },
-  { key: 'sigeon', label: 'Sigeon', on: true, group: 'header' },
+  { key: 'sigeon', label: 'Sigeon', group: 'header' }, // hidden by default: Settings > Interface shows it
   { key: 'asset-explorer', label: 'Asset Explorer', group: 'header' },
   { key: 'share', label: 'Share', group: 'header' },
   { key: 'tools', label: 'Tools', group: 'header' },
@@ -26,6 +26,7 @@ const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod
   { key: 'conflicts', label: 'Conflict warnings (the badge, and the count on Check Conflicts)', on: true, group: 'warn' },
   { key: 'quick-organize', label: 'Show Quick Organize when dropping files on the window' }, // shown under Installing mods
   { key: 'new-strip', label: 'New this week on the Loadouts screen' }, // off by default (NewStripPref)
+  { key: 'builtins', label: 'Built-in mods on the Loadouts screen and in the Library' }, // hidden by default (BuiltinsPref)
 ]
 
 // 100% draws the app at the webview's 120% (what was the old 125% step, a little smaller); the rest scale from there.
@@ -330,6 +331,21 @@ export function NewStripPref() {
     </div>
   )
 }
+
+/** Settings > Library: Hide built-in mods, checked (hidden) until switched off. */
+export function BuiltinsPref() {
+  const shown = useUiPref('builtins')
+  return (
+    <div className="setting-item">
+      <Checkbox checked={!shown} onChange={(checked: boolean) => update(storageKey('builtins'), checked ? '0' : '1')}>
+        <span>Hide built-in mods</span>
+      </Checkbox>
+      <p className="setting-subtext">Force default skin and Skip startup logos, on the Loadouts screen and in the Library. Uncheck to turn them on.</p>
+    </div>
+  )
+}
+/** Someone who turned a built-in on before the setting existed keeps seeing them, once (BuiltinMods.tsx). */
+export const keepBuiltinsShown = () => { if (savedItem(storageKey('builtins')) === null) update(storageKey('builtins'), '1') }
 
 /** Warnings: the show/hide prefs that flag a mod (Broken, May crash, conflicts), their own section under On each mod. */
 export function WarningPrefs() {

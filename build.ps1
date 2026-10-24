@@ -13,7 +13,7 @@ Set-Location $PSScriptRoot
 if (-not $Test) {
     $branch = (git rev-parse --abbrev-ref HEAD)
     $dirty = @(git status --porcelain --untracked-files=no -- . ':!repak-x/gen/schemas')
-    if ($branch -ne 'main' -or $dirty) { throw "The stable build comes from a clean main (this is '$branch'). Use .\build.ps1 -Test to try anything else." }
+    if ($branch -ne 'main' -or $dirty) { throw "The stable build comes from a clean main (this is '$branch'$(if ($dirty) { ", with changes in: $(($dirty | ForEach-Object { $_.Substring(3) }) -join ', ')" })). Use .\build.ps1 -Test to try anything else." }
 }
 if ($Release) {
     git fetch -q origin main
@@ -48,13 +48,21 @@ if ($Release) {
     if ($running -match [regex]::Escape("\$out\")) { throw 'Close repakxtra first: both output folders are in use.' }
 }
 
-Run { dotnet publish UAssetToolRivals/src/UAssetTool/UAssetToolNative.csproj -c Release -r win-x64 -p:DebugType=none -p:DebugSymbols=false -o target/uassettool }
-# UAssetTool's command line from the same source, native (no .NET install needed): the app runs it for IoStore extracts,
-# which it does in parallel where the library's JSON request goes one package at a time (xtra_uat_cli.rs, 2.8x faster).
-# The native link step looks for vswhere, which lives in the Visual Studio Installer folder
-$vsInstaller = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer'
-if ((Test-Path $vsInstaller) -and ($env:PATH -notlike "*$vsInstaller*")) { $env:PATH = "$vsInstaller;$env:PATH" }
-Run { dotnet publish UAssetToolRivals/src/UAssetTool/UAssetTool.csproj -c Release -r win-x64 -p:PublishAot=true -p:PublishSingleFile=false -p:IlcOptimizationPreference=Speed -p:DebugType=none -p:DebugSymbols=false -o target/uassettool-cli }
+# repakxtra's fixes to UAssetToolRivals (uassettool-patches\, see its README): applied for the publish and taken out again,
+# so the submodule stays upstream's and this script's clean-main check still passes
+. .\uassettool-patches\apply.ps1
+Use-UatPatches {
+    Remove-Item UAssetToolRivals\src\UAssetTool\obj, UAssetToolRivals\src\UAssetTool\bin -Recurse -Force -ErrorAction SilentlyContinue
+    Run { dotnet publish UAssetToolRivals/src/UAssetTool/UAssetToolNative.csproj -c Release -r win-x64 -p:DebugType=none -p:DebugSymbols=false -o target/uassettool }
+    # UAssetTool's command line from the same source, native (no .NET install needed): the app runs it for IoStore extracts,
+    # which it does in parallel where the library's JSON request goes one package at a time (xtra_uat_cli.rs, 2.8x faster).
+    # The native link step looks for vswhere, which lives in the Visual Studio Installer folder
+    $vsInstaller = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer'
+    if ((Test-Path $vsInstaller) -and ($env:PATH -notlike "*$vsInstaller*")) { $env:PATH = "$vsInstaller;$env:PATH" }
+    # TrimMode=partial, as the library's project sets it: a full trim strips the field metadata UAssetAPI copies by
+    # reflection (Export.ConvertToChildExport), and packing (create_mod_iostore) then failed on every asset
+    Run { dotnet publish UAssetToolRivals/src/UAssetTool/UAssetTool.csproj -c Release -r win-x64 -p:PublishAot=true -p:TrimMode=partial -p:PublishSingleFile=false -p:IlcOptimizationPreference=Speed -p:DebugType=none -p:DebugSymbols=false -o target/uassettool-cli }
+}
 Push-Location repak-x
 Run { npm install }
 # Test copies mark themselves (green "xtra", "test build" in the version line, a green taskbar icon from

@@ -64,7 +64,8 @@ body, .app { font-family: var(--font-primary); font-size: 14px; }
 :root:not([data-theme="light"]) body { background: var(--bg-darkest); }
 button, input, select, textarea, .MuiButton-root { font-family: inherit !important; }
 ::selection { background: color-mix(in srgb, var(--accent-primary), transparent 60%); color: #fff; }
-.app :focus-visible {
+/* the VFX Updater is its own window, outside .app: the same ring */
+.app :focus-visible, .vf-window :focus-visible {
   outline: 2px solid var(--focus-ring) !important;
   outline-offset: 2px !important;
 }

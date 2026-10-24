@@ -1,0 +1,38 @@
+# UAssetToolRivals patches
+
+repakxtra builds UAssetTool (the in-app `UAssetTool.dll` and `uassettool-cli.exe`) from the `UAssetToolRivals`
+submodule, upstream's code, with these patches on top. `build.ps1` and `dev.ps1` apply them for the .NET publish and
+take them out again (`apply.ps1`), so the submodule itself is never changed or forked.
+
+| Patch | What it fixes | Measured |
+|---|---|---|
+| `0001-no-huge-allocations-on-misread-counts.patch` | UAssetAPI reads GPU script data it cannot decode as counts and lengths, then allocates arrays that size (gigabytes) before the read fails and the export falls back to raw bytes. Now a count that cannot fit in the bytes left fails at once, and `ReadBytes` asks only for what is left. Same exports, same JSON. | 89 Niagara files: 65.9 GB to 4.7 GB peak memory, 131 GB to 14 GB allocated, JSON identical |
+| `0002-faster-batch-json-and-detect.patch` | `batch_to_json` (only the VFX Updater calls it) writes unindented JSON straight into the file instead of building an indented string first. `detect_type` reads a batch's assets in parallel (as `batch_to_json` does), results in the same order. | 89 Niagara files: 17.2 s to 12.6 s, peak memory 1.9 GB to 0.7 GB, same values |
+| `0003-serve-keeps-game-containers-loaded.patch` | `serve`: the command line stays running and takes `extract_iostore_legacy` requests on stdin, keeping the game's 23 containers loaded while their files are unchanged (each request works on its own copy of the index, and no game file stays open between requests). Exits after 90 s idle. `xtra_uat_cli.rs` drives it. | A one-file extract 4.5 s to 0.2 s, a mod extract 5.2 s to 0.9 s, files byte for byte the same |
+
+| `0004-json-read-reuses-contracts.patch` | `UAsset.DeserializeJson` (JSON back to an asset) made a new contract resolver per call, so Newtonsoft rebuilt every type's contract by reflection for every asset. One shared resolver now, each call's FName list passed through a thread-local and numbered as before. | 384 materials: 4.5 s to 2.1 s, 768 of 768 written files byte for byte the same |
+| `0005-detect-type-reads-headers-only.patch` | `detect_type` reads the export and import maps only (`SkipLoadingExports`), which is all the class name comes from. An "Unknown" answer (the fallback that looks at parsed exports) is read again in full. | 1,265 assets: same answers |
+
+| `0006-faster-niagara-parse-and-json-members.patch` | Each element of a property array looked its type up again in the USMAP through the array's name and ancestry, which is the lookup the array itself just made: the array now hands its answer to its elements (`Usmap.ArrayHintName/Data`, thread-local, restored around nested arrays). And typed getters and setters for the members every property element carries (`UAssetContractResolver.CreateProperty`), which Newtonsoft otherwise reaches by reflection under NativeAOT. | 89 Niagara files in the app: 11.6 s to 9.6 s, then writing their JSON 33.7 to 25.7 CPU-seconds. JSON and rebuilt assets byte for byte the same |
+| `0007-serve-never-answers-from-a-half-loaded-game.patch` | A `serve` load that came back incomplete (a container's name map or the script objects could not be read) was not kept, but still answered the request it was loaded for, and without the script objects every class reads `__ScriptImport_<hash>__`. That request now loads its own, as a one-shot run does. The two reads that failed silently say why on stderr (`xtra_uat_cli.rs` logs them). | Found by review (2026-10-24), not reproduced |
+
+Patches stack: each applies on top of the ones before it, in name order.
+
+## Refreshing a patch
+
+When `build.ps1` says a patch no longer applies (the submodule moved to a newer upstream commit):
+
+1. Apply what still applies by hand: `git -C UAssetToolRivals apply --3way uassettool-patches\<name>.patch`
+2. Fix the conflict in the submodule's files, then write the patch again from the submodule:
+   `git -C UAssetToolRivals diff -- <the files it touches> > uassettool-patches\<name>.patch`
+3. Take it out again: `git -C UAssetToolRivals apply --reverse uassettool-patches\<name>.patch`
+
+## The command line's build flags
+
+`build.ps1` and `dev.ps1` compile the command line (`UAssetTool.csproj`, upstream's normal-.NET project) ahead of time
+with `-p:PublishAot=true -p:TrimMode=partial`. Without `TrimMode=partial` the trimmer strips the field metadata of
+UAssetAPI's `Export`, which `ConvertToChildExport` copies by reflection: every export loaded without parsing (packing
+loads them that way) comes back with a null `ClassIndex`, and `create_mod_iostore` failed on every asset ("Object
+reference not set"). Extracts never take that path, so the app's use of the command line was never affected. With the
+flag, on 467 Niagara and material assets: packing works (1.1 s, every unpacked file the same as the preview kit's own
+UAssetTool's output), extracts are byte for byte the same as before, and `serve` matches one-shot runs.

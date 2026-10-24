@@ -14,6 +14,7 @@ import { savedItem } from './storageCarryOver'
 import { setView } from './loadoutStore'
 import { ClapperboardIcon, PortraitCardIcon, type BuiltinIconComponent } from './PixelIcon'
 import { cue } from './sounds'
+import { keepBuiltinsShown } from './uiPrefs'
 
 export type Builtin = { id: string; on: boolean; excluded: string[]; current: boolean; active: boolean; builtAt?: number; summary?: string; heroes: string[]; error?: string; path: string; size: number }
 
@@ -55,7 +56,7 @@ export function revealBuiltin(id: string) {
   setView('home')
   emit()
 }
-const load = () => invoke<Builtin[]>('xtra_builtins_list').then(v => { list = v; emit() }).catch(e => console.warn('[builtins]', e))
+const load = () => invoke<Builtin[]>('xtra_builtins_list').then(v => { list = v; if (v.some(b => b.on)) keepBuiltinsShown(); emit() }).catch(e => console.warn('[builtins]', e))
 
 /** Rebuild the ones that are on but not current (a game update, a hero change a failed build left behind). Skipped while
  *  the game runs (its files are locked): at start from App.tsx, and from the section once the game closes. */
@@ -70,14 +71,13 @@ export async function refreshBuiltins() {
 
 let watching = false
 /** Keeps the built-ins on the installed game build while repakxtra is open: checked at start, whenever the window comes
- *  back into focus (a Steam update while it sat in the background) and every 10 minutes. Each check only reads file
+ *  back into focus (a Steam update while it sat in the background) and once the game closes. Each check only reads file
  *  dates and sizes, and a rebuild runs only when the game changed. */
 export function watchBuiltins() {
   void refreshBuiltins()
   if (watching) return
   watching = true
   window.addEventListener('focus', () => { void refreshBuiltins() })
-  setInterval(() => { void refreshBuiltins() }, 10 * 60 * 1000)
 }
 
 async function change(id: string, args: { on?: boolean; excluded?: string[] }, alert: LoadoutProps['alert']) {
