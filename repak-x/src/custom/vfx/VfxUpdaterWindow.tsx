@@ -410,7 +410,7 @@ export function VfxUpdaterPanel() {
         setCheckError(failed)
         if (!seeded.current && !failed) {
           seeded.current = true
-          pick(list.filter(m => n.has(norm(m.path)) && !m.materials).map(m => norm(m.utoc)), true) // material mods wait for a tick of their own
+          pick(list.filter(m => n.has(norm(m.path))).map(m => norm(m.utoc)), true) // every flagged mod: one Update covers them all
         }
       })
       .catch(e => { if (live) { setLoadError(String(e)); setMods(m => m ?? []); addLog(`Could not read the mods folder: ${e}`, 'error') } })

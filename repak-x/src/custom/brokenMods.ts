@@ -35,10 +35,13 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       .catch(e => console.warn('[brokenMods] check failed', e))
     const t = setTimeout(() => {
       // then VFX mods newer than the update whose Niagara files may still be in the old layout: decoded once each in the
-      // background (xtra_niagara.rs), and checked again when one is
+      // background (xtra_niagara.rs), and checked again when one is. Then the mods the date calls current: their
+      // materials checked once each per game update (xtra_vfx_check.rs), so one made before the update is flagged too
       void check().then(() => (live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: mods.map(m => m.path) }) : 0))
+        .then(found => (live && found ? check() : undefined))
+        .then(() => (live ? invoke<number>('xtra_vfx_check_scan', { modPaths: mods.filter(m => verdicts.get(norm(m.path))?.kind !== 'vfx').map(m => m.path) }) : 0))
         .then(found => { if (live && found) void check() })
-        .catch(e => console.warn('[brokenMods] layout scan failed', e))
+        .catch(e => console.warn('[brokenMods] background scan failed', e))
     }, 1500)
     const again = listen(VERDICTS_CHANGED, () => { void check() })
     return () => { live = false; clearTimeout(t); void again.then(f => f()) }
