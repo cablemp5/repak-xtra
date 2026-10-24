@@ -113,6 +113,12 @@ in the game.
 > [!NOTE]
 > Rendered previews need the preview kit and [Blender](https://www.blender.org/download/) (free). **Setup > Mod previews** installs both.
 
+**Built-in mods:** **Force default skin** (every hero in their default skin, in matches and the lobby, with a picker for
+heroes that keep their own skins) and **Skip startup logos** (the game opens without the Marvel, NetEase and Unreal
+Engine logo videos). Both start off. repakxtra makes them from your own game files when you turn one on, and rebuilds them
+after every game update, so they never go stale. They sit at the bottom of the Loadouts screen and at the top of the
+Library with a blue **Built-in** badge.
+
 **Library:** hero and type filters (Nexus and Project Galacta mods too), double-click to rename, and the arrow keys
 move through the list. Switching to Loadouts and back keeps your search, filters and checked mods; **Show all** clears
 the filters. Libraries of thousands of mods stay quick. Deleted mods (and a mod's old version when it is updated, or a folder's mods when the folder is deleted) wait 7 days in **Settings > Recently deleted**

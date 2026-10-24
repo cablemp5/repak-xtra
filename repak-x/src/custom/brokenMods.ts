@@ -8,8 +8,9 @@ export type Verdict = { path: string; kind: 'broken' | 'vfx' | 'risky'; reason: 
 /** A verdict's badge text. */
 export const verdictLabel = (kind: Verdict['kind']) => (kind === 'broken' ? 'Broken' : kind === 'vfx' ? 'Needs VFX update' : 'May crash')
 
-/** One spelling per file: slashes and case may differ between the mod list and the backend. */
-const norm = (path: string) => path.replace(/\//g, '\\').toLowerCase()
+/** One spelling per mod: slashes and case may differ between the mod list and the backend, and turning a mod on or off
+ *  renames .bak_repak to .pak (or back), so the badge stays put through a switch instead of waiting for the next check. */
+const norm = (path: string) => path.replace(/\//g, '\\').toLowerCase().replace(/\.(pak|bak_repak)$/, '')
 
 let verdicts = new Map<string, Verdict>()
 let version = 0
@@ -23,10 +24,15 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
   useEffect(() => {
     if (!key) return
     let live = true
+    const check = () => invoke<Verdict[]>('xtra_broken_mods', { modPaths: mods.map(m => m.path) })
+      .then(r => { if (live) { verdicts = new Map(r.map(v => [norm(v.path), v])); version++; listeners.forEach(l => l()) } })
+      .catch(e => console.warn('[brokenMods] check failed', e))
     const t = setTimeout(() => {
-      invoke<Verdict[]>('xtra_broken_mods', { modPaths: mods.map(m => m.path) })
-        .then(r => { if (live) { verdicts = new Map(r.map(v => [norm(v.path), v])); version++; listeners.forEach(l => l()) } })
-        .catch(e => console.warn('[brokenMods] check failed', e))
+      // then VFX mods newer than the update whose Niagara files may still be in the old layout: decoded once each in the
+      // background (xtra_niagara.rs), and checked again when one is
+      void check().then(() => (live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: mods.map(m => m.path) }) : 0))
+        .then(found => { if (live && found) void check() })
+        .catch(e => console.warn('[brokenMods] layout scan failed', e))
     }, 1500)
     return () => { live = false; clearTimeout(t) }
   }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -40,4 +46,5 @@ export const verdictOf = (path: string) => verdicts.get(norm(path))
 
 if (import.meta.env.DEV) {
   console.assert(norm('C:/Games/~mods/A_9999999_P.pak') === norm('c:\\games\\~MODS\\a_9999999_p.pak'), 'broken paths match across slashes and case')
+  console.assert(norm('C:/Games/~mods/A_9999999_P.pak') === norm('C:/Games/~mods/A_9999999_P.bak_repak'), 'a mod keeps its verdict on and off')
 }

@@ -17,6 +17,23 @@ use crate::vfx_updater::progress::{TauriVfxProgressSink, VfxProgressSink};
 use crate::vfx_updater::uasset_tool::{run_vfx_uat_request, VfxUatRequest};
 use crate::AppState;
 
+/// UAssetTool (in-process .NET) decodes a batch of files in parallel, and .NET's default workstation garbage collector
+/// makes those threads wait on each other. The server collector decodes the same 89 Niagara files in 50 s instead of 87,
+/// byte for byte the same JSON (2026-10-23). Read when the runtime starts, so this runs first thing in main, before any
+/// other thread. A value the user set stays. The server collector holds more memory, so PCs under 16 GB keep the default
+/// (on a 16 GB PC with other apps open, a Niagara decode already fills the RAM either way, 2026-10-24).
+pub(crate) fn tune_dotnet_gc() {
+    if std::env::var_os("DOTNET_gcServer").is_some() {
+        return;
+    }
+    let mut sys = sysinfo::System::new();
+    sys.refresh_memory();
+    // 16 GB PCs report a little under 16 GB (15.9 here), so the line sits at 15
+    if sys.total_memory() >= 15 * 1024 * 1024 * 1024 {
+        std::env::set_var("DOTNET_gcServer", "1");
+    }
+}
+
 fn base_dir() -> PathBuf {
     std::env::temp_dir().join("repak-x").join("xvfx")
 }
@@ -131,13 +148,18 @@ fn usmap_hash(usmap: &str) -> String {
     format!("{:08x}", h.finish() as u32)
 }
 
+/// The game's own assets for this game build and USMAP, shared by every run (and the Niagara layout check).
+pub(crate) fn vanilla_dir(game_paks: &str, usmap: &str) -> PathBuf {
+    base_dir().join(format!("vanilla-{}-{}", build_hash(Path::new(game_paks)), usmap_hash(usmap)))
+}
+
 fn make_dirs(game_paks: &str, run_id: &str, usmap: &str) -> Result<VfxDirs, String> {
     if !valid_run_id(run_id) {
         return Err(format!("Invalid run id: {run_id}"));
     }
     let base = base_dir();
     let run = base.join(format!("run-{run_id}"));
-    let vanilla = base.join(format!("vanilla-{}-{}", build_hash(Path::new(game_paks)), usmap_hash(usmap)));
+    let vanilla = vanilla_dir(game_paks, usmap);
     // Earlier runs and other game builds or USMAPs go: one run at a time (the window waits out a cancelled one), and a
     // cache from another build or USMAP would hand out old or wrongly decoded game files
     if let Ok(entries) = std::fs::read_dir(&base) {
@@ -388,15 +410,23 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
     let stem = source.file_stem().ok_or("The mod has no name")?.to_string_lossy().to_string();
     let files = |s: &str| MOD_EXTS.iter().map(|x| dir.join(format!("{s}.{x}"))).filter(|p| p.exists()).collect::<Vec<_>>();
     let was_on = dir.join(format!("{stem}.pak")).exists();
+    // a full update made from the original a partial update kept: named as if made from the mod itself, and it takes
+    // the partial update's place (on or off like it, the copy loadouts hold)
+    let kept_original = original_stem(&stem).eq_ignore_ascii_case(&stem);
+    let from_kept = !partial && kept_original;
+    let base = if from_kept { unmarked(&stem).0.to_string() + unmarked(&stem).1 } else { stem.clone() };
+    // full or partial again, the new update replaces the partial one beside the kept original, on or off like it
+    let superseded = kept_original.then(|| partial_stem(&stem)).filter(|s| !files(s).is_empty());
+    let update_on = superseded.as_ref().map_or(was_on, |s| dir.join(format!("{s}.pak")).exists());
     // where the fix goes, and where the original ends up
     let (target, kept) = if partial && partial_stem(&stem).eq_ignore_ascii_case(&stem) {
         (stem.clone(), stem.clone()) // a partial update made again from itself: it replaces itself, _ORIGINAL stays as it is
     } else if partial {
         (partial_stem(&stem), original_stem(&stem))
     } else if keep_name {
-        (unbroken_stem(&stem), broken_stem(&stem))
+        (unbroken_stem(&base), broken_stem(&base))
     } else {
-        (fixed_stem_among(&stem, &stems_in(dir)), stem.clone())
+        (fixed_stem_among(&base, &stems_in(dir)), base.clone())
     };
     let trash_original = trash_original && !partial;
     let eq = |a: &str, b: &str| a.eq_ignore_ascii_case(b);
@@ -435,9 +465,13 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
 
     // 2. what stands in the way: the names the fix and the original move to, unless the original is already there
     let mut existing = Vec::new();
-    for s in if replace { vec![&target] } else { vec![&target, &kept] } {
+    for s in if replace { vec![&target] } else { vec![&target, &kept] }.into_iter().chain(superseded.as_ref()) {
         if replace || !eq(s, &stem) {
-            existing.extend(files(s));
+            for f in files(s) {
+                if !existing.contains(&f) {
+                    existing.push(f);
+                }
+            }
         }
     }
     let trash = if existing.is_empty() {
@@ -502,7 +536,7 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
     }
 
     // 4. the update to its own names: renames in one folder
-    let main = dir.join(format!("{target}.{}", if was_on { "pak" } else { "bak_repak" }));
+    let main = dir.join(format!("{target}.{}", if update_on { "pak" } else { "bak_repak" }));
     let finals = [(tmp("utoc"), dir.join(format!("{target}.utoc"))), (tmp("ucas"), dir.join(format!("{target}.ucas"))), (tmp("pak"), main.clone())];
     for (i, (from, to)) in finals.iter().enumerate() {
         if let Err(e) = std::fs::rename(from, to) {
@@ -556,9 +590,11 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
         }
     };
     let p = |p: &Path| p.to_string_lossy().to_string();
-    let source = dir.join(format!("{stem}.{}", if was_on { "pak" } else { "bak_repak" }));
+    // loadouts and tags move from the copy they held: the partial update a full one replaced, else the original
+    let (from, from_on) = superseded.map_or((stem, was_on), |s| (s, update_on));
+    let source = dir.join(format!("{from}.{}", if from_on { "pak" } else { "bak_repak" }));
     let placed = Placed { fixed: p(&main), source: p(&source), original: p(&original), turned_off: turn_off, replaced: !existing.is_empty(), trashed, warning };
-    Ok((placed, stem, vec![target, kept]))
+    Ok((placed, from, vec![target, kept]))
 }
 
 #[tauri::command]
@@ -603,6 +639,8 @@ pub struct VfxMod {
     hero: Option<String>,
     /// When its file was written (seconds), for Newest first
     modified: u64,
+    /// It carries Niagara systems or emitters (the window's Niagara badge, and its time estimate)
+    niagara: bool,
 }
 
 /// The mods folder's VFX mods (the Library's VFX type) the VFX Updater can update: IoStore mods, no originals with an update
@@ -658,6 +696,10 @@ pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>
                     utoc: utoc.to_string_lossy().to_string(),
                     enabled: m.enabled,
                     modified: m.modified_date,
+                    niagara: details.files.iter().any(|f| {
+                        let n = f.replace('\\', "/").rsplit('/').next().unwrap_or_default().to_ascii_lowercase();
+                        (n.starts_with("ns_") || n.starts_with("ne_")) && n.ends_with(".uasset")
+                    }),
                 })
             })
             .collect::<Vec<_>>();
@@ -691,6 +733,11 @@ fn game_build(paks: &Path) -> GameBuild {
     GameBuild { updated: containers.iter().map(|c| c.2).max().unwrap_or(0), cl }
 }
 
+/// The installed game's build (its newest patch changelist), when the container names carry one.
+pub(crate) fn game_cl(paks: &Path) -> Option<u64> {
+    game_build(paks).cl
+}
+
 /// The installed game's last update and build, for the Update VFX mods notice and the USMAP check.
 #[tauri::command]
 pub fn xtra_game_build(state: State<'_, Arc<Mutex<AppState>>>) -> GameBuild {
@@ -708,6 +755,22 @@ fn stale(mod_path: &str, files: &[String]) -> Result<Vec<String>, String> {
     let written = std::fs::metadata(path).and_then(|m| m.modified()).map_err(|e| format!("{}: {e}", path.display()))?;
     let written = written.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
     Ok(path.parent().and_then(|dir| crate::xtra_broken::rewritten_since(dir, files, written)).unwrap_or_default())
+}
+
+/// What an update of `mod_path` (a .utoc) starts from: a partial update lacks the Niagara files it left out, so its kept
+/// `<name>_ORIGINAL` is updated instead when it is there.
+fn source_of(mod_path: &Path) -> PathBuf {
+    let Some(stem) = mod_path.file_stem().map(|s| s.to_string_lossy().to_string()) else { return mod_path.to_path_buf() };
+    if !partial_stem(&stem).eq_ignore_ascii_case(&stem) {
+        return mod_path.to_path_buf();
+    }
+    let original = mod_path.with_file_name(format!("{}.utoc", original_stem(&stem)));
+    if original.exists() { original } else { mod_path.to_path_buf() }
+}
+
+#[tauri::command]
+pub fn xtra_vfx_source(mod_path: String) -> String {
+    source_of(Path::new(&mod_path)).to_string_lossy().to_string()
 }
 
 #[tauri::command]
@@ -955,9 +1018,34 @@ mod tests {
         // again from the kept original (a later run): the earlier partial update goes, the original stays where it is
         stage("newer");
         let (placed, ..) = place(&mods.join("A_ORIGINAL_9999999_P.utoc"), &root.join("stage/out"), true, true, false, true, &root.join("trash")).unwrap();
-        assert!(placed.replaced && !placed.turned_off);
-        assert_eq!(std::fs::read_to_string(mods.join("A_PARTIAL_9999999_P.bak_repak")).unwrap(), "newer", "off, like the original it was made from");
+        assert!(placed.replaced && !placed.turned_off && placed.source.ends_with("A_PARTIAL_9999999_P.pak"));
+        assert_eq!(std::fs::read_to_string(mods.join("A_PARTIAL_9999999_P.pak")).unwrap(), "newer", "on, like the partial update it replaced");
         assert_eq!(std::fs::read_to_string(mods.join("A_ORIGINAL_9999999_P.bak_repak")).unwrap(), "old");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_full_update_from_the_kept_original_takes_the_partial_ones_place() {
+        let root = std::env::temp_dir().join(format!("xvfx-full-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let mods = root.join("mods");
+        for x in ["utoc", "ucas"] {
+            touch(&mods.join(format!("A_PARTIAL_9999999_P.{x}")), "partial");
+            touch(&mods.join(format!("A_ORIGINAL_9999999_P.{x}")), "old");
+            touch(&root.join(format!("stage/out.{x}")), "full");
+        }
+        touch(&mods.join("A_PARTIAL_9999999_P.pak"), "partial"); // on, in loadouts
+        touch(&mods.join("A_ORIGINAL_9999999_P.bak_repak"), "old"); // kept, off
+        touch(&root.join("stage/out.pak"), "full");
+        assert_eq!(source_of(&mods.join("A_PARTIAL_9999999_P.utoc")), mods.join("A_ORIGINAL_9999999_P.utoc"), "a partial update starts from its original");
+        assert_eq!(source_of(&mods.join("B_PARTIAL_9999999_P.utoc")), mods.join("B_PARTIAL_9999999_P.utoc"), "unless there is none");
+        let (placed, from, to) = place(&mods.join("A_ORIGINAL_9999999_P.utoc"), &root.join("stage/out"), true, true, false, false, &root.join("trash")).unwrap();
+        assert_eq!((from.as_str(), to.join(",").as_str()), ("A_PARTIAL_9999999_P", "A_9999999_P,A_BROKEN_9999999_P"), "tags come from the partial update");
+        assert_eq!(std::fs::read_to_string(mods.join("A_9999999_P.pak")).unwrap(), "full", "the mod's own name, on like the partial update");
+        assert_eq!(std::fs::read_to_string(mods.join("A_BROKEN_9999999_P.bak_repak")).unwrap(), "old", "the original follows the naming choice");
+        assert!(!mods.join("A_PARTIAL_9999999_P.pak").exists() && !mods.join("A_ORIGINAL_9999999_P.utoc").exists());
+        assert!(placed.replaced && placed.source.ends_with("A_PARTIAL_9999999_P.pak"), "loadouts move from the partial update");
+        assert_eq!(std::fs::read_dir(root.join("trash")).unwrap().count(), 1, "the partial update is in Recently deleted");
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -998,6 +1086,14 @@ mod tests {
             "xtra_vfx_dirs" => json!(make_dirs(&s(a, "gamePaks"), &s(a, "runId"), &s(a, "usmapPath"))?),
             "xtra_vfx_stale" => json!(stale(&s(a, "modPath"), &list(a, "files"))?),
             "xtra_vfx_detect" =>json!(detect(&s(a, "usmapPath"), &list(a, "paths"), p).await?),
+            "xtra_vfx_source" => json!(xtra_vfx_source(s(a, "modPath"))),
+            "xtra_skin_table_hero" => json!(crate::xtra_builtins::table_hero(&s(a, "modPath"), Path::new(&s(a, "gamePaks"))).await?),
+            "xtra_vfx_old_layout" => json!(crate::xtra_niagara::xtra_vfx_old_layout(s(a, "modPath"), s(a, "gamePaks"), s(a, "usmapPath"), list(a, "files"), a.get("modExtract").and_then(Value::as_str).map(String::from)).await?),
+            "xtra_vfx_niagara" => {
+                let vanilla = PathBuf::from(s(a, "vanillaExtract")).parent().map(Path::to_path_buf).unwrap_or_default();
+                let work = PathBuf::from(s(a, "stageDir")).join("niagara");
+                json!(crate::xtra_niagara::run(&s(a, "gamePaks"), &s(a, "usmapPath"), Path::new(&s(a, "modExtract")), &list(a, "files"), Path::new(&s(a, "finalUassets")), &work, &vanilla, p).await?)
+            }
             _ => return Err(format!("unknown command {cmd}")),
         })
     }
@@ -1009,6 +1105,7 @@ mod tests {
     #[test]
     #[ignore]
     fn vfx_rpc() {
+        tune_dotnet_gc(); // as main does, before UAssetTool loads
         let rt = tokio::runtime::Runtime::new().unwrap();
         let mut out = std::io::stdout();
         writeln!(out, "@@READY").unwrap();

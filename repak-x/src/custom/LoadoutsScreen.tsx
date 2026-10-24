@@ -8,6 +8,7 @@ import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo, runChanges } from './Loadouts'
 import LoadoutPage from './LoadoutPage'
 import NewStrip from './NewStrip'
+import BuiltinMods from './BuiltinMods'
 import { matchesLoadout } from './homeSearch'
 import { isTyping } from './hotkeys'
 import { modalOpen } from './dialogFocus'
@@ -25,9 +26,11 @@ import {
 } from './loadoutStore'
 import { savedItem } from './storageCarryOver'
 import { useUpstreamWatch } from './upstream'
+import { useUiPref } from './uiPrefs'
 
 type GroupBy = 'group' | 'hero'
 const GROUP_BY_KEY = 'repakxtra.loadoutGroupBy'
+const ONLY_ON_KEY = 'repakxtra.loadoutsOnlyOn' // All or On (loadouts with any of their mods on)
 const FOLDED_KEY = 'repakxtra.foldedGroups' // collections and hero groups shown as just their heading ("group:<key>", "hero:<name>")
 const readFolded = () => { try { return new Set<string>(JSON.parse(savedItem(FOLDED_KEY) || '[]')) } catch { return new Set<string>() } }
 
@@ -187,12 +190,19 @@ const LoadoutCard = memo(function LoadoutCard({ p, l, groupBy, canGenerate, busy
 })
 
 export default function LoadoutsScreen(p: LoadoutProps) {
+  const newStrip = useUiPref('new-strip') // Settings > Library > Show New this week, off by default
   const view = useView()
   const loadouts = useLoadouts()
   // Search: kept while a loadout's page is open, so Back returns to the same results
   const [query, setQuery] = useState('')
   const q = query.trim()
-  const matching = useMemo(() => (q ? loadouts.filter(l => matchesLoadout(l, q)) : loadouts), [loadouts, q])
+  // On: loadouts with at least one installed mod on, fully or partly on (the card's dot is not gray)
+  const [onlyOn, setOnlyOnState] = useState(() => savedItem(ONLY_ON_KEY) === '1')
+  const setOnlyOn = (v: boolean) => { localStorage.setItem(ONLY_ON_KEY, v ? '1' : '0'); setOnlyOnState(v) }
+  const enabledKeys = useMemo(() => new Set(p.mods.filter(m => m.enabled).map(m => modKey(m.path))), [p.mods])
+  const filtered = Boolean(q) || onlyOn // a narrowed view: groups without a match hide, and cards are not dragged
+  const matching = useMemo(() => loadouts.filter(l => (!q || matchesLoadout(l, q)) && (!onlyOn || l.on.some(k => enabledKeys.has(displayName(k))))),
+    [loadouts, q, onlyOn, enabledKeys])
   const [said, setSaid] = useState('') // the result count for screen readers, once typing pauses
   useEffect(() => {
     const t = setTimeout(() => setSaid(!q ? '' : matching.length ? `${plural(matching.length, 'loadout')} found` : 'No loadouts found'), 700)
@@ -290,7 +300,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
 
   // The cards' handlers keep one identity, so a card re-renders only when its own data changes (a drag reorders the
   // cards on every step; re-rendering all of them made it stutter)
-  const pickCard = useStableCallback((e: React.PointerEvent<HTMLElement>, id: string) => { if (!q) drag.onPointerDown(e, id) }) // no reordering a filtered view
+  const pickCard = useStableCallback((e: React.PointerEvent<HTMLElement>, id: string) => { if (!filtered) drag.onPointerDown(e, id) }) // no reordering a filtered view
   const toggleCard = useStableCallback((l: Loadout, on: boolean) => toggle(l, on))
   const startRename = useStableCallback((l: Loadout) => { setDraft(l.name); setRenaming(l.id) })
   const commitCard = useStableCallback((l: Loadout) => commitRename(l))
@@ -400,10 +410,10 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     return s.index < members.length ? { id: members[s.index].id, after: false } : members.length ? { id: members[members.length - 1].id, after: true } : undefined
   }
   // While a card is dragged, the order it would make if dropped now (a search shows only its matches, and no drag)
-  const shown = q ? matching : !(drag.dragId && spot && 'group' in spot) ? loadouts
+  const shown = filtered ? matching : !(drag.dragId && spot && 'group' in spot) ? loadouts
     : groupBy === 'hero' ? movedBeside(loadouts, drag.dragId, besideOf(drag.dragId, spot))
     : placed(loadouts, drag.dragId, spot.group, besideOf(drag.dragId, spot))
-  const groups: [string, Loadout[]][] = (groupBy === 'hero' ? heroGroups(shown) : grouped(shown)).filter(([, list]) => !q || list.length > 0)
+  const groups: [string, Loadout[]][] = (groupBy === 'hero' ? heroGroups(shown) : grouped(shown)).filter(([, list]) => !filtered || list.length > 0)
   const search = (v: string) => {
     if (!q && v.trim()) scrollBefore.current = cardsEl?.scrollTop ?? 0
     else if (q && !v.trim()) requestAnimationFrame(() => cardsEl?.scrollTo({ top: scrollBefore.current }))
@@ -451,6 +461,13 @@ export default function LoadoutsScreen(p: LoadoutProps) {
                   onKeyDown={e => { e.stopPropagation(); if (e.key === 'Escape') search('') }} />
                 {query && <button type="button" className="lo-icon" aria-label="Clear search" title="Clear search" onClick={clearSearch}><X size={13} /></button>}
               </label>
+            )}
+            {/* beside the search: both narrow which cards show */}
+            {loadouts.length > 0 && (
+              <div className="mod-state-filter lo-groupby lo-show" role="group" aria-label="Show loadouts">
+                <button type="button" aria-pressed={!onlyOn} onClick={() => setOnlyOn(false)} title="Every loadout">All</button>
+                <button type="button" aria-pressed={onlyOn} onClick={() => setOnlyOn(true)} title="Only loadouts with mods on, fully or partly">On</button>
+              </div>
             )}
             <span className="xtra-sr-only" role="status">{said}</span>
           </div>
@@ -520,10 +537,13 @@ export default function LoadoutsScreen(p: LoadoutProps) {
           </div>
         )}
 
-        {q && groups.length === 0 && (
+        {filtered && loadouts.length > 0 && groups.length === 0 && (
           <div className="lo-first-run">
-            <p>No loadouts match “{q}”.</p>
-            <div className="lo-first-actions"><button type="button" className="lo-text-btn" onClick={clearSearch}>Clear search</button></div>
+            <p>{q ? `No ${onlyOn ? 'loadouts that are on' : 'loadouts'} match “${q}”.` : 'No loadouts are on.'}</p>
+            <div className="lo-first-actions">
+              {q && <button type="button" className="lo-text-btn" onClick={clearSearch}>Clear search</button>}
+              {onlyOn && <button type="button" className="lo-text-btn" onClick={() => setOnlyOn(false)}>Show all loadouts</button>}
+            </div>
           </div>
         )}
 
@@ -578,7 +598,8 @@ export default function LoadoutsScreen(p: LoadoutProps) {
         )}
 
         {/* below the loadouts: Home is for switching them; this is the inbox of recent mods */}
-        <NewStrip {...p} />
+        <BuiltinMods blocked={p.blocked} alert={p.alert} />
+        {newStrip && <NewStrip {...p} />}
       </div>
     </div>
   )

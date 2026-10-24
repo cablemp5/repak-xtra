@@ -9,7 +9,8 @@ import { ModName } from './modName'
 import { revealOnLoad } from './motion'
 import { formKeys, hasPreview, noPreviewPossible, previewMade, previewSetKey, useCovers, usePreviewStage, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
 import { playEmoteSound, stopEmoteSound, useEmoteSound, webpSeconds } from './emoteSound'
-import { useVerdict, verdictLabel } from './brokenMods'
+import { useVerdict } from './brokenMods'
+import { VerdictBadge } from './VerdictBadge'
 import { useVfxUpdating } from './vfx/quick'
 import { GAME_RUNNING } from './keepOne'
 import { CaptionIcon, CaptionStyleBar } from './captionStyle'
@@ -336,14 +337,14 @@ export function ModRow({ p, k: key, mod, onToggle, onRename, unsure, children }:
             onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { cancelled.current = true; e.currentTarget.blur() } }} />
         : <span className="mod-row-main">
             <span className="mod-row-name" onDoubleClick={canRename ? begin : undefined}>{vfxUpdating ? <span className="t-shimmer"><ModName name={k} /></span> : <ModName name={k} />}</span>
+            {!onToggle && mod?.enabled && <span className="on-dot" role="img" aria-label="On now" title="This mod is on now" />}
             {canRename && (
               <button type="button" className="lo-icon row-rename" title={`Rename ${k} (renames its files)`} aria-label={`Rename ${k}`} onClick={begin}>
                 <Pencil size={13} />
               </button>
             )}
           </span>}
-      {!onToggle && mod?.enabled && <span className="mod-type-badge category-badge on-badge" title="This mod is on now">On</span>}
-      {verdict && <span className={`mod-type-badge broken-badge is-${verdict.kind}`} title={verdict.reason}>{verdictLabel(verdict.kind)}</span>}
+      {verdict && <VerdictBadge path={mod!.path} verdict={verdict} />}
       <span className={`mod-type-badge category-badge ${typeClass(category)}`}>{category ?? 'Unknown'}</span>
       {onToggle && (mod
         ? <Switch size="sm" color="primary" checked={Boolean(mod.enabled)} title={mod.enabled ? `Turn ${k} off` : `Turn ${k} on`}

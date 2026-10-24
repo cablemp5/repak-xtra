@@ -26,6 +26,9 @@ mod xtra_updater; // repakxtra: applies an update without string-built shell com
 mod xtra_conflicts; // repakxtra: conflict comparison by normalized asset path, cached file lists
 mod xtra_extract; // repakxtra: unpacks only archives whose paths stay inside the output folder
 mod xtra_vfx; // repakxtra: VFX fixing after game updates
+mod xtra_niagara; // repakxtra: the VFX Updater's Niagara step
+mod xtra_uat_cli; // repakxtra: IoStore extracts through UAssetTool's parallel command line
+mod xtra_builtins; // repakxtra: built-in mods made from the game's own tables
 mod character_data;
 mod crash_monitor;
 mod discord_presence;
@@ -3003,7 +3006,8 @@ async fn install_mods(
                 disabled_names.join(", ")
             ),
         );
-        installable_mods.retain(|m| enabled_names.contains(&m.mod_name));
+        // repakxtra: drop only the switched-off names (a single-pak archive's pak is not named after the archive)
+        installable_mods.retain(|m| enabled_names.contains(&m.mod_name) || !disabled_names.contains(&m.mod_name));
     }
 
     // Check if we actually have mods to install
@@ -6638,11 +6642,10 @@ async fn discord_set_managing_mods(
 /// Set Discord activity to show installing mod
 #[tauri::command]
 async fn discord_set_installing(
-    mod_name: String,
-    discord_state: State<'_, DiscordState>,
+    discord_state: State<'_, DiscordState>, // repakxtra: no mod_name, the frontend never sent one so every call failed
 ) -> Result<(), String> {
     if discord_state.manager.is_connected() {
-        discord_state.manager.set_installing_mod(&mod_name)
+        discord_state.manager.set_installing_mod()
     } else {
         Ok(())
     }
@@ -8281,6 +8284,7 @@ fn handle_deep_link_url(url: &str, app_handle: &tauri::AppHandle) {
 // ============================================================================
 
 fn main() {
+    xtra_vfx::tune_dotnet_gc(); // repakxtra: before UAssetTool loads, while no other thread runs
     xtra_identity::carry_over_webview_storage(); // repakxtra: before the window opens
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
@@ -8531,10 +8535,18 @@ fn main() {
             xtra_vfx::xtra_vfx_place,
             xtra_vfx::xtra_game_build,
             xtra_vfx::xtra_vfx_mods,
+            xtra_builtins::xtra_builtins_list, // repakxtra: built-in mods
+            xtra_builtins::xtra_builtins_set,
+            xtra_builtins::xtra_builtins_refresh,
             xtra_vfx::xtra_vfx_claim,
             xtra_vfx::xtra_vfx_release,
             xtra_vfx::xtra_vfx_lock,
             xtra_vfx::xtra_vfx_stale,
+            xtra_vfx::xtra_vfx_source,
+            xtra_niagara::xtra_vfx_niagara,
+            xtra_builtins::xtra_skin_table_hero,
+            xtra_niagara::xtra_vfx_layout_scan,
+            xtra_niagara::xtra_vfx_old_layout,
             xtra_nexus::xtra_nexus_sources, // repakxtra: Nexus source
             xtra_nexus::xtra_nexus_downloads, // repakxtra: Nexus downloads still in Downloads, for the one-time scan
             xtra_nexus::xtra_install_paks, // repakxtra: the paks an install puts in place, for loadouts made at install
