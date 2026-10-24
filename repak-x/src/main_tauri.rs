@@ -8543,6 +8543,7 @@ fn main() {
             xtra_broken::xtra_broken_mods, // repakxtra: broken mods
             xtra_broken::xtra_vfx_no_update, // repakxtra: Nothing to update stops the Needs VFX update flag
             xtra_vfx_check::xtra_vfx_check, // repakxtra: Check for VFX update
+            xtra_vfx_check::xtra_vfx_check_scan, // repakxtra: the same check in the background, for the date's blind spot
             xtra_vfx::xtra_vfx_dirs, // repakxtra: VFX Updater
             xtra_vfx::xtra_vfx_detect,
             xtra_vfx::xtra_vfx_place,

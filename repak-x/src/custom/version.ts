@@ -1,6 +1,6 @@
 // repakxtra: repakxtra's own version, bumped for each repakxtra release. The Repak X version it is built on still comes
 // from Cargo (get_app_version).
-export const REPAKXTRA_VERSION = '0.20.0'
+export const REPAKXTRA_VERSION = '0.21.0'
 
 /** Which copy this is. "dev": the live dev copy (dev.ps1, or the browser preview), served by Vite. "test": made with
  *  `build.ps1 -Test`, which sets VITE_REPAKXTRA_TEST for the frontend build. Both mark themselves: the "xtra" in the app
