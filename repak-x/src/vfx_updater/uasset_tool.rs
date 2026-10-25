@@ -787,7 +787,7 @@ pub async fn pack_to_iostore(
         step: 8,
         current: 0,
         total: 1,
-        message: format!("Creating: {}.utoc/.ucas/.pak", output_base),
+        message: "Writing the .utoc, .ucas and .pak".to_string(), // repakxtra: not the temp folder path, which ran off the row
     });
 
     // Checked before the manifest, so an empty pipeline output is not reported as a
