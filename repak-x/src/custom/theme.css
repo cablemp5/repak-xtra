@@ -219,7 +219,7 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 .filter-panel { display: flex; flex-direction: column; gap: 1px; }
 /* The head keeps one height (30px, room for Clear) with or without it, so picking a filter never moves the list under it */
 .fp-head { display: flex; align-items: center; justify-content: space-between; min-height: 30px; padding: 0 6px 6px; box-sizing: border-box; }
-.fp-title, .sidebar-header h3 { font-size: 13px !important; font-weight: 600 !important; color: var(--text-primary) !important; }
+.fp-title, .sidebar-header h3 { font-size: 16px !important; font-weight: 700 !important; color: var(--text-primary) !important; }   /* the panel titles, above the 14px Heroes and Types headers and the 13px filters */
 /* Clear: a small quiet pill (the app's 36px button floor made it a tall grey block) */
 .fp-clear { display: inline-flex !important; align-items: center; gap: 4px; height: 22px !important; min-height: 0 !important; padding: 0 9px !important;
   border: 1px solid var(--panel-border) !important; border-radius: 999px !important; background: transparent !important;
@@ -230,8 +230,8 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
    the hero rows' skin chevrons, turned down while open */
 .fp-section-btn { display: flex !important; align-items: center; gap: 6px; width: 100%; height: auto !important; min-height: 0 !important;
   margin: 0 !important; border: none !important; border-radius: 6px !important; background: transparent !important; cursor: pointer;
-  color: var(--text-secondary) !important; font-size: 11px !important; font-weight: 500 !important; text-align: left; justify-content: flex-start !important; }
-.fp-section-btn:hover { color: var(--text-primary) !important; }
+  color: var(--text-primary) !important; font-size: 14px !important; font-weight: 600 !important; text-align: left; justify-content: flex-start !important; }   /* a step above the 13px filters under it */
+.fp-section-btn:hover { background: var(--quiet-hover) !important; }   /* already white, so hover shows as the rows' wash */
 .fp-section-caret { margin-left: auto; margin-right: 5px; transition: transform var(--acc-chevron, 150ms) var(--acc-ease, ease); }
 .fp-section-btn[aria-expanded="true"] .fp-section-caret { transform: rotate(90deg); }
 .fp-section-picked { padding: 0 6px; border-radius: 999px; background: var(--quiet-active); color: var(--text-primary); font-size: 10.5px; line-height: 16px; }
@@ -1970,6 +1970,7 @@ html[data-motion="off"] .t-matrix i { animation: none; opacity: 0.6; }
 /* Toasts: wider, so a title and an action fit on one line */
 .toast-container { width: 480px !important; max-width: calc(100vw - 32px); }
 .toast-item { max-width: none !important; }
+.toast-title, .toast-description { overflow-wrap: anywhere; }   /* a long mod name breaks inside the text column, never under the action */
 
 /* Loadout page rows: Add is a plain + like Remove's X */
 .row-add { color: var(--text-secondary) !important; }
@@ -2662,14 +2663,19 @@ html[data-motion="off"] .vfx-dot { animation: none; }
 .settings-live-note { font-size: 12.5px; color: var(--text-secondary); }
 
 /* ---------- Numbers in a colored bubble: one centering rule for all of them (the conflicts count, the All / On / Off
-   counts, a collection's count, the setup step numbers, the selection numbers). Grid centering inside a set height
-   (line-height 1 leaves no half-leading to push the digit up) and tabular digits, so a 1 sits in the middle of its
-   slot instead of left of it. ---------- */
-:is(.cf-count, .mod-state-count, .lo-group-count, .fr-num) { display: inline-grid !important; grid-auto-flow: column; place-items: center;
-  place-content: center; line-height: 1 !important; font-variant-numeric: tabular-nums; box-sizing: border-box; }
-.cf-count { height: 22px; min-width: 22px; padding: 0 7px !important; }
-.mod-state-count { height: 18px; min-width: 22px; padding: 4px 6px 0 !important; }   /* Geist's digits sit high in an 11px line: 4px on top centers their ink (measured) */
-.lo-group-count { height: 18px; min-width: 20px; }
+   counts, a collection's count, the setup step numbers, the selection numbers). Tabular digits, so a 1 sits in the
+   middle of its slot instead of left of it. The line is trimmed to the digits' own top and bottom (cap height to baseline), then padded evenly to the bubble's
+   height, so the ink is in the middle at every size and in every pill, with no per-pill nudge. ---------- */
+:is(.cf-count:not(.is-done), .mod-state-count, .lo-group-count, .fr-num:not(:has(svg)), .vf-grp-count, .fp-section-picked) { --pill-h: 18px;
+  display: inline-block !important; height: auto !important; box-sizing: border-box; line-height: 1 !important; text-align: center;
+  text-box: trim-both cap alphabetic; padding-block: calc((var(--pill-h) - 1cap) / 2) !important; font-variant-numeric: tabular-nums; }
+:is(.cf-count:not(.is-done), .mod-state-count, .lo-group-count, .fr-num:not(:has(svg)), .vf-grp-count, .fp-section-picked) > * { text-box: trim-both cap alphabetic; line-height: 1; }
+.cf-count:not(.is-done) { --pill-h: 22px; min-width: 22px; padding-inline: 7px !important; }
+.mod-state-count { min-width: 22px; padding-inline: 6px !important; }
+.lo-group-count { min-width: 20px; padding-inline: 7px !important; }
+.vf-grp-count { min-width: 20px; padding-inline: 6px !important; }
+.fp-section-picked { --pill-h: 16px; padding-inline: 6px !important; }
+.fr-num:not(:has(svg)) { --pill-h: 22px; width: 22px; padding-inline: 0 !important; }
 
 /* ---------- The Library's selection bar (cable, 2026-10-21): a drawer that slides out from under the All / On / Off
    header, its top tucked behind the header so it reads as the header's extension. The header's own surface and border,

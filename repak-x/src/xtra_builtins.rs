@@ -691,7 +691,41 @@ fn changed_heroes(game: &Value, modded: &Value) -> Vec<String> {
 #[tauri::command]
 pub async fn xtra_skin_table_hero(mod_path: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Option<String>, String> {
     let (_, paks) = dirs_of(state.inner())?;
-    table_hero(&mod_path, &paks).await
+    if let Some(id) = table_hero(&mod_path, &paks).await? {
+        return Ok(Some(id));
+    }
+    // a mod of a hero's base model (its xxxx001 skin, which the hero data never lists) names no skin: its one hero folder does
+    let utoc = PathBuf::from(&mod_path).with_extension("utoc");
+    if !utoc.is_file() {
+        return Ok(None);
+    }
+    let files = tauri::async_runtime::spawn_blocking(move || crate::utoc_utils::try_read_utoc(&utoc)).await.map_err(|e| e.to_string())??;
+    Ok(only_hero_folder(files.iter().map(|f| f.file_path.as_str())))
+}
+
+/// The hero id when every `Characters/<id>/` folder in the paths is the same hero, else None.
+fn only_hero_folder<'a>(paths: impl Iterator<Item = &'a str>) -> Option<String> {
+    let ids: HashSet<&str> = paths
+        .filter_map(|p| {
+            let mut parts = p.split(['/', '\\']);
+            parts.find(|s| s.eq_ignore_ascii_case("Characters"))?;
+            parts.next().filter(|id| id.len() == 4 && id.bytes().all(|b| b.is_ascii_digit()))
+        })
+        .collect();
+    (ids.len() == 1).then(|| ids.into_iter().next().unwrap().to_string())
+}
+
+#[cfg(test)]
+mod only_hero_folder_tests {
+    use super::only_hero_folder;
+    #[test]
+    fn one_hero_folder_names_the_hero() {
+        let one = ["/Game/Marvel/Characters/1055/1055001/Meshes/SK_1055_1055001.uasset", "/Game/Marvel/Characters/1055/1055001/Blueprints/1055001_ChildBP.uasset"];
+        assert_eq!(only_hero_folder(one.into_iter()), Some("1055".into()));
+        let two = ["/Game/Marvel/Characters/1055/x.uasset", "/Game/Marvel/Characters/1033/y.uasset"];
+        assert_eq!(only_hero_folder(two.into_iter()), None);
+        assert_eq!(only_hero_folder(["/Game/Marvel/Characters/Common/z.uasset"].into_iter()), None);
+    }
 }
 
 pub(crate) async fn table_hero(mod_path: &str, paks: &Path) -> Result<Option<String>, String> {
