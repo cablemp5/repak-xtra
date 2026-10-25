@@ -11,11 +11,13 @@ export const heroLabel = (name: string) => name.replace(/\s*\([^)]*\)\s*$/, '').
 const norm = (name: string) => heroLabel(name).toLowerCase()
 const idOf = new Map((bundledHeroes as { name: string; id: string }[]).map(h => [norm(h.name), h.id]))
 
-/** The silhouette for a hero by name ("Black Panther", "Iron Fist (lin Lie)"), or undefined. */
-export const silhouetteOf = (hero?: string | null) => {
-  const id = hero ? idOf.get(norm(hero)) : undefined
-  return id ? SILHOUETTES[`./covers/silhouettes/${id}.webp`] : undefined
-}
+/** The silhouette for a hero id ("1055"), or undefined: for heroes newer than the bundled hero list (Daredevil). */
+const silhouetteById = (id?: string | null) => (id ? SILHOUETTES[`./covers/silhouettes/${id}.webp`] : undefined)
+
+/** The silhouette for a hero by name ("Black Panther", "Iron Fist (lin Lie)"), or undefined. A list of heroes newer than
+ *  the bundled one (the app's character data) finds the ones it lacks. */
+export const silhouetteOf = (hero?: string | null, heroes?: { name: string; id: string }[]) =>
+  hero ? silhouetteById(idOf.get(norm(hero)) ?? heroes?.find(h => norm(h.name) === norm(hero))?.id) : undefined
 
 /** A loadout's hero: the most common one among its mods ("Hero - Skin" counts as the hero), or undefined. The mod list's
  *  own character name stands in until the details load (a mod installed a moment ago has none yet). */

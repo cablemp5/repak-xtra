@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, emitTo, listen } from '@tauri-apps/api/event'
-import { AlertTriangle, Archive, Check, ChevronDown, ChevronRight, Copy, Map as MapIcon, Palette, Plus, RefreshCw, RotateCcw, ScrollText, Search, Tag, X } from 'lucide-react'
+import { AlertTriangle, Archive, Check, ChevronDown, ChevronRight, Copy, Download, Map as MapIcon, Palette, RefreshCw, RotateCcw, ScrollText, Search, Tag, X } from 'lucide-react'
 import TitleBar from '../../components/TitleBar'
 import { useGlobalTooltips } from '../../hooks/useGlobalTooltips'
 import Checkbox from '../../components/ui/Checkbox'
@@ -642,7 +642,7 @@ export function VfxUpdaterPanel() {
   const copy = async (what: 'report' | 'log') => {
     const text = what === 'log' ? logs.map(l => `[${l.time}] ${l.text}`).join('\n') : Object.values(runs).filter(r => r.report).map(r => reportText(r.report!)).join('\n\n')
     await navigator.clipboard.writeText(text).catch(() => {})
-    setCopied(what); setTimeout(() => setCopied(null), 1500)
+    setCopied(what); setTimeout(() => setCopied(null), 3000)
   }
 
   // the list: mods that need an update first, then A to Z or newest first
@@ -737,8 +737,8 @@ export function VfxUpdaterPanel() {
               <button type="button" aria-pressed={sort === 'name'} onClick={() => sortBy('name')}>A to Z</button>
             </div>
           </>}
-          <button type="button" className="lo-text-btn vf-add" disabled={busy || mods === null} onClick={() => void addUtoc()}
-            title="Update a mod this list does not show: choose its .utoc file"><Plus size={14} aria-hidden="true" /> Add .utoc…</button>
+          <button type="button" className="lo-text-btn is-primary vf-add" disabled={busy || mods === null} onClick={() => void addUtoc()}
+            title="Update a mod this list does not show: choose its .utoc file"><Download size={14} aria-hidden="true" /> Add .utoc</button>
         </div>
         {loadError && (
           <p className="vf-warn" role="alert">
@@ -876,7 +876,7 @@ export function VfxUpdaterPanel() {
           {/* Cancel beside the button, never in its place: a double-click on Update must not cancel the run */}
           {(busy || checkRun) && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={stop} title="Esc">{cancelling ? 'Cancelling…' : 'Cancel'}</button>}
           {!busy && <button type="button" className="lo-text-btn" disabled={Boolean(checkRun) || !picked.size} onClick={() => void checkTicked()}
-            title="Whether the ticked mods' materials were built for this game version, whatever their dates say">{checkRun ? 'Checking…' : 'Check'}</button>}
+            title="Whether the ticked mods' materials were built for this game version, whatever their dates say">{checkRun ? 'Scanning…' : 'Scan'}</button>}
           <button type="button" className="btn-primary" disabled={busy || Boolean(checkRun) || Boolean(lock) || !todo} title={busy ? undefined : 'Ctrl+Enter'}
             ref={el => { if (el && !busy) updateWidth.current = el.offsetWidth }} style={busy ? { minWidth: updateWidth.current } : undefined} onClick={() => run()}>
             <RefreshCw size={14} aria-hidden="true" className={busy ? 'vf-spin' : undefined} />{busy ? 'Updating…' : todo ? <>Update <Num id="vf-todo" value={todo} /> {todo === 1 ? 'mod' : 'mods'}</> : 'Update'}

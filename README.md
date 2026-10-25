@@ -80,6 +80,32 @@ in the game.
 
 <img src=".github/screenshots/guide-first-loadout.gif" alt="Making a loadout called Ultimate, adding a mod, generating its preview and turning it on" width="100%">
 
+## How to batch update VFX mods
+
+A game update can break VFX mods and mods that change materials, like a skin's glow or shine: colors go wrong or the
+game crashes. The VFX Updater rebuilds them on the new game files, many at once.
+
+1. **Close Marvel Rivals.**
+2. **Open the VFX Updater.** Click **VFX Updater** at the top. A yellow dot on it means some of your mods need an update.
+3. **Check what is ticked.** Mods that need an update are ticked already, under **Needs an update**. To add others,
+   tick them under **Other VFX mods** or **Material mods**, or click **Select all** on a group. Not sure about a mod?
+   Tick it and click **Scan**: it checks whether its materials were made for this game version, whatever its date says.
+4. **Missing a mod?** Click **Add .utoc** and pick its `.utoc` file, or right-click it in the Library and click
+   **For modders > Send to VFX Updater**.
+5. **Click Update** (or press `Ctrl+Enter`). The line at the bottom says about how long it will take, and each mod
+   shows its progress as it goes. **Cancel** (or `Esc`) stops the run.
+6. **Check the result.** Finished mods move down to **Updated**. The updated copy keeps the mod's name, loadouts and
+   tags. The original is turned off and renamed to end in `_BROKEN`. Click **Change** at the bottom to pick another
+   way: move originals to **Recently deleted**, or leave them as they are. **Copy report** copies what each update did.
+7. **Launch the game** and check your mods.
+
+<img src=".github/screenshots/guide-vfx-batch.gif" alt="Opening the VFX Updater with the mods that need an update ticked, clicking Update and watching each mod finish" width="100%">
+
+> [!NOTE]
+> The VFX Updater needs a USMAP that matches the game, and it fetches the newest one by itself. Right after a game
+> update one may not be out yet: mods with Niagara effects then update partly, and their original stays, off, so you
+> can update them fully later. **Check for updates** in the VFX Updater looks for a newer USMAP.
+
 ## Features
 
 **Loadouts**
