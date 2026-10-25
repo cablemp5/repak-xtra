@@ -14,7 +14,6 @@ import { savedItem } from './storageCarryOver'
 import { setView } from './loadoutStore'
 import { ClapperboardIcon, PortraitCardIcon, type BuiltinIconComponent } from './PixelIcon'
 import { cue } from './sounds'
-import { keepBuiltinsShown } from './uiPrefs'
 
 export type Builtin = { id: string; on: boolean; excluded: string[]; current: boolean; active: boolean; builtAt?: number; summary?: string; heroes: string[]; error?: string; path: string; size: number }
 
@@ -56,7 +55,7 @@ export function revealBuiltin(id: string) {
   setView('home')
   emit()
 }
-const load = () => invoke<Builtin[]>('xtra_builtins_list').then(v => { list = v; if (v.some(b => b.on)) keepBuiltinsShown(); emit() }).catch(e => console.warn('[builtins]', e))
+const load = () => invoke<Builtin[]>('xtra_builtins_list').then(v => { list = v; emit() }).catch(e => console.warn('[builtins]', e))
 
 /** Rebuild the ones that are on but not current (a game update, a hero change a failed build left behind). Skipped while
  *  the game runs (its files are locked): at start from App.tsx, and from the section once the game closes. */

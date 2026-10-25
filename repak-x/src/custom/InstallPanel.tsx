@@ -89,13 +89,14 @@ export const plainName = (name = '') => name.replace(/\.(pak|off|zip|rar|7z)$/i,
 
 /** Pure: a name field's value once Enter commits it: trimmed, and empty means the suggested name (null). */
 export const committedName = (v: string) => v.trim() || null
-/** Enter in a name field commits the name and stays there: it never installs (only the Install button does). An IME
+/** Enter in a name field commits the name and leaves the field: it never installs (only the Install button does). An IME
  *  finishing a word with Enter is left alone. */
 const enterCommits = (commit: () => void) => (e: React.KeyboardEvent<HTMLInputElement>) => {
   if (e.key !== 'Enter' || e.nativeEvent.isComposing) return
   e.preventDefault()
   e.stopPropagation()
   commit()
+  e.currentTarget.blur()
 }
 
 const badge = (s: string) => `${s.toLowerCase().replace(/\s+/g, '-')}-badge`
@@ -216,7 +217,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
   }, [mods]) // eslint-disable-line react-hooks/exhaustive-deps
   const heroOf = (i: number) => parsed[i].character?.split(' - ')[0] ?? tableHero[mods[i].path] ?? undefined
   // The cover's hero: the one the picked mods share, else the first picked mod's (a mod of no hero: no shape)
-  const coverShape = silhouetteOf(picked.map(heroOf).find(h => h && !h.startsWith('Multiple')))
+  const coverShape = silhouetteOf(picked.map(heroOf).find(h => h && !h.startsWith('Multiple')), heroes)
   const suggestion = suggestName(picked.map(i => ({ name: settings[i]?.customName || plainName(mods[i].mod_name), character: parsed[i].character })))
   const existing = target === NEW || target === NONE ? undefined : loadouts.find(l => l.id === target)
   const into = target === NONE ? NONE : existing?.id ?? NEW // a loadout deleted while the dialog was open: back to a new one

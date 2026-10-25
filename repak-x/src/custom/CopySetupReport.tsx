@@ -1,7 +1,7 @@
 // repakxtra: the Copy setup report button (Settings > Help & Community, and Setup). Text is built in setupReport.ts.
 import { useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { ClipboardCopy } from 'lucide-react'
+import { Check, ClipboardCopy } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import { DISCORD_LIMIT, gatherReport } from './setupReport'
 
@@ -24,11 +24,13 @@ async function saveTxt(text: string, alert: Alert) {
 
 export default function CopySetupReport({ alert, className = 'action-btn' }: { alert: Alert; className?: string }) {
   const [busy, setBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
   const run = async () => {
     setBusy(true)
     try {
       const text = await gatherReport()
       await copy(text)
+      setCopied(true); setTimeout(() => setCopied(false), 3000)
       if (text.length <= DISCORD_LIMIT) {
         alert.success('Setup report copied', 'Paste it in your Discord help message.')
         return
@@ -46,7 +48,7 @@ export default function CopySetupReport({ alert, className = 'action-btn' }: { a
   return (
     <button type="button" className={className} disabled={busy} onClick={run}
       title="Copies your setup and the mods that are on, ready to paste in a help channel. No folder paths or user name.">
-      <ClipboardCopy size={14} /> {busy ? 'Copying…' : 'Copy setup report'}
+      {copied ? <Check size={14} /> : <ClipboardCopy size={14} />} {busy ? 'Copying…' : copied ? 'Copied' : 'Copy setup report'}
     </button>
   )
 }

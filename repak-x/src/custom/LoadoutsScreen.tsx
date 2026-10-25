@@ -191,7 +191,7 @@ const LoadoutCard = memo(function LoadoutCard({ p, l, groupBy, canGenerate, busy
 
 export default function LoadoutsScreen(p: LoadoutProps) {
   const newStrip = useUiPref('new-strip') // Settings > Library > Show New this week, off by default
-  const builtins = useUiPref('builtins') // Settings > Library > Hide built-in mods, hidden by default
+  const builtins = useUiPref('builtins') // Settings > Library > Hide built-in mods, shown by default
   const view = useView()
   const loadouts = useLoadouts()
   // Search: kept while a loadout's page is open, so Back returns to the same results
