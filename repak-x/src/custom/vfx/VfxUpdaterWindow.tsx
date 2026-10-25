@@ -671,10 +671,10 @@ export function VfxUpdaterPanel() {
   const groups = [
     group('added', 'Chosen files', chosen),
     group('needs', 'Needs an update', needing, needing.filter(m => needsOf(m) && !isDone(runs[norm(m.utoc)]?.status)).length),
-    group('updated', 'Updated', done),
-    group('rest', chosen.length || needing.length || done.length ? 'Other VFX mods' : 'VFX mods', others.filter(m => !m.materials)),
+    group('rest', chosen.length || needing.length ? 'Other VFX mods' : 'VFX mods', others.filter(m => !m.materials)),
     // skins listed for their material instances, apart so the VFX mods stay easy to find
     group('materials', 'Material mods', others.filter(m => m.materials)),
+    group('updated', 'Updated', done), // last: what is done goes below what is left to do
   ]
   const inLoadouts = (m: Mod) => { const k = canonKey(modKey(m.path)); return loadouts.filter(l => l.on.some(x => canonKey(x) === k)).map(l => ({ id: l.id, name: l.name })) }
   const fold = (id: string) => setFoldedIds(f => { const n = f.includes(id) ? f.filter(x => x !== id) : [...f, id]; localStorage.setItem(FOLDED, JSON.stringify(n)); return n })

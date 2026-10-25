@@ -35,6 +35,29 @@ function Fail([string]$msg) {
 $waitFor = [int]$env:RX_PID
 while (Get-Process -Id $waitFor -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 300 }
 
+# What the app started from its own folder (UAssetTool's command line, mid-extract) can outlive it and keeps its files in
+# use: it gets a moment to finish, then it is stopped. The folder by both names: the dist\repakxtra link and its target.
+# Every path through Get-Item, which spells it out in full (a short 8.3 RUNNER~1 and its long name compare equal). Never
+# what stops an update: a failure here leaves the copy below to try
+try {
+    $long = { param($p) try { (Get-Item -LiteralPath $p -ErrorAction Stop).FullName } catch { $p } }
+    $roots = @((& $long $app).TrimEnd('\') + '\')
+    $linked = (Get-Item -LiteralPath $app).Target
+    if ($linked) { $roots += @($linked | ForEach-Object { (& $long $_).TrimEnd('\') + '\' }) }
+    function Left {
+        @(Get-Process | Where-Object {
+            $p = try { $_.Path } catch { $null }
+            if ($p) { $p = & $long $p }
+            $p -and @($roots | Where-Object { $p.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count
+        })
+    }
+    $deadline = (Get-Date).AddSeconds($(if ($env:RX_WAIT) { [int]$env:RX_WAIT } else { 30 }))
+    while (@(Left).Count -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 300 }
+    $stop = @(Left)
+    $stop | Stop-Process -Force -ErrorAction SilentlyContinue
+    $stop | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
+} catch { }
+
 $extracted = Join-Path $temp 'extracted'
 try { Expand-Archive -LiteralPath $zip -DestinationPath $extracted -Force }
 catch { Fail "The update could not be unpacked, so nothing was changed. Download it from github.com/cablemp5/repak-xtra/releases" }
@@ -113,6 +136,9 @@ fn powershell(script: &str) -> std::process::Command {
 /// Starts the hidden helper that waits for this process to exit, then applies `zip` to `app_dir` and starts `exe`.
 pub fn launch_zip(zip: &Path, app_dir: &Path, exe: &Path) -> Result<(), String> {
     let temp = zip.parent().ok_or("The update has no folder")?;
+    // the command line kept running between extracts holds uassettool-cli.exe, which the update replaces (0.20.0 to 0.21.0
+    // failed on it): stopped now, and the helper waits for anything else still running from the app's folder
+    crate::xtra_uat_cli::reset();
     powershell(APPLY_ZIP)
         .env("RX_PID", std::process::id().to_string())
         .env("RX_ZIP", zip)
@@ -175,6 +201,7 @@ mod tests {
             .env("RX_APP", &app)
             .env("RX_EXE", app.join("repakxtra.exe"))
             .env("RX_TEST", "1")
+            .env("RX_WAIT", "2") // a process from the app's folder still running after 2 s is stopped (30 s in the app)
             .status()
             .unwrap()
             .success();
@@ -197,6 +224,24 @@ mod tests {
         assert_eq!(fs::read(app.join("data").join("x.json")).unwrap(), b"{}");
         assert_eq!(fs::read(app.join("keep.txt")).unwrap(), b"untouched");
         assert!(!r.join("update").exists(), "the update folder is cleaned up");
+        let _ = fs::remove_dir_all(r.parent().unwrap());
+    }
+
+    #[test]
+    fn a_tool_still_running_from_the_app_folder_is_stopped_before_the_copy() {
+        let r = root("busy");
+        let app = r.join("app");
+        fs::create_dir_all(&app).unwrap();
+        // a running exe cannot be overwritten: ping stands in for the command line mid-extract (60 s, longer than the wait)
+        let cli = app.join("uassettool-cli.exe");
+        fs::copy(r"C:\Windows\System32\PING.EXE", &cli).unwrap();
+        let mut busy = std::process::Command::new(&cli).args(["-n", "60", "127.0.0.1"]).stdout(std::process::Stdio::null()).spawn().unwrap();
+        let (ok, app) = apply(&r, &[("repakxtra.exe", b"new exe"), ("uassettool-cli.exe", b"new cli")]);
+        let stopped = busy.try_wait().unwrap().is_some();
+        let _ = busy.kill();
+        assert!(ok, "the update went in");
+        assert!(stopped, "the tool was stopped");
+        assert_eq!(fs::read(app.join("uassettool-cli.exe")).unwrap(), b"new cli");
         let _ = fs::remove_dir_all(r.parent().unwrap());
     }
 

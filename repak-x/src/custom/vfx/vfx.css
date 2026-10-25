@@ -33,11 +33,12 @@
   font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-secondary); background: var(--quiet-active); }
 /* Needs an update: its count in the problem yellow, as the Library's Needs VFX update tag */
 .vf-grp.is-needs .vf-grp-count { color: #f5d342; background: color-mix(in srgb, #f5d342, transparent 86%); }
-/* Needs an update: its name takes its count's yellow. Updated: its count takes the Updated pill's green */
+/* Needs an update: its name takes its count's yellow. Updated: its name and count take the Updated pill's green */
 .vf-grp.is-needs .vf-grp-name { color: #f5d342; }
 [data-theme="light"] .vf-grp.is-needs .vf-grp-count, [data-theme="light"] .vf-grp.is-needs .vf-grp-name { color: #574800; }
 .vf-grp.is-done .vf-grp-count { color: #3ecf6e; background: color-mix(in srgb, #3ecf6e, transparent 88%); }
-[data-theme="light"] .vf-grp.is-done .vf-grp-count { color: #166236; }
+.vf-grp.is-done .vf-grp-name { color: #3ecf6e; }
+[data-theme="light"] .vf-grp.is-done .vf-grp-count, [data-theme="light"] .vf-grp.is-done .vf-grp-name { color: #166236; }
 .vf-selects { flex: none; display: inline-flex; gap: 2px; }
 .vf-select { flex: none; height: 28px !important; min-height: 0 !important; padding: 0 10px !important; border: none !important; border-radius: var(--quiet-radius) !important;
   background: none !important; font-size: 12.5px !important; font-weight: 500 !important; color: var(--text-secondary) !important; cursor: pointer; }
@@ -93,7 +94,7 @@ button.vf-loadouts:focus-visible { outline: 2px solid var(--accent-primary); out
 /* running: the app's thin progress bar (the update dialog's), the step and what it is on */
 /* running: under the name (lined up with it, past the tick), the app's thin bar, then the step and its own count. The
    step count and the count inside the step are pills, so the numbers read apart from the words */
-.vf-progress { flex-basis: 100%; margin-top: -8px; padding: 0 0 12px 28px; }   /* close under the name: the tick row is 40px tall, the name sits in its middle */
+.vf-progress { flex-basis: 100%; min-width: 0; margin-top: -8px; padding: 0 0 12px 28px; }   /* close under the name: the tick row is 40px tall, the name sits in its middle */
 .vf-bar { height: 4px; border-radius: 999px; overflow: hidden; background: var(--bg-lighter); }
 /* the fill carries the app's shimmer sweep (transitions.dev: Shimmer), so a long step still reads as working */
 .vf-bar i { display: block; height: 100%; transition: width 0.4s var(--acc-ease);

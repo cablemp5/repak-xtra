@@ -220,7 +220,7 @@ fn unnamed(written: &[PathBuf]) -> bool {
 /// Stops the long-lived command line: the next extract starts a fresh one, which loads the game's containers again.
 /// shortcut: what leaves a running one unable to name classes is not known (seen once in the dev copy, not reproduced by
 /// replaying the layout scan's requests); find it if the "[uat serve]" warning shows in a log.
-fn reset() {
+pub(crate) fn reset() {
     if let Some(mut s) = SERVER.lock().unwrap_or_else(|e| e.into_inner()).take() {
         let _ = s.child.kill();
         let _ = s.child.wait();
