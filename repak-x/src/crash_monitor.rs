@@ -197,7 +197,7 @@ pub fn parse_crash_info(crash_folder: &Path, enabled_mods: Vec<String>) -> Optio
 
 /// Extract a value from an XML tag (simple parser, not full XML)
 /// Includes validation to prevent crashes from malformed XML
-fn extract_xml_tag(xml: &str, tag_name: &str) -> Option<String> {
+pub(crate) fn extract_xml_tag(xml: &str, tag_name: &str) -> Option<String> { // repakxtra: pub(crate) for xtra_crash.rs
     // Validate input parameters
     if xml.is_empty() || tag_name.is_empty() {
         return None;

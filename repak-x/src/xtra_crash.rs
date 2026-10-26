@@ -2,7 +2,9 @@
 //! asset a crash names (crash suspects, custom/CrashSuspects.tsx).
 
 use crate::crash_monitor;
+use regex_lite::Regex;
 use serde::Serialize;
+use std::sync::OnceLock;
 
 #[derive(Serialize)]
 pub struct NewestCrash {
@@ -16,17 +18,243 @@ pub struct NewestCrash {
     message: Option<String>,
     /// A serial size mismatch's numbers, when that is what it was
     detail: Option<String>,
+    /// "3962284" and "5.3.2-3962284+++depot_marvel+S10.5_release"
+    build_version: Option<String>,
+    engine_version: Option<String>,
+    cpu: Option<String>,
+    gpu: Option<String>,
+    gpu_driver: Option<String>,
+    /// "D3D12"
+    rhi: Option<String>,
+    os: Option<String>,
+    ram_gb: Option<u64>,
+    /// The engine says it ran out of memory
+    oom: bool,
+    /// The crashed thread's name, "FAsyncLoadingThread"
+    thread: Option<String>,
+    /// The top frame's module and its class ("game", "Windows", "GPU driver", "third-party", "unknown")
+    faulting_module: Option<String>,
+    faulting_class: Option<&'static str>,
+    /// The top 5 frames, "Marvel-Win64-Shipping + 10c296b (game)"
+    stack: Vec<String>,
+    /// File names of the loaded modules that are not the game's, Windows' or the GPU driver's (.asi, proxy DLLs)
+    third_party: Vec<String>,
 }
 
 /// The newest crash the game left, if any. Reads only; the startup crash check keeps its own bookkeeping.
+/// Everything it returns has been through redact().
 #[tauri::command]
 pub fn xtra_newest_crash() -> Option<NewestCrash> {
     let (_, folder) = crash_monitor::get_newest_crash_folder()?;
     let info = crash_monitor::parse_crash_info(&folder, Vec::new())?;
     let (asset_path, error_type, detail) = crash_monitor::parse_error_details(info.error_message.as_deref().unwrap_or(""));
     let time = info.timestamp.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    let message = info.error_message.as_deref().and_then(first_line);
-    Some(NewestCrash { time, crash_type: error_type.or(info.crash_type), asset_path, seconds_since_start: info.seconds_since_start, message, detail: detail.and_then(|d| first_line(&d)) })
+    let message = info.error_message.as_deref().and_then(|e| short_message(e, asset_path.as_deref()));
+    // parse_crash_info already refused a file over 10 MB, so this read is the same file it parsed
+    let xml = std::fs::read_to_string(folder.join("CrashContext.runtime-xml")).ok().filter(|x| x.len() <= 10_000_000).unwrap_or_default();
+    let tag = |name: &str| crash_monitor::extract_xml_tag(&xml, name);
+    let modules: Vec<String> = tag("Modules").map(|m| m.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect()).unwrap_or_default();
+    let root = norm(&tag("RootDir").unwrap_or_default());
+    let thread_xml = crashed_thread(&xml).unwrap_or("");
+    // PCallStack already skips the engine's own crash-handling frames, the crashed thread's stack does not
+    let mut top = tag("PCallStack").map(|s| frames(&s)).unwrap_or_default();
+    if top.is_empty() {
+        top = crash_monitor::extract_xml_tag(thread_xml, "CallStack").map(|s| frames(&s)).unwrap_or_default();
+    }
+    let class_of = |m: &str| classify(m, &modules, &root);
+    let users = user_names();
+    let r = |s: Option<String>| s.map(|s| redact(&s, &users));
+    Some(NewestCrash {
+        time,
+        crash_type: r(error_type.or(info.crash_type)),
+        asset_path: r(asset_path),
+        seconds_since_start: info.seconds_since_start,
+        message: r(message),
+        detail: r(detail.and_then(|d| first_line(&d))),
+        build_version: r(tag("BuildVersion")),
+        engine_version: r(tag("EngineVersion")),
+        cpu: r(tag("Misc.CPUBrand")),
+        gpu: r(tag("RHI.AdapterName")),
+        gpu_driver: r(tag("RHI.UserDriverVersion")),
+        rhi: r(tag("RHI.RHIName")),
+        os: r(tag("Misc.OSVersionMajor")),
+        ram_gb: tag("MemoryStats.TotalPhysicalGB").and_then(|s| s.parse().ok()),
+        oom: tag("MemoryStats.bIsOOM").is_some_and(|s| s == "1" || s.eq_ignore_ascii_case("true")),
+        thread: r(crash_monitor::extract_xml_tag(thread_xml, "ThreadName")),
+        faulting_module: r(top.first().map(|(m, _)| m.clone())),
+        faulting_class: top.first().map(|(m, _)| class_of(m).label()),
+        stack: top.iter().take(5).map(|(m, off)| redact(&format!("{m} + {off} ({})", class_of(m).label()), &users)).collect(),
+        third_party: modules.iter()
+            .filter(|p| class_of_path(p, &root) == ModuleClass::ThirdParty && !crate::xtra_setup::is_bundled_bypass(std::path::Path::new(p)))
+            .map(|p| redact(p.rsplit(['\\', '/']).next().unwrap_or(p), &users)).collect(),
+    })
+}
+
+/// The `<Thread>` block whose IsCrashed is true.
+fn crashed_thread(xml: &str) -> Option<&str> {
+    let at = xml.find("<IsCrashed>true</IsCrashed>")?;
+    let start = xml[..at].rfind("<Thread>")?;
+    let end = at + xml[at..].find("</Thread>")?;
+    Some(&xml[start..end])
+}
+
+/// A UE portable call stack ("ntdll 0x00007fff89350000 + 9dc24 KERNELBASE 0x... + 462ce") as (module, offset) pairs.
+fn frames(stack: &str) -> Vec<(String, String)> {
+    static FRAME: OnceLock<Regex> = OnceLock::new();
+    let re = FRAME.get_or_init(|| Regex::new(r"(\S+)\s+0x[0-9A-Fa-f]+\s*\+\s*([0-9A-Fa-f]+)").unwrap());
+    re.captures_iter(stack).map(|c| (c[1].to_string(), c[2].to_string())).collect()
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum ModuleClass {
+    Game,
+    Windows,
+    GpuDriver,
+    ThirdParty,
+    Unknown,
+}
+
+impl ModuleClass {
+    fn label(self) -> &'static str {
+        match self {
+            ModuleClass::Game => "game",
+            ModuleClass::Windows => "Windows",
+            ModuleClass::GpuDriver => "GPU driver",
+            ModuleClass::ThirdParty => "third-party",
+            ModuleClass::Unknown => "unknown",
+        }
+    }
+}
+
+/// Lower case with forward slashes, so paths compare.
+fn norm(path: &str) -> String {
+    path.replace('\\', "/").to_lowercase()
+}
+
+/// A path's file name without its last extension, lower case: "sl.common.dll" is "sl.common".
+fn file_stem(path: &str) -> String {
+    let p = norm(path);
+    let file = p.rsplit('/').next().unwrap_or(&p);
+    file.rsplit_once('.').map(|(s, _)| s).unwrap_or(file).to_string()
+}
+
+/// DLL names a mod loader or overlay takes over by sitting beside the game exe (the signature bypass is dsound.dll).
+const PROXY_DLLS: &[&str] = &[
+    "dsound", "dinput8", "winmm", "version", "d3d9", "d3d11", "d3d12", "dxgi", "xinput1_3", "xinput1_4", "xinput9_1_0",
+    "winhttp", "wininet", "dwmapi", "msimg32", "opengl32", "bcrypt", "iphlpapi",
+];
+/// Windows' own modules, for stack frames whose path the crash file does not list.
+const WINDOWS_DLLS: &[&str] = &[
+    "ntdll", "kernel32", "kernelbase", "user32", "gdi32", "gdi32full", "win32u", "ucrtbase", "msvcp140", "msvcp140_1",
+    "vcruntime140", "vcruntime140_1", "combase", "rpcrt4", "ole32", "oleaut32", "advapi32", "sechost", "ws2_32", "dxgi",
+    "d3d11", "d3d12", "d3d12core", "dxcore", "d3dcompiler_47", "dbghelp", "xaudio2_9", "mmdevapi", "audioses", "shell32",
+    "bcrypt", "crypt32", "msvcrt",
+];
+/// Name starts of NVIDIA, AMD and Intel user-mode driver modules.
+const GPU_PREFIXES: &[&str] = &[
+    "nvwgf2um", "nvd3dum", "nvoglv", "nvgpucomp", "nvldumd", "nvapi", "nvcuda", "nvumdshim", "nvppe", "atidxx", "atiumd",
+    "atiadl", "aticfx", "amdxc", "amdxx", "amdenc", "amdihk", "amdvlk", "amdadlx", "igd", "igc64", "igxe",
+];
+
+fn is_gpu_name(stem: &str) -> bool {
+    GPU_PREFIXES.iter().any(|p| stem.starts_with(p))
+}
+
+/// Where a loaded module came from decides its class: a .asi plugin or a proxy DLL beside the exe is a mod loader,
+/// DriverStore is the GPU driver, the Windows folder is Windows, the rest of the game folder is the game's own, and
+/// anything else (overlays, injectors) is third-party. `root` is the crash's RootDir, normalized.
+fn class_of_path(path: &str, root: &str) -> ModuleClass {
+    let p = norm(path);
+    let stem = file_stem(&p);
+    let exe_dir = format!("{root}marvel/binaries/win64/");
+    if p.ends_with(".asi") {
+        ModuleClass::ThirdParty
+    } else if p.contains("/driverstore/") || is_gpu_name(&stem) {
+        ModuleClass::GpuDriver
+    } else if p.contains("/windows/") {
+        ModuleClass::Windows
+    } else if !root.is_empty() && p.starts_with(root) {
+        let beside_exe = p.strip_prefix(&exe_dir).is_some_and(|rest| !rest.contains('/'));
+        if beside_exe && PROXY_DLLS.contains(&stem.as_str()) { ModuleClass::ThirdParty } else { ModuleClass::Game }
+    } else {
+        ModuleClass::ThirdParty
+    }
+}
+
+/// A stack frame's module ("KERNELBASE", "Marvel-Win64-Shipping"): by its path when the crash lists it, else by name.
+fn classify(module: &str, modules: &[String], root: &str) -> ModuleClass {
+    let name = module.to_lowercase();
+    if let Some(path) = modules.iter().find(|m| file_stem(m) == name) {
+        return class_of_path(path, root);
+    }
+    if name == "unknown" {
+        ModuleClass::Unknown
+    } else if is_gpu_name(&name) {
+        ModuleClass::GpuDriver
+    } else if WINDOWS_DLLS.contains(&name.as_str()) || name.starts_with("api-ms-win") {
+        ModuleClass::Windows
+    } else if name.starts_with("marvel-") {
+        ModuleClass::Game
+    } else {
+        ModuleClass::ThirdParty
+    }
+}
+
+/// The Windows user name and the home folder's name, 3 characters or more (shorter would cut common words apart).
+fn user_names() -> Vec<String> {
+    let mut names: Vec<String> = [std::env::var("USERNAME").ok(), dirs::home_dir().and_then(|h| h.file_name().map(|n| n.to_string_lossy().into_owned()))]
+        .into_iter().flatten().filter(|n| n.chars().count() >= 3).collect();
+    names.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+    names
+}
+
+/// Takes out what could name the player or their PC: emails, keyed ids (uid=, token:, MachineId=, player name: ...),
+/// command-line flag values (the flag stays), Steam ids, IPv4 addresses and the Windows user name `users`.
+/// setupReport.ts scrub() still runs after this, on file paths.
+pub(crate) fn redact(text: &str, users: &[String]) -> String {
+    static RULES: OnceLock<[(Regex, &'static str); 4]> = OnceLock::new();
+    static DOTTED: OnceLock<Regex> = OnceLock::new();
+    let rules = RULES.get_or_init(|| [
+        (Regex::new(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+").unwrap(), "<email>"),
+        (Regex::new(r#"(?i)(\b\w*(?:uid|udid|token|ticket|machine_?id|device_?id|account_?id|session[_ ]?id|player[_ ]?name)["']?\s*[:=]\s*["']?)[^\s"'&,;<>]+"#).unwrap(), "${1}<redacted>"),
+        (Regex::new(r#"(^|\s)(--?[A-Za-z][\w.-]*)=(?:"[^"]*"|\S+)"#).unwrap(), "${1}${2}=<redacted>"),
+        (Regex::new(r"\b7656119\d{10}\b").unwrap(), "<steam id>"),
+    ]);
+    let mut out = text.to_string();
+    for (re, with) in rules {
+        out = re.replace_all(&out, *with).into_owned();
+    }
+    // a whole dotted number run, so "10.0.19045.6466" (a Windows version) is not read as an address inside it
+    let dotted = DOTTED.get_or_init(|| Regex::new(r"\d[\d.]*\d").unwrap());
+    out = dotted.replace_all(&out, |c: &regex_lite::Captures| {
+        let parts: Vec<&str> = c[0].split('.').collect();
+        if parts.len() == 4 && parts.iter().all(|p| p.parse::<u8>().is_ok()) { "<ip>".to_string() } else { c[0].to_string() }
+    }).into_owned();
+    for user in users {
+        if let Ok(re) = Regex::new(&format!("(?i){}", regex_lite::escape(user))) {
+            out = re.replace_all(&out, "<user>").into_owned();
+        }
+    }
+    out
+}
+
+/// The error's first line without what the report already says: the engine's source folders before the file name, the
+/// object hashes, and the crashed asset (on the Newest crash line), so what failed inside it fits in the 300 characters.
+fn short_message(error: &str, asset: Option<&str>) -> Option<String> {
+    static SOURCE: OnceLock<Regex> = OnceLock::new();
+    static HASH: OnceLock<Regex> = OnceLock::new();
+    static REPEAT: OnceLock<Regex> = OnceLock::new();
+    let line = error.lines().map(str::trim).find(|l| !l.is_empty())?;
+    let mut out = SOURCE.get_or_init(|| Regex::new(r"\[File:[^\]]*[\\/]").unwrap()).replace_all(line, "[File:").into_owned();
+    out = HASH.get_or_init(|| Regex::new(r" \(0x[0-9A-Fa-f]+\)").unwrap()).replace_all(&out, "").into_owned();
+    if let Some(asset) = asset.filter(|a| !a.trim().is_empty()) {
+        // the package path, and its object path (".NS_A:SystemUpdateScript" keeps the part after the colon)
+        if let Ok(re) = Regex::new(&format!(r"{}(?:\.\w+)?", regex_lite::escape(asset))) {
+            out = re.replace_all(&out, "<asset>").into_owned();
+        }
+        out = REPEAT.get_or_init(|| Regex::new(r"<asset>(?: <asset>)+").unwrap()).replace_all(&out, "<asset>").into_owned();
+    }
+    first_line(&out)
 }
 
 /// The first line with words in it, cut at 300 characters.
@@ -98,6 +326,128 @@ second").as_deref(), Some("Fatal error: x"));
         assert_eq!(first_line("a".repeat(400).as_str()).map(|s| s.len()), Some(300));
         assert_eq!(first_line(" 
  "), None);
+    }
+
+    #[test]
+    fn the_message_names_the_crashed_asset_once_and_keeps_what_failed_in_it() {
+        let asset = "/Game/Marvel/VFX/Particles/Characters/1026/1026001/102671/NS_102671_Hit_01";
+        let error = format!(r"Fatal error: [File:G:\workspace\S10.5_release\UnrealEngine\Engine\Source\Runtime\CoreUObject\Private\Serialization\AsyncLoading2.cpp] [Line: 6459] ObjectSerializationError: {asset} (0x6289A3B9C8F1BA7A) {asset} (0x6289A3B9C8F1BA7A) - NiagaraDataInterfaceCurve {asset}.NS_102671_Hit_01:SystemUpdateScript.NiagaraDataInterfaceCurve_0: Serial size mismatch: Expected read size 408, Actual read size 16");
+        assert_eq!(short_message(&error, Some(asset)).as_deref(), Some("Fatal error: [File:AsyncLoading2.cpp] [Line: 6459] ObjectSerializationError: <asset> - NiagaraDataInterfaceCurve <asset>:SystemUpdateScript.NiagaraDataInterfaceCurve_0: Serial size mismatch: Expected read size 408, Actual read size 16"));
+        let av = "Unhandled Exception: EXCEPTION_ACCESS_VIOLATION writing address 0x0000019d741b18a0";
+        assert_eq!(short_message(av, None).as_deref(), Some(av), "no asset: as it was");
+    }
+
+    fn users() -> Vec<String> {
+        v(&["Alice"])
+    }
+
+    #[test]
+    fn redacts_the_windows_user_name_in_any_case() {
+        assert_eq!(redact(r"C:\Users\Alice\AppData and ALICE-PC", &users()), r"C:\Users\<user>\AppData and <user>-PC");
+        assert_eq!(redact("nothing here", &users()), "nothing here");
+    }
+
+    #[test]
+    fn redacts_steam_ids_but_not_other_long_numbers() {
+        assert_eq!(redact("steam 76561198012345678 build 3962284", &[]), "steam <steam id> build 3962284");
+        assert_eq!(redact("765611980123456789", &[]), "765611980123456789", "18 digits is not a Steam id");
+    }
+
+    #[test]
+    fn redacts_emails() {
+        assert_eq!(redact("mail first.last+rivals@example.co.uk now", &[]), "mail <email> now");
+    }
+
+    #[test]
+    fn redacts_ipv4_but_not_versions() {
+        assert_eq!(redact("from 192.168.1.20:7777", &[]), "from <ip>:7777");
+        assert_eq!(redact("Windows 10 (22H2) [10.0.19045.6466]", &[]), "Windows 10 (22H2) [10.0.19045.6466]", "an OS build");
+        assert_eq!(redact("driver 32.0.21045.16010, engine 5.3.2", &[]), "driver 32.0.21045.16010, engine 5.3.2");
+        assert_eq!(redact("999.1.1.1", &[]), "999.1.1.1", "not an address");
+    }
+
+    #[test]
+    fn redacts_keyed_ids_and_keeps_the_key() {
+        assert_eq!(redact("uid=12345 token: abc.def", &[]), "uid=<redacted> token: <redacted>");
+        assert_eq!(redact(r#"{"ticket":"T-99","udid":"X1"}"#, &[]), r#"{"ticket":"<redacted>","udid":"<redacted>"}"#);
+        assert_eq!(redact("MachineId=AB12 EpicAccountId=cd34 DeviceID: 77", &[]), "MachineId=<redacted> EpicAccountId=<redacted> DeviceID: <redacted>");
+        assert_eq!(redact("session id: s1 Player Name=Bob", &[]), "session id: <redacted> Player Name=<redacted>");
+        assert_eq!(redact("tokens are fine", &[]), "tokens are fine");
+    }
+
+    #[test]
+    fn redacts_command_line_values_and_keeps_the_flags() {
+        assert_eq!(redact(r#"Marvel.exe -dx12 -AUTH_LOGIN=bob --auth="a b" -nosplash"#, &[]), "Marvel.exe -dx12 -AUTH_LOGIN=<redacted> --auth=<redacted> -nosplash");
+        assert_eq!(redact("Marvel-Win64-Shipping x=1", &[]), "Marvel-Win64-Shipping x=1", "a dash inside a word is no flag");
+    }
+
+    const ROOT: &str = "c:/program files (x86)/steam/steamapps/common/marvelrivals/marvelgame/";
+
+    fn game_modules() -> Vec<String> {
+        let win64 = r"C:\Program Files (x86)\Steam\steamapps\common\MarvelRivals\MarvelGame\Marvel\Binaries\Win64";
+        v(&[
+            &format!(r"{win64}\Marvel-Win64-Shipping.exe"),
+            &format!(r"{win64}\dsound.dll"),
+            &format!(r"{win64}\steam_api64.dll"),
+            &format!(r"{win64}\D3D12\D3D12Core.dll"),
+            &format!(r"{win64}\plugins\MarvelRivalsUTOCSignatureBypass.asi"),
+            r"C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_1\nvwgf2umx.dll",
+            r"C:\Windows\System32\dsound.dll",
+            r"C:\Program Files\RivaTuner Statistics Server\RTSSHooks64.dll",
+        ])
+    }
+
+    #[test]
+    fn classifies_modules_by_where_they_loaded_from() {
+        let m = game_modules();
+        let class = |name: &str| classify(name, &m, ROOT);
+        assert_eq!(class("Marvel-Win64-Shipping"), ModuleClass::Game);
+        assert_eq!(class("steam_api64"), ModuleClass::Game, "a DLL the game ships");
+        assert_eq!(class("D3D12Core"), ModuleClass::Game, "a subfolder of the exe's is not beside it");
+        assert_eq!(class("dsound"), ModuleClass::ThirdParty, "the first dsound listed is the proxy beside the exe");
+        assert_eq!(class("MarvelRivalsUTOCSignatureBypass"), ModuleClass::ThirdParty);
+        assert_eq!(class("nvwgf2umx"), ModuleClass::GpuDriver);
+        assert_eq!(class("RTSSHooks64"), ModuleClass::ThirdParty, "an overlay outside the game");
+        assert_eq!(class_of_path(r"C:\Windows\System32\dsound.dll", ROOT), ModuleClass::Windows, "Windows' own dsound");
+    }
+
+    #[test]
+    fn classifies_unlisted_frames_by_name() {
+        let class = |name: &str| classify(name, &[], ROOT);
+        assert_eq!(class("KERNELBASE"), ModuleClass::Windows);
+        assert_eq!(class("ntdll"), ModuleClass::Windows);
+        assert_eq!(class("VCRUNTIME140"), ModuleClass::Windows);
+        assert_eq!(class("atidxx64"), ModuleClass::GpuDriver);
+        assert_eq!(class("amdenc64"), ModuleClass::GpuDriver);
+        assert_eq!(class("igd12umd64"), ModuleClass::GpuDriver);
+        assert_eq!(class("Marvel-Win64-Shipping"), ModuleClass::Game);
+        assert_eq!(class("Unknown"), ModuleClass::Unknown);
+        assert_eq!(class("SomeInjector64"), ModuleClass::ThirdParty);
+    }
+
+    #[test]
+    fn reads_frames_and_the_crashed_thread() {
+        let stack = "Marvel-Win64-Shipping 0x00007ff6c4050000 + 10c296b KERNEL32 0x00007fff88f10000 + 17374 ntdll 0x00007fff89350000 + 4cc91";
+        let got: Vec<String> = frames(stack).into_iter().map(|(m, off)| format!("{m}+{off}")).collect();
+        assert_eq!(got, v(&["Marvel-Win64-Shipping+10c296b", "KERNEL32+17374", "ntdll+4cc91"]));
+        let xml = "<Threads><Thread><CallStack>a 0x1 + 2</CallStack><IsCrashed>false</IsCrashed><ThreadName>Game</ThreadName></Thread>\
+            <Thread><CallStack>b 0x1 + 3</CallStack><IsCrashed>true</IsCrashed><ThreadName>FAsyncLoadingThread</ThreadName></Thread></Threads>";
+        let t = crashed_thread(xml).unwrap();
+        assert_eq!(crash_monitor::extract_xml_tag(t, "ThreadName").as_deref(), Some("FAsyncLoadingThread"));
+        assert_eq!(crash_monitor::extract_xml_tag(t, "CallStack").as_deref(), Some("b 0x1 + 3"));
+    }
+
+    /// cargo test -p repak-x --bin REPAK-X newest_real_crash -- --ignored --nocapture
+    /// Prints what the setup report gets from the newest crash on this PC and checks the user name is not in it.
+    #[test]
+    #[ignore]
+    fn newest_real_crash_has_no_user_name() {
+        let crash = xtra_newest_crash().expect("a crash folder in %LOCALAPPDATA%\\Marvel\\Saved\\Crashes");
+        let json = serde_json::to_string_pretty(&crash).unwrap();
+        println!("{json}");
+        for user in user_names() {
+            assert!(!json.to_lowercase().contains(&user.to_lowercase()), "the user name is in the output");
+        }
     }
 
     #[test]

@@ -29,6 +29,9 @@ export type ReportInput = {
   on: ReportMod[]; off: number; conflicts: string; crash: string
   crashLines?: string[] // more on the newest crash, one indented line each
   flags?: string // how many mods that are on need an update, may crash or carry Niagara
+  // from the newest crash file: summary lines, so a pasted summary still carries the diagnosis
+  system?: string; faulting?: string; thirdParty?: string; oom?: boolean
+  stack?: string[]; thread?: string // the top frames, below the summary
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -69,7 +72,12 @@ export function buildReport(r: ReportInput) {
     `Conflicts: ${r.conflicts}`,
     `Newest crash: ${r.crash}`,
     ...(r.crashLines ?? []).map(l => `  ${l}`),
+    ...(r.system ? [`System: ${r.system}`] : []),
+    ...(r.faulting ? [`Faulting module: ${r.faulting}`] : []),
+    ...(r.thirdParty ? [`Third-party modules: ${r.thirdParty}`] : []),
+    ...(r.oom ? ['Out of memory: yes'] : []),
     '',
+    ...(r.stack?.length ? [`Crash stack, top ${r.stack.length}${r.thread ? ` (${r.thread})` : ''}:`, ...r.stack.map(l => `  ${l}`), ''] : []),
     r.on.length ? 'Mods that are on (name | type | hero | file date | notes):' : 'No mods are on.',
     ...r.on.flatMap(m => [
       [m.name, m.type, m.hero || '-', m.date, ...(m.notes?.length ? [m.notes.join(', ')] : []), ...(m.extra ? [m.extra] : [])].join(' | '),
@@ -81,6 +89,13 @@ export function buildReport(r: ReportInput) {
 }
 
 const settled = <T,>(p: Promise<T>) => p.then(v => v, () => undefined)
+type Opt = string | null | undefined
+/** xtra_crash.rs NewestCrash, already redacted */
+type Crash = {
+  time: number; crash_type?: Opt; asset_path?: Opt; seconds_since_start?: number | null; message?: Opt; detail?: Opt
+  build_version?: Opt; engine_version?: Opt; cpu?: Opt; gpu?: Opt; gpu_driver?: Opt; rhi?: Opt; os?: Opt; ram_gb?: number | null
+  oom?: boolean; thread?: Opt; faulting_module?: Opt; faulting_class?: Opt; stack?: string[]; third_party?: string[]
+}
 const BYPASS: Record<string, string> = { installed: 'installed', disabled: 'off', partial: 'incomplete', other: 'a different version', missing: 'not installed' }
 
 /** Reads everything the report needs; whatever cannot be read says "unknown". */
@@ -92,7 +107,7 @@ export async function gatherReport(): Promise<string> {
     settled(invoke<Galacta>('setup_galacta_status', { online: false })),
     settled(invoke<{ state: string; configured: boolean }>('sigeon_status')),
     settled(invoke<{ file_path: string; mod_paths: string[]; files?: string[] }[]>('check_mod_clashes', { quiet: true })),
-    settled(invoke<{ time: number; crash_type?: string | null; asset_path?: string | null; seconds_since_start?: number | null; message?: string | null; detail?: string | null } | null>('xtra_newest_crash')),
+    settled(invoke<Crash | null>('xtra_newest_crash')),
   ])
   const onPaths = src.mods.filter(m => m.enabled).map(m => m.path)
   // what the app knows about the mods that are on: checked now, not from the last background scan
@@ -110,22 +125,30 @@ export async function gatherReport(): Promise<string> {
     g.disabled ? 'off' : 'on',
     g.up_to_date === true ? `${g.latest}, up to date` : g.up_to_date === false ? `older than ${g.latest}` : 'version not checked',
   ].join(', ')
+  const suspect = new Set((suspects ?? []).map(key)) // hold the asset the newest crash names
   const on = src.mods.filter(m => m.enabled).map(m => {
     const d = src.modDetails[m.path]
     const v = verdictOf.get(key(m.path))
+    const s = suspect.has(key(m.path))
+    const changedSince = s && crash && m.modified_date && m.modified_date > crash.time ? ', changed since that crash' : ''
     return {
       name: relativeToMods(m.path, src.gamePath),
       type: d?.category || 'Unknown',
       hero: d?.character_name || '',
       date: m.modified_date ? day(new Date(m.modified_date * 1000)) : '-',
       extra: sourceOf(m.path) ? `Nexus ${sourceOf(m.path)!.id}` : undefined,
-      notes: [...(v ? [verdictLabel(v.kind)] : []), ...(hasNiagara.has(key(m.path)) ? ['Niagara'] : [])],
-      why: v?.reason.split(/\.\s/)[0].slice(0, 140), // the first sentence: a long list of flagged mods must still fit
+      notes: [...(v ? [verdictLabel(v.kind)] : []), ...(s ? ['Crash suspect'] : []), ...(hasNiagara.has(key(m.path)) ? ['Niagara'] : [])],
+      why: [
+        v?.reason.split(/\.\s/)[0].slice(0, 140), // the first sentence: a long list of flagged mods must still fit
+        s ? `holds the asset the newest crash names${changedSince}` : undefined,
+      ].filter(Boolean).join('. ') || undefined,
     }
   }).sort((a, b) => a.name.localeCompare(b.name))
   const count = (kind: Verdict['kind']) => (verdicts ?? []).filter(v => v.kind === kind).length // only the mods that are on were asked about
+  // a crash suspect may crash too, unless it already counts as broken
+  const mayCrash = onPaths.filter(p => verdictOf.get(key(p))?.kind === 'risky' || (suspect.has(key(p)) && verdictOf.get(key(p))?.kind !== 'broken')).length
   const flags = !verdicts ? 'not checked' : [
-    `${count('vfx')} need a VFX update`, `${count('risky')} may crash`, `${count('broken')} broken`, `${hasNiagara.size} with Niagara`,
+    `${count('vfx')} need a VFX update`, `${mayCrash} may crash`, `${count('broken')} broken`, `${hasNiagara.size} with Niagara`,
   ].join(', ')
   const when = (t: number) => `${day(new Date(t * 1000))} ${pad(new Date(t * 1000).getHours())}:${pad(new Date(t * 1000).getMinutes())}`
   const crashText = crash === undefined ? 'unknown' : !crash ? 'none found' : [
@@ -138,11 +161,15 @@ export async function gatherReport(): Promise<string> {
     ...(crash.seconds_since_start != null ? [`${Math.round(crash.seconds_since_start / 60)} min into the game`] : []),
     ...(crash.message ? [`message: ${crash.message}`] : []),
     ...(crash.detail && !crash.message?.includes(crash.detail) ? [crash.detail] : []),
+    ...(crash.build_version ? [`game build ${crash.build_version}${crash.engine_version ? ` (${crash.engine_version})` : ''}`] : []),
     ...(crash.asset_path
       ? [suspects === undefined ? 'mods holding that asset: could not check'
         : suspects.length ? `mods holding that asset: ${suspects.map(p => relativeToMods(p, src.gamePath)).join(', ')}` : 'no mod that is on holds that asset']
       : []),
   ]
+  const gpuInfo = [crash?.gpu_driver, crash?.rhi].filter(Boolean).join(', ')
+  const system = [crash?.cpu, crash?.gpu && `${crash.gpu}${gpuInfo ? ` (${gpuInfo})` : ''}`, crash?.ram_gb != null && `${crash.ram_gb} GB`, crash?.os]
+    .filter(Boolean).join(', ')
   return buildReport({
     version: REPAKXTRA_VERSION,
     repakx,
@@ -156,6 +183,12 @@ export async function gatherReport(): Promise<string> {
     crash: crashText,
     crashLines,
     flags,
+    system: system || undefined,
+    faulting: crash?.faulting_module ? `${crash.faulting_module} (${crash.faulting_class || 'unknown'})` : undefined,
+    thirdParty: system ? crash?.third_party?.join(', ') || 'none' : undefined, // no system facts: an old crash file, modules unknown too
+    oom: crash?.oom,
+    stack: crash?.stack,
+    thread: crash?.thread || undefined,
   })
 }
 
@@ -179,4 +212,17 @@ if (import.meta.env.DEV) {
     on: [{ name: '~mods/A.pak', type: 'VFX', hero: '', date: '2026-10-01', notes: ['Needs VFX update', 'Niagara'], why: 'made before the game update' }], off: 0 })
   console.assert(flagged.includes('~mods/A.pak | VFX | - | 2026-10-01 | Needs VFX update, Niagara\n  why: made before the game update'), 'notes and reason on the mod line', flagged)
   console.assert(flagged.includes('  7 min into the game') && flagged.includes('message: boom y.cpp') && flagged.includes('Mods that are on: 1 need a VFX update'), 'crash lines indented, paths cut to a file name, flags summarised', flagged)
+  console.assert(!flagged.includes('System:') && !flagged.includes('Out of memory') && !flagged.includes('Crash stack'), 'no crash file facts, no lines for them', flagged)
+  const diagnosed = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', sigeon: 'off', conflicts: '0 groups', off: 0,
+    crash: '2026-10-25 20:55, ObjectSerializationError', system: 'AMD Ryzen 5 5600X, AMD Radeon RX 6700 XT (Adrenalin 26.10.1, D3D12), 16 GB, Windows 10',
+    faulting: 'nvwgf2umx (GPU driver)', thirdParty: 'dsound.dll, MarvelRivalsUTOCSignatureBypass.asi', oom: true, thread: 'RenderThread 1',
+    stack: ['nvwgf2umx + 12ab (GPU driver)', 'Marvel-Win64-Shipping + 10c296b (game)'],
+    on: [{ name: '~mods/A.pak', type: 'Mesh', hero: '', date: '2026-10-01' }] })
+  const summary = diagnosed.slice(0, diagnosed.indexOf('\n\n'))
+  console.assert(['System: AMD Ryzen', 'Faulting module: nvwgf2umx (GPU driver)', 'Third-party modules: dsound.dll, MarvelRivalsUTOCSignatureBypass.asi', 'Out of memory: yes']
+    .every(l => summary.includes(`\n${l}`)), 'crash diagnosis in the top summary block', summary)
+  console.assert(diagnosed.includes('\n\nCrash stack, top 2 (RenderThread 1):\n  nvwgf2umx + 12ab (GPU driver)\n  Marvel-Win64-Shipping + 10c296b (game)\n\n')
+    && diagnosed.indexOf('Crash stack') < diagnosed.indexOf('~mods/A.pak'), 'stack frames indented, below the summary, above the mods', diagnosed)
+  console.assert(!buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', sigeon: 'off', conflicts: '0 groups', off: 0, crash: 'x', oom: false, on: [] })
+    .includes('Out of memory'), 'out of memory only when true')
 }
