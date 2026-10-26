@@ -93,7 +93,7 @@ const settled = <T,>(p: Promise<T>) => p.then(v => v, () => undefined)
 type Opt = string | null | undefined
 /** xtra_crash.rs NewestCrash, already redacted */
 type Crash = {
-  time: number; crash_type?: Opt; asset_path?: Opt; seconds_since_start?: number | null; message?: Opt; detail?: Opt
+  time: number; crash_type?: Opt; asset_path?: Opt; character_id?: Opt; seconds_since_start?: number | null; message?: Opt; detail?: Opt
   build_version?: Opt; engine_version?: Opt; cpu?: Opt; gpu?: Opt; gpu_driver?: Opt; rhi?: Opt; os?: Opt; ram_gb?: number | null
   oom?: boolean; thread?: Opt; faulting_module?: Opt; faulting_class?: Opt; stack?: string[]; third_party?: string[]
 }
@@ -115,7 +115,9 @@ export async function gatherReport(): Promise<string> {
   const [verdicts, niagara, suspects] = await Promise.all([
     settled(invoke<Verdict[]>('xtra_broken_mods', { modPaths: onPaths })),
     settled(invoke<string[]>('xtra_niagara_mods', { modPaths: onPaths })),
-    crash?.asset_path ? settled(invoke<Tiered[]>('xtra_crash_tiers', { assetPath: crash.asset_path, heroId: null, modPaths: onPaths })) : Promise.resolve([] as Tiered[]),
+    crash?.asset_path || crash?.character_id
+      ? settled(invoke<Tiered[]>('xtra_crash_tiers', { assetPath: crash.asset_path ?? '', heroId: crash.character_id ?? null, modPaths: onPaths }))
+      : Promise.resolve([] as Tiered[]),
   ])
   const key = (p: string) => p.replace(/\//g, '\\').toLowerCase().replace(/\.(pak|bak_repak)$/, '')
   const verdictOf = new Map((verdicts ?? []).map(v => [key(v.path), v]))
@@ -163,7 +165,7 @@ export async function gatherReport(): Promise<string> {
     ...(crash.message ? [`message: ${crash.message}`] : []),
     ...(crash.detail && !crash.message?.includes(crash.detail) ? [crash.detail] : []),
     ...(crash.build_version ? [`game build ${crash.build_version}${crash.engine_version ? ` (${crash.engine_version})` : ''}`] : []),
-    ...(crash.asset_path ? tierLines(suspects, p => relativeToMods(p, src.gamePath)) : []),
+    ...(crash.asset_path || crash.character_id ? tierLines(suspects, p => relativeToMods(p, src.gamePath)) : []),
   ]
   const gpuInfo = [crash?.gpu_driver, crash?.rhi].filter(Boolean).join(', ')
   const system = [crash?.cpu, crash?.gpu && `${crash.gpu}${gpuInfo ? ` (${gpuInfo})` : ''}`, crash?.ram_gb != null && `${crash.ram_gb} GB`, crash?.os]

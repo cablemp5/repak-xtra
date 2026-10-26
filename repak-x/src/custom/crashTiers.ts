@@ -16,10 +16,15 @@ export function reasonFor(tier: Tier, hero?: string, otherSkin = false): string 
   return `changes ${hero ?? 'the same hero'}${otherSkin ? ', another skin' : ''}`
 }
 
-/** Rows checked when the dialog opens: asset and skin rows, or the hero rows when nothing closer matched. */
+/** Rows checked when the dialog opens: the closest tier that matched. A mod holding the crashed asset is the proven
+ *  cause, so then only those (a default skin's folder is shared by many emote and swap mods: on a real crash the skin
+ *  tier held 9 of 23 mods that were on). Else the skin rows, else the hero rows. */
 export function prechecked<T extends { tier: Tier }>(rows: T[]): T[] {
-  const close = rows.filter(r => r.tier !== 'hero')
-  return close.length ? close : rows
+  for (const tier of ['asset', 'skin', 'hero'] as Tier[]) {
+    const these = rows.filter(r => r.tier === tier)
+    if (these.length) return these
+  }
+  return []
 }
 
 /** The setup report's lines for the newest crash. `tiers` undefined: the check failed. */
@@ -43,7 +48,8 @@ if (import.meta.env.DEV) {
   const mixed: Tiered[] = [{ path: 'h1', tier: 'hero' }, { path: 's', tier: 'skin' }, { path: 'a', tier: 'asset' }, { path: 'h2', tier: 'hero' }]
   console.assert(ordered(mixed).map(r => r.path).join() === 'a,s,h1,h2', 'asset, then skin, then hero, same order within a tier', ordered(mixed))
   const rows: Tiered[] = [{ path: 'a', tier: 'asset' }, { path: 's', tier: 'skin' }, { path: 'h', tier: 'hero' }]
-  console.assert(prechecked(rows).map(r => r.path).join() === 'a,s', 'asset and skin rows are checked, hero rows are not')
+  console.assert(prechecked(rows).map(r => r.path).join() === 'a', 'an asset row: only asset rows are checked')
+  console.assert(prechecked(rows.filter(r => r.tier !== 'asset')).map(r => r.path).join() === 's', 'no asset row: the skin rows')
   console.assert(prechecked(rows.filter(r => r.tier === 'hero')).map(r => r.path).join() === 'h', 'hero rows alone: checked')
   console.assert(prechecked([]).length === 0, 'nothing to check')
   console.assert(tierLines(rows, p => p.toUpperCase()).join('|') === 'mods holding that asset: A|mods for that skin: S|mods for that hero: H', 'all three report lines', tierLines(rows, p => p))

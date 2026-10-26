@@ -12,6 +12,8 @@ pub struct NewestCrash {
     time: u64,
     crash_type: Option<String>,
     asset_path: Option<String>,
+    /// The hero the error names (crash_monitor's rule), for crashes that name no asset
+    character_id: Option<String>,
     /// How long the game had run when it crashed
     seconds_since_start: Option<u64>,
     /// The error's first line, cut short
@@ -67,6 +69,7 @@ pub fn xtra_newest_crash() -> Option<NewestCrash> {
     Some(NewestCrash {
         time,
         crash_type: r(error_type.or(info.crash_type)),
+        character_id: info.error_message.as_deref().and_then(crash_monitor::extract_character_id),
         asset_path: r(asset_path),
         seconds_since_start: info.seconds_since_start,
         message: r(message),
