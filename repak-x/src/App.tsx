@@ -43,9 +43,8 @@ import LogDrawer from './components/LogDrawer'
 import DropZoneOverlay from './components/DropZoneOverlay'
 import ExtensionModOverlay from './components/ExtensionModOverlay'
 import type { ExtensionInstallOptions } from './components/ExtensionModOverlay'
-import QuickOrganizeOverlay from './components/QuickOrganizeOverlay'
 import InputPromptModal from './components/InputPromptModal'
-import UpdateModModal from './components/UpdateModModal'
+import UpdateModModal from './custom/UpdateModDialog' // repakxtra: the app's own Update mod dialog
 // repakxtra: repakxtra's own update and What's new dialogs (custom/UpdateDialogs.tsx), same props
 import { UpdateModal as UpdateAppModal, WhatsNewModal as ChangelogModal } from './custom/UpdateDialogs'
 import PromiseTransitionLoader from './components/PromiseTransitionLoader'
@@ -69,11 +68,11 @@ import { modKey, nameKey, renameModKey, syncLoadoutKeys } from './custom/loadout
 import { setModsRoot } from './custom/loadoutIdentity' // repakxtra
 import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
-import { useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
+import { rescanVerdicts, useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
 import { fixInVfxWindow } from './custom/vfx/handoff' // repakxtra: the VFX Updater window
 import VfxNotice, { VfxDot } from './custom/vfx/VfxNotice' // repakxtra: the game updated, VFX mods to fix
 import { canUpdateVfx, checkVfxModInPlace, updateVfxModInPlace } from './custom/vfx/quick' // repakxtra: Update VFX in the right-click menu
-import { newDefaultsOnce } from './custom/uiPrefs' // repakxtra
+import { PREF_TOGGLED, type PrefToggled, fewerPopups, newDefaultsOnce, setPref } from './custom/uiPrefs' // repakxtra
 import { reportSource } from './custom/setupReport' // repakxtra: Copy setup report reads the live list
 import { finishInstallLoadout } from './custom/installLoadout'
 import SigeonControl from './custom/SigeonControl'
@@ -446,6 +445,15 @@ function App() {
     list?.scrollTo({ top: 0 })
     if (document.activeElement?.matches('.lib-show-all:focus-visible')) searchInputRef.current?.focus() // the button goes away with what it reset
   }
+  useEffect(() => { // repakxtra: P, I, B and Shift+C flip a show/hide setting: said in a toast, since the change can be out of view
+    const said = (e: Event) => {
+      if (fewerPopups()) return // the sound said it (uiPrefs.tsx togglePref)
+      const { key, name, on } = (e as CustomEvent<PrefToggled>).detail
+      const id = alert.info(`${name} ${on ? 'shown' : 'hidden'}`, 'The same switch is in Settings > Library.', { duration: 4000, action: { label: 'Undo', onClick: () => { alert.dismissAlert(id); setPref(key, !on) } } }) // back to before this press, whatever came after
+    }
+    window.addEventListener(PREF_TOGGLED, said)
+    return () => window.removeEventListener(PREF_TOGGLED, said)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { // repakxtra: a preview failure toast's Open logs
     const open = () => setIsLogDrawerOpen(true)
     window.addEventListener('repakxtra-open-logs', open)
@@ -462,7 +470,6 @@ function App() {
   const [renamingModPath, setRenamingModPath] = useState<string | null>(null) // Track which mod should start inline renaming
   const [extensionModPath, setExtensionModPath] = useState<string | null>(null) // Path of mod received from browser extension
   const [showOnboarding, setShowOnboarding] = useState(false)
-  const [quickOrganizePaths, setQuickOrganizePaths] = useState<string[] | null>(null) // Paths of PAKs to quick-organize (no uassets)
   const [newFolderPrompt, setNewFolderPrompt] = useState<NewFolderPromptState | null>(null) // {paths: []} when prompting for new folder name
   const [newTagPrompt, setNewTagPrompt] = useState<NewTagPromptState | null>(null) // { callback: (tag) => void } when prompting for new tag name
   const [newFolderFromInstall, setNewFolderFromInstall] = useState<NewFolderFromInstallState | null>(null) // { callback: (name) => void } when prompting for new folder from install panel
@@ -818,18 +825,8 @@ function App() {
       console.log('Parsed mods:', modsData)
       setStatus(`Found ${modsData.length} mod(s) in the dropped items`) // repakxtra: "Processing..." stayed after the install was cancelled
 
-      // Check if ALL mods are PAK files with no uassets - if so, use quick organize
-      const allPaksWithNoUassets = modsData.every((mod: DroppedModParse) =>
-        mod.is_dir === false && mod.contains_uassets === false
-      )
-
-      if (allPaksWithNoUassets && modsData.length > 0) {
-        // Skip install panel, show quick organize folder picker
-        console.log('All mods are PAKs with no uassets, using quick organize')
-        setQuickOrganizePaths(paths)
-        return
-      }
-
+      // repakxtra: raw paks (audio, config) open the same install dialog as every other drop, loadouts included. The old
+      // Quick Copy overlay stood here. Their rows install as plain copies (no repak, legacy), see InstallPanel's initialSetting
       // Normal drop: show install panel
       if (panelsRef.current.install) {
         setModsToInstall(prev => [...prev, ...modsData])
@@ -1424,21 +1421,20 @@ function App() {
         newModSource: newSourcePath,
         preserveName: preserveName,
         obfuscate: obfuscate
-      })
+      }) as { new_mod_path: string }
 
       console.log('Update result:', result)
+
+      // repakxtra: with the new file's name, the loadouts (and Nexus source) that held the old mod hold the update,
+      // before the reload, so the old key is never seen as a deleted mod
+      renameModKey(modKey(mod.path), modKey(result.new_mod_path))
+      renameSource(nameKey(mod.path), nameKey(result.new_mod_path))
 
       // Refresh data
       await loadMods()
 
-      // If we're updating the currently selected mod, we might need to update selection if path changed
-      if (selectedMod && selectedMod.path === mod.path) {
-        // If path changed (preserveName=false), we should try to find the new mod
-        // But loadMods is async, so best effort is to deselect or just let user reselect
-        if (!preserveName) {
-          setSelectedMod(null)
-        }
-      }
+      // repakxtra: the details follow the update to its new path rather than closing
+      if (selectedMod && selectedMod.path === mod.path && result.new_mod_path !== mod.path) setSelectedMod({ ...selectedMod, path: result.new_mod_path })
 
       console.debug('[UpdateMod] Completed update flow; relying on backend named success toast')
 
@@ -2913,74 +2909,6 @@ function App() {
     )
   }
 
-  // Handle quick organize for PAKs with no uassets (skips install panel)
-  const handleQuickOrganizeInstall = async (targetFolderId: string | null) => {
-    if (!quickOrganizePaths || quickOrganizePaths.length === 0) return
-
-    const pathCount = quickOrganizePaths.length
-    const pathsCopy = [...quickOrganizePaths] // Copy paths before clearing state
-
-    // Close the overlay immediately
-    setQuickOrganizePaths(null)
-
-    // Start progress bar (indeterminate)
-    setIsModsLoading(true)
-    setModLoadingProgress(-1)
-
-    // Update DRP status
-    invoke('discord_set_installing').catch(console.warn)
-
-    // Use promise toast for loading state and result
-    alert.promise(
-      (async () => {
-        try {
-          await invoke('quick_organize', {
-            paths: pathsCopy,
-            targetFolder: targetFolderId || '',
-            // Explicit nulls rather than omitting: this path installs everything
-            // it was given, with original names and structure, as it always has.
-            selections: null,
-            renames: null,
-            flatten: false
-          })
-
-          await loadMods()
-          await loadFolders()
-          setStatus(`${pathCount} PAK file(s) copied successfully!`)
-
-          // Show warning after success if game is running
-          if (gameRunning) {
-            alert.warning(
-              'Game Running',
-              'Mods installed, but changes will only take effect after restarting the game.',
-              { duration: 8000 }
-            )
-          }
-
-          return { count: countModsInPaths(pathsCopy) }
-        } finally {
-          setIsModsLoading(false)
-          setModLoadingProgress(0)
-          invoke('discord_set_idle').catch(console.warn)
-        }
-      })(),
-      {
-        loading: {
-          title: 'Quick Installing',
-          description: `Copying ${pathCount} PAK file${pathCount > 1 ? 's' : ''}...`
-        },
-        success: (result) => ({
-          title: 'Installation Complete',
-          description: `Successfully installed ${result.count} mod${result.count > 1 ? 's' : ''}`
-        }),
-        error: (err) => ({
-          title: 'Installation Failed',
-          description: String(err)
-        })
-      }
-    )
-  }
-
   const handleResizeStart = (e: React.MouseEvent<HTMLDivElement>) => {
     setIsResizing(true)
     e.preventDefault()
@@ -3207,7 +3135,7 @@ function App() {
       else if (ctrl && shift && key === 'r') {
         e.preventDefault()
         alert.info('Mods Refreshed', 'Refreshed mods list.')
-        loadMods()
+        void loadMods().then(rescanVerdicts) // repakxtra: and every update check
       }
       // Ctrl+, - Settings
       else if (ctrl && key === ',') {
@@ -3833,16 +3761,6 @@ function App() {
         onNewFolder={(callback) => setNewFolderFromInstall({ callback })}
       />
 
-      {/* Quick Organize Overlay - for PAK files with no uassets */}
-      <QuickOrganizeOverlay
-        isVisible={!!quickOrganizePaths && quickOrganizePaths.length > 0}
-        paths={quickOrganizePaths || []}
-        folders={folders}
-        onInstall={handleQuickOrganizeInstall}
-        onCancel={() => setQuickOrganizePaths(null)}
-        onCreateFolder={handleCreateFolderAndReturn}
-      />
-
       {/* New Folder Prompt Modal - for creating folders during drop */}
       {(() => {
         const promptPathCount = newFolderPrompt ? newFolderPrompt.paths.length : 0
@@ -4252,7 +4170,7 @@ function App() {
                   </h2>
                   {(selectedFolderId !== 'all' || selectedCharacters.size > 0 || selectedCategories.size > 0 || filterTag || localSearch) && ( /* repakxtra: the deliberate reset */
                     <button type="button" className="btn-ghost lib-show-all" onClick={showAll}
-                      title="Every mod again: all folders, no hero, type or tag filter, no search. Checked mods stay checked">Show all</button>
+                      title="Every mod again: all folders, no hero, type, or tag filter, no search. Checked mods stay checked">Show all</button>
                   )}
                   <ModStateFilter value={modState} onChange={setModState} mods={folderMods} />
                 </div>
@@ -4325,7 +4243,7 @@ function App() {
                     <ViewSidebarIcon fontSize="small" style={{ transform: isRightPanelOpen ? 'none' : 'rotate(180deg)' }} />
                   </button>
                   <div className="divider-vertical" />
-                  <button onClick={loadMods} className="btn-ghost btn-square" title="Refresh list">
+                  <button onClick={() => { void loadMods().then(rescanVerdicts) }} className="btn-ghost btn-square" title="Refresh list"> {/* repakxtra: and every update check */}
                     <RefreshIcon fontSize="small" />
                   </button>
                 </div>

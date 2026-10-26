@@ -437,7 +437,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                       </Checkbox>
                       <p className={`setting-subtext ${bypassGameRunningLock ? 'is-warning' : ''}`}>
                         {bypassGameRunningLock
-                          ? 'Renaming, moving, switching, deleting and priority changes stay on while the game runs. A change can crash the game or not load until a restart.'
+                          ? 'Renaming, moving, switching, deleting, and priority changes stay on while the game runs. A change can crash the game or not load until a restart.'
                           : 'Off: mod changes wait until the game is closed.'}
                       </p>
                     </div>
@@ -515,7 +515,7 @@ function ResetInterface({ onReset }: { onReset: () => void }) {
     <div className="setting-section">
       <h3 className="setting-icon-label"><LuRotateCcw size={18} aria-hidden="true" />Reset</h3>
       <div className="setting-group">
-        <p className="setting-hint">Puts every setting on the Interface and Library pages back to how repakxtra starts. Your mods folder, launcher, loadouts and mods stay as they are.</p>
+        <p className="setting-hint">Puts every setting on the Interface and Library pages back to how repakxtra starts. Your mods folder, launcher, loadouts, and mods stay as they are.</p>
         <div style={{ display: 'flex', gap: 8 }}>
           {!sure
             ? <button type="button" className="action-btn settings-reset-btn" onClick={() => setSure(true)}><LuRotateCcw size={15} aria-hidden="true" /> Reset to defaults</button>

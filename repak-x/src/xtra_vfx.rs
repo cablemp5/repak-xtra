@@ -252,13 +252,19 @@ pub async fn xtra_vfx_detect(window: Window, usmap_path: String, paths: Vec<Stri
 /// The mods the VFX Updater offers: the Library's VFX type (material instances under /VFX/) and any other mod with a
 /// material instance, wherever it lives, like a skin's own body materials with glowing colors. The update rebuilds every
 /// material instance on the game's copy the same way, whatever its folder. Also the right-click Update VFX
-/// (custom/vfx/quick.ts canUpdateVfx, the same rule).
+/// (custom/vfx/quick.ts canUpdateVfx, the same rule). A recolored KO prompt (its widget, WBP_Battle_Kill_<hero>) is
+/// rebuilt too: its colors are carried onto the game's copy like a blueprint's.
 pub(crate) fn updatable(category: &str, files: &[String]) -> bool {
     category == "VFX"
         || files.iter().any(|f| {
             let name = f.replace('\\', "/").rsplit('/').next().unwrap_or_default().to_ascii_lowercase();
-            name.starts_with("mi_") && name.ends_with(".uasset")
+            (name.starts_with("mi_") || is_ko_prompt(&name)) && name.ends_with(".uasset")
         })
+}
+
+/// A KO prompt widget, by its file or asset name (lowercase): WBP_Battle_Kill_1026_V3.
+pub(crate) fn is_ko_prompt(name: &str) -> bool {
+    name.starts_with("wbp_battle_kill_")
 }
 
 /// A mod's file stem split before its priority suffix ("_<digits>_P" or "_P"): ("A", "_9999999_P").
@@ -707,21 +713,38 @@ pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>
                 };
                 updatable(&details.category, &details.files).then(|| VfxMod {
                     name: m.custom_name.clone().filter(|n| !n.trim().is_empty()).unwrap_or_else(|| split_priority(&stem).0.to_string()),
-                    hero: m.character_name.clone(),
+                    // the mod list leaves it empty for most mods: the details name it (the window's hero filter)
+                    hero: m.character_name.clone().filter(|c| !c.is_empty()).or_else(|| Some(details.character_name.clone()).filter(|c| !c.is_empty())),
                     path: m.path.to_string_lossy().to_string(),
                     utoc: utoc.to_string_lossy().to_string(),
                     enabled: m.enabled,
                     modified: m.modified_date,
-                    niagara: details.files.iter().any(|f| {
-                        let n = f.replace('\\', "/").rsplit('/').next().unwrap_or_default().to_ascii_lowercase();
-                        (n.starts_with("ns_") || n.starts_with("ne_")) && n.ends_with(".uasset")
-                    }),
+                    niagara: has_niagara(&details.files),
                     materials: details.category != "VFX",
                 })
             })
             .collect::<Vec<_>>();
         problems.extend(unread.into_inner().unwrap());
         VfxMods { mods: list, problems }
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+/// Whether a mod's files hold a Niagara system or emitter (NS_ or NE_).
+fn has_niagara(files: &[String]) -> bool {
+    files.iter().any(|f| {
+        let n = f.replace('\\', "/").rsplit('/').next().unwrap_or_default().to_ascii_lowercase();
+        (n.starts_with("ns_") || n.starts_with("ne_")) && n.ends_with(".uasset")
+    })
+}
+
+/// Of `mod_paths`, the mods that carry Niagara (the setup report's flag). Details come from the Library's cache.
+#[tauri::command]
+pub async fn xtra_niagara_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<String>, String> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        mod_paths.into_iter().filter(|p| crate::compute_mod_details(&PathBuf::from(p), &state).is_ok_and(|d| has_niagara(&d.files))).collect()
     })
     .await
     .map_err(|e| e.to_string())
@@ -805,6 +828,14 @@ mod tests {
     use std::io::{BufRead, Write};
 
     #[test]
+    fn niagara_is_an_ns_or_ne_uasset() {
+        let files = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert!(has_niagara(&files(&["Marvel/Content/Marvel/VFX/NS_Burst.uasset"])));
+        assert!(has_niagara(&files(&[r"Marvel\Content\VFX\ne_Spark.UASSET"])), "backslashes and case");
+        assert!(!has_niagara(&files(&["Marvel/Content/Marvel/VFX/MI_Glow.uasset", "Marvel/Content/NS_Burst.uexp"])));
+    }
+
+    #[test]
     fn a_mod_with_material_instances_anywhere_can_be_updated() {
         let files = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
         assert!(updatable("VFX", &[]), "the Library's VFX type");
@@ -813,6 +844,8 @@ mod tests {
         assert!(updatable("Mesh", &files(&["Marvel\\Content\\X\\mi_body.uasset"])), "any case, any slash");
         assert!(!updatable("Texture", &files(&["Marvel/Content/X/T_Body_D.uasset", "Marvel/Content/X/MI_Body.uexp"])), "textures only, or a material's .uexp alone");
         assert!(!updatable("Audio", &files(&["Marvel/Content/Audio/Mission_MI_01.bnk"])), "MI_ inside another name is not one");
+        assert!(updatable("UI", &files(&["Marvel/Content/Marvel/UI/Blueprints/Battle/Custom/1026/WBP_Battle_Kill_1026_V3.uasset"])), "a KO prompt");
+        assert!(!updatable("UI", &files(&["Marvel/Content/Marvel/UI/Blueprints/Battle/WBP_Battle_Hud.uasset"])), "another widget");
     }
 
     #[test]

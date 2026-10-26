@@ -195,15 +195,22 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
             stale_niagara: stale.iter().filter(|k| is_niagara(k)).count(),
         });
     }
-    // A material mod: the updater rebuilds only its material instances, so a rewritten texture alone does not count
+    // A material mod: the updater rebuilds only its material instances and KO prompts, so a rewritten texture alone does not count
     let stale_mi = stale.iter().filter(|k| is_material_instance(k)).count();
-    if m.materials && !m.fixed && m.installed > 0 && stale_mi > 0 {
+    let stale_ko = stale.iter().filter(|k| crate::xtra_vfx::is_ko_prompt(k.rsplit('/').next().unwrap_or(k))).count();
+    if m.materials && !m.fixed && m.installed > 0 && stale_mi + stale_ko > 0 {
+        let what = match (stale_mi, stale_ko) {
+            (0, _) => "the KO prompt".to_string(),
+            (_, 0) => format!("{stale_mi} of the material instances"),
+            _ => format!("{stale_mi} of the material instances and the KO prompt"),
+        };
         return Some(Verdict {
             path: path.to_string(),
             kind: "vfx",
             reason: format!(
-                "A game update changed {stale_mi} of the material instances this mod replaces, so its materials may look wrong. The VFX Updater rebuilds {} on the new game files.",
-                if stale_mi == 1 { "it" } else { "them" }
+                "A game update changed {what} this mod replaces, so {} may look wrong. The VFX Updater rebuilds {} on the new game files.",
+                if stale_mi == 0 { "it" } else { "its materials" },
+                if stale_mi + stale_ko == 1 { "it" } else { "them" }
             ),
             stale_niagara: 0,
         });
@@ -476,6 +483,10 @@ mod tests {
         assert_eq!(judge("m.pak", &Facts { materials: true, ..facts(&textures, 50) }, 200, &game), None, "a rewritten texture alone");
         assert_eq!(judge("m.pak", &Facts { materials: true, ..facts(&skin, 150) }, 200, &game), None, "made after the update");
         assert_eq!(judge("m.pak", &facts(&skin, 50), 200, &game), None, "not a material mod");
+        let ko = "Marvel/Content/Marvel/UI/Blueprints/Battle/Custom/1026/WBP_Battle_Kill_1026_V3.uasset";
+        game.insert(match_key("/Game/Marvel/UI/Blueprints/Battle/Custom/1026/WBP_Battle_Kill_1026_V3.uasset"), 100);
+        let verdict = judge("m.pak", &Facts { materials: true, ..facts(&v(&[ko]), 50) }, 200, &game).unwrap();
+        assert_eq!((verdict.kind, verdict.reason.contains("changed the KO prompt")), ("vfx", true), "a KO prompt the update rewrote");
     }
 
     #[test]

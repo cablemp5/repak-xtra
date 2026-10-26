@@ -10,6 +10,12 @@ pub struct NewestCrash {
     time: u64,
     crash_type: Option<String>,
     asset_path: Option<String>,
+    /// How long the game had run when it crashed
+    seconds_since_start: Option<u64>,
+    /// The error's first line, cut short
+    message: Option<String>,
+    /// A serial size mismatch's numbers, when that is what it was
+    detail: Option<String>,
 }
 
 /// The newest crash the game left, if any. Reads only; the startup crash check keeps its own bookkeeping.
@@ -17,9 +23,16 @@ pub struct NewestCrash {
 pub fn xtra_newest_crash() -> Option<NewestCrash> {
     let (_, folder) = crash_monitor::get_newest_crash_folder()?;
     let info = crash_monitor::parse_crash_info(&folder, Vec::new())?;
-    let (asset_path, error_type, _) = crash_monitor::parse_error_details(info.error_message.as_deref().unwrap_or(""));
+    let (asset_path, error_type, detail) = crash_monitor::parse_error_details(info.error_message.as_deref().unwrap_or(""));
     let time = info.timestamp.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    Some(NewestCrash { time, crash_type: error_type.or(info.crash_type), asset_path })
+    let message = info.error_message.as_deref().and_then(first_line);
+    Some(NewestCrash { time, crash_type: error_type.or(info.crash_type), asset_path, seconds_since_start: info.seconds_since_start, message, detail: detail.and_then(|d| first_line(&d)) })
+}
+
+/// The first line with words in it, cut at 300 characters.
+fn first_line(text: &str) -> Option<String> {
+    let line = text.lines().map(str::trim).find(|l| !l.is_empty())?;
+    Some(line.chars().take(300).collect())
 }
 
 /// One spelling per game asset: the UE path (`Game/...`) without its extension or object name, lower case.
@@ -75,6 +88,16 @@ mod tests {
         assert!(holds_asset(&v(&["../../../Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uexp"]), crash));
         assert!(holds_asset(&v(&["marvel/content/marvel/characters/1026/1026001/meshes/sk_1026_1026001.ubulk"]), crash), "case differs");
         assert!(holds_asset(&v(&[r"Marvel\Content\Marvel\Characters\1026\1026001\Meshes\SK_1026_1026001.uasset"]), crash), "backslashes");
+    }
+
+    #[test]
+    fn the_message_is_its_first_line_cut_short() {
+        assert_eq!(first_line("
+  Fatal error: x
+second").as_deref(), Some("Fatal error: x"));
+        assert_eq!(first_line("a".repeat(400).as_str()).map(|s| s.len()), Some(300));
+        assert_eq!(first_line(" 
+ "), None);
     }
 
     #[test]

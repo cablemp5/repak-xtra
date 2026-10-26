@@ -27,6 +27,7 @@ export type Loadout = {
   captionColor?: string   // their color, one of captionStyle.tsx's swatches; white without one
   captureRev?: number     // an in-game capture, stored apart from its own image (loadoutMedia.ts under captureKey(id))
   cover?: Cover           // which of its pictures its card shows (the page's Cover switch); unset: the first it has
+  edited?: number         // when it was made or last changed by hand (ms), for "most recent first" lists; unset: before this existed
 }
 
 /** A card's picture sources. Each keeps its own slot, so making one never replaces another: the card shows the one
@@ -59,12 +60,18 @@ export const readLoadouts = (): Loadout[] => decode(savedItem(STORAGE) || '[]')
 const sessionIds = new Set<string>()
 /** Throws when localStorage is full (large images). */
 export const writeLoadouts = (list: Loadout[]) => {
+  // a loadout new to the list is stamped as just made (a key sync rewriting old ones is not an edit, so they keep theirs)
+  const had = new Set(readLoadouts().map(l => l.id)), now = Date.now()
+  list = list.map(l => (had.has(l.id) || l.edited ? l : { ...l, edited: now }))
   localStorage.setItem(STORAGE, JSON.stringify(list))
   list.forEach(l => sessionIds.add(l.id))
   notify()
 }
-export const patchLoadout = (id: string, patch: Partial<Loadout>) =>
-  writeLoadouts(readLoadouts().map(l => (l.id === id ? { ...l, ...patch } : l)))
+/** byHand false: the app changed it on its own (a finished preview showing on its card), so its "edited" time stays. */
+export const patchLoadout = (id: string, patch: Partial<Loadout>, byHand = true) =>
+  writeLoadouts(readLoadouts().map(l => (l.id === id ? { ...l, ...patch, ...(byHand ? { edited: Date.now() } : {}) } : l)))
+/** Most recently made or changed first; ones from before stamps keep their order, after the stamped. Pure. */
+export const byRecent = (list: Loadout[]) => [...list].sort((a, b) => (b.edited ?? 0) - (a.edited ?? 0))
 /** A deleted loadout, kept 7 days like a deleted mod (Settings > Recently deleted): the whole loadout (its media stays
  *  in IndexedDB under its id), when it was deleted and goes for good (ms), and its place in the list. Stored as
  *  {v: 1, items} under DELETED, a repakxtra.* key, so the dev copy shares it (devStorage.ts). */
@@ -155,6 +162,20 @@ export const useDeletedLoadouts = (): DeletedLoadout[] | null => {
 
 export const useLoadouts = (): Loadout[] =>
   decode(useSyncExternalStore(subscribe, () => savedItem(STORAGE) || '[]'))
+
+/** The loadouts holding each mod (by canonKey), built once per change of the saved list: every Library row reads it. */
+let holders: { json: string; by: Map<string, { id: string; name: string }[]> } | null = null
+const NONE: { id: string; name: string }[] = []
+/** The loadouts that turn the mod at `path` on, in their saved order. */
+export function useLoadoutsHolding(path: string) {
+  const json = useSyncExternalStore(subscribe, () => savedItem(STORAGE) || '[]')
+  if (holders?.json !== json) {
+    const by = new Map<string, { id: string; name: string }[]>()
+    for (const l of decode(json)) for (const k of new Set(l.on.map(canonKey))) by.set(k, [...(by.get(k) ?? []), { id: l.id, name: l.name }])
+    holders = { json, by }
+  }
+  return holders.by.get(canonKey(memberKey(path))) ?? NONE
+}
 
 let swept = false
 /** Once per start, from Home (the main window only): deletes stored media whose loadout no longer exists, live or in
@@ -440,7 +461,10 @@ export const moveLoadout = (id: string, beside?: { id: string; after: boolean })
 }
 export const placeLoadout = (id: string, group: string, beside?: { id: string; after: boolean }) => {
   const list = readLoadouts(), next = placed(list, id, group, beside)
-  if (next !== list) writeLoadouts(next)
+  if (next === list) return
+  // dropped into another collection is an edit (a new place in the same one is only arranging)
+  const moved = list.find(l => l.id === id)?.label !== next.find(l => l.id === id)?.label
+  writeLoadouts(moved ? next.map(l => (l.id === id ? { ...l, edited: Date.now() } : l)) : next)
 }
 
 /** Ctrl+1..9: each pinned number to its loadout. Only pins count, wherever the loadout sits. A number two loadouts hold
@@ -504,6 +528,8 @@ window.addEventListener('keydown', e => {
 
 if (import.meta.env.DEV) {
   const base: Loadout = { id: 'a', name: 'a', label: 'Other', scope: [], on: [] }
+  console.assert(byRecent([{ ...base, id: 'old' }, { ...base, id: 'b', edited: 1 }, { ...base, id: 'c', edited: 2 }, { ...base, id: 'old2' }]).map(l => l.id).join() === 'c,b,old,old2',
+    'byRecent: newest first, unstamped after in their order')
   console.assert(pickCover({ ...base, cover: 'text', caption: 'Hi', mediaRev: 1 }, coverFills({ ...base, caption: 'Hi', mediaRev: 1 }, true)) === 'text', 'pickCover: the picked source wins')
   console.assert(pickCover({ ...base, cover: 'capture', mediaRev: 1 }, coverFills({ ...base, mediaRev: 1 }, true)) === 'image', 'pickCover: an empty pick falls back, own image first')
   console.assert(pickCover(base, coverFills(base, false)) === null, 'pickCover: nothing to show')

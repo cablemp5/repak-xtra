@@ -4,21 +4,22 @@
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { save as pickSavePath } from '@tauri-apps/plugin-dialog'
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, Ellipsis, ImagePlus, Pencil, Plus, Search, X } from 'lucide-react'
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Ellipsis, Pencil, Plus, Search, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo } from './Loadouts'
 import { CardMedia, ModRow, OnDot, typeClass } from './loadoutBits'
 import { deleteMedia } from './loadoutMedia'
 import CustomDropdown from '../components/CustomDropdown'
+import { HeroFilter, heroOfName } from './heroFilter'
 import {
   type Loadout, type Mod, OTHER, OTHER_LABEL, loadoutable, addGroup, captureKey, addModToLoadout, displayName, duplicateLoadout, groupKey, setLoadoutGroup,
   useGroups, hotkeyOf, hotkeySlots, isActive, modKey, openLoadout, patchLoadout, pinHotkey, readLoadouts, removeModFromLoadout,
-  renameModKey, repakXOpen, takeFresh, useLoadouts, coverFills, memberName, nameKey, pickMember,
+  renameModKey, repakXOpen, takeFresh, useLoadouts, memberName, nameKey, pickMember,
 } from './loadoutStore'
 import { candidatesFor, keysByName, memberFolder } from './loadoutIdentity'
 import { plural } from './modName'
 import { SwapText } from './motion'
-import { GeneratePreviewsButton, previewMade, previewSetKey } from './previews'
+import { GeneratePreviewsButton, previewSetKey } from './previews'
 import { CaptureButton, captureTarget } from './CapturePreview'
 
 const PAGE = 60
@@ -134,17 +135,15 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
   const [newGroup, setNewGroup] = useState<string | null>(null) // typing a new collection's name
   const [q, setQ] = useState('')
   const [type, setType] = useState<string | null>(null)
+  const [hero, setHero] = useState('') // '' = every hero
   const [limit, setLimit] = useState(PAGE)
   const [sort, setSort] = useState<'name' | 'newest'>('newest')
   const [exporting, setExporting] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const freshId = useRef<string | null>(null) // just made: Enter on its name goes on to Search mods to add
-  const [showCover, setShowCover] = useState(false)
   useEffect(() => { setName(l.name) }, [l.id, l.name])
   // A loadout just made opens with its name selected, so making one starts with naming it
   useEffect(() => { if (takeFresh(l.id)) { freshId.current = l.id; nameRef.current?.focus(); nameRef.current?.select() } }, [l.id])
-  useEffect(() => { setShowCover(false) }, [l.id])
-  useEffect(() => { if (showCover) document.querySelector<HTMLElement>('.lp .cover-tab[aria-checked="true"]')?.focus() }, [showCover])
 
   const byKey = new Map(p.mods.map(m => [modKey(m.path), m]))
   const byName = (a: string, b: string) => memberName(a).localeCompare(memberName(b)) || a.localeCompare(b)
@@ -161,15 +160,16 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
   const missing = mine.filter(k => !byKey.has(k) && !choices.get(k)?.length)
   const unsure = mine.filter(k => choices.get(k)?.length)
   const types = [...new Set(others.map(categoryOf))].sort()
+  // the one hero a mod is for (a mod for several heroes, or none, has none here)
+  const heroOf = (k: string) => { const m = byKey.get(k); return heroOfName(m && p.modDetails?.[m.path]?.character_name) }
+  const heroes = [...new Set(others.map(heroOf).filter(Boolean))].sort()
   const needle = q.trim().toLowerCase()
-  const matches = others.filter(k => (!needle || memberName(k).toLowerCase().includes(needle)) && (!type || categoryOf(k) === type))
+  const matches = others.filter(k => (!needle || memberName(k).toLowerCase().includes(needle)) && (!type || categoryOf(k) === type) && (!hero || heroOf(k) === hero))
   const active = isActive(l, p.mods)
   const onNow = mine.filter(k => byKey.get(k)?.enabled).length
   const present = mine.length - missing.length - unsure.length
   const switchTitle = present === 0 ? 'No installed mods' : active ? `Turn ${l.name}'s mods off` : `Turn ${l.name}'s mods on`
   const hasMedia = Boolean(l.mediaRev || l.image)
-  // No mods and no picture of any kind: no cover card, so Add mods comes first (Customize cover brings it)
-  const bare = mine.length === 0 && !showCover && !Object.values(coverFills(l, previewMade(l))).some(Boolean)
   const group = groups.find(g => groupKey(g) === groupKey(l.label))
 
   /** Undo adds the removed mods back to the loadout as it is now, so mods added meanwhile stay. */
@@ -258,18 +258,19 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
   }
 
   return (
-    <div className={`lp${bare ? ' is-bare' : ''}`}>
+    <div className="lp">
       <button type="button" className="lo-text-btn lp-back" onClick={onBack} title="Back to all loadouts (Esc)">
         <ArrowLeft size={14} /> Loadouts
       </button>
 
       <div className="lp-top">
-        {/* The picture card and its Cover switch: Preview, Capture, Image or Text, each with its own way to fill it */}
-        {!bare && <CardMedia p={p} l={l} className="lp-media" onClick={onPickMedia} onRemoveImage={removeImage} onRemoveCapture={removeCapture}
-          title={hasMedia ? 'Change image or video (or paste one)' : 'Add an image, GIF or video (or paste one)'}
+        {/* The picture card and its Cover switch: Preview, Capture, Image or Text, each with its own way to fill it. A new
+            empty loadout has it too (its placeholder), so every loadout's page has the same shape */}
+        <CardMedia p={p} l={l} className="lp-media" onClick={onPickMedia} onRemoveImage={removeImage} onRemoveCapture={removeCapture}
+          title={hasMedia ? 'Change image or video (or paste one)' : 'Add an image, GIF, or video (or paste one)'}
           capture={{ ...target, button: (className, label, note) => <CaptureButton p={p} l={l} onUse={onSetCapture} className={className} label={label} note={note} /> }}
           generate={className => <GeneratePreviewsButton className={className} label="Generate previews" set={previewSetKey(l.id)} name={l.name} stopOnly
-            paths={mine.map(k => byKey.get(k)?.path).filter((x): x is string => Boolean(x))} />} />}
+            paths={mine.map(k => byKey.get(k)?.path).filter((x): x is string => Boolean(x))} />} />
         <div className="lp-info">
           <span className="lp-name-wrap">
             <input ref={nameRef} className="lp-name" value={name} title="Rename" aria-label="Loadout name" onChange={e => setName(e.target.value)} onBlur={commit}
@@ -313,11 +314,6 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
               ...(missing.length ? [{ label: `Remove ${plural(missing.length, 'missing mod')}`, onClick: dropMissing }] : []),
               ...(hasMedia ? [{ label: 'Remove image', onClick: removeImage }] : []),
             ]} l={l} loadouts={loadouts} danger={{ label: 'Delete', danger: true, onClick: () => { if (deleteWithUndo(p, l)) onBack() } }} />
-            {bare && (
-              <button type="button" className="lo-text-btn" onClick={() => setShowCover(true)} title="Pick a preview, capture, image or text for its card">
-                <ImagePlus size={14} /> Customize cover
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -354,6 +350,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
             <input ref={searchRef} value={q} placeholder="Search mods" aria-label="Search mods to add" onChange={e => { setQ(e.target.value); setLimit(PAGE) }}
               onKeyDown={e => { e.stopPropagation(); if (e.key === 'Escape') setQ('') }} />
           </label>
+          <HeroFilter heroes={heroes} value={hero} onChange={v => { setHero(v); setLimit(PAGE) }} />
           <div className="mod-state-filter lp-sort" role="group" aria-label="Sort mods to add">
             <button type="button" aria-pressed={sort === 'newest'} onClick={() => setSort('newest')}>Newest</button>
             <button type="button" aria-pressed={sort === 'name'} onClick={() => setSort('name')}>A to Z</button>
@@ -368,7 +365,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
           </div>
         </div>
         {matches.length === 0
-          ? <p className="lp-empty">No mods match{needle ? ` “${q.trim()}”` : ''}{type ? ` in ${type}` : ''}.</p>
+          ? <p className="lp-empty">No mods match{needle ? ` “${q.trim()}”` : ''}{type ? ` in ${type}` : ''}{hero ? ` for ${hero}` : ''}.</p>
           : (
             <ul className="mod-rows">
               {matches.slice(0, limit).map(k => (

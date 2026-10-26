@@ -22,7 +22,8 @@ import { FIXED_EVENT, onHandoff, openLoadoutInMain, onReport, takeHandoff, takeR
 import { KEEP_NAME, ORIGINALS, claimRun, newRunToken, onRunChange, readNaming, readOriginals, releaseRun, runLock, type Naming, type Originals, type RunLock } from './prefs'
 import { STEPS, fixVfxMod, type AssetKind, type VfxReport } from './pipeline'
 import { checkVfxMod, checkWords } from './quick'
-import { verdictsChanged } from '../brokenMods'
+import { rescanVerdicts, verdictsChanged } from '../brokenMods'
+import { HeroFilter, heroOfName } from '../heroFilter'
 import './vfx.css'
 
 type Status = 'waiting' | 'running' | 'fixed' | 'nothing' | 'failed' | 'cancelled'
@@ -303,6 +304,7 @@ export function VfxUpdaterPanel() {
   const [runs, setRuns] = useState<Record<string, Run>>({}) // by norm(utoc)
   const [picked, setPicked] = useState<Set<string>>(new Set()) // norm(utoc)
   const [q, setQ] = useState('')
+  const [hero, setHero] = useState('') // '' = every hero (the same filter as a loadout's Add mods)
   const [sort, setSort] = useState<'name' | 'newest'>(() => (localStorage.getItem(SORT) === 'name' ? 'name' : 'newest'))
   const [foldedIds, setFoldedIds] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(FOLDED) || '[]') } catch { return [] } })
   const loadouts = useLoadouts()
@@ -624,7 +626,7 @@ export function VfxUpdaterPanel() {
     setCheckRun(null); setCancelling(false)
     const parts = [n.outdated && `${n.outdated} need${n.outdated === 1 ? 's' : ''} an update`, n.current && `${n.current} up to date`, (n.unknown + n.none) && `${n.unknown + n.none} not known`, n.failed && `${n.failed} not checked`].filter(Boolean)
     setEnded({ text: `Checked ${done === list.length ? plural(done, 'mod') : `${done} of ${plural(list.length, 'mod')}`}${parts.length ? `: ${parts.join(', ')}` : ''}. The Log has each one.`, retry: [], edits: pickEditsRef.current })
-    await verdictsChanged() // the Library reads the flags again
+    await rescanVerdicts() // the Library reads the flags again and runs its background checks on every mod
     setReload(r => r + 1)
   }
 
@@ -651,7 +653,11 @@ export function VfxUpdaterPanel() {
   const list = [...(mods ?? [])].sort((a, b) => Number(Boolean(needsOf(b))) - Number(Boolean(needsOf(a))) || order(a, b))
   const sortBy = (v: 'name' | 'newest') => { setSort(v); localStorage.setItem(SORT, v) }
   const needle = q.trim().toLowerCase()
-  const shown = needle ? list.filter(m => m.name.toLowerCase().includes(needle) || (m.hero ?? '').toLowerCase().includes(needle)) : list
+  const heroes = [...new Set(list.map(m => heroOfName(m.hero)).filter(Boolean))].sort()
+  const shown = list.filter(m => (!needle || m.name.toLowerCase().includes(needle) || (m.hero ?? '').toLowerCase().includes(needle)) && (!hero || heroOfName(m.hero) === hero))
+  // ticked mods the search or hero filter hides: Update still takes them, so the footer says so (and shows them in one click)
+  const shownKeys = new Set(shown.map(m => norm(m.utoc)))
+  const hiddenTicked = needle || hero ? [...picked].filter(k => !shownKeys.has(k)).length : 0
   // three groups: the mods that need an update (with any that ran this session and did not update), the ones updated this
   // session, the rest
   const updatedNow = (m: Mod) => runs[norm(m.utoc)]?.status === 'fixed'
@@ -725,13 +731,16 @@ export function VfxUpdaterPanel() {
     <div className="vf-panel">
       <div className="vf-body">
         <div className="lp-filters vf-filters">
-          {list.length > SEARCH_FROM && <>
+          {/* shown while the folder is read too, so the bar does not appear under the pointer when the list lands, and kept
+              while a search or hero filter is on, so it can always be cleared */}
+          {(mods === null || list.length > SEARCH_FROM || Boolean(needle || hero)) && <>
             <label className="lp-search vf-search">
               <Search size={15} aria-hidden="true" />
               <input value={q} placeholder="Search VFX mods" aria-label="Search VFX mods" onChange={e => setQ(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Escape') setQ('') }} />
               {q && <button type="button" className="lo-icon vf-search-clear" onClick={() => setQ('')} aria-label="Clear the search" title="Clear the search"><X size={14} /></button>}
             </label>
+            <HeroFilter heroes={heroes} value={hero} onChange={setHero} always={mods === null} />
             <div className="mod-state-filter lp-sort" role="group" aria-label="Sort VFX mods">
               <button type="button" aria-pressed={sort === 'newest'} onClick={() => sortBy('newest')}>Newest</button>
               <button type="button" aria-pressed={sort === 'name'} onClick={() => sortBy('name')}>A to Z</button>
@@ -771,10 +780,10 @@ export function VfxUpdaterPanel() {
         {mods === null
           ? <p className="lp-empty" aria-live="polite">Reading the mods folder{scan ? `: ${scan.done} of ${plural(scan.total, 'mod')}` : '…'}</p>
           : shown.length === 0
-            ? (loadError && !needle ? null : <p className="lp-empty">{needle ? `No VFX mods match “${q.trim()}”.` : 'No VFX mods in the mods folder. VFX mods and mods with material instances (MI_ files) appear here. Add .utoc takes any other mod.'}</p>)
+            ? (loadError && !needle ? null : <p className="lp-empty">{needle || hero ? `No VFX mods match${needle ? ` “${q.trim()}”` : ''}${hero ? ` for ${hero}` : ''}.` : 'No VFX mods in the mods folder. VFX mods and mods with material instances (MI_ files) appear here. Add .utoc takes any other mod.'}</p>)
             : <div className="vf-groups">{groups.map(g => g.mods.length > 0 && (
               <Group key={g.id} title={g.title} count={g.count} tone={g.id === 'needs' ? 'needs' : g.id === 'updated' ? 'done' : undefined} busy={busy} all={g.all} none={g.none}
-                open={Boolean(needle) || !foldedIds.includes(g.id)} onFold={() => fold(g.id)} onPick={on => userPick(g.keys, on)}>
+                open={Boolean(needle || hero) || !foldedIds.includes(g.id)} onFold={() => fold(g.id)} onPick={on => userPick(g.keys, on)}>
                 <ul className="mod-rows vf-rows">
                   {g.mods.map(m => {
                     const key = norm(m.utoc)
@@ -865,7 +874,10 @@ export function VfxUpdaterPanel() {
           {summary
             ? <>{summary.text}{summary.retry.length > 0 && <>{' '}<button type="button" className="su-link" onClick={() => void run(summary.retry)}>Try {plural(summary.retry.length, 'mod')} again</button></>}</>
             : state ? state
-            : <>{ahead !== undefined && <b className="vf-eta">{timeLeft(ahead).replace(/^./, c => c.toUpperCase())} for {plural(todo, 'mod')}. </b>}{policy}.{' '}
+            : <>{/* its own line: the warning and its link stay together, apart from the estimate */}
+                {hiddenTicked > 0 && <span className="vf-hidden-line"><b className="vf-hidden-n">{hiddenTicked} ticked {hiddenTicked === 1 ? 'mod is' : 'mods are'} hidden by the filter.</b>{' '}
+                  <button type="button" className="su-link" onClick={() => { setQ(''); setHero('') }}>Show {hiddenTicked === 1 ? 'it' : 'them'}</button></span>}
+                {ahead !== undefined && <b className="vf-eta">{timeLeft(ahead).replace(/^./, c => c.toUpperCase())} for {plural(todo, 'mod')}. </b>}{policy}.{' '}
                 {partialTodo > 0 && <><b className="vf-partial-n">{partialTodo === todo ? (todo === 1 ? 'It' : `All ${todo}`) : `${partialTodo} of ${todo}`}</b> will only partially update, without {partialTodo === 1 ? 'its' : 'their'} old Niagara files, and keep {partialTodo === 1 ? 'its' : 'their'} original, off, as _ORIGINAL.{' '}</>}
                 <button type="button" className="su-link" onClick={() => showAdvanced(true)}>Change</button></>}
         </p>

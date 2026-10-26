@@ -3,11 +3,12 @@
 // view (header tabs, or L). On = its mods on, Off = its mods off; other mods and loadouts are never touched.
 import { type CSSProperties, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useStableCallback } from '../hooks/useStableCallback'
-import { ChevronDown, ChevronRight, ChevronUp, CopyPlus, FolderPlus, Pencil, Plus, Search, Trash2, WandSparkles, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, CopyPlus, FolderPlus, ListChecks, Pencil, Plus, Search, Shapes, Trash2, WandSparkles, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo, runChanges } from './Loadouts'
 import LoadoutPage from './LoadoutPage'
 import NewStrip from './NewStrip'
+import SmartLoadouts from './SmartLoadouts' // repakxtra
 import BuiltinMods from './BuiltinMods'
 import { matchesLoadout } from './homeSearch'
 import { isTyping } from './hotkeys'
@@ -233,8 +234,11 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   })
   const fileRef = useRef<HTMLInputElement>(null)
   const [genMenu, setGenMenu] = useState(false)
+  const [smart, setSmart] = useState(false) // repakxtra: the Smart loadouts dialog
   const canGenerate = usePreviewsAvailable()
   const genRef = useRef<HTMLDivElement>(null)
+  const [newMenu, setNewMenu] = useState(false) // repakxtra: + New's menu (New loadout, Smart loadouts, New collection)
+  const newWrap = useRef<HTMLDivElement>(null)
   const cardZoom = useCardZoom()
   const [cardsEl, setCardsEl] = useState<HTMLDivElement | null>(null)
   useWheelZoom(cardsEl)
@@ -328,6 +332,25 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     return () => { window.removeEventListener('keydown', onKey, true); window.removeEventListener('paste', onPaste) }
   }, [view])
 
+  // repakxtra: + New's menu opens on its first item, arrows move while focus is in it, an outside click, Tab or Esc closes
+  // it (Esc gives focus back)
+  useEffect(() => {
+    if (!newMenu) return
+    newWrap.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')?.focus()
+    const close = (e: MouseEvent) => { if (!newWrap.current?.contains(e.target as Node)) setNewMenu(false) }
+    const keys = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); setNewMenu(false); newRef.current?.focus(); return }
+      if (e.key === 'Tab') { setNewMenu(false); return }
+      if ((e.key !== 'ArrowDown' && e.key !== 'ArrowUp') || !newWrap.current?.contains(document.activeElement)) return
+      e.preventDefault()
+      const all = [...(newWrap.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? [])]
+      const i = all.indexOf(document.activeElement as HTMLButtonElement)
+      all[(i + (e.key === 'ArrowDown' ? 1 : -1) + all.length) % all.length]?.focus()
+    }
+    document.addEventListener('mousedown', close)
+    window.addEventListener('keydown', keys, true)
+    return () => { document.removeEventListener('mousedown', close); window.removeEventListener('keydown', keys, true) }
+  }, [newMenu])
   // Generate all previews' choice menu closes on an outside click or Esc (above the early return: hooks run every render)
   useEffect(() => {
     if (!genMenu) return
@@ -430,6 +453,9 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     </>
   )
 
+  // repakxtra: Smart loadouts, a page of its own (Back or Esc returns to the cards)
+  if (smart) return <div className="lo-screen sl-screen" aria-label="Smart loadouts"><SmartLoadouts p={p} onBack={() => { setSmart(false); requestAnimationFrame(() => newRef.current?.focus()) }} /></div>
+
   if (open) {
     return (
       <div className="lo-screen" aria-label={`Loadout ${open.name}`}>
@@ -451,8 +477,10 @@ export default function LoadoutsScreen(p: LoadoutProps) {
           <i style={{ width: `${Math.min(100, ((batch.job - 1 + (batch.total ? batch.done / batch.total : 0)) / batch.jobs) * 100)}%` }} />
         </div>
       )}
+      {/* repakxtra: three parts that never collide: the title row and the view controls on top, the actions on their own
+          row under the title (one line of nine buttons wrapped unevenly at most window widths) */}
       <header className="lo-screen-head">
-        <div>
+        <div className="lo-head-main">
           <div className="lo-title-row">
             <h2>Loadouts</h2>
             {loadouts.length > 0 && (
@@ -472,16 +500,38 @@ export default function LoadoutsScreen(p: LoadoutProps) {
             )}
             <span className="xtra-sr-only" role="status">{said}</span>
           </div>
-          {loadouts.length < 3 && <p>Switch a set of mods on or off together. Other mods stay as they are. To install mods, drop .pak or .zip files anywhere or use Install.</p>}
+        </div>
+        <div className="lo-head-view">
+          <CardZoomControl />
+          <div className="mod-state-filter lo-groupby" role="group" aria-label="Sort loadouts by">
+            <button type="button" aria-pressed={groupBy === 'group'} onClick={() => setGroupBy('group')} title="Your collections">Collection</button>
+            <button type="button" aria-pressed={groupBy === 'hero'} onClick={() => setGroupBy('hero')}>Hero</button>
+          </div>
         </div>
         <div className="lo-head-tools">
-          <button type="button" ref={newRef} className="lo-text-btn" data-tour="new-loadout" onClick={createEmpty} title="A new empty loadout, opened to add mods to it">
-            <Plus size={14} /> New loadout
-          </button>
-          <button type="button" className="lo-text-btn" data-tour="new-collection" onClick={newGroup}
-            title="A new collection: a named shelf for loadouts that belong together (drag cards onto it)">
-            <FolderPlus size={14} /> New collection
-          </button>
+          {/* repakxtra: one + New for the three ways to make something, so the head fits one line (Hick's law: the rare ones
+              are a click away, not always on screen) */}
+          <div className="lo-new" ref={newWrap}>
+            <button type="button" ref={newRef} className="lo-text-btn" data-tour="new-loadout" aria-haspopup="menu" aria-expanded={newMenu}
+              onClick={() => setNewMenu(v => !v)} title="Make a loadout, group your mods into loadouts, or add a collection">
+              <Plus size={14} /> New <ChevronDown size={13} className="lo-new-chev" aria-hidden="true" />
+            </button>
+            {newMenu && (
+              <div className="sigeon-menu lo-gen-menu lo-new-menu" role="menu" aria-label="New">
+                <button type="button" role="menuitem" className="sigeon-item" disabled={p.mods.length === 0} onClick={() => { setNewMenu(false); setSmart(true) }}
+                  title="Make loadouts from the mods that are in none: mods that share a look become one loadout, a lone mod gets its own">
+                  <span><Shapes size={14} /> Smart loadouts</span><small>from your mods</small>
+                </button>
+                <button type="button" role="menuitem" className="sigeon-item" onClick={() => { setNewMenu(false); createEmpty() }}>
+                  <span><Plus size={14} /> New loadout</span><small>empty</small>
+                </button>
+                <button type="button" role="menuitem" className="sigeon-item" data-tour="new-collection" onClick={() => { setNewMenu(false); newGroup() }}
+                  title="A new collection: a named shelf for loadouts that belong together (drag cards onto it)">
+                  <span><FolderPlus size={14} /> New collection</span><small>empty</small>
+                </button>
+              </div>
+            )}
+          </div>
           {!canGenerate && <PreviewsUnavailable className="lo-text-btn" label="Generate all previews" />}
           {canGenerate && <div className="lo-gen" ref={genRef}>
             {/* While a run goes: how far it is (shimmering), and its menu has the step it is on and Stop */}
@@ -513,11 +563,6 @@ export default function LoadoutsScreen(p: LoadoutProps) {
               </div>
             )}
           </div>}
-          <CardZoomControl />
-          <div className="mod-state-filter lo-groupby" role="group" aria-label="Sort loadouts by">
-            <button type="button" aria-pressed={groupBy === 'group'} onClick={() => setGroupBy('group')} title="Your collections">Collection</button>
-            <button type="button" aria-pressed={groupBy === 'hero'} onClick={() => setGroupBy('hero')}>Hero</button>
-          </div>
         </div>
       </header>
       <div className="lo-body" ref={setCardsEl}>
@@ -525,15 +570,21 @@ export default function LoadoutsScreen(p: LoadoutProps) {
         {loadouts.length === 0 && (
           <div className="lo-first-run">
             <h3>No loadouts yet</h3>
-            <p>A loadout is a set of mods you switch on and off together, like one look, one VFX color or one hero's full set of mods.</p>
+            <p>A loadout is a set of mods you switch on and off together, like one look, one VFX color, or one hero's full set of mods.</p>
             <div className="lo-first-actions">
-              {/* only when some mods are on: "the 0 mods that are on now" offered a button that could do nothing */}
-              {p.mods.some(m => m.enabled) && (
-                <button type="button" className="lo-text-btn is-primary" onClick={createFromOn}>
-                  Make one from the {plural(p.mods.filter(m => m.enabled).length, 'mod')} that {p.mods.filter(m => m.enabled).length === 1 ? 'is' : 'are'} on now
+              {/* repakxtra: with mods and no loadouts, Smart loadouts makes them all at once: the first thing to offer */}
+              {p.mods.length > 0 && (
+                <button type="button" className="lo-text-btn is-primary" onClick={() => setSmart(true)}>
+                  <Shapes size={14} /> Group my mods into loadouts
                 </button>
               )}
-              <button type="button" className={`lo-text-btn${p.mods.some(m => m.enabled) ? '' : ' is-primary'}`} onClick={createEmpty}>Start an empty one</button>
+              {/* only when some mods are on: "the 0 mods that are on now" offered a button that could do nothing */}
+              {p.mods.some(m => m.enabled) && (
+                <button type="button" className="lo-text-btn" onClick={createFromOn}>
+                  <ListChecks size={14} /> Make one from the {plural(p.mods.filter(m => m.enabled).length, 'mod')} that {p.mods.filter(m => m.enabled).length === 1 ? 'is' : 'are'} on now
+                </button>
+              )}
+              <button type="button" className={`lo-text-btn${p.mods.length ? '' : ' is-primary'}`} onClick={createEmpty}><Plus size={14} /> Start an empty one</button>
             </div>
           </div>
         )}

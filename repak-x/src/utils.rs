@@ -465,7 +465,7 @@ pub fn find_marvel_rivals() -> Option<PathBuf> {
 
 /// Reads `libraryfolders.vdf` to find additional Steam libraries.
 /// Enhanced to check registry and multiple common locations.
-fn get_steam_library_paths() -> Vec<PathBuf> {
+pub(crate) fn get_steam_library_paths() -> Vec<PathBuf> { // repakxtra: pub(crate), xtra_kit.rs finds Steam's Blender
     let mut vdf_paths_to_check: Vec<PathBuf> = Vec::new();
 
     #[cfg(target_os = "windows")]

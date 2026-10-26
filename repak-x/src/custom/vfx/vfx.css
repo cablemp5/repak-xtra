@@ -17,6 +17,8 @@
 .vf-search input { font-size: 13.5px !important; }
 .vf-search input::placeholder { color: var(--text-secondary); opacity: 1; }
 .vf-search-clear { flex: none; width: 26px; height: 26px !important; min-height: 0 !important; }
+/* the hero filter: as tall as the search and sort beside it (the loadout page's is 32px) */
+.vf-body .vf-filters .lp-hero.custom-dropdown-container { height: auto; }
 .vf-body .vf-add { flex: none; margin-left: auto; height: auto !important; min-height: 32px !important; } /* as tall as the search beside it */
 .vf-body .vf-add:hover:not(:disabled) { background: color-mix(in srgb, var(--accent-primary), white 12%) !important; border-color: color-mix(in srgb, var(--accent-primary), white 12%) !important; } /* stays blue on hover */
 
@@ -235,3 +237,5 @@ html[data-motion="off"] .vfx-notice { animation: none; }
   color: #b9a4ff; border: 1px solid color-mix(in srgb, #9b7bff, transparent 55%); cursor: help; white-space: nowrap; }
 [data-theme="light"] .vf-niagara { color: #5b3fc4; }
 .vf-eta { font-weight: 600; color: var(--text-primary); }
+/* ticked mods a filter hides: a line of its own above the estimate */
+.vf-hidden-line { display: block; margin-bottom: 2px; }

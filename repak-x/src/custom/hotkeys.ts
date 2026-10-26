@@ -2,7 +2,7 @@
 // Upstream keys are handled in App.tsx; L in loadoutStore.ts, Ctrl+1-9 in Loadouts.tsx, S in
 // SigeonControl.tsx, zoom in uiPrefs.tsx. The ones below drive existing buttons, so they follow
 // the same rules (game-running locks, confirmations) as clicking.
-import { toggleTags } from './uiPrefs'
+import { togglePref, toggleTags } from './uiPrefs'
 import { modalOpen } from './dialogFocus'
 
 export type Shortcut = { keys: string[]; action: string }
@@ -43,6 +43,10 @@ export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
       { keys: ['V'], action: 'Cycle list / compact list / grid / compact grid' },
       { keys: ['X'], action: 'Clear hero and type filters' },
       { keys: ['T'], action: 'Show / hide tags on mods' },
+      { keys: ['P'], action: 'Show / hide the load priority counter' },
+      { keys: ['I'], action: 'Show / hide the In loadout tag' },
+      { keys: ['B'], action: 'Show / hide Broken and May crash warnings and the Problems tab' },
+      { keys: ['Shift', 'C'], action: 'Show / hide conflict warnings' },
       { keys: ['Ctrl', '+'], action: 'Zoom in' },
       { keys: ['Ctrl', '-'], action: 'Zoom out' },
       { keys: ['Ctrl', '0'], action: 'Reset zoom' },
@@ -116,7 +120,20 @@ window.addEventListener('keydown', e => {
       break
     }
     case 'c':
-      click('.btn-check-conflicts')
+      if (e.shiftKey) { e.preventDefault(); togglePref('conflicts', 'Conflict warnings') }
+      else click('.btn-check-conflicts')
+      break
+    case 'p':
+      e.preventDefault()
+      togglePref('priority', 'Load priority counter')
+      break
+    case 'i':
+      e.preventDefault()
+      togglePref('loadout-tag', 'In loadout tag')
+      break
+    case 'b':
+      e.preventDefault()
+      togglePref('broken', 'Broken and May crash warnings')
       break
     case 'v': {
       const buttons = VIEWS.map(t => document.querySelector<HTMLElement>(`[title="${t}"]`))
