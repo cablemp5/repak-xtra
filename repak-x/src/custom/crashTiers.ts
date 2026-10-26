@@ -12,9 +12,9 @@ export const ordered = <T extends { tier: Tier }>(rows: T[]): T[] => [...rows].s
 /** The heading over a group of suspects (one per tier, closest first). `hero` is the hero's name when known,
  *  `otherSkin` when the crash names a skin. Pure. */
 export function reasonFor(tier: Tier, hero?: string, otherSkin = false): string {
-  if (tier === 'asset') return 'Hold the asset that crashed'
-  if (tier === 'skin') return hero ? `Change the same ${hero} skin` : 'Change the same skin'
-  return `Change ${hero ?? 'the same hero'}${otherSkin ? ', another skin' : ''}`
+  if (tier === 'asset') return 'Has the crashed file'
+  if (tier === 'skin') return hero ? `Same ${hero} skin` : 'Same skin'
+  return `${hero ?? 'Same hero'}${otherSkin ? ', other skins' : ''}`
 }
 
 /** Suspects in groups of one heading each, in the order given (closest first). Pure. */
@@ -51,11 +51,11 @@ export function tierLines(tiers: Tiered[] | undefined, name: (path: string) => s
 }
 
 if (import.meta.env.DEV) {
-  console.assert(reasonFor('asset', 'Black Panther') === 'Hold the asset that crashed', 'asset heading')
-  console.assert(reasonFor('skin', 'Black Panther') === 'Change the same Black Panther skin', 'skin heading')
-  console.assert(reasonFor('hero', 'Black Panther', true) === 'Change Black Panther, another skin', 'hero heading')
-  console.assert(reasonFor('hero', 'Black Panther') === 'Change Black Panther', 'hero heading when the crash names no skin')
-  console.assert(reasonFor('hero', undefined, true) === 'Change the same hero, another skin', 'hero heading without a name')
+  console.assert(reasonFor('asset', 'Black Panther') === 'Has the crashed file', 'asset heading')
+  console.assert(reasonFor('skin', 'Black Panther') === 'Same Black Panther skin', 'skin heading')
+  console.assert(reasonFor('hero', 'Black Panther', true) === 'Black Panther, other skins', 'hero heading')
+  console.assert(reasonFor('hero', 'Black Panther') === 'Black Panther', 'hero heading when the crash names no skin')
+  console.assert(reasonFor('hero', undefined, true) === 'Same hero, other skins', 'hero heading without a name')
   const g = grouped([{ reason: 'A', n: 1 }, { reason: 'A', n: 2 }, { reason: 'B', n: 3 }])
   console.assert(g.map(x => `${x.title}:${x.rows.map(r => r.n).join('')}`).join() === 'A:12,B:3', 'groups keep the order', g)
   const mixed: Tiered[] = [{ path: 'h1', tier: 'hero' }, { path: 's', tier: 'skin' }, { path: 'a', tier: 'asset' }, { path: 'h2', tier: 'hero' }]

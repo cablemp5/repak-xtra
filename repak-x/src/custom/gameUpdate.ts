@@ -16,8 +16,8 @@ type Alert = { info: (title: string, text?: string, options?: { color?: 'info'; 
 export function updateText(updated: number, flagged: number): string {
   const day = new Date(updated * 1000).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
   // the count, short: what each one needs is in the Problems view the action opens
-  const what = flagged === 0 ? 'No mod needs attention.' : `${plural(flagged, 'mod')} ${flagged === 1 ? 'needs' : 'need'} attention.`
-  return `Updated ${day}. ${what}`
+  const who = flagged === 0 ? 'No mod needs' : `${plural(flagged, 'mod')} ${flagged === 1 ? 'needs' : 'need'}`
+  return `${who} attention after the ${day} update.`
 }
 
 /** Mounted once in App. `loading` and `count` are the mod list's: the check waits for the first load to finish, so a slow
@@ -76,8 +76,8 @@ export function useGameUpdateWatch(alert: Alert, loading: boolean, count: number
 
 if (import.meta.env.DEV) {
   const noon = Date.UTC(2026, 9, 26, 12) / 1000
-  console.assert(/^Updated .+\. 3 mods need attention\.$/.test(updateText(noon, 3)), 'flagged count', updateText(noon, 3))
-  console.assert(updateText(noon, 1).endsWith('1 mod needs attention.'), 'one mod', updateText(noon, 1))
-  console.assert(updateText(noon, 0).endsWith('No mod needs attention.'), 'none flagged', updateText(noon, 0))
+  console.assert(/^3 mods need attention after the .+ update\.$/.test(updateText(noon, 3)), 'flagged count', updateText(noon, 3))
+  console.assert(updateText(noon, 1).startsWith('1 mod needs attention after the '), 'one mod', updateText(noon, 1))
+  console.assert(updateText(noon, 0).startsWith('No mod needs attention after the '), 'none flagged', updateText(noon, 0))
   console.assert(!/[;\u2014]/.test(updateText(noon, 2)), 'no semicolons or em dashes')
 }
