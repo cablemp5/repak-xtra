@@ -30,7 +30,8 @@ const LOGO: &str = "Marvel/Content/Marvel/Data/DataTable/UI/Login/MarvelLogoVide
 const LOGO_FLAGS: [&str; 4] = ["bUsedInCn", "bUsedInHkMoTw", "bUsedInJpKr", "bUsedInEnRegion"];
 pub const DEFAULT_SKIN: &str = "force-default-skin";
 pub const SKIP_INTRO: &str = "skip-intro-movies";
-const IDS: [&str; 2] = [DEFAULT_SKIN, SKIP_INTRO];
+pub const CUSTOM_QUAKE: &str = "custom-quake"; // repakxtra: xtra_quake.rs
+const IDS: [&str; 3] = [DEFAULT_SKIN, SKIP_INTRO, CUSTOM_QUAKE];
 
 /// One build at a time: both share the work folder root and UAssetTool.
 static BUILDING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -54,6 +55,11 @@ struct Saved {
     /// Every hero id the skin table held at the last build, so heroes the bundled hero list lacks still show
     heroes: Vec<String>,
     error: Option<String>,
+    /// CustomQuake's options, and the ones its files were made with (xtra_quake.rs)
+    #[serde(default)]
+    quake: Option<crate::xtra_quake::Options>,
+    #[serde(default)]
+    built_quake: Option<crate::xtra_quake::Options>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -73,6 +79,11 @@ pub struct BuiltinView {
     /// Its main file (.pak), where the Library lists it, and the size of its files
     path: String,
     size: u64,
+    /// CustomQuake: its options, and the mods that are on and change the same map files
+    #[serde(skip_serializing_if = "Option::is_none")]
+    quake: Option<crate::xtra_quake::Options>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    overlaps: Vec<String>,
 }
 
 fn store_path() -> PathBuf {
@@ -135,7 +146,7 @@ fn fits(s: &Saved, build: &str) -> bool {
     made.sort();
     let mut wanted = s.excluded.clone();
     wanted.sort();
-    s.built_for.as_deref() == Some(build) && made == wanted
+    s.built_for.as_deref() == Some(build) && made == wanted && s.built_quake.clone().unwrap_or_default() == s.quake.clone().unwrap_or_default()
 }
 
 /// Off: the .pak goes aside, the rest stays, so turning it on again needs no rebuild.
@@ -173,6 +184,8 @@ fn view(id: &str, s: &Saved, dir: &Path, build: &str) -> BuiltinView {
         error: s.error.clone(),
         path: files_of(dir, id)[0].to_string_lossy().to_string(),
         size: files_of(dir, id).iter().filter_map(|f| std::fs::metadata(f).ok()).map(|m| m.len()).sum(),
+        quake: (id == CUSTOM_QUAKE).then(|| s.quake.clone().unwrap_or_default()),
+        overlaps: if id == CUSTOM_QUAKE && s.on { dir.parent().map(crate::xtra_quake::overlapping).unwrap_or_default() } else { Vec::new() },
     }
 }
 
@@ -400,11 +413,14 @@ async fn usmap() -> Result<String, String> {
 }
 
 /// Extracts, edits, checks and packs one built-in into `out_dir`. Returns the summary and the hero ids seen.
-async fn make(tool: &Path, id: &str, excluded: &[String], paks: &Path, work: &Path, out_base: &Path) -> Result<(String, Vec<String>), String> {
+async fn make(tool: &Path, id: &str, excluded: &[String], quake: &crate::xtra_quake::Options, paks: &Path, work: &Path, out_base: &Path) -> Result<(String, Vec<String>), String> {
     let s = |p: &Path| p.to_string_lossy().to_string();
     let tool = tool.to_path_buf();
     ensure_vfx_uat_session(&tool).await?;
     let usmap = usmap().await?;
+    if id == CUSTOM_QUAKE { // repakxtra: new 1x1 packages, not a table edit
+        return crate::xtra_quake::make(&tool, &usmap, paks, work, out_base, quake).await.map(|summary| (summary, Vec::new()));
+    }
     let tables: &[&str] = if id == DEFAULT_SKIN { &[SKIN, UI] } else { &[LOGO] };
     let (legacy, json, edited, rt, staged) = (work.join("legacy"), work.join("json"), work.join("edited"), work.join("rt"), work.join("mod"));
     let sink = NoOpProgressSink;
@@ -470,6 +486,7 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
     let _one = BUILDING.lock().await;
     let all = load();
     let excluded = all.get(id).map(|s| s.excluded.clone()).unwrap_or_default();
+    let quake = all.get(id).and_then(|s| s.quake.clone()).unwrap_or_default();
     let work = std::env::temp_dir().join("repak-x").join("xbuiltin").join(id);
     let _ = std::fs::remove_dir_all(&work);
     std::fs::create_dir_all(work.join("out")).map_err(|e| e.to_string())?;
@@ -489,7 +506,7 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
             s.error = None;
         });
     }
-    let made = async { make(&get_uasset_tool_path(app)?, id, &excluded, paks, &work, &out_base).await }.await;
+    let made = async { make(&get_uasset_tool_path(app)?, id, &excluded, &quake, paks, &work, &out_base).await }.await;
     // turned off while it built (the switch saves first, then waits for this build): nothing goes into the game
     if !load().get(id).is_some_and(|s| s.on) {
         let _ = std::fs::remove_dir_all(&work);
@@ -506,6 +523,7 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
             Ok((summary, heroes)) => {
                 s.built_for = Some(game_build(paks));
                 s.built_excluded = excluded.clone();
+                s.built_quake = (id == CUSTOM_QUAKE).then(|| quake.clone());
                 s.nothing = false;
                 s.built_at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_secs());
                 s.summary = Some(summary.clone());
@@ -608,18 +626,24 @@ fn game_guard(state: &Arc<Mutex<AppState>>) -> Result<(), String> {
 
 /// Turns a built-in on or off and/or sets its excluded heroes, building or removing its files to match.
 #[tauri::command]
-pub async fn xtra_builtins_set(app: tauri::AppHandle, id: String, on: Option<bool>, excluded: Option<Vec<String>>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<BuiltinView>, String> {
+pub async fn xtra_builtins_set(app: tauri::AppHandle, id: String, on: Option<bool>, excluded: Option<Vec<String>>, quake: Option<crate::xtra_quake::Options>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<BuiltinView>, String> {
     if !IDS.contains(&id.as_str()) {
         return Err(format!("No built-in mod called {id}"));
+    }
+    if let Some(q) = &quake {
+        q.look()?; // a color that is not one is refused before anything is saved
     }
     crate::xtra_identity::upstream_guard()?;
     game_guard(state.inner())?;
     let (dir, paks) = dirs_of(&state)?;
     let (changed, now_on) = update(|all| {
         let s = all.entry(id.clone()).or_default();
-        let changed = excluded.as_ref().is_some_and(|x| *x != s.excluded);
+        let changed = excluded.as_ref().is_some_and(|x| *x != s.excluded) || quake.as_ref().is_some_and(|q| *q != s.quake.clone().unwrap_or_default());
         if let Some(x) = excluded {
             s.excluded = x;
+        }
+        if let Some(q) = quake {
+            s.quake = Some(q);
         }
         if let Some(on) = on {
             s.on = on;
@@ -942,20 +966,22 @@ mod tests {
         assert!(check_flags(&[1, 1, 5], &[0, 1, 6], 1).is_err());
     }
 
-    /// Builds both built-ins from the installed game into a temp folder (UAssetTool.dll must sit beside the test binary):
+    /// Builds the built-ins from the installed game into a temp folder (UAssetTool.dll must sit beside the test binary):
     ///   REPAKXTRA_PAKS=<game Paks folder> cargo test -p repak-x --bin REPAK-X builtins_real -- --ignored --nocapture
+    /// REPAKXTRA_BUILTIN=<id> builds just that one.
     #[test]
     #[ignore]
     fn builtins_real() {
         let paks = PathBuf::from(std::env::var("REPAKXTRA_PAKS").expect("REPAKXTRA_PAKS"));
         let rt = tokio::runtime::Runtime::new().unwrap();
-        for (id, excluded) in [(DEFAULT_SKIN, vec!["1026".to_string()]), (SKIP_INTRO, vec![])] {
+        let only = std::env::var("REPAKXTRA_BUILTIN").ok();
+        for (id, excluded) in [(DEFAULT_SKIN, vec!["1026".to_string()]), (SKIP_INTRO, vec![]), (CUSTOM_QUAKE, vec![])].into_iter().filter(|(id, _)| only.as_deref().is_none_or(|o| o == *id)) {
             let work = std::env::temp_dir().join("repak-x").join("xbuiltin-test").join(id);
             let _ = std::fs::remove_dir_all(&work);
             std::fs::create_dir_all(work.join("out")).unwrap();
             let out = work.join("out").join(stem(id));
             let started = std::time::Instant::now();
-            let made = rt.block_on(make(Path::new("."), id, &excluded, &paks, &work, &out));
+            let made = rt.block_on(make(Path::new("."), id, &excluded, &crate::xtra_quake::Options::default(), &paks, &work, &out));
             println!("{id}: {made:?} in {:.1}s -> {}", started.elapsed().as_secs_f32(), out.display());
             assert!(made.is_ok() && out.with_extension("utoc").exists());
         }
