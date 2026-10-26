@@ -77,5 +77,5 @@ if (import.meta.env.DEV) {
   console.assert(/^The game updated on .+\. 3 mods are flagged Broken, Needs VFX update, or May crash\.$/.test(updateText(noon, 3)), 'flagged count', updateText(noon, 3))
   console.assert(updateText(noon, 1).endsWith('1 mod is flagged Broken, Needs VFX update, or May crash.'), 'one mod', updateText(noon, 1))
   console.assert(updateText(noon, 0).endsWith('No mod is flagged.'), 'none flagged', updateText(noon, 0))
-  console.assert(!/[;—]/.test(updateText(noon, 2)), 'no semicolons or em dashes')
+  console.assert(!/[;\u2014]/.test(updateText(noon, 2)), 'no semicolons or em dashes')
 }
