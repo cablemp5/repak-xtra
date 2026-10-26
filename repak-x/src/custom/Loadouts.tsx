@@ -5,7 +5,7 @@ import { Check, ListPlus } from 'lucide-react'
 import CustomDropdown from '../components/CustomDropdown'
 import type { useAlert } from '../components/AlertHandler'
 import {
-  type Loadout, type Mod, changesToTurnOff, changesToTurnOn, deleteLoadout, flipMods, hotkeySlots, isActive, modKey,
+  type Loadout, type Mod, byRecent, changesToTurnOff, changesToTurnOn, deleteLoadout, flipMods, hotkeySlots, isActive, modKey,
   nameKey, nextLoadoutName, openLoadout, patchLoadout, readLoadouts, useLoadouts, withMods, writeLoadouts,
 } from './loadoutStore'
 import { canonKey } from './loadoutIdentity'
@@ -44,7 +44,7 @@ export function AddToLoadoutField({ paths, alert }: { paths: string[]; alert: Lo
     <div className="bulk-field" title="Add the selected mods to a loadout">
       <CustomDropdown
         icon={<ListPlus size={15} />}
-        options={loadouts.map(l => ({ value: l.id, label: l.name }))}
+        options={byRecent(loadouts).map(l => ({ value: l.id, label: l.name }))}
         value=""
         placeholder="Add to loadout"
         disabled={paths.length === 0}
@@ -88,7 +88,8 @@ export function LoadoutMenuItems({ paths, alert, close }: { paths: string[]; ale
       <div className="context-menu-item" onClick={create}>+ New loadout</div>
       {loadouts.length > 0 && <div className="context-menu-separator" />}
       <div className="scrollable-menu-list" style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }}>
-        {loadouts.map(l => {
+        {/* the loadout just made or worked on first: it is the likely one */}
+        {byRecent(loadouts).map(l => {
           const has = keys.every(k => l.on.some(o => canonKey(o) === k))
           return (
             <div key={l.id} className={`context-menu-item${has ? ' is-disabled' : ''}`} onClick={() => !has && addTo(l)}
@@ -183,7 +184,7 @@ export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], ve
       const id = p.alert.warning(`${o.name} is also on`, `It changes ${both.join(', ')} too, and the game shows only one look.`, {
         duration: 12000,
         action: {
-          label: `Turn ${o.name} off`,
+          label: 'Turn it off', // the name is in the title: a long one in the button squeezed the toast's text away
           onClick: () => { p.alert.dismissAlert(id); runChanges(p, o, changesToTurnOff(o, after).filter(m => !keep.has(modKey(m.path))), 'off') },
         },
       })

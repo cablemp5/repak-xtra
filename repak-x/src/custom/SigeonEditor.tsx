@@ -34,7 +34,7 @@ const TOGGLES = [
   { key: 'fixDarkMaps', label: 'Brighter maps', note: 'Removes the light distance culling that makes maps look too dark' },
   { key: 'darkHair', label: 'Darker hair', note: 'Slightly darker hair, small FPS gain' },
   { key: 'fontAA', label: 'Smooth text', note: 'Font anti-aliasing (off is sharper)' },
-  { key: 'hideUID', label: 'Hide UID', note: 'Hides the UID, version and time overlay' },
+  { key: 'hideUID', label: 'Hide UID', note: 'Hides the UID, version, and time overlay' },
 ]
 const label = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 

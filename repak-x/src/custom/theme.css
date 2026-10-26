@@ -70,6 +70,15 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
   outline-offset: 2px !important;
 }
 .app .mod-name-button:focus-visible { outline-offset: 0 !important; border-radius: 4px; }
+/* A checkbox: its button is the box itself (the 36px button floor made it a tall strip, and the ring a 20x40 rectangle round
+   a 16px box). Focus is a soft accent halo that follows the box's own corners, a dark gap first so it reads on any row */
+.repakx-checkbox-control { min-height: 0 !important; height: auto !important; border-radius: 4px; }
+.app .repakx-checkbox-control:focus-visible, .vf-window .repakx-checkbox-control:focus-visible { outline: none !important; }
+.repakx-checkbox-control .repakx-checkbox-box { transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.15s ease; }
+.repakx-checkbox-control:focus-visible .repakx-checkbox-box {
+  box-shadow: 0 0 0 2px var(--bg-darkest), 0 0 0 4px color-mix(in srgb, var(--accent-primary), transparent 45%);
+  border-color: var(--accent-primary);
+}
 /* A dialog that takes focus itself (tabIndex -1, so keys reach it) gets no ring: a ring round the whole box reads as an error border */
 .app [role="dialog"][tabindex="-1"]:focus-visible { outline: none !important; }
 /* Read by screen readers, never seen: dialog names, toast announcements (toastA11y.tsx), a mod's folder beside a twin name */
@@ -447,6 +456,14 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
   border-radius: 50%;
   background: var(--badge-dot, #8f8f8f);
 }
+/* Raw Assets (a mod with no UAssets: audio, config): one of the quiet type tags, not the old grey fill and bright edge that
+   read as a focused button. A hollow dot: there is no cooked type to color it */
+.no-uassets-badge {
+  background: transparent !important; border: 1px solid var(--panel-border) !important; color: var(--text-secondary) !important;
+  box-shadow: none !important; font-size: 11px !important; font-weight: 500 !important; padding: 1px 8px 1px 7px !important;
+  display: inline-flex !important; align-items: center; gap: 6px;
+}
+.no-uassets-badge::before { content: ""; flex: none; width: 6px; height: 6px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid var(--text-secondary); }
 
 .tag { background: transparent !important; border: 1px solid var(--panel-border) !important; color: var(--text-secondary) !important; font-size: 11px !important; }
 
@@ -633,6 +650,16 @@ html:not([data-show-quick-organize]) .dropzone-container { max-width: 720px; }
 .mod-type-badge.nexus-badge:hover { background: color-mix(in srgb, var(--tag), transparent 86%) !important; color: color-mix(in srgb, var(--tag) 60%, var(--text-primary)) !important; }
 .mod-type-badge.nexus-badge .tag-logo, .mod-type-badge.pg-badge .tag-logo { color: var(--tag); }
 [data-theme="light"] .mod-type-badge.nexus-badge { --tag: #b85a0c; }
+/* In <loadout> (custom/LoadoutTag.tsx): the VFX Updater's quiet hairline tag, a name that ellipsizes, and a hover that
+   only brightens the name */
+.mod-type-badge.loadout-badge { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 180px; height: 22px !important; min-height: 0 !important;
+  padding: 0 8px !important; background: none !important; border: 1px solid var(--panel-border) !important; color: var(--text-secondary) !important;
+  font-size: 11px !important; font-weight: 500 !important; cursor: pointer; transition: none; }
+.mod-type-badge.loadout-badge i { flex: none; font-style: normal; font-weight: 400; }
+.mod-type-badge.loadout-badge span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: color 0.15s ease; }
+.mod-type-badge.loadout-badge b { flex: none; font-weight: 500; }
+.mod-type-badge.loadout-badge:hover span { color: color-mix(in srgb, var(--text-secondary), var(--text-primary) 45%); }
+.mod-type-badge.loadout-badge:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
 .tag-logo { flex: none; width: 13px; height: 13px; }
 .pg-logo { background: currentColor; -webkit-mask: url('./logos/galacta.png') center / contain no-repeat; mask: url('./logos/galacta.png') center / contain no-repeat; }
 [data-theme="light"] .mod-type-badge.pg-badge { --tag: #a3229a; }
@@ -1154,15 +1181,18 @@ html[data-motion="off"] .lo-gen-bar i { transition: none; animation: none; }
 .new-strip .lo-group-head { display: flex; }
 
 /* First run */
-.lo-first-run { padding: 28px; margin-bottom: 28px; border: 1px dashed var(--panel-border); border-radius: 12px; max-width: 640px; }
+.lo-first-run { padding: 28px; margin-bottom: 28px; border: 1px dashed var(--panel-border); border-radius: 12px; width: fit-content; max-width: 100%; } /* as wide as its buttons on one line: they wrap only when the screen is too narrow */
 .lo-first-run h3 { margin: 0 0 6px; font-size: 16px; font-weight: 700; }
-.lo-first-run p { margin: 0 0 16px; color: var(--text-secondary); font-size: 13px; }
+.lo-first-run p { margin: 0 0 16px; color: var(--text-secondary); font-size: 13px; max-width: 584px; }
 .lo-first-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .lo-text-btn.is-primary { background: var(--accent-primary) !important; border-color: var(--accent-primary) !important; color: #fff !important; }
 
 /* Loadout page */
 .lp { display: flex; flex-direction: column; gap: 26px; max-width: 1180px; margin: 0 auto; }
 .lp-back { align-self: flex-start; }
+/* the back button sits as far from the top as from the left (28px, as on Smart loadouts), 20px above the page it leads to */
+.lp { padding-top: 10px; }
+.lp > .lp-back { margin-bottom: -6px; }
 .lp-top { display: flex; gap: 24px; align-items: flex-start; }
 .lp-media { width: 220px; flex: none; border-radius: 12px !important; border: 1px solid var(--panel-border) !important; overflow: hidden; }
 .lp-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
@@ -1197,6 +1227,27 @@ html[data-motion="off"] .lo-gen-bar i { transition: none; animation: none; }
 .lo-screen-head { flex-wrap: wrap; row-gap: 12px; }
 .lo-screen-head > :first-child { flex: 1 1 auto; min-width: 0; }
 .lo-head-tools { flex-wrap: wrap; row-gap: 8px; margin-left: auto; }
+/* the head as a grid: title row and view controls on top, the actions on their own row under the title, left-aligned with it.
+   Even gaps, and nothing wraps into a ragged second row (the actions wrap within their own row on a narrow window) */
+.lo-screen-head { display: grid !important; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "main tools view"; align-items: start; column-gap: 16px; row-gap: 12px; }
+.lo-head-main { grid-area: main; min-width: 0; }
+.lo-head-main .lo-title-row { min-height: 38px; }   /* as tall as the view controls beside it: both centered on one line */
+.lo-head-view { grid-area: view; display: flex; align-items: center; gap: 8px; min-height: 38px; }
+.lo-head-view .lo-groupby { margin-right: 0; }
+.lo-screen-head .lo-head-tools { grid-area: tools; margin-left: 0; justify-content: flex-end; gap: 8px; min-height: 38px; flex-wrap: nowrap; }
+/* + New and its menu (the Generate all previews menu's look) */
+.lo-new { position: relative; }
+.lo-new-chev { margin-left: -2px; opacity: 0.7; transition: transform 0.15s ease; }
+.lo-new > button[aria-expanded="true"] .lo-new-chev { transform: rotate(180deg); }
+.sigeon-menu.lo-new-menu { left: 0; right: auto; width: 250px; transform-origin: top left; }
+.lo-new-menu .sigeon-item span { display: inline-flex; align-items: center; gap: 8px; }
+.lo-new-menu .sigeon-item small { font-size: 11.5px; color: var(--text-secondary); }
+.lo-new-menu .sigeon-item:focus-visible { outline: none !important; background: var(--quiet-hover) !important; }   /* the app's menus: focus is the hover fill */
+/* a narrow window: the actions take their own row under the title rather than squeeze */
+@media (max-width: 1000px) {
+  .lo-screen-head { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main view" "tools tools"; }
+  .lo-screen-head .lo-head-tools { justify-content: flex-start; flex-wrap: wrap; }
+}
 .lo-search { width: 220px; padding-right: 4px; }
 .lo-search .lo-icon { width: 22px; height: 22px !important; }
 .lp-types { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -1454,6 +1505,10 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
 .lp-saved svg.lucide { width: 12px !important; height: 12px !important; color: #3ecf6e; }
 @keyframes lp-saved { 0% { opacity: 0; } 10%, 70% { opacity: 1; } 100% { opacity: 0; } }
 .lp-sort { flex: none; }
+/* a loadout's Add mods row: the sort toggle as tall as the search and the hero filter beside it (32px; the app's 36px button
+   floor made it 42). The VFX Updater's row is 42px throughout, so it keeps its own */
+.lp-filters:not(.vf-filters) .lp-sort { height: 32px; box-sizing: border-box; align-items: stretch; }
+.lp-filters:not(.vf-filters) .lp-sort button { height: auto !important; min-height: 0 !important; padding: 0 12px !important; display: inline-flex; align-items: center; }
 /* Add mods: a mod that is on now gets a small green dot */
 .mod-row-on { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #3ecf6e; }
 /* Quiet fields on the loadout page: the app-wide blue focus ring (.app :focus-visible) is for buttons and links; these
@@ -1499,6 +1554,14 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
 /* Loadout page Group: a dropdown of the groups */
 .lp-group { display: flex; align-items: center; gap: 10px; }
 .lp-group .custom-dropdown-container { width: 240px; }
+/* Add mods' hero filter: the search field's height and quiet field look, beside it */
+.lp-filters .lp-hero.custom-dropdown-container { flex: none; width: 170px; height: 32px; }
+.lp-hero .custom-dropdown-trigger { min-height: 0 !important; background-color: var(--field-bg) !important; border-color: var(--panel-border) !important; border-radius: var(--quiet-radius) !important; font-size: 13px !important; }
+.custom-dropdown-img { flex: none; width: 20px; height: 20px; border-radius: 50%; object-fit: cover; background: var(--bg-light); margin-right: 8px; }
+.custom-dropdown-trigger .custom-dropdown-img { margin-right: 0; }
+/* an icon in the portrait's place (All heroes): the same round size, quiet */
+.custom-dropdown-img.is-glyph { display: grid; place-items: center; background: var(--quiet-hover); color: var(--text-secondary); }
+.custom-dropdown-img.is-glyph svg { width: 12px; height: 12px; }
 /* Generating: what it is doing (dot loader, "2 of 9") as a quiet status, and Stop as its own button beside it with a
    small rounded square, the same Stop as Home's batch line */
 .run-group { display: inline-flex; align-items: center; gap: 6px; flex: none; }
@@ -1680,8 +1743,6 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .su-actions .su-safety-btn:not(:first-child) { margin-left: 8px; }   /* beside the main button, a link's quiet look */
 .su-safety-btn .su-caret { transition: transform 150ms ease; }
 .su-safety-btn[aria-expanded="true"] .su-caret { transform: rotate(90deg); }
-.su-spin { animation: su-spin 0.9s linear infinite; }
-@keyframes su-spin { to { transform: rotate(360deg); } }
 .su-confirm { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: 12.5px; color: var(--text-primary);
   background: color-mix(in srgb, var(--accent-primary), transparent 88%); border: 1px solid color-mix(in srgb, var(--accent-primary), transparent 65%); }
 .su-confirm span { margin-right: auto; }
@@ -1775,9 +1836,6 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
   .lp-cover { grid-column: 1; grid-row: 2 / span 3; width: auto; position: sticky; top: 0; }
   .lp-info { grid-column: 2; grid-row: 2; padding-top: 0; }
   .lp > .lp-section { grid-column: 2; min-width: 0; }
-  /* An empty loadout with no picture of any kind has no cover column: Add mods sits right under the name */
-  .lp.is-bare { grid-template-columns: minmax(0, 1fr); }
-  .lp.is-bare .lp-info, .lp.is-bare > .lp-section { grid-column: 1; }
 }
 .lo-grid .lo-card.lo-card-new { min-height: 300px !important; }   /* .lo-card min-height: max-content comes later */
 
@@ -1878,14 +1936,15 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 /* Preview kit: what the PC check found missing (Setup and the first-launch setup) */
 /* Install progress (installTrack.tsx): one status line, no box and no bar. A small spinner, what is happening in the
    primary color, how far along in grey after it. A finished install turns its words green with a check for a moment */
-.su-track { display: flex; align-items: center; gap: 8px; min-width: 0; margin-top: 6px; font-size: 12.5px; }
-.su-spin { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid color-mix(in srgb, var(--text-secondary), transparent 65%);
-  border-top-color: var(--text-primary); animation: su-spin 0.8s linear infinite; }
+.su-track { min-width: 0; margin-top: 6px; font-size: 12.5px; }
+.su-track-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* the VFX Updater's thin bar (.vf-bar): the fill's shimmer is in the shared loading-bar rule below */
+.su-bar { height: 4px; margin-top: 8px; border-radius: 999px; overflow: hidden; background: var(--bg-lighter); }
+.su-bar i { display: block; height: 100%; transition: width 0.4s var(--acc-ease, cubic-bezier(0.22, 1, 0.36, 1)); }
 .su-track-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: var(--text-primary); }
 .su-track-amount { flex: none; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .su-track.is-done, .su-track.is-done .su-track-text { color: #3ecf6e; }
 .su-track.is-done svg { flex: none; color: #3ecf6e; }
-html[data-motion="off"] .su-spin { animation-duration: 2.4s; }
 .su-problems { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .su-problems li { font-size: 12.5px; line-height: 1.5; color: var(--text-primary); padding-left: 14px; position: relative; }
 .su-problems li::before { content: ''; position: absolute; left: 2px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: #e3a008; }
@@ -1971,6 +2030,11 @@ html[data-motion="off"] .t-matrix i { animation: none; opacity: 0.6; }
 .toast-container { width: 480px !important; max-width: calc(100vw - 32px); }
 .toast-item { max-width: none !important; }
 .toast-title, .toast-description { overflow-wrap: anywhere; }   /* a long mod name breaks inside the text column, never under the action */
+/* The text always keeps most of the row: an action with a long label (a mod's name has no spaces to break at) wraps inside its
+   own share and never squeezes the text to a sliver (overflow-wrap: anywhere above lets a column shrink to one letter) */
+.toast-content { flex: 1 1 60%; min-width: 9rem; }
+.toast-end-content { flex: 0 1 auto !important; min-width: 0; max-width: 40%; }
+.toast-action-btn { white-space: normal; overflow-wrap: anywhere; text-align: center; line-height: 1.25; max-width: 100%; }
 
 /* Loadout page rows: Add is a plain + like Remove's X */
 .row-add { color: var(--text-secondary) !important; }
@@ -2323,7 +2387,8 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
 /* Conflicts: a group whose mods no longer clash says "Resolved" in green and settles back */
 .cf-head { position: relative; }
 .cf-resolved { order: 2; margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
-  font-size: 12px; font-weight: 600; color: #3ecf6e; background: color-mix(in srgb, #3ecf6e, transparent 88%); }
+  font-size: 12px; font-weight: 600; color: #3ecf6e; background: color-mix(in srgb, #3ecf6e, transparent 88%);
+  animation: t-text-in var(--text-swap-dur) var(--text-swap-ease) backwards; }   /* transitions.dev Text states: Resolved swaps in */
 .cf-group { transition: border-color 200ms ease, background 200ms ease; }
 .cf-group.is-resolved { border-color: color-mix(in srgb, #3ecf6e, transparent 70%); background: color-mix(in srgb, #3ecf6e, transparent 97%); }
 .cf-group.is-resolved .cf-what h3 { color: var(--text-secondary); }
@@ -2782,13 +2847,26 @@ html[data-motion="off"] .setting-sub, html[data-motion="off"] .bulk-actions-tool
 .bi-pick[aria-expanded="true"] .bi-chev { transform: rotate(180deg); }
 .bi-row .repakx-switch-control { height: 22px !important; min-height: 0 !important; }
 /* the hero picker, folded open under its row; every hero shows at once (no scroll box inside the page's scroll) */
-.bi-picker { display: flex; flex-direction: column; gap: 12px; padding: 4px 12px 12px 56px; }
+.bi-picker { display: flex; flex-direction: column; gap: 16px; padding: 10px 16px 16px 56px; }   /* room between the search row, the heroes and the foot */
 .bi-picker-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .bi-picker-hint { flex: 1; min-width: 220px; margin: 0; font-size: 12px; color: var(--text-secondary); text-align: right; }
 .bi-search { width: 240px; height: 28px; }
+/* the role buttons beside the search: quiet pills, a kept role a soft accent fill (Common region: one group, the search's row) */
+.bi-roles { display: flex; align-items: center; gap: 4px; margin-left: -8px; }   /* right beside the search (the row's gap is 16px): one group, Law of proximity */
+/* a role partly kept stays an unselected pill (only all kept is selected); its count sits close, in the accent, as a quiet
+   "some of these" */
+.bi-role { gap: 0 !important; }
+.bi-role-n { margin-left: 5px; font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; color: color-mix(in srgb, var(--accent-primary), white 30%); }
+.bi-role { height: 28px !important; min-height: 0 !important; padding: 0 12px !important; border-radius: 999px !important; border: 1px solid var(--panel-border) !important;
+  background: transparent !important; color: var(--text-secondary) !important; font-size: 12px !important; font-weight: 500 !important;
+  transition: background-color var(--text-swap-dur) var(--text-swap-ease), color var(--text-swap-dur) var(--text-swap-ease), border-color var(--text-swap-dur) var(--text-swap-ease); }
+.bi-role:hover:not(:disabled) { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
+.bi-role[aria-pressed="true"] { color: var(--text-primary) !important; border-color: color-mix(in srgb, var(--accent-primary), transparent 55%) !important;
+  background: color-mix(in srgb, var(--accent-primary), transparent 86%) !important; }
+.bi-role:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
 /* each hero is a chip: portrait, name on one line, a check that pops in. Scans by name in rows, half the height of
    portrait tiles. Unchecked portraits are muted (they will show the default), checked ones keep their color */
-.bi-heroes { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); grid-auto-rows: max-content; gap: 4px; }
+.bi-heroes { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); grid-auto-rows: max-content; gap: 6px 10px; }
 .bi-hero { display: flex !important; align-items: center; gap: 9px; height: 38px !important; min-height: 0 !important; padding: 0 10px 0 0 !important;
   border: 1px solid transparent !important; border-radius: 999px !important; background: transparent !important;
   color: var(--text-secondary) !important; text-align: left; transition: background-color var(--text-swap-dur) var(--text-swap-ease), border-color var(--text-swap-dur) var(--text-swap-ease), color var(--text-swap-dur) var(--text-swap-ease); }
@@ -2818,7 +2896,7 @@ html[data-motion="off"] .setting-sub, html[data-motion="off"] .bulk-actions-tool
 .bi-hero[aria-checked="true"] .bi-hero-check svg { transform: translateY(1px) scale(1); }
 .bi-hero:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
 .bi-empty { grid-column: 1 / -1; margin: 8px 0; font-size: 12px; color: var(--text-secondary); }
-.bi-picker-foot { display: flex; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px solid var(--panel-border); }
+.bi-picker-foot { display: flex; align-items: center; gap: 8px; padding-top: 14px; border-top: 1px solid var(--panel-border); }
 .bi-kept { font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .bi-cost { font-size: 12px; color: var(--text-secondary); }
 .bi-foot-gap { flex: 1; }
@@ -2845,6 +2923,7 @@ button.mod-type-badge { display: inline-flex; align-items: center; min-height: 0
 .progress-bar-fill,
 .download-progress .progress-fill,
 .repakx-progress-indicator,
+.su-bar i,
 .upd-bar i {
   background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-primary) 38%, color-mix(in srgb, var(--accent-primary), white 45%) 50%,
     var(--accent-primary) 62%, var(--accent-primary) 100%) 0 0 / 250% 100% no-repeat !important;
@@ -2864,7 +2943,7 @@ button.mod-type-badge { display: inline-flex; align-items: center; min-height: 0
 }
 html[data-motion="off"] .toast-item.is-working .toast-progress-bar, html[data-motion="off"] .log-drawer-progress-bar,
 html[data-motion="off"] .progress-bar-fill, html[data-motion="off"] .download-progress .progress-fill,
-html[data-motion="off"] .repakx-progress-indicator, html[data-motion="off"] .upd-bar i,
+html[data-motion="off"] .repakx-progress-indicator, html[data-motion="off"] .upd-bar i, html[data-motion="off"] .su-bar i,
 html[data-motion="off"] .toast-item.is-working .toast-title, html[data-motion="off"] .log-drawer-header.is-loading .log-drawer-status-text,
 html[data-motion="off"] .transfer-progress-view .progress-info span:first-child, html[data-motion="off"] .download-progress .progress-text,
 html[data-motion="off"] .upd-progress > span, html[data-motion="off"] .repakx-progress-label { animation: none !important; background-position: 50% 0 !important; }

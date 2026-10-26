@@ -1,7 +1,7 @@
 // repakxtra: the conflicts screen (Check Conflicts, and a mod's own conflict check), in place of Repak X's ClashPanel.
 // Mods that are on and change the same game files are grouped by exactly which files they share, and each group says
 // in words what they replace ("Both replace Black Panther's materials"), with each mod's priority and switch below.
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Check, ChevronRight } from 'lucide-react'
 import NumberInput from '../components/ui/NumberInput'
@@ -10,6 +10,7 @@ import { resolveHeroImage, useHeroImages } from '../utils/heroImages'
 import { nameKey } from './loadoutStore'
 import { ModName, plural } from './modName'
 import { useDialogFocus } from './dialogFocus'
+import { cue } from './sounds'
 
 type Clash = { file_path: string; mod_paths: string[]; files?: string[] }
 type Mod = { path: string; priority?: number; enabled?: boolean }
@@ -21,11 +22,23 @@ export type ConflictGroup = { mods: string[]; files: string[] }
 const stemOf = (p: string) => p.replace(/\.(pak|bak_repak|pak_disabled)$/i, '')
 /** The same mod after a switch or a priority change too (its 9s and a leading !): its name alone. */
 const sameMod = (p: string) => nameKey(p).replace(/^!/, '').toLowerCase()
+/** The same mod in its folder: two folders can each hold a "Skin", and those are two mods. */
+const sameModIn = (p: string) => `${p.replace(/[\\/][^\\/]*$/, '').toLowerCase()}|${sameMod(p)}`
 
 /** A group is resolved once no two of its mods that are still on share a priority: one left on, or each at its own. */
 export const resolved = (g: ConflictGroup, find: (path: string) => Mod | undefined) => {
   const on = g.mods.map(find).filter((m): m is Mod => Boolean(m && m.enabled !== false))
   return new Set(on.map(m => m.priority ?? 0)).size === on.length
+}
+
+/** The groups to show after a check: the ones shown before keep their place (the fresh copy when the check still has
+ *  them, else as they were, to show as resolved), then the new ones. A group is the same group whatever its mods'
+ *  priorities and switches (sameMod). Pure. */
+export function keepSeen(before: ConflictGroup[], now: ConflictGroup[]) {
+  const id = (g: ConflictGroup) => g.mods.map(sameModIn).sort().join('|')
+  const fresh = new Map(now.map(g => [id(g), g]))
+  const old = new Set(before.map(id))
+  return [...before.map(g => fresh.get(id(g)) ?? g), ...now.filter(g => !old.has(id(g)))]
 }
 
 /** Mods grouped by exactly the files they share: three mods that all change the same seven materials are one group, not
@@ -103,6 +116,9 @@ function Group({ g, heroes, find, done, onSetPriority, onToggleMod, onKeep }: {
   onKeep?: (keep: string, others: Mod[]) => void
 }) {
   const [open, setOpen] = useState(false)
+  // the moment a group is fixed (Keep this one, a priority, a switch): a quiet success, as the badge turns green
+  const was = useRef(done)
+  useEffect(() => { if (done && !was.current) cue('success', { emphasis: 'subtle' }); was.current = done }, [done])
   const d = describe(g, heroes)
   const portrait = d.hero ? resolveHeroImage(d.hero, heroes) : undefined
   return (
@@ -164,13 +180,16 @@ export default function ConflictsPanel({ clashes, mods = [], characterData = [],
 }) {
   useHeroImages()
   const { ref: dialog, onKeyDown: trap } = useDialogFocus() // focus inside, Tab stays inside, back to the opener on close
-  const groups = useMemo(() => groupConflicts(clashes), [clashes])
+  // Every group seen since the screen opened stays, in its place: a priority change makes the app check again, and a
+  // group it fixed is no longer in the new list, so it would vanish instead of saying Resolved (as Keep this one does)
+  const seen = useRef<ConflictGroup[]>([])
+  const groups = useMemo(() => (seen.current = keepSeen(seen.current, groupConflicts(clashes))), [clashes])
   // The list is not checked again after a switch or a priority change, so a mod may now have another extension or
   // name suffix: matched by its stem, then by its name alone
   const find = useMemo(() => {
     const byStem = new Map(mods.map(m => [stemOf(m.path), m]))
-    const byName = new Map(mods.map(m => [sameMod(m.path), m]))
-    return (path: string) => byStem.get(stemOf(path)) ?? byName.get(sameMod(path))
+    const byName = new Map(mods.map(m => [sameModIn(m.path), m])) // in its own folder: never a same-named mod elsewhere
+    return (path: string) => byStem.get(stemOf(path)) ?? byName.get(sameModIn(path))
   }, [mods])
   const open = groups.filter(g => !resolved(g, find)).length // still conflicting, as mods are switched here
   const allDone = groups.length > 0 && open === 0
@@ -237,4 +256,11 @@ if (import.meta.env.DEV) {
   console.assert(!resolved(g3, live([{ path: 'A.pak', priority: 1 }, { path: 'B.pak', priority: 1 }, { path: 'C.pak', priority: 1, enabled: false }])), 'two on at one priority: open')
   console.assert(resolved(g3, live([{ path: 'A.pak', priority: 1 }, { path: 'B.pak', priority: 2 }, { path: 'C.pak', priority: 3 }])), 'each at its own priority: resolved')
   console.assert(resolved(g3, live([{ path: 'A.pak', priority: 1 }, { path: 'B.pak', enabled: false }])), 'one left on (C gone): resolved')
+  // a priority change renames the mod (A_9999999_P -> A_99999999_P) and the new check no longer has the group
+  const ab = { mods: ['m/A_9999999_P.pak', 'm/B_9999999_P.pak'], files: [] }, cd = { mods: ['m/C_9999999_P.pak', 'm/D_9999999_P.pak'], files: [] }
+  const after = keepSeen([ab, cd], [{ mods: ['m/C_99999999_P.pak', 'm/D_9999999_P.pak'], files: ['x'] }, { mods: ['m/E.pak', 'm/F.pak'], files: [] }])
+  const inA = { mods: ['m/A/Skin.pak', 'm/A/Icons.pak'], files: [] }, inB = { mods: ['m/B/Skin.pak', 'm/B/Icons.pak'], files: [] }
+  const both = keepSeen([inA, inB], [inA, inB])
+  console.assert(both[0] === inA && both[1] === inB, 'the same names in two folders are two groups', both)
+  console.assert(after.length === 3 && after[0] === ab && after[1].files[0] === 'x' && after[2].mods[0] === 'm/E.pak', 'a fixed group stays, a still open one is refreshed, a new one goes last', after)
 }

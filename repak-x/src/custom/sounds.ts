@@ -25,6 +25,9 @@ export function cueFor(target: Element): Cue | null {
   if (el.closest('.lo-media-arrow')) return ['navigate', { direction: el.classList.contains('is-prev') ? 'back' : 'forward', emphasis: 'subtle' }]
   if (el.closest('.lp-back')) return ['navigate', { direction: 'back' }]
   if (el.closest('.view-tabs')) return ['navigate', { direction: el.textContent === 'Loadouts' ? 'back' : 'forward' }]
+  if (el.matches('.bi-role')) return ['toggle', { direction: el.getAttribute('aria-pressed') === 'true' ? 'back' : 'forward' }] // a role kept or let go
+  if (el.matches('.loadout-badge, .vf-loadouts')) return ['navigate', { direction: 'forward' }] // the In loadout tag opens that loadout
+  if (el.matches('.sl-count')) return el.getAttribute('aria-expanded') === 'true' ? ['close', { emphasis: 'subtle' }] : ['open'] // Smart loadouts: a group's mods
   if (el.matches('.bi-pick')) return el.getAttribute('aria-expanded') === 'true' ? ['close', { emphasis: 'subtle' }] : ['open'] // Built-in hero picker
   if (el.matches('.custom-dropdown-trigger')) return el.classList.contains('open') ? ['close', { emphasis: 'subtle' }] : ['open']
   // any other menu button (Install's arrow, All/On/Off, the view menu, More): open and close like the dropdowns
@@ -101,6 +104,8 @@ if (import.meta.env.DEV) {
   console.assert(cueFor(b)?.[0] === 'toggle' && cueFor(b)?.[1]?.direction === 'back', 'switch turning off plays toggle backwards')
   const d = document.createElement('button'); d.title = 'Delete Flames'
   console.assert(cueFor(d)?.[1]?.emphasis === 'strong', 'delete plays a strong close')
+  const r = document.createElement('button'); r.className = 'bi-role'; r.setAttribute('aria-pressed', 'false')
+  console.assert(cueFor(r)?.[0] === 'toggle' && cueFor(r)?.[1]?.direction === 'forward', 'a role button keeping its heroes toggles forward')
   const s = document.createElement('span')
   console.assert(cueFor(s) === null, 'plain text is silent')
   const k = (key: string, more = {}) => typingKey({ key, ctrlKey: false, metaKey: false, altKey: false, repeat: false, ...more })

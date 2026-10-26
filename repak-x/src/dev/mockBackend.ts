@@ -277,7 +277,9 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       }
       // localStorage 'mock.crash' = '1': the newest crash the setup report names
       case 'xtra_newest_crash': return localStorage.getItem('mock.crash') === '1'
-        ? { time: Math.floor(Date.now() / 1000) - 3600, crash_type: 'Access Violation', asset_path: '/Game/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001' } : null
+        ? { time: Math.floor(Date.now() / 1000) - 3600, crash_type: 'Access Violation', asset_path: '/Game/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001', seconds_since_start: 412,
+            message: 'Fatal error: [File:D:/build/Engine/Source/Runtime/CoreUObject/ObjectSerializationError.cpp] ObjectSerializationError', detail: 'Serial size mismatch: Got 4096, Expected 4112' } : null
+      case 'xtra_niagara_mods': return (args?.modPaths ?? []).filter((p: string) => /vfx/i.test(p))
       case 'xtra_upstream_running': return Boolean(mock.__repakXOpen)
       case 'xtra_stage_off_files': { // like xtra_offfiles.rs: a .off set becomes one staged .pak
         const out: string[] = []
@@ -331,9 +333,12 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         if (localStorage.getItem('mock.pick')) return JSON.parse(localStorage.getItem('mock.pick')!) // a JSON list of paths
         return ['C:/Fake/Drop/Alpha_Skin_9999999_P.pak', 'C:/Fake/Drop/Beta_Icons_9999999_P.pak']
       // localStorage 'mock.dropType' sets the dropped mods' type (e.g. 'Daredevil - Mesh [Blueprint]')
-      case 'parse_dropped_files':
-        return (args?.paths ?? []).map((path: string) => ({ path, mod_name: path.split('/').pop(), mod_type: localStorage.getItem('mock.dropType') || 'Black Panther - Texture',
-          is_dir: false, contains_uassets: true, contains_raw_assets: false, auto_to_repak: false, file_size: 1048576 }))
+      // 'mock.dropRaw' = '1': the drop is a raw pak (audio, config: no uassets), as an sfx mod is
+      case 'parse_dropped_files': {
+        const raw = localStorage.getItem('mock.dropRaw') === '1'
+        return (args?.paths ?? []).map((path: string) => ({ path, mod_name: path.split('/').pop(), mod_type: raw ? 'Audio' : localStorage.getItem('mock.dropType') || 'Black Panther - Texture',
+          is_dir: false, contains_uassets: !raw, contains_raw_assets: false, auto_to_repak: false, file_size: 1048576 }))
+      }
       case 'install_mods':
         for (const m of args?.mods ?? []) {
           if (m.enabled === false) continue // left out of an archive: the real backend skips it too

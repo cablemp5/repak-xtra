@@ -15,7 +15,10 @@ export type Originals = 'off' | 'trash' | 'keep'
 export const readNaming = (): Naming => (localStorage.getItem(KEEP_NAME) === '0' ? 'updated' : 'broken')
 export function readOriginals(): Originals {
   const v = localStorage.getItem(ORIGINALS)
-  return v === 'off' || v === 'trash' || v === 'keep' ? v : localStorage.getItem(TURN_OFF) === '0' ? 'keep' : 'off'
+  if (v === 'off' || v === 'trash' || v === 'keep') return v
+  // a choice saved before Originals had three: '1' turned them off, '0' left them on. Only never-chosen gets the new default
+  const old = localStorage.getItem(TURN_OFF)
+  return old === '1' ? 'off' : old === '0' ? 'keep' : 'trash' // untouched: the original goes to Recently deleted, out of the way and one click back
 }
 
 export type RunLock = { token: string; window: string; name?: string | null }

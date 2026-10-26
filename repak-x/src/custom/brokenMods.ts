@@ -23,8 +23,12 @@ const subscribe = (l: () => void) => { listeners.add(l); return () => { listener
 export const VERDICTS_CHANGED = 'xtra-verdicts-changed'
 export const verdictsChanged = () => emit(VERDICTS_CHANGED).catch(() => {})
 
-/** Re-checks a moment after mods are added, removed or replaced (the first run after a game update reads the game's
- *  asset list, which takes a while: the badges appear when it is done). */
+/** Scan (Refresh list, Ctrl+Shift+R) sends it: the Library runs every check again, the background ones too. */
+export const VERDICTS_RESCAN = 'xtra-verdicts-rescan'
+export const rescanVerdicts = () => emit(VERDICTS_RESCAN).catch(() => {})
+
+/** Re-checks a moment after mods are added, removed or replaced, at every launch and on every Scan (the first run after a
+ *  game update reads the game's asset list, which takes a while: the badges appear when it is done). */
 export function useBrokenWatch(mods: { path: string; modified_date?: number; file_size?: number }[]) {
   const key = mods.map(m => `${norm(m.path)}|${m.modified_date ?? ''}|${m.file_size ?? ''}`).sort().join('\n')
   useEffect(() => {
@@ -33,18 +37,22 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     const check = () => invoke<Verdict[]>('xtra_broken_mods', { modPaths: mods.map(m => m.path) })
       .then(r => { if (live) { verdicts = new Map(r.map(v => [norm(v.path), v])); version++; listeners.forEach(l => l()) } })
       .catch(e => console.warn('[brokenMods] check failed', e))
-    const t = setTimeout(() => {
-      // then VFX mods newer than the update whose Niagara files may still be in the old layout: decoded once each in the
-      // background (xtra_niagara.rs), and checked again when one is. Then the mods the date calls current: their
-      // materials checked once each per game update (xtra_vfx_check.rs), so one made before the update is flagged too
-      void check().then(() => (live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: mods.map(m => m.path) }) : 0))
-        .then(found => (live && found ? check() : undefined))
-        .then(() => (live ? invoke<number>('xtra_vfx_check_scan', { modPaths: mods.filter(m => verdicts.get(norm(m.path))?.kind !== 'vfx').map(m => m.path) }) : 0))
-        .then(found => { if (live && found) void check() })
-        .catch(e => console.warn('[brokenMods] background scan failed', e))
-    }, 1500)
+    // then VFX mods newer than the update whose Niagara files may still be in the old layout: decoded once each in the
+    // background (xtra_niagara.rs), and checked again when one is. Then the mods the date calls current: their materials
+    // checked once each per game update (xtra_vfx_check.rs), so one made before the update, or installed before
+    // repakxtra kept made dates, is flagged too. Both need the game's USMAP: fetched first (an ETag check when it has
+    // it), so a library whose VFX Updater was never opened is checked as well
+    const full = () => check()
+      .then(() => (live ? invoke('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
+      .then(() => (live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: mods.map(m => m.path) }) : 0))
+      .then(found => (live && found ? check() : undefined))
+      .then(() => (live ? invoke<number>('xtra_vfx_check_scan', { modPaths: mods.filter(m => verdicts.get(norm(m.path))?.kind !== 'vfx').map(m => m.path) }) : 0))
+      .then(found => { if (live && found) void check() })
+      .catch(e => console.warn('[brokenMods] background scan failed', e))
+    const t = setTimeout(() => { void full() }, 1500)
     const again = listen(VERDICTS_CHANGED, () => { void check() })
-    return () => { live = false; clearTimeout(t); void again.then(f => f()) }
+    const rescan = listen(VERDICTS_RESCAN, () => { void full() })
+    return () => { live = false; clearTimeout(t); void again.then(f => f()); void rescan.then(f => f()) }
   }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 

@@ -127,7 +127,7 @@ export async function sweepOrphanMedia(keep: Set<string>): Promise<void> {
 export async function prepareMedia(file: Blob): Promise<{ blob: Blob; type: 'image' | 'video' }> {
   if (file.size > MAX_BYTES) throw new Error(`File is ${Math.round(file.size / 1048576)} MB; the limit is 300 MB.`)
   if (file.type.startsWith('video/')) return { blob: file, type: 'video' }
-  if (!file.type.startsWith('image/')) throw new Error('Pick an image, GIF or video file.')
+  if (!file.type.startsWith('image/')) throw new Error('Pick an image, GIF, or video file.')
   if (file.type === 'image/gif') return { blob: file, type: 'image' }
   const bitmap = await createImageBitmap(file)
   const scale = Math.min(1, 1280 / bitmap.width)

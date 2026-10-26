@@ -15,7 +15,7 @@ import { revealOnLoad } from './motion'
 import { EGG_MS, stepEgg, stepText } from './previewStages'
 import { plural } from './modName'
 
-const NOTHING = 'Nothing to show for this mod: previews cover skins, meshes, textures, animations, UI icons, VFX colors and sounds.'
+const NOTHING = 'Nothing to show for this mod: previews cover skins, meshes, textures, animations, UI icons, VFX colors, and sounds.'
 const FAILED = 'The last render failed. The full error is in Logs.'
 const SET_FAILED = 'The last loadout render failed. The full error is in Logs.'
 const BUSY = 'Another preview generator is running (a manual run or an earlier app session).'
@@ -42,7 +42,7 @@ const loadoutOf = (setKey: string) => readLoadouts().find(x => previewSetKey(x.i
  *  install), or when the card had nothing else to show. Its image, capture and text all stay, one click away. */
 const showPreviewCover = (setKey: string, show: boolean) => {
   const l = loadoutOf(setKey)
-  if (l && l.cover !== 'preview' && (show || pickCover(l, coverFills(l, false)) === null)) patchLoadout(l.id, { cover: 'preview' })
+  if (l && l.cover !== 'preview' && (show || pickCover(l, coverFills(l, false)) === null)) patchLoadout(l.id, { cover: 'preview' }, false)
 }
 const covers = new Map<string, Covers & { rev: number }>() // loadout render key -> the mods it shows and the mods it was rendered for
 // Shared caches, so a card that remounts (Home -> page -> Home) shows its image at once without reading it again.

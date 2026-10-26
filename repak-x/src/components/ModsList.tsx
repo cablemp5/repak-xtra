@@ -15,6 +15,7 @@ import { VerdictBadge } from '../custom/VerdictBadge' // repakxtra
 import { isBuiltin } from '../custom/builtinRows' // repakxtra
 import { BuiltinIcon, revealBuiltin, useBuiltins } from '../custom/BuiltinMods' // repakxtra
 import { NexusTag } from '../custom/nexusSource' // repakxtra
+import { LoadoutTag } from '../custom/LoadoutTag' // repakxtra
 import { useVfxUpdating } from '../custom/vfx/quick' // repakxtra
 import { detectHeroesWithData } from '../utils/heroes'
 import { useHoverTextReveal } from '../hooks/useHoverTextReveal'
@@ -529,6 +530,7 @@ const ModItem = memo(function ModItem({
                             onClick={(e) => { e.stopPropagation(); revealBuiltin(mod.builtin) }}>Built-in</button>
                     )}
                     <NexusTag path={mod.path} />{/* repakxtra: installed from Nexus Mods (custom/nexusSource.tsx), right of the file size */}
+                    {!builtin && <LoadoutTag path={mod.path} />}{/* repakxtra: the loadouts it is in (custom/LoadoutTag.tsx) */}
                     {/* repakxtra: Project Galacta compatible mods (xtra_classify.rs) */}
                     {typeof modDetails?.mod_type === 'string' && /\[[^\]]*Project Galacta[^\]]*\]$/.test(modDetails.mod_type) && (
                         <span className="mod-type-badge pg-badge" title="Project Galacta compatible: pick it per skin in the Galacta Companion App"><i className="tag-logo pg-logo" aria-hidden="true" />Galacta</span>
