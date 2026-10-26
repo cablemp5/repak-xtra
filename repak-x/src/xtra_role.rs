@@ -32,6 +32,12 @@ fn consent_url(worker: &str, state: &str) -> String {
     url.into()
 }
 
+/// Whether Claim role can work in this build (the Worker's address is set): the card disables it otherwise.
+#[tauri::command]
+pub fn xtra_role_ready() -> bool {
+    WORKER.is_some()
+}
+
 /// Starts a claim: a new state (any older one stops counting) and the consent page to open.
 #[tauri::command]
 pub fn xtra_role_claim_start() -> Result<String, String> {

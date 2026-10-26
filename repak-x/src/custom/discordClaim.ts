@@ -25,7 +25,7 @@ export function claimText(state: ClaimState): string | null {
     case 'denied': return 'Nothing changed. Try again any time.'
     case 'error': case 'timeout': return AGAIN
     case 'unset': return 'Claim role is not set up yet.'
-    default: return null
+    default: return 'Get the repakxtra user role in this server.'
   }
 }
 
@@ -73,6 +73,14 @@ export async function startClaim() {
   }
 }
 
+let checked = false
+/** Once: a build without the Worker's address says so before any click, and the button stays off. */
+export function checkReady() {
+  if (checked) return
+  checked = true
+  invoke<boolean>('xtra_role_ready').then(ok => { if (!ok && state === 'idle') set('unset') }).catch(() => { checked = false })
+}
+
 /** Where the claim stands, for the card. */
 export const useClaim = () => useSyncExternalStore(f => { subscribers.add(f); return () => { subscribers.delete(f) } }, () => state)
 
@@ -81,7 +89,7 @@ if (import.meta.env.DEV) {
   console.assert(claimText('ok') === 'Done. You have the role.' && claimText('not_member') === 'Join the server first, then claim again.', 'ok and not a member')
   console.assert(claimText('denied') === 'Nothing changed. Try again any time.', 'denied')
   console.assert(claimText('error') === AGAIN && claimText('timeout') === AGAIN, 'an error and the timeout read alike')
-  console.assert(claimText('idle') === null, 'nothing shows before a click')
+  console.assert(claimText('idle') === 'Get the repakxtra user role in this server.', 'before a click: which role, in which server')
   console.assert(fromResult('ok') === 'ok' && fromResult('denied') === 'denied' && fromResult('admin') === 'error', 'results map, unknown is an error')
   console.assert(GIVE_UP_MS === 300_000, 'gives up after 5 minutes')
   console.assert(answers({ state: 'b', result: 'ok' }, true, 'b'), 'this claim\'s answer settles it')

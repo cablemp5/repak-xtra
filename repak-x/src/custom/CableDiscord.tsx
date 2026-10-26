@@ -3,7 +3,8 @@
 // online and member counts without the server widget. cable's card also has Claim role (discordClaim.ts).
 import { useEffect, useState } from 'react'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
-import { claimText, startClaim, useClaim } from './discordClaim'
+import { Check } from 'lucide-react'
+import { checkReady, claimText, startClaim, useClaim } from './discordClaim'
 import { SwapText } from './motion'
 
 type Invite = { guild?: { id: string; name: string; icon?: string | null }; approximate_presence_count?: number; approximate_member_count?: number }
@@ -19,6 +20,7 @@ export function DiscordCard({ invite, fallbackName, claim = false }: { invite: s
   const g = info?.guild
   // Doherty threshold: the line says what to do on the click itself, the answer replaces it in place
   const claimed = useClaim()
+  useEffect(() => { if (claim) checkReady() }, [claim])
   const line = claim ? claimText(claimed) : null
   return (
     <div className="cd-card">
@@ -35,8 +37,11 @@ export function DiscordCard({ invite, fallbackName, claim = false }: { invite: s
       </div>
       {/* Hick's law: one action, no options. Join beside it answers "not in the server yet". Jakob's law: Discord's own
           consent page, the flow members know from other apps */}
-      {claim && <button type="button" className="lo-text-btn" disabled={claimed === 'waiting'} onClick={startClaim}
-        title="Opens Discord in your browser. Authorize repakxtra and the server gives you the role.">Claim role</button>}
+      {/* Von Restorff: once claimed the action becomes the result, so the card no longer asks for it */}
+      {claim && (claimed === 'ok'
+        ? <button type="button" className="lo-text-btn" disabled title="The repakxtra user role is yours"><Check size={13} aria-hidden="true" /> Role claimed</button>
+        : <button type="button" className="lo-text-btn" disabled={claimed === 'waiting' || claimed === 'unset'} onClick={startClaim}
+            title={claimed === 'unset' ? 'Claim role is not set up yet.' : 'Opens Discord in your browser. Authorize repakxtra and the server gives you the repakxtra user role.'}>Claim role</button>)}
       <button type="button" className="lo-text-btn" onClick={() => openUrl(`https://discord.gg/${invite}`)}>Join</button>
     </div>
   )

@@ -315,6 +315,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       }
       // repakxtra: Claim role (xtra_role.rs). localStorage 'mock.discordClaim': ok (the default), not_member, denied, error,
       // unset (the Worker is not set up), or wait (no answer, so the 5 minute timeout shows)
+      case 'xtra_role_ready': return localStorage.getItem('mock.discordClaim') !== 'unset'
       case 'xtra_role_claim_start': {
         const mode = localStorage.getItem('mock.discordClaim') || 'ok'
         if (mode === 'unset') throw 'Claim role is not set up yet'

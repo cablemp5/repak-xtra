@@ -8543,7 +8543,7 @@ fn main() {
             xtra_identity::xtra_protocol_reclaim,
             xtra_crash::xtra_newest_crash, // repakxtra: setup report
             xtra_crash::xtra_crash_suspects, // repakxtra: crash suspects
-            xtra_role::xtra_role_claim_start, // repakxtra: Claim role
+            xtra_role::xtra_role_claim_start, xtra_role::xtra_role_ready, // repakxtra: Claim role
             xtra_broken::xtra_broken_mods, // repakxtra: broken mods
             xtra_broken::xtra_vfx_no_update, // repakxtra: Nothing to update stops the Needs VFX update flag
             xtra_vfx_check::xtra_vfx_check, // repakxtra: Check for VFX update
