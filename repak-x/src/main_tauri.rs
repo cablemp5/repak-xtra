@@ -8234,8 +8234,8 @@ fn register_protocol_handler() -> Result<(), Box<dyn std::error::Error>> {
 // ============================================================================
 
 fn handle_deep_link_url(url: &str, app_handle: &tauri::AppHandle) {
+    if xtra_role::on_link(url, app_handle) { return; } // repakxtra: Claim role's answer, before the log line (its state stays out of the log)
     info!("Processing deep link URL: {}", url);
-    if xtra_role::on_link(url, app_handle) { return; } // repakxtra: Claim role's answer from the browser
 
     if let Ok(parsed) = url::Url::parse(url) {
         if parsed.scheme() == "repakx" && parsed.host_str() == Some("install") {

@@ -52,7 +52,7 @@ function settle(s: ClaimState) {
 
 const listenOnce = () => (listening ??= listen<Answer>('xtra-role-claimed', e => {
   if (answers(e.payload, state === 'waiting', mine)) settle(fromResult(e.payload.result))
-}))
+}).catch(e => { listening = null; throw e })) // a failed subscription is tried again on the next claim
 
 /** Starts a claim, unless one is waiting. */
 export async function startClaim() {
