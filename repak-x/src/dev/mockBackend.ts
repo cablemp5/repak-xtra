@@ -313,6 +313,14 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
           crash_type: 'Access Violation', asset_path: '/Game/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001', character_id: '1026', is_mesh_crash: true }), 500)
         return { crash_folder }
       }
+      // repakxtra: Claim role (xtra_role.rs). localStorage 'mock.discordClaim': ok (the default), not_member, denied, error,
+      // unset (the Worker is not set up), or wait (no answer, so the 5 minute timeout shows)
+      case 'xtra_role_claim_start': {
+        const mode = localStorage.getItem('mock.discordClaim') || 'ok'
+        if (mode === 'unset') throw 'Claim role is not set up yet'
+        if (mode !== 'wait') setTimeout(() => emit('xtra-role-claimed', mode), 1000)
+        return 'https://discord.com/oauth2/authorize?client_id=mock&state=mock'
+      }
       case 'get_skip_launcher_status': return false
       // localStorage 'mock.clashes': a JSON list of { file_path, mod_paths } to show conflicts (custom/conflicts.ts)
       case 'check_mod_clashes': return JSON.parse(localStorage.getItem('mock.clashes') || '[]')

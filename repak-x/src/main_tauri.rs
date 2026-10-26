@@ -27,6 +27,7 @@ mod xtra_offfiles; // repakxtra: .pak.off files install like .pak
 mod xtra_bundle; // repakxtra: a mod's pak/utoc/ucas found and moved as one set
 mod xtra_updater; // repakxtra: applies an update without string-built shell commands
 mod xtra_conflicts; // repakxtra: conflict comparison by normalized asset path, cached file lists
+mod xtra_role; // repakxtra: Claim role on cable's Discord card
 mod xtra_extract; // repakxtra: unpacks only archives whose paths stay inside the output folder
 mod xtra_vfx; // repakxtra: VFX fixing after game updates
 mod xtra_niagara; // repakxtra: the VFX Updater's Niagara step
@@ -8234,6 +8235,7 @@ fn register_protocol_handler() -> Result<(), Box<dyn std::error::Error>> {
 
 fn handle_deep_link_url(url: &str, app_handle: &tauri::AppHandle) {
     info!("Processing deep link URL: {}", url);
+    if xtra_role::on_link(url, app_handle) { return; } // repakxtra: Claim role's answer from the browser
 
     if let Ok(parsed) = url::Url::parse(url) {
         if parsed.scheme() == "repakx" && parsed.host_str() == Some("install") {
@@ -8541,6 +8543,7 @@ fn main() {
             xtra_identity::xtra_protocol_reclaim,
             xtra_crash::xtra_newest_crash, // repakxtra: setup report
             xtra_crash::xtra_crash_suspects, // repakxtra: crash suspects
+            xtra_role::xtra_role_claim_start, // repakxtra: Claim role
             xtra_broken::xtra_broken_mods, // repakxtra: broken mods
             xtra_broken::xtra_vfx_no_update, // repakxtra: Nothing to update stops the Needs VFX update flag
             xtra_vfx_check::xtra_vfx_check, // repakxtra: Check for VFX update

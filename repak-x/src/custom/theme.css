@@ -1996,6 +1996,7 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .cd-meta { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .cd-dot { width: 7px; height: 7px; border-radius: 50%; background: #3ecf6e; }
 .cd-members { margin-left: 6px; }
+.cd-claim { font-size: 12px; color: var(--text-secondary); }   /* Claim role's answer, quiet like the meta line */
 
 /* transitions.dev: Matrix dot loader (custom/motion.tsx MatrixLoader). Dots fade up and down on a 1.4s loop, each
    starting at its own point, so the grid twinkles at random */
