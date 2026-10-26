@@ -46,7 +46,7 @@ impl Options {
 /// What the game says about one of its Environment textures (read from the installed game at build time).
 #[derive(Debug, Clone, Default)]
 pub struct Vanilla {
-    /// /Game/Marvel/Environment/.../T_Name (or Marvel/Content/...)
+    /// as the game lists it: Marvel/Content/Marvel/Environment/.../T_Name
     pub path: String,
     /// CompressionSettings, empty when the game leaves it at the default
     pub compression: String,
@@ -233,11 +233,10 @@ fn game_path(vfs: &str) -> Option<String> {
     Some(format!("/Game/{}", v[i + "/content/".len()..].trim_end_matches(".uasset")))
 }
 
-/// One package to write: where (as the game lists it), which shape, which pixel (RGBA).
+/// One package to write: where (as the game lists it), which pixel (RGBA), with which settings.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Planned {
     pub vfs: String,
-    pub normal_shape: bool,
     pub pixel: [u8; 4],
     pub settings: Settings,
 }
@@ -248,9 +247,8 @@ pub fn plan(textures: &[Vanilla], look: &Look) -> Vec<Planned> {
         .iter()
         .filter_map(|t| {
             let px = pixel(classify(t, look.lobby), look)?;
-            let normal_shape = t.compression.eq_ignore_ascii_case("TC_Normalmap");
-            let settings = if normal_shape { Settings::normal() } else { Settings { compression: t.compression.clone(), lod_group: t.lod_group.clone(), srgb_off: t.srgb_off } };
-            Some(Planned { vfs: t.path.clone(), normal_shape, pixel: px, settings })
+            let settings = if t.compression.eq_ignore_ascii_case("TC_Normalmap") { Settings::normal() } else { Settings { compression: t.compression.clone(), lod_group: t.lod_group.clone(), srgb_off: t.srgb_off } };
+            Some(Planned { vfs: t.path.clone(), pixel: px, settings })
         })
         .collect()
 }
@@ -465,9 +463,9 @@ fn vanilla_of(vfs: &str, json: &Value) -> Option<Vanilla> {
     Some(Vanilla { path: vfs.to_string(), compression: prop("CompressionSettings"), lod_group: prop("LODGroup"), srgb_off })
 }
 
-/// Reads the settings of every listed texture, `BATCH` at a time, each batch deleted before the next.
 const STOPPED: &str = "Stopped: switched off while it built";
 
+/// Reads the settings of every listed texture, `BATCH` at a time, each batch deleted before the next.
 async fn read_settings(tool: &Path, usmap: &str, paks: &Path, listed: &[String], work: &Path, stop: fn() -> bool) -> Result<Vec<Vanilla>, String> {
     let sink = crate::vfx_updater::progress::NoOpProgressSink;
     let mut all = Vec::with_capacity(listed.len());
@@ -720,8 +718,8 @@ mod tests {
     #[test]
     fn the_game_decides_normal_maps_never_the_name() {
         assert_eq!(classify(&t("T_Rock_MRO", "TC_Normalmap"), true), Kind::Normal, "121 _MRO textures are stored as normal maps");
-        assert_eq!(plan(&[t("T_Rock_N", "")], &V6)[0].normal_shape, false, "named a normal map, stored as color: its own settings");
-        assert_eq!(plan(&[t("T_Rock_N", "TC_Normalmap")], &V6)[0].normal_shape, true);
+        assert_eq!(plan(&[t("T_Rock_N", "")], &V6)[0].settings, Settings::default(), "named a normal map, stored as color: its own settings");
+        assert_eq!(plan(&[t("T_Rock_N", "TC_Normalmap")], &V6)[0].settings, Settings::normal());
     }
 
     #[test]
@@ -859,10 +857,6 @@ mod tests {
         assert_eq!(group_digits(27181), "27,181");
         assert_eq!(group_digits(999), "999");
     }
-    fn dir_size(d: &std::path::Path) -> u64 {
-        walkdir::WalkDir::new(d).into_iter().flatten().filter_map(|e| e.metadata().ok()).filter(|m| m.is_file()).map(|m| m.len()).sum()
-    }
-
     fn read_json(p: &std::path::Path) -> Value {
         serde_json::from_str(std::fs::read_to_string(p).unwrap().trim_start_matches('\u{feff}')).unwrap()
     }
@@ -1028,141 +1022,5 @@ mod tests {
             std::fs::write(p, &kinds_out).unwrap();
         }
         println!("we write but the oracle leaves alone: {ours_only}. The oracle covers but we leave alone: {oracle_only}. Oracle packages not in this game: {}", oracle.keys().filter(|k| !seen.contains(*k)).count());
-    }
-
-    /// S4: REPAKXTRA_PAKS=<Paks> REPAKXTRA_USMAP=<usmap> REPAKXTRA_QUAKE_GAME=<S1 props TSV> cargo test -p repak-x --bin
-    /// REPAK-X s4_pack -- --ignored --nocapture. Writes 1,000 packages from the plan, packs them into IoStore, lists the
-    /// container, extracts it again and checks each package's pixel.
-    #[test]
-    #[ignore]
-    fn s4_pack() {
-        let paks = std::env::var("REPAKXTRA_PAKS").unwrap();
-        let usmap = std::env::var("REPAKXTRA_USMAP").unwrap();
-        let game: Vec<Vanilla> = std::fs::read_to_string(std::env::var("REPAKXTRA_QUAKE_GAME").unwrap()).unwrap().lines().map(|l| {
-            let f: Vec<&str> = l.split('\t').collect();
-            Vanilla { path: f[0].to_string(), compression: f[1].to_string(), lod_group: f[2].to_string(), srgb_off: f[3] == "false" }
-        }).collect();
-        let look = Look { base: parse_hex("5d7a80").unwrap(), sky: parse_hex("82c6ed").unwrap(), hide_plants: true, lobby: true };
-        let all = plan(&game, &look);
-        let planned: Vec<Planned> = all.iter().step_by(all.len() / 1000).take(1000).cloned().collect();
-        let work = std::env::temp_dir().join("quake-s4");
-        let _ = std::fs::remove_dir_all(&work);
-        let t = std::time::Instant::now();
-        uasset_toolkit::init_global_toolkit().unwrap();
-        let files = write_jsons(&planned, &work.join("json")).unwrap();
-        let req = serde_json::json!({ "action": "batch_from_json", "file_paths": files, "usmap_path": usmap, "output_path": work.join("legacy").to_string_lossy(), "base_path": work.join("json").to_string_lossy() });
-        let r = uasset_toolkit::invoke_json(&req.to_string()).unwrap();
-        assert!(r.contains("\"success\":true"), "{r}");
-        fix_written(&planned, &work.join("legacy"), &work.join("json")).unwrap();
-        let written = t.elapsed();
-        let tool = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/uassettool/UAssetTool.dll");
-        let base = work.join("io").join("repakxtra-custom-quake_9999999_P");
-        std::fs::create_dir_all(work.join("io")).unwrap();
-        let t = std::time::Instant::now();
-        tauri::async_runtime::block_on(crate::vfx_updater::uasset_tool::pack_to_iostore(&tool, &usmap, &work.join("legacy").to_string_lossy(), &base.to_string_lossy(), None, &crate::vfx_updater::progress::NoOpProgressSink)).unwrap();
-        let packed = t.elapsed();
-        let size: u64 = ["pak", "utoc", "ucas"].iter().filter_map(|e| std::fs::metadata(base.with_extension(e)).ok()).map(|m| m.len()).sum();
-        let listed: Vec<String> = crate::utoc_utils::try_read_utoc(&base.with_extension("utoc")).unwrap().into_iter().map(|e| e.file_path).filter(|f| f.ends_with(".uasset")).collect();
-        let cli = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/uassettool-cli/UAssetTool.exe");
-        let o = std::process::Command::new(&cli).args(["extract_iostore_legacy", &paks, work.join("back").to_str().unwrap(), "--mod", base.with_extension("utoc").to_str().unwrap()]).output().unwrap();
-        assert!(o.status.success());
-        let mut ok = 0;
-        for p in &planned {
-            let b = std::fs::read(work.join("back").join(format!("{}.uexp", p.vfs))).unwrap_or_default();
-            let tag = b"PF_B8G8R8A8\0";
-            let at = b.windows(tag.len()).position(|w| w == tag);
-            // a 1x1 BGRA8 texture, its SkipOffset as the cooker writes it, and the planned pixel before the 1x1x1 size
-            let mut c = b.clone();
-            let found = fix_skip_offset(&mut c).is_ok() && c == b;
-            let [r, g, bl, a] = p.pixel;
-            let bgra = [bl, g, r, a];
-            if found && at.is_some() && b.windows(16).any(|w| w[..4] == bgra && w[4..] == [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]) {
-                ok += 1;
-            }
-        }
-        println!("S4: {} planned of {} in the plan, written in {written:?}, packed in {packed:?}, {} bytes, utoc lists {} packages, {ok} read back with their pixel", planned.len(), all.len(), size, listed.len());
-    }
-
-    /// S1 full run: REPAKXTRA_PAKS=<Paks> REPAKXTRA_USMAP=<usmap> REPAKXTRA_QUAKE_LIST=<txt of package paths> cargo test -p
-    /// repak-x --bin REPAK-X s1_full -- --ignored --nocapture. Extracts in batches (the CLI, a fresh game load each time),
-    /// reads each texture's properties in process, deletes the batch, and writes a TSV beside the list.
-    #[test]
-    #[ignore]
-    fn s1_full() {
-        let paks = std::env::var("REPAKXTRA_PAKS").expect("REPAKXTRA_PAKS");
-        let usmap = std::env::var("REPAKXTRA_USMAP").expect("REPAKXTRA_USMAP");
-        let list = std::path::PathBuf::from(std::env::var("REPAKXTRA_QUAKE_LIST").expect("REPAKXTRA_QUAKE_LIST"));
-        let batch: usize = std::env::var("REPAKXTRA_QUAKE_BATCH").ok().and_then(|b| b.parse().ok()).unwrap_or(1000);
-        let cli = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/uassettool-cli/UAssetTool.exe");
-        let paths: Vec<String> = std::fs::read_to_string(&list).unwrap().lines().map(str::to_string).filter(|l| !l.is_empty()).collect();
-        let work = std::env::temp_dir().join("quake-s1-full");
-        uasset_toolkit::init_global_toolkit().expect("toolkit");
-        let mut out = String::new();
-        let (mut peak, mut t_extract, mut t_json, mut t_parse) = (0u64, 0f64, 0f64, 0f64);
-        let all = std::time::Instant::now();
-        for (n, chunk) in paths.chunks(batch).enumerate() {
-            let _ = std::fs::remove_dir_all(&work);
-            std::fs::create_dir_all(&work).unwrap();
-            let filter = work.join("filter.txt");
-            std::fs::write(&filter, chunk.join("\n")).unwrap();
-            let (legacy, json) = (work.join("legacy"), work.join("json"));
-            let t = std::time::Instant::now();
-            let o = std::process::Command::new(&cli).args(["extract_iostore_legacy", &paks, legacy.to_str().unwrap(), "--filter", filter.to_str().unwrap()]).output().unwrap();
-            assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
-            t_extract += t.elapsed().as_secs_f64();
-            let files: Vec<String> = walkdir::WalkDir::new(&legacy).into_iter().flatten().filter(|e| e.path().extension().is_some_and(|x| x == "uasset")).map(|e| e.path().to_string_lossy().replace('\\', "/")).collect();
-            let t = std::time::Instant::now();
-            let req = serde_json::json!({ "action": "batch_to_json", "file_paths": files, "usmap_path": usmap, "output_path": json.to_string_lossy(), "base_path": legacy.to_string_lossy() });
-            uasset_toolkit::invoke_json(&req.to_string()).expect("to json");
-            t_json += t.elapsed().as_secs_f64();
-            peak = peak.max(dir_size(&work));
-            let t = std::time::Instant::now();
-            for e in walkdir::WalkDir::new(&json).into_iter().flatten().filter(|e| e.path().extension().is_some_and(|x| x == "json")) {
-                let text = std::fs::read_to_string(e.path()).unwrap();
-                let v: serde_json::Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).unwrap();
-                let ex = &v["Exports"][0];
-                let prop = |name: &str| ex["Data"].as_array().and_then(|d| d.iter().find(|p| p["Name"] == name)).map(|p| {
-                    let x = if p["EnumValue"].is_null() { &p["Value"] } else { &p["EnumValue"] };
-                    x.as_str().map(str::to_string).unwrap_or_else(|| x.to_string())
-                }).unwrap_or_default();
-                let others: Vec<String> = ex["Data"].as_array().map(|d| d.iter().filter_map(|p| p["Name"].as_str()).filter(|n| !["ImportedSize", "LightingGuid", "CompressionSettings", "LODGroup", "SRGB"].contains(n)).map(str::to_string).collect()).unwrap_or_default();
-                let rel = e.path().strip_prefix(&json).unwrap().to_string_lossy().replace('\\', "/");
-                out += &format!("{}\t{}\t{}\t{}\t{}\t{}\t{}x{}\n", rel.trim_end_matches(".json"), prop("CompressionSettings"), prop("LODGroup"), prop("SRGB"), others.join(","), ex["PixelFormat"].as_str().unwrap_or(""), ex["PlatformData"]["SizeX"], ex["PlatformData"]["SizeY"]);
-            }
-            t_parse += t.elapsed().as_secs_f64();
-            println!("batch {n}: {} done, {:.0}s so far, peak disk {:.2} GB", (n + 1) * batch, all.elapsed().as_secs_f64(), peak as f64 / 1e9);
-        }
-        let _ = std::fs::remove_dir_all(&work);
-        std::fs::write(list.with_extension("props.tsv"), out).unwrap();
-        println!("S1: {} textures in {:.0}s (extract {t_extract:.0}s, json {t_json:.0}s, parse {t_parse:.0}s), peak temp disk {:.2} GB", paths.len(), all.elapsed().as_secs_f64(), peak as f64 / 1e9);
-    }
-
-    /// S1 spike: REPAKXTRA_QUAKE_SAMPLE=<folder of extracted legacy packages> REPAKXTRA_USMAP=<usmap> cargo test -p repak-x
-    /// --bin REPAK-X s1_property_read -- --ignored --nocapture. Times the in-process batch_to_json (the app's path).
-    #[test]
-    #[ignore]
-    fn s1_property_read() {
-        let src = std::env::var("REPAKXTRA_QUAKE_SAMPLE").expect("REPAKXTRA_QUAKE_SAMPLE");
-        let usmap = std::env::var("REPAKXTRA_USMAP").expect("REPAKXTRA_USMAP");
-        let out = std::env::var("REPAKXTRA_QUAKE_OUT").map(std::path::PathBuf::from).unwrap_or_else(|_| std::env::temp_dir().join("quake-spike-s1-json"));
-        let _ = std::fs::remove_dir_all(&out);
-        let files: Vec<String> = walkdir::WalkDir::new(&src)
-            .into_iter()
-            .flatten()
-            .filter(|e| e.path().extension().is_some_and(|x| x == "uasset"))
-            .map(|e| e.path().to_string_lossy().replace('\\', "/"))
-            .collect();
-        let t = std::time::Instant::now();
-        uasset_toolkit::init_global_toolkit().expect("toolkit");
-        println!("toolkit loaded in {:?}", t.elapsed());
-        let req = serde_json::json!({
-            "action": "batch_to_json", "file_paths": files, "usmap_path": usmap,
-            "output_path": out.to_string_lossy(), "base_path": src,
-        });
-        let t = std::time::Instant::now();
-        let r = uasset_toolkit::invoke_json(&req.to_string()).expect("invoke");
-        let took = t.elapsed();
-        let jsons = walkdir::WalkDir::new(&out).into_iter().flatten().filter(|e| e.path().extension().is_some_and(|x| x == "json")).count();
-        println!("{} files -> {jsons} json in {took:?} ({:.1} ms each). Response head: {}", files.len(), took.as_secs_f64() * 1000.0 / files.len() as f64, &r[..r.len().min(200)]);
     }
 }

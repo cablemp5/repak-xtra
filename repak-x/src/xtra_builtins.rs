@@ -45,10 +45,13 @@ fn stopped() -> bool {
 /// Every move of a built-in's files in the game folder, held only for the moves themselves.
 static INSTALL: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-/// Waits for a build of `id` in flight, if any (another built-in's build does not hold it up).
-async fn wait_for_build(id: &str) {
+/// Waits for a build of `id` in flight, if any (another built-in's build does not hold it up). `stop`: switched off, so
+/// that build gives up early (CustomQuake checks between batches). Turning it on never stops it.
+async fn wait_for_build(id: &str, stop: bool) {
     if IN_FLIGHT.lock().unwrap_or_else(|e| e.into_inner()).as_deref() == Some(id) {
-        STOP.store(true, std::sync::atomic::Ordering::Relaxed);
+        if stop {
+            STOP.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
         drop(BUILDING.lock().await);
     }
 }
@@ -730,7 +733,7 @@ pub async fn xtra_builtins_set(app: tauri::AppHandle, id: String, on: Option<boo
     })?;
     if !now_on {
         // after its own build in flight: it sees the saved Off and places nothing, then its files (if any) go
-        wait_for_build(&id).await;
+        wait_for_build(&id, true).await;
         let parked = { let _moving = INSTALL.lock().unwrap_or_else(|e| e.into_inner()); park(&dir, &id) };
         if let Err(e) = parked {
             // still in the game: say it is still on rather than off with its files in place
@@ -745,7 +748,7 @@ pub async fn xtra_builtins_set(app: tauri::AppHandle, id: String, on: Option<boo
         let build_now = game_build(&paks);
         // back on with the same heroes and game build: the set-aside files go back in, no rebuild
         if fits(&load()[&id], &build_now) {
-            wait_for_build(&id).await;
+            wait_for_build(&id, false).await;
             let _moving = INSTALL.lock().unwrap_or_else(|e| e.into_inner());
             unpark(&dir, &id)?;
         }
