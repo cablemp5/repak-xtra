@@ -51,6 +51,23 @@ pub struct Vanilla {
     /// CompressionSettings, empty when the game leaves it at the default
     pub compression: String,
     pub lod_group: String,
+    /// SRGB set off (data textures: masks, roughness): the GPU reads the pixel as it is, not as a color
+    pub srgb_off: bool,
+}
+
+/// The settings a written package carries: the game's own for that texture, so the GPU reads the new pixel the way the
+/// material expects (a normal map always as TC_Normalmap, WorldNormalMap, sRGB off, as the game's normal maps are).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Settings {
+    pub compression: String,
+    pub lod_group: String,
+    pub srgb_off: bool,
+}
+
+impl Settings {
+    fn normal() -> Self {
+        Settings { compression: "TC_Normalmap".into(), lod_group: "TEXTUREGROUP_WorldNormalMap".into(), srgb_off: true }
+    }
 }
 
 /// What a texture becomes. Mro carries its own pixel: each letter of a channel-packed name picks its channel's value.
@@ -129,6 +146,10 @@ pub fn classify(t: &Vanilla, lobby: bool) -> Kind {
         return Kind::Skip;
     }
     let cased = t.path.rsplit(['/', '\\']).next().unwrap_or(&t.path);
+    // float data (HDR, color lookup tables): a color pixel in its place could break the screen's color grading
+    if t.compression.to_ascii_uppercase().starts_with("TC_HDR") || t.compression.eq_ignore_ascii_case("TC_HalfFloat") {
+        return Kind::Skip;
+    }
     // the game's compression decides what a normal map is, never the name
     if t.compression.eq_ignore_ascii_case("TC_Normalmap") {
         return Kind::Normal;
@@ -218,6 +239,7 @@ pub struct Planned {
     pub vfs: String,
     pub normal_shape: bool,
     pub pixel: [u8; 4],
+    pub settings: Settings,
 }
 
 /// Every texture that changes, with its pixel. The shape follows the game's own compression setting.
@@ -226,21 +248,48 @@ pub fn plan(textures: &[Vanilla], look: &Look) -> Vec<Planned> {
         .iter()
         .filter_map(|t| {
             let px = pixel(classify(t, look.lobby), look)?;
-            Some(Planned { vfs: t.path.clone(), normal_shape: t.compression.eq_ignore_ascii_case("TC_Normalmap"), pixel: px })
+            let normal_shape = t.compression.eq_ignore_ascii_case("TC_Normalmap");
+            let settings = if normal_shape { Settings::normal() } else { Settings { compression: t.compression.clone(), lod_group: t.lod_group.clone(), srgb_off: t.srgb_off } };
+            Some(Planned { vfs: t.path.clone(), normal_shape, pixel: px, settings })
         })
         .collect()
 }
 
 /// Writes the JSON of each planned package under `dir` (its game path), ready for UAssetTool's batch_from_json.
+/// The template for a package with these settings: the plain one for default settings, else the normal map's with only
+/// the settings that differ from the default left in, carrying the game's values.
+fn template_for(s: &Settings, plain: &Value, normal: &Value) -> (Value, HashMap<String, String>) {
+    if *s == Settings::default() {
+        return (plain.clone(), HashMap::new());
+    }
+    let mut v = normal.clone();
+    if let Some(data) = v["Exports"][0]["Data"].as_array_mut() {
+        data.retain(|p| match p["Name"].as_str() {
+            Some("CompressionSettings") => !s.compression.is_empty(),
+            Some("LODGroup") => !s.lod_group.is_empty(),
+            Some("SRGB") => s.srgb_off,
+            _ => true,
+        });
+    }
+    let mut map = HashMap::new();
+    if !s.compression.is_empty() {
+        map.insert("TC_Normalmap".to_string(), s.compression.clone());
+    }
+    if !s.lod_group.is_empty() {
+        map.insert("TEXTUREGROUP_WorldNormalMap".to_string(), s.lod_group.clone());
+    }
+    (v, map)
+}
+
 fn write_jsons(planned: &[Planned], dir: &std::path::Path) -> Result<Vec<String>, String> {
     let (plain, normal) = templates()?;
-    let none = HashMap::new();
     planned
         .iter()
         .map(|p| {
             let path = game_path(&p.vfs).ok_or_else(|| format!("{} is not under a Content folder", p.vfs))?;
             let [r, g, b, a] = p.pixel;
-            let v = package_json(if p.normal_shape { &normal } else { &plain }, &path, &guid_for(&path), [b, g, r, a], &none)?;
+            let (template, more) = template_for(&p.settings, &plain, &normal);
+            let v = package_json(&template, &path, &guid_for(&path), [b, g, r, a], &more)?;
             let out = dir.join(format!("{}.json", p.vfs.trim_end_matches(".uasset")));
             std::fs::create_dir_all(out.parent().unwrap()).map_err(|e| e.to_string())?;
             std::fs::write(&out, serde_json::to_string(&v).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
@@ -402,14 +451,17 @@ fn list_textures(paks: &Path) -> Result<Vec<String>, String> {
     Ok(out.into_iter().collect())
 }
 
+const MAPPINGS_BEHIND: &str = "The game's texture settings could not be read. Its mappings file is older than the game. repakxtra checks for a newer one at every start";
+
 /// The game's settings for one texture from its JSON (to_json of the game's package). None when it is not a texture.
 fn vanilla_of(vfs: &str, json: &Value) -> Option<Vanilla> {
     let ex = json["Exports"].as_array()?.iter().find(|e| e["$type"].as_str().is_some_and(|t| t.contains("TextureExport")))?;
+    let srgb_off = ex["Data"].as_array().and_then(|d| d.iter().find(|p| p["Name"] == "SRGB")).is_some_and(|p| p["Value"] == false);
     let prop = |name: &str| {
         // an enum property keeps its value in Value, a byte property naming an enum in EnumValue
         ex["Data"].as_array().and_then(|d| d.iter().find(|p| p["Name"] == name)).and_then(|p| p["EnumValue"].as_str().or(p["Value"].as_str())).unwrap_or_default().to_string()
     };
-    Some(Vanilla { path: vfs.to_string(), compression: prop("CompressionSettings"), lod_group: prop("LODGroup") })
+    Some(Vanilla { path: vfs.to_string(), compression: prop("CompressionSettings"), lod_group: prop("LODGroup"), srgb_off })
 }
 
 /// Reads the settings of every listed texture, `BATCH` at a time, each batch deleted before the next.
@@ -447,12 +499,42 @@ async fn read_settings(tool: &Path, usmap: &str, paks: &Path, listed: &[String],
             let rel = e.path().strip_prefix(&json).map_err(|e| e.to_string())?.with_extension("").to_string_lossy().replace('\\', "/");
             let text = std::fs::read_to_string(e.path()).map_err(|e| e.to_string())?;
             let v: Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("{rel}: {e}"))?;
+            // an export UAssetTool could not decode is kept as raw bytes: the mappings are behind the game
+            if v["Exports"].as_array().is_some_and(|e| e.iter().any(|x| x["$type"].as_str().is_some_and(|t| t.contains("RawExport")))) {
+                return Err(MAPPINGS_BEHIND.into());
+            }
             all.extend(vanilla_of(&rel, &v));
         }
     }
+    all_read(listed, &all)?;
     let _ = std::fs::remove_dir_all(work.join("legacy"));
     let _ = std::fs::remove_dir_all(work.join("json"));
     Ok(all)
+}
+
+/// Every listed texture was read, once: one missing would leave a map texture out of the build without a word.
+fn all_read(listed: &[String], read: &[Vanilla]) -> Result<(), String> {
+    let got: std::collections::HashSet<String> = read.iter().map(|t| t.path.to_ascii_lowercase()).collect();
+    let missing: Vec<&String> = listed.iter().filter(|p| !got.contains(&p.to_ascii_lowercase())).collect();
+    if missing.is_empty() && got.len() == read.len() {
+        return Ok(());
+    }
+    let first = missing.first().map_or("none", |p| p.rsplit('/').next().unwrap_or(p));
+    Err(format!("{} of the game's {} map textures could not be read (first: {first}). {MAPPINGS_BEHIND}", missing.len(), listed.len()))
+}
+
+/// Every package read back out of the container carries the settings it was planned with.
+fn check_settings(planned: &[Planned], json: &Path) -> Result<(), String> {
+    for p in planned {
+        let rel = p.vfs.trim_end_matches(".uasset");
+        let text = std::fs::read_to_string(json.join(format!("{rel}.json"))).map_err(|e| format!("{rel}: {e}"))?;
+        let v: Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("{rel}: {e}"))?;
+        let got = vanilla_of(rel, &v).ok_or_else(|| format!("{rel} is not a texture"))?;
+        if (got.compression.as_str(), got.lod_group.as_str(), got.srgb_off) != (p.settings.compression.as_str(), p.settings.lod_group.as_str(), p.settings.srgb_off) {
+            return Err(format!("{rel} lost the game's settings for it"));
+        }
+    }
+    Ok(())
 }
 
 /// The pixel a written package holds (RGBA), from its .uexp: a 1x1 BGRA8 mip, its four bytes before the 1x1x1 size.
@@ -532,6 +614,21 @@ pub async fn make(tool: &Path, usmap: &str, paks: &Path, work: &Path, out_base: 
         return Err(format!("Could not read the new container back ({}), so nothing was installed", r.message));
     }
     check_all(&planned, &back).map_err(|e| format!("{e} in the packed container, so nothing was installed"))?;
+    // and their settings, read the way the game's own were
+    let back_json = work.join("back-json");
+    let files: Vec<String> = walkdir::WalkDir::new(&back).into_iter().flatten().filter(|e| e.path().extension().is_some_and(|x| x == "uasset")).map(|e| e.path().to_string_lossy().replace('\\', "/")).collect();
+    let req = crate::vfx_updater::uasset_tool::VfxUatRequest {
+        file_paths: Some(files),
+        usmap_path: Some(usmap),
+        output_path: Some(back_json.to_string_lossy().to_string()),
+        base_path: Some(back.to_string_lossy().to_string()),
+        ..uat_request("batch_to_json")
+    };
+    let r = crate::vfx_updater::uasset_tool::run_vfx_uat_request(tool, &req).await?;
+    if !r.success {
+        return Err(format!("Could not read the new packages' settings back ({}), so nothing was installed", r.message));
+    }
+    check_settings(&planned, &back_json).map_err(|e| format!("{e} in the packed container, so nothing was installed"))?;
     let mins = started.elapsed().as_secs_f64() / 60.0;
     Ok(format!("{} textures set in {}", group_digits(planned.len()), if mins < 1.5 { "about a minute".to_string() } else { format!("{} minutes", mins.round()) }))
 }
@@ -576,7 +673,7 @@ mod tests {
     use super::*;
 
     fn t(name: &str, compression: &str) -> Vanilla {
-        Vanilla { path: format!("Marvel/Content/Marvel/Environment/Tokyo/TokyoE01/Tex/{name}"), compression: compression.into(), lod_group: String::new() }
+        Vanilla { path: format!("Marvel/Content/Marvel/Environment/Tokyo/TokyoE01/Tex/{name}"), compression: compression.into(), lod_group: String::new(), srgb_off: false }
     }
     const V6: Look = Look { base: [0x5d, 0x7a, 0x80], sky: [0x82, 0xc6, 0xed], hide_plants: false, lobby: true };
     fn px(name: &str, compression: &str) -> Option<String> {
@@ -668,6 +765,45 @@ mod tests {
         assert!(normal.to_string().contains("TC_Normalmap") && !plain.to_string().contains("TC_Normalmap"));
         assert_eq!(guid_for("/Game/A"), guid_for("/game/a"), "the same package, the same GUID");
         assert_eq!(game_path("Marvel/Content/Marvel/Environment/A/T_X"), Some("/Game/Marvel/Environment/A/T_X".into()));
+    }
+
+    #[test]
+    fn float_textures_stay_as_the_game_has_them() {
+        for c in ["TC_HDR", "TC_HDR_Compressed", "TC_HDR_F32", "TC_HalfFloat"] {
+            assert_eq!(classify(&t("T_LUT_D", c), true), Kind::Skip, "{c}");
+        }
+        assert_eq!(classify(&t("T_Wall_Mask", "TC_Masks"), true), Kind::Color, "masks are not float data");
+    }
+
+    #[test]
+    fn packages_keep_the_games_settings() {
+        let (plain, normal) = templates().unwrap();
+        let data = |v: &Value| v["Exports"][0]["Data"].as_array().unwrap().iter().map(|p| p["Name"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+        let (v, map) = template_for(&Settings::default(), &plain, &normal);
+        assert_eq!(v, plain, "default settings: the plain template");
+        assert!(map.is_empty());
+        let mro = Settings { compression: String::new(), lod_group: "TEXTUREGROUP_Project04".into(), srgb_off: true };
+        let (v, map) = template_for(&mro, &plain, &normal);
+        assert_eq!(data(&v), ["ImportedSize", "LightingGuid", "LODGroup", "SRGB"], "no compression setting: not written");
+        assert_eq!(map["TEXTUREGROUP_WorldNormalMap"], "TEXTUREGROUP_Project04");
+        let masks = Settings { compression: "TC_Masks".into(), lod_group: String::new(), srgb_off: false };
+        let (v, map) = template_for(&masks, &plain, &normal);
+        assert_eq!(data(&v), ["ImportedSize", "LightingGuid", "CompressionSettings"]);
+        let json = package_json(&v, "/Game/Marvel/Environment/A/T_Wall_Mask", &guid_for("x"), [0; 4], &map).unwrap();
+        assert!(json.to_string().contains("TC_Masks") && !json.to_string().contains("\"TC_Normalmap\""), "the game's value replaces the template's");
+        let planned = plan(&[Vanilla { srgb_off: true, lod_group: "TEXTUREGROUP_Project04".into(), ..t("T_Rock_MRO", "") }, t("T_Rock_N", "TC_Normalmap")], &V6);
+        assert_eq!(planned[0].settings, mro);
+        assert_eq!(planned[1].settings, Settings::normal(), "normal maps as the game's normal maps");
+    }
+
+    #[test]
+    fn a_texture_that_was_not_read_stops_the_build() {
+        let listed = vec!["Marvel/Content/Marvel/Environment/A/T_X".to_string(), "Marvel/Content/Marvel/Environment/A/T_Y".to_string()];
+        let read = |p: &str| Vanilla { path: p.into(), ..Default::default() };
+        assert!(all_read(&listed, &[read(&listed[0]), read(&listed[1])]).is_ok());
+        let e = all_read(&listed, &[read(&listed[0])]).unwrap_err();
+        assert!(e.starts_with("1 of the game's 2 map textures could not be read (first: T_Y)"), "{e}");
+        assert!(all_read(&listed, &[read(&listed[0]), read(&listed[0]), read(&listed[1])]).is_err(), "read twice");
     }
 
     #[test]
@@ -845,7 +981,7 @@ mod tests {
         let mut kinds_out = String::new();
         for line in game_tsv.lines() {
             let f: Vec<&str> = line.split('\t').collect();
-            let t = Vanilla { path: f[0].to_string(), compression: f[1].to_string(), lod_group: f[2].to_string() };
+            let t = Vanilla { path: f[0].to_string(), compression: f[1].to_string(), lod_group: f[2].to_string(), srgb_off: f[3] == "false" };
             let kind = classify(&t, true);
             *all_kinds.entry(name(kind)).or_insert(0usize) += 1;
             kinds_out += &format!("{}	{}
@@ -891,7 +1027,7 @@ mod tests {
         let usmap = std::env::var("REPAKXTRA_USMAP").unwrap();
         let game: Vec<Vanilla> = std::fs::read_to_string(std::env::var("REPAKXTRA_QUAKE_GAME").unwrap()).unwrap().lines().map(|l| {
             let f: Vec<&str> = l.split('\t').collect();
-            Vanilla { path: f[0].to_string(), compression: f[1].to_string(), lod_group: f[2].to_string() }
+            Vanilla { path: f[0].to_string(), compression: f[1].to_string(), lod_group: f[2].to_string(), srgb_off: f[3] == "false" }
         }).collect();
         let look = Look { base: parse_hex("5d7a80").unwrap(), sky: parse_hex("82c6ed").unwrap(), hide_plants: true, lobby: true };
         let all = plan(&game, &look);

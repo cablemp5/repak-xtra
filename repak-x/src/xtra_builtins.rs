@@ -33,8 +33,27 @@ pub const SKIP_INTRO: &str = "skip-intro-movies";
 pub const CUSTOM_QUAKE: &str = "custom-quake"; // repakxtra: xtra_quake.rs
 const IDS: [&str; 3] = [DEFAULT_SKIN, SKIP_INTRO, CUSTOM_QUAKE];
 
-/// One build at a time: both share the work folder root and UAssetTool.
+/// One build at a time: they share the work folder root and UAssetTool.
 static BUILDING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+/// repakxtra: which one is building, so switching another one off or on never waits for it (CustomQuake takes minutes)
+static IN_FLIGHT: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+/// Every move of a built-in's files in the game folder, held only for the moves themselves.
+static INSTALL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Waits for a build of `id` in flight, if any (another built-in's build does not hold it up).
+async fn wait_for_build(id: &str) {
+    if IN_FLIGHT.lock().unwrap_or_else(|e| e.into_inner()).as_deref() == Some(id) {
+        drop(BUILDING.lock().await);
+    }
+}
+
+/// Clears IN_FLIGHT when a build ends, whichever way.
+struct Flight;
+impl Drop for Flight {
+    fn drop(&mut self) {
+        *IN_FLIGHT.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+}
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 struct Saved {
@@ -484,6 +503,8 @@ async fn make(tool: &Path, id: &str, excluded: &[String], quake: &crate::xtra_qu
 /// Builds `id` into the built-in folder, replacing the old files only once the new ones exist.
 async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Result<(), String> {
     let _one = BUILDING.lock().await;
+    *IN_FLIGHT.lock().unwrap_or_else(|e| e.into_inner()) = Some(id.to_string());
+    let _flight = Flight;
     let all = load();
     let excluded = all.get(id).map(|s| s.excluded.clone()).unwrap_or_default();
     let quake = all.get(id).and_then(|s| s.quake.clone()).unwrap_or_default();
@@ -507,15 +528,21 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
         });
     }
     let made = async { make(&get_uasset_tool_path(app)?, id, &excluded, &quake, paks, &work, &out_base).await }.await;
+    let _moving = INSTALL.lock().unwrap_or_else(|e| e.into_inner());
     // turned off while it built (the switch saves first, then waits for this build): nothing goes into the game
     if !load().get(id).is_some_and(|s| s.on) {
-        let _ = std::fs::remove_dir_all(&work);
+        clean(&work);
         return park(dir, id);
     }
-    let result = match made {
-        Ok(made) => place(&out_base, dir, id).map(|_| made),
-        Err(e) => Err(e),
+    // the game or Repak X may have opened while it built (CustomQuake takes minutes): checked again before any file moves
+    use tauri::Manager;
+    let blocked = app.try_state::<Arc<Mutex<AppState>>>().map_or(Ok(()), |st| game_guard(st.inner())).and_then(|_| crate::xtra_identity::upstream_guard()).err();
+    let result = match (made, &blocked) {
+        (Ok(_), Some(_)) => Err("Marvel Rivals or Repak X opened while it built, so the new build was not installed. Close it, then try again".to_string()),
+        (Ok(made), None) => place(&out_base, dir, id).map(|_| made),
+        (Err(e), _) => Err(e),
     };
+    clean(&work);
     // the state as it is now: the other built-in may have changed while this one built
     update(|all| {
         let s = all.entry(id.to_string()).or_default();
@@ -531,13 +558,12 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
                     s.heroes = heroes.clone();
                 }
                 s.error = None;
-                let _ = std::fs::remove_dir_all(&work);
             }
             Err(e) => {
                 log::warn!("[builtins] {id}: {e}");
                 s.error = Some(e.clone());
                 // files made for an older game build come out: an old table on a new patch can crash the game
-                if s.built_for.as_deref() != Some(game_build(paks).as_str()) && remove(dir, id).is_ok() {
+                if blocked.is_none() && s.built_for.as_deref() != Some(game_build(paks).as_str()) && remove(dir, id).is_ok() {
                     s.built_for = None;
                     s.nothing = false;
                 }
@@ -545,6 +571,15 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
         }
     })?;
     result.map(|_| ())
+}
+
+/// Removes a build's work folder (temp files, minutes of extracted game data), saying so when it cannot.
+fn clean(work: &Path) {
+    if let Err(e) = std::fs::remove_dir_all(work) {
+        if work.exists() {
+            log::warn!("[builtins] could not remove {}: {e}", work.display());
+        }
+    }
 }
 
 fn with_ext(p: &Path, x: &str) -> PathBuf {
@@ -652,9 +687,10 @@ pub async fn xtra_builtins_set(app: tauri::AppHandle, id: String, on: Option<boo
         (changed, s.on)
     })?;
     if !now_on {
-        // after a build in flight: it sees the saved Off and places nothing, then its files (if any) go
-        let _one = BUILDING.lock().await;
-        if let Err(e) = park(&dir, &id) {
+        // after its own build in flight: it sees the saved Off and places nothing, then its files (if any) go
+        wait_for_build(&id).await;
+        let parked = { let _moving = INSTALL.lock().unwrap_or_else(|e| e.into_inner()); park(&dir, &id) };
+        if let Err(e) = parked {
             // still in the game: say it is still on rather than off with its files in place
             update(|all| {
                 let s = all.entry(id.clone()).or_default();
@@ -667,7 +703,8 @@ pub async fn xtra_builtins_set(app: tauri::AppHandle, id: String, on: Option<boo
         let build_now = game_build(&paks);
         // back on with the same heroes and game build: the set-aside files go back in, no rebuild
         if fits(&load()[&id], &build_now) {
-            let _one = BUILDING.lock().await;
+            wait_for_build(&id).await;
+            let _moving = INSTALL.lock().unwrap_or_else(|e| e.into_inner());
             unpark(&dir, &id)?;
         }
         if changed || !view(&id, &load()[&id], &dir, &build_now).current {
