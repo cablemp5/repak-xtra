@@ -465,10 +465,15 @@ fn vanilla_of(vfs: &str, json: &Value) -> Option<Vanilla> {
 }
 
 /// Reads the settings of every listed texture, `BATCH` at a time, each batch deleted before the next.
-async fn read_settings(tool: &Path, usmap: &str, paks: &Path, listed: &[String], work: &Path) -> Result<Vec<Vanilla>, String> {
+const STOPPED: &str = "Stopped: switched off while it built";
+
+async fn read_settings(tool: &Path, usmap: &str, paks: &Path, listed: &[String], work: &Path, stop: fn() -> bool) -> Result<Vec<Vanilla>, String> {
     let sink = crate::vfx_updater::progress::NoOpProgressSink;
     let mut all = Vec::with_capacity(listed.len());
     for batch in listed.chunks(BATCH) {
+        if stop() {
+            return Err(STOPPED.into());
+        }
         let (legacy, json) = (work.join("legacy"), work.join("json"));
         let _ = std::fs::remove_dir_all(&legacy);
         let _ = std::fs::remove_dir_all(&json);
@@ -569,7 +574,8 @@ fn check_all(planned: &[Planned], dir: &Path) -> Result<(), String> {
 
 /// Builds CustomQuake into `out_base` (.pak, .utoc, .ucas). Every package is checked before packing and again after it
 /// is read back out of the container, so nothing reaches the game unless all of it is right. Returns the summary.
-pub async fn make(tool: &Path, usmap: &str, paks: &Path, work: &Path, out_base: &Path, options: &Options) -> Result<String, String> {
+/// `stop` says when it was switched off: it gives up at the next batch or step.
+pub async fn make(tool: &Path, usmap: &str, paks: &Path, work: &Path, out_base: &Path, options: &Options, stop: fn() -> bool) -> Result<String, String> {
     let look = options.look()?;
     let started = std::time::Instant::now();
     let listed = tokio::task::spawn_blocking({
@@ -578,12 +584,15 @@ pub async fn make(tool: &Path, usmap: &str, paks: &Path, work: &Path, out_base: 
     })
     .await
     .map_err(|e| e.to_string())??;
-    let textures = read_settings(tool, usmap, paks, &listed, &work.join("read")).await?;
+    let textures = read_settings(tool, usmap, paks, &listed, &work.join("read"), stop).await?;
     let planned = plan(&textures, &look);
     if planned.is_empty() {
         return Err("No map texture to change".into());
     }
     let (json, legacy) = (work.join("json"), work.join("mod"));
+    if stop() {
+        return Err(STOPPED.into());
+    }
     let files = write_jsons(&planned, &json)?;
     let req = crate::vfx_updater::uasset_tool::VfxUatRequest {
         file_paths: Some(files),
@@ -599,6 +608,9 @@ pub async fn make(tool: &Path, usmap: &str, paks: &Path, work: &Path, out_base: 
     fix_written(&planned, &legacy, &json)?;
     check_all(&planned, &legacy).map_err(|e| format!("{e}, so nothing was installed"))?;
     let _ = std::fs::remove_dir_all(&json);
+    if stop() {
+        return Err(STOPPED.into());
+    }
     let sink = crate::vfx_updater::progress::NoOpProgressSink;
     crate::vfx_updater::uasset_tool::pack_to_iostore(tool, usmap, &legacy.to_string_lossy(), &out_base.to_string_lossy(), None, &sink).await?;
     // read back out of the container, as the game will see it
