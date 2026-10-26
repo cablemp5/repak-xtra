@@ -48,7 +48,7 @@ export default function WelcomeIntro({ onNext, onSkip }: { onNext: () => void; o
               ))}
             </ul>
           </div>
-          <figcaption><b>One switch</b><span>Skin, effects and icons turn on together.</span></figcaption>
+          <figcaption><b>One switch</b><span>Skin, effects, and icons turn on together.</span></figcaption>
         </figure>
 
         <figure className="wi-demo">

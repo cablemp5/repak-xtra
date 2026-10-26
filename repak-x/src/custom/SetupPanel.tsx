@@ -295,7 +295,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
         <div className="modal-header">
           <h2>Mod setup</h2>
           <button type="button" className="lo-text-btn su-guided" onClick={() => { onClose(); window.dispatchEvent(new Event('repakxtra-first-run')) }}
-            title="The first-launch setup: game folder, bypass, Project Galacta, previews and your first mods, one screen"><ListChecks size={14} /> Guided setup</button>
+            title="The first-launch setup: game folder, bypass, Project Galacta, previews, and your first mods, one screen"><ListChecks size={14} /> Guided setup</button>
           <CopySetupReport alert={alert} className="lo-text-btn su-report" />
           <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
           {/* its own line under the title row, so the header buttons never squeeze it */}
@@ -352,7 +352,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                   <ul className="su-facts">
                     <li><b>Scanned clean.</b> VirusTotal: 0 of 63 engines flagged the release archive (Oct 14, 2026). <a onClick={() => open(VIRUSTOTAL)}>See the report</a></li>
                     <li><b>The loader is open source.</b> dsound.dll is ThirteenAG's Ultimate ASI Loader 7.7.0 (MIT), byte for byte the official release. <a onClick={() => open(LOADER)}>See it on GitHub</a></li>
-                    <li><b>The bypass only patches the game in memory.</b> MarvelRivalsUTOCSignatureBypass.asi uses Windows memory and thread functions only: no internet, file, registry or program-launch calls. It is closed source and unsigned.</li>
+                    <li><b>The bypass only patches the game in memory.</b> MarvelRivalsUTOCSignatureBypass.asi uses Windows memory and thread functions only: no internet, file, registry, or program-launch calls. It is closed source and unsigned.</li>
                     <li><b>Same files as the original.</b> Unchanged from the Nexus Mods release. <a onClick={() => open(NEXUS)}>Open the mod page</a></li>
                   </ul>
                   <table className="su-files">

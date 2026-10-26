@@ -37,23 +37,94 @@ pub fn installed_kit() -> Option<PathBuf> {
     installed(&kit_dir()).map(|_| kit_dir())
 }
 
-/// blender.exe: the one picked in Setup, else the newest under Program Files\Blender Foundation.
+/// blender.exe: the one picked in Setup, else the newest Blender already on this PC (installed_blenders).
 pub fn blender() -> Option<PathBuf> {
     let picked = fs::read_to_string(blender_setting()).ok()
         .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
         .and_then(|v| v["path"].as_str().map(PathBuf::from))
         .filter(|p| p.is_file());
-    picked.or_else(|| {
-        let root = PathBuf::from(std::env::var("ProgramFiles").unwrap_or_else(|_| r"C:\Program Files".into())).join("Blender Foundation");
-        let mut found: Vec<PathBuf> = fs::read_dir(root).ok()?.flatten().map(|e| e.path().join("blender.exe")).filter(|p| p.is_file()).collect();
-        found.sort_by_key(|p| version_of(p));
-        found.pop()
-    })
+    picked.or_else(|| newest(installed_blenders()))
+}
+
+/// The newest by version (version_of); the first found wins a tie.
+fn newest(found: Vec<PathBuf>) -> Option<PathBuf> {
+    found.into_iter().rev().max_by_key(|p| version_of(p))
+}
+
+/// Every blender.exe this PC has, wherever it was installed: Program Files (both), a per-user install, what the
+/// registry knows (installers, the .blend file type), Steam's libraries and PATH.
+fn installed_blenders() -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = ["ProgramW6432", "ProgramFiles", "ProgramFiles(x86)"]
+        .iter()
+        .filter_map(|v| std::env::var_os(v).map(|d| PathBuf::from(d).join("Blender Foundation")))
+        .collect();
+    if let Some(local) = dirs::data_local_dir() {
+        roots.push(local.join("Programs").join("Blender Foundation"));
+    }
+    let mut exes: Vec<PathBuf> = roots.iter().flat_map(|r| fs::read_dir(r).into_iter().flatten().flatten().map(|e| e.path().join("blender.exe"))).collect();
+    exes.extend(registry_blenders());
+    exes.extend(crate::utils::get_steam_library_paths().into_iter().map(|l| l.join("steamapps").join("common").join("Blender").join("blender.exe")));
+    exes.extend(std::env::var_os("PATH").into_iter().flat_map(|p| std::env::split_paths(&p).map(|d| d.join("blender.exe")).collect::<Vec<_>>()));
+    let mut seen = std::collections::HashSet::new();
+    exes.into_iter().filter(|p| p.is_file() && seen.insert(p.to_string_lossy().to_lowercase())).collect()
+}
+
+/// Blenders the registry names: installers' uninstall entries (InstallLocation) and what opens a .blend file.
+#[cfg(windows)]
+fn registry_blenders() -> Vec<PathBuf> {
+    use winreg::enums::{HKEY_CLASSES_ROOT, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_WOW64_32KEY, KEY_WOW64_64KEY};
+    use winreg::RegKey;
+    let mut out = Vec::new();
+    let uninstall = r"Software\Microsoft\Windows\CurrentVersion\Uninstall";
+    for (hive, flags) in [(HKEY_LOCAL_MACHINE, KEY_WOW64_64KEY), (HKEY_LOCAL_MACHINE, KEY_WOW64_32KEY), (HKEY_CURRENT_USER, 0)] {
+        let Ok(list) = RegKey::predef(hive).open_subkey_with_flags(uninstall, KEY_READ | flags) else { continue };
+        for name in list.enum_keys().flatten() {
+            let Ok(app) = list.open_subkey(&name) else { continue };
+            let shown: String = app.get_value("DisplayName").unwrap_or_default();
+            let at: String = app.get_value("InstallLocation").unwrap_or_default();
+            if shown.to_ascii_lowercase().starts_with("blender") && !at.trim().is_empty() {
+                out.push(PathBuf::from(at.trim().trim_matches('"')).join("blender.exe"));
+            }
+        }
+    }
+    // the .blend type's open command: "C:\...\blender-launcher.exe" "%1", whose folder holds blender.exe
+    if let Ok(cmd) = RegKey::predef(HKEY_CLASSES_ROOT).open_subkey(r"blendfile\shell\open\command").and_then(|k| k.get_value::<String, _>("")) {
+        if let Some(exe) = launch_exe(&cmd) {
+            out.push(exe.with_file_name("blender.exe"));
+        }
+    }
+    out
+}
+
+#[cfg(not(windows))]
+fn registry_blenders() -> Vec<PathBuf> {
+    Vec::new()
+}
+
+/// The program a registry open command runs: its first quoted part, or what comes before the first space.
+fn launch_exe(cmd: &str) -> Option<PathBuf> {
+    let c = cmd.trim();
+    let exe = match c.strip_prefix('"') {
+        Some(rest) => rest.split('"').next()?,
+        None => c.split(' ').next()?,
+    };
+    (!exe.is_empty()).then(|| PathBuf::from(exe))
 }
 
 /// "Blender 5.2" folder -> [5, 2], for picking the newest.
+/// A Blender's version: the version folder every install keeps beside blender.exe ("5.2", its scripts and data), else
+/// the digits in its folder's name ("Blender 5.2"). Steam's folder is just "Blender", so the version folder is what
+/// ranks it.
 fn version_of(exe: &Path) -> Vec<u32> {
-    exe.parent().and_then(|d| d.file_name()).map(|n| n.to_string_lossy().split(|c: char| !c.is_ascii_digit()).filter_map(|x| x.parse().ok()).collect()).unwrap_or_default()
+    let digits = |n: &str| n.split(|c: char| !c.is_ascii_digit()).filter_map(|x| x.parse().ok()).collect::<Vec<u32>>();
+    let Some(dir) = exe.parent() else { return Vec::new() };
+    let inside = fs::read_dir(dir).into_iter().flatten().flatten()
+        .filter(|e| e.path().is_dir())
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .filter(|n| n.split('.').count() == 2 && n.split('.').all(|x| !x.is_empty() && x.chars().all(|c| c.is_ascii_digit())))
+        .map(|n| digits(&n))
+        .max();
+    inside.unwrap_or_else(|| dir.file_name().map(|n| digits(&n.to_string_lossy())).unwrap_or_default())
 }
 
 /// Where the installed kit came from: "github" or "file" (None for a kit installed before this was recorded).
@@ -379,6 +450,27 @@ pub fn preview_kit_set_blender(path: Option<String>) -> Result<Option<String>, S
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    #[test]
+    fn the_newest_blender_found_is_used() {
+        let p = |s: &str| PathBuf::from(s);
+        let found = vec![p(r"D:\Steam\steamapps\common\Blender\blender.exe"), p(r"C:\Program Files\Blender Foundation\Blender 4.2\blender.exe"), p(r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe")];
+        assert_eq!(newest(found), Some(p(r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe")));
+        assert_eq!(newest(vec![p(r"D:\Steam\steamapps\common\Blender\blender.exe"), p(r"E:\Tools\Blender\blender.exe")]), Some(p(r"D:\Steam\steamapps\common\Blender\blender.exe")), "no versions: the first found");
+        // a Steam install ("Blender", no digits) ranks by the version folder beside its exe
+        let root = std::env::temp_dir().join(format!("blender-ver-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let steam = root.join("steamapps").join("common").join("Blender");
+        let old = root.join("Blender Foundation").join("Blender 4.2");
+        for (d, v) in [(&steam, "5.2"), (&old, "4.2")] {
+            fs::create_dir_all(d.join(v)).unwrap();
+            fs::write(d.join("blender.exe"), b"").unwrap();
+        }
+        assert_eq!(newest(vec![old.join("blender.exe"), steam.join("blender.exe")]), Some(steam.join("blender.exe")), "Steam's 5.2 beats a named 4.2");
+        let _ = fs::remove_dir_all(&root);
+        assert_eq!(launch_exe(r#""C:\Program Files\Blender Foundation\Blender 5.2\blender-launcher.exe" "%1""#), Some(p(r"C:\Program Files\Blender Foundation\Blender 5.2\blender-launcher.exe")));
+        assert_eq!(launch_exe(r"C:\Blender\blender.exe %1"), Some(p(r"C:\Blender\blender.exe")));
+    }
 
     #[test]
     fn a_zip_that_unpacks_past_the_limit_is_refused_and_the_old_kit_stays() {

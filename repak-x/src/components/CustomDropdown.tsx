@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './CustomDropdown.css';
 
-type DropdownOption = string | { value: string; label: string; showDelete?: boolean };
+type DropdownOption = string | { value: string; label: string; showDelete?: boolean; image?: string; glyph?: React.ReactNode }; // repakxtra: image (a small round picture) or glyph (an icon) before the label
 
 type CustomDropdownProps = {
     options?: DropdownOption[];
@@ -53,7 +53,8 @@ const CustomDropdown = ({
         };
 
         // repakxtra: Esc closes an open menu first (before a page or dialog takes it)
-        const handleEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.stopPropagation(); setIsOpen(false); } };
+        // and focus goes back to its button, so a keyboard user keeps their place
+        const handleEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.stopPropagation(); setIsOpen(false); dropdownRef.current?.querySelector<HTMLElement>('.custom-dropdown-trigger')?.focus(); } };
 
         if (isOpen) {
             document.addEventListener('mousedown', handleClickOutside);
@@ -98,6 +99,8 @@ const CustomDropdown = ({
         if (!isOpen) { setIsOpen(true); requestAnimationFrame(() => moveFocus(1)); } else moveFocus(e.key === 'ArrowDown' ? 1 : -1);
     };
 
+    const imageOf = (val?: string) => { const f = options.find(opt => typeof opt !== 'string' && opt.value === val); return typeof f === 'object' ? f.image : undefined; }; // repakxtra
+    const glyphOf = (val?: string) => { const f = options.find(opt => typeof opt !== 'string' && opt.value === (val ?? '')); return typeof f === 'object' ? f.glyph : undefined; }; // repakxtra
     const getLabel = (val?: string) => {
         if (!val) return placeholder;
         const found = options.find(opt => (typeof opt === 'string' ? opt : opt.value) === val);
@@ -118,6 +121,7 @@ const CustomDropdown = ({
                 style={disabled ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
             >
                 {icon && <span className="custom-dropdown-icon">{icon}</span>}
+                {imageOf(value) ? <img className="custom-dropdown-img" src={imageOf(value)} alt="" /> : glyphOf(value) && <span className="custom-dropdown-img is-glyph" aria-hidden="true">{glyphOf(value)}</span>}
                 <span className="custom-dropdown-text">{getLabel(value)}</span>
             </button>
 
@@ -151,6 +155,7 @@ const CustomDropdown = ({
                                     onClick={() => handleSelect(option)}
                                     title={optLabel}
                                 >
+                                    {typeof option === 'object' && (option.image ? <img className="custom-dropdown-img" src={option.image} alt="" /> : option.glyph && <span className="custom-dropdown-img is-glyph" aria-hidden="true">{option.glyph}</span>)}
                                     <span className="custom-dropdown-item-label">{optLabel}</span>
                                     {onDeleteOption && optValue && optShowDelete && (
                                         <button

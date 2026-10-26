@@ -8,7 +8,7 @@ import { ChevronDown, Download, EyeOff, PanelTop, Tags, Trash2, TriangleAlert, V
 import type { useAlert } from '../components/AlertHandler'
 import { MotionGlobalConfig } from 'framer-motion'
 import Checkbox from '../components/ui/Checkbox'
-import { setSoundOn, unlockSound } from './sounds'
+import { cue, setSoundOn, unlockSound } from './sounds'
 import { savedItem } from './storageCarryOver'
 
 // `on`: shown until switched off (the rest start hidden). Stored as '1' or '0' once changed.
@@ -20,10 +20,11 @@ const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod
   { key: 'share', label: 'Share', group: 'header' },
   { key: 'tools', label: 'Tools', group: 'header' },
   { key: 'mod-size', label: 'File size', group: 'mod' },
-  { key: 'priority', label: 'Load priority counter', group: 'mod' },
+  { key: 'priority', label: 'Load priority counter (P)', group: 'mod' },
   { key: 'nexus', label: 'Nexus tag on mods installed from Nexus Mods', on: true, group: 'mod' },
-  { key: 'broken', label: 'Broken and May crash warnings, and the Problems tab', on: true, group: 'warn' },
-  { key: 'conflicts', label: 'Conflict warnings (the badge, and the count on Check Conflicts)', on: true, group: 'warn' },
+  { key: 'loadout-tag', label: 'In loadout tag, the loadouts a mod is in (I)', group: 'mod' },
+  { key: 'broken', label: 'Broken and May crash warnings, and the Problems tab (B)', on: true, group: 'warn' },
+  { key: 'conflicts', label: 'Conflict warnings, the badge, and the count on Check Conflicts (Shift+C)', on: true, group: 'warn' },
   { key: 'quick-organize', label: 'Show Quick Organize when dropping files on the window' }, // shown under Installing mods
   { key: 'new-strip', label: 'New this week on the Loadouts screen' }, // off by default (NewStripPref)
   { key: 'builtins', label: 'Built-in mods on the Loadouts screen and in the Library', on: true }, // shown by default (BuiltinsPref)
@@ -57,6 +58,8 @@ export const resolveMotion = (saved: string | null, osReduce: boolean) => saved 
 const reduceQuery = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null
 const motionOn = () => resolveMotion(savedItem(MOTION_KEY), !!reduceQuery?.matches)
 const minimalToasts = () => savedItem(MINIMAL_TOASTS_KEY) === '1'
+/** Fewer pop-ups is on (Settings): a show/hide hotkey's toast stays away, its sound still plays. */
+export const fewerPopups = minimalToasts
 const tagsOff = () => savedItem(TAGS_OFF_KEY) !== '0'
 /** Settings > Install mods without a loadout: the install dialog opens on Install without a loadout. */
 export const installsPlain = () => savedItem(PLAIN_INSTALL_KEY) === '1'
@@ -117,6 +120,20 @@ const subscribe = (l: () => void) => {
 export const useUiPref = (key: string) => useSyncExternalStore(subscribe, () => isOn(key))
 /** Broken mod warnings are on (Settings > On each mod): read where a hook cannot be (runChanges' toasts). */
 export const brokenShown = () => isOn('broken')
+
+/** Flips a show/hide pref (the Library's P, I, B and Shift+C) and says so: App shows the toast, whose Undo flips it
+ *  back (setPref). */
+export const PREF_TOGGLED = 'repakxtra-pref-toggled'
+export type PrefToggled = { key: string; name: string; on: boolean }
+export function togglePref(key: string, name: string) {
+  const on = !isOn(key)
+  update(storageKey(key), on ? '1' : '0')
+  cue('toggle', { direction: on ? 'forward' : 'back' }) // a switch flipped: the same sound as clicking it in Settings
+  window.dispatchEvent(new CustomEvent<PrefToggled>(PREF_TOGGLED, { detail: { key, name, on } }))
+}
+
+/** Sets a show/hide pref to a given state, quietly (a toggle toast's Undo puts back the state from before its press). */
+export const setPref = (key: string, on: boolean) => update(storageKey(key), on ? '1' : '0')
 
 /** Show or hide the custom tag chips on mods (T, or the button next to the tag filter). */
 export const toggleTags = () => update(HIDE_TAGS_KEY, tagsHidden() ? '0' : '1')
@@ -239,26 +256,26 @@ export function MotionSection({ extra }: { extra?: React.ReactNode }) {
   useAll()
   return (
     <div className="setting-section">
-      <h3 className="setting-icon-label"><Volume2 size={18} aria-hidden="true" />Sound, motion and pop-ups</h3>
+      <h3 className="setting-icon-label"><Volume2 size={18} aria-hidden="true" />Sound, motion, and pop-ups</h3>
       <div className="setting-group">
         <div className="setting-item">
           <Checkbox checked={soundOn()} onChange={(checked: boolean) => { update(SOUND_KEY, checked ? '1' : '0'); if (checked) unlockSound() }}>
             <span>Sound effects</span>
           </Checkbox>
-          <p className="setting-subtext">Click sounds on buttons, typing, switches and alerts, and an emote's sound when you hover its preview.</p>
+          <p className="setting-subtext">Click sounds on buttons, typing, switches, and alerts, and an emote's sound when you hover its preview.</p>
         </div>
         <div className="setting-item">
           <Checkbox checked={motionOn()} onChange={(checked: boolean) => update(MOTION_KEY, checked ? '1' : '0')}>
             <span>Animations</span>
           </Checkbox>
-          <p className="setting-subtext">Page slides, menus, switches and pop-ups. Unchecked stops every animation in the app. Until you change it, it follows the Windows animation effects setting.</p>
+          <p className="setting-subtext">Page slides, menus, switches, and pop-ups. Unchecked stops every animation in the app. Until you change it, it follows the Windows animation effects setting.</p>
           {extra && <div className={`setting-sub${motionOn() ? '' : ' is-off'}`}>{extra}</div>}
         </div>
         <div className="setting-item">
           <Checkbox checked={minimalToasts()} onChange={(checked: boolean) => update(MINIMAL_TOASTS_KEY, checked ? '1' : '0')}>
             <span>Fewer pop-ups</span>
           </Checkbox>
-          <p className="setting-subtext">Skips the small messages after everyday actions like switching loadouts or installing mods. Errors, warnings, updates and deletions you can undo still show.</p>
+          <p className="setting-subtext">Skips the small messages after everyday actions like switching loadouts or installing mods. Errors, warnings, updates, and deletions you can undo still show.</p>
         </div>
       </div>
     </div>
@@ -313,7 +330,7 @@ export function ModPrefs() {
         <Checkbox checked={!tagsOff()} onChange={(checked: boolean) => update(TAGS_OFF_KEY, checked ? '0' : '1')}>
           <span>Tags</span>
         </Checkbox>
-        <p className="setting-subtext">Tags on mods, the tag filter, the tags button and Assign Tag. Off keeps your tags, just out of sight.</p>
+        <p className="setting-subtext">Tags on mods, the tag filter, the tags button, and Assign Tag. Off keeps your tags, just out of sight.</p>
       </div>
     </>
   )

@@ -31,14 +31,15 @@ const fileName = (p: string) => p.replace(/\\/g, '/').split('/').pop() ?? p
 const nameOf = (p: string) => fileName(p).replace(/\.[^.]+$/, '').replace(/(_\d+)?_P$/i, '')
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
-/** Whether the VFX Updater can update a mod: VFX, or any mod with a material instance (MI_*.uasset), as
- *  xtra_vfx.rs `updatable` decides (a skin's glow or shine material sorts as Mesh or Texture). */
+/** Whether the VFX Updater can update a mod: VFX, or any mod with a material instance (MI_*.uasset) or a KO prompt
+ *  (WBP_Battle_Kill_*.uasset), as xtra_vfx.rs `updatable` decides (a skin's glow or shine material sorts as Mesh or Texture). */
 export const canUpdateVfx = (d?: { category?: string; files?: string[] } | null) =>
-  d?.category === 'VFX' || Boolean(d?.files?.some(f => /^mi_.*\.uasset$/i.test(fileName(f))))
+  d?.category === 'VFX' || Boolean(d?.files?.some(f => /^(mi_|wbp_battle_kill_).*\.uasset$/i.test(fileName(f))))
 
 if (import.meta.env.DEV) {
   console.assert(canUpdateVfx({ category: 'VFX' }) && canUpdateVfx({ category: 'Texture', files: ['Marvel\\Content\\X\\mi_Body_Glow.uasset'] }), 'VFX or a material instance')
   console.assert(!canUpdateVfx({ category: 'Texture', files: ['a/T_Body.uasset', 'a/MI_Body.uexp', 'a/Mission_MI_01.bnk'] }) && !canUpdateVfx(undefined), 'no material instance')
+  console.assert(canUpdateVfx({ category: 'UI', files: ['Marvel/Content/Marvel/UI/Blueprints/Battle/Custom/1026/WBP_Battle_Kill_1026_V3.uasset'] }), 'a KO prompt')
 }
 
 /** The USMAP in use: the one set in the VFX Updater, or the newest from rivals-depot when it has none yet. */

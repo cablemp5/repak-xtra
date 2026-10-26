@@ -8549,6 +8549,7 @@ fn main() {
             xtra_vfx::xtra_vfx_place,
             xtra_vfx::xtra_game_build,
             xtra_vfx::xtra_vfx_mods,
+            xtra_vfx::xtra_niagara_mods, // repakxtra: setup report
             xtra_builtins::xtra_builtins_list, // repakxtra: built-in mods
             xtra_builtins::xtra_builtins_set,
             xtra_builtins::xtra_builtins_refresh,

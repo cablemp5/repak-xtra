@@ -154,7 +154,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
 
   // On the page a click on the card does what its source is for: choose a file, or edit the text
   const cardClick = !page || cover === 'image' ? onClick : words ? () => setTyping(true) : undefined
-  const cardTitle = !page ? title : cover === 'image' ? (own ? 'Click to change the image (or paste one)' : 'Click to add an image, GIF or video (or paste one)')
+  const cardTitle = !page ? title : cover === 'image' ? (own ? 'Click to change the image (or paste one)' : 'Click to add an image, GIF, or video (or paste one)')
     : words ? 'Click to edit the text' : undefined
   const remove = !page || empty || editing ? undefined
     : cover === 'image' ? { what: 'image', run: onRemoveImage } : cover === 'capture' ? { what: 'capture', run: onRemoveCapture }
@@ -211,15 +211,15 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
         <div className="lo-media-cta">
           {cover === 'preview' && (impossible
             ? <><small>Nothing in this loadout can be rendered.</small>
-                <button type="button" className={ctaButton} aria-disabled="true" title="Nothing to render: try Capture, Image or Text"><Lock size={14} aria-hidden="true" /> Generate previews</button></>
+                <button type="button" className={ctaButton} aria-disabled="true" title="Nothing to render: try Capture, Image, or Text"><Lock size={14} aria-hidden="true" /> Generate previews</button></>
             : <><small>Renders this loadout on its hero, on this PC.</small>{generate!(ctaButton)}</>)}
           {cover === 'capture' && (capture?.show
             ? capture.button(ctaButton, 'Capture screenshot', true)
-            : <><small>Capture needs a skin, mesh or texture mod in this loadout.</small>
+            : <><small>Capture needs a skin, mesh, or texture mod in this loadout.</small>
                 <button type="button" className={ctaButton} aria-disabled="true" title="Nothing to capture: try Image or Text"><Lock size={14} aria-hidden="true" /> Capture screenshot</button></>)}
           {/* the same build as Preview and Capture: a line on what it does, then its button */}
           {cover === 'image' && <>
-            <small>Shows your own picture, GIF or video on the card. You can also paste one.</small>
+            <small>Shows your own picture, GIF, or video on the card. You can also paste one.</small>
             <button type="button" className={ctaButton} onClick={onClick}><ImagePlus size={14} aria-hidden="true" /> Choose an image</button>
           </>}
         </div>

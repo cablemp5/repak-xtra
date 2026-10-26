@@ -14,13 +14,14 @@ import { savedItem } from './storageCarryOver'
 import { setView } from './loadoutStore'
 import { ClapperboardIcon, PortraitCardIcon, type BuiltinIconComponent } from './PixelIcon'
 import { cue } from './sounds'
+import { ROLES, type Role } from './heroRoles'
 
 export type Builtin = { id: string; on: boolean; excluded: string[]; current: boolean; active: boolean; builtAt?: number; summary?: string; heroes: string[]; error?: string; path: string; size: number }
 
 // icon: a pixel-grid drawing (PixelIcon.tsx), sharp at any display scale. A new built-in adds its drawing there
 const ABOUT: Record<string, { name: string; what: string; icon: BuiltinIconComponent }> = {
   'force-default-skin': { name: 'Force default skin', what: 'Every hero shows their default skin, in matches and in the lobby', icon: PortraitCardIcon },
-  'skip-intro-movies': { name: 'Skip startup logos', what: 'The game opens faster, without the Marvel, NetEase and Unreal Engine logo videos that play each time it starts', icon: ClapperboardIcon },
+  'skip-intro-movies': { name: 'Skip startup logos', what: 'The game opens faster, without the Marvel, NetEase, and Unreal Engine logo videos that play each time it starts', icon: ClapperboardIcon },
 }
 const FOLD_KEY = 'repakxtra.builtins.folded'
 const BLOCKED = 'Close Marvel Rivals to change built-in mods'
@@ -112,15 +113,21 @@ function status(b: Builtin, building: boolean) {
 
 type Hero = { id: string; name: string }
 
-/** The heroes the skin table holds, named from the character data; a hero it lacks a name for still shows by id. */
+/** A hero's name as the picker shows it: the character data's, without a note in brackets ("Iron Fist (lin Lie)"). Pure. */
+export const heroName = (name: string) => name.replace(/\s*\(.*\)\s*$/, '').trim()
+/** A placeholder the character data keeps for a hero the game does not have yet ("Hive**"). Pure. */
+const unreleased = (name: string) => name.includes('*')
+
+/** The heroes the skin table holds (the ones the build changes), named from the character data; a hero it lacks a name
+ *  for still shows by id. Before the first build the table is not read yet, so the character data's released heroes. */
 function useHeroes(ids: string[]) {
   const [named, setNamed] = useState<Record<string, string> | null>(null)
   useEffect(() => {
     invoke<{ id: string; name: string }[]>('get_character_data')
-      .then(rows => setNamed(Object.fromEntries(rows.filter(r => /^10\d\d$/.test(r.id)).map(r => [r.id, r.name]))))
+      .then(rows => setNamed(Object.fromEntries(rows.filter(r => /^10\d\d$/.test(r.id) && !unreleased(r.name)).map(r => [r.id, heroName(r.name)]))))
       .catch(() => setNamed({}))
   }, [])
-  const heroes = useMemo<Hero[]>(() => [...new Set([...ids, ...Object.keys(named ?? {})])]
+  const heroes = useMemo<Hero[]>(() => (ids.length ? ids : Object.keys(named ?? {}))
     .map(id => ({ id, name: named?.[id] ?? `Hero ${id}` }))
     .sort((a, b) => a.name.localeCompare(b.name)), [ids, named])
   return { heroes, loaded: named !== null }
@@ -141,6 +148,10 @@ function HeroPicker({ id, b, open, building, blocked, onDone, alert }: { id: str
   const shown = heroes.filter(h => h.name.toLowerCase().includes(query.trim().toLowerCase()))
   const dirty = kept.size !== b.excluded.length || b.excluded.some(id => !kept.has(id))
   const flip = (id: string) => setKept(k => { const n = new Set(k); if (!n.delete(id)) n.add(id); return n })
+  // a role's heroes, of those listed: all kept, a click lets them go, else it keeps them all
+  const inRole = (r: Role) => heroes.filter(h => (ROLES[r] as readonly string[]).includes(h.id)).map(h => h.id)
+  const roleKept = (r: Role) => { const ids = inRole(r); return ids.length > 0 && ids.every(i => kept.has(i)) }
+  const flipRole = (r: Role) => { const ids = inRole(r), all = roleKept(r); setKept(k => { const n = new Set(k); ids.forEach(i => (all ? n.delete(i) : n.add(i))); return n }) }
   const apply = () => { onDone(); change(b.id, { excluded: [...kept] }, alert) }
   const escape = (e: React.KeyboardEvent) => {
     if (e.key !== 'Escape') return
@@ -169,6 +180,18 @@ function HeroPicker({ id, b, open, building, blocked, onDone, alert }: { id: str
                 onChange={e => { setQuery(e.target.value); setAt(0) }} onKeyDown={e => { if (e.key !== 'Escape') e.stopPropagation() }} />
               {query && <button type="button" className="lo-icon" aria-label="Clear search" title="Clear search" onClick={() => setQuery('')}><X size={13} /></button>}
             </label>
+            {/* a role partly kept shows how many, as 3/23 */}
+            <div className="bi-roles" role="group" aria-label="Keep a whole role">
+              {(Object.keys(ROLES) as Role[]).map(r => {
+                const ids = inRole(r), n = ids.filter(i => kept.has(i)).length
+                return (
+                  <button key={r} type="button" className="bi-role" aria-pressed={n === ids.length && n > 0 ? true : n > 0 ? 'mixed' : false} disabled={!ids.length}
+                    title={roleKept(r) ? `${r} show their default skins again` : `Every one of the ${r.toLowerCase()} keeps their own skins`} onClick={() => flipRole(r)}>
+                    {r}{n > 0 && n < ids.length && <span className="bi-role-n">{n}/{ids.length}</span>}
+                  </button>
+                )
+              })}
+            </div>
             <p className="bi-picker-hint">Checked heroes keep their own skins. Everyone else shows their default.</p>
           </div>
           <div className="bi-heroes" role="group" aria-label="Heroes that keep their own skins" ref={grid}>
@@ -293,4 +316,9 @@ export default function BuiltinMods({ blocked, alert }: { blocked: boolean; aler
       </div>
     </section>
   )
+}
+
+if (import.meta.env.DEV) {
+  console.assert(heroName('Iron Fist (lin Lie)') === 'Iron Fist' && heroName('Cloak & Dagger') === 'Cloak & Dagger', 'a note in brackets goes')
+  console.assert(unreleased('Hive**') && !unreleased('Hulk'), 'placeholders are not heroes yet')
 }

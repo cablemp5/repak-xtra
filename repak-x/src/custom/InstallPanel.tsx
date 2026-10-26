@@ -99,6 +99,16 @@ const enterCommits = (commit: () => void) => (e: React.KeyboardEvent<HTMLInputEl
   e.currentTarget.blur()
 }
 
+/** The name of the archive at `path` (a .zip, .rar or .7z), without a Nexus download's id, version, upload time and
+ *  random tail (xtra_nexus.rs parse has both formats). Pure. */
+export function archiveName(path: string) {
+  const file = (path.split(/[\\/]/).pop() ?? path).replace(/\.(zip|rar|7z)$/i, '')
+  const now = file.match(/^(.+)[_ ]\d+[_ ][0-9A-Za-z.-]+[_ ]\d{4}-\d{2}-\d{2}T\d{2}-\d{2}Z[_ ][0-9A-Za-z]+$/i)
+  const old = file.match(/^(.+?)-\d+-[0-9A-Za-z]+(?:-[0-9A-Za-z]+)*-\d{9,11}$/)
+  return (now?.[1] ?? old?.[1] ?? file).trim()
+}
+const ARCHIVE = /\.(zip|rar|7z)$/i
+
 const badge = (s: string) => `${s.toLowerCase().replace(/\s+/g, '-')}-badge`
 
 /** A name for the new loadout: the one mod's name, the hero every mod shares, or New loadout. Pure. */
@@ -174,7 +184,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
   const titleRef = useRef<HTMLInputElement>(null)
   const [label, setLabel] = useState(OTHER)
   const [naming, setNaming] = useState(false) // the collection picker's + New collection: a name field in its place
-  const [preview, setPreview] = useState(true)
+  const [previewPick, setPreviewPick] = useState<boolean | null>(null) // null: untouched, on unless every mod is raw (audio has nothing to render)
   const [open, setOpen] = useState<Set<string>>(new Set()) // mod rows showing their details, by path
   // A second drop while open adds to the list: rows already here keep what was typed or switched
   useEffect(() => {
@@ -202,6 +212,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
   const parsed = mods.map(m => parseModType(m.mod_type))
   const picked = mods.map((_, i) => i).filter(i => settings[i]?.enabled !== false)
   const count = picked.length
+  const preview = previewPick ?? (count === 0 || picked.some(i => mods[i].contains_uassets !== false))
   // A skin table mod names no hero in its files: its table is read for the one hero whose skins it changes
   // (xtra_skin_table_hero, a few seconds), and that hero's shape draws on the cover
   const [tableHero, setTableHero] = useState<Record<string, string | null>>({})
@@ -218,7 +229,10 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
   const heroOf = (i: number) => parsed[i].character?.split(' - ')[0] ?? tableHero[mods[i].path] ?? undefined
   // The cover's hero: the one the picked mods share, else the first picked mod's (a mod of no hero: no shape)
   const coverShape = silhouetteOf(picked.map(heroOf).find(h => h && !h.startsWith('Multiple')), heroes)
-  const suggestion = suggestName(picked.map(i => ({ name: settings[i]?.customName || plainName(mods[i].mod_name), character: parsed[i].character })))
+  // every picked mod from one zip: the loadout takes the zip's name
+  const zips = new Set(picked.map(i => mods[i].path))
+  const zip = zips.size === 1 && ARCHIVE.test([...zips][0]) ? archiveName([...zips][0]) : ''
+  const suggestion = zip || suggestName(picked.map(i => ({ name: settings[i]?.customName || plainName(mods[i].mod_name), character: parsed[i].character })))
   const existing = target === NEW || target === NONE ? undefined : loadouts.find(l => l.id === target)
   const into = target === NONE ? NONE : existing?.id ?? NEW // a loadout deleted while the dialog was open: back to a new one
   const loadoutName = existing?.name ?? (name?.trim() || suggestion)
@@ -288,7 +302,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
                       // no render: the other ways to give it a cover, which its page has
                       : <span className="ip-cover-note">
                           <span className="ip-cover-ways" aria-hidden="true"><Camera size={15} /><ImagePlus size={15} /><Type size={15} /></span>
-                          <span>Capture, image or text on its page</span>
+                          <span>Capture, image, or text on its page</span>
                         </span>}
                   </>}
             </div>
@@ -322,7 +336,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
                   </div>
                 )}
                 {canGenerate
-                  ? <Checkbox checked={preview} onChange={(v: boolean) => setPreview(v)} size="sm" color="primary" className="ip-check">
+                  ? <Checkbox checked={preview} onChange={(v: boolean) => setPreviewPick(v)} size="sm" color="primary" className="ip-check">
                       <span>{into === NEW ? 'Generate preview' : 'Render preview again'}</span>
                     </Checkbox>
                   : <PreviewsUnavailable className="lo-text-btn ip-setup" label="Preview" />}
@@ -362,7 +376,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
                     {/* Like a Library row: round hero icon and name, then on the right Leave out, its type and Advanced */}
                     <div className="ip-row-main">
                       <button type="button" className="ip-row-open" aria-expanded={isOpen} disabled={off} onClick={() => toggleOpen(mod.path)}
-                        title={isOpen ? 'Hide its details' : 'File name, folder and install options'}>
+                        title={isOpen ? 'Hide its details' : 'File name, folder, and install options'}>
                         {portrait ? <img className="ip-row-hero" src={portrait} alt="" title={character ?? undefined} /> : <span className="ip-row-hero" />}
                         <span className="ip-row-name">{shown}</span>
                       </button>
@@ -373,10 +387,10 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
                       <span className="ip-badges">
                         <span className={`category-badge ${badge(category)}`}>{category}</span>
                         {additional.map(t => <span key={t} className={`additional-badge ${badge(t)}`}>{t}</span>)}
-                        {mod.contains_uassets === false && <span className="no-uassets-badge" title="No UAsset files: audio, config or other raw files">Raw Assets</span>}
+                        {mod.contains_uassets === false && <span className="no-uassets-badge" title="No UAsset files: audio, config, or other raw files">Raw Assets</span>}
                       </span>
                       <button type="button" className="ip-row-advanced" aria-expanded={isOpen} disabled={off} onClick={() => toggleOpen(mod.path)}
-                        title={isOpen ? 'Hide its file name, folder and install options' : 'File name, folder and install options'}>
+                        title={isOpen ? 'Hide its file name, folder, and install options' : 'File name, folder, and install options'}>
                         Advanced<ChevronDown size={14} className="ip-row-caret" aria-hidden="true" />
                       </button>
                     </div>
@@ -467,4 +481,7 @@ if (import.meta.env.DEV) {
   console.assert(suggestName([{ name: 'A', character: 'Black Panther - Galactic' }, { name: 'B', character: 'Black Panther' }]) === 'Black Panther', 'shared hero')
   console.assert(suggestName([{ name: 'A', character: 'Hulk' }, { name: 'B', character: 'Black Panther' }]) === 'New loadout', 'mixed heroes')
   console.assert(committedName('  Mine ') === 'Mine' && committedName('   ') === null, 'Enter commits a trimmed name, empty goes back to the suggestion')
+  console.assert(archiveName('C:\\Downloads\\Catboy Panther.zip') === 'Catboy Panther', 'a zip: its name')
+  console.assert(archiveName('D:/x/Mialygosa Magik 1.3.1 12984 5 2026-09-21T17-38Z YLrVJSM1X.zip') === 'Mialygosa Magik 1.3.1', 'a Nexus download: its name part')
+  console.assert(archiveName('D:/x/Void Panther-1234-2-5-1729999999.7z') === 'Void Panther', 'an older Nexus download')
 }

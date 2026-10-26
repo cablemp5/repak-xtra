@@ -1,8 +1,8 @@
 // repakxtra: install progress for Setup and the guided setup (FirstRun.tsx), one look for every install: the signature
-// bypass, Project Galacta, the preview kit and Blender. One status line in the card or step it belongs to (cable's pick,
-// 2026-10-21, in place of step dots and a bar): a small spinner, what is happening now, and how far along it is
-// ("38 MB of 108 MB · 35%", or "step 2 of 3" while the size is unknown). A finished install says so for a moment in
-// green before the card's own state takes over.
+// bypass, Project Galacta, the preview kit and Blender. The VFX Updater's look (cable's pick, 2026-10-25, in place of a
+// spinner): what is happening now in shimmer text, how far along it is ("38 MB of 108 MB · 35%", or "step 2 of 3"
+// while the size is unknown), and a thin bar under it with the shimmer sweep. A finished install says so for a moment
+// in green before the card's own state takes over.
 import { useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { Check } from 'lucide-react'
@@ -20,11 +20,17 @@ export function InstallTrack({ steps = [], at = 0, text, amount, share, done }: 
 }) {
   const pct = share === null ? null : Math.round(Math.min(1, Math.max(0, share)) * 100)
   const far = [amount, pct !== null && `${pct}%`].filter(Boolean).join(' · ') || (steps.length > 1 ? `step ${at + 1} of ${steps.length}` : '')
+  // the bar: the share when it is known, else the middle of the current step (the VFX Updater's), else full while it sweeps
+  const width = pct ?? (steps.length > 1 ? ((at + 0.5) / steps.length) * 100 : 100)
   return (
     <div className={`su-track${done ? ' is-done' : ''}`} role="status" aria-live="polite">
-      {done ? <Check size={14} strokeWidth={2.75} aria-hidden="true" /> : <i className="su-spin" aria-hidden="true" />}
-      <span className="su-track-text"><SwapText text={done ?? text} /></span>{/* transitions.dev: Text states swap, each new step rises in */}
-      {!done && far && <span className="su-track-amount">{far}</span>}
+      <div className="su-track-line">
+        {done && <Check size={14} strokeWidth={2.75} aria-hidden="true" />}
+        {/* transitions.dev: Text states swap (each new step rises in) inside the Shimmer sweep */}
+        <span className="su-track-text">{done ? <SwapText text={done} /> : <span className="t-shimmer"><SwapText text={text} /></span>}</span>
+        {!done && far && <span className="su-track-amount">{far}</span>}
+      </div>
+      {!done && <div className="su-bar" aria-hidden="true"><i style={{ width: `${width}%` }} /></div>}
     </div>
   )
 }

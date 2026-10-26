@@ -173,8 +173,11 @@ export type Step = string | number | { name: string; nth: number }
 export type Rgba = { R: number; G: number; B: number; A: number }
 export type ColorProp = { label: string; path: Step[]; rgba: Rgba; name: string; structType: string }
 
+// TintColor and SelectedBackgroundColor: a widget's image brushes, 15 of a KO prompt's colors (WBP_Battle_Kill_1026_V3,
+// 2026-10-25). BrushColor and FillColorAndOpacity: borders and progress bars
 const COLOR_NAMES = new Set(['ColorAndOpacity', 'SpecifiedColor', 'BaseColor', 'HighlightColor', 'FontTopColor', 'FontButtomColor', 'VectorParameter',
-  'ShadowColor', 'ContentColor', 'OutlineColor', 'Color', 'TextColor', 'BackgroundColor', 'Emissive', 'ParameterValue'])
+  'ShadowColor', 'ContentColor', 'OutlineColor', 'Color', 'TextColor', 'BackgroundColor', 'Emissive', 'ParameterValue',
+  'TintColor', 'SelectedBackgroundColor', 'BrushColor', 'FillColorAndOpacity'])
 
 const nameOf = (el: Json): string | undefined => (typeof el?.Name === 'string' ? el.Name : typeof el?.ObjectName === 'string' ? el.ObjectName : undefined)
 
