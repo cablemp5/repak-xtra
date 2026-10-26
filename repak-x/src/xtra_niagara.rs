@@ -284,7 +284,7 @@ fn shape_differs(mod_json: &Value, game_json: &Value, mod_bytes: &[u8], game_byt
 
 // ---- the files around it ----
 
-fn read_json(p: &Path) -> Result<Value, String> {
+pub(crate) fn read_json(p: &Path) -> Result<Value, String> {
     // bytes, not a String: serde checks the UTF-8 as it parses, so the text is walked once
     let b = std::fs::read(p).map_err(|e| format!("{}: {e}", p.display()))?;
     serde_json::from_slice(b.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(&b)).map_err(|e| format!("{}: {e}", p.display()))
@@ -308,7 +308,7 @@ fn rel_no_ext(rel: &str) -> String {
 
 /// Copies these packages (with their .uexp and .ubulk) from `from` to `to`, and lists them for the JSON step. `fresh`
 /// empties `to` first (a run's own folder). The game's cache is added to, never emptied.
-fn stage(from: &Path, to: &Path, rels: &[String], fresh: bool) -> Result<(), String> {
+pub(crate) fn stage(from: &Path, to: &Path, rels: &[String], fresh: bool) -> Result<(), String> {
     if fresh {
         let _ = std::fs::remove_dir_all(to);
     }
@@ -326,7 +326,7 @@ fn stage(from: &Path, to: &Path, rels: &[String], fresh: bool) -> Result<(), Str
     std::fs::write(to.join("uasset_list.txt"), rels.join("\n")).map_err(|e| e.to_string())
 }
 
-async fn to_json(usmap: &str, input: &Path, output: &Path, progress: &dyn VfxProgressSink) -> Result<(), String> {
+pub(crate) async fn to_json(usmap: &str, input: &Path, output: &Path, progress: &dyn VfxProgressSink) -> Result<(), String> {
     let _ = std::fs::remove_dir_all(output);
     crate::vfx_updater::pipeline::step_convert_mod_to_json(&PathBuf::new(), usmap, &input.to_string_lossy(), &output.to_string_lossy(), progress).await.map(|_| ())
 }
@@ -402,9 +402,19 @@ async fn older_usmaps(build: u64) -> Vec<String> {
     have.into_iter().take(3).map(|(_, p)| p.to_string_lossy().to_string()).collect()
 }
 
+/// An extract filter for a package (a path without extension): its folder and name. The tool matches filters as part of
+/// the path it writes, so a full path misses plugin content, which it writes under Marvel/Plugins/<name>/Content
+/// (2026-10-26: "/Marvel/Plugins/MarvelGAS/Content/.../NS_102698_Light_01" extracted nothing, "102698/NS_102698_Light_01"
+/// extracted it).
+pub(crate) fn tail_filter(rel: &str) -> String {
+    let mut parts = rel.rsplit('/').take(2).collect::<Vec<_>>();
+    parts.reverse();
+    parts.join("/")
+}
+
 /// The game's copies of `rels`, extracted and decoded with `usmap` into the cache under `vanilla` (kept for the next
-/// mod): (packages, JSON) folders.
-async fn game_copies(game_paks: &str, usmap: &str, rels: &[String], work: &Path, vanilla: &Path, progress: &dyn VfxProgressSink) -> Result<(PathBuf, PathBuf), String> {
+/// mod): (packages, JSON) folders. xtra_layout.rs reads the game's Blueprints through it too.
+pub(crate) async fn game_copies(game_paks: &str, usmap: &str, rels: &[String], work: &Path, vanilla: &Path, progress: &dyn VfxProgressSink) -> Result<(PathBuf, PathBuf), String> {
     let (gx, gj) = (vanilla.join("niagara_extract"), vanilla.join("niagara_json"));
     // cached only when both the JSON and the package are there
     let missing: Vec<String> = rels.iter().filter(|r| !gj.join(format!("{r}.json")).exists() || !gx.join(format!("{r}.uasset")).exists()).cloned().collect();
@@ -417,13 +427,13 @@ async fn game_copies(game_paks: &str, usmap: &str, rels: &[String], work: &Path,
             action: "extract_iostore_legacy",
             game_paks: Some(game_paks.to_string()),
             output_path: Some(fresh.to_string_lossy().to_string()),
-            filter_patterns: Some(missing.iter().map(|r| crate::vfx_updater::uasset_tool::to_package_path(r)).collect()),
+            filter_patterns: Some(missing.iter().map(|r| tail_filter(r)).collect()),
             with_deps: Some(false),
             ..Default::default()
         };
         let r = crate::vfx_updater::uasset_tool::run_vfx_uat_request(&PathBuf::new(), &req).await?;
         if !r.success {
-            return Err(format!("The game's Niagara files could not be read: {}", r.message));
+            return Err(format!("The game's files could not be read: {}", r.message));
         }
         // only these, not the dependencies the extract adds: a run folder for the JSON step, then into the cache
         let only = work.join("game_only");
@@ -547,7 +557,7 @@ async fn old_layout_of(game_paks: &str, usmap: &str, mod_utoc: &Path, rels: &[St
 }
 
 /// A mod file's path as a package path without extension, from "Marvel/Content/" on.
-fn package_rel(file: &str) -> String {
+pub(crate) fn package_rel(file: &str) -> String {
     let f = file.replace('\\', "/");
     let f = f.find("Marvel/Content/").map_or(f.as_str(), |i| &f[i..]).to_string();
     rel_no_ext(&f)

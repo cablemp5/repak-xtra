@@ -41,13 +41,17 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     // background (xtra_niagara.rs), and checked again when one is. Then the mods the date calls current: their materials
     // checked once each per game update (xtra_vfx_check.rs), so one made before the update, or installed before
     // repakxtra kept made dates, is flagged too. Both need the game's USMAP: fetched first (an ETag check when it has
-    // it), so a library whose VFX Updater was never opened is checked as well
+    // it), so a library whose VFX Updater was never opened is checked as well. Last, the Blueprint mods: their classes
+    // compared with the game's once each per game update (xtra_layout.rs). One the update changed gets May crash with
+    // what changed, one that matches loses the date-only warning, so the badges follow each one checked
     const full = () => check()
       .then(() => (live ? invoke('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
       .then(() => (live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: mods.map(m => m.path) }) : 0))
       .then(found => (live && found ? check() : undefined))
       .then(() => (live ? invoke<number>('xtra_vfx_check_scan', { modPaths: mods.filter(m => verdicts.get(norm(m.path))?.kind !== 'vfx').map(m => m.path) }) : 0))
-      .then(found => { if (live && found) void check() })
+      .then(found => (live && found ? check() : undefined))
+      .then(() => (live ? invoke<number>('xtra_layout_scan', { modPaths: mods.map(m => m.path) }) : 0))
+      .then(checked => { if (live && checked) void check() })
       .catch(e => console.warn('[brokenMods] background scan failed', e))
     const t = setTimeout(() => { void full() }, 1500)
     const again = listen(VERDICTS_CHANGED, () => { void check() })

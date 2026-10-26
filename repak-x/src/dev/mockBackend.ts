@@ -417,6 +417,7 @@ function mockVfx(cmd: string, args: any): unknown {
     case 'xtra_vfx_stale': return mockStale(String(args.modPath)) ? (args.files as string[]).filter(f => /NS_/.test(f)) : []
     case 'xtra_vfx_old_layout': return []
     case 'xtra_vfx_layout_scan': return 0
+    case 'xtra_layout_scan': return 0
     case 'xtra_vfx_source': return String(args.modPath)
     case 'xtra_skin_table_hero': return null
     // the mock's USMAP is older than its game: Niagara files stay left out, as in a real run before a matching USMAP
