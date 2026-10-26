@@ -1,6 +1,7 @@
 // repakxtra: Claim role on cable's Discord card (CableDiscord.tsx, xtra_role.rs). The click says "Finish in your browser"
 // at once, opens Discord's consent page, and waits for the browser's answer, which comes back through a repakx:// link
-// (no polling). Consent pages wait on the member, so it gives up after 5 minutes. The claim lives here, not in the card:
+// (no polling). Consent pages wait on the member, so it gives up after 5 minutes, and Open again starts a fresh claim
+// when the tab was closed. A claimed role is remembered (the role is kept forever). The claim lives here, not in the card:
 // closing Settings mid-claim keeps it, and reopening shows where it stands. Each answer names its claim's state, so an
 // answer to an earlier claim never settles a newer one.
 import { useSyncExternalStore } from 'react'
@@ -19,7 +20,7 @@ const AGAIN = 'Discord did not answer. Try again in a moment.'
 /** The line under the card for each state (null: nothing to say). Pure. */
 export function claimText(state: ClaimState): string | null {
   switch (state) {
-    case 'waiting': return 'Finish in your browser...'
+    case 'waiting': return 'Finish in your browser…'
     case 'ok': return 'Done. You have the role.'
     case 'not_member': return 'Join the server first, then claim again.'
     case 'denied': return 'Nothing changed. Try again any time.'
@@ -35,7 +36,8 @@ export const fromResult = (result: string): ClaimState => (['ok', 'not_member', 
 /** Whether an answer settles the claim in progress: only while waiting, and only for the state this claim opened. Pure. */
 export const answers = (a: Answer, waiting: boolean, mine: string | null) => waiting && mine !== null && a.state === mine
 
-let state: ClaimState = 'idle'
+const CLAIMED = 'repakxtra.discordClaim' // 'ok' once the role was given: the card says so from then on
+let state: ClaimState = localStorage.getItem(CLAIMED) === 'ok' ? 'ok' : 'idle'
 let mine: string | null = null // the state token of the claim in progress, known once the backend made it
 let attempt = 0
 let timer: ReturnType<typeof setTimeout> | undefined
@@ -47,16 +49,16 @@ function settle(s: ClaimState) {
   clearTimeout(timer)
   mine = null
   set(s)
-  if (s === 'ok') cue('success', { emphasis: 'subtle' })
+  if (s === 'ok') { localStorage.setItem(CLAIMED, 'ok'); cue('success', { emphasis: 'subtle' }) }
 }
 
 const listenOnce = () => (listening ??= listen<Answer>('xtra-role-claimed', e => {
   if (answers(e.payload, state === 'waiting', mine)) settle(fromResult(e.payload.result))
 }).catch(e => { listening = null; throw e })) // a failed subscription is tried again on the next claim
 
-/** Starts a claim, unless one is waiting. */
+/** Starts a claim. While one waits (its tab closed, say), it starts a fresh one: the earlier one stops counting. */
 export async function startClaim() {
-  if (state === 'waiting') return
+  clearTimeout(timer)
   const me = ++attempt
   mine = null
   set('waiting')
@@ -85,7 +87,7 @@ export function checkReady() {
 export const useClaim = () => useSyncExternalStore(f => { subscribers.add(f); return () => { subscribers.delete(f) } }, () => state)
 
 if (import.meta.env.DEV) {
-  console.assert(claimText('waiting') === 'Finish in your browser...', 'the click answers at once')
+  console.assert(claimText('waiting') === 'Finish in your browser…', 'the click answers at once')
   console.assert(claimText('ok') === 'Done. You have the role.' && claimText('not_member') === 'Join the server first, then claim again.', 'ok and not a member')
   console.assert(claimText('denied') === 'Nothing changed. Try again any time.', 'denied')
   console.assert(claimText('error') === AGAIN && claimText('timeout') === AGAIN, 'an error and the timeout read alike')

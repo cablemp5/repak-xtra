@@ -21,7 +21,7 @@ export function DiscordCard({ invite, fallbackName, claim = false }: { invite: s
   // Doherty threshold: the line says what to do on the click itself, the answer replaces it in place
   const claimed = useClaim()
   useEffect(() => { if (claim) checkReady() }, [claim])
-  const line = claim ? claimText(claimed) : null
+  const line = claim && claimed !== 'unset' ? claimText(claimed) : null
   return (
     <div className="cd-card">
       {g?.icon
@@ -37,11 +37,15 @@ export function DiscordCard({ invite, fallbackName, claim = false }: { invite: s
       </div>
       {/* Hick's law: one action, no options. Join beside it answers "not in the server yet". Jakob's law: Discord's own
           consent page, the flow members know from other apps */}
-      {/* Von Restorff: once claimed the action becomes the result, so the card no longer asks for it */}
-      {claim && (claimed === 'ok'
-        ? <button type="button" className="lo-text-btn" disabled title="The repakxtra user role is yours"><Check size={13} aria-hidden="true" /> Role claimed</button>
-        : <button type="button" className="lo-text-btn" disabled={claimed === 'waiting' || claimed === 'unset'} onClick={startClaim}
-            title={claimed === 'unset' ? 'Claim role is not set up yet.' : 'Opens Discord in your browser. Authorize repakxtra and the server gives you the repakxtra user role.'}>Claim role</button>)}
+      {/* Von Restorff: once claimed the action becomes the result (plain text, not a dead button), so the card no
+          longer asks for it. While it waits, Open again starts over if the tab was closed. Not set up: nothing shows */}
+      {claim && claimed === 'ok' && <span className="cd-claimed"><Check size={13} aria-hidden="true" /> Role claimed</span>}
+      {claim && claimed !== 'ok' && claimed !== 'unset' && (
+        <button type="button" className="lo-text-btn" onClick={startClaim}
+          title={claimed === 'waiting' ? 'Opens the Discord page again, with a new link' : 'Opens Discord in your browser. Authorize repakxtra and the server gives you the repakxtra user role.'}>
+          {claimed === 'waiting' ? 'Open again' : 'Claim role'}
+        </button>
+      )}
       <button type="button" className="lo-text-btn" onClick={() => openUrl(`https://discord.gg/${invite}`)}>Join</button>
     </div>
   )
