@@ -317,6 +317,9 @@ pub struct Tiered {
     /// a hero match while the crash names a skin: the mod changes another skin of that hero
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     other_skin: bool,
+    /// the hero the crash points at (from the asset's folders, else the crash's id), so the reasons name the same one
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hero: Option<String>,
 }
 
 /// The hero and skin a crash points at: from the crashed asset's folders, else the crash's character id (no skin then).
@@ -362,7 +365,7 @@ fn tiers(asset_path: &str, hero_id: Option<&str>, mod_paths: &[String], read: im
         .filter_map(|p| {
             let tier = tier_of(&read(std::path::Path::new(p))?, asset_path, hero.as_ref())?;
             let other_skin = tier == Tier::Hero && hero.as_ref().is_some_and(|h| h.skin.is_some());
-            Some(Tiered { path: p.clone(), tier, other_skin })
+            Some(Tiered { path: p.clone(), tier, other_skin, hero: hero.as_ref().map(|h| h.hero.clone()) })
         })
         .collect();
     out.sort_by_key(|t| t.tier); // stable: the given order within a tier
@@ -441,6 +444,9 @@ mod tests {
         let read = |_: &std::path::Path| Some(std::sync::Arc::new(files.clone()));
         let rows = tiers("/Game/Marvel/UI/X.X", Some("1026"), &["m.pak".to_string()], read);
         assert!(!rows[0].other_skin, "no skin known: just the same hero");
+        assert_eq!(rows[0].hero.as_deref(), Some("1026"), "the hero the reasons name");
+        let rows = tiers("/Game/Marvel/Characters/1011/1011001/A.A", Some("1026"), &["m.pak".to_string()], |_| Some(std::sync::Arc::new(v(&["/Game/Marvel/Characters/1011/1011500/B.uasset"]))));
+        assert_eq!(rows[0].hero.as_deref(), Some("1011"), "the asset's hero, not the crash's id");
         assert_eq!(crash_hero("/Game/Marvel/Characters/1011/1011001/A.A", Some("1026")).map(|h| h.hero), Some("1011".into()), "the asset's folder wins over the id");
     }
 

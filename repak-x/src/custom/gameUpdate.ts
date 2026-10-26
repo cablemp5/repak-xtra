@@ -1,14 +1,16 @@
-// repakxtra: says once when the game updated (xtra_game.rs), checked 3 s after launch and when the window gets focus (at
-// most once a minute), so an update that lands while repakxtra is open is noticed too. It runs every mod check again
-// first (brokenMods.ts), then one toast says how many mods the update left flagged, with a way to see them.
+// repakxtra: says once when the game updated (xtra_game.rs), checked 3 s after the mod list first loads and when the window
+// gets focus (at most once a minute), so an update that lands while repakxtra is open is noticed too. It runs every mod
+// check again first (brokenMods.ts), then one toast says how many mods the update left flagged, with a way to see them.
+// Laws of UX: one toast with the count, not a badge per mod (Von Restorff), a single action that opens the list it
+// counts (Hick), and it waits for the checks so the number it shows is the number in the Problems tab (Doherty).
 import { useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { flaggedCount, rescanVerdicts, scanFinished } from './brokenMods'
+import { flaggedCount, fullScan } from './brokenMods'
 import { setView } from './loadoutStore'
 import { plural } from './modName'
 
 type GameUpdate = { updated: number; previous: number }
-type Alert = { info: (title: string, text?: string, options?: { duration?: number; action?: { label: string; onClick: () => void } }) => number }
+type Alert = { info: (title: string, text?: string, options?: { color?: 'info'; duration?: number; action?: { label: string; onClick: () => void } }) => number }
 
 /** The toast's text. `updated` is unix seconds. */
 export function updateText(updated: number, flagged: number): string {
@@ -17,11 +19,18 @@ export function updateText(updated: number, flagged: number): string {
   return `The game updated on ${day}. ${what}`
 }
 
-/** Mounted once in App. `hasMods`: no mods means no scan to wait for. `showFlagged` opens the Library's Problems filter. */
-export function useGameUpdateWatch(alert: Alert, hasMods: boolean, showFlagged: () => void) {
-  const live = useRef({ alert, hasMods, showFlagged })
-  live.current = { alert, hasMods, showFlagged }
+/** Mounted once in App. `loading` and `count` are the mod list's: the check waits for the first load to finish, so a slow
+ *  start never reads as an empty library. `showFlagged` opens the Library's Problems filter with every other filter off. */
+export function useGameUpdateWatch(alert: Alert, loading: boolean, count: number, showFlagged: () => void) {
+  const live = useRef({ alert, count, showFlagged })
+  live.current = { alert, count, showFlagged }
+  // ready once there are mods, or a load was seen to end with none (the list starts empty and not loading)
+  const started = useRef(false)
+  if (loading) started.current = true
+  const ready = count > 0 || (started.current && !loading)
+  const shown = useRef(new Set<number>()) // shown this run: a save that failed is retried, the toast is not repeated
   useEffect(() => {
+    if (!ready) return
     let last = 0
     let busy = false
     const check = async () => {
@@ -31,17 +40,24 @@ export function useGameUpdateWatch(alert: Alert, hasMods: boolean, showFlagged: 
       try {
         const found = await invoke<GameUpdate | null>('xtra_game_update_check')
         if (!found) return
-        if (live.current.hasMods) {
-          const done = scanFinished()
-          void rescanVerdicts()
-          await done
+        if (!shown.current.has(found.updated)) {
+          if (live.current.count > 0) {
+            // the library can change under a scan (a reload), so a scan that did not finish is run again, twice at most
+            let done = false
+            for (let i = 0; i < 3 && !done; i++) done = (await fullScan()) ?? true
+            if (!done) return // the checks failed: no notice with a wrong count, tried again on a later focus
+          }
+          const flagged = flaggedCount()
+          const { alert, showFlagged } = live.current
+          // the info color, not primary: Fewer pop-ups skips primary toasts without an action, and this one must show
+          // before it is marked seen
+          alert.info('Game updated', updateText(found.updated, flagged), {
+            color: 'info',
+            duration: 15000,
+            ...(flagged ? { action: { label: 'Show them', onClick: () => { setView('library'); showFlagged() } } } : {}),
+          })
+          shown.current.add(found.updated)
         }
-        const flagged = flaggedCount()
-        const { alert, showFlagged } = live.current
-        alert.info('Game updated', updateText(found.updated, flagged), {
-          duration: 15000,
-          ...(flagged ? { action: { label: 'Show them', onClick: () => { setView('library'); showFlagged() } } } : {}),
-        })
         await invoke('xtra_game_update_seen', { updated: found.updated })
       } catch (e) {
         console.warn('[gameUpdate] check failed', e)
@@ -53,7 +69,7 @@ export function useGameUpdateWatch(alert: Alert, hasMods: boolean, showFlagged: 
     const focus = () => { void check() }
     window.addEventListener('focus', focus)
     return () => { clearTimeout(t); window.removeEventListener('focus', focus) }
-  }, [])
+  }, [ready])
 }
 
 if (import.meta.env.DEV) {

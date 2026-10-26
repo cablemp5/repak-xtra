@@ -10,7 +10,7 @@ import { detectHeroesWithData } from '../utils/heroes'
 import { type KeepDeps, turnOffWithUndo } from './keepOne'
 import { nameKey } from './loadoutStore'
 import { ModName, plural } from './modName'
-import { type Tier, type Tiered, prechecked, reasonFor } from './crashTiers'
+import { type Tier, type Tiered, ordered, prechecked, reasonFor } from './crashTiers'
 
 type Mod = { path: string; enabled?: boolean }
 type Details = { character_id?: string | null; character_name?: string | null; files?: string[] }
@@ -48,9 +48,9 @@ export async function findSuspects(p: CrashPayload, on: Mod[], details: Record<s
   if ((p.asset_path || p.character_id) && on.length) {
     const rows = await invoke<Tiered[]>('xtra_crash_tiers', { assetPath: p.asset_path ?? '', heroId: p.character_id ?? null, modPaths: on.map(m => m.path) }).catch(() => [])
     const byPath = new Map(on.map(m => [m.path, m]))
-    const hero = heroes.find(h => h.id === p.character_id)?.name
-    // already ordered asset, skin, hero
-    const found = rows.flatMap(r => { const mod = byPath.get(r.path); return mod ? [{ mod, tier: r.tier, reason: reasonFor(r.tier, hero, r.other_skin) }] : [] })
+    // the hero the backend matched on (the crashed asset's folder wins over the crash's id)
+    const heroName = (r: Tiered) => heroes.find(h => h.id === (r.hero ?? p.character_id))?.name
+    const found = ordered(rows).flatMap(r => { const mod = byPath.get(r.path); return mod ? [{ mod, tier: r.tier, reason: reasonFor(r.tier, heroName(r), r.other_skin) }] : [] })
     if (found.length) return found
   }
   return p.character_id ? heroSuspects(on, details, heroes, p.character_id) : []

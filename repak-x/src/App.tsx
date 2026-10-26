@@ -560,7 +560,7 @@ function App() {
 
 
   const alert = useAlert();
-  useGameUpdateWatch(alert, mods.length > 0, () => setModState('broken')) // repakxtra: game update notice
+  useGameUpdateWatch(alert, isModsLoading, mods.length, () => { showAll(); setModState('broken') }) // repakxtra: game update notice
 
   // repakxtra: the VFX Updater window (custom/vfx/), a mod handed over when given
   const openVfxUpdaterWindow = (modUtocPath?: string | null) =>
