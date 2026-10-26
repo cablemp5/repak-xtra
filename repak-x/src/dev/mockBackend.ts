@@ -278,7 +278,11 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       // localStorage 'mock.crash' = '1': the newest crash the setup report names
       case 'xtra_newest_crash': return localStorage.getItem('mock.crash') === '1'
         ? { time: Math.floor(Date.now() / 1000) - 3600, crash_type: 'Access Violation', asset_path: '/Game/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001', seconds_since_start: 412,
-            message: 'Fatal error: [File:D:/build/Engine/Source/Runtime/CoreUObject/ObjectSerializationError.cpp] ObjectSerializationError', detail: 'Serial size mismatch: Got 4096, Expected 4112' } : null
+            message: 'Fatal error: [File:D:/build/Engine/Source/Runtime/CoreUObject/ObjectSerializationError.cpp] ObjectSerializationError', detail: 'Serial size mismatch: Got 4096, Expected 4112',
+            build_version: '3962284', engine_version: '5.3.2-3962284+++depot_marvel+S10.5_release', cpu: 'AMD Ryzen 5 5600X 6-Core Processor', gpu: 'AMD Radeon RX 6700 XT',
+            gpu_driver: 'AMD Software: Adrenalin Edition 26.10.1', rhi: 'D3D12', os: 'Windows 10 (22H2) [10.0.19045.6466]', ram_gb: 16, oom: false, thread: 'FAsyncLoadingThread',
+            faulting_module: 'Marvel-Win64-Shipping', faulting_class: 'game', third_party: ['dsound.dll', 'MarvelRivalsUTOCSignatureBypass.asi'],
+            stack: ['Marvel-Win64-Shipping + 10c296b (game)', 'Marvel-Win64-Shipping + 10c38e4 (game)', 'Marvel-Win64-Shipping + 10c41e7 (game)', 'Marvel-Win64-Shipping + 10ca04a (game)', 'Marvel-Win64-Shipping + 10ced44 (game)'] } : null
       case 'xtra_niagara_mods': return (args?.modPaths ?? []).filter((p: string) => /vfx/i.test(p))
       case 'xtra_upstream_running': return Boolean(mock.__repakXOpen)
       case 'xtra_stage_off_files': { // like xtra_offfiles.rs: a .off set becomes one staged .pak

@@ -100,6 +100,12 @@ fn bypass_status(win64: &Path) -> BypassStatus {
     }
 }
 
+/// Whether the file is byte for byte the bundled loader or bypass (the setup report leaves those out of a crash's
+/// third-party modules: the Signature bypass line already names them).
+pub(crate) fn is_bundled_bypass(path: &Path) -> bool {
+    fs::read(path).is_ok_and(|b| b == LOADER_BYTES || b == BYPASS_BYTES)
+}
+
 /// install: writes both files (a different dsound.dll or .asi already there is kept as <name>.repakxtra-backup);
 /// disable / enable: renames dsound.dll like the Tools panel does; remove: deletes the two bundled files only.
 fn bypass_action(win64: &Path, action: &str) -> Result<(), String> {
@@ -414,6 +420,8 @@ mod tests {
         assert_eq!(s.state, "installed");
         assert!(s.sigeon_on);
         assert_eq!(fs::read(win.join("dsound.dll.repakxtra-backup")).unwrap(), b"an older loader", "a different loader is kept");
+        assert!(is_bundled_bypass(&win.join(LOADER)) && is_bundled_bypass(&win.join("plugins").join(BYPASS)));
+        assert!(!is_bundled_bypass(&win.join("dsound.dll.repakxtra-backup")) && !is_bundled_bypass(&win.join("plugins").join("SigeonLoader.asi")));
         bypass_action(&win, "disable").unwrap();
         assert_eq!(bypass_status(&win).state, "disabled");
         bypass_action(&win, "enable").unwrap();
