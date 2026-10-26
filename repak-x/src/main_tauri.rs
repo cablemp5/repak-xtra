@@ -27,6 +27,8 @@ mod xtra_offfiles; // repakxtra: .pak.off files install like .pak
 mod xtra_bundle; // repakxtra: a mod's pak/utoc/ucas found and moved as one set
 mod xtra_updater; // repakxtra: applies an update without string-built shell commands
 mod xtra_conflicts; // repakxtra: conflict comparison by normalized asset path, cached file lists
+mod xtra_heroes; // repakxtra: the hero and skin folder of an asset path
+mod xtra_game; // repakxtra: the game update notice
 mod xtra_extract; // repakxtra: unpacks only archives whose paths stay inside the output folder
 mod xtra_vfx; // repakxtra: VFX fixing after game updates
 mod xtra_niagara; // repakxtra: the VFX Updater's Niagara step
@@ -8541,6 +8543,8 @@ fn main() {
             xtra_identity::xtra_protocol_reclaim,
             xtra_crash::xtra_newest_crash, // repakxtra: setup report
             xtra_crash::xtra_crash_suspects, // repakxtra: crash suspects
+            xtra_crash::xtra_crash_tiers, // repakxtra: crash suspects by asset, skin and hero
+            xtra_game::xtra_game_update_check, xtra_game::xtra_game_update_seen, // repakxtra: game update notice
             xtra_broken::xtra_broken_mods, // repakxtra: broken mods
             xtra_broken::xtra_vfx_no_update, // repakxtra: Nothing to update stops the Needs VFX update flag
             xtra_vfx_check::xtra_vfx_check, // repakxtra: Check for VFX update

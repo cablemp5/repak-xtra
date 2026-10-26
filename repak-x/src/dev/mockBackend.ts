@@ -305,6 +305,17 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       })
       // Crash suspects: mods whose path has window.__suspectMatch (part of a name) hold the crashed asset
       case 'xtra_crash_suspects': return (args?.modPaths ?? []).filter((p: string) => mock.__suspectMatch && p.includes(mock.__suspectMatch))
+      // Crash tiers (xtra_crash.rs): __suspectMatch holds the asset, __suspectSkin the same skin, __suspectHero the same hero
+      case 'xtra_crash_tiers': {
+        const tiers: [string, string][] = [['asset', mock.__suspectMatch], ['skin', mock.__suspectSkin], ['hero', mock.__suspectHero]]
+        return (args?.modPaths ?? []).flatMap((p: string) => {
+          const t = tiers.find(([, m]) => m && p.includes(m))
+          return t ? [{ path: p, tier: t[0], ...(t[0] === 'hero' && mock.__suspectSkin ? { other_skin: true } : {}) }] : []
+        }).sort((a: { tier: string }, b: { tier: string }) => tiers.findIndex(t => t[0] === a.tier) - tiers.findIndex(t => t[0] === b.tier))
+      }
+      // localStorage 'mock.gameUpdate' = '1': the game updated an hour ago (custom/gameUpdate.ts), until the notice is seen
+      case 'xtra_game_update_check': return localStorage.getItem('mock.gameUpdate') === '1' ? { updated: Math.floor(Date.now() / 1000) - 3600, previous: Math.floor(Date.now() / 1000) - 86400 * 14 } : null
+      case 'xtra_game_update_seen': localStorage.removeItem('mock.gameUpdate'); return null
       // localStorage 'mock.prevCrash' = '1': a crash from before the app started (its toast at startup)
       case 'check_for_previous_crash': {
         if (localStorage.getItem('mock.prevCrash') !== '1') return null

@@ -705,14 +705,8 @@ pub async fn xtra_skin_table_hero(mod_path: String, state: State<'_, Arc<Mutex<A
 
 /// The hero id when every `Characters/<id>/` folder in the paths is the same hero, else None.
 fn only_hero_folder<'a>(paths: impl Iterator<Item = &'a str>) -> Option<String> {
-    let ids: HashSet<&str> = paths
-        .filter_map(|p| {
-            let mut parts = p.split(['/', '\\']);
-            parts.find(|s| s.eq_ignore_ascii_case("Characters"))?;
-            parts.next().filter(|id| id.len() == 4 && id.bytes().all(|b| b.is_ascii_digit()))
-        })
-        .collect();
-    (ids.len() == 1).then(|| ids.into_iter().next().unwrap().to_string())
+    let ids: HashSet<String> = paths.filter_map(|p| crate::xtra_heroes::hero_skin(p).map(|h| h.hero)).collect();
+    (ids.len() == 1).then(|| ids.into_iter().next().unwrap())
 }
 
 #[cfg(test)]

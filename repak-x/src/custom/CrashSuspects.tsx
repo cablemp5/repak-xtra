@@ -1,6 +1,7 @@
 // repakxtra: crash suspects. The crash toast's "See suspects" opens a small list of the mods that were on and match the
-// crash: first the ones holding the asset that crashed (xtra_crash.rs), else the ones for the hero it names (the same
-// hero detection the Library uses). Checked ones turn off together, with Undo.
+// crash (xtra_crash.rs xtra_crash_tiers): the ones holding the asset that crashed, then the ones changing the same skin,
+// then the same hero. When none match, the hero detection the Library uses (multi-hero mods). Checked ones turn off
+// together, with Undo.
 import { type ReactNode, useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
@@ -9,12 +10,13 @@ import { detectHeroesWithData } from '../utils/heroes'
 import { type KeepDeps, turnOffWithUndo } from './keepOne'
 import { nameKey } from './loadoutStore'
 import { ModName, plural } from './modName'
+import { type Tier, type Tiered, prechecked, reasonFor } from './crashTiers'
 
 type Mod = { path: string; enabled?: boolean }
 type Details = { character_id?: string | null; character_name?: string | null; files?: string[] }
 type Hero = { id: string; name: string }
 export type CrashPayload = { crash_type?: string | null; asset_path?: string | null; character_id?: string | null; crash_folder?: string | null }
-export type Suspect = { mod: Mod; reason: string }
+export type Suspect = { mod: Mod; reason: string; tier: Tier }
 
 const OPEN = 'repakxtra-crash-suspects'
 /** Crash folders the startup check reported (crashes from before the app started): their suspects are the mods on now,
@@ -39,14 +41,16 @@ export function heroSuspects(on: Mod[], details: Record<string, Details | undefi
   return on.filter(m => {
     const d = details[m.path]
     return d?.character_id === id || (Array.isArray(d?.files) && detectHeroesWithData(d.files, heroes).includes(name))
-  }).map(mod => ({ mod, reason: `changes ${name}` }))
+  }).map(mod => ({ mod, reason: `changes ${name}`, tier: 'hero' as const }))
 }
 
 export async function findSuspects(p: CrashPayload, on: Mod[], details: Record<string, Details | undefined>, heroes: Hero[]): Promise<Suspect[]> {
-  if (p.asset_path && on.length) {
-    const hits = await invoke<string[]>('xtra_crash_suspects', { assetPath: p.asset_path, modPaths: on.map(m => m.path) }).catch(() => [])
-    const set = new Set(hits)
-    const found = on.filter(m => set.has(m.path)).map(mod => ({ mod, reason: 'contains the asset that crashed' }))
+  if ((p.asset_path || p.character_id) && on.length) {
+    const rows = await invoke<Tiered[]>('xtra_crash_tiers', { assetPath: p.asset_path ?? '', heroId: p.character_id ?? null, modPaths: on.map(m => m.path) }).catch(() => [])
+    const byPath = new Map(on.map(m => [m.path, m]))
+    const hero = heroes.find(h => h.id === p.character_id)?.name
+    // already ordered asset, skin, hero
+    const found = rows.flatMap(r => { const mod = byPath.get(r.path); return mod ? [{ mod, tier: r.tier, reason: reasonFor(r.tier, hero, r.other_skin) }] : [] })
     if (found.length) return found
   }
   return p.character_id ? heroSuspects(on, details, heroes, p.character_id) : []
@@ -73,7 +77,7 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
     findSuspects(crash.payload, mods.filter(m => m.enabled), details, heroes).then(s => {
       if (!live) return
       setSuspects(s)
-      setPicked(new Set(s.map(x => x.mod.path)))
+      setPicked(new Set(prechecked(s).map(x => x.mod.path)))
     })
     return () => { live = false }
   }, [crash])   // once per opening: the list does not reshuffle while it is open

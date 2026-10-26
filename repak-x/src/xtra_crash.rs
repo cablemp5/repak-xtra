@@ -301,9 +301,148 @@ pub async fn xtra_crash_suspects(asset_path: String, mod_paths: Vec<String>) -> 
     .map_err(|e| e.to_string())
 }
 
+/// How close a mod is to a crash: it holds the crashed asset, changes the same hero's same skin, or the same hero.
+#[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "lowercase")]
+pub enum Tier {
+    Asset,
+    Skin,
+    Hero,
+}
+
+#[derive(Serialize, Debug, PartialEq)]
+pub struct Tiered {
+    path: String,
+    tier: Tier,
+    /// a hero match while the crash names a skin: the mod changes another skin of that hero
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    other_skin: bool,
+}
+
+/// The hero and skin a crash points at: from the crashed asset's folders, else the crash's character id (no skin then).
+fn crash_hero(asset_path: &str, hero_id: Option<&str>) -> Option<crate::xtra_heroes::HeroSkin> {
+    crate::xtra_heroes::hero_skin(asset_path).or_else(|| {
+        let id = hero_id.filter(|h| h.len() == 4 && h.bytes().all(|b| b.is_ascii_digit()))?;
+        Some(crate::xtra_heroes::HeroSkin { hero: id.to_string(), skin: None })
+    })
+}
+
+/// A mod's best tier for the crash, or None. Pure.
+fn tier_of(files: &[String], asset_path: &str, hero: Option<&crate::xtra_heroes::HeroSkin>) -> Option<Tier> {
+    if holds_asset(files, asset_path) {
+        return Some(Tier::Asset);
+    }
+    let hero = hero?;
+    let mut best = None;
+    for f in files {
+        match crate::xtra_heroes::hero_skin(f) {
+            Some(h) if h.hero == hero.hero && hero.skin.is_some() && h.skin == hero.skin => return Some(Tier::Skin),
+            Some(h) if h.hero == hero.hero => best = Some(Tier::Hero),
+            _ => {}
+        }
+    }
+    best
+}
+
+/// A mod's file list (on or off) through the conflict check's cache. None when it cannot be read.
+fn listed(path: &std::path::Path) -> Option<std::sync::Arc<Vec<String>>> {
+    let utoc = crate::xtra_bundle::companion(path, "utoc");
+    let utoc = utoc.exists().then_some(utoc);
+    crate::xtra_conflicts::files_cached(path, utoc.as_deref(), || match &utoc {
+        Some(u) => crate::utoc_utils::try_read_utoc(u).map(|e| e.into_iter().map(|e| e.file_path).collect()).map_err(|e| e.to_string()),
+        None => uasset_toolkit::list_pak_files(path.to_str().unwrap_or_default(), Some(crate::install_mod::AES_KEY_HEX)).map_err(|e| e.to_string()),
+    })
+    .ok()
+}
+
+fn tiers(asset_path: &str, hero_id: Option<&str>, mod_paths: &[String], read: impl Fn(&std::path::Path) -> Option<std::sync::Arc<Vec<String>>>) -> Vec<Tiered> {
+    let hero = crash_hero(asset_path, hero_id);
+    let mut out: Vec<Tiered> = mod_paths
+        .iter()
+        .filter_map(|p| {
+            let tier = tier_of(&read(std::path::Path::new(p))?, asset_path, hero.as_ref())?;
+            let other_skin = tier == Tier::Hero && hero.as_ref().is_some_and(|h| h.skin.is_some());
+            Some(Tiered { path: p.clone(), tier, other_skin })
+        })
+        .collect();
+    out.sort_by_key(|t| t.tier); // stable: the given order within a tier
+    out
+}
+
+/// The mods (of `mod_paths`) that match a crash, best tier per mod, asset first, then skin, then hero. Mods that match
+/// nothing, or whose files cannot be read, are left out.
+#[tauri::command]
+pub async fn xtra_crash_tiers(asset_path: String, hero_id: Option<String>, mod_paths: Vec<String>) -> Result<Vec<Tiered>, String> {
+    tauri::async_runtime::spawn_blocking(move || tiers(&asset_path, hero_id.as_deref(), &mod_paths, listed)).await.map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn crash_tiers_rank_asset_then_skin_then_hero() {
+        let lists: std::collections::HashMap<&str, Vec<String>> = [
+            ("exact.pak", v(&["Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uasset"])),
+            ("io.pak", v(&["../../../Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uexp"])),
+            ("skin.pak", v(&["/Game/Marvel/Characters/1026/1026001/Textures/T_Body_D.uasset"])),
+            ("hero.pak", v(&["/Game/Marvel/Characters/1026/1026500/Textures/T_Body_D.uasset", "/Game/Marvel/Characters/1026/Weapons/X.uasset"])),
+            ("other.pak", v(&["/Game/Marvel/Characters/1011/1011001/Textures/T_Body_D.uasset"])),
+            ("named.pak", v(&["/Game/Marvel/UI/Textures/T_1026001_Icon.uasset"])),
+        ]
+        .into();
+        let read = |p: &std::path::Path| lists.get(p.to_str().unwrap()).cloned().map(std::sync::Arc::new);
+        let mods: Vec<String> = ["other.pak", "hero.pak", "missing.pak", "skin.pak", "io.pak", "exact.pak", "named.pak"].map(String::from).to_vec();
+        let got = tiers("/Game/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.SK_1026_1026001", None, &mods, read);
+        assert!(got.iter().all(|t| t.other_skin == (t.tier == Tier::Hero)), "the crash names a skin: a hero match is another skin");
+        let got: Vec<(&str, Tier)> = got.iter().map(|t| (t.path.as_str(), t.tier)).collect();
+        assert_eq!(got, [("io.pak", Tier::Asset), ("exact.pak", Tier::Asset), ("skin.pak", Tier::Skin), ("hero.pak", Tier::Hero)],
+            "pak and IoStore spellings both hold the asset, an unreadable list and other heroes are left out, a file name never counts");
+    }
+
+    /// Real proof: REPAKXTRA_PAKS=<...\Content\Paks> cargo test -p repak-x --bin REPAK-X real_newest_crash -- --ignored
+    /// --nocapture. The newest crash against the mods that are on now: before (exact asset) and after (tiers).
+    #[test]
+    #[ignore]
+    fn real_newest_crash() {
+        let paks = std::path::PathBuf::from(std::env::var("REPAKXTRA_PAKS").expect("REPAKXTRA_PAKS"));
+        let crash = xtra_newest_crash().expect("a crash");
+        let asset = crash.asset_path.clone().unwrap_or_default();
+        println!("newest crash: {:?} asset {asset:?}", crash.crash_type);
+        let on: Vec<String> = walkdir::WalkDir::new(paks.join("~mods"))
+            .into_iter()
+            .filter_entry(crate::xtra_bundle::not_staging)
+            .flatten()
+            .filter(|e| e.path().extension().is_some_and(|x| x == "pak"))
+            .map(|e| e.path().to_string_lossy().to_string())
+            .collect();
+        println!("{} mods on", on.len());
+        let before: Vec<&String> = on.iter().filter(|p| holds_asset(&mod_files(std::path::Path::new(p)), &asset)).collect();
+        println!("before (exact asset): {}", before.len());
+        for p in before {
+            println!("   {p}");
+        }
+        let hero_id = crash_monitor::extract_character_id(&asset);
+        println!("crash hero: {:?} (id from the path: {hero_id:?})", crash_hero(&asset, hero_id.as_deref()));
+        let after = tiers(&asset, hero_id.as_deref(), &on, listed);
+        println!("after (tiers): {}", after.len());
+        for t in after {
+            println!("   {:?} {}", t.tier, t.path);
+        }
+    }
+
+    #[test]
+    fn crash_tiers_need_a_hero_beyond_the_asset() {
+        let files = v(&["/Game/Marvel/Characters/1026/1026001/Textures/T_Body_D.uasset"]);
+        assert_eq!(tier_of(&files, "/Game/Marvel/UI/X.X", None), None, "no hero known: only the asset tier");
+        let from_id = crash_hero("/Game/Marvel/UI/X.X", Some("1026"));
+        assert_eq!(tier_of(&files, "/Game/Marvel/UI/X.X", from_id.as_ref()), Some(Tier::Hero), "hero from the crash's character id, no skin");
+        assert_eq!(crash_hero("", Some("10x6")), None, "a malformed id is ignored");
+        let read = |_: &std::path::Path| Some(std::sync::Arc::new(files.clone()));
+        let rows = tiers("/Game/Marvel/UI/X.X", Some("1026"), &["m.pak".to_string()], read);
+        assert!(!rows[0].other_skin, "no skin known: just the same hero");
+        assert_eq!(crash_hero("/Game/Marvel/Characters/1011/1011001/A.A", Some("1026")).map(|h| h.hero), Some("1011".into()), "the asset's folder wins over the id");
+    }
 
     fn v(paths: &[&str]) -> Vec<String> {
         paths.iter().map(|s| s.to_string()).collect()

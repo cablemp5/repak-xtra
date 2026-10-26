@@ -27,6 +27,17 @@ export const verdictsChanged = () => emit(VERDICTS_CHANGED).catch(() => {})
 export const VERDICTS_RESCAN = 'xtra-verdicts-rescan'
 export const rescanVerdicts = () => emit(VERDICTS_RESCAN).catch(() => {})
 
+/** A full scan (launch, Scan, a game update) ran to its end: gameUpdate.ts waits for it before saying what is flagged. */
+const SCAN_FINISHED = 'repakxtra-verdicts-scanned'
+/** Resolves when the next full scan ends, or after 10 minutes so a stuck scan never holds a notice back for good. */
+export const scanFinished = () => new Promise<void>(resolve => {
+  const done = () => { clearTimeout(t); window.removeEventListener(SCAN_FINISHED, done); resolve() }
+  const t = setTimeout(done, 600_000)
+  window.addEventListener(SCAN_FINISHED, done)
+})
+/** How many mods carry a verdict now. */
+export const flaggedCount = () => verdicts.size
+
 /** Re-checks a moment after mods are added, removed or replaced, at every launch and on every Scan (the first run after a
  *  game update reads the game's asset list, which takes a while: the badges appear when it is done). */
 export function useBrokenWatch(mods: { path: string; modified_date?: number; file_size?: number }[]) {
@@ -51,8 +62,9 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       .then(() => (live ? invoke<number>('xtra_vfx_check_scan', { modPaths: mods.filter(m => verdicts.get(norm(m.path))?.kind !== 'vfx').map(m => m.path) }) : 0))
       .then(found => (live && found ? check() : undefined))
       .then(() => (live ? invoke<number>('xtra_layout_scan', { modPaths: mods.map(m => m.path) }) : 0))
-      .then(checked => { if (live && checked) void check() })
+      .then(checked => (live && checked ? check() : undefined))
       .catch(e => console.warn('[brokenMods] background scan failed', e))
+      .finally(() => { if (live) window.dispatchEvent(new Event(SCAN_FINISHED)) })
     const t = setTimeout(() => { void full() }, 1500)
     const again = listen(VERDICTS_CHANGED, () => { void check() })
     const rescan = listen(VERDICTS_RESCAN, () => { void full() })

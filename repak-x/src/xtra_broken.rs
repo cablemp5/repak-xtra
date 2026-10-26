@@ -48,7 +48,7 @@ fn is_material_instance(key: &str) -> bool {
 }
 
 /// The game's Paks folder above a mods folder (~mods, or a subfolder of it).
-fn paks_dir(mods_dir: &Path) -> Option<PathBuf> {
+pub(crate) fn paks_dir(mods_dir: &Path) -> Option<PathBuf> {
     mods_dir.ancestors().find(|p| p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("Paks"))).map(Path::to_path_buf)
 }
 
@@ -94,12 +94,12 @@ pub(crate) fn match_key(file: &str) -> String {
 
 /// Asset key -> when the newest game container holding it was written (seconds): an update's patch container holds
 /// only what the update changed.
-type GameAssets = HashMap<String, u64>;
+pub(crate) type GameAssets = HashMap<String, u64>;
 static GAME_ASSETS: Mutex<Option<(String, Arc<GameAssets>)>> = Mutex::new(None);
 
 /// Every package the installed game has, as asset keys: read from every container once per game build (about 6 s for
 /// 570,000 packages) and kept in memory. Not saved: the list is close to 50 MB as text. None when nothing could be read.
-fn game_assets(paks: &Path) -> Option<Arc<GameAssets>> {
+pub(crate) fn game_assets(paks: &Path) -> Option<Arc<GameAssets>> {
     let containers = game_containers(paks);
     if containers.is_empty() {
         return None;
