@@ -404,7 +404,7 @@ fn check_flags(a: &[u8], b: &[u8], flipped: usize) -> Result<(), String> {
     Ok(())
 }
 
-pub(crate) const MAPPINGS_BEHIND: &str = "Not active yet. The game updated and its new mappings are not out. repakxtra checks again at every start";
+pub(crate) const MAPPINGS_BEHIND: &str = "Not active yet. The game updated and repakxtra waits for the support files for it. It checks for them at every start";
 
 fn read_json(p: &Path) -> Result<Value, String> {
     let t = std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;

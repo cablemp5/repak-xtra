@@ -12,7 +12,8 @@ import { getHeroImageById, useHeroImages } from '../utils/heroImages'
 import type { LoadoutProps } from './Loadouts'
 import { Num, SwapText, revealOnLoad } from './motion'
 import { savedItem } from './storageCarryOver'
-import { setView } from './loadoutStore'
+import { flipMods, setView } from './loadoutStore'
+import { nameKey } from './loadoutIdentity'
 import { ClapperboardIcon, FlatTilesIcon, PortraitCardIcon, type BuiltinIconComponent } from './PixelIcon'
 import { cue } from './sounds'
 import { ROLES, type Role } from './heroRoles'
@@ -122,12 +123,19 @@ const ago = (secs?: number) => {
 export const listWords = (names: string[]) => names.length < 3 ? names.join(' and ') : `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`
 
 /** The other quake mods that are on, said on CustomQuake's row. Pure. */
-export const overlapText = (names: string[]) => names.length
-  ? `${listWords(names)} ${names.length === 1 ? 'changes' : 'change'} the same map textures, so the game shows only one. Turn one of them off`
+export const overlapText = (paths: string[]) => paths.length
+  ? `${listWords(paths.map(nameKey))} ${paths.length === 1 ? 'changes' : 'change'} the same map textures, so the game shows only one. Turn one of them off`
   : ''
 
+/** Turns the other quake mods off (the overlap warning's button), then checks again. */
+async function turnOffOverlaps(paths: string[], alert: LoadoutProps['alert']) {
+  const failed = await flipMods(paths.map(path => ({ path, enabled: true })))
+  if (failed.length) alert.warning('Not turned off', failed.reason ?? `Close anything using ${listWords(failed.map(m => nameKey(m.path)))}, then try again.`)
+  await refreshBuiltins()
+}
+
 /** A mappings error clears itself once new mappings are out (checked at every start): no Try again for it. Pure. */
-export const retryable = (error?: string) => Boolean(error) && !error!.startsWith('Not active yet. The game updated')
+export const retryable = (error?: string) => Boolean(error) && !error!.startsWith('Not active yet.')
 
 function status(b: Builtin, building: boolean) {
   const long = b.id === 'custom-quake' ? ', about 10 minutes' : ''
@@ -269,7 +277,11 @@ function QuakeOptions({ id, b, open, building, blocked, onDone, alert }: { id: s
   const color = (key: 'base' | 'sky', label: string) => (
     <label className="bq-color">
       <input type="color" value={`#${draft[key]}`} onChange={e => set({ [key]: e.target.value.slice(1).toLowerCase() })} aria-label={label} />
-      <span className="bq-color-text"><span>{label}</span><span className="bq-hex">#{draft[key].toUpperCase()}</span></span>
+      <span className="bq-color-text"><span>{label}</span>
+        {/* typed or pasted too: only a full color is taken */}
+        <input className="bq-hex" defaultValue={`#${draft[key].toUpperCase()}`} key={draft[key]} maxLength={7} spellCheck={false} aria-label={`${label}, hex`}
+          onChange={e => { const v = e.target.value.trim().replace(/^#/, ''); if (/^[0-9a-f]{6}$/i.test(v)) set({ [key]: v.toLowerCase() }) }}
+          onClick={e => e.preventDefault()} /></span>
     </label>
   )
   return (
@@ -282,9 +294,8 @@ function QuakeOptions({ id, b, open, building, blocked, onDone, alert }: { id: s
             <Switch size="sm" className="bq-switch" checked={draft.hidePlants} onChange={v => set({ hidePlants: v })} aria-label="Hide plants">Hide plants</Switch>
             <Switch size="sm" className="bq-switch" checked={draft.lobby} onChange={v => set({ lobby: v })} aria-label="Include lobby and showcase scenes">Include lobby and showcase scenes</Switch>
           </div>
-          <p className="bi-picker-hint bq-hint">With the lobby and showcase scenes left out, the textures they share with the maps (Common, MaterialLibrary) still change.</p>
+          {!draft.lobby && <p className="bi-picker-hint bq-hint">Textures the lobby shares with the maps still change.</p>}
           <div className="bi-picker-foot">
-            {dirty && <button type="button" className="lo-text-btn" title="Back to the saved options" onClick={() => setDraft(saved)}>Undo changes</button>}
             <span className="bi-foot-gap" />
             {b.on && dirty && <span className="bi-cost">{blocked ? BLOCKED : 'Takes about 10 minutes'}</span>}
             {/* while it builds, Close: this panel never stops the build (the row's Stop building does) */}
@@ -342,6 +353,12 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
             title="Colors, plants, and the lobby">
             Options
             <ChevronDown size={13} className="bi-chev" aria-hidden="true" />
+          </button>
+        )}
+        {!building && b.on && Boolean(b.overlaps?.length) && (
+          <button type="button" className="lo-text-btn" disabled={blocked} onClick={() => void turnOffOverlaps(b.overlaps!, alert)}
+            title={blocked ? BLOCKED : 'CustomQuake stays on, the other quake mods go off'}>
+            {b.overlaps!.length === 1 ? `Turn off ${nameKey(b.overlaps![0])}` : 'Turn them off'}
           </button>
         )}
         {building && b.id === 'custom-quake' && wanted.get(b.id) !== false && (
@@ -402,10 +419,10 @@ export default function BuiltinMods({ blocked, alert }: { blocked: boolean; aler
 
 if (import.meta.env.DEV) {
   console.assert(sameQuake(QUAKE_DEFAULT, { ...QUAKE_DEFAULT, base: '5D7A80' }) && !sameQuake(QUAKE_DEFAULT, { ...QUAKE_DEFAULT, hidePlants: true }), 'only a real option change rebuilds')
-  console.assert(overlapText(['quakeV6_9999999_P']) === 'quakeV6_9999999_P changes the same map textures, so the game shows only one. Turn one of them off', 'one overlap', overlapText(['quakeV6_9999999_P']))
+  console.assert(overlapText(['C:/G/~mods/quakeV6_9999999_P.pak']) === 'quakeV6 changes the same map textures, so the game shows only one. Turn one of them off', 'one overlap, shown by its name', overlapText(['C:/G/~mods/quakeV6_9999999_P.pak']))
   console.assert(overlapText(['a', 'b', 'c']).startsWith('a, b, and c change the same') && overlapText([]) === '', 'several overlaps, Oxford comma')
   console.assert(listWords(['a', 'b']) === 'a and b' && listWords(['a']) === 'a', 'one or two names')
-  console.assert(!retryable('Not active yet. The game updated and its new mappings are not out. repakxtra checks again at every start') && retryable('Could not write the packages') && !retryable(undefined), 'no Try again for mappings')
+  console.assert(!retryable('Not active yet. The game updated and repakxtra waits for the support files for it. It checks for them at every start') && retryable('Could not write the packages') && !retryable(undefined), 'no Try again while waiting for support files')
   console.assert(Object.values(ABOUT).every(a => !/[;\u2014]/.test(a.what)), 'no semicolons or em dashes')
   console.assert(heroName('Iron Fist (lin Lie)') === 'Iron Fist' && heroName('Cloak & Dagger') === 'Cloak & Dagger', 'a note in brackets goes')
   console.assert(unreleased('Hive**') && !unreleased('Hulk'), 'placeholders are not heroes yet')

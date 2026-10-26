@@ -121,11 +121,11 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         if (!b.on) { b.current = b.active = false; b.overlaps = undefined; return structuredClone(builtins) }
         return new Promise(r => setTimeout(r, 2500)).then(() => {
           if (b.id === 'custom-quake' && localStorage.getItem('mock.quakeError') === '1') {
-            Object.assign(b, { current: false, error: localStorage.getItem('mock.quakeErrorKind') === 'write' ? 'Could not write the packages: a file is in use' : 'Not active yet. The game updated and its new mappings are not out. repakxtra checks again at every start' })
+            Object.assign(b, { current: false, error: localStorage.getItem('mock.quakeErrorKind') === 'write' ? 'Could not write the packages: a file is in use' : 'Not active yet. The game updated and repakxtra waits for the support files for it. It checks for them at every start' })
             throw b.error
           }
           Object.assign(b, { current: true, active: true, builtAt: Math.floor(Date.now() / 1000), error: undefined,
-            ...(b.id === 'custom-quake' && localStorage.getItem('mock.quakeOverlap') === '1' ? { overlaps: ['quakeV6_9999999_P'] } : {}),
+            ...(b.id === 'custom-quake' && localStorage.getItem('mock.quakeOverlap') === '1' ? { overlaps: ['C:/Program Files (x86)/Steam/steamapps/common/MarvelRivals/MarvelGame/Marvel/Content/Paks/~mods/quakeV6_9999999_P.pak'] } : {}),
             summary: b.id === 'skip-intro-movies' ? '12 startup logo videos turned off' : b.id === 'custom-quake' ? '31,191 textures set in 9 minutes' : `${53 - b.excluded.length} heroes, ${697 - b.excluded.length * 13} skins set to default` })
           return structuredClone(builtins)
         })

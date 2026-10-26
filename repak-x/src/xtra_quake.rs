@@ -659,8 +659,8 @@ fn group_digits(n: usize) -> String {
     out
 }
 
-/// Mods that are on and change at least 1,000 map files (another quake mod): the game shows only one of them where they
-/// overlap. Their file lists come from the conflict check's cache.
+/// Mods that are on and change at least 1,000 map files (another quake mod), by path: the game shows only one of them
+/// where they overlap. Their file lists come from the conflict check's cache.
 pub fn overlapping(mods_root: &Path) -> Vec<String> {
     let mut out = Vec::new();
     for e in walkdir::WalkDir::new(mods_root).into_iter().filter_entry(crate::xtra_bundle::not_staging).flatten() {
@@ -674,7 +674,7 @@ pub fn overlapping(mods_root: &Path) -> Vec<String> {
         }
         let Ok(files) = crate::xtra_conflicts::files_cached(p, Some(&utoc), || crate::utoc_utils::try_read_utoc(&utoc).map(|v| v.into_iter().map(|e| e.file_path).collect())) else { continue };
         if files.iter().filter(|f| f.contains("/Environment/")).count() >= 1000 {
-            out.push(crate::xtra_bundle::stem(&p.file_name().unwrap_or_default().to_string_lossy()).to_string());
+            out.push(p.to_string_lossy().to_string());
         }
     }
     out.sort();
