@@ -139,7 +139,7 @@ fn valid_run_id(id: &str) -> bool {
 }
 
 /// The USMAP file's identity (path, size, time written): the game's JSON decoded with one USMAP is no use with another.
-fn usmap_hash(usmap: &str) -> String {
+pub(crate) fn usmap_hash(usmap: &str) -> String {
     let meta = std::fs::metadata(usmap).ok();
     let mut h = std::collections::hash_map::DefaultHasher::new();
     usmap.to_lowercase().hash(&mut h);

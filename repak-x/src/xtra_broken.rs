@@ -5,8 +5,9 @@
 //! - vfx: a VFX mod made before a game update that rewrote game files it replaces (on or off). Its effects can look wrong
 //!   or crash the game until it is rebuilt on the new files (custom/vfx/, the VFX Updater).
 //!   A material mod (a skin's material instances, xtra_vfx::updatable) gets it too, when the update rewrote one of those.
-//! - risky: a Blueprint mod installed before the last game update (on or off: the warning matters before it goes on). Blueprint mods carry whole game classes, and an
-//!   update that changes a class layout makes the game crash on them.
+//! - risky: a Blueprint mod whose game classes the last game update changed (on or off: the warning matters before it goes
+//!   on). Blueprint mods carry whole game classes, and an update that changes a class layout makes the game crash on them.
+//!   xtra_layout.rs compares its classes with the game's. Until it has, a mod installed before the update is flagged by date.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -86,7 +87,7 @@ fn is_package(file: &str) -> bool {
 
 /// An asset's key without its mount root: a mod lists plugin content as "MarvelGAS/Marvel/VFX/..." where the game's own
 /// listing says "/Game/Marvel/VFX/...", so both compare as "marvel/vfx/...".
-fn match_key(file: &str) -> String {
+pub(crate) fn match_key(file: &str) -> String {
     let k = asset_key(file);
     k.split_once('/').map(|(_, rest)| rest.to_string()).unwrap_or(k)
 }
@@ -154,6 +155,9 @@ struct Facts<'a> {
     installed: u64,
     /// its Niagara files are in an older layout although it was written after the update (xtra_niagara.rs layout scan)
     old_layout: bool,
+    /// its classes against the game's (xtra_layout.rs): None not checked yet, Some(None) they match, Some(Some(reason))
+    /// the game's have what its copies lack
+    layout: Option<Option<String>>,
 }
 
 /// The verdict for one mod, or None when it looks fine. Pure: the facts come in, the words go out.
@@ -216,15 +220,16 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
         });
     }
     // On or off: the warning matters most before a loadout switches it on
-    if m.has_blueprint && m.installed > 0 && m.installed < game_updated {
-        return Some(Verdict {
-            path: path.to_string(),
-            kind: "risky",
-            reason: "A Blueprint mod installed before the last game update. Updates often change the game classes it carries, and the game can crash on it. Turn it off if the game crashes, and look for an updated version.".into(),
-            stale_niagara: 0,
-        });
+    let risky = |reason: String| Some(Verdict { path: path.to_string(), kind: "risky", reason, stale_niagara: 0 });
+    match &m.layout {
+        _ if !m.has_blueprint => None,
+        // what the update changed decides, whatever the date: one made after it from old files is caught too
+        Some(Some(reason)) => risky(reason.clone()),
+        Some(None) => None,
+        // not compared yet: the date stands in until the background check has looked
+        None if m.installed > 0 && m.installed < game_updated => risky("A Blueprint mod installed before the last game update. Updates often change the game classes it carries, and the game can crash on it. Turn it off if the game crashes, and look for an updated version.".into()),
+        None => None,
     }
-    None
 }
 
 /// A mod an update found nothing to rebuild in (its report said Nothing to update), or one Check for VFX update looked at
@@ -300,6 +305,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
         let base = |p: &Path| p.with_extension("").to_string_lossy().to_lowercase();
         let installed_mods: HashSet<String> = mod_paths.iter().map(|p| base(Path::new(p))).collect();
         let checked = load_checked(&checked_store());
+        let (layouts, usmap_id) = (crate::xtra_layout::load_done(), crate::xtra_layout::usmap_id());
         // an update beside it: <name>_UPDATED next to the original, or the original renamed <name>_BROKEN next to the update
         // each folder's stems, so an _UPDATED name that takes the priority (two originals that would clash) is found
         let mut by_dir: HashMap<PathBuf, HashSet<String>> = HashMap::new();
@@ -364,6 +370,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                     has_blueprint: details.has_blueprint,
                     installed,
                     old_layout: details.category == "VFX" && crate::xtra_niagara::known_old_layout(&path),
+                    layout: crate::xtra_layout::found_now(&layouts, &path.with_extension("utoc"), game_updated, &usmap_id),
                 };
                 judge(p, &facts, game_updated, &game)
             })
@@ -385,7 +392,7 @@ mod tests {
         files.iter().map(|s| s.to_string()).collect()
     }
     fn facts(files: &[String], installed: u64) -> Facts<'_> {
-        Facts { files, galacta: false, vfx: false, materials: false, fixed: false, has_blueprint: false, installed, old_layout: false }
+        Facts { files, galacta: false, vfx: false, materials: false, fixed: false, has_blueprint: false, installed, old_layout: false, layout: None }
     }
     const LIVE: &str = "Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uasset";
 
@@ -426,6 +433,17 @@ mod tests {
         assert_eq!(judge("m.pak", &bp(100), 200, &game()).map(|j| j.kind), Some("risky"));
         assert_eq!(judge("m.bak_repak", &bp(100), 200, &game()).map(|j| j.kind), Some("risky"), "off too: it crashes once a loadout turns it on");
         assert_eq!(judge("m", &bp(300), 200, &game()), None);
+    }
+
+    #[test]
+    fn a_blueprint_mods_layout_check_decides_over_its_date() {
+        let files = v(&[LIVE]);
+        let bp = |installed, layout| Facts { has_blueprint: true, layout, ..facts(&files, installed) };
+        assert_eq!(judge("m.pak", &bp(100, Some(None)), 200, &game()), None, "older than the update, but its classes match the game's");
+        let found = judge("m.pak", &bp(300, Some(Some("The game's WBP_X has 1 function this copy lacks (OnA).".into()))), 200, &game()).unwrap();
+        assert_eq!((found.kind, found.reason.as_str()), ("risky", "The game's WBP_X has 1 function this copy lacks (OnA)."), "newer than the update, made from old files");
+        assert_eq!(judge("m.pak", &bp(100, None), 200, &game()).map(|j| j.kind), Some("risky"), "not compared yet: the date stands in");
+        assert_eq!(judge("m.pak", &Facts { layout: Some(Some("x".into())), ..facts(&files, 100) }, 200, &game()), None, "not a Blueprint mod");
     }
 
     #[test]
@@ -526,6 +544,69 @@ mod tests {
             let v = judge(&p.to_string_lossy(), &Facts { vfx, ..facts(&files, installed) }, 0, &game).map(|v| v.kind).unwrap_or("ok");
             println!("{v:7} {hits:4}/{pk:<4} newer {newer:4} {}", p.file_name().unwrap().to_string_lossy());
         }
+    }
+
+    /// Manual check of the layout check on a real game: REPAKXTRA_PAKS=<...\Content\Paks> cargo test real_game_layout --
+    /// --ignored --nocapture (the saved USMAP must match the game). Each Blueprint mod's verdict by date (before) and with
+    /// its classes compared (after), and how long each took. Reads only: nothing is saved.
+    #[test]
+    #[ignore]
+    fn real_game_layout() {
+        let paks = PathBuf::from(std::env::var("REPAKXTRA_PAKS").expect("REPAKXTRA_PAKS"));
+        let usmap = crate::vfx_updater::commands::saved_usmap_path().expect("a saved USMAP");
+        assert!(crate::xtra_niagara::usmap_matches(&usmap, &paks), "the saved USMAP is not this game build's");
+        let game = game_assets(&paks).expect("game assets");
+        let updated = game_containers(&paks).iter().map(|c| c.2).max().unwrap_or(0);
+        let state = Arc::new(Mutex::new(crate::AppState { game_path: paks.join("~mods"), ..Default::default() }));
+        let work = std::env::temp_dir().join("repak-x").join("xclass-test");
+        let vanilla = crate::xtra_vfx::vanilla_dir(&paks.to_string_lossy(), &usmap);
+        let mut mods: Vec<PathBuf> = std::fs::read_dir(paks.join("~mods")).unwrap().flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "pak" || x == "bak_repak")).collect();
+        mods.sort();
+        let (all, mut n, mut total) = (std::time::Instant::now(), 0, std::time::Duration::ZERO);
+        for p in mods {
+            let Ok(d) = crate::compute_mod_details(&p, &state) else { continue };
+            if !d.has_blueprint {
+                continue;
+            }
+            let installed = std::fs::metadata(&p).and_then(|m| m.modified()).ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs());
+            let vfx = d.category == "VFX";
+            let facts = |layout| Facts {
+                files: &d.files,
+                galacta: d.mod_type.contains("Project Galacta"),
+                vfx,
+                materials: !vfx && crate::xtra_vfx::updatable(&d.category, &d.files),
+                fixed: false,
+                has_blueprint: true,
+                installed,
+                old_layout: vfx && crate::xtra_niagara::known_old_layout(&p),
+                layout,
+            };
+            let label = |v: Option<Verdict>| v.map_or("ok", |v| match v.kind {
+                "risky" => "May crash",
+                "vfx" => "Needs VFX",
+                k => k,
+            });
+            let name = p.file_name().unwrap().to_string_lossy().to_string();
+            let before = judge(&name, &facts(None), updated, &game);
+            let t = std::time::Instant::now();
+            let r = tauri::async_runtime::block_on(crate::xtra_layout::check_mod(&paks, &usmap, &p.with_extension("utoc"), &d.files, &work, &vanilla));
+            let took = t.elapsed();
+            let (after, note) = match &r {
+                Ok(o) if o.reason.is_some() => (judge(&name, &facts(Some(o.reason.clone())), updated, &game), "older than the game".to_string()),
+                Ok(o) if o.complete => (judge(&name, &facts(Some(None)), updated, &game), "matches the game".to_string()),
+                Ok(_) => (judge(&name, &facts(None), updated, &game), "partly read, date rule".to_string()),
+                Err(e) => (judge(&name, &facts(None), updated, &game), format!("not checked, date rule: {e}")),
+            };
+            println!("{:9} -> {:9} {:5.1}s  {name}  [{note}]", label(before), label(after), took.as_secs_f64());
+            // shown even when a VFX verdict outranks it
+            if let Ok(crate::xtra_layout::Outcome { reason: Some(why), .. }) = &r {
+                println!("      {why}");
+            }
+            n += 1;
+            total += took;
+        }
+        let _ = std::fs::remove_dir_all(&work);
+        println!("{n} Blueprint mods checked in {:.1}s ({:.1}s all told)", total.as_secs_f64(), all.elapsed().as_secs_f64());
     }
 
     #[test]
