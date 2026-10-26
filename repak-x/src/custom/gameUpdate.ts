@@ -3,20 +3,21 @@
 // check again first (brokenMods.ts), then one toast says how many mods the update left flagged, with a way to see them.
 // Laws of UX: one toast with the count, not a badge per mod (Von Restorff), a single action that opens the list it
 // counts (Hick), and it waits for the checks so the number it shows is the number in the Problems tab (Doherty).
-import { useEffect, useRef } from 'react'
+import { createElement, useEffect, useRef, type ReactNode } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { flaggedCount, fullScan } from './brokenMods'
 import { setView } from './loadoutStore'
 import { plural } from './modName'
 
 type GameUpdate = { updated: number; previous: number }
-type Alert = { info: (title: string, text?: string, options?: { color?: 'info'; duration?: number; action?: { label: string; onClick: () => void } }) => number }
+type Alert = { info: (title: string, text?: string, options?: { color?: 'info'; duration?: number; action?: ReactNode }) => number }
 
 /** The toast's text. `updated` is unix seconds. */
 export function updateText(updated: number, flagged: number): string {
   const day = new Date(updated * 1000).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
-  const what = flagged === 0 ? 'No mod is flagged.' : `${plural(flagged, 'mod')} ${flagged === 1 ? 'is' : 'are'} flagged Broken, Needs VFX update, or May crash.`
-  return `The game updated on ${day}. ${what}`
+  // the count, short: what each one needs is in the Problems view the action opens
+  const what = flagged === 0 ? 'No mod needs attention.' : `${plural(flagged, 'mod')} ${flagged === 1 ? 'needs' : 'need'} attention.`
+  return `Updated ${day}. ${what}`
 }
 
 /** Mounted once in App. `loading` and `count` are the mod list's: the check waits for the first load to finish, so a slow
@@ -54,7 +55,8 @@ export function useGameUpdateWatch(alert: Alert, loading: boolean, count: number
           alert.info('Game updated', updateText(found.updated, flagged), {
             color: 'info',
             duration: 15000,
-            ...(flagged ? { action: { label: 'Show them', onClick: () => { setView('library'); showFlagged() } } } : {}),
+            // a short label on one line (the toast's own action button wraps, for long mod names)
+            ...(flagged ? { action: createElement('button', { type: 'button', className: 'toast-action-btn is-short', onClick: (e: { stopPropagation: () => void }) => { e.stopPropagation(); setView('library'); showFlagged() } }, 'Show problems') } : {}),
           })
           shown.current.add(found.updated)
         }
@@ -74,8 +76,8 @@ export function useGameUpdateWatch(alert: Alert, loading: boolean, count: number
 
 if (import.meta.env.DEV) {
   const noon = Date.UTC(2026, 9, 26, 12) / 1000
-  console.assert(/^The game updated on .+\. 3 mods are flagged Broken, Needs VFX update, or May crash\.$/.test(updateText(noon, 3)), 'flagged count', updateText(noon, 3))
-  console.assert(updateText(noon, 1).endsWith('1 mod is flagged Broken, Needs VFX update, or May crash.'), 'one mod', updateText(noon, 1))
-  console.assert(updateText(noon, 0).endsWith('No mod is flagged.'), 'none flagged', updateText(noon, 0))
+  console.assert(/^Updated .+\. 3 mods need attention\.$/.test(updateText(noon, 3)), 'flagged count', updateText(noon, 3))
+  console.assert(updateText(noon, 1).endsWith('1 mod needs attention.'), 'one mod', updateText(noon, 1))
+  console.assert(updateText(noon, 0).endsWith('No mod needs attention.'), 'none flagged', updateText(noon, 0))
   console.assert(!/[;\u2014]/.test(updateText(noon, 2)), 'no semicolons or em dashes')
 }

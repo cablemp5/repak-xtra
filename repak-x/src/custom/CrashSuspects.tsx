@@ -10,7 +10,7 @@ import { detectHeroesWithData } from '../utils/heroes'
 import { type KeepDeps, turnOffWithUndo } from './keepOne'
 import { nameKey } from './loadoutStore'
 import { ModName, plural } from './modName'
-import { type Tier, type Tiered, ordered, prechecked, reasonFor } from './crashTiers'
+import { type Tier, type Tiered, grouped, ordered, prechecked, reasonFor } from './crashTiers'
 
 type Mod = { path: string; enabled?: boolean }
 type Details = { character_id?: string | null; character_name?: string | null; files?: string[] }
@@ -41,7 +41,7 @@ export function heroSuspects(on: Mod[], details: Record<string, Details | undefi
   return on.filter(m => {
     const d = details[m.path]
     return d?.character_id === id || (Array.isArray(d?.files) && detectHeroesWithData(d.files, heroes).includes(name))
-  }).map(mod => ({ mod, reason: `changes ${name}`, tier: 'hero' as const }))
+  }).map(mod => ({ mod, reason: `Change ${name}`, tier: 'hero' as const }))
 }
 
 export async function findSuspects(p: CrashPayload, on: Mod[], details: Record<string, Details | undefined>, heroes: Hero[]): Promise<Suspect[]> {
@@ -66,6 +66,7 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
   const [suspects, setSuspects] = useState<Suspect[] | null>(null)
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
+  const [showFile, setShowFile] = useState(false)
   useEffect(() => {
     const open = (e: Event) => { setCrash((e as CustomEvent).detail); setSuspects(null) }
     window.addEventListener(OPEN, open)
@@ -104,7 +105,11 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
         <div className="modal-header">
           <div>
             <h2>Crash suspects</h2>
-            <p className="cs-sub">{[p.crash_type, p.asset_path].filter(Boolean).join(' · ') || 'The crash report names no asset.'}</p>
+            {/* the plain words first, the file for whoever wants it (Tesler) */}
+            <p className="cs-lead">{p.crash_type ? `${p.crash_type}. These mods that are on match the crash, closest first.` : 'These mods that are on match the crash, closest first.'}</p>
+            {p.asset_path
+              ? <details className="cs-file" onToggle={e => setShowFile(e.currentTarget.open)}><summary>The file it crashed on</summary>{showFile && <p className="cs-sub">{p.asset_path}</p>}</details>
+              : <p className="cs-sub">The crash report names no asset.</p>}
           </div>
           <button className="modal-close" onClick={close} aria-label="Close">×</button>
         </div>
@@ -114,18 +119,27 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
             ? <p className="cs-empty">Looking through the mods that are on…</p>
             : suspects.length === 0
               ? <p className="cs-empty">No mod matches this crash. Turn mods off a few at a time to find it.</p>
-              : <ul className="cs-list">{suspects.map(s => (
-                  <li key={s.mod.path}>
-                    <Checkbox size="sm" checked={picked.has(s.mod.path)} onChange={(v: boolean) => setPicked(prev => {
-                      const next = new Set(prev)
-                      if (v) next.add(s.mod.path); else next.delete(s.mod.path)
-                      return next
-                    })}>
-                      <span className="cs-name"><ModName name={name(s.mod.path)} /></span>
-                      <span className="cs-reason">{s.reason}</span>
-                    </Checkbox>
-                  </li>
-                ))}</ul>}
+              // one group per match strength, closest first: a heading instead of the same reason on every row (common
+              // region, chunking), and a word when only hero matches came up (they are the weakest)
+              : <>
+                  {suspects.every(s => s.tier === 'hero') && <p className="cs-note">Only hero matches came up. These mods change the hero the crash names, which makes them less likely the cause.</p>}
+                  {grouped(suspects).map(g => (
+                    <section key={g.title} className="cs-group" aria-label={g.title}>
+                      <h3 className="cs-group-title">{g.title}</h3>
+                      <ul className="cs-list">{g.rows.map(s => (
+                        <li key={s.mod.path}>
+                          <Checkbox size="sm" checked={picked.has(s.mod.path)} onChange={(v: boolean) => setPicked(prev => {
+                            const next = new Set(prev)
+                            if (v) next.add(s.mod.path); else next.delete(s.mod.path)
+                            return next
+                          })}>
+                            <span className="cs-name"><ModName name={name(s.mod.path)} /></span>
+                          </Checkbox>
+                        </li>
+                      ))}</ul>
+                    </section>
+                  ))}
+                </>}
         </div>
         <div className="modal-footer cs-footer">
           <button type="button" className="lo-text-btn" onClick={close}>{suspects?.length ? 'Cancel' : 'Close'}</button>
@@ -149,6 +163,6 @@ if (import.meta.env.DEV) {
     'c.pak': { character_id: '1011' },
   }
   const s = heroSuspects(on, details, heroes, '1026')
-  console.assert(s.map(x => x.mod.path).join() === 'a.pak,b.pak' && s[0].reason === 'changes Black Panther', 'hero suspects: own id and multi-hero files', s)
+  console.assert(s.map(x => x.mod.path).join() === 'a.pak,b.pak' && s[0].reason === 'Change Black Panther', 'hero suspects: own id and multi-hero files', s)
   console.assert(heroSuspects(on, details, heroes, '9999').length === 0, 'an unknown hero id names no suspects')
 }

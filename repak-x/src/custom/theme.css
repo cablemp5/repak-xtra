@@ -2449,6 +2449,16 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 .cs-list li > * { min-width: 0; }
 .cs-name { display: block; font-size: 13px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cs-reason { display: block; font-size: 12px; color: var(--text-secondary); }
+/* crash suspects in groups by match strength (CrashSuspects.tsx), and the crashed file folded under the lead line */
+.cs-lead { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.cs-file { margin-top: 4px; }
+.cs-file > summary { cursor: pointer; font-size: 12px; color: var(--text-secondary); width: fit-content; }
+.cs-file > summary:hover { color: var(--text-primary); }
+.cs-group + .cs-group { margin-top: 14px; }
+.cs-group-title { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+/* the game update notice (gameUpdate.ts) uses the info color: the app's own blue */
+.toast-item.info { --toast-color: #346bf1; --toast-progress: #346bf1; }
+.toast-action-btn.is-short { white-space: nowrap; flex-shrink: 0; }
 .cs-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px !important; border-top: 1px solid var(--panel-border); }
 .cs-modal .btn-primary { height: 32px !important; min-height: 0 !important; padding: 0 18px !important; font-size: 13px !important; width: auto !important; flex: none;
   border-radius: var(--quiet-radius) !important; }
