@@ -3,15 +3,13 @@
 // online and member counts without the server widget. cable's card also has Claim role (discordClaim.ts).
 import { useEffect, useState } from 'react'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
-import { claimRole, claimText, type ClaimState } from './discordClaim'
+import { claimText, startClaim, useClaim } from './discordClaim'
 import { SwapText } from './motion'
-import { cue } from './sounds'
 
 type Invite = { guild?: { id: string; name: string; icon?: string | null }; approximate_presence_count?: number; approximate_member_count?: number }
 
 export function DiscordCard({ invite, fallbackName, claim = false }: { invite: string; fallbackName: string; claim?: boolean }) {
   const [info, setInfo] = useState<Invite | null>(null)
-  const [claimed, setClaimed] = useState<ClaimState>('idle')
   useEffect(() => {
     fetch(`https://discord.com/api/v10/invites/${invite}?with_counts=true`)
       .then(r => (r.ok ? r.json() : null))
@@ -19,12 +17,9 @@ export function DiscordCard({ invite, fallbackName, claim = false }: { invite: s
       .catch(() => undefined)
   }, [invite])
   const g = info?.guild
-  const line = claimText(claimed)
   // Doherty threshold: the line says what to do on the click itself, the answer replaces it in place
-  const startClaim = () => claimRole(state => {
-    setClaimed(state)
-    if (state === 'ok') cue('success', { emphasis: 'subtle' })
-  })
+  const claimed = useClaim()
+  const line = claim ? claimText(claimed) : null
   return (
     <div className="cd-card">
       {g?.icon

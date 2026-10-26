@@ -318,8 +318,9 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'xtra_role_claim_start': {
         const mode = localStorage.getItem('mock.discordClaim') || 'ok'
         if (mode === 'unset') throw 'Claim role is not set up yet'
-        if (mode !== 'wait') setTimeout(() => emit('xtra-role-claimed', mode), 1000)
-        return 'https://discord.com/oauth2/authorize?client_id=mock&state=mock'
+        const state = `mock${Date.now()}`
+        if (mode !== 'wait') setTimeout(() => emit('xtra-role-claimed', { state, result: mode }), 1000)
+        return `https://discord.com/oauth2/authorize?client_id=mock&state=${state}`
       }
       case 'get_skip_launcher_status': return false
       // localStorage 'mock.clashes': a JSON list of { file_path, mod_paths } to show conflicts (custom/conflicts.ts)

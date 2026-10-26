@@ -44,7 +44,8 @@ pub fn xtra_role_claim_start() -> Result<String, String> {
 }
 
 /// The result a role-claimed link carries, if it answers the claim in `pending` (same state, under 10 minutes old).
-/// None for anything else: someone else's link, an old one, or a result the Worker never sends. Pure.
+/// None for anything else: someone else's link, an old one, or a result the Worker never sends. Pure. The card also
+/// matches the state, so an answer to an earlier claim never settles a newer one (discordClaim.ts answers).
 fn accept(url: &str, pending: &Option<(String, Instant)>, now: Instant) -> Option<&'static str> {
     let parsed = url::Url::parse(url).ok()?;
     if parsed.scheme() != "repakx" || parsed.host_str() != Some("role-claimed") {
@@ -70,9 +71,9 @@ pub fn on_link(url: &str, app: &tauri::AppHandle) -> bool {
     let mut pending = PENDING.lock().unwrap_or_else(|e| e.into_inner());
     match accept(url, &pending, Instant::now()) {
         Some(result) => {
-            *pending = None; // one answer per claim
+            let state = pending.take().map(|(s, _)| s).unwrap_or_default(); // one answer per claim
             log::info!("[role] claim answered: {result}");
-            let _ = app.emit("xtra-role-claimed", result);
+            let _ = app.emit("xtra-role-claimed", serde_json::json!({ "state": state, "result": result }));
         }
         None => log::info!("[role] ignored a role-claimed link that does not answer this app's claim"),
     }
