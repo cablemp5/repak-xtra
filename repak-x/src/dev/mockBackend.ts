@@ -121,7 +121,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         if (!b.on) { b.current = b.active = false; b.overlaps = undefined; return structuredClone(builtins) }
         return new Promise(r => setTimeout(r, 2500)).then(() => {
           if (b.id === 'custom-quake' && localStorage.getItem('mock.quakeError') === '1') {
-            Object.assign(b, { current: false, error: 'Could not read the texture settings of the game. Its mappings file is older than the game' })
+            Object.assign(b, { current: false, error: localStorage.getItem('mock.quakeErrorKind') === 'write' ? 'Could not write the packages: a file is in use' : 'Not active yet. The game updated and its new mappings are not out. repakxtra checks again at every start' })
             throw b.error
           }
           Object.assign(b, { current: true, active: true, builtAt: Math.floor(Date.now() / 1000), error: undefined,

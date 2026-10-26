@@ -2908,7 +2908,7 @@ html[data-motion="off"] .setting-sub, html[data-motion="off"] .bulk-actions-tool
 .bq-color input[type="color"]::-webkit-color-swatch { border: none; border-radius: 5px; }
 .bq-color-text { display: flex; flex-direction: column; gap: 1px; font-size: 13px; color: var(--text-primary); min-width: 0; }
 .bq-hex { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); }
-.bq-switch { justify-self: start; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-primary); cursor: pointer; }
+.bq-switch { justify-self: start; gap: 10px; font-size: 13px; color: var(--text-primary); cursor: pointer; }
 .bq-hint { text-align: left; flex: none; }
 html[data-motion="off"] .bi-hero, html[data-motion="off"] .bi-hero-check, html[data-motion="off"] .bi-hero-check svg, html[data-motion="off"] .bi-hero-face, html[data-motion="off"] .bi-hero-face img, html[data-motion="off"] .bi-pick .bi-chev { transition: none !important; }
 /* the Library's built-in rows: a blue Built-in badge that opens the row on Home, no checkbox (never in a bulk action) */

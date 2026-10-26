@@ -35,9 +35,10 @@ export const sameQuake = (a: Quake, b: Quake) =>
 const FOLD_KEY = 'repakxtra.builtins.folded'
 const BLOCKED = 'Close Marvel Rivals to change built-in mods'
 
-// one store for every remount: the list, and which ones are building
+// one store for every remount: the list, which ones are building, and the switch each was last set to
 let list: Builtin[] = []
 let busy = new Set<string>()
+const wanted = new Map<string, boolean>()
 const listeners = new Set<() => void>()
 let snap = { list, busy }
 const emit = () => { snap = { list, busy }; listeners.forEach(l => l()) }
@@ -90,6 +91,7 @@ export function watchBuiltins() {
 }
 
 async function change(id: string, args: { on?: boolean; excluded?: string[]; quake?: Quake }, alert: LoadoutProps['alert']) {
+  if (args.on !== undefined) wanted.set(id, args.on)
   busy = new Set(busy).add(id); emit()
   const name = ABOUT[id].name
   try {
@@ -102,8 +104,12 @@ async function change(id: string, args: { on?: boolean; excluded?: string[]; qua
     await load() // a build error is saved on the built-in and shown on its row, anything else (Repak X open) is a toast
     if (list.find(b => b.id === id)?.error !== String(e)) alert.error(`${name} not changed`, String(e))
   }
+  wanted.delete(id)
   busy = new Set([...busy].filter(x => x !== id)); emit()
 }
+
+/** Stops CustomQuake's build (it saves Off, and the build gives up at its next batch). */
+const stopBuild = (id: string, alert: LoadoutProps['alert']) => { wanted.set(id, false); emit(); void invoke<Builtin[]>('xtra_builtins_set', { id, on: false }).then(v => { list = v; emit() }).catch(e => alert.error(`${ABOUT[id].name} not stopped`, String(e))) }
 
 const units = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'} ago`
 const ago = (secs?: number) => {
@@ -112,16 +118,23 @@ const ago = (secs?: number) => {
   return d < 90 ? 'just now' : d < 5400 ? units(Math.round(d / 60), 'minute') : d < 129600 ? units(Math.round(d / 3600), 'hour') : units(Math.round(d / 86400), 'day')
 }
 
+/** "a", "a and b", "a, b, and c" (the Oxford comma). Pure. */
+export const listWords = (names: string[]) => names.length < 3 ? names.join(' and ') : `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`
+
 /** The other quake mods that are on, said on CustomQuake's row. Pure. */
 export const overlapText = (names: string[]) => names.length
-  ? `${names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`} ${names.length === 1 ? 'changes' : 'change'} the same map textures, so the game shows only one. Turn one of them off`
+  ? `${listWords(names)} ${names.length === 1 ? 'changes' : 'change'} the same map textures, so the game shows only one. Turn one of them off`
   : ''
+
+/** A mappings error clears itself once new mappings are out (checked at every start): no Try again for it. Pure. */
+export const retryable = (error?: string) => Boolean(error) && !error!.startsWith('Not active yet. The game updated')
 
 function status(b: Builtin, building: boolean) {
   const long = b.id === 'custom-quake' ? ', about 10 minutes' : ''
-  if (building) return b.builtAt ? `Rebuilding from your game files${long}…` : `Building from your game files${long}…`
+  if (building && wanted.get(b.id) === false) return 'Stopping the build…'
+  if (building) return b.active ? `Rebuilding from your game files${long}. The last build stays in use` : `Building from your game files${long}. Not in the game yet`
   if (!b.on) return ABOUT[b.id].what
-  if (b.error) return b.active ? `${b.error}. The last build is still in use` : b.error
+  if (b.error) return b.active ? `${b.error}. The last build is still in use` : retryable(b.error) ? `${b.error}. Not in the game` : b.error
   if (b.overlaps?.length) return overlapText(b.overlaps)
   if (b.current) return [b.summary ?? 'Up to date', b.builtAt ? `Built ${ago(b.builtAt)} for this game version` : ''].filter(Boolean).join('. ')
   return 'Waiting to rebuild for this game version'
@@ -266,15 +279,16 @@ function QuakeOptions({ id, b, open, building, blocked, onDone, alert }: { id: s
           <div className="bq-grid">
             {color('base', 'Map color')}
             {color('sky', 'Sky color')}
-            <label className="bq-switch"><Switch size="sm" checked={draft.hidePlants} onChange={v => set({ hidePlants: v })} /><span>Hide plants</span></label>
-            <label className="bq-switch"><Switch size="sm" checked={draft.lobby} onChange={v => set({ lobby: v })} /><span>Include lobby and showcase scenes</span></label>
+            <Switch size="sm" className="bq-switch" checked={draft.hidePlants} onChange={v => set({ hidePlants: v })} aria-label="Hide plants">Hide plants</Switch>
+            <Switch size="sm" className="bq-switch" checked={draft.lobby} onChange={v => set({ lobby: v })} aria-label="Include lobby and showcase scenes">Include lobby and showcase scenes</Switch>
           </div>
           <p className="bi-picker-hint bq-hint">With the lobby and showcase scenes left out, the textures they share with the maps (Common, MaterialLibrary) still change.</p>
           <div className="bi-picker-foot">
             {dirty && <button type="button" className="lo-text-btn" title="Back to the saved options" onClick={() => setDraft(saved)}>Undo changes</button>}
             <span className="bi-foot-gap" />
             {b.on && dirty && <span className="bi-cost">{blocked ? BLOCKED : 'Takes about 10 minutes'}</span>}
-            <button type="button" className="lo-text-btn" title="Cancel, keep the saved options" onClick={onDone}>Cancel</button>
+            {/* while it builds, Close: this panel never stops the build (the row's Stop building does) */}
+            <button type="button" className="lo-text-btn" title={building ? 'Close the options, the build goes on' : 'Cancel, keep the saved options'} onClick={onDone}>{building ? 'Close' : 'Cancel'}</button>
             <button type="button" className="lo-text-btn is-primary" disabled={!dirty || building || (b.on && blocked)} onClick={apply}
               title={!dirty ? 'Nothing changed yet' : b.on && blocked ? BLOCKED : b.on ? 'Rebuild CustomQuake with these options' : 'Save these options for when it is on'}>{b.on ? 'Apply and rebuild' : 'Save options'}</button>
           </div>
@@ -325,16 +339,19 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
         )}
         {b.id === 'custom-quake' && (
           <button type="button" ref={pick} className="lo-text-btn bi-pick" aria-expanded={picking} aria-controls={pickerId} onClick={() => setPicking(v => !v)}
-            title="Colors, plants and the lobby">
+            title="Colors, plants, and the lobby">
             Options
             <ChevronDown size={13} className="bi-chev" aria-hidden="true" />
           </button>
         )}
-        {warn && b.error && (
+        {building && b.id === 'custom-quake' && wanted.get(b.id) !== false && (
+          <button type="button" className="lo-text-btn" onClick={() => stopBuild(b.id, alert)} title="Stops within a few seconds, nothing goes into the game">Stop building</button>
+        )}
+        {warn && retryable(b.error) && (
           <button type="button" className="lo-text-btn" disabled={blocked} onClick={() => change(b.id, { on: true }, alert)}
             title={blocked ? BLOCKED : 'Build it again'}><RotateCcw size={13} /> Try again</button>
         )}
-        <Switch size="sm" checked={b.on} isDisabled={building || blocked} onChange={on => change(b.id, { on }, alert)}
+        <Switch size="sm" checked={wanted.get(b.id) ?? b.on} isDisabled={building || blocked} onChange={on => change(b.id, { on }, alert)}
           aria-label={about.name} title={blocked ? BLOCKED : about.what} />
       </div>
       {b.id === 'force-default-skin' && <HeroPicker id={pickerId} b={b} open={picking} building={building} blocked={blocked} onDone={done} alert={alert} />}
@@ -386,7 +403,9 @@ export default function BuiltinMods({ blocked, alert }: { blocked: boolean; aler
 if (import.meta.env.DEV) {
   console.assert(sameQuake(QUAKE_DEFAULT, { ...QUAKE_DEFAULT, base: '5D7A80' }) && !sameQuake(QUAKE_DEFAULT, { ...QUAKE_DEFAULT, hidePlants: true }), 'only a real option change rebuilds')
   console.assert(overlapText(['quakeV6_9999999_P']) === 'quakeV6_9999999_P changes the same map textures, so the game shows only one. Turn one of them off', 'one overlap', overlapText(['quakeV6_9999999_P']))
-  console.assert(overlapText(['a', 'b', 'c']).startsWith('a, b and c change the same') && overlapText([]) === '', 'several overlaps')
+  console.assert(overlapText(['a', 'b', 'c']).startsWith('a, b, and c change the same') && overlapText([]) === '', 'several overlaps, Oxford comma')
+  console.assert(listWords(['a', 'b']) === 'a and b' && listWords(['a']) === 'a', 'one or two names')
+  console.assert(!retryable('Not active yet. The game updated and its new mappings are not out. repakxtra checks again at every start') && retryable('Could not write the packages') && !retryable(undefined), 'no Try again for mappings')
   console.assert(Object.values(ABOUT).every(a => !/[;\u2014]/.test(a.what)), 'no semicolons or em dashes')
   console.assert(heroName('Iron Fist (lin Lie)') === 'Iron Fist' && heroName('Cloak & Dagger') === 'Cloak & Dagger', 'a note in brackets goes')
   console.assert(unreleased('Hive**') && !unreleased('Hulk'), 'placeholders are not heroes yet')

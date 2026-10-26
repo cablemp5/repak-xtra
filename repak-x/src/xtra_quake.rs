@@ -451,7 +451,8 @@ fn list_textures(paks: &Path) -> Result<Vec<String>, String> {
     Ok(out.into_iter().collect())
 }
 
-const MAPPINGS_BEHIND: &str = "The game's texture settings could not be read. Its mappings file is older than the game. repakxtra checks for a newer one at every start";
+/// The built-ins' one message for mappings that are behind the game (xtra_builtins.rs): nothing to retry by hand.
+use crate::xtra_builtins::MAPPINGS_BEHIND;
 
 /// The game's settings for one texture from its JSON (to_json of the game's package). None when it is not a texture.
 fn vanilla_of(vfs: &str, json: &Value) -> Option<Vanilla> {
@@ -525,7 +526,7 @@ fn all_read(listed: &[String], read: &[Vanilla]) -> Result<(), String> {
         return Ok(());
     }
     let first = missing.first().map_or("none", |p| p.rsplit('/').next().unwrap_or(p));
-    Err(format!("{} of the game's {} map textures could not be read (first: {first}). {MAPPINGS_BEHIND}", missing.len(), listed.len()))
+    Err(format!("{MAPPINGS_BEHIND} ({} of the game's {} map textures could not be read, first: {first})", missing.len(), listed.len()))
 }
 
 /// Every package read back out of the container carries the settings it was planned with.
@@ -814,7 +815,7 @@ mod tests {
         let read = |p: &str| Vanilla { path: p.into(), ..Default::default() };
         assert!(all_read(&listed, &[read(&listed[0]), read(&listed[1])]).is_ok());
         let e = all_read(&listed, &[read(&listed[0])]).unwrap_err();
-        assert!(e.starts_with("1 of the game's 2 map textures could not be read (first: T_Y)"), "{e}");
+        assert!(e.starts_with(MAPPINGS_BEHIND) && e.ends_with("(1 of the game's 2 map textures could not be read, first: T_Y)"), "{e}");
         assert!(all_read(&listed, &[read(&listed[0]), read(&listed[0]), read(&listed[1])]).is_err(), "read twice");
     }
 
