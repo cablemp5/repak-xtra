@@ -1,34 +1,48 @@
 // repakxtra: Home's "Built-in" section (the Library lists them as rows too, custom/builtinRows.ts): the mods repakxtra makes itself from the game's own tables (xtra_builtins.rs),
-// Force default skin and Skip startup logos. Each row has the same switch as a loadout card. Force default skin's row
-// folds open into the hero picker (the heroes that keep their own skins), applied in one rebuild. The app rebuilds them
+// Force default skin, Skip startup logos and CustomQuake. Each row has the same switch as a loadout card. Force default
+// skin's row folds open into the hero picker (the heroes that keep their own skins), CustomQuake's into its options (the
+// colors and two switches), each applied in one rebuild. The app rebuilds them
 // after a game update on its own (refreshBuiltins at start, from App.tsx, and again here once the game closes), so the
 // rows only show where each one stands. The switch is the saved choice, the blue icon and the count mean a working build.
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { Check, ChevronDown, ChevronRight, RotateCcw, Search, Shirt, TriangleAlert, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, RotateCcw, Search, Shirt, Square, TriangleAlert, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
+import ColorPicker from './ColorPicker'
 import { getHeroImageById, useHeroImages } from '../utils/heroImages'
 import type { LoadoutProps } from './Loadouts'
 import { Num, SwapText, revealOnLoad } from './motion'
 import { savedItem } from './storageCarryOver'
-import { setView } from './loadoutStore'
-import { ClapperboardIcon, PortraitCardIcon, type BuiltinIconComponent } from './PixelIcon'
+import { flipMods, setView } from './loadoutStore'
+import { nameKey } from './loadoutIdentity'
+import { ClapperboardIcon, FlatTilesIcon, PortraitCardIcon, type BuiltinIconComponent } from './PixelIcon'
 import { cue } from './sounds'
 import { ROLES, type Role } from './heroRoles'
 
-export type Builtin = { id: string; on: boolean; excluded: string[]; current: boolean; active: boolean; builtAt?: number; summary?: string; heroes: string[]; error?: string; path: string; size: number }
+/** CustomQuake's options (xtra_quake.rs Options): colors as 6 hex digits */
+export type Quake = { base: string; sky: string; hidePlants: boolean; lobby: boolean }
+export type Builtin = { id: string; on: boolean; excluded: string[]; current: boolean; active: boolean; builtAt?: number; summary?: string; heroes: string[]; error?: string; path: string; size: number
+  quake?: Quake; overlaps?: string[] }
 
 // icon: a pixel-grid drawing (PixelIcon.tsx), sharp at any display scale. A new built-in adds its drawing there
 const ABOUT: Record<string, { name: string; what: string; icon: BuiltinIconComponent }> = {
   'force-default-skin': { name: 'Force default skin', what: 'Every hero shows their default skin, in matches and in the lobby', icon: PortraitCardIcon },
   'skip-intro-movies': { name: 'Skip startup logos', what: 'The game opens faster, without the Marvel, NetEase, and Unreal Engine logo videos that play each time it starts', icon: ClapperboardIcon },
+  'custom-quake': { name: 'CustomQuake', what: 'Every map texture turns one flat color you pick, the Quake look', icon: FlatTilesIcon },
 }
+export const QUAKE_DEFAULT: Quake = { base: '5d7a80', sky: '82c6ed', hidePlants: false, lobby: true }
+/** Suggested colors in the picker, the defaults first */
+const QUAKE_PRESETS = { base: ['5d7a80', '808080', 'a69b8a', '6f8f6a', '3d4a5c', 'b07a63'], sky: ['82c6ed', 'b8dcf2', '1f2f4f', 'e9b9a0', '7a7f8c', '2c3e50'] }
+/** Whether two CustomQuake option sets make the same files: only a real change rebuilds. Pure. */
+export const sameQuake = (a: Quake, b: Quake) =>
+  a.base.toLowerCase() === b.base.toLowerCase() && a.sky.toLowerCase() === b.sky.toLowerCase() && a.hidePlants === b.hidePlants && a.lobby === b.lobby
 const FOLD_KEY = 'repakxtra.builtins.folded'
 const BLOCKED = 'Close Marvel Rivals to change built-in mods'
 
-// one store for every remount: the list, and which ones are building
+// one store for every remount: the list, which ones are building, and the switch each was last set to
 let list: Builtin[] = []
 let busy = new Set<string>()
+const wanted = new Map<string, boolean>()
 const listeners = new Set<() => void>()
 let snap = { list, busy }
 const emit = () => { snap = { list, busy }; listeners.forEach(l => l()) }
@@ -80,7 +94,8 @@ export function watchBuiltins() {
   window.addEventListener('focus', () => { void refreshBuiltins() })
 }
 
-async function change(id: string, args: { on?: boolean; excluded?: string[] }, alert: LoadoutProps['alert']) {
+async function change(id: string, args: { on?: boolean; excluded?: string[]; quake?: Quake }, alert: LoadoutProps['alert']) {
+  if (args.on !== undefined) wanted.set(id, args.on)
   busy = new Set(busy).add(id); emit()
   const name = ABOUT[id].name
   try {
@@ -93,8 +108,12 @@ async function change(id: string, args: { on?: boolean; excluded?: string[] }, a
     await load() // a build error is saved on the built-in and shown on its row, anything else (Repak X open) is a toast
     if (list.find(b => b.id === id)?.error !== String(e)) alert.error(`${name} not changed`, String(e))
   }
+  wanted.delete(id)
   busy = new Set([...busy].filter(x => x !== id)); emit()
 }
+
+/** Stops CustomQuake's build (it saves Off, and the build gives up at its next batch). */
+const stopBuild = (id: string, alert: LoadoutProps['alert']) => { wanted.set(id, false); emit(); void invoke<Builtin[]>('xtra_builtins_set', { id, on: false }).then(v => { list = v; emit() }).catch(e => alert.error(`${ABOUT[id].name} not stopped`, String(e))) }
 
 const units = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'} ago`
 const ago = (secs?: number) => {
@@ -103,10 +122,52 @@ const ago = (secs?: number) => {
   return d < 90 ? 'just now' : d < 5400 ? units(Math.round(d / 60), 'minute') : d < 129600 ? units(Math.round(d / 3600), 'hour') : units(Math.round(d / 86400), 'day')
 }
 
-function status(b: Builtin, building: boolean) {
-  if (building) return b.builtAt ? 'Rebuilding from your game files…' : 'Building from your game files…'
+/** "a", "a and b", "a, b, and c" (the Oxford comma). Pure. */
+export const listWords = (names: string[]) => names.length < 3 ? names.join(' and ') : `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`
+
+/** The other quake mods that are on, said on CustomQuake's row. Pure. */
+export const overlapText = (paths: string[]) => paths.length
+  ? `${listWords(paths.map(nameKey))} ${paths.length === 1 ? 'changes' : 'change'} the same map textures, so the game shows only one. Turn one of them off`
+  : ''
+
+/** Turns the other quake mods off (the overlap warning's button), then checks again. */
+async function turnOffOverlaps(paths: string[], alert: LoadoutProps['alert']) {
+  const failed = await flipMods(paths.map(path => ({ path, enabled: true })))
+  if (failed.length) alert.warning('Not turned off', failed.reason ?? `Close anything using ${listWords(failed.map(m => nameKey(m.path)))}, then try again.`)
+  await refreshBuiltins()
+}
+
+/** A mappings error clears itself once new mappings are out (checked at every start): no Try again for it. Pure. */
+export const retryable = (error?: string) => Boolean(error) && !error!.startsWith('Not active yet.')
+
+/** xtra_quake.rs Progress: the stage a CustomQuake build is in, its count where it has one, and how far the whole build is (0 to 1) */
+type Progress = { stage: string; detail?: string | null; fraction: number }
+
+/** The running build's progress, asked once a second while it builds (nothing to ask for the other built-ins). */
+function useProgress(on: boolean) {
+  const [progress, setProgress] = useState<Progress | null>(null)
+  useEffect(() => {
+    if (!on) { setProgress(null); return }
+    let live = true
+    const ask = () => invoke<Progress | null>('xtra_quake_progress').then(p => { if (live) setProgress(p) }).catch(() => undefined)
+    void ask()
+    const t = setInterval(ask, 1000)
+    return () => { live = false; clearInterval(t) }
+  }, [on])
+  return progress
+}
+
+/** What a CustomQuake build says besides its stage: the stage's count, then where the files are. Pure. */
+export const buildNote = (b: Builtin, progress: Progress | null) => [progress?.detail, b.active ? 'The last build stays in use' : 'Not in the game yet'].filter(Boolean).join('. ')
+
+function status(b: Builtin, building: boolean, progress?: Progress | null) {
+  const long = b.id === 'custom-quake' ? ', about 10 minutes' : ''
+  if (building && wanted.get(b.id) === false) return 'Stopping the build…'
+  if (building && progress) return progress.stage
+  if (building) return b.active ? `Rebuilding from your game files${long}. The last build stays in use` : `Building from your game files${long}. Not in the game yet`
   if (!b.on) return ABOUT[b.id].what
-  if (b.error) return b.active ? `${b.error}. The last build is still in use` : b.error
+  if (b.error) return b.active ? `${b.error}. The last build is still in use` : retryable(b.error) ? `${b.error}. Not in the game` : b.error
+  if (b.overlaps?.length) return overlapText(b.overlaps)
   if (b.current) return [b.summary ?? 'Up to date', b.builtAt ? `Built ${ago(b.builtAt)} for this game version` : ''].filter(Boolean).join('. ')
   return 'Waiting to rebuild for this game version'
 }
@@ -227,6 +288,78 @@ function HeroPicker({ id, b, open, building, blocked, onDone, alert }: { id: str
   )
 }
 
+/** CustomQuake's options under its row: two colors and two switches, saved while off, applied in one rebuild while on.
+ *  The same fold-open panel and foot as the hero picker (Jakob), four choices only (Hick), out of the way until asked for
+ *  (Tesler). The whole switch row is the target, its words included (Fitts). */
+function QuakeOptions({ id, b, open, building, blocked, onDone, alert }: { id: string; b: Builtin; open: boolean; building: boolean; blocked: boolean; onDone: () => void; alert: LoadoutProps['alert'] }) {
+  const saved = b.quake ?? QUAKE_DEFAULT
+  const [draft, setDraft] = useState(saved)
+  useEffect(() => { if (open) setDraft(saved) }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  const dirty = !sameQuake(draft, saved)
+  const set = (part: Partial<Quake>) => setDraft(d => ({ ...d, ...part }))
+  const apply = () => { onDone(); change(b.id, { quake: draft }, alert) }
+  // a build is running: the colors and switches are locked, so what it builds is what the card says (Close and Stop stay)
+  const color = (key: 'base' | 'sky', label: string) => (
+    <div className="bq-color">
+      <ColorPicker value={draft[key]} onChange={v => set({ [key]: v })} label={label} presets={QUAKE_PRESETS[key]} disabled={building} />
+      <span className="bq-color-text"><span>{label}</span>
+        {/* typed or pasted too: only a full color is taken */}
+        <input className="bq-hex" defaultValue={`#${draft[key].toUpperCase()}`} key={draft[key]} maxLength={7} spellCheck={false} aria-label={`${label}, hex`} disabled={building}
+          onChange={e => { const v = e.target.value.trim().replace(/^#/, ''); if (/^[0-9a-f]{6}$/i.test(v)) set({ [key]: v.toLowerCase() }) }} /></span>
+    </div>
+  )
+  return (
+    <div id={id} className="t-acc-panel" data-open={open} ref={el => el?.toggleAttribute('inert', !open)} onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onDone() } }}>
+      <div className="t-acc-panel-inner">
+        <div className="bi-picker">
+          <div className="bq-body">
+            <section className="bq-group" aria-label="Colors">
+              <h4 className="bq-title">Colors</h4>
+              <div className="bq-colors">
+                {/* the draft as a tiny map: sky over flat ground and blocks, plants until they are hidden (feedback before a 10 minute build) */}
+                <svg className="bq-preview" viewBox="0 0 120 72" aria-hidden="true">
+                  <rect width="120" height="72" fill={`#${draft.sky}`} />
+                  <g fill={`#${draft.base}`}>
+                    <rect x="16" y="22" width="18" height="34" /><rect x="76" y="16" width="24" height="40" />
+                    <path d="M0 52 L28 46 L52 50 L78 42 L120 48 V72 H0 Z" />
+                    {!draft.hidePlants && <g opacity="0.55"><circle cx="46" cy="47" r="7" /><circle cx="56" cy="49" r="5" /><circle cx="108" cy="44" r="6" /></g>}
+                  </g>
+                  <g fill="#000" opacity="0.18"><rect x="28" y="22" width="6" height="34" /><rect x="92" y="16" width="8" height="40" /></g>
+                </svg>
+                <div className="bq-color-list">
+                  {color('base', 'Map color')}
+                  {color('sky', 'Sky color')}
+                </div>
+              </div>
+            </section>
+            <section className="bq-group" aria-label="Scenes">
+              <h4 className="bq-title">Scenes</h4>
+              <div className="bq-switches">
+                <Switch size="sm" className="bq-switch" checked={draft.hidePlants} isDisabled={building} onChange={v => set({ hidePlants: v })} aria-label="Hide plants">
+                  <span className="bq-switch-name">Hide plants</span>
+                  <span className="bq-switch-desc">{draft.hidePlants ? 'Grass, bushes, and trees are gone' : 'Grass, bushes, and trees turn the map color'}</span>
+                </Switch>
+                <Switch size="sm" className="bq-switch" checked={draft.lobby} isDisabled={building} onChange={v => set({ lobby: v })} aria-label="Include lobby and showcase scenes">
+                  <span className="bq-switch-name">Include lobby and showcase scenes</span>
+                  <span className="bq-switch-desc">{draft.lobby ? 'The lobby and MVP screens turn flat too' : 'They keep their look, except textures shared with maps'}</span>
+                </Switch>
+              </div>
+            </section>
+          </div>
+          <div className="bi-picker-foot">
+            <span className="bi-foot-gap" />
+            {building ? <span className="bi-cost">Locked while it builds</span> : b.on && dirty && <span className="bi-cost">{blocked ? BLOCKED : 'Takes about 10 minutes'}</span>}
+            {/* while it builds, Close: this panel never stops the build (the row's Stop building does) */}
+            <button type="button" className="lo-text-btn" title={building ? 'Close the options, the build goes on' : 'Cancel, keep the saved options'} onClick={onDone}>{building ? 'Close' : 'Cancel'}</button>
+            <button type="button" className="lo-text-btn is-primary" disabled={!dirty || building || (b.on && blocked)} onClick={apply}
+              title={!dirty ? 'Nothing changed yet' : b.on && blocked ? BLOCKED : b.on ? 'Rebuild CustomQuake with these options' : 'Save these options for when it is on'}>{b.on ? 'Apply and rebuild' : 'Save options'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: boolean; blocked: boolean; alert: LoadoutProps['alert']; revealed: boolean }) {
   const about = ABOUT[b.id]
   const [picking, setPicking] = useState(false)
@@ -243,8 +376,12 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
   }, [revealed, b.id])
   const pick = useRef<HTMLButtonElement>(null)
   const Icon = about.icon
-  const warn = !building && b.on && Boolean(b.error)
-  const text = status(b, building)
+  const warn = !building && b.on && Boolean(b.error || b.overlaps?.length)
+  const quakeBuilding = building && b.id === 'custom-quake'
+  const progress = useProgress(quakeBuilding)
+  const text = status(b, building, progress)
+  const stopping = wanted.get(b.id) === false
+  const pct = Math.round((progress?.fraction ?? 0) * 100)
   const kept = b.excluded.length
   const pickerId = useId()
   const done = () => { setPicking(false); pick.current?.focus() }
@@ -253,11 +390,17 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
       <div className="bi-row">
         <span className="bi-icon" aria-hidden="true"><Icon size={20} /></span>
         <div className="bi-text">
-          <span className="bi-name">{about.name}</span>
+          <span className="bi-name">{about.name}{b.id === 'custom-quake' && <span className="bi-requires"> (Requires Project Sigeon · Native Support Coming Soon)</span>}</span>
           <span className={`bi-status${warn ? ' is-warn' : ''}`} title={text} aria-live="polite">
             {warn && <TriangleAlert size={13} aria-hidden="true" />}
             {building ? <span className="t-shimmer"><SwapText text={text} /></span> : <SwapText text={text} />}
+            {quakeBuilding && !stopping && progress && <span className="bi-count">{buildNote(b, progress)}</span>}
           </span>
+          {quakeBuilding && (
+            <div className="bi-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="CustomQuake build progress">
+              <i style={{ width: `${pct}%` }} />
+            </div>
+          )}
         </div>
         {b.id === 'force-default-skin' && (
           <button type="button" ref={pick} className="lo-text-btn bi-pick" aria-expanded={picking} aria-controls={pickerId} onClick={() => setPicking(v => !v)}
@@ -266,14 +409,31 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
             <ChevronDown size={13} className="bi-chev" aria-hidden="true" />
           </button>
         )}
-        {warn && (
+        {b.id === 'custom-quake' && (
+          <button type="button" ref={pick} className="lo-text-btn bi-pick" aria-expanded={picking} aria-controls={pickerId} onClick={() => setPicking(v => !v)}
+            title="Colors, plants, and the lobby">
+            Options
+            <ChevronDown size={13} className="bi-chev" aria-hidden="true" />
+          </button>
+        )}
+        {!building && b.on && Boolean(b.overlaps?.length) && (
+          <button type="button" className="lo-text-btn" disabled={blocked} onClick={() => void turnOffOverlaps(b.overlaps!, alert)}
+            title={blocked ? BLOCKED : 'CustomQuake stays on, the other quake mods go off'}>
+            {b.overlaps!.length === 1 ? `Turn off ${nameKey(b.overlaps![0])}` : 'Turn them off'}
+          </button>
+        )}
+        {building && b.id === 'custom-quake' && wanted.get(b.id) !== false && (
+          <button type="button" className="lo-text-btn" onClick={() => stopBuild(b.id, alert)} title="Stops within a few seconds, nothing goes into the game"><Square size={11} fill="currentColor" aria-hidden="true" /> Stop building</button>
+        )}
+        {warn && retryable(b.error) && (
           <button type="button" className="lo-text-btn" disabled={blocked} onClick={() => change(b.id, { on: true }, alert)}
             title={blocked ? BLOCKED : 'Build it again'}><RotateCcw size={13} /> Try again</button>
         )}
-        <Switch size="sm" checked={b.on} isDisabled={building || blocked} onChange={on => change(b.id, { on }, alert)}
+        <Switch size="sm" checked={wanted.get(b.id) ?? b.on} isDisabled={building || blocked} onChange={on => change(b.id, { on }, alert)}
           aria-label={about.name} title={blocked ? BLOCKED : about.what} />
       </div>
       {b.id === 'force-default-skin' && <HeroPicker id={pickerId} b={b} open={picking} building={building} blocked={blocked} onDone={done} alert={alert} />}
+      {b.id === 'custom-quake' && <QuakeOptions id={pickerId} b={b} open={picking} building={building} blocked={blocked} onDone={done} alert={alert} />}
     </li>
   )
 }
@@ -319,6 +479,12 @@ export default function BuiltinMods({ blocked, alert }: { blocked: boolean; aler
 }
 
 if (import.meta.env.DEV) {
+  console.assert(sameQuake(QUAKE_DEFAULT, { ...QUAKE_DEFAULT, base: '5D7A80' }) && !sameQuake(QUAKE_DEFAULT, { ...QUAKE_DEFAULT, hidePlants: true }), 'only a real option change rebuilds')
+  console.assert(overlapText(['C:/G/~mods/quakeV6_9999999_P.pak']) === 'quakeV6 changes the same map textures, so the game shows only one. Turn one of them off', 'one overlap, shown by its name', overlapText(['C:/G/~mods/quakeV6_9999999_P.pak']))
+  console.assert(overlapText(['a', 'b', 'c']).startsWith('a, b, and c change the same') && overlapText([]) === '', 'several overlaps, Oxford comma')
+  console.assert(listWords(['a', 'b']) === 'a and b' && listWords(['a']) === 'a', 'one or two names')
+  console.assert(!retryable('Not active yet. The game updated and repakxtra waits for the support files for it. It checks for them at every start') && retryable('Could not write the packages') && !retryable(undefined), 'no Try again while waiting for support files')
+  console.assert(Object.values(ABOUT).every(a => !/[;\u2014]/.test(a.what)), 'no semicolons or em dashes')
   console.assert(heroName('Iron Fist (lin Lie)') === 'Iron Fist' && heroName('Cloak & Dagger') === 'Cloak & Dagger', 'a note in brackets goes')
   console.assert(unreleased('Hive**') && !unreleased('Hulk'), 'placeholders are not heroes yet')
 }

@@ -1160,7 +1160,7 @@ html[data-motion="off"] .lo-gen-bar i { transition: none; animation: none; }
 .mod-row.is-missing { opacity: 0.55; }
 .mod-row-name { flex: 1; min-width: 0; display: flex; }
 .mod-row-name .mn { width: 100%; display: flex; }
-.mod-row .repakx-switch-control { height: 22px !important; min-height: 0 !important; }
+.mod-row .repakx-switch-control, .bq-switch .repakx-switch-control { height: 22px !important; min-height: 0 !important; }
 .mod-row-switch-gap { width: 38px; flex: none; }
 .row-action { display: inline-flex !important; align-items: center; gap: 6px; flex: none; height: 28px !important; min-height: 0 !important; padding: 0 10px !important;
   border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important; background: transparent !important;
@@ -1996,6 +1996,8 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .cd-meta { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .cd-dot { width: 7px; height: 7px; border-radius: 50%; background: #3ecf6e; }
 .cd-members { margin-left: 6px; }
+.cd-claim { font-size: 12px; color: var(--text-secondary); }   /* Claim role's answer, quiet like the meta line */
+.cd-claimed { display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; font-size: 13px; color: var(--text-secondary); }
 
 /* transitions.dev: Matrix dot loader (custom/motion.tsx MatrixLoader). Dots fade up and down on a 1.4s loop, each
    starting at its own point, so the grid twinkles at random */
@@ -2439,7 +2441,7 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 .cs-modal { width: min(560px, 92vw) !important; max-width: none !important; max-height: 80vh; display: flex; flex-direction: column; padding: 0 !important; }
 .cs-modal .modal-header { padding: 16px 20px !important; border-bottom: 1px solid var(--panel-border); align-items: flex-start; }
 .cs-modal .modal-header h2 { margin: 0; font-size: 16px !important; font-weight: 700; }
-.cs-sub { margin: 4px 0 0; font: 12px/1.5 var(--font-mono); color: var(--text-secondary); overflow-wrap: anywhere; }
+.cs-sub { margin: 0; font: 12px/1.5 var(--font-mono); color: var(--text-secondary); overflow-wrap: anywhere; }
 .cs-body { overflow-y: auto; padding: 14px 20px !important; display: flex; flex-direction: column; gap: 10px !important; }
 .cs-note { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }
 .cs-empty { margin: 0; padding: 18px 0; text-align: center; font-size: 13px; color: var(--text-secondary); }
@@ -2448,8 +2450,27 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 .cs-list li + li { border-top: 1px solid var(--panel-border); }
 .cs-list li > * { min-width: 0; }
 .cs-name { display: block; font-size: 13px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cs-reason { display: block; font-size: 12px; color: var(--text-secondary); }
-.cs-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px !important; border-top: 1px solid var(--panel-border); }
+/* crash suspects in groups by match strength (CrashSuspects.tsx), and the crashed file folded under the lead line */
+.cs-lead { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+/* the header's text runs under the close button too, so the details box lines up with the list below */
+.cs-modal .modal-header { display: grid; grid-template-columns: 1fr auto; column-gap: 12px; }
+.cs-modal .modal-header > div { display: contents; }
+.cs-modal .modal-header > div > * { grid-column: 1 / -1; }
+.cs-modal .modal-header > div > h2 { grid-column: 1; grid-row: 1; }
+.cs-modal .modal-header > div > .cs-lead { grid-column: 1; }
+.cs-modal .modal-header > .modal-close { grid-column: 2; grid-row: 1 / span 2; }   /* beside the title and lead, so neither row grows to its height */
+.cs-file { margin-top: 8px; }
+.cs-file > summary { cursor: pointer; font-size: 12px; color: var(--text-secondary); width: fit-content; }
+.cs-file > summary:hover { color: var(--text-primary); }
+.cs-group + .cs-group { margin-top: 14px; }
+.cs-details { display: flex; align-items: center; gap: 12px; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--panel-border); border-radius: 8px; }
+.cs-details .cs-sub { flex: 1; min-width: 0; }
+.cs-undo { margin-right: auto; font-size: 12px; color: var(--text-secondary); }
+.cs-group-title { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+/* the game update notice (gameUpdate.ts) uses the info color: the app's own blue */
+.toast-item.info { --toast-color: #346bf1; --toast-progress: #346bf1; }
+.toast-action-btn.is-short { white-space: nowrap; flex-shrink: 0; }
+.cs-footer { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 12px 20px !important; border-top: 1px solid var(--panel-border); }
 .cs-modal .btn-primary { height: 32px !important; min-height: 0 !important; padding: 0 18px !important; font-size: 13px !important; width: auto !important; flex: none;
   border-radius: var(--quiet-radius) !important; }
 
@@ -2837,6 +2858,7 @@ html[data-motion="off"] .setting-sub, html[data-motion="off"] .bulk-actions-tool
 .bi-item.is-on .bi-icon { color: var(--accent-primary); background: rgba(52, 107, 241, 0.12); }
 .bi-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .bi-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.bi-requires { color: #f2555a; font-size: inherit; font-weight: inherit; }
 .bi-status { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 12px; color: var(--text-secondary);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bi-status > span { overflow: hidden; text-overflow: ellipsis; }
@@ -2900,6 +2922,58 @@ html[data-motion="off"] .setting-sub, html[data-motion="off"] .bulk-actions-tool
 .bi-kept { font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .bi-cost { font-size: 12px; color: var(--text-secondary); }
 .bi-foot-gap { flex: 1; }
+/* CustomQuake options (BuiltinMods.tsx QuakeOptions): Colors with a live preview beside Scenes, each switch a whole
+   clickable row with what it does under its name (Common region: two titled groups) */
+.bq-body { display: flex; flex-wrap: wrap; gap: 20px 48px; }
+.bq-group { min-width: 0; }
+.bq-title { margin: 0 0 10px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.bq-colors { display: flex; align-items: center; gap: 16px; }
+.bq-preview { flex: none; width: 120px; height: 72px; border-radius: 8px; box-shadow: 0 0 0 1px var(--panel-border); }
+.bq-preview rect, .bq-preview path, .bq-preview circle { transition: fill var(--text-swap-dur) var(--text-swap-ease); }
+.bq-color-list { display: flex; flex-direction: column; gap: 8px; }
+.bq-switches { display: flex; flex-direction: column; gap: 12px; }
+.bq-switch { align-items: flex-start !important; }
+.bq-switch .repakx-switch-control { margin-top: 1px; }
+.bq-switch .repakx-switch-label { display: flex; flex-direction: column; gap: 2px; }
+.bq-switch-name { font-size: 13px; color: var(--text-primary); }
+.bq-switch-desc { font-size: 12px; color: var(--text-secondary); }
+.bq-color { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.bq-color-text { display: flex; flex-direction: column; gap: 1px; font-size: 13px; color: var(--text-primary); min-width: 0; }
+.bq-hex { width: 9ch; padding: 0; border: none; background: none; font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); cursor: text; }
+.bq-hex:hover, .bq-hex:focus { color: var(--text-primary); }
+.bq-hex:disabled { cursor: not-allowed; opacity: 0.5; }
+.bq-switch:has(:disabled) { cursor: not-allowed; opacity: 0.55; }
+/* the color picker (ColorPicker.tsx): a swatch, and a popover with the app's own surface under it */
+.cp-swatch { flex: none; width: 32px; height: 32px; min-height: 0 !important; padding: 3px !important; border: 1px solid var(--panel-border) !important; border-radius: 8px !important; background: none !important; cursor: pointer;
+  transition: border-color var(--text-swap-dur) var(--text-swap-ease); }
+.cp-swatch:hover:not(:disabled), .cp-swatch[aria-expanded="true"] { border-color: rgba(255, 255, 255, 0.22) !important; }
+.cp-swatch:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
+.cp-swatch:disabled { cursor: not-allowed; opacity: 0.5; }
+.cp-fill { display: block; width: 100%; height: 100%; border-radius: 5px; }
+.cp-pop { position: fixed; z-index: 3000; display: flex; flex-direction: column; gap: 12px; padding: 12px; box-sizing: border-box; background: var(--bg-dark); border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55); transform-origin: top left; animation: cp-in var(--text-swap-dur) var(--text-swap-ease) both; }
+@keyframes cp-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } }
+.cp-sv { position: relative; height: 128px; border-radius: 8px; cursor: crosshair; touch-action: none; box-shadow: 0 0 0 1px var(--panel-border);
+  background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, var(--hue)); }
+.cp-hue { position: relative; height: 12px; margin: 0 2px; border-radius: 999px; cursor: pointer; touch-action: none; box-shadow: 0 0 0 1px var(--panel-border);
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+.cp-sv:focus-visible, .cp-hue:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+/* the handle carries the color it sits on, in a white ring, so it reads on any color */
+.cp-dot { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55); pointer-events: none; }
+.cp-presets { display: flex; align-items: center; justify-content: space-between; padding: 0 2px; }
+.cp-preset { width: 18px; height: 18px; min-height: 0 !important; padding: 0 !important; border: none !important; border-radius: 50% !important; flex: none; cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12); transition: transform var(--text-swap-dur) var(--text-swap-ease), box-shadow var(--text-swap-dur) var(--text-swap-ease); }
+.cp-preset:hover { transform: scale(1.15); }
+.cp-preset[aria-checked="true"] { box-shadow: 0 0 0 2px var(--bg-dark), 0 0 0 3.5px var(--sw); }
+.cp-preset:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 3px; }
+html[data-motion="off"] .cp-pop, html[data-motion="off"] .cp-swatch, html[data-motion="off"] .cp-preset { animation: none !important; transition: none !important; }
+/* a CustomQuake build's bar, under its status line: the VFX Updater's thin bar, its fill shimmering (the shared rule below) */
+.bi-bar { height: 4px; margin-top: 6px; border-radius: 999px; overflow: hidden; background: var(--bg-lighter); }
+.bi-bar i { display: block; height: 100%; transition: width 0.4s var(--acc-ease); }
+.bi-count { flex: none; font-variant-numeric: tabular-nums; }
+.bi-count::before { content: "\00b7"; margin-right: 7px; }   /* a dot between the stage and its numbers */
+html[data-motion="off"] .bi-bar i { transition: none; animation: none !important; }
+.bq-switch { justify-self: start; gap: 10px; cursor: pointer; }
 html[data-motion="off"] .bi-hero, html[data-motion="off"] .bi-hero-check, html[data-motion="off"] .bi-hero-check svg, html[data-motion="off"] .bi-hero-face, html[data-motion="off"] .bi-hero-face img, html[data-motion="off"] .bi-pick .bi-chev { transition: none !important; }
 /* the Library's built-in rows: a blue Built-in badge that opens the row on Home, no checkbox (never in a bulk action) */
 /* badge buttons keep the badge's size (buttons get a 36px minimum app-wide) */
@@ -2924,6 +2998,7 @@ button.mod-type-badge { display: inline-flex; align-items: center; min-height: 0
 .download-progress .progress-fill,
 .repakx-progress-indicator,
 .su-bar i,
+.bi-bar i,
 .upd-bar i {
   background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-primary) 38%, color-mix(in srgb, var(--accent-primary), white 45%) 50%,
     var(--accent-primary) 62%, var(--accent-primary) 100%) 0 0 / 250% 100% no-repeat !important;

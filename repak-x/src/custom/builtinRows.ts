@@ -2,7 +2,8 @@
 // Built-in badge. Their switch turns the built-in on or off. They are not real library entries: never selected,
 // renamed, deleted, given a priority or put in loadouts, so App.tsx and ModsList.tsx check isBuiltin before those.
 import { useEffect, useMemo } from 'react'
-import { type Builtin, builtinAbout, loadBuiltins, useBuiltins } from './BuiltinMods'
+import { type Builtin, QUAKE_DEFAULT, builtinAbout, loadBuiltins, useBuiltins } from './BuiltinMods'
+import { colorName } from './colorName'
 import { useUiPref } from './uiPrefs'
 
 /** A built-in's file (its .pak under ~mods/.repakxtra-builtin), by path. */
@@ -10,9 +11,14 @@ export const isBuiltin = (path: string) => /[\\/]\.repakxtra-builtin[\\/]/i.test
 
 const listOf = (names: string[]) => names.length <= 2 ? names.join(' and ') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`
 
-/** What it is and, for Force default skin, the heroes it leaves alone: "Force default skin (Except Black Panther)". */
-export function builtinName(b: Pick<Builtin, 'id' | 'excluded'>, heroName: (id: string) => string | undefined) {
+/** What it is and what it is set to: Force default skin "(Except Black Panther)", CustomQuake "(Slate Map, Light Blue Sky,
+ *  Hidden Plants, Includes Lobby)" (the two colors always, a switch only when it is on). */
+export function builtinName(b: Pick<Builtin, 'id' | 'excluded' | 'quake'>, heroName: (id: string) => string | undefined) {
   const base = builtinAbout(b.id)?.name ?? b.id
+  if (b.id === 'custom-quake') {
+    const q = b.quake ?? QUAKE_DEFAULT
+    return `${base} (${[`${colorName(q.base)} Map`, `${colorName(q.sky)} Sky`, q.hidePlants && 'Hidden Plants', q.lobby && 'Includes Lobby'].filter(Boolean).join(', ')})`
+  }
   if (b.id !== 'force-default-skin' || !b.excluded.length) return base
   return `${base} (Except ${listOf(b.excluded.map(id => heroName(id) ?? `hero ${id}`).sort())})`
 }

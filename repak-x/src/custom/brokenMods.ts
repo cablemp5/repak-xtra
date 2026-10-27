@@ -27,6 +27,17 @@ export const verdictsChanged = () => emit(VERDICTS_CHANGED).catch(() => {})
 export const VERDICTS_RESCAN = 'xtra-verdicts-rescan'
 export const rescanVerdicts = () => emit(VERDICTS_RESCAN).catch(() => {})
 
+/** Full scans run one at a time: the backend's background checks skip a call while one runs (they answer 0), so a scan
+ *  started beside another would end early with half the answers. Each waits for the one before it. */
+let queue: Promise<unknown> = Promise.resolve()
+let runFull: (() => Promise<boolean>) | null = null
+const queued = (run: () => Promise<boolean>) => { const next = queue.then(run, run); queue = next; return next }
+/** Runs every check again once the scan in flight (if any) is done. True when it ran to its end, false when it failed or
+ *  the library changed under it. Null when no library is watched yet (no mods loaded). gameUpdate.ts waits on it. */
+export const fullScan = (): Promise<boolean> | null => (runFull ? queued(runFull) : null)
+/** How many mods carry a verdict now. */
+export const flaggedCount = () => verdicts.size
+
 /** Re-checks a moment after mods are added, removed or replaced, at every launch and on every Scan (the first run after a
  *  game update reads the game's asset list, which takes a while: the badges appear when it is done). */
 export function useBrokenWatch(mods: { path: string; modified_date?: number; file_size?: number }[]) {
@@ -35,8 +46,8 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     if (!key) return
     let live = true
     const check = () => invoke<Verdict[]>('xtra_broken_mods', { modPaths: mods.map(m => m.path) })
-      .then(r => { if (live) { verdicts = new Map(r.map(v => [norm(v.path), v])); version++; listeners.forEach(l => l()) } })
-      .catch(e => console.warn('[brokenMods] check failed', e))
+      .then(r => { if (live) { verdicts = new Map(r.map(v => [norm(v.path), v])); version++; listeners.forEach(l => l()) } return true })
+      .catch(e => { console.warn('[brokenMods] check failed', e); return false })
     // then VFX mods newer than the update whose Niagara files may still be in the old layout: decoded once each in the
     // background (xtra_niagara.rs), and checked again when one is. Then the mods the date calls current: their materials
     // checked once each per game update (xtra_vfx_check.rs), so one made before the update, or installed before
@@ -44,19 +55,22 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     // it), so a library whose VFX Updater was never opened is checked as well. Last, the Blueprint mods: their classes
     // compared with the game's once each per game update (xtra_layout.rs). One the update changed gets May crash with
     // what changed, one that matches loses the date-only warning, so the badges follow each one checked
-    const full = () => check()
+    const chain = () => check()
+      .then(ok => { if (!ok) throw new Error('the first check failed') })
       .then(() => (live ? invoke('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
       .then(() => (live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: mods.map(m => m.path) }) : 0))
       .then(found => (live && found ? check() : undefined))
       .then(() => (live ? invoke<number>('xtra_vfx_check_scan', { modPaths: mods.filter(m => verdicts.get(norm(m.path))?.kind !== 'vfx').map(m => m.path) }) : 0))
       .then(found => (live && found ? check() : undefined))
       .then(() => (live ? invoke<number>('xtra_layout_scan', { modPaths: mods.map(m => m.path) }) : 0))
-      .then(checked => { if (live && checked) void check() })
-      .catch(e => console.warn('[brokenMods] background scan failed', e))
+      .then(checked => (live && checked ? check() : undefined))
+      .then(() => live, e => { console.warn('[brokenMods] background scan failed', e); return false })
+    const full = () => queued(chain)
+    runFull = chain
     const t = setTimeout(() => { void full() }, 1500)
     const again = listen(VERDICTS_CHANGED, () => { void check() })
     const rescan = listen(VERDICTS_RESCAN, () => { void full() })
-    return () => { live = false; clearTimeout(t); void again.then(f => f()); void rescan.then(f => f()) }
+    return () => { live = false; if (runFull === chain) runFull = null; clearTimeout(t); void again.then(f => f()); void rescan.then(f => f()) }
   }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 

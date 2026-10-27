@@ -7,6 +7,7 @@ import { groupConflicts } from './ConflictsPanel'
 import { plural } from './modName'
 import { sourceOf } from './nexusSource'
 import { type Verdict, verdictLabel } from './brokenMods'
+import { type Tiered, tierLines } from './crashTiers'
 
 type Mod = { path: string; enabled?: boolean; modified_date?: number }
 type Details = { category?: string | null; character_name?: string | null }
@@ -92,7 +93,7 @@ const settled = <T,>(p: Promise<T>) => p.then(v => v, () => undefined)
 type Opt = string | null | undefined
 /** xtra_crash.rs NewestCrash, already redacted */
 type Crash = {
-  time: number; crash_type?: Opt; asset_path?: Opt; seconds_since_start?: number | null; message?: Opt; detail?: Opt
+  time: number; crash_type?: Opt; asset_path?: Opt; character_id?: Opt; seconds_since_start?: number | null; message?: Opt; detail?: Opt
   build_version?: Opt; engine_version?: Opt; cpu?: Opt; gpu?: Opt; gpu_driver?: Opt; rhi?: Opt; os?: Opt; ram_gb?: number | null
   oom?: boolean; thread?: Opt; faulting_module?: Opt; faulting_class?: Opt; stack?: string[]; third_party?: string[]
 }
@@ -114,7 +115,9 @@ export async function gatherReport(): Promise<string> {
   const [verdicts, niagara, suspects] = await Promise.all([
     settled(invoke<Verdict[]>('xtra_broken_mods', { modPaths: onPaths })),
     settled(invoke<string[]>('xtra_niagara_mods', { modPaths: onPaths })),
-    crash?.asset_path ? settled(invoke<string[]>('xtra_crash_suspects', { assetPath: crash.asset_path, modPaths: onPaths })) : Promise.resolve([] as string[]),
+    crash?.asset_path || crash?.character_id
+      ? settled(invoke<Tiered[]>('xtra_crash_tiers', { assetPath: crash.asset_path ?? '', heroId: crash.character_id ?? null, modPaths: onPaths }))
+      : Promise.resolve([] as Tiered[]),
   ])
   const key = (p: string) => p.replace(/\//g, '\\').toLowerCase().replace(/\.(pak|bak_repak)$/, '')
   const verdictOf = new Map((verdicts ?? []).map(v => [key(v.path), v]))
@@ -125,7 +128,7 @@ export async function gatherReport(): Promise<string> {
     g.disabled ? 'off' : 'on',
     g.up_to_date === true ? `${g.latest}, up to date` : g.up_to_date === false ? `older than ${g.latest}` : 'version not checked',
   ].join(', ')
-  const suspect = new Set((suspects ?? []).map(key)) // hold the asset the newest crash names
+  const suspect = new Set((suspects ?? []).filter(t => t.tier === 'asset').map(t => key(t.path))) // hold the asset the newest crash names
   const on = src.mods.filter(m => m.enabled).map(m => {
     const d = src.modDetails[m.path]
     const v = verdictOf.get(key(m.path))
@@ -162,10 +165,7 @@ export async function gatherReport(): Promise<string> {
     ...(crash.message ? [`message: ${crash.message}`] : []),
     ...(crash.detail && !crash.message?.includes(crash.detail) ? [crash.detail] : []),
     ...(crash.build_version ? [`game build ${crash.build_version}${crash.engine_version ? ` (${crash.engine_version})` : ''}`] : []),
-    ...(crash.asset_path
-      ? [suspects === undefined ? 'mods holding that asset: could not check'
-        : suspects.length ? `mods holding that asset: ${suspects.map(p => relativeToMods(p, src.gamePath)).join(', ')}` : 'no mod that is on holds that asset']
-      : []),
+    ...(crash.asset_path || crash.character_id ? tierLines(suspects, p => relativeToMods(p, src.gamePath)) : []),
   ]
   const gpuInfo = [crash?.gpu_driver, crash?.rhi].filter(Boolean).join(', ')
   const system = [crash?.cpu, crash?.gpu && `${crash.gpu}${gpuInfo ? ` (${gpuInfo})` : ''}`, crash?.ram_gb != null && `${crash.ram_gb} GB`, crash?.os]

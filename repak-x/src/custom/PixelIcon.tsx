@@ -72,3 +72,12 @@ export const ClapperboardIcon = pixelIcon(n => {
     </g>
   </>
 })
+
+/** CustomQuake: a map flattened to plain tiles, a rounded square split into four. Every line on whole pixels. */
+export const FlatTilesIcon = pixelIcon(n => {
+  const m = n / 2, r = Math.round(n * 0.15)
+  return <>
+    <rect x={1} y={1} width={n - 2} height={n - 2} rx={r} />
+    <path d={`M${m} 1V${n - 1}M1 ${m}H${n - 1}`} />
+  </>
+})

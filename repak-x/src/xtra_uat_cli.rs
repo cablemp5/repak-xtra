@@ -16,7 +16,7 @@ const EXE: &str = "uassettool-cli.exe";
 static ONE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// The command line: beside the app, else the workspace's build (dev copy, tests). None when switched off or missing.
-fn cli() -> Option<PathBuf> {
+pub(crate) fn cli() -> Option<PathBuf> {
     if std::env::var("REPAKXTRA_UAT_CLI").is_ok_and(|v| v.eq_ignore_ascii_case("off")) {
         return None;
     }
@@ -46,7 +46,7 @@ pub(crate) async fn extract(request: &VfxUatRequest<'_>) -> Option<Result<VfxUat
     let _one = ONE.lock().await;
     let (Some(paks), Some(out)) = (request.game_paks.clone(), request.output_path.clone()) else { return None };
     let filters = request.filter_patterns.clone().unwrap_or_default();
-    let (mod_path, with_deps) = (request.mod_path.clone(), request.with_deps.unwrap_or(false));
+    let (mod_path, with_deps, no_bulk) = (request.mod_path.clone(), request.with_deps.unwrap_or(false), request.no_bulk);
     Some(
         tokio::task::spawn_blocking(move || -> Result<VfxUatResponse, String> {
             let out_dir = PathBuf::from(&out);
@@ -56,6 +56,9 @@ pub(crate) async fn extract(request: &VfxUatRequest<'_>) -> Option<Result<VfxUat
             cmd.arg("extract_iostore_legacy").arg(&paks).arg(&out_dir).arg("--aes").arg(crate::install_mod::AES_KEY_HEX);
             if with_deps {
                 cmd.arg("--with-deps");
+            }
+            if no_bulk {
+                cmd.arg("--no-bulk"); // uassettool-patches 0008: an older command line ignores it and extracts everything
             }
             if let Some(m) = &mod_path {
                 cmd.arg("--mod").arg(m);

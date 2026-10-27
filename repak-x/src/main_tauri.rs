@@ -27,6 +27,10 @@ mod xtra_offfiles; // repakxtra: .pak.off files install like .pak
 mod xtra_bundle; // repakxtra: a mod's pak/utoc/ucas found and moved as one set
 mod xtra_updater; // repakxtra: applies an update without string-built shell commands
 mod xtra_conflicts; // repakxtra: conflict comparison by normalized asset path, cached file lists
+mod xtra_heroes; // repakxtra: the hero and skin folder of an asset path
+mod xtra_game; // repakxtra: the game update notice
+mod xtra_quake; // repakxtra: CustomQuake built-in (flat map textures)
+mod xtra_role; // repakxtra: Claim role on cable's Discord card
 mod xtra_extract; // repakxtra: unpacks only archives whose paths stay inside the output folder
 mod xtra_vfx; // repakxtra: VFX fixing after game updates
 mod xtra_niagara; // repakxtra: the VFX Updater's Niagara step
@@ -8233,6 +8237,7 @@ fn register_protocol_handler() -> Result<(), Box<dyn std::error::Error>> {
 // ============================================================================
 
 fn handle_deep_link_url(url: &str, app_handle: &tauri::AppHandle) {
+    if xtra_role::on_link(url, app_handle) { return; } // repakxtra: Claim role's answer, before the log line (its state stays out of the log)
     info!("Processing deep link URL: {}", url);
 
     if let Ok(parsed) = url::Url::parse(url) {
@@ -8541,6 +8546,9 @@ fn main() {
             xtra_identity::xtra_protocol_reclaim,
             xtra_crash::xtra_newest_crash, // repakxtra: setup report
             xtra_crash::xtra_crash_suspects, // repakxtra: crash suspects
+            xtra_crash::xtra_crash_tiers, // repakxtra: crash suspects by asset, skin and hero
+            xtra_game::xtra_game_update_check, xtra_game::xtra_game_update_seen, // repakxtra: game update notice
+            xtra_role::xtra_role_claim_start, xtra_role::xtra_role_ready, // repakxtra: Claim role
             xtra_broken::xtra_broken_mods, // repakxtra: broken mods
             xtra_broken::xtra_vfx_no_update, // repakxtra: Nothing to update stops the Needs VFX update flag
             xtra_vfx_check::xtra_vfx_check, // repakxtra: Check for VFX update
@@ -8554,6 +8562,7 @@ fn main() {
             xtra_vfx::xtra_niagara_mods, // repakxtra: setup report
             xtra_builtins::xtra_builtins_list, // repakxtra: built-in mods
             xtra_builtins::xtra_builtins_set,
+            xtra_quake::xtra_quake_progress, // repakxtra: CustomQuake's build progress
             xtra_builtins::xtra_builtins_refresh,
             xtra_vfx::xtra_vfx_claim,
             xtra_vfx::xtra_vfx_release,
