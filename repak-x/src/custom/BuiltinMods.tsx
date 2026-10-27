@@ -288,13 +288,40 @@ function QuakeOptions({ id, b, open, building, blocked, onDone, alert }: { id: s
     <div id={id} className="t-acc-panel" data-open={open} ref={el => el?.toggleAttribute('inert', !open)} onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onDone() } }}>
       <div className="t-acc-panel-inner">
         <div className="bi-picker">
-          <div className="bq-grid">
-            {color('base', 'Map color')}
-            {color('sky', 'Sky color')}
-            <Switch size="sm" className="bq-switch" checked={draft.hidePlants} onChange={v => set({ hidePlants: v })} aria-label="Hide plants">Hide plants</Switch>
-            <Switch size="sm" className="bq-switch" checked={draft.lobby} onChange={v => set({ lobby: v })} aria-label="Include lobby and showcase scenes">Include lobby and showcase scenes</Switch>
+          <div className="bq-body">
+            <section className="bq-group" aria-label="Colors">
+              <h4 className="bq-title">Colors</h4>
+              <div className="bq-colors">
+                {/* the draft as a tiny map: sky over flat ground and blocks, plants until they are hidden (feedback before a 10 minute build) */}
+                <svg className="bq-preview" viewBox="0 0 120 72" aria-hidden="true">
+                  <rect width="120" height="72" fill={`#${draft.sky}`} />
+                  <g fill={`#${draft.base}`}>
+                    <rect x="16" y="22" width="18" height="34" /><rect x="76" y="16" width="24" height="40" />
+                    <path d="M0 52 L28 46 L52 50 L78 42 L120 48 V72 H0 Z" />
+                    {!draft.hidePlants && <g opacity="0.55"><circle cx="46" cy="47" r="7" /><circle cx="56" cy="49" r="5" /><circle cx="108" cy="44" r="6" /></g>}
+                  </g>
+                  <g fill="#000" opacity="0.18"><rect x="28" y="22" width="6" height="34" /><rect x="92" y="16" width="8" height="40" /></g>
+                </svg>
+                <div className="bq-color-list">
+                  {color('base', 'Map color')}
+                  {color('sky', 'Sky color')}
+                </div>
+              </div>
+            </section>
+            <section className="bq-group" aria-label="Scenes">
+              <h4 className="bq-title">Scenes</h4>
+              <div className="bq-switches">
+                <Switch size="sm" className="bq-switch" checked={draft.hidePlants} onChange={v => set({ hidePlants: v })} aria-label="Hide plants">
+                  <span className="bq-switch-name">Hide plants</span>
+                  <span className="bq-switch-desc">{draft.hidePlants ? 'Grass, bushes, and trees are gone' : 'Grass, bushes, and trees turn the map color'}</span>
+                </Switch>
+                <Switch size="sm" className="bq-switch" checked={draft.lobby} onChange={v => set({ lobby: v })} aria-label="Include lobby and showcase scenes">
+                  <span className="bq-switch-name">Include lobby and showcase scenes</span>
+                  <span className="bq-switch-desc">{draft.lobby ? 'The lobby and MVP screens turn flat too' : 'They keep their look, except textures shared with maps'}</span>
+                </Switch>
+              </div>
+            </section>
           </div>
-          {!draft.lobby && <p className="bi-picker-hint bq-hint">Textures the lobby shares with the maps still change.</p>}
           <div className="bi-picker-foot">
             <span className="bi-foot-gap" />
             {b.on && dirty && <span className="bi-cost">{blocked ? BLOCKED : 'Takes about 10 minutes'}</span>}

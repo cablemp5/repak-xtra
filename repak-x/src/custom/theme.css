@@ -2470,7 +2470,7 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 /* the game update notice (gameUpdate.ts) uses the info color: the app's own blue */
 .toast-item.info { --toast-color: #346bf1; --toast-progress: #346bf1; }
 .toast-action-btn.is-short { white-space: nowrap; flex-shrink: 0; }
-.cs-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px !important; border-top: 1px solid var(--panel-border); }
+.cs-footer { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 12px 20px !important; border-top: 1px solid var(--panel-border); }
 .cs-modal .btn-primary { height: 32px !important; min-height: 0 !important; padding: 0 18px !important; font-size: 13px !important; width: auto !important; flex: none;
   border-radius: var(--quiet-radius) !important; }
 
@@ -2921,8 +2921,21 @@ html[data-motion="off"] .setting-sub, html[data-motion="off"] .bulk-actions-tool
 .bi-kept { font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .bi-cost { font-size: 12px; color: var(--text-secondary); }
 .bi-foot-gap { flex: 1; }
-/* CustomQuake options (BuiltinMods.tsx QuakeOptions): two colors over two switches, each a whole clickable row */
-.bq-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; max-width: 640px; }
+/* CustomQuake options (BuiltinMods.tsx QuakeOptions): Colors with a live preview beside Scenes, each switch a whole
+   clickable row with what it does under its name (Common region: two titled groups) */
+.bq-body { display: flex; flex-wrap: wrap; gap: 20px 48px; }
+.bq-group { min-width: 0; }
+.bq-title { margin: 0 0 10px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.bq-colors { display: flex; align-items: center; gap: 16px; }
+.bq-preview { flex: none; width: 120px; height: 72px; border-radius: 8px; box-shadow: 0 0 0 1px var(--panel-border); }
+.bq-preview rect, .bq-preview path, .bq-preview circle { transition: fill var(--text-swap-dur) var(--text-swap-ease); }
+.bq-color-list { display: flex; flex-direction: column; gap: 8px; }
+.bq-switches { display: flex; flex-direction: column; gap: 12px; }
+.bq-switch { align-items: flex-start !important; }
+.bq-switch .repakx-switch-control { margin-top: 1px; }
+.bq-switch .repakx-switch-label { display: flex; flex-direction: column; gap: 2px; }
+.bq-switch-name { font-size: 13px; color: var(--text-primary); }
+.bq-switch-desc { font-size: 12px; color: var(--text-secondary); }
 .bq-color { display: flex; align-items: center; gap: 10px; cursor: pointer; min-width: 0; }
 .bq-color input[type="color"] { flex: none; width: 32px; height: 32px; padding: 0; border: 1px solid var(--panel-border); border-radius: 8px; background: none; cursor: pointer; }
 .bq-color input[type="color"]::-webkit-color-swatch-wrapper { padding: 3px; }
@@ -2930,8 +2943,7 @@ html[data-motion="off"] .setting-sub, html[data-motion="off"] .bulk-actions-tool
 .bq-color-text { display: flex; flex-direction: column; gap: 1px; font-size: 13px; color: var(--text-primary); min-width: 0; }
 .bq-hex { width: 9ch; padding: 0; border: none; background: none; font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); cursor: text; }
 .bq-hex:hover, .bq-hex:focus { color: var(--text-primary); }
-.bq-switch { justify-self: start; gap: 10px; font-size: 13px; color: var(--text-primary); cursor: pointer; }
-.bq-hint { text-align: left; flex: none; }
+.bq-switch { justify-self: start; gap: 10px; cursor: pointer; }
 html[data-motion="off"] .bi-hero, html[data-motion="off"] .bi-hero-check, html[data-motion="off"] .bi-hero-check svg, html[data-motion="off"] .bi-hero-face, html[data-motion="off"] .bi-hero-face img, html[data-motion="off"] .bi-pick .bi-chev { transition: none !important; }
 /* the Library's built-in rows: a blue Built-in badge that opens the row on Home, no checkbox (never in a bulk action) */
 /* badge buttons keep the badge's size (buttons get a 36px minimum app-wide) */
