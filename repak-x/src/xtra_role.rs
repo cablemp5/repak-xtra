@@ -11,8 +11,8 @@ use tauri::Emitter;
 
 /// repakxtra's Discord application (public, already in the app's presence code).
 const CLIENT_ID: &str = "1563325728416604231";
-/// The Worker's address, set once it is deployed (docs kept outside the repo, the setup steps). None: not set up yet.
-const WORKER: Option<&str> = None;
+/// The Worker's address (the Worker itself lives outside this repo). None: not set up, and the card hides Claim role.
+const WORKER: Option<&str> = Some("https://repakxtra-role.cablemp5.workers.dev");
 const MAX_AGE: Duration = Duration::from_secs(10 * 60);
 const RESULTS: [&str; 4] = ["ok", "not_member", "denied", "error"];
 
