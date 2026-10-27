@@ -390,7 +390,7 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
       <div className="bi-row">
         <span className="bi-icon" aria-hidden="true"><Icon size={20} /></span>
         <div className="bi-text">
-          <span className="bi-name">{about.name}</span>
+          <span className="bi-name">{about.name}{b.id === 'custom-quake' && <span className="bi-requires"> (Requires Project Sigeon · Native Support Coming Soon)</span>}</span>
           <span className={`bi-status${warn ? ' is-warn' : ''}`} title={text} aria-live="polite">
             {warn && <TriangleAlert size={13} aria-hidden="true" />}
             {building ? <span className="t-shimmer"><SwapText text={text} /></span> : <SwapText text={text} />}

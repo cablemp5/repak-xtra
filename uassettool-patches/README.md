@@ -20,6 +20,11 @@ take them out again (`apply.ps1`), so the submodule itself is never changed or f
 
 Patches stack: each applies on top of the ones before it, in name order.
 
+`0009-custom-quake-v6-packaging.patch`: CustomQuake opts into V6's encrypted-container flag and payloads,
+`quakeV6/Content/` directory paths, and an empty 416-byte companion PAK. Package IDs retain the real game paths.
+Other mod packing keeps its existing format. Check with `python repak-x/scripts/check-quake-packaging.py
+target/quake-packaging-check/UAssetTool.dll <legacy-texture-root>` after building the patched managed tool.
+
 ## Refreshing a patch
 
 When `build.ps1` says a patch no longer applies (the submodule moved to a newer upstream commit):

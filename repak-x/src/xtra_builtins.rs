@@ -88,6 +88,9 @@ struct Saved {
     quake: Option<crate::xtra_quake::Options>,
     #[serde(default)]
     built_quake: Option<crate::xtra_quake::Options>,
+    /// Old CustomQuake bundles must rebuild once with V6 packaging.
+    #[serde(default)]
+    built_quake_packaging: bool,
     /// CustomQuake: the other quake mods that were on at the last build or refresh (read off the main thread)
     #[serde(default)]
     overlaps: Vec<String>,
@@ -178,6 +181,7 @@ fn fits(s: &Saved, build: &str) -> bool {
     let mut wanted = s.excluded.clone();
     wanted.sort();
     s.built_for.as_deref() == Some(build) && made == wanted && s.built_quake.clone().unwrap_or_default() == s.quake.clone().unwrap_or_default()
+        && (s.built_quake.is_none() || s.built_quake_packaging)
 }
 
 /// Off: the .pak goes aside, the rest stays, so turning it on again needs no rebuild.
@@ -542,7 +546,7 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
     }
     // a finished build the game kept out last time (it opened while it built): made for this game and these options
     let pending = std::env::temp_dir().join("repak-x").join("xbuiltin-pending").join(id);
-    let made_for = format!("{}|{:?}|{:?}", game_build(paks), { let mut e = excluded.clone(); e.sort(); e }, quake);
+    let made_for = format!("{}|{:?}|{:?}|{}", game_build(paks), { let mut e = excluded.clone(); e.sort(); e }, quake, id == CUSTOM_QUAKE);
     let kept = std::fs::read_to_string(pending.join("made-for")).ok().filter(|k| *k == made_for).and_then(|_| std::fs::read_to_string(pending.join("summary")).ok());
     let (made, from) = match kept {
         Some(summary) => (Ok((summary, Vec::new())), pending.join(stem(id))),
@@ -579,6 +583,7 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
                 s.built_for = Some(game_build(paks));
                 s.built_excluded = excluded.clone();
                 s.built_quake = (id == CUSTOM_QUAKE).then(|| quake.clone());
+                s.built_quake_packaging = id == CUSTOM_QUAKE;
                 s.nothing = false;
                 s.built_at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_secs());
                 s.summary = Some(summary.clone());
@@ -1008,6 +1013,14 @@ mod tests {
         remove(&dir, DEFAULT_SKIN).unwrap();
         assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn old_quake_packaging_rebuilds_once() {
+        let mut s = Saved { built_for: Some("b1".into()), built_quake: Some(Default::default()), ..Default::default() };
+        assert!(!fits(&s, "b1"));
+        s.built_quake_packaging = true;
+        assert!(fits(&s, "b1"));
     }
 
     #[test]

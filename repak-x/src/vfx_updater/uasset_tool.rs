@@ -49,6 +49,9 @@ pub struct VfxUatRequest<'a> {
     /// repakxtra: convert on 75% of the cores instead of 50%, for `create_mod_iostore`
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parallel: Option<bool>,
+    /// CustomQuake's V6 container layout (ordinary mod packing keeps its current format).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quake_packaging: Option<bool>,
     /// repakxtra: leave out the bulk data (pixels, audio), for `extract_iostore_legacy`. Only the command line takes it
     /// (xtra_uat_cli.rs): the library extracts everything, and a request is not sent to it with this field.
     #[serde(skip)]

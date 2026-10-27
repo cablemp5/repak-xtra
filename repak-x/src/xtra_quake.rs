@@ -902,8 +902,21 @@ pub async fn make(tool: &Path, usmap: &str, paks: &Path, work: &Path, out_base: 
         return Err(STOPPED.into());
     }
     report(3, 0.5, saved, None);
-    let sink = crate::vfx_updater::progress::NoOpProgressSink;
-    crate::vfx_updater::uasset_tool::pack_to_iostore(tool, usmap, &legacy.to_string_lossy(), &out_base.to_string_lossy(), None, &sink).await?;
+    let req = crate::vfx_updater::uasset_tool::VfxUatRequest {
+        input_dir: Some(legacy.to_string_lossy().into_owned()),
+        output_path: Some(out_base.to_string_lossy().into_owned()),
+        compress: Some(true),
+        parallel: Some(true),
+        quake_packaging: Some(true),
+        ..uat_request("create_mod_iostore")
+    };
+    let r = crate::vfx_updater::uasset_tool::run_vfx_uat_request(tool, &req).await?;
+    if !r.success {
+        return Err(format!("Could not pack CustomQuake: {}", r.message));
+    }
+    if r.data.as_ref().and_then(|d| d["quake_packaging"].as_bool()) != Some(true) {
+        return Err("CustomQuake needs the updated UAssetTool library for V6 packaging; nothing was installed".into());
+    }
     lap("fixing, checking and packing");
     // read back out of the container, as the game will see it
     report(4, 0.0, saved, None);
@@ -917,6 +930,10 @@ pub async fn make(tool: &Path, usmap: &str, paks: &Path, work: &Path, out_base: 
     let r = crate::vfx_updater::uasset_tool::run_vfx_uat_request(tool, &req).await?;
     if !r.success {
         return Err(format!("Could not read the new container back ({}), so nothing was installed", r.message));
+    }
+    // Extraction follows the directory index; verification uses the original game paths.
+    if back.join("quakeV6").is_dir() {
+        std::fs::rename(back.join("quakeV6"), back.join("Marvel")).map_err(|e| format!("Could not check the V6 container paths: {e}"))?;
     }
     report(4, 0.35, saved, None);
     {
