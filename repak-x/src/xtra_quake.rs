@@ -5,6 +5,8 @@
 //! 3. classify each (classify: the game's compression, then the name) and give it a pixel (pixel, from the options),
 //! 4. write a 1x1 package per texture from one of two templates (resources/quake/), put right the two fields UAssetTool
 //!    writes differently from the cooker (fix_skip_offset, fix_names_referenced), check every package, then pack.
+//! The game's settings (step 2) and the written packages (step 4) are kept for the game build: a rebuild for new options
+//! reads nothing from the game and only puts the new pixel into each kept package (reuse_kept).
 //! The rules were measured against quakeV6 on 2026-10-26 (ignored tests below, docs kept outside the repo): normal maps
 //! 99.89%, channel-packed 99.91% and color 99.31% of its textures get the same pixel.
 
@@ -653,14 +655,101 @@ fn check_settings(planned: &[Planned], json: &Path) -> Result<(), String> {
     })
 }
 
-/// The pixel a written package holds (RGBA), from its .uexp: a 1x1 BGRA8 mip, its four bytes before the 1x1x1 size.
-fn pixel_in(uexp: &[u8]) -> Option<[u8; 4]> {
+/// Where a written package's pixel sits in its .uexp: a 1x1 BGRA8 mip, its four bytes before the 1x1x1 size.
+fn pixel_at(uexp: &[u8]) -> Option<usize> {
     const ONE: [u8; 12] = [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0];
     let tag = b"PF_B8G8R8A8\0";
     uexp.windows(tag.len()).position(|w| w == tag)?;
-    let at = uexp.windows(16).rposition(|w| w[4..] == ONE)?;
+    uexp.windows(16).rposition(|w| w[4..] == ONE)
+}
+
+/// The pixel a written package holds (RGBA), from its .uexp.
+fn pixel_in(uexp: &[u8]) -> Option<[u8; 4]> {
+    let at = pixel_at(uexp)?;
     let [b, g, r, a] = uexp[at..at + 4].try_into().ok()?;
     Some([r, g, b, a])
+}
+
+/// Puts another pixel (RGBA) into a written package's .uexp: nothing else in the package depends on it.
+fn set_pixel(uexp: &mut [u8], rgba: [u8; 4]) -> Result<(), String> {
+    let at = pixel_at(uexp).ok_or("no pixel found in the package")?;
+    let [r, g, b, a] = rgba;
+    uexp[at..at + 4].copy_from_slice(&[b, g, r, a]);
+    Ok(())
+}
+
+/// The packages of the last build, kept for the next one: a rebuild for new options only puts new pixels in them instead
+/// of writing 31,000 packages again. Valid for one game build (index.json, written last).
+fn store_dir() -> std::path::PathBuf {
+    dirs::cache_dir().unwrap_or_else(|| ".".into()).join("Repak-X").join("repakxtra-quake-packages")
+}
+
+/// For each kept package (its path without .uasset), the settings it was written with.
+type Kept = HashMap<String, (String, String, bool)>;
+
+fn settings_row(s: &Settings) -> (String, String, bool) {
+    (s.compression.clone(), s.lod_group.clone(), s.srgb_off)
+}
+
+/// The packages kept for this game build and the format of this version of repakxtra. Empty for anything else.
+fn load_kept(dir: &Path, build: &str) -> Kept {
+    let Ok(text) = std::fs::read_to_string(dir.join("index.json")) else { return Kept::new() };
+    let Ok(v) = serde_json::from_str::<Value>(&text) else { return Kept::new() };
+    if v["v"] != STORE_FORMAT || v["build"] != build {
+        return Kept::new();
+    }
+    serde_json::from_value(v["packages"].clone()).unwrap_or_default()
+}
+
+fn save_kept(dir: &Path, build: &str, kept: &Kept) -> Result<(), String> {
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let tmp = dir.join("index.json.tmp");
+    std::fs::write(&tmp, serde_json::json!({ "v": STORE_FORMAT, "build": build, "packages": kept }).to_string()).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, dir.join("index.json")).map_err(|e| e.to_string())
+}
+
+/// Bump when the templates or the two writer fixes change: packages kept by an older version are written again.
+const STORE_FORMAT: u32 = 1;
+
+/// Copies one package between two roots (its .uasset as it is, its .uexp with `rgba` put in when given).
+fn copy_package(from: &Path, to: &Path, rel: &str, rgba: Option<[u8; 4]>) -> Result<(), String> {
+    let mut uexp = std::fs::read(from.join(format!("{rel}.uexp"))).map_err(|e| format!("{rel}.uexp: {e}"))?;
+    if let Some(px) = rgba {
+        set_pixel(&mut uexp, px).map_err(|e| format!("{rel}: {e}"))?;
+    }
+    let target = to.join(format!("{rel}.uexp"));
+    std::fs::create_dir_all(target.parent().ok_or("no folder")?).map_err(|e| e.to_string())?;
+    std::fs::write(&target, uexp).map_err(|e| e.to_string())?;
+    std::fs::copy(from.join(format!("{rel}.uasset")), to.join(format!("{rel}.uasset"))).map_err(|e| format!("{rel}.uasset: {e}"))?;
+    Ok(())
+}
+
+/// Copies every planned package the store holds with the same settings into `legacy`, the new pixel put in, side by side.
+/// Returns the ones still to be written (not kept, written for other settings, or not readable).
+fn reuse_kept(planned: &[Planned], kept: &Kept, store: &Path, legacy: &Path) -> Vec<usize> {
+    use rayon::prelude::*;
+    planned
+        .par_iter()
+        .enumerate()
+        .filter_map(|(i, p)| {
+            let rel = p.vfs.trim_end_matches(".uasset");
+            let same = kept.get(rel).is_some_and(|row| *row == settings_row(&p.settings));
+            if same && copy_package(store, legacy, rel, Some(p.pixel)).is_ok() { None } else { Some(i) }
+        })
+        .collect()
+}
+
+/// Keeps the checked packages for the next build: all of them when none were reused (the store was empty or for another
+/// game build), else the ones written now. The index goes last, so a store cut short counts as empty.
+fn keep_written(written: &[Planned], legacy: &Path, store: &Path, build: &str, fresh: bool, mut kept: Kept) -> Result<(), String> {
+    use rayon::prelude::*;
+    if fresh {
+        let _ = std::fs::remove_dir_all(store);
+        kept.clear();
+    }
+    written.par_iter().try_for_each(|p| copy_package(legacy, store, p.vfs.trim_end_matches(".uasset"), None))?;
+    kept.extend(written.iter().map(|p| (p.vfs.trim_end_matches(".uasset").to_string(), settings_row(&p.settings))));
+    save_kept(store, build, &kept)
 }
 
 /// Every planned package is under `dir` with its planned pixel and a SkipOffset as the cooker writes it.
@@ -752,18 +841,42 @@ pub async fn make(tool: &Path, usmap: &str, paks: &Path, work: &Path, out_base: 
         return Err("No map texture to change".into());
     }
     let total = planned.len();
-    let (json, legacy) = (work.join("json"), work.join("mod"));
-    write_packages(tool, usmap, &planned, &json, &legacy, WRITE_CHUNK, saved, stop).await?;
-    lap("writing the packages");
+    let (json, legacy, store) = (work.join("json"), work.join("mod"), store_dir());
+    // the last build's packages with the new pixels put in, and only the rest written
+    report(2, 0.0, saved, Some("Reusing the last build's packages".into()));
+    let kept = load_kept(&store, build);
+    let todo: Vec<Planned> = {
+        let (all, kept, store, legacy) = (planned.clone(), kept.clone(), store.clone(), legacy.clone());
+        let left = blocking(move || Ok::<_, String>(reuse_kept(&all, &kept, &store, &legacy))).await?;
+        left.into_iter().map(|i| planned[i].clone()).collect()
+    };
+    let todo = std::sync::Arc::new(todo);
+    let reused = total - todo.len();
+    lap(&format!("reusing {reused} kept packages"));
+    write_packages(tool, usmap, &todo, &json, &legacy, WRITE_CHUNK, saved, stop).await?;
+    lap(&format!("writing {} packages", todo.len()));
     report(3, 0.0, saved, None);
     {
-        let (planned, legacy, json) = (planned.clone(), legacy.clone(), json.clone());
-        blocking(move || fix_written(&planned, &legacy, &json)).await?;
+        let (todo, legacy, json) = (todo.clone(), legacy.clone(), json.clone());
+        blocking(move || fix_written(&todo, &legacy, &json)).await?;
     }
     report(3, 0.3, saved, None);
     {
         let (planned, legacy) = (planned.clone(), legacy.clone());
-        blocking(move || check_all(&planned, &legacy)).await.map_err(|e| format!("{e}, so nothing was installed"))?;
+        // a kept package that fails its check is not kept: the next build writes them all again
+        if let Err(e) = blocking(move || check_all(&planned, &legacy)).await {
+            if reused > 0 {
+                let _ = std::fs::remove_dir_all(&store);
+            }
+            return Err(format!("{e}, so nothing was installed"));
+        }
+    }
+    {
+        let (todo, legacy, store, build) = (todo.clone(), legacy.clone(), store.clone(), build.to_string());
+        let (fresh, kept) = (reused == 0, kept.clone());
+        if let Err(e) = blocking(move || keep_written(&todo, &legacy, &store, &build, fresh, kept)).await {
+            log::warn!("[quake] the packages were not kept for the next build: {e}");
+        }
     }
     let _ = std::fs::remove_dir_all(&json);
     if stop() {
@@ -879,6 +992,67 @@ mod tests {
             assert_eq!(fraction(first, 0.0, saved), 0.0, "starts empty");
         }
         assert_eq!(fraction(0, 0.5, true), 0.0, "a skipped stage counts as the start");
+    }
+
+    /// A stand-in .uexp: the pixel (BGRA) before the 1x1x1 size, after the pixel format's name.
+    fn fake_uexp(rgba: [u8; 4]) -> Vec<u8> {
+        let [r, g, b, a] = rgba;
+        let mut v = vec![7u8; 20];
+        v.extend_from_slice(b"PF_B8G8R8A8\0");
+        v.extend_from_slice(&[0; 8]);
+        v.extend_from_slice(&[b, g, r, a, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]);
+        v.extend_from_slice(&[3; 14]);
+        v
+    }
+
+    fn planned_at(name: &str, settings: Settings, pixel: [u8; 4]) -> Planned {
+        Planned { vfs: format!("Marvel/Content/Marvel/Environment/A/{name}"), pixel, settings }
+    }
+
+    #[test]
+    fn a_kept_package_takes_a_new_pixel_and_nothing_else() {
+        let before = fake_uexp([1, 2, 3, 4]);
+        let mut after = before.clone();
+        set_pixel(&mut after, [9, 8, 7, 6]).unwrap();
+        assert_eq!(pixel_in(&before), Some([1, 2, 3, 4]));
+        assert_eq!(pixel_in(&after), Some([9, 8, 7, 6]));
+        assert_eq!(after.iter().zip(&before).filter(|(a, b)| a != b).count(), 4, "four bytes changed");
+        assert_eq!(after, fake_uexp([9, 8, 7, 6]), "the same as a package written with that pixel");
+        assert!(set_pixel(&mut [1, 2, 3], [0; 4]).is_err(), "no pixel, no change");
+    }
+
+    #[test]
+    fn kept_packages_come_back_with_the_new_pixel_and_the_rest_is_left_to_write() {
+        let root = std::env::temp_dir().join(format!("quake-store-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (legacy, store) = (root.join("legacy"), root.join("store"));
+        let (plain, normal) = (Settings::default(), Settings::normal());
+        // the first build: three packages written, kept
+        let first = vec![planned_at("T_One", plain.clone(), [1, 2, 3, 4]), planned_at("T_Two", plain.clone(), [1, 2, 3, 4]), planned_at("T_Three", normal.clone(), [128, 128, 255, 255])];
+        for p in &first {
+            let rel = p.vfs.trim_end_matches(".uasset");
+            std::fs::create_dir_all(legacy.join(rel).parent().unwrap()).unwrap();
+            std::fs::write(legacy.join(format!("{rel}.uexp")), fake_uexp(p.pixel)).unwrap();
+            std::fs::write(legacy.join(format!("{rel}.uasset")), b"header").unwrap();
+        }
+        keep_written(&first, &legacy, &store, "build-1", true, Kept::new()).unwrap();
+        assert_eq!(load_kept(&store, "build-1").len(), 3);
+        assert!(load_kept(&store, "build-2").is_empty(), "another game build keeps nothing");
+        // the next build: other colors, T_Two now with other settings, T_Four new, T_Three's kept file gone
+        std::fs::remove_file(store.join("Marvel/Content/Marvel/Environment/A/T_Three.uexp")).unwrap();
+        let next = vec![
+            planned_at("T_One", plain.clone(), [9, 8, 7, 6]),
+            planned_at("T_Two", normal.clone(), [128, 128, 255, 255]),
+            planned_at("T_Three", normal, [128, 128, 255, 255]),
+            planned_at("T_Four", plain, [5, 5, 5, 5]),
+        ];
+        let again = root.join("again");
+        let left = reuse_kept(&next, &load_kept(&store, "build-1"), &store, &again);
+        assert_eq!(left, vec![1, 2, 3], "only T_One is reused: the others changed, are gone or are new");
+        let one = std::fs::read(again.join("Marvel/Content/Marvel/Environment/A/T_One.uexp")).unwrap();
+        assert_eq!(pixel_in(&one), Some([9, 8, 7, 6]));
+        assert_eq!(std::fs::read(again.join("Marvel/Content/Marvel/Environment/A/T_One.uasset")).unwrap(), b"header");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
@@ -1201,6 +1375,30 @@ mod tests {
         let fixed = t.elapsed();
         check_all(&planned, &legacy).unwrap();
         println!("{} packages: write {:.1} s, fix {:.1} s, check {:.1} s", planned.len(), wrote.as_secs_f32(), (fixed - wrote).as_secs_f32(), (t.elapsed() - fixed).as_secs_f32());
+        // a rebuild for other colors from the kept packages must equal packages written again with those colors
+        let store = work.join("store");
+        keep_written(&planned, &legacy, &store, "real", true, Kept::new()).unwrap();
+        let other = std::sync::Arc::new(plan(&textures, &Look { base: [0x33, 0x66, 0x99], sky: [0xff, 0x00, 0xff], hide_plants: true, lobby: true }));
+        let reused = work.join("reused");
+        let t = std::time::Instant::now();
+        let left = reuse_kept(&other, &load_kept(&store, "real"), &store, &reused);
+        println!("reused {} of {} in {:.1} s", other.len() - left.len(), other.len(), t.elapsed().as_secs_f32());
+        assert!(left.is_empty(), "every package is kept");
+        check_all(&other, &reused).unwrap();
+        let (json2, fresh) = (work.join("json2"), work.join("fresh"));
+        rt.block_on(write_packages(Path::new("."), &usmap, &other, &json2, &fresh, 2000, false, || false)).unwrap();
+        fix_written(&other, &fresh, &json2).unwrap();
+        let mut different = 0;
+        for p in other.iter() {
+            let rel = p.vfs.trim_end_matches(".uasset");
+            for ext in ["uasset", "uexp"] {
+                if std::fs::read(reused.join(format!("{rel}.{ext}"))).unwrap() != std::fs::read(fresh.join(format!("{rel}.{ext}"))).unwrap() {
+                    different += 1;
+                }
+            }
+        }
+        assert_eq!(different, 0, "reused files are byte for byte the files written again");
+        println!("{} packages reused with new colors, all byte for byte the same as written again", other.len());
         let _ = std::fs::remove_dir_all(&work);
     }
 
