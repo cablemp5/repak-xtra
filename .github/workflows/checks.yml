@@ -125,3 +125,15 @@ jobs:
 
       - name: Native wrapper tests
         run: cargo test --locked -p uasset_app --lib
+
+  # Keep the existing branch-protection check name while requiring both edition jobs.
+  required-checks:
+    name: Typecheck, build and test
+    if: always()
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require both editions to pass
+        env:
+          CHECKS_RESULT: ${{ needs.checks.result }}
+        run: test "$CHECKS_RESULT" = success
