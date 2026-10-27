@@ -31,7 +31,10 @@ const LOGO_FLAGS: [&str; 4] = ["bUsedInCn", "bUsedInHkMoTw", "bUsedInJpKr", "bUs
 pub const DEFAULT_SKIN: &str = "force-default-skin";
 pub const SKIP_INTRO: &str = "skip-intro-movies";
 pub const CUSTOM_QUAKE: &str = "custom-quake"; // repakxtra: xtra_quake.rs
+#[cfg(feature = "extended")]
 const IDS: [&str; 3] = [DEFAULT_SKIN, SKIP_INTRO, CUSTOM_QUAKE];
+#[cfg(not(feature = "extended"))]
+const IDS: [&str; 1] = [SKIP_INTRO];
 
 /// One build at a time: they share the work folder root and UAssetTool.
 static BUILDING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -39,6 +42,7 @@ static BUILDING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 static IN_FLIGHT: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 /// Set when the built-in building now is switched off: CustomQuake stops at its next batch instead of minutes later.
 static STOP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+#[cfg(feature = "extended")]
 fn stopped() -> bool {
     STOP.load(std::sync::atomic::Ordering::Relaxed)
 }
@@ -85,9 +89,9 @@ struct Saved {
     error: Option<String>,
     /// CustomQuake's options, and the ones its files were made with (xtra_quake.rs)
     #[serde(default)]
-    quake: Option<crate::xtra_quake::Options>,
+    quake: Option<crate::xtra_quake_options::Options>,
     #[serde(default)]
-    built_quake: Option<crate::xtra_quake::Options>,
+    built_quake: Option<crate::xtra_quake_options::Options>,
     /// Old CustomQuake bundles must rebuild once with V6 packaging.
     #[serde(default)]
     built_quake_packaging: bool,
@@ -115,7 +119,7 @@ pub struct BuiltinView {
     size: u64,
     /// CustomQuake: its options, and the mods that are on and change the same map files
     #[serde(skip_serializing_if = "Option::is_none")]
-    quake: Option<crate::xtra_quake::Options>,
+    quake: Option<crate::xtra_quake_options::Options>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     overlaps: Vec<String>,
 }
@@ -126,6 +130,10 @@ fn store_path() -> PathBuf {
 
 fn load() -> HashMap<String, Saved> {
     std::fs::read_to_string(store_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+}
+
+pub(crate) fn disable_legacy_choices() -> Result<(), String> {
+    update(|all| { for id in [DEFAULT_SKIN, CUSTOM_QUAKE] { if let Some(saved) = all.get_mut(id) { saved.on = false; } } })
 }
 
 /// Held for every read-change-save of the state, never across a build: two commands never write over each other.
@@ -236,7 +244,8 @@ fn views(state: &Arc<Mutex<AppState>>) -> Vec<BuiltinView> {
         Ok((dir, paks)) => (dir, game_build(&paks)),
         Err(_) => (PathBuf::new(), String::new()),
     };
-    IDS.iter().map(|id| view(id, &all.get(*id).cloned().unwrap_or_default(), &dir, &build)).collect()
+    IDS.iter().filter(|id| ![DEFAULT_SKIN, CUSTOM_QUAKE].contains(id) || crate::xtra_edition::features_unlocked())
+        .map(|id| view(id, &all.get(*id).cloned().unwrap_or_default(), &dir, &build)).collect()
 }
 
 // ---- table edits (serde_json ports of the Python scripts) ----
@@ -448,11 +457,15 @@ async fn usmap() -> Result<String, String> {
 }
 
 /// Extracts, edits, checks and packs one built-in into `out_dir`. Returns the summary and the hero ids seen.
-async fn make(tool: &Path, id: &str, excluded: &[String], quake: &crate::xtra_quake::Options, paks: &Path, work: &Path, out_base: &Path) -> Result<(String, Vec<String>), String> {
+async fn make(tool: &Path, id: &str, excluded: &[String], quake: &crate::xtra_quake_options::Options, paks: &Path, work: &Path, out_base: &Path) -> Result<(String, Vec<String>), String> {
+    if !IDS.contains(&id) { return Err(format!("No built-in mod called {id}")); }
+    #[cfg(not(feature = "extended"))]
+    let _ = quake;
     let s = |p: &Path| p.to_string_lossy().to_string();
     let tool = tool.to_path_buf();
     ensure_vfx_uat_session(&tool).await?;
     let usmap = usmap().await?;
+    #[cfg(feature = "extended")]
     if id == CUSTOM_QUAKE { // repakxtra: new 1x1 packages, not a table edit
         return crate::xtra_quake::make(&tool, &usmap, paks, work, out_base, quake, &game_build(paks), stopped).await.map(|summary| (summary, Vec::new()));
     }
@@ -574,6 +587,9 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
     }
     clean(&work);
     // the other quake mods that are on, read before the saved state is locked (a walk of ~mods)
+    #[cfg(not(feature = "extended"))]
+    let overlaps: Vec<String> = Vec::new();
+    #[cfg(feature = "extended")]
     let overlaps = if id == CUSTOM_QUAKE && result.is_ok() { dir.parent().map(crate::xtra_quake::overlapping).unwrap_or_default() } else { Vec::new() };
     // the state as it is now: the other built-in may have changed while this one built
     update(|all| {
@@ -711,10 +727,16 @@ fn game_guard(state: &Arc<Mutex<AppState>>) -> Result<(), String> {
 
 /// Turns a built-in on or off and/or sets its excluded heroes, building or removing its files to match.
 #[tauri::command]
-pub async fn xtra_builtins_set(app: tauri::AppHandle, id: String, on: Option<bool>, excluded: Option<Vec<String>>, quake: Option<crate::xtra_quake::Options>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<BuiltinView>, String> {
+pub async fn xtra_builtins_set(app: tauri::AppHandle, id: String, on: Option<bool>, excluded: Option<Vec<String>>, quake: Option<crate::xtra_quake_options::Options>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<BuiltinView>, String> {
+    #[cfg(feature = "extended")]
+    if id == CUSTOM_QUAKE || id == DEFAULT_SKIN { crate::xtra_activation::require()?; }
     if !IDS.contains(&id.as_str()) {
         return Err(format!("No built-in mod called {id}"));
     }
+    if !crate::xtra_edition::EXTENDED && quake.is_some() {
+        return Err("These options are unavailable in Standard".into());
+    }
+    #[cfg(feature = "extended")]
     if let Some(q) = &quake {
         q.look()?; // a color that is not one is refused before anything is saved
     }
@@ -777,7 +799,8 @@ pub async fn xtra_builtins_refresh(app: tauri::AppHandle, state: State<'_, Arc<M
         }
     }
     // the quake mods that are on now, read off the main thread (they may have changed since the last build)
-    if load().get(CUSTOM_QUAKE).is_some_and(|s| s.on) {
+    #[cfg(feature = "extended")]
+    if crate::xtra_edition::features_unlocked() && load().get(CUSTOM_QUAKE).is_some_and(|s| s.on) {
         let root = dir.parent().map(Path::to_path_buf).unwrap_or_default();
         let found = tauri::async_runtime::spawn_blocking(move || crate::xtra_quake::overlapping(&root)).await.unwrap_or_default();
         update(|all| all.entry(CUSTOM_QUAKE.to_string()).or_default().overlaps = found)?;
@@ -901,6 +924,13 @@ pub(crate) async fn table_hero(mod_path: &str, paks: &Path) -> Result<Option<Str
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn quake_is_available_only_in_extended() {
+        assert_eq!(super::IDS.contains(&super::CUSTOM_QUAKE), crate::xtra_edition::EXTENDED);
+        assert_eq!(super::IDS.contains(&super::DEFAULT_SKIN), crate::xtra_edition::EXTENDED);
+        assert!(super::IDS.contains(&super::SKIP_INTRO));
+    }
+
     use super::*;
     use serde_json::json;
 
@@ -1093,7 +1123,7 @@ mod tests {
             std::fs::create_dir_all(work.join("out")).unwrap();
             let out = work.join("out").join(stem(id));
             let started = std::time::Instant::now();
-            let made = rt.block_on(make(Path::new("."), id, &excluded, &crate::xtra_quake::Options::default(), &paks, &work, &out));
+            let made = rt.block_on(make(Path::new("."), id, &excluded, &crate::xtra_quake_options::Options::default(), &paks, &work, &out));
             println!("{id}: {made:?} in {:.1}s -> {}", started.elapsed().as_secs_f32(), out.display());
             assert!(made.is_ok() && out.with_extension("utoc").exists());
         }

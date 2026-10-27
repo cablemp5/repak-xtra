@@ -38,6 +38,19 @@
   --logo-x-color: #ededed;
 }
 
+/* repakxploit's optional AMOLED palette; raised controls retain contrast against the black panels. */
+:root[data-edition="extended"][data-amoled] {
+  --bg-darkest: #000;
+  --bg-darker: #000;
+  --bg-dark: #000;
+  --bg-light: #101010;
+  --bg-lighter: #191919;
+  --panel-bg: #000;
+  --header-bg: #000;
+  --status-bar-bg: #000;
+  --input-bg: #080808;
+}
+
 /* Geist and Geist Mono (OFL, bundled in ./fonts, one variable file each covering 100-900): UI and code */
 @font-face {
   font-family: 'Geist';
@@ -2066,6 +2079,9 @@ html[data-motion="off"] .lo-row .fp-lead.is-busy .lo-on-dot { animation: none; }
    amber for the live dev copy (dev.ps1), instead of blue */
 :root[data-build="test"] .wm { --wm-xtra: #12c85a; }
 :root[data-build="dev"] .wm { --wm-xtra: #ff7a00; }
+:root[data-edition="extended"]:not([data-build="dev"]) .wm { --wm-xtra: #ef4444; }
+:root[data-edition="extended"][data-build="test"] .wm { --wm-xtra: #a855f7; }
+:root[data-edition="extended"][data-build="dev"] .wm { --wm-xtra: #ec4899; }
 
 /* Setup > Mod previews: its two parts (the kit, Blender) as rows with a check when present, their links on the right;
    a quiet trust line while Blender is missing or installing */
@@ -3022,3 +3038,18 @@ html[data-motion="off"] .repakx-progress-indicator, html[data-motion="off"] .upd
 html[data-motion="off"] .toast-item.is-working .toast-title, html[data-motion="off"] .log-drawer-header.is-loading .log-drawer-status-text,
 html[data-motion="off"] .transfer-progress-view .progress-info span:first-child, html[data-motion="off"] .download-progress .progress-text,
 html[data-motion="off"] .upd-progress > span, html[data-motion="off"] .repakx-progress-label { animation: none !important; background-position: 50% 0 !important; }
+
+/* The extended access screen mounts before any application window content. */
+.extended-access { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; overflow-y: auto; padding: 32px 24px; background: var(--bg-darkest); }
+.extended-access-card { width: min(380px, 100%); flex-shrink: 0; margin-block: auto; display: flex; flex-direction: column; gap: 14px; color: var(--text-primary); }
+.extended-access-card .wm { align-self: center; margin-bottom: 18px; }
+.extended-access-card p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text-secondary); text-align: center; }
+.extended-access-card label { font-size: 13px; margin-bottom: -6px; }
+.extended-access-card input { padding: 12px; border: 1px solid var(--input-border); border-radius: 8px; color: inherit; background: var(--input-bg); font: inherit; }
+.extended-access-card [role=alert] { color: #f87171; }
+.extended-access-community { margin-top: 10px; padding-top: 22px; border-top: 1px solid var(--panel-border); }
+.extended-access-community .cd-meta { flex-wrap: wrap; }
+.extended-access-community .cd-members { margin-left: 0; }
+
+.legacy-setup { margin: 12px 0; padding: 16px; border: 1px solid #a16207; border-radius: 10px; background: #713f121a; }
+.legacy-setup p { margin: 8px 0; font-size: 14px; line-height: 1.5; }

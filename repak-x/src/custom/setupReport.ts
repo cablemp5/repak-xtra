@@ -1,3 +1,4 @@
+import { EXTENDED, LOADER_NAME } from './edition'
 // repakxtra: Copy setup report (Settings > Help & Community, and Setup). Plain text a helper can read in Discord: the
 // app and loader state first, then the mods that are on, so the summary survives Discord's 2,000 character cut. No
 // absolute path and no Windows user name: mods are named from ~mods down.
@@ -66,8 +67,8 @@ export function buildReport(r: ReportInput) {
     '```',
     `repakxtra ${r.version}${r.repakx ? ` (RepakX ${r.repakx})` : ''}, ${r.launcher}`,
     `Signature bypass: ${r.bypass}`,
-    `Project Galacta: ${r.galacta}`,
-    `Sigeon: ${r.sigeon}`,
+    `${LOADER_NAME}: ${r.galacta}`,
+    ...(EXTENDED ? [`Sigeon: ${r.sigeon}`] : []),
     `Mods: ${r.on.length} on, ${r.off} off`,
     ...(r.flags ? [`Mods that are on: ${r.flags}`] : []),
     `Conflicts: ${r.conflicts}`,
@@ -106,7 +107,7 @@ export async function gatherReport(): Promise<string> {
     settled(invoke<string>('get_app_version')),
     settled(invoke<{ state: string }>('setup_bypass_status')),
     settled(invoke<Galacta>('setup_galacta_status', { online: false })),
-    settled(invoke<{ state: string; configured: boolean }>('sigeon_status')),
+    EXTENDED ? settled(invoke<{ state: string; configured: boolean }>('sigeon_status')) : Promise.resolve(null),
     settled(invoke<{ file_path: string; mod_paths: string[]; files?: string[] }[]>('check_mod_clashes', { quiet: true })),
     settled(invoke<Crash | null>('xtra_newest_crash')),
   ])

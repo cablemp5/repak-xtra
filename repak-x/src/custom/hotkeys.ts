@@ -1,3 +1,4 @@
+import { EXTENDED } from './edition'
 // repakxtra: extra keyboard shortcuts plus the full list shown in the F1 help (ShortcutsHelpModal).
 // Upstream keys are handled in App.tsx; L in loadoutStore.ts, Ctrl+1-9 in Loadouts.tsx, S in
 // SigeonControl.tsx, zoom in uiPrefs.tsx. The ones below drive existing buttons, so they follow
@@ -53,7 +54,7 @@ export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
     ],
   },
   {
-    title: 'Loadouts and Sigeon',
+    title: EXTENDED ? 'Loadouts and Sigeon' : 'Loadouts',
     items: [
       { keys: ['L'], action: 'Switch between Loadouts and Library' },
       { keys: ['Ctrl', '1–9'], action: 'Turn the loadout pinned to 1–9 on/off (its page: More > Hotkey)' },
@@ -61,7 +62,7 @@ export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
       { keys: ['Ctrl', 'V'], action: 'Paste an image onto the card under the mouse' },
       { keys: ['Ctrl', 'Scroll'], action: 'Change the card size on Loadouts' },
       { keys: ['Esc'], action: "Back from a loadout's page" },
-      { keys: ['S'], action: 'Cycle Sigeon through Off and each config (with its header button shown)' },
+      ...(EXTENDED ? [{ keys: ['S'], action: 'Cycle Sigeon through Off and each config (with its header button shown)' }] : []),
     ],
   },
 ]

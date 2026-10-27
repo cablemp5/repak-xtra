@@ -1,3 +1,4 @@
+import { EXTENDED, LOADER_NAME, LOADER_PAK, APP_NAME } from './edition'
 // repakxtra: Setup, what the game needs to load mods (backend: xtra_setup.rs). The UTOC signature bypass ships inside
 // repakxtra; Project Galacta comes from its GitHub releases, with an update check and the release notes.
 import { useEffect, useState } from 'react'
@@ -29,7 +30,7 @@ const NEXUS = 'https://www.nexusmods.com/marvelrivals/mods/2940'
 const LOADER = 'https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases/tag/v7.7.0'
 const VIRUSTOTAL = 'https://www.virustotal.com/gui/file/251d2830ec8c1f3ed804ce4d8340705264642435cd3218308d18c7ee314db776'
 const GALACTA = 'https://github.com/0xSaturno/ProjectGalacta'
-const GALACTA_PAK = '!ProjectGalacta_9999999_P.pak'
+const GALACTA_PAK = LOADER_PAK
 
 const open = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
 const BYPASS_LABEL: Record<Bypass['state'], string> = {
@@ -53,7 +54,7 @@ function Notes({ text }: { text: string }) {
   )
 }
 
-function Changelog({ g, title, onClose, product = 'Project Galacta' }: {
+function Changelog({ g, title, onClose, product = `${LOADER_NAME}` }: {
   g: Pick<Galacta, 'latest' | 'published' | 'notes' | 'url'>; title: string; onClose: () => void; product?: string
 }) {
   return (
@@ -88,7 +89,7 @@ export function BlenderTrust() {
       </button>
       <div className="t-acc-panel" data-open={shown} ref={el => el?.toggleAttribute('inert', !shown)}>
         <div className="t-acc-panel-inner">
-          <p>Blender is free, open-source 3D software from the Blender Foundation. repakxtra installs the official release
+          <p>Blender is free, open-source 3D software from the Blender Foundation. {APP_NAME} installs the official release
             through winget, Windows' own package manager, and Windows asks for admin rights once. <a href={BLENDER} onClick={e => { e.preventDefault(); open(BLENDER) }}>blender.org/download</a></p>
         </div>
       </div>
@@ -258,7 +259,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   const check = () => run('check', async () => {
     const g = remember(await invoke<Galacta>('setup_galacta_status', { online: true }))
     setGalacta(g)
-    if (g.up_to_date === true) alert.success('Project Galacta', `Up to date (${g.latest}).`)
+    if (g.up_to_date === true) alert.success(`${LOADER_NAME}`, `Up to date (${g.latest}).`)
   })
   const install = () => run('install-galacta', async () => {
     const wasInstalled = Boolean(galacta?.installed)
@@ -295,7 +296,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
         <div className="modal-header">
           <h2>Mod setup</h2>
           <button type="button" className="lo-text-btn su-guided" onClick={() => { onClose(); window.dispatchEvent(new Event('repakxtra-first-run')) }}
-            title="The first-launch setup: game folder, bypass, Project Galacta, previews, and your first mods, one screen"><ListChecks size={14} /> Guided setup</button>
+            title={`The first-launch setup: game folder, bypass, ${LOADER_NAME}, previews, and your first mods, one screen`}><ListChecks size={14} /> Guided setup</button>
           <CopySetupReport alert={alert} className="lo-text-btn su-report" />
           <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
           {/* its own line under the title row, so the header buttons never squeeze it */}
@@ -307,7 +308,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
             <div className="su-card-head">
               <div>
                 <h3>Signature bypass</h3>
-                <p>Lets the game load mods that replace its files. Every mod needs it. Comes with repakxtra.</p>
+                <p>Lets the game load mods that replace its files. Every mod needs it. Comes with {APP_NAME}.</p>
               </div>
               <span className={`su-chip is-${b?.state ?? 'missing'}`}>{b ? BYPASS_LABEL[b.state] : 'Checking…'}</span>
             </div>
@@ -322,14 +323,14 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                 </div>
                 {bypassOn && <span className="su-part-links">
                   {b.state === 'installed' && <button type="button" className="su-link" disabled={Boolean(busy)}
-                    onClick={() => (b.sigeon_on ? setConfirmOff('disable') : act('disable'))}>Turn off</button>}
+                    onClick={() => (EXTENDED && b.sigeon_on ? setConfirmOff('disable') : act('disable'))}>Turn off</button>}
                   <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => setConfirmOff('remove')}>Remove</button>
                 </span>}
               </li>
             </ul>
             {confirmOff && <ConfirmRow yes={confirmOff === 'remove' ? 'Remove' : 'Turn off anyway'} onYes={() => act(confirmOff)} onNo={() => setConfirmOff(null)}
               text={confirmOff === 'disable' ? 'Sigeon loads through the same loader, so it turns off too.'
-                : `Remove the loader and bypass? Mods stop loading${b?.sigeon_on ? ', and Sigeon turns off too' : ''}.`} />}
+                : `Remove the loader and bypass? Mods stop loading${EXTENDED && b?.sigeon_on ? ', and Sigeon turns off too' : ''}.`} />}
             {/* its progress above the buttons, like Galacta's and the preview kit's */}
             <BypassTrack on={busy === 'install' || busy === 'enable'}
               done={finished === 'install' ? 'Installed. Mods load from the next game launch.' : finished === 'enable' ? 'On again. Mods load from the next game launch.' : undefined} />
@@ -374,8 +375,8 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
           <section className="su-card">
             <div className="su-card-head">
               <div>
-                <h3>Project Galacta</h3>
-                <p>Loads more types of mods and lets you toggle mods in game. By <a onClick={() => open(GALACTA)}>0xSaturno</a>.</p>
+                <h3>{LOADER_NAME}</h3>
+                <p>{EXTENDED ? 'Project Sigeon Minimal is included with repakxploit and updates with the app.' : <>Loads more types of mods and lets you toggle mods in game. By <a onClick={() => open(GALACTA)}>0xSaturno</a>.</>}</p>
               </div>
               <span className={`su-chip ${g?.up_to_date === false ? 'is-update' : g?.installed ? 'is-installed' : 'is-missing'}`}>{g ? galactaState : 'Checking…'}</span>
             </div>
@@ -388,11 +389,11 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                   {/* like the preview kit's line: its version (known once a check finds it matches), where, then What's new */}
                   <span>
                     {!g ? 'Checking…' : [g.installed && g.up_to_date && g.latest, g.installed ? `in ${where}${g.disabled ? ', off in the Library' : ''}` : 'Not installed'].filter(Boolean).join(' · ')}
-                    {g?.latest && <> · <button type="button" className="su-link" onClick={() => setNotes("What's new")}>{g.up_to_date === false ? `${g.latest} on GitHub` : `What's new in ${g.latest}`}</button></>}
+                    {g?.latest && <> · <button type="button" className="su-link" onClick={() => setNotes("What's new")}>{g.up_to_date === false ? `${g.latest} ${EXTENDED ? "bundled" : "on GitHub"}` : `What's new in ${g.latest}`}</button></>}
                   </span>
                 </div>
                 <span className="su-part-links">
-                  <button type="button" className="su-link" disabled={Boolean(busy)} onClick={check} title="Ask GitHub for the newest Project Galacta">
+                  <button type="button" className="su-link" disabled={Boolean(busy)} onClick={check} title={EXTENDED ? "Check against the bundled version" : `Ask GitHub for the newest ${LOADER_NAME}`}>
                     {busy === 'check' ? 'Checking…' : 'Check for updates'}
                   </button>
                   {g?.installed && <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => setAskGalacta(true)}
@@ -400,9 +401,9 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                 </span>
               </li>
             </ul>
-            {askGalacta && g?.installed && <ConfirmRow text="Remove Project Galacta? It goes to Recently deleted for 7 days." yes="Remove"
+            {askGalacta && g?.installed && <ConfirmRow text={`Remove ${LOADER_NAME}? It goes to Recently deleted for 7 days.`} yes="Remove"
               onYes={removeGalacta} onNo={() => setAskGalacta(false)} />}
-            <GalactaTrack on={busy === 'install-galacta'} done={finished === 'install-galacta' ? `Project Galacta ${galacta?.latest ?? ''} is in your mods folder`.replace('  ', ' ') : undefined} />
+            <GalactaTrack on={busy === 'install-galacta'} done={finished === 'install-galacta' ? `${LOADER_NAME} ${galacta?.latest ?? ''} is in your mods folder`.replace('  ', ' ') : undefined} />
             {/* Install or update, and where to: only when one is offered */}
             {(!g?.installed || g.up_to_date === false) && (
               <div className="su-actions">
@@ -423,7 +424,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
         {/* One switch for both startup checks (SetupButton: Project Galacta and the preview kit), so it lives under all the cards */}
         <div className="su-modal-foot">
           <Checkbox checked={auto} onChange={(v: boolean) => { setAuto(v); localStorage.setItem(AUTO_KEY, v ? '1' : '0') }}>
-            Check for Project Galacta and preview kit updates when repakxtra starts
+            Check for {LOADER_NAME} and preview kit updates when {APP_NAME} starts
           </Checkbox>
         </div>
         {notes && g && <Changelog g={g} title={notes} onClose={() => setNotes(null)} />}
@@ -458,7 +459,7 @@ export default function SetupButton({ alert }: { alert: Alert }) {
       remember(g)
       if (!g.installed || g.up_to_date !== false) return
       setAttention(true)
-      const id = alert.info('Project Galacta update', `${g.latest} is out.`, {
+      const id = alert.info(`${LOADER_NAME} update`, `${g.latest} is out.`, {
         duration: 12000,
         action: { label: 'Update', onClick: () => { alert.dismissAlert(id); setOpen(true) } },
       })

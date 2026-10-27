@@ -9,6 +9,23 @@ export default defineConfig({
   },
   plugins: [
     lucideSwap(),
+    {
+      name: 'edition-features', enforce: 'pre',
+      load(id: string) {
+        if (process.env.VITE_REPAKXTRA_EDITION === 'extended' && /[\\/]custom[\\/]LegacySetup\.tsx$/.test(id)) {
+          return 'export default function LegacySetup() { return null }'
+        }
+        if (process.env.VITE_REPAKXTRA_EDITION !== 'extended' && /[\\/]custom[\\/]ExtendedAccess\.tsx$/.test(id)) {
+          return 'export default function ExtendedAccess({ children }) { return children }'
+        }
+        if (process.env.VITE_REPAKXTRA_EDITION !== 'extended' && /[\\/]custom[\\/]SigeonControl\.tsx$/.test(id)) {
+          return 'export default function SigeonControl() { return null }'
+        }
+      },
+      generateBundle() {
+        this.emitFile({ type: 'asset', fileName: 'edition.json', source: JSON.stringify({ edition: process.env.VITE_REPAKXTRA_EDITION === 'extended' ? 'extended' : 'standard' }) })
+      },
+    },
     // repakxtra: the browser-preview mock (src/dev) is empty in the app's build, so none of its local fixtures and
     // preview PNGs get bundled
     { name: 'drop-dev-mock', apply: 'build', enforce: 'pre', load: (id: string) => (/[\/]src[\/]dev[\/]mockBackend\.ts$/.test(id) ? 'export {}' : null) },

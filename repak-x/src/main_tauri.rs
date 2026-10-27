@@ -7,6 +7,13 @@ mod asset_explorer;
 mod xtra_classify; // repakxtra: extra mod types, Project Galacta check
 mod xtra_made; // repakxtra: installed mods keep when they were made (the Needs VFX update check)
 mod xtra_vfx_check; // repakxtra: Check for VFX update (built for this game version or an older one)
+#[cfg(feature = "extended")]
+mod xtra_activation;
+#[cfg(not(feature = "extended"))]
+mod xtra_legacy_setup;
+mod xtra_edition;
+mod xtra_quake_options;
+#[cfg(feature = "extended")]
 mod xtra_sigeon; // repakxtra: Sigeon V2 switch
 mod xtra_setup; // repakxtra: Setup panel (signature bypass, Project Galacta)
 mod xtra_kit; // repakxtra: preview kit (previews on other PCs)
@@ -29,6 +36,7 @@ mod xtra_updater; // repakxtra: applies an update without string-built shell com
 mod xtra_conflicts; // repakxtra: conflict comparison by normalized asset path, cached file lists
 mod xtra_heroes; // repakxtra: the hero and skin folder of an asset path
 mod xtra_game; // repakxtra: the game update notice
+#[cfg(feature = "extended")]
 mod xtra_quake; // repakxtra: CustomQuake built-in (flat map textures)
 mod xtra_role; // repakxtra: Claim role on cable's Discord card
 mod xtra_extract; // repakxtra: unpacks only archives whose paths stay inside the output folder
@@ -8562,6 +8570,7 @@ fn main() {
             xtra_vfx::xtra_niagara_mods, // repakxtra: setup report
             xtra_builtins::xtra_builtins_list, // repakxtra: built-in mods
             xtra_builtins::xtra_builtins_set,
+            #[cfg(feature = "extended")]
             xtra_quake::xtra_quake_progress, // repakxtra: CustomQuake's build progress
             xtra_builtins::xtra_builtins_refresh,
             xtra_vfx::xtra_vfx_claim,
@@ -8586,17 +8595,36 @@ fn main() {
             xtra_capture::capture_game_now,
             xtra_capture::capture_game_hotkey,
             xtra_capture::capture_game_cancel,
+            #[cfg(feature = "extended")]
+            xtra_activation::extended_access_status,
+            #[cfg(feature = "extended")]
+            xtra_activation::extended_unlock,
+            #[cfg(feature = "extended")]
             xtra_sigeon::sigeon_status,
+            #[cfg(feature = "extended")]
             xtra_sigeon::sigeon_set,
+            #[cfg(feature = "extended")]
             xtra_sigeon::sigeon_read, // repakxtra: Sigeon editor
+            #[cfg(feature = "extended")]
             xtra_sigeon::sigeon_save,
+            #[cfg(feature = "extended")]
             xtra_sigeon::sigeon_create,
+            #[cfg(feature = "extended")]
             xtra_sigeon::sigeon_rename,
+            #[cfg(feature = "extended")]
             xtra_sigeon::sigeon_delete,
+            #[cfg(feature = "extended")]
             xtra_sigeon::sigeon_restore,
+            #[cfg(feature = "extended")]
             xtra_sigeon::sigeon_storage,
+            #[cfg(feature = "extended")]
             xtra_sigeon::sigeon_set_storage,
+            #[cfg(feature = "extended")]
             xtra_sigeon::sigeon_open,
+            #[cfg(not(feature = "extended"))]
+            xtra_legacy_setup::legacy_setup_status,
+            #[cfg(not(feature = "extended"))]
+            xtra_legacy_setup::legacy_setup_disable,
             xtra_setup::setup_bypass_status, // repakxtra: Setup panel
             xtra_setup::setup_bypass,
             xtra_setup::setup_galacta_status,

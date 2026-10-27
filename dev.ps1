@@ -1,16 +1,29 @@
 # Live dev copy: the real app (your library, the real backend) from the folder as it is, uncommitted edits included.
 #   .\dev.ps1    starts it; interface edits show about a second after a save, Rust edits rebuild and reopen the app.
+#   .\dev.ps1 -Edition Repakxploit    starts the pink repakxploit dev copy, with its real backend and shared-code gate.
 #                Stop it with Ctrl+C in this window (or close the app window).
-# The first start compiles a debug build (several minutes); later starts reuse it. It marks itself (amber "xtra", "dev
-# build" in the version line). It is the real app: mods, Setup and %APPDATA%\Repak-X are the stable copy's, and loadouts
+# The first start compiles a debug build (several minutes); later starts reuse it. It marks itself (amber "xtra" or pink
+# "xploit", "dev build" in the version line). It is the real app: mods, Setup and %APPDATA%\Repak-X are the stable copy's, and loadouts
 # and settings are shared both ways with it, the newest save winning (custom/devStorage.ts). The app runs one copy at a
 # time: close the stable repakxtra first. Before a PR, a real .\build.ps1 -Test is still the final check.
+param([ValidateSet('Standard', 'Repakxploit', 'Extended')][string]$Edition = 'Standard')
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
+$isExtended = $Edition -ne 'Standard'
+$env:VITE_REPAKXTRA_EDITION = if ($isExtended) { 'extended' } else { 'standard' }
+$env:VITE_REPAKXTRA_TEST = ''
+$env:REPAKXTRA_BUILD = 'dev'
+if ($isExtended) {
+    foreach ($resource in @('ProjectSigeon.zip', 'activation.sha256')) {
+        if (-not (Test-Path -LiteralPath (Join-Path 'repak-x\resources\extended' $resource))) {
+            throw 'Configure the local repakxploit archive and shared-code hash before starting its dev copy. See EDITIONS.md.'
+        }
+    }
+}
 # vswhere: the .NET NativeAOT linker step calls it to find MSVC
 $env:PATH = "$env:USERPROFILE\.cargo\bin;${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer;$env:PATH"
 
-if (Get-Process repakxtra, REPAK-X -ErrorAction SilentlyContinue) { throw 'Close repakxtra first (stable or test): the app runs one copy at a time.' }
+if (Get-Process repakxtra, REPAK-X -ErrorAction SilentlyContinue) { throw 'Close the running repakxtra or repakxploit copy first: the app runs one copy at a time.' }
 # The backend copies UAssetTool from here into the debug folder (repak-x\build.rs); publish it once if it is missing
 $uat = 'target\uassettool\UAssetTool.dll'
 $cli = 'target\uassettool-cli\UAssetTool.exe'
@@ -38,4 +51,7 @@ $env:SKIP_UASSET_TOOL_BUILD = '1'
 $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9223'
 Set-Location repak-x
 # Its own port (5180), so it never collides with the browser preview (npm run dev, 5173)
-npx tauri dev --config tauri.dev.conf.json
+$tauriArgs = @('tauri', 'dev', '--config', 'tauri.dev.conf.json')
+if ($isExtended) { $tauriArgs += @('--features', 'extended') }
+npx @tauriArgs
+if ($LASTEXITCODE -ne 0) { throw 'The dev copy stopped with an error.' }

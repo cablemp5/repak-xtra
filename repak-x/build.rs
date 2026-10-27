@@ -1,5 +1,22 @@
 // extern crate winres; // Disabled for Tauri - Tauri handles icons
 fn main() {
+    println!("cargo:rerun-if-env-changed=REPAKXTRA_BUILD");
+    println!("cargo:rerun-if-changed=resources/extended/activation.sha256");
+    if std::env::var_os("CARGO_FEATURE_EXTENDED").is_some() {
+        let hash = std::fs::read_to_string("resources/extended/activation.sha256").unwrap_or_default();
+        let hash = hash.trim();
+        let valid = hash.len() == 64 && hash.bytes().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase());
+        assert!(valid || std::env::var_os("CARGO_FEATURE_CUSTOM_PROTOCOL").is_none(), "Configure the shared extended code with scripts/Set-ExtendedUnlockCode.ps1 before building.");
+        println!("cargo:rustc-env=REPAKXTRA_UNLOCK_HASH={}", if valid { hash } else { "" });
+    }
+    // A direct Cargo build must not embed the other edition's previously built frontend.
+    println!("cargo:rerun-if-changed=dist/edition.json");
+    if std::env::var_os("CARGO_FEATURE_CUSTOM_PROTOCOL").is_some() {
+        let edition = if std::env::var_os("CARGO_FEATURE_EXTENDED").is_some() { "extended" } else { "standard" };
+        let expected = format!("{{\"edition\":\"{edition}\"}}");
+        let actual = std::fs::read_to_string("dist/edition.json").unwrap_or_default();
+        assert_eq!(actual.trim(), expected, "Build the matching frontend first: use build.ps1 -Edition {edition}");
+    }
     // Tauri build - handles icons and resources
     tauri_build::build();
     // repakxtra: tauri-build only watches tauri.conf.json, so a new icon kept the old one in the exe until a clean build

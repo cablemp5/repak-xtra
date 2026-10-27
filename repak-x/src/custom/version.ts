@@ -1,6 +1,7 @@
+import { RELEASE_PREFIX } from './edition'
 // repakxtra: repakxtra's own version, bumped for each repakxtra release. The Repak X version it is built on still comes
 // from Cargo (get_app_version).
-export const REPAKXTRA_VERSION = '0.25.0'
+export const REPAKXTRA_VERSION = '0.26.0'
 
 /** Which copy this is. "dev": the live dev copy (dev.ps1, or the browser preview), served by Vite. "test": made with
  *  `build.ps1 -Test`, which sets VITE_REPAKXTRA_TEST for the frontend build. Both mark themselves: the "xtra" in the app
@@ -17,7 +18,7 @@ export async function latestRelease(): Promise<{ tag_name: string; body?: string
   const res = await fetch('https://api.github.com/repos/cablemp5/repak-xtra/releases?per_page=30', { headers: { Accept: 'application/vnd.github.v3+json' } })
   if (!res.ok) return null
   const list: { tag_name: string; body?: string; draft?: boolean }[] = await res.json()
-  const parts = (t: string) => t.slice(1).split('.').map(Number)
+  const parts = (t: string) => t.slice(RELEASE_PREFIX.length).split('.').map(Number)
   const newer = (a: string, b: string) => { const x = parts(a), y = parts(b); const i = x.findIndex((n, k) => n !== y[k]); return i >= 0 && x[i] > y[i] }
-  return list.filter(r => !r.draft && /^v\d+\.\d+\.\d+$/.test(r.tag_name)).reduce<typeof list[0] | null>((best, r) => (!best || newer(r.tag_name, best.tag_name) ? r : best), null)
+  return list.filter(r => !r.draft && r.tag_name.startsWith(RELEASE_PREFIX) && /^\d+\.\d+\.\d+$/.test(r.tag_name.slice(RELEASE_PREFIX.length))).reduce<typeof list[0] | null>((best, r) => (!best || newer(r.tag_name, best.tag_name) ? r : best), null)
 }

@@ -1,4 +1,4 @@
-// repakxtra: Sigeon V2 setup, opened from the header while Sigeon reads "not configured" (no SigeonLoader.asi in the
+// repakxploit: Sigeon V2 setup, opened from the header while Sigeon reads "not configured" (no SigeonLoader.asi in the
 // Sigeon folder). Four numbered steps, the guided setup's own rows (FirstRun.tsx Step: a check once done, the action on
 // the right): where to buy it, the signature bypass it loads through, the folder its files stay in, then the editor
 // (a config and its license key).
@@ -20,8 +20,8 @@ const BYPASS_TEXT: Record<Bypass['state'], string> = {
   installed: 'Installed. Sigeon loads through it, like every mod.',
   disabled: 'Installed but turned off. Turn it on so Sigeon and your mods load.',
   partial: 'Part of it is missing. Repair puts the missing files back.',
-  other: 'A different loader or bypass is installed. Setup shows it and can install the one that comes with repakxtra.',
-  missing: 'Sigeon loads through it, like every mod. It comes with repakxtra.',
+  other: 'A different loader or bypass is installed. Setup shows it and can install the one that comes with repakxploit.',
+  missing: 'Sigeon loads through it, like every mod. It comes with repakxploit.',
 }
 
 export default function SigeonSetup({ alert, onClose, onEdit }: { alert: ReturnType<typeof useAlert>; onClose: () => void; onEdit: () => void }) {
@@ -73,7 +73,7 @@ export default function SigeonSetup({ alert, onClose, onEdit }: { alert: ReturnT
         <div className="modal-header">
           <div>
             <h2>Set up Sigeon V2</h2>
-            <p className="su-sub">A performance loader for Marvel Rivals. Once it is set up, repakxtra switches it on and off and edits its configs.</p>
+            <p className="su-sub">A performance loader for Marvel Rivals. Once it is set up, repakxploit switches it on and off and edits its configs.</p>
           </div>
           <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
@@ -96,14 +96,14 @@ export default function SigeonSetup({ alert, onClose, onEdit }: { alert: ReturnT
             action={<button type="button" className={ready ? 'lo-text-btn' : 'btn-primary'} onClick={choose}>
               {ready ? 'Change…' : <><FolderOpen size={14} /> Choose folder</>}</button>}>
             {ready
-              ? <p>Found in <code>{storage!.path}</code>. Leave the files there: repakxtra copies the loader and the config you pick into the game.</p>
+              ? <p>Found in <code>{storage!.path}</code>. Leave the files there: repakxploit copies the loader and the config you pick into the game.</p>
               : <p>Unzip the download into a folder you keep, like Desktop\Sigeon V2, and choose it.
                   {storage && <> <code>{storage.path}</code> has no SigeonLoader.asi.</>}</p>}
           </Step>
 
           <Step n={4} done={false} title="Config and license key"
             action={<button type="button" className="btn-primary" disabled={!ready} onClick={onEdit}><SlidersHorizontal size={14} /> Open the editor</button>}>
-            <p>Make a config in the editor, then paste your license key into it in Notepad. Your key stays in that file: repakxtra never shows it.
+            <p>Make a config in the editor, then paste your license key into it in Notepad. Your key stays in that file: repakxploit never shows it.
               {!ready && ' Choose the Sigeon folder first.'}</p>
           </Step>
         </ol>

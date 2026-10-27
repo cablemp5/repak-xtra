@@ -1,3 +1,4 @@
+import { EXTENDED } from './edition'
 // repakxtra: UI scale and show/hide switches for optional UI, saved in localStorage and applied
 // instantly in every window. Show/hide prefs set a data-show-* attribute on <html>; theme.css hides
 // the element when it is absent. UI scale uses the webview zoom, like Ctrl + in a browser.
@@ -15,7 +16,7 @@ import { savedItem } from './storageCarryOver'
 // `group`: the Settings section it is drawn in (Header buttons, On each mod), or its own place elsewhere.
 const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod' | 'warn' }[] = [
   { key: 'vfx-updater', label: 'VFX Updater', on: true, group: 'header' },
-  { key: 'sigeon', label: 'Sigeon', group: 'header' }, // hidden by default: Settings > Interface shows it
+  ...(EXTENDED ? [{ key: 'sigeon', label: 'Sigeon', group: 'header' as const }] : []), // hidden by default: Settings > Interface shows it
   { key: 'asset-explorer', label: 'Asset Explorer', group: 'header' },
   { key: 'share', label: 'Share', group: 'header' },
   { key: 'tools', label: 'Tools', group: 'header' },
@@ -44,11 +45,12 @@ const MINIMAL_TOASTS_KEY = 'repakxtra.minimalToasts' // off by default: '1' = on
 const DEFAULTS_KEY = 'repakxtra.defaults.v2'
 const PLAIN_INSTALL_KEY = 'repakxtra.install.plain' // off by default: '1' = the install dialog starts without a loadout
 const TAGS_OFF_KEY = 'repakxtra.tagsOff' // tag features hidden by default: '0' = shown
+const AMOLED_KEY = 'repakxtra.extended.amoled' // retained by Standard, applied only in repakxploit
 
 const storageKey = (key: string) => `repakxtra.show.${key}`
 const listeners = new Set<() => void>()
 
-const isOn = (key: string) => { const v = savedItem(storageKey(key)); return v === null ? Boolean(PREFS.find(p => p.key === key)?.on) : v === '1' }
+const isOn = (key: string) => { if (key === 'sigeon' && !EXTENDED) return false; const v = savedItem(storageKey(key)); return v === null ? Boolean(PREFS.find(p => p.key === key)?.on) : v === '1' }
 const getScale = () => { const s = Number(savedItem(SCALE_KEY)); return SCALES.includes(s) ? s : 100 }
 const tagsHidden = () => savedItem(HIDE_TAGS_KEY) === '1'
 const soundOn = () => savedItem(SOUND_KEY) !== '0'
@@ -61,6 +63,7 @@ const minimalToasts = () => savedItem(MINIMAL_TOASTS_KEY) === '1'
 /** Fewer pop-ups is on (Settings): a show/hide hotkey's toast stays away, its sound still plays. */
 export const fewerPopups = minimalToasts
 const tagsOff = () => savedItem(TAGS_OFF_KEY) !== '0'
+const amoledOn = () => EXTENDED && savedItem(AMOLED_KEY) === '1'
 /** Settings > Install mods without a loadout: the install dialog opens on Install without a loadout. */
 export const installsPlain = () => savedItem(PLAIN_INSTALL_KEY) === '1'
 
@@ -80,6 +83,7 @@ export const quietToast = (t: { color?: string; action?: unknown; isLoading?: bo
   minimalToasts() && (!t.color || t.color === 'success' || t.color === 'primary' || t.color === 'default') && !t.action && !t.isLoading
 
 const apply = () => {
+  document.documentElement.toggleAttribute('data-amoled', amoledOn())
   PREFS.forEach(({ key }) => document.documentElement.toggleAttribute(`data-show-${key}`, isOn(key)))
   document.documentElement.toggleAttribute('data-hide-tags', tagsHidden())
   document.documentElement.toggleAttribute('data-tags-off', tagsOff()) // theme.css hides the tags on mods
@@ -231,7 +235,26 @@ function PrefBox({ k, label }: { k: string; label: string }) {
     </div>
   )
 }
-const useAll = () => useSyncExternalStore(subscribe, () => PREFS.map(p => (isOn(p.key) ? 1 : 0)).join('') + '|' + getScale() + '|' + soundOn() + motionOn() +minimalToasts() + installsPlain() + tagsOff())
+const useAll = () => useSyncExternalStore(subscribe, () => PREFS.map(p => (isOn(p.key) ? 1 : 0)).join('') + '|' + getScale() + '|' + soundOn() + motionOn() +minimalToasts() + installsPlain() + tagsOff() + amoledOn())
+
+export function AmoledSection({ onEnable }: { onEnable: () => void }) {
+  useAll()
+  if (!EXTENDED) return null
+  return (
+    <div className="setting-section">
+      <h3>Appearance</h3>
+      <div className="setting-group">
+        <div className="setting-item">
+          <Checkbox checked={amoledOn()} onChange={(checked: boolean) => {
+            if (checked) onEnable()
+            update(AMOLED_KEY, checked ? '1' : '0')
+          }}><span>AMOLED black theme</span></Checkbox>
+          <p className="setting-subtext">Pure-black backgrounds with subtle borders to keep panels and controls clear.</p>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 /** Settings > Interface, top: UI scale. */
 export function UiScaleSection() {
@@ -357,7 +380,7 @@ export function BuiltinsPref() {
       <Checkbox checked={!shown} onChange={(checked: boolean) => update(storageKey('builtins'), checked ? '0' : '1')}>
         <span>Hide built-in mods</span>
       </Checkbox>
-      <p className="setting-subtext">Force default skin and Skip startup logos, on the Loadouts screen and in the Library. Uncheck to turn them on.</p>
+      <p className="setting-subtext">{EXTENDED ? 'Force default skin, CustomQuake, and Skip startup logos' : 'Skip startup logos'}, on the Loadouts screen and in the Library. Uncheck to turn them on.</p>
     </div>
   )
 }
@@ -377,6 +400,7 @@ export function WarningPrefs() {
 
 /** Every Interface setting kept in this file back to how it starts (App's own ones are reset by SettingsPanel). */
 export function resetUiPrefs() {
+  if (EXTENDED) localStorage.removeItem(AMOLED_KEY)
   for (const p of PREFS) localStorage.removeItem(storageKey(p.key))
   for (const k of [SCALE_KEY, SOUND_KEY, MOTION_KEY, MINIMAL_TOASTS_KEY, PLAIN_INSTALL_KEY, TAGS_OFF_KEY, HIDE_TAGS_KEY]) localStorage.removeItem(k)
   apply()

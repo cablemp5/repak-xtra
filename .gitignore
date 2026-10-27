@@ -47,3 +47,5 @@ repak-x/src/dev/fixture.local.json
 repak-x/src/dev/heroes.local/
 repak-x/src/dev/previews.local/
 repak-x/.impeccable/live/
+# Supplied binary assets are staged locally for Extended builds only.
+repak-x/resources/extended/
