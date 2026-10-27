@@ -21,6 +21,16 @@ repakxtra is a fork of **[Repak X](https://github.com/X-zant/Repak-X)** by **Xza
 > [!NOTE]
 > repakxtra is an unofficial fork: not made by the Repak X team, and not affiliated with NetEase or Marvel.
 
+## repakxtra and repakxploit
+
+**repakxtra (standard)** is the default download on the [latest release page](https://github.com/cablemp5/repak-xtra/releases/latest). Current users move to standard through the normal in-app update.
+
+**repakxploit** adds Force default skin, Custom Quake, the bundled Project Sigeon Minimal loader, and the Sigeon V2 editor and config switcher. These features are excluded from standard. The V2 editor still needs your separate SigeonLoader.asi. repakxploit downloads use separate releases tagged `extended-v<version>` in this same repository.
+
+repakxploit asks for the shared unlock code before opening. standard does not need a code. After moving to standard, an older-setup notice offers to disable leftover repakxploit mods while keeping backups; it never does this automatically.
+
+See [edition builds and release channels](EDITIONS.md) for build commands and publishing details.
+
 ## How to install repakxtra and your first mod
 
 You need a Windows PC with Marvel Rivals and a mod you downloaded. The mod is a `.pak`, `.zip`, `.rar` or `.7z` file;
@@ -139,7 +149,7 @@ game crashes. The VFX Updater rebuilds them on the new game files, many at once.
 > [!NOTE]
 > Rendered previews need the preview kit and [Blender](https://www.blender.org/download/) (free). **Setup > Mod previews** installs both.
 
-**Built-in mods:** **Force default skin** (every hero in their default skin, in matches and the lobby, with a picker for
+**Built-in mods:** **Force default skin (repakxploit only)** (every hero in their default skin, in matches and the lobby, with a picker for
 heroes that keep their own skins) and **Skip startup logos** (the game opens without the Marvel, NetEase and Unreal
 Engine logo videos). Both start off. repakxtra makes them from your own game files when you turn one on, and rebuilds them
 after every game update, so they never go stale. They sit at the bottom of the Loadouts screen and at the top of the
@@ -155,7 +165,7 @@ with Undo. Mods installed from a Nexus Mods download get an orange **Nexus** tag
 in mod details ("Nexus 12890, uploaded Sep 13, 2026" with **Open page**), read from the download's file name. On its
 first launch repakxtra finds the source of mods you installed earlier from the Nexus downloads still in your Downloads
 folder. Project Galacta mods get a magenta tag. File sizes are a setting (**Settings > Interface > On each mod**), and
-**Settings > Interface > On each mod** hides the Nexus tag and the Broken and Conflict warnings, and **Header buttons** hides Sigeon.
+**Settings > Interface > On each mod** hides the Nexus tag and the Broken and Conflict warnings, and **Header buttons** hides Sigeon (repakxploit only).
 
 **Installing:** drop zips, rars and 7zs as they are, no need to extract. Reinstalling or updating a mod builds the
 new version first and keeps the old one in **Recently deleted**, so a failed install leaves your mod as it was. `.pak.off`, `.utoc.off` and `.ucas.off` files
@@ -165,11 +175,11 @@ new version first and keeps the old one in **Recently deleted**, so a failed ins
 (or else change the hero it names), checked, to turn off together with Undo. **Copy setup report** (in **Setup** and
 **Settings > Help & Community**) copies your setup, conflicts, newest crash and the mods that are on as text for a help
 channel, with no folder paths or user name. Audio and UI mods say in their details when they only look broken
-(cooldown sounds in the practice range, icons under Sigeon).
+(cooldown sounds in the practice range, icons under Sigeon in repakxploit).
 
-**Setup:** the signature bypass ships inside the app (with an "Is it safe?" report), Project Galacta installs and updates in one click, and the preview kit and Blender install from here. Every install shows its steps as it goes.
+**Setup:** the signature bypass ships inside the app (with an "Is it safe?" report), Project Galacta installs and updates in one click in standard (extended uses bundled Project Sigeon Minimal), and the preview kit and Blender install from here. Every install shows its steps as it goes.
 
-**Sigeon V2 Editor:** create and edit configs and console overrides, and switch configs from the header. Your license key is never shown, and saving keeps its line as it was.
+**Sigeon V2 Editor (repakxploit only):** create and edit configs and console overrides, and switch configs from the header. Your license key is never shown, and saving keeps its line as it was.
 
 ## See it in action
 
@@ -204,7 +214,7 @@ want until it says **All resolved**.
 | `Ctrl+1` to `Ctrl+9` | Turn the loadout pinned to that number on or off (pick it in More > Hotkey on the loadout's page) |
 | `Ctrl+G` | Launch the game |
 | `Ctrl+O` | Install PAKs or archives |
-| `S` | Cycle Sigeon through Off and the installed configs |
+| `S` | Cycle Sigeon through Off and the installed configs (repakxploit only) |
 | `Ctrl+Shift+X` (in game) | [Capture the loadout's picture](#features), once **Capture screenshot** is open |
 
 ## Screenshots
@@ -219,7 +229,7 @@ want until it says **All resolved**.
     <td width="50%"><img src=".github/screenshots/setup.png" alt="Setup"><br><sub>Setup</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src=".github/screenshots/sigeon-editor.png" alt="Sigeon V2 Editor"><br><sub>Sigeon V2 Editor</sub></td>
+    <td width="50%"><img src=".github/screenshots/sigeon-editor.png" alt="Sigeon V2 Editor (repakxploit only)"><br><sub>Sigeon V2 Editor (repakxploit only)</sub></td>
     <td width="50%"><img src=".github/screenshots/settings.png" alt="Settings"><br><sub>Settings: UI scale, sound and motion</sub></td>
   </tr>
 </table>
@@ -295,7 +305,7 @@ updates. Without either, the **Capture** cover on a loadout's page uses a screen
 </details>
 
 <details>
-<summary><strong>Does the Sigeon V2 Editor see my license key?</strong></summary>
+<summary><strong>Does the Sigeon V2 Editor in repakxploit see my license key?</strong></summary>
 <br>
 
 It never shows it. The key stays out of the editor's window: **Open in Notepad** opens the config so you can paste the
@@ -439,3 +449,7 @@ This serves the interface in a normal browser with a mock backend (`src/dev/mock
 ## License
 
 GPL-3.0, the same as Repak X. See [LICENSE](LICENSE).
+
+### Standard and Extended builds
+
+See [edition builds and release channels](EDITIONS.md) for the two build commands, bundled Sigeon setup, and publishing both editions in this repository.

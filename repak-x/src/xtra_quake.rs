@@ -18,23 +18,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::Digest;
 
-/// The saved options (Settings of the built-in's card). A change rebuilds.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(rename_all = "camelCase", default)]
-pub struct Options {
-    /// hex RGB, "5d7a80"
-    pub base: String,
-    pub sky: String,
-    pub hide_plants: bool,
-    /// the lobby, MVP and showcase scenes too
-    pub lobby: bool,
-}
-
-impl Default for Options {
-    fn default() -> Self {
-        Options { base: "5d7a80".into(), sky: "82c6ed".into(), hide_plants: false, lobby: true }
-    }
-}
+pub use crate::xtra_quake_options::Options;
 
 impl Options {
     /// The options as a build uses them, or what is wrong with them.
@@ -471,8 +455,9 @@ impl Drop for Finished {
 
 /// The build in flight, if any (the card's bar).
 #[tauri::command]
-pub fn xtra_quake_progress() -> Option<Progress> {
-    PROGRESS.lock().unwrap_or_else(|e| e.into_inner()).clone()
+pub fn xtra_quake_progress() -> Result<Option<Progress>, String> {
+    crate::xtra_activation::require()?;
+    Ok(PROGRESS.lock().unwrap_or_else(|e| e.into_inner()).clone())
 }
 
 fn cache_path() -> std::path::PathBuf {

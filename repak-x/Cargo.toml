@@ -95,6 +95,7 @@ winreg = "0.52"
 
 [features]
 default = []
+extended = []
 # Serves frontend from embedded assets instead of dev server (required for production builds)
 custom-protocol = ["tauri/custom-protocol"]
 

@@ -1,3 +1,4 @@
+import { APP_NAME } from '../edition'
 // repakxtra: the VFX Updater window (route vfx-updater), in place of the upstream VFX Updater's panel. It works on the mods
 // folder's own VFX mods (xtra_vfx_mods): one list, like a loadout's Add mods, with the mods that need an update first and
 // already ticked, so after a game update the whole job is one press of Update (pipeline.ts). Each ticked mod shows its step
@@ -191,7 +192,7 @@ function Row({ mod, rowKey, loadouts, run, needs, partial, picked, open, busy, o
       ) : null}
       {loadouts.length > 0 && (
         <button type="button" className="vf-loadouts" onClick={() => void openLoadoutInMain(loadouts[0].id)}
-          title={`Open ${loadouts[0].name} in repakxtra${loadouts.length > 1 ? `. Also in ${loadouts.slice(1).map(l => l.name).join(', ')}` : ''}`}>
+          title={`Open ${loadouts[0].name} in ${APP_NAME}${loadouts.length > 1 ? `. Also in ${loadouts.slice(1).map(l => l.name).join(', ')}` : ''}`}>
           <i>In</i><span>{loadouts[0].name}</span>{loadouts.length > 1 && <b>{' '}+{loadouts.length - 1}</b>}
         </button>
       )}

@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:unit": "node scripts/run-asserts.mjs"
+    "test:unit": "node scripts/run-asserts.mjs",
+    "test:editions": "node scripts/check-extended-access.mjs && node scripts/check-amoled.mjs && node scripts/check-release-notes.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

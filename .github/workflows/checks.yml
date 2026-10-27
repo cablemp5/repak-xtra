@@ -18,9 +18,15 @@ env:
 
 jobs:
   checks:
-    name: Typecheck, build and test
+    name: Typecheck, build and test (${{ matrix.edition }})
     runs-on: windows-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [standard, extended]
+    env:
+      VITE_REPAKXTRA_EDITION: ${{ matrix.edition }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -45,10 +51,52 @@ jobs:
         working-directory: repak-x
         run: npm run test:unit
 
+      - name: Edition access, appearance and release-note checks
+        working-directory: repak-x
+        run: npm run test:editions
+
       # The Rust app embeds the built frontend, so it is built before the tests
       - name: Build frontend
         working-directory: repak-x
         run: npm run build
+
+      - name: Check shipped edition boundaries
+        working-directory: repak-x
+        run: node scripts/check-edition.mjs
+
+      # Fake files test embedding/selection without distributing Sigeon or using a real unlock hash.
+      # These jobs only run tests; no executable or archive is published.
+      - name: Prepare test-only repakxploit resources
+        if: matrix.edition == 'extended'
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+          $resourceDir = Join-Path $PWD 'repak-x/resources/extended'
+          $archivePath = Join-Path $resourceDir 'ProjectSigeon.zip'
+          $hashPath = Join-Path $resourceDir 'activation.sha256'
+          if ((Test-Path -LiteralPath $archivePath) -or (Test-Path -LiteralPath $hashPath)) {
+            throw 'Refusing to replace existing edition resources with test fixtures.'
+          }
+          New-Item -ItemType Directory -Force -Path $resourceDir | Out-Null
+          $archive = [IO.Compression.ZipFile]::Open($archivePath, [IO.Compression.ZipArchiveMode]::Create)
+          try {
+            foreach ($variant in @('Minimal', 'Splash', 'Settings', 'Splash + Settings')) {
+              foreach ($extension in @('pak', 'utoc', 'ucas')) {
+                $entry = $archive.CreateEntry("$variant/!ProjectSigeon_9999999_P.$extension")
+                $stream = $entry.Open()
+                try {
+                  $bytes = [Text.Encoding]::UTF8.GetBytes("CI fixture only: $variant $extension")
+                  $stream.Write($bytes, 0, $bytes.Length)
+                } finally { $stream.Dispose() }
+              }
+            }
+          } finally { $archive.Dispose() }
+          $sha = [Security.Cryptography.SHA256]::Create()
+          try {
+            $bytes = $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes('fixture-only'))
+            $hash = ([BitConverter]::ToString($bytes)).Replace('-', '').ToLowerInvariant()
+            [IO.File]::WriteAllText($hashPath, $hash)
+          } finally { $sha.Dispose() }
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -62,13 +110,18 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: checks-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: checks-${{ runner.os }}-
+          key: checks-${{ runner.os }}-${{ matrix.edition }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: checks-${{ runner.os }}-${{ matrix.edition }}-
 
       - name: Rust tests
         env:
           SKIP_UASSET_TOOL_BUILD: '1'   # the .NET asset tool is only needed to package, not to test
-        run: cargo test --locked -p repak-x --bin REPAK-X
+        run: |
+          if ('${{ matrix.edition }}' -eq 'extended') {
+            cargo test --locked -p repak-x --bin REPAK-X --features extended
+          } else {
+            cargo test --locked -p repak-x --bin REPAK-X
+          }
 
       - name: Native wrapper tests
         run: cargo test --locked -p uasset_app --lib

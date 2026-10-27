@@ -1,3 +1,4 @@
+import { APP_NAME } from './edition'
 // repakxtra: the welcome screen's first page (FirstRun.tsx shows it on the first launch, and from "Why loadouts?" on
 // its setup page). Loadouts in one line and three small looping demos (welcome.css) with real previews the app made
 // (covers/welcome): a loadout's preview, one switch for a whole set, and swapping between sets. Kept short on purpose
@@ -62,7 +63,7 @@ export default function WelcomeIntro({ onNext, onSkip }: { onNext: () => void; o
 
       <div className="modal-footer fr-foot">
         <button type="button" className="lo-text-btn" onClick={onSkip}>Skip setup</button>
-        <button type="button" className="btn-primary wi-next" onClick={onNext}>Set up repakxtra <ArrowRight size={15} /></button>
+        <button type="button" className="btn-primary wi-next" onClick={onNext}>Set up {APP_NAME} <ArrowRight size={15} /></button>
       </div>
     </div>
   )

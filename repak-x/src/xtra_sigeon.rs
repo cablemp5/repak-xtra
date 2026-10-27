@@ -131,6 +131,7 @@ fn paths(state: &State<'_, Arc<Mutex<crate::AppState>>>) -> (PathBuf, Option<Pat
 
 #[tauri::command]
 pub async fn sigeon_status(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<SigeonStatus, String> {
+    crate::xtra_activation::require()?;
     let (storage, plugins) = paths(&state);
     let configured = storage.join(ASI).exists();
     let problem = if !configured {
@@ -155,6 +156,7 @@ pub async fn sigeon_status(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Res
 /// `preset` = None turns Sigeon off.
 #[tauri::command]
 pub async fn sigeon_set(preset: Option<String>, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<String, String> {
+    crate::xtra_activation::require()?;
     if crate::is_game_process_running() {
         return Err("Marvel Rivals is running. Close the game before switching Sigeon.".into());
     }
@@ -421,6 +423,7 @@ fn restore_preset(storage: &Path, name: &str) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn sigeon_read(preset: String) -> Result<Vec<Line>, String> {
+    crate::xtra_activation::require()?;
     read_preset(&storage_dir(), &preset)
 }
 
@@ -434,6 +437,7 @@ pub struct Saved {
 /// Saves a preset. When it is the one in use and the game is closed, the game's copy is refreshed too.
 #[tauri::command]
 pub async fn sigeon_save(preset: String, lines: Vec<Line>, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<Saved, String> {
+    crate::xtra_activation::require()?;
     let (storage, plugins) = paths(&state);
     let was_live = in_use(&storage, plugins.as_deref(), &preset);
     save_preset(&storage, &preset, &lines)?;
@@ -447,6 +451,7 @@ pub async fn sigeon_save(preset: String, lines: Vec<Line>, state: State<'_, Arc<
 
 #[tauri::command]
 pub async fn sigeon_create(name: String, from: Option<String>) -> Result<(), String> {
+    crate::xtra_activation::require()?;
     create_preset(&storage_dir(), &name, from.as_deref())
 }
 
@@ -460,6 +465,7 @@ pub struct Storage {
 
 #[tauri::command]
 pub async fn sigeon_storage() -> Result<Storage, String> {
+    crate::xtra_activation::require()?;
     let path = storage_dir();
     Ok(Storage { loader: path.join(ASI).exists(), default: path == default_storage(), path: path.display().to_string() })
 }
@@ -467,6 +473,7 @@ pub async fn sigeon_storage() -> Result<Storage, String> {
 /// Picks the folder holding SigeonLoader.asi and the configs; None goes back to Desktop\Sigeon V2.
 #[tauri::command]
 pub async fn sigeon_set_storage(path: Option<String>) -> Result<Storage, String> {
+    crate::xtra_activation::require()?;
     let _ = fs::create_dir_all(crate::app_dir());
     match path.filter(|p| !p.trim().is_empty()) {
         Some(p) => {
@@ -483,6 +490,7 @@ pub async fn sigeon_set_storage(path: Option<String>) -> Result<Storage, String>
 /// Opens a config in Notepad, where the license key is pasted (the app never handles the key).
 #[tauri::command]
 pub async fn sigeon_open(preset: String) -> Result<(), String> {
+    crate::xtra_activation::require()?;
     let file = preset_file(&storage_dir(), &preset)?;
     if !file.exists() {
         return Err(format!("{} not found", file.display()));
@@ -492,17 +500,20 @@ pub async fn sigeon_open(preset: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn sigeon_rename(from: String, to: String) -> Result<(), String> {
+    crate::xtra_activation::require()?;
     rename_preset(&storage_dir(), &from, &to)
 }
 
 #[tauri::command]
 pub async fn sigeon_delete(name: String, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<(), String> {
+    crate::xtra_activation::require()?;
     let (storage, plugins) = paths(&state);
     delete_preset(&storage, plugins.as_deref(), &name)
 }
 
 #[tauri::command]
 pub async fn sigeon_restore(name: String) -> Result<(), String> {
+    crate::xtra_activation::require()?;
     restore_preset(&storage_dir(), &name)
 }
 

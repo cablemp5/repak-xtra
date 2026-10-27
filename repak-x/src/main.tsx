@@ -5,6 +5,7 @@ import './dev/mockBackend' // repakxtra: fake backend for the browser preview, i
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
+import ExtendedAccess from './custom/ExtendedAccess'
 import VfxUpdaterWindow from './custom/vfx/VfxUpdaterWindow' // repakxtra: in place of the upstream VFX Updater's page
 import AssetExplorerPage from './modules/asset-explorer/AssetExplorerPage'
 import './custom/theme.css' // repakxtra: theme for every window, last so it wins the cascade
@@ -34,6 +35,6 @@ const rootView = secondary ? secondary.view() : <App />
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    {rootView}
+    <ExtendedAccess>{rootView}</ExtendedAccess>
   </React.StrictMode>,
 )

@@ -84,7 +84,7 @@ export function checkReady() {
 }
 
 /** Where the claim stands, for the card. */
-export const useClaim = () => useSyncExternalStore(f => { subscribers.add(f); return () => { subscribers.delete(f) } }, () => state)
+export const useClaim = () => useSyncExternalStore(f => { subscribers.add(f); return () => { subscribers.delete(f) } }, () => state, () => 'unset' as ClaimState)
 
 if (import.meta.env.DEV) {
   console.assert(claimText('waiting') === 'Finish in your browser…', 'the click answers at once')

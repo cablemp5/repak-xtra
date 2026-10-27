@@ -1,3 +1,4 @@
+import { EXTENDED } from './edition'
 // repakxtra: Home's "Built-in" section (the Library lists them as rows too, custom/builtinRows.ts): the mods repakxtra makes itself from the game's own tables (xtra_builtins.rs),
 // Force default skin, Skip startup logos and CustomQuake. Each row has the same switch as a loadout card. Force default
 // skin's row folds open into the hero picker (the heroes that keep their own skins), CustomQuake's into its options (the
@@ -26,9 +27,9 @@ export type Builtin = { id: string; on: boolean; excluded: string[]; current: bo
 
 // icon: a pixel-grid drawing (PixelIcon.tsx), sharp at any display scale. A new built-in adds its drawing there
 const ABOUT: Record<string, { name: string; what: string; icon: BuiltinIconComponent }> = {
-  'force-default-skin': { name: 'Force default skin', what: 'Every hero shows their default skin, in matches and in the lobby', icon: PortraitCardIcon },
+  ...(EXTENDED ? { 'force-default-skin': { name: 'Force default skin', what: 'Every hero shows their default skin, in matches and in the lobby', icon: PortraitCardIcon } } : {}),
   'skip-intro-movies': { name: 'Skip startup logos', what: 'The game opens faster, without the Marvel, NetEase, and Unreal Engine logo videos that play each time it starts', icon: ClapperboardIcon },
-  'custom-quake': { name: 'CustomQuake', what: 'Every map texture turns one flat color you pick, the Quake look', icon: FlatTilesIcon },
+  ...(EXTENDED ? { 'custom-quake': { name: 'CustomQuake', what: 'Every map texture turns one flat color you pick, the Quake look', icon: FlatTilesIcon } } : {}),
 }
 export const QUAKE_DEFAULT: Quake = { base: '5d7a80', sky: '82c6ed', hidePlants: false, lobby: true }
 /** Suggested colors in the picker, the defaults first */
@@ -70,7 +71,7 @@ export function revealBuiltin(id: string) {
   setView('home')
   emit()
 }
-const load = () => invoke<Builtin[]>('xtra_builtins_list').then(v => { list = v; emit() }).catch(e => console.warn('[builtins]', e))
+const load = () => invoke<Builtin[]>('xtra_builtins_list').then(v => { list = v.filter(b => EXTENDED || (b.id !== 'custom-quake' && b.id !== 'force-default-skin')); emit() }).catch(e => console.warn('[builtins]', e))
 
 /** Rebuild the ones that are on but not current (a game update, a hero change a failed build left behind). Skipped while
  *  the game runs (its files are locked): at start from App.tsx, and from the section once the game closes. */
@@ -113,7 +114,7 @@ async function change(id: string, args: { on?: boolean; excluded?: string[]; qua
 }
 
 /** Stops CustomQuake's build (it saves Off, and the build gives up at its next batch). */
-const stopBuild = (id: string, alert: LoadoutProps['alert']) => { wanted.set(id, false); emit(); void invoke<Builtin[]>('xtra_builtins_set', { id, on: false }).then(v => { list = v; emit() }).catch(e => alert.error(`${ABOUT[id].name} not stopped`, String(e))) }
+const stopBuild = (id: string, alert: LoadoutProps['alert']) => { wanted.set(id, false); emit(); void invoke<Builtin[]>('xtra_builtins_set', { id, on: false }).then(v => { list = v.filter(b => EXTENDED || (b.id !== 'custom-quake' && b.id !== 'force-default-skin')); emit() }).catch(e => alert.error(`${ABOUT[id].name} not stopped`, String(e))) }
 
 const units = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'} ago`
 const ago = (secs?: number) => {
@@ -147,7 +148,7 @@ type Progress = { stage: string; detail?: string | null; fraction: number }
 function useProgress(on: boolean) {
   const [progress, setProgress] = useState<Progress | null>(null)
   useEffect(() => {
-    if (!on) { setProgress(null); return }
+    if (!EXTENDED || !on) { setProgress(null); return }
     let live = true
     const ask = () => invoke<Progress | null>('xtra_quake_progress').then(p => { if (live) setProgress(p) }).catch(() => undefined)
     void ask()
@@ -161,7 +162,7 @@ function useProgress(on: boolean) {
 export const buildNote = (b: Builtin, progress: Progress | null) => [progress?.detail, b.active ? 'The last build stays in use' : 'Not in the game yet'].filter(Boolean).join('. ')
 
 function status(b: Builtin, building: boolean, progress?: Progress | null) {
-  const long = b.id === 'custom-quake' ? ', about 10 minutes' : ''
+  const long = EXTENDED && b.id === 'custom-quake' ? ', about 10 minutes' : ''
   if (building && wanted.get(b.id) === false) return 'Stopping the build…'
   if (building && progress) return progress.stage
   if (building) return b.active ? `Rebuilding from your game files${long}. The last build stays in use` : `Building from your game files${long}. Not in the game yet`
@@ -366,7 +367,7 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
   const item = useRef<HTMLLIElement>(null)
   useEffect(() => {
     if (!revealed) return
-    if (b.id === 'force-default-skin') setPicking(true)
+    if (EXTENDED && b.id === 'force-default-skin') setPicking(true)
     const el = item.current
     el?.classList.add('is-flash')
     // after the picker has unfolded, so the row lands at the top with the heroes below it
@@ -377,7 +378,7 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
   const pick = useRef<HTMLButtonElement>(null)
   const Icon = about.icon
   const warn = !building && b.on && Boolean(b.error || b.overlaps?.length)
-  const quakeBuilding = building && b.id === 'custom-quake'
+  const quakeBuilding = building && EXTENDED && b.id === 'custom-quake'
   const progress = useProgress(quakeBuilding)
   const text = status(b, building, progress)
   const stopping = wanted.get(b.id) === false
@@ -390,7 +391,7 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
       <div className="bi-row">
         <span className="bi-icon" aria-hidden="true"><Icon size={20} /></span>
         <div className="bi-text">
-          <span className="bi-name">{about.name}{b.id === 'custom-quake' && <span className="bi-requires"> (Requires Project Sigeon · Native Support Coming Soon)</span>}</span>
+          <span className="bi-name">{about.name}</span>
           <span className={`bi-status${warn ? ' is-warn' : ''}`} title={text} aria-live="polite">
             {warn && <TriangleAlert size={13} aria-hidden="true" />}
             {building ? <span className="t-shimmer"><SwapText text={text} /></span> : <SwapText text={text} />}
@@ -402,27 +403,27 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
             </div>
           )}
         </div>
-        {b.id === 'force-default-skin' && (
+        {EXTENDED && b.id === 'force-default-skin' && (
           <button type="button" ref={pick} className="lo-text-btn bi-pick" aria-expanded={picking} aria-controls={pickerId} onClick={() => setPicking(v => !v)}
             title="Pick heroes that keep their own skins">
             {kept ? `${kept} ${kept === 1 ? 'hero keeps' : 'heroes keep'} skins` : 'Keep some heroes'}
             <ChevronDown size={13} className="bi-chev" aria-hidden="true" />
           </button>
         )}
-        {b.id === 'custom-quake' && (
+        {EXTENDED && b.id === 'custom-quake' && (
           <button type="button" ref={pick} className="lo-text-btn bi-pick" aria-expanded={picking} aria-controls={pickerId} onClick={() => setPicking(v => !v)}
             title="Colors, plants, and the lobby">
             Options
             <ChevronDown size={13} className="bi-chev" aria-hidden="true" />
           </button>
         )}
-        {!building && b.on && Boolean(b.overlaps?.length) && (
+        {EXTENDED && !building && b.on && Boolean(b.overlaps?.length) && (
           <button type="button" className="lo-text-btn" disabled={blocked} onClick={() => void turnOffOverlaps(b.overlaps!, alert)}
             title={blocked ? BLOCKED : 'CustomQuake stays on, the other quake mods go off'}>
             {b.overlaps!.length === 1 ? `Turn off ${nameKey(b.overlaps![0])}` : 'Turn them off'}
           </button>
         )}
-        {building && b.id === 'custom-quake' && wanted.get(b.id) !== false && (
+        {building && EXTENDED && b.id === 'custom-quake' && wanted.get(b.id) !== false && (
           <button type="button" className="lo-text-btn" onClick={() => stopBuild(b.id, alert)} title="Stops within a few seconds, nothing goes into the game"><Square size={11} fill="currentColor" aria-hidden="true" /> Stop building</button>
         )}
         {warn && retryable(b.error) && (
@@ -432,8 +433,8 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
         <Switch size="sm" checked={wanted.get(b.id) ?? b.on} isDisabled={building || blocked} onChange={on => change(b.id, { on }, alert)}
           aria-label={about.name} title={blocked ? BLOCKED : about.what} />
       </div>
-      {b.id === 'force-default-skin' && <HeroPicker id={pickerId} b={b} open={picking} building={building} blocked={blocked} onDone={done} alert={alert} />}
-      {b.id === 'custom-quake' && <QuakeOptions id={pickerId} b={b} open={picking} building={building} blocked={blocked} onDone={done} alert={alert} />}
+      {EXTENDED && b.id === 'force-default-skin' && <HeroPicker id={pickerId} b={b} open={picking} building={building} blocked={blocked} onDone={done} alert={alert} />}
+      {EXTENDED && b.id === 'custom-quake' && <QuakeOptions id={pickerId} b={b} open={picking} building={building} blocked={blocked} onDone={done} alert={alert} />}
     </li>
   )
 }
