@@ -84,7 +84,9 @@ const setCovers = new Map<string, { covers: string[]; members: string[] | null }
 const previewMode = (): string => (Array.isArray(mock.__previewMock) ? mock.__previewMock.shift() : mock.__previewMock) ?? 'ok'
 
 // repakxtra: the built-in mods' saved state (xtra_builtins.rs BuiltinView); heroes are the skin table's 10xx rows
-const builtins: any[] = ['force-default-skin', 'skip-intro-movies'].map(id => ({ id, on: false, excluded: [], current: false, active: false, heroes: [] as string[], path: `C:/Mock/Paks/~mods/.repakxtra-builtin/repakxtra-${id}_9999999_P.pak`, size: 150000 }))
+const builtins: any[] = ['force-default-skin', 'skip-intro-movies', 'custom-quake'].map(id => ({ id, on: false, excluded: [], current: false, active: false, heroes: [] as string[], path: `C:/Mock/Paks/~mods/.repakxtra-builtin/repakxtra-${id}_9999999_P.pak`, size: 150000,
+  ...(id === 'custom-quake' ? { quake: { base: '5d7a80', sky: '82c6ed', hidePlants: false, lobby: true } } : {}) }))
+// CustomQuake (xtra_quake.rs): localStorage 'mock.quakeError' = '1' fails its build, 'mock.quakeOverlap' = '1' says quakeV6 is on too
 
 if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
   mockWindows('main')
@@ -114,11 +116,17 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'xtra_builtins_set': {
         const b = builtins.find(x => x.id === args?.id)!
         if (args?.excluded) b.excluded = args.excluded
+        if (args?.quake) b.quake = args.quake
         if (args?.on !== undefined) b.on = args.on
-        if (!b.on) { b.current = b.active = false; return structuredClone(builtins) }
+        if (!b.on) { b.current = b.active = false; b.overlaps = undefined; return structuredClone(builtins) }
         return new Promise(r => setTimeout(r, 2500)).then(() => {
+          if (b.id === 'custom-quake' && localStorage.getItem('mock.quakeError') === '1') {
+            Object.assign(b, { current: false, error: localStorage.getItem('mock.quakeErrorKind') === 'write' ? 'Could not write the packages: a file is in use' : 'Not active yet. The game updated and repakxtra waits for the support files for it. It checks for them at every start' })
+            throw b.error
+          }
           Object.assign(b, { current: true, active: true, builtAt: Math.floor(Date.now() / 1000), error: undefined,
-            summary: b.id === 'skip-intro-movies' ? '12 startup logo videos turned off' : `${53 - b.excluded.length} heroes, ${697 - b.excluded.length * 13} skins set to default` })
+            ...(b.id === 'custom-quake' && localStorage.getItem('mock.quakeOverlap') === '1' ? { overlaps: ['C:/Program Files (x86)/Steam/steamapps/common/MarvelRivals/MarvelGame/Marvel/Content/Paks/~mods/quakeV6_9999999_P.pak'] } : {}),
+            summary: b.id === 'skip-intro-movies' ? '12 startup logo videos turned off' : b.id === 'custom-quake' ? '31,191 textures set in 9 minutes' : `${53 - b.excluded.length} heroes, ${697 - b.excluded.length * 13} skins set to default` })
           return structuredClone(builtins)
         })
       }

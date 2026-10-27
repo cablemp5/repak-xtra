@@ -30,10 +30,39 @@ const LOGO: &str = "Marvel/Content/Marvel/Data/DataTable/UI/Login/MarvelLogoVide
 const LOGO_FLAGS: [&str; 4] = ["bUsedInCn", "bUsedInHkMoTw", "bUsedInJpKr", "bUsedInEnRegion"];
 pub const DEFAULT_SKIN: &str = "force-default-skin";
 pub const SKIP_INTRO: &str = "skip-intro-movies";
-const IDS: [&str; 2] = [DEFAULT_SKIN, SKIP_INTRO];
+pub const CUSTOM_QUAKE: &str = "custom-quake"; // repakxtra: xtra_quake.rs
+const IDS: [&str; 3] = [DEFAULT_SKIN, SKIP_INTRO, CUSTOM_QUAKE];
 
-/// One build at a time: both share the work folder root and UAssetTool.
+/// One build at a time: they share the work folder root and UAssetTool.
 static BUILDING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+/// repakxtra: which one is building, so switching another one off or on never waits for it (CustomQuake takes minutes)
+static IN_FLIGHT: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+/// Set when the built-in building now is switched off: CustomQuake stops at its next batch instead of minutes later.
+static STOP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+fn stopped() -> bool {
+    STOP.load(std::sync::atomic::Ordering::Relaxed)
+}
+/// Every move of a built-in's files in the game folder, held only for the moves themselves.
+static INSTALL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Waits for a build of `id` in flight, if any (another built-in's build does not hold it up). `stop`: switched off, so
+/// that build gives up early (CustomQuake checks between batches). Turning it on never stops it.
+async fn wait_for_build(id: &str, stop: bool) {
+    if IN_FLIGHT.lock().unwrap_or_else(|e| e.into_inner()).as_deref() == Some(id) {
+        if stop {
+            STOP.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        drop(BUILDING.lock().await);
+    }
+}
+
+/// Clears IN_FLIGHT when a build ends, whichever way.
+struct Flight;
+impl Drop for Flight {
+    fn drop(&mut self) {
+        *IN_FLIGHT.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+}
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 struct Saved {
@@ -54,6 +83,14 @@ struct Saved {
     /// Every hero id the skin table held at the last build, so heroes the bundled hero list lacks still show
     heroes: Vec<String>,
     error: Option<String>,
+    /// CustomQuake's options, and the ones its files were made with (xtra_quake.rs)
+    #[serde(default)]
+    quake: Option<crate::xtra_quake::Options>,
+    #[serde(default)]
+    built_quake: Option<crate::xtra_quake::Options>,
+    /// CustomQuake: the other quake mods that were on at the last build or refresh (read off the main thread)
+    #[serde(default)]
+    overlaps: Vec<String>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -73,6 +110,11 @@ pub struct BuiltinView {
     /// Its main file (.pak), where the Library lists it, and the size of its files
     path: String,
     size: u64,
+    /// CustomQuake: its options, and the mods that are on and change the same map files
+    #[serde(skip_serializing_if = "Option::is_none")]
+    quake: Option<crate::xtra_quake::Options>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    overlaps: Vec<String>,
 }
 
 fn store_path() -> PathBuf {
@@ -135,7 +177,7 @@ fn fits(s: &Saved, build: &str) -> bool {
     made.sort();
     let mut wanted = s.excluded.clone();
     wanted.sort();
-    s.built_for.as_deref() == Some(build) && made == wanted
+    s.built_for.as_deref() == Some(build) && made == wanted && s.built_quake.clone().unwrap_or_default() == s.quake.clone().unwrap_or_default()
 }
 
 /// Off: the .pak goes aside, the rest stays, so turning it on again needs no rebuild.
@@ -173,6 +215,8 @@ fn view(id: &str, s: &Saved, dir: &Path, build: &str) -> BuiltinView {
         error: s.error.clone(),
         path: files_of(dir, id)[0].to_string_lossy().to_string(),
         size: files_of(dir, id).iter().filter_map(|f| std::fs::metadata(f).ok()).map(|m| m.len()).sum(),
+        quake: (id == CUSTOM_QUAKE).then(|| s.quake.clone().unwrap_or_default()),
+        overlaps: if id == CUSTOM_QUAKE && s.on { s.overlaps.clone() } else { Vec::new() },
     }
 }
 
@@ -363,7 +407,7 @@ fn check_flags(a: &[u8], b: &[u8], flipped: usize) -> Result<(), String> {
     Ok(())
 }
 
-const MAPPINGS_BEHIND: &str = "Not active yet. The game updated and its new mappings are not out. repakxtra checks again at every start";
+pub(crate) const MAPPINGS_BEHIND: &str = "Not active yet. The game updated and repakxtra waits for the support files for it. It checks for them at every start";
 
 fn read_json(p: &Path) -> Result<Value, String> {
     let t = std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
@@ -400,11 +444,14 @@ async fn usmap() -> Result<String, String> {
 }
 
 /// Extracts, edits, checks and packs one built-in into `out_dir`. Returns the summary and the hero ids seen.
-async fn make(tool: &Path, id: &str, excluded: &[String], paks: &Path, work: &Path, out_base: &Path) -> Result<(String, Vec<String>), String> {
+async fn make(tool: &Path, id: &str, excluded: &[String], quake: &crate::xtra_quake::Options, paks: &Path, work: &Path, out_base: &Path) -> Result<(String, Vec<String>), String> {
     let s = |p: &Path| p.to_string_lossy().to_string();
     let tool = tool.to_path_buf();
     ensure_vfx_uat_session(&tool).await?;
     let usmap = usmap().await?;
+    if id == CUSTOM_QUAKE { // repakxtra: new 1x1 packages, not a table edit
+        return crate::xtra_quake::make(&tool, &usmap, paks, work, out_base, quake, stopped).await.map(|summary| (summary, Vec::new()));
+    }
     let tables: &[&str] = if id == DEFAULT_SKIN { &[SKIN, UI] } else { &[LOGO] };
     let (legacy, json, edited, rt, staged) = (work.join("legacy"), work.join("json"), work.join("edited"), work.join("rt"), work.join("mod"));
     let sink = NoOpProgressSink;
@@ -468,8 +515,12 @@ async fn make(tool: &Path, id: &str, excluded: &[String], paks: &Path, work: &Pa
 /// Builds `id` into the built-in folder, replacing the old files only once the new ones exist.
 async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Result<(), String> {
     let _one = BUILDING.lock().await;
+    *IN_FLIGHT.lock().unwrap_or_else(|e| e.into_inner()) = Some(id.to_string());
+    STOP.store(false, std::sync::atomic::Ordering::Relaxed);
+    let _flight = Flight;
     let all = load();
     let excluded = all.get(id).map(|s| s.excluded.clone()).unwrap_or_default();
+    let quake = all.get(id).and_then(|s| s.quake.clone()).unwrap_or_default();
     let work = std::env::temp_dir().join("repak-x").join("xbuiltin").join(id);
     let _ = std::fs::remove_dir_all(&work);
     std::fs::create_dir_all(work.join("out")).map_err(|e| e.to_string())?;
@@ -489,16 +540,37 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
             s.error = None;
         });
     }
-    let made = async { make(&get_uasset_tool_path(app)?, id, &excluded, paks, &work, &out_base).await }.await;
+    // a finished build the game kept out last time (it opened while it built): made for this game and these options
+    let pending = std::env::temp_dir().join("repak-x").join("xbuiltin-pending").join(id);
+    let made_for = format!("{}|{:?}|{:?}", game_build(paks), { let mut e = excluded.clone(); e.sort(); e }, quake);
+    let kept = std::fs::read_to_string(pending.join("made-for")).ok().filter(|k| *k == made_for).and_then(|_| std::fs::read_to_string(pending.join("summary")).ok());
+    let (made, from) = match kept {
+        Some(summary) => (Ok((summary, Vec::new())), pending.join(stem(id))),
+        None => (async { make(&get_uasset_tool_path(app)?, id, &excluded, &quake, paks, &work, &out_base).await }.await, out_base.clone()),
+    };
+    let _moving = INSTALL.lock().unwrap_or_else(|e| e.into_inner());
     // turned off while it built (the switch saves first, then waits for this build): nothing goes into the game
     if !load().get(id).is_some_and(|s| s.on) {
-        let _ = std::fs::remove_dir_all(&work);
+        clean(&work);
         return park(dir, id);
     }
-    let result = match made {
-        Ok(made) => place(&out_base, dir, id).map(|_| made),
-        Err(e) => Err(e),
+    // the game or Repak X may have opened while it built (CustomQuake takes minutes): checked again before any file moves
+    use tauri::Manager;
+    let blocked = app.try_state::<Arc<Mutex<AppState>>>().map_or(Ok(()), |st| game_guard(st.inner())).and_then(|_| crate::xtra_identity::upstream_guard()).err();
+    let result = match (made, &blocked) {
+        (Ok((summary, _)), Some(_)) => Err(match keep(&from, &pending, id, &made_for, &summary) {
+            Ok(()) => "Marvel Rivals or Repak X opened while it built, so the new build waits. Close it, then try again to put it in".to_string(),
+            Err(e) => format!("Marvel Rivals or Repak X opened while it built, so the new build was not installed ({e}). Close it, then try again"),
+        }),
+        (Ok(made), None) => place(&from, dir, id).map(|_| made),
+        (Err(e), _) => Err(e),
     };
+    if result.is_ok() {
+        clean(&pending);
+    }
+    clean(&work);
+    // the other quake mods that are on, read before the saved state is locked (a walk of ~mods)
+    let overlaps = if id == CUSTOM_QUAKE && result.is_ok() { dir.parent().map(crate::xtra_quake::overlapping).unwrap_or_default() } else { Vec::new() };
     // the state as it is now: the other built-in may have changed while this one built
     update(|all| {
         let s = all.entry(id.to_string()).or_default();
@@ -506,6 +578,7 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
             Ok((summary, heroes)) => {
                 s.built_for = Some(game_build(paks));
                 s.built_excluded = excluded.clone();
+                s.built_quake = (id == CUSTOM_QUAKE).then(|| quake.clone());
                 s.nothing = false;
                 s.built_at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_secs());
                 s.summary = Some(summary.clone());
@@ -513,13 +586,15 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
                     s.heroes = heroes.clone();
                 }
                 s.error = None;
-                let _ = std::fs::remove_dir_all(&work);
+                if id == CUSTOM_QUAKE {
+                    s.overlaps = overlaps.clone();
+                }
             }
             Err(e) => {
                 log::warn!("[builtins] {id}: {e}");
                 s.error = Some(e.clone());
                 // files made for an older game build come out: an old table on a new patch can crash the game
-                if s.built_for.as_deref() != Some(game_build(paks).as_str()) && remove(dir, id).is_ok() {
+                if blocked.is_none() && s.built_for.as_deref() != Some(game_build(paks).as_str()) && remove(dir, id).is_ok() {
                     s.built_for = None;
                     s.nothing = false;
                 }
@@ -527,6 +602,29 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
         }
     })?;
     result.map(|_| ())
+}
+
+/// Keeps a finished build (its .pak, .utoc and .ucas) for the next try, with what it was made for.
+fn keep(from: &Path, pending: &Path, id: &str, made_for: &str, summary: &str) -> Result<(), String> {
+    if from.starts_with(pending) {
+        return Ok(()); // already the kept one
+    }
+    clean(pending);
+    std::fs::create_dir_all(pending).map_err(|e| e.to_string())?;
+    for ext in ["pak", "utoc", "ucas"] {
+        std::fs::copy(from.with_extension(ext), pending.join(format!("{}.{ext}", stem(id)))).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(pending.join("summary"), summary).map_err(|e| e.to_string())?;
+    std::fs::write(pending.join("made-for"), made_for).map_err(|e| e.to_string())
+}
+
+/// Removes a build's work folder (temp files, minutes of extracted game data), saying so when it cannot.
+fn clean(work: &Path) {
+    if let Err(e) = std::fs::remove_dir_all(work) {
+        if work.exists() {
+            log::warn!("[builtins] could not remove {}: {e}", work.display());
+        }
+    }
 }
 
 fn with_ext(p: &Path, x: &str) -> PathBuf {
@@ -608,18 +706,24 @@ fn game_guard(state: &Arc<Mutex<AppState>>) -> Result<(), String> {
 
 /// Turns a built-in on or off and/or sets its excluded heroes, building or removing its files to match.
 #[tauri::command]
-pub async fn xtra_builtins_set(app: tauri::AppHandle, id: String, on: Option<bool>, excluded: Option<Vec<String>>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<BuiltinView>, String> {
+pub async fn xtra_builtins_set(app: tauri::AppHandle, id: String, on: Option<bool>, excluded: Option<Vec<String>>, quake: Option<crate::xtra_quake::Options>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<BuiltinView>, String> {
     if !IDS.contains(&id.as_str()) {
         return Err(format!("No built-in mod called {id}"));
+    }
+    if let Some(q) = &quake {
+        q.look()?; // a color that is not one is refused before anything is saved
     }
     crate::xtra_identity::upstream_guard()?;
     game_guard(state.inner())?;
     let (dir, paks) = dirs_of(&state)?;
     let (changed, now_on) = update(|all| {
         let s = all.entry(id.clone()).or_default();
-        let changed = excluded.as_ref().is_some_and(|x| *x != s.excluded);
+        let changed = excluded.as_ref().is_some_and(|x| *x != s.excluded) || quake.as_ref().is_some_and(|q| *q != s.quake.clone().unwrap_or_default());
         if let Some(x) = excluded {
             s.excluded = x;
+        }
+        if let Some(q) = quake {
+            s.quake = Some(q);
         }
         if let Some(on) = on {
             s.on = on;
@@ -628,9 +732,10 @@ pub async fn xtra_builtins_set(app: tauri::AppHandle, id: String, on: Option<boo
         (changed, s.on)
     })?;
     if !now_on {
-        // after a build in flight: it sees the saved Off and places nothing, then its files (if any) go
-        let _one = BUILDING.lock().await;
-        if let Err(e) = park(&dir, &id) {
+        // after its own build in flight: it sees the saved Off and places nothing, then its files (if any) go
+        wait_for_build(&id, true).await;
+        let parked = { let _moving = INSTALL.lock().unwrap_or_else(|e| e.into_inner()); park(&dir, &id) };
+        if let Err(e) = parked {
             // still in the game: say it is still on rather than off with its files in place
             update(|all| {
                 let s = all.entry(id.clone()).or_default();
@@ -643,7 +748,8 @@ pub async fn xtra_builtins_set(app: tauri::AppHandle, id: String, on: Option<boo
         let build_now = game_build(&paks);
         // back on with the same heroes and game build: the set-aside files go back in, no rebuild
         if fits(&load()[&id], &build_now) {
-            let _one = BUILDING.lock().await;
+            wait_for_build(&id, false).await;
+            let _moving = INSTALL.lock().unwrap_or_else(|e| e.into_inner());
             unpark(&dir, &id)?;
         }
         if changed || !view(&id, &load()[&id], &dir, &build_now).current {
@@ -664,6 +770,12 @@ pub async fn xtra_builtins_refresh(app: tauri::AppHandle, state: State<'_, Arc<M
         if v.on && !v.current {
             let _ = build(&app, &v.id, &dir, &paks).await; // the error is saved on the built-in and shown on its card
         }
+    }
+    // the quake mods that are on now, read off the main thread (they may have changed since the last build)
+    if load().get(CUSTOM_QUAKE).is_some_and(|s| s.on) {
+        let root = dir.parent().map(Path::to_path_buf).unwrap_or_default();
+        let found = tauri::async_runtime::spawn_blocking(move || crate::xtra_quake::overlapping(&root)).await.unwrap_or_default();
+        update(|all| all.entry(CUSTOM_QUAKE.to_string()).or_default().overlaps = found)?;
     }
     Ok(views(&state))
 }
@@ -936,20 +1048,39 @@ mod tests {
         assert!(check_flags(&[1, 1, 5], &[0, 1, 6], 1).is_err());
     }
 
-    /// Builds both built-ins from the installed game into a temp folder (UAssetTool.dll must sit beside the test binary):
+    #[test]
+    fn a_kept_build_waits_for_the_next_try() {
+        let d = tempfile::tempdir().unwrap();
+        let out = d.path().join("out").join(stem(CUSTOM_QUAKE));
+        std::fs::create_dir_all(out.parent().unwrap()).unwrap();
+        for ext in ["pak", "utoc", "ucas"] {
+            std::fs::write(out.with_extension(ext), ext).unwrap();
+        }
+        let pending = d.path().join("pending").join(CUSTOM_QUAKE);
+        keep(&out, &pending, CUSTOM_QUAKE, "build|[]|opts", "31,011 textures set").unwrap();
+        assert_eq!(std::fs::read_to_string(pending.join("made-for")).unwrap(), "build|[]|opts");
+        assert_eq!(std::fs::read_to_string(pending.join(format!("{}.utoc", stem(CUSTOM_QUAKE)))).unwrap(), "utoc");
+        keep(&pending.join(stem(CUSTOM_QUAKE)), &pending, CUSTOM_QUAKE, "build|[]|opts", "x").unwrap();
+        assert_eq!(std::fs::read_to_string(pending.join("summary")).unwrap(), "31,011 textures set", "the kept one is left as it is");
+        assert!(keep(&d.path().join("missing").join("x"), &d.path().join("p2"), CUSTOM_QUAKE, "k", "s").is_err(), "nothing to keep");
+    }
+
+    /// Builds the built-ins from the installed game into a temp folder (UAssetTool.dll must sit beside the test binary):
     ///   REPAKXTRA_PAKS=<game Paks folder> cargo test -p repak-x --bin REPAK-X builtins_real -- --ignored --nocapture
+    /// REPAKXTRA_BUILTIN=<id> builds just that one.
     #[test]
     #[ignore]
     fn builtins_real() {
         let paks = PathBuf::from(std::env::var("REPAKXTRA_PAKS").expect("REPAKXTRA_PAKS"));
         let rt = tokio::runtime::Runtime::new().unwrap();
-        for (id, excluded) in [(DEFAULT_SKIN, vec!["1026".to_string()]), (SKIP_INTRO, vec![])] {
+        let only = std::env::var("REPAKXTRA_BUILTIN").ok();
+        for (id, excluded) in [(DEFAULT_SKIN, vec!["1026".to_string()]), (SKIP_INTRO, vec![]), (CUSTOM_QUAKE, vec![])].into_iter().filter(|(id, _)| only.as_deref().is_none_or(|o| o == *id)) {
             let work = std::env::temp_dir().join("repak-x").join("xbuiltin-test").join(id);
             let _ = std::fs::remove_dir_all(&work);
             std::fs::create_dir_all(work.join("out")).unwrap();
             let out = work.join("out").join(stem(id));
             let started = std::time::Instant::now();
-            let made = rt.block_on(make(Path::new("."), id, &excluded, &paks, &work, &out));
+            let made = rt.block_on(make(Path::new("."), id, &excluded, &crate::xtra_quake::Options::default(), &paks, &work, &out));
             println!("{id}: {made:?} in {:.1}s -> {}", started.elapsed().as_secs_f32(), out.display());
             assert!(made.is_ok() && out.with_extension("utoc").exists());
         }

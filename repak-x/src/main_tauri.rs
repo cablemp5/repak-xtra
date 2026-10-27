@@ -29,6 +29,7 @@ mod xtra_updater; // repakxtra: applies an update without string-built shell com
 mod xtra_conflicts; // repakxtra: conflict comparison by normalized asset path, cached file lists
 mod xtra_heroes; // repakxtra: the hero and skin folder of an asset path
 mod xtra_game; // repakxtra: the game update notice
+mod xtra_quake; // repakxtra: CustomQuake built-in (flat map textures)
 mod xtra_extract; // repakxtra: unpacks only archives whose paths stay inside the output folder
 mod xtra_vfx; // repakxtra: VFX fixing after game updates
 mod xtra_niagara; // repakxtra: the VFX Updater's Niagara step

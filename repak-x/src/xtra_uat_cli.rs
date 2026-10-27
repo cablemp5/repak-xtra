@@ -16,7 +16,7 @@ const EXE: &str = "uassettool-cli.exe";
 static ONE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// The command line: beside the app, else the workspace's build (dev copy, tests). None when switched off or missing.
-fn cli() -> Option<PathBuf> {
+pub(crate) fn cli() -> Option<PathBuf> {
     if std::env::var("REPAKXTRA_UAT_CLI").is_ok_and(|v| v.eq_ignore_ascii_case("off")) {
         return None;
     }
