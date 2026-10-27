@@ -21,7 +21,7 @@ const AGAIN = 'Discord did not answer. Try again in a moment.'
 export function claimText(state: ClaimState): string | null {
   switch (state) {
     case 'waiting': return 'Finish in your browser…'
-    case 'ok': return 'Done. You have the role.'
+    case 'ok': return null // the card's own "Role claimed" says it
     case 'not_member': return 'Join the server first, then claim again.'
     case 'denied': return 'Nothing changed. Try again any time.'
     case 'error': case 'timeout': return AGAIN
@@ -88,7 +88,7 @@ export const useClaim = () => useSyncExternalStore(f => { subscribers.add(f); re
 
 if (import.meta.env.DEV) {
   console.assert(claimText('waiting') === 'Finish in your browser…', 'the click answers at once')
-  console.assert(claimText('ok') === 'Done. You have the role.' && claimText('not_member') === 'Join the server first, then claim again.', 'ok and not a member')
+  console.assert(claimText('ok') === null &&claimText('not_member') === 'Join the server first, then claim again.', 'ok and not a member')
   console.assert(claimText('denied') === 'Nothing changed. Try again any time.', 'denied')
   console.assert(claimText('error') === AGAIN && claimText('timeout') === AGAIN, 'an error and the timeout read alike')
   console.assert(claimText('idle') === 'Get the repakxtra user role in this server.', 'before a click: which role, in which server')
