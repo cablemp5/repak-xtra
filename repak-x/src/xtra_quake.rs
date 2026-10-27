@@ -414,8 +414,10 @@ fn fix_names_referenced(uasset: &mut [u8], names: &[String]) -> Result<(), Strin
 
 // ---- the build ----
 
-/// Batches of settings read at a time: a batch of 500 textures takes about 90 MB on disk once its pixel data is gone.
-const BATCH: usize = 500;
+/// Batches of settings read at a time. Each call to UAssetTool costs about a second whatever its size (66 calls at 500, 9
+/// at 4,000), and with the pixel data left out a batch of 4,000 takes about 600 MB of temporary disk (1,000 real
+/// textures: 151 MB) and the same again in memory while its JSON is read.
+const BATCH: usize = 4000;
 /// Packages written per call to UAssetTool: the card's bar moves between calls and a stop is heard between them. A call costs
 /// about a second whatever its size (measured: 1,148 packages took 3.1 s in one call and 11.5 s in twelve), so not smaller.
 const WRITE_CHUNK: usize = 8000;
@@ -554,7 +556,6 @@ const STOPPED: &str = "Stopped: switched off while it built";
 
 /// Reads the settings of every listed texture, `BATCH` at a time, each batch deleted before the next.
 async fn read_settings(tool: &Path, usmap: &str, paks: &Path, listed: &[String], work: &Path, stop: fn() -> bool) -> Result<Vec<Vanilla>, String> {
-    let sink = crate::vfx_updater::progress::NoOpProgressSink;
     let mut all = Vec::with_capacity(listed.len());
     let mut done = 0;
     for batch in listed.chunks(BATCH) {
@@ -567,8 +568,24 @@ async fn read_settings(tool: &Path, usmap: &str, paks: &Path, listed: &[String],
         let (legacy, json) = (work.join("legacy"), work.join("json"));
         let _ = std::fs::remove_dir_all(&legacy);
         let _ = std::fs::remove_dir_all(&json);
-        // without their dependencies: a texture imports only engine classes
-        crate::vfx_updater::uasset_tool::extract_vanilla_assets_split(tool, &paks.to_string_lossy(), &legacy.to_string_lossy(), batch, batch, &sink).await?;
+        let began = std::time::Instant::now();
+        // without their dependencies (a texture imports only engine classes) and without their pixel data, which is 32 GB
+        // of the game and none of the settings (uassettool-patches 0008: the same .uasset and .uexp, checked byte for byte
+        // on 1,000 real textures). An older command line ignores the flag and extracts everything.
+        std::fs::create_dir_all(&legacy).map_err(|e| e.to_string())?;
+        let req = crate::vfx_updater::uasset_tool::VfxUatRequest {
+            game_paks: Some(paks.to_string_lossy().to_string()),
+            output_path: Some(legacy.to_string_lossy().to_string()),
+            filter_patterns: Some(batch.iter().map(|p| crate::vfx_updater::uasset_tool::to_package_path(p.trim_end_matches(".uasset"))).collect()),
+            with_deps: Some(false),
+            no_bulk: true,
+            ..uat_request("extract_iostore_legacy")
+        };
+        let r = crate::vfx_updater::uasset_tool::run_vfx_uat_request(tool, &req).await?;
+        if !r.success {
+            return Err(format!("Could not read the game's textures: {}", r.message));
+        }
+        let extracted = began.elapsed();
         let mut files = Vec::new();
         for e in walkdir::WalkDir::new(&legacy).into_iter().flatten().filter(|e| e.file_type().is_file()) {
             let ext = e.path().extension().map(|x| x.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
@@ -590,10 +607,12 @@ async fn read_settings(tool: &Path, usmap: &str, paks: &Path, listed: &[String],
         if !r.success {
             return Err(format!("Could not read the game's texture settings: {}", r.message));
         }
+        let converted = began.elapsed();
         let found = {
             let json = json.clone();
             blocking(move || read_batch(&json)).await?
         };
+        log::info!("[quake] {} textures read: extract {:.1} s, to JSON {:.1} s, parse {:.1} s", batch.len(), extracted.as_secs_f32(), (converted - extracted).as_secs_f32(), (began.elapsed() - converted).as_secs_f32());
         all.extend(found);
         done += batch.len();
         report(READING, done as f32 / listed.len() as f32, false, Some(format!("{} of {}", group_digits(done), group_digits(listed.len()))));
@@ -1344,6 +1363,52 @@ mod tests {
             }
         }
         println!("S2: {same} of {total} files byte for byte the same after packing and reading back");
+    }
+
+    /// read_settings on real game textures (a spread of 2,000 rows of the S1 props TSV, which was read with their pixel data):
+    /// REPAKXTRA_QUAKE_GAME=<props TSV> REPAKXTRA_USMAP=<usmap> REPAKXTRA_PAKS=<Paks folder> cargo test -p repak-x --bin REPAK-X
+    /// real_read -- --ignored --nocapture. The settings must be the TSV's, whatever the extract leaves out.
+    #[test]
+    #[ignore]
+    fn real_read() {
+        let tsv = std::fs::read_to_string(std::env::var("REPAKXTRA_QUAKE_GAME").unwrap()).unwrap();
+        let (usmap, paks) = (std::env::var("REPAKXTRA_USMAP").unwrap(), std::env::var("REPAKXTRA_PAKS").unwrap());
+        let mut want: Vec<Vanilla> = tsv
+            .lines()
+            .step_by(std::env::var("REPAKXTRA_READ_STEP").ok().and_then(|v| v.parse().ok()).unwrap_or(16))
+            .take(std::env::var("REPAKXTRA_READ_N").ok().and_then(|v| v.parse().ok()).unwrap_or(2000))
+            .map(|l| {
+                let f: Vec<&str> = l.split('\t').collect();
+                Vanilla { path: f[0].to_string(), compression: f[1].to_string(), lod_group: f[2].to_string(), srgb_off: f[3] == "false" }
+            })
+            .collect();
+        let listed: Vec<String> = want.iter().map(|t| t.path.clone()).collect();
+        let work = std::env::temp_dir().join("quake-real-read");
+        let _ = std::fs::remove_dir_all(&work);
+        struct Say;
+        impl log::Log for Say {
+            fn enabled(&self, _: &log::Metadata) -> bool {
+                true
+            }
+            fn log(&self, r: &log::Record) {
+                if r.target().contains("xtra_quake") {
+                    println!("{}", r.args());
+                }
+            }
+            fn flush(&self) {}
+        }
+        let _ = log::set_logger(&Say).map(|()| log::set_max_level(log::LevelFilter::Info));
+        uasset_toolkit::init_global_toolkit().expect("toolkit");
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let t = std::time::Instant::now();
+        let mut got = rt.block_on(read_settings(Path::new("."), &usmap, Path::new(&paks), &listed, &work, || false)).unwrap();
+        println!("{} textures read in {:.1} s", got.len(), t.elapsed().as_secs_f32());
+        want.sort_by(|a, b| a.path.cmp(&b.path));
+        got.sort_by(|a, b| a.path.cmp(&b.path));
+        assert_eq!(got.len(), want.len());
+        let wrong: Vec<&str> = got.iter().zip(&want).filter(|(g, w)| (&g.path, &g.compression, &g.lod_group, g.srgb_off) != (&w.path, &w.compression, &w.lod_group, w.srgb_off)).map(|(g, _)| g.path.as_str()).collect();
+        assert!(wrong.is_empty(), "{} differ from the TSV, first {:?}", wrong.len(), wrong.first());
+        let _ = std::fs::remove_dir_all(&work);
     }
 
     /// The build's write, fix and check steps on real texture settings (every 27th row of the S1 props TSV), in chunks:
