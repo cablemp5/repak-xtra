@@ -2970,6 +2970,7 @@ html[data-motion="off"] .cp-pop, html[data-motion="off"] .cp-swatch, html[data-m
 .bi-bar { height: 4px; margin-top: 6px; border-radius: 999px; overflow: hidden; background: var(--bg-lighter); }
 .bi-bar i { display: block; height: 100%; transition: width 0.4s var(--acc-ease); }
 .bi-count { flex: none; font-variant-numeric: tabular-nums; }
+.bi-count::before { content: "\00b7"; margin-right: 7px; }   /* a dot between the stage and its numbers */
 html[data-motion="off"] .bi-bar i { transition: none; animation: none !important; }
 .bq-switch { justify-self: start; gap: 10px; cursor: pointer; }
 html[data-motion="off"] .bi-hero, html[data-motion="off"] .bi-hero-check, html[data-motion="off"] .bi-hero-check svg, html[data-motion="off"] .bi-hero-face, html[data-motion="off"] .bi-hero-face img, html[data-motion="off"] .bi-pick .bi-chev { transition: none !important; }

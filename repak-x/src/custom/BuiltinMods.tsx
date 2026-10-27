@@ -30,7 +30,7 @@ const ABOUT: Record<string, { name: string; what: string; icon: BuiltinIconCompo
   'skip-intro-movies': { name: 'Skip startup logos', what: 'The game opens faster, without the Marvel, NetEase, and Unreal Engine logo videos that play each time it starts', icon: ClapperboardIcon },
   'custom-quake': { name: 'CustomQuake', what: 'Every map texture turns one flat color you pick, the Quake look', icon: FlatTilesIcon },
 }
-const QUAKE_DEFAULT: Quake = { base: '5d7a80', sky: '82c6ed', hidePlants: false, lobby: true }
+export const QUAKE_DEFAULT: Quake = { base: '5d7a80', sky: '82c6ed', hidePlants: false, lobby: true }
 /** Suggested colors in the picker, the defaults first */
 const QUAKE_PRESETS = { base: ['5d7a80', '808080', 'a69b8a', '6f8f6a', '3d4a5c', 'b07a63'], sky: ['82c6ed', 'b8dcf2', '1f2f4f', 'e9b9a0', '7a7f8c', '2c3e50'] }
 /** Whether two CustomQuake option sets make the same files: only a real change rebuilds. Pure. */
