@@ -2,7 +2,7 @@
 // crash (xtra_crash.rs xtra_crash_tiers): the ones holding the asset that crashed, then the ones changing the same skin,
 // then the same hero. When none match, the hero detection the Library uses (multi-hero mods). Checked ones turn off
 // together, with Undo.
-import { type ReactNode, useEffect, useState } from 'react'
+import { Fragment, type ReactNode, useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
 import Checkbox from '../components/ui/Checkbox'
@@ -122,7 +122,8 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
               <details className="cs-file" onToggle={e => setShowFile(e.currentTarget.open)}>
                 <summary>Crash details</summary>
                 {showFile && <div className="cs-details">
-                  <p className="cs-sub">{[p.crash_type, p.asset_path ?? 'The crash report names no asset.'].filter(Boolean).join('\n')}</p>
+                  {/* the path may break only before a slash, never inside a folder name */}
+                  <p className="cs-sub">{p.crash_type && <>{p.crash_type}<br /></>}{(p.asset_path ?? 'The crash report names no asset.').split('/').map((s, i) => <Fragment key={i}>{i > 0 && <><wbr />/</>}{s}</Fragment>)}</p>
                   <button type="button" className="lo-text-btn" onClick={() => void navigator.clipboard.writeText([p.crash_type, p.asset_path].filter(Boolean).join('\n'))}>Copy</button>
                 </div>}
               </details>
