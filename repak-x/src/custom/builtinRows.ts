@@ -1,3 +1,4 @@
+import { EXTENDED } from './edition'
 // repakxtra: the built-in mods (xtra_builtins.rs, custom/BuiltinMods.tsx) as rows of the Library's list, with a blue
 // Built-in badge. Their switch turns the built-in on or off. They are not real library entries: never selected,
 // renamed, deleted, given a priority or put in loadouts, so App.tsx and ModsList.tsx check isBuiltin before those.
@@ -15,11 +16,11 @@ const listOf = (names: string[]) => names.length <= 2 ? names.join(' and ') : `$
  *  Hidden Plants, Includes Lobby)" (the two colors always, a switch only when it is on). */
 export function builtinName(b: Pick<Builtin, 'id' | 'excluded' | 'quake'>, heroName: (id: string) => string | undefined) {
   const base = builtinAbout(b.id)?.name ?? b.id
-  if (b.id === 'custom-quake') {
+  if (EXTENDED && b.id === 'custom-quake') {
     const q = b.quake ?? QUAKE_DEFAULT
     return `${base} (${[`${colorName(q.base)} Map`, `${colorName(q.sky)} Sky`, q.hidePlants && 'Hidden Plants', q.lobby && 'Includes Lobby'].filter(Boolean).join(', ')})`
   }
-  if (b.id !== 'force-default-skin' || !b.excluded.length) return base
+  if (!EXTENDED || b.id !== 'force-default-skin' || !b.excluded.length) return base
   return `${base} (Except ${listOf(b.excluded.map(id => heroName(id) ?? `hero ${id}`).sort())})`
 }
 

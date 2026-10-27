@@ -1,11 +1,12 @@
 //! repakxtra: test and dev copies mark their window (and so taskbar) icon in their color, like the "xtra" in the header
 //! (custom/version.ts): green for a test build (`build.ps1 -Test` sets REPAKXTRA_BUILD=test for the Rust build), amber for
-//! the dev copy (dev.ps1 runs a debug build). The icon is the app's own x with its blues turned to that color, so no extra icon files exist.
+//! The icon is the app's own x with its blues turned to that color.
 
 /// How far this copy turns the icon's blues around the color wheel, in degrees, or None for the stable copy.
 fn mark() -> Option<f32> {
     if cfg!(debug_assertions) {
-        Some(170.0) // dev, amber
+    } else if crate::xtra_edition::EXTENDED {
+        Some(if option_env!("REPAKXTRA_BUILD") == Some("test") { 60.0 } else { 140.0 }) // purple test, red stable
     } else if option_env!("REPAKXTRA_BUILD") == Some("test") {
         Some(-80.0) // test, green
     } else {
@@ -42,6 +43,7 @@ pub fn tint_window_icon(app: &tauri::App) {
     use tauri::Manager;
     let Some(icon) = tinted(app.default_window_icon()) else { return };
     for window in app.webview_windows().values() {
+        if window.label() == "main" { let _ = window.set_title(crate::xtra_edition::APP_NAME); }
         let _ = window.set_icon(icon.clone());
     }
 }
@@ -61,6 +63,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn debug_builds_use_the_correct_dev_color() {
+        if cfg!(debug_assertions) {
+            assert_eq!(mark(), Some(if crate::xtra_edition::EXTENDED { 100.0 } else { 170.0 }));
+        }
+    }
+
+    #[test]
     fn recolor_turns_hues_and_keeps_white_and_alpha() {
         let px = [0x03, 0x4E, 0xFE, 255, 255, 255, 255, 200, 255, 0, 0, 0];
         assert_eq!(recolor(&px, 0.0), px.to_vec());
@@ -68,5 +77,16 @@ mod tests {
         let out = recolor(&px, -80.0);
         assert_eq!(&out[4..8], &[255, 255, 255, 200]); // white and its alpha untouched
         assert!(out[1] > out[2] && out[1] > out[0], "the blue turned green: {:?}", &out[..3]);
+    }
+
+    #[test]
+    fn extended_stable_and_test_have_distinct_colors() {
+        let blue = [0x03, 0x4E, 0xFE, 255];
+        let purple = recolor(&blue, 60.0);
+        let red = recolor(&blue, 140.0);
+        assert!(purple[2] > purple[0] && purple[0] > purple[1]);
+        assert!(red[0] > red[1] && red[0] > red[2]);
+        assert_eq!(purple[3], 255);
+        assert_eq!(red[3], 255);
     }
 }

@@ -1,3 +1,4 @@
+import { APP_NAME } from '../../custom/edition'
 // Asset Explorer - window shell (mirrors VfxUpdaterPage).
 
 import { useEffect } from 'react'
@@ -74,7 +75,7 @@ export default function AssetExplorerPage() {
 
     return (
         <div className="ae-window">
-            <TitleBar title="repakxtra Asset Explorer" />
+            <TitleBar title={`${APP_NAME} Asset Explorer`} />
             <div className="ae-window-body">
                 <AssetExplorerPanel />
             </div>

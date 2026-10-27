@@ -54,6 +54,6 @@ export function DiscordCard({ invite, fallbackName, claim = false }: { invite: s
 /** The Repak X community server (upstream's invite). */
 export const RepakXDiscord = () => <DiscordCard invite="nrud2gjUJk" fallbackName="Repak X" />
 
-export default function CableDiscord() {
-  return <DiscordCard invite="C7geHdWBP5" fallbackName="cable's server" claim />
+export default function CableDiscord({ claim = true }: { claim?: boolean } = {}) {
+  return <DiscordCard invite="C7geHdWBP5" fallbackName="cable's server" claim={claim} />
 }

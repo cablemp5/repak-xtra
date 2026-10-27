@@ -1,3 +1,4 @@
+import { EXTENDED, LOADER_NAME, APP_NAME } from './edition'
 // repakxtra: the first-launch setup. On the first launch it opens on what loadouts are (WelcomeIntro.tsx), then one
 // screen, top to bottom: the game folder, the signature bypass, Project Galacta, the first mods, then under Optional mod
 // previews and the desktop shortcut. Setup > Guided setup opens it again on the steps. Closing it, or dropping mods on the window, marks it
@@ -142,7 +143,7 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
 
   return (
     <div className="modal-overlay fr-overlay" onClick={close}>
-      <motion.div ref={focus.ref} onKeyDown={focus.onKeyDown} tabIndex={-1} className="modal-content fr-modal" role="dialog" aria-modal="true" aria-label="Set up repakxtra"
+      <motion.div ref={focus.ref} onKeyDown={focus.onKeyDown} tabIndex={-1} className="modal-content fr-modal" role="dialog" aria-modal="true" aria-label={`Set up ${APP_NAME}`}
         onClick={e => e.stopPropagation()}
         initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }}>
         {intro ? <>
@@ -156,7 +157,7 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
           </div>
           {!coreDone && (
             <button type="button" className="btn-primary fr-all" disabled={Boolean(busy) || (bypass === null && !bypassError)} onClick={setUpAll}
-              title="Finds the game, installs the signature bypass and Project Galacta, one after another">
+              title={`Finds the game, installs the signature bypass and ${LOADER_NAME}, one after another`}>
               {busy ? 'Setting up…' : 'Set up mods'}
             </button>
           )}
@@ -182,13 +183,13 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
             <BypassTrack on={busy === 'bypass'} done={finished === 'bypass' ? 'Installed. Mods load from the next game launch.' : undefined} />
           </Step>
 
-          <Step n={3} done={galactaOn} title="Install Project Galacta"
+          <Step n={3} done={galactaOn} title={`Install ${LOADER_NAME}`}
             action={!galacta?.installed && <button type="button" className="btn-primary" disabled={noGame || Boolean(busy)} onClick={installGalacta}
-              title={noGame ? 'Find the game first' : 'Downloads the newest release from GitHub'}>{busy === 'galacta' ? 'Installing…' : 'Install'}</button>}>
+              title={noGame ? 'Find the game first' : EXTENDED ? 'Installs the bundled Minimal variant' : 'Downloads the newest release from GitHub'}>{busy === 'galacta' ? 'Installing…' : 'Install'}</button>}>
             <p>{galacta?.installed && !galactaOn ? 'Installed but switched off. Turn it on in the Library.'
               : galactaOn ? 'Installed.'
               : 'Most skin mods need it. It also lets you switch mods in game.'}</p>
-            <GalactaTrack on={busy === 'galacta'} done={finished === 'galacta' ? 'Project Galacta is in your mods folder' : undefined} />
+            <GalactaTrack on={busy === 'galacta'} done={finished === 'galacta' ? `${LOADER_NAME} is in your mods folder` : undefined} />
           </Step>
 
           <Step n={4} done={false} wide title="Add your first mods">
@@ -213,7 +214,7 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
           <li className="fr-divider" aria-hidden="true">Optional</li>
           <Step n={6} done={Boolean(shortcut.exists)} title="Desktop shortcut"
             action={!shortcut.exists && <ShortcutButton s={shortcut} />}>
-            <p>{shortcut.exists ? 'On your desktop.' : 'Start repakxtra from your desktop.'}</p>
+            <p>{shortcut.exists ? 'On your desktop.' : `Start ${APP_NAME} from your desktop.`}</p>
           </Step>
 
         </ol>

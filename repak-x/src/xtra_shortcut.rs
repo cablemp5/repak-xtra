@@ -8,13 +8,18 @@ use serde::Serialize;
 use std::io::Write;
 use std::path::PathBuf;
 
-const NAME: &str = "repakxtra.lnk";
+fn shortcut_name() -> &'static str {
+    match (crate::xtra_edition::EXTENDED, option_env!("REPAKXTRA_BUILD") == Some("test")) {
+        (false, true) => "repakxtratest.lnk",
+        (false, false) => "repakxtra.lnk",
+    }
+}
 const SCRIPT: &str = "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:RX_LNK); $s.TargetPath = $env:RX_EXE; \
-    $s.WorkingDirectory = $env:RX_DIR; $s.IconLocation = $env:RX_EXE + ',0'; $s.Description = 'repakxtra'; $s.Save()";
+    $s.WorkingDirectory = $env:RX_DIR; $s.IconLocation = $env:RX_EXE + ',0'; $s.Description = $env:RX_NAME; $s.Save()";
 
 /// The desktop (Windows' known folder, so a desktop moved to OneDrive is found too) and the shortcut on it.
 fn shortcut() -> Option<PathBuf> {
-    dirs::desktop_dir().map(|d| d.join(NAME))
+    dirs::desktop_dir().map(|d| d.join(shortcut_name()))
 }
 
 #[derive(Serialize)]
@@ -32,7 +37,7 @@ pub fn shortcut_status() -> ShortcutStatus {
 pub async fn shortcut_create() -> Result<(), String> {
     let lnk = shortcut().ok_or("Windows did not say where the desktop is.")?;
     if lnk.exists() {
-        return Err("A repakxtra shortcut is already on the desktop.".into());
+        return Err("A desktop shortcut for this copy already exists.".into());
     }
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let dir = exe.parent().ok_or("repakxtra's folder is unknown.")?.to_path_buf();
@@ -43,7 +48,8 @@ pub async fn shortcut_create() -> Result<(), String> {
         cmd.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", SCRIPT])
             .env("RX_LNK", &made)
             .env("RX_EXE", &exe)
-            .env("RX_DIR", &dir);
+            .env("RX_DIR", &dir)
+            .env("RX_NAME", crate::xtra_edition::APP_NAME);
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
@@ -67,7 +73,7 @@ pub async fn shortcut_create() -> Result<(), String> {
 /// Writes the shortcut under its name only if nothing holds that name yet (create_new fails on an existing file).
 fn publish(lnk: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
     let mut f = std::fs::OpenOptions::new().write(true).create_new(true).open(lnk).map_err(|e| {
-        if e.kind() == std::io::ErrorKind::AlreadyExists { "A repakxtra shortcut is already on the desktop.".to_string() } else { e.to_string() }
+        if e.kind() == std::io::ErrorKind::AlreadyExists { "A desktop shortcut for this copy already exists.".to_string() } else { e.to_string() }
     })?;
     f.write_all(bytes).map_err(|e| e.to_string())
 }

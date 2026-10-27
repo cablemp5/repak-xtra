@@ -79,6 +79,9 @@ import { finishInstallLoadout } from './custom/installLoadout'
 import SigeonControl from './custom/SigeonControl'
 import SetupButton from './custom/SetupPanel'
 import { REPAKXTRA_VERSION, latestRelease, versionTag } from './custom/version'
+import { installedReleaseNotes } from './custom/releaseNotes'
+import LegacySetup from './custom/LegacySetup'
+import { APP_NAME } from './custom/edition'
 import FirstRun from './custom/FirstRun' // repakxtra: first-launch setup
 import { installDroppedKit } from './custom/previewKit'
 import { useGlobalTooltips } from './hooks/useGlobalTooltips'
@@ -1805,46 +1808,7 @@ function App() {
       if (versionRecorded && lastSeen && lastSeen !== xver) {
         console.debug('[Changelog] Version change detected', { lastSeen, currentVersion: xver, normalizedVersion })
         try {
-          const headers = { 'Accept': 'application/vnd.github.v3+json' }
-          let releaseBody = ''
-          const tagCandidates = [`v${normalizedVersion}`, normalizedVersion]
-
-          for (const tag of tagCandidates) {
-            const tagUrl = `https://api.github.com/repos/cablemp5/repak-xtra/releases/tags/${encodeURIComponent(tag)}` // repakxtra
-            console.debug('[Changelog] Trying tag endpoint', { tag, tagUrl })
-            const tagRes = await fetch(tagUrl, { headers })
-            console.debug('[Changelog] Tag endpoint response', { tag, status: tagRes.status, ok: tagRes.ok })
-            if (!tagRes.ok) continue
-
-            const tagRelease = await tagRes.json()
-            if (tagRelease?.body) {
-              releaseBody = String(tagRelease.body)
-              console.debug('[Changelog] Changelog found via tag endpoint', { tag })
-              break
-            }
-          }
-
-          // Fallback: releases/latest (helps when the expected tag is not published yet)
-          if (!releaseBody) {
-            const latestUrl = 'https://api.github.com/repos/cablemp5/repak-xtra/releases/latest' // repakxtra
-            console.debug('[Changelog] Falling back to latest release endpoint', { latestUrl })
-            const latestRes = await fetch(latestUrl, { headers })
-            console.debug('[Changelog] Latest release response', { status: latestRes.status, ok: latestRes.ok })
-            if (latestRes.ok) {
-              const latestRelease = await latestRes.json()
-              const latestTagNormalized = String(latestRelease?.tag_name || '').replace(/^v/, '')
-              console.debug('[Changelog] Latest release payload', {
-                latestTag: latestRelease?.tag_name,
-                latestTagNormalized,
-                expectedNormalizedVersion: normalizedVersion
-              })
-
-              if (latestTagNormalized === normalizedVersion && latestRelease?.body) {
-                releaseBody = String(latestRelease.body)
-                console.debug('[Changelog] Changelog found via latest release fallback')
-              }
-            }
-          }
+          const releaseBody = await installedReleaseNotes(normalizedVersion)
 
           if (releaseBody) {
             uiLog.info('Changelog', `Updated from v${lastSeen} to ${xver} - showing changelog`)
@@ -1859,8 +1823,7 @@ function App() {
             console.warn('[Changelog] No changelog body found for updated version', {
               lastSeen,
               currentVersion: xver,
-              normalizedVersion,
-              tagCandidates
+              normalizedVersion
             })
           }
         } catch (err) {
@@ -3647,7 +3610,7 @@ function App() {
 
   return (
     <div className={`app${isAprilFools ? ' april-fools' : ''}`}>
-      <TitleBar title="repakxtra" />
+      <TitleBar title={APP_NAME} />
       {panels.install && (
         <InstallModPanel
           characterData={characterData} // repakxtra: hero portraits for heroes newer than the bundled list
@@ -3995,6 +3958,7 @@ function App() {
       </header>
 
       <div className="container">
+        <LegacySetup gamePath={gamePath} reload={loadMods} />
         <VfxNotice mods={mods} reload={loadMods} />{/* repakxtra: the game updated, VFX mods to fix */}
         {/* repakxtra: Home view (custom/LoadoutsScreen.tsx); the action bar and panels below are the Library */}
         <LoadoutsScreen

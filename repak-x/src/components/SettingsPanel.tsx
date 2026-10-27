@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AnimatedThemeToggler } from './ui/AnimatedThemeToggler'
 import Checkbox from './ui/Checkbox'
-import { UiScaleSection, MotionSection, InstallingSection, HeaderButtonsSection, ModPrefs, WarningPrefs, NewStripPref, BuiltinsPref, resetUiPrefs } from '../custom/uiPrefs' // repakxtra
+import { AmoledSection, UiScaleSection, MotionSection, InstallingSection, HeaderButtonsSection, ModPrefs, WarningPrefs, NewStripPref, BuiltinsPref, resetUiPrefs } from '../custom/uiPrefs' // repakxtra
 import RecentlyDeleted from '../custom/RecentlyDeleted' // repakxtra: Settings > Recently deleted
 import { useDialogFocus } from '../custom/dialogFocus' // repakxtra
 import TailInput from './ui/TailInput'
@@ -344,6 +344,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
             {activeCategory === 'interface' && (
               <>
                 <UiScaleSection />
+                <AmoledSection onEnable={() => setTheme('dark')} />
                 <MotionSection extra={
                   <div className="setting-item">
                     <Checkbox
@@ -356,7 +357,6 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                   </div>
                 } />
                 <HeaderButtonsSection />
-                {/* repakxtra: no Theme section (dark only, accent fixed to the title's blue) */}
                 {resetSection}
               </>
             )}
