@@ -2936,13 +2936,41 @@ html[data-motion="off"] .setting-sub, html[data-motion="off"] .bulk-actions-tool
 .bq-switch .repakx-switch-label { display: flex; flex-direction: column; gap: 2px; }
 .bq-switch-name { font-size: 13px; color: var(--text-primary); }
 .bq-switch-desc { font-size: 12px; color: var(--text-secondary); }
-.bq-color { display: flex; align-items: center; gap: 10px; cursor: pointer; min-width: 0; }
-.bq-color input[type="color"] { flex: none; width: 32px; height: 32px; padding: 0; border: 1px solid var(--panel-border); border-radius: 8px; background: none; cursor: pointer; }
-.bq-color input[type="color"]::-webkit-color-swatch-wrapper { padding: 3px; }
-.bq-color input[type="color"]::-webkit-color-swatch { border: none; border-radius: 5px; }
+.bq-color { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .bq-color-text { display: flex; flex-direction: column; gap: 1px; font-size: 13px; color: var(--text-primary); min-width: 0; }
 .bq-hex { width: 9ch; padding: 0; border: none; background: none; font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); cursor: text; }
 .bq-hex:hover, .bq-hex:focus { color: var(--text-primary); }
+.bq-hex:disabled { cursor: not-allowed; opacity: 0.5; }
+.bq-switch:has(:disabled) { cursor: not-allowed; opacity: 0.55; }
+/* the color picker (ColorPicker.tsx): a swatch, and a popover with the app's own surface under it */
+.cp-swatch { flex: none; width: 32px; height: 32px; min-height: 0 !important; padding: 3px !important; border: 1px solid var(--panel-border) !important; border-radius: 8px !important; background: none !important; cursor: pointer;
+  transition: border-color var(--text-swap-dur) var(--text-swap-ease); }
+.cp-swatch:hover:not(:disabled), .cp-swatch[aria-expanded="true"] { border-color: rgba(255, 255, 255, 0.22) !important; }
+.cp-swatch:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
+.cp-swatch:disabled { cursor: not-allowed; opacity: 0.5; }
+.cp-fill { display: block; width: 100%; height: 100%; border-radius: 5px; }
+.cp-pop { position: fixed; z-index: 3000; display: flex; flex-direction: column; gap: 12px; padding: 12px; box-sizing: border-box; background: var(--bg-dark); border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55); transform-origin: top left; animation: cp-in var(--text-swap-dur) var(--text-swap-ease) both; }
+@keyframes cp-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } }
+.cp-sv { position: relative; height: 128px; border-radius: 8px; cursor: crosshair; touch-action: none; box-shadow: 0 0 0 1px var(--panel-border);
+  background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, var(--hue)); }
+.cp-hue { position: relative; height: 12px; margin: 0 2px; border-radius: 999px; cursor: pointer; touch-action: none; box-shadow: 0 0 0 1px var(--panel-border);
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+.cp-sv:focus-visible, .cp-hue:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+/* the handle carries the color it sits on, in a white ring, so it reads on any color */
+.cp-dot { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55); pointer-events: none; }
+.cp-presets { display: flex; align-items: center; justify-content: space-between; padding: 0 2px; }
+.cp-preset { width: 18px; height: 18px; min-height: 0 !important; padding: 0 !important; border: none !important; border-radius: 50% !important; flex: none; cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12); transition: transform var(--text-swap-dur) var(--text-swap-ease), box-shadow var(--text-swap-dur) var(--text-swap-ease); }
+.cp-preset:hover { transform: scale(1.15); }
+.cp-preset[aria-checked="true"] { box-shadow: 0 0 0 2px var(--bg-dark), 0 0 0 3.5px var(--sw); }
+.cp-preset:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 3px; }
+html[data-motion="off"] .cp-pop, html[data-motion="off"] .cp-swatch, html[data-motion="off"] .cp-preset { animation: none !important; transition: none !important; }
+/* a CustomQuake build's bar, under its status line: the VFX Updater's thin bar, its fill shimmering (the shared rule below) */
+.bi-bar { height: 4px; margin-top: 6px; border-radius: 999px; overflow: hidden; background: var(--bg-lighter); }
+.bi-bar i { display: block; height: 100%; transition: width 0.4s var(--acc-ease); }
+.bi-count { flex: none; font-variant-numeric: tabular-nums; }
+html[data-motion="off"] .bi-bar i { transition: none; animation: none !important; }
 .bq-switch { justify-self: start; gap: 10px; cursor: pointer; }
 html[data-motion="off"] .bi-hero, html[data-motion="off"] .bi-hero-check, html[data-motion="off"] .bi-hero-check svg, html[data-motion="off"] .bi-hero-face, html[data-motion="off"] .bi-hero-face img, html[data-motion="off"] .bi-pick .bi-chev { transition: none !important; }
 /* the Library's built-in rows: a blue Built-in badge that opens the row on Home, no checkbox (never in a bulk action) */
@@ -2968,6 +2996,7 @@ button.mod-type-badge { display: inline-flex; align-items: center; min-height: 0
 .download-progress .progress-fill,
 .repakx-progress-indicator,
 .su-bar i,
+.bi-bar i,
 .upd-bar i {
   background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-primary) 38%, color-mix(in srgb, var(--accent-primary), white 45%) 50%,
     var(--accent-primary) 62%, var(--accent-primary) 100%) 0 0 / 250% 100% no-repeat !important;

@@ -6,8 +6,9 @@
 // rows only show where each one stands. The switch is the saved choice, the blue icon and the count mean a working build.
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { Check, ChevronDown, ChevronRight, RotateCcw, Search, Shirt, TriangleAlert, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, RotateCcw, Search, Shirt, Square, TriangleAlert, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
+import ColorPicker from './ColorPicker'
 import { getHeroImageById, useHeroImages } from '../utils/heroImages'
 import type { LoadoutProps } from './Loadouts'
 import { Num, SwapText, revealOnLoad } from './motion'
@@ -30,6 +31,8 @@ const ABOUT: Record<string, { name: string; what: string; icon: BuiltinIconCompo
   'custom-quake': { name: 'CustomQuake', what: 'Every map texture turns one flat color you pick, the Quake look', icon: FlatTilesIcon },
 }
 const QUAKE_DEFAULT: Quake = { base: '5d7a80', sky: '82c6ed', hidePlants: false, lobby: true }
+/** Suggested colors in the picker, the defaults first */
+const QUAKE_PRESETS = { base: ['5d7a80', '808080', 'a69b8a', '6f8f6a', '3d4a5c', 'b07a63'], sky: ['82c6ed', 'b8dcf2', '1f2f4f', 'e9b9a0', '7a7f8c', '2c3e50'] }
 /** Whether two CustomQuake option sets make the same files: only a real change rebuilds. Pure. */
 export const sameQuake = (a: Quake, b: Quake) =>
   a.base.toLowerCase() === b.base.toLowerCase() && a.sky.toLowerCase() === b.sky.toLowerCase() && a.hidePlants === b.hidePlants && a.lobby === b.lobby
@@ -137,9 +140,30 @@ async function turnOffOverlaps(paths: string[], alert: LoadoutProps['alert']) {
 /** A mappings error clears itself once new mappings are out (checked at every start): no Try again for it. Pure. */
 export const retryable = (error?: string) => Boolean(error) && !error!.startsWith('Not active yet.')
 
-function status(b: Builtin, building: boolean) {
+/** xtra_quake.rs Progress: the stage a CustomQuake build is in, its count where it has one, and how far the whole build is (0 to 1) */
+type Progress = { stage: string; detail?: string | null; fraction: number }
+
+/** The running build's progress, asked once a second while it builds (nothing to ask for the other built-ins). */
+function useProgress(on: boolean) {
+  const [progress, setProgress] = useState<Progress | null>(null)
+  useEffect(() => {
+    if (!on) { setProgress(null); return }
+    let live = true
+    const ask = () => invoke<Progress | null>('xtra_quake_progress').then(p => { if (live) setProgress(p) }).catch(() => undefined)
+    void ask()
+    const t = setInterval(ask, 1000)
+    return () => { live = false; clearInterval(t) }
+  }, [on])
+  return progress
+}
+
+/** What a CustomQuake build says besides its stage: the stage's count, then where the files are. Pure. */
+export const buildNote = (b: Builtin, progress: Progress | null) => [progress?.detail, b.active ? 'The last build stays in use' : 'Not in the game yet'].filter(Boolean).join('. ')
+
+function status(b: Builtin, building: boolean, progress?: Progress | null) {
   const long = b.id === 'custom-quake' ? ', about 10 minutes' : ''
   if (building && wanted.get(b.id) === false) return 'Stopping the build…'
+  if (building && progress) return progress.stage
   if (building) return b.active ? `Rebuilding from your game files${long}. The last build stays in use` : `Building from your game files${long}. Not in the game yet`
   if (!b.on) return ABOUT[b.id].what
   if (b.error) return b.active ? `${b.error}. The last build is still in use` : retryable(b.error) ? `${b.error}. Not in the game` : b.error
@@ -274,15 +298,15 @@ function QuakeOptions({ id, b, open, building, blocked, onDone, alert }: { id: s
   const dirty = !sameQuake(draft, saved)
   const set = (part: Partial<Quake>) => setDraft(d => ({ ...d, ...part }))
   const apply = () => { onDone(); change(b.id, { quake: draft }, alert) }
+  // a build is running: the colors and switches are locked, so what it builds is what the card says (Close and Stop stay)
   const color = (key: 'base' | 'sky', label: string) => (
-    <label className="bq-color">
-      <input type="color" value={`#${draft[key]}`} onChange={e => set({ [key]: e.target.value.slice(1).toLowerCase() })} aria-label={label} />
+    <div className="bq-color">
+      <ColorPicker value={draft[key]} onChange={v => set({ [key]: v })} label={label} presets={QUAKE_PRESETS[key]} disabled={building} />
       <span className="bq-color-text"><span>{label}</span>
         {/* typed or pasted too: only a full color is taken */}
-        <input className="bq-hex" defaultValue={`#${draft[key].toUpperCase()}`} key={draft[key]} maxLength={7} spellCheck={false} aria-label={`${label}, hex`}
-          onChange={e => { const v = e.target.value.trim().replace(/^#/, ''); if (/^[0-9a-f]{6}$/i.test(v)) set({ [key]: v.toLowerCase() }) }}
-          onClick={e => e.preventDefault()} /></span>
-    </label>
+        <input className="bq-hex" defaultValue={`#${draft[key].toUpperCase()}`} key={draft[key]} maxLength={7} spellCheck={false} aria-label={`${label}, hex`} disabled={building}
+          onChange={e => { const v = e.target.value.trim().replace(/^#/, ''); if (/^[0-9a-f]{6}$/i.test(v)) set({ [key]: v.toLowerCase() }) }} /></span>
+    </div>
   )
   return (
     <div id={id} className="t-acc-panel" data-open={open} ref={el => el?.toggleAttribute('inert', !open)} onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onDone() } }}>
@@ -311,11 +335,11 @@ function QuakeOptions({ id, b, open, building, blocked, onDone, alert }: { id: s
             <section className="bq-group" aria-label="Scenes">
               <h4 className="bq-title">Scenes</h4>
               <div className="bq-switches">
-                <Switch size="sm" className="bq-switch" checked={draft.hidePlants} onChange={v => set({ hidePlants: v })} aria-label="Hide plants">
+                <Switch size="sm" className="bq-switch" checked={draft.hidePlants} isDisabled={building} onChange={v => set({ hidePlants: v })} aria-label="Hide plants">
                   <span className="bq-switch-name">Hide plants</span>
                   <span className="bq-switch-desc">{draft.hidePlants ? 'Grass, bushes, and trees are gone' : 'Grass, bushes, and trees turn the map color'}</span>
                 </Switch>
-                <Switch size="sm" className="bq-switch" checked={draft.lobby} onChange={v => set({ lobby: v })} aria-label="Include lobby and showcase scenes">
+                <Switch size="sm" className="bq-switch" checked={draft.lobby} isDisabled={building} onChange={v => set({ lobby: v })} aria-label="Include lobby and showcase scenes">
                   <span className="bq-switch-name">Include lobby and showcase scenes</span>
                   <span className="bq-switch-desc">{draft.lobby ? 'The lobby and MVP screens turn flat too' : 'They keep their look, except textures shared with maps'}</span>
                 </Switch>
@@ -324,7 +348,7 @@ function QuakeOptions({ id, b, open, building, blocked, onDone, alert }: { id: s
           </div>
           <div className="bi-picker-foot">
             <span className="bi-foot-gap" />
-            {b.on && dirty && <span className="bi-cost">{blocked ? BLOCKED : 'Takes about 10 minutes'}</span>}
+            {building ? <span className="bi-cost">Locked while it builds</span> : b.on && dirty && <span className="bi-cost">{blocked ? BLOCKED : 'Takes about 10 minutes'}</span>}
             {/* while it builds, Close: this panel never stops the build (the row's Stop building does) */}
             <button type="button" className="lo-text-btn" title={building ? 'Close the options, the build goes on' : 'Cancel, keep the saved options'} onClick={onDone}>{building ? 'Close' : 'Cancel'}</button>
             <button type="button" className="lo-text-btn is-primary" disabled={!dirty || building || (b.on && blocked)} onClick={apply}
@@ -353,7 +377,11 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
   const pick = useRef<HTMLButtonElement>(null)
   const Icon = about.icon
   const warn = !building && b.on && Boolean(b.error || b.overlaps?.length)
-  const text = status(b, building)
+  const quakeBuilding = building && b.id === 'custom-quake'
+  const progress = useProgress(quakeBuilding)
+  const text = status(b, building, progress)
+  const stopping = wanted.get(b.id) === false
+  const pct = Math.round((progress?.fraction ?? 0) * 100)
   const kept = b.excluded.length
   const pickerId = useId()
   const done = () => { setPicking(false); pick.current?.focus() }
@@ -366,7 +394,13 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
           <span className={`bi-status${warn ? ' is-warn' : ''}`} title={text} aria-live="polite">
             {warn && <TriangleAlert size={13} aria-hidden="true" />}
             {building ? <span className="t-shimmer"><SwapText text={text} /></span> : <SwapText text={text} />}
+            {quakeBuilding && !stopping && progress && <span className="bi-count">{buildNote(b, progress)}</span>}
           </span>
+          {quakeBuilding && (
+            <div className="bi-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="CustomQuake build progress">
+              <i style={{ width: `${pct}%` }} />
+            </div>
+          )}
         </div>
         {b.id === 'force-default-skin' && (
           <button type="button" ref={pick} className="lo-text-btn bi-pick" aria-expanded={picking} aria-controls={pickerId} onClick={() => setPicking(v => !v)}
@@ -389,7 +423,7 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
           </button>
         )}
         {building && b.id === 'custom-quake' && wanted.get(b.id) !== false && (
-          <button type="button" className="lo-text-btn" onClick={() => stopBuild(b.id, alert)} title="Stops within a few seconds, nothing goes into the game">Stop building</button>
+          <button type="button" className="lo-text-btn" onClick={() => stopBuild(b.id, alert)} title="Stops within a few seconds, nothing goes into the game"><Square size={11} fill="currentColor" aria-hidden="true" /> Stop building</button>
         )}
         {warn && retryable(b.error) && (
           <button type="button" className="lo-text-btn" disabled={blocked} onClick={() => change(b.id, { on: true }, alert)}

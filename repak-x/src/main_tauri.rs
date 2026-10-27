@@ -8562,6 +8562,7 @@ fn main() {
             xtra_vfx::xtra_niagara_mods, // repakxtra: setup report
             xtra_builtins::xtra_builtins_list, // repakxtra: built-in mods
             xtra_builtins::xtra_builtins_set,
+            xtra_quake::xtra_quake_progress, // repakxtra: CustomQuake's build progress
             xtra_builtins::xtra_builtins_refresh,
             xtra_vfx::xtra_vfx_claim,
             xtra_vfx::xtra_vfx_release,

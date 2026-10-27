@@ -450,7 +450,7 @@ async fn make(tool: &Path, id: &str, excluded: &[String], quake: &crate::xtra_qu
     ensure_vfx_uat_session(&tool).await?;
     let usmap = usmap().await?;
     if id == CUSTOM_QUAKE { // repakxtra: new 1x1 packages, not a table edit
-        return crate::xtra_quake::make(&tool, &usmap, paks, work, out_base, quake, stopped).await.map(|summary| (summary, Vec::new()));
+        return crate::xtra_quake::make(&tool, &usmap, paks, work, out_base, quake, &game_build(paks), stopped).await.map(|summary| (summary, Vec::new()));
     }
     let tables: &[&str] = if id == DEFAULT_SKIN { &[SKIN, UI] } else { &[LOGO] };
     let (legacy, json, edited, rt, staged) = (work.join("legacy"), work.join("json"), work.join("edited"), work.join("rt"), work.join("mod"));

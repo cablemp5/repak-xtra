@@ -280,9 +280,10 @@ fn template_for(s: &Settings, plain: &Value, normal: &Value) -> (Value, HashMap<
 }
 
 fn write_jsons(planned: &[Planned], dir: &std::path::Path) -> Result<Vec<String>, String> {
+    use rayon::prelude::*;
     let (plain, normal) = templates()?;
     planned
-        .iter()
+        .par_iter()
         .map(|p| {
             let path = game_path(&p.vfs).ok_or_else(|| format!("{} is not under a Content folder", p.vfs))?;
             let [r, g, b, a] = p.pixel;
@@ -299,7 +300,8 @@ fn write_jsons(planned: &[Planned], dir: &std::path::Path) -> Result<Vec<String>
 /// Puts the two fields UAssetTool writes differently from the cooker right, in every package under `dir` (see
 /// fix_skip_offset and fix_names_referenced). Names come from each package's JSON under `json`.
 fn fix_written(planned: &[Planned], dir: &std::path::Path, json: &std::path::Path) -> Result<(), String> {
-    for p in planned {
+    use rayon::prelude::*;
+    planned.par_iter().try_for_each(|p| -> Result<(), String> {
         let rel = p.vfs.trim_end_matches(".uasset");
         let uexp = dir.join(format!("{rel}.uexp"));
         let mut b = std::fs::read(&uexp).map_err(|e| format!("{rel}.uexp: {e}"))?;
@@ -310,9 +312,8 @@ fn fix_written(planned: &[Planned], dir: &std::path::Path, json: &std::path::Pat
         let uasset = dir.join(format!("{rel}.uasset"));
         let mut b = std::fs::read(&uasset).map_err(|e| format!("{rel}.uasset: {e}"))?;
         fix_names_referenced(&mut b, &names).map_err(|e| format!("{rel}: {e}"))?;
-        std::fs::write(&uasset, b).map_err(|e| e.to_string())?;
-    }
-    Ok(())
+        std::fs::write(&uasset, b).map_err(|e| e.to_string())
+    })
 }
 
 /// Every string in `v` equal to a key of `map` becomes its value (names, the package path, enum values).
@@ -413,6 +414,90 @@ fn fix_names_referenced(uasset: &mut [u8], names: &[String]) -> Result<(), Strin
 
 /// Batches of settings read at a time: a batch of 500 textures takes about 90 MB on disk once its pixel data is gone.
 const BATCH: usize = 500;
+/// Packages written per call to UAssetTool: the card's bar moves between calls and a stop is heard between them. A call costs
+/// about a second whatever its size (measured: 1,148 packages took 3.1 s in one call and 11.5 s in twelve), so not smaller.
+const WRITE_CHUNK: usize = 8000;
+
+/// What a build is doing now, for the card's bar (it asks once a second while a build runs).
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct Progress {
+    pub stage: String,
+    /// "12,000 of 32,855" where a stage counts
+    pub detail: Option<String>,
+    /// how far the whole build has come, 0 to 1
+    pub fraction: f32,
+}
+
+static PROGRESS: std::sync::Mutex<Option<Progress>> = std::sync::Mutex::new(None);
+
+/// The stages and the share of a whole build each takes. A guess from the first real build (about 9 minutes, two thirds of
+/// it reading the game): every stage's time goes to the log, so the shares can be set from measured ones.
+const STAGES: [(&str, f32); 5] = [
+    ("Listing the game's textures", 0.04),
+    ("Reading the game's texture settings", 0.60),
+    ("Writing the packages", 0.16),
+    ("Packing", 0.06),
+    ("Checking the new container", 0.14),
+];
+const READING: usize = 1;
+
+/// How far the whole build has come at `within` (0 to 1) of stage `i`. With the game's settings saved by an earlier build
+/// the first two stages are skipped and the others share the bar. Pure.
+fn fraction(i: usize, within: f32, saved: bool) -> f32 {
+    let first = if saved { 2 } else { 0 };
+    if i < first {
+        return 0.0;
+    }
+    let total: f32 = STAGES[first..].iter().map(|s| s.1).sum();
+    let before: f32 = STAGES[first..i].iter().map(|s| s.1).sum();
+    ((before + STAGES[i].1 * within.clamp(0.0, 1.0)) / total).clamp(0.0, 1.0)
+}
+
+fn report(stage: usize, within: f32, saved: bool, detail: Option<String>) {
+    *PROGRESS.lock().unwrap_or_else(|e| e.into_inner()) = Some(Progress { stage: STAGES[stage].0.to_string(), detail, fraction: fraction(stage, within, saved) });
+}
+
+/// Clears the progress when a build ends, whichever way.
+struct Finished;
+impl Drop for Finished {
+    fn drop(&mut self) {
+        *PROGRESS.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+}
+
+/// The build in flight, if any (the card's bar).
+#[tauri::command]
+pub fn xtra_quake_progress() -> Option<Progress> {
+    PROGRESS.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+fn cache_path() -> std::path::PathBuf {
+    dirs::config_dir().unwrap_or_else(|| ".".into()).join("Repak-X").join("repakxtra-quake-settings.json")
+}
+
+/// The game's settings for its map textures, kept for the game build they were read from. Reading them is two thirds of a
+/// first build and they change only when the game does, so a rebuild for new options skips it. Pure.
+fn cache_text(build: &str, textures: &[Vanilla]) -> String {
+    serde_json::json!({ "v": 1, "build": build, "textures": textures.iter().map(|t| (&t.path, &t.compression, &t.lod_group, t.srgb_off)).collect::<Vec<_>>() }).to_string()
+}
+
+/// The saved settings, when they were read from this game build. None for anything else. Pure.
+fn cache_from(text: &str, build: &str) -> Option<Vec<Vanilla>> {
+    let v: Value = serde_json::from_str(text).ok()?;
+    if v["v"] != 1 || v["build"] != build {
+        return None;
+    }
+    let rows: Vec<(String, String, String, bool)> = serde_json::from_value(v["textures"].clone()).ok()?;
+    (!rows.is_empty()).then(|| rows.into_iter().map(|(path, compression, lod_group, srgb_off)| Vanilla { path, compression, lod_group, srgb_off }).collect())
+}
+
+fn save_cache(build: &str, textures: &[Vanilla]) -> Result<(), String> {
+    let path = cache_path();
+    std::fs::create_dir_all(path.parent().ok_or("no folder")?).map_err(|e| e.to_string())?;
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, cache_text(build, textures)).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, &path).map_err(|e| e.to_string())
+}
 
 fn uat_request<'a>(action: &'a str) -> crate::vfx_updater::uasset_tool::VfxUatRequest<'a> {
     crate::vfx_updater::uasset_tool::VfxUatRequest { action, ..Default::default() }
@@ -469,9 +554,13 @@ const STOPPED: &str = "Stopped: switched off while it built";
 async fn read_settings(tool: &Path, usmap: &str, paks: &Path, listed: &[String], work: &Path, stop: fn() -> bool) -> Result<Vec<Vanilla>, String> {
     let sink = crate::vfx_updater::progress::NoOpProgressSink;
     let mut all = Vec::with_capacity(listed.len());
+    let mut done = 0;
     for batch in listed.chunks(BATCH) {
         if stop() {
             return Err(STOPPED.into());
+        }
+        if done == 0 {
+            report(READING, 0.0, false, Some(format!("0 of {}", group_digits(listed.len()))));
         }
         let (legacy, json) = (work.join("legacy"), work.join("json"));
         let _ = std::fs::remove_dir_all(&legacy);
@@ -499,21 +588,43 @@ async fn read_settings(tool: &Path, usmap: &str, paks: &Path, listed: &[String],
         if !r.success {
             return Err(format!("Could not read the game's texture settings: {}", r.message));
         }
-        for e in walkdir::WalkDir::new(&json).into_iter().flatten().filter(|e| e.path().extension().is_some_and(|x| x == "json")) {
-            let rel = e.path().strip_prefix(&json).map_err(|e| e.to_string())?.with_extension("").to_string_lossy().replace('\\', "/");
-            let text = std::fs::read_to_string(e.path()).map_err(|e| e.to_string())?;
-            let v: Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("{rel}: {e}"))?;
-            // an export UAssetTool could not decode is kept as raw bytes: the mappings are behind the game
-            if v["Exports"].as_array().is_some_and(|e| e.iter().any(|x| x["$type"].as_str().is_some_and(|t| t.contains("RawExport")))) {
-                return Err(MAPPINGS_BEHIND.into());
-            }
-            all.extend(vanilla_of(&rel, &v));
-        }
+        let found = {
+            let json = json.clone();
+            blocking(move || read_batch(&json)).await?
+        };
+        all.extend(found);
+        done += batch.len();
+        report(READING, done as f32 / listed.len() as f32, false, Some(format!("{} of {}", group_digits(done), group_digits(listed.len()))));
     }
     all_read(listed, &all)?;
     let _ = std::fs::remove_dir_all(work.join("legacy"));
     let _ = std::fs::remove_dir_all(work.join("json"));
     Ok(all)
+}
+
+/// The settings in each JSON of one batch, parsed side by side (the files are independent).
+fn read_batch(json: &Path) -> Result<Vec<Vanilla>, String> {
+    use rayon::prelude::*;
+    let files: Vec<_> = walkdir::WalkDir::new(json).into_iter().flatten().filter(|e| e.path().extension().is_some_and(|x| x == "json")).map(|e| e.into_path()).collect();
+    let read: Vec<Option<Vanilla>> = files
+        .par_iter()
+        .map(|path| {
+            let rel = path.strip_prefix(json).map_err(|e| e.to_string())?.with_extension("").to_string_lossy().replace('\\', "/");
+            let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+            let v: Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("{rel}: {e}"))?;
+            // an export UAssetTool could not decode is kept as raw bytes: the mappings are behind the game
+            if v["Exports"].as_array().is_some_and(|e| e.iter().any(|x| x["$type"].as_str().is_some_and(|t| t.contains("RawExport")))) {
+                return Err(MAPPINGS_BEHIND.to_string());
+            }
+            Ok(vanilla_of(&rel, &v))
+        })
+        .collect::<Result<_, String>>()?;
+    Ok(read.into_iter().flatten().collect())
+}
+
+/// Runs heavy file work off the async threads.
+async fn blocking<T: Send + 'static>(work: impl FnOnce() -> Result<T, String> + Send + 'static) -> Result<T, String> {
+    tokio::task::spawn_blocking(work).await.map_err(|e| e.to_string())?
 }
 
 /// Every listed texture was read, once: one missing would leave a map texture out of the build without a word.
@@ -529,7 +640,8 @@ fn all_read(listed: &[String], read: &[Vanilla]) -> Result<(), String> {
 
 /// Every package read back out of the container carries the settings it was planned with.
 fn check_settings(planned: &[Planned], json: &Path) -> Result<(), String> {
-    for p in planned {
+    use rayon::prelude::*;
+    planned.par_iter().try_for_each(|p| -> Result<(), String> {
         let rel = p.vfs.trim_end_matches(".uasset");
         let text = std::fs::read_to_string(json.join(format!("{rel}.json"))).map_err(|e| format!("{rel}: {e}"))?;
         let v: Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("{rel}: {e}"))?;
@@ -537,8 +649,8 @@ fn check_settings(planned: &[Planned], json: &Path) -> Result<(), String> {
         if (got.compression.as_str(), got.lod_group.as_str(), got.srgb_off) != (p.settings.compression.as_str(), p.settings.lod_group.as_str(), p.settings.srgb_off) {
             return Err(format!("{rel} lost the game's settings for it"));
         }
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 /// The pixel a written package holds (RGBA), from its .uexp: a 1x1 BGRA8 mip, its four bytes before the 1x1x1 size.
@@ -553,11 +665,12 @@ fn pixel_in(uexp: &[u8]) -> Option<[u8; 4]> {
 
 /// Every planned package is under `dir` with its planned pixel and a SkipOffset as the cooker writes it.
 fn check_all(planned: &[Planned], dir: &Path) -> Result<(), String> {
+    use rayon::prelude::*;
     let written = walkdir::WalkDir::new(dir).into_iter().flatten().filter(|e| e.path().extension().is_some_and(|x| x == "uasset")).count();
     if written != planned.len() {
         return Err(format!("{written} packages were written for {} planned", planned.len()));
     }
-    for p in planned {
+    planned.par_iter().try_for_each(|p| -> Result<(), String> {
         let rel = p.vfs.trim_end_matches(".uasset");
         let b = std::fs::read(dir.join(format!("{rel}.uexp"))).map_err(|e| format!("{rel}: {e}"))?;
         if pixel_in(&b) != Some(p.pixel) {
@@ -567,52 +680,101 @@ fn check_all(planned: &[Planned], dir: &Path) -> Result<(), String> {
         if fix_skip_offset(&mut c).is_err() || c != b {
             return Err(format!("{rel} would point the game at the wrong place"));
         }
+        Ok(())
+    })
+}
+
+/// Writes every planned package under `legacy`, `chunk` at a time: each chunk's JSON in parallel, then UAssetTool's
+/// batch_from_json. The card's bar moves and a stop is heard between chunks.
+async fn write_packages(tool: &Path, usmap: &str, planned: &std::sync::Arc<Vec<Planned>>, json: &Path, legacy: &Path, chunk: usize, saved: bool, stop: fn() -> bool) -> Result<(), String> {
+    let total = planned.len();
+    for from in (0..total).step_by(chunk) {
+        if stop() {
+            return Err(STOPPED.into());
+        }
+        report(2, from as f32 / total as f32, saved, Some(format!("{} of {}", group_digits(from), group_digits(total))));
+        let to = (from + chunk).min(total);
+        let files = {
+            let (planned, json) = (planned.clone(), json.to_path_buf());
+            blocking(move || write_jsons(&planned[from..to], &json)).await?
+        };
+        let req = crate::vfx_updater::uasset_tool::VfxUatRequest {
+            file_paths: Some(files),
+            usmap_path: Some(usmap),
+            output_path: Some(legacy.to_string_lossy().to_string()),
+            base_path: Some(json.to_string_lossy().to_string()),
+            ..uat_request("batch_from_json")
+        };
+        let r = crate::vfx_updater::uasset_tool::run_vfx_uat_request(tool, &req).await?;
+        if !r.success {
+            return Err(format!("Could not write the packages: {}", r.message));
+        }
     }
     Ok(())
 }
 
 /// Builds CustomQuake into `out_base` (.pak, .utoc, .ucas). Every package is checked before packing and again after it
 /// is read back out of the container, so nothing reaches the game unless all of it is right. Returns the summary.
+/// `build` names the game build: the game's settings are kept for it, so a rebuild for new options skips reading them.
 /// `stop` says when it was switched off: it gives up at the next batch or step.
-pub async fn make(tool: &Path, usmap: &str, paks: &Path, work: &Path, out_base: &Path, options: &Options, stop: fn() -> bool) -> Result<String, String> {
+pub async fn make(tool: &Path, usmap: &str, paks: &Path, work: &Path, out_base: &Path, options: &Options, build: &str, stop: fn() -> bool) -> Result<String, String> {
     let look = options.look()?;
+    let _finished = Finished;
     let started = std::time::Instant::now();
-    let listed = tokio::task::spawn_blocking({
-        let paks = paks.to_path_buf();
-        move || list_textures(&paks)
-    })
-    .await
-    .map_err(|e| e.to_string())??;
-    let textures = read_settings(tool, usmap, paks, &listed, &work.join("read"), stop).await?;
-    let planned = plan(&textures, &look);
+    let mut since = started;
+    let mut lap = |what: &str| {
+        log::info!("[quake] {what}: {:.1} s", since.elapsed().as_secs_f32());
+        since = std::time::Instant::now();
+    };
+    let kept = std::fs::read_to_string(cache_path()).ok().and_then(|t| cache_from(&t, build));
+    let saved = kept.is_some();
+    let textures = match kept {
+        Some(t) => t,
+        None => {
+            report(0, 0.0, false, None);
+            let listed = tokio::task::spawn_blocking({
+                let paks = paks.to_path_buf();
+                move || list_textures(&paks)
+            })
+            .await
+            .map_err(|e| e.to_string())??;
+            lap("listing the textures");
+            let t = read_settings(tool, usmap, paks, &listed, &work.join("read"), stop).await?;
+            lap("reading their settings");
+            if let Err(e) = save_cache(build, &t) {
+                log::warn!("[quake] the game's settings were not kept for the next build: {e}");
+            }
+            t
+        }
+    };
+    let planned = std::sync::Arc::new(plan(&textures, &look));
     if planned.is_empty() {
         return Err("No map texture to change".into());
     }
+    let total = planned.len();
     let (json, legacy) = (work.join("json"), work.join("mod"));
-    if stop() {
-        return Err(STOPPED.into());
+    write_packages(tool, usmap, &planned, &json, &legacy, WRITE_CHUNK, saved, stop).await?;
+    lap("writing the packages");
+    report(3, 0.0, saved, None);
+    {
+        let (planned, legacy, json) = (planned.clone(), legacy.clone(), json.clone());
+        blocking(move || fix_written(&planned, &legacy, &json)).await?;
     }
-    let files = write_jsons(&planned, &json)?;
-    let req = crate::vfx_updater::uasset_tool::VfxUatRequest {
-        file_paths: Some(files),
-        usmap_path: Some(usmap),
-        output_path: Some(legacy.to_string_lossy().to_string()),
-        base_path: Some(json.to_string_lossy().to_string()),
-        ..uat_request("batch_from_json")
-    };
-    let r = crate::vfx_updater::uasset_tool::run_vfx_uat_request(tool, &req).await?;
-    if !r.success {
-        return Err(format!("Could not write the packages: {}", r.message));
+    report(3, 0.3, saved, None);
+    {
+        let (planned, legacy) = (planned.clone(), legacy.clone());
+        blocking(move || check_all(&planned, &legacy)).await.map_err(|e| format!("{e}, so nothing was installed"))?;
     }
-    fix_written(&planned, &legacy, &json)?;
-    check_all(&planned, &legacy).map_err(|e| format!("{e}, so nothing was installed"))?;
     let _ = std::fs::remove_dir_all(&json);
     if stop() {
         return Err(STOPPED.into());
     }
+    report(3, 0.5, saved, None);
     let sink = crate::vfx_updater::progress::NoOpProgressSink;
     crate::vfx_updater::uasset_tool::pack_to_iostore(tool, usmap, &legacy.to_string_lossy(), &out_base.to_string_lossy(), None, &sink).await?;
+    lap("fixing, checking and packing");
     // read back out of the container, as the game will see it
+    report(4, 0.0, saved, None);
     let back = work.join("back");
     let req = crate::vfx_updater::uasset_tool::VfxUatRequest {
         game_paks: Some(paks.to_string_lossy().to_string()),
@@ -624,8 +786,13 @@ pub async fn make(tool: &Path, usmap: &str, paks: &Path, work: &Path, out_base: 
     if !r.success {
         return Err(format!("Could not read the new container back ({}), so nothing was installed", r.message));
     }
-    check_all(&planned, &back).map_err(|e| format!("{e} in the packed container, so nothing was installed"))?;
+    report(4, 0.35, saved, None);
+    {
+        let (planned, back) = (planned.clone(), back.clone());
+        blocking(move || check_all(&planned, &back)).await.map_err(|e| format!("{e} in the packed container, so nothing was installed"))?;
+    }
     // and their settings, read the way the game's own were
+    report(4, 0.55, saved, None);
     let back_json = work.join("back-json");
     let files: Vec<String> = walkdir::WalkDir::new(&back).into_iter().flatten().filter(|e| e.path().extension().is_some_and(|x| x == "uasset")).map(|e| e.path().to_string_lossy().replace('\\', "/")).collect();
     let req = crate::vfx_updater::uasset_tool::VfxUatRequest {
@@ -639,9 +806,14 @@ pub async fn make(tool: &Path, usmap: &str, paks: &Path, work: &Path, out_base: 
     if !r.success {
         return Err(format!("Could not read the new packages' settings back ({}), so nothing was installed", r.message));
     }
-    check_settings(&planned, &back_json).map_err(|e| format!("{e} in the packed container, so nothing was installed"))?;
+    report(4, 0.85, saved, None);
+    {
+        let (planned, back_json) = (planned.clone(), back_json.clone());
+        blocking(move || check_settings(&planned, &back_json)).await.map_err(|e| format!("{e} in the packed container, so nothing was installed"))?;
+    }
+    lap("reading the container back and checking it");
     let mins = started.elapsed().as_secs_f64() / 60.0;
-    Ok(format!("{} textures set in {}", group_digits(planned.len()), if mins < 1.5 { "about a minute".to_string() } else { format!("{} minutes", mins.round()) }))
+    Ok(format!("{} textures set in {}", group_digits(total), if mins < 1.5 { "about a minute".to_string() } else { format!("{} minutes", mins.round()) }))
 }
 
 /// 27181 as "27,181".
@@ -689,6 +861,40 @@ mod tests {
     const V6: Look = Look { base: [0x5d, 0x7a, 0x80], sky: [0x82, 0xc6, 0xed], hide_plants: false, lobby: true };
     fn px(name: &str, compression: &str) -> Option<String> {
         pixel(classify(&t(name, compression), true), &V6).map(|p| p.iter().map(|b| format!("{b:02x}")).collect())
+    }
+
+    #[test]
+    fn the_bar_only_moves_forward_and_ends_full() {
+        for saved in [false, true] {
+            let first = if saved { 2 } else { 0 };
+            let mut last = 0.0;
+            for stage in first..STAGES.len() {
+                for step in 0..=4 {
+                    let f = fraction(stage, step as f32 / 4.0, saved);
+                    assert!(f >= last && (0.0..=1.0).contains(&f), "stage {stage} step {step}: {f} after {last}");
+                    last = f;
+                }
+            }
+            assert!((last - 1.0).abs() < 1e-5, "ends full, saved {saved}: {last}");
+            assert_eq!(fraction(first, 0.0, saved), 0.0, "starts empty");
+        }
+        assert_eq!(fraction(0, 0.5, true), 0.0, "a skipped stage counts as the start");
+    }
+
+    #[test]
+    fn the_games_settings_are_kept_for_one_game_build() {
+        let textures = vec![
+            Vanilla { path: "Marvel/Content/Marvel/Environment/A/T_A_N".into(), compression: "TC_Normalmap".into(), lod_group: "TEXTUREGROUP_WorldNormalMap".into(), srgb_off: true },
+            Vanilla { path: "Marvel/Content/Marvel/Environment/A/T_B".into(), ..Default::default() },
+        ];
+        let text = cache_text("build-1", &textures);
+        let back = cache_from(&text, "build-1").expect("the same build reads it back");
+        assert_eq!(back.len(), 2);
+        assert_eq!((back[0].path.as_str(), back[0].compression.as_str(), back[0].lod_group.as_str(), back[0].srgb_off), (textures[0].path.as_str(), "TC_Normalmap", "TEXTUREGROUP_WorldNormalMap", true));
+        assert_eq!((back[1].compression.as_str(), back[1].srgb_off), ("", false));
+        assert!(cache_from(&text, "build-2").is_none(), "another game build reads nothing");
+        assert!(cache_from("not json", "build-1").is_none());
+        assert!(cache_from(&cache_text("build-1", &[]), "build-1").is_none(), "an empty list is not a cache");
     }
 
     /// Rows of quakeV6 (2026-10-26): the game's name and compression, and the pixel V6 gave it.
@@ -964,6 +1170,38 @@ mod tests {
             }
         }
         println!("S2: {same} of {total} files byte for byte the same after packing and reading back");
+    }
+
+    /// The build's write, fix and check steps on real texture settings (every 27th row of the S1 props TSV), in chunks:
+    /// REPAKXTRA_QUAKE_GAME=<props TSV> REPAKXTRA_USMAP=<usmap> cargo test -p repak-x --bin REPAK-X real_write -- --ignored --nocapture.
+    /// Prints the time per step, to set the stage shares and to see what a whole game would take.
+    #[test]
+    #[ignore]
+    fn real_write() {
+        let tsv = std::fs::read_to_string(std::env::var("REPAKXTRA_QUAKE_GAME").unwrap()).unwrap();
+        let usmap = std::env::var("REPAKXTRA_USMAP").unwrap();
+        let textures: Vec<Vanilla> = tsv
+            .lines()
+            .step_by(27)
+            .map(|l| {
+                let f: Vec<&str> = l.split('\t').collect();
+                Vanilla { path: f[0].to_string(), compression: f[1].to_string(), lod_group: f[2].to_string(), srgb_off: f[3] == "false" }
+            })
+            .collect();
+        let planned = std::sync::Arc::new(plan(&textures, &Look { base: [0x5d, 0x7a, 0x80], sky: [0x82, 0xc6, 0xed], hide_plants: false, lobby: true }));
+        let work = std::env::temp_dir().join("quake-real-write");
+        let _ = std::fs::remove_dir_all(&work);
+        let (json, legacy) = (work.join("json"), work.join("mod"));
+        uasset_toolkit::init_global_toolkit().expect("toolkit");
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let t = std::time::Instant::now();
+        rt.block_on(write_packages(Path::new("."), &usmap, &planned, &json, &legacy, std::env::var("REPAKXTRA_CHUNK").ok().and_then(|c| c.parse().ok()).unwrap_or(400), false, || false)).unwrap();
+        let wrote = t.elapsed();
+        fix_written(&planned, &legacy, &json).unwrap();
+        let fixed = t.elapsed();
+        check_all(&planned, &legacy).unwrap();
+        println!("{} packages: write {:.1} s, fix {:.1} s, check {:.1} s", planned.len(), wrote.as_secs_f32(), (fixed - wrote).as_secs_f32(), (t.elapsed() - fixed).as_secs_f32());
+        let _ = std::fs::remove_dir_all(&work);
     }
 
     /// S3: REPAKXTRA_QUAKE_GAME=<S1 props TSV> REPAKXTRA_QUAKE_PIXELS=<oracle pixels TSV> cargo test -p repak-x --bin REPAK-X
