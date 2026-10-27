@@ -84,7 +84,20 @@ const setCovers = new Map<string, { covers: string[]; members: string[] | null }
 const previewMode = (): string => (Array.isArray(mock.__previewMock) ? mock.__previewMock.shift() : mock.__previewMock) ?? 'ok'
 
 // repakxtra: the built-in mods' saved state (xtra_builtins.rs BuiltinView); heroes are the skin table's 10xx rows
-const builtins: any[] = ['force-default-skin', 'skip-intro-movies'].map(id => ({ id, on: false, excluded: [], current: false, active: false, heroes: [] as string[], path: `C:/Mock/Paks/~mods/.repakxtra-builtin/repakxtra-${id}_9999999_P.pak`, size: 150000 }))
+const builtins: any[] = ['force-default-skin', 'skip-intro-movies', 'custom-quake'].map(id => ({ id, on: false, excluded: [], current: false, active: false, heroes: [] as string[], path: `C:/Mock/Paks/~mods/.repakxtra-builtin/repakxtra-${id}_9999999_P.pak`, size: 150000,
+  ...(id === 'custom-quake' ? { quake: { base: '5d7a80', sky: '82c6ed', hidePlants: false, lobby: true } } : {}) }))
+// CustomQuake (xtra_quake.rs): localStorage 'mock.quakeError' = '1' fails its build, 'mock.quakeOverlap' = '1' says quakeV6 is on too,
+// 'mock.quakeSlow' = '1' makes its build last a minute so the progress bar can be seen
+let quakeStart = 0
+const quakeLength = () => (localStorage.getItem('mock.quakeSlow') === '1' ? 60000 : 2500)
+const quakeProgress = () => {
+  if (!quakeStart) return null
+  const f = Math.min(0.99, (Date.now() - quakeStart) / quakeLength())
+  const stage = f < 0.04 ? 0 : f < 0.64 ? 1 : f < 0.8 ? 2 : f < 0.86 ? 3 : 4
+  const names = ["Listing the game's textures", "Reading the game's texture settings", 'Writing the packages', 'Packing', 'Checking the new container']
+  const count = (of: number, from: number, to: number) => Math.round(of * Math.min(1, (f - from) / (to - from))).toLocaleString('en-US')
+  return { stage: names[stage], detail: stage === 1 ? `${count(32855, 0.04, 0.64)} of 32,855` : stage === 2 ? `${count(31191, 0.64, 0.8)} of 31,191` : null, fraction: f }
+}
 
 if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
   mockWindows('main')
@@ -111,14 +124,23 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       // repakxtra: built-in mods (xtra_builtins.rs): a build takes a few seconds, like the real one's 10 to 25
       case 'xtra_builtins_list': return structuredClone(builtins)
       case 'xtra_builtins_refresh': return structuredClone(builtins)
+      case 'xtra_quake_progress': return quakeProgress()
       case 'xtra_builtins_set': {
         const b = builtins.find(x => x.id === args?.id)!
         if (args?.excluded) b.excluded = args.excluded
+        if (args?.quake) b.quake = args.quake
         if (args?.on !== undefined) b.on = args.on
-        if (!b.on) { b.current = b.active = false; return structuredClone(builtins) }
-        return new Promise(r => setTimeout(r, 2500)).then(() => {
+        if (!b.on) { b.current = b.active = false; b.overlaps = undefined; quakeStart = 0; return structuredClone(builtins) }
+        if (b.id === 'custom-quake') quakeStart = Date.now()
+        return new Promise(r => setTimeout(r, b.id === 'custom-quake' ? quakeLength() : 2500)).then(() => {
+          if (b.id === 'custom-quake') quakeStart = 0
+          if (b.id === 'custom-quake' && localStorage.getItem('mock.quakeError') === '1') {
+            Object.assign(b, { current: false, error: localStorage.getItem('mock.quakeErrorKind') === 'write' ? 'Could not write the packages: a file is in use' : 'Not active yet. The game updated and repakxtra waits for the support files for it. It checks for them at every start' })
+            throw b.error
+          }
           Object.assign(b, { current: true, active: true, builtAt: Math.floor(Date.now() / 1000), error: undefined,
-            summary: b.id === 'skip-intro-movies' ? '12 startup logo videos turned off' : `${53 - b.excluded.length} heroes, ${697 - b.excluded.length * 13} skins set to default` })
+            ...(b.id === 'custom-quake' && localStorage.getItem('mock.quakeOverlap') === '1' ? { overlaps: ['C:/Program Files (x86)/Steam/steamapps/common/MarvelRivals/MarvelGame/Marvel/Content/Paks/~mods/quakeV6_9999999_P.pak'] } : {}),
+            summary: b.id === 'skip-intro-movies' ? '12 startup logo videos turned off' : b.id === 'custom-quake' ? '31,191 textures set in 9 minutes' : `${53 - b.excluded.length} heroes, ${697 - b.excluded.length * 13} skins set to default` })
           return structuredClone(builtins)
         })
       }
@@ -305,6 +327,17 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       })
       // Crash suspects: mods whose path has window.__suspectMatch (part of a name) hold the crashed asset
       case 'xtra_crash_suspects': return (args?.modPaths ?? []).filter((p: string) => mock.__suspectMatch && p.includes(mock.__suspectMatch))
+      // Crash tiers (xtra_crash.rs): __suspectMatch holds the asset, __suspectSkin the same skin, __suspectHero the same hero
+      case 'xtra_crash_tiers': {
+        const tiers: [string, string][] = [['asset', mock.__suspectMatch], ['skin', mock.__suspectSkin], ['hero', mock.__suspectHero]]
+        return (args?.modPaths ?? []).flatMap((p: string) => {
+          const t = tiers.find(([, m]) => m && p.includes(m))
+          return t ? [{ path: p, tier: t[0], ...(t[0] === 'hero' && mock.__suspectSkin ? { other_skin: true } : {}) }] : []
+        }).sort((a: { tier: string }, b: { tier: string }) => tiers.findIndex(t => t[0] === a.tier) - tiers.findIndex(t => t[0] === b.tier))
+      }
+      // localStorage 'mock.gameUpdate' = '1': the game updated an hour ago (custom/gameUpdate.ts), until the notice is seen
+      case 'xtra_game_update_check': return localStorage.getItem('mock.gameUpdate') === '1' ? { updated: Math.floor(Date.now() / 1000) - 3600, previous: Math.floor(Date.now() / 1000) - 86400 * 14 } : null
+      case 'xtra_game_update_seen': localStorage.removeItem('mock.gameUpdate'); return null
       // localStorage 'mock.prevCrash' = '1': a crash from before the app started (its toast at startup)
       case 'check_for_previous_crash': {
         if (localStorage.getItem('mock.prevCrash') !== '1') return null
@@ -312,6 +345,16 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         setTimeout(() => emit('game_crash_detected', { title: 'Game Crashed', description: 'Error: Access Violation', type: 'danger', crash_folder,
           crash_type: 'Access Violation', asset_path: '/Game/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001', character_id: '1026', is_mesh_crash: true }), 500)
         return { crash_folder }
+      }
+      // repakxtra: Claim role (xtra_role.rs). localStorage 'mock.discordClaim': ok (the default), not_member, denied, error,
+      // unset (the Worker is not set up), or wait (no answer, so the 5 minute timeout shows)
+      case 'xtra_role_ready': return localStorage.getItem('mock.discordClaim') !== 'unset'
+      case 'xtra_role_claim_start': {
+        const mode = localStorage.getItem('mock.discordClaim') || 'ok'
+        if (mode === 'unset') throw 'Claim role is not set up yet'
+        const state = `mock${Date.now()}`
+        if (mode !== 'wait') setTimeout(() => emit('xtra-role-claimed', { state, result: mode }), 1000)
+        return `https://discord.com/oauth2/authorize?client_id=mock&state=${state}`
       }
       case 'get_skip_launcher_status': return false
       // localStorage 'mock.clashes': a JSON list of { file_path, mod_paths } to show conflicts (custom/conflicts.ts)

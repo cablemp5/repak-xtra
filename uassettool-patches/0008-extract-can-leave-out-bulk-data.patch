@@ -1,0 +1,38 @@
+diff --git a/src/UAssetTool/Program.cs b/src/UAssetTool/Program.cs
+index 8dae9d9..fb51551 100644
+--- a/src/UAssetTool/Program.cs
++++ b/src/UAssetTool/Program.cs
+@@ -1582,6 +1582,7 @@ public partial class Program
+             Console.Error.WriteLine("                           Engine/Content/...) and mount paths (/Game/..., /Engine/...)");
+             Console.Error.WriteLine("                           Can also pass a .txt file containing one pattern per line");
+             Console.Error.WriteLine("  --with-deps              Also extract imported/referenced packages");
++            Console.Error.WriteLine("  --no-bulk                Leave out the bulk data (.ubulk, .uptnl, .m.ubulk): the .uasset and .uexp are the same");
+             Console.Error.WriteLine("  --mod <path>             Path to modded .utoc file or directory containing .utoc files.");
+             Console.Error.WriteLine("                           Extracts from mod containers, uses game paks for import resolution.");
+             Console.Error.WriteLine("                           If path is a .utoc file, loads that single bundle.");
+@@ -1607,6 +1608,7 @@ public partial class Program
+         List<string> modPaths = new(); // Mod utoc files or directories
+         List<string> aesKeys = new();
+         bool extractDependencies = false;
++        bool skipBulkData = false;
+ 
+         for (int i = 3; i < args.Length; i++)
+         {
+@@ -1649,6 +1651,8 @@ public partial class Program
+             }
+             else if (args[i] == "-deps" || args[i] == "--with-deps")
+                 extractDependencies = true;
++            else if (args[i] == "--no-bulk")
++                skipBulkData = true;
+         }
+ 
+         // Validate paks path
+@@ -1873,7 +1877,7 @@ public partial class Program
+ 
+                     var converter = new ZenPackage.ZenToLegacyConverter(context, packageId);
+                     if (debugMode) converter.SetDebugMode(true);
+-                    var legacyBundle = converter.Convert();
++                    var legacyBundle = converter.Convert(skipBulkData);
+ 
+                     if (extractDependencies)
+                     {

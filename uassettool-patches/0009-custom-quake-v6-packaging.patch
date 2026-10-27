@@ -1,0 +1,76 @@
+diff --git a/src/UAssetTool/Program.cs b/src/UAssetTool/Program.cs
+index b7bdc4d..77709d1 100644
+--- a/src/UAssetTool/Program.cs
++++ b/src/UAssetTool/Program.cs
+@@ -2796,7 +2796,7 @@ public partial class Program
+                 "extract_iostore" => ExtractIoStoreJson(request.FilePath, request.OutputPath, request.AesKey),
+                 "extract_iostore_legacy" => ExtractIoStoreLegacyJson(request.GamePaks, request.ModPath, request.OutputPath, request.FilterPatterns, request.AesKey, request.WithDeps),
+                 "extract_script_objects" => ExtractScriptObjectsJson(request.FilePath, request.OutputPath),
+-                "create_mod_iostore" => CreateModIoStoreJson(request.OutputPath, request.InputDir, request.InputPak, request.MountPoint, request.Compress, request.AesKey, request.Parallel, request.Obfuscate, request.Hybrid),
++                "create_mod_iostore" => CreateModIoStoreJson(request.OutputPath, request.InputDir, request.InputPak, request.MountPoint, request.Compress, request.AesKey, request.Parallel, request.Obfuscate, request.Hybrid, request.QuakePackaging),
+                 
+                 // Additional CLI-equivalent operations for parity
+                 "dump" => DumpAssetJson(request.FilePath, request.UsmapPath),
+@@ -7064,10 +7064,13 @@ public partial class Program
+     /// Converts .uasset/.uexp files to Zen format and creates .utoc/.ucas/.pak bundle.
+     /// Supports direct .pak file input (input_pak) as an alternative to input_dir.
+     /// </summary>
+-    public static UAssetResponse CreateModIoStoreJson(string? outputPath, string? inputDir, string? inputPak, string? mountPoint, bool compress, string? aesKey, bool parallel, bool obfuscate, bool hybrid = false)
++    public static UAssetResponse CreateModIoStoreJson(string? outputPath, string? inputDir, string? inputPak, string? mountPoint, bool compress, string? aesKey, bool parallel, bool obfuscate, bool hybrid = false, bool quakePackaging = false)
+     {
+         if (string.IsNullOrEmpty(outputPath))
+             return new UAssetResponse { Success = false, Message = "Output path is required" };
++        if (quakePackaging && hybrid)
++            return new UAssetResponse { Success = false, Message = "Quake packaging requires an empty companion PAK; hybrid files are not supported" };
++        obfuscate |= quakePackaging;
+ 
+         // Marvel Rivals AES key for obfuscation
+         const string MARVEL_RIVALS_AES_KEY = "0C263D8C22DCB085894899C3A3796383E9BF9DE0CBFB08C9BF2DEF2E84F29D74";
+@@ -7269,6 +7272,13 @@ public partial class Program
+                     // Marvel/Content prefix, which only held for /Game/ content; the converter
+                     // resolves the actual name, so use that.
+                     string gamePackagePath = gamePath;
++                    // V6 changes only the directory index; package IDs still name the real game packages.
++                    if (quakePackaging)
++                    {
++                        if (!packagePath.StartsWith("Marvel/Content/", StringComparison.OrdinalIgnoreCase))
++                            throw new InvalidDataException($"Quake packaging requires Marvel/Content assets: {packagePath}");
++                        packagePath = "quakeV6/Content/" + packagePath["Marvel/Content/".Length..];
++                    }
+                     
+                     var packageId = IoStore.FPackageId.FromName(gamePackagePath);
+                     var chunkId = IoStore.FIoChunkId.FromPackageId(packageId, 0, IoStore.EIoChunkType.ExportBundleData);
+@@ -7396,7 +7406,13 @@ public partial class Program
+             }
+ 
+             // Create companion PAK with chunknames (and any hybrid raw files).
+-            IoStore.ChunkNamesPakWriter.Create(pakPath, filePaths, mount, 0, aesKey, rawEntries.Count > 0 ? rawEntries : null);
++            if (quakePackaging)
++            {
++                using var emptyPak = new IoStore.PakWriter(mount, 0, aesKey);
++                emptyPak.Write(pakPath);
++            }
++            else
++                IoStore.ChunkNamesPakWriter.Create(pakPath, filePaths, mount, 0, aesKey, rawEntries.Count > 0 ? rawEntries : null);
+             
+             // Resolve file paths to Marvel/Content/ format for the app
+             var resolvedFilePaths = filePaths.Select(p => ResolveGamePathToContent(p)).ToList();
+@@ -7429,6 +7445,7 @@ public partial class Program
+                     ["converted_count"] = converted,
+                     ["file_count"] = filePaths.Count,
+                     ["raw_file_count"] = rawEntries.Count,
++                    ["quake_packaging"] = quakePackaging,
+                     ["file_paths"] = resolvedFilePaths,
+                     ["errors"] = errors.Count > 0 ? errors : null
+                 }
+@@ -7639,6 +7656,10 @@ public class UAssetRequest
+     /// </summary>
+     [JsonPropertyName("hybrid")]
+     public bool Hybrid { get; set; } = false;
++
++    /// <summary>CustomQuake: V6 directory layout, encryption, and an empty companion PAK.</summary>
++    [JsonPropertyName("quake_packaging")]
++    public bool QuakePackaging { get; set; } = false;
+     
+     /// <summary>
+     /// Use compact CUE4Parse-style JSON output (read-only, no roundtrip)

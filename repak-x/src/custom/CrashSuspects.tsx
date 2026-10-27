@@ -1,20 +1,23 @@
 // repakxtra: crash suspects. The crash toast's "See suspects" opens a small list of the mods that were on and match the
-// crash: first the ones holding the asset that crashed (xtra_crash.rs), else the ones for the hero it names (the same
-// hero detection the Library uses). Checked ones turn off together, with Undo.
-import { type ReactNode, useEffect, useState } from 'react'
+// crash (xtra_crash.rs xtra_crash_tiers): the ones holding the asset that crashed, then the ones changing the same skin,
+// then the same hero. When none match, the hero detection the Library uses (multi-hero mods). Checked ones turn off
+// together, with Undo.
+import { Fragment, type ReactNode, useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
 import Checkbox from '../components/ui/Checkbox'
 import { detectHeroesWithData } from '../utils/heroes'
+import { useDialogFocus } from './dialogFocus'
 import { type KeepDeps, turnOffWithUndo } from './keepOne'
 import { nameKey } from './loadoutStore'
 import { ModName, plural } from './modName'
+import { type Tier, type Tiered, grouped, ordered, prechecked, reasonFor } from './crashTiers'
 
 type Mod = { path: string; enabled?: boolean }
 type Details = { character_id?: string | null; character_name?: string | null; files?: string[] }
 type Hero = { id: string; name: string }
 export type CrashPayload = { crash_type?: string | null; asset_path?: string | null; character_id?: string | null; crash_folder?: string | null }
-export type Suspect = { mod: Mod; reason: string }
+export type Suspect = { mod: Mod; reason: string; tier: Tier }
 
 const OPEN = 'repakxtra-crash-suspects'
 /** Crash folders the startup check reported (crashes from before the app started): their suspects are the mods on now,
@@ -39,17 +42,23 @@ export function heroSuspects(on: Mod[], details: Record<string, Details | undefi
   return on.filter(m => {
     const d = details[m.path]
     return d?.character_id === id || (Array.isArray(d?.files) && detectHeroesWithData(d.files, heroes).includes(name))
-  }).map(mod => ({ mod, reason: `changes ${name}` }))
+  }).map(mod => ({ mod, reason: name, tier: 'hero' as const }))
 }
 
-export async function findSuspects(p: CrashPayload, on: Mod[], details: Record<string, Details | undefined>, heroes: Hero[]): Promise<Suspect[]> {
-  if (p.asset_path && on.length) {
-    const hits = await invoke<string[]>('xtra_crash_suspects', { assetPath: p.asset_path, modPaths: on.map(m => m.path) }).catch(() => [])
-    const set = new Set(hits)
-    const found = on.filter(m => set.has(m.path)).map(mod => ({ mod, reason: 'contains the asset that crashed' }))
+/** The suspects, or 'failed' when the check could not run and nothing else matched (never read as "no match"). */
+export async function findSuspects(p: CrashPayload, on: Mod[], details: Record<string, Details | undefined>, heroes: Hero[]): Promise<Suspect[] | 'failed'> {
+  let failed = false
+  if ((p.asset_path || p.character_id) && on.length) {
+    const rows = await invoke<Tiered[]>('xtra_crash_tiers', { assetPath: p.asset_path ?? '', heroId: p.character_id ?? null, modPaths: on.map(m => m.path) })
+      .catch(() => { failed = true; return [] as Tiered[] })
+    const byPath = new Map(on.map(m => [m.path, m]))
+    // the hero the backend matched on (the crashed asset's folder wins over the crash's id)
+    const heroName = (r: Tiered) => heroes.find(h => h.id === (r.hero ?? p.character_id))?.name
+    const found = ordered(rows).flatMap(r => { const mod = byPath.get(r.path); return mod ? [{ mod, tier: r.tier, reason: reasonFor(r.tier, heroName(r), r.other_skin) }] : [] })
     if (found.length) return found
   }
-  return p.character_id ? heroSuspects(on, details, heroes, p.character_id) : []
+  const hero = p.character_id ? heroSuspects(on, details, heroes, p.character_id) : []
+  return hero.length || !failed ? hero : 'failed'
 }
 
 const name = nameKey
@@ -60,20 +69,26 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
 }) {
   const [crash, setCrash] = useState<{ payload: CrashPayload; previous: boolean } | null>(null)
   const [suspects, setSuspects] = useState<Suspect[] | null>(null)
+  const [failed, setFailed] = useState(false)
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
+  const [showFile, setShowFile] = useState(false)
+  // focus moves into the dialog, Tab stays in it, and it goes back to the toast's button on close
+  const { ref, onKeyDown } = useDialogFocus(Boolean(crash))
   useEffect(() => {
-    const open = (e: Event) => { setCrash((e as CustomEvent).detail); setSuspects(null) }
+    const open = (e: Event) => { setCrash((e as CustomEvent).detail); setSuspects(null); setFailed(false); setShowFile(false) }
     window.addEventListener(OPEN, open)
     return () => window.removeEventListener(OPEN, open)
   }, [])
   useEffect(() => {
     if (!crash) return
     let live = true
-    findSuspects(crash.payload, mods.filter(m => m.enabled), details, heroes).then(s => {
+    findSuspects(crash.payload, mods.filter(m => m.enabled), details, heroes).then(found => {
       if (!live) return
+      const s = found === 'failed' ? [] : found
+      setFailed(found === 'failed')
       setSuspects(s)
-      setPicked(new Set(s.map(x => x.mod.path)))
+      setPicked(new Set(prechecked(s).map(x => x.mod.path)))
     })
     return () => { live = false }
   }, [crash])   // once per opening: the list does not reshuffle while it is open
@@ -96,11 +111,23 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
   return (
     <div className="modal-overlay" onClick={close}>
       <motion.div className="modal-content cs-modal" role="dialog" aria-modal="true" aria-label="Crash suspects" onClick={e => e.stopPropagation()}
+        ref={ref} tabIndex={-1} onKeyDown={onKeyDown}
         initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.15 }}>
         <div className="modal-header">
           <div>
             <h2>Crash suspects</h2>
-            <p className="cs-sub">{[p.crash_type, p.asset_path].filter(Boolean).join(' · ') || 'The crash report names no asset.'}</p>
+            {/* the plain words first, the error and the file for whoever wants them, with Copy (Tesler) */}
+            <p className="cs-lead">These mods that are on match the crash, closest first.</p>
+            {(p.crash_type || p.asset_path) && (
+              <details className="cs-file" onToggle={e => setShowFile(e.currentTarget.open)}>
+                <summary>Crash details</summary>
+                {showFile && <div className="cs-details">
+                  {/* the path may break only before a slash, never inside a folder name */}
+                  <p className="cs-sub">{p.crash_type && <>{p.crash_type}<br /></>}{(p.asset_path ?? 'The crash report names no asset.').split('/').map((s, i) => <Fragment key={i}>{i > 0 && <><wbr />/</>}{s}</Fragment>)}</p>
+                  <button type="button" className="lo-text-btn" onClick={() => void navigator.clipboard.writeText([p.crash_type, p.asset_path].filter(Boolean).join('\n'))}>Copy</button>
+                </div>}
+              </details>
+            )}
           </div>
           <button className="modal-close" onClick={close} aria-label="Close">×</button>
         </div>
@@ -109,25 +136,36 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
           {suspects === null
             ? <p className="cs-empty">Looking through the mods that are on…</p>
             : suspects.length === 0
-              ? <p className="cs-empty">No mod matches this crash. Turn mods off a few at a time to find it.</p>
-              : <ul className="cs-list">{suspects.map(s => (
-                  <li key={s.mod.path}>
-                    <Checkbox size="sm" checked={picked.has(s.mod.path)} onChange={(v: boolean) => setPicked(prev => {
-                      const next = new Set(prev)
-                      if (v) next.add(s.mod.path); else next.delete(s.mod.path)
-                      return next
-                    })}>
-                      <span className="cs-name"><ModName name={name(s.mod.path)} /></span>
-                      <span className="cs-reason">{s.reason}</span>
-                    </Checkbox>
-                  </li>
-                ))}</ul>}
+              ? <p className="cs-empty">{failed ? 'The mods could not be checked just now. Turn mods off a few at a time to find it, or open this again.' : 'No mod matches this crash. Turn mods off a few at a time to find it.'}</p>
+              // one group per match strength, closest first: a heading instead of the same reason on every row (common
+              // region, chunking), and a word when only hero matches came up (they are the weakest)
+              : <>
+                  {suspects.every(s => s.tier === 'hero') && <p className="cs-note">Only hero matches came up. These mods change the hero the crash names, which makes them less likely the cause.</p>}
+                  {grouped(suspects).map(g => (
+                    <section key={g.title} className="cs-group" aria-label={g.title}>
+                      <h3 className="cs-group-title">{g.title}</h3>
+                      <ul className="cs-list">{g.rows.map(s => (
+                        <li key={s.mod.path}>
+                          <Checkbox size="sm" checked={picked.has(s.mod.path)} onChange={(v: boolean) => setPicked(prev => {
+                            const next = new Set(prev)
+                            if (v) next.add(s.mod.path); else next.delete(s.mod.path)
+                            return next
+                          })}>
+                            <span className="cs-name"><ModName name={name(s.mod.path)} /></span>
+                          </Checkbox>
+                        </li>
+                      ))}</ul>
+                    </section>
+                  ))}
+                </>}
         </div>
         <div className="modal-footer cs-footer">
+          {/* the reassurance at the risky click: it can be undone, and the button says how many */}
+          {Boolean(suspects?.length) && <span className="cs-undo">You can undo this from the notice that follows.</span>}
           <button type="button" className="lo-text-btn" onClick={close}>{suspects?.length ? 'Cancel' : 'Close'}</button>
           {Boolean(suspects?.length) && (
             <button type="button" className="btn-primary" disabled={busy || picked.size === 0} onClick={turnOff}>
-              {busy ? 'Turning off…' : 'Turn off selected'}
+              {busy ? 'Turning off…' : picked.size ? `Turn off ${plural(picked.size, 'mod')}` : 'Turn off'}
             </button>
           )}
         </div>
@@ -145,6 +183,6 @@ if (import.meta.env.DEV) {
     'c.pak': { character_id: '1011' },
   }
   const s = heroSuspects(on, details, heroes, '1026')
-  console.assert(s.map(x => x.mod.path).join() === 'a.pak,b.pak' && s[0].reason === 'changes Black Panther', 'hero suspects: own id and multi-hero files', s)
+  console.assert(s.map(x => x.mod.path).join() === 'a.pak,b.pak' && s[0].reason === 'Black Panther', 'hero suspects: own id and multi-hero files', s)
   console.assert(heroSuspects(on, details, heroes, '9999').length === 0, 'an unknown hero id names no suspects')
 }

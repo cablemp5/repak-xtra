@@ -16,7 +16,14 @@ take them out again (`apply.ps1`), so the submodule itself is never changed or f
 | `0006-faster-niagara-parse-and-json-members.patch` | Each element of a property array looked its type up again in the USMAP through the array's name and ancestry, which is the lookup the array itself just made: the array now hands its answer to its elements (`Usmap.ArrayHintName/Data`, thread-local, restored around nested arrays). And typed getters and setters for the members every property element carries (`UAssetContractResolver.CreateProperty`), which Newtonsoft otherwise reaches by reflection under NativeAOT. | 89 Niagara files in the app: 11.6 s to 9.6 s, then writing their JSON 33.7 to 25.7 CPU-seconds. JSON and rebuilt assets byte for byte the same |
 | `0007-serve-never-answers-from-a-half-loaded-game.patch` | A `serve` load that came back incomplete (a container's name map or the script objects could not be read) was not kept, but still answered the request it was loaded for, and without the script objects every class reads `__ScriptImport_<hash>__`. That request now loads its own, as a one-shot run does. The two reads that failed silently say why on stderr (`xtra_uat_cli.rs` logs them). | Found by review (2026-10-24), not reproduced |
 
+| `0008-extract-can-leave-out-bulk-data.patch` | `extract_iostore_legacy` takes `--no-bulk`: the conversion is told to leave out the bulk data (`.ubulk`, `.uptnl`, `.m.ubulk`), a flag `ZenToLegacyConverter.Convert` already had and nothing set. The `.uasset` and `.uexp` are the same. CustomQuake's settings read needs only those (the game's textures hold 32 GB of pixel data). The command line and `serve` both take it (the library's JSON request does not). An older command line ignores the flag and extracts everything. | 1,000 real textures: 8.8 s to 6.2 s, 1,111 MB to 151 MB, 2,000 of 2,000 `.uasset` and `.uexp` byte for byte the same. CustomQuake's `real_read` test: 8,000 textures read the same settings as the earlier read with pixel data |
+
 Patches stack: each applies on top of the ones before it, in name order.
+
+`0009-custom-quake-v6-packaging.patch`: CustomQuake opts into V6's encrypted-container flag and payloads,
+`quakeV6/Content/` directory paths, and an empty 416-byte companion PAK. Package IDs retain the real game paths.
+Other mod packing keeps its existing format. Check with `python repak-x/scripts/check-quake-packaging.py
+target/quake-packaging-check/UAssetTool.dll <legacy-texture-root>` after building the patched managed tool.
 
 ## Refreshing a patch
 
