@@ -24,12 +24,16 @@ pub fn owned_download(path: &Path) -> Result<PathBuf, String> {
 const APPLY_ZIP: &str = r#"
 $ErrorActionPreference = 'Stop'
 $zip = $env:RX_ZIP; $temp = $env:RX_TEMP; $app = $env:RX_APP; $exe = $env:RX_EXE
-function Fail([string]$msg) {
-    if ($env:RX_TEST -ne '1') {
+# RX_TEST: '1' starts nothing and shows nothing, '2' starts the app but shows no message (the tests' stub app)
+function Say([string]$msg) {
+    if (-not $env:RX_TEST) {
         Add-Type -AssemblyName PresentationFramework
         [System.Windows.MessageBox]::Show($msg, 'repakxtra update') | Out-Null
-        Start-Process -FilePath $exe
     }
+}
+function Fail([string]$msg) {
+    if ($env:RX_TEST -ne '1') { Start-Process -FilePath $exe }
+    Say $msg
     exit 1
 }
 $waitFor = [int]$env:RX_PID
@@ -73,12 +77,28 @@ if (@(Get-ChildItem -LiteralPath $src -File -Filter '*.exe').Count -eq 0) {
     Fail "The update holds no app, so nothing was changed. Download it from github.com/cablemp5/repak-xtra/releases"
 }
 
-# Copy every file, keeping a backup of each one it replaces
+# Copy every file (a repair: only the ones RX_ONLY lists), keeping a backup of each one it replaces
 $backup = Join-Path $temp 'previous'
 $copied = New-Object System.Collections.Generic.List[string]
+$only = @($env:RX_ONLY -split "`n" | Where-Object { $_ })
+# Puts every backed up file back and removes the ones the update added. Returns how many could not be
+function Restore {
+    $failed = 0
+    foreach ($rel in $copied) {
+        $b = Join-Path $backup $rel
+        $dest = Join-Path $app $rel
+        try {
+            if (Test-Path -LiteralPath $b) { Copy-Item -LiteralPath $b -Destination $dest -Force -ErrorAction Stop }
+            else { Remove-Item -LiteralPath $dest -Force -ErrorAction Stop }
+        } catch { $failed++ }
+    }
+    $failed
+}
+$broken = 'Download repakxtra again from github.com/cablemp5/repak-xtra/releases'
 try {
     foreach ($f in Get-ChildItem -LiteralPath $src -Recurse -File) {
         $rel = $f.FullName.Substring($src.Length).TrimStart('\')
+        if ($only.Count -and $only -notcontains $rel) { continue }
         $dest = Join-Path $app $rel
         if (Test-Path -LiteralPath $dest) {
             $b = Join-Path $backup $rel
@@ -91,28 +111,56 @@ try {
     }
 } catch {
     $err = $_.Exception.Message
-    foreach ($rel in $copied) {
-        $b = Join-Path $backup $rel
-        $dest = Join-Path $app $rel
-        if (Test-Path -LiteralPath $b) { Copy-Item -LiteralPath $b -Destination $dest -Force -ErrorAction SilentlyContinue }
-        else { Remove-Item -LiteralPath $dest -Force -ErrorAction SilentlyContinue }
-    }
+    $bad = Restore
+    if ($bad) { Fail "The update could not be copied ($err), and $bad files could not be put back. $broken" }
     Fail "The update could not be copied ($err). The previous version was kept."
 }
 
-# Leftovers older releases shipped (legacy dds tools, debug symbols, misplaced tool copies)
-$tool = Join-Path $app 'uassettool'
-Remove-Item -LiteralPath (Join-Path $tool 'ue4-dds-tools') -Recurse -Force -ErrorAction SilentlyContinue
-Get-ChildItem -LiteralPath $tool -Filter '*.pdb' -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-if ((Test-Path -LiteralPath (Join-Path $src 'UAssetTool.dll')) -and -not (Test-Path -LiteralPath (Join-Path $src 'uassettool'))) {
-    Remove-Item -LiteralPath $tool -Recurse -Force -ErrorAction SilentlyContinue
+# The backups stay until the new version's window has loaded: it writes 'started' (xtra_started_ok). If that never comes
+# within 60 s, the new process cannot start, or it exits with an error first, the previous version goes back and starts.
+# A clean exit (code 0) before any window is a hand-off to a copy that is already open (one instance at a time): kept
+if ($env:RX_TEST -ne '1') {
+    $marker = Join-Path $temp 'started'
+    Remove-Item -LiteralPath $marker -Force -ErrorAction SilentlyContinue
+    $new = $null
+    try { $new = Start-Process -FilePath $exe -PassThru; $null = $new.Handle } catch { } # the handle keeps its exit code readable
+    if ($env:RX_CHECK -eq '1') {
+        if ($new) {
+            $deadline = (Get-Date).AddSeconds($(if ($env:RX_HEALTH) { [int]$env:RX_HEALTH } else { 60 }))
+            while (-not (Test-Path -LiteralPath $marker) -and -not $new.HasExited -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
+        }
+        $handedOff = $new -and $new.HasExited -and $new.ExitCode -eq 0
+        if (-not (Test-Path -LiteralPath $marker) -and -not $handedOff) {
+            if ($new) {
+                Stop-Process -Id $new.Id -Force -ErrorAction SilentlyContinue
+                $null = $new.WaitForExit(10000) # its files stay locked until it is gone
+            }
+            try { $left = @(Left); $left | Stop-Process -Force -ErrorAction SilentlyContinue; $left | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue } catch { }
+            $bad = Restore
+            Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
+            try { Start-Process -FilePath $exe } catch { }
+            if ($bad) { Say "The new version did not start, and $bad files of the previous one could not be put back. $broken" }
+            else { Say 'The new version did not start, so repakxtra went back to the previous one.' }
+            exit 2
+        }
+    }
 }
-foreach ($stale in @('UAssetTool.exe', 'tools\UAssetTool.exe', 'tools\uassettool\UAssetTool.exe')) {
-    Remove-Item -LiteralPath (Join-Path $app $stale) -Force -ErrorAction SilentlyContinue
+
+# Leftovers older releases shipped (legacy dds tools, debug symbols, misplaced tool copies). Never on a repair, which
+# leaves every file the zip lacks alone
+if (-not $only.Count) {
+    $tool = Join-Path $app 'uassettool'
+    Remove-Item -LiteralPath (Join-Path $tool 'ue4-dds-tools') -Recurse -Force -ErrorAction SilentlyContinue
+    Get-ChildItem -LiteralPath $tool -Filter '*.pdb' -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+    if ((Test-Path -LiteralPath (Join-Path $src 'UAssetTool.dll')) -and -not (Test-Path -LiteralPath (Join-Path $src 'uassettool'))) {
+        Remove-Item -LiteralPath $tool -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    foreach ($stale in @('UAssetTool.exe', 'tools\UAssetTool.exe', 'tools\uassettool\UAssetTool.exe')) {
+        Remove-Item -LiteralPath (Join-Path $app $stale) -Force -ErrorAction SilentlyContinue
+    }
 }
 
 Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
-if ($env:RX_TEST -ne '1') { Start-Process -FilePath $exe }
 "#;
 
 const RUN_INSTALLER: &str = r#"
@@ -133,8 +181,9 @@ fn powershell(script: &str) -> std::process::Command {
     cmd
 }
 
-/// Starts the hidden helper that waits for this process to exit, then applies `zip` to `app_dir` and starts `exe`.
-pub fn launch_zip(zip: &Path, app_dir: &Path, exe: &Path) -> Result<(), String> {
+/// Starts the hidden helper that waits for this process to exit, then applies `zip` to `app_dir` and starts `exe`. It
+/// keeps the replaced files until the new version reports a loaded window. `only`: just these zip files (a repair).
+pub fn launch_zip(zip: &Path, app_dir: &Path, exe: &Path, only: &[String]) -> Result<(), String> {
     let temp = zip.parent().ok_or("The update has no folder")?;
     // the command line kept running between extracts holds uassettool-cli.exe, which the update replaces (0.20.0 to 0.21.0
     // failed on it): stopped now, and the helper waits for anything else still running from the app's folder
@@ -145,9 +194,21 @@ pub fn launch_zip(zip: &Path, app_dir: &Path, exe: &Path) -> Result<(), String> 
         .env("RX_TEMP", temp)
         .env("RX_APP", app_dir)
         .env("RX_EXE", exe)
+        .env("RX_CHECK", "1")
+        .env("RX_ONLY", only.iter().map(|f| f.replace('/', "\\")).collect::<Vec<_>>().join("\n"))
         .spawn()
         .map(|_| ())
         .map_err(|e| format!("Failed to launch updater: {e}"))
+}
+
+/// The new version's window has loaded (main.tsx, once after the first render): the update script, waiting in the
+/// update folder, may now drop the backup of the previous version. Nothing is written when no update is under way.
+#[tauri::command]
+pub fn xtra_started_ok() {
+    let dir = update_dir();
+    if dir.is_dir() {
+        let _ = std::fs::write(dir.join("started"), b"ok");
+    }
 }
 
 /// Starts the hidden helper that waits for this process to exit, then runs `installer` and deletes it.
@@ -177,6 +238,12 @@ mod tests {
 
     /// Runs the real script against a made-up install under a folder name full of shell characters.
     fn apply(root: &Path, files: &[(&str, &[u8])]) -> (bool, PathBuf) {
+        let (code, app) = run(root, files, "repakxtra.exe", &[("RX_TEST", "1")]);
+        (code == Some(0), app)
+    }
+
+    /// The same, with the app started from `exe` (a .cmd stub the test writes) and extra environment.
+    fn run(root: &Path, files: &[(&str, &[u8])], exe: &str, env: &[(&str, &str)]) -> (Option<i32>, PathBuf) {
         let temp = root.join("update");
         let app = root.join("app");
         fs::create_dir_all(&temp).unwrap();
@@ -194,18 +261,114 @@ mod tests {
         // the update folder by another spelling than Windows lists it (CI's temp is a short 8.3 path, RUNNER~1): the script
         // must still copy each file to its own place
         let alias = temp.join("..").join("update");
-        let ok = powershell(APPLY_ZIP)
+        let code = powershell(APPLY_ZIP)
             .env("RX_PID", gone.id().to_string())
             .env("RX_ZIP", alias.join("repak-xtra-v9.9.9-windows.zip"))
             .env("RX_TEMP", &alias)
             .env("RX_APP", &app)
-            .env("RX_EXE", app.join("repakxtra.exe"))
-            .env("RX_TEST", "1")
+            .env("RX_EXE", app.join(exe))
             .env("RX_WAIT", "2") // a process from the app's folder still running after 2 s is stopped (30 s in the app)
+            .envs(env.iter().copied())
             .status()
             .unwrap()
-            .success();
-        (ok, app)
+            .code();
+        (code, app)
+    }
+
+    /// A stand-in app: run.cmd. The old one leaves old-started.txt, a new one reports a loaded window or exits at once.
+    const OLD_APP: &[u8] = b"@echo started> \"%~dp0old-started.txt\"\r\n";
+    const STARTS: &[u8] = b"@echo ok> \"%RX_TEMP%\\started\"\r\n";
+    const EXITS: &[u8] = b"@exit /b 1\r\n";
+    const HANDS_OFF: &[u8] = b"@exit /b 0\r\n"; // what a second copy does while one is already open
+    const HANGS: &[u8] = b"@ping -n 30 127.0.0.1 >nul\r\n"; // runs but never loads a window
+
+    /// A folder without shell characters: cmd.exe cannot start a .cmd under one with "&" (a real exe can, the copy tests
+    /// above cover those names).
+    fn plain_root(tag: &str) -> PathBuf {
+        let r = std::env::temp_dir().join(format!("repakxtra-updater-{tag}-{}", std::process::id())).join("install");
+        let _ = fs::remove_dir_all(r.parent().unwrap());
+        fs::create_dir_all(&r).unwrap();
+        r
+    }
+
+    fn started_app(r: &Path, new_app: &[u8]) -> (Option<i32>, PathBuf) {
+        started_app_with(r, new_app, &[])
+    }
+
+    fn started_app_with(r: &Path, new_app: &[u8], env: &[(&str, &str)]) -> (Option<i32>, PathBuf) {
+        let app = r.join("app");
+        fs::create_dir_all(&app).unwrap();
+        fs::write(app.join("run.cmd"), OLD_APP).unwrap();
+        run(r, &[("repakxtra.exe", b"new exe"), ("run.cmd", new_app), ("added.dll", b"new only")], "run.cmd",
+            &[&[("RX_TEST", "2"), ("RX_CHECK", "1")], env].concat())
+    }
+
+    #[test]
+    fn a_new_version_that_loads_keeps_its_files_and_drops_the_backup() {
+        let r = plain_root("starts");
+        let (code, app) = started_app(&r, STARTS);
+        assert_eq!(code, Some(0));
+        assert_eq!(fs::read(app.join("repakxtra.exe")).unwrap(), b"new exe");
+        assert_eq!(fs::read(app.join("added.dll")).unwrap(), b"new only");
+        assert!(!r.join("update").exists(), "previous and the marker go with the update folder");
+        assert!(!app.join("old-started.txt").exists());
+        let _ = fs::remove_dir_all(r.parent().unwrap());
+    }
+
+    #[test]
+    fn a_new_version_that_exits_at_once_is_rolled_back() {
+        let r = plain_root("exits");
+        let (code, app) = started_app(&r, EXITS);
+        assert_eq!(code, Some(2));
+        assert_eq!(fs::read(app.join("repakxtra.exe")).unwrap(), b"old exe");
+        assert_eq!(fs::read(app.join("run.cmd")).unwrap(), OLD_APP);
+        assert_eq!(fs::read(app.join("keep.txt")).unwrap(), b"untouched");
+        assert!(!app.join("added.dll").exists(), "a file the update added is removed");
+        assert!(!r.join("update").exists());
+        // the old app was started: wait for the file it writes (the real signal), at most 10 s
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !app.join("old-started.txt").exists() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        assert!(app.join("old-started.txt").exists(), "the previous version was started");
+        let _ = fs::remove_dir_all(r.parent().unwrap());
+    }
+
+    #[test]
+    fn a_new_version_that_never_loads_is_rolled_back_when_the_wait_ends() {
+        let r = plain_root("hangs");
+        let (code, app) = started_app_with(&r, HANGS, &[("RX_HEALTH", "3")]);
+        assert_eq!(code, Some(2));
+        assert_eq!(fs::read(app.join("repakxtra.exe")).unwrap(), b"old exe");
+        assert_eq!(fs::read(app.join("run.cmd")).unwrap(), OLD_APP);
+        assert!(!app.join("added.dll").exists());
+        let _ = fs::remove_dir_all(r.parent().unwrap());
+    }
+
+    #[test]
+    fn a_hand_off_to_an_open_copy_keeps_the_update() {
+        let r = plain_root("handoff");
+        let (code, app) = started_app(&r, HANDS_OFF);
+        assert_eq!(code, Some(0));
+        assert_eq!(fs::read(app.join("repakxtra.exe")).unwrap(), b"new exe");
+        assert!(!r.join("update").exists());
+        let _ = fs::remove_dir_all(r.parent().unwrap());
+    }
+
+    #[test]
+    fn a_repair_copies_only_the_listed_files() {
+        let r = root("repair");
+        let app = r.join("app");
+        fs::create_dir_all(app.join("uassettool")).unwrap();
+        fs::write(app.join("uassettool").join("old.pdb"), b"left alone").unwrap();
+        let (code, app) = run(&r, &[("repakxtra.exe", b"new exe"), ("UAssetTool.dll", b"fixed"), ("data/x.json", b"{}")],
+            "repakxtra.exe", &[("RX_TEST", "1"), ("RX_ONLY", "UAssetTool.dll\ndata\\x.json")]);
+        assert_eq!(code, Some(0));
+        assert_eq!(fs::read(app.join("repakxtra.exe")).unwrap(), b"old exe", "not listed, not copied");
+        assert_eq!(fs::read(app.join("UAssetTool.dll")).unwrap(), b"fixed");
+        assert_eq!(fs::read(app.join("data").join("x.json")).unwrap(), b"{}");
+        assert!(app.join("uassettool").join("old.pdb").exists(), "a repair cleans up nothing");
+        let _ = fs::remove_dir_all(r.parent().unwrap());
     }
 
     fn root(tag: &str) -> PathBuf {

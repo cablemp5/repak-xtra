@@ -101,6 +101,7 @@ const quakeProgress = () => {
 
 if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
   mockWindows('main')
+  mock.__mockRelease = localStorage.getItem('mock.release') === '1' // custom/AppFiles.tsx
   mockIPC((cmd, args: any) => {
     mock.__calls[cmd] = (mock.__calls[cmd] ?? 0) + 1
     switch (cmd) {
@@ -338,6 +339,14 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       // localStorage 'mock.gameUpdate' = '1': the game updated an hour ago (custom/gameUpdate.ts), until the notice is seen
       case 'xtra_game_update_check': return localStorage.getItem('mock.gameUpdate') === '1' ? { updated: Math.floor(Date.now() / 1000) - 3600, previous: Math.floor(Date.now() / 1000) - 86400 * 14 } : null
       case 'xtra_game_update_seen': localStorage.removeItem('mock.gameUpdate'); return null
+      // Settings > App files (xtra_repair.rs): localStorage 'mock.release' = '1' acts as a release, 'mock.appFiles' = 'ok'
+      // has every file match, 'fail' cannot reach GitHub, anything else has two differ and one missing
+      case 'xtra_check_app_files': return wait(4).then(() => {
+        const mode = localStorage.getItem('mock.appFiles')
+        if (mode === 'fail') throw 'Could not reach GitHub (error sending request). Check your connection and try again.'
+        return mode === 'ok' ? { missing: [], different: [], total: 412 } : { missing: ['data/character_data.json'], different: ['uassettool-cli.exe', 'UAssetTool.dll'], total: 412 }
+      })
+      case 'xtra_repair_app_files': throw 'The browser preview cannot restart the app.'
       // localStorage 'mock.prevCrash' = '1': a crash from before the app started (its toast at startup)
       case 'check_for_previous_crash': {
         if (localStorage.getItem('mock.prevCrash') !== '1') return null
