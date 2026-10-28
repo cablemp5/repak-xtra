@@ -9,6 +9,7 @@ import { ExternalLink, KeyRound, LogOut, X } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import type { NexusSource } from './nexusSource'
 import nexusLogo from './logos/nexus.png'
+import { ownsTop, useDialogFocus } from './dialogFocus'
 
 type Alert = ReturnType<typeof useAlert>
 type Account = { name: string; premium: boolean }
@@ -175,18 +176,17 @@ export function NexusPictures({ ids, onPick, onClose }: { ids: number[]; onPick:
   const [pics, setPics] = useState<Picture[] | null>(null)
   const [busy, setBusy] = useState<number | null>(null)
   const [error, setError] = useState('')
-  const box = useRef<HTMLDivElement>(null)
+  const focus = useDialogFocus() // a dialog: Tab stays inside, focus goes back to From Nexus, the page's Esc waits
   const close = useRef(onClose)
   close.current = onClose
   useEffect(() => {
     const list = ids.map(id => `{ gameDomain: "marvelrivals", modId: ${id} }`).join(', ') // numbers only: nothing to escape
     gql<{ legacyModsByDomain: { nodes: Picture[] } }>(`{ legacyModsByDomain(ids: [${list}]) { nodes { modId name pictureUrl thumbnailLargeUrl } } }`)
       .then(d => setPics(d.legacyModsByDomain.nodes.filter(p => p.pictureUrl)), e => setError(String(e)))
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); close.current() } }
-    const out = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) close.current() }
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape' && ownsTop(focus.ref.current)) { e.stopPropagation(); close.current() } }
+    const out = (e: MouseEvent) => { if (ownsTop(focus.ref.current) && !focus.ref.current?.contains(e.target as Node)) close.current() }
     window.addEventListener('keydown', key, true)
     document.addEventListener('mousedown', out)
-    box.current?.focus()
     return () => { window.removeEventListener('keydown', key, true); document.removeEventListener('mousedown', out) }
   }, [ids.join()]) // eslint-disable-line react-hooks/exhaustive-deps
   const pick = async (p: Picture) => {
@@ -198,7 +198,7 @@ export function NexusPictures({ ids, onPick, onClose }: { ids: number[]; onPick:
     } catch (e) { setError(`The picture did not download. ${e instanceof Error ? e.message : e}`) } finally { setBusy(null) }
   }
   return (
-    <div className="nx-pics" ref={box} role="dialog" aria-label="Pictures from Nexus Mods" tabIndex={-1}>
+    <div className="nx-pics" ref={focus.ref} onKeyDown={focus.onKeyDown} role="dialog" aria-modal="true" aria-label="Pictures from Nexus Mods" tabIndex={-1}>
       <div className="nx-pics-head">
         <span>Pictures from Nexus Mods</span>
         <button type="button" className="lo-icon" aria-label="Close" title="Close" onClick={() => close.current()}><X size={14} /></button>
