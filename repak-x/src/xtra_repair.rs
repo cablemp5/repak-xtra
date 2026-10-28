@@ -55,7 +55,8 @@ fn app_dir() -> Result<(PathBuf, PathBuf), String> {
 fn zip_hashes(path: &Path) -> Result<BTreeMap<String, String>, String> {
     use sha2::{Digest, Sha256};
     let mut zip = zip::ZipArchive::new(std::fs::File::open(path).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
-    let names: Vec<String> = (0..zip.len()).filter_map(|i| zip.by_index(i).ok().filter(|f| f.is_file()).map(|f| f.name().to_string())).collect();
+    // a name with ".." or a drive would point outside the app folder: such entries are skipped
+    let names: Vec<String> = (0..zip.len()).filter_map(|i| zip.by_index(i).ok().filter(|f| f.is_file() && f.enclosed_name().is_some()).map(|f| f.name().to_string())).collect();
     let top = names.first().and_then(|n| n.split_once('/')).map(|(t, _)| format!("{t}/"))
         .filter(|t| names.iter().all(|n| n.starts_with(t.as_str())));
     let mut out = BTreeMap::new();
@@ -96,12 +97,11 @@ async fn download(zip: &Path) -> Result<(), String> {
         return Err(format!("The download failed: GitHub returned {}", res.status()));
     }
     let bytes = res.bytes().await.map_err(offline)?;
-    let dir = crate::xtra_updater::update_dir();
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    std::fs::write(zip, &bytes).map_err(|e| e.to_string())?;
+    // beside any update download waiting there, never in its place
+    tokio::fs::create_dir_all(crate::xtra_updater::update_dir()).await.map_err(|e| e.to_string())?;
+    tokio::fs::write(zip, &bytes).await.map_err(|e| e.to_string())?;
     if let Err(e) = crate::xtra_update::verify_checksum(&client, &url, zip).await {
-        let _ = std::fs::remove_file(zip);
+        let _ = tokio::fs::remove_file(zip).await;
         return Err(e);
     }
     Ok(())
@@ -114,8 +114,12 @@ pub async fn xtra_check_app_files() -> Result<Report, String> {
     crate::ui_log::info("Repair", format!("Checking the app files against release v{}", crate::xtra_update::version()));
     download(&zip).await?;
     let (_, app) = app_dir()?;
+    let kept = zip.clone();
     let (diff, total) = tokio::task::spawn_blocking(move || compare(&zip, &app)).await.map_err(|e| e.to_string())??;
     let off = diff.missing.len() + diff.different.len();
+    if off == 0 {
+        let _ = tokio::fs::remove_file(&kept).await; // Repair only needs it when something differs
+    }
     crate::ui_log::info("Repair", if off == 0 { format!("All {total} app files match") } else { format!("{off} of {total} app files are missing or differ") });
     Ok(Report { diff, total })
 }
@@ -136,7 +140,7 @@ pub async fn xtra_repair_app_files(app: tauri::AppHandle) -> Result<(), String> 
         return Err("All app files match. Nothing to repair.".into());
     }
     crate::ui_log::info("Repair", format!("Repairing {} app files and restarting", files.len()));
-    crate::xtra_updater::launch_zip(&zip, &dir, &exe, Some(crate::xtra_update::version()), &files)?;
+    crate::xtra_updater::launch_zip(&zip, &dir, &exe, &files)?;
     app.exit(0);
     Ok(())
 }
@@ -176,6 +180,8 @@ mod tests {
                 z.start_file(format!("{top}{f}"), zip::write::SimpleFileOptions::default()).unwrap();
                 z.write_all(data).unwrap();
             }
+            z.start_file("../outside.txt", zip::write::SimpleFileOptions::default()).unwrap(); // skipped: outside the app folder
+            z.write_all(b"x").unwrap();
             z.finish().unwrap();
             let (diff, total) = compare(&path, &app).unwrap();
             assert_eq!(total, 3);

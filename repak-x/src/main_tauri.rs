@@ -6402,8 +6402,7 @@ async fn apply_update(downloaded_path: String, window: Window) -> Result<(), Str
         // repakxtra: a fixed PowerShell script gets every path through environment variables (xtra_updater.rs), so
         // no folder name can change the command, and a failed copy puts the old files back
         if is_zip {
-            let version = download_path.file_name().and_then(|n| n.to_str()).and_then(crate::xtra_update::zip_version); // repakxtra: rollback unless it starts
-            crate::xtra_updater::launch_zip(&download_path, app_dir, &exe_path, version.as_deref(), &[])?;
+            crate::xtra_updater::launch_zip(&download_path, app_dir, &exe_path, &[])?;
         } else {
             crate::xtra_updater::launch_installer(&download_path)?;
         }

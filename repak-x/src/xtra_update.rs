@@ -83,12 +83,6 @@ pub fn check_update_zip(path: &std::path::Path) -> Result<(), String> {
     Ok(())
 }
 
-/// The release version in a downloaded zip's name (asset_name's form), which the updater waits to see start.
-pub fn zip_version(name: &str) -> Option<String> {
-    let rest = name.strip_prefix(&format!("repak-xtra-{}-v", crate::xtra_edition::NAME))?.strip_suffix("-windows.zip")?;
-    semver::Version::parse(rest).ok().map(|v| v.to_string())
-}
-
 /// Releases since v0.5.0 publish `<zip>.sha256` ("<hex>  <name>") beside the zip. When it exists, the download must match
 /// it. A release without one (404) still applies, and the log says it was not checked. The checksum comes from the same
 /// release as the zip: it catches a corrupted or swapped download, not a release someone else published.
@@ -238,12 +232,6 @@ mod tests {
         assert!(ok(String::new()).is_err());
     }
 
-    #[test]
-    fn update_version_comes_from_the_zip_name() {
-        assert_eq!(zip_version(&crate::xtra_edition::asset_name(&semver::Version::new(1, 2, 3))).as_deref(), Some("1.2.3"));
-        assert_eq!(zip_version("repak-xtra-v1.2.3-windows.zip"), None, "an older name: the script then skips the start check");
-        assert_eq!(zip_version("update.zip"), None);
-    }
 
     #[test]
     fn version_comes_from_version_ts() {

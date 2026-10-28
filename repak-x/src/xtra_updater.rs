@@ -81,14 +81,20 @@ if (@(Get-ChildItem -LiteralPath $src -File -Filter '*.exe').Count -eq 0) {
 $backup = Join-Path $temp 'previous'
 $copied = New-Object System.Collections.Generic.List[string]
 $only = @($env:RX_ONLY -split "`n" | Where-Object { $_ })
+# Puts every backed up file back and removes the ones the update added. Returns how many could not be
 function Restore {
+    $failed = 0
     foreach ($rel in $copied) {
         $b = Join-Path $backup $rel
         $dest = Join-Path $app $rel
-        if (Test-Path -LiteralPath $b) { Copy-Item -LiteralPath $b -Destination $dest -Force -ErrorAction SilentlyContinue }
-        else { Remove-Item -LiteralPath $dest -Force -ErrorAction SilentlyContinue }
+        try {
+            if (Test-Path -LiteralPath $b) { Copy-Item -LiteralPath $b -Destination $dest -Force -ErrorAction Stop }
+            else { Remove-Item -LiteralPath $dest -Force -ErrorAction Stop }
+        } catch { $failed++ }
     }
+    $failed
 }
+$broken = 'Download repakxtra again from github.com/cablemp5/repak-xtra/releases'
 try {
     foreach ($f in Get-ChildItem -LiteralPath $src -Recurse -File) {
         $rel = $f.FullName.Substring($src.Length).TrimStart('\')
@@ -105,26 +111,36 @@ try {
     }
 } catch {
     $err = $_.Exception.Message
-    Restore
+    $bad = Restore
+    if ($bad) { Fail "The update could not be copied ($err), and $bad files could not be put back. $broken" }
     Fail "The update could not be copied ($err). The previous version was kept."
 }
 
-# The backups stay until the new version's window has loaded: it writes started-<RX_VERSION> (xtra_started_ok). If that
-# never comes within 60 s, or the new process exits first, the previous version goes back and starts
+# The backups stay until the new version's window has loaded: it writes 'started' (xtra_started_ok). If that never comes
+# within 60 s, the new process cannot start, or it exits with an error first, the previous version goes back and starts.
+# A clean exit (code 0) before any window is a hand-off to a copy that is already open (one instance at a time): kept
 if ($env:RX_TEST -ne '1') {
-    $marker = Join-Path $temp "started-$($env:RX_VERSION)"
+    $marker = Join-Path $temp 'started'
     Remove-Item -LiteralPath $marker -Force -ErrorAction SilentlyContinue
-    $new = Start-Process -FilePath $exe -PassThru
-    if ($env:RX_VERSION) {
-        $deadline = (Get-Date).AddSeconds($(if ($env:RX_HEALTH) { [int]$env:RX_HEALTH } else { 60 }))
-        while (-not (Test-Path -LiteralPath $marker) -and -not $new.HasExited -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
-        if (-not (Test-Path -LiteralPath $marker)) {
-            Stop-Process -Id $new.Id -Force -ErrorAction SilentlyContinue
+    $new = $null
+    try { $new = Start-Process -FilePath $exe -PassThru; $null = $new.Handle } catch { } # the handle keeps its exit code readable
+    if ($env:RX_CHECK -eq '1') {
+        if ($new) {
+            $deadline = (Get-Date).AddSeconds($(if ($env:RX_HEALTH) { [int]$env:RX_HEALTH } else { 60 }))
+            while (-not (Test-Path -LiteralPath $marker) -and -not $new.HasExited -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
+        }
+        $handedOff = $new -and $new.HasExited -and $new.ExitCode -eq 0
+        if (-not (Test-Path -LiteralPath $marker) -and -not $handedOff) {
+            if ($new) {
+                Stop-Process -Id $new.Id -Force -ErrorAction SilentlyContinue
+                $null = $new.WaitForExit(10000) # its files stay locked until it is gone
+            }
             try { $left = @(Left); $left | Stop-Process -Force -ErrorAction SilentlyContinue; $left | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue } catch { }
-            Restore
+            $bad = Restore
             Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
-            Start-Process -FilePath $exe
-            Say 'The new version did not start, so repakxtra went back to the previous one.'
+            try { Start-Process -FilePath $exe } catch { }
+            if ($bad) { Say "The new version did not start, and $bad files of the previous one could not be put back. $broken" }
+            else { Say 'The new version did not start, so repakxtra went back to the previous one.' }
             exit 2
         }
     }
@@ -166,8 +182,8 @@ fn powershell(script: &str) -> std::process::Command {
 }
 
 /// Starts the hidden helper that waits for this process to exit, then applies `zip` to `app_dir` and starts `exe`. It
-/// keeps the replaced files until `version` reports a loaded window (None: no check). `only`: just these zip files.
-pub fn launch_zip(zip: &Path, app_dir: &Path, exe: &Path, version: Option<&str>, only: &[String]) -> Result<(), String> {
+/// keeps the replaced files until the new version reports a loaded window. `only`: just these zip files (a repair).
+pub fn launch_zip(zip: &Path, app_dir: &Path, exe: &Path, only: &[String]) -> Result<(), String> {
     let temp = zip.parent().ok_or("The update has no folder")?;
     // the command line kept running between extracts holds uassettool-cli.exe, which the update replaces (0.20.0 to 0.21.0
     // failed on it): stopped now, and the helper waits for anything else still running from the app's folder
@@ -178,7 +194,7 @@ pub fn launch_zip(zip: &Path, app_dir: &Path, exe: &Path, version: Option<&str>,
         .env("RX_TEMP", temp)
         .env("RX_APP", app_dir)
         .env("RX_EXE", exe)
-        .env("RX_VERSION", version.unwrap_or_default())
+        .env("RX_CHECK", "1")
         .env("RX_ONLY", only.iter().map(|f| f.replace('/', "\\")).collect::<Vec<_>>().join("\n"))
         .spawn()
         .map(|_| ())
@@ -191,7 +207,7 @@ pub fn launch_zip(zip: &Path, app_dir: &Path, exe: &Path, version: Option<&str>,
 pub fn xtra_started_ok() {
     let dir = update_dir();
     if dir.is_dir() {
-        let _ = std::fs::write(dir.join(format!("started-{}", crate::xtra_update::version())), b"ok");
+        let _ = std::fs::write(dir.join("started"), b"ok");
     }
 }
 
@@ -261,8 +277,10 @@ mod tests {
 
     /// A stand-in app: run.cmd. The old one leaves old-started.txt, a new one reports a loaded window or exits at once.
     const OLD_APP: &[u8] = b"@echo started> \"%~dp0old-started.txt\"\r\n";
-    const STARTS: &[u8] = b"@echo ok> \"%RX_TEMP%\\started-%RX_VERSION%\"\r\n";
+    const STARTS: &[u8] = b"@echo ok> \"%RX_TEMP%\\started\"\r\n";
     const EXITS: &[u8] = b"@exit /b 1\r\n";
+    const HANDS_OFF: &[u8] = b"@exit /b 0\r\n"; // what a second copy does while one is already open
+    const HANGS: &[u8] = b"@ping -n 30 127.0.0.1 >nul\r\n"; // runs but never loads a window
 
     /// A folder without shell characters: cmd.exe cannot start a .cmd under one with "&" (a real exe can, the copy tests
     /// above cover those names).
@@ -274,11 +292,15 @@ mod tests {
     }
 
     fn started_app(r: &Path, new_app: &[u8]) -> (Option<i32>, PathBuf) {
+        started_app_with(r, new_app, &[])
+    }
+
+    fn started_app_with(r: &Path, new_app: &[u8], env: &[(&str, &str)]) -> (Option<i32>, PathBuf) {
         let app = r.join("app");
         fs::create_dir_all(&app).unwrap();
         fs::write(app.join("run.cmd"), OLD_APP).unwrap();
         run(r, &[("repakxtra.exe", b"new exe"), ("run.cmd", new_app), ("added.dll", b"new only")], "run.cmd",
-            &[("RX_TEST", "2"), ("RX_VERSION", "9.9.9")])
+            &[&[("RX_TEST", "2"), ("RX_CHECK", "1")], env].concat())
     }
 
     #[test]
@@ -309,6 +331,27 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
         assert!(app.join("old-started.txt").exists(), "the previous version was started");
+        let _ = fs::remove_dir_all(r.parent().unwrap());
+    }
+
+    #[test]
+    fn a_new_version_that_never_loads_is_rolled_back_when_the_wait_ends() {
+        let r = plain_root("hangs");
+        let (code, app) = started_app_with(&r, HANGS, &[("RX_HEALTH", "3")]);
+        assert_eq!(code, Some(2));
+        assert_eq!(fs::read(app.join("repakxtra.exe")).unwrap(), b"old exe");
+        assert_eq!(fs::read(app.join("run.cmd")).unwrap(), OLD_APP);
+        assert!(!app.join("added.dll").exists());
+        let _ = fs::remove_dir_all(r.parent().unwrap());
+    }
+
+    #[test]
+    fn a_hand_off_to_an_open_copy_keeps_the_update() {
+        let r = plain_root("handoff");
+        let (code, app) = started_app(&r, HANDS_OFF);
+        assert_eq!(code, Some(0));
+        assert_eq!(fs::read(app.join("repakxtra.exe")).unwrap(), b"new exe");
+        assert!(!r.join("update").exists());
         let _ = fs::remove_dir_all(r.parent().unwrap());
     }
 
