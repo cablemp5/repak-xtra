@@ -64,7 +64,7 @@ import FilterPanel, { filterScope } from './custom/FilterPanel'
 import LoadoutHotkeys, { AddToLoadoutField, LoadoutMenuItems } from './custom/Loadouts'
 import LoadoutsScreen, { ViewTabs } from './custom/LoadoutsScreen'
 import ViewModeMenu from './custom/ViewModeMenu' // repakxtra: view buttons folded into one when narrow
-import { modKey, nameKey, renameModKey, syncLoadoutKeys } from './custom/loadoutStore' // repakxtra
+import { loadoutable, modKey, nameKey, renameModKey, syncLoadoutKeys } from './custom/loadoutStore' // repakxtra
 import { setModsRoot } from './custom/loadoutIdentity' // repakxtra
 import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
@@ -81,7 +81,7 @@ import SetupButton from './custom/SetupPanel'
 import { REPAKXTRA_VERSION, latestRelease, versionTag } from './custom/version'
 import { installedReleaseNotes } from './custom/releaseNotes'
 import LegacySetup from './custom/LegacySetup'
-import { APP_NAME } from './custom/edition'
+import { APP_NAME, EXTENDED } from './custom/edition'
 import FirstRun from './custom/FirstRun' // repakxtra: first-launch setup
 import { installDroppedKit } from './custom/previewKit'
 import { useGlobalTooltips } from './hooks/useGlobalTooltips'
@@ -1912,7 +1912,7 @@ function App() {
 
       // repakxtra: the count the Library's All tab shows, which leaves Project Galacta out (it lives in Setup)
       // shortcut: matched by its pak name, not its files (those land in modDetails later), so a renamed Galacta still counts
-      const listed = modList.filter((m: ModRecord) => !/projectgalacta/i.test(m.path.split(/[\\/]/).pop() ?? '')).length
+      const listed = modList.filter((m: ModRecord) => !/projectgalacta/i.test(m.path.split(/[\\/]/).pop() ?? '') && !(EXTENDED && !loadoutable(modKey(m.path)))).length
       setStatus(`Loaded ${listed} mod${listed === 1 ? '' : 's'}`)
       return modList as ModRecord[]
     } catch (error) {
@@ -2973,6 +2973,8 @@ function App() {
   const baseFilteredMods = mods.filter(mod => {
     // Project Galacta is managed from its own Tools panel toggle, not the mods list
     if (projectGalactaMod && mod.path === projectGalactaMod.path) return false
+    // repakxtra: repakxploit's Project Sigeon loader lives in Setup the same way (Standard keeps a leftover copy listed, to delete)
+    if (EXTENDED && !loadoutable(modKey(mod.path))) return false
 
     // Search query
     if (searchQuery) {
