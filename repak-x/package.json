@@ -10,14 +10,6 @@
     "test:editions": "node scripts/check-extended-access.mjs && node scripts/check-amoled.mjs && node scripts/check-release-notes.mjs"
   },
   "dependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
-    "@heroui/checkbox": "^2.3.27",
-    "@heroui/switch": "^2.2.24",
-    "@heroui/system": "^2.4.23",
-    "@heroui/theme": "^2.4.23",
-    "@mui/icons-material": "^7.3.5",
-    "@mui/material": "^7.3.5",
     "@phosphor-icons/react": "^2.1.10",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.0.0",
@@ -29,7 +21,6 @@
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "react-icons": "^5.5.0",
-    "tailwindcss": "^4.0.0",
     "use-debounce": "^10.1.0"
   },
   "devDependencies": {

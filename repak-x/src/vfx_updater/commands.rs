@@ -163,29 +163,29 @@ pub async fn vfx_detect_asset_class(
 // Temp Directory Management
 // ============================================================================
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vfx_get_temp_dir() -> Result<String, String> {
     let base = get_vfx_temp_base()?;
     Ok(base.to_string_lossy().to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vfx_create_step_directory(step_name: String) -> Result<String, String> {
     let dir = create_step_directory(&step_name)?;
     Ok(dir.to_string_lossy().to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vfx_create_pipeline_directories() -> Result<VfxTempDirectories, String> {
     create_pipeline_directories()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vfx_cleanup_temp_directories() -> Result<(), String> {
     cleanup_vfx_temp_directories()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vfx_cleanup_pipeline() -> Result<(), String> {
     cleanup_pipeline()
 }
@@ -194,7 +194,7 @@ pub fn vfx_cleanup_pipeline() -> Result<(), String> {
 // UAssetTool Path
 // ============================================================================
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vfx_get_uasset_tool_path() -> Result<String, String> {
     // The tool is now an in-process NativeAOT library (loaded via the uasset_toolkit FFI),
     // not a child-process exe. Return its resolved on-disk path for the frontend.
@@ -315,7 +315,7 @@ pub async fn vfx_list_json_files(dir: String) -> Result<Vec<String>, String> {
 // Settings (VFX-specific)
 // ============================================================================
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vfx_get_settings(_app: AppHandle) -> Result<VfxSettings, String> {
     let settings_path = vfx_app_dir().join("vfx_settings.json");
 
@@ -328,7 +328,7 @@ pub fn vfx_get_settings(_app: AppHandle) -> Result<VfxSettings, String> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vfx_save_settings(_app: AppHandle, settings: VfxSettings) -> Result<(), String> {
     let app_dir = vfx_app_dir();
     std::fs::create_dir_all(&app_dir)
@@ -463,7 +463,7 @@ pub(crate) fn saved_usmap_path() -> Option<String> {
 }
 
 /// Whether the selected USMAP exists, so the UI can hold the pipeline until it does.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vfx_usmap_exists(path: String) -> bool {
     !path.trim().is_empty() && Path::new(&path).is_file()
 }

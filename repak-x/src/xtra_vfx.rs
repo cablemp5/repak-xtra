@@ -188,7 +188,7 @@ fn make_dirs(game_paks: &str, run_id: &str, usmap: &str) -> Result<VfxDirs, Stri
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn xtra_vfx_dirs(game_paks: String, run_id: String, usmap_path: Option<String>) -> Result<VfxDirs, String> {
     make_dirs(&game_paks, &run_id, usmap_path.as_deref().unwrap_or(""))
 }
@@ -617,7 +617,7 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
     Ok((placed, from, vec![target, kept]))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn xtra_vfx_place(source: String, staged_base: String, turn_off_original: bool, keep_name: Option<bool>, trash_original: Option<bool>, partial: Option<bool>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Placed, String> {
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?;
@@ -780,7 +780,7 @@ pub(crate) fn game_cl(paks: &Path) -> Option<u64> {
 }
 
 /// The installed game's last update and build, for the Update VFX mods notice and the USMAP check.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn xtra_game_build(state: State<'_, Arc<Mutex<AppState>>>) -> GameBuild {
     let mods = state.lock().unwrap().game_path.clone();
     mods.ancestors().find(|p| p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("Paks"))).map(game_build).unwrap_or_default()
@@ -811,7 +811,7 @@ fn source_of(mod_path: &Path) -> PathBuf {
     if original.exists() { original } else { mod_path.to_path_buf() }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn xtra_vfx_source(mod_path: String) -> String {
     source_of(Path::new(&mod_path)).to_string_lossy().to_string()
 }

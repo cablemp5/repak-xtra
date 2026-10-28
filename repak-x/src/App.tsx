@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, useSyncExternalStore } from 'react'
+import type { ComponentProps } from 'react'
 import type { ChangeEvent } from 'react'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
@@ -6,7 +7,6 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { listen } from '@tauri-apps/api/event'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useDebouncedCallback } from 'use-debounce'
-import { IconButton, Tooltip } from '@mui/material'
 import {
   Refresh as RefreshIcon,
   CreateNewFolder as CreateNewFolderIcon,
@@ -73,7 +73,7 @@ import { useGameUpdateWatch } from './custom/gameUpdate' // repakxtra
 import { fixInVfxWindow } from './custom/vfx/handoff' // repakxtra: the VFX Updater window
 import VfxNotice, { VfxDot } from './custom/vfx/VfxNotice' // repakxtra: the game updated, VFX mods to fix
 import { canUpdateVfx, checkVfxModInPlace, updateVfxModInPlace } from './custom/vfx/quick' // repakxtra: Update VFX in the right-click menu
-import { PREF_TOGGLED, type PrefToggled, fewerPopups, newDefaultsOnce, setPref } from './custom/uiPrefs' // repakxtra
+import { PREF_TOGGLED, type PrefToggled, fewerPopups, liteOn, newDefaultsOnce, setPref } from './custom/uiPrefs' // repakxtra
 import { reportSource } from './custom/setupReport' // repakxtra: Copy setup report reads the live list
 import { finishInstallLoadout } from './custom/installLoadout'
 import SigeonControl from './custom/SigeonControl'
@@ -95,8 +95,7 @@ import {
   getLogEntries,
   initLogBridge,
   subscribeToLogs,
-  uiLog,
-  type LogEntry
+  uiLog
 } from './utils/uiLog'
 import { useStableCallback } from './hooks/useStableCallback'
 import './App.css'
@@ -295,6 +294,15 @@ const hideSplash = () => {
   setTimeout(() => splash.remove(), 300)
 }
 
+// repakxtra: the drawer reads the log itself, so a new log line re-renders the drawer, not the whole window
+function LiveLogDrawer(props: Omit<ComponentProps<typeof LogDrawer>, 'logs'>) {
+  const logs = useSyncExternalStore(subscribeToLogs, getLogEntries)
+  return <LogDrawer {...props} logs={logs} />
+}
+
+// repakxtra: the order localeCompare gives, without building a collator per comparison
+const nameCollator = new Intl.Collator()
+
 function App() {
   const isAprilFools = useAprilFools();
   const [hideSuffix, setHideSuffix] = useState(true); // repakxtra: on by default
@@ -424,7 +432,6 @@ function App() {
   const [modsToInstall, setModsToInstall] = useState<any[]>([])
   // Mirror of the log bus (see utils/uiLog.ts). The bus owns the entries so any
   // component can log without prop drilling; App only re-renders the drawer.
-  const [installLogs, setInstallLogs] = useState<LogEntry[]>(() => getLogEntries())
   const [modLoadingProgress, setModLoadingProgress] = useState(0) // 0-100 for progress, -1 for indeterminate
   const [isModsLoading, setIsModsLoading] = useState(false) // Track if mods are being loaded
   // Non-null only while hero portraits are downloading (see 'hero_sync_progress')
@@ -1458,7 +1465,6 @@ function App() {
   // first so the Rust-side startup banner and character/hero checks - which run
   // before the webview exists - are replayed into the drawer rather than lost.
   useEffect(() => {
-    const unsubscribe = subscribeToLogs(setInstallLogs)
     let unlistenBridge: (() => void) | null = null
     let cancelled = false
 
@@ -1471,7 +1477,6 @@ function App() {
 
     return () => {
       cancelled = true
-      unsubscribe()
       unlistenBridge?.()
     }
   }, [])
@@ -1740,11 +1745,17 @@ function App() {
 
   // Periodically check game running state every 5 seconds
   useEffect(() => {
+    // repakxtra: no checks while minimized, and one the moment the window shows again
     const intervalId = setInterval(() => {
-      checkGame()
+      if (!document.hidden) checkGame()
     }, 5000)
+    const onShow = () => { if (!document.hidden) checkGame() }
+    document.addEventListener('visibilitychange', onShow)
 
-    return () => clearInterval(intervalId)
+    return () => {
+      clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', onShow)
+    }
   }, [])
 
   const loadInitialData = async () => {
@@ -1986,14 +1997,18 @@ function App() {
       const totalCount = pathsToFetch.length
       setModLoadingProgress(0)
 
-      const results = await Promise.allSettled(
-        pathsToFetch.map(async (p) => {
-          const result = await invoke('get_mod_details', { modPath: p })
+      // repakxtra: four at a time, so a big library's first read keeps the disk and the other commands free
+      const results: PromiseSettledResult<unknown>[] = new Array(pathsToFetch.length)
+      let next = 0
+      await Promise.all(Array.from({ length: Math.min(4, pathsToFetch.length) }, async () => {
+        while (next < pathsToFetch.length) {
+          const i = next++
+          results[i] = await invoke('get_mod_details', { modPath: pathsToFetch[i] })
+            .then(value => ({ status: 'fulfilled' as const, value }), reason => ({ status: 'rejected' as const, reason }))
           completedCount++
           setModLoadingProgress(Math.round((completedCount / totalCount) * 100))
-          return result
-        })
-      )
+        }
+      }))
 
       const newMap = { ...modDetailsRef.current }
       results.forEach((res, idx) => {
@@ -2960,17 +2975,19 @@ function App() {
   // name or path, so it stays correctly detected across enable/disable renames.
   // If it isn't in ~mods, fall back to the external match from the base game's
   // Paks folder (see refreshExternalGalactaMod).
-  const projectGalactaMod = mods.find(mod => {
+  // repakxtra: memoized (here and the lists below), so a keystroke, a progress tick or a log line no longer re-reads
+  // every file of every mod and re-filters and re-sorts the whole library
+  const projectGalactaMod = useMemo(() => mods.find(mod => {
     const files = modDetails[mod.path]?.files
     return Array.isArray(files) && files.some((f: string) => f.toLowerCase().includes('wbp_galacta'))
-  }) || externalGalactaMod
+  }) || externalGalactaMod, [mods, modDetails, externalGalactaMod])
 
   // Kept live for the drag-drop handler and extension listener, both captured
   // once at mount and otherwise stuck reading a stale value.
   projectGalactaModRef.current = projectGalactaMod
 
   // Compute base filtered mods (excluding folder filter)
-  const baseFilteredMods = mods.filter(mod => {
+  const baseFilteredMods = useMemo(() => mods.filter(mod => {
     // Project Galacta is managed from its own Tools panel toggle, not the mods list
     if (projectGalactaMod && mod.path === projectGalactaMod.path) return false
     // repakxtra: Project Galacta and the Project Sigeon loader never show in the Library, by name too (before their files are read)
@@ -3025,10 +3042,10 @@ function App() {
     }
 
     return true
-  })
+  }), [mods, projectGalactaMod, searchQuery, filterTag, selectedCharacters, selectedCategories, modDetails])
 
   // Apply folder filter to get final list for display
-  const folderMods = baseFilteredMods.filter(mod => {
+  const folderMods = useMemo(() => baseFilteredMods.filter(mod => {
     if (selectedFolderId === 'all') return true
 
     if (showSubfolderMods) {
@@ -3040,26 +3057,31 @@ function App() {
       // Match exact folder only
       return mod.folder_id === selectedFolderId
     }
-  })
-  const isEncrypted = (p: string) => Boolean(modDetails[p]?.is_encrypted) // repakxtra: the Encrypted tab
-  const filteredMods = folderMods.filter(matchesState(modState, isEncrypted)).sort((a, b) => {
-    if (sortBy === 'enabled' && Boolean(a.enabled) !== Boolean(b.enabled)) return a.enabled ? -1 : 1
-    if (sortBy === 'name' || sortBy === 'enabled') {
-      const aName = (a.custom_name || a.path.split(/[/\\]/).pop() || '').toLowerCase()
-      const bName = (b.custom_name || b.path.split(/[/\\]/).pop() || '').toLowerCase()
-      return sortDirection === 'asc' ? aName.localeCompare(bName) : bName.localeCompare(aName)
-    } else {
-      const aTime = a.modified_date || 0
-      const bTime = b.modified_date || 0
-      return sortDirection === 'asc' ? aTime - bTime : bTime - aTime
-    }
-  })
+  }), [baseFilteredMods, selectedFolderId, showSubfolderMods])
+  const isEncrypted = useCallback((p: string) => Boolean(modDetails[p]?.is_encrypted), [modDetails]) // repakxtra: the Encrypted tab
+  const filteredMods = useMemo(() => {
+    // repakxtra: each name lowercased once, not twice per comparison
+    const names = new Map(folderMods.map(m => [m, (m.custom_name || m.path.split(/[/\\]/).pop() || '').toLowerCase()]))
+    return folderMods.filter(matchesState(modState, isEncrypted)).sort((a, b) => {
+      if (sortBy === 'enabled' && Boolean(a.enabled) !== Boolean(b.enabled)) return a.enabled ? -1 : 1
+      if (sortBy === 'name' || sortBy === 'enabled') {
+        const aName = names.get(a)!
+        const bName = names.get(b)!
+        return sortDirection === 'asc' ? nameCollator.compare(aName, bName) : nameCollator.compare(bName, aName)
+      } else {
+        const aTime = a.modified_date || 0
+        const bTime = b.modified_date || 0
+        return sortDirection === 'asc' ? aTime - bTime : bTime - aTime
+      }
+    })
+  }, [folderMods, modState, isEncrypted, sortBy, sortDirection])
 
   // repakxtra: the built-in mods head the list (custom/builtinRows.ts), unless a hero, type or tag filter or a folder
   // narrows it: a search matches their names, the On / Off switch their state
   const builtinRows = useBuiltinRows(builtinHeroName)
-  const libraryMods = selectedCharacters.size || selectedCategories.size || filterTag || selectedFolderId !== 'all' ? filteredMods
-    : [...builtinRows.filter(r => (!searchQuery || r.custom_name.toLowerCase().includes(searchQuery.toLowerCase())) && matchesState(modState, isEncrypted)(r as ModRecord)), ...filteredMods]
+  const libraryMods = useMemo(() => selectedCharacters.size || selectedCategories.size || filterTag || selectedFolderId !== 'all' ? filteredMods
+    : [...builtinRows.filter(r => (!searchQuery || r.custom_name.toLowerCase().includes(searchQuery.toLowerCase())) && matchesState(modState, isEncrypted)(r as ModRecord)), ...filteredMods],
+  [filteredMods, builtinRows, selectedCharacters, selectedCategories, filterTag, selectedFolderId, searchQuery, modState, isEncrypted])
 
   // Keep filteredModsRef in sync for Shift+click range selection (repakxtra: the rows shown, built-ins too)
   filteredModsRef.current = libraryMods
@@ -3254,11 +3276,14 @@ function App() {
   }, [isPanelSettled])
 
   // Group mods by folder
-  const modsByFolder: Record<string, ModRecord[]> = {}
-  modsByFolder['_root'] = filteredMods.filter(m => !m.folder_id)
-  folders.forEach(folder => {
-    modsByFolder[folder.id] = filteredMods.filter(m => m.folder_id === folder.id)
-  })
+  const modsByFolder = useMemo(() => {
+    const byFolder: Record<string, ModRecord[]> = {}
+    byFolder['_root'] = filteredMods.filter(m => !m.folder_id)
+    folders.forEach(folder => {
+      byFolder[folder.id] = filteredMods.filter(m => m.folder_id === folder.id)
+    })
+    return byFolder
+  }, [filteredMods, folders])
 
   const toggleFolder = (folderId: string) => {
     const newExpanded = new Set(expandedFolders)
@@ -3995,9 +4020,10 @@ function App() {
               className="main-search-input"
             />
             {localSearch && (
-              <IconButton
-                size="small"
+              <button
+                type="button"
                 className="clear-search-btn"
+                aria-label="Clear search"
                 onClick={() => {
                   setLocalSearch('')
                   debouncedSetSearch('') // Clear immediately
@@ -4006,7 +4032,7 @@ function App() {
                 }}
               >
                 <ClearIcon fontSize="small" />
-              </IconButton>
+              </button>
             )}
           </div>
 
@@ -4066,7 +4092,7 @@ function App() {
             className="content-wrapper"
             initial={false}
             animate={{ width: `${leftPanelWidth}%` }}
-            transition={isResizing || !enableAnimations ? { duration: 0 } : { type: "tween", ease: "circOut", duration: 0.35 }}
+            transition={isResizing || !enableAnimations || liteOn() /* repakxtra: a width tween reflows the list every frame */ ? { duration: 0 } : { type: "tween", ease: "circOut", duration: 0.35 }}
           >
             {/* Left Sidebar - Folders */}
             <div className="left-sidebar" data-tour="folder-sidebar">
@@ -4425,11 +4451,10 @@ function App() {
         </div>
       </div >
 
-      <LogDrawer
+      <LiveLogDrawer
         // A running mod operation owns the bar; the hero download is background
         // work and only takes it over when nothing else is using it.
         status={!isModsLoading && heroSyncProgress ? heroSyncProgress.message : status}
-        logs={installLogs}
         onClear={clearLogs}
         progress={!isModsLoading && heroSyncProgress ? heroSyncProgress.percent : modLoadingProgress}
         isLoading={isModsLoading || heroSyncProgress !== null}

@@ -194,7 +194,7 @@ pub struct TrashedMod {
 }
 
 /// Every deletion still in the trash, newest first (expired ones go first, as on the next delete).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_trashed_mods() -> Vec<TrashedMod> {
     let root = trash_dir();
     purge_old(&root);
@@ -269,7 +269,7 @@ fn list_in(root: &Path) -> Vec<TrashedMod> {
 }
 
 /// Deletes the given deletions from the trash for good (they cannot be restored after this).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn empty_trashed_mods(ids: Vec<String>) -> Result<usize, String> {
     empty_in(&trash_dir(), &ids)
 }

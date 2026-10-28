@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, memo } from 'react'
 import { ModName } from '../custom/modName'
 import { motion } from 'framer-motion'
-import { Tooltip } from '@mui/material'
+import HoverTip from '../custom/HoverTip' // repakxtra: in place of MUI's Tooltip
 import { RiDeleteBin2Fill } from 'react-icons/ri'
 import { FaTag } from "react-icons/fa6"
 import Checkbox from './ui/Checkbox'
@@ -351,8 +351,10 @@ const ModItem = memo(function ModItem({
                 {/* Hero icon before name in list view */}
                 {heroImage && showHeroIcons && (viewMode === 'list' || viewMode === 'list-compact') && (
                     isMultiHero && heroesList.length > 0 ? (
-                        <Tooltip
-                            title={
+                        <HoverTip
+                            className="multi-hero-tooltip"
+                            placement="bottom"
+                            content={
                                 <div className="heroes-list">
                                     {heroesList.map(name => (
                                         <span key={name} className="tag hero-tag">
@@ -364,19 +366,9 @@ const ModItem = memo(function ModItem({
                                     ))}
                                 </div>
                             }
-                            arrow
-                            placement="bottom"
-                            slotProps={{
-                                tooltip: {
-                                    className: 'multi-hero-tooltip'
-                                },
-                                arrow: {
-                                    className: 'multi-hero-arrow'
-                                }
-                            }}
                         >
                             <img src={heroImage} alt="" className="mod-hero-icon-inline" />
-                        </Tooltip>
+                        </HoverTip>
                     ) : (
                         <img
                             src={heroImage}
@@ -439,8 +431,10 @@ const ModItem = memo(function ModItem({
                 <div className="mod-tags-row">
                     {heroImage && showHeroIcons && isCardView && (
                         isMultiHero && heroesList.length > 0 ? (
-                            <Tooltip
-                                title={
+                            <HoverTip
+                                className="multi-hero-tooltip"
+                                placement="bottom"
+                                content={
                                     <div className="heroes-list">
                                         {heroesList.map(name => (
                                             <span key={name} className="tag hero-tag">
@@ -452,23 +446,11 @@ const ModItem = memo(function ModItem({
                                         ))}
                                     </div>
                                 }
-                                arrow
-                                placement="bottom"
-                                slotProps={{
-                                    tooltip: {
-                                        className: 'multi-hero-tooltip'
-                                    },
-                                    arrow: {
-                                        className: 'multi-hero-arrow'
-                                    }
-                                }}
                             >
                                 <img src={heroImage} alt="" className="mod-hero-icon-badge" />
-                            </Tooltip>
+                            </HoverTip>
                         ) : (
-                            <Tooltip title={characterName ? heroLabel(characterName) /* repakxtra */ : 'Unknown Hero'}>
-                                <img src={heroImage} alt="" className="mod-hero-icon-badge" />
-                            </Tooltip>
+                            <img src={heroImage} alt="" className="mod-hero-icon-badge" title={characterName ? heroLabel(characterName) /* repakxtra */ : 'Unknown Hero'} />
                         )
                     )}
                     {/* Type badge at start for card views */}
@@ -497,29 +479,21 @@ const ModItem = memo(function ModItem({
                         </span>
                     ))}
                     {hiddenTags.length > 0 && (
-                        <Tooltip
-                            title={
+                        <HoverTip
+                            className="tags-tooltip"
+                            placement="top"
+                            content={
                                 <div className="tags-tooltip-content">
                                     {hiddenTags.map(tag => (
                                         <span key={tag}>{tag}</span>
                                     ))}
                                 </div>
                             }
-                            arrow
-                            placement="top"
-                            slotProps={{
-                                tooltip: {
-                                    className: 'tags-tooltip'
-                                },
-                                arrow: {
-                                    className: 'tags-tooltip-arrow'
-                                }
-                            }}
                         >
                             <span className="tag extra-tags-badge" style={{ cursor: 'help' }}>
                                 +{hiddenTags.length}
                             </span>
-                        </Tooltip>
+                        </HoverTip>
                     )}
                     {/* Type badge at end for list view */}
                     {!isCardView && sizeTag}

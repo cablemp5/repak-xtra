@@ -563,6 +563,7 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
   background: var(--bg-darkest) !important;
   border-top: 1px solid var(--panel-border) !important;
   box-shadow: none !important;
+  backdrop-filter: none !important; /* opaque here, so the blur showed nothing but redrew under every scroll */
 }
 .log-drawer-status-text { font-size: 12px; color: var(--text-secondary); }
 
@@ -1407,6 +1408,14 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
   animation-duration: 0s !important; animation-delay: 0s !important; transition-duration: 0s !important; transition-delay: 0s !important;
   scroll-behavior: auto !important;
 }
+/* Lighter graphics (Settings, uiPrefs.tsx liteOn): no blur or glass, the most expensive things a slow GPU draws. Motion
+   stays (slides and fades only move layers), surfaces keep their own colors behind where the glass was. A caption's
+   chosen Blur background is content, so it stays. */
+html[data-lite] { --page-blur: 0px; --icon-swap-blur: 0px; --stagger-blur: 0px; --reveal-blur: 0px; --digit-blur: 0px; --text-swap-blur: 0px; }
+html[data-lite] *, html[data-lite] *::before, html[data-lite] *::after { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+html[data-lite] .t-acc-panel-inner, html[data-lite] .lo-media.is-running .lo-card-image img, html[data-lite] .lo-media.is-queued .lo-card-image img,
+html[data-lite] .shine-border::after, html[data-lite] .toast-item { filter: none !important; }
+html[data-lite] .shine-border::after { animation: none !important; }
 
 /* Shimmer text (preview runs while they generate): one layer, the text itself is the gradient, so a light band crosses
    it left to right with nothing drawn twice (an overlay copy of the text never lines up exactly). Children (a bold

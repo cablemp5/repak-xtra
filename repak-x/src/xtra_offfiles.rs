@@ -102,7 +102,7 @@ fn sweep(root: &Path) {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn xtra_stage_off_files(paths: Vec<String>) -> Result<Vec<String>, String> {
     let root = std::env::temp_dir().join("repakxtra-off");
     if !paths.iter().any(|p| strip_off(p).is_some() || (Path::new(p).is_dir() && has_off_files(Path::new(p)))) {

@@ -36,8 +36,8 @@ const TitleBar = ({ title = "repakxtra", hideMaximize = false }: TitleBarProps) 
             }
         };
 
-        // Poll for resize changes to update maximize icon accurately (e.g. if user uses Snap Layouts)
-        const resizeInterval = setInterval(checkMaximizedState, 1000); // Poll every second as a fallback
+        // repakxtra: the resize event keeps the maximize icon right (Snap Layouts too), instead of asking every second
+        const unlistenResize = win.onResized(checkMaximizedState);
 
         // Focus listeners
         const unlistenFocus = win.listen('tauri://focus', () => {
@@ -51,7 +51,7 @@ const TitleBar = ({ title = "repakxtra", hideMaximize = false }: TitleBarProps) 
         });
 
         return () => {
-            clearInterval(resizeInterval);
+            unlistenResize.then(f => { try { f(); } catch (e) { } }).catch(() => { });
             unlistenFocus.then(f => { try { f(); } catch (e) { } }).catch(() => { });
             unlistenBlur.then(f => { try { f(); } catch (e) { } }).catch(() => { });
         };

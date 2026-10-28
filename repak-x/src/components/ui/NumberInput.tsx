@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react'
-import PropTypes from 'prop-types'
 import './NumberInput.css'
 
 type NumberInputProps = {
@@ -138,15 +137,6 @@ const NumberInput = ({ value, min = 0, max = 999, onChange, className, disabled 
       </button>
     </div>
   )
-}
-
-NumberInput.propTypes = {
-  value: PropTypes.number,
-  min: PropTypes.number,
-  max: PropTypes.number,
-  onChange: PropTypes.func,
-  className: PropTypes.string,
-  disabled: PropTypes.bool
 }
 
 export default NumberInput

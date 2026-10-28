@@ -192,7 +192,19 @@
   color: #999;
 }
 
-/* Tooltip styles */
+/* Tooltip styles (repakxtra: custom/HoverTip.tsx draws them, at the spot MUI's Tooltip did) */
+.hover-tip {
+  position: fixed;
+  z-index: 100000;
+  transform: translateX(-50%);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.hover-tip[data-placement="top"] {
+  transform: translate(-50%, -100%);
+}
+
 .multi-hero-tooltip {
   background-color: var(--panel-bg) !important;
   border: 1px solid rgba(74, 158, 255, 0.3) !important;

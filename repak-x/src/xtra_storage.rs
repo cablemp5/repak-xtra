@@ -41,18 +41,18 @@ fn write(name: &str, text: &str) -> Result<(), String> {
     fs::rename(&tmp, &path).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn xtra_storage_snapshot_write(text: String) -> Result<(), String> {
     write("webview-storage.json", &text)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn xtra_storage_snapshot_read() -> Option<String> {
     fs::read_to_string(file("webview-storage.json")).ok().filter(|t| checked(t).is_ok())
 }
 
 /// A copy's own entries, kept just before newer ones from another copy replace them.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn xtra_storage_backup_write(text: String) -> Result<(), String> {
     write("webview-storage.backup.json", &text)
 }

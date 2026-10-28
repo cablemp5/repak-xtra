@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useHoverTextReveal } from '../hooks/useHoverTextReveal'
 import { invoke } from '@tauri-apps/api/core'
-import { Tooltip } from '@mui/material'
+import HoverTip from '../custom/HoverTip' // repakxtra: in place of MUI's Tooltip
 import { FaTag, FaExchangeAlt } from "react-icons/fa"
 import { VscListTree } from "react-icons/vsc"
 import FileTree from './FileTree'
@@ -209,8 +209,10 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
                   </div>
                 )}
                 {details.mod_type?.startsWith('Multiple Heroes') && (
-                  <Tooltip
-                    title={
+                  <HoverTip
+                      className="multi-hero-tooltip"
+                      placement="bottom"
+                      content={
                       <div className="heroes-list">
                         {heroesList.map(name => (
                           <span key={name} className="tag hero-tag">
@@ -222,21 +224,11 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
                         ))}
                       </div>
                     }
-                    arrow
-                    placement="bottom"
-                    slotProps={{
-                      tooltip: {
-                        className: 'multi-hero-tooltip'
-                      },
-                      arrow: {
-                        className: 'multi-hero-arrow'
-                      }
-                    }}
                   >
                     <div className="character-badge multi-hero">
                       {details.mod_type?.split(' - ')[0] || 'Multiple Heroes'}
                     </div>
-                  </Tooltip>
+                  </HoverTip>
                 )}
                 <div className={`category-badge ${details.category ? details.category.toLowerCase().replace(/\s+/g, '-') + '-badge' : ''}`} title={typeHint ?? 'Mod Type'}>
                   {details.category || 'Unknown'}

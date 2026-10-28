@@ -138,7 +138,7 @@ pub fn error(scope: &str, message: impl Into<String>) {
 ///
 /// Non-draining on purpose: a reload should still see the startup banner, and
 /// the frontend dedupes by `seq` anyway.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_ui_log_backlog() -> Vec<UiLogPayload> {
     BACKLOG
         .lock()
@@ -173,7 +173,7 @@ pub fn get_app_log_path() -> String {
 /// The drawer already formats each line the way the user sees it, so exporting
 /// the frontend's strings keeps the file identical to what they were looking at
 /// (including any active filter) rather than re-deriving it here.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn export_ui_logs(lines: Vec<String>) -> Result<String, String> {
     let dir = log_dir();
     std::fs::create_dir_all(&dir).map_err(|e| format!("Could not create {:?}: {}", dir, e))?;
