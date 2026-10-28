@@ -2286,6 +2286,10 @@ input[type="text"]:focus {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  min-height: 0;
   padding: 5px;
   border: 0;
   border-radius: 50%;

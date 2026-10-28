@@ -196,13 +196,8 @@
 .hover-tip {
   position: fixed;
   z-index: 100000;
-  transform: translateX(-50%);
   border-radius: 6px;
   pointer-events: none;
-}
-
-.hover-tip[data-placement="top"] {
-  transform: translate(-50%, -100%);
 }
 
 .multi-hero-tooltip {

@@ -146,7 +146,7 @@ import SharingPanel from './components/SharingPanel'
 import Wordmark from './custom/Wordmark' // repakxtra: the logo
 import ConflictsPanel from './custom/ConflictsPanel' // repakxtra: in place of Repak X's ClashPanel (grouped, in words)
 import { keepThisOne } from './custom/keepOne' // repakxtra: Keep this one
-import { NEXUS_TYPE, recordSources, renameSource, sourceOf, useNexusScan } from './custom/nexusSource' // repakxtra: Nexus source
+import { NEXUS_TYPE, recordSources, renameSource, sourceOf, useNexusScan, useNexusSources } from './custom/nexusSource' // repakxtra: Nexus source
 import { stageOffFiles } from './custom/offFiles' // repakxtra: .pak.off files
 import CrashSuspects, { previousCrashes, withSuspects } from './custom/CrashSuspects' // repakxtra: crash suspects
 import { revealBuiltin, toggleBuiltin, useBuiltins, watchBuiltins } from './custom/BuiltinMods' // repakxtra: built-in mods
@@ -443,7 +443,8 @@ function App() {
   useConflictWatch(mods) // repakxtra
   useBrokenWatch(mods) // repakxtra
   useNexusScan(mods) // repakxtra: Nexus sources for mods installed before they were recorded, once
-  useBrokenVersion() // repakxtra: the Broken filter re-runs when the verdicts land
+  const brokenVersion = useBrokenVersion() // repakxtra: the Broken filter re-runs when the verdicts land
+  const nexusSources = useNexusSources() // repakxtra: and the Nexus type filter when a source is recorded
   const conflictCount = useConflictCount() // repakxtra
   reportSource.get = () => ({ mods, modDetails, launcherType, gamePath }) // repakxtra: setup report
   // repakxtra: Show all, beside the Library's title: every folder, no hero, type or tag filter and no search (the All / On /
@@ -1820,8 +1821,9 @@ function App() {
 
       if (versionRecorded && lastSeen && lastSeen !== xver) {
         console.debug('[Changelog] Version change detected', { lastSeen, currentVersion: xver, normalizedVersion })
-        try {
-          const releaseBody = await installedReleaseNotes(normalizedVersion)
+        // repakxtra: in the background with a 10 s cap, so a slow or unreachable network never holds up the mod list
+        void (async () => { try {
+          const releaseBody = await installedReleaseNotes(normalizedVersion, undefined, (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(10000) }))
 
           if (releaseBody) {
             uiLog.info('Changelog', `Updated from v${lastSeen} to ${xver} - showing changelog`)
@@ -1841,7 +1843,7 @@ function App() {
           }
         } catch (err) {
           uiLog.warn('Changelog', `Could not fetch the changelog for this version: ${err}`)
-        }
+        } })()
       } else {
         console.debug('[Changelog] Skipping changelog check on startup', {
           reason: !normalizedVersion
@@ -3042,7 +3044,7 @@ function App() {
     }
 
     return true
-  }), [mods, projectGalactaMod, searchQuery, filterTag, selectedCharacters, selectedCategories, modDetails])
+  }), [mods, projectGalactaMod, searchQuery, filterTag, selectedCharacters, selectedCategories, modDetails, nexusSources])
 
   // Apply folder filter to get final list for display
   const folderMods = useMemo(() => baseFilteredMods.filter(mod => {
@@ -3074,14 +3076,14 @@ function App() {
         return sortDirection === 'asc' ? aTime - bTime : bTime - aTime
       }
     })
-  }, [folderMods, modState, isEncrypted, sortBy, sortDirection])
+  }, [folderMods, modState, isEncrypted, sortBy, sortDirection, brokenVersion])
 
   // repakxtra: the built-in mods head the list (custom/builtinRows.ts), unless a hero, type or tag filter or a folder
   // narrows it: a search matches their names, the On / Off switch their state
   const builtinRows = useBuiltinRows(builtinHeroName)
   const libraryMods = useMemo(() => selectedCharacters.size || selectedCategories.size || filterTag || selectedFolderId !== 'all' ? filteredMods
     : [...builtinRows.filter(r => (!searchQuery || r.custom_name.toLowerCase().includes(searchQuery.toLowerCase())) && matchesState(modState, isEncrypted)(r as ModRecord)), ...filteredMods],
-  [filteredMods, builtinRows, selectedCharacters, selectedCategories, filterTag, selectedFolderId, searchQuery, modState, isEncrypted])
+  [filteredMods, builtinRows, selectedCharacters, selectedCategories, filterTag, selectedFolderId, searchQuery, modState, isEncrypted, brokenVersion])
 
   // Keep filteredModsRef in sync for Shift+click range selection (repakxtra: the rows shown, built-ins too)
   filteredModsRef.current = libraryMods

@@ -245,7 +245,7 @@ function PrefBox({ k, label }: { k: string; label: string }) {
     </div>
   )
 }
-const useAll = () => useSyncExternalStore(subscribe, () => PREFS.map(p => (isOn(p.key) ? 1 : 0)).join('') + '|' + getScale() + '|' + soundOn() + motionOn() +minimalToasts() + installsPlain() + tagsOff() + amoledOn())
+const useAll = () => useSyncExternalStore(subscribe, () => PREFS.map(p => (isOn(p.key) ? 1 : 0)).join('') + '|' + getScale() + '|' + soundOn() + motionOn() + liteOn() +minimalToasts() + installsPlain() + tagsOff() + amoledOn())
 
 export function AmoledSection({ onEnable }: { onEnable: () => void }) {
   useAll()

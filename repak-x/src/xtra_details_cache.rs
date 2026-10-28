@@ -11,8 +11,15 @@ fn file() -> PathBuf {
     dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-details-cache.json")
 }
 
-/// A new build or a character data update can change what details say, so either one starts the cache over.
+/// A new build or a character data update can change what details say, so either one starts the cache over. Taken once
+/// at launch: entries computed after a character data update while the app runs are saved under the launch's stamp, so
+/// the next launch (which sees the newer file) starts over instead of trusting them.
 fn stamp() -> String {
+    static STAMP: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    STAMP.get_or_init(launch_stamp).clone()
+}
+
+fn launch_stamp() -> String {
     let mtime = |p: Option<PathBuf>| {
         p.and_then(|p| std::fs::metadata(p).ok()).and_then(|m| m.modified().ok())
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs())

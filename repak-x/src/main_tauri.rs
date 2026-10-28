@@ -564,6 +564,7 @@ async fn start_file_watcher(
     // one every 500 ms while a big file copies (each reload re-lists the library and restarts its background scans).
     let (tx, rx) = std::sync::mpsc::channel::<Vec<std::path::PathBuf>>();
     let window_clone = window.clone();
+    let paused_at_emit = watcher_state.paused.clone();
     std::thread::spawn(move || {
         // Ends when the watcher (and with it the sender) is dropped
         while let Ok(first) = rx.recv() {
@@ -574,6 +575,9 @@ async fn start_file_watcher(
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => break,
                     Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
                 }
+            }
+            if paused_at_emit.load(Ordering::Relaxed) {
+                continue; // paused while these settled (a P2P transfer started): they are its own files
             }
             paths.sort();
             paths.dedup();
@@ -978,6 +982,7 @@ async fn set_mod_priority(
     {
         let mut state_guard = state.lock().unwrap();
         state_guard.mod_details_cache.remove(&path);
+        xtra_details_cache::mark_dirty(); // repakxtra: the saved copy follows
     }
 
     Ok(())
@@ -3412,6 +3417,7 @@ async fn delete_mod(
     {
         let mut state_guard = state.lock().unwrap();
         state_guard.mod_details_cache.remove(&actual_path);
+        xtra_details_cache::mark_dirty(); // repakxtra: the saved copy follows
     }
 
     // Determine the base path for IoStore files (always based on .pak name, not .bak_repak)
@@ -4115,6 +4121,7 @@ async fn rename_mod(
     {
         let mut state_guard = state.lock().unwrap();
         state_guard.mod_details_cache.remove(&old_path_buf);
+        xtra_details_cache::mark_dirty(); // repakxtra: the saved copy follows
 
         let old_key = get_mod_key(&old_path_buf);
         let new_key = get_mod_key(&new_path);
@@ -4765,6 +4772,7 @@ async fn toggle_mod(
         let mut state_guard = state.lock().unwrap();
         if let Some(entry) = state_guard.mod_details_cache.remove(&path) {
             state_guard.mod_details_cache.insert(new_path, entry);
+            xtra_details_cache::mark_dirty(); // repakxtra: the saved copy follows
         }
     }
 
