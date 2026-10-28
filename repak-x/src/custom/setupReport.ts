@@ -71,7 +71,7 @@ export function buildReport(r: ReportInput) {
     `repakxtra ${r.version}${r.repakx ? ` (RepakX ${r.repakx})` : ''}, ${r.launcher}`,
     `Signature bypass: ${r.bypass}`,
     `${LOADER_NAME}: ${r.galacta}`,
-    ...(EXTENDED ? [`Sigeon: ${r.sigeon}`] : []),
+    ...(EXTENDED ? [`SigeonLoader.asi config: ${r.sigeon}`] : []),
     `Mods: ${r.on.length} on, ${r.off} off`,
     ...(r.flags ? [`Mods that are on: ${r.flags}`] : []),
     `Conflicts: ${r.conflicts}`,
@@ -103,6 +103,11 @@ type Crash = {
 }
 const BYPASS: Record<string, string> = { installed: 'installed', disabled: 'off', partial: 'incomplete', other: 'a different version', missing: 'not installed' }
 
+/** This edition's loader pak (!ProjectGalacta_9999999_P, or !ProjectSigeon_9999999_P in repakxploit), on or off. The other
+ *  edition's loader stays listed: on, it means two loaders. */
+const isOwnLoader = (path: string) =>
+  new RegExp(String.raw`^!?project${EXTENDED ? 'sigeon' : 'galacta'}(_\d+)?(_p)?\.(pak|bak_repak)$`, 'i').test(path.split(/[\\/]/).pop() ?? '')
+
 /** Reads everything the report needs; whatever cannot be read says "unknown". */
 export async function gatherReport(): Promise<string> {
   const src = reportSource.get?.() ?? { mods: [], modDetails: {}, launcherType: '', gamePath: '' }
@@ -114,7 +119,9 @@ export async function gatherReport(): Promise<string> {
     settled(invoke<{ file_path: string; mod_paths: string[]; files?: string[] }[]>('check_mod_clashes', { quiet: true })),
     settled(invoke<Crash | null>('xtra_newest_crash')),
   ])
-  const onPaths = src.mods.filter(m => m.enabled).map(m => m.path)
+  // the edition's own loader has its line above, so it is not counted or listed as a mod too
+  const mods = src.mods.filter(m => !isOwnLoader(m.path))
+  const onPaths = mods.filter(m => m.enabled).map(m => m.path)
   // what the app knows about the mods that are on: checked now, not from the last background scan
   const [verdicts, niagara, suspects] = await Promise.all([
     settled(invoke<Verdict[]>('xtra_broken_mods', { modPaths: onPaths })),
@@ -133,7 +140,7 @@ export async function gatherReport(): Promise<string> {
     g.up_to_date === true ? `${g.latest}, up to date` : g.up_to_date === false ? `older than ${g.latest}` : 'version not checked',
   ].join(', ')
   const suspect = new Set((suspects ?? []).filter(t => t.tier === 'asset').map(t => key(t.path))) // hold the asset the newest crash names
-  const on = src.mods.filter(m => m.enabled).map(m => {
+  const on = mods.filter(m => m.enabled).map(m => {
     const d = src.modDetails[m.path]
     const v = verdictOf.get(key(m.path))
     const s = suspect.has(key(m.path))
@@ -182,7 +189,7 @@ export async function gatherReport(): Promise<string> {
     galacta: galactaText,
     sigeon: !sigeon ? 'unknown' : !sigeon.configured ? 'not set up' : sigeon.state === 'off' ? 'off' : `on, config "${sigeon.state}"`,
     on,
-    off: src.mods.filter(m => !m.enabled).length,
+    off: mods.filter(m => !m.enabled).length,
     conflicts: clashes ? plural(groupConflicts(clashes).length, 'group') : 'unknown',
     crash: crashText,
     crashLines,
@@ -200,6 +207,8 @@ if (import.meta.env.DEV) {
   const root = 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\MarvelRivals\\MarvelGame\\Marvel\\Content\\Paks\\~mods'
   console.assert(relativeToMods(`${root}\\Sub\\A_9999999_P.pak`, root) === '~mods/Sub/A_9999999_P.pak', 'mods relative to ~mods')
   console.assert(relativeToMods('D:\\Elsewhere\\B.pak', root) === 'B.pak', 'outside ~mods: the file name only')
+  console.assert(isOwnLoader(`${root}\\${EXTENDED ? '!ProjectSigeon' : '!ProjectGalacta'}_9999999_P.pak`) && !isOwnLoader(`${root}\\${EXTENDED ? 'ProjectSigeonFan' : 'BuckySwap_ProjectGalacta'}_P.pak`)
+    && !isOwnLoader(`${root}\\${EXTENDED ? '!ProjectGalacta' : '!ProjectSigeon'}_9999999_P.pak`), 'only this edition\'s own loader leaves the mod list')
   console.assert(scrub('C:\\Users\\someone\\Desktop\\x and D:/Games/MarvelRivals/~mods/a.pak') === '%USERPROFILE%\\…\\x and ~mods/a.pak', 'no user name, no drive paths', scrub('C:\\Users\\someone\\Desktop\\x and D:/Games/MarvelRivals/~mods/a.pak'))
   console.assert(scrub('at C:\\Users\\First Last\\Marvel\\x.cpp') === 'at %USERPROFILE%\\…\\x.cpp', 'a user folder with a space goes whole', scrub('at C:\\Users\\First Last\\Marvel\\x.cpp'))
   console.assert(scrub('C:\\Users\\x\\OneDrive - Contoso Ltd\\Games\\a.pak') === '%USERPROFILE%\\…\\a.pak', 'no folders under the user folder', scrub('C:\\Users\\x\\OneDrive - Contoso Ltd\\Games\\a.pak'))
