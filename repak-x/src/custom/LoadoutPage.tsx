@@ -21,7 +21,6 @@ import { plural } from './modName'
 import { SwapText } from './motion'
 import { GeneratePreviewsButton, previewSetKey } from './previews'
 import { CaptureButton, captureTarget } from './CapturePreview'
-import { cardItems } from './loadoutCardDraw' // repakxtra: Copy and Save loadout card
 
 const PAGE = 60
 
@@ -33,7 +32,7 @@ function SavedNote({ sig }: { sig: string }) {
   return n ? <span key={n} className="lp-saved" role="status"><Check size={12} />Saved</span> : null
 }
 
-type MoreItem = { label: string; onClick: () => void; disabled?: boolean; danger?: boolean; checked?: boolean } // checked: a switch, the menu stays open
+type MoreItem = { label: string; onClick: () => void; disabled?: boolean; danger?: boolean }
 
 /** Ctrl+N drawn as two key caps. */
 const Keys = ({ n }: { n: number }) => <span className="lp-keys"><kbd>Ctrl</kbd><span className="key-separator">+</span><kbd>{n}</kbd></span>
@@ -68,11 +67,7 @@ function MoreMenu({ items, danger, l, loadouts }: { items: MoreItem[]; danger: M
     return () => { document.removeEventListener('mousedown', outside); window.removeEventListener('keydown', keys, true) }
   }, [open, view])
   const pin = (n: number) => { pinHotkey(l.id, n); close() }
-  const action = (it: MoreItem) => it.checked !== undefined ? (
-    <button key={it.label} type="button" role="menuitemcheckbox" aria-checked={it.checked} className="sigeon-item lp-more-check" onClick={it.onClick}>
-      {it.label}<Check size={14} />
-    </button>
-  ) : (
+  const action = (it: MoreItem) => (
     <button key={it.label} type="button" role="menuitem" className={`sigeon-item${it.danger ? ' is-danger' : ''}`} disabled={it.disabled} onClick={() => { close(); it.onClick() }}>
       {it.label}
     </button>
@@ -144,7 +139,6 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
   const [limit, setLimit] = useState(PAGE)
   const [sort, setSort] = useState<'name' | 'newest'>('newest')
   const [exporting, setExporting] = useState(false)
-  const [, rerender] = useState(0) // repakxtra: the card's Show mod names switch
   const searchRef = useRef<HTMLInputElement>(null)
   const freshId = useRef<string | null>(null) // just made: Enter on its name goes on to Search mods to add
   useEffect(() => { setName(l.name) }, [l.id, l.name])
@@ -317,7 +311,6 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
             <MoreMenu items={[
               { label: 'Duplicate', onClick: () => openLoadout(duplicateLoadout(l).id, true) },
               { label: exporting ? 'Exporting…' : 'Export as zip', onClick: exportZip, disabled: exporting },
-              ...cardItems(l, mine.filter(k => byKey.has(k)).map(k => ({ key: k, category: categoryOf(k) })), p.alert, () => rerender(n => n + 1)), // repakxtra
               ...(missing.length ? [{ label: `Remove ${plural(missing.length, 'missing mod')}`, onClick: dropMissing }] : []),
               ...(hasMedia ? [{ label: 'Remove image', onClick: removeImage }] : []),
             ]} l={l} loadouts={loadouts} danger={{ label: 'Delete', danger: true, onClick: () => { if (deleteWithUndo(p, l)) onBack() } }} />

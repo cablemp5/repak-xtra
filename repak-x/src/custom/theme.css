@@ -1634,11 +1634,6 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
 .lp-more-menu .sigeon-item.lp-more-sub, .lp-more-menu .sigeon-item.lp-key-row { justify-content: space-between !important; gap: 12px; }
 .lp-more-value { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
 .lp-more-value > svg { margin-right: -4px; }
-/* Loadout card's Show mod names switch: the check pops in or fades out in place, the menu stays open (Doherty threshold: under 200 ms) */
-.lp-more-menu .sigeon-item.lp-more-check { justify-content: space-between !important; gap: 12px; }
-.lp-more-check > svg { color: var(--text-secondary); transition: opacity 160ms ease-out, transform 160ms cubic-bezier(0.34, 1.56, 0.64, 1); }
-.lp-more-check[aria-checked="false"] > svg { opacity: 0; transform: scale(0.6); }
-@media (prefers-reduced-motion: reduce) { .lp-more-check > svg { transition: none; } }
 .lp-more-menu .sigeon-item.lp-more-back { position: relative; margin-bottom: 9px; gap: 6px; padding-left: 6px !important; color: var(--text-secondary) !important; font-size: 12px !important; }
 .lp-more-back::after { content: ''; position: absolute; left: -4px; right: -4px; bottom: -5px; border-top: 1px solid var(--panel-border); }
 .lp-more-back:hover { color: var(--text-primary) !important; }
