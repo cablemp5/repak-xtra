@@ -8392,8 +8392,6 @@ fn main() {
     character_data::refresh_cache();
 
     let state = Arc::new(Mutex::new(load_state()));
-    // repakxtra: a half-built install or receive from a run that was closed midway is never left for the game to load
-    crate::xtra_bundle::sweep_staging(&state.lock().unwrap().game_path);
     let watcher_state = WatcherState {
         watcher: Mutex::new(None),
         last_event_time: Mutex::new(std::time::Instant::now()),
@@ -8491,6 +8489,9 @@ fn main() {
             // void. Entries land in a replay buffer until the webview mounts.
             ui_log::init(app.handle().clone());
             emit_session_banner(app);
+            // Plugin initialization has established that this is the primary instance. Secondary opens must not sweep live work.
+            let mods = app.state::<Arc<Mutex<AppState>>>().lock().unwrap().game_path.clone();
+            crate::xtra_bundle::sweep_staging(&mods);
             xtra_project::on_open(app.handle());
             xtra_buildmark::tint_window_icon(app); // repakxtra: green (test) or amber (dev) taskbar icon
 
