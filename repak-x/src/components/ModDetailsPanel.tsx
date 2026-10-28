@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useHoverTextReveal } from '../hooks/useHoverTextReveal'
 import { invoke } from '@tauri-apps/api/core'
 import HoverTip from '../custom/HoverTip' // repakxtra: in place of MUI's Tooltip
@@ -60,6 +60,9 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
   const typeHint = useTypeHint(details?.category) // repakxtra: type badge tooltip
   const [loading, setLoading] = useState(!initialDetails)
   const [error, setError] = useState<string | null>(null)
+  // repakxtra: the mod whose whole file list is showing (its name without the on/off extension, which a toggle changes)
+  const fullFor = useRef<string | null>(null)
+  const sameMod = (path: string) => path.replace(/\.(pak|bak_repak|pak_disabled)$/i, '')
 
   useEffect(() => {
     let cancelled = false
@@ -72,7 +75,8 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
       // Check if we already have details for this mod
       const preloaded = initialDetails && (initialDetails.mod_path === mod.path || !initialDetails.mod_path)
       if (preloaded) {
-        setDetails(initialDetails)
+        // a reload (a toggle, a rename) hands over the Library's partial copy: the whole list on show stays until the new one lands
+        if (!initialDetails.files_partial || fullFor.current !== sameMod(mod.path)) setDetails(initialDetails)
         setLoading(false)
         // repakxtra: the Library holds only part of the file list (xtra_library_files.rs): the whole one is fetched below,
         // without the loading state, while the rest shows
@@ -97,6 +101,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
 
         console.log('Received details:', modDetails)
         setDetails(modDetails)
+        fullFor.current = modDetails.files_partial ? null : sameMod(mod.path) // repakxtra
       } catch (err) {
         if (cancelled) return
         console.error('Failed to load mod details:', err)

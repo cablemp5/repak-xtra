@@ -180,14 +180,14 @@ pub fn vfx_create_pipeline_directories() -> Result<VfxTempDirectories, String> {
     create_pipeline_directories()
 }
 
-#[tauri::command(async)]
-pub fn vfx_cleanup_temp_directories() -> Result<(), String> {
-    cleanup_vfx_temp_directories()
+#[tauri::command]
+pub async fn vfx_cleanup_temp_directories() -> Result<(), String> {
+    crate::blocking(cleanup_vfx_temp_directories).await // repakxtra: off the async workers
 }
 
-#[tauri::command(async)]
-pub fn vfx_cleanup_pipeline() -> Result<(), String> {
-    cleanup_pipeline()
+#[tauri::command]
+pub async fn vfx_cleanup_pipeline() -> Result<(), String> {
+    crate::blocking(cleanup_pipeline).await // repakxtra: off the async workers
 }
 
 // ============================================================================

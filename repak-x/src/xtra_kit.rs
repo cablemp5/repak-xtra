@@ -424,10 +424,13 @@ fn run_winget(app: &AppHandle) -> Result<(Option<i32>, String), String> {
     Ok((code, last))
 }
 
-#[tauri::command(async)]
-pub fn preview_kit_remove() -> Result<(), String> {
-    let _hold = crate::xtra_previews::reserve("kit").map_err(crate::xtra_previews::busy_text)?;
-    fs::remove_dir_all(kit_dir()).or_else(|e| if e.kind() == std::io::ErrorKind::NotFound { Ok(()) } else { Err(e.to_string()) })
+#[tauri::command]
+pub async fn preview_kit_remove() -> Result<(), String> {
+    // repakxtra: file work on a blocking thread, never on the async workers every other command shares
+    crate::blocking(|| {
+        let _hold = crate::xtra_previews::reserve("kit").map_err(crate::xtra_previews::busy_text)?;
+        fs::remove_dir_all(kit_dir()).or_else(|e| if e.kind() == std::io::ErrorKind::NotFound { Ok(()) } else { Err(e.to_string()) })
+    }).await
 }
 
 /// Picks blender.exe by hand (None goes back to finding it in Program Files).

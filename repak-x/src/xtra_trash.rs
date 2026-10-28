@@ -194,12 +194,15 @@ pub struct TrashedMod {
 }
 
 /// Every deletion still in the trash, newest first (expired ones go first, as on the next delete).
-#[tauri::command(async)]
-pub fn list_trashed_mods() -> Vec<TrashedMod> {
-    let root = trash_dir();
-    purge_old(&root);
-    adopt_flat(&root);
-    list_in(&root)
+#[tauri::command]
+pub async fn list_trashed_mods() -> Vec<TrashedMod> {
+    // repakxtra: it deletes expired entries too: on a blocking thread, never on the async workers
+    crate::blocking(|| {
+        let root = trash_dir();
+        purge_old(&root);
+        adopt_flat(&root);
+        Ok(list_in(&root))
+    }).await.unwrap_or_default()
 }
 
 /// A mod's files share this: its name without the pak, container and on/off extensions.
@@ -269,9 +272,9 @@ fn list_in(root: &Path) -> Vec<TrashedMod> {
 }
 
 /// Deletes the given deletions from the trash for good (they cannot be restored after this).
-#[tauri::command(async)]
-pub fn empty_trashed_mods(ids: Vec<String>) -> Result<usize, String> {
-    empty_in(&trash_dir(), &ids)
+#[tauri::command]
+pub async fn empty_trashed_mods(ids: Vec<String>) -> Result<usize, String> {
+    crate::blocking(move || empty_in(&trash_dir(), &ids)).await // repakxtra: off the async workers
 }
 
 fn empty_in(root: &Path, ids: &[String]) -> Result<usize, String> {

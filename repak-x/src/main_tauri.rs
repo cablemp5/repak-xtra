@@ -88,7 +88,6 @@ use walkdir::WalkDir;
 struct WatcherState {
     watcher: Mutex<Option<RecommendedWatcher>>,
     #[allow(dead_code)]
-    last_event_time: Mutex<std::time::Instant>,
     /// When true, the file watcher suppresses events (e.g. during P2P transfer)
     paused: Arc<AtomicBool>,
 }
@@ -7290,6 +7289,12 @@ async fn get_mod_details(
     .map_err(|e| e.to_string())?
 }
 
+/// repakxtra: runs a slow file command's work on a blocking thread. `#[tauri::command(async)]` alone runs it on one of
+/// the async workers every other command shares (one per CPU thread), so two slow ones stalled the app on a 2-thread PC.
+pub(crate) async fn blocking<T: Send + 'static>(work: impl FnOnce() -> Result<T, String> + Send + 'static) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(work).await.map_err(|e| e.to_string())?
+}
+
 /// repakxtra: the Library's copy of cached details: every field but the whole file list, which stays in the cache.
 fn library_copy(d: &mut ModDetails) -> Option<ModDetails> {
     let library = d.library_files.clone()?;
@@ -8497,9 +8502,26 @@ fn main() {
     character_data::refresh_cache();
 
     let state = Arc::new(Mutex::new(load_state()));
+    // repakxtra: last launch's mod details come back before the window opens and asks for them (entries computed meanwhile win), then changes are saved every 15 s
+    let details_state = state.clone();
+    std::thread::spawn(move || {
+        let saved = xtra_details_cache::load();
+        {
+            let mut st = details_state.lock().unwrap();
+            for (path, entry) in saved {
+                st.mod_details_cache.entry(path).or_insert(entry);
+            }
+        }
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(15));
+            if xtra_details_cache::take_dirty() {
+                let snapshot = details_state.lock().unwrap().mod_details_cache.clone();
+                xtra_details_cache::save(&snapshot);
+            }
+        }
+    });
     let watcher_state = WatcherState {
         watcher: Mutex::new(None),
-        last_event_time: Mutex::new(std::time::Instant::now()),
         paused: Arc::new(AtomicBool::new(false)),
     };
     let crash_state = CrashMonitorState {
@@ -8603,24 +8625,6 @@ fn main() {
             crate::xtra_bundle::sweep_staging(&mods);
             xtra_project::on_open(app.handle());
             xtra_buildmark::tint_window_icon(app); // repakxtra: green (test) or amber (dev) taskbar icon
-            // repakxtra: last launch's mod details come back (entries computed meanwhile win), then changes are saved every 15 s
-            let details_state = app.state::<Arc<Mutex<AppState>>>().inner().clone();
-            std::thread::spawn(move || {
-                let saved = xtra_details_cache::load();
-                {
-                    let mut st = details_state.lock().unwrap();
-                    for (path, entry) in saved {
-                        st.mod_details_cache.entry(path).or_insert(entry);
-                    }
-                }
-                loop {
-                    std::thread::sleep(std::time::Duration::from_secs(15));
-                    if xtra_details_cache::take_dirty() {
-                        let snapshot = details_state.lock().unwrap().mod_details_cache.clone();
-                        xtra_details_cache::save(&snapshot);
-                    }
-                }
-            });
 
             #[cfg(any(windows, target_os = "linux"))]
             {

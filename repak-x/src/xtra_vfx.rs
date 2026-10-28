@@ -617,8 +617,11 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
     Ok((placed, from, vec![target, kept]))
 }
 
-#[tauri::command(async)]
-pub fn xtra_vfx_place(source: String, staged_base: String, turn_off_original: bool, keep_name: Option<bool>, trash_original: Option<bool>, partial: Option<bool>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Placed, String> {
+#[tauri::command]
+pub async fn xtra_vfx_place(source: String, staged_base: String, turn_off_original: bool, keep_name: Option<bool>, trash_original: Option<bool>, partial: Option<bool>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Placed, String> {
+    // repakxtra: file moves on a blocking thread, never on the async workers every other command shares
+    let state = state.inner().clone();
+    crate::blocking(move || {
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?;
     // renaming or replacing containers the game has loaded: not while it runs, as every other mod change
@@ -637,6 +640,7 @@ pub fn xtra_vfx_place(source: String, staged_base: String, turn_off_original: bo
         let _ = crate::save_state(&s);
     }
     Ok(placed)
+    }).await
 }
 
 #[derive(Serialize, Debug)]
