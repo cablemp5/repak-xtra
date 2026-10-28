@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { IoLayersSharp } from "react-icons/io5"
+import { Trash2 } from 'lucide-react' // repakxtra
 import './ContextMenu.css'
 import { holdKeys } from '../custom/holdKeys' // repakxtra
 import { useMenuKeys } from '../custom/menuKeys' // repakxtra
@@ -44,6 +45,7 @@ type ContextMenuProps = {
   onCheckVfx?: () => void // repakxtra: Check for VFX update (custom/vfx/quick.ts)
   onShowInAssetExplorer?: (mod: ModRecord) => void
   onExtractAssets?: (mod: ModRecord) => void
+  onEncrypt?: () => void // repakxtra: opens Encrypt with the clicked mod or its selection picked (custom/EncryptMods.tsx)
   allTags: string[]
   onDeleteTag?: (tag: string) => void
   gamePath?: string
@@ -52,7 +54,7 @@ type ContextMenuProps = {
   selectionCount?: number
 }
 
-const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMoveTo, onMoveFolderTo, onCreateFolder, folders, onDelete, onToggle, onRename, onRenameFolder, onCheckConflicts, loadoutMenu, onUpdateMod, onSendToVfxUpdater, onUpdateVfx, onCheckVfx, onShowInAssetExplorer, onExtractAssets, allTags, onDeleteTag, gamePath, holdToDelete = true, selectionCount = 0 }: ContextMenuProps) => {
+const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMoveTo, onMoveFolderTo, onCreateFolder, folders, onDelete, onToggle, onRename, onRenameFolder, onCheckConflicts, loadoutMenu, onUpdateMod, onSendToVfxUpdater, onUpdateVfx, onCheckVfx, onShowInAssetExplorer, onExtractAssets, onEncrypt, allTags, onDeleteTag, gamePath, holdToDelete = true, selectionCount = 0 }: ContextMenuProps) => {
   const [isDeleting, setIsDeleting] = useState(false)
   const deleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
@@ -334,7 +336,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
           {...deleteProps}
         >
           <div className="danger-bg" />
-          <span style={{ position: 'relative', zIndex: 2 }}>{!holdToDelete ? 'Delete Folder' : isDeleting ? 'Hold to delete…' : 'Delete Folder (Hold 2s)'}</span>
+          <span style={{ position: 'relative', zIndex: 2 }}>{!holdToDelete ? 'Delete Folder' : isDeleting ? 'Hold to delete…' : 'Delete Folder (Hold 2s)'}</span><Trash2 size={14} className="context-menu-trash" aria-hidden="true" />{/* repakxtra */}
         </div>
       </div>
     )
@@ -424,6 +426,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
       <div className="context-menu-item" onClick={() => { if (onUpdateMod) onUpdateMod(); onClose(); }}>
         Replace file…
       </div>
+      {onEncrypt && <div className="context-menu-item" onClick={() => { onEncrypt(); onClose(); }}>{selectionCount > 1 ? `Encrypt ${selectionCount} mods` : 'Encrypt'}</div>}{/* repakxtra */}
       <div className="context-menu-item" onClick={async () => {
         try {
           await invoke('open_in_explorer', { path: mod.path });
@@ -470,7 +473,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
         {...deleteProps}
       >
         <div className="danger-bg" />
-        <span style={{ position: 'relative', zIndex: 2 }}>{!holdToDelete ? 'Delete' : isDeleting ? 'Hold to delete…' : 'Delete (Hold 2s)'}</span>
+        <span style={{ position: 'relative', zIndex: 2 }}>{!holdToDelete ? 'Delete' : isDeleting ? 'Hold to delete…' : 'Delete (Hold 2s)'}</span><Trash2 size={14} className="context-menu-trash" aria-hidden="true" />{/* repakxtra */}
       </div>
     </div>
   )

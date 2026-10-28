@@ -7,6 +7,7 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import ExtendedAccess from './custom/ExtendedAccess'
 import VfxUpdaterWindow from './custom/vfx/VfxUpdaterWindow' // repakxtra: in place of the upstream VFX Updater's page
+import EncryptWindow from './custom/EncryptWindow' // repakxtra
 import AssetExplorerPage from './modules/asset-explorer/AssetExplorerPage'
 import './custom/theme.css' // repakxtra: theme for every window, last so it wins the cascade
 import './custom/uiPrefs' // repakxtra: UI scale and optional controls in every window
@@ -27,6 +28,7 @@ if (!rootElement) {
 // index.html, which is what dismisses the splash overlay for them.
 const SECONDARY_WINDOWS: { route: string; view: () => JSX.Element }[] = [
   { route: 'vfx-updater', view: () => <VfxUpdaterWindow /> }, // repakxtra
+  { route: '/encrypt', view: () => <EncryptWindow /> }, // repakxtra
   { route: 'asset-explorer', view: () => <AssetExplorerPage /> },
 ]
 

@@ -61,6 +61,32 @@ fn primary(path: &Path) -> Result<PathBuf, String> {
         .ok_or_else(|| "The IoStore companion PAK is missing. Select a complete mod bundle.".into())
 }
 
+/// One UAssetTool encryption (`encrypt_iostore` or `encrypt_pak`): it rewrites `from` encrypted into `to`, then reads it
+/// back and compares every entry, so a success means the payloads are unchanged.
+fn tool(action: &str, from: &Path, to: &Path) -> Result<(), String> {
+    let request = serde_json::json!({ "action": action, "file_path": from, "output_path": to });
+    let answer = uasset_toolkit::invoke_json(&request.to_string()).map_err(|e| e.to_string())?;
+    let answer: serde_json::Value = serde_json::from_str(&answer).map_err(|e| e.to_string())?;
+    if answer["success"] != true { return Err(answer["message"].as_str().unwrap_or("Encryption failed").into()); }
+    Ok(())
+}
+
+/// Encrypts a fresh build outside the library (`base` + .pak, .utoc and .ucas, as xtra_builtins makes them) in place:
+/// CustomQuake after every build. All three are written beside it first, so a failure leaves the build as it was.
+pub fn encrypt_built(base: &Path) -> Result<(), String> {
+    let name = base.file_name().ok_or("The build has no file name")?;
+    let work = tempfile::Builder::new().prefix(".repakxtra-encrypt-").tempdir_in(base.parent().ok_or("The build has no folder")?).map_err(|e| e.to_string())?;
+    let out = work.path().join(name);
+    tool("encrypt_iostore", &base.with_extension("utoc"), &out.with_extension("utoc"))?;
+    tool("encrypt_pak", &base.with_extension("pak"), &out.with_extension("pak"))?;
+    let exts = ["ucas", "utoc", "pak"];
+    if let Some(x) = exts.iter().find(|x| !out.with_extension(x).is_file()) { return Err(format!("Encryption made no .{x}")); }
+    // shortcut: a rename failing after the first leaves a mixed set in the temp build, which the caller then drops (it
+    // fails the build), so nothing mixed reaches the game
+    for x in exts { fs::rename(out.with_extension(x), base.with_extension(x)).map_err(|e| e.to_string())?; }
+    Ok(())
+}
+
 fn encrypt(path: &Path) -> Result<Encrypted, String> {
     crate::xtra_identity::upstream_guard()?;
     if crate::is_game_process_running() { return Err("Close Marvel Rivals before encrypting mods.".into()); }
@@ -77,17 +103,9 @@ fn encrypt(path: &Path) -> Result<Encrypted, String> {
     let before = snapshot(&source)?;
     let work = tempfile::Builder::new().prefix(".repakxtra-encrypt-").tempdir_in(parent).map_err(|e| e.to_string())?;
     let output = work.path().join(format!("{name}.bak_repak")); // never mountable, even if the app crashes
-    if toc.is_file() {
-        let request = serde_json::json!({ "action": "encrypt_iostore", "file_path": toc, "output_path": companion(&output, "utoc") });
-        let answer = uasset_toolkit::invoke_json(&request.to_string()).map_err(|e| e.to_string())?;
-        let answer: serde_json::Value = serde_json::from_str(&answer).map_err(|e| e.to_string())?;
-        if answer["success"] != true { return Err(answer["message"].as_str().unwrap_or("Encryption failed").into()); }
-    }
+    if toc.is_file() { tool("encrypt_iostore", &toc, &companion(&output, "utoc"))?; }
     // Repack the PAK separately, including loose hybrid files; never drop its entries.
-    let request = serde_json::json!({ "action": "encrypt_pak", "file_path": source, "output_path": output });
-    let answer = uasset_toolkit::invoke_json(&request.to_string()).map_err(|e| e.to_string())?;
-    let answer: serde_json::Value = serde_json::from_str(&answer).map_err(|e| e.to_string())?;
-    if answer["success"] != true { return Err(answer["message"].as_str().unwrap_or("PAK encryption failed").into()); }
+    tool("encrypt_pak", &source, &output)?;
     let mut moves = vec![(output, source.clone())];
     if toc.is_file() {
         for x in ["utoc", "ucas"] {
@@ -110,6 +128,32 @@ fn encrypt(path: &Path) -> Result<Encrypted, String> {
     unchanged(&source, &before)?;
     crate::xtra_bundle::replace_all(&moves)?;
     Ok(Encrypted { path: source.to_string_lossy().into_owned(), backup: backup.to_string_lossy().into_owned() })
+}
+
+/// One mod for the Encrypt window's list (EncryptWindow.tsx).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Listed { path: String, custom_name: Option<String>, enabled: bool, hero: Option<String>, modified: u64, encrypted: bool }
+
+/// The Library's mods with their heroes and whether each is encrypted, for the Encrypt window: the mod list leaves the hero
+/// empty for most mods, so it comes from their details, as the VFX Updater's list does (cached after the Library's first look).
+#[tauri::command]
+pub async fn xtra_encrypt_list(window: tauri::Window, state: tauri::State<'_, std::sync::Arc<std::sync::Mutex<crate::AppState>>>) -> Result<Vec<Listed>, String> {
+    use tauri::Emitter;
+    let mods = crate::get_pak_files(state.clone()).await?;
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let total = mods.len();
+        mods.into_iter().enumerate().map(|(i, m)| {
+            if i % 8 == 0 || i + 1 == total { let _ = window.emit("encrypt_list_progress", serde_json::json!({ "done": i + 1, "total": total })); }
+            let named = |c: Option<String>| c.filter(|c| !c.is_empty());
+            // the details also say whether it is encrypted (the PAK index or the .utoc header), for the window's two groups
+            let details = crate::compute_mod_details(&m.path, &state).ok();
+            let encrypted = details.as_ref().is_some_and(|d| d.is_encrypted);
+            let hero = named(m.character_name.clone()).or_else(|| details.and_then(|d| named(Some(d.character_name))));
+            Listed { path: m.path.to_string_lossy().into_owned(), custom_name: named(m.custom_name), enabled: m.enabled, hero, modified: m.modified_date, encrypted }
+        }).collect()
+    }).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -163,6 +207,20 @@ mod tests {
         assert!(primary(&d.path().join("anything.exe")).is_err());
         fs::write(d.path().join("Skin.v2.pak"), b"another").unwrap();
         assert!(primary(&d.path().join("Skin.v2.bak_repak")).is_err(), "ambiguous bundles are not touched");
+    }
+
+    #[test]
+    fn vfx_updated_bundles_resolve_on_and_off() {
+        // the VFX Updater's names, and a turned-off update (the case repak-rivals' encrypter cannot find a .pak for)
+        let d = tempfile::tempdir().unwrap();
+        let name = "ElectricBluePantherDarkerShinierSuit_UPDATED_9999999_P";
+        for x in ["utoc", "ucas"] { fs::write(d.path().join(format!("{name}.{x}")), b"c").unwrap(); }
+        fs::write(d.path().join(format!("{name}.bak_repak")), b"pak").unwrap();
+        let off = primary(&d.path().join(format!("{name}.utoc"))).unwrap();
+        assert_eq!(off, d.path().join(format!("{name}.bak_repak")), "off: the .bak_repak is the bundle, nothing is turned on");
+        assert_eq!(companion(&off, "utoc"), d.path().join(format!("{name}.utoc")));
+        fs::rename(&off, d.path().join(format!("{name}.pak"))).unwrap();
+        assert_eq!(primary(&d.path().join(format!("{name}.ucas"))).unwrap(), d.path().join(format!("{name}.pak")));
     }
 
     #[test]

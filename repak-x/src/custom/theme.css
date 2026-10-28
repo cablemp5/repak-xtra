@@ -49,6 +49,11 @@
   --status-bar-bg: #000;
   --input-bg: #080808;
 }
+/* AMOLED drop overlay: the hovered zone stays black (it was --bg-lighter grey with a tinted inner glow), folder rows keep a hover */
+:root[data-edition="extended"][data-amoled] .dropzone-overlay { --overlay-bg: rgba(0, 0, 0, 0.88); }
+:root[data-edition="extended"][data-amoled] .dropzone-card { --bg-lighter: #000; }
+:root[data-edition="extended"][data-amoled] .dropzone-card:is(:hover, .active) { box-shadow: 0 0 40px color-mix(in srgb, var(--accent-primary), transparent 85%); }
+:root[data-edition="extended"][data-amoled] .drop-folder-item:hover { background: #191919; }
 
 /* Geist and Geist Mono (OFL, bundled in ./fonts, one variable file each covering 100-900): UI and code */
 @font-face {
@@ -523,6 +528,7 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 .context-menu .submenu > .context-menu-item { white-space: nowrap; }
 /* Delete is the one red word in the menu */
 .context-menu-item.danger, .context-menu-item.danger span { color: #f2555a !important; }
+.context-menu-item.danger > .context-menu-trash { position: relative; z-index: 2; flex: none; margin-left: 12px; color: #f2555a; }   /* above the hold fill */
 .context-menu-item.danger:hover, .app .context-menu-item.danger:focus-visible { background: rgba(242, 85, 90, 0.1) !important; }
 .context-menu-separator { background: rgba(255, 255, 255, 0.07) !important; }
 
@@ -579,11 +585,19 @@ html:not([data-show-priority]) .mod-card .number-input-container { display: none
 html:not([data-show-share]) [data-tour="sharing-btn"] { display: none !important; }
 html:not([data-show-tools]) [data-tour="tools-btn"] { display: none !important; }
 html:not([data-show-vfx-updater]) [data-tour="vfx-updater-btn"] { display: none !important; }
+html:not([data-show-encrypt]) [data-tour="encrypt-btn"] { display: none !important; }
 html:not([data-show-conflicts]) .mod-type-badge.conflict-badge, html:not([data-show-conflicts]) .conflict-dot { display: none !important; }   /* Settings > On each mod */
 html:not([data-show-asset-explorer]) .btn-asset-explorer,
 html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { display: none !important; }
 html:not([data-show-sigeon]) .header .sigeon { display: none !important; }
 html:not([data-show-nexus]) .nexus-badge { display: none !important; }
+html:not([data-show-encrypted]) .mod-lock { display: none !important; }
+/* an encrypted mod: a quiet lock after its name (mod details read the flag from the PAK index or the .utoc header) */
+/* the lock and the word, in the tags row after the Nexus tag, built like the In loadout tag: 22px, a hairline, no fill */
+.mod-type-badge.mod-lock { gap: 4px; height: 22px !important; min-height: 0 !important; padding: 0 8px !important; box-sizing: border-box;   /* the tags row's gap spaces it */
+  background: none !important; border: 1px solid var(--panel-border) !important; color: var(--text-secondary) !important;
+  font-size: 11px !important; font-weight: 600 !important; line-height: normal !important; }   /* the type badges' text */
+.mod-type-badge.mod-lock svg.lucide { flex: none; width: 9px !important; height: 9px !important; }   /* past the 14px icon rule */
 /* Broken warnings off: no Broken or May crash badges (the Broken tab and the switch-on warnings are left out in code) */
 html:not([data-show-broken]) .broken-badge { display: none !important; }
 /* Quick Organize off (the default): dragging files in shows only the Install panel, at a readable width */
@@ -2709,7 +2723,7 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
   display: block; border: none; border-radius: 0; background: transparent; outline: none; box-shadow: none !important;
   color: var(--cap, var(--text-primary)); font: 800 22px/1.15 var(--font-primary); letter-spacing: -0.02em; text-align: center; cursor: text;
   transition: border-color 0.15s ease; }
-.lo-caption-edit::placeholder { color: rgba(255, 255, 255, 0.28); }
+.app .lo-caption-edit::placeholder { color: rgba(255, 255, 255, 0.28); }   /* .app: past the app-wide .app textarea::placeholder grey */
 /* Empty, the field is as wide as "Type a title" and starts at its left, so the caret sits at the start of the words */
 .lo-caption-edit:placeholder-shown { text-align: left; }
 [data-theme="light"] .lo-caption-edit::placeholder { color: rgba(0, 0, 0, 0.3); }

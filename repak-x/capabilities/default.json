@@ -4,6 +4,7 @@
   "windows": [
     "main",
     "vfx-updater",
+    "encrypt",
     "asset-explorer"
   ],
   "permissions": [
