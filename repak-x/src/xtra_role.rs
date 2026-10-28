@@ -42,7 +42,7 @@ pub fn xtra_role_ready() -> bool {
 }
 
 /// Starts a claim: a new state (the last few older ones still count, see accept) and the consent page to open.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn xtra_role_claim_start() -> Result<String, String> {
     let worker = WORKER.ok_or("Claim role is not set up yet")?;
     let mut bytes = [0u8; 32];

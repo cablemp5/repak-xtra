@@ -46,14 +46,14 @@ fn disable(items: &[Item], save_choice: impl FnOnce() -> Result<(), String>) -> 
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn legacy_setup_status(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Vec<String> {
     let path = state.lock().unwrap().game_path.clone();
     let mut labels: Vec<String> = discover(&path).into_iter().map(|i| i.label.to_string()).collect();
     labels.sort(); labels.dedup(); labels
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn legacy_setup_disable(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<(), String> {
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?;

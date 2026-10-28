@@ -150,7 +150,7 @@ export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], ve
     const details = { ...p.modDetails }
     if (verb === 'on' && wasOn.length) {
       const relevant = new Set([l, ...wasOn].flatMap(o => o.on.map(canonKey)))
-      const missing = p.mods.filter(m => relevant.has(modKey(m.path)) && (!details[m.path] || (!details[m.path]!.files?.length && !skinLooks(details[m.path]!).size)))
+      const missing = p.mods.filter(m => relevant.has(modKey(m.path)) && (!details[m.path] || (!details[m.path]!.files?.length && !details[m.path]!.files_partial /* repakxtra: a partial list is complete for skins */ && !skinLooks(details[m.path]!).size)))
       const loaded = await Promise.allSettled(missing.map(async m => { details[m.path] = await invoke<SkinDetails>('get_mod_details', { modPath: m.path }) }))
       if (loaded.some(r => r.status === 'rejected')) p.alert.warning('Skin check incomplete', 'Some mod details could not be read. Conflicts for those mods could not be checked.')
     }

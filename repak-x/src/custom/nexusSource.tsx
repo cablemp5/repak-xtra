@@ -26,6 +26,8 @@ export const NEXUS_TYPE = 'Nexus'
 
 export const pageUrl = (id: number) => `https://www.nexusmods.com/marvelrivals/mods/${id}`
 export const sourceOf = (path: string): NexusSource | undefined => read()[norm(nameKey(path))]
+/** The saved sources as stored (a string, so it compares by value): changes whenever a source is recorded. */
+export const useNexusSources = () => useSyncExternalStore(subscribe, () => savedItem(STORAGE))
 
 /** After an install: each mod from a Nexus-named archive gets its source (an archive's paks all get the same one).
  *  Kept under the name the install panel showed and under each pak's own name: an archive holding one pak installs it

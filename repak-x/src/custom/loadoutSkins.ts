@@ -5,7 +5,7 @@ const skinIds = new Map<string, string | null>()
 for (const [id, name] of skinNames) skinIds.set(name, skinIds.has(name) && skinIds.get(name) !== id ? null : id)
 export const skinLabel = (id: string) => skinNames.get(id) ?? id.replace(/^name:/, '')
 
-export type SkinDetails = { character_name?: string | null; skin_name?: string | null; files?: string[]; category?: string | null; additional_categories?: string[]; mod_type?: string }
+export type SkinDetails = { character_name?: string | null; skin_name?: string | null; files?: string[]; files_partial?: boolean; category?: string | null; additional_categories?: string[]; mod_type?: string }
 
 /** A known skin label is a fallback for details without an asset listing, never a guess that a bare hero means Default. */
 export function skinLook(d: SkinDetails) {

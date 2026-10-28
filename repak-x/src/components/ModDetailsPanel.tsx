@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useHoverTextReveal } from '../hooks/useHoverTextReveal'
 import { invoke } from '@tauri-apps/api/core'
-import { Tooltip } from '@mui/material'
+import HoverTip from '../custom/HoverTip' // repakxtra: in place of MUI's Tooltip
 import { FaTag, FaExchangeAlt } from "react-icons/fa"
 import { VscListTree } from "react-icons/vsc"
 import FileTree from './FileTree'
@@ -40,6 +40,7 @@ type ModDetailsData = {
   is_iostore?: boolean
   is_encrypted?: boolean
   is_hybrid?: boolean
+  files_partial?: boolean // repakxtra: `files` is only what the Library reads
   [key: string]: any
 }
 
@@ -59,6 +60,9 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
   const typeHint = useTypeHint(details?.category) // repakxtra: type badge tooltip
   const [loading, setLoading] = useState(!initialDetails)
   const [error, setError] = useState<string | null>(null)
+  // repakxtra: the mod whose whole file list is showing (its name without the on/off extension, which a toggle changes)
+  const fullFor = useRef<string | null>(null)
+  const sameMod = (path: string) => path.replace(/\.(pak|bak_repak|pak_disabled)$/i, '')
 
   useEffect(() => {
     let cancelled = false
@@ -69,19 +73,24 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
       setError(null)
 
       // Check if we already have details for this mod
-      if (initialDetails && (initialDetails.mod_path === mod.path || !initialDetails.mod_path)) {
-        setDetails(initialDetails)
+      const preloaded = initialDetails && (initialDetails.mod_path === mod.path || !initialDetails.mod_path)
+      if (preloaded) {
+        // a reload (a toggle, a rename) hands over the Library's partial copy: the whole list on show stays until the new one lands
+        if (!initialDetails.files_partial || fullFor.current !== sameMod(mod.path)) setDetails(initialDetails)
         setLoading(false)
-        return
+        // repakxtra: the Library holds only part of the file list (xtra_library_files.rs): the whole one is fetched below,
+        // without the loading state, while the rest shows
+        if (!initialDetails.files_partial) return
       }
 
       // Need to fetch details
       try {
-        setLoading(true)
+        if (!preloaded) setLoading(true)
         setError(null)
         console.log('Loading details for:', mod.path)
         const modDetails = await invoke<ModDetailsData>('get_mod_details', {
-          modPath: mod.path
+          modPath: mod.path,
+          fullFiles: true // repakxtra
         })
 
         // Check if this request is still relevant
@@ -92,6 +101,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
 
         console.log('Received details:', modDetails)
         setDetails(modDetails)
+        fullFor.current = modDetails.files_partial ? null : sameMod(mod.path) // repakxtra
       } catch (err) {
         if (cancelled) return
         console.error('Failed to load mod details:', err)
@@ -209,8 +219,10 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
                   </div>
                 )}
                 {details.mod_type?.startsWith('Multiple Heroes') && (
-                  <Tooltip
-                    title={
+                  <HoverTip
+                      className="multi-hero-tooltip"
+                      placement="bottom"
+                      content={
                       <div className="heroes-list">
                         {heroesList.map(name => (
                           <span key={name} className="tag hero-tag">
@@ -222,21 +234,11 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
                         ))}
                       </div>
                     }
-                    arrow
-                    placement="bottom"
-                    slotProps={{
-                      tooltip: {
-                        className: 'multi-hero-tooltip'
-                      },
-                      arrow: {
-                        className: 'multi-hero-arrow'
-                      }
-                    }}
                   >
                     <div className="character-badge multi-hero">
                       {details.mod_type?.split(' - ')[0] || 'Multiple Heroes'}
                     </div>
-                  </Tooltip>
+                  </HoverTip>
                 )}
                 <div className={`category-badge ${details.category ? details.category.toLowerCase().replace(/\s+/g, '-') + '-badge' : ''}`} title={typeHint ?? 'Mod Type'}>
                   {details.category || 'Unknown'}
@@ -302,7 +304,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
                   </div>
                 )}
                 {/* No UAssets badge - show if mod has no .uasset files (but not for IoStore bundles) */}
-                {!details.is_iostore && details.files && details.files.length > 0 && !details.files.some(f => f.toLowerCase().endsWith('.uasset')) && (
+                {!details.is_iostore && (details.file_count ?? details.files?.length ?? 0) > 0 && !details.files?.some(f => f.toLowerCase().endsWith('.uasset')) && ( /* repakxtra: file_count, the Library's partial list keeps any .uasset */
                   <div className="no-uassets-badge" title="This mod contains no UAsset files" style={{ padding: '0.4rem 0.75rem', display: 'inline-block' }}>Raw Assets</div>
                 )}
               </div>
@@ -343,6 +345,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <button
                     className="copy-paths-btn"
+                    disabled={details.files_partial /* repakxtra: until the whole list is here */}
                     onClick={(e) => {
                       const allPaths = (details.files || [])
                         .map(p => p.replace(/^\/Game\//i, ''))
@@ -371,7 +374,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
                 </div>
               </div>
               <div className="file-list-container" style={{ border: '1px solid var(--panel-border)', borderRadius: '4px', background: 'var(--bg-darker)' }}>
-                <FileTree files={details.files} />
+                {details.files_partial ? null : <FileTree files={details.files} />}{/* repakxtra: until the whole list is here */}
               </div>
             </div>
           </>

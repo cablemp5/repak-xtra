@@ -28,7 +28,8 @@ export default function lucideSwap(): Plugin {
       const mui = source === '@mui/icons-material'
       const map = mui ? MUI_ICONS : REACT_ICONS[source.split('/')[1]]
       const wrap = mui ? 'muiIcon' : 'riIcon'
-      const lines = [`export * from '${source}'`, `import { ${wrap} } from '/src/custom/icons/wrap.tsx'`]
+      // MUI names are all mapped (the package is gone): an unmapped one fails the build instead of pulling MUI back in
+      const lines = [...(mui ? [] : [`export * from '${source}'`]), `import { ${wrap} } from '/src/custom/icons/wrap.tsx'`]
       for (const [name, lucide] of Object.entries(map)) {
         lines.push(`import { ${lucide} as L_${name} } from 'lucide-react'`, `export const ${name} = ${wrap}(L_${name})`)
       }

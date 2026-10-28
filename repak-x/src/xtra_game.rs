@@ -67,7 +67,7 @@ pub async fn xtra_game_update_check(state: State<'_, Arc<Mutex<AppState>>>) -> R
 }
 
 /// The notice for `updated` was shown: it never repeats.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn xtra_game_update_seen(updated: u64) -> Result<(), String> {
     save(&store(), updated)
 }

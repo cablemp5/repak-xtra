@@ -430,7 +430,7 @@ async fn download_portrait(client: &reqwest::Client, url: &str) -> Result<Vec<u8
 /// The frontend pairs this with `get_hero_image` to build one blob URL per
 /// portrait: the bytes cross the IPC boundary raw, and the DOM only ever holds
 /// a short `blob:` URL instead of a ~46 KB data URL per `<img>`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_hero_image_ids() -> Result<Vec<String>, String> {
     Ok(read_ids_from(&hero_cache_dir()))
 }
@@ -469,7 +469,7 @@ fn read_ids_from(cache_dir: &std::path::Path) -> Vec<String> {
 ///
 /// Returned as an IPC `Response`, so the payload stays binary end to end and
 /// arrives in the webview as an ArrayBuffer.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_hero_image(id: String) -> Result<tauri::ipc::Response, String> {
     // `id` comes from the frontend, so keep it to a bare file stem — never let
     // it walk out of the cache directory.
@@ -485,7 +485,7 @@ pub fn get_hero_image(id: String) -> Result<tauri::ipc::Response, String> {
 }
 
 /// Absolute path of the portrait cache, for the settings UI / troubleshooting.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_hero_cache_dir() -> Result<String, String> {
     Ok(hero_cache_dir().to_string_lossy().to_string())
 }

@@ -16,7 +16,10 @@ export function useUpstreamWatch(alert: ReturnType<typeof useAlert>) {
       open = now
     }).catch(() => undefined)
     check()
-    const t = setInterval(check, 5000)
-    return () => clearInterval(t)
+    // Not while minimized: one check the moment the window shows again
+    const t = setInterval(() => { if (!document.hidden) check() }, 5000)
+    const onShow = () => { if (!document.hidden) check() }
+    document.addEventListener('visibilitychange', onShow)
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onShow) }
   }, [alert])
 }

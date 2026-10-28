@@ -63,9 +63,14 @@ function push(entry: LogEntry) {
   if (seen.has(entry.id)) return
   seen.add(entry.id)
 
-  entries = entries.length >= MAX_ENTRIES
-    ? [...entries.slice(entries.length - MAX_ENTRIES + 1), entry]
-    : [...entries, entry]
+  if (entries.length >= MAX_ENTRIES) {
+    const dropped = entries.length - MAX_ENTRIES + 1
+    // repakxtra: their ids go too, so the dedupe set stays as small as the buffer (a repeat only arrives right away)
+    for (let i = 0; i < dropped; i++) seen.delete(entries[i].id)
+    entries = [...entries.slice(dropped), entry]
+  } else {
+    entries = [...entries, entry]
+  }
 
   notify()
 }

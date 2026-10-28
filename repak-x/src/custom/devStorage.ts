@@ -69,7 +69,22 @@ async function start() {
   }
   if (mode !== 'rw') return
   let last = localStorage.getItem(AT) ? JSON.stringify(collect(localStorage)) : ''
+  // Only after a repakxtra.* change (here or in another window): reading and serializing every entry each second cost
+  // a slow PC time while nothing changed
+  let dirty = true
+  const touched = (key: string | null) => { if (key === null || key.startsWith(PREFIX)) dirty = true }
+  for (const name of ['setItem', 'removeItem', 'clear'] as const) {
+    const original = Storage.prototype[name] as (...args: unknown[]) => unknown
+    Storage.prototype[name] = function (this: Storage, ...args: unknown[]) {
+      const result = original.apply(this, args)
+      if (this === localStorage) touched(name === 'clear' ? null : String(args[0]))
+      return result
+    } as never
+  }
+  window.addEventListener('storage', e => touched(e.key))
   const save = () => {
+    if (!dirty) return
+    dirty = false
     let text: string
     try { text = JSON.stringify(collect(localStorage)) } catch { return }
     if (text === last) return
@@ -77,7 +92,7 @@ async function start() {
     const at = Date.now()
     localStorage.setItem(AT, String(at))
     invoke('xtra_storage_snapshot_write', { text: JSON.stringify({ at, data: JSON.parse(text) }) })
-      .catch(e => { last = ''; console.warn('[devStorage] Could not save the shared copy:', e) })
+      .catch(e => { last = ''; dirty = true; console.warn('[devStorage] Could not save the shared copy:', e) })
   }
   setTimeout(save, 1500)
   setInterval(save, 1000) // often: a copy closed right after an edit must not lose it to the other copy
