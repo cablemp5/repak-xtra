@@ -49,6 +49,17 @@ export async function recordSources(installed: { path?: string; customName?: str
   if (changed) write(store)
 }
 
+/** After an update from `archive`: the updated mod (its name key) gets the archive's source, nothing else does (an
+ *  archive's other paks may be mods that were not updated). A non-Nexus archive leaves the source as it was. */
+export async function recordUpdateSource(archive: string, key: string) {
+  const [f] = await invoke<(Found | null)[]>('xtra_nexus_sources', { paths: [archive] }).catch(() => [])
+  if (!f) return
+  const { paks: _, ...s } = f // eslint-disable-line @typescript-eslint/no-unused-vars
+  const store = read()
+  store[norm(key)] = s
+  write(store)
+}
+
 const SCANNED = 'repakxtra.nexusScanned'
 let scanning = false
 

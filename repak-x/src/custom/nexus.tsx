@@ -44,37 +44,42 @@ export const useNexusUpdates = () => useSyncExternalStore(subscribe, () => updat
 
 /** Pure: the file that replaces the installed one (uploaded at `uploaded`, Unix seconds), or undefined. The installed
  *  file is the one uploaded at that time (new archive names keep only the minute, so up to 59 s later); a newer version
- *  of it is a newer file of its file group that is not archived or removed. When the installed file is gone from the
+ *  of it is a newer file of its file group that is not retired (old version, archived, removed). When the installed file is gone from the
  *  mod, a mod with a single main file offers that one if it is newer. */
 export function newerFile(files: NexusFile[], uploaded: number): NexusFile | undefined {
   // shortcut: two files of one mod uploaded in the same minute read as the first; a stored file id would settle it
   const mine = files.find(f => f.date >= uploaded && f.date - uploaded < 60)
-  const live = files.filter(f => f.category !== 'ARCHIVED' && f.category !== 'REMOVED')
+  const live = files.filter(f => !['OLD_VERSION', 'ARCHIVED', 'REMOVED'].includes(f.category))
   const pool = mine ? live.filter(f => f.groupId !== null && f.groupId === mine.groupId) : live.filter(f => f.category === 'MAIN')
   if (!mine && pool.length !== 1) return undefined
   const after = mine?.date ?? uploaded + 59
   return pool.filter(f => f.date > after).sort((a, b) => b.date - a.date)[0]
 }
 
-let lastCheck = 0
-const CHECK_EVERY = 60 * 60 * 1000
+const FILE_FIELDS = 'fileId name version date category groupId'
+/** How often a mod's files are looked at again (App runs checkUpdates on this beat and when the mods change). */
+export const CHECK_EVERY = 60 * 60 * 1000
+const checkedAt = new Map<number, number>() // by mod id, only checks that got an answer
 
-/** Looks for newer files of the given sources: one query per 40 mods, at most once an hour unless `force`. */
-export async function checkUpdates(sources: (NexusSource | undefined)[], force = false) {
-  const unique = [...new Map(sources.filter((s): s is NexusSource => Boolean(s)).map(s => [sourceId(s), s])).values()]
-  if (!unique.length || (!force && Date.now() - lastCheck < CHECK_EVERY)) return
-  lastCheck = Date.now()
-  const ids = [...new Set(unique.map(s => s.id))]
+/** Looks for newer files of the given sources whose mod was not checked within the hour: one query per 40 mods. A
+ *  failed query is tried again next time. */
+export async function checkUpdates(sources: (NexusSource | undefined)[]) {
+  const due = sources.filter((s): s is NexusSource => Boolean(s) && Date.now() - (checkedAt.get(s!.id) ?? 0) >= CHECK_EVERY)
+  const ids = [...new Set(due.map(s => s.id))]
+  if (!ids.length) return
+  ids.forEach(id => checkedAt.set(id, Date.now())) // taken now, so a second call meanwhile skips them
   const files: Record<string, NexusFile[] | null> = {}
   for (let i = 0; i < ids.length; i += 40) {
     const part = ids.slice(i, i + 40)
-    const query = `{ ${part.map(id => `m${id}: modFiles(modId: ${id}, gameId: ${GAME_ID}) { fileId name version date category groupId }`).join(' ')} }`
-    Object.assign(files, await gql<Record<string, NexusFile[] | null>>(query).catch(() => ({})))
+    const query = `{ ${part.map(id => `m${id}: modFiles(modId: ${id}, gameId: ${GAME_ID}) { ${FILE_FIELDS} }`).join(' ')} }`
+    const got = await gql<Record<string, NexusFile[] | null>>(query).catch(() => null)
+    if (got) Object.assign(files, got); else part.forEach(id => checkedAt.delete(id))
   }
-  const next: Record<string, NexusUpdate> = {}
-  for (const s of unique) {
+  const next = { ...updates }
+  for (const s of due) {
+    if (!(`m${s.id}` in files)) continue
     const f = newerFile(files[`m${s.id}`] ?? [], s.uploaded)
-    if (f) next[sourceId(s)] = { ...f, modId: s.id }
+    if (f) next[sourceId(s)] = { ...f, modId: s.id }; else delete next[sourceId(s)]
   }
   updates = next
   notify()
@@ -82,14 +87,24 @@ export async function checkUpdates(sources: (NexusSource | undefined)[], force =
 
 type Handlers = { install: (archive: string) => Promise<unknown>; update: (oldPath: string, archive: string) => Promise<unknown>; alert: Alert }
 let handlers: Handlers | null = null
-/** What each Mod manager download is for, by mod id: an update of the mod at that path, or (absent) an install. */
-const waiting = new Map<number, string | undefined>()
+/** The updates waiting on a Mod manager download, by mod id: the file asked for and the mod it replaces. A link for
+ *  another file of that mod (an optional extra) installs as itself. Forgotten after half an hour (the page was closed). */
+const waiting = new Map<number, { fileId: number; oldPath: string; at: number }>()
+const WAIT_MS = 30 * 60 * 1000
+/** Files downloading or installing now: a second click on the same one waits for the first. */
+const busy = new Set<number>()
 
 /** Downloads a file (with an nxm:// link's key for free accounts) with a toast that fills, then installs it or updates
  *  the mod at `oldPath` with it. */
 async function fetchAndApply(link: Link, oldPath?: string) {
   if (!handlers) return
   const { alert } = handlers
+  if (busy.has(link.fileId)) { alert.info('Already downloading', 'That file is on its way.'); return }
+  busy.add(link.fileId)
+  try { await download(link, alert, oldPath) } finally { busy.delete(link.fileId) }
+}
+
+async function download(link: Link, alert: Alert, oldPath?: string) {
   const id = alert.showAlert({ color: 'default', title: oldPath ? 'Downloading the update' : 'Downloading from Nexus Mods', description: '0%', isLoading: true, duration: 0, progressValue: 0 })
   const un = listen<{ fileId: number; percent: number }>('nexus_download_progress', e => {
     if (e.payload.fileId === link.fileId) alert.updateToast(id, { progressValue: e.payload.percent, description: `${e.payload.percent}%` })
@@ -104,7 +119,7 @@ async function fetchAndApply(link: Link, oldPath?: string) {
     un.then(f => f())
     alert.dismissAlert(id)
   }
-  await (oldPath ? handlers.update(oldPath, archive) : handlers.install(archive)) // the cache copy goes a day later (xtra_nexus_download)
+  await (oldPath ? handlers?.update(oldPath, archive) : handlers?.install(archive)) // the cache copy goes a day later (xtra_nexus_download)
 }
 
 /** Gets a file of a Nexus mod and installs it, or updates the installed mod at `oldPath`. Premium downloads it now;
@@ -117,7 +132,7 @@ export async function getNexusFile(modId: number, fileId?: number, oldPath?: str
     return
   }
   if (account.premium && fileId) return fetchAndApply({ modId, fileId }, oldPath)
-  waiting.set(modId, oldPath)
+  if (oldPath && fileId) waiting.set(modId, { fileId, oldPath, at: Date.now() })
   await invoke('xtra_nexus_open', { url: `${pageUrl(modId)}?tab=files${fileId ? `&file_id=${fileId}&nmm=1` : ''}` })
     .catch(e => handlers?.alert.error('Could not open Nexus Mods', String(e)))
 }
@@ -132,9 +147,10 @@ export function useNexus(h: Handlers) {
   useEffect(() => {
     loadAccount()
     const un = listen<Link>('nexus-nxm', e => {
-      const oldPath = waiting.get(e.payload.modId)
-      waiting.delete(e.payload.modId)
-      void fetchAndApply(e.payload, oldPath)
+      const w = waiting.get(e.payload.modId)
+      const forThis = w && w.fileId === e.payload.fileId && Date.now() - w.at < WAIT_MS
+      if (forThis || (w && Date.now() - w.at >= WAIT_MS)) waiting.delete(e.payload.modId)
+      void fetchAndApply(e.payload, forThis ? w.oldPath : undefined)
     })
     return () => { un.then(f => f()) }
   }, [])

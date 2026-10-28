@@ -146,8 +146,8 @@ import SharingPanel from './components/SharingPanel'
 import Wordmark from './custom/Wordmark' // repakxtra: the logo
 import ConflictsPanel from './custom/ConflictsPanel' // repakxtra: in place of Repak X's ClashPanel (grouped, in words)
 import { keepThisOne } from './custom/keepOne' // repakxtra: Keep this one
-import { NEXUS_TYPE, recordSources, renameSource, sourceOf, useNexusScan, useNexusSources } from './custom/nexusSource' // repakxtra: Nexus source
-import { checkUpdates, useNexus } from './custom/nexus' // repakxtra: Nexus account, update checks and downloads
+import { NEXUS_TYPE, recordSources, recordUpdateSource, renameSource, sourceOf, useNexusScan, useNexusSources } from './custom/nexusSource' // repakxtra: Nexus source
+import { CHECK_EVERY, checkUpdates, useNexus } from './custom/nexus' // repakxtra: Nexus account, update checks and downloads
 import { stageOffFiles } from './custom/offFiles' // repakxtra: .pak.off files
 import CrashSuspects, { previousCrashes, withSuspects } from './custom/CrashSuspects' // repakxtra: crash suspects
 import { revealBuiltin, toggleBuiltin, useBuiltins, watchBuiltins } from './custom/BuiltinMods' // repakxtra: built-in mods
@@ -446,7 +446,12 @@ function App() {
   useNexusScan(mods) // repakxtra: Nexus sources for mods installed before they were recorded, once
   const brokenVersion = useBrokenVersion() // repakxtra: the Broken filter re-runs when the verdicts land
   const nexusSources = useNexusSources() // repakxtra: and the Nexus type filter when a source is recorded
-  useEffect(() => { checkUpdates(mods.map(m => sourceOf(m.path))) }, [mods, nexusSources]) // repakxtra: newer versions on Nexus, at most hourly
+  useEffect(() => { // repakxtra: newer versions on Nexus, each mod at most hourly
+    const run = () => checkUpdates(mods.map(m => sourceOf(m.path)))
+    run()
+    const t = setInterval(run, CHECK_EVERY)
+    return () => clearInterval(t)
+  }, [mods, nexusSources])
   const conflictCount = useConflictCount() // repakxtra
   reportSource.get = () => ({ mods, modDetails, launcherType, gamePath }) // repakxtra: setup report
   // repakxtra: Show all, beside the Library's title: every folder, no hero, type or tag filter and no search (the All / On /
@@ -1447,7 +1452,7 @@ function App() {
       // before the reload, so the old key is never seen as a deleted mod
       renameModKey(modKey(mod.path), modKey(result.new_mod_path))
       renameSource(nameKey(mod.path), nameKey(result.new_mod_path))
-      await recordSources([{ path: newSourcePath, customName: nameKey(result.new_mod_path) }]) // a newer Nexus download: its version now
+      await recordUpdateSource(newSourcePath, nameKey(result.new_mod_path)) // a newer Nexus download: its version now
 
       // Refresh data
       await loadMods()
@@ -3313,9 +3318,11 @@ function App() {
       await handleInstallMods(defaultInstall(parsed) as InstallModPayload[])
     },
     update: async (oldPath, archive) => {
-      const mod = mods.find(m => m.path === oldPath)
+      // by name, so a mod switched on or off while it downloaded is still found
+      const mod = mods.find(m => m.path === oldPath) ?? mods.find(m => nameKey(m.path) === nameKey(oldPath))
       if (mod) await handleConfirmUpdate(true, false, { mod, newSourcePath: archive })
     },
+      else alert.warning('Update not applied', `${nameKey(oldPath)} is no longer in your mods folder, so the download was not used.`)
   })
 
   const handleInstallMods = async (sent: InstallModPayload[]) => {

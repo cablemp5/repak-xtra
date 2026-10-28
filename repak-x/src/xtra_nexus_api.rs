@@ -54,7 +54,8 @@ fn client() -> Result<reqwest::Client, String> {
         .map_err(|e| e.to_string())
 }
 
-/// GET a v1 API path with the user's key. Nexus's own message on failure (it says what was wrong).
+/// GET a v1 API path with the user's key. Network errors drop their URL (it can hold an nxm key or a signed link).
+/// Nexus's own message on failure (it says what was wrong).
 async fn get_json(path: &str, key: &str) -> Result<Value, String> {
     let r = client()?
         .get(format!("{API}{path}"))
@@ -63,7 +64,7 @@ async fn get_json(path: &str, key: &str) -> Result<Value, String> {
         .header("Application-Version", env!("CARGO_PKG_VERSION"))
         .send()
         .await
-        .map_err(|e| format!("Could not reach Nexus Mods: {e}"))?;
+        .map_err(|e| format!("Could not reach Nexus Mods: {}", e.without_url()))?;
     let status = r.status();
     let body: Value = r.json().await.unwrap_or(Value::Null);
     if status.is_success() {
@@ -141,7 +142,7 @@ pub async fn xtra_nexus_gql(query: String, variables: Value) -> Result<Value, St
         .json(&serde_json::json!({ "query": query, "variables": variables }))
         .send()
         .await
-        .map_err(|e| format!("Could not reach Nexus Mods: {e}"))?;
+        .map_err(|e| format!("Could not reach Nexus Mods: {}", e.without_url()))?;
     let body: Value = r.json().await.map_err(|e| format!("Nexus Mods sent something unreadable: {e}"))?;
     if body["data"].is_null() {
         return Err(body["errors"][0]["message"].as_str().unwrap_or("Nexus Mods sent no answer.").to_string());
@@ -173,11 +174,11 @@ pub async fn xtra_nexus_download(app: AppHandle, mod_id: u64, file_id: u64, key:
     let dest = dir.join(&name);
     let part = dir.join(format!("{}.part", name.to_string_lossy()));
     let mut r = client()?.get(&uri).timeout(std::time::Duration::from_secs(60 * 30)).send().await
-        .and_then(|r| r.error_for_status()).map_err(|e| format!("Download failed: {e}"))?;
+        .and_then(|r| r.error_for_status()).map_err(|e| format!("Download failed: {}", e.without_url()))?;
     let total = r.content_length().unwrap_or(0);
     let mut file = std::fs::File::create(&part).map_err(|e| e.to_string())?;
     let (mut got, mut shown) = (0u64, 0u64);
-    while let Some(chunk) = r.chunk().await.map_err(|e| format!("Download failed: {e}"))? {
+    while let Some(chunk) = r.chunk().await.map_err(|e| format!("Download failed: {}", e.without_url()))? {
         std::io::Write::write_all(&mut file, &chunk).map_err(|e| e.to_string())?;
         got += chunk.len() as u64;
         let pct = if total > 0 { got * 100 / total } else { 0 };
