@@ -8756,6 +8756,7 @@ fn main() {
             xtra_nexus_api::xtra_nexus_gql,
             xtra_nexus_api::xtra_nexus_download,
             xtra_nexus_api::xtra_nexus_open,
+            xtra_nexus_api::xtra_nexus_pending,
             xtra_previews::get_preview_emotes, // repakxtra: emote sounds over animation previews
             xtra_previews::get_preview_audio,
             xtra_offfiles::xtra_stage_off_files, // repakxtra: .pak.off files

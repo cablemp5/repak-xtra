@@ -83,12 +83,14 @@ async fn validate(key: &str) -> Result<Account, String> {
     Ok(Account { name: v["name"].as_str().unwrap_or_default().to_string(), premium: v["is_premium"].as_bool().unwrap_or(false) })
 }
 
-/// The account of the saved key, or None when there is none.
+/// The account of the saved key, or None when there is none. Offline, a saved key still counts (as a free account with
+/// no name yet): only Nexus saying no to the key is an error.
 #[tauri::command]
 pub async fn xtra_nexus_account() -> Result<Option<Account>, String> {
-    match saved_key() {
-        Some(key) => validate(&key).await.map(Some),
-        None => Ok(None),
+    let Some(key) = saved_key() else { return Ok(None) };
+    match validate(&key).await {
+        Err(e) if e.starts_with("Could not reach") => Ok(Some(Account { name: String::new(), premium: false })),
+        r => r.map(Some),
     }
 }
 
@@ -229,6 +231,15 @@ pub async fn xtra_nexus_open(app: AppHandle, url: String) -> Result<(), String> 
     Ok(())
 }
 
+/// Links that came before the window listened; None once it does.
+static HELD: std::sync::Mutex<Option<Vec<NxmLink>>> = std::sync::Mutex::new(Some(Vec::new()));
+
+/// The window listens now: the links that came before it, and every later one as a "nexus-nxm" event.
+#[tauri::command]
+pub fn xtra_nexus_pending() -> Vec<NxmLink> {
+    HELD.lock().unwrap().take().unwrap_or_default()
+}
+
 fn parse_nxm(url: &str) -> Option<NxmLink> {
     let u = url::Url::parse(url).ok()?;
     if u.scheme() != "nxm" || !u.host_str()?.eq_ignore_ascii_case(GAME) {
@@ -251,7 +262,13 @@ pub fn on_link(url: &str, app: &AppHandle) -> bool {
     }
     match parse_nxm(url) {
         Some(link) => {
-            let _ = app.emit_to("main", "nexus-nxm", link);
+            // before the window listens (a link that started the app): kept until it asks (xtra_nexus_pending)
+            let mut held = HELD.lock().unwrap();
+            match held.as_mut() {
+                Some(queue) => queue.push(link),
+                None => { let _ = app.emit_to("main", "nexus-nxm", link); }
+            }
+            drop(held);
             if let Some(main) = app.get_webview_window("main") {
                 let _ = main.unminimize();
                 let _ = main.set_focus();

@@ -9,7 +9,7 @@ import { nameKey } from './loadoutStore'
 import { installedKey } from './installLoadout'
 import { savedItem } from './storageCarryOver'
 import nexusLogo from './logos/nexus.png'
-import { getNexusFile, pageUrl, updateOf, useNexusUpdates } from './nexus'
+import { getNexusFile, openNexusPage, pageUrl, updateOf, useNexusUpdates } from './nexus'
 
 export type NexusSource = { id: number; version: string; uploaded: number }
 type Found = NexusSource & { paks?: string[] }
@@ -21,7 +21,14 @@ const subscribe = (l: () => void) => { listeners.add(l); return () => { listener
 // without the load priority: its _9999999_P suffix, and the ! that priority zero puts in front
 const norm = (key: string) => key.replace(/^!+/, '').replace(/(_\d+_P)+$/i, '').toLowerCase()
 // keys saved before norm dropped the ! read as today's (a tiny object, so every read redoes it)
-const read = (): Store => { try { return Object.fromEntries(Object.entries(JSON.parse(savedItem(STORAGE) || '{}')).map(([k, v]) => [norm(k), v])) as Store } catch { return {} } }
+let parsed = { raw: '', store: {} as Store } // every Library row reads it: parsed once per change
+const read = (): Store => {
+  const raw = savedItem(STORAGE) || '{}'
+  if (raw !== parsed.raw) {
+    try { parsed = { raw, store: Object.fromEntries(Object.entries(JSON.parse(raw)).map(([k, v]) => [norm(k), v])) as Store } } catch { parsed = { raw, store: {} } }
+  }
+  return { ...parsed.store } // a copy: callers change it before writing
+}
 const write = (s: Store) => { localStorage.setItem(STORAGE, JSON.stringify(s)); listeners.forEach(l => l()) }
 
 /** The Types filter's name for mods installed from Nexus (FilterPanel.tsx, matched in App.tsx): not a real mod type */
@@ -108,7 +115,6 @@ const useSource = (path: string) => {
   return sourceOf(path)
 }
 
-const open = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
 const day = (s: number) => new Date(s * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 
 /** ModDetailsPanel's source line: "Nexus Mods, uploaded Sep 13, 2026 · Open page". */
@@ -121,7 +127,7 @@ export function NexusSourceLine({ path }: { path: string }) {
       <span className="detail-label">Source:</span>
       <span className="detail-value" title={`File version ${s.version}, uploaded ${new Date(s.uploaded * 1000).toUTCString()}`}>
         Nexus Mods, uploaded {day(s.uploaded)}
-        <button type="button" className="su-link nx-open" onClick={() => open(pageUrl(s.id))}><ExternalLink size={12} /> Open page</button>
+        <button type="button" className="su-link nx-open" onClick={() => openNexusPage(s.id)}><ExternalLink size={12} /> Open page</button>
         {u && <button type="button" className="su-link nx-open nx-update" onClick={() => getNexusFile(u.modId, u.fileId, path)}
           title={`${u.name}, uploaded ${day(u.date)}`}><ArrowUpCircle size={12} /> Update to {u.version}</button>}
       </span>
@@ -141,7 +147,7 @@ export function NexusTag({ path }: { path: string }) {
   )
   return (
     <button type="button" className="mod-type-badge nexus-badge" title={`Installed from Nexus Mods, uploaded ${day(s.uploaded)}. Click to open its page`}
-      onClick={e => { e.stopPropagation(); open(pageUrl(s.id)) }}><img className="tag-logo" src={nexusLogo} alt="" />Nexus</button>
+      onClick={e => { e.stopPropagation(); openNexusPage(s.id) }}><img className="tag-logo" src={nexusLogo} alt="" />Nexus</button>
   )
 }
 

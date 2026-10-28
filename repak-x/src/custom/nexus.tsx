@@ -31,8 +31,9 @@ const subscribe = (l: () => void) => { listeners.add(l); return () => { listener
 export const useNexusAccount = () => useSyncExternalStore(subscribe, () => account)
 const useChecked = () => useSyncExternalStore(subscribe, () => checked)
 const loadAccount = () => invoke<Account | null>('xtra_nexus_account')
-  .then(a => { account = a }, () => { account = null }) // offline: no account until the next start, nothing breaks
+  .then(a => { account = a }, () => { account = null }) // the key was turned down: Settings asks for it again
   .finally(() => { checked = true; notify() })
+let accountLoaded: Promise<void> = Promise.resolve() // an Install clicked at start waits for it
 
 /** Nexus sends names and summaries with HTML entities (&#39;): plain text. */
 export const plain = (s: string) => new DOMParser().parseFromString(s, 'text/html').documentElement.textContent ?? s
@@ -91,9 +92,9 @@ export async function checkUpdates(sources: (NexusSource | undefined)[]) {
 
 type Handlers = { install: (archive: string) => Promise<unknown>; update: (oldPath: string, archive: string) => Promise<unknown>; alert: Alert }
 let handlers: Handlers | null = null
-/** The updates waiting on a Mod manager download, by mod id: the file asked for and the mod it replaces. A link for
- *  another file of that mod (an optional extra) installs as itself. Forgotten after half an hour (the page was closed). */
-const waiting = new Map<number, { fileId: number; oldPath: string; at: number }>()
+/** The updates waiting on a Mod manager download, by the file asked for: the mod it replaces. A link for any other
+ *  file (an optional extra) installs as itself. Forgotten after half an hour (the page was closed). */
+const waiting = new Map<number, { oldPath: string; at: number }>()
 const WAIT_MS = 30 * 60 * 1000
 /** Files downloading or installing now: a second click on the same one waits for the first. */
 const busy = new Set<number>()
@@ -131,12 +132,13 @@ async function download(link: Link, alert: Alert, oldPath?: string) {
  *  the download link it opens finishes the job (useNexus). */
 export async function getNexusFile(modId: number, fileId?: number, oldPath?: string) {
   if (!handlers) return
+  await accountLoaded
   if (!account) {
     handlers.alert.warning('Nexus Mods account needed', 'Add your personal API key in Settings > General > Nexus Mods to install and update from Nexus.')
     return
   }
   if (account.premium && fileId) return fetchAndApply({ modId, fileId }, oldPath)
-  if (oldPath && fileId) waiting.set(modId, { fileId, oldPath, at: Date.now() })
+  if (oldPath && fileId) waiting.set(fileId, { oldPath, at: Date.now() })
   await invoke('xtra_nexus_open', { url: `${pageUrl(modId)}?tab=files${fileId ? `&file_id=${fileId}&nmm=1` : ''}` })
     .catch(e => handlers?.alert.error('Could not open Nexus Mods', String(e)))
 }
@@ -157,13 +159,15 @@ export const openNexusPage = (modId: number) => invoke('xtra_nexus_open', { url:
 export function useNexus(h: Handlers) {
   handlers = h
   useEffect(() => {
-    loadAccount()
-    const un = listen<Link>('nexus-nxm', e => {
-      const w = waiting.get(e.payload.modId)
-      const forThis = w && w.fileId === e.payload.fileId && Date.now() - w.at < WAIT_MS
-      if (forThis || (w && Date.now() - w.at >= WAIT_MS)) waiting.delete(e.payload.modId)
-      void fetchAndApply(e.payload, forThis ? w.oldPath : undefined)
-    })
+    accountLoaded = loadAccount()
+    const take = (link: Link) => {
+      const w = waiting.get(link.fileId)
+      waiting.delete(link.fileId)
+      void fetchAndApply(link, w && Date.now() - w.at < WAIT_MS ? w.oldPath : undefined)
+    }
+    const un = listen<Link>('nexus-nxm', e => take(e.payload))
+    // once listening: the links that came first (one that started the app)
+    un.then(() => invoke<Link[]>('xtra_nexus_pending')).then(held => held.forEach(take)).catch(() => undefined)
     return () => { un.then(f => f()) }
   }, [])
 }
@@ -248,7 +252,7 @@ export function NexusSetting() {
         {a ? (
           <div className="xs-row">
             <div className="xs-text">
-              <span className="xs-label">Signed in as {a.name}</span>
+              <span className="xs-label">{a.name ? `Signed in as ${a.name}` : 'Key saved. Nexus Mods could not be reached to check it.'}</span>
               <span className="setting-subtext">
                 {a.premium ? 'Premium: installs and updates download straight away.' : 'Free account: each install or update opens the mod on Nexus. Click Slow download there and repakxtra does the rest.'}
               </span>

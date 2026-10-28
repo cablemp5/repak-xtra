@@ -3321,6 +3321,14 @@ function App() {
     update: async (oldPath, archive) => {
       // by name, so a mod switched on or off while it downloaded is still found
       const mod = mods.find(m => m.path === oldPath) ?? mods.find(m => nameKey(m.path) === nameKey(oldPath))
+      // several mods in one download: which one is this mod is unknown, so the Install dialog shows them all
+      const paks = await invoke<string[][]>('xtra_install_paks', { paths: [archive] }).then(r => r[0] ?? [], () => [])
+      if (mod && paks.length > 1) {
+        alert.info('Pick what to update', `The update holds ${paks.length} mods. Install the ones you want, then remove the old ${nameKey(oldPath)}.`)
+        setModsToInstall(await invoke('parse_dropped_files', { paths: [archive] }))
+        setPanel('install', true)
+        return
+      }
       if (mod) await handleConfirmUpdate(true, false, { mod, newSourcePath: archive })
       else alert.warning('Update not applied', `${nameKey(oldPath)} is no longer in your mods folder, so the download was not used.`)
     },
