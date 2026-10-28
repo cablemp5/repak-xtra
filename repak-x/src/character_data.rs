@@ -225,8 +225,15 @@ pub fn save_character_data(skins: &[CharacterSkin]) -> Result<(), String> {
 
 /// Initialize or refresh the character data cache
 pub fn refresh_cache() {
-    let skins = load_character_data();
+    cache_character_data(load_character_data());
+}
 
+#[cfg(test)]
+pub(crate) fn init_test_cache() {
+    cache_character_data(serde_json::from_str(include_str!("data/character_data.json")).unwrap());
+}
+
+fn cache_character_data(skins: Vec<CharacterSkin>) {
     let mut cache = CHARACTER_CACHE.write().unwrap();
     cache.by_skin_id.clear();
     cache.character_ids.clear();

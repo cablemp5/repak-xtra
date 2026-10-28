@@ -131,7 +131,7 @@ pub fn get_character_mod_skin(file: &str) -> Option<ModType> {
 }
 /// Get detailed mod characteristics including mod type and all detected heroes
 pub fn get_pak_characteristics_detailed(mod_contents: Vec<String>) -> ModCharacteristics {
-    let mut _fallback: Option<String> = None;
+    let mut fallback: Option<String> = None;
 
     // Track what content types we find
     let mut has_skeletal_mesh = false;
@@ -244,7 +244,7 @@ pub fn get_pak_characteristics_detailed(mod_contents: Vec<String>) -> ModCharact
             }
             Some(ModType::Default(name)) => {
                 trace!("Found default skin: {} from path: {}", name, path);
-                _fallback = Some(name);
+                fallback = Some(name);
             }
             None => {
                 // No skin-specific match, will use character ID detection below
@@ -365,6 +365,8 @@ pub fn get_pak_characteristics_detailed(mod_contents: Vec<String>) -> ModCharact
     } else if let Some(ref char_name) = character_name {
         // Single hero with skin-specific name
         char_name.clone()
+    } else if let Some(name) = fallback {
+        name // explicitly detected default skin, never inferred from a bare hero
     } else if heroes.len() == 1 {
         // Single hero without skin info
         heroes[0].clone()
@@ -574,4 +576,23 @@ fn get_steam_path_from_registry() -> Option<PathBuf> {
 #[cfg(not(target_os = "windows"))]
 fn get_steam_path_from_registry() -> Option<PathBuf> {
     None
+}
+
+#[cfg(test)]
+mod skin_identity_tests {
+    use super::*;
+    #[test]
+    fn real_asset_paths_preserve_default_skin_without_inventing_unknown_skins() {
+        crate::character_data::init_test_cache();
+        let classify = |path: &str| get_pak_characteristics_detailed(vec![path.to_string()]);
+        let default = classify("Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uasset");
+        let another = classify("/Game/Marvel/Characters/1026/1026001/Textures/T_1026_1026001.uasset");
+        let claw = classify("Marvel/Content/Marvel/Characters/1026/1026300/Meshes/SK_1026_1026300.uasset");
+        let unknown = classify("Marvel/Content/Marvel/Characters/1026/Shared/Textures/T_shared.uasset");
+        assert_eq!(default.character_name, "Black Panther - Default");
+        assert_eq!(default.character_name, another.character_name);
+        assert_ne!(default.character_name, claw.character_name);
+        assert_eq!(claw.character_name, "Black Panther - Galactic Claw");
+        assert_eq!(unknown.character_name, "Black Panther");
+    }
 }

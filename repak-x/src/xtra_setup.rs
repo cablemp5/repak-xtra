@@ -161,6 +161,7 @@ pub async fn setup_bypass_status(state: State<'_, Arc<Mutex<crate::AppState>>>) 
 
 #[tauri::command]
 pub async fn setup_bypass(action: String, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<BypassStatus, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // both apps change the game's files: not while Repak X is open
     if crate::is_game_process_running() {
         return Err("Marvel Rivals is running. Close it first.".into());
@@ -388,6 +389,7 @@ pub async fn setup_galacta_status(online: bool, state: State<'_, Arc<Mutex<crate
 pub async fn setup_galacta_install(app: AppHandle, folder: Option<String>, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<GalactaStatus, String> {
     #[cfg(feature = "extended")]
     crate::xtra_activation::require()?;
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // both apps change the game's files: not while Repak X is open
     if crate::is_game_process_running() {
         return Err("Marvel Rivals is running. Close it first.".into());
