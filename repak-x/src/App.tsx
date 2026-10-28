@@ -2840,6 +2840,8 @@ function App() {
             renames: options.renames,
             flatten: options.flatten
           })
+          // repakxtra: its Nexus source, under each pak's name and any name it was renamed to (before the archive goes)
+          await recordSources([{ path: modPath }, ...Object.values(options.renames).map(customName => ({ path: modPath, customName }))])
 
           await loadMods()
           await loadFolders()

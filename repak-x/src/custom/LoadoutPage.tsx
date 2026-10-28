@@ -17,6 +17,7 @@ import {
   renameModKey, repakXOpen, takeFresh, useLoadouts, memberName, nameKey, pickMember,
 } from './loadoutStore'
 import { candidatesFor, keysByName, memberFolder } from './loadoutIdentity'
+import { renameSource } from './nexusSource'
 import { plural } from './modName'
 import { SwapText } from './motion'
 import { GeneratePreviewsButton, previewSetKey } from './previews'
@@ -204,6 +205,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
     try {
       const path = await invoke<string>('rename_mod', { modPath: mod.path, newName: next })
       renameModKey(from, modKey(path))
+      renameSource(nameKey(mod.path), nameKey(path)) // its Nexus source too, as the Library's rename does
       await p.reload()
     } catch (e) {
       const why = repakXOpen(e)   // other errors show the backend's own Rename Failed toast
