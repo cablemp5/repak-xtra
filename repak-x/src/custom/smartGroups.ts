@@ -190,7 +190,7 @@ export function propose(mods: Candidate[], taken: string[] = [], rules: Rules = 
 export function rekey(rules: Rules, moves: (key: string) => boolean, to: string, prefer?: string): Rules {
   const m = (k: string) => (moves(k) ? to : k)
   const named = Object.keys(rules.names).filter(moves)
-  const name = rules.names[to] ?? rules.names[prefer && moves(prefer) ? prefer : named[0]]
+  const name = rules.names[to] ?? (prefer && moves(prefer) ? rules.names[prefer] : undefined) ?? rules.names[named[0]]
   const names = Object.fromEntries(Object.entries(rules.names).filter(([k]) => !moves(k)))
   if (name !== undefined && named.length) names[to] = name
   const merge = [...new Map(rules.merge.map(x => ({ from: m(x.from), into: m(x.into) })).filter(x => x.from !== x.into).map(x => [x.from, x])).values()]
@@ -289,6 +289,7 @@ if (import.meta.env.DEV) {
     console.assert(moved.names[all] === 'Kitty' && !moved.names[cat] && !moved.names[hulk] && moved.merge[0].from === all && moved.split.join() === all && moved.pins.x === all,
       'rekey carries names, merges, splits, and moves to the new key', moved)
     console.assert(rekey(r({ merge: [{ from: hulk, into: cat }] }), k => k === hulk || k === cat, all).merge.length === 0, 'rekey drops a merge into itself')
+    console.assert(rekey(r({ names: { [hulk]: 'Big' } }), k => k === hulk || k === cat, all, cat).names[all] === 'Big', 'rekey keeps a sibling\'s name when the preferred one has none')
   }
   const cut = marks('bp-symbiote_matSwap_v3')
   console.assert(cut.map(x => x.text).join('') === 'bp-symbiote_matSwap_v3' && cut.filter(x => x.look).map(x => x.text).join() === 'symbiote', 'a name keeps every character, its look words marked', cut)
