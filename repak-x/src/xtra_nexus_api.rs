@@ -60,6 +60,7 @@ async fn get_json(path: &str, key: &str) -> Result<Value, String> {
     let r = client()?
         .get(format!("{API}{path}"))
         .header("apikey", key)
+        .timeout(std::time::Duration::from_secs(8)) // small answers: offline at start is not a 30 s wait
         .header("Application-Name", "repakxtra")
         .header("Application-Version", env!("CARGO_PKG_VERSION"))
         .send()
@@ -211,8 +212,7 @@ fn prune(dir: &std::path::Path) {
 #[tauri::command]
 pub async fn xtra_nexus_open(app: AppHandle, url: String) -> Result<(), String> {
     let url = url::Url::parse(&url).map_err(|e| e.to_string())?;
-    let nexus = url.scheme() == "https" && url.host_str().is_some_and(|h| h == "nexusmods.com" || h.ends_with(".nexusmods.com"));
-    if !nexus {
+    if !is_nexus(&url) {
         return Err("Only nexusmods.com pages open here.".into());
     }
     if let Some(w) = app.get_webview_window(WINDOW) {
@@ -225,7 +225,18 @@ pub async fn xtra_nexus_open(app: AppHandle, url: String) -> Result<(), String> 
     WebviewWindowBuilder::new(&app, WINDOW, WebviewUrl::External(url))
         .title("Nexus Mods")
         .inner_size(1180.0, 860.0)
-        .on_navigation(move |u| !(u.scheme() == "nxm" && on_link(u.as_str(), &handle)))
+        .on_navigation(move |u| {
+            if u.scheme() == "nxm" {
+                return !on_link(u.as_str(), &handle);
+            }
+            // a link in a mod's description to another site opens in the browser, not in this window
+            if u.scheme() == "https" && !is_nexus(u) {
+                #[allow(deprecated)] // the shell plugin's open, as the frontend uses it
+                let _ = tauri_plugin_shell::ShellExt::shell(&handle).open(u.as_str(), None);
+                return false;
+            }
+            true
+        })
         .build()
         .map_err(|e| e.to_string())?;
     Ok(())
@@ -238,6 +249,20 @@ static HELD: std::sync::Mutex<Option<Vec<NxmLink>>> = std::sync::Mutex::new(Some
 #[tauri::command]
 pub fn xtra_nexus_pending() -> Vec<NxmLink> {
     HELD.lock().unwrap().take().unwrap_or_default()
+}
+
+fn is_nexus(url: &url::Url) -> bool {
+    url.scheme() == "https" && url.host_str().is_some_and(|h| h == "nexusmods.com" || h.ends_with(".nexusmods.com"))
+}
+
+/// At start, with a key saved: nxm:// links come to this copy again (the one that saved the key may be gone).
+pub fn reclaim_nxm(app: &AppHandle) {
+    #[cfg(any(windows, target_os = "linux"))]
+    if saved_key().is_some() {
+        use tauri_plugin_deep_link::DeepLinkExt;
+        let _ = app.deep_link().register("nxm");
+    }
+    let _ = app;
 }
 
 fn parse_nxm(url: &str) -> Option<NxmLink> {

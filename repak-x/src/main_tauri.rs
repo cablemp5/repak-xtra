@@ -8639,6 +8639,7 @@ fn main() {
                     );
                 } else {
                     info!("Successfully registered repakx:// protocol handler");
+                    xtra_nexus_api::reclaim_nxm(app.handle()); // repakxtra: Nexus download links, when a key is saved
                     ui_log::debug("Startup", "repakx:// protocol handler registered");
                 }
             }

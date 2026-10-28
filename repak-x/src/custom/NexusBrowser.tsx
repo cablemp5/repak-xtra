@@ -146,13 +146,13 @@ function NexusCard({ c, path }: { c: Card; path?: string }) {
           <span className="nx-stat" title={`${c.endorsements.toLocaleString()} endorsements`}><Heart size={12} aria-hidden="true" />{count.format(c.endorsements)}</span>
           <span className="nx-stat" title={`${c.downloads.toLocaleString()} downloads`}><Download size={12} aria-hidden="true" />{count.format(c.downloads)}</span>
           {u && path ? (
-            <button type="button" className="lo-text-btn nx-act is-update" onClick={() => getNexusFile(u.modId, u.fileId, path)} title={`Version ${u.version} is out`}>
+            <button type="button" className="lo-text-btn nx-act is-update" onClick={() => getNexusFile(u.modId, u.fileId, path)} title={`Version ${u.version} is out`} aria-label={`Update ${name} to ${u.version}`}>
               <ArrowUpCircle size={13} aria-hidden="true" /> Update
             </button>
           ) : path ? (
             <span className="nx-installed"><Check size={13} aria-hidden="true" /> Installed</span>
           ) : (
-            <button type="button" className="lo-text-btn nx-act" onClick={() => installFromNexus(c.modId)}><Download size={13} aria-hidden="true" /> Install</button>
+            <button type="button" className="lo-text-btn nx-act" onClick={() => installFromNexus(c.modId)} aria-label={`Install ${name}`}><Download size={13} aria-hidden="true" /> Install</button>
           )}
         </div>
       </div>
