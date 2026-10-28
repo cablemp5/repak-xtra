@@ -87,7 +87,6 @@ use walkdir::WalkDir;
 
 struct WatcherState {
     watcher: Mutex<Option<RecommendedWatcher>>,
-    #[allow(dead_code)]
     /// When true, the file watcher suppresses events (e.g. during P2P transfer)
     paused: Arc<AtomicBool>,
 }
