@@ -83,6 +83,40 @@ pub fn check_update_zip(path: &std::path::Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Releases since v0.5.0 publish `<zip>.sha256` ("<hex>  <name>") beside the zip. When it exists, the download must match
+/// it. A release without one (404) keeps the older behavior.
+pub async fn verify_checksum(client: &reqwest::Client, asset_url: &str, path: &std::path::Path) -> Result<(), String> {
+    let res = client.get(format!("{asset_url}.sha256")).header("User-Agent", "repakxtra").send().await
+        .map_err(|e| format!("Could not download the update's checksum: {e}"))?;
+    if res.status() == reqwest::StatusCode::NOT_FOUND {
+        log::info!("Update has no published checksum: skipping the comparison");
+        return Ok(());
+    }
+    if !res.status().is_success() {
+        return Err(format!("Could not download the update's checksum: GitHub returned {}", res.status()));
+    }
+    let text = res.text().await.map_err(|e| format!("Could not read the update's checksum: {e}"))?;
+    let path = path.to_path_buf();
+    let actual = tokio::task::spawn_blocking(move || -> Result<String, String> {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        std::io::copy(&mut std::fs::File::open(&path).map_err(|e| e.to_string())?, &mut hasher).map_err(|e| e.to_string())?;
+        Ok(format!("{:x}", hasher.finalize()))
+    }).await.map_err(|e| e.to_string())??;
+    checksum_matches(&text, &actual)
+}
+
+fn checksum_matches(published: &str, actual: &str) -> Result<(), String> {
+    let expected = published.split_whitespace().next().unwrap_or("").to_ascii_lowercase();
+    if expected.len() != 64 || !expected.bytes().all(|c| c.is_ascii_hexdigit()) {
+        return Err("The update's published checksum is unreadable. Nothing was changed.".into());
+    }
+    if expected != actual {
+        return Err("The downloaded update does not match its published checksum. Nothing was changed: try again.".into());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -160,6 +194,15 @@ mod tests {
         std::fs::write(&tar, [b"repakxtra.exe".as_slice(), &[0u8; 244], b"ustar  \0"].concat()).unwrap();
         assert!(check_update_zip(&tar).unwrap_err().contains("not a zip"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn only_the_published_checksum_matches() {
+        let sum = "ab".repeat(32);
+        assert!(checksum_matches(&format!("{}  repak-xtra-standard-v1.0.0-windows.zip\n", sum.to_uppercase()), &sum).is_ok());
+        assert!(checksum_matches(&format!("{sum}  x.zip"), &"cd".repeat(32)).unwrap_err().contains("does not match"));
+        assert!(checksum_matches("<html>Not Found</html>", &sum).unwrap_err().contains("unreadable"));
+        assert!(checksum_matches("", &sum).is_err());
     }
 
     #[test]

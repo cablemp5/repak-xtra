@@ -44,9 +44,13 @@ pub struct NewestCrash {
 }
 
 /// The newest crash the game left, if any. Reads only; the startup crash check keeps its own bookkeeping.
-/// Everything it returns has been through redact().
+/// Everything it returns has been through redact(). Off the main thread: it reads the crash file and module DLLs.
 #[tauri::command]
-pub fn xtra_newest_crash() -> Option<NewestCrash> {
+pub async fn xtra_newest_crash() -> Option<NewestCrash> {
+    tauri::async_runtime::spawn_blocking(newest_crash).await.ok().flatten()
+}
+
+fn newest_crash() -> Option<NewestCrash> {
     let (_, folder) = crash_monitor::get_newest_crash_folder()?;
     let info = crash_monitor::parse_crash_info(&folder, Vec::new())?;
     let (asset_path, error_type, detail) = crash_monitor::parse_error_details(info.error_message.as_deref().unwrap_or(""));
@@ -70,7 +74,8 @@ pub fn xtra_newest_crash() -> Option<NewestCrash> {
         time,
         crash_type: r(error_type.or(info.crash_type)),
         character_id: info.error_message.as_deref().and_then(crash_monitor::extract_character_id),
-        asset_path: r(asset_path),
+        // no user names: a game asset path holds none, and a changed path would break the suspect lookup
+        asset_path: asset_path.map(|s| redact(&s, &[])),
         seconds_since_start: info.seconds_since_start,
         message: r(message),
         detail: r(detail.and_then(|d| first_line(&d))),
@@ -235,9 +240,27 @@ pub(crate) fn redact(text: &str, users: &[String]) -> String {
     }).into_owned();
     for user in users {
         if let Ok(re) = Regex::new(&format!("(?i){}", regex_lite::escape(user))) {
-            out = re.replace_all(&out, "<user>").into_owned();
+            out = replace_words(&out, &re, "<user>");
         }
     }
+    out
+}
+
+/// `re`'s matches that stand as a whole word (no letter or digit right before or after) replaced by `with`, so the
+/// user "art" leaves "Particles" alone.
+fn replace_words(text: &str, re: &Regex, with: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut last = 0;
+    for m in re.find_iter(text) {
+        let before = text[..m.start()].chars().next_back().is_some_and(char::is_alphanumeric);
+        let after = text[m.end()..].chars().next().is_some_and(char::is_alphanumeric);
+        if !before && !after {
+            out.push_str(&text[last..m.start()]);
+            out.push_str(with);
+            last = m.end();
+        }
+    }
+    out.push_str(&text[last..]);
     out
 }
 
@@ -412,7 +435,7 @@ mod tests {
     #[ignore]
     fn real_newest_crash() {
         let paks = std::path::PathBuf::from(std::env::var("REPAKXTRA_PAKS").expect("REPAKXTRA_PAKS"));
-        let crash = xtra_newest_crash().expect("a crash");
+        let crash = newest_crash().expect("a crash");
         let asset = crash.asset_path.clone().unwrap_or_default();
         println!("newest crash: {:?} asset {asset:?}", crash.crash_type);
         let on: Vec<String> = walkdir::WalkDir::new(paks.join("~mods"))
@@ -524,6 +547,23 @@ second").as_deref(), Some("Fatal error: x"));
     }
 
     #[test]
+    fn redacts_values_the_crash_xml_escaped() {
+        let read = |escaped: &str| redact(&crash_monitor::extract_xml_tag(&format!("<ErrorMessage>{escaped}</ErrorMessage>"), "ErrorMessage").unwrap(), &v(&["O'Brien"]));
+        assert_eq!(read("Token=&quot;abc&quot;"), r#"Token="<redacted>""#);
+        assert_eq!(read("{&quot;ticket&quot;:&quot;T-99&quot;}"), r#"{"ticket":"<redacted>"}"#);
+        assert_eq!(read("Marvel.exe -pass=&quot;a b&quot; -x"), "Marvel.exe -pass=<redacted> -x");
+        assert_eq!(read(r"C:\Users\O&apos;Brien\x and O&apos;Brien-PC"), r"C:\Users\<user>\x and <user>-PC");
+        assert_eq!(crash_monitor::unescape_xml("&amp;quot; &lt;a&gt;"), "&quot; <a>", "&amp; decoded last, once");
+    }
+
+    #[test]
+    fn the_user_name_goes_only_as_a_whole_word() {
+        let art = v(&["art"]);
+        assert_eq!(redact("/Game/Marvel/VFX/Particles/x", &art), "/Game/Marvel/VFX/Particles/x");
+        assert_eq!(redact(r"C:\Users\Art\x and art-PC, Smart", &art), r"C:\Users\<user>\x and <user>-PC, Smart");
+    }
+
+    #[test]
     fn redacts_command_line_values_and_keeps_the_flags() {
         assert_eq!(redact(r#"Marvel.exe -dx12 -AUTH_LOGIN=bob --auth="a b" -nosplash"#, &[]), "Marvel.exe -dx12 -AUTH_LOGIN=<redacted> --auth=<redacted> -nosplash");
         assert_eq!(redact("Marvel-Win64-Shipping x=1", &[]), "Marvel-Win64-Shipping x=1", "a dash inside a word is no flag");
@@ -590,7 +630,7 @@ second").as_deref(), Some("Fatal error: x"));
     #[test]
     #[ignore]
     fn newest_real_crash_has_no_user_name() {
-        let crash = xtra_newest_crash().expect("a crash folder in %LOCALAPPDATA%\\Marvel\\Saved\\Crashes");
+        let crash = newest_crash().expect("a crash folder in %LOCALAPPDATA%\\Marvel\\Saved\\Crashes");
         let json = serde_json::to_string_pretty(&crash).unwrap();
         println!("{json}");
         for user in user_names() {

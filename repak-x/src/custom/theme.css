@@ -1787,7 +1787,8 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 
 /* Library right-click menu: Check Conflicts icon neutral like the rest of the menu; loadouts already holding the mod */
 /* Check Conflicts: the outline layers icon at the row's end, like the submenu chevrons (it was a filled blob) */
-.context-menu .warning-icon-small { fill: none !important; color: var(--text-secondary) !important; margin-left: auto; }
+.context-menu .warning-icon-small:not(.ph) { fill: none !important; }   /* Phosphor icons are filled shapes */
+.context-menu .warning-icon-small { color: var(--text-secondary) !important; margin-left: auto; }
 .context-menu-item.is-disabled { opacity: 0.5; cursor: default; }
 .context-menu-item .lo-menu-check { margin-left: auto; color: var(--text-secondary); }
 /* Setup and changelog: every button one height (the primary ones were 44px beside 32px ones); a closed "Is it safe?"
@@ -2010,6 +2011,10 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .cd-members { margin-left: 6px; }
 .cd-claim { font-size: 12px; color: var(--text-secondary); }   /* Claim role's answer, quiet like the meta line */
 .cd-claimed { display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; font-size: 13px; color: var(--text-secondary); }
+/* Role claimed reads as a result, and answers a click (claim again) only with a hover tint and the pointer */
+.cd-claimed-btn { height: 28px; border: 0; border-radius: 6px; background: none; font: inherit; font-size: 13px; cursor: pointer; transition: background-color .15s, color .15s; }
+.cd-claimed-btn:hover { background: var(--bg-tertiary, #ffffff0d); color: var(--text-primary); }
+@media (prefers-reduced-motion: reduce) { .cd-claimed-btn { transition: none; } }
 
 /* transitions.dev: Matrix dot loader (custom/motion.tsx MatrixLoader). Dots fade up and down on a 1.4s loop, each
    starting at its own point, so the grid twinkles at random */
@@ -2430,6 +2435,12 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 
 /* Settings > Help & Community: rows like every other section (label, gray note, button); buttons in regular weight */
 .settings-content .xs-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; }
+/* Support and Star stand apart from the Discord servers above them: a group of their own (Common Region) */
+.settings-content .xs-row.xs-support-first { margin-top: 10px; }
+/* the Ko-fi heart red and the GitHub star yellow (cable's pick, over the gray every Settings button icon gets), a deeper yellow on the light theme */
+.settings-content .action-btn svg.xs-heart { color: #ef4444 !important; }
+.settings-content .action-btn svg.xs-star { color: #facc15 !important; }
+[data-theme="light"] .settings-content .action-btn svg.xs-star { color: #ca8a04 !important; }
 .settings-content .xs-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .settings-content .xs-label { font-size: 13px; font-weight: 450; color: var(--text-primary); }
 .settings-content .xs-text .setting-subtext { padding: 0 !important; margin: 0 !important; }

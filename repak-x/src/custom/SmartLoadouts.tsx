@@ -19,7 +19,7 @@ import { isTyping } from './hotkeys'
 import { modalOpen } from './dialogFocus'
 import { cue } from './sounds'
 import { heroOfName, useHeroPortrait } from './heroFilter'
-import { type Candidate, NO_RULES, type Rules, carryOff, marks, ownKey, propose, readRules } from './smartGroups'
+import { type Candidate, NO_RULES, type Rules, carryOff, lookKey, marks, ownKey, propose, readRules, rekey, ruleWords } from './smartGroups'
 import './smartLoadouts.css'
 
 const RULES = 'repakxtra.smartRules'
@@ -58,7 +58,8 @@ function Menu({ at, onClose }: { at: MenuAt; onClose: () => void }) {
     const outside = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) onClose() }
     const keys = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { e.stopPropagation(); onClose(); back(); return }
-      if (e.key === 'Tab') { onClose(); return }
+      // focus back on the button that opened it first, so Tab moves on from there (the portaled menu sits at the end of the page)
+      if (e.key === 'Tab') { if (at.anchor.isConnected) at.anchor.focus(); onClose(); return }
       if ((e.key !== 'ArrowDown' && e.key !== 'ArrowUp') || !ref.current?.contains(document.activeElement)) return
       e.preventDefault()
       const all = [...(ref.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])]
@@ -195,10 +196,11 @@ export default function SmartLoadouts({ p, onBack }: { p: LoadoutProps; onBack: 
   }
   const unpin = (key: string) => setRules(r => { const { [key]: _, ...pins } = r.pins; return { ...r, pins } })
   const ignore = (w: string) => setRules(r => ({ ...r, ignore: [...new Set([...r.ignore, w])], keep: r.keep.filter(x => x !== w) }))
-  const addWordRule = () => {
-    const w = draft.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
-    if (w && adding === 'ignore') ignore(w)
-    if (w && adding === 'keep') setRules(r => ({ ...r, keep: [...new Set([...r.keep, w])], ignore: r.ignore.filter(x => x !== w) }))
+  /** A typed word rule, one rule per word the text holds as mod names are cut ("Cat Boy" -> cat, boy), so each can match */
+  const addWordRule = (typed: string) => {
+    const ws = ruleWords(typed)
+    if (ws.length && adding === 'ignore') setRules(r => ({ ...r, ignore: [...new Set([...r.ignore, ...ws])], keep: r.keep.filter(x => !ws.includes(x)) }))
+    if (ws.length && adding === 'keep') setRules(r => ({ ...r, keep: [...new Set([...r.keep, ...ws])], ignore: r.ignore.filter(x => !ws.includes(x)) }))
     setAdding(null)
     setDraft('')
   }
@@ -238,8 +240,8 @@ export default function SmartLoadouts({ p, onBack }: { p: LoadoutProps; onBack: 
     <span className="sl-chip-form">
       <span>{adding === 'ignore' ? 'Ignore' : 'Group by'}</span>
       <input autoFocus value={draft} placeholder="a word" aria-label={adding === 'ignore' ? 'Word to ignore' : 'Word to group by'} spellCheck={false}
-        onChange={e => setDraft(e.target.value)} onBlur={addWordRule}
-        onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') addWordRule(); if (e.key === 'Escape') { setAdding(null); setDraft('') } }} />
+        onChange={e => setDraft(e.target.value)} onBlur={e => addWordRule(e.currentTarget.value)}
+        onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { e.currentTarget.value = ''; e.currentTarget.blur() } }} />
     </span>
   ) : (
     <>
@@ -257,9 +259,19 @@ export default function SmartLoadouts({ p, onBack }: { p: LoadoutProps; onBack: 
         <Merge size={14} /> Merge into
       </button>
     ),
+    // the loadout's key changes with these (words@Hero <-> words@*): its rules and the selection follow it
     g.why.together
-      ? <button key="heroes" type="button" className="lo-text-btn sl-tool" title="One loadout per hero again" onClick={() => setRules(r => ({ ...r, together: r.together.filter(w => w !== words) }))}><Split size={14} /> Split by hero</button>
-      : g.why.splitHeroes && <button key="heroes" type="button" className="lo-text-btn sl-tool" title={`Every hero's ${words} in one loadout`} onClick={() => setRules(r => ({ ...r, together: [...r.together, words] }))}><Users size={14} /> Join other heroes</button>,
+      ? <button key="heroes" type="button" className="lo-text-btn sl-tool" title="One loadout per hero again" onClick={() => {
+          const top = [...g.keys.reduce((n, k) => { const h = heroOf.get(k); if (h) n.set(h, (n.get(h) ?? 0) + 1); return n }, new Map<string, number>())].sort((a, b) => b[1] - a[1])[0]?.[0]
+          const to = top ? lookKey(g.why.words, top) : null
+          setRules(r => ({ ...(to ? rekey(r, k => k === g.id, to) : r), together: r.together.filter(w => w !== words) }))
+          if (to) setSel(to)
+        }}><Split size={14} /> Split by hero</button>
+      : g.why.splitHeroes && <button key="heroes" type="button" className="lo-text-btn sl-tool" title={`Every hero's ${words} in one loadout`} onClick={() => {
+          const to = lookKey(g.why.words, '*')
+          setRules(r => ({ ...rekey(r, k => k !== to && k.includes('@') && k.slice(0, k.lastIndexOf('@')) === words, to, g.id), together: [...r.together, words] }))
+          setSel(to)
+        }}><Users size={14} /> Join other heroes</button>,
     g.named && <button key="name" type="button" className="lo-text-btn sl-tool" title={`Name it as its words do`} onClick={() => setRules(r => { const { [g.id]: _, ...names } = r.names; return { ...r, names } })}><RotateCcw size={14} /> Use the suggested name</button>,
   ].filter(Boolean)
 

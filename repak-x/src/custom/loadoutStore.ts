@@ -235,9 +235,10 @@ const normKey = canonKey
  *  priority. Display names and preview keys use nameKey. */
 export const modKey = memberKey
 
-/** Mods a loadout may hold: not the Project Galacta loader, which every Galacta mod needs on (a loadout switching it
- *  off would break all the others). */
-export const loadoutable = (key: string) => !/^!?projectgalacta$/i.test(memberName(key))
+/** Mods a loadout may hold: not the Project Galacta or Project Sigeon loader, which every mod made for it needs on (a
+ *  loadout switching it off would break all the others). The same names xtra_project.rs treats as a loader: an optional
+ *  _digits and an optional _P, each on its own. */
+export const loadoutable = (key: string) => !/^!?project(galacta|sigeon)(_\d+)?(_p)?$/i.test(memberName(key))
 
 /** Stored keys normalized, so loadouts saved before the suffix was dropped still match. */
 const keySet = (keys: string[]) => new Set(keys.map(normKey))
@@ -262,10 +263,11 @@ export const changesToTurnOff = (l: Loadout, mods: Mod[]) => {
   return mods.filter(m => on.has(modKey(m.path)) && loadoutable(modKey(m.path)) && m.enabled)
 }
 
-/** On = every one of its installed mods is on (other mods may be on too). */
+/** On = every one of its installed mods is on (other mods may be on too). A loader saved in an older loadout does not
+ *  count: switching the loadout never touches it. */
 export const isActive = (l: Loadout, mods: Mod[]) => {
   const on = keySet(l.on)
-  const mine = mods.filter(m => on.has(modKey(m.path)))
+  const mine = mods.filter(m => on.has(modKey(m.path)) && loadoutable(modKey(m.path)))
   return mine.length > 0 && mine.every(m => m.enabled)
 }
 
@@ -531,6 +533,15 @@ window.addEventListener('keydown', e => {
 })
 
 if (import.meta.env.DEV) {
+  console.assert(['C:/g/~mods/!ProjectGalacta_9999999_P.pak', 'C:/g/~mods/!ProjectSigeon_9999999_P.bak_repak'].every(x => !loadoutable(modKey(x)))
+    && loadoutable(modKey('C:/g/~mods/ProjectSigeonFan_9999999_P.pak')), 'loadoutable: neither loader, other mods yes')
+  console.assert(['ProjectSigeon_P', 'ProjectGalacta_12', '!ProjectSigeon_3_P'].every(n => !loadoutable(modKey(`C:/g/~mods/${n}.pak`)))
+    && loadoutable(modKey('C:/g/~mods/ProjectGalacta_Compat_P.pak')), 'loadoutable: the loader names xtra_project.rs accepts')
+  {
+    const mod = (name: string, enabled: boolean) => ({ path: `C:/g/~mods/${name}.pak`, enabled }) as Mod
+    const old: Loadout = { id: 'x', name: 'x', label: 'Other', scope: [], on: [modKey('C:/g/~mods/!ProjectSigeon_9999999_P.pak'), modKey('C:/g/~mods/Skin.pak')] }
+    console.assert(isActive(old, [mod('!ProjectSigeon_9999999_P', false), mod('Skin', true)]), 'isActive: a loader saved in an old loadout does not count')
+  }
   const base: Loadout = { id: 'a', name: 'a', label: 'Other', scope: [], on: [] }
   console.assert(byRecent([{ ...base, id: 'old' }, { ...base, id: 'b', edited: 1 }, { ...base, id: 'c', edited: 2 }, { ...base, id: 'old2' }]).map(l => l.id).join() === 'c,b,old,old2',
     'byRecent: newest first, unstamped after in their order')

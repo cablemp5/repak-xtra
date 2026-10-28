@@ -5229,8 +5229,16 @@ async fn launch_game(app: tauri::AppHandle, state: State<'_, Arc<Mutex<AppState>
         (state.game_path.clone(), state.launcher_type.clone())
     };
 
-    if xtra_project::select(&mods_path)? {
-        let _ = app.emit("mods_dir_changed", ());
+    // repakxtra: selecting the loader is a convenience here, never a reason to refuse Play
+    match xtra_project::select(&mods_path) {
+        Ok(true) => {
+            let _ = app.emit("mods_dir_changed", ());
+        }
+        Ok(false) => {}
+        Err(error) => {
+            warn!("Project selection before launch: {error}");
+            ui_log::warn("Launch", error);
+        }
     }
 
     // Go up 5 levels to get the actual game root
@@ -6201,7 +6209,8 @@ async fn download_update(
     // Create temp directory for the update
     let temp_dir = crate::xtra_updater::update_dir(); // repakxtra: not Repak X's
     // repakxtra: the name comes from the release listing: one plain file name, so the download stays in temp_dir
-    if !crate::p2p_sharing::safe_file_name(&asset_name) {
+    // repakxtra: only the release zip, which apply_update checks for the app and edition before installing
+    if !crate::p2p_sharing::safe_file_name(&asset_name) || !asset_name.to_ascii_lowercase().ends_with(".zip") {
         return Err(format!("Unexpected update file name: {asset_name}"));
     }
     if temp_dir.exists() {
@@ -6314,6 +6323,12 @@ async fn download_update(
         .await
         .map_err(|e| format!("Failed to flush file: {}", e))?;
     drop(file);
+
+    // repakxtra: a corrupted or swapped download never reaches apply_update
+    if let Err(error) = crate::xtra_update::verify_checksum(&client, &asset_url, &download_path).await {
+        let _ = std::fs::remove_file(&download_path);
+        return Err(error);
+    }
 
     info!("Update downloaded to: {:?}", download_path);
 
@@ -8462,8 +8477,12 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // This closure is called when a second instance is launched
             // `args` contains command line arguments including the deep-link URL
-            info!("Single instance callback triggered with args: {:?}", args);
-            xtra_project::on_open(app);
+            // repakxtra: links can carry a Claim role state, so the log keeps each argument only up to its query
+            let shown: Vec<&str> = args.iter().map(|a| a.split('?').next().unwrap_or("")).collect();
+            info!("Single instance callback triggered with args: {:?}", shown);
+            // repakxtra: off the window thread, which this callback runs on (it walks ~mods)
+            let handle = app.clone();
+            std::thread::spawn(move || xtra_project::on_open(&handle));
 
             // Focus the main window
             if let Some(window) = app.get_webview_window("main") {
@@ -8474,7 +8493,7 @@ fn main() {
             // Check if args contains a repakx:// URL
             for arg in args.iter() {
                 if arg.starts_with("repakx://") {
-                    info!("Received deep link from second instance: {}", arg);
+                    info!("Received deep link from second instance: {}", arg.split('?').next().unwrap_or(""));
                     handle_deep_link_url(arg, app);
                 }
             }
@@ -8513,7 +8532,7 @@ fn main() {
             let app_handle = app.handle().clone();
             app.listen("deep-link://new-url", move |event| {
                 let payload = event.payload();
-                info!("Received deep link URL: {}", payload);
+                info!("Received deep link URL: {}", payload.split('?').next().unwrap_or("")); // repakxtra: no query (a Claim role state)
                 handle_deep_link_url(payload, &app_handle);
             });
 
@@ -8533,12 +8552,12 @@ fn main() {
 
                 // Check command-line arguments for repakx:// URL
                 let args: Vec<String> = std::env::args().collect();
-                info!("Startup command-line args: {:?}", args);
+                info!("Startup command-line args: {:?}", args.iter().map(|a| a.split('?').next().unwrap_or("")).collect::<Vec<_>>()); // repakxtra: no query
 
                 for arg in args.iter().skip(1) {
                     // Skip the exe path itself
                     if arg.starts_with("repakx://") {
-                        info!("Found cold-start deep link URL: {}", arg);
+                        info!("Found cold-start deep link URL: {}", arg.split('?').next().unwrap_or("")); // repakxtra: no query
                         handle_deep_link_url(arg, &startup_app_handle);
                         break; // Only process the first repakx:// URL
                     }
