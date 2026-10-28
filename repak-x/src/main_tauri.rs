@@ -36,6 +36,7 @@ mod xtra_bundle; // repakxtra: a mod's pak/utoc/ucas found and moved as one set
 mod xtra_encrypt;
 mod xtra_mutation;
 mod xtra_updater; // repakxtra: applies an update without string-built shell commands
+mod xtra_repair; // repakxtra: Settings > Check app files and Repair
 mod xtra_conflicts; // repakxtra: conflict comparison by normalized asset path, cached file lists
 mod xtra_heroes; // repakxtra: the hero and skin folder of an asset path
 mod xtra_game; // repakxtra: the game update notice
@@ -6401,7 +6402,7 @@ async fn apply_update(downloaded_path: String, window: Window) -> Result<(), Str
         // repakxtra: a fixed PowerShell script gets every path through environment variables (xtra_updater.rs), so
         // no folder name can change the command, and a failed copy puts the old files back
         if is_zip {
-            crate::xtra_updater::launch_zip(&download_path, app_dir, &exe_path)?;
+            crate::xtra_updater::launch_zip(&download_path, app_dir, &exe_path, &[])?;
         } else {
             crate::xtra_updater::launch_installer(&download_path)?;
         }
@@ -8704,6 +8705,9 @@ fn main() {
             xtra_storage::xtra_storage_snapshot_read,
             xtra_storage::xtra_storage_backup_write,
             xtra_buildmark::xtra_buildmark_tint,
+            xtra_updater::xtra_started_ok, // repakxtra: an update keeps its rollback until this
+            xtra_repair::xtra_check_app_files, // repakxtra: Settings > Check app files
+            xtra_repair::xtra_repair_app_files,
             xtra_export::export_loadout_zip, // repakxtra: export a loadout as a zip
             xtra_shortcut::shortcut_status, // repakxtra: desktop shortcut
             xtra_shortcut::shortcut_create,

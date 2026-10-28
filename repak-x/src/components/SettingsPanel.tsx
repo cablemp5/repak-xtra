@@ -25,6 +25,7 @@ import { IoIosSettings } from "react-icons/io"
 import { REPAKXTRA_VERSION } from '../custom/version' // repakxtra
 import CableDiscord, { RepakXDiscord } from '../custom/CableDiscord' // repakxtra: both servers as quiet cards
 import CopySetupReport from '../custom/CopySetupReport' // repakxtra: setup report for help channels
+import AppFiles from '../custom/AppFiles' // repakxtra: Check app files and Repair
 import Support from '../custom/Support'
 import { invoke } from '@tauri-apps/api/core'
 import { ShortcutSetting } from '../custom/shortcut' // repakxtra
@@ -343,6 +344,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                     >
                       <span>Check for updates when repakxtra starts</span>
                     </Checkbox>
+                    <AppFiles alert={alert} />{/* repakxtra */}
                   </div>
                 </div>
               </>

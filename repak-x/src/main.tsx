@@ -8,6 +8,7 @@ import App from './App'
 import ExtendedAccess from './custom/ExtendedAccess'
 import VfxUpdaterWindow from './custom/vfx/VfxUpdaterWindow' // repakxtra: in place of the upstream VFX Updater's page
 import EncryptWindow from './custom/EncryptWindow' // repakxtra
+import StartedOk from './custom/startedOk' // repakxtra: an update keeps its rollback until the window has rendered
 import AssetExplorerPage from './modules/asset-explorer/AssetExplorerPage'
 import './custom/theme.css' // repakxtra: theme for every window, last so it wins the cascade
 import './custom/uiPrefs' // repakxtra: UI scale and optional controls in every window
@@ -38,5 +39,6 @@ const rootView = secondary ? secondary.view() : <App />
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <ExtendedAccess>{rootView}</ExtendedAccess>
+    {!secondary && <StartedOk />}{/* repakxtra */}
   </React.StrictMode>,
 )

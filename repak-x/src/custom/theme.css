@@ -2472,6 +2472,12 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 .settings-content .xs-label { font-size: 13px; font-weight: 450; color: var(--text-primary); }
 .settings-content .xs-text .setting-subtext { padding: 0 !important; margin: 0 !important; }
 .settings-content .xs-note { margin: -4px 0 4px !important; padding: 0 !important; }
+/* Settings > Updates > App files: below the auto-check box, its buttons side by side and never squeezed (Proximity) */
+.settings-content .xs-app-files { margin-top: 6px; }
+.settings-content .xs-buttons { display: flex; gap: 8px; flex-shrink: 0; }
+.settings-content .xs-app-report { margin-top: 4px; animation: xs-report-in 180ms ease-out; }
+@keyframes xs-report-in { from { opacity: 0; transform: translateY(-2px); } }
+@media (prefers-reduced-motion: reduce) { .settings-content .xs-app-report { animation: none; } }
 .settings-content .action-btn, .settings-content .lo-text-btn { font-weight: 400 !important; }
 /* Install card, one scale: labels (Custom name, Add to loadout, Install to) 12.5px gray; what you type and pick (the
    name, folders, the footer choice) 13px regular; the file-name preview 12.5px gray; tile hints 12px regular under
