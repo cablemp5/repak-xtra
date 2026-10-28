@@ -3319,18 +3319,20 @@ function App() {
       await handleInstallMods(defaultInstall(parsed) as InstallModPayload[])
     },
     update: async (oldPath, archive) => {
-      // by name, so a mod switched on or off while it downloaded is still found
-      const mod = mods.find(m => m.path === oldPath) ?? mods.find(m => nameKey(m.path) === nameKey(oldPath))
-      // several mods in one download: which one is this mod is unknown, so the Install dialog shows them all
-      const paks = await invoke<string[][]>('xtra_install_paks', { paths: [archive] }).then(r => r[0] ?? [], () => [])
-      if (mod && paks.length > 1) {
-        alert.info('Pick what to update', `The update holds ${paks.length} mods. Install the ones you want, then remove the old ${nameKey(oldPath)}.`)
-        setModsToInstall(await invoke('parse_dropped_files', { paths: [archive] }))
+      // by its key (folder and name, on or off alike), so a mod switched while it downloaded is still found
+      const mod = mods.find(m => m.path === oldPath) ?? mods.find(m => modKey(m.path) === modKey(oldPath))
+      if (!mod) { alert.warning('Update not applied', `${nameKey(oldPath)} is no longer in your mods folder, so the download was not used.`); return }
+      const parsed = await invoke<unknown[]>('parse_dropped_files', { paths: [archive] })
+        .catch(e => { alert.error('Update not applied', `The download could not be read: ${e}`); return null })
+      if (!parsed) return
+      // only a download of exactly one mod replaces it: with several (or none found) the Install dialog shows them
+      if (parsed.length !== 1) {
+        alert.info('Pick what to update', `The update holds ${parsed.length} mods. Install the ones you want, then remove the old ${nameKey(oldPath)}.`)
+        setModsToInstall(parsed)
         setPanel('install', true)
         return
       }
-      if (mod) await handleConfirmUpdate(true, false, { mod, newSourcePath: archive })
-      else alert.warning('Update not applied', `${nameKey(oldPath)} is no longer in your mods folder, so the download was not used.`)
+      await handleConfirmUpdate(true, false, { mod, newSourcePath: archive })
     },
   })
 
@@ -3360,8 +3362,9 @@ function App() {
       const pct = Math.max(0, Math.min(100, Math.round(Number(event.payload) || 0)))
       if (installToast >= 0) alert.updateToast(installToast, { progressValue: pct, description: `${pct}% · ${modCount} mod${modCount > 1 ? 's' : ''}` })
     })
+    let job: Promise<unknown> = Promise.resolve() // repakxtra: the install itself, so a Nexus install can wait for it
     installToast = alert.promise(
-      (async () => {
+      job = (async () => {
         // Create a promise that resolves when install_complete event fires
         const installCompletePromise = new Promise<void>((resolve, reject) => {
           let unlistenComplete: UnlistenFn | null = null
@@ -3467,6 +3470,7 @@ function App() {
         })
       }
     )
+    await job.catch(() => undefined) // the toast reports a failure
   }
 
   const saveAllSettings = async (overrides: Partial<AppSettings>) => {

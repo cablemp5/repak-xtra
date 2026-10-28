@@ -98,6 +98,7 @@ const waiting = new Map<number, { oldPath: string; at: number }>()
 const WAIT_MS = 30 * 60 * 1000
 /** Files downloading or installing now: a second click on the same one waits for the first. */
 const busy = new Set<number>()
+let applying: Promise<unknown> = Promise.resolve()
 
 /** Downloads a file (with an nxm:// link's key for free accounts) with a toast that fills, then installs it or updates
  *  the mod at `oldPath` with it. */
@@ -124,7 +125,10 @@ async function download(link: Link, alert: Alert, oldPath?: string) {
     un.then(f => f())
     alert.dismissAlert(id)
   }
-  await (oldPath ? handlers?.update(oldPath, archive) : handlers?.install(archive)) // the cache copy goes a day later (xtra_nexus_download)
+  // one install or update at a time, each to its end (its loadout too): downloads may finish together
+  const run = applying.then(() => (oldPath ? handlers?.update(oldPath, archive) : handlers?.install(archive))) // the cache copy goes a day later
+  applying = run.catch(() => undefined)
+  await run
 }
 
 /** Gets a file of a Nexus mod and installs it, or updates the installed mod at `oldPath`. Premium downloads it now;
@@ -241,9 +245,12 @@ export function NexusSetting() {
     } catch (e) { setError(String(e)); field.current?.focus() } finally { setBusy(false) }
   }
   const signOut = async () => {
-    await invoke('xtra_nexus_forget_key').catch(() => undefined)
-    account = null
-    notify()
+    try {
+      await invoke('xtra_nexus_forget_key')
+      account = null
+      setError(null)
+      notify()
+    } catch (e) { setError(`Not signed out: ${e}`) } // the key is still saved
   }
   return (
     <div className="setting-section">
@@ -271,9 +278,9 @@ export function NexusSetting() {
               <button type="button" className="action-btn" disabled={busy || !key.trim()} onClick={save}><KeyRound size={14} /> {busy ? 'Checking…' : 'Save key'}</button>
               <button type="button" className="action-btn" onClick={() => open(KEYS_URL)}><ExternalLink size={14} /> Get your key</button>
             </div>
-            {error && <p className="setting-subtext nx-key-error" role="alert">{error}</p>}
           </>
         )}
+        {error && <p className="setting-subtext nx-key-error" role="alert">{error}</p>}
       </div>
     </div>
   )
