@@ -8532,7 +8532,7 @@ fn main() {
             let app_handle = app.handle().clone();
             app.listen("deep-link://new-url", move |event| {
                 let payload = event.payload();
-                info!("Received deep link URL: {}", payload);
+                info!("Received deep link URL: {}", payload.split('?').next().unwrap_or("")); // repakxtra: no query (a Claim role state)
                 handle_deep_link_url(payload, &app_handle);
             });
 
@@ -8552,12 +8552,12 @@ fn main() {
 
                 // Check command-line arguments for repakx:// URL
                 let args: Vec<String> = std::env::args().collect();
-                info!("Startup command-line args: {:?}", args);
+                info!("Startup command-line args: {:?}", args.iter().map(|a| a.split('?').next().unwrap_or("")).collect::<Vec<_>>()); // repakxtra: no query
 
                 for arg in args.iter().skip(1) {
                     // Skip the exe path itself
                     if arg.starts_with("repakx://") {
-                        info!("Found cold-start deep link URL: {}", arg);
+                        info!("Found cold-start deep link URL: {}", arg.split('?').next().unwrap_or("")); // repakxtra: no query
                         handle_deep_link_url(arg, &startup_app_handle);
                         break; // Only process the first repakx:// URL
                     }

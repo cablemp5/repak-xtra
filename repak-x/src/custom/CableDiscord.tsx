@@ -39,7 +39,12 @@ export function DiscordCard({ invite, fallbackName, claim = false }: { invite: s
           consent page, the flow members know from other apps */}
       {/* Von Restorff: once claimed the action becomes the result (plain text, not a dead button), so the card no
           longer asks for it. While it waits, Open again starts over if the tab was closed. Not set up: nothing shows */}
-      {claim && claimed === 'ok' && <span className="cd-claimed"><Check size={13} aria-hidden="true" /> Role claimed</span>}
+      {/* still a quiet result, but clickable: a role removed (or lost by leaving the server) can be claimed again */}
+      {claim && claimed === 'ok' && (
+        <button type="button" className="cd-claimed cd-claimed-btn" onClick={startClaim} title="Claimed. Click to claim it again if the role was removed.">
+          <Check size={13} aria-hidden="true" /> Role claimed
+        </button>
+      )}
       {claim && claimed !== 'ok' && claimed !== 'unset' && (
         <button type="button" className="lo-text-btn" onClick={startClaim}
           title={claimed === 'waiting' ? 'Opens the Discord page again, with a new link' : 'Opens Discord in your browser. Authorize repakxtra and the server gives you the repakxtra user role.'}>

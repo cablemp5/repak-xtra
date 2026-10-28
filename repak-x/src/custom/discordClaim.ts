@@ -2,8 +2,9 @@
 // at once, opens Discord's consent page, and waits for the browser's answer, which comes back through a repakx:// link
 // (no polling). Consent pages wait on the member, so it gives up after 5 minutes, and Open again starts a fresh claim
 // when the tab was closed. A claimed role is remembered (the role is kept forever). The claim lives here, not in the card:
-// closing Settings mid-claim keeps it, and reopening shows where it stands. Each answer names its claim's state, so an
-// answer to an earlier claim never settles a newer one.
+// closing Settings mid-claim keeps it, and reopening shows where it stands. Each answer names its claim's state. A role
+// given counts from any recent claim (an earlier tab, or after the 5 minutes), anything else only from the newest one.
+// Role claimed can be clicked to claim again (the role was removed, or the member left and came back).
 import { useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
@@ -33,12 +34,15 @@ export function claimText(state: ClaimState): string | null {
 /** The answer's state, from the result the browser sent back. Unknown words read as an error. Pure. */
 export const fromResult = (result: string): ClaimState => (['ok', 'not_member', 'denied'].includes(result) ? result as ClaimState : 'error')
 
-/** Whether an answer settles the claim in progress: only while waiting, and only for the state this claim opened. Pure. */
-export const answers = (a: Answer, waiting: boolean, mine: string | null) => waiting && mine !== null && a.state === mine
+/** Whether an answer changes the card. A role given (ok) from any claim this session made counts until the card says
+ *  so. Other answers count only for the newest claim, while it waits or after it gave up waiting. Pure. */
+export const answers = (a: Answer, now: ClaimState, mine: string | null, recent: readonly string[]) =>
+  recent.includes(a.state) && (a.result === 'ok' ? now !== 'ok' : a.state === mine && (now === 'waiting' || now === 'timeout'))
 
 const CLAIMED = 'repakxtra.discordClaim' // 'ok' once the role was given: the card says so from then on
 let state: ClaimState = localStorage.getItem(CLAIMED) === 'ok' ? 'ok' : 'idle'
-let mine: string | null = null // the state token of the claim in progress, known once the backend made it
+let mine: string | null = null // the state token of the newest claim, known once the backend made it
+const recent: string[] = [] // this session's claims, newest last (xtra_role.rs keeps as many)
 let attempt = 0
 let timer: ReturnType<typeof setTimeout> | undefined
 let listening: Promise<unknown> | null = null
@@ -47,16 +51,17 @@ const set = (s: ClaimState) => { state = s; subscribers.forEach(f => f()) }
 
 function settle(s: ClaimState) {
   clearTimeout(timer)
-  mine = null
   set(s)
   if (s === 'ok') { localStorage.setItem(CLAIMED, 'ok'); cue('success', { emphasis: 'subtle' }) }
+  if (s === 'not_member') localStorage.removeItem(CLAIMED) // left the server: the role went with them
 }
 
 const listenOnce = () => (listening ??= listen<Answer>('xtra-role-claimed', e => {
-  if (answers(e.payload, state === 'waiting', mine)) settle(fromResult(e.payload.result))
+  if (answers(e.payload, state, mine, recent)) settle(fromResult(e.payload.result))
 }).catch(e => { listening = null; throw e })) // a failed subscription is tried again on the next claim
 
-/** Starts a claim. While one waits (its tab closed, say), it starts a fresh one: the earlier one stops counting. */
+/** Starts a claim, also from Role claimed (to claim again). While one waits (its tab closed, say), it starts a fresh one:
+ *  the earlier one can still give the role, nothing else. */
 export async function startClaim() {
   clearTimeout(timer)
   const me = ++attempt
@@ -69,6 +74,7 @@ export async function startClaim() {
     const url = await invoke<string>('xtra_role_claim_start')
     if (!current()) return
     mine = new URL(url).searchParams.get('state')
+    if (mine) { recent.push(mine); if (recent.length > 5) recent.shift() }
     await openUrl(url)
   } catch (e) {
     if (current()) settle(String(e).includes('not set up') ? 'unset' : 'error')
@@ -94,9 +100,12 @@ if (import.meta.env.DEV) {
   console.assert(claimText('idle') === 'Get the repakxtra user role in this server.', 'before a click: which role, in which server')
   console.assert(fromResult('ok') === 'ok' && fromResult('denied') === 'denied' && fromResult('admin') === 'error', 'results map, unknown is an error')
   console.assert(GIVE_UP_MS === 300_000, 'gives up after 5 minutes')
-  console.assert(answers({ state: 'b', result: 'ok' }, true, 'b'), 'this claim\'s answer settles it')
-  console.assert(!answers({ state: 'a', result: 'ok' }, true, 'b'), 'an earlier claim\'s answer does not')
-  console.assert(!answers({ state: 'a', result: 'ok' }, true, null), 'nor one that arrives while the new claim is being made')
-  console.assert(!answers({ state: 'b', result: 'ok' }, false, 'b'), 'nor one after it settled')
+  console.assert(answers({ state: 'b', result: 'denied' }, 'waiting', 'b', ['a', 'b']), 'this claim\'s answer settles it')
+  console.assert(answers({ state: 'a', result: 'ok' }, 'waiting', 'b', ['a', 'b']), 'an earlier tab that gave the role counts')
+  console.assert(!answers({ state: 'a', result: 'denied' }, 'waiting', 'b', ['a', 'b']), 'an earlier tab\'s other answers do not')
+  console.assert(answers({ state: 'b', result: 'ok' }, 'timeout', 'b', ['b']) && answers({ state: 'b', result: 'denied' }, 'timeout', 'b', ['b']), 'late answers still land')
+  console.assert(!answers({ state: 'b', result: 'ok' }, 'ok', 'b', ['b']), 'nothing to change once claimed')
+  console.assert(!answers({ state: 'x', result: 'ok' }, 'waiting', 'b', ['b']), 'never a claim this session did not make')
+  console.assert(!answers({ state: 'b', result: 'denied' }, 'not_member', 'b', ['b']), 'a settled answer is not replaced by another')
   console.assert(!(['waiting', 'ok', 'not_member', 'denied', 'error', 'timeout', 'unset'] as ClaimState[]).some(s => /[;\u2014]/.test(claimText(s) ?? '')), 'no semicolons or em dashes')
 }
