@@ -3140,7 +3140,8 @@ html[data-motion="off"] .upd-progress > span, html[data-motion="off"] .repakx-pr
 .nx-act { display: inline-flex !important; align-items: center; gap: 5px; }
 .nx-act.is-update { color: var(--accent-primary) !important; }
 .nx-installed { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-secondary); }
-.nx-more { display: flex; justify-content: center; padding: 20px 0 4px; }
+.nx-more { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 20px 0 4px; }
+.nx-more small { font-size: 12px; color: var(--text-secondary); }
 .nx-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 64px 0; text-align: center; color: var(--text-secondary); }
 .nx-empty p { margin: 0; font-size: 14px; color: var(--text-primary); }
 .nx-empty small { max-width: 60ch; }

@@ -35,12 +35,14 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
   const [sort, setSort] = useState('endorsements')
   const [cards, setCards] = useState<Card[]>([])
   const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(0)
+  const [done, setDone] = useState(false) // every page of this search is in
   const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading')
   const [error, setError] = useState('')
-  const [tries, setTries] = useState(0)
+  const [tries, setTries] = useState(0) // Try again after a failed search
+  const [more, setMore] = useState(0) // Show more (or its retry) clicks
   const shown = useRef('') // the search and sort the cards are for: a new one starts from page one
   const loaded = useRef(-1) // the last page loaded for it
+  const wanted = useRef(0) // the page to load next: one past `loaded` once Show more asks
   // Your copy of each Nexus mod, by mod id (the first one found when there are several)
   const installed = useMemo(() => {
     const byId = new Map<number, string>()
@@ -54,8 +56,9 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
     if (view !== 'nexus') return
     const key = `${query}\n${sort}\n${tries}`
     const fresh = key !== shown.current
-    const at = fresh ? 0 : page
-    if (!fresh && at <= loaded.current) return // back on the tab: those pages are still there
+    if (fresh) wanted.current = 0
+    else if (wanted.current <= loaded.current) { setState('ok'); return } // back on the tab (or this search again): its pages are here
+    const at = wanted.current
     let live = true
     setState('loading')
     const f = { gameDomainName: [{ value: 'marvelrivals' }], adultContent: [{ value: false }], ...(query ? { nameStemmed: [{ value: query, op: 'MATCHES' }] } : {}) }
@@ -64,14 +67,26 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
         if (!live) return
         shown.current = key
         loaded.current = at
-        if (fresh) setPage(0)
-        setCards(prev => (fresh ? d.mods.nodes : [...prev, ...d.mods.nodes]))
+        // a mod uploaded between two pages pushes the last one onto the next: each mod once
+        setCards(prev => {
+          if (fresh) return d.mods.nodes
+          const seen = new Set(prev.map(c => c.modId))
+          return [...prev, ...d.mods.nodes.filter(c => !seen.has(c.modId))]
+        })
         setTotal(d.mods.totalCount)
+        setDone((at + 1) * PAGE >= d.mods.totalCount)
         setState('ok')
       })
-      .catch(e => { if (live) { setError(String(e)); setState('error') } })
+      .catch(e => {
+        if (!live) return
+        if (fresh) { setCards([]); shown.current = key; loaded.current = -1 } // never the last search's cards under this one
+        setError(String(e))
+        setState('error')
+      })
     return () => { live = false }
-  }, [view, query, sort, page, tries])
+  }, [view, query, sort, tries, more])
+
+  const showMore = () => { wanted.current = loaded.current + 1; setMore(n => n + 1) }
 
   if (view !== 'nexus') return null
   const first = state === 'loading' && !cards.length
@@ -103,10 +118,11 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
               : cards.map(c => <NexusCard key={c.modId} c={c} path={installed.get(c.modId)} />)}
           </div>
         )}
-        {cards.length > 0 && cards.length < total && (
+        {cards.length > 0 && !done && (
           <div className="nx-more">
-            <button type="button" className="lo-text-btn" disabled={state === 'loading'} onClick={() => setPage(p => p + 1)}>
-              {state === 'loading' ? 'Loading…' : 'Show more'}
+            {state === 'error' && <small role="alert">More did not load: {error}</small>}
+            <button type="button" className="lo-text-btn" disabled={state === 'loading'} onClick={showMore}>
+              {state === 'loading' ? 'Loading…' : state === 'error' ? 'Try again' : 'Show more'}
             </button>
           </div>
         )}
