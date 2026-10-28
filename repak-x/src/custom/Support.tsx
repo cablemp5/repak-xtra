@@ -4,7 +4,7 @@ import { Heart, Star } from 'lucide-react'
 export default function Support({ onError }: { onError: (error: string) => void }) {
   const visit = (url: string) => { void open(url).catch(error => onError(String(error))) }
   return <>
-    <div className="xs-row">
+    <div className="xs-row xs-support-first">
       <div className="xs-text"><span className="xs-label">Support cablebp</span><span className="setting-subtext">Help support repakxtra development.</span></div>
       <button type="button" className="action-btn" onClick={() => visit('https://ko-fi.com/cablebp')}><Heart size={16} />Support on Ko-fi</button>
     </div>
