@@ -79,7 +79,7 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
     if (r.status === 'fixed' && r.placed) {
       // a new name (_UPDATED) moves the loadouts that held the original; with the name kept they already hold the update
       renameModKey(modKey(r.placed.source), modKey(r.placed.fixed))
-      renameSource(nameKey(r.placed.source), nameKey(r.placed.fixed)) // and its Nexus source
+      renameSource(nameKey(r.placed.source), nameKey(r.placed.fixed), nameKey(r.placed.original)) // its Nexus source on the update and the kept original
       await emit('mods_dir_changed').catch(() => {})
       await reload()
     }

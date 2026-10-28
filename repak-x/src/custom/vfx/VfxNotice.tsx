@@ -43,7 +43,7 @@ export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () =>
     const un = listen<Fixed>(FIXED_EVENT, e => {
       if (e.payload?.swap) {
         renameModKey(modKey(e.payload.from), modKey(e.payload.to))
-        renameSource(nameKey(e.payload.from), nameKey(e.payload.to)) // and its Nexus source
+        renameSource(nameKey(e.payload.from), nameKey(e.payload.to), nameKey(e.payload.original ?? e.payload.from)) // its Nexus source on both copies
       }
       reloadRef.current()
     })

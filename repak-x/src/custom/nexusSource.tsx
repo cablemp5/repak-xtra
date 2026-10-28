@@ -18,8 +18,10 @@ type Store = Record<string, NexusSource>
 const STORAGE = 'repakxtra.nexusSources'
 const listeners = new Set<() => void>()
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
-const norm = (key: string) => key.replace(/(_\d+_P)+$/i, '').toLowerCase()
-const read = (): Store => { try { return JSON.parse(savedItem(STORAGE) || '{}') } catch { return {} } }
+// without the load priority: its _9999999_P suffix, and the ! that priority zero puts in front
+const norm = (key: string) => key.replace(/^!+/, '').replace(/(_\d+_P)+$/i, '').toLowerCase()
+// keys saved before norm dropped the ! read as today's (a tiny object, so every read redoes it)
+const read = (): Store => { try { return Object.fromEntries(Object.entries(JSON.parse(savedItem(STORAGE) || '{}')).map(([k, v]) => [norm(k), v])) as Store } catch { return {} } }
 const write = (s: Store) => { localStorage.setItem(STORAGE, JSON.stringify(s)); listeners.forEach(l => l()) }
 
 /** The Types filter's name for mods installed from Nexus (FilterPanel.tsx, matched in App.tsx): not a real mod type */
@@ -49,14 +51,15 @@ export async function recordSources(installed: { path?: string; customName?: str
   if (changed) write(store)
 }
 
-/** After an update from `archive`: the updated mod (its name key) gets the archive's source, nothing else does (an
- *  archive's other paks may be mods that were not updated). A non-Nexus archive leaves the source as it was. */
-export async function recordUpdateSource(archive: string, key: string) {
+/** The archive's source for exactly these installed mods (name keys): an update's mod, or the paks picked in the
+ *  browser extension's installer under the names they got. Nothing else, so an archive's other paks keep theirs. A
+ *  non-Nexus archive records nothing. */
+export async function recordSourceAs(archive: string, keys: string[]) {
   const [f] = await invoke<(Found | null)[]>('xtra_nexus_sources', { paths: [archive] }).catch(() => [])
-  if (!f) return
+  if (!f || !keys.length) return
   const { paks: _, ...s } = f // eslint-disable-line @typescript-eslint/no-unused-vars
   const store = read()
-  store[norm(key)] = s
+  for (const k of keys) store[norm(k)] = s
   write(store)
 }
 
@@ -87,11 +90,12 @@ export function useNexusScan(mods: { path: string }[]) {
 }
 
 /** A renamed mod keeps its source. */
-export function renameSource(oldKey: string, newKey: string) {
-  const store = read(), from = norm(oldKey), to = norm(newKey)
-  if (from === to || !store[from]) return
-  store[to] = store[from]
-  delete store[from]
+/** With several new keys each gets it (a VFX update and the original it kept). The old key goes unless it is one. */
+export function renameSource(oldKey: string, ...newKeys: string[]) {
+  const store = read(), from = norm(oldKey), to = newKeys.map(norm)
+  if (!store[from] || to.every(k => k === from)) return
+  for (const k of to) store[k] = store[from]
+  if (!to.includes(from)) delete store[from]
   write(store)
 }
 
@@ -143,4 +147,5 @@ export function NexusTag({ path }: { path: string }) {
 
 if (import.meta.env.DEV) {
   console.assert(norm(nameKey('C:/m/~mods/Pucci_Skin_9999999_P.bak_repak')) === norm(installedKey({ mod_name: 'Pucci_Skin_9999999_P' })), 'installed and listed keys match')
+  console.assert(norm(nameKey('C:/m/~mods/!Pucci_Skin_9999999_P.pak')) === norm(nameKey('C:/m/~mods/Pucci_Skin_99999999_P.pak')), 'priority zero keeps its source')
 }

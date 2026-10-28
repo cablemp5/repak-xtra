@@ -146,7 +146,7 @@ import SharingPanel from './components/SharingPanel'
 import Wordmark from './custom/Wordmark' // repakxtra: the logo
 import ConflictsPanel from './custom/ConflictsPanel' // repakxtra: in place of Repak X's ClashPanel (grouped, in words)
 import { keepThisOne } from './custom/keepOne' // repakxtra: Keep this one
-import { NEXUS_TYPE, recordSources, recordUpdateSource, renameSource, sourceOf, useNexusScan, useNexusSources } from './custom/nexusSource' // repakxtra: Nexus source
+import { NEXUS_TYPE, recordSourceAs, recordSources, renameSource, sourceOf, useNexusScan, useNexusSources } from './custom/nexusSource' // repakxtra: Nexus source
 import { CHECK_EVERY, checkUpdates, useNexus } from './custom/nexus' // repakxtra: Nexus account, update checks and downloads
 import { stageOffFiles } from './custom/offFiles' // repakxtra: .pak.off files
 import CrashSuspects, { previousCrashes, withSuspects } from './custom/CrashSuspects' // repakxtra: crash suspects
@@ -1452,7 +1452,7 @@ function App() {
       // before the reload, so the old key is never seen as a deleted mod
       renameModKey(modKey(mod.path), modKey(result.new_mod_path))
       renameSource(nameKey(mod.path), nameKey(result.new_mod_path))
-      await recordUpdateSource(newSourcePath, nameKey(result.new_mod_path)) // a newer Nexus download: its version now
+      await recordSourceAs(newSourcePath, [nameKey(result.new_mod_path)]) // a newer Nexus download: its version now
 
       // Refresh data
       await loadMods()
@@ -2849,8 +2849,8 @@ function App() {
             renames: options.renames,
             flatten: options.flatten
           })
-          // repakxtra: its Nexus source, under each pak's name and any name it was renamed to (before the archive goes)
-          await recordSources([{ path: modPath }, ...Object.values(options.renames).map(customName => ({ path: modPath, customName }))])
+          // repakxtra: its Nexus source, for the picked paks under the names they landed as (before the archive goes)
+          await recordSourceAs(modPath, options.selections.map(rel => nameKey(`${options.renames[rel] ?? rel.split(/[\\/]/).pop()!.replace(/\.[^.]+$/, '')}.pak`)))
 
           await loadMods()
           await loadFolders()
@@ -3321,9 +3321,9 @@ function App() {
       // by name, so a mod switched on or off while it downloaded is still found
       const mod = mods.find(m => m.path === oldPath) ?? mods.find(m => nameKey(m.path) === nameKey(oldPath))
       if (mod) await handleConfirmUpdate(true, false, { mod, newSourcePath: archive })
-    },
       else alert.warning('Update not applied', `${nameKey(oldPath)} is no longer in your mods folder, so the download was not used.`)
   })
+    },
 
   const handleInstallMods = async (sent: InstallModPayload[]) => {
     const modsWithSettings = sent.filter(m => m.enabled !== false) // repakxtra: left-out archive mods go to the backend only, to be skipped
