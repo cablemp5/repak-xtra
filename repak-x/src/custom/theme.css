@@ -2537,6 +2537,17 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 .nx-source { gap: 12px; }
 .nx-source .detail-value { display: inline-flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 2px 10px; text-align: right; }
 .nx-open { display: inline-flex; align-items: center; gap: 4px; }
+/* A newer version on Nexus: the tag reads Update in the accent (the app's one color for "do this"), not Nexus orange */
+.mod-type-badge.nexus-badge.is-update { --tag: var(--accent-primary); }
+.nx-update { color: var(--accent-primary) !important; }
+/* Settings > General > Nexus Mods (custom/nexus.tsx): the key field is a quiet field, its buttons beside it */
+.nx-setting-logo { width: 18px; height: 18px; flex: none; }
+.nx-key-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.nx-key-input { flex: 1 1 220px; min-width: 0; height: 32px; padding: 0 10px !important; background: var(--field-bg) !important;
+  border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important; color: var(--text-primary) !important;
+  font: 13px var(--font-mono) !important; outline: none !important; box-shadow: none !important; transition: border-color 0.15s ease; }
+.nx-key-input:focus { border-color: rgba(255, 255, 255, 0.16) !important; }
+.settings-content .nx-key-error { margin: 6px 0 0 !important; padding: 0 !important; color: var(--text-primary) !important; }
 
 /* Type hint under the type badges in mod details (custom/typeHints.tsx) */
 .type-hint { margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }

@@ -88,6 +88,7 @@ discord-rich-presence = "1.1.0"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
+keyring = "4" # repakxtra: the Nexus API key in Windows Credential Manager
 
 [features]
 default = []

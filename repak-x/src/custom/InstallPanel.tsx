@@ -18,7 +18,7 @@ import { OTHER, OTHER_LABEL, addGroup, byRecent, useGroups, useLoadouts } from '
 import { useMediaUrl } from './loadoutMedia'
 import { silhouetteOf } from './silhouettes'
 import { installsPlain } from './uiPrefs'
-import { PreviewsUnavailable, usePreviewsAvailable } from './previews'
+import { PreviewsUnavailable, previewsAvailable, usePreviewsAvailable } from './previews'
 import { useDialogFocus } from './dialogFocus'
 // Not for this dialog: the dropdown, switch tile and button styles other dialogs share (they loaded with InstallModPanel)
 import '../components/InstallModPanel.css'
@@ -174,6 +174,18 @@ function TargetPicker({ options, value, onChange }: { options: { value: string; 
 function Cover({ id, rev, image }: { id: string; rev?: number; image?: string }) {
   const url = useMediaUrl(id, rev) ?? image
   return url ? <img src={url} alt="" /> : null
+}
+
+/** What Install sends when nothing in the dialog is touched (a Nexus one-click install, App.tsx): each mod's starting
+ *  switches, into the mods folder, and the loadout the dialog starts on: the open loadout page's, else a new one named
+ *  after the download (Settings' classic installer: none). */
+export function defaultInstall(mods: ModInput[]) {
+  const target = startingLoadouts()[0] ?? (installsPlain() ? NONE : NEW)
+  const preview = previewsAvailable() && mods.some(m => m.contains_uassets !== false)
+  const name = archiveLoadoutName(mods.map(m => m.path)) || suggestName(mods.map(m => ({ name: plainName(m.mod_name), character: parseModType(m.mod_type).character })))
+  setInstallDraft(target === NONE ? null : target === NEW ? { name, label: OTHER, preview } : { into: target, preview })
+  commitInstallLoadout()
+  return mods.map(m => ({ ...m, ...initialSetting(m), installSubfolder: '', loadouts: target === NEW || target === NONE ? [] : [target] }))
 }
 
 export default function InstallPanel({ mods, folders = [], currentFolderId, onCreateFolder, onInstall, onCancel, onNewFolder, onMergeHybrid, characterData }: Props) {

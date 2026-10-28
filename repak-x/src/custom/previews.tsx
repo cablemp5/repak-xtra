@@ -96,6 +96,7 @@ let available = false
 export const refreshPreviewsAvailable = () => invoke<boolean>('previews_available').then(v => { available = v; notify() }).catch(() => undefined)
 refreshPreviewsAvailable()
 export const usePreviewsAvailable = () => useSyncExternalStore(subscribe, () => available)
+export const previewsAvailable = () => available
 listen<string>('mod-preview-ready', e => {
   dropCached(e.payload)
   revs.set(e.payload, (revs.get(e.payload) ?? 0) + 1)

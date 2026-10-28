@@ -1,0 +1,206 @@
+// repakxtra: Nexus Mods in the app (xtra_nexus_api.rs). The account (each user's own personal API key, Settings >
+// General), update checks for mods installed from Nexus (their source, nexusSource.tsx), and getting a file: Premium
+// downloads it straight away, a free account confirms it with Mod manager download on the mod's Files tab, opened in the
+// app's Nexus window. The download then installs (App's one-click install) or updates the mod it replaces.
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
+import { ExternalLink, KeyRound, LogOut } from 'lucide-react'
+import type { useAlert } from '../components/AlertHandler'
+import type { NexusSource } from './nexusSource'
+import nexusLogo from './logos/nexus.png'
+
+type Alert = ReturnType<typeof useAlert>
+type Account = { name: string; premium: boolean }
+export type NexusFile = { fileId: number; name: string; version: string; date: number; category: string; groupId: number | null }
+export type NexusUpdate = NexusFile & { modId: number }
+type Link = { modId: number; fileId: number; key?: string; expires?: number }
+
+/** Marvel Rivals on Nexus Mods (its game id in the GraphQL API, its domain in page links). */
+export const GAME_ID = 7106
+export const pageUrl = (id: number) => `https://www.nexusmods.com/marvelrivals/mods/${id}`
+const KEYS_URL = 'https://www.nexusmods.com/settings/api-keys'
+
+let account: Account | null = null
+let checked = false // the saved key was looked at (or there was none)
+let updates: Record<string, NexusUpdate> = {}
+const listeners = new Set<() => void>()
+const notify = () => listeners.forEach(l => l())
+const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
+export const useNexusAccount = () => useSyncExternalStore(subscribe, () => account)
+const useChecked = () => useSyncExternalStore(subscribe, () => checked)
+const loadAccount = () => invoke<Account | null>('xtra_nexus_account')
+  .then(a => { account = a }, () => { account = null }) // offline: no account until the next start, nothing breaks
+  .finally(() => { checked = true; notify() })
+
+/** One query to Nexus's public GraphQL API (no key needed). */
+export const gql = <T,>(query: string, variables: Record<string, unknown> = {}) => invoke<T>('xtra_nexus_gql', { query, variables })
+
+const sourceId = (s: NexusSource) => `${s.id}:${s.uploaded}`
+/** The newer file for a mod installed from Nexus, once checked (checkUpdates). */
+export const updateOf = (s?: NexusSource) => (s ? updates[sourceId(s)] : undefined)
+/** Re-renders when an update check finishes. */
+export const useNexusUpdates = () => useSyncExternalStore(subscribe, () => updates)
+
+/** Pure: the file that replaces the installed one (uploaded at `uploaded`, Unix seconds), or undefined. The installed
+ *  file is the one uploaded at that time (new archive names keep only the minute, so up to 59 s later); a newer version
+ *  of it is a newer file of its file group that is not archived or removed. When the installed file is gone from the
+ *  mod, a mod with a single main file offers that one if it is newer. */
+export function newerFile(files: NexusFile[], uploaded: number): NexusFile | undefined {
+  // shortcut: two files of one mod uploaded in the same minute read as the first; a stored file id would settle it
+  const mine = files.find(f => f.date >= uploaded && f.date - uploaded < 60)
+  const live = files.filter(f => f.category !== 'ARCHIVED' && f.category !== 'REMOVED')
+  const pool = mine ? live.filter(f => f.groupId !== null && f.groupId === mine.groupId) : live.filter(f => f.category === 'MAIN')
+  if (!mine && pool.length !== 1) return undefined
+  const after = mine?.date ?? uploaded + 59
+  return pool.filter(f => f.date > after).sort((a, b) => b.date - a.date)[0]
+}
+
+let lastCheck = 0
+const CHECK_EVERY = 60 * 60 * 1000
+
+/** Looks for newer files of the given sources: one query per 40 mods, at most once an hour unless `force`. */
+export async function checkUpdates(sources: (NexusSource | undefined)[], force = false) {
+  const unique = [...new Map(sources.filter((s): s is NexusSource => Boolean(s)).map(s => [sourceId(s), s])).values()]
+  if (!unique.length || (!force && Date.now() - lastCheck < CHECK_EVERY)) return
+  lastCheck = Date.now()
+  const ids = [...new Set(unique.map(s => s.id))]
+  const files: Record<string, NexusFile[] | null> = {}
+  for (let i = 0; i < ids.length; i += 40) {
+    const part = ids.slice(i, i + 40)
+    const query = `{ ${part.map(id => `m${id}: modFiles(modId: ${id}, gameId: ${GAME_ID}) { fileId name version date category groupId }`).join(' ')} }`
+    Object.assign(files, await gql<Record<string, NexusFile[] | null>>(query).catch(() => ({})))
+  }
+  const next: Record<string, NexusUpdate> = {}
+  for (const s of unique) {
+    const f = newerFile(files[`m${s.id}`] ?? [], s.uploaded)
+    if (f) next[sourceId(s)] = { ...f, modId: s.id }
+  }
+  updates = next
+  notify()
+}
+
+type Handlers = { install: (archive: string) => Promise<unknown>; update: (oldPath: string, archive: string) => Promise<unknown>; alert: Alert }
+let handlers: Handlers | null = null
+/** What each Mod manager download is for, by mod id: an update of the mod at that path, or (absent) an install. */
+const waiting = new Map<number, string | undefined>()
+
+/** Downloads a file (with an nxm:// link's key for free accounts) with a toast that fills, then installs it or updates
+ *  the mod at `oldPath` with it. */
+async function fetchAndApply(link: Link, oldPath?: string) {
+  if (!handlers) return
+  const { alert } = handlers
+  const id = alert.showAlert({ color: 'default', title: oldPath ? 'Downloading the update' : 'Downloading from Nexus Mods', description: '0%', isLoading: true, duration: 0, progressValue: 0 })
+  const un = listen<{ fileId: number; percent: number }>('nexus_download_progress', e => {
+    if (e.payload.fileId === link.fileId) alert.updateToast(id, { progressValue: e.payload.percent, description: `${e.payload.percent}%` })
+  })
+  let archive: string
+  try {
+    archive = await invoke<string>('xtra_nexus_download', { modId: link.modId, fileId: link.fileId, key: link.key ?? null, expires: link.expires ?? null })
+  } catch (e) {
+    alert.error('Download failed', String(e))
+    return
+  } finally {
+    un.then(f => f())
+    alert.dismissAlert(id)
+  }
+  await (oldPath ? handlers.update(oldPath, archive) : handlers.install(archive)) // the cache copy goes a day later (xtra_nexus_download)
+}
+
+/** Gets a file of a Nexus mod and installs it, or updates the installed mod at `oldPath`. Premium downloads it now;
+ *  a free account gets the mod's Files tab in the Nexus window (on that file's Mod manager download, when known), and
+ *  the download link it opens finishes the job (useNexus). */
+export async function getNexusFile(modId: number, fileId?: number, oldPath?: string) {
+  if (!handlers) return
+  if (!account) {
+    handlers.alert.warning('Nexus Mods account needed', 'Add your personal API key in Settings > General > Nexus Mods to install and update from Nexus.')
+    return
+  }
+  if (account.premium && fileId) return fetchAndApply({ modId, fileId }, oldPath)
+  waiting.set(modId, oldPath)
+  await invoke('xtra_nexus_open', { url: `${pageUrl(modId)}?tab=files${fileId ? `&file_id=${fileId}&nmm=1` : ''}` })
+    .catch(e => handlers?.alert.error('Could not open Nexus Mods', String(e)))
+}
+
+/** Opens a mod's Nexus page in the app's Nexus window. */
+export const openNexusPage = (modId: number) => invoke('xtra_nexus_open', { url: pageUrl(modId) }).catch(() => undefined)
+
+/** App's hook: the account at start, and each Mod manager download (from the Nexus window or a browser) installed or
+ *  applied as the update it was asked for. */
+export function useNexus(h: Handlers) {
+  handlers = h
+  useEffect(() => {
+    loadAccount()
+    const un = listen<Link>('nexus-nxm', e => {
+      const oldPath = waiting.get(e.payload.modId)
+      waiting.delete(e.payload.modId)
+      void fetchAndApply(e.payload, oldPath)
+    })
+    return () => { un.then(f => f()) }
+  }, [])
+}
+
+/** Settings > General > Nexus Mods: paste a personal API key, or see who is signed in and sign out. */
+export function NexusSetting() {
+  const a = useNexusAccount()
+  const ready = useChecked()
+  const [key, setKey] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const field = useRef<HTMLInputElement>(null)
+  const open = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
+  const save = async () => {
+    setBusy(true); setError(null)
+    try {
+      account = await invoke<Account>('xtra_nexus_set_key', { key })
+      setKey('')
+      notify()
+    } catch (e) { setError(String(e)); field.current?.focus() } finally { setBusy(false) }
+  }
+  const signOut = async () => {
+    await invoke('xtra_nexus_forget_key').catch(() => undefined)
+    account = null
+    notify()
+  }
+  return (
+    <div className="setting-section">
+      <h3 className="setting-icon-label"><img src={nexusLogo} alt="" className="nx-setting-logo" />Nexus Mods</h3>
+      <div className="setting-group">
+        {a ? (
+          <div className="xs-row">
+            <div className="xs-text">
+              <span className="xs-label">Signed in as {a.name}</span>
+              <span className="setting-subtext">
+                {a.premium ? 'Premium: installs and updates download straight away.' : 'Free account: each install or update opens the mod on Nexus. Click Slow download there and repakxtra does the rest.'}
+              </span>
+            </div>
+            <button type="button" className="action-btn" onClick={signOut}><LogOut size={14} /> Sign out</button>
+          </div>
+        ) : (
+          <>
+            <p className="setting-subtext xs-note">
+              Browsing Nexus and update checks work without an account. To install and update with one click, paste your personal API key.
+              repakxtra then opens Nexus Mod manager downloads, in place of any other mod manager.
+            </p>
+            <div className="nx-key-row">
+              <input ref={field} className="nx-key-input" type="password" value={key} placeholder={ready ? 'Personal API key' : 'Checking…'} autoComplete="off" spellCheck={false}
+                aria-label="Nexus Mods personal API key" onChange={e => setKey(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && key.trim()) save() }} />
+              <button type="button" className="action-btn" disabled={busy || !key.trim()} onClick={save}><KeyRound size={14} /> {busy ? 'Checking…' : 'Save key'}</button>
+              <button type="button" className="action-btn" onClick={() => open(KEYS_URL)}><ExternalLink size={14} /> Get your key</button>
+            </div>
+            {error && <p className="setting-subtext nx-key-error" role="alert">{error}</p>}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+if (import.meta.env.DEV) {
+  const f = (fileId: number, date: number, groupId: number | null, category = 'MAIN') => ({ fileId, name: '', version: '', date, category, groupId })
+  console.assert(newerFile([f(1, 1000, 7, 'OLD_VERSION'), f(2, 2000, 7), f(3, 3000, 8)], 1000)?.fileId === 2, 'newerFile: the same group, not another file')
+  console.assert(newerFile([f(1, 1030, 7), f(2, 2000, 7, 'ARCHIVED')], 1000) === undefined, 'newerFile: an archived one is no update')
+  console.assert(newerFile([f(1, 1000, 7)], 1000) === undefined, 'newerFile: up to date')
+  console.assert(newerFile([f(2, 2000, 7), f(3, 1500, 8, 'OPTIONAL')], 1000)?.fileId === 2, 'newerFile: installed file gone, the one main file')
+  console.assert(newerFile([f(2, 2000, 7), f(3, 1500, 8)], 1000) === undefined, 'newerFile: installed file gone, two main files')
+}

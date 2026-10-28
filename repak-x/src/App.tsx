@@ -137,7 +137,7 @@ const ASSET_EXPLORER_FOCUS_MOD_KEY = 'repakx:assetExplorer:focusModPath'
 
 import TitleBar from './components/TitleBar'
 
-import InstallModPanel from './custom/InstallPanel' // repakxtra: the install dialog redesigned around saving a loadout
+import InstallModPanel, { defaultInstall } from './custom/InstallPanel' // repakxtra: the install dialog redesigned around saving a loadout
 import EncryptMods, { openEncrypt } from './custom/EncryptMods' // repakxtra
 import SettingsPanel from './components/SettingsPanel'
 import CreditsPanel from './components/CreditsPanel'
@@ -147,6 +147,7 @@ import Wordmark from './custom/Wordmark' // repakxtra: the logo
 import ConflictsPanel from './custom/ConflictsPanel' // repakxtra: in place of Repak X's ClashPanel (grouped, in words)
 import { keepThisOne } from './custom/keepOne' // repakxtra: Keep this one
 import { NEXUS_TYPE, recordSources, renameSource, sourceOf, useNexusScan, useNexusSources } from './custom/nexusSource' // repakxtra: Nexus source
+import { checkUpdates, useNexus } from './custom/nexus' // repakxtra: Nexus account, update checks and downloads
 import { stageOffFiles } from './custom/offFiles' // repakxtra: .pak.off files
 import CrashSuspects, { previousCrashes, withSuspects } from './custom/CrashSuspects' // repakxtra: crash suspects
 import { revealBuiltin, toggleBuiltin, useBuiltins, watchBuiltins } from './custom/BuiltinMods' // repakxtra: built-in mods
@@ -445,6 +446,7 @@ function App() {
   useNexusScan(mods) // repakxtra: Nexus sources for mods installed before they were recorded, once
   const brokenVersion = useBrokenVersion() // repakxtra: the Broken filter re-runs when the verdicts land
   const nexusSources = useNexusSources() // repakxtra: and the Nexus type filter when a source is recorded
+  useEffect(() => { checkUpdates(mods.map(m => sourceOf(m.path))) }, [mods, nexusSources]) // repakxtra: newer versions on Nexus, at most hourly
   const conflictCount = useConflictCount() // repakxtra
   reportSource.get = () => ({ mods, modDetails, launcherType, gamePath }) // repakxtra: setup report
   // repakxtra: Show all, beside the Library's title: every folder, no hero, type or tag filter and no search (the All / On /
@@ -1419,8 +1421,9 @@ function App() {
     }
   }
 
-  const handleConfirmUpdate = async (preserveName: boolean, obfuscate: boolean) => {
-    const { mod, newSourcePath } = updateModState
+  // repakxtra: `direct` is a Nexus one-click update (custom/nexus.tsx), with no file picker or dialog
+  const handleConfirmUpdate = async (preserveName: boolean, obfuscate: boolean, direct?: { mod: ModRecord; newSourcePath: string }) => {
+    const { mod, newSourcePath } = direct ?? updateModState
     if (!mod || !newSourcePath) return
 
     // Close modal first
@@ -1444,6 +1447,7 @@ function App() {
       // before the reload, so the old key is never seen as a deleted mod
       renameModKey(modKey(mod.path), modKey(result.new_mod_path))
       renameSource(nameKey(mod.path), nameKey(result.new_mod_path))
+      await recordSources([{ path: newSourcePath, customName: nameKey(result.new_mod_path) }]) // a newer Nexus download: its version now
 
       // Refresh data
       await loadMods()
@@ -3298,6 +3302,21 @@ function App() {
     }
     setExpandedFolders(newExpanded)
   }
+
+  // repakxtra: Nexus downloads (custom/nexus.tsx): an install as the dialog would do it untouched, an update in place
+  // keeping the mod's name, folder and loadouts
+  useNexus({
+    alert,
+    install: async archive => {
+      const parsed = await invoke<Parameters<typeof defaultInstall>[0]>('parse_dropped_files', { paths: [archive] })
+      if (!parsed.length) { alert.error('Nothing to install', 'The Nexus download holds no mod repakxtra can install.'); return }
+      await handleInstallMods(defaultInstall(parsed) as InstallModPayload[])
+    },
+    update: async (oldPath, archive) => {
+      const mod = mods.find(m => m.path === oldPath)
+      if (mod) await handleConfirmUpdate(true, false, { mod, newSourcePath: archive })
+    },
+  })
 
   const handleInstallMods = async (sent: InstallModPayload[]) => {
     const modsWithSettings = sent.filter(m => m.enabled !== false) // repakxtra: left-out archive mods go to the backend only, to be skipped

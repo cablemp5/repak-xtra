@@ -4,11 +4,12 @@
 // Mods installed before that (or by another app) get theirs once, from the Nexus downloads still in Downloads.
 import { useEffect, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { ExternalLink } from 'lucide-react'
+import { ArrowUpCircle, ExternalLink } from 'lucide-react'
 import { nameKey } from './loadoutStore'
 import { installedKey } from './installLoadout'
 import { savedItem } from './storageCarryOver'
 import nexusLogo from './logos/nexus.png'
+import { getNexusFile, pageUrl, updateOf, useNexusUpdates } from './nexus'
 
 export type NexusSource = { id: number; version: string; uploaded: number }
 type Found = NexusSource & { paks?: string[] }
@@ -24,7 +25,7 @@ const write = (s: Store) => { localStorage.setItem(STORAGE, JSON.stringify(s)); 
 /** The Types filter's name for mods installed from Nexus (FilterPanel.tsx, matched in App.tsx): not a real mod type */
 export const NEXUS_TYPE = 'Nexus'
 
-export const pageUrl = (id: number) => `https://www.nexusmods.com/marvelrivals/mods/${id}`
+export { pageUrl }
 export const sourceOf = (path: string): NexusSource | undefined => read()[norm(nameKey(path))]
 /** The saved sources as stored (a string, so it compares by value): changes whenever a source is recorded. */
 export const useNexusSources = () => useSyncExternalStore(subscribe, () => savedItem(STORAGE))
@@ -88,6 +89,7 @@ export const useNexusVersion = () => useSyncExternalStore(subscribe, () => saved
 
 const useSource = (path: string) => {
   useNexusVersion()
+  useNexusUpdates()
   return sourceOf(path)
 }
 
@@ -98,21 +100,30 @@ const day = (s: number) => new Date(s * 1000).toLocaleDateString(undefined, { ye
 export function NexusSourceLine({ path }: { path: string }) {
   const s = useSource(path)
   if (!s) return null
+  const u = updateOf(s)
   return (
     <div className="detail-item nx-source">
       <span className="detail-label">Source:</span>
       <span className="detail-value" title={`File version ${s.version}, uploaded ${new Date(s.uploaded * 1000).toUTCString()}`}>
         Nexus Mods, uploaded {day(s.uploaded)}
         <button type="button" className="su-link nx-open" onClick={() => open(pageUrl(s.id))}><ExternalLink size={12} /> Open page</button>
+        {u && <button type="button" className="su-link nx-open nx-update" onClick={() => getNexusFile(u.modId, u.fileId, path)}
+          title={`${u.name}, uploaded ${day(u.date)}`}><ArrowUpCircle size={12} /> Update to {u.version}</button>}
       </span>
     </div>
   )
 }
 
-/** The Library row's Nexus tag (Settings > On each mod hides it): a click opens the mod's Nexus page. */
+/** The Library row's Nexus tag (Settings > On each mod hides it): a click opens the mod's Nexus page. With a newer
+ *  version out it reads Update, and a click gets that version in place of this one (nexus.tsx getNexusFile). */
 export function NexusTag({ path }: { path: string }) {
   const s = useSource(path)
   if (!s) return null
+  const u = updateOf(s)
+  if (u) return (
+    <button type="button" className="mod-type-badge nexus-badge is-update" title={`Version ${u.version} is on Nexus Mods (uploaded ${day(u.date)}). Click to update`}
+      onClick={e => { e.stopPropagation(); getNexusFile(u.modId, u.fileId, path) }}><ArrowUpCircle size={12} aria-hidden="true" />Update</button>
+  )
   return (
     <button type="button" className="mod-type-badge nexus-badge" title={`Installed from Nexus Mods, uploaded ${day(s.uploaded)}. Click to open its page`}
       onClick={e => { e.stopPropagation(); open(pageUrl(s.id)) }}><img className="tag-logo" src={nexusLogo} alt="" />Nexus</button>
