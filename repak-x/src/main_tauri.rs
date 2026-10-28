@@ -16,6 +16,7 @@ mod xtra_quake_options;
 #[cfg(feature = "extended")]
 mod xtra_sigeon; // repakxtra: Sigeon V2 switch
 mod xtra_setup; // repakxtra: Setup panel (signature bypass, Project Galacta)
+mod xtra_project;
 mod xtra_kit; // repakxtra: preview kit (previews on other PCs)
 mod xtra_previews; // repakxtra: generated mod previews
 mod xtra_trash; // repakxtra: undoable delete
@@ -5233,7 +5234,7 @@ fn is_game_process_running() -> bool {
 /// This ensures the game launches without the launcher when using our app,
 /// but preserves the user's Steam launch settings for manual launches
 #[tauri::command]
-async fn launch_game(state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
+async fn launch_game(app: tauri::AppHandle, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
     use std::process::Command;
 
     // Get game path (this is the ~mods folder inside Paks)
@@ -5241,6 +5242,10 @@ async fn launch_game(state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), Strin
         let state = state.lock().unwrap();
         (state.game_path.clone(), state.launcher_type.clone())
     };
+
+    if xtra_project::select(&mods_path)? {
+        let _ = app.emit("mods_dir_changed", ());
+    }
 
     // Go up 5 levels to get the actual game root
     // ~mods -> Paks -> Content -> Marvel -> MarvelGame -> MarvelRivals (game root)
@@ -8474,6 +8479,7 @@ fn main() {
             // This closure is called when a second instance is launched
             // `args` contains command line arguments including the deep-link URL
             info!("Single instance callback triggered with args: {:?}", args);
+            xtra_project::on_open(app);
 
             // Focus the main window
             if let Some(window) = app.get_webview_window("main") {
@@ -8499,6 +8505,7 @@ fn main() {
             // void. Entries land in a replay buffer until the webview mounts.
             ui_log::init(app.handle().clone());
             emit_session_banner(app);
+            xtra_project::on_open(app.handle());
             xtra_buildmark::tint_window_icon(app); // repakxtra: green (test) or amber (dev) taskbar icon
 
             #[cfg(any(windows, target_os = "linux"))]
