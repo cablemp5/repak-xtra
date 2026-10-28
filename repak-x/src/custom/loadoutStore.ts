@@ -42,7 +42,7 @@ export const captureKey = (id: string) => `${id}#capture`
 export const captionBackgroundKey = (id: string) => `${id}#caption-background`
 /** Which sources hold something; `preview` comes from previews.tsx (previewMade). Pure. */
 export const coverFills = (l: Loadout, preview: boolean): Record<Cover, boolean> =>
-  ({ preview, capture: Boolean(l.captureRev), image: Boolean(l.mediaRev || l.image), text: Boolean(l.caption?.trim() || l.captionIcon) })
+  ({ preview, capture: Boolean(l.captureRev), image: Boolean(l.mediaRev || l.image), text: Boolean(l.caption?.trim() || l.captionIcon || l.captionBackgroundRev) })
 /** The source a card shows: the picked one while it holds something, else the first that does (own image first, as
  *  before covers existed), or null for an empty card. Pure. */
 export const pickCover = (l: Loadout, fills: Record<Cover, boolean>): Cover | null =>

@@ -13,16 +13,12 @@
 .cp-how .cp-example-frame { grid-area: pic; }
 .cp-how .cp-example figcaption { grid-area: cap; }
 .cp-how .cp-steps { grid-area: steps; }
-/* The steps: the number in a 22px column, the words beside it on 22px lines (a keycap fits inside one), one color,
-   no bold */
+/* The steps: a plain muted number in a 14px column, the words beside it on 22px lines (a keycap fits inside one), one
+   color, no bold. No numbered pills: the keycaps stay the only boxes in the steps (cable's pick, 2026-10-28) */
 .cp-steps { margin: 0; padding: 0; list-style: none; counter-reset: cp; display: flex; flex-direction: column; gap: 14px; }
-.cp-steps li { counter-increment: cp; display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 12px; align-items: start;
+.cp-steps li { counter-increment: cp; display: grid; grid-template-columns: 14px minmax(0, 1fr); column-gap: 12px; align-items: start;
   font-size: 13px; line-height: 22px; color: var(--text-primary); }
-.cp-steps li::before {
-  content: counter(cp); width: 22px; height: 22px; box-sizing: border-box; border-radius: 50%;
-  text-align: center; line-height: 20px; font-size: 11.5px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text-primary);
-  background: var(--bg-lighter); border: 1px solid var(--panel-border);
-}
+.cp-steps li::before { content: counter(cp); font-size: 13px; font-weight: 500; line-height: 22px; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
 .cp-keys { display: inline-flex; align-items: center; margin: 0 2px; vertical-align: 1px; }
 /* Keycaps keep their own line height (the shortcuts screen's 21px), not the step's 22px lines, so a step with keys
    stays the height of one without */
@@ -33,13 +29,13 @@
   font-size: 12.5px; color: var(--text-secondary); }
 .cp-status > span { display: inline-flex; align-items: center; gap: 4px; }
 .cp-status .cp-keys { margin: 0 2px; vertical-align: 0; }
-.cp-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #3ecf6e; animation: cp-pulse 1.6s ease-out infinite; }
-.cp-dot.is-off { background: var(--text-secondary); opacity: 0.6; animation: none; }
+.cp-listen-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #3ecf6e; animation: cp-pulse 1.6s ease-out infinite; }
+.cp-listen-dot.is-off { background: var(--text-secondary); opacity: 0.6; animation: none; }
 @keyframes cp-pulse {
   0% { box-shadow: 0 0 0 0 rgba(62, 207, 110, 0.55); }
   100% { box-shadow: 0 0 0 6px rgba(62, 207, 110, 0); }
 }
-html[data-motion="off"] .cp-dot { animation: none; }
+html[data-motion="off"] .cp-listen-dot { animation: none; }
 .cp-modal .cp-link {
   display: inline; padding: 0 !important; border: none !important; background: none !important; cursor: pointer; height: auto !important; min-height: 0 !important; line-height: inherit;
   font-size: inherit; font-weight: 500; color: color-mix(in srgb, var(--accent-primary), white 30%) !important;

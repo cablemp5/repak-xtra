@@ -16,6 +16,7 @@ import { savedItem } from './storageCarryOver'
 // `group`: the Settings section it is drawn in (Header buttons, On each mod), or its own place elsewhere.
 const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod' | 'warn' }[] = [
   { key: 'vfx-updater', label: 'VFX Updater', on: true, group: 'header' },
+  { key: 'encrypt', label: 'Encrypt', group: 'header' }, // hidden by default: Settings > Header buttons shows it
   ...(EXTENDED ? [{ key: 'sigeon', label: 'Sigeon', group: 'header' as const }] : []), // hidden by default: Settings > Interface shows it
   { key: 'asset-explorer', label: 'Asset Explorer', group: 'header' },
   { key: 'share', label: 'Share', group: 'header' },
@@ -24,6 +25,7 @@ const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod
   { key: 'priority', label: 'Load priority counter (P)', group: 'mod' },
   { key: 'nexus', label: 'Nexus tag on mods installed from Nexus Mods', on: true, group: 'mod' },
   { key: 'loadout-tag', label: 'In loadout tag, the loadouts a mod is in (I)', group: 'mod' },
+  { key: 'encrypted', label: 'Lock on encrypted mods, and the Encrypted tab', on: true, group: 'mod' },
   { key: 'broken', label: 'Broken and May crash warnings, and the Problems tab (B)', on: true, group: 'warn' },
   { key: 'conflicts', label: 'Conflict warnings, the badge, and the count on Check Conflicts (Shift+C)', on: true, group: 'warn' },
   { key: 'quick-organize', label: 'Show Quick Organize when dropping files on the window' }, // shown under Installing mods

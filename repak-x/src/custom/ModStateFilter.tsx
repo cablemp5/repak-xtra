@@ -8,15 +8,17 @@ import { Check, ChevronDown } from 'lucide-react'
 import { useBrokenVersion, verdictOf } from './brokenMods'
 import { useUiPref } from './uiPrefs'
 
-export type ModState = 'all' | 'enabled' | 'disabled' | 'broken'
+export type ModState = 'all' | 'enabled' | 'disabled' | 'broken' | 'encrypted'
 
-export const matchesState = (state: ModState) => (mod: { path: string; enabled?: boolean }) =>
-  state === 'all' || (state === 'broken' ? Boolean(verdictOf(mod.path)) : (state === 'enabled') === Boolean(mod.enabled))
+/** `encrypted`: whether a mod is encrypted (its details' is_encrypted), for the Encrypted tab. */
+export const matchesState = (state: ModState, encrypted?: (path: string) => boolean) => (mod: { path: string; enabled?: boolean }) =>
+  state === 'all' || (state === 'broken' ? Boolean(verdictOf(mod.path)) : state === 'encrypted' ? Boolean(encrypted?.(mod.path)) : (state === 'enabled') === Boolean(mod.enabled))
 
 type Props = {
   value: ModState
   onChange: (state: ModState) => void
   mods: { path: string; enabled?: boolean }[]
+  encrypted?: (path: string) => boolean // repakxtra: the Encrypted tab, shown while any mod is encrypted
 }
 
 const BROKEN_TITLE = 'Mods marked Broken (will not work in this game version), Needs VFX update or May crash. Hover a badge for why'
@@ -53,18 +55,20 @@ function useFolded(tabs: React.RefObject<HTMLDivElement | null>) {
   return folded
 }
 
-export default function ModStateFilter({ value, onChange, mods }: Props) {
+export default function ModStateFilter({ value, onChange, mods, encrypted }: Props) {
   useBrokenVersion()
   const enabled = mods.filter(m => m.enabled).length
   const shown = useUiPref('broken') // Settings can hide the Problems tab and badges
   const broken = shown ? mods.filter(m => verdictOf(m.path)).length : 0
-  // the last broken mod fixed or removed: back to every mod rather than an empty list
-  useEffect(() => { if (value === 'broken' && broken === 0) onChange('all') }, [value, broken]) // eslint-disable-line react-hooks/exhaustive-deps
+  const locked = useUiPref('encrypted') && encrypted ? mods.filter(m => encrypted(m.path)).length : 0 // Settings hides the lock and this tab
+  // the last broken (or encrypted) mod fixed or removed: back to every mod rather than an empty list
+  useEffect(() => { if ((value === 'broken' && broken === 0) || (value === 'encrypted' && locked === 0)) onChange('all') }, [value, broken, locked]) // eslint-disable-line react-hooks/exhaustive-deps
   const options: [ModState, string, number][] = [
     ['all', 'All', mods.length],
     ['enabled', 'On', enabled],
     ['disabled', 'Off', mods.length - enabled],
     ...(broken ? [['broken', 'Problems', broken] as [ModState, string, number]] : []),
+    ...(locked ? [['encrypted', 'Encrypted', locked] as [ModState, string, number]] : []),
   ]
   const tabs = useRef<HTMLDivElement>(null)
   const folded = useFolded(tabs)

@@ -120,9 +120,9 @@ function CaptureDialog({ p, l, hero, onUse, onClose }: {
           {/* Listening state on the footer's left: one quiet line beside the buttons */}
           {!shot && (
             <div className={`cp-status is-${phase}`} role="status">
-              {phase === 'listening' && <><i className="cp-dot" aria-hidden="true" /><span>Listening for <Keys /></span></>}
+              {phase === 'listening' && <><i className="cp-listen-dot" aria-hidden="true" /><span>Listening for <Keys /></span></>}
               {phase === 'capturing' && <><MatrixLoader size={12} /><span>Switching to the game…</span></>}
-              {phase === 'idle' && <><i className="cp-dot is-off" aria-hidden="true" /><span>Not listening.</span>
+              {phase === 'idle' && <><i className="cp-listen-dot is-off" aria-hidden="true" /><span>Not listening.</span>
                 <button type="button" className="cp-link" onClick={() => take('capture_game_hotkey')}>Listen again</button></>}
             </div>
           )}

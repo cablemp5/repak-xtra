@@ -167,7 +167,7 @@ export async function finishInstallLoadout(installed: Installed[], alert: Return
   const found = (l: Landed) => l.keys.length > 0
   if (joining.length) {
     const joins = joinsByLoadout(landed, here)
-    writeLoadouts(readLoadouts().map(l => joins.has(l.id) ? { ...l, ...withMods(l, joins.get(l.id)!) } : l))
+    writeLoadouts(readLoadouts().map(l => joins.has(l.id) ? { ...l, ...withMods(l, joins.get(l.id)!), edited: Date.now() } : l)) // joined: most recent in pickers
     const lost = landed.filter(l => l.loadouts?.length && !found(l)).length
     if (lost) alert.warning('Not added to its loadout', `${lost} installed mod${lost === 1 ? ' was' : 's were'} not found in the mods folder.`)
   }

@@ -8623,6 +8623,7 @@ fn main() {
             xtra_vfx::xtra_vfx_release,
             xtra_vfx::xtra_vfx_lock,
             xtra_encrypt::xtra_encrypt_mods,
+            xtra_encrypt::xtra_encrypt_list,
             xtra_vfx::xtra_vfx_stale,
             xtra_vfx::xtra_vfx_source,
             xtra_niagara::xtra_vfx_niagara,

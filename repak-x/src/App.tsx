@@ -139,7 +139,7 @@ const ASSET_EXPLORER_FOCUS_MOD_KEY = 'repakx:assetExplorer:focusModPath'
 import TitleBar from './components/TitleBar'
 
 import InstallModPanel from './custom/InstallPanel' // repakxtra: the install dialog redesigned around saving a loadout
-// import EncryptMods from './custom/EncryptMods' // Deferred UI; implementation retained.
+import EncryptMods, { openEncrypt } from './custom/EncryptMods' // repakxtra
 import SettingsPanel from './components/SettingsPanel'
 import CreditsPanel from './components/CreditsPanel'
 import ToolsPanel from './components/ToolsPanel'
@@ -1912,7 +1912,7 @@ function App() {
 
       // repakxtra: the count the Library's All tab shows, which leaves Project Galacta out (it lives in Setup)
       // shortcut: matched by its pak name, not its files (those land in modDetails later), so a renamed Galacta still counts
-      const listed = modList.filter((m: ModRecord) => !/projectgalacta/i.test(m.path.split(/[\\/]/).pop() ?? '') && !(EXTENDED && !loadoutable(modKey(m.path)))).length
+      const listed = modList.filter((m: ModRecord) => !/projectgalacta/i.test(m.path.split(/[\\/]/).pop() ?? '') && loadoutable(modKey(m.path))).length
       setStatus(`Loaded ${listed} mod${listed === 1 ? '' : 's'}`)
       return modList as ModRecord[]
     } catch (error) {
@@ -2973,8 +2973,8 @@ function App() {
   const baseFilteredMods = mods.filter(mod => {
     // Project Galacta is managed from its own Tools panel toggle, not the mods list
     if (projectGalactaMod && mod.path === projectGalactaMod.path) return false
-    // repakxtra: repakxploit's Project Sigeon loader lives in Setup the same way (Standard keeps a leftover copy listed, to delete)
-    if (EXTENDED && !loadoutable(modKey(mod.path))) return false
+    // repakxtra: Project Galacta and the Project Sigeon loader never show in the Library, by name too (before their files are read)
+    if (!loadoutable(modKey(mod.path))) return false
 
     // Search query
     if (searchQuery) {
@@ -3041,7 +3041,8 @@ function App() {
       return mod.folder_id === selectedFolderId
     }
   })
-  const filteredMods = folderMods.filter(matchesState(modState)).sort((a, b) => {
+  const isEncrypted = (p: string) => Boolean(modDetails[p]?.is_encrypted) // repakxtra: the Encrypted tab
+  const filteredMods = folderMods.filter(matchesState(modState, isEncrypted)).sort((a, b) => {
     if (sortBy === 'enabled' && Boolean(a.enabled) !== Boolean(b.enabled)) return a.enabled ? -1 : 1
     if (sortBy === 'name' || sortBy === 'enabled') {
       const aName = (a.custom_name || a.path.split(/[/\\]/).pop() || '').toLowerCase()
@@ -3058,7 +3059,7 @@ function App() {
   // narrows it: a search matches their names, the On / Off switch their state
   const builtinRows = useBuiltinRows(builtinHeroName)
   const libraryMods = selectedCharacters.size || selectedCategories.size || filterTag || selectedFolderId !== 'all' ? filteredMods
-    : [...builtinRows.filter(r => (!searchQuery || r.custom_name.toLowerCase().includes(searchQuery.toLowerCase())) && matchesState(modState)(r as ModRecord)), ...filteredMods]
+    : [...builtinRows.filter(r => (!searchQuery || r.custom_name.toLowerCase().includes(searchQuery.toLowerCase())) && matchesState(modState, isEncrypted)(r as ModRecord)), ...filteredMods]
 
   // Keep filteredModsRef in sync for Shift+click range selection (repakxtra: the rows shown, built-ins too)
   filteredModsRef.current = libraryMods
@@ -3847,8 +3848,6 @@ function App() {
         </div>
         <ViewTabs />{/* repakxtra: Home | Library */}
         <div className="header-actions-right">
-          {/* Deferred UI; restore this and its import to expose encryption again.
-          <EncryptMods mods={mods} selected={[...selectedFiles]} blocked={gameRunning} alert={alert} reload={loadMods} /> */}
           <button
             className="btn-settings"
             data-tour="launch-btn"
@@ -3933,6 +3932,7 @@ function App() {
             <span>VFX Updater</span>
             <VfxDot mods={mods} />{/* repakxtra: VFX mods need an update */}
           </button>
+          <EncryptMods />{/* repakxtra */}
 
           <SigeonControl alert={alert} />{/* repakxtra */}
           <SetupButton alert={alert} />{/* repakxtra: signature bypass and Project Galacta */}
@@ -4144,7 +4144,7 @@ function App() {
                     <button type="button" className="btn-ghost lib-show-all" onClick={showAll}
                       title="Every mod again: all folders, no hero, type, or tag filter, no search. Checked mods stay checked">Show all</button>
                   )}
-                  <ModStateFilter value={modState} onChange={setModState} mods={folderMods} />
+                  <ModStateFilter value={modState} onChange={setModState} mods={folderMods} encrypted={isEncrypted} />
                 </div>
                 <div className="header-actions" data-tour="header-actions">
                   <button
@@ -4517,6 +4517,7 @@ function App() {
               handleShowInAssetExplorer(targets)
             }}
             onExtractAssets={handleExtractAssets}
+            onEncrypt={contextMenu.mod ? () => void openEncrypt(menuSelection.has(contextMenu.mod!.path) ? [...menuSelection] : [contextMenu.mod!.path]) : undefined /* repakxtra */}
             allTags={allTags}
             onDeleteTag={handleDeleteTagFromCatalog}
             gamePath={gamePath}
