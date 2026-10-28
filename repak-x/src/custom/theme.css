@@ -2433,6 +2433,10 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 .settings-content .xs-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; }
 /* Support and Star stand apart from the Discord servers above them: a group of their own (Common Region) */
 .settings-content .xs-row.xs-support-first { margin-top: 10px; }
+/* the Ko-fi heart red and the GitHub star yellow (cable's pick, over the gray every Settings button icon gets), a deeper yellow on the light theme */
+.settings-content .action-btn svg.xs-heart { color: #ef4444 !important; }
+.settings-content .action-btn svg.xs-star { color: #facc15 !important; }
+[data-theme="light"] .settings-content .action-btn svg.xs-star { color: #ca8a04 !important; }
 .settings-content .xs-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .settings-content .xs-label { font-size: 13px; font-weight: 450; color: var(--text-primary); }
 .settings-content .xs-text .setting-subtext { padding: 0 !important; margin: 0 !important; }
