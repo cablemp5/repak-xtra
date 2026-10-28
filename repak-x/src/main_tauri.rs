@@ -35,7 +35,6 @@ mod xtra_offfiles; // repakxtra: .pak.off files install like .pak
 mod xtra_bundle; // repakxtra: a mod's pak/utoc/ucas found and moved as one set
 mod xtra_encrypt;
 mod xtra_mutation;
-mod xtra_install_count;
 mod xtra_updater; // repakxtra: applies an update without string-built shell commands
 mod xtra_conflicts; // repakxtra: conflict comparison by normalized asset path, cached file lists
 mod xtra_heroes; // repakxtra: the hero and skin folder of an asset path
@@ -1829,7 +1828,6 @@ fn copy_iostore_with_compression_check(
     output_dir: &Path,
     window: &Window,
     rename_stem: Option<&str>,
-    installed: &mut crate::xtra_install_count::InstallTally,
 ) -> Result<u32, String> {
     let utoc_name = utoc_src.file_name().unwrap();
     let ucas_src = utoc_src.with_extension("ucas");
@@ -2006,9 +2004,6 @@ fn copy_iostore_with_compression_check(
         }
     }
 
-    for src in [pak_src.as_path(), bak_repak_src.as_path(), utoc_src, ucas_src.as_path()].into_iter().filter(|p| p.is_file()) {
-        installed.copied(src, &dest_name(src));
-    }
     Ok(file_count)
 }
 
@@ -2525,11 +2520,6 @@ fn quick_organize_impl(
         format!("[QuickOrganize] Copying to folder: {}", location_label),
     );
 
-    struct NotifyInstalls<'a> { tally: crate::xtra_install_count::InstallTally, window: &'a Window }
-    impl Drop for NotifyInstalls<'_> {
-        fn drop(&mut self) { let _ = self.window.emit("xtra_mods_installed", self.tally.count()); }
-    }
-    let mut installed = NotifyInstalls { tally: Default::default(), window };
     let mut copied_count = 0;
 
     /// Helper to compute relative path from a base directory to preserve subfolder structure
@@ -2681,7 +2671,6 @@ fn quick_organize_impl(
                                 format!("[QuickOrganize] Copied: {}", rel_dest.display()),
                             );
                             copied_count += 1;
-                            installed.tally.copied(entry_path, &dest);
                         }
                     } else if entry_ext == "utoc" {
                         // Process IoStore with compression check, preserving subfolder structure
@@ -2728,7 +2717,7 @@ fn quick_organize_impl(
                             cleanup_conflicting_mods(&dest_dir, &file_name_str);
 
                             match copy_iostore_with_compression_check(
-                                entry_path, &dest_dir, &window, rename, &mut installed.tally,
+                                entry_path, &dest_dir, &window, rename,
                             ) {
                                 Ok(count) => copied_count += count as i32,
                                 Err(e) => {
@@ -2771,14 +2760,13 @@ fn quick_organize_impl(
                 format!("[QuickOrganize] Copied: {}", file_name_str),
             );
             copied_count += 1;
-            installed.tally.copied(&path, &dest);
 
             // Also handle utoc and ucas if they exist (IoStore package)
             let utoc_path = path.with_extension("utoc");
             let ucas_path = path.with_extension("ucas");
 
             if utoc_path.exists() && ucas_path.exists() {
-                match copy_iostore_with_compression_check(&utoc_path, &output_dir, &window, rename, &mut installed.tally)
+                match copy_iostore_with_compression_check(&utoc_path, &output_dir, &window, rename)
                 {
                     Ok(count) => copied_count += count as i32,
                     Err(e) => {
@@ -2814,7 +2802,7 @@ fn quick_organize_impl(
                 };
                 cleanup_conflicting_mods(&output_dir, &file_name_str);
 
-                match copy_iostore_with_compression_check(&path, &output_dir, &window, rename, &mut installed.tally) {
+                match copy_iostore_with_compression_check(&path, &output_dir, &window, rename) {
                     Ok(count) => copied_count += count as i32,
                     Err(e) => {
                         error!("[QuickOrganize] Failed to process IoStore: {}", e);
@@ -2880,7 +2868,6 @@ fn quick_organize_impl(
                                 format!("[QuickOrganize] Copied: {}", rel_dest.display()),
                             );
                             copied_count += 1;
-                            installed.tally.copied(entry_path, &dest);
                         }
                     } else if entry_ext == "utoc" {
                         // Process IoStore with compression check, preserving subfolder structure
@@ -2923,7 +2910,7 @@ fn quick_organize_impl(
                             cleanup_conflicting_mods(&dest_dir, &file_name_str);
 
                             match copy_iostore_with_compression_check(
-                                entry_path, &dest_dir, &window, rename, &mut installed.tally,
+                                entry_path, &dest_dir, &window, rename,
                             ) {
                                 Ok(count) => copied_count += count as i32,
                                 Err(e) => {
@@ -3272,7 +3259,6 @@ async fn install_mods(
 
         match result {
             Ok(install_results) => {
-                window_for_logs.emit("xtra_mods_installed", install_results.iter().filter(|r| r.success).count()).ok();
                 let total = install_results.len();
                 let failed: Vec<&crate::install_mod::install_mod_logic::ModInstallResult> =
                     install_results.iter().filter(|r| !r.success).collect();
@@ -3815,20 +3801,20 @@ async fn open_in_explorer(path: String) -> Result<(), String> {
 
         info!("open_in_explorer: using path={}", clean_path);
 
-        // Use /select, with the path - explorer handles the quoting
-        let select_arg = format!("/select,\"{}\"", clean_path);
-        std::process::Command::new("explorer.exe")
-            .raw_arg(&select_arg)
-            .spawn()
+        // Open folders themselves; keep selecting individual files for existing callers.
+        let mut explorer = std::process::Command::new("explorer.exe");
+        if path_buf.is_dir() { explorer.arg(&clean_path); }
+        else { explorer.raw_arg(format!("/select,\"{}\"", clean_path)); }
+        explorer.spawn()
             .map_err(|e| format!("Failed to open explorer: {}", e))?;
     }
 
     #[cfg(target_os = "macos")]
     {
         // On macOS, use open -R to reveal the file in Finder
-        std::process::Command::new("open")
-            .args(["-R", &path_buf.to_string_lossy()])
-            .spawn()
+        let mut finder = std::process::Command::new("open");
+        if path_buf.is_file() { finder.arg("-R"); }
+        finder.arg(&path_buf).spawn()
             .map_err(|e| format!("Failed to open Finder: {}", e))?;
     }
 

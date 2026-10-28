@@ -15,7 +15,8 @@ import { useVfxUpdating } from './vfx/quick'
 import { GAME_RUNNING } from './keepOne'
 import { CaptionIcon, CaptionStyleBar } from './captionStyle'
 import { loadoutHero, silhouetteOf } from './silhouettes'
-import CaptionBackground from './CaptionBackground'
+// import CaptionBackground from './CaptionBackground' // Deferred background editor; implementation retained.
+import './support.css'
 import { captionBackgroundKey } from './loadoutStore'
 
 /** The home screen's badge color class for a mod type (theme.css *-badge sets --badge-dot). */
@@ -288,7 +289,8 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
           )
         })}
       </div>
-      {cover === 'text' && <CaptionBackground l={l} alert={p.alert} />}
+      {/* Deferred background editor; restore this and its import to expose it again.
+      {cover === 'text' && <CaptionBackground l={l} alert={p.alert} />} */}
     </div>
   )
 }

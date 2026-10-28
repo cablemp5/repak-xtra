@@ -7,6 +7,7 @@ import Checkbox from '../components/ui/Checkbox'
 import { useDialogFocus } from './dialogFocus'
 import { nameKey } from './loadoutStore'
 import type { LoadoutProps } from './Loadouts'
+import './support.css'
 
 type Props = { mods: { path: string }[]; selected: string[]; blocked: boolean; alert: LoadoutProps['alert']; reload: () => Promise<unknown> }
 type Result = { Ok: { path: string; backup: string } } | { Err: string }

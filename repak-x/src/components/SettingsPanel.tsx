@@ -25,6 +25,8 @@ import { IoIosSettings } from "react-icons/io"
 import { REPAKXTRA_VERSION } from '../custom/version' // repakxtra
 import CableDiscord, { RepakXDiscord } from '../custom/CableDiscord' // repakxtra: both servers as quiet cards
 import CopySetupReport from '../custom/CopySetupReport' // repakxtra: setup report for help channels
+import Support from '../custom/Support'
+import { invoke } from '@tauri-apps/api/core'
 import { ShortcutSetting } from '../custom/shortcut' // repakxtra
 import './SettingsPanel.css'
 import { useAlert } from './AlertHandler'
@@ -227,6 +229,11 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                           title="Browse for the folder"
                         >
                           <LuFolderInput size={16} />
+                        </button>
+                        <button type="button" className="action-btn icon-only" disabled={!gamePath}
+                          title="Open selected mods folder" aria-label="Open selected mods folder"
+                          onClick={() => void invoke('open_in_explorer', { path: gamePath }).catch(e => alert.warning('Could not open mods folder', String(e)))}>
+                          <LuFolderOpen size={16} />
                         </button>
                       </div>
                     </div>
@@ -490,6 +497,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                     </p>
                     <RepakXDiscord />
                     <CableDiscord />{/* repakxtra: cable's server */}
+                    <Support onError={error => alert.warning('Could not open link', error)} />
                   </div>
                 </div>
               </>
