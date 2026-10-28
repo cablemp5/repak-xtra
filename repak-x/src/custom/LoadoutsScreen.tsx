@@ -115,7 +115,7 @@ function GroupHead({ p, name, count, at, total, editing, setEditing, folded, onF
   )
 }
 
-/** Home | Library switch for the app header. Its own class: the 1/2/3 hotkeys click the first .mod-state-filter. The
+/** Home | Library | Nexus switch for the app header. Its own class: the 1/2/3 hotkeys click the first .mod-state-filter. The
  *  Loadouts tab lands on the cards (not a loadout page left open). The Library tab and L keep the Library as it was
  *  (search, filters, folder, checked and viewed mods, scroll): its Show all button is the deliberate reset (App.tsx). */
 export function ViewTabs() {
@@ -125,6 +125,8 @@ export function ViewTabs() {
       <button type="button" role="tab" aria-selected={view === 'home'} onClick={() => { openLoadout(null); setView('home') }} title="Loadouts and new mods (L)">Loadouts</button>
       <button type="button" role="tab" aria-selected={view === 'library'} onClick={() => setView('library')}
         title="Every mod, with filters and folders (L)">Library</button>
+      <button type="button" role="tab" aria-selected={view === 'nexus'} onClick={() => setView('nexus')}
+        title="Find and install mods from Nexus Mods">Nexus</button>
     </div>
   )
 }

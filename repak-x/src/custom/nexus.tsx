@@ -137,6 +137,14 @@ export async function getNexusFile(modId: number, fileId?: number, oldPath?: str
     .catch(e => handlers?.alert.error('Could not open Nexus Mods', String(e)))
 }
 
+/** Install from the Nexus tab: a mod with one main file goes straight to that file, others open their Files tab to
+ *  pick one (Premium included). */
+export async function installFromNexus(modId: number) {
+  const files = await gql<{ modFiles: NexusFile[] }>(`{ modFiles(modId: ${modId}, gameId: ${GAME_ID}) { ${FILE_FIELDS} } }`).then(d => d.modFiles, () => [])
+  const main = files.filter(f => f.category === 'MAIN')
+  return getNexusFile(modId, main.length === 1 ? main[0].fileId : undefined)
+}
+
 /** Opens a mod's Nexus page in the app's Nexus window. */
 export const openNexusPage = (modId: number) => invoke('xtra_nexus_open', { url: pageUrl(modId) }).catch(() => undefined)
 

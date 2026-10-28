@@ -63,6 +63,7 @@ import { focusRow, relink, useLibraryFocus } from './custom/libraryFocus' // rep
 import FilterPanel, { filterScope } from './custom/FilterPanel'
 import LoadoutHotkeys, { AddToLoadoutField, LoadoutMenuItems } from './custom/Loadouts'
 import LoadoutsScreen, { ViewTabs } from './custom/LoadoutsScreen'
+import NexusBrowser from './custom/NexusBrowser' // repakxtra: the Nexus tab
 import ViewModeMenu from './custom/ViewModeMenu' // repakxtra: view buttons folded into one when narrow
 import { loadoutable, modKey, nameKey, renameModKey, syncLoadoutKeys } from './custom/loadoutStore' // repakxtra
 import { setModsRoot } from './custom/loadoutIdentity' // repakxtra
@@ -3322,8 +3323,8 @@ function App() {
       const mod = mods.find(m => m.path === oldPath) ?? mods.find(m => nameKey(m.path) === nameKey(oldPath))
       if (mod) await handleConfirmUpdate(true, false, { mod, newSourcePath: archive })
       else alert.warning('Update not applied', `${nameKey(oldPath)} is no longer in your mods folder, so the download was not used.`)
-  })
     },
+  })
 
   const handleInstallMods = async (sent: InstallModPayload[]) => {
     const modsWithSettings = sent.filter(m => m.enabled !== false) // repakxtra: left-out archive mods go to the backend only, to be skipped
@@ -4033,6 +4034,7 @@ function App() {
           alert={alert}
           onModContextMenu={(e, m, rename) => { handleContextMenu(e, m as ModRecord); setContextMenu(c => c && { ...c, fromLoadout: true, rename }) }} /* repakxtra: a loadout page's rows open the Library's menu, for that row */
         />
+        <NexusBrowser mods={mods} />{/* repakxtra: the Nexus tab (custom/NexusBrowser.tsx) */}
         {/* repakxtra: Ctrl+1..9 switches pinned loadouts on every view (custom/Loadouts.tsx) */}
         <LoadoutHotkeys mods={mods} scopeMods={folderMods} scopeLabel="all mods" blocked={gameRunning && !bypassGameRunningLock}
           isBlocked={undoBlocked} reload={loadMods} alert={alert} modDetails={modDetails} />
