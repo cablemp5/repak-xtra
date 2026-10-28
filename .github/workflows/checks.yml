@@ -98,23 +98,30 @@ jobs:
           } finally { $sha.Dispose() }
 
       - uses: dtolnay/rust-toolchain@stable
+        id: toolchain
         with:
           targets: x86_64-pc-windows-msvc
 
-      - name: Cache Rust build
-        uses: actions/cache@v4
+      # Saved only from main (PR caches are scoped to their own PR, so main's cache is the one every PR reuses)
+      - name: Restore Rust build cache
+        id: rust-cache
+        uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: checks-${{ runner.os }}-${{ matrix.edition }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: checks-${{ runner.os }}-${{ matrix.edition }}-
+          key: checks-v2-${{ runner.os }}-${{ matrix.edition }}-${{ steps.toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: checks-v2-${{ runner.os }}-${{ matrix.edition }}-${{ steps.toolchain.outputs.cachekey }}-
 
       - name: Rust tests
         env:
           SKIP_UASSET_TOOL_BUILD: '1'   # the .NET asset tool is only needed to package, not to test
+          # rust-toolchain.toml asks for nightly, which rustup would download (about 90 s) and which changes daily,
+          # so the cached build never matched and every run rebuilt all crates. No crate needs nightly.
+          RUSTUP_TOOLCHAIN: stable
+          CARGO_INCREMENTAL: '0'   # incremental files only bloat the cache on a fresh runner
         run: |
           if ('${{ matrix.edition }}' -eq 'extended') {
             cargo test --locked -p repak-x --bin REPAK-X --features extended
@@ -123,7 +130,21 @@ jobs:
           }
 
       - name: Native wrapper tests
+        env:
+          RUSTUP_TOOLCHAIN: stable
+          CARGO_INCREMENTAL: '0'
         run: cargo test --locked -p uasset_app --lib
+
+      - name: Save Rust build cache
+        if: github.ref == 'refs/heads/main' && steps.rust-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ steps.rust-cache.outputs.cache-primary-key }}
 
   # Keep the existing branch-protection check name while requiring both edition jobs.
   required-checks:
