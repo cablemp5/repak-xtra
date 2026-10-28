@@ -103,13 +103,16 @@ fn sweep(root: &Path) {
 }
 
 #[tauri::command]
-pub fn xtra_stage_off_files(paths: Vec<String>) -> Result<Vec<String>, String> {
-    let root = std::env::temp_dir().join("repakxtra-off");
-    if !paths.iter().any(|p| strip_off(p).is_some() || (Path::new(p).is_dir() && has_off_files(Path::new(p)))) {
-        return Ok(paths);
-    }
-    sweep(&root);
-    stage_into(paths, &root)
+pub async fn xtra_stage_off_files(paths: Vec<String>) -> Result<Vec<String>, String> {
+    // repakxtra: file copies on a blocking thread, never on the async workers every other command shares
+    crate::blocking(move || {
+        let root = std::env::temp_dir().join("repakxtra-off");
+        if !paths.iter().any(|p| strip_off(p).is_some() || (Path::new(p).is_dir() && has_off_files(Path::new(p)))) {
+            return Ok(paths);
+        }
+        sweep(&root);
+        stage_into(paths, &root)
+    }).await
 }
 
 #[cfg(test)]

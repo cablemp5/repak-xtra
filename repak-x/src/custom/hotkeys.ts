@@ -46,6 +46,7 @@ export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
       { keys: ['T'], action: 'Show / hide tags on mods' },
       { keys: ['P'], action: 'Show / hide the load priority counter' },
       { keys: ['I'], action: 'Show / hide the In loadout tag' },
+      { keys: ['E'], action: 'Show / hide the Encrypted tag and the Encrypted tab' },
       { keys: ['B'], action: 'Show / hide Broken and May crash warnings and the Problems tab' },
       { keys: ['Shift', 'C'], action: 'Show / hide conflict warnings' },
       { keys: ['Ctrl', '+'], action: 'Zoom in' },
@@ -135,6 +136,10 @@ window.addEventListener('keydown', e => {
     case 'b':
       e.preventDefault()
       togglePref('broken', 'Broken and May crash warnings')
+      break
+    case 'e':
+      e.preventDefault()
+      togglePref('encrypted', 'Encrypted tag')
       break
     case 'v': {
       const buttons = VIEWS.map(t => document.querySelector<HTMLElement>(`[title="${t}"]`))

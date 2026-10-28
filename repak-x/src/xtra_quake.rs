@@ -454,7 +454,7 @@ impl Drop for Finished {
 }
 
 /// The build in flight, if any (the card's bar).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn xtra_quake_progress() -> Result<Option<Progress>, String> {
     crate::xtra_activation::require()?;
     Ok(PROGRESS.lock().unwrap_or_else(|e| e.into_inner()).clone())

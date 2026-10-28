@@ -25,7 +25,7 @@ const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod
   { key: 'priority', label: 'Load priority counter (P)', group: 'mod' },
   { key: 'nexus', label: 'Nexus tag on mods installed from Nexus Mods', on: true, group: 'mod' },
   { key: 'loadout-tag', label: 'In loadout tag, the loadouts a mod is in (I)', group: 'mod' },
-  { key: 'encrypted', label: 'Lock on encrypted mods, and the Encrypted tab', on: true, group: 'mod' },
+  { key: 'encrypted', label: 'Encrypted tag on encrypted mods, and the Encrypted tab (E)', on: true, group: 'mod' },
   { key: 'broken', label: 'Broken and May crash warnings, and the Problems tab (B)', on: true, group: 'warn' },
   { key: 'conflicts', label: 'Conflict warnings, the badge, and the count on Check Conflicts (Shift+C)', on: true, group: 'warn' },
   { key: 'quick-organize', label: 'Show Quick Organize when dropping files on the window' }, // shown under Installing mods
@@ -43,6 +43,8 @@ const SOUND_KEY = 'repakxtra.sound'   // on by default: '0' = off
 // unset or 'system' = follow Windows (System), '1' = on, '0' = off. System is saved, not removed: storageCarryOver would
 // copy an old-prefix '0' back over a missing key at the next start.
 const MOTION_KEY = 'repakxtra.motion'
+// unset = automatic (on for a PC with 4 CPU threads or fewer, or 4 GB of memory or less), '1' = on, '0' = off
+const LITE_KEY = 'repakxtra.lite'
 const MINIMAL_TOASTS_KEY = 'repakxtra.minimalToasts' // off by default: '1' = on (shown as Fewer pop-ups)
 const DEFAULTS_KEY = 'repakxtra.defaults.v2'
 const PLAIN_INSTALL_KEY = 'repakxtra.install.plain' // off by default: '1' = the install dialog starts without a loadout
@@ -61,6 +63,11 @@ const soundOn = () => savedItem(SOUND_KEY) !== '0'
 export const resolveMotion = (saved: string | null, osReduce: boolean) => saved === '1' ? true : saved === '0' ? false : !osReduce
 const reduceQuery = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null
 const motionOn = () => resolveMotion(savedItem(MOTION_KEY), !!reduceQuery?.matches)
+/** Lighter graphics on (blur and glass effects off, theme.css data-lite): a saved '1' or '0' is the user's choice,
+ *  anything else turns it on for a weak PC. `memoryGb` is navigator.deviceMemory (in GB, WebView2 has it). */
+export const resolveLite = (saved: string | null, threads: number, memoryGb?: number) =>
+  saved === '1' ? true : saved === '0' ? false : threads <= 4 || (memoryGb !== undefined && memoryGb <= 4)
+export const liteOn = () => resolveLite(savedItem(LITE_KEY), navigator.hardwareConcurrency || 8, (navigator as { deviceMemory?: number }).deviceMemory)
 const minimalToasts = () => savedItem(MINIMAL_TOASTS_KEY) === '1'
 /** Fewer pop-ups is on (Settings): a show/hide hotkey's toast stays away, its sound still plays. */
 export const fewerPopups = minimalToasts
@@ -91,6 +98,7 @@ const apply = () => {
   document.documentElement.toggleAttribute('data-tags-off', tagsOff()) // theme.css hides the tags on mods
   // Motion off: theme.css zeroes every CSS transition and animation, framer-motion jumps to the end state
   document.documentElement.setAttribute('data-motion', motionOn() ? 'on' : 'off')
+  document.documentElement.toggleAttribute('data-lite', liteOn()) // theme.css drops blur and glass
   MotionGlobalConfig.skipAnimations = !motionOn()
   setSoundOn(soundOn())
   getCurrentWebview().setZoom(getScale() / 100 * BASE_ZOOM).catch(e => console.warn('[uiPrefs] zoom failed', e))
@@ -237,7 +245,7 @@ function PrefBox({ k, label }: { k: string; label: string }) {
     </div>
   )
 }
-const useAll = () => useSyncExternalStore(subscribe, () => PREFS.map(p => (isOn(p.key) ? 1 : 0)).join('') + '|' + getScale() + '|' + soundOn() + motionOn() +minimalToasts() + installsPlain() + tagsOff() + amoledOn())
+const useAll = () => useSyncExternalStore(subscribe, () => PREFS.map(p => (isOn(p.key) ? 1 : 0)).join('') + '|' + getScale() + '|' + soundOn() + motionOn() + liteOn() +minimalToasts() + installsPlain() + tagsOff() + amoledOn())
 
 export function AmoledSection({ onEnable }: { onEnable: () => void }) {
   useAll()
@@ -295,6 +303,12 @@ export function MotionSection({ extra }: { extra?: React.ReactNode }) {
           </Checkbox>
           <p className="setting-subtext">Page slides, menus, switches, and pop-ups. Unchecked stops every animation in the app. Until you change it, it follows the Windows animation effects setting.</p>
           {extra && <div className={`setting-sub${motionOn() ? '' : ' is-off'}`}>{extra}</div>}
+        </div>
+        <div className="setting-item">
+          <Checkbox checked={liteOn()} onChange={(checked: boolean) => update(LITE_KEY, checked ? '1' : '0')}>
+            <span>Lighter graphics</span>
+          </Checkbox>
+          <p className="setting-subtext">Skips blur and glass effects, the heaviest part to draw on a slower PC. Until you change it, it turns on by itself on a PC with 4 CPU threads or fewer, or 4 GB of memory or less.</p>
         </div>
         <div className="setting-item">
           <Checkbox checked={minimalToasts()} onChange={(checked: boolean) => update(MINIMAL_TOASTS_KEY, checked ? '1' : '0')}>
@@ -404,7 +418,7 @@ export function WarningPrefs() {
 export function resetUiPrefs() {
   if (EXTENDED) localStorage.removeItem(AMOLED_KEY)
   for (const p of PREFS) localStorage.removeItem(storageKey(p.key))
-  for (const k of [SCALE_KEY, SOUND_KEY, MOTION_KEY, MINIMAL_TOASTS_KEY, PLAIN_INSTALL_KEY, TAGS_OFF_KEY, HIDE_TAGS_KEY]) localStorage.removeItem(k)
+  for (const k of [SCALE_KEY, SOUND_KEY, MOTION_KEY, LITE_KEY, MINIMAL_TOASTS_KEY, PLAIN_INSTALL_KEY, TAGS_OFF_KEY, HIDE_TAGS_KEY]) localStorage.removeItem(k)
   apply()
   listeners.forEach(l => l())
 }
@@ -413,4 +427,6 @@ if (import.meta.env.DEV) {
   console.assert(resolveMotion(null, false) === true && resolveMotion(null, true) === false, 'unset Animations follows the OS reduce motion setting')
   console.assert(resolveMotion('1', true) === true && resolveMotion('0', false) === false, 'a saved 1 or 0 overrides the OS')
   console.assert(resolveMotion('junk', true) === false, 'an unknown saved value counts as System')
+  console.assert(resolveLite(null, 4) && resolveLite(null, 16, 4) && !resolveLite(null, 8, 8) && !resolveLite(null, 16), 'unset Lighter graphics follows the PC')
+  console.assert(resolveLite('0', 2, 2) === false && resolveLite('1', 32, 8) === true, 'a saved 1 or 0 overrides the PC')
 }

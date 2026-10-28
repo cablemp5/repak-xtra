@@ -754,7 +754,7 @@ fn remove(dir: &Path, id: &str) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn xtra_builtins_list(state: State<'_, Arc<Mutex<AppState>>>) -> Vec<BuiltinView> {
     views(&state)
 }

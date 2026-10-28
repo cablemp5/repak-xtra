@@ -6,6 +6,11 @@
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
+
+/// One write at a time (these commands run off the window's thread, and every window saves), and the `at` of the newest
+/// snapshot written, so a save that arrives late never replaces a newer one.
+static WRITING: Mutex<u64> = Mutex::new(0);
 
 const MAX_BYTES: usize = 32 * 1024 * 1024;
 
@@ -41,19 +46,32 @@ fn write(name: &str, text: &str) -> Result<(), String> {
     fs::rename(&tmp, &path).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn xtra_storage_snapshot_write(text: String) -> Result<(), String> {
-    write("webview-storage.json", &text)
+    let at = serde_json::from_str::<serde_json::Value>(&text).ok().and_then(|v| v.get("at").and_then(|a| a.as_u64())).unwrap_or(0);
+    let mut newest = WRITING.lock().unwrap_or_else(|e| e.into_inner());
+    if !newer(at, *newest) {
+        return Ok(());
+    }
+    write("webview-storage.json", &text)?;
+    *newest = at;
+    Ok(())
 }
 
-#[tauri::command]
+/// Pure: whether a snapshot taken at `at` may replace the newest one written this session (`newest`, 0 before any).
+fn newer(at: u64, newest: u64) -> bool {
+    at >= newest
+}
+
+#[tauri::command(async)]
 pub fn xtra_storage_snapshot_read() -> Option<String> {
     fs::read_to_string(file("webview-storage.json")).ok().filter(|t| checked(t).is_ok())
 }
 
 /// A copy's own entries, kept just before newer ones from another copy replace them.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn xtra_storage_backup_write(text: String) -> Result<(), String> {
+    let _one_at_a_time = WRITING.lock().unwrap_or_else(|e| e.into_inner());
     write("webview-storage.backup.json", &text)
 }
 
@@ -71,5 +89,11 @@ mod tests {
         assert!(checked(r#"{"other.key":"x"}"#).is_err());
         assert!(checked(r#"{"repakxtra.loadouts":[]}"#).is_err());
         assert!(checked("[1]").is_err() && checked("not json").is_err());
+    }
+
+    #[test]
+    fn a_late_older_snapshot_never_replaces_a_newer_one() {
+        assert!(newer(5, 0) && newer(5, 5));
+        assert!(!newer(4, 5));
     }
 }

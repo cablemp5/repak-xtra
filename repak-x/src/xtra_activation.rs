@@ -28,7 +28,7 @@ pub fn require() -> Result<(), String> {
 #[tauri::command]
 pub fn extended_access_status() -> bool { is_unlocked() }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn extended_unlock(code: String, app: tauri::AppHandle) -> Result<(), String> {
     unlock_then(&code, expected(), &receipt(), || crate::xtra_project::on_open(&app))
 }

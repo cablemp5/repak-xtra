@@ -57,7 +57,7 @@ fn generator() -> Option<(PathBuf, PathBuf, PathBuf)> {
 
 
 /// Whether previews can be generated here; without it the app hides its Generate buttons and keeps showing previews it has.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn previews_available() -> bool {
     generator().is_some()
 }
@@ -70,7 +70,7 @@ fn valid_key(key: &str) -> bool {
 /// A preview is a PNG, or an animated WebP for animation mods (a clip on a gray model).
 const PREVIEW_EXTS: [&str; 2] = [".png", ".webp"];
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_mod_previews() -> Vec<String> {
     let mut keys: Vec<String> = std::fs::read_dir(previews_dir())
         .map(|it| {
@@ -97,7 +97,7 @@ fn preview_file(dir: &std::path::Path, key: &str) -> Option<PathBuf> {
         .map(|(_, p)| p)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_mod_preview(key: String) -> Result<tauri::ipc::Response, String> {
     if !valid_key(&key) {
         return Err(format!("Invalid preview key: {key}"));
@@ -108,7 +108,7 @@ pub fn get_mod_preview(key: String) -> Result<tauri::ipc::Response, String> {
 
 /// A loadout's combined render (`set`), from the generator's <set>.json: `covers`, the mods it shows (empty when there
 /// is none), and `members`, the installed mods it was rendered for (null for renders older than that record).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_preview_covers(key: String) -> serde_json::Value {
     let v = if valid_key(&key) {
         std::fs::read_to_string(previews_dir().join(format!("{key}.json")))
@@ -125,7 +125,7 @@ pub fn get_preview_covers(key: String) -> serde_json::Value {
 /// Which previews belong to emotes, from the generator's index.json: `anim` {mod key: [emote]} for animation previews
 /// and `audio` {mod key: [emote]} for sound mods whose emote sounds it saved (custom/emoteSound.ts pairs them on hover).
 /// An emote is "<hero>-<item index>", like "1026-205".
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_preview_emotes() -> serde_json::Value {
     let index: serde_json::Value = std::fs::read_to_string(previews_dir().join("index.json"))
         .ok()
@@ -146,7 +146,7 @@ fn valid_emote(emote: &str) -> bool {
 }
 
 /// A sound mod's emote sound (WAV), saved by the generator as <key>.audio/<emote>.wav.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_preview_audio(key: String, emote: String) -> Result<tauri::ipc::Response, String> {
     if !valid_key(&key) || !valid_emote(&emote) {
         return Err(format!("Invalid emote sound: {key} {emote}"));
@@ -186,7 +186,7 @@ fn parse_line(line: &str) -> Option<(&'static str, Option<String>)> {
 /// app session left going) holds its lock, `mod-previews-done` (ok) at the end. Ok(false) = this app runs one already.
 /// Unchanged mods and sets report their existing result without rendering; `force` (Regenerate) renders them anyway.
 /// The generator alone owns its lock and the cancel file (it clears a stale Stop once it holds the lock).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: Option<String>, force: Option<bool>, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<bool, String> {
     if let Some(bad) = jobs.iter().map(|(_, k)| k).chain(set.iter()).find(|k| !valid_key(k)) {
         return Err(format!("Invalid preview key: {bad}"));

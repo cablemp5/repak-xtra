@@ -147,7 +147,7 @@ pub struct KitStatus {
     blender: Option<String>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn preview_kit_status() -> KitStatus {
     let version = installed(&kit_dir());
     KitStatus {
@@ -425,13 +425,16 @@ fn run_winget(app: &AppHandle) -> Result<(Option<i32>, String), String> {
 }
 
 #[tauri::command]
-pub fn preview_kit_remove() -> Result<(), String> {
-    let _hold = crate::xtra_previews::reserve("kit").map_err(crate::xtra_previews::busy_text)?;
-    fs::remove_dir_all(kit_dir()).or_else(|e| if e.kind() == std::io::ErrorKind::NotFound { Ok(()) } else { Err(e.to_string()) })
+pub async fn preview_kit_remove() -> Result<(), String> {
+    // repakxtra: file work on a blocking thread, never on the async workers every other command shares
+    crate::blocking(|| {
+        let _hold = crate::xtra_previews::reserve("kit").map_err(crate::xtra_previews::busy_text)?;
+        fs::remove_dir_all(kit_dir()).or_else(|e| if e.kind() == std::io::ErrorKind::NotFound { Ok(()) } else { Err(e.to_string()) })
+    }).await
 }
 
 /// Picks blender.exe by hand (None goes back to finding it in Program Files).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn preview_kit_set_blender(path: Option<String>) -> Result<Option<String>, String> {
     match path.filter(|p| !p.trim().is_empty()) {
         Some(p) => {

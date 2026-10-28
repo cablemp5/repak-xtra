@@ -293,7 +293,7 @@ pub(crate) fn record_check(mods_dir: &Path, utoc: &Path, outdated: bool) -> Resu
 }
 
 /// An update of `mod_path` said Nothing to update: Needs VFX update stops flagging it until the mod or the game changes.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn xtra_vfx_no_update(mod_path: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
     let mods_dir = state.lock().unwrap().game_path.clone();
     record_check(&mods_dir, &Path::new(&mod_path).with_extension("utoc"), false)

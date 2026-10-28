@@ -55,13 +55,13 @@ pub fn upstream_guard() -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn xtra_upstream_running() -> bool {
     upstream_running()
 }
 
 /// Points repakx:// links back at repakxtra once Repak X has closed (it takes them over when it starts).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn xtra_protocol_reclaim() -> Result<(), String> {
     if upstream_running() {
         return Ok(());

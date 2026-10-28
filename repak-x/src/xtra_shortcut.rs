@@ -29,7 +29,7 @@ pub struct ShortcutStatus {
     exists: bool,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn shortcut_status() -> ShortcutStatus {
     ShortcutStatus { exists: shortcut().is_some_and(|p| p.exists()) }
 }

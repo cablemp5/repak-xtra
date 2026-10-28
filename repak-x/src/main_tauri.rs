@@ -43,6 +43,8 @@ mod xtra_game; // repakxtra: the game update notice
 mod xtra_quake; // repakxtra: CustomQuake built-in (flat map textures)
 mod xtra_role; // repakxtra: Claim role on cable's Discord card
 mod xtra_extract; // repakxtra: unpacks only archives whose paths stay inside the output folder
+mod xtra_library_files; // repakxtra: the part of a mod's file list the Library reads
+mod xtra_details_cache; // repakxtra: the mod details cache kept between launches
 mod xtra_vfx; // repakxtra: VFX fixing after game updates
 mod xtra_niagara; // repakxtra: the VFX Updater's Niagara step
 mod xtra_uat_cli; // repakxtra: IoStore extracts through UAssetTool's parallel command line
@@ -85,8 +87,6 @@ use walkdir::WalkDir;
 
 struct WatcherState {
     watcher: Mutex<Option<RecommendedWatcher>>,
-    #[allow(dead_code)]
-    last_event_time: Mutex<std::time::Instant>,
     /// When true, the file watcher suppresses events (e.g. during P2P transfer)
     paused: Arc<AtomicBool>,
 }
@@ -559,9 +559,40 @@ async fn start_file_watcher(
 
     let mut watcher_guard = watcher_state.watcher.lock().unwrap();
 
-    // Create a new watcher with debouncing
+    // repakxtra: trailing-edge debounce. One reload 750 ms after the folder goes quiet, instead of the first event and then
+    // one every 500 ms while a big file copies (each reload re-lists the library and restarts its background scans).
+    let (tx, rx) = std::sync::mpsc::channel::<Vec<std::path::PathBuf>>();
     let window_clone = window.clone();
-    let last_event_time = Arc::new(Mutex::new(std::time::Instant::now()));
+    let paused_at_emit = watcher_state.paused.clone();
+    std::thread::spawn(move || {
+        // Ends when the watcher (and with it the sender) is dropped
+        while let Ok(first) = rx.recv() {
+            let mut paths = first;
+            loop {
+                match rx.recv_timeout(std::time::Duration::from_millis(750)) {
+                    Ok(more) => paths.extend(more),
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => break,
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
+                }
+            }
+            if paused_at_emit.load(Ordering::Relaxed) {
+                continue; // paused while these settled (a P2P transfer started): they are its own files
+            }
+            paths.sort();
+            paths.dedup();
+            let changed_paths: Vec<String> = paths.iter().map(|p| p.to_string_lossy().to_string()).collect();
+            let changed_folders: Vec<String> = paths
+                .iter()
+                .filter_map(|p| p.parent())
+                .map(|p| p.to_string_lossy().to_string())
+                .collect::<std::collections::HashSet<_>>()
+                .into_iter()
+                .collect();
+            window_clone
+                .emit("mods_dir_changed", serde_json::json!({ "paths": changed_paths, "folders": changed_folders }))
+                .unwrap_or_else(|e| error!("Failed to emit mods_dir_changed: {}", e));
+        }
+    });
 
     let paused = watcher_state.paused.clone();
     let watcher_result = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
@@ -572,47 +603,8 @@ async fn start_file_watcher(
                     return;
                 }
                 // We only care about Create, Remove, Rename, and Modify events (files and directories)
-                match event.kind {
-                    EventKind::Create(_) | EventKind::Remove(_) | EventKind::Modify(_) => {
-                        // Debounce: only emit if 500ms have passed since last event
-                        let mut last_time = last_event_time.lock().unwrap();
-                        let now = std::time::Instant::now();
-                        let elapsed = now.duration_since(*last_time);
-
-                        if elapsed.as_millis() >= 500 {
-                            *last_time = now;
-
-                            // Collect affected paths
-                            let changed_paths: Vec<String> = event
-                                .paths
-                                .iter()
-                                .map(|p| p.to_string_lossy().to_string())
-                                .collect();
-
-                            // Determine which folders were affected
-                            let changed_folders: Vec<String> = event
-                                .paths
-                                .iter()
-                                .filter_map(|p| p.parent())
-                                .map(|p| p.to_string_lossy().to_string())
-                                .collect::<std::collections::HashSet<_>>()
-                                .into_iter()
-                                .collect();
-
-                            window_clone
-                                .emit(
-                                    "mods_dir_changed",
-                                    serde_json::json!({
-                                        "paths": changed_paths,
-                                        "folders": changed_folders,
-                                    }),
-                                )
-                                .unwrap_or_else(|e| {
-                                    error!("Failed to emit mods_dir_changed: {}", e);
-                                });
-                        }
-                    }
-                    _ => {}
+                if matches!(event.kind, EventKind::Create(_) | EventKind::Remove(_) | EventKind::Modify(_)) {
+                    let _ = tx.send(event.paths);
                 }
             }
             Err(e) => error!("Watch error: {:?}", e),
@@ -639,8 +631,12 @@ async fn start_file_watcher(
 #[tauri::command]
 async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<ModEntry>, String> {
     let scan_started = std::time::Instant::now();
-    let state = state.lock().unwrap();
-    let game_path = &state.game_path;
+    // repakxtra: copies what the scan needs and lets go of the state, so the walk never holds up other commands
+    let (game_path, mod_tags) = {
+        let state = state.lock().unwrap();
+        (state.game_path.clone(), state.mod_tags.clone())
+    };
+    let game_path = &game_path;
 
     info!("Loading mods from: {}", game_path.display());
 
@@ -659,8 +655,8 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
     for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::not_staging) /* repakxtra */.filter_map(|e| e.ok()) {
         let path = entry.path();
 
-        // Skip directories themselves
-        if path.is_dir() {
+        // Skip directories themselves (repakxtra: the walk already knows, no extra disk stat per file)
+        if entry.file_type().is_dir() {
             continue;
         }
 
@@ -694,7 +690,7 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
                 Some(root_folder_name)
             };
 
-            info!(
+            debug!( // repakxtra: debug, one line per mod at every reload filled the log
                 "Found PAK file: {} (enabled: {}, folder: {:?})",
                 path.display(),
                 is_enabled,
@@ -731,7 +727,8 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
             } else if file_stem.ends_with("_P") {
                 let base_no_p = file_stem.strip_suffix("_P").unwrap();
                 // Check for _999... suffix
-                let re_nums = Regex::new(r"_(\d+)$").unwrap();
+                static RE_NUMS: std::sync::OnceLock<Regex> = std::sync::OnceLock::new(); // repakxtra: compiled once
+                let re_nums = RE_NUMS.get_or_init(|| Regex::new(r"_(\d+)$").unwrap());
                 if let Some(caps) = re_nums.captures(base_no_p) {
                     let nums = &caps[1];
                     // Verify they are all 9s
@@ -747,7 +744,7 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
             }
 
             let key = get_mod_key(&path);
-            let custom_tags = state.mod_tags.get(&key).cloned().unwrap_or_default();
+            let custom_tags = mod_tags.get(&key).cloned().unwrap_or_default();
 
             mods.push(ModEntry {
                 path: path.to_path_buf(),
@@ -984,6 +981,7 @@ async fn set_mod_priority(
     {
         let mut state_guard = state.lock().unwrap();
         state_guard.mod_details_cache.remove(&path);
+        xtra_details_cache::mark_dirty(); // repakxtra: the saved copy follows
     }
 
     Ok(())
@@ -3335,15 +3333,22 @@ async fn install_mods(
     });
 
     // Monitor progress
-    std::thread::spawn(move || loop {
-        let current = counter_clone.load(std::sync::atomic::Ordering::SeqCst);
-        if current == -255 {
-            window_clone.emit("install_complete", ()).ok();
-            break;
+    // repakxtra: emits only when the count moved, so a long install does not re-render the window 10 times a second
+    std::thread::spawn(move || {
+        let mut last = i32::MIN;
+        loop {
+            let current = counter_clone.load(std::sync::atomic::Ordering::SeqCst);
+            if current == -255 {
+                window_clone.emit("install_complete", ()).ok();
+                break;
+            }
+            if current != last {
+                last = current;
+                let progress = (current as f32 / total as f32) * 100.0;
+                window_clone.emit("install_progress", progress).ok();
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
         }
-        let progress = (current as f32 / total as f32) * 100.0;
-        window_clone.emit("install_progress", progress).ok();
-        std::thread::sleep(std::time::Duration::from_millis(100));
     });
 
     Ok(())
@@ -3411,6 +3416,7 @@ async fn delete_mod(
     {
         let mut state_guard = state.lock().unwrap();
         state_guard.mod_details_cache.remove(&actual_path);
+        xtra_details_cache::mark_dirty(); // repakxtra: the saved copy follows
     }
 
     // Determine the base path for IoStore files (always based on .pak name, not .bak_repak)
@@ -4114,6 +4120,7 @@ async fn rename_mod(
     {
         let mut state_guard = state.lock().unwrap();
         state_guard.mod_details_cache.remove(&old_path_buf);
+        xtra_details_cache::mark_dirty(); // repakxtra: the saved copy follows
 
         let old_key = get_mod_key(&old_path_buf);
         let new_key = get_mod_key(&new_path);
@@ -4764,6 +4771,7 @@ async fn toggle_mod(
         let mut state_guard = state.lock().unwrap();
         if let Some(entry) = state_guard.mod_details_cache.remove(&path) {
             state_guard.mod_details_cache.insert(new_path, entry);
+            xtra_details_cache::mark_dirty(); // repakxtra: the saved copy follows
         }
     }
 
@@ -5173,11 +5181,13 @@ async fn check_game_running() -> Result<bool, String> {
 fn is_game_process_running() -> bool {
     use sysinfo::{ProcessRefreshKind, RefreshKind, System};
 
-    // Create system with full process info including exe path
-    // Use everything() to ensure exe path is fetched
-    let s = System::new_with_specifics(
-        RefreshKind::new().with_processes(ProcessRefreshKind::everything()),
-    );
+    // repakxtra: on Windows a process name is its exe file name, so names alone answer this. Reading every
+    // process's exe, command line, environment and folder (everything()) made each 5 s check far heavier.
+    #[cfg(windows)]
+    let kind = ProcessRefreshKind::new();
+    #[cfg(not(windows))]
+    let kind = ProcessRefreshKind::everything();
+    let s = System::new_with_specifics(RefreshKind::new().with_processes(kind));
 
     let game_exe_name = "marvel-win64-shipping.exe";
 
@@ -7217,7 +7227,7 @@ fn setup_logging() {
     }));
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)] // repakxtra: Deserialize for xtra_details_cache
 struct ModDetails {
     mod_name: String,
     mod_type: String,
@@ -7231,15 +7241,69 @@ struct ModDetails {
     is_encrypted: bool,
     has_blueprint: bool,
     is_hybrid: bool,
+    /// repakxtra: `files` holds only what the Library reads (xtra_library_files.rs), not the whole list
+    #[serde(default)]
+    files_partial: bool,
+    /// repakxtra: that part, worked out once when the mod is read and kept in the saved cache (never sent itself)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    library_files: Option<Vec<String>>,
+    /// repakxtra: of an IoStore mod's `files`, how many came from its .utoc (the .pak's own follow): the conflict check
+    /// reads that part from here instead of the disk
+    #[serde(default)]
+    utoc_files: Option<usize>,
 }
 
 #[tauri::command]
 async fn get_mod_details(
     mod_path: String,
     _detect_blueprint: Option<bool>,
+    full_files: Option<bool>, // repakxtra: the whole file list (the details panel); otherwise only what the Library reads
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<ModDetails, String> {
-    compute_mod_details(&PathBuf::from(&mod_path), &state)
+    // repakxtra: a blocking thread, so a library's worth of these at once never starves the other commands' workers
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        // repakxtra: a cache hit for the Library copies only the small part, never the whole file list
+        if full_files != Some(true) {
+            let path = PathBuf::from(&mod_path);
+            let fingerprint = mod_fingerprint(&path);
+            let mut st = state.lock().unwrap();
+            if let Some((cached, d)) = st.mod_details_cache.get_mut(&path) {
+                if *cached == fingerprint {
+                    if let Some(copy) = library_copy(d) {
+                        return Ok(copy);
+                    }
+                }
+            }
+        }
+        let mut details = compute_mod_details(&PathBuf::from(&mod_path), &state)?;
+        let library = details.library_files.take();
+        if full_files != Some(true) {
+            details.files = library.unwrap_or_else(|| xtra_library_files::library_files(&details.files));
+            details.files_partial = true;
+        }
+        Ok(details)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// repakxtra: runs a slow file command's work on a blocking thread. `#[tauri::command(async)]` alone runs it on one of
+/// the async workers every other command shares (one per CPU thread), so two slow ones stalled the app on a 2-thread PC.
+pub(crate) async fn blocking<T: Send + 'static>(work: impl FnOnce() -> Result<T, String> + Send + 'static) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(work).await.map_err(|e| e.to_string())?
+}
+
+/// repakxtra: the Library's copy of cached details: every field but the whole file list, which stays in the cache.
+fn library_copy(d: &mut ModDetails) -> Option<ModDetails> {
+    let library = d.library_files.clone()?;
+    let files = std::mem::take(&mut d.files);
+    let mut copy = d.clone(); // without its files, so only the small fields are copied
+    d.files = files;
+    copy.files = library;
+    copy.files_partial = true;
+    copy.library_files = None;
+    Some(copy)
 }
 
 /// The body of [`get_mod_details`], callable from other commands.
@@ -7291,6 +7355,7 @@ fn compute_mod_details(
     // status — so we don't have to make a second call later.
     let mut pak_list_info: Option<uasset_toolkit::PakListResult> = None;
     let mut is_hybrid = false;
+    let mut utoc_count = None; // repakxtra: see ModDetails::utoc_files
     let files: Vec<String> = if is_iostore {
         // For IoStore, read from utoc (handles both normal and obfuscated containers)
         use crate::utoc_utils::read_utoc;
@@ -7298,6 +7363,7 @@ fn compute_mod_details(
             .iter()
             .map(|entry| entry.file_path.clone())
             .collect();
+        utoc_count = Some(utoc_files.len()); // repakxtra
 
         // For Hybrid detection: Check if the .pak file also contains raw assets
         if path.exists() && path.extension().unwrap_or_default() == "pak" {
@@ -7426,7 +7492,11 @@ fn compute_mod_details(
         is_encrypted,
         has_blueprint,
         is_hybrid,
+        files_partial: false,
+        library_files: None,
+        utoc_files: utoc_count,
     };
+    let details = ModDetails { library_files: Some(xtra_library_files::library_files(&details.files)), ..details }; // repakxtra
 
     // --- Cache store ---
     {
@@ -7434,6 +7504,7 @@ fn compute_mod_details(
         state_guard
             .mod_details_cache
             .insert(path.clone(), (fingerprint, details.clone()));
+        xtra_details_cache::mark_dirty(); // repakxtra
         info!("Cached details for mod: {}", path.display());
     }
     // --- End cache store ---
@@ -7627,12 +7698,29 @@ async fn check_mod_clashes(
     static ONE_SCAN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
     let game_path = state.lock().unwrap().game_path.clone();
     let _turn = ONE_SCAN.lock().await;
-    tokio::task::spawn_blocking(move || scan_mod_clashes(quiet == Some(true), &game_path))
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || scan_mod_clashes(quiet == Some(true), &game_path, &state))
         .await
         .map_err(|e| format!("Conflict check stopped: {e}"))?
 }
 
-fn scan_mod_clashes(quiet: bool, game_path: &Path) -> Result<Vec<ModClash>, String> {
+/// repakxtra: a container's file list as the conflict check reads it (the .utoc's for IoStore, else the .pak's), from
+/// the saved mod details when they are current: after a restart the check then reads no mod from the disk again.
+fn clash_files_from_details(state: &Arc<Mutex<AppState>>, pak: &Path, is_iostore: bool) -> Option<Vec<String>> {
+    let fingerprint = mod_fingerprint(pak);
+    let st = state.lock().unwrap();
+    let (cached, d) = st.mod_details_cache.get(pak)?;
+    if *cached != fingerprint {
+        return None;
+    }
+    match (is_iostore, d.utoc_files) {
+        (true, Some(n)) if n <= d.files.len() => Some(d.files[..n].to_vec()),
+        (false, _) if !d.is_iostore => Some(d.files.clone()),
+        _ => None,
+    }
+}
+
+fn scan_mod_clashes(quiet: bool, game_path: &Path, state: &Arc<Mutex<AppState>>) -> Result<Vec<ModClash>, String> {
     let started = std::time::Instant::now();
 
     if !quiet { // repakxtra
@@ -7690,6 +7778,9 @@ fn scan_mod_clashes(quiet: bool, game_path: &Path) -> Result<Vec<ModClash>, Stri
 
         // Get file list (repakxtra: cached until the container changes)
         let listed = crate::xtra_conflicts::files_cached(path, is_iostore.then_some(utoc_path.as_path()), || {
+            if let Some(files) = clash_files_from_details(state, path, is_iostore) {
+                return Ok(files); // repakxtra
+            }
             if is_iostore {
                 Ok(crate::utoc_utils::read_utoc(&utoc_path).iter().map(|entry| entry.file_path.clone()).collect())
             } else {
@@ -8392,24 +8483,44 @@ fn main() {
 
     // Initialize UAssetToolkit global singleton on startup
     // This starts the UAssetTool process once and keeps it alive for the app lifetime
-    info!("Initializing UAssetToolkit global singleton...");
-    if let Err(e) = uasset_toolkit::init_global_toolkit() {
-        warn!(
-            "Failed to initialize UAssetToolkit singleton: {} - detection features may be slower",
-            e
-        );
-    } else {
-        info!("UAssetToolkit global singleton initialized successfully");
-    }
+    // repakxtra: loads the .NET toolkit beside the window opening instead of before it (first callers wait on its OnceLock)
+    std::thread::spawn(|| {
+        info!("Initializing UAssetToolkit global singleton...");
+        if let Err(e) = uasset_toolkit::init_global_toolkit() {
+            warn!(
+                "Failed to initialize UAssetToolkit singleton: {} - detection features may be slower",
+                e
+            );
+        } else {
+            info!("UAssetToolkit global singleton initialized successfully");
+        }
+    });
 
     // Initialize character data cache on startup
     info!("Initializing character data cache...");
     character_data::refresh_cache();
 
     let state = Arc::new(Mutex::new(load_state()));
+    // repakxtra: last launch's mod details come back before the window opens and asks for them (entries computed meanwhile win), then changes are saved every 15 s
+    let details_state = state.clone();
+    std::thread::spawn(move || {
+        let saved = xtra_details_cache::load();
+        {
+            let mut st = details_state.lock().unwrap();
+            for (path, entry) in saved {
+                st.mod_details_cache.entry(path).or_insert(entry);
+            }
+        }
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(15));
+            if xtra_details_cache::take_dirty() {
+                let snapshot = details_state.lock().unwrap().mod_details_cache.clone();
+                xtra_details_cache::save(&snapshot);
+            }
+        }
+    });
     let watcher_state = WatcherState {
         watcher: Mutex::new(None),
-        last_event_time: Mutex::new(std::time::Instant::now()),
         paused: Arc::new(AtomicBool::new(false)),
     };
     let crash_state = CrashMonitorState {
