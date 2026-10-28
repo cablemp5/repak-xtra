@@ -16,6 +16,7 @@ mod xtra_quake_options;
 #[cfg(feature = "extended")]
 mod xtra_sigeon; // repakxtra: Sigeon V2 switch
 mod xtra_setup; // repakxtra: Setup panel (signature bypass, Project Galacta)
+mod xtra_project;
 mod xtra_kit; // repakxtra: preview kit (previews on other PCs)
 mod xtra_previews; // repakxtra: generated mod previews
 mod xtra_trash; // repakxtra: undoable delete
@@ -32,6 +33,8 @@ mod xtra_layout; // repakxtra: May crash from the game classes an update changed
 mod xtra_nexus; // repakxtra: Nexus source from archive names
 mod xtra_offfiles; // repakxtra: .pak.off files install like .pak
 mod xtra_bundle; // repakxtra: a mod's pak/utoc/ucas found and moved as one set
+mod xtra_encrypt;
+mod xtra_mutation;
 mod xtra_updater; // repakxtra: applies an update without string-built shell commands
 mod xtra_conflicts; // repakxtra: conflict comparison by normalized asset path, cached file lists
 mod xtra_heroes; // repakxtra: the hero and skin folder of an asset path
@@ -901,6 +904,7 @@ async fn set_mod_priority(
     priority: usize,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<(), String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let path = PathBuf::from(&mod_path);
     if !path.exists() {
@@ -1857,6 +1861,7 @@ fn copy_iostore_with_compression_check(
                 pak_src.file_name().unwrap().to_string_lossy(),
                 e
             );
+            return Err(format!("The companion could not be copied: {e}"));
         } else {
             info!(
                 "[QuickOrganize] Copied: {}",
@@ -1882,6 +1887,7 @@ fn copy_iostore_with_compression_check(
                 bak_repak_src.file_name().unwrap().to_string_lossy(),
                 e
             );
+            return Err(format!("The companion could not be copied: {e}"));
         } else {
             info!(
                 "[QuickOrganize] Copied: {}",
@@ -2294,6 +2300,7 @@ async fn quick_organize(
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
 ) -> Result<i32, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let state_guard = state.lock().unwrap();
     let mod_directory = state_guard.game_path.clone();
@@ -2363,6 +2370,7 @@ async fn quick_organize_locked(
     flatten: Option<bool>,
     window: Window,
 ) -> Result<i32, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let existing = PathBuf::from(&existing_mod_path);
     let output_dir = existing
@@ -2940,6 +2948,7 @@ async fn install_mods(
     window: Window,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<(), String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     use std::sync::atomic::{AtomicBool, AtomicI32};
     use std::sync::Arc as StdArc;
@@ -3136,6 +3145,7 @@ async fn install_mods(
     // Spawn installation thread
     let window_for_logs = window.clone();
     std::thread::spawn(move || {
+        let _mutation = _mutation;
         use std::panic;
 
         let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
@@ -3346,6 +3356,7 @@ async fn delete_mod(
     window: Window,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<(), String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let path_buf = PathBuf::from(&path);
     log::info!("delete_mod called with path: {}", path);
@@ -3489,6 +3500,7 @@ async fn update_mod(
     window: Window,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<UpdateModResult, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     info!(
         "update_mod called: old={}, new={}, preserve_name={}, obfuscate={:?}",
@@ -3789,20 +3801,20 @@ async fn open_in_explorer(path: String) -> Result<(), String> {
 
         info!("open_in_explorer: using path={}", clean_path);
 
-        // Use /select, with the path - explorer handles the quoting
-        let select_arg = format!("/select,\"{}\"", clean_path);
-        std::process::Command::new("explorer.exe")
-            .raw_arg(&select_arg)
-            .spawn()
+        // Open folders themselves; keep selecting individual files for existing callers.
+        let mut explorer = std::process::Command::new("explorer.exe");
+        if path_buf.is_dir() { explorer.arg(&clean_path); }
+        else { explorer.raw_arg(format!("/select,\"{}\"", clean_path)); }
+        explorer.spawn()
             .map_err(|e| format!("Failed to open explorer: {}", e))?;
     }
 
     #[cfg(target_os = "macos")]
     {
         // On macOS, use open -R to reveal the file in Finder
-        std::process::Command::new("open")
-            .args(["-R", &path_buf.to_string_lossy()])
-            .spawn()
+        let mut finder = std::process::Command::new("open");
+        if path_buf.is_file() { finder.arg("-R"); }
+        finder.arg(&path_buf).spawn()
             .map_err(|e| format!("Failed to open Finder: {}", e))?;
     }
 
@@ -3963,6 +3975,7 @@ async fn rename_mod(
     window: Window,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<String, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let old_path_buf = PathBuf::from(&mod_path);
 
@@ -4127,6 +4140,7 @@ async fn create_folder(
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
 ) -> Result<String, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let state = state.lock().unwrap();
     let game_path = &state.game_path;
@@ -4333,6 +4347,7 @@ async fn delete_folder(
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
 ) -> Result<Vec<String>, String> { // repakxtra: the trash ids of its files, for Undo
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let state = state.lock().unwrap();
     let game_path = &state.game_path;
@@ -4401,6 +4416,7 @@ async fn rename_folder(
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
 ) -> Result<String, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let mut state = state.lock().unwrap();
     let game_path = state.game_path.clone();
@@ -4470,6 +4486,7 @@ async fn move_folder(
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
 ) -> Result<String, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let mut state = state.lock().unwrap();
     let game_path = state.game_path.clone();
@@ -4560,6 +4577,7 @@ async fn assign_mod_to_folder(
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
 ) -> Result<(), String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let state = state.lock().unwrap();
     let game_path = &state.game_path;
@@ -4707,6 +4725,7 @@ async fn toggle_mod(
     window: Window,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<bool, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let path = PathBuf::from(&mod_path);
 
@@ -5201,7 +5220,7 @@ fn is_game_process_running() -> bool {
 /// This ensures the game launches without the launcher when using our app,
 /// but preserves the user's Steam launch settings for manual launches
 #[tauri::command]
-async fn launch_game(state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
+async fn launch_game(app: tauri::AppHandle, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
     use std::process::Command;
 
     // Get game path (this is the ~mods folder inside Paks)
@@ -5209,6 +5228,10 @@ async fn launch_game(state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), Strin
         let state = state.lock().unwrap();
         (state.game_path.clone(), state.launcher_type.clone())
     };
+
+    if xtra_project::select(&mods_path)? {
+        let _ = app.emit("mods_dir_changed", ());
+    }
 
     // Go up 5 levels to get the actual game root
     // ~mods -> Paks -> Content -> Marvel -> MarvelGame -> MarvelRivals (game root)
@@ -5605,6 +5628,7 @@ async fn recompress_mods(
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
 ) -> Result<RecompressResult, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let game_path = {
         let state = state.lock().unwrap();
@@ -8368,8 +8392,6 @@ fn main() {
     character_data::refresh_cache();
 
     let state = Arc::new(Mutex::new(load_state()));
-    // repakxtra: a half-built install or receive from a run that was closed midway is never left for the game to load
-    crate::xtra_bundle::sweep_staging(&state.lock().unwrap().game_path);
     let watcher_state = WatcherState {
         watcher: Mutex::new(None),
         last_event_time: Mutex::new(std::time::Instant::now()),
@@ -8441,6 +8463,7 @@ fn main() {
             // This closure is called when a second instance is launched
             // `args` contains command line arguments including the deep-link URL
             info!("Single instance callback triggered with args: {:?}", args);
+            xtra_project::on_open(app);
 
             // Focus the main window
             if let Some(window) = app.get_webview_window("main") {
@@ -8466,6 +8489,10 @@ fn main() {
             // void. Entries land in a replay buffer until the webview mounts.
             ui_log::init(app.handle().clone());
             emit_session_banner(app);
+            // Plugin initialization has established that this is the primary instance. Secondary opens must not sweep live work.
+            let mods = app.state::<Arc<Mutex<AppState>>>().lock().unwrap().game_path.clone();
+            crate::xtra_bundle::sweep_staging(&mods);
+            xtra_project::on_open(app.handle());
             xtra_buildmark::tint_window_icon(app); // repakxtra: green (test) or amber (dev) taskbar icon
 
             #[cfg(any(windows, target_os = "linux"))]
@@ -8576,6 +8603,7 @@ fn main() {
             xtra_vfx::xtra_vfx_claim,
             xtra_vfx::xtra_vfx_release,
             xtra_vfx::xtra_vfx_lock,
+            xtra_encrypt::xtra_encrypt_mods,
             xtra_vfx::xtra_vfx_stale,
             xtra_vfx::xtra_vfx_source,
             xtra_niagara::xtra_vfx_niagara,

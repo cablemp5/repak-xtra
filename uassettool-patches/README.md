@@ -20,6 +20,13 @@ take them out again (`apply.ps1`), so the submodule itself is never changed or f
 
 Patches stack: each applies on top of the ones before it, in name order.
 
+`0010-encrypt-existing-iostore.patch` adds `encrypt_iostore` and `encrypt_pak` JSON actions. They write to separate staging
+paths, preserve container identity and chunk payloads, and reopen the encrypted output to verify every payload. Empty
+companion PAKs are valid. Signed, multipart and memory-mapped containers are refused. The app supplies the selected
+on/off companion explicitly, so encrypting a VFX-updated disabled mod does not lose its PAK. Originals are backed up and
+disabled before the app publishes the verified bundle. `scripts/check-encryption-roundtrip.py` checks temporary copies
+through the native library; run its Python host beside `oo2core_9_win64.dll`.
+
 `0009-custom-quake-v6-packaging.patch`: CustomQuake opts into V6's encrypted-container flag and payloads,
 `quakeV6/Content/` directory paths, and an empty 416-byte companion PAK. Package IDs retain the real game paths.
 Other mod packing keeps its existing format. Check with `python repak-x/scripts/check-quake-packaging.py

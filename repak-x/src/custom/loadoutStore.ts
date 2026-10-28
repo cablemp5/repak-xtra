@@ -25,6 +25,9 @@ export type Loadout = {
   caption?: string        // words shown big on its card while it has no picture or preview (typed on its page)
   captionIcon?: string    // a Lucide icon above those words (captionStyle.tsx CAPTION_ICONS)
   captionColor?: string   // their color, one of captionStyle.tsx's swatches; white without one
+  captionBackgroundRev?: number
+  captionBlur?: boolean
+  captionDark?: boolean
   captureRev?: number     // an in-game capture, stored apart from its own image (loadoutMedia.ts under captureKey(id))
   cover?: Cover           // which of its pictures its card shows (the page's Cover switch); unset: the first it has
   edited?: number         // when it was made or last changed by hand (ms), for "most recent first" lists; unset: before this existed
@@ -36,6 +39,7 @@ export type Cover = 'preview' | 'capture' | 'image' | 'text'
 export const COVERS: Cover[] = ['preview', 'capture', 'image', 'text']
 /** The media key of a loadout's in-game capture (its own image is under its id). */
 export const captureKey = (id: string) => `${id}#capture`
+export const captionBackgroundKey = (id: string) => `${id}#caption-background`
 /** Which sources hold something; `preview` comes from previews.tsx (previewMade). Pure. */
 export const coverFills = (l: Loadout, preview: boolean): Record<Cover, boolean> =>
   ({ preview, capture: Boolean(l.captureRev), image: Boolean(l.mediaRev || l.image), text: Boolean(l.caption?.trim() || l.captionIcon) })
@@ -148,7 +152,7 @@ export const restoreLoadout = (id: string) => {
 export function forgetDeleted(ids: string[]) {
   const items = parseDeleted(LIVE.getItem(DELETED)), live = new Set(readLoadouts().map(l => l.id))
   try { putDeleted(LIVE, items.filter(r => !ids.includes(r.loadout.id))) } finally { notify() }
-  for (const id of ids.filter(i => !live.has(i))) { deleteMedia(id); deleteMedia(captureKey(id)) }
+  for (const id of ids.filter(i => !live.has(i))) { deleteMedia(id); deleteMedia(captureKey(id)); deleteMedia(captionBackgroundKey(id)) }
 }
 /** Deleted loadouts not expired and not live, newest first; null while the list is unreadable. */
 export const useDeletedLoadouts = (): DeletedLoadout[] | null => {

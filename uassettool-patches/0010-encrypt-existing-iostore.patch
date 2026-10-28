@@ -1,0 +1,118 @@
+--- a/src/UAssetTool/Program.cs
++++ b/src/UAssetTool/Program.cs
+@@ -2793,6 +2793,8 @@
+                 "is_iostore_compressed" => IsIoStoreCompressed(request.FilePath),
+                 "is_iostore_encrypted" => IsIoStoreEncrypted(request.FilePath),
+                 "recompress_iostore" => RecompressIoStore(request.FilePath),
++                "encrypt_iostore" => EncryptIoStore(request.FilePath, request.OutputPath),
++                "encrypt_pak" => EncryptPak(request.FilePath, request.OutputPath),
+                 "extract_iostore" => ExtractIoStoreJson(request.FilePath, request.OutputPath, request.AesKey),
+                 "extract_iostore_legacy" => ExtractIoStoreLegacyJson(request.GamePaks, request.ModPath, request.OutputPath, request.FilterPatterns, request.AesKey, request.WithDeps),
+                 "extract_script_objects" => ExtractScriptObjectsJson(request.FilePath, request.OutputPath),
+--- /dev/null
++++ b/src/UAssetTool/Encryption.cs
+@@ -0,0 +1,86 @@
++using System;
++using System.IO;
++using System.Linq;
++using System.Security.Cryptography;
++using UAssetTool.IoStore;
++
++namespace UAssetTool;
++
++public partial class Program
++{
++    private static UAssetResponse EncryptPak(string? input, string? output)
++    {
++        try
++        {
++            if (string.IsNullOrEmpty(input) || string.IsNullOrEmpty(output) ||
++                Path.GetFullPath(input).Equals(Path.GetFullPath(output), StringComparison.OrdinalIgnoreCase))
++                throw new ArgumentException("Encryption requires separate input and output files.");
++            const string key = "0C263D8C22DCB085894899C3A3796383E9BF9DE0CBFB08C9BF2DEF2E84F29D74";
++            using var reader = new PakReader(input, key);
++            using (var writer = new PakWriter(reader.MountPoint, reader.PathHashSeed, key))
++            {
++                foreach (var path in reader.Files) writer.AddEntry(path, reader.Get(path));
++                writer.Write(output);
++            }
++            using var verify = new PakReader(output, key);
++            if (!verify.EncryptedIndex || !reader.Files.OrderBy(x => x).SequenceEqual(verify.Files.OrderBy(x => x)))
++                throw new InvalidDataException("Encrypted PAK failed index verification.");
++            foreach (var path in reader.Files)
++                if (!reader.Get(path).AsSpan().SequenceEqual(verify.Get(path)))
++                    throw new InvalidDataException("Encrypted PAK changed an entry payload.");
++            return new UAssetResponse { Success = true, Message = "Encrypted and verified all PAK entries" };
++        }
++        catch (Exception e) { return new UAssetResponse { Success = false, Message = e.Message }; }
++    }
++
++    // Rewrite chunks without converting Zen packages to legacy or changing their payloads.
++    private static UAssetResponse EncryptIoStore(string? input, string? output)
++    {
++        try
++        {
++            if (string.IsNullOrEmpty(input) || string.IsNullOrEmpty(output) ||
++                Path.GetFullPath(input).Equals(Path.GetFullPath(output), StringComparison.OrdinalIgnoreCase))
++                throw new ArgumentException("Encryption requires separate input and output files.");
++            byte[] key = Convert.FromHexString("0C263D8C22DCB085894899C3A3796383E9BF9DE0CBFB08C9BF2DEF2E84F29D74");
++            using var reader = new IoStoreReader(input, key);
++            var toc = reader.Toc;
++            if (toc.PartitionCount > 1 || toc.ContainerFlags.HasFlag(EIoContainerFlags.Signed))
++                throw new NotSupportedException("Signed or multi-part containers cannot be encrypted here.");
++            var chunks = reader.GetChunks().ToArray();
++            if (chunks.Any(id => id.ChunkType == EIoChunkType.MemoryMappedBulkData))
++                throw new NotSupportedException("Memory-mapped chunks cannot be encrypted here.");
++            if (chunks.Length == 0) throw new InvalidDataException("The container has no chunks.");
++            using (var writer = new IoStoreWriter(output, toc.Version, null, toc.MountPoint,
++                enableCompression: true, enableEncryption: true, aesKeyHex: Convert.ToHexString(key),
++                containerId: toc.ContainerId, compressionBlockSize: toc.CompressionBlockSize))
++            {
++                if (toc.RawDirectoryIndex is { Length: > 0 } directory)
++                {
++                    byte[] padded = new byte[(directory.Length + 15) & ~15];
++                    directory.CopyTo(padded, 0);
++                    using var aes = Aes.Create();
++                    aes.Key = key;
++                    aes.Mode = CipherMode.ECB;
++                    aes.Padding = PaddingMode.None;
++                    using var encryptor = aes.CreateEncryptor();
++                    writer.SetRawDirectoryIndex(encryptor.TransformFinalBlock(padded, 0, padded.Length));
++                }
++                foreach (var id in chunks)
++                {
++                    byte[] data = reader.ReadChunk(id);
++                    if (id.ChunkType == EIoChunkType.ContainerHeader) writer.WriteChunkUncompressed(id, data);
++                    else writer.WriteChunk(id, reader.GetChunkPath(id), data);
++                }
++                writer.Complete();
++            }
++            using var verify = new IoStoreReader(output, key);
++            if (!verify.Toc.IsEncrypted || !chunks.SequenceEqual(verify.GetChunks()))
++                throw new InvalidDataException("Encrypted container failed metadata verification.");
++            foreach (var id in chunks)
++                if (!reader.ReadChunk(id).AsSpan().SequenceEqual(verify.ReadChunk(id)))
++                    throw new InvalidDataException("Encrypted container changed a chunk payload.");
++            return new UAssetResponse { Success = true, Message = "Encrypted and verified all chunks" };
++        }
++        catch (Exception e) { return new UAssetResponse { Success = false, Message = e.Message }; }
++    }
++}
+--- a/src/UAssetTool/IoStore/IoStoreReader.cs
++++ b/src/UAssetTool/IoStore/IoStoreReader.cs
+@@ -519,6 +519,7 @@
+ {
+     public EIoStoreTocVersion Version { get; set; }
+     public EIoContainerFlags ContainerFlags { get; set; }
++    public uint PartitionCount { get; set; }
+     public uint CompressionBlockSize { get; set; }
+     public List<FIoChunkId> Chunks { get; set; } = new();
+     public List<FIoOffsetAndLengthReadable> ChunkOffsetLengths { get; set; } = new();
+@@ -589,6 +590,7 @@
+         toc.CompressionBlockSize = reader.ReadUInt32();
+         uint directoryIndexSize = reader.ReadUInt32();
+         uint partitionCount = reader.ReadUInt32();
++        toc.PartitionCount = partitionCount;
+         ulong containerId = reader.ReadUInt64();
+         toc.ContainerId = new FIoContainerId(containerId);
+         byte[] encryptionKeyGuid = reader.ReadBytes(16);

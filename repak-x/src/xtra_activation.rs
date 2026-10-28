@@ -25,10 +25,16 @@ pub fn require() -> Result<(), String> {
 pub fn extended_access_status() -> bool { is_unlocked() }
 
 #[tauri::command]
-pub fn extended_unlock(code: String) -> Result<(), String> {
-    if !accepts(&code, expected()) { return Err("Code not recognized.".into()); }
-    std::fs::create_dir_all(crate::app_dir()).map_err(|e| format!("Could not save unlock: {e}"))?;
-    std::fs::write(receipt(), expected()).map_err(|e| format!("Could not save unlock: {e}"))
+pub fn extended_unlock(code: String, app: tauri::AppHandle) -> Result<(), String> {
+    unlock_then(&code, expected(), &receipt(), || crate::xtra_project::on_open(&app))
+}
+
+pub(crate) fn unlock_then(code: &str, hash: &str, receipt: &std::path::Path, after: impl FnOnce()) -> Result<(), String> {
+    if !accepts(code, hash) { return Err("Code not recognized.".into()); }
+    std::fs::create_dir_all(receipt.parent().ok_or("Missing unlock folder")?).map_err(|e| format!("Could not save unlock: {e}"))?;
+    std::fs::write(receipt, hash).map_err(|e| format!("Could not save unlock: {e}"))?;
+    after();
+    Ok(())
 }
 
 #[cfg(test)]

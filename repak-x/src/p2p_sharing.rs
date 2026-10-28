@@ -1026,12 +1026,7 @@ impl P2PClient {
             .iter()
             .map(|f| (staging.join(format!("{}.part", f.name)), output_dir.join(&f.name)))
             .collect();
-        match crate::xtra_bundle::replace_all(&moves) {
-            Ok(Some(trash_id)) => info!("Replaced files are in Recently deleted ({})", trash_id),
-            Ok(None) => {}
-            Err(e) => return Err(P2PError::FileError(e)),
-        }
-        Ok(())
+        publish_received(&moves, || {})
     }
 
     fn read_message(&self, stream: &mut TcpStream) -> P2PResult<Vec<u8>> {
@@ -1145,6 +1140,17 @@ impl P2PClient {
         );
         Ok(total_received)
     }
+}
+
+fn publish_received(moves: &[(PathBuf, PathBuf)], before_publish: impl FnOnce()) -> P2PResult<()> {
+    let _mutation = crate::xtra_mutation::edit().map_err(P2PError::FileError)?;
+    before_publish();
+    match crate::xtra_bundle::replace_all(moves) {
+        Ok(Some(trash_id)) => info!("Replaced files are in Recently deleted ({})", trash_id),
+        Ok(None) => {}
+        Err(e) => return Err(P2PError::FileError(e)),
+    }
+    Ok(())
 }
 
 /// repakxtra: one file of an incoming pack, after its name and size were checked.
@@ -1491,6 +1497,22 @@ impl Default for P2PManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn receive_publication_and_encryption_exclude_each_other() {
+        let d = tempfile::tempdir().unwrap();
+        let staged = d.path().join("incoming.part");
+        let destination = d.path().join("Received.pak");
+        fs::write(&staged, b"received").unwrap();
+        let moves = vec![(staged.clone(), destination.clone())];
+        let encryption = crate::xtra_mutation::encrypt().unwrap();
+        assert!(publish_received(&moves, || panic!("blocked publication ran")).is_err());
+        assert!(staged.exists() && !destination.exists());
+        drop(encryption);
+        publish_received(&moves, || assert!(crate::xtra_mutation::encrypt().is_err())).unwrap();
+        assert_eq!(fs::read(destination).unwrap(), b"received");
+        assert!(crate::xtra_mutation::encrypt().is_ok());
+    }
 
     #[test]
     fn test_share_code_generation() {

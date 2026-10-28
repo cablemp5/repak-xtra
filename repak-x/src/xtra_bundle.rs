@@ -126,16 +126,22 @@ pub fn not_staging(e: &walkdir::DirEntry) -> bool {
 /// Removes staging folders a closed or crashed run left under `mods` (one level of subfolders deep), so the game
 /// never loads a half-built copy. Only names `staging_dir` makes are touched; the replaced files are in the trash.
 pub fn sweep_staging(mods: &Path) {
-    let is_staging = |n: &str| ["installing", "incoming"].iter().any(|t| n.starts_with(&format!(".repakxtra-{}-", t)));
+    let is_staging = |n: &str| ["installing", "incoming", "encrypt"].iter().any(|t| n.starts_with(&format!(".repakxtra-{}-", t)));
     let mut dirs = vec![mods.to_path_buf()];
-    if let Ok(rd) = fs::read_dir(mods) {
-        dirs.extend(rd.flatten().filter(|e| e.file_type().map_or(false, |t| t.is_dir())).map(|e| e.path()));
-    }
-    for d in dirs {
+    while let Some(d) = dirs.pop() {
         for e in fs::read_dir(&d).into_iter().flatten().flatten() {
             let name = e.file_name().to_string_lossy().to_string();
-            if is_staging(&name) && e.file_type().map_or(false, |t| t.is_dir()) {
+            let Ok(meta) = fs::symlink_metadata(e.path()) else { continue };
+            if !meta.is_dir() || meta.file_type().is_symlink() { continue; }
+            #[cfg(windows)]
+            {
+                use std::os::windows::fs::MetadataExt;
+                if meta.file_attributes() & 0x400 != 0 { continue; } // no junction traversal
+            }
+            if is_staging(&name) {
                 let _ = fs::remove_dir_all(e.path());
+            } else if !name.starts_with(".repakxtra-") {
+                dirs.push(e.path());
             }
         }
     }
@@ -144,6 +150,23 @@ pub fn sweep_staging(mods: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn abandoned_encryption_stays_off_and_is_swept_without_touching_originals() {
+        let d = tempfile::tempdir().unwrap();
+        let original = d.path().join("Skin.bak_repak");
+        fs::write(&original, b"original").unwrap();
+        let nested = d.path().join("collection").join("hero");
+        fs::create_dir_all(&nested).unwrap();
+        let stage = staging_dir(&nested, "encrypt").unwrap();
+        fs::write(stage.join("Skin.bak_repak"), b"encrypted").unwrap();
+        fs::write(stage.join("Skin.utoc"), b"toc").unwrap();
+        fs::write(stage.join("Skin.ucas"), b"cas").unwrap();
+        assert!(!stage.join("Skin.pak").exists());
+        sweep_staging(d.path());
+        assert!(!stage.exists());
+        assert_eq!(fs::read(original).unwrap(), b"original");
+    }
 
     fn tmp(tag: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("repakxtra-bundle-{}-{}", tag, std::process::id()));

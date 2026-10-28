@@ -1,6 +1,9 @@
 // repakxtra: loadout pieces the Library uses (state lives in loadoutStore.ts): the selection bar's Add to loadout, the
 // right-click Add to loadout items, switching with its guards (runChanges), and Ctrl+N for a loadout pinned to N.
 import { useEffect, useRef } from 'react'
+import { invoke } from '@tauri-apps/api/core'
+import { looksOf, skinLabel, skinLooks, type SkinDetails } from './loadoutSkins'
+export { skinLook } from './loadoutSkins'
 import { Check, ListPlus } from 'lucide-react'
 import CustomDropdown from '../components/CustomDropdown'
 import type { useAlert } from '../components/AlertHandler'
@@ -24,7 +27,7 @@ export type LoadoutProps = {
   isBlocked: () => boolean // the same, read live (Undo toasts outlive the component that made them)
   reload: () => Promise<unknown>
   alert: ReturnType<typeof useAlert>
-  modDetails?: Record<string, { character_name?: string | null; category?: string | null; additional_categories?: string[]; mod_type?: string } | undefined>
+  modDetails?: Record<string, SkinDetails | undefined>
   selected?: string[]    // paths picked in the Library: + makes a loadout of exactly these
   onModContextMenu?: (e: React.MouseEvent, mod: Mod, rename?: () => void) => void // a mod row's right-click: the Library's menu for that row (rename: the row's own)
 }
@@ -123,17 +126,6 @@ export function deleteWithUndo(p: LoadoutProps, l: Loadout) {
 
 let switching = '' // the loadout being switched: one at a time, whether from the sidebar, Ctrl+N, a card or a page
 
-/** Heroes whose look (a Mesh or Texture mod) the loadout changes. */
-const looksOf = (p: LoadoutProps, l: Loadout) => {
-  const on = new Set(l.on.map(canonKey))
-  const heroes = new Set<string>()
-  for (const m of p.mods) {
-    const d = p.modDetails?.[m.path]
-    if (on.has(modKey(m.path)) && (d?.category === 'Mesh' || d?.category === 'Texture') && d.character_name) heroes.add(d.character_name.split(' - ')[0])
-  }
-  return heroes
-}
-
 /** Shared by the sidebar and the cards screen: apply a set of flips with the game-running guard. Loadouts stay
  *  independent, but it says when another loadout that is on also changes the same hero's look (the game shows only
  *  one), and which other loadouts went off because they shared mods with this one. */
@@ -154,6 +146,15 @@ export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], ve
   switching = l.name || 'A loadout'
   try {
     const wasOn = readLoadouts().filter(o => o.id !== l.id && isActive(o, p.mods))
+    // Snapshot details before toggle/reload renames their keys, and fill gaps if a switch beats the initial scan.
+    const details = { ...p.modDetails }
+    if (verb === 'on' && wasOn.length) {
+      const relevant = new Set([l, ...wasOn].flatMap(o => o.on.map(canonKey)))
+      const missing = p.mods.filter(m => relevant.has(modKey(m.path)) && (!details[m.path] || (!details[m.path]!.files?.length && !skinLooks(details[m.path]!).size)))
+      const loaded = await Promise.allSettled(missing.map(async m => { details[m.path] = await invoke<SkinDetails>('get_mod_details', { modPath: m.path }) }))
+      if (loaded.some(r => r.status === 'rejected')) p.alert.warning('Skin check incomplete', 'Some mod details could not be read. Conflicts for those mods could not be checked.')
+    }
+    if (p.isBlocked()) { p.alert.warning(...GAME_RUNNING); return }
     // Mods that will not work or may crash, read before the switch renames their files
     const flagged = verb === 'on' && brokenShown() ? changes.map(m => verdictOf(m.path)).filter((v): v is Verdict => Boolean(v)) : []
     const failed = await flipMods(changes)
@@ -176,12 +177,12 @@ export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], ve
     if (vfx.length) p.alert.warning('Made for the old game files', `${vfx.join(', ')} ${vfx.length === 1 ? 'is a VFX or material mod' : 'are VFX or material mods'} from before the last game update. The VFX Updater (Update VFX mods at the top, or right-click > For modders > Send to VFX Updater) rebuilds ${vfx.length === 1 ? 'it' : 'them'}.`, { duration: 15000 })
     if (risky.length) p.alert.warning('May crash the game', `${risky.join(', ')} ${risky.length === 1 ? 'is a Blueprint mod' : 'are Blueprint mods'} from before the last game update. If the game crashes, turn ${risky.length === 1 ? 'it' : 'them'} off and look for an updated version.`, { duration: 15000 })
     if (broken.length) p.alert.warning('Will not work in this game version', `${broken.join(', ')} ${broken.length === 1 ? 'replaces' : 'replace'} game files an update renamed or removed.`, { duration: 15000 })
-    const mine = looksOf(p, l)
+    const mine = looksOf(after, details, l)
     for (const o of wasOn) {
-      const both = [...looksOf(p, o)].filter(h => mine.has(h))
+      const both = [...looksOf(after, details, o)].filter(h => mine.has(h))
       if (!both.length) continue
       const keep = new Set(l.on.map(canonKey))
-      const id = p.alert.warning(`${o.name} is also on`, `It changes ${both.join(', ')} too, and the game shows only one look.`, {
+      const id = p.alert.warning(`${o.name} is also on`, `It changes ${both.map(skinLabel).join(', ')} too, and the game shows only one look.`, {
         duration: 12000,
         action: {
           label: 'Turn it off', // the name is in the title: a long one in the button squeezed the toast's text away

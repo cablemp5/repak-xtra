@@ -15,6 +15,9 @@ import { useVfxUpdating } from './vfx/quick'
 import { GAME_RUNNING } from './keepOne'
 import { CaptionIcon, CaptionStyleBar } from './captionStyle'
 import { loadoutHero, silhouetteOf } from './silhouettes'
+// import CaptionBackground from './CaptionBackground' // Deferred background editor; implementation retained.
+import './support.css'
+import { captionBackgroundKey } from './loadoutStore'
 
 /** The home screen's badge color class for a mod type (theme.css *-badge sets --badge-dot). */
 export const typeClass = (category?: string | null) => `${(category || 'unknown').toLowerCase().replace(/\s+/g, '-')}-badge`
@@ -86,6 +89,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   usePreviewVersion()
   const page = Boolean(generate)
   const ownUrl = useMediaUrl(l.id, l.mediaRev)
+  const captionBackground = useMediaUrl(captionBackgroundKey(l.id), l.captionBackgroundRev)
   const own = ownUrl ?? l.image
   const shot = useMediaUrl(captureKey(l.id), l.captureRev)
   const [previewSlides, previewNames] = usePreviewSlides(p, l)
@@ -176,6 +180,10 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
         </span>
       )}
       <button type="button" className={`lo-card-image${cardClick ? '' : ' is-still'}`} onClick={cardClick} title={cardTitle} tabIndex={cardClick ? undefined : -1}>
+        {cover === 'text' && captionBackground && <span className="caption-background" aria-hidden="true">
+          <img src={captionBackground} alt="" className="is-loaded" style={{ filter: l.captionBlur ? 'blur(8px)' : undefined, transform: l.captionBlur ? 'scale(1.08)' : undefined }} />
+          {l.captionDark && <span className="caption-background-tint" />}
+        </span>}
         {words
           ? <span className="lo-card-placeholder lo-card-caption" style={tint}>
               <CaptionIcon name={l.captionIcon} className="lo-cap-icon" />{caption && <span>{caption}</span>}
@@ -225,7 +233,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
         </div>
       )}
       {editing && (
-        <div className="lo-caption-wrap" style={tint}>
+        <div className="lo-caption-wrap" style={{ ...tint, ...(captionBackground ? { background: 'transparent' } : {}) }}>
           <CaptionIcon name={l.captionIcon} className="lo-cap-icon" />
           <textarea ref={captionRef} className="lo-caption-edit" autoFocus={typing} defaultValue={caption} maxLength={80} placeholder="Type a title"
             aria-label={`Text on ${l.name}'s card`} spellCheck={false} onFocus={e => e.currentTarget.select()}
@@ -281,6 +289,8 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
           )
         })}
       </div>
+      {/* Deferred background editor; restore this and its import to expose it again.
+      {cover === 'text' && <CaptionBackground l={l} alert={p.alert} />} */}
     </div>
   )
 }

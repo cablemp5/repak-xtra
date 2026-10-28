@@ -781,13 +781,7 @@ pub async fn pack_to_iostore(
     allowed_assets: Option<&[String]>,
     progress: &dyn VfxProgressSink,
 ) -> Result<String, String> {
-    let output_base = if output_base.ends_with(".pak") {
-        output_base.replace(".pak", "")
-    } else if output_base.ends_with(".utoc") {
-        output_base.replace(".utoc", "")
-    } else {
-        output_base.to_string()
-    };
+    let output_base = output_base.strip_suffix(".pak").or_else(|| output_base.strip_suffix(".utoc")).unwrap_or(output_base).to_string();
 
     progress.emit(VfxPipelineProgress {
         stage: "Creating IOStore bundle".to_string(),
@@ -883,6 +877,12 @@ pub async fn pack_to_iostore(
         message: "IOStore bundle created successfully".to_string(),
     });
 
+    for ext in ["pak", "utoc", "ucas"] {
+        let path = format!("{output_base}.{ext}");
+        if !Path::new(&path).is_file() {
+            return Err(format!("[VFX] Rebuilt bundle is missing .{ext}; the original mod was kept."));
+        }
+    }
     Ok(format!("{}.utoc", output_base))
 }
 

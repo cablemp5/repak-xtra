@@ -55,6 +55,7 @@ pub fn legacy_setup_status(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Vec
 
 #[tauri::command]
 pub fn legacy_setup_disable(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<(), String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?;
     if crate::is_game_process_running() { return Err("Close Marvel Rivals before disabling the older setup.".into()); }
     let path = state.lock().unwrap().game_path.clone();

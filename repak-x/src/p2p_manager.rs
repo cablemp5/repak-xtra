@@ -521,7 +521,8 @@ impl UnifiedP2PManager {
                         *guard = Some(client.progress_handle());
                     }
 
-                    match client.download_pack(&out, client_name.clone()) {
+                    let received = client.download_pack(&out, client_name.clone());
+                    match received {
                         Ok(pack) => {
                             info!(
                                 "[P2P] Download complete! {} mods received via {}",
