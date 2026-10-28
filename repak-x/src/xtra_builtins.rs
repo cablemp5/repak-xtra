@@ -69,7 +69,8 @@ static FAILED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new())
 fn made_for(id: &str, s: &Saved, build: &str) -> String {
     let mut excluded = s.excluded.clone();
     excluded.sort();
-    format!("{build}|{excluded:?}|{:?}|{}", s.quake.clone().unwrap_or_default(), id == CUSTOM_QUAKE)
+    // "enc": a build kept from before CustomQuake was encrypted is not put in
+    format!("{build}|{excluded:?}|{:?}|{}|enc", s.quake.clone().unwrap_or_default(), id == CUSTOM_QUAKE)
 }
 
 fn failed_key(id: &str, s: &Saved, build: &str) -> String {
@@ -111,6 +112,9 @@ struct Saved {
     /// Old CustomQuake bundles must rebuild once with V6 packaging.
     #[serde(default)]
     built_quake_packaging: bool,
+    /// CustomQuake bundles built before they were encrypted rebuild once, encrypted.
+    #[serde(default)]
+    built_quake_encrypted: bool,
     /// CustomQuake: the other quake mods that were on at the last build or refresh (read off the main thread)
     #[serde(default)]
     overlaps: Vec<String>,
@@ -208,7 +212,7 @@ fn fits(s: &Saved, build: &str) -> bool {
     let mut wanted = s.excluded.clone();
     wanted.sort();
     s.built_for.as_deref() == Some(build) && made == wanted && s.built_quake.clone().unwrap_or_default() == s.quake.clone().unwrap_or_default()
-        && (s.built_quake.is_none() || s.built_quake_packaging)
+        && (s.built_quake.is_none() || (s.built_quake_packaging && s.built_quake_encrypted))
 }
 
 /// Off: the .pak goes aside, the rest stays, so turning it on again needs no rebuild.
@@ -487,7 +491,12 @@ async fn make(tool: &Path, id: &str, excluded: &[String], quake: &crate::xtra_qu
     let usmap = usmap().await?;
     #[cfg(feature = "extended")]
     if id == CUSTOM_QUAKE { // repakxtra: new 1x1 packages, not a table edit
-        return crate::xtra_quake::make(&tool, &usmap, paks, work, out_base, quake, &game_build(paks), stopped).await.map(|summary| (summary, Vec::new()));
+        let summary = crate::xtra_quake::make(&tool, &usmap, paks, work, out_base, quake, &game_build(paks), stopped).await?;
+        // every build goes in encrypted, as if run through Encrypt mods
+        let base = out_base.to_path_buf();
+        tauri::async_runtime::spawn_blocking(move || crate::xtra_encrypt::encrypt_built(&base)).await.map_err(|e| e.to_string())?
+            .map_err(|e| format!("CustomQuake was built but could not be encrypted, so nothing was installed: {e}"))?;
+        return Ok((summary, Vec::new()));
     }
     let tables: &[&str] = if id == DEFAULT_SKIN { &[SKIN, UI] } else { &[LOGO] };
     let (legacy, json, edited, rt, staged) = (work.join("legacy"), work.join("json"), work.join("edited"), work.join("rt"), work.join("mod"));
@@ -633,6 +642,7 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
                 s.built_excluded = excluded.clone();
                 s.built_quake = (id == CUSTOM_QUAKE).then(|| quake.clone());
                 s.built_quake_packaging = id == CUSTOM_QUAKE;
+                s.built_quake_encrypted = id == CUSTOM_QUAKE;
                 s.nothing = false;
                 s.built_at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_secs());
                 s.summary = Some(summary.clone());
@@ -1083,6 +1093,8 @@ mod tests {
         let mut s = Saved { built_for: Some("b1".into()), built_quake: Some(Default::default()), ..Default::default() };
         assert!(!fits(&s, "b1"));
         s.built_quake_packaging = true;
+        assert!(!fits(&s, "b1"), "an unencrypted build rebuilds once, encrypted");
+        s.built_quake_encrypted = true;
         assert!(fits(&s, "b1"));
     }
 

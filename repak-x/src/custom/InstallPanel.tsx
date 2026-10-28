@@ -14,7 +14,7 @@ import CustomDropdown from '../components/CustomDropdown'
 import bundledHeroes from '../data/character_data.json'
 import { type CharacterDataEntry, FALLBACK_HERO_ID, resolveHeroImage, useHeroImages } from '../utils/heroImages'
 import { commitInstallLoadout, setInstallDraft, startingLoadouts } from './installLoadout'
-import { OTHER, OTHER_LABEL, addGroup, useGroups, useLoadouts } from './loadoutStore'
+import { OTHER, OTHER_LABEL, addGroup, byRecent, useGroups, useLoadouts } from './loadoutStore'
 import { useMediaUrl } from './loadoutMedia'
 import { silhouetteOf } from './silhouettes'
 import { installsPlain } from './uiPrefs'
@@ -275,7 +275,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
   // Esc: App closes the dialog. Enter is each control's own: the Install button installs, a name field commits its name
   const focus = useDialogFocus() // focus inside, Tab stays inside, back to the opener on close
 
-  const targetOptions = [{ value: NEW, label: 'New loadout' }, ...loadouts.map(l => ({ value: l.id, label: `Add to ${l.name}`, name: l.name }))]
+  const targetOptions = [{ value: NEW, label: 'New loadout' }, ...byRecent(loadouts).map(l => ({ value: l.id, label: `Add to ${l.name}`, name: l.name }))]
   const hybridPair = mods.length > 1 && mods.some(m => m.contains_uassets !== false) && mods.some(m => m.contains_raw_assets && m.contains_uassets === false)
 
   return (

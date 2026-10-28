@@ -219,7 +219,7 @@
       document.documentElement.setAttribute('data-build', BUILD);
       document.querySelector('.splash-build').textContent = BUILD + ' build';
     }
-    var SECONDARY_WINDOW_ROUTES = ['vfx-updater', 'asset-explorer'];
+    var SECONDARY_WINDOW_ROUTES = ['vfx-updater', 'asset-explorer', '/encrypt'];
     if (SECONDARY_WINDOW_ROUTES.some(function (route) {
       return window.location.href.includes(route);
     })) {

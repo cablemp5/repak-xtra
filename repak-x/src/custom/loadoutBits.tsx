@@ -15,7 +15,7 @@ import { useVfxUpdating } from './vfx/quick'
 import { GAME_RUNNING } from './keepOne'
 import { CaptionIcon, CaptionStyleBar } from './captionStyle'
 import { loadoutHero, silhouetteOf } from './silhouettes'
-// import CaptionBackground from './CaptionBackground' // Deferred background editor; implementation retained.
+import CaptionBackground from './CaptionBackground'
 import './support.css'
 import { captionBackgroundKey } from './loadoutStore'
 
@@ -162,7 +162,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
     : words ? 'Click to edit the text' : undefined
   const remove = !page || empty || editing ? undefined
     : cover === 'image' ? { what: 'image', run: onRemoveImage } : cover === 'capture' ? { what: 'capture', run: onRemoveCapture }
-    : cover === 'text' ? { what: 'text and icon', run: clearCaption } : undefined
+    : cover === 'text' && (caption || l.captionIcon) ? { what: 'text and icon', run: clearCaption } : undefined // a background has its own remove
   const ctaButton = 'lo-text-btn lo-media-gen-btn'
 
   const media = (
@@ -180,11 +180,11 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
         </span>
       )}
       <button type="button" className={`lo-card-image${cardClick ? '' : ' is-still'}`} onClick={cardClick} title={cardTitle} tabIndex={cardClick ? undefined : -1}>
-        {cover === 'text' && captionBackground && <span className="caption-background" aria-hidden="true">
-          <img src={captionBackground} alt="" className="is-loaded" style={{ filter: l.captionBlur ? 'blur(8px)' : undefined, transform: l.captionBlur ? 'scale(1.08)' : undefined }} />
+        {cover === 'text' && captionBackground && <span className={`caption-background${l.captionBlur ? ' is-blur' : ''}`} aria-hidden="true">
+          <img src={captionBackground} alt="" className="is-loaded" />
           {l.captionDark && <span className="caption-background-tint" />}
         </span>}
-        {words
+        {words && !editing /* while typing, only the field shows the words: no second copy under it */
           ? <span className="lo-card-placeholder lo-card-caption" style={tint}>
               <CaptionIcon name={l.captionIcon} className="lo-cap-icon" />{caption && <span>{caption}</span>}
             </span>
@@ -289,8 +289,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
           )
         })}
       </div>
-      {/* Deferred background editor; restore this and its import to expose it again.
-      {cover === 'text' && <CaptionBackground l={l} alert={p.alert} />} */}
+      {cover === 'text' && <CaptionBackground l={l} alert={p.alert} />}
     </div>
   )
 }

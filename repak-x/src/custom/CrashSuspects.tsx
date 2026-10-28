@@ -25,12 +25,12 @@ const OPEN = 'repakxtra-crash-suspects'
  *  toast and the check's answer arrive does not matter. */
 export const previousCrashes = new Set<string>()
 
-/** The crash toast's buttons: upstream's own action, then See suspects. */
+/** The crash toast's buttons: upstream's own action, then See suspects. Short labels: they never break inside a word. */
 export function withSuspects(details: { label: string; onClick: () => void }, payload: CrashPayload): ReactNode {
   return (
     <span className="cs-toast-actions">
-      <button type="button" className="toast-action-btn" onClick={e => { e.stopPropagation(); details.onClick() }}>{details.label}</button>
-      <button type="button" className="toast-action-btn" onClick={e => { e.stopPropagation(); window.dispatchEvent(new CustomEvent(OPEN, { detail: { payload, previous: previousCrashes.has(payload.crash_folder ?? '') } })) }}>See suspects</button>
+      <button type="button" className="toast-action-btn is-short" onClick={e => { e.stopPropagation(); details.onClick() }}>{details.label}</button>
+      <button type="button" className="toast-action-btn is-short" onClick={e => { e.stopPropagation(); window.dispatchEvent(new CustomEvent(OPEN, { detail: { payload, previous: previousCrashes.has(payload.crash_folder ?? '') } })) }}>See suspects</button>
     </span>
   )
 }
