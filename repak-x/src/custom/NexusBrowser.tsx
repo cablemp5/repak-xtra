@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUpCircle, Check, Download, Heart, Search, X } from 'lucide-react'
 import CustomDropdown from '../components/CustomDropdown'
-import { gql, getNexusFile, installFromNexus, openNexusPage, updateOf, useNexusUpdates } from './nexus'
+import { gql, getNexusFile, installFromNexus, openNexusPage, plain, updateOf, useNexusUpdates } from './nexus'
 import { sourceOf, useNexusVersion } from './nexusSource'
 import { useView } from './loadoutStore'
 
@@ -22,8 +22,6 @@ const PAGE = 24
 const QUERY = `query($f: ModsFilter, $s: [ModsSort!], $o: Int, $c: Int) {
   mods(filter: $f, sort: $s, offset: $o, count: $c) { totalCount nodes { modId name author summary endorsements downloads thumbnailLargeUrl } } }`
 
-/** Nexus sends names and summaries with HTML entities (&#39;): plain text. */
-const plain = (s: string) => new DOMParser().parseFromString(s, 'text/html').documentElement.textContent ?? s
 const count = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 })
 
 export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {

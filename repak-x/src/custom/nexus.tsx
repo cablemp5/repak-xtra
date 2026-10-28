@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { ExternalLink, KeyRound, LogOut } from 'lucide-react'
+import { ExternalLink, KeyRound, LogOut, X } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import type { NexusSource } from './nexusSource'
 import nexusLogo from './logos/nexus.png'
@@ -32,6 +32,9 @@ const useChecked = () => useSyncExternalStore(subscribe, () => checked)
 const loadAccount = () => invoke<Account | null>('xtra_nexus_account')
   .then(a => { account = a }, () => { account = null }) // offline: no account until the next start, nothing breaks
   .finally(() => { checked = true; notify() })
+
+/** Nexus sends names and summaries with HTML entities (&#39;): plain text. */
+export const plain = (s: string) => new DOMParser().parseFromString(s, 'text/html').documentElement.textContent ?? s
 
 /** One query to Nexus's public GraphQL API (no key needed). */
 export const gql = <T,>(query: string, variables: Record<string, unknown> = {}) => invoke<T>('xtra_nexus_gql', { query, variables })
@@ -162,6 +165,58 @@ export function useNexus(h: Handlers) {
     })
     return () => { un.then(f => f()) }
   }, [])
+}
+
+type Picture = { modId: number; name: string; pictureUrl: string | null; thumbnailLargeUrl: string | null }
+
+/** The loadout page's From Nexus (over its Image cover): the main picture of each Nexus mod in the loadout. A click
+ *  makes it the loadout's image (`onPick`, which says itself when it could not save). Esc or a click outside closes. */
+export function NexusPictures({ ids, onPick, onClose }: { ids: number[]; onPick: (image: Blob) => Promise<boolean>; onClose: () => void }) {
+  const [pics, setPics] = useState<Picture[] | null>(null)
+  const [busy, setBusy] = useState<number | null>(null)
+  const [error, setError] = useState('')
+  const box = useRef<HTMLDivElement>(null)
+  const close = useRef(onClose)
+  close.current = onClose
+  useEffect(() => {
+    const list = ids.map(id => `{ gameDomain: "marvelrivals", modId: ${id} }`).join(', ') // numbers only: nothing to escape
+    gql<{ legacyModsByDomain: { nodes: Picture[] } }>(`{ legacyModsByDomain(ids: [${list}]) { nodes { modId name pictureUrl thumbnailLargeUrl } } }`)
+      .then(d => setPics(d.legacyModsByDomain.nodes.filter(p => p.pictureUrl)), e => setError(String(e)))
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); close.current() } }
+    const out = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) close.current() }
+    window.addEventListener('keydown', key, true)
+    document.addEventListener('mousedown', out)
+    box.current?.focus()
+    return () => { window.removeEventListener('keydown', key, true); document.removeEventListener('mousedown', out) }
+  }, [ids.join()]) // eslint-disable-line react-hooks/exhaustive-deps
+  const pick = async (p: Picture) => {
+    setBusy(p.modId); setError('')
+    try {
+      const r = await fetch(p.pictureUrl!)
+      if (!r.ok) throw new Error(`Nexus Mods answered ${r.status}`)
+      if (await onPick(await r.blob())) close.current()
+    } catch (e) { setError(`The picture did not download. ${e instanceof Error ? e.message : e}`) } finally { setBusy(null) }
+  }
+  return (
+    <div className="nx-pics" ref={box} role="dialog" aria-label="Pictures from Nexus Mods" tabIndex={-1}>
+      <div className="nx-pics-head">
+        <span>Pictures from Nexus Mods</span>
+        <button type="button" className="lo-icon" aria-label="Close" title="Close" onClick={() => close.current()}><X size={14} /></button>
+      </div>
+      {!pics && !error && <small>Loading…</small>}
+      {pics && !pics.length && <small>None of these mods has a picture on Nexus Mods.</small>}
+      {pics && pics.length > 0 && (
+        <div className="nx-pics-grid">
+          {pics.map(p => (
+            <button key={p.modId} type="button" className="nx-pic" disabled={busy !== null} aria-busy={busy === p.modId} onClick={() => pick(p)} title={`Use the picture of ${plain(p.name)}`}>
+              <img src={p.thumbnailLargeUrl ?? p.pictureUrl!} alt={plain(p.name)} loading="lazy" />
+            </button>
+          ))}
+        </div>
+      )}
+      {error && <small role="alert">{error}</small>}
+    </div>
+  )
 }
 
 /** Settings > General > Nexus Mods: paste a personal API key, or see who is signed in and sign out. */
