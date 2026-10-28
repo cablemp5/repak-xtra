@@ -102,6 +102,7 @@ const quakeProgress = () => {
 if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
   mockWindows('main')
   mock.__mockRelease = localStorage.getItem('mock.release') === '1' // custom/AppFiles.tsx
+  mock.__mockBackend = true // custom/loadoutCardDraw.ts: Save downloads the card here
   mockIPC((cmd, args: any) => {
     mock.__calls[cmd] = (mock.__calls[cmd] ?? 0) + 1
     switch (cmd) {
