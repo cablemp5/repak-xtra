@@ -40,6 +40,7 @@ type ModDetailsData = {
   is_iostore?: boolean
   is_encrypted?: boolean
   is_hybrid?: boolean
+  files_partial?: boolean // repakxtra: `files` is only what the Library reads
   [key: string]: any
 }
 
@@ -69,19 +70,23 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
       setError(null)
 
       // Check if we already have details for this mod
-      if (initialDetails && (initialDetails.mod_path === mod.path || !initialDetails.mod_path)) {
+      const preloaded = initialDetails && (initialDetails.mod_path === mod.path || !initialDetails.mod_path)
+      if (preloaded) {
         setDetails(initialDetails)
         setLoading(false)
-        return
+        // repakxtra: the Library holds only part of the file list (xtra_library_files.rs): the whole one is fetched below,
+        // without the loading state, while the rest shows
+        if (!initialDetails.files_partial) return
       }
 
       // Need to fetch details
       try {
-        setLoading(true)
+        if (!preloaded) setLoading(true)
         setError(null)
         console.log('Loading details for:', mod.path)
         const modDetails = await invoke<ModDetailsData>('get_mod_details', {
-          modPath: mod.path
+          modPath: mod.path,
+          fullFiles: true // repakxtra
         })
 
         // Check if this request is still relevant
@@ -294,7 +299,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
                   </div>
                 )}
                 {/* No UAssets badge - show if mod has no .uasset files (but not for IoStore bundles) */}
-                {!details.is_iostore && details.files && details.files.length > 0 && !details.files.some(f => f.toLowerCase().endsWith('.uasset')) && (
+                {!details.is_iostore && (details.file_count ?? details.files?.length ?? 0) > 0 && !details.files?.some(f => f.toLowerCase().endsWith('.uasset')) && ( /* repakxtra: file_count, the Library's partial list keeps any .uasset */
                   <div className="no-uassets-badge" title="This mod contains no UAsset files" style={{ padding: '0.4rem 0.75rem', display: 'inline-block' }}>Raw Assets</div>
                 )}
               </div>
@@ -335,6 +340,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <button
                     className="copy-paths-btn"
+                    disabled={details.files_partial /* repakxtra: until the whole list is here */}
                     onClick={(e) => {
                       const allPaths = (details.files || [])
                         .map(p => p.replace(/^\/Game\//i, ''))
@@ -363,7 +369,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
                 </div>
               </div>
               <div className="file-list-container" style={{ border: '1px solid var(--panel-border)', borderRadius: '4px', background: 'var(--bg-darker)' }}>
-                <FileTree files={details.files} />
+                {details.files_partial ? null : <FileTree files={details.files} />}{/* repakxtra: until the whole list is here */}
               </div>
             </div>
           </>

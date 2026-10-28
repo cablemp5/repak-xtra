@@ -43,6 +43,7 @@ mod xtra_game; // repakxtra: the game update notice
 mod xtra_quake; // repakxtra: CustomQuake built-in (flat map textures)
 mod xtra_role; // repakxtra: Claim role on cable's Discord card
 mod xtra_extract; // repakxtra: unpacks only archives whose paths stay inside the output folder
+mod xtra_library_files; // repakxtra: the part of a mod's file list the Library reads
 mod xtra_details_cache; // repakxtra: the mod details cache kept between launches
 mod xtra_vfx; // repakxtra: VFX fixing after game updates
 mod xtra_niagara; // repakxtra: the VFX Updater's Niagara step
@@ -7242,19 +7243,63 @@ struct ModDetails {
     is_encrypted: bool,
     has_blueprint: bool,
     is_hybrid: bool,
+    /// repakxtra: `files` holds only what the Library reads (xtra_library_files.rs), not the whole list
+    #[serde(default)]
+    files_partial: bool,
+    /// repakxtra: that part, worked out once when the mod is read and kept in the saved cache (never sent itself)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    library_files: Option<Vec<String>>,
+    /// repakxtra: of an IoStore mod's `files`, how many came from its .utoc (the .pak's own follow): the conflict check
+    /// reads that part from here instead of the disk
+    #[serde(default)]
+    utoc_files: Option<usize>,
 }
 
 #[tauri::command]
 async fn get_mod_details(
     mod_path: String,
     _detect_blueprint: Option<bool>,
+    full_files: Option<bool>, // repakxtra: the whole file list (the details panel); otherwise only what the Library reads
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<ModDetails, String> {
     // repakxtra: a blocking thread, so a library's worth of these at once never starves the other commands' workers
     let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || compute_mod_details(&PathBuf::from(&mod_path), &state))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        // repakxtra: a cache hit for the Library copies only the small part, never the whole file list
+        if full_files != Some(true) {
+            let path = PathBuf::from(&mod_path);
+            let fingerprint = mod_fingerprint(&path);
+            let mut st = state.lock().unwrap();
+            if let Some((cached, d)) = st.mod_details_cache.get_mut(&path) {
+                if *cached == fingerprint {
+                    if let Some(copy) = library_copy(d) {
+                        return Ok(copy);
+                    }
+                }
+            }
+        }
+        let mut details = compute_mod_details(&PathBuf::from(&mod_path), &state)?;
+        let library = details.library_files.take();
+        if full_files != Some(true) {
+            details.files = library.unwrap_or_else(|| xtra_library_files::library_files(&details.files));
+            details.files_partial = true;
+        }
+        Ok(details)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// repakxtra: the Library's copy of cached details: every field but the whole file list, which stays in the cache.
+fn library_copy(d: &mut ModDetails) -> Option<ModDetails> {
+    let library = d.library_files.clone()?;
+    let files = std::mem::take(&mut d.files);
+    let mut copy = d.clone(); // without its files, so only the small fields are copied
+    d.files = files;
+    copy.files = library;
+    copy.files_partial = true;
+    copy.library_files = None;
+    Some(copy)
 }
 
 /// The body of [`get_mod_details`], callable from other commands.
@@ -7306,6 +7351,7 @@ fn compute_mod_details(
     // status — so we don't have to make a second call later.
     let mut pak_list_info: Option<uasset_toolkit::PakListResult> = None;
     let mut is_hybrid = false;
+    let mut utoc_count = None; // repakxtra: see ModDetails::utoc_files
     let files: Vec<String> = if is_iostore {
         // For IoStore, read from utoc (handles both normal and obfuscated containers)
         use crate::utoc_utils::read_utoc;
@@ -7313,6 +7359,7 @@ fn compute_mod_details(
             .iter()
             .map(|entry| entry.file_path.clone())
             .collect();
+        utoc_count = Some(utoc_files.len()); // repakxtra
 
         // For Hybrid detection: Check if the .pak file also contains raw assets
         if path.exists() && path.extension().unwrap_or_default() == "pak" {
@@ -7441,7 +7488,11 @@ fn compute_mod_details(
         is_encrypted,
         has_blueprint,
         is_hybrid,
+        files_partial: false,
+        library_files: None,
+        utoc_files: utoc_count,
     };
+    let details = ModDetails { library_files: Some(xtra_library_files::library_files(&details.files)), ..details }; // repakxtra
 
     // --- Cache store ---
     {
@@ -7643,12 +7694,29 @@ async fn check_mod_clashes(
     static ONE_SCAN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
     let game_path = state.lock().unwrap().game_path.clone();
     let _turn = ONE_SCAN.lock().await;
-    tokio::task::spawn_blocking(move || scan_mod_clashes(quiet == Some(true), &game_path))
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || scan_mod_clashes(quiet == Some(true), &game_path, &state))
         .await
         .map_err(|e| format!("Conflict check stopped: {e}"))?
 }
 
-fn scan_mod_clashes(quiet: bool, game_path: &Path) -> Result<Vec<ModClash>, String> {
+/// repakxtra: a container's file list as the conflict check reads it (the .utoc's for IoStore, else the .pak's), from
+/// the saved mod details when they are current: after a restart the check then reads no mod from the disk again.
+fn clash_files_from_details(state: &Arc<Mutex<AppState>>, pak: &Path, is_iostore: bool) -> Option<Vec<String>> {
+    let fingerprint = mod_fingerprint(pak);
+    let st = state.lock().unwrap();
+    let (cached, d) = st.mod_details_cache.get(pak)?;
+    if *cached != fingerprint {
+        return None;
+    }
+    match (is_iostore, d.utoc_files) {
+        (true, Some(n)) if n <= d.files.len() => Some(d.files[..n].to_vec()),
+        (false, _) if !d.is_iostore => Some(d.files.clone()),
+        _ => None,
+    }
+}
+
+fn scan_mod_clashes(quiet: bool, game_path: &Path, state: &Arc<Mutex<AppState>>) -> Result<Vec<ModClash>, String> {
     let started = std::time::Instant::now();
 
     if !quiet { // repakxtra
@@ -7706,6 +7774,9 @@ fn scan_mod_clashes(quiet: bool, game_path: &Path) -> Result<Vec<ModClash>, Stri
 
         // Get file list (repakxtra: cached until the container changes)
         let listed = crate::xtra_conflicts::files_cached(path, is_iostore.then_some(utoc_path.as_path()), || {
+            if let Some(files) = clash_files_from_details(state, path, is_iostore) {
+                return Ok(files); // repakxtra
+            }
             if is_iostore {
                 Ok(crate::utoc_utils::read_utoc(&utoc_path).iter().map(|entry| entry.file_path.clone()).collect())
             } else {
