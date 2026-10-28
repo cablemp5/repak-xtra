@@ -7,7 +7,10 @@ fn main() {
         let hash = hash.trim();
         let valid = hash.len() == 64 && hash.bytes().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase());
         assert!(valid || std::env::var_os("CARGO_FEATURE_CUSTOM_PROTOCOL").is_none(), "Configure the shared extended code with scripts/Set-ExtendedUnlockCode.ps1 before building.");
-        println!("cargo:rustc-env=REPAKXTRA_UNLOCK_HASH={}", if valid { hash } else { "" });
+        // Only sha256(hash) ships: the hash itself is the saved receipt, so it must not be readable from the exe.
+        use sha2::{Digest, Sha256};
+        let bundled = if valid { format!("{:x}", Sha256::digest(hash.as_bytes())) } else { String::new() };
+        println!("cargo:rustc-env=REPAKXTRA_UNLOCK_HASH={bundled}");
     }
     // A direct Cargo build must not embed the other edition's previously built frontend.
     println!("cargo:rerun-if-changed=dist/edition.json");

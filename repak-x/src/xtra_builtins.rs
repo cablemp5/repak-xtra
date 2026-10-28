@@ -60,6 +60,22 @@ async fn wait_for_build(id: &str, stop: bool) {
     }
 }
 
+/// Builds that failed in this run (`id|made_for`): the automatic checks (start, focus, the game closing) leave them
+/// alone until the game build, the options or the app run change, so a failing CustomQuake is not redone on every focus.
+/// The switch and Try again still build them.
+static FAILED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// What a build of `id` is made from: the game build and its options (a kept build and a failed try are keyed on it).
+fn made_for(id: &str, s: &Saved, build: &str) -> String {
+    let mut excluded = s.excluded.clone();
+    excluded.sort();
+    format!("{build}|{excluded:?}|{:?}|{}", s.quake.clone().unwrap_or_default(), id == CUSTOM_QUAKE)
+}
+
+fn failed_key(id: &str, s: &Saved, build: &str) -> String {
+    format!("{id}|{}", made_for(id, s, build))
+}
+
 /// Clears IN_FLIGHT when a build ends, whichever way.
 struct Flight;
 impl Drop for Flight {
@@ -122,6 +138,9 @@ pub struct BuiltinView {
     quake: Option<crate::xtra_quake_options::Options>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     overlaps: Vec<String>,
+    /// Its last build for these options failed in this run: the automatic checks do not try it again (FAILED)
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    gave_up: bool,
 }
 
 fn store_path() -> PathBuf {
@@ -229,6 +248,7 @@ fn view(id: &str, s: &Saved, dir: &Path, build: &str) -> BuiltinView {
         size: files_of(dir, id).iter().filter_map(|f| std::fs::metadata(f).ok()).map(|m| m.len()).sum(),
         quake: (id == CUSTOM_QUAKE).then(|| s.quake.clone().unwrap_or_default()),
         overlaps: if id == CUSTOM_QUAKE && s.on { s.overlaps.clone() } else { Vec::new() },
+        gave_up: s.error.is_some() && FAILED.lock().unwrap_or_else(|e| e.into_inner()).contains(&failed_key(id, s, build)),
     }
 }
 
@@ -559,11 +579,21 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
     }
     // a finished build the game kept out last time (it opened while it built): made for this game and these options
     let pending = std::env::temp_dir().join("repak-x").join("xbuiltin-pending").join(id);
-    let made_for = format!("{}|{:?}|{:?}|{}", game_build(paks), { let mut e = excluded.clone(); e.sort(); e }, quake, id == CUSTOM_QUAKE);
+    let saved = all.get(id).cloned().unwrap_or_default();
+    let made_for = made_for(id, &saved, &game_build(paks));
+    let failed_key = failed_key(id, &saved, &game_build(paks));
     let kept = std::fs::read_to_string(pending.join("made-for")).ok().filter(|k| *k == made_for).and_then(|_| std::fs::read_to_string(pending.join("summary")).ok());
     let (made, from) = match kept {
         Some(summary) => (Ok((summary, Vec::new())), pending.join(stem(id))),
         None => (async { make(&get_uasset_tool_path(app)?, id, &excluded, &quake, paks, &work, &out_base).await }.await, out_base.clone()),
+    };
+    // the other quake mods that are on (a walk of ~mods), read off the async threads before any lock is taken
+    #[cfg(not(feature = "extended"))]
+    let overlaps: Vec<String> = Vec::new();
+    #[cfg(feature = "extended")]
+    let overlaps = match dir.parent().filter(|_| id == CUSTOM_QUAKE && made.is_ok()) {
+        Some(root) => { let root = root.to_path_buf(); tauri::async_runtime::spawn_blocking(move || crate::xtra_quake::overlapping(&root)).await.unwrap_or_default() }
+        None => Vec::new(),
     };
     let _moving = INSTALL.lock().unwrap_or_else(|e| e.into_inner());
     // turned off while it built (the switch saves first, then waits for this build): nothing goes into the game
@@ -586,11 +616,14 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
         clean(&pending);
     }
     clean(&work);
-    // the other quake mods that are on, read before the saved state is locked (a walk of ~mods)
-    #[cfg(not(feature = "extended"))]
-    let overlaps: Vec<String> = Vec::new();
-    #[cfg(feature = "extended")]
-    let overlaps = if id == CUSTOM_QUAKE && result.is_ok() { dir.parent().map(crate::xtra_quake::overlapping).unwrap_or_default() } else { Vec::new() };
+    {
+        let mut failed = FAILED.lock().unwrap_or_else(|e| e.into_inner());
+        failed.retain(|k| *k != failed_key);
+        // a build the game kept out is not a failed one: it goes in once the game closes
+        if result.is_err() && blocked.is_none() {
+            failed.push(failed_key);
+        }
+    }
     // the state as it is now: the other built-in may have changed while this one built
     update(|all| {
         let s = all.entry(id.to_string()).or_default();
@@ -794,7 +827,7 @@ pub async fn xtra_builtins_refresh(app: tauri::AppHandle, state: State<'_, Arc<M
         return Ok(views(&state)); // Repak X or the game is open: wait for the next check
     }
     for v in views(&state) {
-        if v.on && !v.current {
+        if v.on && !v.current && !v.gave_up {
             let _ = build(&app, &v.id, &dir, &paks).await; // the error is saved on the built-in and shown on its card
         }
     }
@@ -1106,6 +1139,22 @@ mod tests {
         keep(&pending.join(stem(CUSTOM_QUAKE)), &pending, CUSTOM_QUAKE, "build|[]|opts", "x").unwrap();
         assert_eq!(std::fs::read_to_string(pending.join("summary")).unwrap(), "31,011 textures set", "the kept one is left as it is");
         assert!(keep(&d.path().join("missing").join("x"), &d.path().join("p2"), CUSTOM_QUAKE, "k", "s").is_err(), "nothing to keep");
+    }
+
+    #[test]
+    fn a_failed_build_waits_for_a_new_game_or_new_options() {
+        let mut s = Saved { on: true, error: Some("Could not pack".into()), ..Default::default() };
+        let dir = Path::new("nowhere");
+        assert!(!view(SKIP_INTRO, &s, dir, "b1").gave_up, "not failed in this run yet");
+        FAILED.lock().unwrap().push(failed_key(SKIP_INTRO, &s, "b1"));
+        assert!(view(SKIP_INTRO, &s, dir, "b1").gave_up);
+        assert!(!view(SKIP_INTRO, &s, dir, "b2").gave_up, "a game update tries again");
+        assert!(!view(DEFAULT_SKIN, &s, dir, "b1").gave_up, "another built-in is its own");
+        s.excluded = vec!["1011".into()];
+        assert!(!view(SKIP_INTRO, &s, dir, "b1").gave_up, "new options try again");
+        s.excluded.clear();
+        s.error = None;
+        assert!(!view(SKIP_INTRO, &s, dir, "b1").gave_up, "switched on again (the error is cleared): it builds");
     }
 
     /// Builds the built-ins from the installed game into a temp folder (UAssetTool.dll must sit beside the test binary):

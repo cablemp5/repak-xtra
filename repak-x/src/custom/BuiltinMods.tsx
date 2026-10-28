@@ -23,7 +23,7 @@ import { ROLES, type Role } from './heroRoles'
 /** CustomQuake's options (xtra_quake.rs Options): colors as 6 hex digits */
 export type Quake = { base: string; sky: string; hidePlants: boolean; lobby: boolean }
 export type Builtin = { id: string; on: boolean; excluded: string[]; current: boolean; active: boolean; builtAt?: number; summary?: string; heroes: string[]; error?: string; path: string; size: number
-  quake?: Quake; overlaps?: string[] }
+  quake?: Quake; overlaps?: string[]; gaveUp?: boolean }
 
 // icon: a pixel-grid drawing (PixelIcon.tsx), sharp at any display scale. A new built-in adds its drawing there
 const ABOUT: Record<string, { name: string; what: string; icon: BuiltinIconComponent }> = {
@@ -74,10 +74,11 @@ export function revealBuiltin(id: string) {
 const load = () => invoke<Builtin[]>('xtra_builtins_list').then(v => { list = v.filter(b => EXTENDED || (b.id !== 'custom-quake' && b.id !== 'force-default-skin')); emit() }).catch(e => console.warn('[builtins]', e))
 
 /** Rebuild the ones that are on but not current (a game update, a hero change a failed build left behind). Skipped while
- *  the game runs (its files are locked): at start from App.tsx, and from the section once the game closes. */
+ *  the game runs (its files are locked): at start from App.tsx, and from the section once the game closes. A build that
+ *  failed for this game and these options in this run waits for Try again (gaveUp), not for the next focus. */
 export async function refreshBuiltins() {
   await load()
-  const stale = list.filter(b => b.on && !b.current).map(b => b.id)
+  const stale = list.filter(b => b.on && !b.current && !b.gaveUp).map(b => b.id)
   if (!stale.length || busy.size || await invoke<boolean>('check_game_running').catch(() => false)) return
   busy = new Set(stale); emit()
   try { list = await invoke<Builtin[]>('xtra_builtins_refresh') } catch (e) { console.warn('[builtins] refresh', e) }
@@ -113,8 +114,14 @@ async function change(id: string, args: { on?: boolean; excluded?: string[]; qua
   busy = new Set([...busy].filter(x => x !== id)); emit()
 }
 
-/** Stops CustomQuake's build (it saves Off, and the build gives up at its next batch). */
-const stopBuild = (id: string, alert: LoadoutProps['alert']) => { wanted.set(id, false); emit(); void invoke<Builtin[]>('xtra_builtins_set', { id, on: false }).then(v => { list = v.filter(b => EXTENDED || (b.id !== 'custom-quake' && b.id !== 'force-default-skin')); emit() }).catch(e => alert.error(`${ABOUT[id].name} not stopped`, String(e))) }
+/** Stops CustomQuake's build (it saves Off, and the build gives up at its next batch). Refused (the game opened): the row
+ *  shows the build again, with its Stop button. */
+const stopBuild = (id: string, alert: LoadoutProps['alert']) => {
+  wanted.set(id, false); emit()
+  void invoke<Builtin[]>('xtra_builtins_set', { id, on: false })
+    .then(v => { list = v.filter(b => EXTENDED || (b.id !== 'custom-quake' && b.id !== 'force-default-skin')); emit() })
+    .catch(e => { wanted.delete(id); emit(); void load(); alert.error(`${ABOUT[id].name} not stopped`, String(e)) })
+}
 
 const units = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'} ago`
 const ago = (secs?: number) => {
@@ -289,6 +296,16 @@ function HeroPicker({ id, b, open, building, blocked, onDone, alert }: { id: str
   )
 }
 
+/** A color typed or pasted: only a full color is taken. While it has focus it keeps what is typed (the field stays put
+ *  as a color completes), else it shows the picked color. */
+function HexInput({ value, onChange, label, disabled }: { value: string; onChange: (v: string) => void; label: string; disabled: boolean }) {
+  const shown = `#${value.toUpperCase()}`
+  const [text, setText] = useState<string | null>(null)
+  return <input className="bq-hex" value={text ?? shown} maxLength={7} spellCheck={false} aria-label={`${label}, hex`} disabled={disabled}
+    onFocus={() => setText(shown)} onBlur={() => setText(null)}
+    onChange={e => { setText(e.target.value); const v = e.target.value.trim().replace(/^#/, ''); if (/^[0-9a-f]{6}$/i.test(v)) onChange(v.toLowerCase()) }} />
+}
+
 /** CustomQuake's options under its row: two colors and two switches, saved while off, applied in one rebuild while on.
  *  The same fold-open panel and foot as the hero picker (Jakob), four choices only (Hick), out of the way until asked for
  *  (Tesler). The whole switch row is the target, its words included (Fitts). */
@@ -304,9 +321,7 @@ function QuakeOptions({ id, b, open, building, blocked, onDone, alert }: { id: s
     <div className="bq-color">
       <ColorPicker value={draft[key]} onChange={v => set({ [key]: v })} label={label} presets={QUAKE_PRESETS[key]} disabled={building} />
       <span className="bq-color-text"><span>{label}</span>
-        {/* typed or pasted too: only a full color is taken */}
-        <input className="bq-hex" defaultValue={`#${draft[key].toUpperCase()}`} key={draft[key]} maxLength={7} spellCheck={false} aria-label={`${label}, hex`} disabled={building}
-          onChange={e => { const v = e.target.value.trim().replace(/^#/, ''); if (/^[0-9a-f]{6}$/i.test(v)) set({ [key]: v.toLowerCase() }) }} /></span>
+        <HexInput value={draft[key]} onChange={v => set({ [key]: v })} label={label} disabled={building} /></span>
     </div>
   )
   return (
@@ -424,7 +439,7 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
           </button>
         )}
         {building && EXTENDED && b.id === 'custom-quake' && wanted.get(b.id) !== false && (
-          <button type="button" className="lo-text-btn" onClick={() => stopBuild(b.id, alert)} title="Stops within a few seconds, nothing goes into the game"><Square size={11} fill="currentColor" aria-hidden="true" /> Stop building</button>
+          <button type="button" className="lo-text-btn" disabled={blocked} onClick={() => stopBuild(b.id, alert)} title={blocked ? BLOCKED : 'Stops within a few seconds, nothing goes into the game'}><Square size={11} fill="currentColor" aria-hidden="true" /> Stop building</button>
         )}
         {warn && retryable(b.error) && (
           <button type="button" className="lo-text-btn" disabled={blocked} onClick={() => change(b.id, { on: true }, alert)}

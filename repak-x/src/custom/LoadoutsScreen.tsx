@@ -235,6 +235,8 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [genMenu, setGenMenu] = useState(false)
   const [smart, setSmart] = useState(false) // repakxtra: the Smart loadouts dialog
+  // a loadout opened from elsewhere (an In loadout tag, a toast) shows its page, not the Smart page over it
+  useEffect(() => { if (openId) setSmart(false) }, [openId])
   const canGenerate = usePreviewsAvailable()
   const genRef = useRef<HTMLDivElement>(null)
   const [newMenu, setNewMenu] = useState(false) // repakxtra: + New's menu (New loadout, Smart loadouts, New collection)
@@ -354,7 +356,8 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     const close = (e: MouseEvent) => { if (!newWrap.current?.contains(e.target as Node)) setNewMenu(false) }
     const keys = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { e.stopPropagation(); setNewMenu(false); newRef.current?.focus(); return }
-      if (e.key === 'Tab') { setNewMenu(false); return }
+      // focus back on + New first, so Tab moves on from it (the closed menu's item would leave focus nowhere)
+      if (e.key === 'Tab') { if (newWrap.current?.contains(document.activeElement)) newRef.current?.focus(); setNewMenu(false); return }
       if ((e.key !== 'ArrowDown' && e.key !== 'ArrowUp') || !newWrap.current?.contains(document.activeElement)) return
       e.preventDefault()
       const all = [...(newWrap.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? [])]

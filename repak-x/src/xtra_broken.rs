@@ -52,14 +52,21 @@ pub(crate) fn paks_dir(mods_dir: &Path) -> Option<PathBuf> {
     mods_dir.ancestors().find(|p| p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("Paks"))).map(Path::to_path_buf)
 }
 
-/// The game's own containers (the .utoc files directly in Paks, never the mods below it).
+/// A container name the game ships (pakchunk0-Windows, pakchunkVFX-Windows, Patch_-Windows_1.1.3962284_P, global), not
+/// a loader or mod an older install put directly in Paks.
+fn is_game_container(file_name: &str) -> bool {
+    let n = file_name.to_ascii_lowercase();
+    n.ends_with(".utoc") && (n.starts_with("pakchunk") || n.starts_with("patch_") || n == "global.utoc")
+}
+
+/// The game's own containers (the game's .utoc files directly in Paks, never the mods below it or beside it).
 pub(crate) fn game_containers(paks: &Path) -> Vec<(PathBuf, u64, u64)> {
     let mut out: Vec<_> = std::fs::read_dir(paks)
         .into_iter()
         .flatten()
         .flatten()
         .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("utoc")))
+        .filter(|p| p.file_name().is_some_and(|n| is_game_container(&n.to_string_lossy())))
         .filter_map(|p| {
             let m = std::fs::metadata(&p).ok()?;
             let at = m.modified().ok()?.duration_since(UNIX_EPOCH).ok()?.as_secs();
@@ -383,6 +390,16 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_games_own_containers_count() {
+        for n in ["pakchunk0-Windows.utoc", "pakchunkVFX-Windows.utoc", "Patch_-Windows_1.1.3962284_P.utoc", "global.utoc"] {
+            assert!(is_game_container(n), "{n}");
+        }
+        for n in ["!ProjectGalacta_9999999_P.utoc", "!ProjectSigeon_9999999_P.utoc", "MyMod_P.utoc", "pakchunk0-Windows.pak"] {
+            assert!(!is_game_container(n), "{n}: a loader, a mod or no container");
+        }
+    }
 
     /// The game holds SK_1026_1026001, last written at 100 (seconds).
     fn game() -> GameAssets {

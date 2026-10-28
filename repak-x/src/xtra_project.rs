@@ -4,26 +4,30 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// (is Sigeon, is active) for a project loader's own file, active or disabled. Only the loader's exact name counts
+/// (`!ProjectGalacta_9999999_P`, `ProjectSigeon`, ...), so mods that merely mention a project are left alone.
 fn project(path: &Path) -> Option<(bool, bool)> {
     let name = path.file_name()?.to_string_lossy().to_ascii_lowercase();
-    let sigeon = if name.contains("projectsigeon") {
-        true
-    } else if name.contains("projectgalacta") {
-        false
-    } else {
-        return None;
+    let stem = [".pak", ".bak_repak", ".pak_disabled", ".pak.off", ".pak.repakxtra-project-off"]
+        .iter()
+        .find_map(|suffix| name.strip_suffix(suffix))
+        .or_else(|| name.rfind(".pak.repakxtra-disabled-").map(|i| &name[..i]))?;
+    let stem = stem.strip_prefix('!').unwrap_or(stem);
+    let stem = stem.strip_suffix("_p").unwrap_or(stem);
+    let stem = stem
+        .rsplit_once('_')
+        .filter(|(_, digits)| !digits.is_empty() && digits.bytes().all(|c| c.is_ascii_digit()))
+        .map_or(stem, |(base, _)| base);
+    let sigeon = match stem {
+        "projectsigeon" => true,
+        "projectgalacta" => false,
+        _ => return None,
     };
-    let active = name.ends_with(".pak");
-    (active
-        || name.ends_with(".bak_repak")
-        || name.ends_with(".pak_disabled")
-        || name.ends_with(".pak.off")
-        || name.ends_with(".pak.repakxtra-project-off")
-        || name.contains(".pak.repakxtra-disabled-"))
-    .then_some((sigeon, active))
+    Some((sigeon, name.ends_with(".pak")))
 }
 
-fn switch(mods: &Path, extended: bool) -> Result<bool, String> {
+/// The renames that select this edition's loader, in order. Read-only: empty when nothing needs to change.
+fn plan(mods: &Path, extended: bool) -> Result<Vec<(PathBuf, PathBuf)>, String> {
     let mods = mods
         .ancestors()
         .find(|p| {
@@ -32,7 +36,7 @@ fn switch(mods: &Path, extended: bool) -> Result<bool, String> {
         })
         .unwrap_or(mods);
     if !mods.is_dir() {
-        return Ok(false);
+        return Ok(Vec::new());
     }
     let mut files: Vec<PathBuf> = Vec::new();
     for entry in walkdir::WalkDir::new(mods)
@@ -82,11 +86,14 @@ fn switch(mods: &Path, extended: bool) -> Result<bool, String> {
     if candidates.len() > 1 && candidates.iter().all(|p| rank(p) == 2) {
         return Err("Multiple disabled copies of the selected project were found. Enable the current copy in the Library or reinstall it in Setup before switching; no files were changed.".into());
     }
-    let chosen = candidates.into_iter().min_by_key(|p| rank(p)).cloned();
+    // With this edition's loader missing, the other one stays as it is: disabling it would leave no loader at all.
+    let Some(chosen) = candidates.into_iter().min_by_key(|p| rank(p)).cloned() else {
+        return Ok(Vec::new());
+    };
     let mut changes = Vec::new();
     // Disable every opposing/duplicate loader before enabling the selected one.
     for path in &files {
-        if project(path).unwrap().1 && Some(path) != chosen.as_ref() {
+        if project(path).unwrap().1 && *path != chosen {
             let off = parked_path(path);
             if off.exists() {
                 let backup = path.with_file_name(format!(
@@ -99,44 +106,43 @@ fn switch(mods: &Path, extended: bool) -> Result<bool, String> {
             changes.push((path.clone(), off));
         }
     }
-    if let Some(path) = &chosen {
-        let name = path.file_name().unwrap().to_string_lossy();
-        let lower = name.to_ascii_lowercase();
-        let pak = if project(path).unwrap().1 {
-            path.clone()
-        } else {
-            let stem_end = lower
-                .find(".pak.")
-                .unwrap_or_else(|| lower.rfind('.').unwrap());
-            path.with_file_name(format!("{}.pak", &name[..stem_end]))
-        };
-        // Legacy .off bundles keep all three files disabled. Restore companions before publishing the PAK.
-        for ext in ["utoc", "ucas"] {
-            let to = pak.with_extension(ext);
-            let expected = format!("{}.off", to.file_name().unwrap().to_string_lossy());
-            let from = fs::read_dir(path.parent().unwrap())
-                .map_err(|e| e.to_string())?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| e.to_string())?
-                .into_iter()
-                .find(|e| {
-                    e.file_name()
-                        .to_string_lossy()
-                        .eq_ignore_ascii_case(&expected)
-                });
-            if let Some(from) = from {
-                if !from.file_type().map_err(|e| e.to_string())?.is_file() {
-                    return Err(format!(
-                        "{} is not a regular companion file",
-                        from.path().display()
-                    ));
-                }
-                changes.push((from.path(), to));
+    let path = &chosen;
+    let name = path.file_name().unwrap().to_string_lossy();
+    let lower = name.to_ascii_lowercase();
+    let pak = if project(path).unwrap().1 {
+        path.clone()
+    } else {
+        let stem_end = lower
+            .find(".pak.")
+            .unwrap_or_else(|| lower.rfind('.').unwrap());
+        path.with_file_name(format!("{}.pak", &name[..stem_end]))
+    };
+    // Legacy .off bundles keep all three files disabled. Restore companions before publishing the PAK.
+    for ext in ["utoc", "ucas"] {
+        let to = pak.with_extension(ext);
+        let expected = format!("{}.off", to.file_name().unwrap().to_string_lossy());
+        let from = fs::read_dir(path.parent().unwrap())
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .find(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .eq_ignore_ascii_case(&expected)
+            });
+        if let Some(from) = from {
+            if !from.file_type().map_err(|e| e.to_string())?.is_file() {
+                return Err(format!(
+                    "{} is not a regular companion file",
+                    from.path().display()
+                ));
             }
+            changes.push((from.path(), to));
         }
-        if !project(path).unwrap().1 {
-            changes.push((path.clone(), pak));
-        }
+    }
+    if !project(path).unwrap().1 {
+        changes.push((path.clone(), pak));
     }
     // A collision in a later companion must leave even the opposing project untouched.
     let mut vacated = std::collections::HashSet::new();
@@ -150,6 +156,11 @@ fn switch(mods: &Path, extended: bool) -> Result<bool, String> {
         vacated.insert(from.clone());
         vacated.remove(to);
     }
+    Ok(changes)
+}
+
+fn switch(mods: &Path, extended: bool) -> Result<bool, String> {
+    let changes = plan(mods, extended)?;
     let mut moved: Vec<(PathBuf, PathBuf)> = Vec::new();
     for (from, to) in changes {
         let result = if to.exists() {
@@ -175,16 +186,6 @@ fn switch(mods: &Path, extended: bool) -> Result<bool, String> {
         }
         moved.push((from, to));
     }
-    if chosen.is_none() && !files.is_empty() {
-        return Err(format!(
-            "The other project was disabled, but {} is not installed. Install it in Setup first.",
-            if extended {
-                "Project Sigeon"
-            } else {
-                "Project Galacta"
-            }
-        ));
-    }
     Ok(!moved.is_empty())
 }
 
@@ -196,7 +197,8 @@ fn parked_path(pak: &Path) -> PathBuf {
 }
 
 pub fn select(mods: &Path) -> Result<bool, String> {
-    if !mods.is_dir() {
+    // Most calls (every launch, every app open) find nothing to switch: those must never wait on or fail a guard.
+    if plan(mods, crate::xtra_edition::EXTENDED)?.is_empty() {
         return Ok(false);
     }
     let _exclusive = crate::xtra_mutation::encrypt()?;
@@ -266,7 +268,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let mods = temp.path().join("Paks/~mods");
         fs::create_dir_all(mods.join("nested")).unwrap();
-        let galacta = mods.parent().unwrap().join("ProjectGalacta-repacked.PAK");
+        let galacta = mods.parent().unwrap().join("ProjectGalacta.PAK");
         let sigeon = mods.join("nested/!ProjectSigeon_9999999_P.bak_repak");
         fs::write(&galacta, b"galacta").unwrap();
         fs::write(&sigeon, b"sigeon").unwrap();
@@ -336,7 +338,7 @@ mod tests {
     }
 
     #[test]
-    fn missing_project_disables_opponent_and_staging_is_ignored() {
+    fn missing_project_leaves_the_opponent_and_staging_is_ignored() {
         let temp = tempfile::tempdir().unwrap();
         let stage = temp.path().join(".repakxtra-encrypt-test");
         fs::create_dir(&stage).unwrap();
@@ -344,11 +346,23 @@ mod tests {
         assert!(!switch(temp.path(), true).unwrap());
         let active = temp.path().join("ProjectGalacta.pak");
         fs::write(&active, b"galacta").unwrap();
-        assert!(switch(temp.path(), true)
-            .unwrap_err()
-            .contains("not installed"));
-        assert!(!active.exists());
-        assert_eq!(fs::read(parked_path(&active)).unwrap(), b"galacta");
+        assert!(plan(temp.path(), true).unwrap().is_empty());
+        assert!(!switch(temp.path(), true).unwrap());
+        assert_eq!(fs::read(&active).unwrap(), b"galacta");
+        assert!(!parked_path(&active).exists());
+    }
+
+    #[test]
+    fn only_the_loaders_own_name_counts() {
+        let is = |name: &str| project(Path::new(name));
+        assert_eq!(is("!ProjectGalacta_9999999_P.pak"), Some((false, true)));
+        assert_eq!(is("!ProjectSigeon_9999999_P.pak.repakxtra-project-off"), Some((true, false)));
+        assert_eq!(is("ProjectGalacta.pak.repakxtra-disabled-abc"), Some((false, false)));
+        assert_eq!(is("ProjectSigeon.bak_repak"), Some((true, false)));
+        assert_eq!(is("BuckySwap_ProjectGalacta_P.pak"), None);
+        assert_eq!(is("ProjectGalacta_Compat_P.pak"), None);
+        assert_eq!(is("ProjectGalacta_Compat_P.pak.repakxtra-project-off"), None);
+        assert_eq!(is("!ProjectGalacta_9999999_P.utoc"), None);
     }
 
     #[test]
@@ -449,8 +463,9 @@ mod tests {
         fs::write(mods.join("ProjectSigeon.bak_repak"), b"sigeon").unwrap();
         let receipt = temp.path().join("settings/receipt");
         let hash = format!("{:x}", Sha256::digest(b"fixture-only"));
+        let bundled = format!("{:x}", Sha256::digest(hash.as_bytes()));
         assert!(
-            crate::xtra_activation::unlock_then("wrong", &hash, &receipt, || panic!(
+            crate::xtra_activation::unlock_then("wrong", &bundled, &receipt, || panic!(
                 "invalid unlock must never switch"
             ))
             .is_err()
@@ -458,7 +473,7 @@ mod tests {
         assert!(!receipt.exists());
         assert!(mods.join("ProjectGalacta.pak").exists());
         assert!(!mods.join("ProjectSigeon.pak").exists());
-        crate::xtra_activation::unlock_then("fixture-only", &hash, &receipt, || {
+        crate::xtra_activation::unlock_then("fixture-only", &bundled, &receipt, || {
             assert_eq!(fs::read_to_string(&receipt).unwrap(), hash);
             switch(&mods, true).unwrap();
         })

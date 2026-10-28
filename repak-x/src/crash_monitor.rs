@@ -234,12 +234,17 @@ pub(crate) fn extract_xml_tag(xml: &str, tag_name: &str) -> Option<String> { // 
 
             // Don't return empty values
             if !value.is_empty() {
-                return Some(value.to_string());
+                return Some(unescape_xml(value)); // repakxtra: decoded, so redaction sees the real quotes and names
             }
         }
     }
 
     None
+}
+
+/// repakxtra: the five XML entities as their characters, &amp; last so "&amp;quot;" stays "&quot;".
+pub(crate) fn unescape_xml(value: &str) -> String {
+    value.replace("&quot;", "\"").replace("&apos;", "'").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
 }
 
 /// Extract specific crash details from error message

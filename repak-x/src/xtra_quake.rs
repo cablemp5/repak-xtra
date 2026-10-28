@@ -551,8 +551,7 @@ async fn read_settings(tool: &Path, usmap: &str, paks: &Path, listed: &[String],
             report(READING, 0.0, false, Some(format!("0 of {}", group_digits(listed.len()))));
         }
         let (legacy, json) = (work.join("legacy"), work.join("json"));
-        let _ = std::fs::remove_dir_all(&legacy);
-        let _ = std::fs::remove_dir_all(&json);
+        remove_dirs(vec![legacy.clone(), json.clone()]).await;
         let began = std::time::Instant::now();
         // without their dependencies (a texture imports only engine classes) and without their pixel data, which is 32 GB
         // of the game and none of the settings (uassettool-patches 0008: the same .uasset and .uexp, checked byte for byte
@@ -571,16 +570,23 @@ async fn read_settings(tool: &Path, usmap: &str, paks: &Path, listed: &[String],
             return Err(format!("Could not read the game's textures: {}", r.message));
         }
         let extracted = began.elapsed();
-        let mut files = Vec::new();
-        for e in walkdir::WalkDir::new(&legacy).into_iter().flatten().filter(|e| e.file_type().is_file()) {
-            let ext = e.path().extension().map(|x| x.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
-            match ext.as_str() {
-                // the pixels are not needed for the settings: gone at once, they are most of the disk space
-                "ubulk" | "uptnl" => { let _ = std::fs::remove_file(e.path()); }
-                "uasset" => files.push(e.path().to_string_lossy().replace('\\', "/")),
-                _ => {}
-            }
-        }
+        let files = {
+            let legacy = legacy.clone();
+            blocking(move || {
+                let mut files = Vec::new();
+                for e in walkdir::WalkDir::new(&legacy).into_iter().flatten().filter(|e| e.file_type().is_file()) {
+                    let ext = e.path().extension().map(|x| x.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+                    match ext.as_str() {
+                        // the pixels are not needed for the settings: gone at once, they are most of the disk space
+                        "ubulk" | "uptnl" => { let _ = std::fs::remove_file(e.path()); }
+                        "uasset" => files.push(e.path().to_string_lossy().replace('\\', "/")),
+                        _ => {}
+                    }
+                }
+                Ok(files)
+            })
+            .await?
+        };
         let req = crate::vfx_updater::uasset_tool::VfxUatRequest {
             file_paths: Some(files),
             usmap_path: Some(usmap),
@@ -603,9 +609,17 @@ async fn read_settings(tool: &Path, usmap: &str, paks: &Path, listed: &[String],
         report(READING, done as f32 / listed.len() as f32, false, Some(format!("{} of {}", group_digits(done), group_digits(listed.len()))));
     }
     all_read(listed, &all)?;
-    let _ = std::fs::remove_dir_all(work.join("legacy"));
-    let _ = std::fs::remove_dir_all(work.join("json"));
+    remove_dirs(vec![work.join("legacy"), work.join("json")]).await;
     Ok(all)
+}
+
+/// Removes folders off the async threads (a batch's folders hold thousands of files). Best effort, as before.
+async fn remove_dirs(dirs: Vec<std::path::PathBuf>) {
+    let _ = blocking(move || {
+        dirs.iter().for_each(|d| { let _ = std::fs::remove_dir_all(d); });
+        Ok(())
+    })
+    .await;
 }
 
 /// The settings in each JSON of one batch, parsed side by side (the files are independent).
@@ -723,9 +737,21 @@ fn copy_package(from: &Path, to: &Path, rel: &str, rgba: Option<[u8; 4]>) -> Res
     }
     let target = to.join(format!("{rel}.uexp"));
     std::fs::create_dir_all(target.parent().ok_or("no folder")?).map_err(|e| e.to_string())?;
-    std::fs::write(&target, uexp).map_err(|e| e.to_string())?;
-    std::fs::copy(from.join(format!("{rel}.uasset")), to.join(format!("{rel}.uasset"))).map_err(|e| format!("{rel}.uasset: {e}"))?;
-    Ok(())
+    write_whole(&target, |tmp| std::fs::write(tmp, &uexp)).map_err(|e| format!("{rel}.uexp: {e}"))?;
+    write_whole(&to.join(format!("{rel}.uasset")), |tmp| std::fs::copy(from.join(format!("{rel}.uasset")), tmp).map(|_| ())).map_err(|e| format!("{rel}.uasset: {e}"))
+}
+
+/// Writes `target` through a temp file beside it, then renames it in: a write cut short never stands as the file (a kept
+/// package that looks whole), and its temp file does not stay behind to be packed.
+fn write_whole(target: &Path, write: impl FnOnce(&Path) -> std::io::Result<()>) -> std::io::Result<()> {
+    let mut tmp = target.as_os_str().to_owned();
+    tmp.push(".tmp");
+    let tmp = std::path::PathBuf::from(tmp);
+    let r = write(&tmp).and_then(|_| std::fs::rename(&tmp, target));
+    if r.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    r
 }
 
 /// Copies every planned package the store holds with the same settings into `legacy`, the new pixel put in, side by side.
@@ -870,7 +896,7 @@ pub async fn make(tool: &Path, usmap: &str, paks: &Path, work: &Path, out_base: 
         // a kept package that fails its check is not kept: the next build writes them all again
         if let Err(e) = blocking(move || check_all(&planned, &legacy)).await {
             if reused > 0 {
-                let _ = std::fs::remove_dir_all(&store);
+                remove_dirs(vec![store.clone()]).await;
             }
             return Err(format!("{e}, so nothing was installed"));
         }
@@ -882,7 +908,24 @@ pub async fn make(tool: &Path, usmap: &str, paks: &Path, work: &Path, out_base: 
             log::warn!("[quake] the packages were not kept for the next build: {e}");
         }
     }
-    let _ = std::fs::remove_dir_all(&json);
+    remove_dirs(vec![json.clone()]).await;
+    // a later failure may come from a kept package check_all cannot see (its .uasset): the store goes, so the next build
+    // writes every package again instead of failing the same way until the game updates
+    let packed = pack_and_check(tool, usmap, paks, work, out_base, &legacy, &planned, saved, stop, &mut lap).await;
+    if let Err(e) = &packed {
+        if e.as_str() != STOPPED {
+            remove_dirs(vec![store]).await;
+        }
+    }
+    packed?;
+    let mins = started.elapsed().as_secs_f64() / 60.0;
+    Ok(format!("{} textures set in {}", group_digits(total), if mins < 1.5 { "about a minute".to_string() } else { format!("{} minutes", mins.round()) }))
+}
+
+/// Packs the checked packages into `out_base`, then reads the container back the way the game will and checks every
+/// package and its settings again.
+#[allow(clippy::too_many_arguments)]
+async fn pack_and_check(tool: &Path, usmap: &str, paks: &Path, work: &Path, out_base: &Path, legacy: &Path, planned: &std::sync::Arc<Vec<Planned>>, saved: bool, stop: fn() -> bool, lap: &mut impl FnMut(&str)) -> Result<(), String> {
     if stop() {
         return Err(STOPPED.into());
     }
@@ -928,7 +971,10 @@ pub async fn make(tool: &Path, usmap: &str, paks: &Path, work: &Path, out_base: 
     // and their settings, read the way the game's own were
     report(4, 0.55, saved, None);
     let back_json = work.join("back-json");
-    let files: Vec<String> = walkdir::WalkDir::new(&back).into_iter().flatten().filter(|e| e.path().extension().is_some_and(|x| x == "uasset")).map(|e| e.path().to_string_lossy().replace('\\', "/")).collect();
+    let files: Vec<String> = {
+        let back = back.clone();
+        blocking(move || Ok(walkdir::WalkDir::new(&back).into_iter().flatten().filter(|e| e.path().extension().is_some_and(|x| x == "uasset")).map(|e| e.path().to_string_lossy().replace('\\', "/")).collect())).await?
+    };
     let req = crate::vfx_updater::uasset_tool::VfxUatRequest {
         file_paths: Some(files),
         usmap_path: Some(usmap),
@@ -946,8 +992,7 @@ pub async fn make(tool: &Path, usmap: &str, paks: &Path, work: &Path, out_base: 
         blocking(move || check_settings(&planned, &back_json)).await.map_err(|e| format!("{e} in the packed container, so nothing was installed"))?;
     }
     lap("reading the container back and checking it");
-    let mins = started.elapsed().as_secs_f64() / 60.0;
-    Ok(format!("{} textures set in {}", group_digits(total), if mins < 1.5 { "about a minute".to_string() } else { format!("{} minutes", mins.round()) }))
+    Ok(())
 }
 
 /// 27181 as "27,181".
@@ -1028,6 +1073,19 @@ mod tests {
 
     fn planned_at(name: &str, settings: Settings, pixel: [u8; 4]) -> Planned {
         Planned { vfs: format!("Marvel/Content/Marvel/Environment/A/{name}"), pixel, settings }
+    }
+
+    #[test]
+    fn a_write_cut_short_leaves_the_old_file_and_no_temp() {
+        let d = tempfile::tempdir().unwrap();
+        let target = d.path().join("T.uasset");
+        std::fs::write(&target, "old").unwrap();
+        let cut = write_whole(&target, |tmp| { std::fs::write(tmp, "ha")?; Err(std::io::Error::other("cut")) });
+        assert!(cut.is_err());
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "old");
+        assert!(!d.path().join("T.uasset.tmp").exists(), "no temp file left to be packed");
+        write_whole(&target, |tmp| std::fs::write(tmp, "new")).unwrap();
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "new");
     }
 
     #[test]

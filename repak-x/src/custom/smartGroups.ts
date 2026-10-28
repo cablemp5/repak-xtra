@@ -44,6 +44,8 @@ export const STOP = new Set([
 ])
 /** Upper-case runs (KO), capitalized words, lower-case words and numbers: "CatboyPantherKOPrompt" -> Catboy Panther KO Prompt. */
 const PIECE = /[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+/g
+/** Typed text as the words a rule can name, cut the way mod names are ("Cat Boy" and "CatBoy" -> cat boy). */
+export const ruleWords = (text: string) => [...new Set((text.match(PIECE) ?? []).map(w => w.toLowerCase()))]
 
 /** Every word in a mod's name and what it did. `hero`'s own words, type words and numbers drop out unless kept. */
 export function explain(name: string, hero = '', rules: Rules = NO_RULES): Word[] {
@@ -183,6 +185,18 @@ export function propose(mods: Candidate[], taken: string[] = [], rules: Rules = 
     })
 }
 
+/** Rules saved under the look keys `moves` picks, saved under `to` instead (a loadout's key changed, as Join other
+ *  heroes does): its name (`prefer`'s first), merges, a kept-apart look, and mods moved to it. Pure. */
+export function rekey(rules: Rules, moves: (key: string) => boolean, to: string, prefer?: string): Rules {
+  const m = (k: string) => (moves(k) ? to : k)
+  const named = Object.keys(rules.names).filter(moves)
+  const name = rules.names[to] ?? (prefer && moves(prefer) ? rules.names[prefer] : undefined) ?? rules.names[named[0]]
+  const names = Object.fromEntries(Object.entries(rules.names).filter(([k]) => !moves(k)))
+  if (name !== undefined && named.length) names[to] = name
+  const merge = [...new Map(rules.merge.map(x => ({ from: m(x.from), into: m(x.into) })).filter(x => x.from !== x.into).map(x => [x.from, x])).values()]
+  return { ...rules, names, merge, split: [...new Set(rules.split.map(m))], pins: Object.fromEntries(Object.entries(rules.pins).map(([k, v]) => [k, m(v)])) }
+}
+
 /** Rules read from storage: anything unreadable is no rule. Pure. */
 export function readRules(json: string | null): Rules {
   try {
@@ -267,6 +281,16 @@ if (import.meta.env.DEV) {
   console.assert(propose([m('CatboyMesh')], [], r({ names: { [cat]: 'Kitty' } }))[0].name === 'Kitty', 'a name given is kept')
   console.assert(readRules('{"ignore":["a",1],"pins":{"x":"y","z":2},"merge":[{"from":"a"},{"from":"a","into":"b"}]}').ignore.join() === 'a', 'stored rules are checked')
   console.assert(readRules('garbage').ignore.length === 0, 'unreadable rules are none')
+  console.assert(ruleWords('Cat Boy').join() === 'cat,boy' && ruleWords('CatBoy').join() === 'cat,boy' && ruleWords('!!').length === 0, 'a typed rule is cut as names are')
+  {
+    const hulk = lookKey(['catboy'], 'Hulk'), all = lookKey(['catboy'], '*')
+    const moved = rekey(r({ names: { [cat]: 'Kitty', [hulk]: 'Big' }, merge: [{ from: hulk, into: green }], split: [cat], pins: { x: hulk } }),
+      k => k.startsWith('catboy@') && k !== all, all, cat)
+    console.assert(moved.names[all] === 'Kitty' && !moved.names[cat] && !moved.names[hulk] && moved.merge[0].from === all && moved.split.join() === all && moved.pins.x === all,
+      'rekey carries names, merges, splits, and moves to the new key', moved)
+    console.assert(rekey(r({ merge: [{ from: hulk, into: cat }] }), k => k === hulk || k === cat, all).merge.length === 0, 'rekey drops a merge into itself')
+    console.assert(rekey(r({ names: { [hulk]: 'Big' } }), k => k === hulk || k === cat, all, cat).names[all] === 'Big', 'rekey keeps a sibling\'s name when the preferred one has none')
+  }
   const cut = marks('bp-symbiote_matSwap_v3')
   console.assert(cut.map(x => x.text).join('') === 'bp-symbiote_matSwap_v3' && cut.filter(x => x.look).map(x => x.text).join() === 'symbiote', 'a name keeps every character, its look words marked', cut)
 }

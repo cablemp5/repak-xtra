@@ -107,7 +107,9 @@ fn bypass_status(win64: &Path) -> BypassStatus {
 /// Whether the file is byte for byte the bundled loader or bypass (the setup report leaves those out of a crash's
 /// third-party modules: the Signature bypass line already names them).
 pub(crate) fn is_bundled_bypass(path: &Path) -> bool {
-    fs::read(path).is_ok_and(|b| b == LOADER_BYTES || b == BYPASS_BYTES)
+    // the size first, so an overlay DLL of another size is never read whole
+    let len = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+    [LOADER_BYTES, BYPASS_BYTES].iter().any(|bytes| len == bytes.len() as u64 && fs::read(path).is_ok_and(|b| b == *bytes))
 }
 
 /// install: writes both files (a different dsound.dll or .asi already there is kept as <name>.repakxtra-backup);

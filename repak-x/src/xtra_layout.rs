@@ -329,8 +329,9 @@ fn some(names: &[&str]) -> String {
 }
 
 /// The May crash reason for a mod's findings (per package: its name, what the game's copy has that the mod's lacks),
-/// told from the package with the most. None when nothing was found.
-pub(crate) fn reason(found: &[(String, Vec<Finding>)]) -> Option<String> {
+/// told from the package with the most. None when nothing was found. `before_update`: the mod's file is older than the
+/// game's last update (else it was made after it, from older game files).
+pub(crate) fn reason(found: &[(String, Vec<Finding>)], before_update: bool) -> Option<String> {
     let (package, findings) = found.iter().filter(|(_, f)| !f.is_empty()).max_by_key(|(_, f)| f.len())?;
     let (layout, members): (Vec<&Finding>, Vec<&Finding>) = findings.iter().partition(|f| f.kind == Kind::Layout);
     let mut kinds: Vec<Kind> = members.iter().map(|f| f.kind).collect();
@@ -359,7 +360,8 @@ pub(crate) fn reason(found: &[(String, Vec<Finding>)]) -> Option<String> {
     if more > 0 {
         text.push_str(&format!(" {more} more of its files {} from the game's too.", if more == 1 { "differs" } else { "differ" }));
     }
-    text.push_str(" It was built before a game update, and the game can crash on it. Turn it off if the game crashes, and look for an updated version.");
+    text.push_str(if before_update { " It was built before a game update" } else { " It was made from older game files" });
+    text.push_str(", and the game can crash on it. Turn it off if the game crashes, and look for an updated version.");
     Some(text)
 }
 
@@ -391,19 +393,27 @@ pub(crate) struct Outcome {
 
 /// The mod at `utoc` (its `files`) against the game in `paks`: the May crash reason when the game's copies of its classes
 /// and tables have what the mod's lack, None when they match (or it replaces none of the game's: its own classes are its
-/// business). An error when one could not be read and nothing was found, so the date rule stays and the next scan tries
-/// again. The game's copies are kept under `vanilla` for the next mod.
+/// business). Not complete when some could not be read (or sit in a hybrid mod's .pak) and nothing was found, so the date
+/// rule stays until the mod, the game or the USMAP changes. An error when the check itself failed, tried again next scan.
+/// The game's copies are kept under `vanilla` for the next mod.
 pub(crate) async fn check_mod(paks: &Path, usmap: &str, utoc: &Path, files: &[String], work: &Path, vanilla: &Path) -> Result<Outcome, String> {
     let have = crate::xtra_broken::rewritten_since(paks, files, 0).ok_or("the game's file list could not be read")?;
-    let all: BTreeSet<String> = have.iter().filter(|f| is_layout_package(f)).map(|f| crate::xtra_niagara::package_rel(f)).collect();
-    let complete = all.len() <= MAX_PACKAGES;
-    let rels: Vec<String> = all.into_iter().take(MAX_PACKAGES).collect();
-    if rels.is_empty() {
-        return Ok(Outcome { reason: None, complete });
+    let mut all: BTreeSet<String> = have.iter().filter(|f| is_layout_package(f)).map(|f| crate::xtra_niagara::package_rel(f)).collect();
+    if all.is_empty() {
+        return Ok(Outcome { reason: None, complete: true });
     }
     // with no container to read, the extract hands back the game's own copies, which always match
     if !utoc.is_file() {
         return Err(format!("{} is not there", utoc.display()));
+    }
+    // only what the .utoc holds: a hybrid mod's .pak packages would come back as the game's own copies too
+    let in_utoc: HashSet<String> = crate::utoc_utils::try_read_utoc(utoc)?.iter().map(|e| crate::xtra_broken::match_key(&e.file_path)).collect();
+    let listed = all.len();
+    all.retain(|r| in_utoc.contains(&crate::xtra_broken::match_key(&format!("{r}.uasset"))));
+    let complete = all.len() == listed && all.len() <= MAX_PACKAGES;
+    let rels: Vec<String> = all.into_iter().take(MAX_PACKAGES).collect();
+    if rels.is_empty() {
+        return Ok(Outcome { reason: None, complete });
     }
     let progress = &crate::vfx_updater::progress::NoOpProgressSink;
     let game_paks = paks.to_string_lossy().to_string();
@@ -452,10 +462,11 @@ pub(crate) async fn check_mod(paks: &Path, usmap: &str, utoc: &Path, files: &[St
             (false, false) => {}
         }
     }
-    match reason(&found) {
-        None if unreadable > 0 => Err(format!("{unreadable} of its packages could not be read")),
-        reason => Ok(Outcome { reason, complete }),
-    }
+    let game_updated = crate::xtra_broken::game_containers(paks).iter().map(|c| c.2).max().unwrap_or(0);
+    let before_update = crate::xtra_broken::file_stamp(utoc).is_some_and(|(_, modified)| modified < game_updated);
+    let reason = reason(&found, before_update);
+    // unreadable and nothing found: kept as not complete, so the date rule stays and it is not read again for nothing
+    Ok(Outcome { complete: complete && (reason.is_some() || unreadable == 0), reason })
 }
 
 // ---- kept per mod file, game update and USMAP, like xtra_broken's Checked store ----
@@ -555,9 +566,14 @@ pub async fn xtra_layout_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
             continue;
         }
         let t = std::time::Instant::now();
-        match check_mod(&paks, &usmap, &utoc, &details.files, &work, &vanilla).await {
+        // seconds of file reads and JSON work between the tool runs: off the async workers
+        let (pk, us, ut, wk, va) = (paks.clone(), usmap.clone(), utoc.clone(), work.clone(), vanilla.clone());
+        let outcome = tauri::async_runtime::spawn_blocking(move || tauri::async_runtime::block_on(check_mod(&pk, &us, &ut, &details.files, &wk, &va)))
+            .await
+            .unwrap_or_else(|e| Err(e.to_string()));
+        match outcome {
             Ok(o) => {
-                let said = if o.reason.is_some() { "older than the game" } else if o.complete { "matches" } else { "partly read, matches so far" };
+                let said = if o.reason.is_some() { "older than the game" } else if o.complete { "matches" } else { "partly read or unreadable, date rule stays" };
                 log::info!("[layout] {p}: {:.1}s, {said}", t.elapsed().as_secs_f64());
                 if crate::xtra_broken::file_stamp(&utoc) == Some((size, modified)) {
                     checked += 1;
@@ -715,17 +731,20 @@ mod tests {
     fn the_reason_names_a_few() {
         let f = |kind, what: &str| Finding { kind, what: what.into(), changed: false };
         let funcs = vec![f(Kind::Function, "OnA"), f(Kind::Function, "OnB"), f(Kind::Function, "OnC")];
-        let r = reason(&[("WBP_X".into(), funcs.clone())]).unwrap();
+        let r = reason(&[("WBP_X".into(), funcs.clone())], true).unwrap();
         assert!(r.starts_with("The game's WBP_X has 3 functions this copy lacks (OnA, OnB, OnC)."), "{r}");
         assert!(!r.contains(';') && !r.contains('\u{2014}'), "no semicolons or em dashes in UI text");
+        assert!(r.contains("It was built before a game update, and the game can crash"), "{r}");
+        let after = reason(&[("WBP_X".into(), funcs.clone())], false).unwrap();
+        assert!(after.contains("It was made from older game files, and the game can crash") && !after.contains("before a game update"), "{after}");
         let mixed = vec![f(Kind::Variable, "V"), f(Kind::Function, "F"), Finding { kind: Kind::Layout, what: "Default__X".into(), changed: true }];
-        let r = reason(&[("BP_Small".into(), vec![f(Kind::Row, "1")]), ("BP_X".into(), mixed)]).unwrap();
+        let r = reason(&[("BP_Small".into(), vec![f(Kind::Row, "1")]), ("BP_X".into(), mixed)], true).unwrap();
         assert!(r.starts_with("The game's BP_X has 1 variable and 1 function this copy lacks (V, F). 1 object in it is saved in an older layout"), "{r}");
         assert!(r.contains("1 more of its files differs from"), "{r}");
         let layout: Vec<Finding> = (0..5).map(|i| Finding { kind: Kind::Layout, what: format!("O{i}"), changed: true }).collect();
-        let r = reason(&[("1026001_ChildBP".into(), layout)]).unwrap();
+        let r = reason(&[("1026001_ChildBP".into(), layout)], true).unwrap();
         assert!(r.starts_with("5 objects in its 1026001_ChildBP are saved in an older layout than the game reads (O0, O1, O2, and 2 more)."), "{r}");
-        assert_eq!(reason(&[("BP_X".into(), vec![])]), None);
+        assert_eq!(reason(&[("BP_X".into(), vec![])], true), None);
     }
 
     #[test]
