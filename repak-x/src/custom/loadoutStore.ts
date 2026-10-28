@@ -235,9 +235,9 @@ const normKey = canonKey
  *  priority. Display names and preview keys use nameKey. */
 export const modKey = memberKey
 
-/** Mods a loadout may hold: not the Project Galacta loader, which every Galacta mod needs on (a loadout switching it
- *  off would break all the others). */
-export const loadoutable = (key: string) => !/^!?projectgalacta$/i.test(memberName(key))
+/** Mods a loadout may hold: not the Project Galacta or Project Sigeon loader, which every mod made for it needs on (a
+ *  loadout switching it off would break all the others). */
+export const loadoutable = (key: string) => !/^!?project(galacta|sigeon)$/i.test(memberName(key))
 
 /** Stored keys normalized, so loadouts saved before the suffix was dropped still match. */
 const keySet = (keys: string[]) => new Set(keys.map(normKey))
@@ -531,6 +531,8 @@ window.addEventListener('keydown', e => {
 })
 
 if (import.meta.env.DEV) {
+  console.assert(['C:/g/~mods/!ProjectGalacta_9999999_P.pak', 'C:/g/~mods/!ProjectSigeon_9999999_P.bak_repak'].every(x => !loadoutable(modKey(x)))
+    && loadoutable(modKey('C:/g/~mods/ProjectSigeonFan_9999999_P.pak')), 'loadoutable: neither loader, other mods yes')
   const base: Loadout = { id: 'a', name: 'a', label: 'Other', scope: [], on: [] }
   console.assert(byRecent([{ ...base, id: 'old' }, { ...base, id: 'b', edited: 1 }, { ...base, id: 'c', edited: 2 }, { ...base, id: 'old2' }]).map(l => l.id).join() === 'c,b,old,old2',
     'byRecent: newest first, unstamped after in their order')

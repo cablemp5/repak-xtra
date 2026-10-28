@@ -54,9 +54,11 @@ if ($Release) {
     if ((git rev-parse HEAD) -ne (git rev-parse origin/main)) { throw 'Release what GitHub has: run git pull on main first.' }
     $ver = [regex]::Match((Get-Content -Raw repak-x\src\custom\version.ts), "REPAKXTRA_VERSION = '([^']+)'").Groups[1].Value
     if (-not $ver) { throw 'No REPAKXTRA_VERSION in repak-x\src\custom\version.ts.' }
-    # cmd swallows gh's "release not found" (the answer wanted here): PowerShell 5.1 would make that stderr line a fatal error
-    cmd /c "gh release view $tagPrefix$ver -R cablemp5/repak-xtra >nul 2>&1"
+    # cmd merges gh's stderr into its output: PowerShell 5.1 would make that stderr line a fatal error. Only "release not
+    # found" means not released yet. Offline, signed out or rate limited must not pass as that.
+    $viewed = (cmd /c "gh release view $tagPrefix$ver -R cablemp5/repak-xtra --json tagName 2>&1") -join ' '
     if ($LASTEXITCODE -eq 0) { throw "$tagPrefix$ver is already released: bump REPAKXTRA_VERSION in custom/version.ts (in a PR) first." }
+    if ($viewed -notmatch 'release not found') { throw "Could not check whether $tagPrefix$ver is already released (gh: $viewed). Check the connection and gh auth status, then try again." }
 }
 # vswhere: the .NET NativeAOT linker step calls it to find MSVC
 $env:PATH = "$env:USERPROFILE\.cargo\bin;${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer;$env:PATH"

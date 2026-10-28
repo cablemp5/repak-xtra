@@ -1268,9 +1268,10 @@ function App() {
       return
     }
     const targetMods = mods.filter(m => selectedMods.has(m.path) && m.enabled !== enable)
-    // repakxtra: checked built-ins switch too (each rebuilds or removes its own files)
+    // repakxtra: checked built-ins switch too (each rebuilds or removes its own files), not waited for: a CustomQuake
+    // build takes minutes and the other mods switch at once
     const builtinTargets = builtinList.filter(b => selectedMods.has(b.path) && b.on !== enable && !builtinBusy.has(b.id))
-    for (const b of builtinTargets) await toggleBuiltin(b.id, enable, alert)
+    void (async () => { for (const b of builtinTargets) await toggleBuiltin(b.id, enable, alert) })()
     if (targetMods.length === 0) return
 
     try {
