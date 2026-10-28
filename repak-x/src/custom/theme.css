@@ -1788,7 +1788,8 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 
 /* Library right-click menu: Check Conflicts icon neutral like the rest of the menu; loadouts already holding the mod */
 /* Check Conflicts: the outline layers icon at the row's end, like the submenu chevrons (it was a filled blob) */
-.context-menu .warning-icon-small { fill: none !important; color: var(--text-secondary) !important; margin-left: auto; }
+.context-menu .warning-icon-small:not(.ph) { fill: none !important; }   /* Phosphor icons are filled shapes */
+.context-menu .warning-icon-small { color: var(--text-secondary) !important; margin-left: auto; }
 .context-menu-item.is-disabled { opacity: 0.5; cursor: default; }
 .context-menu-item .lo-menu-check { margin-left: auto; color: var(--text-secondary); }
 /* Setup and changelog: every button one height (the primary ones were 44px beside 32px ones); a closed "Is it safe?"
