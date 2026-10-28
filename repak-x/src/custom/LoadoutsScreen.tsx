@@ -313,6 +313,20 @@ export default function LoadoutsScreen(p: LoadoutProps) {
 
   useEffect(() => {
     if (view !== 'home') return
+    // Stay mounted through mouseup/auxclick so WebView's native back never follows the page close.
+    const mouseBack = (e: MouseEvent) => {
+      if (e.button !== 3) return
+      e.preventDefault()
+      e.stopPropagation()
+      if (e.type === 'mousedown' && openRef.current && !modalOpen()) closePage()
+    }
+    const events = ['mousedown', 'mouseup', 'auxclick'] as const
+    for (const type of events) window.addEventListener(type, mouseBack, true)
+    return () => { for (const type of events) window.removeEventListener(type, mouseBack, true) }
+  }, [view])
+
+  useEffect(() => {
+    if (view !== 'home') return
     // Esc on a loadout page goes back to the cards (a text field, an open menu or a dialog takes its own Esc first)
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && openRef.current && !isTyping(e.target) && !modalOpen() && !document.querySelector('[role="menu"], .custom-dropdown-menu')) { e.stopPropagation(); closePage() }

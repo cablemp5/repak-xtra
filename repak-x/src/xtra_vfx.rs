@@ -619,6 +619,7 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
 
 #[tauri::command]
 pub fn xtra_vfx_place(source: String, staged_base: String, turn_off_original: bool, keep_name: Option<bool>, trash_original: Option<bool>, partial: Option<bool>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Placed, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?;
     // renaming or replacing containers the game has loaded: not while it runs, as every other mod change
     let bypass = state.lock().map(|s| s.bypass_game_running_lock).unwrap_or(false);

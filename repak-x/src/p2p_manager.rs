@@ -18,6 +18,30 @@ use std::sync::Arc;
 use std::time::Duration;
 use tauri::{Emitter, Window};
 
+fn report_received_installs(result: &P2PResult<crate::p2p_sharing::ShareableModPack>, emit: impl FnOnce(usize)) {
+    if let Ok(pack) = result { emit(pack.mods.len()); }
+}
+
+#[cfg(test)]
+mod receive_install_tests {
+    use super::*;
+    use crate::p2p_sharing::{IoStoreFile, ShareableMod, ShareableModPack};
+    #[test]
+    fn received_iostore_is_one_install_and_failed_or_cancelled_receives_are_zero() {
+        let pack = ShareableModPack {
+            name: "Received".into(), description: String::new(), created_at: 0, creator: None,
+            mods: vec![ShareableMod { filename: "Skin.pak".into(), size: 1, hash: String::new(),
+                iostore_files: ["utoc", "ucas"].iter().map(|ext| IoStoreFile { extension: (*ext).into(), size: 1, hash: String::new() }).collect() }],
+        };
+        let mut events = vec![];
+        report_received_installs(&Ok(pack), |n| events.push(n));
+        report_received_installs(&Err(P2PError::Cancelled), |n| events.push(n));
+        report_received_installs(&Err(P2PError::FileError("failed".into())), |n| events.push(n));
+        assert_eq!(events, vec![1]);
+        assert_eq!(9 + events.iter().sum::<usize>(), 10);
+    }
+}
+
 // ============================================================================
 // UPnP & PUBLIC IP HELPERS
 // ============================================================================
@@ -521,7 +545,9 @@ impl UnifiedP2PManager {
                         *guard = Some(client.progress_handle());
                     }
 
-                    match client.download_pack(&out, client_name.clone()) {
+                    let received = client.download_pack(&out, client_name.clone());
+                    report_received_installs(&received, |count| { let _ = window.emit("xtra_mods_installed", count); });
+                    match received {
                         Ok(pack) => {
                             info!(
                                 "[P2P] Download complete! {} mods received via {}",

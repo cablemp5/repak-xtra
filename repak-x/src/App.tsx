@@ -139,6 +139,8 @@ const ASSET_EXPLORER_FOCUS_MOD_KEY = 'repakx:assetExplorer:focusModPath'
 import TitleBar from './components/TitleBar'
 
 import InstallModPanel from './custom/InstallPanel' // repakxtra: the install dialog redesigned around saving a loadout
+import Support from './custom/Support'
+import EncryptMods from './custom/EncryptMods'
 import SettingsPanel from './components/SettingsPanel'
 import CreditsPanel from './components/CreditsPanel'
 import ToolsPanel from './components/ToolsPanel'
@@ -3843,6 +3845,8 @@ function App() {
         </div>
         <ViewTabs />{/* repakxtra: Home | Library */}
         <div className="header-actions-right">
+          <Support />
+          <EncryptMods mods={mods} selected={[...selectedFiles]} blocked={gameRunning} alert={alert} reload={loadMods} />
           <button
             className="btn-settings"
             data-tour="launch-btn"

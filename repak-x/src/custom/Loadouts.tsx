@@ -24,7 +24,7 @@ export type LoadoutProps = {
   isBlocked: () => boolean // the same, read live (Undo toasts outlive the component that made them)
   reload: () => Promise<unknown>
   alert: ReturnType<typeof useAlert>
-  modDetails?: Record<string, { character_name?: string | null; category?: string | null; additional_categories?: string[]; mod_type?: string } | undefined>
+  modDetails?: Record<string, { character_name?: string | null; skin_name?: string | null; category?: string | null; additional_categories?: string[]; mod_type?: string } | undefined>
   selected?: string[]    // paths picked in the Library: + makes a loadout of exactly these
   onModContextMenu?: (e: React.MouseEvent, mod: Mod, rename?: () => void) => void // a mod row's right-click: the Library's menu for that row (rename: the row's own)
 }
@@ -123,13 +123,21 @@ export function deleteWithUndo(p: LoadoutProps, l: Loadout) {
 
 let switching = '' // the loadout being switched: one at a time, whether from the sidebar, Ctrl+N, a card or a page
 
-/** Heroes whose look (a Mesh or Texture mod) the loadout changes. */
+/** Exact skin whose look a mod changes. Unknown skins never imply a conflict. */
+export function skinLook(d: { character_name?: string | null; skin_name?: string | null }) {
+  const [hero, ...parts] = (d.character_name ?? '').split(' - ')
+  const skin = d.skin_name?.trim() || parts.join(' - ').trim()
+  return hero && skin && !hero.startsWith('Multiple') ? `${hero.trim()} - ${skin}`.toLowerCase() : null
+}
+
+/** Skins whose look (a Mesh or Texture mod) the loadout changes. */
 const looksOf = (p: LoadoutProps, l: Loadout) => {
   const on = new Set(l.on.map(canonKey))
   const heroes = new Set<string>()
   for (const m of p.mods) {
     const d = p.modDetails?.[m.path]
-    if (on.has(modKey(m.path)) && (d?.category === 'Mesh' || d?.category === 'Texture') && d.character_name) heroes.add(d.character_name.split(' - ')[0])
+    const skin = d && skinLook(d)
+    if (on.has(modKey(m.path)) && (d?.category === 'Mesh' || d?.category === 'Texture') && skin) heroes.add(skin)
   }
   return heroes
 }
@@ -220,4 +228,11 @@ export default function LoadoutHotkeys(p: LoadoutProps) {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
   return null
+}
+
+if (import.meta.env.DEV) {
+  console.assert(skinLook({ character_name: 'Black Panther - Galactic Claw' }) !== skinLook({ character_name: 'Black Panther - Default' }), 'different skins do not conflict')
+  console.assert(skinLook({ character_name: 'Black Panther - Galactic Claw' }) === skinLook({ character_name: 'Black Panther', skin_name: 'Galactic Claw' }), 'both skin metadata formats match')
+  console.assert(skinLook({ character_name: 'Black Panther' }) === null, 'unknown skin does not claim a conflict')
+  console.assert(skinLook({ character_name: 'Black Panther - Default' }) === 'black panther - default' && skinLook({ character_name: 'Black Panther - Default' }) !== skinLook({ character_name: 'Black Panther - Galactic Claw' }), 'explicitly detected default skins match each other, not another skin')
 }

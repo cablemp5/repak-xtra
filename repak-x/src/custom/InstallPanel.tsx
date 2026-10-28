@@ -108,6 +108,11 @@ export function archiveName(path: string) {
   return (now?.[1] ?? old?.[1] ?? file).trim()
 }
 const ARCHIVE = /\.(zip|rar|7z)$/i
+/** The selected entries of one archive keep that archive's name, even when its PAK names differ. */
+export function archiveLoadoutName(paths: string[]) {
+  const sources = [...new Set(paths)]
+  return sources.length === 1 && ARCHIVE.test(sources[0]) ? archiveName(sources[0]) : ''
+}
 
 const badge = (s: string) => `${s.toLowerCase().replace(/\s+/g, '-')}-badge`
 
@@ -230,8 +235,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
   // The cover's hero: the one the picked mods share, else the first picked mod's (a mod of no hero: no shape)
   const coverShape = silhouetteOf(picked.map(heroOf).find(h => h && !h.startsWith('Multiple')), heroes)
   // every picked mod from one zip: the loadout takes the zip's name
-  const zips = new Set(picked.map(i => mods[i].path))
-  const zip = zips.size === 1 && ARCHIVE.test([...zips][0]) ? archiveName([...zips][0]) : ''
+  const zip = archiveLoadoutName(picked.map(i => mods[i].path))
   const suggestion = zip || suggestName(picked.map(i => ({ name: settings[i]?.customName || plainName(mods[i].mod_name), character: parsed[i].character })))
   const existing = target === NEW || target === NONE ? undefined : loadouts.find(l => l.id === target)
   const into = target === NONE ? NONE : existing?.id ?? NEW // a loadout deleted while the dialog was open: back to a new one
@@ -482,6 +486,10 @@ if (import.meta.env.DEV) {
   console.assert(suggestName([{ name: 'A', character: 'Hulk' }, { name: 'B', character: 'Black Panther' }]) === 'New loadout', 'mixed heroes')
   console.assert(committedName('  Mine ') === 'Mine' && committedName('   ') === null, 'Enter commits a trimmed name, empty goes back to the suggestion')
   console.assert(archiveName('C:\\Downloads\\Catboy Panther.zip') === 'Catboy Panther', 'a zip: its name')
+  for (const ext of ['zip', '7z', 'rar', 'ZIP']) {
+    console.assert(archiveLoadoutName([`C:/mods/My loadout.${ext}`, `C:/mods/My loadout.${ext}`]) === 'My loadout', `${ext} loadout uses the archive name for all its PAKs`)
+  }
+  console.assert(archiveLoadoutName(['A.zip', 'B.zip']) === '' && archiveLoadoutName([]) === '', 'multiple sources use a normal suggestion')
   console.assert(archiveName('D:/x/Mialygosa Magik 1.3.1 12984 5 2026-09-21T17-38Z YLrVJSM1X.zip') === 'Mialygosa Magik 1.3.1', 'a Nexus download: its name part')
   console.assert(archiveName('D:/x/Void Panther-1234-2-5-1729999999.7z') === 'Void Panther', 'an older Nexus download')
 }

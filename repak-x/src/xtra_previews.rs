@@ -304,14 +304,25 @@ fn generator_error(text: &str) -> bool {
 /// The generator's command so far (the kit's python and script, run in its folder, with the kit's variables). The error
 /// says what to install.
 fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Result<Command, String> {
-    let Some((root, python, script)) = generator() else {
+    let Some((root, python, _script)) = generator() else {
         return Err("Previews need the preview kit: install it in Setup.".into());
     };
     if need_blender && crate::xtra_kit::blender().is_none() {
         return Err("Previews need Blender: install it in Setup (or from blender.org), or pick blender.exe there.".into());
     }
+    let runtime = previews_dir().join("runtime");
+    std::fs::create_dir_all(&runtime).map_err(|e| format!("Could not prepare preview fixes: {e}"))?;
+    for (name, contents) in [
+        ("runtime.py", include_str!("preview_fixes/runtime.py")),
+        ("galactic_mane.py", include_str!("preview_fixes/galactic_mane.py")),
+    ] {
+        let path = runtime.join(name);
+        if std::fs::read_to_string(&path).ok().as_deref() != Some(contents) {
+            std::fs::write(path, contents).map_err(|e| format!("Could not write preview fixes: {e}"))?;
+        }
+    }
     let mut cmd = Command::new(&python);
-    cmd.arg(&script).current_dir(&root).env("PYTHONUTF8", "1");
+    cmd.arg(runtime.join("runtime.py")).current_dir(&root).env("PYTHONUTF8", "1");
     // The kit's contract (tools\previews\build_kit.py): where the kit is, the game's Paks folder, a writable work folder
     // for exports, caches and the lock, and Blender
     cmd.env("REPAKXTRA_KIT", &root).env("REPAKXTRA_WORK", previews_dir().join("work"));

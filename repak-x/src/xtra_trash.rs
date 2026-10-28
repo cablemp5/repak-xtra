@@ -294,6 +294,7 @@ fn empty_in(root: &Path, ids: &[String]) -> Result<usize, String> {
 /// is open, nor while the game runs (unless Settings bypasses that lock, as for every other mod change).
 #[tauri::command]
 pub async fn restore_trashed_mods(ids: Vec<String>, state: tauri::State<'_, std::sync::Arc<std::sync::Mutex<crate::AppState>>>) -> Result<usize, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // Undo moves files back into the mods folder: not while Repak X is open
     let bypass = state.lock().map(|s| s.bypass_game_running_lock).unwrap_or(false);
     if !bypass && crate::is_game_process_running() {

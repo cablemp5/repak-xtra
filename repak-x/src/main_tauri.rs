@@ -32,6 +32,9 @@ mod xtra_layout; // repakxtra: May crash from the game classes an update changed
 mod xtra_nexus; // repakxtra: Nexus source from archive names
 mod xtra_offfiles; // repakxtra: .pak.off files install like .pak
 mod xtra_bundle; // repakxtra: a mod's pak/utoc/ucas found and moved as one set
+mod xtra_encrypt;
+mod xtra_mutation;
+mod xtra_install_count;
 mod xtra_updater; // repakxtra: applies an update without string-built shell commands
 mod xtra_conflicts; // repakxtra: conflict comparison by normalized asset path, cached file lists
 mod xtra_heroes; // repakxtra: the hero and skin folder of an asset path
@@ -901,6 +904,7 @@ async fn set_mod_priority(
     priority: usize,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<(), String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let path = PathBuf::from(&mod_path);
     if !path.exists() {
@@ -1824,6 +1828,7 @@ fn copy_iostore_with_compression_check(
     output_dir: &Path,
     window: &Window,
     rename_stem: Option<&str>,
+    installed: &mut crate::xtra_install_count::InstallTally,
 ) -> Result<u32, String> {
     let utoc_name = utoc_src.file_name().unwrap();
     let ucas_src = utoc_src.with_extension("ucas");
@@ -1857,6 +1862,7 @@ fn copy_iostore_with_compression_check(
                 pak_src.file_name().unwrap().to_string_lossy(),
                 e
             );
+            return Err(format!("The companion could not be copied: {e}"));
         } else {
             info!(
                 "[QuickOrganize] Copied: {}",
@@ -1882,6 +1888,7 @@ fn copy_iostore_with_compression_check(
                 bak_repak_src.file_name().unwrap().to_string_lossy(),
                 e
             );
+            return Err(format!("The companion could not be copied: {e}"));
         } else {
             info!(
                 "[QuickOrganize] Copied: {}",
@@ -1998,6 +2005,9 @@ fn copy_iostore_with_compression_check(
         }
     }
 
+    for src in [pak_src.as_path(), bak_repak_src.as_path(), utoc_src, ucas_src.as_path()].into_iter().filter(|p| p.is_file()) {
+        installed.copied(src, &dest_name(src));
+    }
     Ok(file_count)
 }
 
@@ -2294,6 +2304,7 @@ async fn quick_organize(
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
 ) -> Result<i32, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let state_guard = state.lock().unwrap();
     let mod_directory = state_guard.game_path.clone();
@@ -2363,6 +2374,7 @@ async fn quick_organize_locked(
     flatten: Option<bool>,
     window: Window,
 ) -> Result<i32, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let existing = PathBuf::from(&existing_mod_path);
     let output_dir = existing
@@ -2512,6 +2524,11 @@ fn quick_organize_impl(
         format!("[QuickOrganize] Copying to folder: {}", location_label),
     );
 
+    struct NotifyInstalls<'a> { tally: crate::xtra_install_count::InstallTally, window: &'a Window }
+    impl Drop for NotifyInstalls<'_> {
+        fn drop(&mut self) { let _ = self.window.emit("xtra_mods_installed", self.tally.count()); }
+    }
+    let mut installed = NotifyInstalls { tally: Default::default(), window };
     let mut copied_count = 0;
 
     /// Helper to compute relative path from a base directory to preserve subfolder structure
@@ -2663,6 +2680,7 @@ fn quick_organize_impl(
                                 format!("[QuickOrganize] Copied: {}", rel_dest.display()),
                             );
                             copied_count += 1;
+                            installed.tally.copied(entry_path, &dest);
                         }
                     } else if entry_ext == "utoc" {
                         // Process IoStore with compression check, preserving subfolder structure
@@ -2709,7 +2727,7 @@ fn quick_organize_impl(
                             cleanup_conflicting_mods(&dest_dir, &file_name_str);
 
                             match copy_iostore_with_compression_check(
-                                entry_path, &dest_dir, &window, rename,
+                                entry_path, &dest_dir, &window, rename, &mut installed.tally,
                             ) {
                                 Ok(count) => copied_count += count as i32,
                                 Err(e) => {
@@ -2752,13 +2770,14 @@ fn quick_organize_impl(
                 format!("[QuickOrganize] Copied: {}", file_name_str),
             );
             copied_count += 1;
+            installed.tally.copied(&path, &dest);
 
             // Also handle utoc and ucas if they exist (IoStore package)
             let utoc_path = path.with_extension("utoc");
             let ucas_path = path.with_extension("ucas");
 
             if utoc_path.exists() && ucas_path.exists() {
-                match copy_iostore_with_compression_check(&utoc_path, &output_dir, &window, rename)
+                match copy_iostore_with_compression_check(&utoc_path, &output_dir, &window, rename, &mut installed.tally)
                 {
                     Ok(count) => copied_count += count as i32,
                     Err(e) => {
@@ -2794,7 +2813,7 @@ fn quick_organize_impl(
                 };
                 cleanup_conflicting_mods(&output_dir, &file_name_str);
 
-                match copy_iostore_with_compression_check(&path, &output_dir, &window, rename) {
+                match copy_iostore_with_compression_check(&path, &output_dir, &window, rename, &mut installed.tally) {
                     Ok(count) => copied_count += count as i32,
                     Err(e) => {
                         error!("[QuickOrganize] Failed to process IoStore: {}", e);
@@ -2860,6 +2879,7 @@ fn quick_organize_impl(
                                 format!("[QuickOrganize] Copied: {}", rel_dest.display()),
                             );
                             copied_count += 1;
+                            installed.tally.copied(entry_path, &dest);
                         }
                     } else if entry_ext == "utoc" {
                         // Process IoStore with compression check, preserving subfolder structure
@@ -2902,7 +2922,7 @@ fn quick_organize_impl(
                             cleanup_conflicting_mods(&dest_dir, &file_name_str);
 
                             match copy_iostore_with_compression_check(
-                                entry_path, &dest_dir, &window, rename,
+                                entry_path, &dest_dir, &window, rename, &mut installed.tally,
                             ) {
                                 Ok(count) => copied_count += count as i32,
                                 Err(e) => {
@@ -2940,6 +2960,7 @@ async fn install_mods(
     window: Window,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<(), String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     use std::sync::atomic::{AtomicBool, AtomicI32};
     use std::sync::Arc as StdArc;
@@ -3136,6 +3157,7 @@ async fn install_mods(
     // Spawn installation thread
     let window_for_logs = window.clone();
     std::thread::spawn(move || {
+        let _mutation = _mutation;
         use std::panic;
 
         let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
@@ -3249,6 +3271,7 @@ async fn install_mods(
 
         match result {
             Ok(install_results) => {
+                window_for_logs.emit("xtra_mods_installed", install_results.iter().filter(|r| r.success).count()).ok();
                 let total = install_results.len();
                 let failed: Vec<&crate::install_mod::install_mod_logic::ModInstallResult> =
                     install_results.iter().filter(|r| !r.success).collect();
@@ -3346,6 +3369,7 @@ async fn delete_mod(
     window: Window,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<(), String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let path_buf = PathBuf::from(&path);
     log::info!("delete_mod called with path: {}", path);
@@ -3489,6 +3513,7 @@ async fn update_mod(
     window: Window,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<UpdateModResult, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     info!(
         "update_mod called: old={}, new={}, preserve_name={}, obfuscate={:?}",
@@ -3963,6 +3988,7 @@ async fn rename_mod(
     window: Window,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<String, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let old_path_buf = PathBuf::from(&mod_path);
 
@@ -4127,6 +4153,7 @@ async fn create_folder(
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
 ) -> Result<String, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let state = state.lock().unwrap();
     let game_path = &state.game_path;
@@ -4333,6 +4360,7 @@ async fn delete_folder(
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
 ) -> Result<Vec<String>, String> { // repakxtra: the trash ids of its files, for Undo
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let state = state.lock().unwrap();
     let game_path = &state.game_path;
@@ -4401,6 +4429,7 @@ async fn rename_folder(
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
 ) -> Result<String, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let mut state = state.lock().unwrap();
     let game_path = state.game_path.clone();
@@ -4470,6 +4499,7 @@ async fn move_folder(
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
 ) -> Result<String, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let mut state = state.lock().unwrap();
     let game_path = state.game_path.clone();
@@ -4560,6 +4590,7 @@ async fn assign_mod_to_folder(
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
 ) -> Result<(), String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let state = state.lock().unwrap();
     let game_path = &state.game_path;
@@ -4707,6 +4738,7 @@ async fn toggle_mod(
     window: Window,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<bool, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let path = PathBuf::from(&mod_path);
 
@@ -5605,6 +5637,7 @@ async fn recompress_mods(
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
 ) -> Result<RecompressResult, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let game_path = {
         let state = state.lock().unwrap();
@@ -8576,6 +8609,7 @@ fn main() {
             xtra_vfx::xtra_vfx_claim,
             xtra_vfx::xtra_vfx_release,
             xtra_vfx::xtra_vfx_lock,
+            xtra_encrypt::xtra_encrypt_mods,
             xtra_vfx::xtra_vfx_stale,
             xtra_vfx::xtra_vfx_source,
             xtra_niagara::xtra_vfx_niagara,
