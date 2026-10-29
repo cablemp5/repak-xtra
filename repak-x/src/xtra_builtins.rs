@@ -118,6 +118,28 @@ struct Saved {
     /// CustomQuake: the other quake mods that were on at the last build or refresh (read off the main thread)
     #[serde(default)]
     overlaps: Vec<String>,
+    /// repakxtra: the last build left out game files a patch newer than this USMAP (its file name) rewrote. Once another
+    /// USMAP is saved the build is out of date, and the next refresh builds it with everything
+    #[serde(default)]
+    waited_usmap: Option<String>,
+    /// repakxtra: the recipe its files were made with (`recipe`): an app update that changes how one is built rebuilds it
+    #[serde(default)]
+    built_recipe: u32,
+}
+
+/// How a built-in is built, raised whenever an app update changes what its build makes, so that built-in rebuilds once
+/// after the update (and the others do not). 1: the effect built-ins add newer heroes' effects (xtra_visual_builtins.rs).
+fn recipe(id: &str) -> u32 {
+    match id {
+        "no-impact" | "no-tracers" | "no-screen-shake" => 1,
+        _ => 0,
+    }
+}
+
+/// The build left files out for want of a newer USMAP, and one has been saved since.
+fn usmap_moved(s: &Saved) -> bool {
+    let saved = crate::vfx_updater::commands::saved_usmap_path().map(|u| Path::new(&u).file_name().unwrap_or_default().to_string_lossy().to_string());
+    s.waited_usmap.as_ref().is_some_and(|w| saved.as_deref() != Some(w.as_str()))
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -206,12 +228,12 @@ fn parked(dir: &Path, id: &str) -> PathBuf {
 }
 
 /// The files on disk were made for this game build with the heroes chosen now.
-fn fits(s: &Saved, build: &str) -> bool {
+fn fits(id: &str, s: &Saved, build: &str) -> bool {
     let mut made = s.built_excluded.clone();
     made.sort();
     let mut wanted = s.excluded.clone();
     wanted.sort();
-    s.built_for.as_deref() == Some(build) && made == wanted && s.built_quake.clone().unwrap_or_default() == s.quake.clone().unwrap_or_default()
+    s.built_for.as_deref() == Some(build) && made == wanted && !usmap_moved(s) && s.built_recipe == recipe(id) && s.built_quake.clone().unwrap_or_default() == s.quake.clone().unwrap_or_default()
         && (s.built_quake.is_none() || (s.built_quake_packaging && s.built_quake_encrypted))
 }
 
@@ -242,7 +264,7 @@ fn view(id: &str, s: &Saved, dir: &Path, build: &str) -> BuiltinView {
         id: id.to_string(),
         on: s.on,
         excluded: s.excluded.clone(),
-        current: s.on && fits(s, build) && (present || s.nothing),
+        current: s.on && fits(id, s, build) && (present || s.nothing),
         active: s.on && for_build && present,
         built_at: s.built_at,
         summary: s.summary.clone(),
@@ -255,7 +277,8 @@ fn view(id: &str, s: &Saved, dir: &Path, build: &str) -> BuiltinView {
         gave_up: s.error.is_some() && FAILED.lock().unwrap_or_else(|e| e.into_inner()).contains(&failed_key(id, s, build)),
     };
     #[cfg(feature = "extended")]
-    if let Some(heroes) = crate::xtra_visual_builtins::effect_heroes(id) { result.heroes = heroes; }
+    // the supplied list's heroes, and the newer ones the last build found
+    if let Some(mut heroes) = crate::xtra_visual_builtins::effect_heroes(id, None) { heroes.extend(s.heroes.iter().cloned()); heroes.sort(); heroes.dedup(); result.heroes = heroes; }
     #[cfg(feature = "extended")]
     if id == crate::xtra_login_video::ID {
         if let Some(paks) = paks_dir(dir) {
@@ -538,13 +561,27 @@ async fn make(tool: &Path, id: &str, excluded: &[String], quake: &crate::xtra_qu
     if [DEFAULT_SKIN, SKIP_INTRO].contains(&id) {
         usmap_ready(paks, &usmap, &(if id == DEFAULT_SKIN { [SKIN, UI].map(String::from).to_vec() } else { vec![LOGO.to_string()] }))?;
     }
+    // FOV Slider needs every file it reads. The effect ones build from the files the patch left alone now, and put the
+    // rest in once its USMAP is out (waited_usmap)
     #[cfg(feature = "extended")]
-    if let Some(inputs) = crate::xtra_visual_builtins::inputs(id, excluded) {
-        usmap_ready(paks, &usmap, &inputs)?;
+    let mut waiting = Vec::new();
+    #[cfg(feature = "extended")]
+    if let Some(inputs) = crate::xtra_visual_builtins::inputs(id, excluded, paks) {
+        if id == crate::xtra_visual_builtins::FOV {
+            usmap_ready(paks, &usmap, &inputs)?;
+        } else {
+            let files: Vec<String> = inputs.iter().map(|p| format!("{p}.uasset")).collect();
+            waiting = crate::xtra_broken::changed_since_usmap(paks, &usmap, &files).map_or_else(|| files.clone(), |c| c);
+            if waiting.len() == files.len() {
+                usmap_ready(paks, &usmap, &inputs)?; // nothing to build yet: says so the usual way
+            }
+            let name = Path::new(&usmap).file_name().unwrap_or_default().to_string_lossy().to_string();
+            update(|all| all.entry(id.to_string()).or_default().waited_usmap = (!waiting.is_empty()).then_some(name))?;
+        }
     }
     #[cfg(feature = "extended")]
     if [crate::xtra_visual_builtins::NO_IMPACT, crate::xtra_visual_builtins::NO_TRACERS, crate::xtra_visual_builtins::NO_SHAKE, crate::xtra_visual_builtins::FOV].contains(&id) {
-        let made = crate::xtra_visual_builtins::make(&tool, &usmap, id, excluded, paks, work, out_base, stopped).await?;
+        let made = crate::xtra_visual_builtins::make(&tool, &usmap, id, excluded, paks, work, out_base, stopped, &waiting).await?;
         let base = out_base.to_path_buf();
         tauri::async_runtime::spawn_blocking(move || crate::xtra_encrypt::encrypt_built(&base)).await.map_err(|e| e.to_string())??;
         return Ok(made);
@@ -653,19 +690,20 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
     let out_base = work.join("out").join(stem(id));
     let known = all.get(id).map(|s| s.heroes.clone()).unwrap_or_default();
     #[cfg(feature = "extended")]
-    let known = crate::xtra_visual_builtins::effect_heroes(id).unwrap_or(known);
+    let known = crate::xtra_visual_builtins::effect_heroes(id, Some(paks)).unwrap_or(known);
     // every hero excluded: nothing to build. Only with this game build's hero list, a new hero after an update is not
     // in the old one
     let known_now = all.get(id).and_then(|s| s.built_for.as_deref()) == Some(game_build(paks).as_str());
     let all_excluded = id == DEFAULT_SKIN && known_now && !known.is_empty() && known.iter().all(|h| excluded.contains(h));
     #[cfg(feature = "extended")]
-    let all_excluded = all_excluded || crate::xtra_visual_builtins::all_excluded(id, &excluded);
+    let all_excluded = all_excluded || crate::xtra_visual_builtins::all_excluded(id, &excluded, paks);
     if all_excluded {
         remove(dir, id)?;
         return update(|all| {
             let s = all.entry(id.to_string()).or_default();
             s.built_for = Some(game_build(paks));
             s.built_excluded = excluded;
+            s.built_recipe = recipe(id);
             s.nothing = true;
             s.heroes = known;
             s.summary = Some("Every hero is excluded, so nothing is changed".to_string());
@@ -729,6 +767,7 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
                 s.built_excluded = excluded.clone();
                 s.built_quake = (id == CUSTOM_QUAKE).then(|| quake.clone());
                 s.built_quake_packaging = id == CUSTOM_QUAKE;
+                s.built_recipe = recipe(id);
                 s.built_quake_encrypted = id == CUSTOM_QUAKE;
                 s.nothing = false;
                 s.built_at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_secs());
@@ -918,7 +957,7 @@ pub async fn xtra_builtins_set(app: tauri::AppHandle, id: String, on: Option<boo
     } else {
         let build_now = game_build(&paks);
         // back on with the same heroes and game build: the set-aside files go back in, no rebuild
-        if fits(&load()[&id], &build_now) {
+        if fits(&id, &load()[&id], &build_now) {
             wait_for_build(&id, false).await;
             let _moving = INSTALL.lock().unwrap_or_else(|e| e.into_inner());
             unpark(&dir, &id)?;
@@ -1190,11 +1229,11 @@ mod tests {
         assert!(!files_of(&dir, DEFAULT_SKIN)[0].exists() && parked(&dir, DEFAULT_SKIN).exists(), "off: the game no longer loads it");
         assert!(!view(DEFAULT_SKIN, &s, &dir, "b1").active);
         s.on = true;
-        assert!(fits(&s, "b1"));
+        assert!(fits(SKIP_INTRO, &s, "b1"));
         unpark(&dir, DEFAULT_SKIN).unwrap();
         assert!(view(DEFAULT_SKIN, &s, &dir, "b1").current, "on again: current with no build");
         // a hero change or a game update means a rebuild
-        assert!(!fits(&Saved { excluded: vec!["1011".into()], ..s.clone() }, "b1") && !fits(&s, "b2"));
+        assert!(!fits(SKIP_INTRO, &Saved { excluded: vec!["1011".into()], ..s.clone() }, "b1") && !fits(SKIP_INTRO, &s, "b2"));
         // a new build replaces the set-aside one, and removing takes every file
         park(&dir, DEFAULT_SKIN).unwrap();
         remove(&dir, DEFAULT_SKIN).unwrap();
@@ -1205,11 +1244,11 @@ mod tests {
     #[test]
     fn old_quake_packaging_rebuilds_once() {
         let mut s = Saved { built_for: Some("b1".into()), built_quake: Some(Default::default()), ..Default::default() };
-        assert!(!fits(&s, "b1"));
+        assert!(!fits(SKIP_INTRO, &s, "b1"));
         s.built_quake_packaging = true;
-        assert!(!fits(&s, "b1"), "an unencrypted build rebuilds once, encrypted");
+        assert!(!fits(SKIP_INTRO, &s, "b1"), "an unencrypted build rebuilds once, encrypted");
         s.built_quake_encrypted = true;
-        assert!(fits(&s, "b1"));
+        assert!(fits(SKIP_INTRO, &s, "b1"));
     }
 
     #[test]

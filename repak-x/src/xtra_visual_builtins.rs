@@ -46,7 +46,7 @@ fn hero(path: &str) -> Option<String> {
 }
 /// The game packages a build of `id` reads (Marvel/Content/... paths), for xtra_builtins.rs usmap_ready. FOV Slider also
 /// lists the game packages its own Blueprints import: a patch that changed the classes they use recooks those.
-pub(crate) fn inputs(id: &str, excluded: &[String]) -> Option<Vec<String>> {
+pub(crate) fn inputs(id: &str, excluded: &[String], paks: &Path) -> Option<Vec<String>> {
     if id == FOV {
         let mut out = vec![LAYOUT.to_string(), WIDGET.to_string()];
         let recipe: Value = serde_json::from_str(include_str!("../resources/visual-builtins/fov-widget.json")).ok()?;
@@ -68,23 +68,59 @@ pub(crate) fn inputs(id: &str, excluded: &[String]) -> Option<Vec<String>> {
         out.dedup();
         return Some(out);
     }
-    let paths = effect_paths(id)?;
-    Some(paths.lines().filter(|p| !hero(p).is_some_and(|h| excluded.contains(&h))).map(str::to_string).collect())
+    Some(effects(id, paks)?.into_iter().filter(|p| !hero(p).is_some_and(|h| excluded.contains(&h))).collect())
 }
 
-pub(crate) fn effect_heroes(id: &str) -> Option<Vec<String>> {
-    let paths = effect_paths(id)?;
-    let mut heroes: Vec<_> = paths.lines().filter_map(hero).collect();
+/// Effects named like the supplied list's own, for the heroes and skins it never covered: the ones newer than the mod
+/// it came from. The list's choices for the heroes and skins it covers stay as they are.
+/// shortcut: by name, like the lists themselves (Hit, Trajectory, CameraShake, never a lobby, MVP or emote one), so a
+/// new hero's effect with another name (a Blast, a LaserEnd) is not found. Montages are not, their camera curves would
+/// need every montage decoded.
+fn newer(id: &str, paks: &Path) -> Vec<String> {
+    let Some(listed) = effect_paths(id) else { return Vec::new() };
+    let rule: fn(&str) -> bool = match id {
+        NO_IMPACT => |n| n.starts_with("ns_") && n.contains("hit"),
+        NO_TRACERS => |n| n.starts_with("ns_") && n.contains("trajectory"),
+        NO_SHAKE => |n| n.starts_with("camerashake"),
+        _ => return Vec::new(),
+    };
+    const COSMETIC: [&str; 13] = ["mvp", "lobby", "show", "select", "victory", "emote", "/ui/", "_ui_", "intro", "outro", "gallery", "pose", "idle"];
+    let skin = |p: &str| crate::xtra_heroes::hero_skin(p).and_then(|h| h.skin);
+    let listed: HashSet<String> = listed.lines().map(str::to_ascii_lowercase).collect();
+    let heroes: HashSet<String> = listed.iter().filter_map(|p| hero(p)).collect();
+    let skins: HashSet<String> = listed.iter().filter_map(|p| skin(p)).collect();
+    crate::xtra_broken::game_effects(paks)
+        .iter()
+        .filter(|p| {
+            let low = p.to_ascii_lowercase();
+            let name = low.rsplit('/').next().unwrap_or(&low);
+            let Some(h) = hero(p) else { return false };
+            rule(name)
+                && !COSMETIC.iter().any(|c| low.contains(c))
+                && !listed.contains(&low)
+                && (!heroes.contains(&h) || skin(p).is_some_and(|s| !skins.contains(&s)))
+        })
+        .cloned()
+        .collect()
+}
+
+/// The supplied list and the newer heroes' and skins' effects (`newer`) in the installed game.
+fn effects(id: &str, paks: &Path) -> Option<Vec<String>> {
+    let mut all: Vec<String> = effect_paths(id)?.lines().map(str::to_string).collect();
+    all.extend(newer(id, paks));
+    Some(all)
+}
+
+/// The heroes the effect built-in `id` has effects for: the supplied list's, and with `paks` the newer ones too.
+pub(crate) fn effect_heroes(id: &str, paks: Option<&Path>) -> Option<Vec<String>> {
+    let mut heroes: Vec<_> = effect_paths(id)?.lines().filter_map(hero).collect();
+    heroes.extend(paks.into_iter().flat_map(|p| newer(id, p)).filter_map(|p| hero(&p)));
     heroes.sort();
     heroes.dedup();
     Some(heroes)
 }
-pub(crate) fn all_excluded(id: &str, excluded: &[String]) -> bool {
-    effect_paths(id).is_some_and(|paths| {
-        paths
-            .lines()
-            .all(|p| hero(p).is_some_and(|h| excluded.contains(&h)))
-    })
+pub(crate) fn all_excluded(id: &str, excluded: &[String], paks: &Path) -> bool {
+    effects(id, paks).is_some_and(|all| all.iter().all(|p| hero(p).is_some_and(|h| excluded.contains(&h))))
 }
 pub(crate) fn overlapping(root: &Path, id: &str) -> Vec<String> {
     let prefix = match id {
@@ -908,6 +944,7 @@ pub async fn make(
     work: &Path,
     out: &Path,
     cancelled: fn() -> bool,
+    waiting: &[String],
 ) -> Result<(String, Vec<String>), String> {
     let s = |p: &Path| p.to_string_lossy().to_string();
     let legacy = work.join("legacy");
@@ -958,15 +995,18 @@ pub async fn make(
             Vec::new(),
         ));
     }
-    let list = effect_paths(id).ok_or("Unknown visual built-in")?;
+    let all_paths = effects(id, paks).ok_or("Unknown visual built-in")?;
     let mut heroes = HashSet::new();
-    let all_paths: Vec<_> = list.lines().collect();
     heroes.extend(all_paths.iter().filter_map(|p| hero(p)));
+    // files a patch newer than the USMAP rewrote: left out now, put in once that patch's USMAP is out (xtra_builtins.rs)
+    let waiting: HashSet<String> = waiting.iter().map(|p| p.trim_end_matches(".uasset").to_ascii_lowercase()).collect();
+    let newer: HashSet<String> = newer(id, paks).into_iter().collect();
     let paths: Vec<String> = all_paths
         .into_iter()
         .filter(|p| !hero(p).is_some_and(|h| excluded.contains(&h)))
-        .map(str::to_string)
         .collect();
+    let waits = paths.iter().filter(|p| waiting.contains(&p.to_ascii_lowercase())).count();
+    let paths: Vec<String> = paths.into_iter().filter(|p| !waiting.contains(&p.to_ascii_lowercase())).collect();
     if paths.is_empty() {
         return Err("Every effect hero is excluded".into());
     }
@@ -1042,24 +1082,21 @@ pub async fn make(
     let mut heroes: Vec<_> = heroes.into_iter().collect();
     heroes.sort();
     let missing = listed - paths.len();
-    Ok((
-        format!(
-            "{} {} assets, {count} {}{}",
-            paths.len(),
-            if id == NO_SHAKE { "camera" } else { "effect" },
-            if id == NO_SHAKE {
-                "shake values zeroed"
-            } else {
-                "emitter masks disabled"
-            },
-            if missing > 0 {
-                format!(". {missing} listed assets are not in this game version")
-            } else {
-                String::new()
-            }
-        ),
-        heroes,
-    ))
+    let added = paths.iter().filter(|p| newer.contains(*p)).count();
+    let mut summary = format!(
+        "{} {} assets{}, {count} {}",
+        paths.len(),
+        if id == NO_SHAKE { "camera" } else { "effect" },
+        if added > 0 { format!(" ({added} for heroes and skins newer than the supplied mod)") } else { String::new() },
+        if id == NO_SHAKE { "shake values zeroed" } else { "emitter masks disabled" },
+    );
+    if missing > 0 {
+        summary += &format!(". {missing} listed assets are not in this game version");
+    }
+    if waits > 0 {
+        summary += &format!(". {waits} more wait for the USMAP of game build {}", crate::xtra_vfx::game_cl(paks).unwrap_or(0));
+    }
+    Ok((summary, heroes))
 }
 
 #[cfg(test)]
@@ -1118,11 +1155,11 @@ mod tests {
     #[test]
     fn effect_hero_choices_cover_the_reference_paths() {
         for id in [NO_IMPACT, NO_TRACERS, NO_SHAKE] {
-            let heroes = effect_heroes(id).unwrap();
+            let heroes = effect_heroes(id, None).unwrap();
             assert!(!heroes.is_empty());
             // game-mode camera shakes belong to no hero, so excluding every hero still builds them
-            assert_eq!(all_excluded(id, &heroes), id != NO_SHAKE);
-            assert!(!all_excluded(id, &[]));
+            assert_eq!(all_excluded(id, &heroes, Path::new("no-game")), id != NO_SHAKE);
+            assert!(!all_excluded(id, &[], Path::new("no-game")));
         }
         assert!(inject_fov(&mut json!({}), &mut json!({})).is_err());
         assert!(disable_emitters(&json!({"Exports":[]}), &mut [], 0).is_err());
@@ -1262,6 +1299,7 @@ mod tests {
             work.path(),
             &out,
             || false,
+            &[],
         ));
         assert!(made.is_ok(), "{made:?}");
         crate::xtra_encrypt::encrypt_built(&out).unwrap();
@@ -1351,13 +1389,19 @@ mod tests {
         let (paks, usmap) = (Path::new(c["paks"].as_str().unwrap()), c["usmap"].as_str().unwrap());
         let gate = |inputs: Vec<String>| crate::xtra_builtins::usmap_ready(paks, usmap, &inputs);
         let waits = |r: Result<(), String>| r.err().map(|e| e.split(" of the ").next().unwrap_or_default().rsplit(' ').next().unwrap_or_default().to_string());
-        assert_eq!(waits(gate(inputs(NO_IMPACT, &[]).unwrap())), None, "No Impact reads nothing the patch changed");
-        assert_eq!(waits(gate(inputs(NO_TRACERS, &[]).unwrap())), None);
-        assert_eq!(waits(gate(inputs(NO_SHAKE, &[]).unwrap())).as_deref(), Some("23"), "23 montages were rewritten");
-        assert_eq!(waits(gate(inputs(FOV, &[]).unwrap())).as_deref(), Some("1"), "one material its Blueprints import");
+        // the effect ones: only newer heroes' files, and the 23 montages the patch rewrote, may wait
+        for id in [NO_IMPACT, NO_TRACERS, NO_SHAKE] {
+            let files: Vec<String> = inputs(id, &[], paks).unwrap().iter().map(|p| format!("{p}.uasset")).collect();
+            let changed = crate::xtra_broken::changed_since_usmap(paks, usmap, &files).unwrap();
+            let listed: HashSet<String> = effect_paths(id).unwrap().lines().map(|l| format!("{l}.uasset")).collect();
+            let listed_changed = changed.iter().filter(|c| listed.contains(*c)).count();
+            println!("{id}: {} newer effects found, {} files changed by the patch ({listed_changed} of the supplied list)", newer(id, paks).len(), changed.len());
+            assert_eq!(listed_changed, if id == NO_SHAKE { 23 } else { 0 }, "{id}");
+        }
+        assert_eq!(waits(gate(inputs(FOV, &[], paks).unwrap())).as_deref(), Some("1"), "one material its Blueprints import");
         assert_eq!(waits(gate(vec!["Marvel/Content/Marvel/Data/DataTable/UI/Login/MarvelLogoVideoTable".into()])), None);
         assert_eq!(waits(gate(vec!["Marvel/Content/Marvel/Data/DataTable/MarvelHeroSkinTable".into(), "Marvel/Content/Marvel/Data/DataTable/HeroGallery/UISkinTable".into()])).as_deref(), Some("2"));
-        println!("USMAP gate matches the patch: impact, tracers and logos build, screen shake, FOV and default skin wait");
+        println!("USMAP gate matches the patch: effects build without what changed, FOV and default skin wait, logos build");
     }
 
     /// Builds No Screen Shake from the installed game (no hero excluded) and reads the encrypted package back.
@@ -1383,6 +1427,7 @@ mod tests {
                 work.path(),
                 &out,
                 || false,
+                &[],
             ))
             .unwrap();
         crate::xtra_encrypt::encrypt_built(&out).unwrap();
@@ -1449,7 +1494,7 @@ mod tests {
             let work = tempfile::tempdir().unwrap();
             let out = work.path().join("out/effects");
             std::fs::create_dir_all(out.parent().unwrap()).unwrap();
-            let excluded = effect_heroes(id)
+            let excluded = effect_heroes(id, None)
                 .unwrap()
                 .into_iter()
                 .filter(|h| h != "1017")
@@ -1463,6 +1508,7 @@ mod tests {
                 work.path(),
                 &out,
                 || false,
+                &[],
             ))
             .unwrap();
             crate::xtra_encrypt::encrypt_built(&out).unwrap();

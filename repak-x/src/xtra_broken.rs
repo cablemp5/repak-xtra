@@ -148,6 +148,34 @@ pub(crate) fn rewritten_since(paks: &Path, files: &[String], since: u64) -> Opti
     Some(stale_in(&game, files, since))
 }
 
+static EFFECTS: Mutex<Option<(String, Arc<Vec<String>>)>> = Mutex::new(None);
+
+/// The game's Niagara systems and camera shakes, as Marvel/... package paths in their own case without an extension,
+/// read once per game build (about 6 s). The effect built-ins find newer heroes' effects in it (xtra_visual_builtins.rs).
+pub(crate) fn game_effects(paks: &Path) -> Arc<Vec<String>> {
+    let containers = game_containers(paks);
+    let key = build_key(&containers);
+    if let Some((k, list)) = EFFECTS.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+        if *k == key {
+            return list.clone();
+        }
+    }
+    let mut out = std::collections::BTreeSet::new();
+    for (utoc, ..) in &containers {
+        for e in crate::utoc_utils::try_read_utoc(utoc).unwrap_or_default() {
+            let path = e.file_path.trim_start_matches("../../../");
+            let Some(path) = path.strip_suffix(".uasset") else { continue };
+            let name = path.rsplit('/').next().unwrap_or(path).to_ascii_lowercase();
+            if name.starts_with("ns_") || name.starts_with("camerashake") {
+                out.insert(path.to_string());
+            }
+        }
+    }
+    let list = Arc::new(out.into_iter().collect::<Vec<_>>());
+    *EFFECTS.lock().unwrap_or_else(|e| e.into_inner()) = Some((key, list.clone()));
+    list
+}
+
 /// The game build in a patch container's name (Patch_-Windows_1.1.3962284_P.utoc), None for a base chunk.
 pub(crate) fn container_cl(utoc: &Path) -> Option<u64> {
     let name = utoc.file_stem()?.to_string_lossy().to_string();
