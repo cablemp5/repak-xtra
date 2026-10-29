@@ -8,7 +8,12 @@
   const css = __CSS__
   const app = __APP__
   // Nexus's words on the buttons that hand a file to the app, and what they say here instead
-  const LABELS = { 'Mod manager download': `Install with ${app}`, 'Slow download': `Slow download, installs in ${app}` }
+  // every download button says the file goes into the app (the window catches each download and hands it over)
+  const LABELS = {
+    'Mod manager download': `Install with ${app}`, 'Slow download': `Slow download, installs in ${app}`,
+    'Fast download': `Fast download, installs in ${app}`, 'Manual download': `Download, installs in ${app}`,
+    'Download': `Download, installs in ${app}`,
+  }
 
   const slow = new Set() // the Slow download buttons seen (relabelled, so found again here, not by their words)
   let clickedOn = '' // the page whose Slow download was clicked (a page that changes without loading counts anew)
