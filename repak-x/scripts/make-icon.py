@@ -1,7 +1,8 @@
 """repakxtra's app icon: the logo's lowercase x (custom/Wordmark.tsx), Geist 800, in the logo's solid color, centered on
 transparency. With --mesh it is filled with the logo's old mesh gradient instead (the long tilted color blobs that cross
 the logo's x, blurred into each other and bent along smooth noise, over the base color; custom/WordmarkMesh.tsx). Writes icons/RepakIcon.png (512) and icons/RepakIcon.ico (16 to
-256), which tauri.conf.json bundles into the exe: the taskbar, the window and the desktop shortcut all show it. Colors are
+256), which tauri.conf.json bundles into the exe: the taskbar, the window and the desktop shortcut all show it, and
+icons/builds/ (each test, dev and repakxploit copy's own color, picked by build.rs). Colors are
 theme.css .wm's. Run from repak-x/ with any Python that has Pillow and numpy:
     python scripts/make-icon.py [--mesh] [--test-ico path.ico] [--sheet contact.png]
 --test-ico writes the same icon in the test build's green, for the test copy's desktop shortcut (kept outside the repo).
@@ -111,9 +112,16 @@ def render(size, colors=SOLID):   # colors: one '#rrggbb' for the solid icon, or
     return Image.fromarray(img, 'RGBA').resize((size, size), Image.BOX)
 
 
-def save_ico(path, colors=SOLID):
+def save_ico(path, colors=SOLID, degrees=0):
     frames = [render(s, colors) for s in sorted(SIZES, reverse=True)]
+    if degrees:
+        frames = [turned(f, degrees) for f in frames]
     frames[0].save(path, sizes=[f.size for f in frames], append_images=frames[1:])
+
+
+# Each other copy's exe icon (build.rs picks one; Task Manager and Explorer show it): the stable icon's hues turned as far
+# as xtra_buildmark.rs turns the window icon, so the two always match
+BUILDS = {'test': -80, 'dev': 170, 'xploit': 140, 'xploit-test': 60, 'xploit-dev': 100}
 
 
 def turned(img, degrees):
@@ -155,8 +163,12 @@ if __name__ == '__main__':
     mask = Image.new('RGBA', big.size, (255, 255, 255, 0))
     mask.putalpha(big.getchannel('A'))
     mask.save(art / 'logomask_R.png', optimize=True)
+    builds = HERE / 'icons' / 'builds'
+    builds.mkdir(exist_ok=True)
+    for kind, degrees in BUILDS.items():
+        save_ico(builds / f'RepakIcon-{kind}.ico', BLUE, degrees)
     if '--test-ico' in args:
         save_ico(args[args.index('--test-ico') + 1], GREEN)
     if '--sheet' in args:
         contact_sheet(args[args.index('--sheet') + 1], BLUE, GREEN)
-    print('wrote icons/RepakIcon.png, icons/RepakIcon.ico and the app\'s logo images in src/assets/app-icons')
+    print('wrote icons/RepakIcon.png, icons/RepakIcon.ico, each build\'s icons/builds/*.ico and the app\'s logo images in src/assets/app-icons')

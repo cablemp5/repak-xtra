@@ -28,8 +28,21 @@ fn main() {
         _ => format!("{{\"productName\":\"{name}\"}}"),
     };
     std::env::set_var("TAURI_CONFIG", config);
+    // The exe's own icon (Task Manager and Explorer show it) in this copy's color, as xtra_buildmark.rs colors the window's:
+    // icons/builds/ from scripts/make-icon.py. The stable repakxtra keeps the blue icons/RepakIcon.ico
+    let extended = std::env::var_os("CARGO_FEATURE_EXTENDED").is_some();
+    let kind = if std::env::var("PROFILE").as_deref() == Ok("debug") { "dev" }
+        else if std::env::var("REPAKXTRA_BUILD").as_deref() == Ok("test") { "test" } else { "" };
+    let icon = match (extended, kind) {
+        (false, "") => "icons/RepakIcon.ico".to_string(),
+        (false, k) => format!("icons/builds/RepakIcon-{k}.ico"),
+        (true, "") => "icons/builds/RepakIcon-xploit.ico".to_string(),
+        (true, k) => format!("icons/builds/RepakIcon-xploit-{k}.ico"),
+    };
+    println!("cargo:rerun-if-changed={icon}");
     // Tauri build - handles icons and resources
-    tauri_build::build();
+    tauri_build::try_build(tauri_build::Attributes::new().windows_attributes(tauri_build::WindowsAttributes::new().window_icon_path(&icon)))
+        .expect("tauri build");
     // repakxtra: tauri-build only watches tauri.conf.json, so a new icon kept the old one in the exe until a clean build
     println!("cargo:rerun-if-changed=icons/RepakIcon.ico");
 
