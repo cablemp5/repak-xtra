@@ -69,6 +69,10 @@ function usePreviewSlides(p: LoadoutProps, l: Loadout) {
   return [all, mine] as [Slide[], string[]] // mine: the members' preview names (the emote sound looks them up)
 }
 
+/** A picture behind a Text cover's words (CaptionBackground.tsx, in the card's tools): hidden for now (cable, 2026-10-29),
+ *  its controls and any saved picture, the code kept for later. */
+const CAPTION_BACKGROUND = false
+
 /** What the card's Cover switch calls each source, and its icon. */
 const COVER_LABEL: Record<Cover, string> = { preview: 'Preview', capture: 'Capture', image: 'Image', text: 'Text' }
 const COVER_ICON: Record<Cover, typeof WandSparkles> = { preview: WandSparkles, capture: Camera, image: ImageIcon, text: Type }
@@ -97,7 +101,8 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   usePreviewVersion()
   const page = Boolean(generate)
   const ownUrl = useMediaUrl(l.id, l.mediaRev)
-  const captionBackground = useMediaUrl(captionBackgroundKey(l.id), l.captionBackgroundRev)
+  const savedBackground = useMediaUrl(captionBackgroundKey(l.id), l.captionBackgroundRev)
+  const captionBackground = CAPTION_BACKGROUND ? savedBackground : undefined
   const own = ownUrl ?? l.image
   const shot = useMediaUrl(captureKey(l.id), l.captureRev)
   const [previewSlides, previewNames] = usePreviewSlides(p, l)
@@ -266,7 +271,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
         </div>
       )}
       {/* Image and Text keep their tools behind one arrow in the corner (CardTools.tsx) */}
-      {page && !working && ((cover === 'image' && !empty) || cover === 'text') && (
+      {page && !working && ((cover === 'image' && !empty) || (cover === 'text' && CAPTION_BACKGROUND)) && (
         <CardTools l={l} text={cover === 'text'} top={editing} alert={p.alert} onImage={onClick}
           onNexus={nexus?.ids.length ? () => setNexusOpen(true) : undefined} />
       )}
