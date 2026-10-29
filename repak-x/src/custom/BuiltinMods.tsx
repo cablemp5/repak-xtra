@@ -31,8 +31,8 @@ const ABOUT: Record<string, { name: string; what: string; icon: BuiltinIconCompo
   'skip-intro-movies': { name: 'Skip startup logos', what: 'The game opens faster, without the Marvel, NetEase, and Unreal Engine logo videos that play each time it starts', icon: ClapperboardIcon },
   ...(EXTENDED ? { 'custom-quake': { name: 'CustomQuake', what: 'Every map texture turns one flat color you pick, the Quake look', icon: FlatTilesIcon } } : {}),
   ...(EXTENDED ? {
-    'no-impact': { name: 'No Impact', what: 'Hides the impact effects covered by the supplied mod, rebuilt from your current game files', icon: ImpactIcon },
-    'no-tracers': { name: 'No Tracers', what: 'Hides the tracer effects covered by the supplied mod, rebuilt from your current game files', icon: TracerIcon },
+    'no-impact': { name: 'No Impact', what: 'Hides hit impact effects, rebuilt from your current game files', icon: ImpactIcon },
+    'no-tracers': { name: 'No Tracers', what: 'Hides projectile tracer effects, rebuilt from your current game files', icon: TracerIcon },
     'fov-slider': { name: 'FOV Slider', what: 'Adds FOV controls to the in-game settings, with the original saved values and match updates', icon: FovIcon },
     'skip-login-video': { name: 'Skip login video', what: 'Skips seasonal login transitions using the supplied movie placeholder. Turning off restores backed-up originals', icon: ClapperboardIcon },
   } : {}),
@@ -294,7 +294,7 @@ function HeroPicker({ id, b, open, building, blocked, onDone, alert }: { id: str
             <span className="bi-kept"><Num id="bi-kept" value={kept.size} /> {kept.size === 1 ? 'hero keeps' : 'heroes keep'} their {keptThing}</span>
             {kept.size > 0 && <button type="button" className="lo-text-btn" title="Clear excluded heroes" onClick={() => setKept(new Set())}>Clear</button>}
             <span className="bi-foot-gap" />
-            {b.on && dirty && <span className="bi-cost">{blocked ? BLOCKED : 'Takes about 25 seconds'}</span>}
+            {b.on && dirty && <span className="bi-cost">{blocked ? BLOCKED : skin ? 'Takes about 25 seconds' : 'Takes a few minutes'}</span>}
             <button type="button" className="lo-text-btn" title="Cancel, keep the saved heroes" onClick={onDone}>Cancel</button>
             <button type="button" className="lo-text-btn is-primary" disabled={!dirty || building || (b.on && blocked)} onClick={apply}
               title={!dirty ? 'Nothing changed yet' : b.on && blocked ? BLOCKED : b.on ? `Rebuild ${ABOUT[b.id].name} with these heroes left out` : 'Save these heroes for when it is on'}>{applyLabel}</button>

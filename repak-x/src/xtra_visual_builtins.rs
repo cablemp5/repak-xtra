@@ -682,6 +682,15 @@ pub async fn make(
         return Err("Every effect hero is excluded".into());
     }
     extract_vanilla_assets(tool, &s(paks), &s(&legacy), &paths, &sink).await?;
+    // A game update can drop or rename a listed asset: build the rest instead of nothing.
+    let listed = paths.len();
+    let paths: Vec<String> = paths
+        .into_iter()
+        .filter(|rel| legacy.join(format!("{rel}.uexp")).is_file())
+        .collect();
+    if paths.is_empty() {
+        return Err("None of the listed effect assets exist in this game version".into());
+    }
     let mut count = 0;
     // Niagara JSON contains large script arrays. Decode bounded batches and discard them immediately.
     for batch in paths.chunks(8) {
@@ -730,10 +739,16 @@ pub async fn make(
     pack_to_iostore(tool, usmap, &s(&staged), &s(out), None, &sink).await?;
     let mut heroes: Vec<_> = heroes.into_iter().collect();
     heroes.sort();
+    let missing = listed - paths.len();
     Ok((
         format!(
-            "{} effect assets, {count} emitter masks disabled",
-            paths.len()
+            "{} effect assets, {count} emitter masks disabled{}",
+            paths.len(),
+            if missing > 0 {
+                format!(". {missing} listed assets are not in this game version")
+            } else {
+                String::new()
+            }
         ),
         heroes,
     ))
@@ -900,6 +915,33 @@ mod tests {
             9
         );
         println!("FOV rebuilt, encrypted, extracted and decoded successfully (9 packages)");
+    }
+
+    /// A listed asset the game no longer has must not fail extraction, so the rest still builds.
+    #[test]
+    #[ignore]
+    fn missing_listed_asset_is_skipped() {
+        let root = std::path::PathBuf::from(
+            std::env::var("REPAKXTRA_REFERENCES").expect("REPAKXTRA_REFERENCES"),
+        );
+        let c = read(&root.join("context.json")).unwrap();
+        let work = tempfile::tempdir().unwrap();
+        let legacy = work.path().join("legacy");
+        let real = effect_paths(NO_IMPACT).unwrap().lines().next().unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(extract_vanilla_assets(
+            Path::new("."),
+            c["paks"].as_str().unwrap(),
+            &legacy.to_string_lossy(),
+            &[
+                real.to_string(),
+                "Marvel/Content/Marvel/Characters/1011/Gone/NS_Gone_Hit_01".to_string(),
+            ],
+            &NoOpProgressSink,
+        ))
+        .unwrap();
+        assert!(legacy.join(format!("{real}.uexp")).is_file());
+        println!("extraction tolerates a missing listed asset");
     }
 
     #[test]

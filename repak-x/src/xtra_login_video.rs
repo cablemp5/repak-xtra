@@ -117,6 +117,19 @@ fn apply_with(
 ) -> Result<String, String> {
     fs::create_dir_all(dir.join("login-video-backups")).map_err(|e| e.to_string())?;
     let mut records = records(dir)?;
+    // A crash mid-publication leaves the staging folder in the game's movie folder: sweep it first.
+    for entry in fs::read_dir(root(paks)?)
+        .map_err(|e| e.to_string())?
+        .flatten()
+    {
+        if entry
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".repakxtra-login-")
+        {
+            fs::remove_dir_all(entry.path()).map_err(|e| e.to_string())?;
+        }
+    }
     let stage = tempfile::Builder::new()
         .prefix(".repakxtra-login-")
         .tempdir_in(root(paks)?)
@@ -269,7 +282,10 @@ mod tests {
         fs::create_dir_all(&season).unwrap();
         let movie = season.join("Transition.bk2");
         fs::write(&movie, b"original movie").unwrap();
+        let stale = root(&paks).unwrap().join(".repakxtra-login-stale");
+        fs::create_dir(&stale).unwrap();
         apply_with(&paks, &dir, true, publish_movies).unwrap();
+        assert!(!stale.exists(), "a crashed run's staging folder is swept");
         assert_eq!(fs::read(&movie).unwrap(), PLACEHOLDER);
         assert_eq!(status(&paks, &dir), (true, true, 10));
         apply_with(&paks, &dir, false, publish_movies).unwrap();
