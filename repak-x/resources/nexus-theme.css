@@ -40,7 +40,8 @@ div:has(> button[aria-label="Show notifications"]), div:has(> a[aria-label="View
 .modtabs > li > a { display: flex !important; align-items: center; gap: 7px; height: 44px; padding: 0 18px !important; box-sizing: border-box;
   font-size: 14px !important; font-weight: 500 !important; }
 
-/* downloads go through Mod manager download only (repakxploit takes its links): the Files tab hides Manual download and
-   its Premium banner, and the top of a mod page drops its Download row (Manual and Vortex) */
-.new-new-premium-banner, a.nxm-button-secondary[href*="tab=files&file_id="]:not([href*="nmm=1"]),
+/* downloads go through Mod manager download (repakxploit takes its links): where a file has one, the Files tab hides its
+   Manual download. A file with only Manual download keeps it (the window's download still installs in the app). The
+   Premium banner goes, and the top of a mod page drops its Download row (Manual and Vortex) */
+.new-new-premium-banner, .accordion-downloads:has(a[href*="nmm=1"]) a.nxm-button-secondary[href*="tab=files&file_id="]:not([href*="nmm=1"]),
 .modactions > li.dllabel, .modactions > li:has(> mod-download-modal) { display: none !important; }
