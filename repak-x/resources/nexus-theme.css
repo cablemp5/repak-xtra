@@ -52,3 +52,11 @@ html body[class] { background-color: #101010 !important; }
 /* ads, upsells and the footer */
 .ads-holder, .ad, .ad-billboard, [id^="billboard_"], a.rj-btn[href*="/vortex"],
 .bg-premium-weak, free-trial-banner, #rj-footer, footer, .rj-vortex-icon-wrapper, [class*="vortex-promo"] { display: none !important; }
+
+/* header buttons the app has no use for: the game switcher, Upload, notifications and messages. Mod pages have the
+   older header (named parts), list pages the newer one (found by its labels, the Upload icon, and Games as the first
+   of the six nav menus) */
+.nav-tab-button[data-title="Games"], upload-modal-button, .rj-notifications, .rj-messages,
+div.h-full:has(> [data-headlessui-state]:nth-child(6)) > [data-headlessui-state]:first-child,
+button.nxm-button:has(> svg path[d^="M9,16V10H5L12,3"]),
+div:has(> button[aria-label="Show notifications"]), div:has(> a[aria-label="View messages"]) { display: none !important; }
