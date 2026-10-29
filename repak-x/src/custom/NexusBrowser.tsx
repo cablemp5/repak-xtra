@@ -237,6 +237,21 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
   )
 }
 
+// a medal's scalloped rim: ten soft round bumps around a 24px circle
+const RIM = Array.from({ length: 96 }, (_, i) => {
+  const a = (i / 96) * Math.PI * 2, r = 10.7 + 0.9 * Math.abs(Math.cos(a * 5)) ** 0.6 // rounded tops, tight dips
+  return `${(12 + r * Math.cos(a)).toFixed(2)},${(12 + r * Math.sin(a)).toFixed(2)}`
+}).join(' ')
+
+/** A Top this week card's place: a flat medal (a scalloped rim, a darker disc, the number in the rim's color). */
+const Medal = ({ rank }: { rank: number }) => (
+  <svg className={`nx-medal is-${rank}`} viewBox="0 0 24 24" role="img" aria-label={`Number ${rank} this week`}>
+    <polygon className="nx-medal-rim" points={RIM} />
+    <circle className="nx-medal-disc" cx="12" cy="12" r="7.8" />
+    <text x="12" y="12" textAnchor="middle" dominantBaseline="central">{rank}</text>
+  </svg>
+)
+
 /** What Nexus said when it failed, folded away under a short explanation. */
 const ErrorDetails = ({ error }: { error: string }) => (
   <details className="nx-details"><summary>Details</summary><code>{error}</code></details>
@@ -257,7 +272,7 @@ function NexusCard({ c, path, look, rank }: { c: Card; path?: string; look: Look
   const install = () => { setPreparing(true); void installFromNexus(c.modId).finally(() => setPreparing(false)) }
   return (
     <article className="nx-card">
-      {rank && <span className={`nx-medal is-${rank}`} aria-label={`Number ${rank} this week`}>{rank}</span>}
+      {rank && <Medal rank={rank} />}
       {peek && <NexusPeek modId={c.modId} name={name} first={c.thumbnailLargeUrl} onOpen={open} onClose={() => setPeek(false)} />}
       <button ref={picture} type="button" className="nx-card-image" title={pictures} aria-label={pictures}
         onClick={() => { if (c.thumbnailLargeUrl) setPeek(true); else open() }}>
