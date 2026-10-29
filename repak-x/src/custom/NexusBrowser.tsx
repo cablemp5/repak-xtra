@@ -241,6 +241,9 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
   )
 }
 
+/** Top this week's medals are hidden for now (cable's call): the code stays, true shows them again. */
+const SHOW_MEDALS = false
+
 /** A Top this week card's place: a flat medal (a light rim, a darker disc, the number in the rim's color). */
 const Medal = ({ rank }: { rank: number }) => (
   <svg className={`nx-medal is-${rank}`} viewBox="0 0 24 24" role="img" aria-label={`Number ${rank} this week`}>
@@ -270,7 +273,7 @@ function NexusCard({ c, path, look, rank }: { c: Card; path?: string; look: Look
   const install = () => { setPreparing(true); void installFromNexus(c.modId).finally(() => setPreparing(false)) }
   return (
     <article className="nx-card">
-      {rank && <Medal rank={rank} />}
+      {SHOW_MEDALS && rank && <Medal rank={rank} />}
       {peek && <NexusPeek modId={c.modId} name={name} first={c.thumbnailLargeUrl} onOpen={open} onClose={() => setPeek(false)} />}
       <button ref={picture} type="button" className="nx-card-image" title={pictures} aria-label={pictures}
         onClick={() => { if (c.thumbnailLargeUrl) setPeek(true); else open() }}>
