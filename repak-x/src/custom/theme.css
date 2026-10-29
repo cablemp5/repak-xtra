@@ -2805,6 +2805,8 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 [data-theme="light"] .mod-type-badge.broken-badge, [data-theme="light"] .mod-state-filter button.is-broken, [data-theme="light"] .mod-state-filter button.is-broken .mod-state-count { color: #7f6900 !important; }
 .mod-type-badge.broken-badge.is-broken { background: color-mix(in srgb, #f5d342, transparent 88%) !important; }
 .mod-type-badge.broken-badge.is-risky, .mod-type-badge.broken-badge.is-vfx { background: transparent !important; }
+/* Needs VFX update that waits for the game's new USMAP: grey, nothing to do yet (custom/VerdictBadge.tsx) */
+.mod-type-badge.broken-badge.is-waiting, [data-theme="light"] .mod-type-badge.broken-badge.is-waiting { color: var(--text-secondary) !important; border-color: color-mix(in srgb, var(--text-secondary), transparent 60%) !important; }
 /* the header's VFX Updater button: a yellow dot (the Needs VFX update tag's) while VFX mods need an update (custom/vfx/VfxNotice.tsx) */
 .btn-vfx { position: relative; }
 .vfx-dot { position: absolute; top: -4px; right: -4px; width: 9px; height: 9px; border-radius: 50%; pointer-events: none;
@@ -2943,6 +2945,10 @@ html[data-motion="off"] .setting-sub, html[data-motion="off"] .bulk-actions-tool
 .bi-item.is-on .bi-icon { color: var(--accent-primary); background: rgba(52, 107, 241, 0.12); }
 .bi-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .bi-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+/* in the game, but some files wait for the game's new USMAP (BuiltinMods.tsx partialText): a yellow tag by the name */
+.bi-partial { margin-left: 8px; height: 20px; display: inline-flex; align-items: center; padding: 0 6px; border-radius: 6px; vertical-align: 1px;
+  font-size: 11px; font-weight: 600; color: #f5d342; border: 1px solid color-mix(in srgb, #f5d342, transparent 55%); cursor: help; }
+[data-theme="light"] .bi-partial { color: #7f6900; }
 .bi-requires { color: #f2555a; font-size: inherit; font-weight: inherit; }
 .bi-status { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 12px; color: var(--text-secondary);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -3151,7 +3157,7 @@ html[data-motion="off"] .upd-progress > span, html[data-motion="off"] .repakx-pr
 .nx-filters .nx-type.custom-dropdown-container { width: 170px; }
 .nx-type .custom-dropdown-img.is-glyph { width: 14px; height: 14px; background: transparent; }
 .nx-type-dot { width: 8px; height: 8px; border-radius: 50%; }
-.nx-type-dot.is-all { box-sizing: border-box; border: 1.5px solid var(--text-secondary); }
+.nx-type-dot.is-all { box-sizing: border-box; border: 2px solid var(--text-secondary); }
 [data-theme="light"] .nx-card-type { --c: color-mix(in srgb, var(--type, var(--text-primary)), #000 38%); }
 .nx-clear { margin-left: 6px; font-size: 12.5px; white-space: nowrap; }
 .nx-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; gap: 24px; }

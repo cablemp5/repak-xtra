@@ -63,6 +63,14 @@ export type FixOptions = {
   cancelled?: () => boolean
 }
 
+/** xtra_broken.rs UsmapWait, while the USMAP is older than the game: its game build, the installed game's, and how many
+ *  of the files the update decodes the newer patch rewrote (the update waits when that is not 0). */
+export type UsmapWait = { usmap: number; game: number; changed: number }
+/** Why an update waits. A patch can insert properties into a class, and an older USMAP then reads every later one under
+ *  the wrong name without any error. Files the patch left alone read right, so only a mod whose files it changed waits. */
+export const usmapWaitText = (w: UsmapWait) =>
+  `The game update changed ${plural(w.changed, 'file')} it rebuilds, and the saved USMAP (game build ${w.usmap}) would read ${w.changed === 1 ? 'it' : 'them'} wrong. It can be updated once the USMAP for game build ${w.game} is out.`
+
 type Dirs = { modExtract: string; modJson: string; editedJson: string; finalUassets: string; stage: string; vanillaExtract: string; vanillaJson: string; vanillaIndex: string }
 type Detected = { kind: 'material_instance' | 'blueprint' | 'maybe' | 'other'; class: string | null; error: string | null }
 type VanillaIndex = { have: string[] } // an older index's "absent" list is not read (see step 4)
@@ -129,9 +137,13 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
   try {
     // ---- 1: extract and sort ----
     enter(1)
+
     // a partial update lacks the Niagara files it left out: its kept original is what gets updated
     const src = await invoke<string>('xtra_vfx_source', { modPath: o.modPath }).catch(() => o.modPath)
     if (src !== o.modPath) log(`Starting from ${stem(src)}, the original kept with its Niagara files.`)
+    // the USMAP may be older than the game: fine unless the patch rewrote files this update decodes
+    const wait = await invoke<UsmapWait | null>('xtra_vfx_usmap_wait', { modPath: src, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath }).catch(() => null)
+    if (wait?.changed) { report.error = `Not updated yet. ${usmapWaitText(wait)}`; return report }
     const runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
     const dirs = await invoke<Dirs>('xtra_vfx_dirs', { gamePaks: o.gamePaksPath, runId, usmapPath: o.usmapPath }) // the game files' cache is per USMAP too
     const extracted = await invoke<string[]>('vfx_extract_mod_assets', { gamePaks: o.gamePaksPath, modPath: src, outputDir: dirs.modExtract })
@@ -205,6 +217,15 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
 
     // ---- 9 (also reached early when the mod changes only Niagara files): pack and place ----
     const packAndPlace = async () => {
+      // while the USMAP is older than the game only a whole update goes in: one with files left out would not look the
+      // same in the game, so it waits for the USMAP instead
+      // ownGame: a Niagara file whose edits could not be carried, so the game's own plays instead of the mod's
+      const missing = report.counts.left + report.counts.ownGame + report.counts.unreadable + report.assets.filter(a => a.kind === 'failed').length
+      if (wait && missing) {
+        report.error = `Not updated yet. With the saved USMAP (game build ${wait.usmap}) ${plural(missing, 'file')} of it could not be rebuilt, so the update would not look the same in the game. It can be updated once the USMAP for game build ${wait.game} is out.`
+        log(report.error, 'warning')
+        return
+      }
       enter(9)
       const base = o.outputDir ? `${slash(o.outputDir)}/${fixedName(o.modPath)}` : `${dirs.stage}/fixed`
       const utoc = await invoke<string>('vfx_pack_to_iostore', { usmapPath: o.usmapPath, inputDir: dirs.finalUassets, outputBase: base, allowedAssets: manifest })

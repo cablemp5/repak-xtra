@@ -22,3 +22,6 @@ uassettool-patches/*.patch -text
 
 # repakxtra: uBlock Origin Lite for the Nexus window, compiled into the exe (include_bytes!): a real file, never an LFS pointer
 repak-x/resources/ubol/uBOLite.edge.zip -filter -diff -merge binary
+
+# repakxtra: the FOV logic source is compiled into the exe (include_bytes!): a real file, never an LFS pointer
+repak-x/resources/visual-builtins/fov-logic.zip -filter -diff -merge binary

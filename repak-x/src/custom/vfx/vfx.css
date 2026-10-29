@@ -65,6 +65,8 @@
   color: #f5d342; border: 1px solid color-mix(in srgb, #f5d342, transparent 55%); cursor: help; white-space: nowrap; }
 .vf-partial-n { font-weight: 500; color: #f5d342; }
 [data-theme="light"] .vf-partial, [data-theme="light"] .vf-needs, [data-theme="light"] .vf-partial-n { color: #665400; }
+/* needs an update the saved USMAP cannot make yet: grey, nothing to do until the new USMAP is out */
+.vf-needs.is-waiting, [data-theme="light"] .vf-needs.is-waiting { color: var(--text-secondary); border-color: color-mix(in srgb, var(--text-secondary), transparent 60%); }
 .vf-loadouts {flex: 0 1 auto; min-width: 0; max-width: 34%; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px;
   border: 1px solid var(--panel-border); border-radius: 6px; font-size: 11.5px; font-weight: 500; color: var(--text-secondary); }
 /* a button: opens that loadout's page in the main window */
@@ -210,16 +212,17 @@ html[data-motion="off"] .vf-pill, html[data-motion="off"] .vf-status { animation
 
 /* the main window's notice after a game update (VfxNotice.tsx) */
 .vfx-notice {
-  display: flex; align-items: center; gap: 12px; margin: 0 0 14px; padding: 10px 12px 10px 14px;
-  border: 1px solid var(--panel-border); border-radius: 12px; background: var(--panel-bg);
+  display: flex; align-items: center; gap: 12px; margin: 0 0 24px; padding: 12px 12px 12px 16px; /* 24px: as far from the page below as from the header above */
+  /* the problem yellow, tinted: it must not read like the quiet panels around it */
+  border: 1px solid color-mix(in srgb, #f5d342, transparent 50%); border-radius: 12px; background: color-mix(in srgb, #f5d342, transparent 92%);
   animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards;
 }
 .vfx-notice p { flex: 1; min-width: 0; margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-secondary); }
-.vfx-notice strong { color: var(--text-primary); font-weight: 600; }
+.vfx-notice-head { display: block; margin-bottom: 2px; font-size: 15px; font-weight: 700; line-height: 1.35; color: var(--text-primary); }
 .vfx-notice-icon { flex: none; color: #f5d342; }
 .vfx-notice .btn-primary {
   height: 32px !important; min-height: 0 !important; padding: 0 14px !important; font-size: 13px !important; border-radius: var(--quiet-radius) !important;
-  display: inline-flex !important; align-items: center; width: auto !important; flex: none; white-space: nowrap;
+  display: inline-flex !important; align-items: center; gap: 7px; width: auto !important; flex: none; white-space: nowrap;
 }
 .vfx-notice .lo-text-btn { flex: none; white-space: nowrap; }
 html[data-motion="off"] .vfx-notice { animation: none; }
@@ -229,6 +232,7 @@ html[data-motion="off"] .vfx-notice { animation: none; }
 [data-theme="light"] .vf-pill.is-failed, [data-theme="light"] .vf-pill.is-partial,
 [data-theme="light"] .vf-counts .is-failed b, [data-theme="light"] .vf-counts .is-unreadable b, [data-theme="light"] .vf-log .is-warning { color: #665400 !important; }
 [data-theme="light"] .vf-warn svg, [data-theme="light"] .vfx-notice-icon { color: #9a7d00; }
+[data-theme="light"] .vfx-notice { border-color: color-mix(in srgb, #9a7d00, transparent 55%); background: color-mix(in srgb, #f5d342, transparent 82%); }
 [data-theme="light"] .vf-warnings li::before { background: #9a7d00; }
 
 /* a mod with Niagara effects (particle systems) */

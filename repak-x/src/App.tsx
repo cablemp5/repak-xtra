@@ -71,6 +71,7 @@ import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
 import { rescanVerdicts, useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
 import { useGameUpdateWatch } from './custom/gameUpdate' // repakxtra
+import { useUsmapWatch } from './custom/usmapWatch' // repakxtra
 import { fixInVfxWindow } from './custom/vfx/handoff' // repakxtra: the VFX Updater window
 import VfxNotice, { VfxDot } from './custom/vfx/VfxNotice' // repakxtra: the game updated, VFX mods to fix
 import { canUpdateVfx, checkVfxModInPlace, updateVfxModInPlace } from './custom/vfx/quick' // repakxtra: Update VFX in the right-click menu
@@ -581,6 +582,7 @@ function App() {
 
   const alert = useAlert();
   useGameUpdateWatch(alert, isModsLoading, mods.length, () => { showAll(); setModState('broken') }) // repakxtra: game update notice
+  useUsmapWatch() // repakxtra: checks and built-ins again once this game build's USMAP is out
 
   // repakxtra: the VFX Updater window (custom/vfx/), a mod handed over when given
   const openVfxUpdaterWindow = (modUtocPath?: string | null) =>
