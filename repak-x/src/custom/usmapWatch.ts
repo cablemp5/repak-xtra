@@ -1,7 +1,8 @@
 // repakxtra: the USMAP for a new game build is often out days after the patch. Built-ins and VFX updates wait for it
-// (xtra_niagara.rs usmap_behind), and so do the mod checks that read the game's files. So while the saved one is older
-// than the game, a look for a newer one (an ETag check) runs 5 s after start and on focus, every 10 minutes at most. Once
-// one is saved, every mod check runs again and the built-ins that waited build, in this run and not only at the next start.
+// (xtra_broken.rs changed_since_usmap), and so do the mod checks that read the game's files. A look for a newer one (an
+// ETag check) runs 5 s after start and on focus, every 10 minutes at most. Once one is saved, every mod check runs again
+// and the built-ins that waited build, in this run. The first look of a run also builds the ones that waited for a USMAP
+// which came out while repakxtra was closed.
 import { useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { rescanVerdicts } from './brokenMods'
@@ -15,15 +16,20 @@ export function useUsmapWatch() {
     let last = 0
     let busy = false
     let waited = false
+    let first = true
     const check = async () => {
       if (busy || Date.now() - last < EVERY) return
       last = Date.now()
       busy = true
       try {
-        if (await invoke<boolean>('xtra_usmap_waiting')) { waited = true; return }
-        if (!waited) return // it matched all along: the launch's own checks already used it
+        if (await invoke<boolean>('xtra_usmap_waiting')) { waited = true; first = false; return }
+        // The first check of a run also catches a USMAP that came out while repakxtra was closed: the launch's mod
+        // checks may have fetched it first, so nothing here looks new, but a built-in that left files out for an older
+        // USMAP is out of date by its own record and builds now (a no-op for the rest)
+        if (!waited && !first) return
+        if (waited) rescanVerdicts() // the launch's checks ran before it: once more with it
         waited = false
-        rescanVerdicts()
+        first = false
         await refreshBuiltins()
       } catch (e) {
         console.warn('[usmapWatch] check failed', e)
