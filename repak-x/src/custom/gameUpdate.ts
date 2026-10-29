@@ -9,6 +9,7 @@ import { flaggedCount, fullScan, waitingCount } from './brokenMods'
 import { setView } from './loadoutStore'
 import { plural } from './modName'
 import { REPAKXTRA_VERSION } from './version'
+import { APP_NAME } from './edition'
 
 type GameUpdate = { updated: number; previous: number }
 type Alert = { info: (title: string, text?: string, options?: { color?: 'info'; duration?: number; action?: ReactNode }) => number }
@@ -89,7 +90,7 @@ export function useGameUpdateWatch(alert: Alert, loading: boolean, count: number
       const flagged = flaggedCount()
       if (!seen || !flagged) return
       const { alert, showFlagged } = live.current
-      alert.info(`Updated to repakxtra ${REPAKXTRA_VERSION}`, appUpdateText(flagged, waitingCount()), {
+      alert.info(`Updated to ${APP_NAME} ${REPAKXTRA_VERSION}`, appUpdateText(flagged, waitingCount()), {
         color: 'info',
         duration: 15000,
         action: createElement('button', { type: 'button', className: 'toast-action-btn is-short', onClick: (e: { stopPropagation: () => void }) => { e.stopPropagation(); setView('library'); showFlagged() } }, 'Show problems'),

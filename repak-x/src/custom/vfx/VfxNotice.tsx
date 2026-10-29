@@ -64,12 +64,17 @@ export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () =>
   if (!shown || !stale.length || !updated || dismissed === String(updated)) return null
   const when = new Date(updated * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
   const n = stale.length
+  // the ones whose files the patch itself changed wait for its USMAP (xtra_broken.rs usmap_wait): Update sends the rest
+  const ready = stale.filter(m => !verdictOf(m.path)?.usmapWait)
+  const waiting = n - ready.length
   return (
     <div className="vfx-notice" role="status">
       <AlertTriangle size={16} className="vfx-notice-icon" aria-hidden="true" />
-      <p><strong>The game updated on {when}.</strong> {n === 1 ? '1 VFX or material mod was' : `${n} VFX or material mods were`} made for the files it changed, so {n === 1 ? 'its' : 'their'} effects or materials may look wrong or crash the game.</p>
+      <p><strong>The game updated on {when}.</strong> {n === 1 ? '1 VFX or material mod was' : `${n} VFX or material mods were`} made for the files it changed, so {n === 1 ? 'its' : 'their'} effects or materials may look wrong or crash the game.
+        {waiting > 0 && ` ${ready.length ? `${ready.length} can be updated now. ` : ''}${waiting === n ? (n === 1 ? 'It waits' : 'They all wait') : `${waiting} wait`} for the game's new USMAP before ${waiting === 1 ? 'it' : 'they'} can be updated.`}</p>
       <button type="button" className="lo-text-btn" onClick={() => { localStorage.setItem(DISMISSED, String(updated)); setDismissed(String(updated)) }}>Not now</button>
-      <button type="button" className="btn-primary" onClick={() => fixInVfxWindow(stale.map(m => m.utoc_path || utocOf(m.path)), true)}>Update VFX mods</button>
+      {ready.length > 0 && <button type="button" className="btn-primary" onClick={() => fixInVfxWindow(ready.map(m => m.utoc_path || utocOf(m.path)), true)}>
+        {waiting ? `Update ${ready.length === 1 ? '1 mod' : `${ready.length} mods`}` : 'Update VFX mods'}</button>}
     </div>
   )
 }

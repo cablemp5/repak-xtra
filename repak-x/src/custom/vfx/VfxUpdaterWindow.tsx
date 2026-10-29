@@ -694,7 +694,8 @@ export function VfxUpdaterPanel() {
   ]
   const inLoadouts = (m: Mod) => { const k = canonKey(modKey(m.path)); return loadouts.filter(l => l.on.some(x => canonKey(x) === k)).map(l => ({ id: l.id, name: l.name })) }
   const fold = (id: string) => setFoldedIds(f => { const n = f.includes(id) ? f.filter(x => x !== id) : [...f, id]; localStorage.setItem(FOLDED, JSON.stringify(n)); return n })
-  const todo = [...picked].filter(k => !isDone(runs[k]?.status)).length
+  // a ticked mod that waits for the USMAP is skipped by Update, so it is not counted (its tick shows off)
+  const todo = [...picked].filter(k => !isDone(runs[k]?.status) && !waits.has(k)).length
   const runningAt = batch.findIndex(k => runs[k]?.status === 'running')
   const reports = Object.values(runs).filter(r => r.report)
   const updated = reports.filter(r => r.status === 'fixed').length
@@ -719,7 +720,7 @@ export function VfxUpdaterPanel() {
   })() : undefined
   // before Update: what the ticked mods should take
   const ahead = !busy && todo ? (() => {
-    const xs = [...picked].filter(k => !isDone(runs[k]?.status)).map(k => expected(times, byUtoc.get(k)?.niagara))
+    const xs = [...picked].filter(k => !isDone(runs[k]?.status) && !waits.has(k)).map(k => expected(times, byUtoc.get(k)?.niagara))
     return xs.some(x => x === undefined) ? undefined : xs.reduce<number>((a, b) => a + (b ?? 0), 0)
   })() : undefined
   const state = checkRun ? `Checking ${checkRun.at} of ${checkRun.of}: ${checkRun.name}…`
