@@ -9,7 +9,8 @@ import { invoke } from '@tauri-apps/api/core'
 import { emit } from '@tauri-apps/api/event'
 import type { useAlert } from '../../components/AlertHandler'
 import { verdictsChanged } from '../brokenMods'
-import { modKey, renameModKey } from '../loadoutStore'
+import { modKey, nameKey, renameModKey } from '../loadoutStore'
+import { renameSource } from '../nexusSource'
 import { readFilter } from './filter'
 import { openVfxWindow, sendReport, utocOf } from './handoff'
 import { STEPS, fixVfxMod, type VfxReport } from './pipeline'
@@ -78,6 +79,7 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
     if (r.status === 'fixed' && r.placed) {
       // a new name (_UPDATED) moves the loadouts that held the original; with the name kept they already hold the update
       renameModKey(modKey(r.placed.source), modKey(r.placed.fixed))
+      renameSource(nameKey(r.placed.source), nameKey(r.placed.fixed), nameKey(r.placed.original)) // its Nexus source on the update and the kept original
       await emit('mods_dir_changed').catch(() => {})
       await reload()
     }

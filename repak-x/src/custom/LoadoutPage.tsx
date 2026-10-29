@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { save as pickSavePath } from '@tauri-apps/plugin-dialog'
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, Ellipsis, Pencil, Plus, Search, X } from 'lucide-react'
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Ellipsis, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo } from './Loadouts'
 import { CardMedia, ModRow, OnDot, typeClass } from './loadoutBits'
@@ -17,10 +17,12 @@ import {
   renameModKey, repakXOpen, takeFresh, useLoadouts, memberName, nameKey, pickMember,
 } from './loadoutStore'
 import { candidatesFor, keysByName, memberFolder } from './loadoutIdentity'
+import { renameSource, sourceOf } from './nexusSource'
 import { plural } from './modName'
 import { SwapText } from './motion'
 import { GeneratePreviewsButton, previewSetKey } from './previews'
 import { CaptureButton, captureTarget } from './CapturePreview'
+import { EXTENDED } from './edition'
 
 const PAGE = 60
 
@@ -70,6 +72,7 @@ function MoreMenu({ items, danger, l, loadouts }: { items: MoreItem[]; danger: M
   const action = (it: MoreItem) => (
     <button key={it.label} type="button" role="menuitem" className={`sigeon-item${it.danger ? ' is-danger' : ''}`} disabled={it.disabled} onClick={() => { close(); it.onClick() }}>
       {it.label}
+      {it.danger && <Trash2 size={14} className="context-menu-trash" aria-hidden="true" />}{/* the Library menu's Delete icon */}
     </button>
   )
   return (
@@ -204,6 +207,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
     try {
       const path = await invoke<string>('rename_mod', { modPath: mod.path, newName: next })
       renameModKey(from, modKey(path))
+      renameSource(nameKey(mod.path), nameKey(path)) // its Nexus source too, as the Library's rename does
       await p.reload()
     } catch (e) {
       const why = repakXOpen(e)   // other errors show the backend's own Rename Failed toast
@@ -267,6 +271,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
         {/* The picture card and its Cover switch: Preview, Capture, Image or Text, each with its own way to fill it. A new
             empty loadout has it too (its placeholder), so every loadout's page has the same shape */}
         <CardMedia p={p} l={l} className="lp-media" onClick={onPickMedia} onRemoveImage={removeImage} onRemoveCapture={removeCapture}
+          nexus={EXTENDED ? { ids: [...new Set(mine.map(k => byKey.get(k)).map(m => m && sourceOf(m.path)?.id).filter((id): id is number => Boolean(id)))], onPick: onSetMedia } : undefined}
           title={hasMedia ? 'Change image or video (or paste one)' : 'Add an image, GIF, or video (or paste one)'}
           capture={{ ...target, button: (className, label, note) => <CaptureButton p={p} l={l} onUse={onSetCapture} className={className} label={label} note={note} /> }}
           generate={className => <GeneratePreviewsButton className={className} label="Generate previews" set={previewSetKey(l.id)} name={l.name} stopOnly

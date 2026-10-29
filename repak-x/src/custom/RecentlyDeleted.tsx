@@ -141,7 +141,7 @@ function DeletedLoadouts() {
   }
   return (
     <>
-      <h3 className="setting-icon-label"><Trash2 size={18} aria-hidden="true" />Deleted loadouts</h3>
+      <h3 className="setting-icon-label rd-loadouts-head"><Trash2 size={18} aria-hidden="true" />Deleted loadouts</h3>
       <p className="setting-subtext">Deleted loadouts stay here for 7 days, then they are deleted for good. Restore puts one back with its mods and pictures, and switches no mods.</p>
       <div className="setting-group">
         {items === null

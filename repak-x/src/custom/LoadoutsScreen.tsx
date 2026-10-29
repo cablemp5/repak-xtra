@@ -28,6 +28,7 @@ import {
 import { savedItem } from './storageCarryOver'
 import { useUpstreamWatch } from './upstream'
 import { useUiPref } from './uiPrefs'
+import { EXTENDED } from './edition'
 
 type GroupBy = 'group' | 'hero'
 const GROUP_BY_KEY = 'repakxtra.loadoutGroupBy'
@@ -115,16 +116,19 @@ function GroupHead({ p, name, count, at, total, editing, setEditing, folded, onF
   )
 }
 
-/** Home | Library switch for the app header. Its own class: the 1/2/3 hotkeys click the first .mod-state-filter. The
+/** Home | Library | Nexus Mods switch for the app header (Nexus Mods unless Settings hides it). Its own class: the 1/2/3 hotkeys click the first .mod-state-filter. The
  *  Loadouts tab lands on the cards (not a loadout page left open). The Library tab and L keep the Library as it was
  *  (search, filters, folder, checked and viewed mods, scroll): its Show all button is the deliberate reset (App.tsx). */
 export function ViewTabs() {
   const view = useView()
+  useEffect(() => { if (!nexus && view === 'nexus') setView('library') }, [nexus, view])
   return (
-    <div className="view-tabs" role="tablist" aria-label="View" data-tour="view-tabs">
+    <div className={`view-tabs${nexus ? '' : ' is-two'}`} role="tablist" aria-label="View" data-tour="view-tabs">
       <button type="button" role="tab" aria-selected={view === 'home'} onClick={() => { openLoadout(null); setView('home') }} title="Loadouts and new mods (L)">Loadouts</button>
       <button type="button" role="tab" aria-selected={view === 'library'} onClick={() => setView('library')}
         title="Every mod, with filters and folders (L)">Library</button>
+      {nexus && <button type="button" role="tab" aria-selected={view === 'nexus'} onClick={() => setView('nexus')}
+        title="Find and install mods from Nexus Mods">Nexus Mods</button>}
     </div>
   )
 }
@@ -331,7 +335,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     if (view !== 'home') return
     // Esc on a loadout page goes back to the cards (a text field, an open menu or a dialog takes its own Esc first)
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && openRef.current && !isTyping(e.target) && !modalOpen() && !document.querySelector('[role="menu"], .custom-dropdown-menu')) { e.stopPropagation(); closePage() }
+      if (e.key === 'Escape' && openRef.current && !isTyping(e.target) && !modalOpen() && !document.querySelector('[role="menu"], .custom-dropdown-menu, .ct-pop')) { e.stopPropagation(); closePage() }
     }
     // Ctrl+V with an image, GIF or video sets the open loadout's media, or the hovered card's
     const onPaste = (e: ClipboardEvent) => {

@@ -63,6 +63,7 @@ import { focusRow, relink, useLibraryFocus } from './custom/libraryFocus' // rep
 import FilterPanel, { filterScope } from './custom/FilterPanel'
 import LoadoutHotkeys, { AddToLoadoutField, LoadoutMenuItems } from './custom/Loadouts'
 import LoadoutsScreen, { ViewTabs } from './custom/LoadoutsScreen'
+import NexusBrowser from './custom/NexusBrowser' // repakxtra: the Nexus tab
 import ViewModeMenu from './custom/ViewModeMenu' // repakxtra: view buttons folded into one when narrow
 import { loadoutable, modKey, nameKey, renameModKey, syncLoadoutKeys } from './custom/loadoutStore' // repakxtra
 import { setModsRoot } from './custom/loadoutIdentity' // repakxtra
@@ -146,7 +147,8 @@ import SharingPanel from './components/SharingPanel'
 import Wordmark from './custom/Wordmark' // repakxtra: the logo
 import ConflictsPanel from './custom/ConflictsPanel' // repakxtra: in place of Repak X's ClashPanel (grouped, in words)
 import { keepThisOne } from './custom/keepOne' // repakxtra: Keep this one
-import { NEXUS_TYPE, recordSources, renameSource, sourceOf, useNexusScan, useNexusSources } from './custom/nexusSource' // repakxtra: Nexus source
+import { NEXUS_TYPE, recordSourceAs, recordSources, renameSource, sourceOf, useNexusScan, useNexusSources } from './custom/nexusSource' // repakxtra: Nexus source
+import { CHECK_EVERY, checkUpdates, useNexus } from './custom/nexus' // repakxtra: Nexus account, update checks and downloads
 import { stageOffFiles } from './custom/offFiles' // repakxtra: .pak.off files
 import CrashSuspects, { previousCrashes, withSuspects } from './custom/CrashSuspects' // repakxtra: crash suspects
 import { revealBuiltin, toggleBuiltin, useBuiltins, watchBuiltins } from './custom/BuiltinMods' // repakxtra: built-in mods
@@ -445,6 +447,12 @@ function App() {
   useNexusScan(mods) // repakxtra: Nexus sources for mods installed before they were recorded, once
   const brokenVersion = useBrokenVersion() // repakxtra: the Broken filter re-runs when the verdicts land
   const nexusSources = useNexusSources() // repakxtra: and the Nexus type filter when a source is recorded
+    if (!EXTENDED) return
+    const run = () => checkUpdates(mods.map(m => sourceOf(m.path)))
+    run()
+    const t = setInterval(run, CHECK_EVERY)
+    return () => clearInterval(t)
+  }, [mods, nexusSources])
   const conflictCount = useConflictCount() // repakxtra
   reportSource.get = () => ({ mods, modDetails, launcherType, gamePath }) // repakxtra: setup report
   // repakxtra: Show all, beside the Library's title: every folder, no hero, type or tag filter and no search (the All / On /
@@ -1419,8 +1427,9 @@ function App() {
     }
   }
 
-  const handleConfirmUpdate = async (preserveName: boolean, obfuscate: boolean) => {
-    const { mod, newSourcePath } = updateModState
+  // repakxtra: `direct` is a Nexus one-click update (custom/nexus.tsx), with no file picker or dialog
+  const handleConfirmUpdate = async (preserveName: boolean, obfuscate: boolean, direct?: { mod: ModRecord; newSourcePath: string }) => {
+    const { mod, newSourcePath } = direct ?? updateModState
     if (!mod || !newSourcePath) return
 
     // Close modal first
@@ -1444,6 +1453,7 @@ function App() {
       // before the reload, so the old key is never seen as a deleted mod
       renameModKey(modKey(mod.path), modKey(result.new_mod_path))
       renameSource(nameKey(mod.path), nameKey(result.new_mod_path))
+      await recordSourceAs(newSourcePath, [nameKey(result.new_mod_path)]) // a newer Nexus download: its version now
 
       // Refresh data
       await loadMods()
@@ -2840,6 +2850,8 @@ function App() {
             renames: options.renames,
             flatten: options.flatten
           })
+          // repakxtra: its Nexus source, for the picked paks under the names they landed as (before the archive goes)
+          await recordSourceAs(modPath, options.selections.map(rel => nameKey(`${options.renames[rel] ?? rel.split(/[\\/]/).pop()!.replace(/\.[^.]+$/, '')}.pak`)))
 
           await loadMods()
           await loadFolders()
@@ -3296,6 +3308,34 @@ function App() {
     }
     setExpandedFolders(newExpanded)
   }
+
+  // repakxtra: Nexus downloads (custom/nexus.tsx): a new mod opens the Install dialog, as a dropped file does (save it
+  // as a loadout or not, or cancel), an update applies in place keeping the mod's name, folder and loadouts
+  useNexus({
+    alert,
+    install: async archive => {
+      const parsed = await invoke<DroppedModParse[]>('parse_dropped_files', { paths: [archive] })
+      if (!parsed.length) { alert.error('Nothing to install', 'The Nexus download holds no mod repakxtra can install.'); return }
+      if (panelsRef.current.install) setModsToInstall(prev => [...prev, ...parsed])
+      else { setModsToInstall(parsed); setPanel('install', true) }
+    },
+    update: async (oldPath, archive) => {
+      // by its key (folder and name, on or off alike), so a mod switched while it downloaded is still found
+      const mod = mods.find(m => m.path === oldPath) ?? mods.find(m => modKey(m.path) === modKey(oldPath))
+      if (!mod) { alert.warning('Update not applied', `${nameKey(oldPath)} is no longer in your mods folder, so the download was not used.`); return }
+      const parsed = await invoke<unknown[]>('parse_dropped_files', { paths: [archive] })
+        .catch(e => { alert.error('Update not applied', `The download could not be read: ${e}`); return null })
+      if (!parsed) return
+      // only a download of exactly one mod replaces it: with several (or none found) the Install dialog shows them
+      if (parsed.length !== 1) {
+        alert.info('Pick what to update', `The update holds ${parsed.length} mods. Install the ones you want, then remove the old ${nameKey(oldPath)}.`)
+        setModsToInstall(parsed)
+        setPanel('install', true)
+        return
+      }
+      await handleConfirmUpdate(true, false, { mod, newSourcePath: archive })
+    },
+  })
 
   const handleInstallMods = async (sent: InstallModPayload[]) => {
     const modsWithSettings = sent.filter(m => m.enabled !== false) // repakxtra: left-out archive mods go to the backend only, to be skipped

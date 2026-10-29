@@ -54,6 +54,10 @@
 :root[data-edition="extended"][data-amoled] .dropzone-card { --bg-lighter: #000; }
 :root[data-edition="extended"][data-amoled] .dropzone-card:is(:hover, .active) { box-shadow: 0 0 40px color-mix(in srgb, var(--accent-primary), transparent 85%); }
 :root[data-edition="extended"][data-amoled] .drop-folder-item:hover { background: #191919; }
+/* AMOLED toasts: black like the panels, their hairline border keeps them apart from what is under them */
+:root[data-edition="extended"][data-amoled] .toast-item { --toast-bg: #000; }
+/* AMOLED hover tooltips: black too (they were a grey glass), the same hairline border */
+:root[data-edition="extended"][data-amoled] .global-tooltip { background: #000; }
 
 /* Geist and Geist Mono (OFL, bundled in ./fonts, one variable file each covering 100-900): UI and code */
 @font-face {
@@ -528,6 +532,7 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 .context-menu .submenu > .context-menu-item { white-space: nowrap; }
 /* Delete is the one red word in the menu */
 .context-menu-item.danger, .context-menu-item.danger span { color: #f2555a !important; }
+.sigeon-item.is-danger > .context-menu-trash { flex: none; margin-left: auto; padding-left: 12px; box-sizing: content-box; color: #f2555a; } /* at the right edge, like the Library menu */
 .context-menu-item.danger > .context-menu-trash { position: relative; z-index: 2; flex: none; margin-left: 12px; color: #f2555a; }   /* above the hold fill */
 .context-menu-item.danger:hover, .app .context-menu-item.danger:focus-visible { background: rgba(242, 85, 90, 0.1) !important; }
 .context-menu-separator { background: rgba(255, 255, 255, 0.07) !important; }
@@ -591,7 +596,7 @@ html:not([data-show-conflicts]) .mod-type-badge.conflict-badge, html:not([data-s
 html:not([data-show-asset-explorer]) .btn-asset-explorer,
 html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { display: none !important; }
 html:not([data-show-sigeon]) .header .sigeon { display: none !important; }
-html:not([data-show-nexus]) .nexus-badge { display: none !important; }
+html:not([data-show-nexus]) :is(.nexus-badge, .nexus-update-chip, .nexus-split) { display: none !important; }
 html:not([data-show-encrypted]) .mod-lock { display: none !important; }
 /* an encrypted mod: a quiet lock after its name (mod details read the flag from the PAK index or the .utoc header) */
 /* the lock and the word, in the tags row after the Nexus tag, 22px like the In loadout tag. Violet (2026-10-28):
@@ -1157,9 +1162,9 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 
 /* ---------- Home view (custom/LoadoutsScreen.tsx): inline in the main area instead of a full-window overlay.
    <html data-view> picks the view; both stay mounted so the Library keeps its scroll and selection. ---------- */
-html[data-view="home"] .container > .main-action-bar,
-html[data-view="home"] .container > .main-panels,
-html[data-view="home"] .container > .config-warning { display: none !important; }
+html:not([data-view="library"]) .container > .main-action-bar,
+html:not([data-view="library"]) .container > .main-panels,
+html:not([data-view="library"]) .container > .config-warning { display: none !important; }
 .lo-screen { position: relative !important; inset: auto !important; z-index: auto !important; animation: none !important;
   flex: 1 1 auto; min-height: 0; background: transparent !important; border: 1px solid var(--panel-border); border-radius: 10px; }
 .lo-screen-head { padding: 18px 22px 14px; }
@@ -1394,10 +1399,13 @@ html[data-view="library"] .container > .main-panels { animation: t-page-from-rig
 /* transitions.dev: Toggle (the thumb settles with a small overshoot) */
 .repakx-switch-thumb { transition: transform var(--toggle-dur) var(--toggle-ease), box-shadow var(--toggle-dur) var(--toggle-ease) !important; }
 /* transitions.dev: Tabs sliding (one pill moves between Home and Library) */
-.view-tabs { position: relative; display: inline-grid !important; grid-template-columns: 1fr 1fr; }
-.view-tabs::before { content: ''; position: absolute; top: 2px; bottom: 2px; left: 2px; width: calc(50% - 3px); border-radius: 6px;
+.view-tabs { position: relative; display: inline-grid !important; grid-template-columns: 1fr 1fr 1fr; }
+.view-tabs::before { content: ''; position: absolute; top: 2px; bottom: 2px; left: 2px; width: calc((100% - 8px) / 3); border-radius: 6px;
   background: var(--bg-lighter); transition: transform var(--tabs-dur) var(--tabs-ease); }
 html[data-view="library"] .view-tabs::before { transform: translateX(calc(100% + 2px)); }
+html[data-view="nexus"] .view-tabs::before { transform: translateX(calc(200% + 4px)); }
+.view-tabs.is-two { grid-template-columns: 1fr 1fr; }
+.view-tabs.is-two::before { width: calc((100% - 6px) / 2); }
 .view-tabs button { position: relative; z-index: 1; transition: color var(--tabs-dur) var(--tabs-ease) !important; }
 .view-tabs button[aria-selected="true"] { background: transparent !important; }
 /* transitions.dev: Icon swap (a loadout's previews blur in as you page through them) */
@@ -1936,13 +1944,17 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
   border-radius: var(--quiet-radius) !important; font-size: 13px !important; font-weight: 600 !important; display: inline-flex !important; align-items: center; }
 .fr-steps { list-style: none; margin: 0; overflow-y: auto; padding: 4px 22px !important; display: flex; flex-direction: column; }
 .fr-modal .fr-steps, .ss-modal .fr-steps { gap: 0; }   /* .modal-body's 2rem section gap stacked on every step's padding */
-.fr-step { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--panel-border); }
+.fr-step { position: relative; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 14px 0; }
+/* the line between rings: each row draws its half above its ring (centered in the row) and its half below, so rows
+   of any height join up. None across the Optional label */
+.fr-step::before, .fr-step::after { content: ''; position: absolute; left: 13.5px; width: 1px; background: var(--panel-border); }
+.fr-step::before { top: 0; bottom: calc(50% + 20px); }
+.fr-step::after { top: calc(50% + 20px); bottom: 0; }
+.fr-step:first-child::before, .fr-divider + .fr-step::before, .fr-step:last-child::after, .fr-step:has(+ .fr-divider)::after { display: none; }
 .fr-step.is-wide { align-items: start; }   /* the drop card under the title: the number stays level with the title */
-.fr-step:last-child { border-bottom: none; }
-/* A step's marker: its number as plain gray text, a plain green check once done (Setup's part mark), no circle */
-.fr-num { width: 22px; height: 22px; display: grid; place-items: center; font-size: 13px; font-weight: 600;
-  color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-.fr-step.is-done .fr-num { color: #3ecf6e; }
+/* A step's marker: the shared ring (.nx-step-n), a small green check in its place once done */
+.fr-step.is-done .fr-num { color: #3ecf6e; background: transparent; box-shadow: none; }   /* done: the check alone, no ring */
+.fr-step .fr-num svg { width: 14px !important; height: 14px !important; }   /* even, like the 28px ring: no half-pixel offset */
 .fr-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .fr-text h3 { margin: 0; font-size: 14.5px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
 .fr-text p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }
@@ -1950,7 +1962,6 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .fr-step.is-done .fr-text h3 { color: var(--text-secondary); }
 /* The guided setup's "Optional" label between the first mods and the extras, and its "1 of 3 done" */
 .fr-divider { padding: 18px 0 2px; font-size: 11px; font-weight: 500; color: var(--text-secondary); }   /* the sidebar's section label look (.fp-section-label) */
-.fr-step:has(+ .fr-divider) { border-bottom: none; }
 .fr-progress { font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .fr-optional { padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--text-secondary); background: var(--bg-lighter); }
 .fr-recommended { color: var(--accent-primary); background: color-mix(in srgb, var(--accent-primary), transparent 86%); }   /* Mod previews: worth doing, unlike the Optional extras */
@@ -2405,6 +2416,8 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
 .settings-content .setting-item:has(.setting-toggle-label) > .setting-subtext { padding-left: 30px !important; }
 /* Settings > Recently deleted */
 .rd-empty { margin: 0; font-size: 13px; color: var(--text-secondary); }
+/* the deleted loadouts start a section of their own, set apart from the mods above */
+.settings-content .rd-loadouts-head { margin-top: 36px; padding-top: 28px; border-top: 1px solid var(--panel-border); }
 .rd-list { margin: 0; padding: 0; list-style: none; border: 1px solid var(--panel-border); border-radius: 10px; }
 .rd-row { display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 8px 8px 8px 14px; }
 .rd-row + .rd-row { border-top: 1px solid var(--panel-border); }
@@ -2536,6 +2549,20 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 .nx-source { gap: 12px; }
 .nx-source .detail-value { display: inline-flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 2px 10px; text-align: right; }
 .nx-open { display: inline-flex; align-items: center; gap: 4px; }
+.nx-update { color: var(--accent-primary) !important; }
+/* Settings > General > Nexus Mods (custom/nexus.tsx): its logo, and the key field (a quiet field) its steps share */
+.nx-setting-logo { width: 18px; height: 18px; flex: none; }
+.nx-key-input { flex: 1 1 220px; min-width: 0; height: 32px; padding: 0 10px !important; background: var(--field-bg) !important;
+  border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important; color: var(--text-primary) !important;
+  font: 13px var(--font-mono) !important; outline: none !important; box-shadow: none !important; transition: border-color 0.15s ease; }
+.nx-key-input:focus { border-color: color-mix(in srgb, var(--text-primary), transparent 84%) !important; }
+/* the field's own show-key eye (Edge's password reveal): light on the dark field, like its text */
+.nx-key-input { color-scheme: dark; }
+.nx-key-input::-ms-reveal { filter: invert(1); opacity: 0.7; }
+.nx-key-input::-ms-reveal:hover { opacity: 1; }
+[data-theme="light"] .nx-key-input { color-scheme: light; }
+[data-theme="light"] .nx-key-input::-ms-reveal { filter: none; }
+.settings-content .nx-key-error { margin: 6px 0 0 !important; padding: 0 !important; color: var(--text-primary) !important; }
 
 /* Type hint under the type badges in mod details (custom/typeHints.tsx) */
 .type-hint { margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
@@ -2819,7 +2846,7 @@ html[data-motion="off"] .vfx-dot { animation: none; }
 .lo-group-count { min-width: 20px; padding-inline: 7px !important; }
 .vf-grp-count { min-width: 20px; padding-inline: 6px !important; }
 .fp-section-picked { --pill-h: 16px; padding-inline: 6px !important; }
-.fr-num:not(:has(svg)) { --pill-h: 22px; width: 22px; padding-inline: 0 !important; }
+.fr-step .fr-num:not(:has(svg)) { width: 28px; height: 28px !important; padding: 0 !important; display: grid !important; text-box: normal; }   /* the shared ring (.nx-step-n) centers its digit itself */
 
 /* ---------- The Library's selection bar (cable, 2026-10-21): a drawer that slides out from under the All / On / Off
    header, its top tucked behind the header so it reads as the header's extension. The header's own surface and border,
@@ -3095,3 +3122,278 @@ html[data-motion="off"] .upd-progress > span, html[data-motion="off"] .repakx-pr
 
 .legacy-setup { margin: 12px 0; padding: 16px; border: 1px solid #a16207; border-radius: 10px; background: #713f121a; }
 .legacy-setup p { margin: 8px 0; font-size: 14px; line-height: 1.5; }
+
+/* ---------- the Nexus Mods tab (custom/NexusBrowser.tsx). Reading order: title and count, then one filter bar (search
+   first and widest, then hero, type and time, the sort set apart on the right), then the cards. A card leads with its
+   picture (its category on it), then the name, the author and age in one quiet line, two lines of summary, and a footer
+   with the numbers on the left and the one action on the right, the same box whether it reads Install, Installed or
+   Update (Fitts, Jakob, Proximity) ---------- */
+.nx-screen { overflow: hidden; }
+.nx-head { display: flex; flex-direction: column; gap: 14px; padding: 18px 22px 14px; border-bottom: 1px solid var(--panel-border); }
+.nx-title { display: flex; align-items: baseline; gap: 10px; }
+.nx-title h2 { margin: 0; font-size: 20px; font-weight: 650; }
+/* free accounts: how an install goes, one quiet line under the title (Setup's subtitle) */
+.nx-titles { display: flex; flex-direction: column; gap: 4px; }
+.nx-sub { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-secondary); }
+.nx-total.is-stale { opacity: 0.45; }
+.nx-total { min-width: 64px; font-size: 13.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.nx-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.nx-filters .nx-search { flex: 1 1 220px; max-width: 360px; width: auto; }
+.nx-filters .custom-dropdown-container { flex: none; height: 34px; }
+.nx-filters .nx-search { height: 34px; }
+.nx-filters .nx-search:focus-within { border-color: color-mix(in srgb, var(--text-primary), transparent 55%); } /* neutral, never the blue ring */
+.nx-filters .lp-hero.custom-dropdown-container { width: 170px; }
+.nx-filters .nx-window.custom-dropdown-container { width: 120px; }
+.nx-filters .nx-sort.custom-dropdown-container { width: 170px; margin-left: auto; }
+/* the sort sits at the right edge: its menu opens leftward, inside the window */
+.nx-filters .nx-sort .custom-dropdown-menu { left: auto; right: 0; }
+.nx-filters .custom-dropdown-menu { max-height: min(320px, calc(100vh - 220px)); }
+.nx-filters .nx-type.custom-dropdown-container { width: 170px; }
+.nx-type .custom-dropdown-img.is-glyph { width: 14px; height: 14px; background: transparent; }
+.nx-type-dot { width: 8px; height: 8px; border-radius: 50%; }
+.nx-type-dot.is-all { box-sizing: border-box; border: 1.5px solid var(--text-secondary); }
+[data-theme="light"] .nx-card-type { --c: color-mix(in srgb, var(--type, var(--text-primary)), #000 38%); }
+.nx-clear { margin-left: 6px; font-size: 12.5px; white-space: nowrap; }
+.nx-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; gap: 24px; }
+.nx-section { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+/* section headings: sentence case, the card names' weight one step up, a quiet note beside when it helps */
+.nx-section-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.nx-section-title { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.005em; color: var(--text-primary); }
+.nx-section-note { font-size: 13.5px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.nx-card { display: flex; flex-direction: column; min-width: 0; overflow: hidden; background: var(--panel-bg);
+  border: 1px solid var(--panel-border); border-radius: 12px; transition: border-color 0.15s ease; }
+.nx-card:hover { border-color: color-mix(in srgb, var(--text-primary), transparent 86%); }
+/* a placeholder card in a card's own shape: the picture and three lines */
+.nx-card.is-skeleton { gap: 10px; padding-bottom: 16px; }
+.nx-card.is-skeleton > span { display: block; background: linear-gradient(90deg, var(--bg-lighter) 0%, color-mix(in srgb, var(--bg-lighter), var(--text-primary) 6%) 50%, var(--bg-lighter) 100%) 0 0 / 250% 100%;
+  animation: t-shimmer var(--shimmer-dur, 2s) var(--shimmer-ease, linear) infinite; }
+.nx-sk-img { aspect-ratio: 16 / 9; }
+.nx-sk-line { height: 11px; margin: 0 12px; border-radius: 4px; width: 55%; }
+.nx-sk-line.is-wide { width: 80%; height: 13px; margin-top: 4px; }
+.nx-sk-line.is-short { width: 35%; }
+.nx-card-image { position: relative; display: block !important; aspect-ratio: 16 / 9; width: 100%; padding: 0 !important; border: none !important;
+  border-radius: 0 !important; background: var(--bg-dark) !important; overflow: hidden; cursor: pointer; }
+.nx-card-image img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.25s ease; }
+.nx-card:hover .nx-card-image img { transform: scale(1.03); }
+.nx-card-noimage { display: block; width: 100%; height: 100%; }
+.nx-card-image:has(img) { cursor: zoom-in; } /* a click opens its pictures */
+.nx-card-body { display: flex; flex-direction: column; padding: 12px; min-height: 0; flex: 1; }
+.nx-card-name { all: unset; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text-primary); line-height: 18px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.nx-card-name:hover { text-decoration: underline; text-underline-offset: 2px; }
+.nx-card-name:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; border-radius: 3px; }
+/* who made it and when, each with its icon, brighter than the summary (they read as facts, not description) */
+.nx-card-by { display: flex; align-items: center; gap: 12px; margin-top: 8px; min-width: 0; font-size: 12px; color: color-mix(in srgb, var(--text-primary) 82%, transparent); }
+.nx-meta { display: inline-flex; align-items: center; gap: 5px; min-width: 0; white-space: nowrap; }
+.nx-meta:first-child { flex: 0 1 auto; overflow: hidden; }
+.nx-meta:first-child > span { overflow: hidden; text-overflow: ellipsis; }
+.nx-meta svg { flex: none; color: var(--text-secondary); }
+/* the type line: the hero's portrait and name in the Characters color, or the type's name in its color */
+.nx-card-type { --c: var(--type, var(--text-secondary)); display: flex; align-items: center; gap: 6px; margin-top: 8px; min-width: 0; font-size: 12px;
+  font-weight: 500; color: var(--c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nx-card-type svg { flex: none; }
+.nx-card-type img { flex: none; width: 18px; height: 18px; border-radius: 50%; object-fit: cover; background: var(--bg-lighter); }
+.nx-card-summary { margin: 8px 0 0; font-size: 12.5px; line-height: 1.45; color: color-mix(in srgb, var(--text-secondary) 88%, var(--text-primary));
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-wrap: pretty; }
+.nx-card-foot { display: flex; align-items: center; gap: 12px; margin-top: auto; padding-top: 12px; }
+/* the numbers sized to sit level with the 32px Install beside them */
+.nx-stat { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 400; color: color-mix(in srgb, var(--text-primary) 78%, transparent); font-variant-numeric: tabular-nums; }
+.nx-stat.is-endorsed svg { color: #f2555a; } /* red heart: cable's pick (2026-10-29) */
+/* the action: one box for all three states, so Installed sits exactly where Install was */
+.nx-act { margin-left: auto; display: inline-flex !important; align-items: center; gap: 5px; height: 32px !important; min-height: 0 !important; padding: 0 12px !important;
+  border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important; background: transparent !important;
+  color: var(--text-primary) !important; font: 500 12.5px var(--font-primary) !important; white-space: nowrap; cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease; }
+button.nx-act:hover { background: var(--quiet-hover) !important; border-color: color-mix(in srgb, var(--text-primary), transparent 80%) !important; }
+.nx-act svg { width: 13px; height: 13px; }
+.nx-act.is-update { color: var(--accent-primary) !important; border-color: color-mix(in srgb, var(--accent-primary), transparent 55%) !important; }
+.nx-act.is-waiting { color: var(--text-secondary) !important; }
+.nx-act.is-installed { cursor: default; color: #3ecf6e !important; border-color: color-mix(in srgb, #3ecf6e, transparent 60%) !important;
+  background: color-mix(in srgb, #3ecf6e, transparent 92%) !important; }
+[data-theme="light"] .nx-act.is-installed { color: #1f7a3f !important; }
+/* Install: the one tinted button on a card (Von Restorff) */
+.nx-act.is-install { color: color-mix(in srgb, var(--accent-primary), #fff 45%) !important; background: color-mix(in srgb, var(--accent-primary), transparent 88%) !important;
+  border-color: color-mix(in srgb, var(--accent-primary), transparent 60%) !important; }
+button.nx-act.is-install:hover { background: color-mix(in srgb, var(--accent-primary), transparent 78%) !important; border-color: color-mix(in srgb, var(--accent-primary), transparent 40%) !important; }
+[data-theme="light"] .nx-act.is-install { color: var(--accent-primary) !important; }
+/* Top this week: three equal cards as pictures, the words on a dark fade at the bottom, set apart from
+   All mods below by a rule (Common region) */
+.nx-spot { padding-bottom: 20px; border-bottom: 1px solid var(--panel-border); }
+.nx-spot-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; height: 276px; }
+.nx-spot .nx-card { position: relative; }
+.nx-spot .nx-card-image { position: absolute !important; inset: 0; height: 100%; aspect-ratio: auto; }
+.nx-spot .nx-card-body { position: relative; flex: none; margin-top: auto; padding: 82px 14px 12px; /* the fade reaches a little higher than the words */ pointer-events: none;
+  background: linear-gradient(rgba(6, 6, 8, 0), rgba(6, 6, 8, 0.93) 50%, rgba(6, 6, 8, 0.98)); }
+.nx-spot .nx-card-body > * { pointer-events: auto; }
+.nx-spot .nx-card-name { color: #fff; font-size: 16px; line-height: 21px; }
+/* the picture fills from its top edge: faces and titles sit at the top of most mod pictures */
+.nx-spot .nx-card-image img { object-position: center top; }
+.nx-spot .nx-card-by, .nx-spot .nx-stat { color: rgba(255, 255, 255, 0.72); }
+.nx-spot .nx-card-summary { display: none; }
+/* its place in the corner: a flat medal, a smooth rim in the light metal, a darker disc, the number in the rim's color */
+.nx-medal { --rim: #fbe06a; --disc: #f2b62b; position: absolute; left: 10px; top: 10px; z-index: 2; width: 36px; height: 36px; pointer-events: none;
+  filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.45)); }
+.nx-medal.is-2 { --rim: #e2e4e7; --disc: #a9adb3; }
+.nx-medal.is-3 { --rim: #e8a77c; --disc: #c2774a; }
+.nx-medal-rim { fill: var(--rim); }
+.nx-medal-disc { fill: var(--disc); }
+.nx-medal text { fill: var(--rim); font: 700 9px var(--font-primary); }
+/* who, when, and the hero on one line here (on the grid's cards they stack: .nx-card-facts adds no box there) */
+.nx-card-facts { display: contents; }
+.nx-spot .nx-card-facts { display: flex; align-items: center; gap: 12px; margin-top: 6px; min-width: 0; }
+.nx-spot .nx-card-facts > * { margin-top: 0; }
+.nx-spot .nx-card-by { flex: 0 1 auto; min-width: 0; }
+.nx-spot .nx-card-type { flex: none; }
+.nx-spot .nx-card-foot { padding-top: 8px; }
+.nx-more { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 20px 0 4px; }
+.nx-more small { font-size: 12px; color: var(--text-secondary); }
+.nx-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 64px 0; text-align: center; color: var(--text-secondary); }
+.nx-empty p { margin: 0; font-size: 14px; color: var(--text-primary); }
+.nx-empty small { max-width: 60ch; }
+.nx-empty .lo-text-btn svg, .nx-peek-error .lo-text-btn svg { vertical-align: -2px; margin-right: 4px; }
+/* what Nexus said, folded under the short explanation */
+.nx-details { font-size: 12px; color: var(--text-secondary); text-align: left; }
+.nx-details summary { cursor: pointer; text-align: center; }
+.nx-details code { display: block; margin-top: 6px; max-width: 60ch; white-space: pre-wrap; word-break: break-word; font: 11.5px var(--font-mono, monospace); }
+/* Settings > Nexus Mods: the ban risk under One-click Install, in the app's warning amber. No box: the icon sits in the
+   checkbox's 20px column and the words start where the switch's own words do (30px in), so the setting reads as one block */
+.nx-auto-warn { display: grid; grid-template-columns: 20px 1fr; column-gap: 10px; align-items: start; margin: 6px 0 0; font-size: 12.5px; line-height: 1.45;
+  color: #f5a524; }
+.nx-auto-warn svg { justify-self: center; margin-top: 2px; }
+[data-theme="light"] .nx-auto-warn { color: #9a5b00; }
+.nx-checking { margin: 64px auto; text-align: center; font-size: 13px; color: var(--text-secondary); }
+/* signed out (custom/nexus.tsx NexusSignIn): one column at reading width in the middle of the tab, no second frame
+   inside the screen's own. A header (the Nexus mark, what this is), then three numbered steps joined by a thin line,
+   in the order they happen: open the page, find the key at its bottom (the picture shows where), paste it here */
+.nx-signin-wrap { flex: 1; min-height: 0; overflow-y: auto; display: grid; place-items: center; padding: 40px 24px; }
+.nx-signin { width: min(500px, 100%); display: flex; flex-direction: column; gap: 28px; }
+.nx-signin-head { display: flex; align-items: flex-start; gap: 14px; }
+.nx-signin-logo { width: 28px; height: 28px; flex: none; margin-top: 2px; }   /* the step numbers' column */
+.nx-signin-head h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; color: var(--text-primary); }
+.nx-signin-head p { margin: 3px 0 0; font-size: 13.5px; line-height: 1.45; color: var(--text-secondary); text-wrap: pretty; }
+.nx-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.nx-steps > li { position: relative; display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 14px; padding-bottom: 24px; }
+.nx-steps > li:last-child { padding-bottom: 0; }
+.nx-steps > li:not(:last-child)::before { content: ''; position: absolute; left: 13.5px; top: 34px; bottom: 6px; width: 1px; background: var(--panel-border); }
+/* One marker for every numbered guide (Connect Nexus Mods, the guided setup, the capture dialog, cable 2026-10-29): the
+   number in a 28px ring, a thin line down to the next one. The ring is an inset shadow, not a border, so the guided
+   setup's centered-digit rule keeps its math */
+.nx-step-n, .fr-num, .cp-steps li::before { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; box-sizing: border-box;
+  font: 600 12.5px var(--font-primary); font-variant-numeric: tabular-nums; color: var(--text-primary); background: var(--bg-darker);
+  box-shadow: inset 0 0 0 1px var(--panel-border); }
+.nx-step-body { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding-top: 4px; }
+.nx-step-body > b { font-size: 13.5px; font-weight: 600; line-height: 1.4; color: var(--text-primary); }
+.nx-step-body > span { margin-top: -6px; font-size: 12.5px; line-height: 1.45; color: var(--text-secondary); }
+.nx-step-shot { display: block; width: 100%; border-radius: 8px; border: 1px solid var(--panel-border); }
+.nx-step-body > .nx-step-note { margin-top: 2px; font-size: 12px; line-height: 1.45; color: var(--text-secondary); }   /* clear of the field, not tucked under it like a step's subtitle */
+.nx-step-key { display: flex; gap: 8px; width: 100%; }
+.nx-step-key .nx-key-input { flex: 1; font-family: var(--font-primary) !important; }
+.nx-step-save { flex: none; }
+.nx-step-save:not(:disabled) { background: var(--text-primary) !important; border-color: var(--text-primary) !important; color: var(--bg-darkest) !important; }
+.nx-step-save:not(:disabled):hover { background: color-mix(in srgb, var(--text-primary) 86%, var(--bg-darkest)) !important; color: var(--bg-darkest) !important; }   /* stays light: the quiet buttons' dark hover hid its words */
+.nx-step-save:disabled { opacity: 0.45; cursor: default; }
+/* Settings > General: the same steps under the section's words, the picture no wider than the key field */
+.nx-setting-steps { margin-top: 14px; max-width: 560px; }
+.nx-step-error { font-size: 12.5px; line-height: 1.45; color: var(--text-primary); }
+.nx-signin-foot { margin: 0; padding-top: 18px; border-top: 1px solid var(--panel-border); font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+html[data-motion="off"] .nx-card.is-skeleton, html[data-motion="off"] .nx-card-image img { animation: none; transition: none; }
+/* A card's gallery (NexusBrowser.tsx NexusPeek): a click on its picture opens it larger in the middle of the window, the
+   loadout cards' arrows to page, a count in the corner, a click beside it closes it */
+/* the dim layer is the dialog (a click on it closes), the gallery centered in it */
+.nx-peek-layer { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; background: rgba(0, 0, 0, 0.35); outline: none;
+  animation: nx-peek-dim 0.2s ease-out backwards; }
+.nx-peek { position: relative; overflow: hidden; border-radius: 12px; background: var(--bg-darkest); border: 1px solid var(--panel-border);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.6); animation: t-dropdown-open var(--dropdown-open-dur, 0.16s) var(--dropdown-ease, ease-out) backwards; }
+.nx-peek-image { display: block !important; width: 100%; height: 100%; padding: 0 !important; border: none !important; border-radius: 0 !important;
+  background: transparent !important; cursor: pointer; }
+.nx-peek-image img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.nx-peek .lo-media-arrow { opacity: 1; }
+/* its name and a close button along the top, over the picture on a soft shade so both read on any artwork */
+.nx-peek-bar { position: absolute; left: 0; right: 0; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 10px 10px 18px 14px;
+  background: linear-gradient(rgba(10, 11, 14, 0.78), rgba(10, 11, 14, 0)); pointer-events: none; }
+.nx-peek-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 13px var(--font-primary); color: #fff; }
+.nx-peek .lo-media-arrow { width: 36px !important; height: 36px !important; }
+.nx-peek button:focus-visible { outline: 2px solid rgba(255, 255, 255, 0.85) !important; outline-offset: 2px; }
+.nx-peek-error { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  background: rgba(10, 11, 14, 0.72); font: 500 13px var(--font-primary); color: #fff; }
+.nx-peek-close { pointer-events: auto; flex: none; width: 36px !important; height: 36px !important; min-height: 0 !important; padding: 0 !important;
+  display: grid !important; place-items: center; border-radius: 50% !important; background: rgba(10, 11, 14, 0.62) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important; color: #fff !important; }
+.nx-peek-close:hover { background: rgba(10, 11, 14, 0.85) !important; }
+.nx-peek-count { position: absolute; right: 10px; bottom: 10px; height: 28px; box-sizing: border-box; display: inline-flex; align-items: center;
+  padding: 0 10px; border-radius: 999px; font: 500 12px var(--font-primary); pointer-events: none;   /* the app's font: the gallery sits on <body>, outside it */
+  color: #fff; background: rgba(10, 11, 14, 0.62); border: 1px solid rgba(255, 255, 255, 0.12); }   /* a loadout card's label pill */
+@keyframes nx-peek-dim { from { opacity: 0; } }
+html[data-motion="off"] .nx-peek, html[data-motion="off"] .nx-peek-layer { animation: none; }
+
+/* A Nexus mod with a newer version: one split badge (cable's pick, 2026-10-29), the orange Nexus half as always, a blue
+   half joined to it with the new version. The accent says "do this", the arrow says what */
+.nexus-split { display: inline-flex; flex: none; }
+.nexus-split > .nexus-badge { border-top-right-radius: 0 !important; border-bottom-right-radius: 0 !important; }
+.mod-type-badge.nexus-update-chip { gap: 4px; padding: 0 8px 0 6px !important; margin-left: -1px; cursor: pointer; font-weight: 600 !important; font-variant-numeric: tabular-nums;
+  border-top-left-radius: 0 !important; border-bottom-left-radius: 0 !important;
+  color: color-mix(in srgb, var(--accent-primary), white 35%) !important; border: 1px solid color-mix(in srgb, var(--accent-primary), transparent 50%) !important;
+  background: color-mix(in srgb, var(--accent-primary), transparent 88%) !important; transition: background 0.15s ease; }
+.mod-type-badge.nexus-update-chip:hover { background: color-mix(in srgb, var(--accent-primary), transparent 78%) !important; }
+[data-theme="light"] .mod-type-badge.nexus-update-chip { color: var(--accent-primary) !important; }
+
+/* The loadout page's From Nexus (custom/nexus.tsx NexusPictures): the loadout's Nexus mod pictures take the whole card,
+   one surface in the card's own frame, two to a row; a click makes one the image */
+.nx-cta-pair { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 6px; }
+.nx-cta-pair .lo-text-btn { margin: 0; }
+.nx-btn-logo { width: 14px; height: 14px; flex: none; }
+.nx-pics { position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column; gap: 10px; padding: 12px; overflow-y: auto;
+  background: var(--bg-darkest); border-radius: inherit; outline: none;
+  animation: t-dropdown-open var(--dropdown-open-dur, 0.16s) var(--dropdown-ease, ease-out) backwards; }
+.nx-pics-head { display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
+.nx-pics small { font-size: 12px; color: var(--text-secondary); }
+.nx-pics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.nx-pic { display: block !important; aspect-ratio: 16 / 9; padding: 0 !important; overflow: hidden; border: none !important; outline: 2px solid transparent; outline-offset: -2px;
+  border-radius: 6px !important; background: var(--bg-dark) !important; cursor: pointer; transition: outline-color 0.15s ease, opacity 0.15s ease; }
+.nx-pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.nx-pic:hover:not(:disabled) { outline-color: color-mix(in srgb, var(--text-primary), transparent 40%); }
+.nx-pic:disabled { opacity: 0.5; cursor: default; }
+.nx-pic[aria-busy="true"] { opacity: 1; outline-color: var(--accent-primary); }
+html[data-motion="off"] .nx-pics { animation: none; }
+
+/* A loadout card's tools (custom/CardTools.tsx): one round arrow in the bottom left (the arrows' dark circle), shown on
+   hover and while open. Its popover rises from it over the card: rows for actions, labeled fields for the look */
+.ct { position: absolute; left: 6px; bottom: 6px; right: 6px; z-index: 5; pointer-events: none; }
+.ct > * { pointer-events: auto; }
+.ct-btn { width: 28px !important; height: 28px !important; min-height: 0 !important; padding: 0 !important; display: grid !important; place-items: center;
+  border-radius: 50% !important; background: rgba(10, 11, 14, 0.72) !important; border: 1px solid rgba(255, 255, 255, 0.14) !important; color: var(--text-primary) !important;
+  opacity: 0; transition: opacity 0.15s ease, background 0.15s ease; }
+.ct-btn svg { width: 15px; height: 15px; transition: transform 0.18s ease; }
+.lo-media:hover .ct-btn, .ct-btn:focus-visible, .ct.is-open .ct-btn { opacity: 1; }
+.ct.is-open .ct-btn svg { transform: rotate(180deg); }
+.ct-btn:hover { background: rgba(10, 11, 14, 0.9) !important; }
+.ct.is-top { top: 6px; bottom: auto; }
+.ct.is-top .ct-pop { bottom: auto; top: 36px; transform-origin: top left; }
+.ct-pop { position: absolute; left: 0; right: 0; bottom: 36px; display: flex; flex-direction: column; gap: 2px; padding: 6px;
+  max-height: 250px; overflow-y: auto; border-radius: 10px; background: var(--bg-darker); border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55); transform-origin: bottom left;
+  animation: t-dropdown-open var(--dropdown-open-dur, 0.16s) var(--dropdown-ease, ease-out) backwards; }
+.ct-row { display: flex !important; align-items: center; justify-content: flex-start !important; gap: 8px; height: 32px !important; min-height: 0 !important; padding: 0 8px !important; border: none !important;
+  border-radius: 7px !important; background: transparent !important; color: var(--text-primary) !important; font: 500 12.5px var(--font-primary) !important; text-align: left; }
+.ct-row:hover { background: var(--quiet-hover) !important; }
+.ct-row svg { width: 14px; height: 14px; flex: none; color: var(--text-secondary); }
+.ct-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; padding: 0 4px 0 8px; font-size: 12px; color: var(--text-secondary); }
+.ct-field.is-stacked { flex-direction: column; align-items: stretch; gap: 6px; margin-top: 2px; padding: 8px 4px 4px 8px; border-top: 1px solid rgba(255, 255, 255, 0.07); }
+.ct-pick { display: inline-flex !important; align-items: center; gap: 5px; height: 26px !important; min-height: 0 !important; padding: 0 6px !important; border: none !important;
+  border-radius: 6px !important; background: transparent !important; color: var(--text-primary) !important; font: 500 12px var(--font-primary) !important; }
+.ct-pick:hover, .ct-pick[aria-expanded="true"] { background: var(--quiet-hover) !important; }
+.ct-pick svg { width: 14px; height: 14px; color: var(--cap, var(--text-primary)); }
+.ct-pick svg.ct-caret { width: 12px; height: 12px; opacity: 0.6; color: var(--text-secondary); }
+.ct-icons { position: static !important; max-height: 132px; margin: 2px 0 4px; box-shadow: none !important; background: var(--bg-dark) !important; }
+.ct .cap-swatches { margin-left: 0; gap: 8px; }
+.cap-bg { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.ct-chip { display: inline-flex !important; align-items: center; justify-content: center; gap: 5px; height: 26px !important; min-height: 0 !important; padding: 0 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important; border-radius: 6px !important; background: transparent !important;
+  color: var(--text-secondary) !important; font: 500 12px var(--font-primary) !important; white-space: nowrap; }
+.ct-chip:hover { color: var(--text-primary) !important; background: var(--quiet-hover) !important; }
+.ct-chip[aria-pressed="true"] { color: var(--text-primary) !important; background: var(--quiet-active) !important; border-color: rgba(255, 255, 255, 0.24) !important; }
+.ct-chip svg { width: 13px; height: 13px; }
+.ct-chip.cap-bg-thumb { width: 40px; padding: 0 !important; overflow: hidden; }
+.ct-chip.cap-bg-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.ct-chip.cap-bg-remove { width: 26px; padding: 0 !important; }
+html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation: none; transition: none; }

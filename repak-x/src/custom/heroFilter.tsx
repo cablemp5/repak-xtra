@@ -9,7 +9,8 @@ import bundled from '../data/character_data.json'
 import { FALLBACK_HERO_ID, getHeroImageById, initHeroImages, useHeroImages } from '../utils/heroImages'
 
 type Row = { id: string; name: string }
-const norm = (name: string) => name.replace(/\s*\(.*\)\s*$/, '').trim().toLowerCase()
+// spaces and punctuation left out too, so Nexus's "Jeff the Land Shark" finds "Jeff the Landshark"
+const norm = (name: string) => name.replace(/\s*\(.*\)\s*$/, '').toLowerCase().replace(/[^a-z0-9]/g, '')
 const idsOf = (rows: Row[]) => new Map(rows.filter(r => /^10\d\d$/.test(r.id)).map(r => [norm(r.name), r.id]))
 let live: Map<string, string> | null = null
 let pending: Promise<Map<string, string>> | null = null
@@ -18,7 +19,26 @@ let pending: Promise<Map<string, string>> | null = null
  *  several. A note in brackets is not part of the name. */
 export const heroOfName = (c?: string | null) => (c && !c.startsWith('Multiple') ? c.split(' - ')[0].replace(/\s*\(.*\)$/, '').trim() : '')
 
-/** A hero's portrait by name (the placeholder when there is none); re-renders when the character data and portraits land. */
+const spaced = (s: string) => s.toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim()
+/** The ways a title may write a hero: whole, run together ("Spiderman"), without "The", only the part before "the"
+ *  ("Jeff" for Jeff the Landshark), or "Dr" for Doctor. */
+const spellings = (hero: string) => {
+  const n = spaced(hero)
+  return [...new Set([n, n.replace(/ /g, ''), n.replace(/^the /, ''), n.split(' the ')[0], n.replace(/^doctor /, 'dr ')])]
+}
+/** The hero a mod's title names ("Vegeta as Iron Man" -> Iron Man), or '' for none. With two heroes and "replace" in
+ *  it ("Venom replaces Hulk"), the second. */
+export function heroInTitle(title: string, heroes: string[]) {
+  const words = ` ${spaced(title)} `
+  const found = heroes
+    .map(hero => ({ hero, at: Math.min(...spellings(hero).map(s => words.indexOf(` ${s} `)).filter(i => i >= 0)) }))
+    .filter(f => Number.isFinite(f.at))
+    .sort((a, b) => a.at - b.at)
+  return (found.length > 1 && / replac/.test(words) ? found[1] : found[0])?.hero ?? ''
+}
+
+/** A hero's portrait by name (the placeholder when there is none, or nothing with `placeholder` false); re-renders when
+ *  the character data and portraits land. */
 export function useHeroPortrait() {
   useHeroImages()
   const [ids, setIds] = useState(() => live ?? idsOf(bundled as Row[]))
@@ -32,7 +52,14 @@ export function useHeroPortrait() {
     void pending.then(m => { if (on) setIds(m) })
     return () => { on = false }
   }, [])
-  return (name: string) => getHeroImageById(ids.get(norm(name))) ?? getHeroImageById(FALLBACK_HERO_ID)
+  return (name: string, placeholder = true) => getHeroImageById(ids.get(norm(name))) ?? (placeholder ? getHeroImageById(FALLBACK_HERO_ID) : undefined)
+}
+
+/** Every playable hero's name, A to Z (the bundled list, plus heroes the live character data adds). */
+export function useHeroNames() {
+  const [rows, setRows] = useState(bundled as Row[])
+  useEffect(() => { invoke<Row[]>('get_character_data').then(r => { if (r?.length) setRows([...(bundled as Row[]), ...r]) }, () => undefined) }, [])
+  return [...new Set(rows.filter(r => /^10\d\d$/.test(r.id) && !r.name.includes('*')).map(r => heroOfName(r.name)))].sort()
 }
 
 /** All heroes, or one: shown when the list holds two or more heroes. */
@@ -44,7 +71,7 @@ export function HeroFilter({ heroes, value, onChange, always }: { heroes: string
   if (list.length < 2 && !value && !always) return null
   return (
     <CustomDropdown className="lp-hero" options={[{ value: '', label: 'All heroes', glyph: <Users /> }, ...list.map(h => ({ value: h, label: h, image: portrait(h) }))]}
-      value={value} onChange={onChange} placeholder="All heroes" />
+      value={value} onChange={onChange} placeholder="All heroes" ariaLabel="Hero" />
   )
 }
 
@@ -52,4 +79,10 @@ if (import.meta.env.DEV) {
   console.assert(heroOfName('Black Panther - Catboy') === 'Black Panther' && heroOfName('Iron Fist (lin Lie)') === 'Iron Fist', 'the hero, without the skin or a note')
   console.assert(heroOfName('Multiple Heroes (3)') === '' && heroOfName(null) === '', 'several heroes, or none: no hero')
   console.assert(norm('Iron Fist (lin Lie)') === norm('iron fist'), 'a portrait is found with or without the note')
+  const cast = ['Iron Man', 'Jeff the Landshark', 'Hulk', 'Venom', 'The Punisher', 'Spider-Man', 'Doctor Strange']
+  console.assert(heroInTitle('Vegeta (Dragon Ball) as Iron Man', cast) === 'Iron Man' && heroInTitle('Pochita Jeff', cast) === 'Jeff the Landshark', 'a hero in the title, a short name too')
+  console.assert(heroInTitle('Venom replaces Hulk', cast) === 'Hulk' && heroInTitle('Hulk and Venom', cast) === 'Hulk', 'replace: the second')
+  console.assert(heroInTitle('Big Smoke as Punisher', cast) === 'The Punisher' && heroInTitle('Spiderman Miles', cast) === 'Spider-Man' && heroInTitle('Dr. Strange cape', cast) === 'Doctor Strange', 'other spellings')
+  console.assert(heroInTitle('Skip intro movies', cast) === '' && heroInTitle('Ironmanic', cast) === '', 'whole words only')
+  console.assert(norm('Jeff the Land Shark') === norm('Jeff the Landshark'), "Nexus's spelling finds the game's")
 }

@@ -20,8 +20,26 @@ fn main() {
         let actual = std::fs::read_to_string("dist/edition.json").unwrap_or_default();
         assert_eq!(actual.trim(), expected, "Build the matching frontend first: use build.ps1 -Edition {edition}");
     }
+    // repakxtra: Task Manager names a running app by its exe's description, which tauri-build takes from productName
+    // ("RepakX"): each edition gets its own name there (the app's own config, identifier and data stay as they are)
+    let config = match std::env::var("TAURI_CONFIG") {
+        Ok(c) if c.trim_start().starts_with('{') && c.trim() != "{}" => format!("{{\"productName\":\"{name}\",{}", &c.trim_start()[1..]),
+        _ => format!("{{\"productName\":\"{name}\"}}"),
+    };
+    std::env::set_var("TAURI_CONFIG", config);
+    // The exe's own icon (Task Manager and Explorer show it) in this copy's color, as xtra_buildmark.rs colors the window's:
+    // icons/builds/ from scripts/make-icon.py. The stable repakxtra keeps the blue icons/RepakIcon.ico
+    let extended = std::env::var_os("CARGO_FEATURE_EXTENDED").is_some();
+    let kind = if std::env::var("PROFILE").as_deref() == Ok("debug") { "dev" }
+        else if std::env::var("REPAKXTRA_BUILD").as_deref() == Ok("test") { "test" } else { "" };
+    let icon = match (extended, kind) {
+        (false, "") => "icons/RepakIcon.ico".to_string(),
+        (false, k) => format!("icons/builds/RepakIcon-{k}.ico"),
+    };
+    println!("cargo:rerun-if-changed={icon}");
     // Tauri build - handles icons and resources
-    tauri_build::build();
+    tauri_build::try_build(tauri_build::Attributes::new().windows_attributes(tauri_build::WindowsAttributes::new().window_icon_path(&icon)))
+        .expect("tauri build");
     // repakxtra: tauri-build only watches tauri.conf.json, so a new icon kept the old one in the exe until a clean build
     println!("cargo:rerun-if-changed=icons/RepakIcon.ico");
 

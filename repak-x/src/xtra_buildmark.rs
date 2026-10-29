@@ -52,6 +52,11 @@ pub fn tint_window_icon(app: &tauri::App) {
 /// later, get it too.
 #[tauri::command]
 pub fn xtra_buildmark_tint(window: tauri::WebviewWindow) {
+    tint(&window);
+}
+
+/// One window's icon in this copy's colors (the Nexus window, which shows Nexus's pages, cannot ask for it itself).
+pub fn tint(window: &tauri::WebviewWindow) {
     use tauri::Manager;
     if let Some(icon) = tinted(window.app_handle().default_window_icon()) {
         let _ = window.set_icon(icon);

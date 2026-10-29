@@ -6,18 +6,6 @@
 .lo-card-caption { position: relative; z-index: 1; }
 .lo-caption-wrap { z-index: 2; }
 
-/* Its controls: tiles like the Cover switch above. Add fills the row; with a picture, its thumbnail, Blur, Dim, and X */
-.cap-bg { display: grid; grid-template-columns: 44px 1fr 1fr 34px; gap: 6px; }
-.cap-bg .cap-bg-add { grid-column: 1 / -1; }
-.cap-bg .cover-tab { padding: 0 8px !important; }
-.cap-bg .cover-tab[aria-pressed="true"] { color: var(--text-primary) !important; background: var(--bg-lighter) !important; border-color: rgba(255, 255, 255, 0.32) !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45); }
-[data-theme="light"] .cap-bg .cover-tab[aria-pressed="true"] { border-color: rgba(0, 0, 0, 0.22) !important; }
-.cap-bg .cap-bg-thumb { padding: 0 !important; overflow: hidden; }
-.cap-bg .cap-bg-thumb img { width: 100%; height: 100%; object-fit: cover; transition: opacity 0.15s ease; }
-.cap-bg .cap-bg-thumb:hover img { opacity: 0.75; }
-.cap-bg .cap-bg-remove { padding: 0 !important; }
-
 /* The words being typed sit where the card shows them: the same size (the card's container units) and the same middle, so
    nothing jumps between typing and showing */
 .lo-caption-wrap { container-type: inline-size; padding: 52px 14px !important; gap: 0 !important; }
