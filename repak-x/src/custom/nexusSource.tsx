@@ -136,7 +136,7 @@ export function NexusSourceLine({ path }: { path: string }) {
 }
 
 /** The Library row's Nexus tag (Settings > On each mod hides it): a click opens the mod's Nexus page. With a newer
- *  version out a blue chip with it follows the tag, and a click on the chip gets that version in place of this one (nexus.tsx getNexusFile). */
+ *  version out the tag splits: its blue half shows the version, and a click there gets it in place of this one (nexus.tsx getNexusFile). */
 export function NexusTag({ path }: { path: string }) {
   const s = useSource(path)
   if (!s) return null
@@ -146,10 +146,16 @@ export function NexusTag({ path }: { path: string }) {
       onClick={e => { e.stopPropagation(); openNexusPage(s.id) }}><img className="tag-logo" src={nexusLogo} alt="" />Nexus</button>
   )
   if (!u) return tag
-  // a newer version: the Nexus tag stays as it is, a blue chip beside it with the version gets it
-  return <>{tag}<button type="button" className="mod-type-badge nexus-update-chip" title={`Version ${u.version} is on Nexus Mods (uploaded ${day(u.date)}). Click to update`}
-    aria-label={`Update from Nexus Mods to ${u.version}`} onClick={e => { e.stopPropagation(); getNexusFile(u.modId, u.fileId, path) }}>
-    <ArrowUp size={12} strokeWidth={2.5} aria-hidden="true" />{u.version}</button></>
+  // a newer version: one split badge, the orange Nexus half opens the page, the blue half with the version updates
+  const v = /^v/i.test(u.version) ? u.version : `v${u.version}`
+  return (
+    <span className="nexus-split">
+      {tag}
+      <button type="button" className="mod-type-badge nexus-update-chip" title={`Version ${u.version} is on Nexus Mods (uploaded ${day(u.date)}). Click to update`}
+        aria-label={`Update from Nexus Mods to ${v}`} onClick={e => { e.stopPropagation(); getNexusFile(u.modId, u.fileId, path) }}>
+        <ArrowUp size={12} strokeWidth={2.5} aria-hidden="true" />{v}</button>
+    </span>
+  )
 }
 
 if (import.meta.env.DEV) {
