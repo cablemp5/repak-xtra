@@ -110,7 +110,9 @@ let applying: Promise<unknown> = Promise.resolve()
 /** Mods whose Files tab is open in the Nexus window for a free account's Install, by mod id, until the download comes
  *  back (or half an hour passes): the Nexus Mods tab's card says it is waiting there. */
 let pending: Record<number, number> = {}
-const setPending = (next: Record<number, number>) => { pending = next; notify() }
+// a card stops waiting after WAIT_MS on its own: the screen is told then
+const setPending = (next: Record<number, number>) => { pending = next; notify(); setTimeout(notify, WAIT_MS + 50) }
+let autoMod = 0 // the mod a one-click Install's hidden window is for (xtra_nexus_open's own window)
 export const useNexusPending = (modId: number) => useSyncExternalStore(subscribe, () => Date.now() - (pending[modId] ?? 0) < WAIT_MS)
 
 async function fetchAndApply(link: Link, oldPath?: string) {
@@ -161,7 +163,9 @@ export async function getNexusFile(modId: number, fileId?: number, oldPath?: str
   if (oldPath && fileId) waiting.set(fileId, { oldPath, at: Date.now() })
   if (!oldPath) setPending({ ...pending, [modId]: Date.now() })
   // one-click Install (experimental): a known file downloads in a hidden Nexus window, no click there
-  await openWindow(`${pageUrl(modId)}?tab=files${fileId ? `&file_id=${fileId}&nmm=1` : ''}`, Boolean(fileId) && prefOn('nexus-auto'))
+  const auto = Boolean(fileId) && prefOn('nexus-auto')
+  if (auto && !oldPath && !autoMod) autoMod = modId
+  await openWindow(`${pageUrl(modId)}?tab=files${fileId ? `&file_id=${fileId}&nmm=1` : ''}`, auto)
     .catch(e => {
       if (pending[modId]) { const { [modId]: _, ...rest } = pending; setPending(rest) } // eslint-disable-line @typescript-eslint/no-unused-vars
       handlers?.alert.error('Could not open Nexus Mods', String(e))
@@ -198,6 +202,17 @@ export function useNexus(h: Handlers) {
     const un = listen<Link>('nexus-nxm', e => take(e.payload))
     // a plain download in the Nexus window (xtra_nexus_open's on_download) installs the same way
     const file = listen<string>('nexus-file', e => { setPending({}); void apply(e.payload) }) // which mod it is for is unknown: none waits
+    // a Nexus window closed (by hand, or after its download): its cards stop waiting. A one-click window waits for its
+    // mod, the Nexus window for the others
+    const closed = listen<string>('nexus-window-closed', e => {
+      const one = e.payload === 'nexus-auto'
+      setPending(Object.fromEntries(Object.entries(pending).filter(([id]) => (Number(id) === autoMod) !== one)))
+      if (one) autoMod = 0
+    })
+    const failed = listen<string>('nexus-download-failed', () => {
+      setPending({})
+      handlers?.alert.error('The Nexus download failed', 'The Nexus window is open again. Click Slow download to try once more.')
+    })
     // the API keys page's Copy closed the Nexus window (nexus-theme.js): where the key goes now
     const copied = listen('nexus-key-copied', () => {
       handlers?.alert.success('API key copied', 'It is on your clipboard. Paste it in step 3 and click Connect.', { keep: true })
@@ -205,7 +220,7 @@ export function useNexus(h: Handlers) {
     })
     // once listening: the links that came first (one that started the app)
     un.then(() => invoke<Link[]>('xtra_nexus_pending')).then(held => held.forEach(take)).catch(() => undefined)
-    return () => { un.then(f => f()); file.then(f => f()); copied.then(f => f()) }
+    return () => { un.then(f => f()); file.then(f => f()); copied.then(f => f()); closed.then(f => f()); failed.then(f => f()) }
   }, [])
 }
 

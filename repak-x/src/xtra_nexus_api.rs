@@ -273,42 +273,101 @@ fn prune(dir: &std::path::Path) {
     }
 }
 
+/// One-click Install's own hidden window (Settings > Nexus Mods, experimental), apart from the Nexus window people browse
+/// in: only it clicks Slow download (nexus-theme.js), and only for the file it was opened for.
+const AUTO_WINDOW: &str = "nexus-auto";
+/// Each one-click Install's number, and the page it asked for: a late timer or close of an earlier one leaves a newer one
+/// alone, and Install again on the same mod (its Waiting for Nexus) shows the window instead of starting over.
+static AUTO_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static AUTO_URL: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+fn current(gen: u64) -> bool { AUTO_GEN.load(std::sync::atomic::Ordering::SeqCst) == gen }
+
 /// Opens a nexusmods.com page in the app's own Nexus window (one window, reused). A Mod manager download clicked there
-/// is caught before Windows sees it. `auto` (Settings > Nexus Mods, one-click Install, experimental): a new window opens
-/// hidden and clicks Slow download itself (nexus-theme.js), shown after AUTO_GIVE_UP if it has not finished by then.
+/// is caught before Windows sees it. `auto` (one-click Install): the page opens in a hidden window of its own that clicks
+/// Slow download itself, shown after AUTO_GIVE_UP if it has not finished by then. One at a time: while one runs, another
+/// mod's Install opens in the normal Nexus window, and the same mod's shows the hidden one.
 #[tauri::command]
 pub async fn xtra_nexus_open(app: AppHandle, url: String, auto: Option<bool>) -> Result<(), String> {
-    let auto = auto.unwrap_or(false);
     let url = url::Url::parse(&url).map_err(|e| e.to_string())?;
     if !is_nexus(&url) {
         return Err("Only nexusmods.com pages open here.".into());
     }
+    if auto.unwrap_or(false) {
+        match app.get_webview_window(AUTO_WINDOW) {
+            None => return open_auto(&app, url),
+            Some(w) if *AUTO_URL.lock().unwrap() == url.as_str() => { show(&w); return Ok(()); }
+            Some(_) => {} // another mod's is running: this one by hand
+        }
+    }
     if let Some(w) = app.get_webview_window(WINDOW) {
         w.navigate(url).map_err(|e| e.to_string())?;
-        if !auto || w.is_visible().unwrap_or(true) {
-            let _ = w.show();
-            let _ = w.unminimize();
-            let _ = w.set_focus();
-        }
+        show(&w);
         return Ok(());
     }
+    build(&app, WINDOW, url, None)?;
+    Ok(())
+}
+
+fn show(w: &tauri::WebviewWindow) {
+    let _ = w.show();
+    let _ = w.unminimize();
+    let _ = w.set_focus();
+}
+
+/// A one-click Install's hidden window, for the file in `url` (its file_id) of the mod in it.
+fn open_auto(app: &AppHandle, url: url::Url) -> Result<(), String> {
+    let gen = AUTO_GEN.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+    *AUTO_URL.lock().unwrap() = url.as_str().to_owned();
+    let file = url.query_pairs().find(|(k, _)| k == "file_id").map(|(_, v)| v.into_owned()).unwrap_or_default();
+    let module = url.path_segments().and_then(|mut s| s.find(|p| p.chars().all(|c| c.is_ascii_digit()))).unwrap_or("").to_owned();
+    // numbers only (from a parsed URL), so nothing to escape in the script
+    let ask = format!("window.__repakxtraAuto = {{ modId: '{}', fileId: '{}' }}",
+        module.chars().filter(char::is_ascii_digit).collect::<String>(), file.chars().filter(char::is_ascii_digit).collect::<String>());
+    build(app, AUTO_WINDOW, url, Some((ask, gen)))?;
+    // not signed in to Nexus in that window, or Nexus changed its page: the window shows, to finish by hand
+    let h = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(AUTO_GIVE_UP);
+        if !current(gen) { return; }
+        if let Some(w) = h.get_webview_window(AUTO_WINDOW) {
+            if !w.is_visible().unwrap_or(true) { show(&w); }
+        }
+    });
+    Ok(())
+}
+
+/// Closes the window `label` off this thread (a window's own handler may be the one asking). A one-click window closes
+/// only while it is still the request `gen` was for.
+fn close_later(app: &AppHandle, label: &'static str, gen: Option<u64>) {
+    let h = app.clone();
+    std::thread::spawn(move || {
+        if gen.is_some_and(|g| !current(g)) { return; }
+        if let Some(w) = h.get_webview_window(label) { let _ = w.close(); }
+    });
+}
+
+/// The Nexus window (`label` WINDOW), or a one-click Install's (`auto`: its script and request number).
+fn build(app: &AppHandle, label: &'static str, url: url::Url, auto: Option<(String, u64)>) -> Result<tauri::WebviewWindow, String> {
     let handle = app.clone();
     let loader = app.clone();
-    let (profile, extensions) = browser_dirs(&app)?;
-    let window = WebviewWindowBuilder::new(&app, WINDOW, WebviewUrl::External(url))
+    let gen = auto.as_ref().map(|a| a.1);
+    let (profile, extensions) = browser_dirs(app)?;
+    let window = WebviewWindowBuilder::new(app, label, WebviewUrl::External(url))
         .title("Nexus Mods")
         .inner_size(1180.0, 860.0)
         // its own browser profile: extensions need a WebView2 environment of their own, and the app's window has none
         .data_directory(profile)
         .browser_extensions_enabled(true)
         .extensions_path(extensions)
-        .visible(!auto)
-        .focused(!auto)
-        .initialization_script(if auto { "window.__repakxtraAuto = true" } else { "" })
+        .visible(auto.is_none())
+        .focused(auto.is_none())
+        .initialization_script(auto.map(|a| a.0).unwrap_or_default())
         .initialization_script(theme_script())
         .on_navigation(move |u| {
             if u.scheme() == "nxm" {
-                return !on_link(u.as_str(), &handle);
+                if !take_link(u.as_str(), &handle) { return true; }
+                close_later(&handle, label, gen);
+                return false;
             }
             // nexus-theme.js after the API keys page's Copy: the main window says the key is copied, this one closes
             if u.host_str() == Some("repakxtra.invalid") {
@@ -316,7 +375,7 @@ pub async fn xtra_nexus_open(app: AppHandle, url: String, auto: Option<bool>) ->
                     let _ = handle.emit_to("main", "nexus-key-copied", ());
                     let h = handle.clone();
                     std::thread::spawn(move || {
-                        if let Some(w) = h.get_webview_window(WINDOW) { let _ = w.close(); }
+                        if let Some(w) = h.get_webview_window(label) { let _ = w.close(); }
                         if let Some(m) = h.get_webview_window("main") { let _ = m.set_focus(); } // its toast is seen
                     });
                 }
@@ -345,7 +404,12 @@ pub async fn xtra_nexus_open(app: AppHandle, url: String, auto: Option<bool>) ->
                 }
                 tauri::webview::DownloadEvent::Finished { path: Some(path), success: true, .. } => {
                     let _ = loader.emit_to("main", "nexus-file", path.to_string_lossy().into_owned());
-                    if let Some(w) = loader.get_webview_window(WINDOW) { let _ = w.close(); }
+                    close_later(&loader, label, gen);
+                }
+                // a download that failed: the app says so, and the window shows to try again
+                tauri::webview::DownloadEvent::Finished { .. } => {
+                    let _ = loader.emit_to("main", "nexus-download-failed", label);
+                    if let Some(w) = loader.get_webview_window(label) { show(&w); }
                 }
                 _ => {}
             }
@@ -354,17 +418,12 @@ pub async fn xtra_nexus_open(app: AppHandle, url: String, auto: Option<bool>) ->
         .build()
         .map_err(|e| e.to_string())?;
     crate::xtra_buildmark::tint(&window); // the build's color, like the main window's
-    if auto {
-        // not signed in to Nexus in this window, or Nexus changed its page: the window shows, to finish by hand
-        let h = app.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(AUTO_GIVE_UP);
-            if let Some(w) = h.get_webview_window(WINDOW) {
-                if !w.is_visible().unwrap_or(true) { let _ = w.show(); let _ = w.set_focus(); }
-            }
-        });
-    }
-    Ok(())
+    // closed by hand, or after its download: the app stops waiting on it
+    let h = app.clone();
+    window.on_window_event(move |e| {
+        if let tauri::WindowEvent::Destroyed = e { let _ = h.emit_to("main", "nexus-window-closed", label); }
+    });
+    Ok(window)
 }
 
 /// How long a hidden one-click Install may take (Nexus's wait is 5 seconds) before its window shows.
@@ -443,8 +502,15 @@ fn parse_nxm(url: &str) -> Option<NxmLink> {
 }
 
 /// The deep link handler's hook: true when `url` is an nxm:// link (handed to the window as "nexus-nxm", or ignored when
-/// it is for another game). The link's key never reaches the log.
+/// it is for another game), and the Nexus window closes. The link's key never reaches the log.
 pub fn on_link(url: &str, app: &AppHandle) -> bool {
+    let taken = take_link(url, app);
+    if taken { close_later(app, WINDOW, None); }
+    taken
+}
+
+/// An nxm:// link to the main window (true), or false when `url` is not one.
+fn take_link(url: &str, app: &AppHandle) -> bool {
     if !url.to_ascii_lowercase().starts_with("nxm://") {
         return false;
     }
@@ -461,9 +527,6 @@ pub fn on_link(url: &str, app: &AppHandle) -> bool {
                 let _ = main.unminimize();
                 let _ = main.set_focus();
             }
-            // off this thread: the Nexus window may be the one asking (its navigation handler)
-            let h = app.clone();
-            std::thread::spawn(move || if let Some(w) = h.get_webview_window(WINDOW) { let _ = w.close(); });
         }
         None => crate::ui_log::warn("Nexus", "Ignored a Nexus download link that is not for Marvel Rivals"),
     }
