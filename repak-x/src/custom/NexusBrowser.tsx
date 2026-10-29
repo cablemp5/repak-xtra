@@ -199,7 +199,7 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
         {/* each heading with its own cards (Proximity), the two sections apart */}
         {spot && (
           <section className="nx-section nx-spot" aria-labelledby="nx-top-title">
-            <h3 id="nx-top-title" className="nx-section-title">Top this week</h3>
+            <div className="nx-section-head"><h3 id="nx-top-title" className="nx-section-title">Top this week</h3><span className="nx-section-note">Most endorsed uploads of the last 7 days</span></div>
             <div className="nx-spot-grid">{top.map(c => <NexusCard key={c.modId} c={c} path={installed.get(c.modId)} look={look} />)}</div>
           </section>
         )}

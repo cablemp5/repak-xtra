@@ -3155,7 +3155,10 @@ html[data-motion="off"] .upd-progress > span, html[data-motion="off"] .repakx-pr
 .nx-clear { margin-left: 6px; font-size: 12.5px; white-space: nowrap; }
 .nx-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; gap: 24px; }
 .nx-section { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.nx-section-title { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+/* section headings: sentence case, the card names' weight one step up, a quiet note beside when it helps */
+.nx-section-head { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.nx-section-title { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.005em; color: var(--text-primary); }
+.nx-section-note { font-size: 12.5px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
 .nx-card { display: flex; flex-direction: column; min-width: 0; overflow: hidden; background: var(--panel-bg);
   border: 1px solid var(--panel-border); border-radius: 12px; transition: border-color 0.15s ease; }
