@@ -84,7 +84,7 @@ const setCovers = new Map<string, { covers: string[]; members: string[] | null }
 const previewMode = (): string => (Array.isArray(mock.__previewMock) ? mock.__previewMock.shift() : mock.__previewMock) ?? 'ok'
 
 // repakxtra: the built-in mods' saved state (xtra_builtins.rs BuiltinView); heroes are the skin table's 10xx rows
-const builtins: any[] = ['force-default-skin', 'skip-intro-movies', 'custom-quake', 'no-impact', 'no-tracers', 'fov-slider', 'skip-login-video'].map(id => ({ id, on: false, excluded: [], current: false, active: false, heroes: [] as string[], path: `C:/Mock/Paks/~mods/.repakxtra-builtin/repakxtra-${id}_9999999_P.pak`, size: 150000,
+const builtins: any[] = ['force-default-skin', 'skip-intro-movies', 'custom-quake', 'no-impact', 'no-tracers', 'no-screen-shake', 'fov-slider', 'skip-login-video'].map(id => ({ id, on: false, excluded: [], current: false, active: false, heroes: [] as string[], path: `C:/Mock/Paks/~mods/.repakxtra-builtin/repakxtra-${id}_9999999_P.pak`, size: 150000,
   ...(id === 'custom-quake' ? { quake: { base: '5d7a80', sky: '82c6ed', hidePlants: false, lobby: true } } : {}) }))
 // CustomQuake (xtra_quake.rs): localStorage 'mock.quakeError' = '1' fails its build, 'mock.quakeOverlap' = '1' says quakeV6 is on too,
 // 'mock.quakeSlow' = '1' makes its build last a minute so the progress bar can be seen

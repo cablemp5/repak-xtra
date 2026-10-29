@@ -32,7 +32,7 @@ pub const DEFAULT_SKIN: &str = "force-default-skin";
 pub const SKIP_INTRO: &str = "skip-intro-movies";
 pub const CUSTOM_QUAKE: &str = "custom-quake"; // repakxtra: xtra_quake.rs
 #[cfg(feature = "extended")]
-const IDS: [&str; 7] = [DEFAULT_SKIN, SKIP_INTRO, CUSTOM_QUAKE, crate::xtra_visual_builtins::NO_IMPACT, crate::xtra_visual_builtins::NO_TRACERS, crate::xtra_visual_builtins::FOV, crate::xtra_login_video::ID];
+const IDS: [&str; 8] = [DEFAULT_SKIN, SKIP_INTRO, CUSTOM_QUAKE, crate::xtra_visual_builtins::NO_IMPACT, crate::xtra_visual_builtins::NO_TRACERS, crate::xtra_visual_builtins::NO_SHAKE, crate::xtra_visual_builtins::FOV, crate::xtra_login_video::ID];
 #[cfg(not(feature = "extended"))]
 const IDS: [&str; 1] = [SKIP_INTRO];
 
@@ -503,7 +503,7 @@ async fn make(tool: &Path, id: &str, excluded: &[String], quake: &crate::xtra_qu
     ensure_vfx_uat_session(&tool).await?;
     let usmap = usmap().await?;
     #[cfg(feature = "extended")]
-    if [crate::xtra_visual_builtins::NO_IMPACT, crate::xtra_visual_builtins::NO_TRACERS, crate::xtra_visual_builtins::FOV].contains(&id) {
+    if [crate::xtra_visual_builtins::NO_IMPACT, crate::xtra_visual_builtins::NO_TRACERS, crate::xtra_visual_builtins::NO_SHAKE, crate::xtra_visual_builtins::FOV].contains(&id) {
         let made = crate::xtra_visual_builtins::make(&tool, &usmap, id, excluded, paks, work, out_base, stopped).await?;
         let base = out_base.to_path_buf();
         tauri::async_runtime::spawn_blocking(move || crate::xtra_encrypt::encrypt_built(&base)).await.map_err(|e| e.to_string())??;
@@ -822,7 +822,7 @@ pub async fn xtra_builtins_set(app: tauri::AppHandle, id: String, on: Option<boo
         return Err(format!("No built-in mod called {id}"));
     }
     if quake.is_some() && id != CUSTOM_QUAKE { return Err("Color options apply only to CustomQuake".into()); }
-    if excluded.is_some() && ![DEFAULT_SKIN, "no-impact", "no-tracers"].contains(&id.as_str()) { return Err("This built-in has no hero exclusions".into()); }
+    if excluded.is_some() && ![DEFAULT_SKIN, "no-impact", "no-tracers", "no-screen-shake"].contains(&id.as_str()) { return Err("This built-in has no hero exclusions".into()); }
     if !crate::xtra_edition::EXTENDED && quake.is_some() {
         return Err("These options are unavailable in Standard".into());
     }
@@ -911,7 +911,7 @@ pub async fn xtra_builtins_refresh(app: tauri::AppHandle, state: State<'_, Arc<M
     }
     #[cfg(feature = "extended")]
     if crate::xtra_edition::features_unlocked() {
-        for id in [crate::xtra_visual_builtins::NO_IMPACT,crate::xtra_visual_builtins::NO_TRACERS,crate::xtra_visual_builtins::FOV] {
+        for id in [crate::xtra_visual_builtins::NO_IMPACT,crate::xtra_visual_builtins::NO_TRACERS,crate::xtra_visual_builtins::NO_SHAKE,crate::xtra_visual_builtins::FOV] {
             if !load().get(id).is_some_and(|s|s.on) {continue;}
             let root=dir.parent().map(Path::to_path_buf).unwrap_or_default();
             let found=tauri::async_runtime::spawn_blocking(move ||crate::xtra_visual_builtins::overlapping(&root,id)).await.unwrap_or_default();
@@ -1041,7 +1041,7 @@ mod tests {
     fn quake_is_available_only_in_extended() {
         assert_eq!(super::IDS.contains(&super::CUSTOM_QUAKE), crate::xtra_edition::EXTENDED);
         assert_eq!(super::IDS.contains(&super::DEFAULT_SKIN), crate::xtra_edition::EXTENDED);
-        for id in ["no-impact", "no-tracers", "fov-slider", "skip-login-video"] {
+        for id in ["no-impact", "no-tracers", "no-screen-shake", "fov-slider", "skip-login-video"] {
             assert_eq!(super::IDS.contains(&id), crate::xtra_edition::EXTENDED);
         }
         assert!(super::IDS.contains(&super::SKIP_INTRO));

@@ -16,7 +16,7 @@ import { Num, SwapText, revealOnLoad } from './motion'
 import { savedItem } from './storageCarryOver'
 import { flipMods, setView } from './loadoutStore'
 import { nameKey } from './loadoutIdentity'
-import { ClapperboardIcon, FlatTilesIcon, PortraitCardIcon, ImpactIcon, TracerIcon, FovIcon, type BuiltinIconComponent } from './PixelIcon'
+import { ClapperboardIcon, FlatTilesIcon, PortraitCardIcon, ImpactIcon, TracerIcon, ShakeIcon, FovIcon, type BuiltinIconComponent } from './PixelIcon'
 import { cue } from './sounds'
 import { ROLES, type Role } from './heroRoles'
 
@@ -33,6 +33,7 @@ const ABOUT: Record<string, { name: string; what: string; icon: BuiltinIconCompo
   ...(EXTENDED ? {
     'no-impact': { name: 'No Impact', what: 'Hides hit impact effects, rebuilt from your current game files', icon: ImpactIcon },
     'no-tracers': { name: 'No Tracers', what: 'Hides projectile tracer effects, rebuilt from your current game files', icon: TracerIcon },
+    'no-screen-shake': { name: 'No Screen Shake', what: 'Stops the camera shaking from hits, recoil, and abilities, rebuilt from your current game files', icon: ShakeIcon },
     'fov-slider': { name: 'FOV Slider', what: 'Adds FOV controls to the in-game settings, with the original saved values and match updates', icon: FovIcon },
     'skip-login-video': { name: 'Skip login video', what: 'Skips seasonal login transitions using the supplied movie placeholder. Turning off restores backed-up originals', icon: ClapperboardIcon },
   } : {}),
@@ -44,7 +45,9 @@ const QUAKE_PRESETS = { base: ['5d7a80', '808080', 'a69b8a', '6f8f6a', '3d4a5c',
 export const sameQuake = (a: Quake, b: Quake) =>
   a.base.toLowerCase() === b.base.toLowerCase() && a.sky.toLowerCase() === b.sky.toLowerCase() && a.hidePlants === b.hidePlants && a.lobby === b.lobby
 const FOLD_KEY = 'repakxtra.builtins.folded'
-const heroPicker = (id: string) => EXTENDED && ['force-default-skin', 'no-impact', 'no-tracers'].includes(id)
+const heroPicker = (id: string) => EXTENDED && ['force-default-skin', 'no-impact', 'no-tracers', 'no-screen-shake'].includes(id)
+/** What a hero picker's checked heroes keep */
+const keptOf = (id: string) => id === 'force-default-skin' ? 'skins' : id === 'no-screen-shake' ? 'screen shake' : 'effects'
 const BLOCKED = 'Close Marvel Rivals to change built-in mods'
 
 // one store for every remount: the list, which ones are building, and the switch each was last set to
@@ -142,7 +145,7 @@ export const listWords = (names: string[]) => names.length < 3 ? names.join(' an
 
 /** The other quake mods that are on, said on CustomQuake's row. Pure. */
 export const overlapText = (paths: string[], id = 'custom-quake') => paths.length
-  ? `${listWords(paths.map(nameKey))} ${paths.length === 1 ? 'changes' : 'change'} the same ${id === 'custom-quake' ? 'map textures' : id === 'fov-slider' ? 'FOV settings' : 'effects'}, so the game shows only one. Turn one of them off`
+  ? `${listWords(paths.map(nameKey))} ${paths.length === 1 ? 'changes' : 'change'} the same ${id === 'custom-quake' ? 'map textures' : id === 'fov-slider' ? 'FOV settings' : id === 'no-screen-shake' ? 'camera shakes' : 'effects'}, so the game shows only one. Turn one of them off`
   : ''
 
 /** Turns the other quake mods off (the overlap warning's button), then checks again. */
@@ -215,7 +218,7 @@ function HeroPicker({ id, b, open, building, blocked, onDone, alert }: { id: str
   useHeroImages()
   const { heroes, loaded } = useHeroes(b.heroes)
   const skin = b.id === 'force-default-skin'
-  const keptThing = skin ? 'skins' : 'effects'
+  const keptThing = keptOf(b.id)
   const [kept, setKept] = useState(() => new Set(b.excluded))
   const [query, setQuery] = useState('')
   const [at, setAt] = useState(0) // the hero that holds the group's one tab stop
@@ -270,7 +273,7 @@ function HeroPicker({ id, b, open, building, blocked, onDone, alert }: { id: str
                 )
               })}
             </div>
-            <p className="bi-picker-hint">{skin ? 'Checked heroes keep their own skins. Everyone else shows their default.' : 'Checked heroes keep their effects. The mod applies to everyone else in its asset list.'}</p>
+            <p className="bi-picker-hint">{skin ? 'Checked heroes keep their own skins. Everyone else shows their default.' : b.id === 'no-screen-shake' ? 'Checked heroes keep their screen shake. It goes for everyone else, and in game modes.' : 'Checked heroes keep their effects. The mod applies to everyone else in its asset list.'}</p>
           </div>
           <div className="bi-heroes" role="group" aria-label={`Heroes that keep their own ${keptThing}`} ref={grid}>
             {shown.map((h, i) => {
@@ -429,8 +432,8 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
         </div>
         {heroPicker(b.id) && (
           <button type="button" ref={pick} className="lo-text-btn bi-pick" aria-expanded={picking} aria-controls={pickerId} onClick={() => setPicking(v => !v)}
-            title={`Pick heroes that keep their own ${b.id === 'force-default-skin' ? 'skins' : 'effects'}`}>
-            {kept ? `${kept} ${kept === 1 ? 'hero keeps' : 'heroes keep'} ${b.id === 'force-default-skin' ? 'skins' : 'effects'}` : 'Keep some heroes'}
+            title={`Pick heroes that keep their own ${keptOf(b.id)}`}>
+            {kept ? `${kept} ${kept === 1 ? 'hero keeps' : 'heroes keep'} ${keptOf(b.id)}` : 'Keep some heroes'}
             <ChevronDown size={13} className="bi-chev" aria-hidden="true" />
           </button>
         )}
@@ -447,7 +450,7 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
             {b.overlaps!.length === 1 ? `Turn off ${nameKey(b.overlaps![0])}` : 'Turn them off'}
           </button>
         )}
-        {building && EXTENDED && ['custom-quake', 'no-impact', 'no-tracers'].includes(b.id) && wanted.get(b.id) !== false && (
+        {building && EXTENDED && ['custom-quake', 'no-impact', 'no-tracers', 'no-screen-shake'].includes(b.id) && wanted.get(b.id) !== false && (
           <button type="button" className="lo-text-btn" disabled={blocked} onClick={() => stopBuild(b.id, alert)} title={blocked ? BLOCKED : 'Stops after the current batch. Nothing new goes into the game'}><Square size={11} fill="currentColor" aria-hidden="true" /> Stop building</button>
         )}
         {warn && retryable(b.error) && (
@@ -510,7 +513,7 @@ if (import.meta.env.DEV) {
   console.assert(overlapText(['a', 'b', 'c']).startsWith('a, b, and c change the same') && overlapText([]) === '', 'several overlaps, Oxford comma')
   console.assert(listWords(['a', 'b']) === 'a and b' && listWords(['a']) === 'a', 'one or two names')
   console.assert(!retryable('Not active yet. The game updated and repakxtra waits for the support files for it. It checks for them at every start') && retryable('Could not write the packages') && !retryable(undefined), 'no Try again while waiting for support files')
-  console.assert(EXTENDED || ['no-impact', 'no-tracers', 'fov-slider', 'skip-login-video'].every(id => !ABOUT[id]), 'private built-ins stay out of Standard')
+  console.assert(EXTENDED || ['no-impact', 'no-tracers', 'no-screen-shake', 'fov-slider', 'skip-login-video'].every(id => !ABOUT[id]), 'private built-ins stay out of Standard')
   console.assert(Object.values(ABOUT).every(a => !/[;\u2014]/.test(a.what)), 'no semicolons or em dashes')
   console.assert(heroName('Iron Fist (lin Lie)') === 'Iron Fist' && heroName('Cloak & Dagger') === 'Cloak & Dagger', 'a note in brackets goes')
   console.assert(unreleased('Hive**') && !unreleased('Hulk'), 'placeholders are not heroes yet')

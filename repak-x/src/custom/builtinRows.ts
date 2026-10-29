@@ -20,7 +20,7 @@ export function builtinName(b: Pick<Builtin, 'id' | 'excluded' | 'quake'>, heroN
     const q = b.quake ?? QUAKE_DEFAULT
     return `${base} (${[`${colorName(q.base)} Map`, `${colorName(q.sky)} Sky`, q.hidePlants && 'Hidden Plants', q.lobby && 'Includes Lobby'].filter(Boolean).join(', ')})`
   }
-  if (!EXTENDED || !['force-default-skin', 'no-impact', 'no-tracers'].includes(b.id) || !b.excluded.length) return base
+  if (!EXTENDED || !['force-default-skin', 'no-impact', 'no-tracers', 'no-screen-shake'].includes(b.id) || !b.excluded.length) return base
   return `${base} (Except ${listOf(b.excluded.map(id => heroName(id) ?? `hero ${id}`).sort())})`
 }
 

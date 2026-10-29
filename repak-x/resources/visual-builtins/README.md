@@ -4,6 +4,7 @@ These resources come from the four packages supplied for this feature. They are 
 
 - `impact.txt`: the 559 asset paths in `zNoImpact_9999999_P.zip`.
 - `tracers.txt`: the 415 asset paths in `zNoTracersAll_9999999_P.zip`.
+- `screen-shake.txt`: the 1991 asset paths in `noss_9999999_P`: camera shake blueprints and montages.
 - `fov-logic.zip`: JSON source for the seven mod-owned `/Game/FOV/` assets decoded from `!FOVSlider_9999999_P`. Game assets are excluded.
 - `fov-widget.json`: names, import identities, export identities, and the two added widget exports from FOV Slider. This is a recipe for extending the current game widget, not a replacement for that widget.
 
@@ -18,3 +19,5 @@ Skip login video is a loose-file mod. It uses the supplied `yakuzadeso` placehol
 Movie publication uses atomic file replacement with a separate rollback copy for each season. Recorded movies missing after an interrupted older install recover from verified backups. Tests cover twelve seasons through the production publisher, interrupted publication, missing files, and rollback after a replacement fails.
 
 The ignored Rust tests `visual_reference_assets`, `effects_real`, and `fov_real` use `REPAKXTRA_REFERENCES` to point at a local reference workspace. The former compares regenerated exports against both supplied effect mods byte for byte. `effects_real` checks encrypted effect builds and hero exclusions. `fov_real` rebuilds FOV in a temporary folder, encrypts it, and decodes all nine packages. These tests do not install into the game. Movie recovery tests use temporary game folders.
+
+No Screen Shake extracts the listed camera shakes and montages from the installed game. It zeroes the amplitude and frequency floats of each camera shake oscillator, and the keys and default value of each montage CameraLocationOffset and CameraRotationOffset curve. Each struct is located by its header and current values. Other curves, headers, and bytes are retained, and an ambiguous match stops installation.

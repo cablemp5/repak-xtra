@@ -14,6 +14,7 @@ use std::{
 pub const NO_IMPACT: &str = "no-impact";
 pub const NO_TRACERS: &str = "no-tracers";
 pub const FOV: &str = "fov-slider";
+pub const NO_SHAKE: &str = "no-screen-shake";
 const LAYOUT: &str =
     "Marvel/Content/Marvel/Data/DataTable/UI/Setting/SettingPageLayout/SettingPageLayoutTable";
 const WIDGET: &str =
@@ -23,16 +24,29 @@ fn effect_paths(id: &str) -> Option<&'static str> {
     match id {
         NO_IMPACT => Some(include_str!("../resources/visual-builtins/impact.txt")),
         NO_TRACERS => Some(include_str!("../resources/visual-builtins/tracers.txt")),
+        NO_SHAKE => Some(include_str!(
+            "../resources/visual-builtins/screen-shake.txt"
+        )),
         _ => None,
     }
 }
+/// The hero an asset belongs to: Characters/10xx, or AbilitySystem/10xx where camera shakes live.
+fn hero(path: &str) -> Option<String> {
+    crate::xtra_heroes::hero_skin(path)
+        .map(|h| h.hero)
+        .or_else(|| {
+            let mut dirs = path.split('/');
+            dirs.find(|d| d.eq_ignore_ascii_case("AbilitySystem"))?;
+            dirs.next()
+                .filter(|h| {
+                    h.len() == 4 && h.starts_with("10") && h.bytes().all(|b| b.is_ascii_digit())
+                })
+                .map(str::to_string)
+        })
+}
 pub(crate) fn effect_heroes(id: &str) -> Option<Vec<String>> {
     let paths = effect_paths(id)?;
-    let mut heroes: Vec<_> = paths
-        .lines()
-        .filter_map(crate::xtra_heroes::hero_skin)
-        .map(|h| h.hero)
-        .collect();
+    let mut heroes: Vec<_> = paths.lines().filter_map(hero).collect();
     heroes.sort();
     heroes.dedup();
     Some(heroes)
@@ -41,7 +55,7 @@ pub(crate) fn all_excluded(id: &str, excluded: &[String]) -> bool {
     effect_paths(id).is_some_and(|paths| {
         paths
             .lines()
-            .all(|p| crate::xtra_heroes::hero_skin(p).is_some_and(|h| excluded.contains(&h.hero)))
+            .all(|p| hero(p).is_some_and(|h| excluded.contains(&h)))
     })
 }
 pub(crate) fn overlapping(root: &Path, id: &str) -> Vec<String> {
@@ -49,6 +63,7 @@ pub(crate) fn overlapping(root: &Path, id: &str) -> Vec<String> {
         NO_IMPACT => "znoimpact_",
         NO_TRACERS => "znotracersall_",
         FOV => "!fovslider_",
+        NO_SHAKE => "noss_",
         _ => return Vec::new(),
     };
     let mut paths: Vec<_> = walkdir::WalkDir::new(root)
@@ -149,35 +164,7 @@ pub(crate) fn disable_emitters(
 ) -> Result<usize, String> {
     fn collect(v: &Value, masks: &mut Vec<(Vec<u8>, usize, i32)>) -> Result<(), String> {
         if v["Name"] == "Platforms" && v["StructType"] == "NiagaraPlatformSet" {
-            let mut bytes = Vec::new();
-            let h = &v["OriginalStructHeader"];
-            for f in items(h, "Fragments")? {
-                let skip = f["SkipNum"]
-                    .as_u64()
-                    .filter(|n| *n <= 127)
-                    .ok_or("Invalid platform header")? as u16;
-                let count = f["ValueNum"]
-                    .as_u64()
-                    .filter(|n| *n <= 127)
-                    .ok_or("Invalid platform header")? as u16;
-                let packed = skip
-                    | (if f["bHasAnyZeroes"] == true { 0x80 } else { 0 })
-                    | (count << 9)
-                    | (if f["bIsLast"] == true { 0x100 } else { 0 });
-                bytes.extend(packed.to_le_bytes());
-            }
-            let zeros = items(h, "ZeroMask")?;
-            if !zeros.is_empty() {
-                if zeros.len() > 8 {
-                    return Err("Emitter platform zero mask changed".into());
-                }
-                bytes.push(
-                    zeros
-                        .iter()
-                        .enumerate()
-                        .fold(0, |b, (i, v)| b | if v == true { 1 << i } else { 0 }),
-                );
-            }
+            let mut bytes = header(&v["OriginalStructHeader"])?;
             let mut target = None;
             for p in items(v, "Value")? {
                 if p["IsZero"] == true {
@@ -237,17 +224,15 @@ pub(crate) fn disable_emitters(
             .filter(|n| *n < 0)
             .and_then(|n| doc["Imports"].get((-n - 1) as usize));
         let is_emitter = class.is_some_and(|c| c["ObjectName"] == "NiagaraEmitter");
-        let is_renderer = class
-            .and_then(|c| c["ObjectName"].as_str())
-            .is_some_and(|n| n.starts_with("Niagara") && n.ends_with("RendererProperties"));
-        if is_emitter || is_renderer {
-            if export["$type"]
+        // Emitters hold the masks and must decode. A renderer the mappings cannot read (ribbon renderers on
+        // this game version) is left as it is: the supplied mods match byte for byte without renderer edits.
+        if is_emitter
+            && (export["$type"]
                 .as_str()
                 .is_some_and(|t| t.contains("RawExport"))
-                || !export["Data"].is_array()
-            {
-                return Err(crate::xtra_builtins::MAPPINGS_BEHIND.into());
-            }
+                || !export["Data"].is_array())
+        {
+            return Err(crate::xtra_builtins::MAPPINGS_BEHIND.into());
         }
         if is_emitter {
             if !items(export, "Data")?
@@ -305,6 +290,289 @@ pub(crate) fn disable_emitters(
     }
     if emitters == 0 {
         return Err("No Niagara emitters found: the game layout may have changed".into());
+    }
+    Ok(edits)
+}
+
+/// Unversioned property header bytes: its fragments, then the zero mask when a property is zero.
+fn header(h: &Value) -> Result<Vec<u8>, String> {
+    let mut bytes = Vec::new();
+    for f in items(h, "Fragments")? {
+        let num = |k: &str| {
+            f[k].as_u64()
+                .filter(|n| *n <= 127)
+                .map(|n| n as u16)
+                .ok_or("Invalid property header")
+        };
+        let packed = num("SkipNum")?
+            | (if f["bHasAnyZeroes"] == true { 0x80 } else { 0 })
+            | (num("ValueNum")? << 9)
+            | (if f["bIsLast"] == true { 0x100 } else { 0 });
+        bytes.extend(packed.to_le_bytes());
+    }
+    let zeros = items(h, "ZeroMask")?;
+    if !zeros.is_empty() {
+        if zeros.len() > 8 {
+            return Err("Property zero mask changed".into());
+        }
+        bytes.push(
+            zeros
+                .iter()
+                .enumerate()
+                .fold(0, |b, (i, v)| b | if v == true { 1 << i } else { 0 }),
+        );
+    }
+    Ok(bytes)
+}
+
+/// A float as written in the JSON. NaN has more than one bit pattern, so it is left unchecked.
+fn float(v: &Value) -> Result<f32, String> {
+    match v {
+        Value::Number(n) => n.as_f64().map(|f| f as f32),
+        Value::String(s) if s == "+0" => Some(0.0),
+        Value::String(s) if s == "-0" => Some(-0.0),
+        Value::String(s) if s == "NaN" => Some(f32::NAN),
+        Value::String(s) if s == "Infinity" => Some(f32::INFINITY),
+        Value::String(s) if s == "-Infinity" => Some(f32::NEG_INFINITY),
+        _ => None,
+    }
+    .ok_or_else(|| format!("Unexpected float {v}"))
+}
+
+/// Bytes of a serialized struct (`None`: an enum byte not checked), the offsets of floats to zero, and whether any of
+/// them is not zero yet. Like the supplied mod, a struct whose values are all zero already (+0 or -0) stays as it is.
+type Pattern = (Vec<Option<u8>>, Vec<usize>, bool);
+
+fn encode(v: &Value, zero: fn(&str) -> bool, out: &mut Pattern) -> Result<(), String> {
+    const CHANGED: &str = "Screen shake layout changed; refusing an unchecked edit";
+    let put = |out: &mut Pattern, name: &str, f: f32| {
+        if zero(name) {
+            out.1.push(out.0.len());
+            out.2 |= f != 0.0;
+        }
+        if f.is_nan() {
+            out.0.extend([None; 4]);
+        } else {
+            out.0.extend(f.to_le_bytes().map(Some));
+        }
+    };
+    out.0
+        .extend(header(&v["OriginalStructHeader"])?.into_iter().map(Some));
+    for p in items(v, "Value")? {
+        if p["IsZero"] == true {
+            continue;
+        }
+        let kind = p["$type"].as_str().unwrap_or_default();
+        let name = p["Name"].as_str().unwrap_or_default();
+        if kind.contains(".FloatPropertyData") {
+            put(out, name, float(&p["Value"])?);
+        } else if kind.contains(".BytePropertyData") || kind.contains(".EnumPropertyData") {
+            out.0.push(None);
+        } else if kind.contains(".NamePropertyData") {
+            out.0.extend([None; 8]); // a name table index and number
+        } else if kind.contains(".IntPropertyData") {
+            let n = p["Value"]
+                .as_i64()
+                .and_then(|n| i32::try_from(n).ok())
+                .ok_or(CHANGED)?;
+            out.0.extend(n.to_le_bytes().map(Some));
+        } else if kind.contains(".StructPropertyData") {
+            encode(p, zero, out)?;
+        } else if name == "Keys" && p["ArrayType"] == "StructProperty" {
+            // FRichCurveKey is native: three mode bytes, then six floats
+            let keys = items(p, "Value")?;
+            out.0.extend((keys.len() as i32).to_le_bytes().map(Some));
+            for k in keys {
+                let k = &k["Value"][0]["Value"];
+                if !k.is_object() {
+                    return Err(CHANGED.into());
+                }
+                out.0.extend([None; 3]);
+                for f in [
+                    "Time",
+                    "Value",
+                    "ArriveTangent",
+                    "ArriveTangentWeight",
+                    "LeaveTangent",
+                    "LeaveTangentWeight",
+                ] {
+                    put(out, f, float(&k[f])?);
+                }
+            }
+        } else {
+            return Err(CHANGED.into());
+        }
+    }
+    Ok(())
+}
+
+fn shake_patterns(v: &Value, out: &mut Vec<Pattern>) -> Result<(), String> {
+    match v {
+        Value::Object(o) => {
+            if v["StructType"] == "FOscillator" {
+                let mut p = Pattern::default();
+                encode(
+                    v,
+                    |n| matches!(n, "Amplitude" | "AmplitudeEnhanced" | "Frequency"),
+                    &mut p,
+                )?;
+                out.push(p);
+                return Ok(());
+            }
+            // a weapon's crosshair kick
+            if v["StructType"].is_string()
+                && v["Name"]
+                    .as_str()
+                    .is_some_and(|n| n.starts_with("CrosshairShake"))
+            {
+                let mut p = Pattern::default();
+                encode(
+                    v,
+                    |n| {
+                        matches!(n, "ShakePitch" | "ShakePitchMax")
+                            || n.starts_with("ShakeAmplitude")
+                    },
+                    &mut p,
+                )?;
+                out.push(p);
+                return Ok(());
+            }
+            if v["Name"] == "FloatCurves" {
+                // the whole array as one pattern (count, then every curve in order), so a short camera curve
+                // with no keys cannot match a lookalike elsewhere; only camera curves get targets
+                let curves = items(v, "Value")?;
+                let mut all = Pattern::default();
+                all.0.extend((curves.len() as i32).to_le_bytes().map(Some));
+                for c in curves {
+                    let name = items(c, "Value")?
+                        .iter()
+                        .find_map(|p| {
+                            (p["Name"] == "CurveName")
+                                .then(|| p["Value"].as_str())
+                                .flatten()
+                        })
+                        .unwrap_or_default();
+                    let camera = ["CameraLocationOffset", "CameraRotationOffset"]
+                        .iter()
+                        .any(|s| {
+                            name.strip_suffix(['X', 'Y', 'Z'])
+                                .is_some_and(|n| n.ends_with(s))
+                        });
+                    let mut one = Pattern::default();
+                    if camera {
+                        encode(
+                            c,
+                            |n| {
+                                matches!(
+                                    n,
+                                    "DefaultValue" | "Value" | "ArriveTangent" | "LeaveTangent"
+                                )
+                            },
+                            &mut one,
+                        )?;
+                    } else {
+                        encode(c, |_| false, &mut one)?;
+                    }
+                    let at = all.0.len();
+                    if one.2 {
+                        all.1.extend(one.1.iter().map(|t| t + at));
+                        all.2 = true;
+                    }
+                    all.0.extend(one.0);
+                }
+                out.push(all);
+                return Ok(());
+            }
+            for x in o.values() {
+                shake_patterns(x, out)?;
+            }
+        }
+        Value::Array(a) => {
+            for x in a {
+                shake_patterns(x, out)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Zero camera shake oscillation and montage camera curves in place, leaving headers and other bytes intact.
+pub(crate) fn disable_shake(
+    doc: &Value,
+    raw: &mut [u8],
+    header_size: usize,
+) -> Result<usize, String> {
+    let mut edits = 0;
+    for export in items(doc, "Exports")? {
+        let class = export["ClassIndex"]
+            .as_i64()
+            .filter(|n| *n < 0)
+            .and_then(|n| doc["Imports"].get((-n - 1) as usize))
+            .and_then(|c| c["ObjectName"].as_str());
+        let shake = export["ObjectName"]
+            .as_str()
+            .is_some_and(|n| n.starts_with("Default__"));
+        if (shake || class == Some("AnimMontage")) && !export["Data"].is_array() {
+            return Err(crate::xtra_builtins::MAPPINGS_BEHIND.into());
+        }
+        let mut patterns = Vec::new();
+        if class == Some("CurveFloat") {
+            // a standalone shake curve: its key values go
+            for rich in items(export, "Data")?
+                .iter()
+                .filter(|p| p["StructType"] == "RichCurve")
+            {
+                let mut p = Pattern::default();
+                encode(rich, |n| n == "Value", &mut p)?;
+                patterns.push(p);
+            }
+        } else {
+            shake_patterns(&export["Data"], &mut patterns)?;
+        }
+        // already zero: nothing to change, and nothing to look for
+        patterns.retain(|p| p.2);
+        if patterns.is_empty() {
+            continue;
+        }
+        let start = export["SerialOffset"]
+            .as_u64()
+            .and_then(|n| usize::try_from(n).ok())
+            .and_then(|n| n.checked_sub(header_size))
+            .ok_or("Invalid export offset")?;
+        let len = export["SerialSize"]
+            .as_u64()
+            .and_then(|n| usize::try_from(n).ok())
+            .ok_or("Invalid export size")?;
+        let end = start
+            .checked_add(len)
+            .filter(|n| *n <= raw.len())
+            .ok_or("Export exceeds file")?;
+        let data = &mut raw[start..end];
+        let mut writes = Vec::new();
+        for (bytes, targets, _) in &patterns {
+            let hits: Vec<_> = (0..(data.len() + 1).saturating_sub(bytes.len()))
+                .filter(|&i| {
+                    bytes
+                        .iter()
+                        .zip(&data[i..])
+                        .all(|(b, d)| b.is_none_or(|b| b == *d))
+                })
+                .collect();
+            let expected = patterns.iter().filter(|(b, _, _)| b == bytes).count();
+            if hits.len() != expected {
+                return Err(
+                    "Shake values could not be located unambiguously; nothing was installed".into(),
+                );
+            }
+            writes.extend(hits.iter().flat_map(|i| targets.iter().map(move |t| i + t)));
+        }
+        writes.sort();
+        writes.dedup();
+        for at in writes {
+            data[at..at + 4].fill(0);
+            edits += 1;
+        }
     }
     Ok(edits)
 }
@@ -665,17 +933,10 @@ pub async fn make(
     let list = effect_paths(id).ok_or("Unknown visual built-in")?;
     let mut heroes = HashSet::new();
     let all_paths: Vec<_> = list.lines().collect();
-    for p in &all_paths {
-        if let Some(h) = crate::xtra_heroes::hero_skin(p) {
-            heroes.insert(h.hero);
-        }
-    }
+    heroes.extend(all_paths.iter().filter_map(|p| hero(p)));
     let paths: Vec<String> = all_paths
         .into_iter()
-        .filter(|p| {
-            let hero = crate::xtra_heroes::hero_skin(p).map(|h| h.hero);
-            !hero.as_ref().is_some_and(|h| excluded.contains(h))
-        })
+        .filter(|p| !hero(p).is_some_and(|h| excluded.contains(&h)))
         .map(str::to_string)
         .collect();
     if paths.is_empty() {
@@ -724,8 +985,16 @@ pub async fn make(
                 .map_err(|e| format!("{rel}: {e}"))?;
             let mut raw =
                 std::fs::read(legacy.join(format!("{rel}.uexp"))).map_err(|e| e.to_string())?;
-            count += disable_emitters(&doc, &mut raw, header.len())
-                .map_err(|e| format!("{rel}: {e}"))?;
+            let patch = if id == NO_SHAKE {
+                disable_shake
+            } else {
+                disable_emitters
+            };
+            let edits = patch(&doc, &mut raw, header.len()).map_err(|e| format!("{rel}: {e}"))?;
+            if edits == 0 {
+                continue; // already off in the game: the original stays in use
+            }
+            count += edits;
             let dest = staged.join(rel);
             std::fs::create_dir_all(dest.parent().unwrap()).map_err(|e| e.to_string())?;
             std::fs::write(dest.with_extension("uasset"), header).map_err(|e| e.to_string())?;
@@ -736,14 +1005,25 @@ pub async fn make(
     if cancelled() {
         return Err("Build stopped".into());
     }
+    if count == 0 {
+        return Err(
+            "Nothing to change in these game files: the game layout may have changed".into(),
+        );
+    }
     pack_to_iostore(tool, usmap, &s(&staged), &s(out), None, &sink).await?;
     let mut heroes: Vec<_> = heroes.into_iter().collect();
     heroes.sort();
     let missing = listed - paths.len();
     Ok((
         format!(
-            "{} effect assets, {count} emitter masks disabled{}",
+            "{} {} assets, {count} {}{}",
             paths.len(),
+            if id == NO_SHAKE { "camera" } else { "effect" },
+            if id == NO_SHAKE {
+                "shake values zeroed"
+            } else {
+                "emitter masks disabled"
+            },
             if missing > 0 {
                 format!(". {missing} listed assets are not in this game version")
             } else {
@@ -774,11 +1054,46 @@ mod tests {
     }
 
     #[test]
+    fn shake_patch_zeroes_only_the_oscillator() {
+        let f = |name: &str, v: f64| json!({"$type":"UAssetAPI.PropertyTypes.Objects.FloatPropertyData, UAssetAPI","Name":name,"IsZero":false,"Value":v});
+        let frag = |skip: u64, n: u64, last: bool| json!({"SkipNum":skip,"ValueNum":n,"bIsLast":last,"bHasAnyZeroes":false});
+        let pitch = json!({"$type":"UAssetAPI.PropertyTypes.Structs.StructPropertyData, UAssetAPI","StructType":"FOscillator","Name":"Pitch","IsZero":false,
+            "OriginalStructHeader":{"Fragments":[frag(0, 1, false), frag(1, 1, true)],"ZeroMask":[]},"Value":[f("Amplitude", 0.3), f("Frequency", 5.0)]});
+        let doc = json!({"Imports":[],"Exports":[{"ObjectName":"Default__Shake_C","SerialOffset":10,"SerialSize":16,"Data":[f("OscillationDuration", 0.3), pitch]}]});
+        let mut raw = [
+            0.3_f32.to_le_bytes().as_slice(),
+            &[0, 2, 1, 3],
+            &0.3_f32.to_le_bytes(),
+            &5.0_f32.to_le_bytes(),
+        ]
+        .concat();
+        assert_eq!(disable_shake(&doc, &mut raw, 10).unwrap(), 2);
+        assert_eq!(
+            raw,
+            [0.3_f32.to_le_bytes().as_slice(), &[0, 2, 1, 3], &[0; 8]].concat()
+        );
+        assert!(
+            disable_shake(&doc, &mut [0; 16], 10).is_err(),
+            "a moved oscillator stops the build"
+        );
+        assert_eq!(
+            hero("Marvel/Content/Marvel/AbilitySystem/1039/103912/CameraShake_103912_Hit03")
+                .as_deref(),
+            Some("1039")
+        );
+        assert_eq!(
+            hero("Marvel/Content/Marvel/AbilitySystem/Level/GameMode/2206/CameraShake_403721_Hit"),
+            None
+        );
+    }
+
+    #[test]
     fn effect_hero_choices_cover_the_reference_paths() {
-        for id in [NO_IMPACT, NO_TRACERS] {
+        for id in [NO_IMPACT, NO_TRACERS, NO_SHAKE] {
             let heroes = effect_heroes(id).unwrap();
             assert!(!heroes.is_empty());
-            assert!(all_excluded(id, &heroes));
+            // game-mode camera shakes belong to no hero, so excluding every hero still builds them
+            assert_eq!(all_excluded(id, &heroes), id != NO_SHAKE);
             assert!(!all_excluded(id, &[]));
         }
         assert!(inject_fov(&mut json!({}), &mut json!({})).is_err());
@@ -799,8 +1114,19 @@ mod tests {
             .num_threads(4)
             .build()
             .unwrap();
-        for (id, kind) in [(NO_IMPACT, "impact"), (NO_TRACERS, "tracers")] {
+        let stale = std::sync::atomic::AtomicUsize::new(0);
+        let extra = std::sync::atomic::AtomicUsize::new(0);
+        for (id, kind) in [
+            (NO_IMPACT, "impact"),
+            (NO_TRACERS, "tracers"),
+            (NO_SHAKE, "shake"),
+        ] {
             let paths: Vec<_> = effect_paths(id).unwrap().lines().collect();
+            let patch = if id == NO_SHAKE {
+                disable_shake
+            } else {
+                disable_emitters
+            };
             let results = pool.install(|| {
                 paths
                     .par_iter()
@@ -815,11 +1141,50 @@ mod tests {
                             let mut raw =
                                 std::fs::read(root.join(format!("{kind}-all-vanilla/{rel}.uexp")))
                                     .map_err(|e| e.to_string())?;
-                            disable_emitters(&doc, &mut raw, header.len())?;
                             let reference =
                                 std::fs::read(root.join(format!("{kind}-all/{rel}.uexp")))
                                     .map_err(|e| e.to_string())?;
-                            if raw != reference {
+                            // the supplied mod was made for an older game version: nothing to compare
+                            if reference.len() != raw.len() {
+                                stale.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                return Ok(());
+                            }
+                            let game = raw.clone();
+                            patch(&doc, &mut raw, header.len())?;
+                            let reference_header =
+                                std::fs::read(root.join(format!("{kind}-all/{rel}.uasset")))
+                                    .map_err(|e| e.to_string())?;
+                            if reference_header != header {
+                                return Err("Rebuilt header differs from the supplied mod".into());
+                            }
+                            if raw == reference {
+                                return Ok(());
+                            }
+                            // No Screen Shake also zeroes the ~2% of camera curves the supplied mod skipped. The mod
+                            // additionally zeroes the duration of four shakes that have no amplitude left either way.
+                            const DURATION_ONLY: [&str; 4] = [
+                                "CameraShake_2212_103322_RedRoom",
+                                "CameraShake_106602_01",
+                                "CameraShake_106603_01",
+                                "CameraShake_106605_01",
+                            ];
+                            let duration_only = DURATION_ONLY.iter().any(|n| rel.ends_with(n));
+                            for i in 0..raw.len() {
+                                let ours = raw[i] != reference[i]
+                                    && reference[i] == game[i]
+                                    && raw[i] == 0;
+                                let theirs =
+                                    duration_only && raw[i] == game[i] && reference[i] == 0;
+                                if raw[i] != reference[i] && !ours && !theirs {
+                                    return Err(format!(
+                                        "Rebuilt export differs from the supplied mod at byte {i}"
+                                    ));
+                                }
+                                if ours {
+                                    extra.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                }
+                            }
+                            if kind != "shake" {
                                 return Err("Rebuilt export differs from the supplied mod".into());
                             }
                             Ok(())
@@ -836,7 +1201,11 @@ mod tests {
             }
             println!("{kind}: checked {} assets", paths.len());
         }
-        println!("{checked} effect exports match their supplied mods byte for byte");
+        println!(
+            "{checked} exports match their supplied mods, {} older-game references skipped, {} more camera curve bytes zeroed",
+            stale.into_inner(),
+            extra.into_inner()
+        );
         assert!(
             failures.is_empty(),
             "{} failures:\n{}",
@@ -942,6 +1311,83 @@ mod tests {
         .unwrap();
         assert!(legacy.join(format!("{real}.uexp")).is_file());
         println!("extraction tolerates a missing listed asset");
+    }
+
+    /// Builds No Screen Shake from the installed game (no hero excluded) and reads the encrypted package back.
+    #[test]
+    #[ignore]
+    fn shake_real() {
+        let root = std::path::PathBuf::from(
+            std::env::var("REPAKXTRA_REFERENCES").expect("REPAKXTRA_REFERENCES"),
+        );
+        let c = read(&root.join("context.json")).unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let work = tempfile::tempdir().unwrap();
+        let out = work.path().join("out/shake");
+        std::fs::create_dir_all(out.parent().unwrap()).unwrap();
+        let excluded: Vec<String> = Vec::new();
+        let made = rt
+            .block_on(make(
+                Path::new("."),
+                c["usmap"].as_str().unwrap(),
+                NO_SHAKE,
+                &excluded,
+                Path::new(c["paks"].as_str().unwrap()),
+                work.path(),
+                &out,
+                || false,
+            ))
+            .unwrap();
+        crate::xtra_encrypt::encrypt_built(&out).unwrap();
+        assert!(uasset_toolkit::is_iostore_encrypted(
+            &out.with_extension("utoc").to_string_lossy()
+        )
+        .unwrap());
+        let extracted = work.path().join("extracted");
+        let req = crate::vfx_updater::uasset_tool::VfxUatRequest {
+            action: "extract_iostore_legacy",
+            game_paks: Some(c["paks"].as_str().unwrap().into()),
+            mod_path: Some(out.with_extension("utoc").to_string_lossy().into()),
+            output_path: Some(extracted.to_string_lossy().into()),
+            ..Default::default()
+        };
+        let result = rt
+            .block_on(crate::vfx_updater::uasset_tool::run_vfx_uat_request(
+                Path::new("."),
+                &req,
+            ))
+            .unwrap();
+        assert!(result.success, "{}", result.message);
+        // every packed asset is the game's own file with only the shake values zeroed
+        let mut packed = 0;
+        let mut headers = Vec::new();
+        for rel in effect_paths(NO_SHAKE).unwrap().lines() {
+            let got = extracted.join(format!("{rel}.uexp"));
+            if !got.exists() {
+                continue;
+            }
+            let header =
+                std::fs::read(root.join(format!("shake-all-vanilla/{rel}.uasset"))).unwrap();
+            let mut want =
+                std::fs::read(root.join(format!("shake-all-vanilla/{rel}.uexp"))).unwrap();
+            let doc = read(&root.join(format!("shake-all-vanilla-json/{rel}.json"))).unwrap();
+            assert!(disable_shake(&doc, &mut want, header.len()).unwrap() > 0);
+            assert_eq!(std::fs::read(got).unwrap(), want, "{rel}");
+            // UAssetTool's packer lists a class dependency twice, and names a package after its file when the
+            // game's own name differs (Camerashake_102761). Both only add to the header. Export bytes stay exact.
+            let back = std::fs::read(extracted.join(format!("{rel}.uasset"))).unwrap();
+            if back != header {
+                assert!(back.len() > header.len(), "{rel}: header changed");
+                headers.push(rel);
+            }
+            packed += 1;
+        }
+        assert!(packed > 0);
+        println!(
+            "no-screen-shake: {}, {packed} packages built, encrypted and read back, {} headers with the packer's additions",
+            made.0,
+            headers.len()
+        );
     }
 
     #[test]
