@@ -21,7 +21,7 @@ import { canonKey } from '../loadoutIdentity'
 import { modKey, useLoadouts } from '../loadoutStore'
 import { FIXED_EVENT, onHandoff, openLoadoutInMain, onReport, takeHandoff, takeReport, utocOf, type Fixed } from './handoff'
 import { KEEP_NAME, ORIGINALS, claimRun, newRunToken, onRunChange, readNaming, readOriginals, releaseRun, runLock, type Naming, type Originals, type RunLock } from './prefs'
-import { STEPS, fixVfxMod, type AssetKind, type VfxReport } from './pipeline'
+import { STEPS, fixVfxMod, usmapWaitText, type AssetKind, type VfxReport } from './pipeline'
 import { checkVfxMod, checkWords } from './quick'
 import { rescanVerdicts, verdictsChanged } from '../brokenMods'
 import { HeroFilter, heroOfName } from '../heroFilter'
@@ -315,6 +315,8 @@ export function VfxUpdaterPanel() {
   const [usmap, setUsmap] = useState<string | null>(null)
   const [usmapInfo, setUsmapInfo] = useState<Usmap | null>(null)
   const [usmapOk, setUsmapOk] = useState<boolean | null>(null)
+  // the USMAP is older than the game: updates wait, unless material-only mods are updated with it anyway (this window only)
+  const [previousUsmap, setPreviousUsmap] = useState(false)
   const [checking, setChecking] = useState(true)
   const [naming, setNaming] = useState<Naming>(readNaming)
   const [originals, setOriginals] = useState<Originals>(readOriginals)
@@ -516,7 +518,9 @@ export function VfxUpdaterPanel() {
   }
 
   const elsewhere = busy || !held || held.token === myToken.current ? null : held
-  const lock = busy ? null : elsewhere ? `Updating ${elsewhere.name ?? 'a mod'} elsewhere. Update waits for it.` : checking ? 'Checking for a newer USMAP…' : !usmap ? 'Choose a USMAP file in Advanced first' : usmapOk === false ? 'The USMAP file is missing' : !paks ? 'Set the game folder in Setup first' : null
+  const usmapBuild = usmapCl(usmap ? fileName(usmap) : null)
+  const waiting = Boolean(usmapBuild && build?.cl && usmapBuild < build.cl) && !previousUsmap
+  const lock = busy ? null : elsewhere ? `Updating ${elsewhere.name ?? 'a mod'} elsewhere. Update waits for it.` : checking ? 'Checking for a newer USMAP…' : !usmap ? 'Choose a USMAP file in Advanced first' : usmapOk === false ? 'The USMAP file is missing' : !paks ? 'Set the game folder in Setup first' : waiting ? `Waiting for a USMAP of game build ${build!.cl}` : null
 
   const run = useCallback(async (keys?: string[]) => {
     const byKey = new Map((modsRef.current ?? []).map(m => [norm(m.utoc), m]))
@@ -545,7 +549,7 @@ export function VfxUpdaterPanel() {
       modStart.current = performance.now()
       addLog(`Updating ${mod.name}`)
       const r = await fixVfxMod({
-        modPath: mod.utoc, usmapPath: usmap, gamePaksPath: paks, turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash', keepName, filter,
+        modPath: mod.utoc, usmapPath: usmap, gamePaksPath: paks, turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash', keepName, filter, previousUsmap,
         log: addLog, cancelled: () => cancel.current,
         onStep: s => patch(key, { step: s.step, sub: undefined }),
         onProgress: (_, __, message) => patch(key, { sub: message }),
@@ -583,7 +587,7 @@ export function VfxUpdaterPanel() {
     setEnded({ text: `${parts.join(', ')}${parts.length > 1 ? ',' : ''} in ${took(performance.now() - startedAt)}.`, retry, edits: pickEditsRef.current })
     cue(failed ? 'warning' : 'success', { emphasis: fixed > 1 ? undefined : 'subtle' }) // a problem is a warning, never an error sound
     setBusy(false); setCancelling(false)
-  }, [picked, usmap, paks, originals, keepName, addLog])
+  }, [picked, usmap, paks, originals, keepName, previousUsmap, addLog])
 
   // the Library's notice updates exactly the mods it sent, as soon as the list and the USMAP are ready (after a run in
   // progress)
@@ -771,12 +775,18 @@ export function VfxUpdaterPanel() {
               <button type="button" className="su-link" disabled={busy} onClick={() => setReload(n => n + 1)}>Try again</button></span>
           </p>
         )}
-        {behind && stale.size > 0 && !usmapMissing && (
-          <p className="vf-warn" role="note">
+        {behind && !usmapMissing && (
+          <div className="vf-warn vf-usmap-behind" role="note">
             <AlertTriangle size={14} aria-hidden="true" />
-            <span>The USMAP is for build {cl} and the game is on {build!.cl}, so {plural(stale.size, 'mod')} with Niagara effects can only partially update until a newer one is out.{' '}
-              <button type="button" className="su-link" disabled={checking || busy} onClick={() => usmapCheck(true)}>{checking ? 'Checking…' : 'Check for updates'}</button></span>
-          </p>
+            <div>
+              <span>{usmapWaitText({ usmap: cl, game: build!.cl! })}{' '}
+                <button type="button" className="su-link" disabled={checking || busy} onClick={() => usmapCheck(true)}>{checking ? 'Checking…' : 'Check for updates'}</button></span>
+              <Checkbox size="sm" className="vf-previous" checked={previousUsmap} isDisabled={busy} disabled={busy} onChange={v => setPreviousUsmap(Boolean(v))}>
+                Update mods made only of material instances with the previous USMAP
+              </Checkbox>
+              <span className="vf-previous-hint">Material layouts rarely change in a patch, but a season update can change them. Mods with blueprints still wait{previousUsmap && stale.size > 0 ? `, and ${plural(stale.size, 'mod')} with Niagara effects only partially update` : ''}.</span>
+            </div>
+          </div>
         )}
         {mods === null
           ? <p className="lp-empty" aria-live="polite">Reading the mods folder{scan ? `: ${scan.done} of ${plural(scan.total, 'mod')}` : '…'}</p>

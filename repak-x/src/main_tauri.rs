@@ -8758,6 +8758,8 @@ fn main() {
             xtra_builtins::xtra_skin_table_hero,
             xtra_niagara::xtra_vfx_layout_scan,
             xtra_niagara::xtra_vfx_old_layout,
+            xtra_niagara::xtra_usmap_behind, // repakxtra: VFX updates wait for a USMAP of this game build
+            xtra_niagara::xtra_usmap_waiting, // repakxtra: checks again once that USMAP is out
             xtra_nexus::xtra_nexus_sources, // repakxtra: Nexus source
             xtra_nexus::xtra_nexus_downloads, // repakxtra: Nexus downloads still in Downloads, for the one-time scan
             xtra_nexus::xtra_install_paks, // repakxtra: the paks an install puts in place, for loadouts made at install

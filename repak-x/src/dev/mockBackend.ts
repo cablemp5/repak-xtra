@@ -381,7 +381,10 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'xtra_vfx_mods': return { problems: [], mods: data.mods.filter((m: any) => /vfx/i.test(m.path) && !/_BROKEN(_\d+)?_P\./i.test(m.path)).map((m: any) => ({
         path: m.path, utoc: m.utoc_path || m.path.replace(/\.(pak|bak_repak)$/i, '.utoc'), enabled: m.enabled, hero: m.character_name ?? null, modified: m.modified_date ?? 0,
         name: m.custom_name || m.path.split(/[\\/]/).pop().replace(/\.[^.]+$/, '').replace(/(_\d+)?_P$/i, '') })) }
-      case 'xtra_game_build': return { updated: Math.floor(Date.now() / 1000) - 3600 * 5, cl: 3962284 }
+      // the mock USMAP is 3939753: localStorage 'mock.usmapBehind' = '1' puts the game a build ahead of it, so updates wait
+      case 'xtra_game_build': return { updated: Math.floor(Date.now() / 1000) - 3600 * 5, cl: localStorage.getItem('mock.usmapBehind') === '1' ? 3962284 : 3939753 }
+      case 'xtra_usmap_behind': return localStorage.getItem('mock.usmapBehind') === '1' ? { usmap: 3939753, game: 3962284 } : null
+      case 'xtra_usmap_waiting': return localStorage.getItem('mock.usmapBehind') === '1'
       // Installing: the file picker returns two fake paks, install adds them to the library and reports done. A folder
       // pick (the Sigeon folder) returns an unzipped Sigeon download.
       case 'plugin:dialog|open':

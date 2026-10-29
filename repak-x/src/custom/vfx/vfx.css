@@ -145,6 +145,10 @@ button.vf-assets-toggle:hover { color: var(--text-primary) !important; }
 
 .vf-warn { margin: 10px 0 0; display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 .vf-warn svg { flex: none; margin-top: 2px; color: #f5d342; }
+/* the USMAP is older than the game: why updates wait, then the one way to update material-only mods anyway */
+.vf-usmap-behind > div { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.vf-previous { font-size: 12.5px; color: var(--text-primary); }
+.vf-previous-hint { font-size: 12px; color: var(--text-secondary); }
 
 /* Advanced: the install card's fold (.ia) under the lists. Its parts are Settings sections: an icon and heading, one
    line on what it is for, the control, a short note; a hairline between parts, the same rhythm in each */

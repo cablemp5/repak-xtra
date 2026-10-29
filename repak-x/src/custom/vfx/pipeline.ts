@@ -61,7 +61,17 @@ export type FixOptions = {
   onProgress?: (current: number, total: number, message: string) => void
   /** Checked between steps and files: true stops the run once the call in flight returns */
   cancelled?: () => boolean
+  /** The USMAP is older than the game and the user chose to update a mod made only of material instances with it anyway
+   *  (the VFX Updater's switch). Without it such a run waits for this game build's USMAP. */
+  previousUsmap?: boolean
 }
+
+/** xtra_niagara.rs UsmapBehind: the USMAP's game build and the installed game's, when the USMAP is the older one. */
+export type UsmapBehind = { usmap: number; game: number }
+/** Why an update waits. A patch can insert properties into a class, and an older USMAP then reads every later one under
+ *  the wrong name without any error, so an update made with it could be silently wrong. */
+export const usmapWaitText = (b: UsmapBehind) =>
+  `The USMAP is for game build ${b.usmap} and the game is on ${b.game}. Updates wait for one made for this build, so nothing is rebuilt from a misread layout.`
 
 type Dirs = { modExtract: string; modJson: string; editedJson: string; finalUassets: string; stage: string; vanillaExtract: string; vanillaJson: string; vanillaIndex: string }
 type Detected = { kind: 'material_instance' | 'blueprint' | 'maybe' | 'other'; class: string | null; error: string | null }
@@ -129,6 +139,8 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
   try {
     // ---- 1: extract and sort ----
     enter(1)
+    const behind = await invoke<UsmapBehind | null>('xtra_usmap_behind', { gamePaks: o.gamePaksPath, usmapPath: o.usmapPath }).catch(() => null)
+    if (behind && !o.previousUsmap) { report.error = `Not updated yet. ${usmapWaitText(behind)}`; return report }
     // a partial update lacks the Niagara files it left out: its kept original is what gets updated
     const src = await invoke<string>('xtra_vfx_source', { modPath: o.modPath }).catch(() => o.modPath)
     if (src !== o.modPath) log(`Starting from ${stem(src)}, the original kept with its Niagara files.`)
@@ -157,6 +169,12 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       if (d?.error) asset(p, 'unreadable', `Could not be read (${d.error}). Kept as it was.`)
       else if (!d && !PASS_BY_NAME.test(fileName(p))) asset(p, 'unreadable', 'Its type could not be read. Kept as it was.')
       else asset(p, 'passed', d?.class ? `${d.class}, kept as it was.` : 'Kept as it was.')
+    }
+    // the previous USMAP only for material instances: a game class's layout (a Blueprint's) is what patches change most
+    if (behind) {
+      const other = editable.filter(p => types.get(assetKey(slash(p)))?.kind !== 'material_instance')
+      if (other.length) { report.error = `Not updated: it has ${plural(other.length, 'blueprint')}, and blueprints need the USMAP for game build ${behind.game}. The previous USMAP is only used for mods made of material instances.`; return report }
+      warn(`Updated with the USMAP for game build ${behind.usmap}, older than the game's ${behind.game}. If it looks wrong in the game, turn it off and update again once the new USMAP is out.`)
     }
     // Niagara files a game update rewrote after the mod was made are still cooked for the old game and can crash it. They
     // are left out here (the game uses its own), and step 7 puts back each one it can rebuild

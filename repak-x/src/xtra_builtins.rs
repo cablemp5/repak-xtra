@@ -457,6 +457,18 @@ fn check_flags(a: &[u8], b: &[u8], flipped: usize) -> Result<(), String> {
     Ok(())
 }
 
+/// repakxtra: once the saved USMAP is this game build's, the built-ins that waited for it are no longer given up on, so
+/// the next refresh builds them (in this run, not only at the next start). True when it is this game build's.
+pub(crate) fn usmap_arrived(paks: &Path) -> bool {
+    let here = crate::vfx_updater::commands::saved_usmap_path().is_some_and(|u| Path::new(&u).is_file() && crate::xtra_niagara::usmap_behind(&u, paks).is_none());
+    if here {
+        let build = game_build(paks);
+        let waited: Vec<String> = load().iter().filter(|(_, s)| s.error.as_deref() == Some(MAPPINGS_BEHIND)).map(|(id, s)| failed_key(id, s, &build)).collect();
+        FAILED.lock().unwrap_or_else(|e| e.into_inner()).retain(|k| !waited.contains(k));
+    }
+    here
+}
+
 pub(crate) const MAPPINGS_BEHIND: &str = "Not active yet. The game updated and repakxtra waits for the support files for it. It checks for them at every start";
 
 fn read_json(p: &Path) -> Result<Value, String> {
@@ -476,7 +488,7 @@ fn write_json(p: &Path, v: &Value) -> Result<(), String> {
 }
 
 /// The USMAP the VFX Updater keeps current (rivals-depot), fetched when there is none yet.
-async fn usmap() -> Result<String, String> {
+async fn usmap(paks: &Path) -> Result<String, String> {
     if cfg!(test) {
         if let Ok(p) = std::env::var("REPAKXTRA_USMAP") {
             return Ok(p); // builtins_real with a gapped mappings file while the feed is behind the patch
@@ -486,11 +498,18 @@ async fn usmap() -> Result<String, String> {
     let path = |s: crate::vfx_updater::models::VfxSettings| s.usmap_path.filter(|p| Path::new(p).exists());
     let settings = || std::fs::read_to_string(store_path().with_file_name("vfx_settings.json")).ok()
         .and_then(|t| serde_json::from_str::<crate::vfx_updater::models::VfxSettings>(&t).ok()).unwrap_or_default();
-    if let Some(p) = path(settings()) {
-        return Ok(p);
+    let found = match path(settings()) {
+        Some(p) => p,
+        None => {
+            crate::vfx_updater::commands::vfx_check_usmap_update(true).await?;
+            path(settings()).ok_or_else(|| "No USMAP mappings file yet: open the VFX Updater once to fetch it".to_string())?
+        }
+    };
+    // repakxtra: an older USMAP misreads what a patch changed without any error: wait for this game build's one
+    if crate::xtra_niagara::usmap_behind(&found, paks).is_some() {
+        return Err(MAPPINGS_BEHIND.to_string());
     }
-    crate::vfx_updater::commands::vfx_check_usmap_update(true).await?;
-    path(settings()).ok_or_else(|| "No USMAP mappings file yet: open the VFX Updater once to fetch it".to_string())
+    Ok(found)
 }
 
 /// Extracts, edits, checks and packs one built-in into `out_dir`. Returns the summary and the hero ids seen.
@@ -501,7 +520,7 @@ async fn make(tool: &Path, id: &str, excluded: &[String], quake: &crate::xtra_qu
     let s = |p: &Path| p.to_string_lossy().to_string();
     let tool = tool.to_path_buf();
     ensure_vfx_uat_session(&tool).await?;
-    let usmap = usmap().await?;
+    let usmap = usmap(paks).await?;
     #[cfg(feature = "extended")]
     if [crate::xtra_visual_builtins::NO_IMPACT, crate::xtra_visual_builtins::NO_TRACERS, crate::xtra_visual_builtins::NO_SHAKE, crate::xtra_visual_builtins::FOV].contains(&id) {
         let made = crate::xtra_visual_builtins::make(&tool, &usmap, id, excluded, paks, work, out_base, stopped).await?;
@@ -897,6 +916,7 @@ pub async fn xtra_builtins_refresh(app: tauri::AppHandle, state: State<'_, Arc<M
     if crate::xtra_identity::upstream_guard().is_err() || game_guard(state.inner()).is_err() {
         return Ok(views(&state)); // Repak X or the game is open: wait for the next check
     }
+    usmap_arrived(&paks);
     for v in views(&state) {
         if v.on && !v.current && !v.gave_up {
             let _ = build(&app, &v.id, &dir, &paks).await; // the error is saved on the built-in and shown on its card
