@@ -15,4 +15,6 @@ All three packaged mods use the existing staged IoStore and PAK encryption, whos
 
 Skip login video is a loose-file mod. It uses the supplied `yakuzadeso` placeholder for each existing seasonal `LoginAndLobby/*/Transition.bk2`. Its originals and digest records are retained under `.repakxtra-builtin`, and turning it off restores only placeholders still owned by this operation. Game updates and third-party replacements are preserved. Loose movies cannot be encrypted without changing how the game reads them.
 
+Movie publication uses atomic file replacement with a separate rollback copy for each season. Recorded movies missing after an interrupted older install recover from verified backups. Tests cover twelve seasons through the production publisher, interrupted publication, missing files, and rollback after a replacement fails.
+
 The ignored Rust tests `visual_reference_assets`, `effects_real`, and `fov_real` use `REPAKXTRA_REFERENCES` to point at a local reference workspace. The former compares regenerated exports against both supplied effect mods byte for byte. `effects_real` checks encrypted effect builds and hero exclusions. `fov_real` rebuilds FOV in a temporary folder, encrypts it, and decodes all nine packages. These tests do not install into the game. Movie recovery tests use temporary game folders.
