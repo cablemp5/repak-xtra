@@ -36,9 +36,11 @@ const WINDOWS = [
 // Nexus's top categories for Marvel Rivals, each in its own color on the cards (hero mods are Characters or a hero's own
 // category, which a card shows as the hero's portrait in the Characters color)
 const TYPE_COLOR: Record<string, string> = {
-  Characters: '#5cc8ff', Audio: '#9d7bff', 'User Interface': '#ff7ad9', Visuals: '#3ecf6e', Gameplay: '#f5d342', Miscellaneous: '#a7a7a7',
+  Characters: '#5cc8ff', Audio: '#9d7bff', 'User Interface': '#ff7ad9', Visuals: '#3ecf6e', Gameplay: '#f5d342', Miscellaneous: '#2dd4bf',
 }
-const TYPES = [{ value: 'all', label: 'All types' }, ...Object.keys(TYPE_COLOR).map(t => ({ value: t, label: t }))]
+// the type filter shows each type's color as a dot, the one the cards use (Similarity)
+const TYPES = [{ value: 'all', label: 'All types', glyph: <span className="nx-type-dot is-all" /> },
+  ...Object.entries(TYPE_COLOR).map(([t, color]) => ({ value: t, label: t, glyph: <span className="nx-type-dot" style={{ background: color }} /> }))]
 // where a Nexus category name differs from the game's hero name
 const CATEGORY_OF: Record<string, string> = { 'Doctor Strange': 'Dr. Strange', Deadpool: 'DeadPool' }
 const HERO_OF = Object.fromEntries(Object.entries(CATEGORY_OF).map(([hero, category]) => [category, hero]))
