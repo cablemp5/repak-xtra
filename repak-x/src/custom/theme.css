@@ -593,7 +593,7 @@ html:not([data-show-conflicts]) .mod-type-badge.conflict-badge, html:not([data-s
 html:not([data-show-asset-explorer]) .btn-asset-explorer,
 html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { display: none !important; }
 html:not([data-show-sigeon]) .header .sigeon { display: none !important; }
-html:not([data-show-nexus]) .nexus-badge { display: none !important; }
+html:not([data-show-nexus]) :is(.nexus-badge, .nexus-update-chip) { display: none !important; }
 html:not([data-show-encrypted]) .mod-lock { display: none !important; }
 /* an encrypted mod: a quiet lock after its name (mod details read the flag from the PAK index or the .utoc header) */
 /* the lock and the word, in the tags row after the Nexus tag, 22px like the In loadout tag. Violet (2026-10-28):
@@ -2546,8 +2546,6 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 .nx-source { gap: 12px; }
 .nx-source .detail-value { display: inline-flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 2px 10px; text-align: right; }
 .nx-open { display: inline-flex; align-items: center; gap: 4px; }
-/* A newer version on Nexus: the tag reads Update in the accent (the app's one color for "do this"), not Nexus orange */
-.mod-type-badge.nexus-badge.is-update { --tag: var(--accent-primary); }
 .nx-update { color: var(--accent-primary) !important; }
 /* Settings > General > Nexus Mods (custom/nexus.tsx): its logo, and the key field (a quiet field) its steps share */
 .nx-setting-logo { width: 18px; height: 18px; flex: none; }
@@ -3211,11 +3209,13 @@ button.nx-act:hover { background: var(--quiet-hover) !important; border-color: c
 .nx-signin-foot { margin: 0; padding-top: 18px; border-top: 1px solid var(--panel-border); font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 html[data-motion="off"] .nx-card.is-skeleton, html[data-motion="off"] .nx-card-image img { animation: none; transition: none; }
 
-/* A Nexus mod with a newer version: the orange Nexus tag stays, a blue arrow dot on its corner */
-.mod-type-badge.nexus-badge.has-update { position: relative; overflow: visible !important; }
-.nx-update-dot { position: absolute; top: -5px; right: -5px; width: 14px; height: 14px; border-radius: 50%; display: grid; place-items: center;
-  background: var(--accent-primary); color: #fff; box-shadow: 0 0 0 2px var(--bg-dark); }
-.nx-update-dot svg { width: 9px !important; height: 9px !important; }
+/* A Nexus mod with a newer version: the orange Nexus tag stays, a blue chip beside it with the new version (cable's
+   pick, 2026-10-29). The accent says "do this", the arrow says what */
+.mod-type-badge.nexus-update-chip { gap: 4px; padding: 0 8px 0 6px !important; cursor: pointer; font-weight: 600 !important; font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--accent-primary), white 35%) !important; border: 1px solid color-mix(in srgb, var(--accent-primary), transparent 50%) !important;
+  background: color-mix(in srgb, var(--accent-primary), transparent 88%) !important; transition: background 0.15s ease; }
+.mod-type-badge.nexus-update-chip:hover { background: color-mix(in srgb, var(--accent-primary), transparent 78%) !important; }
+[data-theme="light"] .mod-type-badge.nexus-update-chip { color: var(--accent-primary) !important; }
 
 /* The loadout page's From Nexus (custom/nexus.tsx NexusPictures): the loadout's Nexus mod pictures take the whole card,
    one surface in the card's own frame, two to a row; a click makes one the image */

@@ -136,22 +136,20 @@ export function NexusSourceLine({ path }: { path: string }) {
 }
 
 /** The Library row's Nexus tag (Settings > On each mod hides it): a click opens the mod's Nexus page. With a newer
- *  version out it gets a blue arrow dot, and a click gets that version in place of this one (nexus.tsx getNexusFile). */
+ *  version out a blue chip with it follows the tag, and a click on the chip gets that version in place of this one (nexus.tsx getNexusFile). */
 export function NexusTag({ path }: { path: string }) {
   const s = useSource(path)
   if (!s) return null
   const u = updateOf(s)
-  // an update keeps the Nexus badge, with a blue arrow dot on its corner: a click gets the new version
-  if (u) return (
-    <button type="button" className="mod-type-badge nexus-badge has-update" title={`Version ${u.version} is on Nexus Mods (uploaded ${day(u.date)}). Click to update`}
-      aria-label={`Update from Nexus Mods to ${u.version}`} onClick={e => { e.stopPropagation(); getNexusFile(u.modId, u.fileId, path) }}>
-      <img className="tag-logo" src={nexusLogo} alt="" />Nexus<span className="nx-update-dot" aria-hidden="true"><ArrowUp size={9} strokeWidth={3} /></span>
-    </button>
-  )
-  return (
+  const tag = (
     <button type="button" className="mod-type-badge nexus-badge" title={`Installed from Nexus Mods, uploaded ${day(s.uploaded)}. Click to open its page`}
       onClick={e => { e.stopPropagation(); openNexusPage(s.id) }}><img className="tag-logo" src={nexusLogo} alt="" />Nexus</button>
   )
+  if (!u) return tag
+  // a newer version: the Nexus tag stays as it is, a blue chip beside it with the version gets it
+  return <>{tag}<button type="button" className="mod-type-badge nexus-update-chip" title={`Version ${u.version} is on Nexus Mods (uploaded ${day(u.date)}). Click to update`}
+    aria-label={`Update from Nexus Mods to ${u.version}`} onClick={e => { e.stopPropagation(); getNexusFile(u.modId, u.fileId, path) }}>
+    <ArrowUp size={12} strokeWidth={2.5} aria-hidden="true" />{u.version}</button></>
 }
 
 if (import.meta.env.DEV) {
