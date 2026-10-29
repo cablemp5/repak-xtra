@@ -22,6 +22,7 @@ import { plural } from './modName'
 import { SwapText } from './motion'
 import { GeneratePreviewsButton, previewSetKey } from './previews'
 import { CaptureButton, captureTarget } from './CapturePreview'
+import { EXTENDED } from './edition'
 
 const PAGE = 60
 
@@ -270,7 +271,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
         {/* The picture card and its Cover switch: Preview, Capture, Image or Text, each with its own way to fill it. A new
             empty loadout has it too (its placeholder), so every loadout's page has the same shape */}
         <CardMedia p={p} l={l} className="lp-media" onClick={onPickMedia} onRemoveImage={removeImage} onRemoveCapture={removeCapture}
-          nexus={{ ids: [...new Set(mine.map(k => byKey.get(k)).map(m => m && sourceOf(m.path)?.id).filter((id): id is number => Boolean(id)))], onPick: onSetMedia }}
+          nexus={EXTENDED ? { ids: [...new Set(mine.map(k => byKey.get(k)).map(m => m && sourceOf(m.path)?.id).filter((id): id is number => Boolean(id)))], onPick: onSetMedia } : undefined}
           title={hasMedia ? 'Change image or video (or paste one)' : 'Add an image, GIF, or video (or paste one)'}
           capture={{ ...target, button: (className, label, note) => <CaptureButton p={p} l={l} onUse={onSetCapture} className={className} label={label} note={note} /> }}
           generate={className => <GeneratePreviewsButton className={className} label="Generate previews" set={previewSetKey(l.id)} name={l.name} stopOnly

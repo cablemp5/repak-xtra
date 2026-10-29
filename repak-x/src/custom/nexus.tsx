@@ -11,6 +11,7 @@ import type { NexusSource } from './nexusSource'
 import nexusLogo from './logos/nexus.png'
 import keyShot from './logos/nexus-api-key.png'
 import { ownsTop, useDialogFocus } from './dialogFocus'
+import { EXTENDED } from './edition'
 
 type Alert = ReturnType<typeof useAlert>
 type Account = { name: string; premium: boolean }
@@ -158,13 +159,16 @@ export async function installFromNexus(modId: number) {
 }
 
 /** Opens a mod's Nexus page in the app's Nexus window. */
-export const openNexusPage = (modId: number) => invoke('xtra_nexus_open', { url: pageUrl(modId) }).catch(() => undefined)
+export const openNexusPage = (modId: number) => EXTENDED
+  ? invoke('xtra_nexus_open', { url: pageUrl(modId) }).catch(() => undefined)
+  : openOutside(pageUrl(modId)) // repakxtra has no Nexus window: the browser
 
 /** App's hook: the account at start, and each Mod manager download (from the Nexus window or a browser) installed or
  *  applied as the update it was asked for. */
 export function useNexus(h: Handlers) {
   handlers = h
   useEffect(() => {
+    if (!EXTENDED) { checked = true; return } // repakxploit only: repakxtra has no Nexus account or downloads
     accountLoaded = loadAccount()
     const take = (link: Link) => {
       const w = waiting.get(link.fileId)

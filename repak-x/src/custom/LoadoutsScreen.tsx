@@ -28,6 +28,7 @@ import {
 import { savedItem } from './storageCarryOver'
 import { useUpstreamWatch } from './upstream'
 import { useUiPref } from './uiPrefs'
+import { EXTENDED } from './edition'
 
 type GroupBy = 'group' | 'hero'
 const GROUP_BY_KEY = 'repakxtra.loadoutGroupBy'
@@ -120,7 +121,7 @@ function GroupHead({ p, name, count, at, total, editing, setEditing, folded, onF
  *  (search, filters, folder, checked and viewed mods, scroll): its Show all button is the deliberate reset (App.tsx). */
 export function ViewTabs() {
   const view = useView()
-  const nexus = useUiPref('nexus-tab') // Settings > Header buttons can hide the Nexus Mods tab
+  const nexus = useUiPref('nexus-tab') && EXTENDED // repakxploit only, and Settings > Header buttons can hide it
   useEffect(() => { if (!nexus && view === 'nexus') setView('library') }, [nexus, view])
   return (
     <div className={`view-tabs${nexus ? '' : ' is-two'}`} role="tablist" aria-label="View" data-tour="view-tabs">

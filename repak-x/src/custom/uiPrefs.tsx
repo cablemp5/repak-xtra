@@ -15,7 +15,7 @@ import { savedItem } from './storageCarryOver'
 // `on`: shown until switched off (the rest start hidden). Stored as '1' or '0' once changed.
 // `group`: the Settings section it is drawn in (Header buttons, On each mod), or its own place elsewhere.
 const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod' | 'warn' }[] = [
-  { key: 'nexus-tab', label: 'Nexus Mods tab', on: true, group: 'header' }, // repakxtra: off hides the tab (LoadoutsScreen ViewTabs)
+  ...(EXTENDED ? [{ key: 'nexus-tab', label: 'Nexus Mods tab', on: true, group: 'header' as const }] : []), // repakxploit: off hides the tab (LoadoutsScreen ViewTabs)
   { key: 'vfx-updater', label: 'VFX Updater', on: true, group: 'header' },
   { key: 'encrypt', label: 'Encrypt', group: 'header' }, // hidden by default: Settings > Header buttons shows it
   ...(EXTENDED ? [{ key: 'sigeon', label: 'Sigeon', group: 'header' as const }] : []), // hidden by default: Settings > Interface shows it

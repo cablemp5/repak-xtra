@@ -30,6 +30,7 @@ import Support from '../custom/Support'
 import { invoke } from '@tauri-apps/api/core'
 import { ShortcutSetting } from '../custom/shortcut' // repakxtra
 import { NexusSetting } from '../custom/nexus' // repakxtra
+import { EXTENDED } from '../custom/edition' // repakxtra
 import './SettingsPanel.css'
 import { useAlert } from './AlertHandler'
 import { motion } from 'framer-motion'
@@ -299,7 +300,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                   </div>
                 </div>
 
-                <NexusSetting />{/* repakxtra: Nexus Mods account (custom/nexus.tsx) */}
+                {EXTENDED && <NexusSetting />}{/* repakxtra: Nexus Mods account (custom/nexus.tsx), repakxploit only */}
 
                 <ShortcutSetting />{/* repakxtra: desktop shortcut */}
 

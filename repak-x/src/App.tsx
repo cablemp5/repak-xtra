@@ -447,7 +447,8 @@ function App() {
   useNexusScan(mods) // repakxtra: Nexus sources for mods installed before they were recorded, once
   const brokenVersion = useBrokenVersion() // repakxtra: the Broken filter re-runs when the verdicts land
   const nexusSources = useNexusSources() // repakxtra: and the Nexus type filter when a source is recorded
-  useEffect(() => { // repakxtra: newer versions on Nexus, each mod at most hourly
+  useEffect(() => { // repakxtra: newer versions on Nexus, each mod at most hourly (repakxploit)
+    if (!EXTENDED) return
     const run = () => checkUpdates(mods.map(m => sourceOf(m.path)))
     run()
     const t = setInterval(run, CHECK_EVERY)
@@ -4045,7 +4046,7 @@ function App() {
           alert={alert}
           onModContextMenu={(e, m, rename) => { handleContextMenu(e, m as ModRecord); setContextMenu(c => c && { ...c, fromLoadout: true, rename }) }} /* repakxtra: a loadout page's rows open the Library's menu, for that row */
         />
-        <NexusBrowser mods={mods} />{/* repakxtra: the Nexus tab (custom/NexusBrowser.tsx) */}
+        {EXTENDED && <NexusBrowser mods={mods} />}{/* repakxtra: the Nexus tab (custom/NexusBrowser.tsx), repakxploit only */}
         {/* repakxtra: Ctrl+1..9 switches pinned loadouts on every view (custom/Loadouts.tsx) */}
         <LoadoutHotkeys mods={mods} scopeMods={folderMods} scopeLabel="all mods" blocked={gameRunning && !bypassGameRunningLock}
           isBlocked={undoBlocked} reload={loadMods} alert={alert} modDetails={modDetails} />
