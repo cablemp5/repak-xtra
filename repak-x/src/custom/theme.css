@@ -3223,7 +3223,7 @@ button.nx-act.is-install:hover { background: color-mix(in srgb, var(--accent-pri
 .nx-spot-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; height: 276px; }
 .nx-spot .nx-card { position: relative; }
 .nx-spot .nx-card-image { position: absolute !important; inset: 0; height: 100%; aspect-ratio: auto; }
-.nx-spot .nx-card-body { position: relative; flex: none; margin-top: auto; padding: 68px 14px 12px; /* the fade reaches a little higher than the words */ pointer-events: none;
+.nx-spot .nx-card-body { position: relative; flex: none; margin-top: auto; padding: 82px 14px 12px; /* the fade reaches a little higher than the words */ pointer-events: none;
   background: linear-gradient(rgba(6, 6, 8, 0), rgba(6, 6, 8, 0.93) 50%, rgba(6, 6, 8, 0.98)); }
 .nx-spot .nx-card-body > * { pointer-events: auto; }
 .nx-spot .nx-card-name { color: #fff; font-size: 16px; line-height: 21px; }
