@@ -1,7 +1,8 @@
 // repakxtra: a loadout card's tools on its page (loadoutBits.tsx CardMedia), behind one small arrow in a corner of the
 // card: for an Image cover, change it or take a mod's picture from Nexus, for a Text cover, the picture behind the words
 // (the icon and color stay in the bar along the card's bottom while typing). The arrow sits bottom left, or top left while
-// typing, where the bar is not. A popover on the card: Esc or a click outside closes it.
+// typing, where the bar is not. A popover on the card, after its arrow so Tab goes from one into the other: Esc or a
+// click outside closes it.
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, ImagePlus } from 'lucide-react'
 import CaptionBackground from './CaptionBackground'
@@ -26,6 +27,9 @@ export function CardTools({ l, text, top, alert, onImage, onNexus }: {
   const Arrow = top ? ChevronDown : ChevronUp
   return (
     <div className={`ct${open ? ' is-open' : ''}${top ? ' is-top' : ''}`} ref={box} onMouseDown={e => { if (top) e.preventDefault() }}>
+      <button type="button" className="ct-btn" aria-expanded={open} aria-label="Card options" title="Card options" onClick={() => setOpen(v => !v)}>
+        <Arrow aria-hidden="true" />
+      </button>
       {open && (
         <div className="ct-pop" role="dialog" aria-label="Card options">
           {text ? (
@@ -39,9 +43,6 @@ export function CardTools({ l, text, top, alert, onImage, onNexus }: {
           </>}
         </div>
       )}
-      <button type="button" className="ct-btn" aria-expanded={open} aria-label="Card options" title="Card options" onClick={() => setOpen(v => !v)}>
-        <Arrow aria-hidden="true" />
-      </button>
     </div>
   )
 }
