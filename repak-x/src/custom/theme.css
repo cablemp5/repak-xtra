@@ -3165,7 +3165,12 @@ html[data-motion="off"] .upd-progress > span, html[data-motion="off"] .repakx-pr
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .nx-card-name:hover { text-decoration: underline; text-underline-offset: 2px; }
 .nx-card-name:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; border-radius: 3px; }
-.nx-card-by { margin-top: 3px; font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* who made it and when, each with its icon, brighter than the summary (they read as facts, not description) */
+.nx-card-by { display: flex; align-items: center; gap: 12px; margin-top: 6px; min-width: 0; font-size: 12px; color: color-mix(in srgb, var(--text-primary) 82%, transparent); }
+.nx-meta { display: inline-flex; align-items: center; gap: 5px; min-width: 0; white-space: nowrap; }
+.nx-meta:first-child { flex: 0 1 auto; overflow: hidden; }
+.nx-meta:first-child > span { overflow: hidden; text-overflow: ellipsis; }
+.nx-meta svg { flex: none; color: var(--text-secondary); }
 /* the type line: the hero's portrait and name in the Characters color, or the type's name in its color */
 .nx-card-type { --c: var(--type, var(--text-secondary)); display: flex; align-items: center; gap: 6px; margin-top: 7px; min-width: 0; font-size: 12px;
   font-weight: 500; color: var(--c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -3174,7 +3179,7 @@ html[data-motion="off"] .upd-progress > span, html[data-motion="off"] .repakx-pr
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-wrap: pretty; }
 .nx-card-foot { display: flex; align-items: center; gap: 12px; margin-top: auto; padding-top: 12px; }
 .nx-stat { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-.nx-stat.is-endorsed svg { color: #f2555a; fill: currentColor; } /* red heart: cable's pick (2026-10-29) */
+.nx-stat.is-endorsed svg { color: #f2555a; } /* red heart: cable's pick (2026-10-29) */
 /* the action: one box for all three states, so Installed sits exactly where Install was */
 .nx-act { margin-left: auto; display: inline-flex !important; align-items: center; gap: 5px; height: 28px !important; min-height: 0 !important; padding: 0 10px !important;
   border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important; background: transparent !important;

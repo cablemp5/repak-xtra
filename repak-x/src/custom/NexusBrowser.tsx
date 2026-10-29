@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
-import { ArrowUpCircle, Check, ChevronLeft, ChevronRight, Download, Heart, Loader2, Search, X } from 'lucide-react'
+import { ArrowUpCircle, Check, ChevronLeft, ChevronRight, Clock, Download, Heart, Loader2, Search, User, X } from 'lucide-react'
 import CustomDropdown from '../components/CustomDropdown'
 import { NexusSignIn, gql, getNexusFile, installFromNexus, openNexusPage, plain, updateOf, useNexusAccount, useNexusPending, useNexusReady, useNexusUpdates } from './nexus'
 import { sourceOf, useNexusVersion } from './nexusSource'
@@ -231,7 +231,10 @@ function NexusCard({ c, path, look }: { c: Card; path?: string; look: Look }) {
       </button>
       <div className="nx-card-body">
         <button type="button" className="nx-card-name" onClick={open} title={`Open ${name} on Nexus Mods`}>{name}</button>
-        <span className="nx-card-by">{plain(c.author)}<span aria-hidden="true"> · </span><span title={new Date(c.updatedAt).toLocaleString()}>updated {ago(c.updatedAt)}</span></span>
+        <span className="nx-card-by">
+          <span className="nx-meta" title={`By ${plain(c.author)}`}><User size={12} aria-hidden="true" /><span>{plain(c.author)}</span></span>
+          <span className="nx-meta" title={`Updated ${new Date(c.updatedAt).toLocaleString()}`}><Clock size={12} aria-hidden="true" />{ago(c.updatedAt)}</span>
+        </span>
         <TypeLine category={c.modCategory?.name ?? ''} title={name} look={look} />
         <p className="nx-card-summary">{plain(c.summary)}</p>
         <div className="nx-card-foot">
