@@ -237,16 +237,10 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
   )
 }
 
-// a medal's scalloped rim: ten soft round bumps around a 24px circle
-const RIM = Array.from({ length: 96 }, (_, i) => {
-  const a = (i / 96) * Math.PI * 2, r = 10.7 + 0.9 * Math.abs(Math.cos(a * 5)) ** 0.6 // rounded tops, tight dips
-  return `${(12 + r * Math.cos(a)).toFixed(2)},${(12 + r * Math.sin(a)).toFixed(2)}`
-}).join(' ')
-
-/** A Top this week card's place: a flat medal (a scalloped rim, a darker disc, the number in the rim's color). */
+/** A Top this week card's place: a flat medal (a light rim, a darker disc, the number in the rim's color). */
 const Medal = ({ rank }: { rank: number }) => (
   <svg className={`nx-medal is-${rank}`} viewBox="0 0 24 24" role="img" aria-label={`Number ${rank} this week`}>
-    <polygon className="nx-medal-rim" points={RIM} />
+    <circle className="nx-medal-rim" cx="12" cy="12" r="11.5" />
     <circle className="nx-medal-disc" cx="12" cy="12" r="7.8" />
     <text x="12" y="12" textAnchor="middle" dominantBaseline="central">{rank}</text>
   </svg>

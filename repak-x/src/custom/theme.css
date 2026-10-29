@@ -3217,16 +3217,16 @@ button.nx-act.is-install:hover { background: color-mix(in srgb, var(--accent-pri
 /* Top this week: three equal cards as pictures, the words on a dark fade at the bottom, set apart from
    All mods below by a rule (Common region) */
 .nx-spot { padding-bottom: 20px; border-bottom: 1px solid var(--panel-border); }
-.nx-spot-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; height: 240px; }
+.nx-spot-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; height: 276px; }
 .nx-spot .nx-card { position: relative; }
 .nx-spot .nx-card-image { position: absolute !important; inset: 0; height: 100%; aspect-ratio: auto; }
-.nx-spot .nx-card-body { position: relative; flex: none; margin-top: auto; padding: 68px 14px 12px; /* the fade starts 12px (5% of the 240px card) higher */ pointer-events: none;
+.nx-spot .nx-card-body { position: relative; flex: none; margin-top: auto; padding: 68px 14px 12px; /* the fade reaches a little higher than the words */ pointer-events: none;
   background: linear-gradient(rgba(6, 6, 8, 0), rgba(6, 6, 8, 0.93) 50%, rgba(6, 6, 8, 0.98)); }
 .nx-spot .nx-card-body > * { pointer-events: auto; }
 .nx-spot .nx-card-name { color: #fff; }
 .nx-spot .nx-card-by, .nx-spot .nx-stat { color: rgba(255, 255, 255, 0.72); }
 .nx-spot .nx-card-summary { display: none; }
-/* its place in the corner: a flat medal, a scalloped rim in the light metal, a darker disc, the number in the rim's color */
+/* its place in the corner: a flat medal, a smooth rim in the light metal, a darker disc, the number in the rim's color */
 .nx-medal { --rim: #fbe06a; --disc: #f2b62b; position: absolute; left: 10px; top: 10px; z-index: 2; width: 30px; height: 30px; pointer-events: none;
   filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.45)); }
 .nx-medal.is-2 { --rim: #e2e4e7; --disc: #a9adb3; }
