@@ -274,17 +274,22 @@ fn prune(dir: &std::path::Path) {
 }
 
 /// Opens a nexusmods.com page in the app's own Nexus window (one window, reused). A Mod manager download clicked there
-/// is caught before Windows sees it.
+/// is caught before Windows sees it. `auto` (Settings > Nexus Mods, one-click Install, experimental): a new window opens
+/// hidden and clicks Slow download itself (nexus-theme.js), shown after AUTO_GIVE_UP if it has not finished by then.
 #[tauri::command]
-pub async fn xtra_nexus_open(app: AppHandle, url: String) -> Result<(), String> {
+pub async fn xtra_nexus_open(app: AppHandle, url: String, auto: Option<bool>) -> Result<(), String> {
+    let auto = auto.unwrap_or(false);
     let url = url::Url::parse(&url).map_err(|e| e.to_string())?;
     if !is_nexus(&url) {
         return Err("Only nexusmods.com pages open here.".into());
     }
     if let Some(w) = app.get_webview_window(WINDOW) {
         w.navigate(url).map_err(|e| e.to_string())?;
-        let _ = w.unminimize();
-        let _ = w.set_focus();
+        if !auto || w.is_visible().unwrap_or(true) {
+            let _ = w.show();
+            let _ = w.unminimize();
+            let _ = w.set_focus();
+        }
         return Ok(());
     }
     let handle = app.clone();
@@ -297,6 +302,9 @@ pub async fn xtra_nexus_open(app: AppHandle, url: String) -> Result<(), String> 
         .data_directory(profile)
         .browser_extensions_enabled(true)
         .extensions_path(extensions)
+        .visible(!auto)
+        .focused(!auto)
+        .initialization_script(if auto { "window.__repakxtraAuto = true" } else { "" })
         .initialization_script(theme_script())
         .on_navigation(move |u| {
             if u.scheme() == "nxm" {
@@ -346,8 +354,21 @@ pub async fn xtra_nexus_open(app: AppHandle, url: String) -> Result<(), String> 
         .build()
         .map_err(|e| e.to_string())?;
     crate::xtra_buildmark::tint(&window); // the build's color, like the main window's
+    if auto {
+        // not signed in to Nexus in this window, or Nexus changed its page: the window shows, to finish by hand
+        let h = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(AUTO_GIVE_UP);
+            if let Some(w) = h.get_webview_window(WINDOW) {
+                if !w.is_visible().unwrap_or(true) { let _ = w.show(); let _ = w.set_focus(); }
+            }
+        });
+    }
     Ok(())
 }
+
+/// How long a hidden one-click Install may take (Nexus's wait is 5 seconds) before its window shows.
+const AUTO_GIVE_UP: std::time::Duration = std::time::Duration::from_secs(40);
 
 /// uBlock Origin Lite for Edge, bundled (resources/ubol, its license beside it), unpacked once per version for the
 /// Nexus window. A new version replaces the old folder.

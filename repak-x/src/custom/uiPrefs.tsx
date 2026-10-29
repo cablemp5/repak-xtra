@@ -32,6 +32,7 @@ const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod
   { key: 'quick-organize', label: 'Show Quick Organize when dropping files on the window' }, // shown under Installing mods
   { key: 'new-strip', label: 'New this week on the Loadouts screen' }, // off by default (NewStripPref)
   { key: 'builtins', label: 'Built-in mods on the Loadouts screen and in the Library', on: true }, // shown by default (BuiltinsPref)
+  ...(EXTENDED ? [{ key: 'nexus-auto', label: 'One-click Install for free Nexus accounts' }] : []), // experimental, off by default (nexus.tsx NexusSetting)
 ]
 
 // 100% draws the app at the webview's 120% (what was the old 125% step, a little smaller); the rest scale from there.
@@ -149,6 +150,7 @@ export function togglePref(key: string, name: string) {
 }
 
 /** Sets a show/hide pref to a given state, quietly (a toggle toast's Undo puts back the state from before its press). */
+export const prefOn = isOn
 export const setPref = (key: string, on: boolean) => update(storageKey(key), on ? '1' : '0')
 
 /** Show or hide the custom tag chips on mods (T, or the button next to the tag filter). */

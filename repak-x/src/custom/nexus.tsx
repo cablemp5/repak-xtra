@@ -12,6 +12,8 @@ import nexusLogo from './logos/nexus.png'
 import keyShot from './logos/nexus-api-key.png'
 import { ownsTop, useDialogFocus } from './dialogFocus'
 import { APP_NAME, EXTENDED } from './edition'
+import Checkbox from '../components/ui/Checkbox'
+import { prefOn, setPref, useUiPref } from './uiPrefs'
 
 type Alert = ReturnType<typeof useAlert>
 type Account = { name: string; premium: boolean }
@@ -158,7 +160,8 @@ export async function getNexusFile(modId: number, fileId?: number, oldPath?: str
   if (account.premium && fileId) return fetchAndApply({ modId, fileId }, oldPath)
   if (oldPath && fileId) waiting.set(fileId, { oldPath, at: Date.now() })
   if (!oldPath) setPending({ ...pending, [modId]: Date.now() })
-  await openWindow(`${pageUrl(modId)}?tab=files${fileId ? `&file_id=${fileId}&nmm=1` : ''}`)
+  // one-click Install (experimental): a known file downloads in a hidden Nexus window, no click there
+  await openWindow(`${pageUrl(modId)}?tab=files${fileId ? `&file_id=${fileId}&nmm=1` : ''}`, Boolean(fileId) && prefOn('nexus-auto'))
     .catch(e => handlers?.alert.error('Could not open Nexus Mods', String(e)))
 }
 
@@ -170,7 +173,7 @@ export async function installFromNexus(modId: number) {
   return getNexusFile(modId, main.length === 1 ? main[0].fileId : undefined)
 }
 
-const openWindow = (url: string) => invoke('xtra_nexus_open', { url })
+const openWindow = (url: string, auto = false) => invoke('xtra_nexus_open', { url, auto })
 
 /** Opens a mod's Nexus page in the app's Nexus window. */
 export const openNexusPage = (modId: number) => EXTENDED
@@ -330,6 +333,22 @@ function NexusSteps() {
 const openOutside = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
 
 /** Settings > General > Nexus Mods: paste a personal API key, or see who is signed in and sign out. */
+/** Settings > Nexus Mods, free accounts: one-click Install, off until switched on (experimental). */
+function AutoInstallPref() {
+  const on = useUiPref('nexus-auto')
+  return (
+    <div className="setting-item">
+      <Checkbox checked={on} onChange={(checked: boolean) => setPref('nexus-auto', checked)}>
+        <span>One-click Install (experimental)</span>
+      </Checkbox>
+      <p className="setting-subtext">
+        Install clicks Slow download for you in a hidden Nexus window. If it has not finished after 40 seconds the window shows.
+        Nexus asks free accounts to download on its site, so it may limit or ban accounts that automate this.
+      </p>
+    </div>
+  )
+}
+
 export function NexusSetting() {
   const a = useNexusAccount()
   const ready = useNexusReady() // until the saved key is looked at, signed in is unknown: no sign-in steps yet
@@ -348,7 +367,7 @@ export function NexusSetting() {
       <div className="setting-group">
         {!ready && !a ? (
           <p className="setting-subtext xs-note">Checking your Nexus Mods account…</p>
-        ) : a ? (
+        ) : a ? (<>
           <div className="xs-row">
             <div className="xs-text">
               <span className="xs-label">{a.name ? `Signed in as ${a.name}` : 'Key saved. Nexus Mods could not be reached to check it.'}</span>
@@ -358,7 +377,8 @@ export function NexusSetting() {
             </div>
             <button type="button" className="action-btn" onClick={signOut}><LogOut size={14} /> Sign out</button>
           </div>
-        ) : (
+          {!a.premium && <AutoInstallPref />}
+        </>) : (
           <>
             <p className="setting-subtext xs-note">
               Connect your Nexus account to browse, install, and update mods here. Nexus Mod manager downloads then open in {APP_NAME}.
