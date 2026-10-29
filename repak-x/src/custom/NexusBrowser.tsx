@@ -173,11 +173,6 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
         <div className="nx-titles">
           <div className="nx-title">
             <h2>Nexus Mods</h2>
-            {/* the last count stays, dimmed, while the next loads: the title never jumps */}
-            <span className={`nx-total${state === 'loading' ? ' is-stale' : ''}`} role="status">
-              {state === 'loading' && <span className="xtra-sr-only">Updating results</span>}
-              <span aria-hidden={state === 'loading'}>{total || state === 'ok' ? `${total.toLocaleString()} ${total === 1 ? 'mod' : 'mods'}` : ''}</span>
-            </span>
           </div>
           {!account.premium && <p className="nx-sub">Install opens Nexus. Choose Slow download to finish here.</p>}
         </div>
@@ -203,8 +198,16 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
             <div className="nx-spot-grid">{top.map(c => <NexusCard key={c.modId} c={c} path={installed.get(c.modId)} look={look} />)}</div>
           </section>
         )}
-        <section className="nx-section" aria-label={spot ? undefined : 'Mods'} aria-labelledby={spot ? 'nx-all-title' : undefined}>
-          {spot && <h3 id="nx-all-title" className="nx-section-title">All mods</h3>}
+        <section className="nx-section" aria-labelledby="nx-all-title">
+          {/* the count beside the heading it counts: All mods, or Results while filters narrow it. The last count stays,
+              dimmed, while the next loads, so the heading never jumps */}
+          <div className="nx-section-head">
+            <h3 id="nx-all-title" className="nx-section-title">{narrowed ? 'Results' : 'All mods'}</h3>
+            <span className={`nx-total${state === 'loading' ? ' is-stale' : ''}`} role="status">
+              {state === 'loading' && <span className="xtra-sr-only">Updating results</span>}
+              <span aria-hidden={state === 'loading'}>{total || state === 'ok' ? `${total.toLocaleString()} ${total === 1 ? 'mod' : 'mods'}` : ''}</span>
+            </span>
+          </div>
           {state === 'error' && !cards.length ? (
             <div className="nx-empty" role="alert"><p>Nexus Mods could not be reached.</p><small>Check your connection, then try again.</small>
               <button type="button" className="lo-text-btn" onClick={() => setTries(t => t + 1)}><RotateCw size={13} aria-hidden="true" /> Try again</button>
