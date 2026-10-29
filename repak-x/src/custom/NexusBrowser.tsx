@@ -267,6 +267,20 @@ function NexusPeek({ modId, name, first, anchor, hover, onOpen, onClose }: {
   const [urls, setUrls] = useState<string[]>(() => (first ? [first] : []))
   const [loading, setLoading] = useState(true)
   const [at, setAt] = useState(0)
+  // the picture on screen stays until the next one has fully loaded: no blank frame between them (and the card's own
+  // thumbnail stays until the full-size first picture is in)
+  const [onScreen, setOnScreen] = useState(first ?? '')
+  const wanted = urls[Math.min(at, urls.length - 1)] ?? ''
+  useEffect(() => {
+    if (!wanted || wanted === onScreen) return
+    let on = true
+    const next = new Image()
+    next.onload = () => { if (on) setOnScreen(wanted) }
+    next.src = wanted
+    return () => { on = false }
+  }, [wanted]) // eslint-disable-line react-hooks/exhaustive-deps
+  // the others load in the background, so paging shows each at once
+  useEffect(() => { urls.slice(0, 24).forEach(u => { new Image().src = u }) }, [urls])
   useEffect(() => {
     let on = true
     loadGallery(modId).then(found => {
@@ -285,9 +299,8 @@ function NexusPeek({ modId, name, first, anchor, hover, onOpen, onClose }: {
     window.addEventListener('keydown', key, true)
     // the pointer can leave without a mouseleave (onto the title bar, which drags the window): closed then too
     const away = () => onClose()
-    window.addEventListener('blur', away)
     document.documentElement.addEventListener('mouseleave', away)
-    return () => { window.removeEventListener('keydown', key, true); window.removeEventListener('blur', away); document.documentElement.removeEventListener('mouseleave', away) }
+    return () => { window.removeEventListener('keydown', key, true); document.documentElement.removeEventListener('mouseleave', away) }
   }) // eslint-disable-line react-hooks/exhaustive-deps
   if (!urls.length) return null
   // centered on the card's picture, as big as the window allows, never past its edges
@@ -295,13 +308,12 @@ function NexusPeek({ modId, name, first, anchor, hover, onOpen, onClose }: {
   const w = Math.min(720, window.innerWidth - 32), h = Math.round(w * 9 / 16)
   const left = Math.max(16, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 16))
   const top = Math.max(16, Math.min(r.top + r.height / 2 - h / 2, window.innerHeight - h - 16))
-  const shown = urls[Math.min(at, urls.length - 1)]
   return createPortal(<>
     {/* the rest of the app dims behind the pictures; it takes no pointer, so leaving still closes them */}
     <div className="nx-peek-dim" aria-hidden="true" />
     <div className="nx-peek" style={{ left, top, width: w, height: h }} role="dialog" aria-label={`Pictures of ${name}`} {...hover}>
       <button type="button" className="nx-peek-image" onClick={onOpen} aria-label={`Open ${name} on Nexus Mods`}>
-        <img key={shown} src={shown} alt={`${name}, picture ${at + 1} of ${urls.length}`} />
+        {onScreen && <img src={onScreen} alt={`${name}, picture ${at + 1} of ${urls.length}`} />}
       </button>
       {urls.length > 1 && <>
         <button type="button" className="lo-media-arrow is-prev" aria-label="Previous picture" title="Previous picture" onClick={() => step(-1)}><ChevronLeft size={16} /></button>

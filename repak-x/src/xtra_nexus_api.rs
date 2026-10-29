@@ -168,6 +168,7 @@ pub async fn xtra_nexus_images(app: AppHandle, mod_id: u64) -> Result<Vec<String
     let (profile, extensions) = browser_dirs(&app)?;
     WebviewWindowBuilder::new(&app, SCOUT_WINDOW, WebviewUrl::External(url))
         .visible(false)
+        .focused(false) // never takes focus from the app (the gallery waiting on it would lose its hover)
         .skip_taskbar(true)
         .data_directory(profile)
         .browser_extensions_enabled(true)
