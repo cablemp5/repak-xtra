@@ -3211,8 +3211,7 @@ html[data-motion="off"] .nx-act.is-waiting svg { animation: none; }
 .nx-step-body { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding-top: 4px; }
 .nx-step-body > b { font-size: 13.5px; font-weight: 600; line-height: 1.4; color: var(--text-primary); }
 .nx-step-body > span { margin-top: -6px; font-size: 12.5px; line-height: 1.45; color: var(--text-secondary); }
-/* a picture of where the key is on Nexus, not a button: quieter than the steps' own actions */
-.nx-step-shot { display: block; width: 100%; border-radius: 8px; border: 1px solid var(--panel-border); filter: saturate(0.45); opacity: 0.85; pointer-events: none; }
+.nx-step-shot { display: block; width: 100%; border-radius: 8px; border: 1px solid var(--panel-border); }
 .nx-step-note { font-size: 12px; line-height: 1.45; color: var(--text-secondary); }
 .nx-step-key { display: flex; gap: 8px; width: 100%; }
 .nx-step-key .nx-key-input { flex: 1; font-family: var(--font-primary) !important; }

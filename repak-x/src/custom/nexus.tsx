@@ -307,7 +307,7 @@ function NexusSteps() {
           <div className="nx-step-body">
             <b>Scroll all the way down to Personal API Key</b>
             <span>Click Request Api Key, then copy the key it shows.</span>
-            <img className="nx-step-shot" src={keyShot} alt="The Personal API Key heading at the bottom of the Nexus Mods API keys page, above its orange Request Api Key button" />
+            <img className="nx-step-shot" src={keyShot} alt="The Personal API Key section at the bottom of the Nexus Mods API keys page, with its orange Request Api Key button" />
           </div>
         </li>
         <li>
