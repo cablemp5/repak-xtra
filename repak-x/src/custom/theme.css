@@ -3238,10 +3238,11 @@ button.nx-act.is-install:hover { background: color-mix(in srgb, var(--accent-pri
 .nx-details { font-size: 12px; color: var(--text-secondary); text-align: left; }
 .nx-details summary { cursor: pointer; text-align: center; }
 .nx-details code { display: block; margin-top: 6px; max-width: 60ch; white-space: pre-wrap; word-break: break-word; font: 11.5px var(--font-mono, monospace); }
-/* Settings > Nexus Mods: the ban risk under One-click Install, in the app's warning amber */
-.nx-auto-warn { display: flex; align-items: flex-start; gap: 8px; margin: 8px 0 0 32px; padding: 8px 10px; border-radius: 8px; font-size: 12.5px; line-height: 1.45;
-  color: #f5a524; background: color-mix(in srgb, #f5a524, transparent 92%); border: 1px solid color-mix(in srgb, #f5a524, transparent 70%); }
-.nx-auto-warn svg { flex: none; margin-top: 2px; }
+/* Settings > Nexus Mods: the ban risk under One-click Install, in the app's warning amber. No box: the icon sits in the
+   checkbox's 20px column and the words start where the switch's own words do (30px in), so the setting reads as one block */
+.nx-auto-warn { display: grid; grid-template-columns: 20px 1fr; column-gap: 10px; align-items: start; margin: 6px 0 0; font-size: 12.5px; line-height: 1.45;
+  color: #f5a524; }
+.nx-auto-warn svg { justify-self: center; margin-top: 2px; }
 [data-theme="light"] .nx-auto-warn { color: #9a5b00; }
 .nx-checking { margin: 64px auto; text-align: center; font-size: 13px; color: var(--text-secondary); }
 /* signed out (custom/nexus.tsx NexusSignIn): one column at reading width in the middle of the tab, no second frame
