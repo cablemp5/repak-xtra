@@ -1941,13 +1941,17 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
   border-radius: var(--quiet-radius) !important; font-size: 13px !important; font-weight: 600 !important; display: inline-flex !important; align-items: center; }
 .fr-steps { list-style: none; margin: 0; overflow-y: auto; padding: 4px 22px !important; display: flex; flex-direction: column; }
 .fr-modal .fr-steps, .ss-modal .fr-steps { gap: 0; }   /* .modal-body's 2rem section gap stacked on every step's padding */
-.fr-step { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--panel-border); }
+.fr-step { position: relative; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 14px 0; }
+/* the line between rings: each row draws its half above its ring (centered in the row) and its half below, so rows
+   of any height join up. None across the Optional label */
+.fr-step::before, .fr-step::after { content: ''; position: absolute; left: 13.5px; width: 1px; background: var(--panel-border); }
+.fr-step::before { top: 0; bottom: calc(50% + 20px); }
+.fr-step::after { top: calc(50% + 20px); bottom: 0; }
+.fr-step:first-child::before, .fr-divider + .fr-step::before, .fr-step:last-child::after, .fr-step:has(+ .fr-divider)::after { display: none; }
 .fr-step.is-wide { align-items: start; }   /* the drop card under the title: the number stays level with the title */
-.fr-step:last-child { border-bottom: none; }
-/* A step's marker: its number as plain gray text, a plain green check once done (Setup's part mark), no circle */
-.fr-num { width: 22px; height: 22px; display: grid; place-items: center; font-size: 13px; font-weight: 600;
-  color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-.fr-step.is-done .fr-num { color: #3ecf6e; }
+/* A step's marker: the shared ring (.nx-step-n), a green check in a green ring once done */
+.fr-step.is-done .fr-num { color: #3ecf6e; box-shadow: inset 0 0 0 1px color-mix(in srgb, #3ecf6e, transparent 55%); }
+.fr-num svg { width: 15px; height: 15px; }
 .fr-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .fr-text h3 { margin: 0; font-size: 14.5px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
 .fr-text p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }
@@ -1955,7 +1959,6 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .fr-step.is-done .fr-text h3 { color: var(--text-secondary); }
 /* The guided setup's "Optional" label between the first mods and the extras, and its "1 of 3 done" */
 .fr-divider { padding: 18px 0 2px; font-size: 11px; font-weight: 500; color: var(--text-secondary); }   /* the sidebar's section label look (.fp-section-label) */
-.fr-step:has(+ .fr-divider) { border-bottom: none; }
 .fr-progress { font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .fr-optional { padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--text-secondary); background: var(--bg-lighter); }
 .fr-recommended { color: var(--accent-primary); background: color-mix(in srgb, var(--accent-primary), transparent 86%); }   /* Mod previews: worth doing, unlike the Optional extras */
@@ -2839,7 +2842,7 @@ html[data-motion="off"] .vfx-dot { animation: none; }
 .lo-group-count { min-width: 20px; padding-inline: 7px !important; }
 .vf-grp-count { min-width: 20px; padding-inline: 6px !important; }
 .fp-section-picked { --pill-h: 16px; padding-inline: 6px !important; }
-.fr-num:not(:has(svg)) { --pill-h: 22px; width: 22px; padding-inline: 0 !important; }
+.fr-step .fr-num:not(:has(svg)) { width: 28px; height: 28px !important; padding: 0 !important; display: grid !important; text-box: normal; }   /* the shared ring (.nx-step-n) centers its digit itself */
 
 /* ---------- The Library's selection bar (cable, 2026-10-21): a drawer that slides out from under the All / On / Off
    header, its top tucked behind the header so it reads as the header's extension. The header's own surface and border,
@@ -3189,13 +3192,15 @@ button.nx-act:hover { background: var(--quiet-hover) !important; border-color: c
 .nx-steps > li { position: relative; display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 14px; padding-bottom: 24px; }
 .nx-steps > li:last-child { padding-bottom: 0; }
 .nx-steps > li:not(:last-child)::before { content: ''; position: absolute; left: 13.5px; top: 34px; bottom: 6px; width: 1px; background: var(--panel-border); }
-.nx-step-n { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; box-sizing: border-box; font: 600 12.5px var(--font-primary);
-  font-variant-numeric: tabular-nums; color: var(--text-primary); background: var(--bg-darker); border: 1px solid var(--panel-border); }
+/* One marker for every numbered guide (Connect Nexus Mods, the guided setup, the capture dialog, cable 2026-10-29): the
+   number in a 28px ring, a thin line down to the next one. The ring is an inset shadow, not a border, so the guided
+   setup's centered-digit rule keeps its math */
+.nx-step-n, .fr-num, .cp-steps li::before { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; box-sizing: border-box;
+  font: 600 12.5px var(--font-primary); font-variant-numeric: tabular-nums; color: var(--text-primary); background: var(--bg-darker);
+  box-shadow: inset 0 0 0 1px var(--panel-border); }
 .nx-step-body { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding-top: 4px; }
 .nx-step-body > b { font-size: 13.5px; font-weight: 600; line-height: 1.4; color: var(--text-primary); }
 .nx-step-body > span { margin-top: -6px; font-size: 12.5px; line-height: 1.45; color: var(--text-secondary); }
-.nx-steps > li:nth-child(2) .nx-step-body > b { color: #facc15; }
-[data-theme="light"] .nx-steps > li:nth-child(2) .nx-step-body > b { color: #8a6a00; }
 .nx-step-shot { display: block; width: 100%; border-radius: 8px; border: 1px solid var(--panel-border); }
 .nx-step-key { display: flex; gap: 8px; width: 100%; }
 .nx-step-key .nx-key-input { flex: 1; font-family: var(--font-primary) !important; }
