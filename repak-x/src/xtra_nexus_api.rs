@@ -255,16 +255,11 @@ const UBOL_VERSION: &str = "2026.1026.1812";
 
 /// repakxtra's look on nexusmods.com (resources/nexus-theme.css), put on each page of the Nexus window and inside its
 /// web components by resources/nexus-theme.js, which runs before the page's own scripts. `accent` is the build's logo
-/// color (a #rrggbb from the app, anything else falls back to the stable blue). The script also carries the app's Lucide
-/// icons (resources/nexus-icons.json) and its Geist font.
+/// color (a #rrggbb from the app, anything else falls back to the stable blue).
 fn theme_script(accent: Option<&str>) -> String {
     let accent = accent.filter(|a| a.len() == 7 && a.starts_with('#') && a[1..].chars().all(|c| c.is_ascii_hexdigit())).unwrap_or("#346bf1");
     let css = include_str!("../resources/nexus-theme.css").replace("__ACCENT__", accent);
-    let geist = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, include_bytes!("custom/fonts/Geist-Variable.ttf"));
-    include_str!("../resources/nexus-theme.js")
-        .replace("__CSS__", &serde_json::to_string(&css).unwrap_or_default())
-        .replace("__ICONS__", include_str!("../resources/nexus-icons.json").trim())
-        .replace("__GEIST__", &format!("'{geist}'"))
+    include_str!("../resources/nexus-theme.js").replace("__CSS__", &serde_json::to_string(&css).unwrap_or_default())
 }
 
 /// The Nexus window's profile folder and its extensions folder (uBOL unpacked in it).

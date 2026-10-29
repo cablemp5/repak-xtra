@@ -52,7 +52,3 @@ html body[class] { background-color: #101010 !important; }
 /* ads, upsells and the footer */
 .ads-holder, .ad, .ad-billboard, [id^="billboard_"], a.rj-btn[href*="/vortex"],
 .bg-premium-weak, free-trial-banner, #rj-footer, footer, .rj-vortex-icon-wrapper, [class*="vortex-promo"] { display: none !important; }
-
-/* Nexus icons drawn as Lucide (nexus-theme.js): a Font Awesome glyph's own character goes, the drawn one sits on its line */
-.rx-fa::before { content: none !important; }
-.rx-icon { display: inline-block; vertical-align: -0.125em; }
