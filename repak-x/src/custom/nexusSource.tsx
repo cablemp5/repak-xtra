@@ -18,8 +18,9 @@ type Store = Record<string, NexusSource>
 const STORAGE = 'repakxtra.nexusSources'
 const listeners = new Set<() => void>()
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
-// without the load priority: its _9999999_P suffix, and the ! that priority zero puts in front
-const norm = (key: string) => key.replace(/^!+/, '').replace(/(_\d+_P)+$/i, '').toLowerCase()
+// without the load priority: its _9999999_P suffix, and the ! that priority zero puts in front. Spaces and underscores
+// count as one: the Install dialog can turn an archive's casual_rogue into the mod casual rogue
+const norm = (key: string) => key.replace(/^!+/, '').replace(/(_\d+_P)+$/i, '').toLowerCase().replace(/[\s_]+/g, '_')
 // keys saved before norm dropped the ! read as today's (a tiny object, so every read redoes it)
 let parsed = { raw: '', store: {} as Store } // every Library row reads it: parsed once per change
 const read = (): Store => {
@@ -118,6 +119,10 @@ const useSource = (path: string) => {
 const day = (s: number) => new Date(s * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 
 /** ModDetailsPanel's source line: "Nexus Mods, uploaded Sep 13, 2026 · Open page". */
+if (import.meta.env.DEV) {
+  console.assert(norm('casual rogue_9999999_P') === norm('casual_rogue') && norm('!Casual  Rogue') === 'casual_rogue', 'a space and an underscore match, priority dropped')
+}
+
 export function NexusSourceLine({ path }: { path: string }) {
   const s = useSource(path)
   if (!s) return null
