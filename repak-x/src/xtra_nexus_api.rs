@@ -253,11 +253,11 @@ pub async fn xtra_nexus_open(app: AppHandle, url: String) -> Result<(), String> 
 const UBOL_ZIP: &[u8] = include_bytes!("../resources/ubol/uBOLite.edge.zip");
 const UBOL_VERSION: &str = "2026.1026.1812";
 
-/// repakxtra's look on nexusmods.com (resources/nexus-theme.css), added to each page of the Nexus window before its own
-/// scripts run (the page has no root element yet then: the style goes in at DOMContentLoaded).
+/// repakxtra's look on nexusmods.com (resources/nexus-theme.css), put on each page of the Nexus window and inside its
+/// web components by resources/nexus-theme.js, which runs before the page's own scripts.
 fn theme_script() -> String {
     let css = serde_json::to_string(include_str!("../resources/nexus-theme.css")).unwrap_or_default();
-    format!("(() => {{ const add = () => {{ const root = document.head || document.documentElement; if (!root || document.getElementById('repakxtra-theme')) return; const s = document.createElement('style'); s.id = 'repakxtra-theme'; s.textContent = {css}; root.appendChild(s) }}; document.addEventListener('DOMContentLoaded', add); add() }})()")
+    include_str!("../resources/nexus-theme.js").replace("__CSS__", &css)
 }
 
 /// The Nexus window's profile folder and its extensions folder (uBOL unpacked in it).
