@@ -84,7 +84,7 @@ const setCovers = new Map<string, { covers: string[]; members: string[] | null }
 const previewMode = (): string => (Array.isArray(mock.__previewMock) ? mock.__previewMock.shift() : mock.__previewMock) ?? 'ok'
 
 // repakxtra: the built-in mods' saved state (xtra_builtins.rs BuiltinView); heroes are the skin table's 10xx rows
-const builtins: any[] = ['force-default-skin', 'skip-intro-movies', 'custom-quake'].map(id => ({ id, on: false, excluded: [], current: false, active: false, heroes: [] as string[], path: `C:/Mock/Paks/~mods/.repakxtra-builtin/repakxtra-${id}_9999999_P.pak`, size: 150000,
+const builtins: any[] = ['force-default-skin', 'skip-intro-movies', 'custom-quake', 'no-impact', 'no-tracers', 'no-screen-shake', 'fov-slider', 'skip-login-video'].map(id => ({ id, on: false, excluded: [], current: false, active: false, heroes: [] as string[], path: `C:/Mock/Paks/~mods/.repakxtra-builtin/repakxtra-${id}_9999999_P.pak`, size: 150000,
   ...(id === 'custom-quake' ? { quake: { base: '5d7a80', sky: '82c6ed', hidePlants: false, lobby: true } } : {}) }))
 // CustomQuake (xtra_quake.rs): localStorage 'mock.quakeError' = '1' fails its build, 'mock.quakeOverlap' = '1' says quakeV6 is on too,
 // 'mock.quakeSlow' = '1' makes its build last a minute so the progress bar can be seen
@@ -381,7 +381,11 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'xtra_vfx_mods': return { problems: [], mods: data.mods.filter((m: any) => /vfx/i.test(m.path) && !/_BROKEN(_\d+)?_P\./i.test(m.path)).map((m: any) => ({
         path: m.path, utoc: m.utoc_path || m.path.replace(/\.(pak|bak_repak)$/i, '.utoc'), enabled: m.enabled, hero: m.character_name ?? null, modified: m.modified_date ?? 0,
         name: m.custom_name || m.path.split(/[\\/]/).pop().replace(/\.[^.]+$/, '').replace(/(_\d+)?_P$/i, '') })) }
-      case 'xtra_game_build': return { updated: Math.floor(Date.now() / 1000) - 3600 * 5, cl: 3962284 }
+      // the mock USMAP is 3939753: localStorage 'mock.usmapBehind' = '1' puts the game a build ahead of it, so updates wait
+      case 'xtra_game_build': return { updated: Math.floor(Date.now() / 1000) - 3600 * 5, cl: localStorage.getItem('mock.usmapBehind') === '1' ? 3962284 : 3939753 }
+      // with mock.usmapBehind, mods whose name has 'wait' in it use files the patch changed
+      case 'xtra_vfx_usmap_wait': return localStorage.getItem('mock.usmapBehind') === '1' && /wait/i.test(String(args?.modPath ?? '')) ? { usmap: 3939753, game: 3962284, changed: 3 } : null
+      case 'xtra_usmap_waiting': return { waiting: localStorage.getItem('mock.usmapBehind') === '1', fetched: false }
       // Installing: the file picker returns two fake paks, install adds them to the library and reports done. A folder
       // pick (the Sigeon folder) returns an unzipped Sigeon download.
       case 'plugin:dialog|open':

@@ -52,6 +52,10 @@ mod xtra_vfx; // repakxtra: VFX fixing after game updates
 mod xtra_niagara; // repakxtra: the VFX Updater's Niagara step
 mod xtra_uat_cli; // repakxtra: IoStore extracts through UAssetTool's parallel command line
 mod xtra_builtins; // repakxtra: built-in mods made from the game's own tables
+#[cfg(feature = "extended")]
+mod xtra_visual_builtins;
+#[cfg(feature = "extended")]
+mod xtra_login_video;
 mod character_data;
 mod crash_monitor;
 mod discord_presence;
@@ -8754,6 +8758,8 @@ fn main() {
             xtra_builtins::xtra_skin_table_hero,
             xtra_niagara::xtra_vfx_layout_scan,
             xtra_niagara::xtra_vfx_old_layout,
+            xtra_niagara::xtra_usmap_waiting, // repakxtra: checks again once the USMAP of this game build is out
+            xtra_broken::xtra_vfx_usmap_wait, // repakxtra: a VFX update waits only when the patch changed its files
             xtra_nexus::xtra_nexus_sources, // repakxtra: Nexus source
             xtra_nexus::xtra_nexus_downloads, // repakxtra: Nexus downloads still in Downloads, for the one-time scan
             xtra_nexus::xtra_install_paks, // repakxtra: the paks an install puts in place, for loadouts made at install

@@ -81,3 +81,8 @@ export const FlatTilesIcon = pixelIcon(n => {
     <path d={`M${m} 1V${n - 1}M1 ${m}H${n - 1}`} />
   </>
 })
+
+export const ImpactIcon = pixelIcon((n, k) => <><path d={`M${3*k} ${3*k}l${18*k} ${18*k}M${12*k} ${2*k}v${4*k}m0 ${12*k}v${4*k}M${2*k} ${12*k}h${4*k}m${12*k} 0h${4*k}`} /><circle cx={n/2} cy={n/2} r={5*k} /></>)
+export const TracerIcon = pixelIcon((n, k) => <><path d={`M${3*k} ${5*k}l${18*k} ${14*k}M${3*k} ${12*k}h${5*k}m${3*k} 0h${4*k}m${3*k} 0h${3*k}`} /></>)
+export const ShakeIcon = pixelIcon((n, k) => <><path d={`M${7*k} ${7*k}h${10*k}v${10*k}h-${10*k}zM${3*k} ${9*k}v${6*k}M${21*k} ${9*k}v${6*k}M${9*k} ${3*k}h${6*k}M${9*k} ${21*k}h${6*k}`} /></>)
+export const FovIcon = pixelIcon((n, k) => <><path d={`M${3*k} ${4*k}v${16*k}l${18*k}-${5*k}v-${6*k}zM${7*k} ${12*k}h${10*k}`} /></>)

@@ -346,6 +346,34 @@ pub(crate) fn usmap_matches(usmap: &str, paks: &Path) -> bool {
     }
 }
 
+/// The USMAP's build and the game's, when both are known and the USMAP is the older one. A patch can insert properties
+/// into classes (NiagaraSystem in 3962284), and an older USMAP then reads every later property under the wrong name
+/// without any error, so whatever decodes a file such a patch rewrote waits for the new one (xtra_broken.rs
+/// changed_since_usmap).
+pub(crate) fn usmap_behind(usmap: &str, paks: &Path) -> Option<(u64, u64)> {
+    let (u, g) = (usmap_build(usmap)?, crate::xtra_vfx::game_cl(paks)?);
+    (u < g).then_some((u, g))
+}
+
+/// usmapWatch.ts: whether the saved USMAP is still older than the installed game, and whether this call saved a newer one.
+#[derive(Serialize)]
+pub struct UsmapWaiting {
+    waiting: bool,
+    fetched: bool,
+}
+
+/// Fetches a newer USMAP when there is one (an ETag check, so cheap) and says whether the saved one is still older than
+/// the installed game. Once it is not, built-ins that waited for it may build again (usmapWatch.ts).
+#[tauri::command]
+pub async fn xtra_usmap_waiting(state: tauri::State<'_, std::sync::Arc<std::sync::Mutex<crate::AppState>>>) -> Result<UsmapWaiting, String> {
+    let mods = state.lock().unwrap_or_else(|e| e.into_inner()).game_path.clone();
+    let Some(paks) = mods.ancestors().find(|p| p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("Paks"))).map(Path::to_path_buf) else {
+        return Ok(UsmapWaiting { waiting: false, fetched: false });
+    };
+    let fetched = crate::vfx_updater::commands::vfx_check_usmap_update(false).await.is_ok_and(|r| r.updated);
+    Ok(UsmapWaiting { waiting: !crate::xtra_builtins::usmap_arrived(&paks), fetched })
+}
+
 /// The saved USMAP matches the game: mods made partial for want of one can now update fully (xtra_broken).
 pub(crate) fn saved_usmap_matches(paks: &Path) -> bool {
     crate::vfx_updater::commands::saved_usmap_path().is_some_and(|u| Path::new(&u).is_file() && usmap_matches(&u, paks))
@@ -700,9 +728,11 @@ pub(crate) async fn run(game_paks: &str, usmap: &str, mod_extract: &Path, files:
     let Some(build) = usmap_build(usmap) else {
         return Ok(NiagaraRun { why: Some("The USMAP's game build is not in its name".into()), ..Default::default() });
     };
-    if !usmap_matches(usmap, Path::new(game_paks)) {
+    // a USMAP behind the game still reads the files no newer patch rewrote (xtra_broken.rs changed_since_usmap)
+    let changed = crate::xtra_broken::changed_since_usmap(Path::new(game_paks), usmap, files).map_or(files.len().max(1), |c| c.len());
+    if changed > 0 {
         let game = crate::xtra_vfx::game_cl(Path::new(game_paks)).unwrap_or(0);
-        return Ok(NiagaraRun { why: Some(format!("The USMAP is for build {build} and the game is on {game}")), ..Default::default() });
+        return Ok(NiagaraRun { why: Some(format!("The USMAP is for build {build} and the game is on {game}, whose update changed {changed} of these Niagara files")), ..Default::default() });
     }
     let rels: Vec<String> = files.iter().map(|f| rel_no_ext(f)).collect();
     let emit = |n: usize, msg: String| progress.emit(VfxPipelineProgress { stage: "Rebuilding Niagara effects".into(), step: 7, current: n, total: rels.len(), message: msg });
@@ -813,6 +843,19 @@ pub async fn xtra_vfx_niagara(window: Window, game_paks: String, usmap_path: Str
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn an_older_usmap_makes_updates_wait() {
+        let paks = tempfile::tempdir().unwrap();
+        for f in ["pakchunk0-Windows.utoc", "Patch_-Windows_1.1.3962284_P.utoc", "Patch_-Windows_1.1.3984769_P.utoc"] {
+            std::fs::write(paks.path().join(f), b"").unwrap();
+        }
+        let usmap = |cl: u64| format!("C:/x/5.3.2-{cl}+++depot_marvel+S10.5_release-Marvel.usmap");
+        assert_eq!(usmap_behind(&usmap(3962284), paks.path()), Some((3962284, 3984769)), "the patch from today is ahead");
+        assert_eq!(usmap_behind(&usmap(3984769), paks.path()), None, "the same build");
+        assert_eq!(usmap_behind(&usmap(3990000), paks.path()), None, "a newer USMAP");
+        assert_eq!(usmap_behind("C:/x/custom.usmap", paks.path()), None, "a chosen file without a build is not judged");
+    }
 
     fn floats(name: &str, v: &[f32]) -> Value {
         json!({ "$type": "UAssetAPI.PropertyTypes.Objects.ArrayPropertyData, UAssetAPI", "ArrayType": "FloatProperty", "Name": name,
