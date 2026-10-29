@@ -71,7 +71,7 @@ export function HeroFilter({ heroes, value, onChange, always }: { heroes: string
   if (list.length < 2 && !value && !always) return null
   return (
     <CustomDropdown className="lp-hero" options={[{ value: '', label: 'All heroes', glyph: <Users /> }, ...list.map(h => ({ value: h, label: h, image: portrait(h) }))]}
-      value={value} onChange={onChange} placeholder="All heroes" />
+      value={value} onChange={onChange} placeholder="All heroes" ariaLabel="Hero" />
   )
 }
 

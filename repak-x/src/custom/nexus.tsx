@@ -162,7 +162,10 @@ export async function getNexusFile(modId: number, fileId?: number, oldPath?: str
   if (!oldPath) setPending({ ...pending, [modId]: Date.now() })
   // one-click Install (experimental): a known file downloads in a hidden Nexus window, no click there
   await openWindow(`${pageUrl(modId)}?tab=files${fileId ? `&file_id=${fileId}&nmm=1` : ''}`, Boolean(fileId) && prefOn('nexus-auto'))
-    .catch(e => handlers?.alert.error('Could not open Nexus Mods', String(e)))
+    .catch(e => {
+      if (pending[modId]) { const { [modId]: _, ...rest } = pending; setPending(rest) } // eslint-disable-line @typescript-eslint/no-unused-vars
+      handlers?.alert.error('Could not open Nexus Mods', String(e))
+    })
 }
 
 /** Install from the Nexus tab: a mod with one main file goes straight to that file, others open their Files tab to
