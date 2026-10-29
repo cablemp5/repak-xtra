@@ -32,7 +32,7 @@ pub const DEFAULT_SKIN: &str = "force-default-skin";
 pub const SKIP_INTRO: &str = "skip-intro-movies";
 pub const CUSTOM_QUAKE: &str = "custom-quake"; // repakxtra: xtra_quake.rs
 #[cfg(feature = "extended")]
-const IDS: [&str; 3] = [DEFAULT_SKIN, SKIP_INTRO, CUSTOM_QUAKE];
+const IDS: [&str; 7] = [DEFAULT_SKIN, SKIP_INTRO, CUSTOM_QUAKE, crate::xtra_visual_builtins::NO_IMPACT, crate::xtra_visual_builtins::NO_TRACERS, crate::xtra_visual_builtins::FOV, crate::xtra_login_video::ID];
 #[cfg(not(feature = "extended"))]
 const IDS: [&str; 1] = [SKIP_INTRO];
 
@@ -238,7 +238,7 @@ fn unpark(dir: &Path, id: &str) -> Result<(), String> {
 fn view(id: &str, s: &Saved, dir: &Path, build: &str) -> BuiltinView {
     let present = files_of(dir, id).iter().all(|f| f.exists());
     let for_build = s.built_for.as_deref() == Some(build);
-    BuiltinView {
+    let mut result = BuiltinView {
         id: id.to_string(),
         on: s.on,
         excluded: s.excluded.clone(),
@@ -251,9 +251,22 @@ fn view(id: &str, s: &Saved, dir: &Path, build: &str) -> BuiltinView {
         path: files_of(dir, id)[0].to_string_lossy().to_string(),
         size: files_of(dir, id).iter().filter_map(|f| std::fs::metadata(f).ok()).map(|m| m.len()).sum(),
         quake: (id == CUSTOM_QUAKE).then(|| s.quake.clone().unwrap_or_default()),
-        overlaps: if id == CUSTOM_QUAKE && s.on { s.overlaps.clone() } else { Vec::new() },
+        overlaps: if s.on { s.overlaps.clone() } else { Vec::new() },
         gave_up: s.error.is_some() && FAILED.lock().unwrap_or_else(|e| e.into_inner()).contains(&failed_key(id, s, build)),
+    };
+    #[cfg(feature = "extended")]
+    if let Some(heroes) = crate::xtra_visual_builtins::effect_heroes(id) { result.heroes = heroes; }
+    #[cfg(feature = "extended")]
+    if id == crate::xtra_login_video::ID {
+        if let Some(paks) = paks_dir(dir) {
+            let (current, active, size) = crate::xtra_login_video::status(&paks, dir);
+            result.current = s.on && current;
+            result.active = active;
+            result.size = size;
+        }
+        result.path = crate::xtra_login_video::receipt(dir).to_string_lossy().into_owned();
     }
+    result
 }
 
 fn dirs_of(state: &Arc<Mutex<AppState>>) -> Result<(PathBuf, PathBuf), String> {
@@ -268,7 +281,7 @@ fn views(state: &Arc<Mutex<AppState>>) -> Vec<BuiltinView> {
         Ok((dir, paks)) => (dir, game_build(&paks)),
         Err(_) => (PathBuf::new(), String::new()),
     };
-    IDS.iter().filter(|id| ![DEFAULT_SKIN, CUSTOM_QUAKE].contains(id) || crate::xtra_edition::features_unlocked())
+    IDS.iter().filter(|id| **id == SKIP_INTRO || crate::xtra_edition::features_unlocked())
         .map(|id| view(id, &all.get(*id).cloned().unwrap_or_default(), &dir, &build)).collect()
 }
 
@@ -490,6 +503,13 @@ async fn make(tool: &Path, id: &str, excluded: &[String], quake: &crate::xtra_qu
     ensure_vfx_uat_session(&tool).await?;
     let usmap = usmap().await?;
     #[cfg(feature = "extended")]
+    if [crate::xtra_visual_builtins::NO_IMPACT, crate::xtra_visual_builtins::NO_TRACERS, crate::xtra_visual_builtins::FOV].contains(&id) {
+        let made = crate::xtra_visual_builtins::make(&tool, &usmap, id, excluded, paks, work, out_base, stopped).await?;
+        let base = out_base.to_path_buf();
+        tauri::async_runtime::spawn_blocking(move || crate::xtra_encrypt::encrypt_built(&base)).await.map_err(|e| e.to_string())??;
+        return Ok(made);
+    }
+    #[cfg(feature = "extended")]
     if id == CUSTOM_QUAKE { // repakxtra: new 1x1 packages, not a table edit
         let summary = crate::xtra_quake::make(&tool, &usmap, paks, work, out_base, quake, &game_build(paks), stopped).await?;
         // every build goes in encrypted, as if run through Encrypt mods
@@ -564,33 +584,59 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
     *IN_FLIGHT.lock().unwrap_or_else(|e| e.into_inner()) = Some(id.to_string());
     STOP.store(false, std::sync::atomic::Ordering::Relaxed);
     let _flight = Flight;
+    #[cfg(feature = "extended")]
+    if id == crate::xtra_login_video::ID {
+        let dir_copy = dir.to_path_buf();
+        let paks_copy = paks.to_path_buf();
+        let result = tauri::async_runtime::spawn_blocking(move || crate::xtra_login_video::apply(&paks_copy, &dir_copy, true)).await.map_err(|e| e.to_string())?;
+        let build = game_build(paks);
+        update(|all| {
+            let s = all.entry(id.into()).or_default();
+            match &result {
+                Ok(summary) => { s.built_for = Some(build.clone()); s.summary = Some(summary.clone()); s.error = None; s.built_at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_secs()); }
+                Err(e) => { s.error = Some(e.clone()); }
+            }
+            let key = failed_key(id, s, &build);
+            let mut failed = FAILED.lock().unwrap_or_else(|e| e.into_inner());
+            failed.retain(|k| k != &key);
+            if result.is_err() { failed.push(key); }
+        })?;
+        return result.map(|_| ());
+    }
     let all = load();
     let excluded = all.get(id).map(|s| s.excluded.clone()).unwrap_or_default();
     let quake = all.get(id).and_then(|s| s.quake.clone()).unwrap_or_default();
+    let build_at_start = game_build(paks);
     let work = std::env::temp_dir().join("repak-x").join("xbuiltin").join(id);
     let _ = std::fs::remove_dir_all(&work);
     std::fs::create_dir_all(work.join("out")).map_err(|e| e.to_string())?;
     let out_base = work.join("out").join(stem(id));
     let known = all.get(id).map(|s| s.heroes.clone()).unwrap_or_default();
+    #[cfg(feature = "extended")]
+    let known = crate::xtra_visual_builtins::effect_heroes(id).unwrap_or(known);
     // every hero excluded: nothing to build. Only with this game build's hero list, a new hero after an update is not
     // in the old one
     let known_now = all.get(id).and_then(|s| s.built_for.as_deref()) == Some(game_build(paks).as_str());
-    if id == DEFAULT_SKIN && known_now && !known.is_empty() && known.iter().all(|h| excluded.contains(h)) {
+    let all_excluded = id == DEFAULT_SKIN && known_now && !known.is_empty() && known.iter().all(|h| excluded.contains(h));
+    #[cfg(feature = "extended")]
+    let all_excluded = all_excluded || crate::xtra_visual_builtins::all_excluded(id, &excluded);
+    if all_excluded {
         remove(dir, id)?;
         return update(|all| {
             let s = all.entry(id.to_string()).or_default();
             s.built_for = Some(game_build(paks));
             s.built_excluded = excluded;
             s.nothing = true;
-            s.summary = Some("Every hero keeps their own skins, so nothing is changed".to_string());
+            s.heroes = known;
+            s.summary = Some("Every hero is excluded, so nothing is changed".to_string());
             s.error = None;
         });
     }
     // a finished build the game kept out last time (it opened while it built): made for this game and these options
     let pending = std::env::temp_dir().join("repak-x").join("xbuiltin-pending").join(id);
     let saved = all.get(id).cloned().unwrap_or_default();
-    let made_for = made_for(id, &saved, &game_build(paks));
-    let failed_key = failed_key(id, &saved, &game_build(paks));
+    let made_for = made_for(id, &saved, &build_at_start);
+    let failed_key = failed_key(id, &saved, &build_at_start);
     let kept = std::fs::read_to_string(pending.join("made-for")).ok().filter(|k| *k == made_for).and_then(|_| std::fs::read_to_string(pending.join("summary")).ok());
     let (made, from) = match kept {
         Some(summary) => (Ok((summary, Vec::new())), pending.join(stem(id))),
@@ -600,8 +646,8 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
     #[cfg(not(feature = "extended"))]
     let overlaps: Vec<String> = Vec::new();
     #[cfg(feature = "extended")]
-    let overlaps = match dir.parent().filter(|_| id == CUSTOM_QUAKE && made.is_ok()) {
-        Some(root) => { let root = root.to_path_buf(); tauri::async_runtime::spawn_blocking(move || crate::xtra_quake::overlapping(&root)).await.unwrap_or_default() }
+    let overlaps = match dir.parent().filter(|_| made.is_ok()) {
+        Some(root) => { let root = root.to_path_buf(); let id=id.to_string(); tauri::async_runtime::spawn_blocking(move || if id==CUSTOM_QUAKE {crate::xtra_quake::overlapping(&root)} else {crate::xtra_visual_builtins::overlapping(&root,&id)}).await.unwrap_or_default() }
         None => Vec::new(),
     };
     let _moving = INSTALL.lock().unwrap_or_else(|e| e.into_inner());
@@ -613,6 +659,7 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
     // the game or Repak X may have opened while it built (CustomQuake takes minutes): checked again before any file moves
     use tauri::Manager;
     let blocked = app.try_state::<Arc<Mutex<AppState>>>().map_or(Ok(()), |st| game_guard(st.inner())).and_then(|_| crate::xtra_identity::upstream_guard()).err();
+    let made = if game_build(paks) != build_at_start { Err("The game updated during the build. Check again to rebuild from the new game files".into()) } else { made };
     let result = match (made, &blocked) {
         (Ok((summary, _)), Some(_)) => Err(match keep(&from, &pending, id, &made_for, &summary) {
             Ok(()) => "Marvel Rivals or Repak X opened while it built, so the new build waits. Close it, then try again to put it in".to_string(),
@@ -638,7 +685,7 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
         let s = all.entry(id.to_string()).or_default();
         match &result {
             Ok((summary, heroes)) => {
-                s.built_for = Some(game_build(paks));
+                s.built_for = Some(build_at_start.clone());
                 s.built_excluded = excluded.clone();
                 s.built_quake = (id == CUSTOM_QUAKE).then(|| quake.clone());
                 s.built_quake_packaging = id == CUSTOM_QUAKE;
@@ -650,9 +697,7 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
                     s.heroes = heroes.clone();
                 }
                 s.error = None;
-                if id == CUSTOM_QUAKE {
-                    s.overlaps = overlaps.clone();
-                }
+                s.overlaps = overlaps.clone();
             }
             Err(e) => {
                 log::warn!("[builtins] {id}: {e}");
@@ -772,10 +817,12 @@ fn game_guard(state: &Arc<Mutex<AppState>>) -> Result<(), String> {
 #[tauri::command]
 pub async fn xtra_builtins_set(app: tauri::AppHandle, id: String, on: Option<bool>, excluded: Option<Vec<String>>, quake: Option<crate::xtra_quake_options::Options>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<BuiltinView>, String> {
     #[cfg(feature = "extended")]
-    if id == CUSTOM_QUAKE || id == DEFAULT_SKIN { crate::xtra_activation::require()?; }
+    if id != SKIP_INTRO { crate::xtra_activation::require()?; }
     if !IDS.contains(&id.as_str()) {
         return Err(format!("No built-in mod called {id}"));
     }
+    if quake.is_some() && id != CUSTOM_QUAKE { return Err("Color options apply only to CustomQuake".into()); }
+    if excluded.is_some() && ![DEFAULT_SKIN, "no-impact", "no-tracers"].contains(&id.as_str()) { return Err("This built-in has no hero exclusions".into()); }
     if !crate::xtra_edition::EXTENDED && quake.is_some() {
         return Err("These options are unavailable in Standard".into());
     }
@@ -786,6 +833,20 @@ pub async fn xtra_builtins_set(app: tauri::AppHandle, id: String, on: Option<boo
     crate::xtra_identity::upstream_guard()?;
     game_guard(state.inner())?;
     let (dir, paks) = dirs_of(&state)?;
+    #[cfg(feature = "extended")]
+    if id == crate::xtra_login_video::ID && on == Some(false) {
+        // Keep the saved switch on until restoration succeeds, including across a crash.
+        wait_for_build(&id, true).await;
+        let _one = BUILDING.lock().await;
+        let dir_copy = dir.clone(); let paks_copy = paks.clone();
+        let result = tauri::async_runtime::spawn_blocking(move || crate::xtra_login_video::apply(&paks_copy, &dir_copy, false)).await.map_err(|e| e.to_string())?;
+        update(|all| {
+            let s = all.entry(id.clone()).or_default();
+            match &result { Ok(summary) => { s.on = false; s.error = None; s.summary = Some(summary.clone()); }, Err(e) => { s.error = Some(e.clone()); } }
+        })?;
+        result?;
+        return Ok(views(&state));
+    }
     let (changed, now_on) = update(|all| {
         let s = all.entry(id.clone()).or_default();
         let changed = excluded.as_ref().is_some_and(|x| *x != s.excluded) || quake.as_ref().is_some_and(|q| *q != s.quake.clone().unwrap_or_default());
@@ -847,6 +908,15 @@ pub async fn xtra_builtins_refresh(app: tauri::AppHandle, state: State<'_, Arc<M
         let root = dir.parent().map(Path::to_path_buf).unwrap_or_default();
         let found = tauri::async_runtime::spawn_blocking(move || crate::xtra_quake::overlapping(&root)).await.unwrap_or_default();
         update(|all| all.entry(CUSTOM_QUAKE.to_string()).or_default().overlaps = found)?;
+    }
+    #[cfg(feature = "extended")]
+    if crate::xtra_edition::features_unlocked() {
+        for id in [crate::xtra_visual_builtins::NO_IMPACT,crate::xtra_visual_builtins::NO_TRACERS,crate::xtra_visual_builtins::FOV] {
+            if !load().get(id).is_some_and(|s|s.on) {continue;}
+            let root=dir.parent().map(Path::to_path_buf).unwrap_or_default();
+            let found=tauri::async_runtime::spawn_blocking(move ||crate::xtra_visual_builtins::overlapping(&root,id)).await.unwrap_or_default();
+            update(|all|all.entry(id.into()).or_default().overlaps=found)?;
+        }
     }
     Ok(views(&state))
 }
@@ -971,6 +1041,9 @@ mod tests {
     fn quake_is_available_only_in_extended() {
         assert_eq!(super::IDS.contains(&super::CUSTOM_QUAKE), crate::xtra_edition::EXTENDED);
         assert_eq!(super::IDS.contains(&super::DEFAULT_SKIN), crate::xtra_edition::EXTENDED);
+        for id in ["no-impact", "no-tracers", "fov-slider", "skip-login-video"] {
+            assert_eq!(super::IDS.contains(&id), crate::xtra_edition::EXTENDED);
+        }
         assert!(super::IDS.contains(&super::SKIP_INTRO));
     }
 

@@ -52,6 +52,10 @@ mod xtra_vfx; // repakxtra: VFX fixing after game updates
 mod xtra_niagara; // repakxtra: the VFX Updater's Niagara step
 mod xtra_uat_cli; // repakxtra: IoStore extracts through UAssetTool's parallel command line
 mod xtra_builtins; // repakxtra: built-in mods made from the game's own tables
+#[cfg(feature = "extended")]
+mod xtra_visual_builtins;
+#[cfg(feature = "extended")]
+mod xtra_login_video;
 mod character_data;
 mod crash_monitor;
 mod discord_presence;
