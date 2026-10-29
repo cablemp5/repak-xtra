@@ -533,7 +533,7 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 .context-menu .submenu > .context-menu-item { white-space: nowrap; }
 /* Delete is the one red word in the menu */
 .context-menu-item.danger, .context-menu-item.danger span { color: #f2555a !important; }
-.sigeon-item.is-danger > .context-menu-trash { flex: none; margin-left: 12px; color: #f2555a; }
+.sigeon-item.is-danger > .context-menu-trash { flex: none; margin-left: auto; padding-left: 12px; box-sizing: content-box; color: #f2555a; } /* at the right edge, like the Library menu */
 .context-menu-item.danger > .context-menu-trash { position: relative; z-index: 2; flex: none; margin-left: 12px; color: #f2555a; }   /* above the hold fill */
 .context-menu-item.danger:hover, .app .context-menu-item.danger:focus-visible { background: rgba(242, 85, 90, 0.1) !important; }
 .context-menu-separator { background: rgba(255, 255, 255, 0.07) !important; }
