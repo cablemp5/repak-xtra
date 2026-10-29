@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { save as pickSavePath } from '@tauri-apps/plugin-dialog'
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, Ellipsis, Pencil, Plus, Search, X } from 'lucide-react'
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Ellipsis, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo } from './Loadouts'
 import { CardMedia, ModRow, OnDot, typeClass } from './loadoutBits'
@@ -71,6 +71,7 @@ function MoreMenu({ items, danger, l, loadouts }: { items: MoreItem[]; danger: M
   const action = (it: MoreItem) => (
     <button key={it.label} type="button" role="menuitem" className={`sigeon-item${it.danger ? ' is-danger' : ''}`} disabled={it.disabled} onClick={() => { close(); it.onClick() }}>
       {it.label}
+      {it.danger && <Trash2 size={14} className="context-menu-trash" aria-hidden="true" />}{/* the Library menu's Delete icon */}
     </button>
   )
   return (

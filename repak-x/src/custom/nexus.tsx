@@ -229,23 +229,12 @@ export function NexusPictures({ ids, onPick, onClose }: { ids: number[]; onPick:
   )
 }
 
-/** Paste a personal API key and save it (Settings, Setup and the signed-out Nexus Mods tab). Where the key is on Nexus's
+/** Paste a personal API key and save it (Settings and the signed-out Nexus Mods tab). Where the key is on Nexus's
  *  page, in words and in a picture: a preview on hover, shown in full under the words on a click. */
 export function NexusKeyForm() {
   const ready = useNexusReady()
-  const [key, setKey] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { key, setKey, busy, error, field, save } = useKeySave()
   const [shown, setShown] = useState(false)
-  const field = useRef<HTMLInputElement>(null)
-  const save = async () => {
-    setBusy(true); setError(null)
-    try {
-      account = await invoke<Account>('xtra_nexus_set_key', { key })
-      setKey('')
-      notify()
-    } catch (e) { setError(String(e)); field.current?.focus() } finally { setBusy(false) }
-  }
   return (
     <div className="nx-key">
       <p className="setting-subtext nx-key-where">
@@ -267,24 +256,71 @@ export function NexusKeyForm() {
   )
 }
 
-const openOutside = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
+/** The key field's state and Save: checks the key with Nexus, then stores it (xtra_nexus_set_key). */
+function useKeySave() {
+  const [key, setKey] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const field = useRef<HTMLInputElement>(null)
+  const save = async () => {
+    setBusy(true); setError(null)
+    try {
+      account = await invoke<Account>('xtra_nexus_set_key', { key: key.trim() })
+      setKey('')
+      notify()
+    } catch (e) { setError(String(e)); field.current?.focus() } finally { setBusy(false) }
+  }
+  return { key, setKey, busy, error, field, save }
+}
 
-/** Setup's Nexus Mods card: optional, signed in or the key form. */
-export function NexusSetupCard() {
-  const a = useNexusAccount()
+/** The Nexus Mods tab while signed out: one card that walks through getting a personal API key, three steps in the
+ *  order they happen (open the page, find the key at its bottom, paste it here). */
+export function NexusSignIn() {
+  const { key, setKey, busy, error, field, save } = useKeySave()
   return (
-    <section className="su-card">
-      <div className="su-card-head">
+    <section className="nx-signin" aria-labelledby="nx-signin-title">
+      <header className="nx-signin-head">
+        <img src={nexusLogo} alt="" className="nx-signin-logo" />
         <div>
-          <h3>Nexus Mods</h3>
-          <p>Optional. Browse, install, and update Nexus mods in repakxtra with your own personal API key.</p>
+          <h2 id="nx-signin-title">Connect Nexus Mods</h2>
+          <p>Browse, install, and update Marvel Rivals mods without leaving repakxtra.</p>
         </div>
-        <span className={`su-chip ${a ? 'is-installed' : 'is-missing'}`}>{a ? 'Signed in' : 'Not signed in'}</span>
-      </div>
-      {a ? <p className="su-note">{a.name ? `Signed in as ${a.name}. Sign out in Settings > General.` : 'Key saved. Nexus Mods could not be reached to check it.'}</p> : <NexusKeyForm />}
+      </header>
+      <ol className="nx-steps">
+        <li>
+          <span className="nx-step-n" aria-hidden="true">1</span>
+          <div className="nx-step-body">
+            <b>Open your API keys page</b>
+            <button type="button" className="lo-text-btn nx-step-btn" onClick={() => openOutside(KEYS_URL)}><ExternalLink size={14} aria-hidden="true" /> Open API keys page</button>
+          </div>
+        </li>
+        <li>
+          <span className="nx-step-n" aria-hidden="true">2</span>
+          <div className="nx-step-body">
+            <b>Scroll all the way down to Personal API Key</b>
+            <span>Click Request Api Key, then copy the key it shows.</span>
+            <img className="nx-step-shot" src={keyShot} alt="The Personal API Key section at the bottom of the Nexus Mods API keys page, with its orange Request Api Key button" />
+          </div>
+        </li>
+        <li>
+          <span className="nx-step-n" aria-hidden="true">3</span>
+          <div className="nx-step-body">
+            <b>Paste it here</b>
+            <div className="nx-step-key">
+              <input ref={field} className="nx-key-input" type="password" value={key} placeholder="Personal API key" autoComplete="off" spellCheck={false}
+                aria-label="Nexus Mods personal API key" onChange={e => setKey(e.target.value)} onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter' && key.trim()) save() }} />
+              <button type="button" className="lo-text-btn nx-step-save" disabled={busy || !key.trim()} onClick={save}><KeyRound size={14} aria-hidden="true" /> {busy ? 'Checking…' : 'Connect'}</button>
+            </div>
+            {error && <span className="nx-step-error" role="alert">{error}</span>}
+          </div>
+        </li>
+      </ol>
+      <p className="nx-signin-foot">The key stays in Windows Credential Manager on this PC. Free accounts work too: each download asks for one click on Slow download.</p>
     </section>
   )
 }
+
+const openOutside = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
 
 /** Settings > General > Nexus Mods: paste a personal API key, or see who is signed in and sign out. */
 export function NexusSetting() {

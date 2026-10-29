@@ -115,18 +115,20 @@ function GroupHead({ p, name, count, at, total, editing, setEditing, folded, onF
   )
 }
 
-/** Home | Library | Nexus Mods switch for the app header. Its own class: the 1/2/3 hotkeys click the first .mod-state-filter. The
+/** Home | Library | Nexus Mods switch for the app header (Nexus Mods unless Settings hides it). Its own class: the 1/2/3 hotkeys click the first .mod-state-filter. The
  *  Loadouts tab lands on the cards (not a loadout page left open). The Library tab and L keep the Library as it was
  *  (search, filters, folder, checked and viewed mods, scroll): its Show all button is the deliberate reset (App.tsx). */
 export function ViewTabs() {
   const view = useView()
+  const nexus = useUiPref('nexus-tab') // Settings > Header buttons can hide the Nexus Mods tab
+  useEffect(() => { if (!nexus && view === 'nexus') setView('library') }, [nexus, view])
   return (
-    <div className="view-tabs" role="tablist" aria-label="View" data-tour="view-tabs">
+    <div className={`view-tabs${nexus ? '' : ' is-two'}`} role="tablist" aria-label="View" data-tour="view-tabs">
       <button type="button" role="tab" aria-selected={view === 'home'} onClick={() => { openLoadout(null); setView('home') }} title="Loadouts and new mods (L)">Loadouts</button>
       <button type="button" role="tab" aria-selected={view === 'library'} onClick={() => setView('library')}
         title="Every mod, with filters and folders (L)">Library</button>
-      <button type="button" role="tab" aria-selected={view === 'nexus'} onClick={() => setView('nexus')}
-        title="Find and install mods from Nexus Mods">Nexus Mods</button>
+      {nexus && <button type="button" role="tab" aria-selected={view === 'nexus'} onClick={() => setView('nexus')}
+        title="Find and install mods from Nexus Mods">Nexus Mods</button>}
     </div>
   )
 }

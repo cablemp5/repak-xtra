@@ -16,7 +16,6 @@ import CopySetupReport from './CopySetupReport'
 import { noteGalactaCheck } from './setupReport'
 import { useDialogFocus } from './dialogFocus'
 import { offerUndoDelete } from './undoDelete'
-import { NexusSetupCard } from './nexus'
 
 type Alert = ReturnType<typeof useAlert>
 type FileCheck = { name: string; place: string; size: number; sha256: string; found: 'missing' | 'same' | 'other' }
@@ -421,7 +420,6 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
           </section>
 
           <PreviewKitCard alert={alert} />
-          <NexusSetupCard />{/* repakxtra: sign in to Nexus Mods (custom/nexus.tsx) */}
         </div>
         {/* One switch for both startup checks (SetupButton: Project Galacta and the preview kit), so it lives under all the cards */}
         <div className="su-modal-foot">

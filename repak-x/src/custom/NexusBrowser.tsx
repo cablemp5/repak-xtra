@@ -6,11 +6,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUpCircle, Check, Download, Heart, Search, X } from 'lucide-react'
 import CustomDropdown from '../components/CustomDropdown'
-import { NexusKeyForm, gql, getNexusFile, installFromNexus, openNexusPage, plain, updateOf, useNexusAccount, useNexusReady, useNexusUpdates } from './nexus'
+import { NexusSignIn, gql, getNexusFile, installFromNexus, openNexusPage, plain, updateOf, useNexusAccount, useNexusReady, useNexusUpdates } from './nexus'
 import { sourceOf, useNexusVersion } from './nexusSource'
 import { useView } from './loadoutStore'
 import { HeroFilter, useHeroNames } from './heroFilter'
-import nexusLogo from './logos/nexus.png'
 
 type Card = {
   modId: number; name: string; author: string; summary: string; endorsements: number; downloads: number
@@ -135,14 +134,7 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
   if (view !== 'nexus') return null
   if (!account) return (
     <div className="lo-screen nx-screen" aria-label="Nexus Mods">
-      <div className="nx-signin">
-        {ready && <>
-          <img src={nexusLogo} alt="" className="nx-signin-logo" />
-          <h2>Sign in to Nexus Mods</h2>
-          <p>Browse, install, and update Marvel Rivals mods from Nexus Mods right here. repakxtra signs in with your own personal API key.</p>
-          <NexusKeyForm />
-        </>}
-      </div>
+      <div className="nx-signin-wrap">{ready && <NexusSignIn />}</div>
     </div>
   )
   const first = state === 'loading' && !cards.length

@@ -13,7 +13,7 @@ import { useVerdict } from './brokenMods'
 import { VerdictBadge } from './VerdictBadge'
 import { useVfxUpdating } from './vfx/quick'
 import { GAME_RUNNING } from './keepOne'
-import { CaptionIcon } from './captionStyle'
+import { CaptionIcon, CaptionStyleBar } from './captionStyle'
 import { loadoutHero, silhouetteOf } from './silhouettes'
 import { CardTools } from './CardTools'
 import { NexusPictures } from './nexus'
@@ -254,6 +254,8 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.blur() }
               if (e.key === 'Escape') { e.currentTarget.value = caption; e.currentTarget.blur() }
             }} />
+          <CaptionStyleBar icon={l.captionIcon} color={l.captionColor}
+            onIcon={captionIcon => patchLoadout(l.id, { captionIcon })} onColor={captionColor => patchLoadout(l.id, { captionColor })} />
         </div>
       )}
       {/* A filled source keeps its way to redo it in the corner (the preview's also shows Stop while it renders) */}
@@ -265,7 +267,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
       )}
       {/* Image and Text keep their tools behind one arrow in the corner (CardTools.tsx) */}
       {page && !working && ((cover === 'image' && !empty) || cover === 'text') && (
-        <CardTools l={l} text={cover === 'text'} alert={p.alert} onImage={onClick} onEdit={() => setTyping(true)}
+        <CardTools l={l} text={cover === 'text'} top={editing} alert={p.alert} onImage={onClick}
           onNexus={nexus?.ids.length ? () => setNexusOpen(true) : undefined} />
       )}
       {nexusOpen && nexus && cover === 'image' && <NexusPictures ids={nexus.ids} onPick={nexus.onPick} onClose={() => setNexusOpen(false)} />}
