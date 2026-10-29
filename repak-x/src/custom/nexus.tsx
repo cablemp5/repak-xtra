@@ -11,7 +11,7 @@ import type { NexusSource } from './nexusSource'
 import nexusLogo from './logos/nexus.png'
 import keyShot from './logos/nexus-api-key.png'
 import { ownsTop, useDialogFocus } from './dialogFocus'
-import { EXTENDED } from './edition'
+import { APP_NAME, EXTENDED } from './edition'
 
 type Alert = ReturnType<typeof useAlert>
 type Account = { name: string; premium: boolean }
@@ -287,14 +287,14 @@ export function NexusSignIn() {
         <img src={nexusLogo} alt="" className="nx-signin-logo" />
         <div>
           <h2 id="nx-signin-title">Connect Nexus Mods</h2>
-          <p>Browse, install, and update Marvel Rivals mods without leaving repakxtra.</p>
+          <p>Browse, install, and update Marvel Rivals mods without leaving {APP_NAME}.</p>
         </div>
       </header>
       <ol className="nx-steps">
         <li>
           <span className="nx-step-n" aria-hidden="true">1</span>
           <div className="nx-step-body">
-            <b>Open your API keys page</b>
+            <b>Sign in to Nexus Mods in your browser</b>
             <button type="button" className="lo-text-btn nx-step-btn" onClick={() => openOutside(KEYS_URL)}><ExternalLink size={14} aria-hidden="true" /> Open API keys page</button>
           </div>
         </li>
