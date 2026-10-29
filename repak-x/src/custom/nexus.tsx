@@ -146,7 +146,7 @@ export async function getNexusFile(modId: number, fileId?: number, oldPath?: str
   }
   if (account.premium && fileId) return fetchAndApply({ modId, fileId }, oldPath)
   if (oldPath && fileId) waiting.set(fileId, { oldPath, at: Date.now() })
-  await invoke('xtra_nexus_open', { url: `${pageUrl(modId)}?tab=files${fileId ? `&file_id=${fileId}&nmm=1` : ''}` })
+  await openWindow(`${pageUrl(modId)}?tab=files${fileId ? `&file_id=${fileId}&nmm=1` : ''}`)
     .catch(e => handlers?.alert.error('Could not open Nexus Mods', String(e)))
 }
 
@@ -158,9 +158,15 @@ export async function installFromNexus(modId: number) {
   return getNexusFile(modId, main.length === 1 ? main[0].fileId : undefined)
 }
 
+/** The Nexus window on a page, in this build's colors: the accent is the logo's own (theme.css .wm --wm-xtra). */
+const openWindow = (url: string) => {
+  const logo = document.querySelector('.wm') ?? document.documentElement
+  return invoke('xtra_nexus_open', { url, accent: getComputedStyle(logo).getPropertyValue('--wm-xtra').trim() || null })
+}
+
 /** Opens a mod's Nexus page in the app's Nexus window. */
 export const openNexusPage = (modId: number) => EXTENDED
-  ? invoke('xtra_nexus_open', { url: pageUrl(modId) }).catch(() => undefined)
+  ? openWindow(pageUrl(modId)).catch(() => undefined)
   : openOutside(pageUrl(modId)) // repakxtra has no Nexus window: the browser
 
 /** App's hook: the account at start, and each Mod manager download (from the Nexus window or a browser) installed or

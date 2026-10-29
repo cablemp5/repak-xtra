@@ -210,7 +210,7 @@ fn prune(dir: &std::path::Path) {
 /// Opens a nexusmods.com page in the app's own Nexus window (one window, reused). A Mod manager download clicked there
 /// is caught before Windows sees it.
 #[tauri::command]
-pub async fn xtra_nexus_open(app: AppHandle, url: String) -> Result<(), String> {
+pub async fn xtra_nexus_open(app: AppHandle, url: String, accent: Option<String>) -> Result<(), String> {
     let url = url::Url::parse(&url).map_err(|e| e.to_string())?;
     if !is_nexus(&url) {
         return Err("Only nexusmods.com pages open here.".into());
@@ -230,7 +230,7 @@ pub async fn xtra_nexus_open(app: AppHandle, url: String) -> Result<(), String> 
         .data_directory(profile)
         .browser_extensions_enabled(true)
         .extensions_path(extensions)
-        .initialization_script(theme_script())
+        .initialization_script(theme_script(accent.as_deref()))
         .on_navigation(move |u| {
             if u.scheme() == "nxm" {
                 return !on_link(u.as_str(), &handle);
@@ -254,10 +254,17 @@ const UBOL_ZIP: &[u8] = include_bytes!("../resources/ubol/uBOLite.edge.zip");
 const UBOL_VERSION: &str = "2026.1026.1812";
 
 /// repakxtra's look on nexusmods.com (resources/nexus-theme.css), put on each page of the Nexus window and inside its
-/// web components by resources/nexus-theme.js, which runs before the page's own scripts.
-fn theme_script() -> String {
-    let css = serde_json::to_string(include_str!("../resources/nexus-theme.css")).unwrap_or_default();
-    include_str!("../resources/nexus-theme.js").replace("__CSS__", &css)
+/// web components by resources/nexus-theme.js, which runs before the page's own scripts. `accent` is the build's logo
+/// color (a #rrggbb from the app, anything else falls back to the stable blue). The script also carries the app's Lucide
+/// icons (resources/nexus-icons.json) and its Geist font.
+fn theme_script(accent: Option<&str>) -> String {
+    let accent = accent.filter(|a| a.len() == 7 && a.starts_with('#') && a[1..].chars().all(|c| c.is_ascii_hexdigit())).unwrap_or("#346bf1");
+    let css = include_str!("../resources/nexus-theme.css").replace("__ACCENT__", accent);
+    let geist = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, include_bytes!("custom/fonts/Geist-Variable.ttf"));
+    include_str!("../resources/nexus-theme.js")
+        .replace("__CSS__", &serde_json::to_string(&css).unwrap_or_default())
+        .replace("__ICONS__", include_str!("../resources/nexus-icons.json").trim())
+        .replace("__GEIST__", &format!("'{geist}'"))
 }
 
 /// The Nexus window's profile folder and its extensions folder (uBOL unpacked in it).
