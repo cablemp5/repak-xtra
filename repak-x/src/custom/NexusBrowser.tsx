@@ -296,7 +296,9 @@ function NexusPeek({ modId, name, first, anchor, hover, onOpen, onClose }: {
   const left = Math.max(16, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 16))
   const top = Math.max(16, Math.min(r.top + r.height / 2 - h / 2, window.innerHeight - h - 16))
   const shown = urls[Math.min(at, urls.length - 1)]
-  return createPortal(
+  return createPortal(<>
+    {/* the rest of the app dims behind the pictures; it takes no pointer, so leaving still closes them */}
+    <div className="nx-peek-dim" aria-hidden="true" />
     <div className="nx-peek" style={{ left, top, width: w, height: h }} role="dialog" aria-label={`Pictures of ${name}`} {...hover}>
       <button type="button" className="nx-peek-image" onClick={onOpen} aria-label={`Open ${name} on Nexus Mods`}>
         <img key={shown} src={shown} alt={`${name}, picture ${at + 1} of ${urls.length}`} />
@@ -306,7 +308,8 @@ function NexusPeek({ modId, name, first, anchor, hover, onOpen, onClose }: {
         <button type="button" className="lo-media-arrow is-next" aria-label="Next picture" title="Next picture" onClick={() => step(1)}><ChevronRight size={16} /></button>
       </>}
       {(urls.length > 1 || loading) && <span className="nx-peek-count" aria-live="polite">{loading && urls.length < 2 ? 'Loading pictures…' : `${at + 1} of ${urls.length}`}</span>}
-    </div>,
+    </div>
+  </>,
     document.body,
   )
 }
