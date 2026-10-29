@@ -6,9 +6,9 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
-import { ArrowUpCircle, Check, ChevronLeft, ChevronRight, Clock, Download, Heart, Loader2, RotateCw, Search, User, X } from 'lucide-react'
+import { ArrowUpCircle, Check, ChevronLeft, ChevronRight, Clock, Download, Heart, RotateCw, Search, User, X } from 'lucide-react'
 import CustomDropdown from '../components/CustomDropdown'
-import { NexusSignIn, gql, getNexusFile, installFromNexus, openNexusPage, plain, updateOf, useNexusAccount, useNexusPending, useNexusReady, useNexusUpdates } from './nexus'
+import { NexusSignIn, gql, getNexusFile, installFromNexus, openNexusPage, plain, updateOf, useNexusAccount, useNexusInstalling, useNexusPending, useNexusReady, useNexusUpdates } from './nexus'
 import { sourceOf, useNexusVersion } from './nexusSource'
 import { useView } from './loadoutStore'
 import { ownsTop, useDialogFocus } from './dialogFocus'
@@ -247,6 +247,7 @@ function NexusCard({ c, path, look }: { c: Card; path?: string; look: Look }) {
   const name = plain(c.name)
   const open = () => openNexusPage(c.modId)
   const waiting = useNexusPending(c.modId)
+  const installing = useNexusInstalling(c.modId)
   const picture = useRef<HTMLButtonElement>(null)
   const [peek, setPeek] = useState(false)
   const pictures = c.thumbnailLargeUrl ? `See the pictures of ${name}` : `Open ${name} on Nexus Mods` // no picture: its page
@@ -262,11 +263,14 @@ function NexusCard({ c, path, look }: { c: Card; path?: string; look: Look }) {
       </button>
       <div className="nx-card-body">
         <div className="nx-card-title"><button type="button" className="nx-card-name" onClick={open} title={`Open ${name} on Nexus Mods`}>{name}</button></div>
-        <span className="nx-card-by">
-          <span className="nx-meta" title={`By ${plain(c.author)}`}><User size={12} aria-hidden="true" /><span>{plain(c.author)}</span></span>
-          <span className="nx-meta" title={`Updated ${new Date(c.updatedAt).toLocaleString()}`}><Clock size={12} aria-hidden="true" />{ago(c.updatedAt)}</span>
-        </span>
-        <TypeLine category={c.modCategory?.name ?? ''} title={name} look={look} />
+        {/* who, when, and the hero or type: two lines on a card, one line on a Top this week card */}
+        <div className="nx-card-facts">
+          <span className="nx-card-by">
+            <span className="nx-meta" title={`By ${plain(c.author)}`}><User size={12} aria-hidden="true" /><span>{plain(c.author)}</span></span>
+            <span className="nx-meta" title={`Updated ${new Date(c.updatedAt).toLocaleString()}`}><Clock size={12} aria-hidden="true" />{ago(c.updatedAt)}</span>
+          </span>
+          <TypeLine category={c.modCategory?.name ?? ''} title={name} look={look} />
+        </div>
         <p className="nx-card-summary">{plain(c.summary)}</p>
         <div className="nx-card-foot">
           <span className="nx-stat is-endorsed" title={`${c.endorsements.toLocaleString()} endorsements`}><Heart size={13} aria-hidden="true" />{count.format(c.endorsements)}</span>
@@ -277,12 +281,14 @@ function NexusCard({ c, path, look }: { c: Card; path?: string; look: Look }) {
             </button>
           ) : path ? (
             <span className="nx-act is-installed"><Check size={13} aria-hidden="true" /> Installed</span>
-          ) : preparing ? (
-            <button type="button" className="nx-act is-waiting" disabled aria-label={`Preparing to install ${name}`}><Loader2 size={13} aria-hidden="true" /> Preparing</button>
+          ) : installing || preparing ? (
+            // working on it: the words shimmer (the app's loading text), no spinner
+            <button type="button" className="nx-act is-waiting" disabled aria-label={`${installing ? 'Installing' : 'Preparing to install'} ${name}`}>
+              <span className="t-shimmer">{installing ? 'Installing' : 'Preparing'}</span></button>
           ) : waiting ? (
             // free account: the mod's Files tab is open in the Nexus window, a click brings it back to the front
             <button type="button" className="nx-act is-waiting" onClick={install} title="Click Slow download in the Nexus window"
-              aria-label={`Waiting for Nexus. Click Slow download in the Nexus window to install ${name}`}><Loader2 size={13} aria-hidden="true" /> Waiting for Nexus</button>
+              aria-label={`Waiting for Nexus. Click Slow download in the Nexus window to install ${name}`}><span className="t-shimmer">Waiting for Nexus</span></button>
           ) : (
             <button type="button" className="nx-act is-install" onClick={install} aria-label={`Install ${name}`}><Download size={13} aria-hidden="true" /> Install</button>
           )}

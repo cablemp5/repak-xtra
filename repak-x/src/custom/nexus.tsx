@@ -114,6 +114,9 @@ let pending: Record<number, number> = {}
 const setPending = (next: Record<number, number>) => { pending = next; notify(); setTimeout(notify, WAIT_MS + 50) }
 let autoMod = 0 // the mod a one-click Install's hidden window is for (xtra_nexus_open's own window)
 export const useNexusPending = (modId: number) => useSyncExternalStore(subscribe, () => Date.now() - (pending[modId] ?? 0) < WAIT_MS)
+/** Mods downloading from Nexus right now, until their file is handed to the Install dialog: their card says Installing. */
+const installing = new Set<number>()
+export const useNexusInstalling = (modId: number) => useSyncExternalStore(subscribe, () => installing.has(modId))
 
 async function fetchAndApply(link: Link, oldPath?: string) {
   if (pending[link.modId]) { const { [link.modId]: _, ...rest } = pending; setPending(rest) } // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -121,7 +124,8 @@ async function fetchAndApply(link: Link, oldPath?: string) {
   const { alert } = handlers
   if (busy.has(link.fileId)) { alert.info('Already downloading', 'That file is on its way.'); return }
   busy.add(link.fileId)
-  try { await download(link, alert, oldPath) } finally { busy.delete(link.fileId) }
+  installing.add(link.modId); notify()
+  try { await download(link, alert, oldPath) } finally { busy.delete(link.fileId); installing.delete(link.modId); notify() }
 }
 
 async function download(link: Link, alert: Alert, oldPath?: string) {

@@ -3156,9 +3156,9 @@ html[data-motion="off"] .upd-progress > span, html[data-motion="off"] .repakx-pr
 .nx-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; gap: 24px; }
 .nx-section { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 /* section headings: sentence case, the card names' weight one step up, a quiet note beside when it helps */
-.nx-section-head { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.nx-section-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .nx-section-title { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.005em; color: var(--text-primary); }
-.nx-section-note { font-size: 12.5px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nx-section-note { font-size: 13.5px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
 .nx-card { display: flex; flex-direction: column; min-width: 0; overflow: hidden; background: var(--panel-bg);
   border: 1px solid var(--panel-border); border-radius: 12px; transition: border-color 0.15s ease; }
@@ -3206,9 +3206,6 @@ button.nx-act:hover { background: var(--quiet-hover) !important; border-color: c
 .nx-act svg { width: 13px; height: 13px; }
 .nx-act.is-update { color: var(--accent-primary) !important; border-color: color-mix(in srgb, var(--accent-primary), transparent 55%) !important; }
 .nx-act.is-waiting { color: var(--text-secondary) !important; }
-.nx-act.is-waiting svg { animation: nx-spin 1s linear infinite; }
-@keyframes nx-spin { to { transform: rotate(360deg); } }
-html[data-motion="off"] .nx-act.is-waiting svg { animation: none; }
 .nx-act.is-installed { cursor: default; color: #3ecf6e !important; border-color: color-mix(in srgb, #3ecf6e, transparent 60%) !important;
   background: color-mix(in srgb, #3ecf6e, transparent 92%) !important; }
 [data-theme="light"] .nx-act.is-installed { color: #1f7a3f !important; }
@@ -3229,6 +3226,12 @@ button.nx-act.is-install:hover { background: color-mix(in srgb, var(--accent-pri
 .nx-spot .nx-card-name { color: #fff; }
 .nx-spot .nx-card-by, .nx-spot .nx-stat { color: rgba(255, 255, 255, 0.72); }
 .nx-spot .nx-card-summary { display: none; }
+/* who, when, and the hero on one line here (on the grid's cards they stack: .nx-card-facts adds no box there) */
+.nx-card-facts { display: contents; }
+.nx-spot .nx-card-facts { display: flex; align-items: center; gap: 12px; margin-top: 6px; min-width: 0; }
+.nx-spot .nx-card-facts > * { margin-top: 0; }
+.nx-spot .nx-card-by { flex: 0 1 auto; min-width: 0; }
+.nx-spot .nx-card-type { flex: none; }
 .nx-spot .nx-card-foot { padding-top: 8px; }
 .nx-more { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 20px 0 4px; }
 .nx-more small { font-size: 12px; color: var(--text-secondary); }
