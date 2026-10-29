@@ -267,8 +267,8 @@ function NexusCard({ c, path, look }: { c: Card; path?: string; look: Look }) {
         <TypeLine category={c.modCategory?.name ?? ''} title={name} look={look} />
         <p className="nx-card-summary">{plain(c.summary)}</p>
         <div className="nx-card-foot">
-          <span className="nx-stat is-endorsed" title={`${c.endorsements.toLocaleString()} endorsements`}><Heart size={15} aria-hidden="true" />{count.format(c.endorsements)}</span>
-          <span className="nx-stat is-downloads" title={`${c.downloads.toLocaleString()} downloads`}><Download size={15} aria-hidden="true" />{count.format(c.downloads)}</span>
+          <span className="nx-stat is-endorsed" title={`${c.endorsements.toLocaleString()} endorsements`}><Heart size={14} aria-hidden="true" />{count.format(c.endorsements)}</span>
+          <span className="nx-stat is-downloads" title={`${c.downloads.toLocaleString()} downloads`}><Download size={14} aria-hidden="true" />{count.format(c.downloads)}</span>
           {u && path ? (
             <button type="button" className="nx-act is-update" onClick={() => getNexusFile(u.modId, u.fileId, path)} title={`Version ${u.version} is out`} aria-label={`Update ${name} to ${u.version}`}>
               <ArrowUpCircle size={13} aria-hidden="true" /> Update
