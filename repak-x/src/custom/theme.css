@@ -3221,7 +3221,7 @@ button.nx-act.is-install:hover { background: color-mix(in srgb, var(--accent-pri
 .nx-spot .nx-card { position: relative; }
 .nx-spot .nx-card-image { position: absolute !important; inset: 0; height: 100%; aspect-ratio: auto; }
 .nx-spot .nx-card-body { position: relative; flex: none; margin-top: auto; padding: 68px 14px 12px; /* the fade starts 12px (5% of the 240px card) higher */ pointer-events: none;
-  background: linear-gradient(rgba(4, 4, 6, 0), rgba(4, 4, 6, 0.96) 50%, rgb(4, 4, 6)); }
+  background: linear-gradient(rgba(6, 6, 8, 0), rgba(6, 6, 8, 0.93) 50%, rgba(6, 6, 8, 0.98)); }
 .nx-spot .nx-card-body > * { pointer-events: auto; }
 .nx-spot .nx-card-name { color: #fff; }
 .nx-spot .nx-card-by, .nx-spot .nx-stat { color: rgba(255, 255, 255, 0.72); }
