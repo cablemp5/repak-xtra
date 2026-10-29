@@ -3228,7 +3228,7 @@ html[data-motion="off"] .nx-card.is-skeleton, html[data-motion="off"] .nx-card-i
 .nx-peek-image img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .nx-peek .lo-media-arrow { opacity: 1; }
 .nx-peek-count { position: absolute; right: 10px; bottom: 10px; height: 28px; box-sizing: border-box; display: inline-flex; align-items: center;
-  padding: 0 10px; border-radius: 999px; font-size: 12px; font-variant-numeric: tabular-nums; pointer-events: none;
+  padding: 0 10px; border-radius: 999px; font: 500 12px var(--font-primary); pointer-events: none;   /* the app's font: the gallery sits on <body>, outside it */
   color: #fff; background: rgba(10, 11, 14, 0.62); border: 1px solid rgba(255, 255, 255, 0.12); }   /* a loadout card's label pill */
 html[data-motion="off"] .nx-peek { animation: none; }
 

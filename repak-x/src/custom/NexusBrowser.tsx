@@ -283,7 +283,11 @@ function NexusPeek({ modId, name, first, anchor, hover, onOpen, onClose }: {
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); step(e.key === 'ArrowLeft' ? -1 : 1) }
     }
     window.addEventListener('keydown', key, true)
-    return () => window.removeEventListener('keydown', key, true)
+    // the pointer can leave without a mouseleave (onto the title bar, which drags the window): closed then too
+    const away = () => onClose()
+    window.addEventListener('blur', away)
+    document.documentElement.addEventListener('mouseleave', away)
+    return () => { window.removeEventListener('keydown', key, true); window.removeEventListener('blur', away); document.documentElement.removeEventListener('mouseleave', away) }
   }) // eslint-disable-line react-hooks/exhaustive-deps
   if (!urls.length) return null
   // centered on the card's picture, as big as the window allows, never past its edges
@@ -301,7 +305,7 @@ function NexusPeek({ modId, name, first, anchor, hover, onOpen, onClose }: {
         <button type="button" className="lo-media-arrow is-prev" aria-label="Previous picture" title="Previous picture" onClick={() => step(-1)}><ChevronLeft size={16} /></button>
         <button type="button" className="lo-media-arrow is-next" aria-label="Next picture" title="Next picture" onClick={() => step(1)}><ChevronRight size={16} /></button>
       </>}
-      {(urls.length > 1 || loading) && <span className="nx-peek-count" aria-live="polite">{loading && urls.length < 2 ? 'Loading pictures…' : `${at + 1} / ${urls.length}`}</span>}
+      {(urls.length > 1 || loading) && <span className="nx-peek-count" aria-live="polite">{loading && urls.length < 2 ? 'Loading pictures…' : `${at + 1} of ${urls.length}`}</span>}
     </div>,
     document.body,
   )

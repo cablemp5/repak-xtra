@@ -286,7 +286,7 @@ pub async fn xtra_nexus_open(app: AppHandle, url: String) -> Result<(), String> 
     let handle = app.clone();
     let loader = app.clone();
     let (profile, extensions) = browser_dirs(&app)?;
-    WebviewWindowBuilder::new(&app, WINDOW, WebviewUrl::External(url))
+    let window = WebviewWindowBuilder::new(&app, WINDOW, WebviewUrl::External(url))
         .title("Nexus Mods")
         .inner_size(1180.0, 860.0)
         // its own browser profile: extensions need a WebView2 environment of their own, and the app's window has none
@@ -337,6 +337,7 @@ pub async fn xtra_nexus_open(app: AppHandle, url: String) -> Result<(), String> 
         })
         .build()
         .map_err(|e| e.to_string())?;
+    crate::xtra_buildmark::tint(&window); // the build's color, like the main window's
     Ok(())
 }
 
