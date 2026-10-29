@@ -31,6 +31,8 @@ mod xtra_crash; // repakxtra: crash facts for the setup report, crash suspects
 mod xtra_broken; // repakxtra: mods that will not work in the installed game version
 mod xtra_layout; // repakxtra: May crash from the game classes an update changed
 mod xtra_nexus; // repakxtra: Nexus source from archive names
+#[cfg(feature = "extended")]
+mod xtra_nexus_api; // repakxtra: Nexus account, downloads and nxm:// links (repakxploit only)
 mod xtra_offfiles; // repakxtra: .pak.off files install like .pak
 mod xtra_bundle; // repakxtra: a mod's pak/utoc/ucas found and moved as one set
 mod xtra_encrypt;
@@ -3716,8 +3718,11 @@ async fn update_mod(
     };
 
     // repakxtra: a new version under another name left the old files where they were: they go to Recently deleted now
-    let mut old_deleted = old_files.iter().all(|p| !p.exists());
-    let leftover: Vec<&PathBuf> = old_files.iter().filter(|p| p.exists()).collect();
+    // repakxtra: under the same name the install already swapped the old files out: those paths now hold the new version
+    let key = |p: &Path| p.to_string_lossy().replace('/', "\\").to_lowercase();
+    let new_files: Vec<String> = ["pak", "utoc", "ucas"].iter().map(|e| key(&new_mod_path.with_extension(e))).collect();
+    let leftover: Vec<&PathBuf> = old_files.iter().filter(|p| p.exists() && !new_files.contains(&key(p))).collect();
+    let mut old_deleted = leftover.is_empty();
     if !leftover.is_empty() {
         match xtra_trash::reserve(None) {
             Ok(trash) => {
@@ -8377,6 +8382,8 @@ fn register_protocol_handler() -> Result<(), Box<dyn std::error::Error>> {
 
 fn handle_deep_link_url(url: &str, app_handle: &tauri::AppHandle) {
     if xtra_role::on_link(url, app_handle) { return; } // repakxtra: Claim role's answer, before the log line (its state stays out of the log)
+    #[cfg(feature = "extended")]
+    if xtra_nexus_api::on_link(url, app_handle) { return; } // repakxtra: a Nexus Mod manager download (its key stays out of the log)
     info!("Processing deep link URL: {}", url);
 
     if let Ok(parsed) = url::Url::parse(url) {
@@ -8604,7 +8611,7 @@ fn main() {
 
             // Check if args contains a repakx:// URL
             for arg in args.iter() {
-                if arg.starts_with("repakx://") {
+                if arg.starts_with("repakx://") || (cfg!(feature = "extended") && arg.to_ascii_lowercase().starts_with("nxm://")) { // repakxtra: and Nexus downloads (repakxploit)
                     info!("Received deep link from second instance: {}", arg.split('?').next().unwrap_or(""));
                     handle_deep_link_url(arg, app);
                 }
@@ -8637,6 +8644,8 @@ fn main() {
                     );
                 } else {
                     info!("Successfully registered repakx:// protocol handler");
+                    #[cfg(feature = "extended")]
+                    xtra_nexus_api::reclaim_nxm(app.handle()); // repakxtra: Nexus download links, when a key is saved
                     ui_log::debug("Startup", "repakx:// protocol handler registered");
                 }
             }
@@ -8668,7 +8677,7 @@ fn main() {
 
                 for arg in args.iter().skip(1) {
                     // Skip the exe path itself
-                    if arg.starts_with("repakx://") {
+                    if arg.starts_with("repakx://") || (cfg!(feature = "extended") && arg.to_ascii_lowercase().starts_with("nxm://")) { // repakxtra: and Nexus downloads (repakxploit)
                         info!("Found cold-start deep link URL: {}", arg.split('?').next().unwrap_or("")); // repakxtra: no query
                         handle_deep_link_url(arg, &startup_app_handle);
                         break; // Only process the first repakx:// URL
@@ -8748,6 +8757,22 @@ fn main() {
             xtra_nexus::xtra_nexus_sources, // repakxtra: Nexus source
             xtra_nexus::xtra_nexus_downloads, // repakxtra: Nexus downloads still in Downloads, for the one-time scan
             xtra_nexus::xtra_install_paks, // repakxtra: the paks an install puts in place, for loadouts made at install
+            #[cfg(feature = "extended")]
+            xtra_nexus_api::xtra_nexus_account, // repakxtra: Nexus account, downloads and its in-app window
+            #[cfg(feature = "extended")]
+            xtra_nexus_api::xtra_nexus_set_key,
+            #[cfg(feature = "extended")]
+            xtra_nexus_api::xtra_nexus_forget_key,
+            #[cfg(feature = "extended")]
+            xtra_nexus_api::xtra_nexus_gql,
+            #[cfg(feature = "extended")]
+            xtra_nexus_api::xtra_nexus_download,
+            #[cfg(feature = "extended")]
+            xtra_nexus_api::xtra_nexus_open,
+            #[cfg(feature = "extended")]
+            xtra_nexus_api::xtra_nexus_pending,
+            #[cfg(feature = "extended")]
+            xtra_nexus_api::xtra_nexus_images,
             xtra_previews::get_preview_emotes, // repakxtra: emote sounds over animation previews
             xtra_previews::get_preview_audio,
             xtra_offfiles::xtra_stage_off_files, // repakxtra: .pak.off files

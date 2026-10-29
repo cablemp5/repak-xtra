@@ -8,7 +8,8 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { AlertTriangle } from 'lucide-react'
 import { useBrokenVersion, verdictOf } from '../brokenMods'
-import { modKey, openLoadout, renameModKey } from '../loadoutStore'
+import { modKey, nameKey, openLoadout, renameModKey } from '../loadoutStore'
+import { renameSource } from '../nexusSource'
 import { useUiPref } from '../uiPrefs'
 import { FIXED_EVENT, OPEN_LOADOUT_EVENT, fixInVfxWindow, utocOf, type Fixed } from './handoff'
 import './vfx.css'
@@ -40,7 +41,10 @@ export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () =>
   // each fix: the loadouts that held the original hold the fix (only when the original was replaced, not kept beside it)
   useEffect(() => {
     const un = listen<Fixed>(FIXED_EVENT, e => {
-      if (e.payload?.swap) renameModKey(modKey(e.payload.from), modKey(e.payload.to))
+      if (e.payload?.swap) {
+        renameModKey(modKey(e.payload.from), modKey(e.payload.to))
+        renameSource(nameKey(e.payload.from), nameKey(e.payload.to), nameKey(e.payload.original ?? e.payload.from)) // its Nexus source on both copies
+      }
       reloadRef.current()
     })
     return () => { un.then(f => f()) }

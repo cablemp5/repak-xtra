@@ -4,8 +4,8 @@ import { captionBackgroundKey, type Loadout, patchLoadout } from './loadoutStore
 import { deleteMedia, prepareMedia, putMedia, useMediaUrl } from './loadoutMedia'
 import type { LoadoutProps } from './Loadouts'
 
-/** A picture behind a card's typed words, under the page's Cover switch while Text is picked. Drawn as the switch's
- *  tiles: one Add tile, then (with a picture) its thumbnail to change it, Blur, Dim, and remove. */
+/** A picture behind a card's typed words, in the card's tools (CardTools.tsx) while Text is picked: one Add chip, then
+ *  (with a picture) its thumbnail to change it, Blur, Dim, and remove. */
 export default function CaptionBackground({ l, alert }: { l: Loadout; alert: LoadoutProps['alert'] }) {
   const file = useRef<HTMLInputElement>(null)
   const url = useMediaUrl(captionBackgroundKey(l.id), l.captionBackgroundRev)
@@ -23,16 +23,16 @@ export default function CaptionBackground({ l, alert }: { l: Loadout; alert: Loa
       } catch (err) { alert.warning('Background not saved', String(err)) }
     }} />
     {!l.captionBackgroundRev
-      ? <button type="button" className="cover-tab cap-bg-add" onClick={choose} title="Put a picture behind the text"><ImagePlus size={14} aria-hidden="true" />Add background</button>
+      ? <button type="button" className="ct-chip cap-bg-add" onClick={choose} title="Put a picture behind the text"><ImagePlus size={14} aria-hidden="true" />Add picture</button>
       : <>
-          <button type="button" className="cover-tab cap-bg-thumb" onClick={choose} title="Change the background" aria-label="Change the background">
+          <button type="button" className="ct-chip cap-bg-thumb" onClick={choose} title="Change the background" aria-label="Change the background">
             {url && <img src={url} alt="" />}
           </button>
-          <button type="button" className="cover-tab" aria-pressed={Boolean(l.captionBlur)} title="Blur the background"
+          <button type="button" className="ct-chip" aria-pressed={Boolean(l.captionBlur)} title="Blur the background"
             onClick={() => patchLoadout(l.id, { captionBlur: l.captionBlur ? undefined : true })}>Blur</button>
-          <button type="button" className="cover-tab" aria-pressed={Boolean(l.captionDark)} title="Darken the background so the text stands out"
+          <button type="button" className="ct-chip" aria-pressed={Boolean(l.captionDark)} title="Darken the background so the text stands out"
             onClick={() => patchLoadout(l.id, { captionDark: l.captionDark ? undefined : true })}>Dim</button>
-          <button type="button" className="cover-tab cap-bg-remove" title="Remove the background" aria-label="Remove the background" onClick={() => {
+          <button type="button" className="ct-chip cap-bg-remove" title="Remove the background" aria-label="Remove the background" onClick={() => {
             patchLoadout(l.id, { captionBackgroundRev: undefined, captionBlur: undefined, captionDark: undefined })
             void deleteMedia(captionBackgroundKey(l.id))
           }}><X size={14} aria-hidden="true" /></button>

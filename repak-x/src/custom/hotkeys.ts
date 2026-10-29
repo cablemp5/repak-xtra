@@ -74,9 +74,9 @@ export const isTyping = (target: EventTarget | null) => {
   return Boolean(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable))
 }
 
-/** A dialog is open (dialogFocus.ts MODAL: Settings, Sharing, Tools, help...), or Home is showing: the Library's
- *  plain-letter shortcuts pause. */
-export const dialogOpen = () => modalOpen() || document.documentElement.dataset.view === 'home'
+/** A dialog is open (dialogFocus.ts MODAL: Settings, Sharing, Tools, help...), or Home or Nexus is showing: the
+ *  Library's plain-letter shortcuts pause. */
+export const dialogOpen = () => modalOpen() || document.documentElement.dataset.view !== 'library'
 
 const VIEWS = ['List View', 'Compact List View', 'Grid View', 'Compact Grid View'] // the four view buttons, in the menu's order
 

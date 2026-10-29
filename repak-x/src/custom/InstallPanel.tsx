@@ -182,7 +182,9 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
   const loadouts = useLoadouts()
   const groups = useGroups()
   const canGenerate = usePreviewsAvailable()
-  const [settings, setSettings] = useState<ModSetting[]>(() => mods.map(m => initialSetting(m, currentFolderId)))
+  const [stored, setSettings] = useState<ModSetting[]>(() => mods.map(m => initialSetting(m, currentFolderId)))
+  // by path, every render: mods added while the dialog is open (a drop, a Nexus download) have a row before the effect below stores it
+  const settings = mods.map((m, i) => (stored[i]?.path === m.path ? stored[i] : stored.find(s => s.path === m.path) ?? initialSetting(m, currentFolderId)))
   // Installing from a loadout's page: that loadout. Otherwise a new one, or none with Settings' classic installer
   const [target, setTarget] = useState(() => startingLoadouts()[0] ?? (installsPlain() ? NONE : NEW))
   const [name, setName] = useState<string | null>(null) // null: untouched, the suggested name shows (and follows the mods)
@@ -197,7 +199,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
   }, [mods]) // eslint-disable-line react-hooks/exhaustive-deps
   const update = (i: number, patch: Partial<ModSetting>) => {
     if ('toRepak' in patch && repakLocked(mods[i])) delete patch.toRepak
-    setSettings(prev => prev.map((s, j) => (j === i ? { ...s, ...patch } : s)))
+    setSettings(prev => mods.map((m, j) => { const s = prev.find(x => x.path === m.path) ?? initialSetting(m, currentFolderId); return j === i ? { ...s, ...patch } : s }))
   }
   const toggleOpen = (path: string) => setOpen(prev => { const next = new Set(prev); if (!next.delete(path)) next.add(path); return next })
 

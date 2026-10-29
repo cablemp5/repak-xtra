@@ -13,12 +13,14 @@
 .cp-how .cp-example-frame { grid-area: pic; }
 .cp-how .cp-example figcaption { grid-area: cap; }
 .cp-how .cp-steps { grid-area: steps; }
-/* The steps: a plain muted number in a 14px column, the words beside it on 22px lines (a keycap fits inside one), one
-   color, no bold. No numbered pills: the keycaps stay the only boxes in the steps (cable's pick, 2026-10-28) */
-.cp-steps { margin: 0; padding: 0; list-style: none; counter-reset: cp; display: flex; flex-direction: column; gap: 14px; }
-.cp-steps li { counter-increment: cp; display: grid; grid-template-columns: 14px minmax(0, 1fr); column-gap: 12px; align-items: start;
+/* The steps: each number in the shared ring (theme.css .nx-step-n), a thin line down to the next, the words beside it
+   on 22px lines (a keycap fits inside one), level with the ring (cable 2026-10-29, in place of the plain numbers) */
+.cp-steps { margin: 0; padding: 0; list-style: none; counter-reset: cp; display: flex; flex-direction: column; gap: 18px; }
+.cp-steps li { position: relative; counter-increment: cp; display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 12px; align-items: start;
   font-size: 13px; line-height: 22px; color: var(--text-primary); }
-.cp-steps li::before { content: counter(cp); font-size: 13px; font-weight: 500; line-height: 22px; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.cp-steps li::before { content: counter(cp); }
+.cp-steps li > span { padding-top: 3px; }
+.cp-steps li:not(:last-child)::after { content: ''; position: absolute; left: 13.5px; top: 34px; bottom: -12px; width: 1px; background: var(--panel-border); }
 .cp-keys { display: inline-flex; align-items: center; margin: 0 2px; vertical-align: 1px; }
 /* Keycaps keep their own line height (the shortcuts screen's 21px), not the step's 22px lines, so a step with keys
    stays the height of one without */

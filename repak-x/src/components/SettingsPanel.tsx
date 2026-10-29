@@ -29,6 +29,8 @@ import AppFiles from '../custom/AppFiles' // repakxtra: Check app files and Repa
 import Support from '../custom/Support'
 import { invoke } from '@tauri-apps/api/core'
 import { ShortcutSetting } from '../custom/shortcut' // repakxtra
+import { NexusSetting } from '../custom/nexus' // repakxtra
+import { APP_NAME, EXTENDED } from '../custom/edition' // repakxtra
 import './SettingsPanel.css'
 import { useAlert } from './AlertHandler'
 import { motion } from 'framer-motion'
@@ -298,6 +300,8 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                   </div>
                 </div>
 
+                {EXTENDED && <NexusSetting />}{/* repakxtra: Nexus Mods account (custom/nexus.tsx), repakxploit only */}
+
                 <ShortcutSetting />{/* repakxtra: desktop shortcut */}
 
                 <div className="setting-section">
@@ -342,7 +346,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                       checked={autoCheckUpdates}
                       onChange={(checked: boolean) => live('autoCheckUpdates', setAutoCheckUpdates)(checked)}
                     >
-                      <span>Check for updates when repakxtra starts</span>
+                      <span>Check for updates when {APP_NAME} starts</span>
                     </Checkbox>
                     <AppFiles alert={alert} />{/* repakxtra */}
                   </div>

@@ -15,6 +15,7 @@ type CustomDropdownProps = {
     addNewLabel?: string;
     onDeleteOption?: (value: string) => void;
     alwaysShowDeleteIcon?: boolean;
+    ariaLabel?: string; // repakxtra: what it picks ("Hero"), read before the picked value
 };
 
 /**
@@ -39,7 +40,8 @@ const CustomDropdown = ({
     onAddNew,
     addNewLabel = "+ Add New",
     onDeleteOption,
-    alwaysShowDeleteIcon = false
+    alwaysShowDeleteIcon = false,
+    ariaLabel
 }: CustomDropdownProps) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -117,6 +119,7 @@ const CustomDropdown = ({
                 aria-haspopup="listbox"
                 aria-expanded={isOpen}
                 title={getLabel(value)}
+                aria-label={ariaLabel && `${ariaLabel}: ${getLabel(value)}`} // repakxtra
                 disabled={disabled}
                 style={disabled ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
             >

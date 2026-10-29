@@ -1,6 +1,6 @@
 # Probe files themselves: a process keeps its old junction spelling after that junction moves.
 function Test-BuildOutputAvailable([string]$Directory) {
-    foreach ($name in @('repakxtra.exe', 'REPAK-X.exe', 'UAssetTool.dll', 'uassettool-cli.exe')) {
+    foreach ($name in @('repakxtra.exe', 'repakxploit.exe', 'REPAK-X.exe', 'UAssetTool.dll', 'uassettool-cli.exe')) {
         $path = Join-Path $Directory $name
         if (-not (Test-Path -LiteralPath $path)) { continue }
         $probe = $null

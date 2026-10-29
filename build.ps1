@@ -115,9 +115,12 @@ Run { cargo build --release --target x86_64-pc-windows-msvc --features $features
 if (-not (Test-BuildOutputAvailable $out)) { throw 'The selected copy was opened during the build. Close it and run the build again.' }
 New-Item -ItemType Directory -Force "$out\data" | Out-Null
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot "$out\edition.json"), "{`"edition`":`"$editionName`"}")
-# cargo names the exe after upstream's bin (REPAK-X); it ships as repakxtra.exe. An older build's REPAK-X.exe goes, so a
-# shortcut still pointing at it fails instead of opening a stale copy.
-Copy-Item target\x86_64-pc-windows-msvc\release\REPAK-X.exe "$out\repakxtra.exe" -Force
+# cargo names the exe after upstream's bin (REPAK-X); it ships as repakxtra.exe, or repakxploit.exe for that edition (Task
+# Manager and Explorer show each edition's own name). An older build's REPAK-X.exe goes (and, in repakxploit's folder, an
+# older repakxtra.exe), so a shortcut still pointing at it fails instead of opening a stale copy.
+$exeName = if ($isExtended) { 'repakxploit.exe' } else { 'repakxtra.exe' }
+Copy-Item target\x86_64-pc-windows-msvc\release\REPAK-X.exe "$out\$exeName" -Force
+if ($isExtended) { Remove-Item "$out\repakxtra.exe" -ErrorAction SilentlyContinue }
 Copy-Item target\uassettool\* $out -Recurse -Force
 Remove-Item "$out\*.pdb", "$out\UAssetTool.exe", "$out\REPAK-X.exe" -ErrorAction SilentlyContinue
 Copy-Item target\uassettool-cli\UAssetTool.exe "$out\uassettool-cli.exe" -Force
@@ -131,20 +134,20 @@ if ($Test) {
     }
     New-Item -ItemType Junction -Path $link -Target (Resolve-Path $out).Path | Out-Null
 }
-Write-Host "Built: $out\repakxtra.exe" -ForegroundColor Green
+Write-Host "Built: $out\$exeName" -ForegroundColor Green
 if ($Release) {
     # Windows' own tar (bsdtar, Windows 10+) writes a zip with forward-slash entries; the in-app updater unzips it over
     # the app folder. By full path: from Git Bash, PATH finds GNU tar first, which ignores -a and writes a tar named .zip
     $zip = "dist\repak-xtra-$editionName-v$ver-windows.zip"
     Remove-Item $zip -ErrorAction SilentlyContinue
-    Run { & "$env:SystemRoot\System32\tar.exe" -a -cf $zip -C $out repakxtra.exe UAssetTool.dll uassettool-cli.exe data edition.json }
+    Run { & "$env:SystemRoot\System32\tar.exe" -a -cf $zip -C $out $exeName UAssetTool.dll uassettool-cli.exe data edition.json }
     # Unpacked the way the in-app updater does (Windows PowerShell's Expand-Archive): the zip must give back the same app
     $check = Join-Path $env:TEMP "repakxtra-release-check-$PID"
     Remove-Item $check -Recurse -Force -ErrorAction SilentlyContinue
     try {
         & powershell -NoProfile -Command "`$ErrorActionPreference = 'Stop'; Expand-Archive -LiteralPath '$((Resolve-Path $zip).Path)' -DestinationPath '$check' -Force"
-        $same = $LASTEXITCODE -eq 0 -and (Test-Path "$check\repakxtra.exe") -and
-            (Get-FileHash "$check\repakxtra.exe").Hash -eq (Get-FileHash "$out\repakxtra.exe").Hash
+        $same = $LASTEXITCODE -eq 0 -and (Test-Path "$check\$exeName") -and
+            (Get-FileHash "$check\$exeName").Hash -eq (Get-FileHash "$out\$exeName").Hash
         if (-not $same) { throw "$zip does not unpack to this build: the in-app updater could not install it. Nothing to publish." }
     } finally { Remove-Item $check -Recurse -Force -ErrorAction SilentlyContinue }
     $hash = (Get-FileHash $zip).Hash.ToLower()

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { Check, Monitor } from 'lucide-react'
 import { useAlert } from '../components/AlertHandler'
+import { APP_NAME } from './edition'
 
 /** Whether repakxtra.lnk is on the desktop (null while asking), and the button that makes it. */
 export function useShortcut() {
@@ -45,7 +46,7 @@ export function ShortcutSetting() {
     <div className="setting-section">
       <h3 className="setting-icon-label"><Monitor size={18} aria-hidden="true" />Desktop shortcut</h3>
       <div className="setting-group shortcut-setting">
-        <p className="setting-hint">Start repakxtra from your desktop. An existing repakxtra shortcut stays as it is.</p>
+        <p className="setting-hint">Start {APP_NAME} from your desktop. An existing {APP_NAME} shortcut stays as it is.</p>
         <ShortcutButton s={s} className="action-btn" />
       </div>
     </div>
