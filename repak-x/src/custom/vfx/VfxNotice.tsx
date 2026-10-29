@@ -27,6 +27,14 @@ export function VfxDot({ mods }: { mods: Mod[] }) {
   return shown && n ? <span className="vfx-dot" role="img" aria-label={`${n} VFX ${n === 1 ? 'mod needs' : 'mods need'} an update`} /> : null
 }
 
+/** The strip's headline: the risk, then which update. */
+export const noticeHead = (n: number, when: string) =>
+  `${n === 1 ? '1 mod may' : `${n} mods may`} crash the game or not load correctly after the ${when} update`
+/** Its second line: what can be done now, and what waits for the game's new USMAP. */
+export const noticeDetail = (n: number, ready: number, waiting: number) => !waiting
+  ? `${n === 1 ? 'It was' : 'They were'} made for game files this update changed. Update rebuilds ${n === 1 ? 'it' : 'them'} on the new ones.`
+  : `${ready ? `${ready} can be updated now. ` : ''}${waiting === n ? (n === 1 ? 'It waits' : 'They all wait') : `${waiting} wait`} for the game's new USMAP before ${waiting === 1 ? 'it' : 'they'} can be updated.`
+
 export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () => void }) {
   useBrokenVersion()
   const shown = useUiPref('broken') // Settings can hide problem badges, this goes with them
@@ -73,12 +81,20 @@ export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () =>
   return (
     <div className="vfx-notice" role="status">
       <AlertTriangle size={16} className="vfx-notice-icon" aria-hidden="true" />
-      <p><strong>The game updated on {when}.</strong> {n === 1 ? '1 VFX or material mod was' : `${n} VFX or material mods were`} made for the files it changed, so {n === 1 ? 'its' : 'their'} effects or materials may look wrong or crash the game.
-        {waiting > 0 && ` ${ready.length ? `${ready.length} can be updated now. ` : ''}${waiting === n ? (n === 1 ? 'It waits' : 'They all wait') : `${waiting} wait`} for the game's new USMAP before ${waiting === 1 ? 'it' : 'they'} can be updated.`}</p>
+      {/* the risk first as a headline, the counts below it (Von Restorff, progressive disclosure) */}
+      <p><strong className="vfx-notice-head">{noticeHead(n, when)}</strong>{noticeDetail(n, ready.length, waiting)}</p>
       <button type="button" className="lo-text-btn" onClick={() => { localStorage.setItem(DISMISSED, seen); setDismissed(seen) }}
         title={waiting ? 'Hide this until the next game update, or until the new USMAP is out' : 'Hide this until the next game update'}>Not now</button>
       {ready.length > 0 && <button type="button" className="btn-primary" onClick={() => fixInVfxWindow(ready.map(m => m.utoc_path || utocOf(m.path)), true)}>
         <RefreshCw size={14} aria-hidden="true" />{waiting ? `Update ${ready.length === 1 ? '1 mod' : `${ready.length} mods`}` : 'Update VFX mods'}</button>}
     </div>
   )
+}
+
+if (import.meta.env.DEV) {
+  console.assert(noticeHead(101, 'Oct 29') === '101 mods may crash the game or not load correctly after the Oct 29 update', 'headline', noticeHead(101, 'Oct 29'))
+  console.assert(noticeHead(1, 'Oct 29').startsWith('1 mod may crash'), 'one mod')
+  console.assert(noticeDetail(101, 1, 100) === "1 can be updated now. 100 wait for the game's new USMAP before they can be updated.", 'some wait', noticeDetail(101, 1, 100))
+  console.assert(noticeDetail(3, 0, 3) === "They all wait for the game's new USMAP before they can be updated.", 'all wait')
+  console.assert(noticeDetail(2, 2, 0).startsWith('They were made for game files'), 'none wait')
 }
