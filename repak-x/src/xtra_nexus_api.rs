@@ -298,6 +298,15 @@ pub async fn xtra_nexus_open(app: AppHandle, url: String) -> Result<(), String> 
             if u.scheme() == "nxm" {
                 return !on_link(u.as_str(), &handle);
             }
+            // nexus-theme.js after the API keys page's Copy: the main window says the key is copied, this one closes
+            if u.host_str() == Some("repakxtra.invalid") {
+                if u.path() == "/key-copied" {
+                    let _ = handle.emit_to("main", "nexus-key-copied", ());
+                    let h = handle.clone();
+                    std::thread::spawn(move || if let Some(w) = h.get_webview_window(WINDOW) { let _ = w.close(); });
+                }
+                return false;
+            }
             // a link in a mod's description to another site opens in the browser, not in this window (signing in to
             // Nexus with another account stays here, so the sign-in lands in this window's profile)
             if u.scheme() == "https" && !is_nexus(u) && !u.host_str().is_some_and(|h| SIGN_IN.contains(&h)) {

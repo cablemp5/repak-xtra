@@ -184,9 +184,14 @@ export function useNexus(h: Handlers) {
     const un = listen<Link>('nexus-nxm', e => take(e.payload))
     // a plain download in the Nexus window (xtra_nexus_open's on_download) installs the same way
     const file = listen<string>('nexus-file', e => { void apply(e.payload) })
+    // the API keys page's Copy closed the Nexus window (nexus-theme.js): where the key goes now
+    const copied = listen('nexus-key-copied', () => {
+      handlers?.alert.success('API key copied', 'It is on your clipboard. Paste it in step 3 and click Connect.')
+      document.querySelector<HTMLInputElement>('.nx-step-key .nx-key-input')?.focus()
+    })
     // once listening: the links that came first (one that started the app)
     un.then(() => invoke<Link[]>('xtra_nexus_pending')).then(held => held.forEach(take)).catch(() => undefined)
-    return () => { un.then(f => f()); file.then(f => f()) }
+    return () => { un.then(f => f()); file.then(f => f()); copied.then(f => f()) }
   }, [])
 }
 

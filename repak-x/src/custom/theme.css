@@ -3131,9 +3131,9 @@ html[data-motion="off"] .upd-progress > span, html[data-motion="off"] .repakx-pr
 .nx-head { display: flex; flex-direction: column; gap: 14px; padding: 18px 22px 14px; border-bottom: 1px solid var(--panel-border); }
 .nx-title { display: flex; align-items: baseline; gap: 10px; }
 .nx-title h2 { margin: 0; }
-/* free accounts: how an install goes, beside the count */
-.nx-how { margin-left: auto; font-size: 12.5px; color: var(--text-secondary); text-wrap: pretty; }
-.nx-how b { color: var(--text-primary); font-weight: 600; }
+/* free accounts: how an install goes, one quiet line under the title (Setup's subtitle) */
+.nx-titles { display: flex; flex-direction: column; gap: 4px; }
+.nx-sub { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-secondary); }
 .nx-total { font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .nx-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .nx-filters .nx-search { flex: 1 1 220px; max-width: 360px; width: auto; }
@@ -3227,8 +3227,9 @@ html[data-motion="off"] .nx-card.is-skeleton, html[data-motion="off"] .nx-card-i
   background: transparent !important; cursor: pointer; }
 .nx-peek-image img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .nx-peek .lo-media-arrow { opacity: 1; }
-.nx-peek-count { position: absolute; right: 10px; bottom: 10px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-variant-numeric: tabular-nums;
-  color: #fff; background: rgba(10, 11, 14, 0.72); border: 1px solid rgba(255, 255, 255, 0.12); pointer-events: none; }
+.nx-peek-count { position: absolute; right: 10px; bottom: 10px; height: 28px; box-sizing: border-box; display: inline-flex; align-items: center;
+  padding: 0 10px; border-radius: 999px; font-size: 12px; font-variant-numeric: tabular-nums; pointer-events: none;
+  color: #fff; background: rgba(10, 11, 14, 0.62); border: 1px solid rgba(255, 255, 255, 0.12); }   /* a loadout card's label pill */
 html[data-motion="off"] .nx-peek { animation: none; }
 
 /* A Nexus mod with a newer version: one split badge (cable's pick, 2026-10-29), the orange Nexus half as always, a blue

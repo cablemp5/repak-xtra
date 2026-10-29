@@ -1,7 +1,7 @@
 // repakxtra: puts nexus-theme.css on every Nexus page in the app's Nexus window (xtra_nexus_api.rs theme_script fills in
 // __CSS__ and __APP__). It runs before the page's own scripts: the page itself gets the style once it has a root element,
 // and each web component (Nexus draws its download buttons and banners in shadow roots, which page styles never reach)
-// gets its own copy as it is made. The buttons that install through the app say so.
+// gets its own copy as it is made. The buttons that install through the app say so, and copying the API key ends the visit.
 (() => {
   const css = __CSS__
   const app = __APP__
@@ -36,6 +36,10 @@
     try { shadow.appendChild(style()); watch(shadow) } catch { /* a locked root keeps Nexus's look */ }
     return shadow
   }
+  // the API keys page's Copy: once the key is on the clipboard the window's work is done (the app closes it and says so)
+  document.addEventListener('click', e => {
+    if (e.target instanceof Element && e.target.closest('button[aria-label="Copy Api Key"]')) setTimeout(() => { location.href = 'https://repakxtra.invalid/key-copied' }, 250)
+  }, true)
   document.addEventListener('DOMContentLoaded', page)
   page()
 })()

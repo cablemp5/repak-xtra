@@ -143,10 +143,12 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
   return (
     <div className="lo-screen nx-screen" aria-label="Nexus Mods">
       <header className="nx-head">
-        <div className="nx-title">
-          <h2>Nexus Mods</h2>
-          <span className="nx-total" role="status">{state === 'ok' ? `${total.toLocaleString()} ${total === 1 ? 'mod' : 'mods'}` : ''}</span>
-          {!account.premium && <span className="nx-how">To install, click <b>Install</b>, then <b>Slow download</b> in the Nexus window.</span>}
+        <div className="nx-titles">
+          <div className="nx-title">
+            <h2>Nexus Mods</h2>
+            <span className="nx-total" role="status">{state === 'ok' ? `${total.toLocaleString()} ${total === 1 ? 'mod' : 'mods'}` : ''}</span>
+          </div>
+          {!account.premium && <p className="nx-sub">Install opens the mod's file in the Nexus window. Click Slow download there and it installs here.</p>}
         </div>
         <div className="nx-filters" role="search">
           <label className="lp-search nx-search">
@@ -193,6 +195,8 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
  *  picture and the gallery before the gallery closes (time to move from one to the other). */
 const PEEK_OPEN_MS = 450
 const PEEK_CLOSE_MS = 160
+/** How long the pointer rests on a picture before its gallery starts loading (it takes a few seconds). */
+const PEEK_READ_MS = 150
 
 function NexusCard({ c, path }: { c: Card; path?: string }) {
   const u = path ? updateOf(sourceOf(path)) : undefined
@@ -203,7 +207,15 @@ function NexusCard({ c, path }: { c: Card; path?: string }) {
   const timer = useRef<ReturnType<typeof setTimeout>>()
   const later = (f: () => void, ms: number) => { clearTimeout(timer.current); timer.current = setTimeout(f, ms) }
   useEffect(() => () => clearTimeout(timer.current), [])
-  const hover = { onMouseEnter: () => later(() => setPeek(true), peek ? 0 : PEEK_OPEN_MS), onMouseLeave: () => later(() => setPeek(false), PEEK_CLOSE_MS) }
+  const settle = useRef<ReturnType<typeof setTimeout>>()
+  useEffect(() => () => clearTimeout(settle.current), [])
+  const hover = {
+    onMouseEnter: () => {
+      later(() => setPeek(true), peek ? 0 : PEEK_OPEN_MS)
+      clearTimeout(settle.current); settle.current = setTimeout(() => { void loadGallery(c.modId) }, PEEK_READ_MS) // a pointer passing over reads nothing
+    },
+    onMouseLeave: () => { clearTimeout(settle.current); later(() => setPeek(false), PEEK_CLOSE_MS) },
+  }
   return (
     <article className="nx-card">
       {peek && picture.current && <NexusPeek modId={c.modId} name={name} first={c.thumbnailLargeUrl} anchor={picture.current} hover={hover} onOpen={open} onClose={() => setPeek(false)} />}
@@ -233,7 +245,17 @@ function NexusCard({ c, path }: { c: Card; path?: string }) {
   )
 }
 
-const galleries = new Map<number, string[]>() // by mod id, once read this session
+/** Each mod's gallery, read once this session (xtra_nexus_images): a mod whose read came back empty is tried again later. */
+const galleries = new Map<number, Promise<string[]>>()
+const loadGallery = (modId: number) => {
+  let read = galleries.get(modId)
+  if (!read) {
+    read = invoke<string[]>('xtra_nexus_images', { modId }).catch(() => [] as string[])
+    read.then(found => { if (!found.length) galleries.delete(modId) })
+    galleries.set(modId, read)
+  }
+  return read
+}
 
 /** A card's gallery, larger, over the card while the pointer rests on its picture: every picture on the mod's Nexus page
  *  (xtra_nexus_images), paged with arrows or the arrow keys. Until they load, or when Nexus turns the request away, the
@@ -242,16 +264,16 @@ function NexusPeek({ modId, name, first, anchor, hover, onOpen, onClose }: {
   modId: number; name: string; first: string | null; anchor: HTMLElement
   hover: { onMouseEnter: () => void; onMouseLeave: () => void }; onOpen: () => void; onClose: () => void
 }) {
-  const [urls, setUrls] = useState<string[]>(() => galleries.get(modId) ?? (first ? [first] : []))
+  const [urls, setUrls] = useState<string[]>(() => (first ? [first] : []))
+  const [loading, setLoading] = useState(true)
   const [at, setAt] = useState(0)
   useEffect(() => {
-    if (galleries.has(modId)) return
     let on = true
-    invoke<string[]>('xtra_nexus_images', { modId }).then(found => {
-      if (!found.length) return
-      galleries.set(modId, found)
-      if (on) setUrls(found)
-    }, () => undefined)
+    loadGallery(modId).then(found => {
+      if (!on) return
+      if (found.length) setUrls(found)
+      setLoading(false)
+    })
     return () => { on = false }
   }, [modId])
   const step = (d: number) => setAt(i => (i + d + urls.length) % urls.length)
@@ -278,8 +300,8 @@ function NexusPeek({ modId, name, first, anchor, hover, onOpen, onClose }: {
       {urls.length > 1 && <>
         <button type="button" className="lo-media-arrow is-prev" aria-label="Previous picture" title="Previous picture" onClick={() => step(-1)}><ChevronLeft size={16} /></button>
         <button type="button" className="lo-media-arrow is-next" aria-label="Next picture" title="Next picture" onClick={() => step(1)}><ChevronRight size={16} /></button>
-        <span className="nx-peek-count" aria-live="polite">{at + 1} / {urls.length}</span>
       </>}
+      {(urls.length > 1 || loading) && <span className="nx-peek-count" aria-live="polite">{loading && urls.length < 2 ? 'Loading pictures…' : `${at + 1} / ${urls.length}`}</span>}
     </div>,
     document.body,
   )
