@@ -3226,14 +3226,12 @@ button.nx-act.is-install:hover { background: color-mix(in srgb, var(--accent-pri
 .nx-spot .nx-card-name { color: #fff; }
 .nx-spot .nx-card-by, .nx-spot .nx-stat { color: rgba(255, 255, 255, 0.72); }
 .nx-spot .nx-card-summary { display: none; }
-/* its place in the corner, in the app's picture-label style (the gallery count): a dark glass circle, its ring and number
-   in gold, silver, or bronze */
+/* its place in the corner: a solid gold, silver, or bronze circle with a dark number, flat like the app's other labels */
 .nx-medal { --m: #e8c35a; position: absolute; left: 10px; top: 10px; z-index: 2; display: grid; place-items: center; width: 26px; height: 26px;
-  box-sizing: border-box; border-radius: 50%; pointer-events: none; font: 600 13px var(--font-primary); font-variant-numeric: tabular-nums;
-  color: var(--m); background: rgba(10, 11, 14, 0.72); border: 1.5px solid color-mix(in srgb, var(--m), transparent 25%);
-  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  border-radius: 50%; pointer-events: none; font: 700 13px var(--font-primary); font-variant-numeric: tabular-nums;
+  color: rgba(16, 14, 10, 0.9); background: var(--m); box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4); }
 .nx-medal.is-2 { --m: #cfd6de; }
-.nx-medal.is-3 { --m: #d9955a; }
+.nx-medal.is-3 { --m: #d08a4e; }
 /* who, when, and the hero on one line here (on the grid's cards they stack: .nx-card-facts adds no box there) */
 .nx-card-facts { display: contents; }
 .nx-spot .nx-card-facts { display: flex; align-items: center; gap: 12px; margin-top: 6px; min-width: 0; }
