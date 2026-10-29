@@ -185,7 +185,7 @@ function Row({ mod, rowKey, loadouts, run, needs, partial, waits, picked, open, 
       {/* why it needs an update, read with its tick (the row's tooltip says it on hover) */}
       {needs && <span id={whyId} className="xtra-sr-only">{needs}</span>}
       {/* in Material mods (not under Needs an update): which of them need one */}
-      {waits ? <span className="vf-needs is-waiting" tabIndex={0} title={needs}>Waits for USMAP</span>
+      {waits ? <span className="vf-needs is-waiting" tabIndex={0} title={needs}>Waiting</span>
         : needs && mod.materials && !run && <span className="vf-needs" tabIndex={0} title={needs}>Needs update</span>}
       {mod.niagara && !partial && <span className="vf-niagara" tabIndex={0} title="Has Niagara effects (particle systems). When a game update changes them, the update rebuilds them on the new game files.">Niagara</span>}
       {partial && !run?.report ? (

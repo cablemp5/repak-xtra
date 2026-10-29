@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { useBrokenVersion, verdictOf } from '../brokenMods'
 import { modKey, nameKey, openLoadout, renameModKey } from '../loadoutStore'
 import { renameSource } from '../nexusSource'
@@ -15,7 +15,9 @@ import { FIXED_EVENT, OPEN_LOADOUT_EVENT, fixInVfxWindow, utocOf, type Fixed } f
 import './vfx.css'
 
 type Mod = { path: string; utoc_path?: string | null }
-const DISMISSED = 'repakxtra.vfxNotice' // the game update (seconds) Not now was pressed for
+// the game update (seconds) Not now was pressed for, and whether some mods were waiting for its USMAP then: the strip
+// stays away until the next game update, or once more when that USMAP is out and the waiting ones can be updated
+const DISMISSED = 'repakxtra.vfxNotice'
 
 /** The yellow dot on the header's VFX Updater button while any mod needs a VFX update (hidden with the problem badges). */
 export function VfxDot({ mods }: { mods: Mod[] }) {
@@ -61,20 +63,22 @@ export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () =>
     return () => { un.then(f => f()) }
   }, [])
 
-  if (!shown || !stale.length || !updated || dismissed === String(updated)) return null
-  const when = new Date(updated * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
   const n = stale.length
   // the ones whose files the patch itself changed wait for its USMAP (xtra_broken.rs usmap_wait): Update sends the rest
   const ready = stale.filter(m => !verdictOf(m.path)?.usmapWait)
   const waiting = n - ready.length
+  const seen = `${updated}${waiting ? ':waiting' : ''}`
+  if (!shown || !n || !updated || dismissed === seen) return null
+  const when = new Date(updated * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
   return (
     <div className="vfx-notice" role="status">
       <AlertTriangle size={16} className="vfx-notice-icon" aria-hidden="true" />
       <p><strong>The game updated on {when}.</strong> {n === 1 ? '1 VFX or material mod was' : `${n} VFX or material mods were`} made for the files it changed, so {n === 1 ? 'its' : 'their'} effects or materials may look wrong or crash the game.
         {waiting > 0 && ` ${ready.length ? `${ready.length} can be updated now. ` : ''}${waiting === n ? (n === 1 ? 'It waits' : 'They all wait') : `${waiting} wait`} for the game's new USMAP before ${waiting === 1 ? 'it' : 'they'} can be updated.`}</p>
-      <button type="button" className="lo-text-btn" onClick={() => { localStorage.setItem(DISMISSED, String(updated)); setDismissed(String(updated)) }}>Not now</button>
+      <button type="button" className="lo-text-btn" onClick={() => { localStorage.setItem(DISMISSED, seen); setDismissed(seen) }}
+        title={waiting ? 'Hide this until the next game update, or until the new USMAP is out' : 'Hide this until the next game update'}>Not now</button>
       {ready.length > 0 && <button type="button" className="btn-primary" onClick={() => fixInVfxWindow(ready.map(m => m.utoc_path || utocOf(m.path)), true)}>
-        {waiting ? `Update ${ready.length === 1 ? '1 mod' : `${ready.length} mods`}` : 'Update VFX mods'}</button>}
+        <RefreshCw size={14} aria-hidden="true" />{waiting ? `Update ${ready.length === 1 ? '1 mod' : `${ready.length} mods`}` : 'Update VFX mods'}</button>}
     </div>
   )
 }

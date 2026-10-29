@@ -11,7 +11,7 @@ export function VerdictBadge({ path, verdict }: { path: string; verdict: Verdict
   return (
     <button type="button" className={`${cls} is-action${verdict.usmapWait ? ' is-waiting' : ''}`} title={`${verdict.reason} Click to open it in the VFX Updater.`}
       onClick={e => { e.stopPropagation(); void fixInVfxWindow([path], false) }}>
-      {verdict.usmapWait ? 'Waits for USMAP' : verdictLabel(verdict.kind)}
+      {verdict.usmapWait ? 'Waiting' : verdictLabel(verdict.kind)}
     </button>
   )
 }

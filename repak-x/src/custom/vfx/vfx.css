@@ -212,7 +212,7 @@ html[data-motion="off"] .vf-pill, html[data-motion="off"] .vf-status { animation
 
 /* the main window's notice after a game update (VfxNotice.tsx) */
 .vfx-notice {
-  display: flex; align-items: center; gap: 12px; margin: 0 0 14px; padding: 10px 12px 10px 14px;
+  display: flex; align-items: center; gap: 12px; margin: 0 0 24px; padding: 10px 12px 10px 14px; /* 24px: as far from the page below as from the header above */
   border: 1px solid var(--panel-border); border-radius: 12px; background: var(--panel-bg);
   animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards;
 }
@@ -221,7 +221,7 @@ html[data-motion="off"] .vf-pill, html[data-motion="off"] .vf-status { animation
 .vfx-notice-icon { flex: none; color: #f5d342; }
 .vfx-notice .btn-primary {
   height: 32px !important; min-height: 0 !important; padding: 0 14px !important; font-size: 13px !important; border-radius: var(--quiet-radius) !important;
-  display: inline-flex !important; align-items: center; width: auto !important; flex: none; white-space: nowrap;
+  display: inline-flex !important; align-items: center; gap: 7px; width: auto !important; flex: none; white-space: nowrap;
 }
 .vfx-notice .lo-text-btn { flex: none; white-space: nowrap; }
 html[data-motion="off"] .vfx-notice { animation: none; }
