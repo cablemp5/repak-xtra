@@ -1949,9 +1949,9 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .fr-step::after { top: calc(50% + 20px); bottom: 0; }
 .fr-step:first-child::before, .fr-divider + .fr-step::before, .fr-step:last-child::after, .fr-step:has(+ .fr-divider)::after { display: none; }
 .fr-step.is-wide { align-items: start; }   /* the drop card under the title: the number stays level with the title */
-/* A step's marker: the shared ring (.nx-step-n), a small green check in it once done */
-.fr-step.is-done .fr-num { color: #3ecf6e; }   /* the same grey ring as a number: a bright ring read as a bigger circle */
-.fr-step .fr-num svg { width: 13px !important; height: 13px !important; }
+/* A step's marker: the shared ring (.nx-step-n), a small green check in its place once done */
+.fr-step.is-done .fr-num { color: #3ecf6e; background: transparent; box-shadow: none; }   /* done: the check alone, no ring */
+.fr-step .fr-num svg { width: 14px !important; height: 14px !important; }   /* even, like the 28px ring: no half-pixel offset */
 .fr-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .fr-text h3 { margin: 0; font-size: 14.5px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
 .fr-text p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }

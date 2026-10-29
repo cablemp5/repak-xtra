@@ -36,7 +36,7 @@ export function Step({ n, done, title, optional, recommended, wide, children, ac
 }) {
   return (
     <li className={`fr-step${done ? ' is-done' : ''}${wide ? ' is-wide' : ''}`}>
-      <span className="fr-num" aria-hidden="true">{done ? <Check size={13} strokeWidth={2.75} /> : n}</span>
+      <span className="fr-num" aria-hidden="true">{done ? <Check size={14} strokeWidth={2.75} /> : n}</span>
       <div className="fr-text">
         <h3>{title}{optional && <span className="fr-optional">Optional</span>}{recommended && !done && <span className="fr-optional fr-recommended">Recommended</span>}</h3>
         {children}
