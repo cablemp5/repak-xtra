@@ -105,7 +105,14 @@ let applying: Promise<unknown> = Promise.resolve()
 
 /** Downloads a file (with an nxm:// link's key for free accounts) with a toast that fills, then installs it or updates
  *  the mod at `oldPath` with it. */
+/** Mods whose Files tab is open in the Nexus window for a free account's Install, by mod id, until the download comes
+ *  back (or half an hour passes): the Nexus Mods tab's card says it is waiting there. */
+let pending: Record<number, number> = {}
+const setPending = (next: Record<number, number>) => { pending = next; notify() }
+export const useNexusPending = (modId: number) => useSyncExternalStore(subscribe, () => Date.now() - (pending[modId] ?? 0) < WAIT_MS)
+
 async function fetchAndApply(link: Link, oldPath?: string) {
+  if (pending[link.modId]) { const { [link.modId]: _, ...rest } = pending; setPending(rest) } // eslint-disable-line @typescript-eslint/no-unused-vars
   if (!handlers) return
   const { alert } = handlers
   if (busy.has(link.fileId)) { alert.info('Already downloading', 'That file is on its way.'); return }
@@ -150,6 +157,7 @@ export async function getNexusFile(modId: number, fileId?: number, oldPath?: str
   }
   if (account.premium && fileId) return fetchAndApply({ modId, fileId }, oldPath)
   if (oldPath && fileId) waiting.set(fileId, { oldPath, at: Date.now() })
+  if (!oldPath) setPending({ ...pending, [modId]: Date.now() })
   await openWindow(`${pageUrl(modId)}?tab=files${fileId ? `&file_id=${fileId}&nmm=1` : ''}`)
     .catch(e => handlers?.alert.error('Could not open Nexus Mods', String(e)))
 }
@@ -183,7 +191,7 @@ export function useNexus(h: Handlers) {
     }
     const un = listen<Link>('nexus-nxm', e => take(e.payload))
     // a plain download in the Nexus window (xtra_nexus_open's on_download) installs the same way
-    const file = listen<string>('nexus-file', e => { void apply(e.payload) })
+    const file = listen<string>('nexus-file', e => { setPending({}); void apply(e.payload) }) // which mod it is for is unknown: none waits
     // the API keys page's Copy closed the Nexus window (nexus-theme.js): where the key goes now
     const copied = listen('nexus-key-copied', () => {
       handlers?.alert.success('API key copied', 'It is on your clipboard. Paste it in step 3 and click Connect.')
@@ -275,7 +283,7 @@ export function NexusSignIn() {
         </div>
       </header>
       <NexusSteps />
-      <p className="nx-signin-foot">The key stays in Windows Credential Manager on this PC. Free accounts work too: Install opens the mod's file in the Nexus window, and one click on Slow download there installs it here.</p>
+      <p className="nx-signin-foot">Free accounts work too: Install opens the mod's file in the Nexus window, and one click on Slow download there installs it here.</p>
     </section>
   )
 }
@@ -299,7 +307,7 @@ function NexusSteps() {
           <div className="nx-step-body">
             <b>Scroll all the way down to Personal API Key</b>
             <span>Click Request Api Key, then copy the key it shows.</span>
-            <img className="nx-step-shot" src={keyShot} alt="The Personal API Key section at the bottom of the Nexus Mods API keys page, with its orange Request Api Key button" />
+            <img className="nx-step-shot" src={keyShot} alt="The Personal API Key heading at the bottom of the Nexus Mods API keys page, above its orange Request Api Key button" />
           </div>
         </li>
         <li>
@@ -311,7 +319,8 @@ function NexusSteps() {
                 aria-label="Nexus Mods personal API key" onChange={e => setKey(e.target.value)} onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter' && key.trim()) save() }} />
               <button type="button" className="lo-text-btn nx-step-save" disabled={busy || !key.trim()} onClick={save}><KeyRound size={14} aria-hidden="true" /> {busy ? 'Checking…' : 'Connect'}</button>
             </div>
-            {error && <span className="nx-step-error" role="alert">{error}</span>}
+            {error ? <span className="nx-step-error" role="alert">{error}</span>
+              : <span className="nx-step-note">Kept only in Windows Credential Manager on this PC. Sign out in Settings removes it.</span>}
           </div>
         </li>
       </ol>
@@ -349,7 +358,7 @@ export function NexusSetting() {
         ) : (
           <>
             <p className="setting-subtext xs-note">
-              Connect your account to browse, install, and update Nexus mods in {APP_NAME}. It then opens Nexus Mod manager downloads, in place of any other mod manager.
+              Connect your Nexus account to browse, install, and update mods here. Nexus Mod manager downloads then open in {APP_NAME}.
             </p>
             <div className="nx-setting-steps"><NexusSteps /></div>
           </>

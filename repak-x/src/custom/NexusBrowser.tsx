@@ -6,9 +6,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
-import { ArrowUpCircle, Check, ChevronLeft, ChevronRight, Download, Heart, Search, X } from 'lucide-react'
+import { ArrowUpCircle, Check, ChevronLeft, ChevronRight, Download, Heart, Loader2, Search, X } from 'lucide-react'
 import CustomDropdown from '../components/CustomDropdown'
-import { NexusSignIn, gql, getNexusFile, installFromNexus, openNexusPage, plain, updateOf, useNexusAccount, useNexusReady, useNexusUpdates } from './nexus'
+import { NexusSignIn, gql, getNexusFile, installFromNexus, openNexusPage, plain, updateOf, useNexusAccount, useNexusPending, useNexusReady, useNexusUpdates } from './nexus'
 import { sourceOf, useNexusVersion } from './nexusSource'
 import { useView } from './loadoutStore'
 import { HeroFilter, useHeroNames } from './heroFilter'
@@ -197,11 +197,16 @@ const PEEK_OPEN_MS = 450
 const PEEK_CLOSE_MS = 160
 /** How long the pointer rests on a picture before its gallery starts loading (it takes a few seconds). */
 const PEEK_READ_MS = 150
+/** When Tab was last pressed: keyboard focus opens a gallery only when Tab put it there, not when a closing dialog
+ *  hands focus back to a card's picture. */
+let tabbedAt = 0
+window.addEventListener('keydown', e => { tabbedAt = e.key === 'Tab' ? Date.now() : 0 }, true)
 
 function NexusCard({ c, path }: { c: Card; path?: string }) {
   const u = path ? updateOf(sourceOf(path)) : undefined
   const name = plain(c.name)
   const open = () => openNexusPage(c.modId)
+  const waiting = useNexusPending(c.modId)
   const picture = useRef<HTMLButtonElement>(null)
   const [peek, setPeek] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout>>()
@@ -224,7 +229,7 @@ function NexusCard({ c, path }: { c: Card; path?: string }) {
       {/* by keyboard: Tab onto the picture opens the gallery (arrow keys page it, Esc closes, Enter opens the mod's page) */}
       <button ref={picture} type="button" className="nx-card-image" onClick={open} title={`Open ${name} on Nexus Mods`}
         aria-label={`${name}: pictures, Enter opens the mod's page`} {...(c.thumbnailLargeUrl ? hover : {})}
-        onFocus={e => { if (c.thumbnailLargeUrl && e.currentTarget.matches(':focus-visible')) { void loadGallery(c.modId); setPeek(true) } }}
+        onFocus={() => { if (c.thumbnailLargeUrl && Date.now() - tabbedAt < 500) { void loadGallery(c.modId); setPeek(true) } }}
         onBlur={e => { if (!(e.relatedTarget instanceof Element && e.relatedTarget.closest('.nx-peek'))) setPeek(false) }}>
         {c.thumbnailLargeUrl ? <img src={c.thumbnailLargeUrl} alt="" loading="lazy" /> : <span className="nx-card-noimage" />}
         {c.modCategory && <span className="nx-card-cat">{c.modCategory.name}</span>}
@@ -242,9 +247,14 @@ function NexusCard({ c, path }: { c: Card; path?: string }) {
             </button>
           ) : path ? (
             <span className="nx-act is-installed"><Check size={13} aria-hidden="true" /> Installed</span>
+          ) : waiting ? (
+            // free account: the mod's Files tab is open in the Nexus window, a click brings it back to the front
+            <button type="button" className="nx-act is-waiting" onClick={() => installFromNexus(c.modId)} title="Click Slow download in the Nexus window"
+              aria-label={`Waiting for Nexus. Click Slow download in the Nexus window to install ${name}`}><Loader2 size={13} aria-hidden="true" /> Waiting for Nexus</button>
           ) : (
             <button type="button" className="nx-act" onClick={() => installFromNexus(c.modId)} aria-label={`Install ${name}`}><Download size={13} aria-hidden="true" /> Install</button>
           )}
+          {waiting && <span className="xtra-sr-only" role="status">Click Slow download in the Nexus window to install {name}.</span>}
         </div>
       </div>
     </article>
@@ -318,6 +328,10 @@ function NexusPeek({ modId, name, first, anchor, hover, onOpen, onClose }: {
     {/* the rest of the app dims behind the pictures; it takes no pointer, so leaving still closes them */}
     <div className="nx-peek-dim" aria-hidden="true" />
     <div className="nx-peek" style={{ left, top, width: w, height: h }} role="dialog" aria-label={`Pictures of ${name}`} {...hover}>
+      <div className="nx-peek-bar">
+        <span className="nx-peek-name">{name}</span>
+        <button type="button" className="nx-peek-close" aria-label="Close pictures" title="Close (Esc)" onClick={onClose}><X size={14} /></button>
+      </div>
       <button type="button" className="nx-peek-image" onClick={onOpen} aria-label={`Open ${name} on Nexus Mods`}>
         {onScreen && <img src={onScreen} alt={`${name}, picture ${at + 1} of ${urls.length}`} />}
       </button>
