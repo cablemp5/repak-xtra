@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
-import { ArrowUpCircle, Check, ChevronLeft, ChevronRight, Clock, Download, Heart, RotateCw, Search, User, X } from 'lucide-react'
+import { ArrowUpCircle, Check, ChevronLeft, ChevronRight, Clock, Download, Gamepad2, Heart, LayoutGrid, Music, RotateCw, Search, SlidersHorizontal, Sparkles, Tag, User, X, type LucideIcon } from 'lucide-react'
 import CustomDropdown from '../components/CustomDropdown'
 import { NexusSignIn, gql, getNexusFile, installFromNexus, openNexusPage, plain, updateOf, useNexusAccount, useNexusInstalling, useNexusPending, useNexusReady, useNexusUpdates } from './nexus'
 import { sourceOf, useNexusVersion } from './nexusSource'
@@ -37,6 +37,10 @@ const WINDOWS = [
 // category, which a card shows as the hero's portrait in the Characters color)
 const TYPE_COLOR: Record<string, string> = {
   Characters: '#5cc8ff', Audio: '#9d7bff', 'User Interface': '#ff7ad9', Visuals: '#3ecf6e', Gameplay: '#f5d342', Miscellaneous: '#2dd4bf',
+}
+// and its icon, before the type's name on a card without a hero (another category: a tag)
+const TYPE_ICON: Record<string, LucideIcon> = {
+  Characters: User, Audio: Music, 'User Interface': LayoutGrid, Visuals: Sparkles, Gameplay: Gamepad2, Miscellaneous: SlidersHorizontal,
 }
 // the type filter shows each type's color as a dot, the one the cards use (Similarity)
 const TYPES = [{ value: 'all', label: 'All types', glyph: <span className="nx-type-dot is-all" /> },
@@ -322,10 +326,12 @@ function TypeLine({ category, title, look }: { category: string; title: string; 
   const color = hero ? TYPE_COLOR.Characters : TYPE_COLOR[category]
   return (
     <span className="nx-card-type" style={color ? { '--type': color } as CSSProperties : undefined}>
-      {face && <img src={face} alt="" />}{label}
+      {face ? <img src={face} alt="" /> : <TypeIcon category={category} />}{label}
     </span>
   )
 }
+
+const TypeIcon = ({ category }: { category: string }) => { const Icon = TYPE_ICON[category] ?? Tag; return <Icon size={13} aria-hidden="true" /> }
 
 /** Each mod's gallery, read once this session (xtra_nexus_images): a mod whose read came back empty is tried again later. */
 const galleries = new Map<number, Promise<string[]>>()

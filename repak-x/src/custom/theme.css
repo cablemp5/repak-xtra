@@ -3193,6 +3193,7 @@ html[data-motion="off"] .upd-progress > span, html[data-motion="off"] .repakx-pr
 /* the type line: the hero's portrait and name in the Characters color, or the type's name in its color */
 .nx-card-type { --c: var(--type, var(--text-secondary)); display: flex; align-items: center; gap: 6px; margin-top: 8px; min-width: 0; font-size: 12px;
   font-weight: 500; color: var(--c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nx-card-type svg { flex: none; }
 .nx-card-type img { flex: none; width: 18px; height: 18px; border-radius: 50%; object-fit: cover; background: var(--bg-lighter); }
 .nx-card-summary { margin: 8px 0 0; font-size: 12.5px; line-height: 1.45; color: color-mix(in srgb, var(--text-secondary) 88%, var(--text-primary));
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-wrap: pretty; }
