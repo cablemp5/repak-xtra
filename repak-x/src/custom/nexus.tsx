@@ -332,6 +332,7 @@ const openOutside = (url: string) => import('@tauri-apps/plugin-shell').then(m =
 /** Settings > General > Nexus Mods: paste a personal API key, or see who is signed in and sign out. */
 export function NexusSetting() {
   const a = useNexusAccount()
+  const ready = useNexusReady() // until the saved key is looked at, signed in is unknown: no sign-in steps yet
   const [error, setError] = useState<string | null>(null)
   const signOut = async () => {
     try {
@@ -345,7 +346,9 @@ export function NexusSetting() {
     <div className="setting-section">
       <h3 className="setting-icon-label"><img src={nexusLogo} alt="" className="nx-setting-logo" />Nexus Mods</h3>
       <div className="setting-group">
-        {a ? (
+        {!ready && !a ? (
+          <p className="setting-subtext xs-note">Checking your Nexus Mods account…</p>
+        ) : a ? (
           <div className="xs-row">
             <div className="xs-text">
               <span className="xs-label">{a.name ? `Signed in as ${a.name}` : 'Key saved. Nexus Mods could not be reached to check it.'}</span>
