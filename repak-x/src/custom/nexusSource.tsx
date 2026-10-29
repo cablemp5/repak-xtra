@@ -4,7 +4,7 @@
 // Mods installed before that (or by another app) get theirs once, from the Nexus downloads still in Downloads.
 import { useEffect, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { ArrowUpCircle, ExternalLink } from 'lucide-react'
+import { ArrowUp, ArrowUpCircle, ExternalLink } from 'lucide-react'
 import { nameKey } from './loadoutStore'
 import { installedKey } from './installLoadout'
 import { savedItem } from './storageCarryOver'
@@ -136,14 +136,17 @@ export function NexusSourceLine({ path }: { path: string }) {
 }
 
 /** The Library row's Nexus tag (Settings > On each mod hides it): a click opens the mod's Nexus page. With a newer
- *  version out it reads Update, and a click gets that version in place of this one (nexus.tsx getNexusFile). */
+ *  version out it gets a blue arrow dot, and a click gets that version in place of this one (nexus.tsx getNexusFile). */
 export function NexusTag({ path }: { path: string }) {
   const s = useSource(path)
   if (!s) return null
   const u = updateOf(s)
+  // an update keeps the Nexus badge, with a blue arrow dot on its corner: a click gets the new version
   if (u) return (
-    <button type="button" className="mod-type-badge nexus-badge is-update" title={`Version ${u.version} is on Nexus Mods (uploaded ${day(u.date)}). Click to update`}
-      onClick={e => { e.stopPropagation(); getNexusFile(u.modId, u.fileId, path) }}><ArrowUpCircle size={12} aria-hidden="true" />Update</button>
+    <button type="button" className="mod-type-badge nexus-badge has-update" title={`Version ${u.version} is on Nexus Mods (uploaded ${day(u.date)}). Click to update`}
+      aria-label={`Update from Nexus Mods to ${u.version}`} onClick={e => { e.stopPropagation(); getNexusFile(u.modId, u.fileId, path) }}>
+      <img className="tag-logo" src={nexusLogo} alt="" />Nexus<span className="nx-update-dot" aria-hidden="true"><ArrowUp size={9} strokeWidth={3} /></span>
+    </button>
   )
   return (
     <button type="button" className="mod-type-badge nexus-badge" title={`Installed from Nexus Mods, uploaded ${day(s.uploaded)}. Click to open its page`}

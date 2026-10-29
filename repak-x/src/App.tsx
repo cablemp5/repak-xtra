@@ -138,7 +138,7 @@ const ASSET_EXPLORER_FOCUS_MOD_KEY = 'repakx:assetExplorer:focusModPath'
 
 import TitleBar from './components/TitleBar'
 
-import InstallModPanel, { defaultInstall } from './custom/InstallPanel' // repakxtra: the install dialog redesigned around saving a loadout
+import InstallModPanel from './custom/InstallPanel' // repakxtra: the install dialog redesigned around saving a loadout
 import EncryptMods, { openEncrypt } from './custom/EncryptMods' // repakxtra
 import SettingsPanel from './components/SettingsPanel'
 import CreditsPanel from './components/CreditsPanel'
@@ -3309,14 +3309,15 @@ function App() {
     setExpandedFolders(newExpanded)
   }
 
-  // repakxtra: Nexus downloads (custom/nexus.tsx): an install as the dialog would do it untouched, an update in place
-  // keeping the mod's name, folder and loadouts
+  // repakxtra: Nexus downloads (custom/nexus.tsx): a new mod opens the Install dialog, as a dropped file does (save it
+  // as a loadout or not, or cancel), an update applies in place keeping the mod's name, folder and loadouts
   useNexus({
     alert,
     install: async archive => {
-      const parsed = await invoke<Parameters<typeof defaultInstall>[0]>('parse_dropped_files', { paths: [archive] })
+      const parsed = await invoke<DroppedModParse[]>('parse_dropped_files', { paths: [archive] })
       if (!parsed.length) { alert.error('Nothing to install', 'The Nexus download holds no mod repakxtra can install.'); return }
-      await handleInstallMods(defaultInstall(parsed) as InstallModPayload[])
+      if (panelsRef.current.install) setModsToInstall(prev => [...prev, ...parsed])
+      else { setModsToInstall(parsed); setPanel('install', true) }
     },
     update: async (oldPath, archive) => {
       // by its key (folder and name, on or off alike), so a mod switched while it downloaded is still found
@@ -3362,9 +3363,8 @@ function App() {
       const pct = Math.max(0, Math.min(100, Math.round(Number(event.payload) || 0)))
       if (installToast >= 0) alert.updateToast(installToast, { progressValue: pct, description: `${pct}% · ${modCount} mod${modCount > 1 ? 's' : ''}` })
     })
-    let job: Promise<unknown> = Promise.resolve() // repakxtra: the install itself, so a Nexus install can wait for it
     installToast = alert.promise(
-      job = (async () => {
+      (async () => {
         // Create a promise that resolves when install_complete event fires
         const installCompletePromise = new Promise<void>((resolve, reject) => {
           let unlistenComplete: UnlistenFn | null = null
@@ -3470,7 +3470,6 @@ function App() {
         })
       }
     )
-    await job.catch(() => undefined) // the toast reports a failure
   }
 
   const saveAllSettings = async (overrides: Partial<AppSettings>) => {

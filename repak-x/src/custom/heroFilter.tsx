@@ -35,6 +35,13 @@ export function useHeroPortrait() {
   return (name: string) => getHeroImageById(ids.get(norm(name))) ?? getHeroImageById(FALLBACK_HERO_ID)
 }
 
+/** Every playable hero's name, A to Z (the bundled list, plus heroes the live character data adds). */
+export function useHeroNames() {
+  const [rows, setRows] = useState(bundled as Row[])
+  useEffect(() => { invoke<Row[]>('get_character_data').then(r => { if (r?.length) setRows([...(bundled as Row[]), ...r]) }, () => undefined) }, [])
+  return [...new Set(rows.filter(r => /^10\d\d$/.test(r.id) && !r.name.includes('*')).map(r => heroOfName(r.name)))].sort()
+}
+
 /** All heroes, or one: shown when the list holds two or more heroes. */
 /** always: shown even with fewer than two heroes (while a list loads, so the bar does not change when it lands) */
 export function HeroFilter({ heroes, value, onChange, always }: { heroes: string[]; value: string; onChange: (hero: string) => void; always?: boolean }) {

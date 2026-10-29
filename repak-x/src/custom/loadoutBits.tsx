@@ -13,9 +13,9 @@ import { useVerdict } from './brokenMods'
 import { VerdictBadge } from './VerdictBadge'
 import { useVfxUpdating } from './vfx/quick'
 import { GAME_RUNNING } from './keepOne'
-import { CaptionIcon, CaptionStyleBar } from './captionStyle'
+import { CaptionIcon } from './captionStyle'
 import { loadoutHero, silhouetteOf } from './silhouettes'
-import CaptionBackground from './CaptionBackground'
+import { CardTools } from './CardTools'
 import { NexusPictures } from './nexus'
 import nexusLogo from './logos/nexus.png'
 import './support.css'
@@ -254,19 +254,19 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.blur() }
               if (e.key === 'Escape') { e.currentTarget.value = caption; e.currentTarget.blur() }
             }} />
-          <CaptionStyleBar icon={l.captionIcon} color={l.captionColor}
-            onIcon={captionIcon => patchLoadout(l.id, { captionIcon })} onColor={captionColor => patchLoadout(l.id, { captionColor })} />
         </div>
       )}
       {/* A filled source keeps its way to redo it in the corner (the preview's also shows Stop while it renders) */}
-      {page && !editing && (!empty || working) && (
+      {page && !editing && (!empty || working) && (cover === 'preview' || cover === 'capture') && (
         <div className={`lo-media-gen${working ? ' is-busy' : ''}`}>
           {cover === 'preview' && !impossible && generate!('lo-media-chip')}
           {cover === 'capture' && capture?.show && capture.button('lo-media-chip', 'Capture again')}
-          {cover === 'image' && <button type="button" className="lo-media-chip" onClick={onClick}><ImagePlus size={13} /> Change</button>}
-          {cover === 'image' && fromNexus('lo-media-chip')}
-          {words && <button type="button" className="lo-media-chip" onClick={() => setTyping(true)}><Pencil size={13} /> Edit text</button>}
         </div>
+      )}
+      {/* Image and Text keep their tools behind one arrow in the corner (CardTools.tsx) */}
+      {page && !working && ((cover === 'image' && !empty) || cover === 'text') && (
+        <CardTools l={l} text={cover === 'text'} alert={p.alert} onImage={onClick} onEdit={() => setTyping(true)}
+          onNexus={nexus?.ids.length ? () => setNexusOpen(true) : undefined} />
       )}
       {nexusOpen && nexus && cover === 'image' && <NexusPictures ids={nexus.ids} onPick={nexus.onPick} onClose={() => setNexusOpen(false)} />}
       {remove?.run && (
@@ -302,7 +302,6 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
           )
         })}
       </div>
-      {cover === 'text' && <CaptionBackground l={l} alert={p.alert} />}
     </div>
   )
 }

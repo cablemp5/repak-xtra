@@ -1,15 +1,21 @@
-// repakxtra: the Nexus tab, beside Loadouts and Library: Marvel Rivals mods on Nexus Mods from its public API (no
-// account needed to look, adult mods left out). Search, a sort, and pages of cards. Install gets the mod's main file
-// (nexus.tsx installFromNexus), Update replaces the copy you have, and the picture or name opens the mod's page in the
-// app's Nexus window. Stays mounted while hidden, so the search and the cards are still there on the way back.
+// repakxtra: the Nexus Mods tab, beside Loadouts and Library: Marvel Rivals mods on Nexus Mods from its public API
+// (adult mods left out), once an account is saved (nexus.tsx). Search, a hero, a type, a time window and a sort, then
+// pages of cards. Install gets the mod's main file (nexus.tsx installFromNexus), Update replaces the copy you have, and the
+// picture or name opens the mod's page in the app's Nexus window. Stays mounted while hidden, so the search and the cards
+// are still there on the way back.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUpCircle, Check, Download, Heart, Search, X } from 'lucide-react'
 import CustomDropdown from '../components/CustomDropdown'
-import { gql, getNexusFile, installFromNexus, openNexusPage, plain, updateOf, useNexusUpdates } from './nexus'
+import { NexusKeyForm, gql, getNexusFile, installFromNexus, openNexusPage, plain, updateOf, useNexusAccount, useNexusReady, useNexusUpdates } from './nexus'
 import { sourceOf, useNexusVersion } from './nexusSource'
 import { useView } from './loadoutStore'
+import { HeroFilter, useHeroNames } from './heroFilter'
+import nexusLogo from './logos/nexus.png'
 
-type Card = { modId: number; name: string; author: string; summary: string; endorsements: number; downloads: number; thumbnailLargeUrl: string | null }
+type Card = {
+  modId: number; name: string; author: string; summary: string; endorsements: number; downloads: number
+  thumbnailLargeUrl: string | null; updatedAt: string; modCategory: { name: string } | null
+}
 type Page = { mods: { totalCount: number; nodes: Card[] } }
 
 const SORTS = [
@@ -17,20 +23,57 @@ const SORTS = [
   { value: 'downloads', label: 'Most downloaded' },
   { value: 'updatedAt', label: 'Recently updated' },
   { value: 'createdAt', label: 'Newest' },
+  { value: 'name', label: 'Name, A to Z' },
+  { value: 'relevance', label: 'Best match' },
 ]
+// Nexus's own time windows (its All time menu)
+const WINDOWS = [
+  { value: 'all', label: 'All time' }, { value: '1', label: '24 hours' }, { value: '7', label: '7 days' },
+  { value: '14', label: '14 days' }, { value: '28', label: '28 days' }, { value: '365', label: '1 year' },
+]
+// Nexus's top categories for Marvel Rivals (hero mods are Characters or a hero's own category)
+const TYPES = [{ value: 'all', label: 'All types' }, ...['Characters', 'Audio', 'User Interface', 'Visuals', 'Gameplay', 'Miscellaneous'].map(c => ({ value: c, label: c }))]
+// where a Nexus category name differs from the game's hero name
+const CATEGORY_OF: Record<string, string> = { 'Doctor Strange': 'Dr. Strange', Deadpool: 'DeadPool' }
 const PAGE = 24
 const QUERY = `query($f: ModsFilter, $s: [ModsSort!], $o: Int, $c: Int) {
-  mods(filter: $f, sort: $s, offset: $o, count: $c) { totalCount nodes { modId name author summary endorsements downloads thumbnailLargeUrl } } }`
+  mods(filter: $f, sort: $s, offset: $o, count: $c) { totalCount nodes { modId name author summary endorsements downloads thumbnailLargeUrl updatedAt modCategory { name } } } }`
 
 const count = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 })
+const rel = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto', style: 'short' })
+const ago = (iso: string) => {
+  const s = (Date.parse(iso) - Date.now()) / 1000
+  for (const [unit, n] of [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600]] as const) {
+    if (Math.abs(s) >= n) return rel.format(Math.round(s / n), unit)
+  }
+  return rel.format(Math.round(s / 60), 'minute')
+}
+
+/** The search as a Nexus filter: the game, no adult mods, then each picked part (all must match). A hero matches its
+ *  category, or its name in the mod's name or description. */
+function filterOf(query: string, hero: string, type: string, days: string, sort: string) {
+  const f: Record<string, unknown> = { gameDomainName: [{ value: 'marvelrivals' }], adultContent: [{ value: false }] }
+  if (query) f.nameStemmed = [{ value: query, op: 'MATCHES' }]
+  if (type !== 'all') f.categoryName = [{ value: type }]
+  if (days !== 'all') f[sort === 'updatedAt' ? 'updatedAt' : 'createdAt'] = [{ value: String(Math.floor(Date.now() / 1000) - Number(days) * 86400), op: 'GT' }]
+  if (hero) f.filter = [{ op: 'OR', categoryName: [{ value: CATEGORY_OF[hero] ?? hero }], nameStemmed: [{ value: hero, op: 'MATCHES' }], description: [{ value: hero, op: 'MATCHES' }] }]
+  return f
+}
 
 export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
   const view = useView()
+  const account = useNexusAccount()
+  const ready = useNexusReady()
   const sources = useNexusVersion()
   useNexusUpdates()
+  const heroes = useHeroNames()
   const [text, setText] = useState('')
   const [query, setQuery] = useState('')
-  const [sort, setSort] = useState('endorsements')
+  const [hero, setHero] = useState('')
+  const [type, setType] = useState('all')
+  const [days, setDays] = useState('all')
+  const [pickedSort, setSort] = useState('endorsements')
+  const sort = pickedSort === 'relevance' && !query ? 'endorsements' : pickedSort // Best match needs words to match
   const [cards, setCards] = useState<Card[]>([])
   const [total, setTotal] = useState(0)
   const [done, setDone] = useState(false) // every page of this search is in
@@ -38,7 +81,7 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
   const [error, setError] = useState('')
   const [tries, setTries] = useState(0) // Try again after a failed search
   const [more, setMore] = useState(0) // Show more (or its retry) clicks
-  const shown = useRef('') // the search and sort the cards are for: a new one starts from page one
+  const shown = useRef('') // the search the cards are for: a new one starts from page one
   const loaded = useRef(-1) // the last page loaded for it
   const wanted = useRef(0) // the page to load next: one past `loaded` once Show more asks
   // Your copy of each Nexus mod, by mod id (the first one found when there are several)
@@ -50,19 +93,20 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
 
   useEffect(() => { const t = setTimeout(() => setQuery(text.trim()), 300); return () => clearTimeout(t) }, [text])
 
+  const live = view === 'nexus' && Boolean(account)
   useEffect(() => {
-    if (view !== 'nexus') return
-    const key = `${query}\n${sort}\n${tries}`
+    if (!live) return
+    const key = JSON.stringify([query, hero, type, days, sort, tries])
     const fresh = key !== shown.current
     if (fresh) wanted.current = 0
     else if (wanted.current <= loaded.current) { setState('ok'); return } // back on the tab (or this search again): its pages are here
     const at = wanted.current
-    let live = true
+    let on = true
     setState('loading')
-    const f = { gameDomainName: [{ value: 'marvelrivals' }], adultContent: [{ value: false }], ...(query ? { nameStemmed: [{ value: query, op: 'MATCHES' }] } : {}) }
-    gql<Page>(QUERY, { f, s: [{ [sort]: { direction: 'DESC' } }], o: at * PAGE, c: PAGE })
+    const dir = sort === 'name' ? 'ASC' : 'DESC'
+    gql<Page>(QUERY, { f: filterOf(query, hero, type, days, sort), s: [{ [sort]: { direction: dir } }], o: at * PAGE, c: PAGE })
       .then(d => {
-        if (!live) return
+        if (!on) return
         shown.current = key
         loaded.current = at
         // a mod uploaded between two pages pushes the last one onto the next: each mod once
@@ -76,39 +120,60 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
         setState('ok')
       })
       .catch(e => {
-        if (!live) return
+        if (!on) return
         if (fresh) { setCards([]); shown.current = key; loaded.current = -1 } // never the last search's cards under this one
         setError(String(e))
         setState('error')
       })
-    return () => { live = false }
-  }, [view, query, sort, tries, more])
+    return () => { on = false }
+  }, [live, query, hero, type, days, sort, tries, more])
 
   const showMore = () => { wanted.current = loaded.current + 1; setMore(n => n + 1) }
+  const narrowed = Boolean(query || hero || type !== 'all' || days !== 'all')
+  const clear = () => { setText(''); setQuery(''); setHero(''); setType('all'); setDays('all') }
 
   if (view !== 'nexus') return null
+  if (!account) return (
+    <div className="lo-screen nx-screen" aria-label="Nexus Mods">
+      <div className="nx-signin">
+        {ready && <>
+          <img src={nexusLogo} alt="" className="nx-signin-logo" />
+          <h2>Sign in to Nexus Mods</h2>
+          <p>Browse, install, and update Marvel Rivals mods from Nexus Mods right here. repakxtra signs in with your own personal API key.</p>
+          <NexusKeyForm />
+        </>}
+      </div>
+    </div>
+  )
   const first = state === 'loading' && !cards.length
   return (
     <div className="lo-screen nx-screen" aria-label="Nexus Mods">
-      <header className="lo-screen-head">
-        <div className="lo-head-main"><div className="lo-title-row">
+      <header className="nx-head">
+        <div className="nx-title">
           <h2>Nexus Mods</h2>
-          <label className="lp-search lo-search">
+          <span className="nx-total" role="status">{state === 'ok' ? `${total.toLocaleString()} ${total === 1 ? 'mod' : 'mods'}` : ''}</span>
+        </div>
+        <div className="nx-filters" role="search">
+          <label className="lp-search nx-search">
             <Search size={14} aria-hidden="true" />
-            <input value={text} placeholder="Search Nexus Mods..." aria-label="Search Marvel Rivals mods on Nexus Mods" onChange={e => setText(e.target.value)}
+            <input value={text} placeholder="Search mods" aria-label="Search Marvel Rivals mods on Nexus Mods" onChange={e => setText(e.target.value)}
               onKeyDown={e => { e.stopPropagation(); if (e.key === 'Escape') setText('') }} />
             {text && <button type="button" className="lo-icon" aria-label="Clear search" title="Clear search" onClick={() => setText('')}><X size={13} /></button>}
           </label>
-          <span className="nx-total" role="status">{state === 'ok' ? `${total.toLocaleString()} mods` : ''}</span>
-        </div></div>
-        <div className="lo-head-view nx-sort"><CustomDropdown options={SORTS} value={sort} onChange={setSort} /></div>
+          <HeroFilter heroes={heroes} value={hero} onChange={setHero} always />
+          <CustomDropdown className="lp-hero nx-type" options={TYPES} value={type} onChange={setType} />
+          <CustomDropdown className="lp-hero nx-window" options={WINDOWS} value={days} onChange={setDays} />
+          {narrowed && <button type="button" className="su-link nx-clear" onClick={clear}>Clear filters</button>}
+          <CustomDropdown className="lp-hero nx-sort" options={query ? SORTS : SORTS.slice(0, -1)} value={sort} onChange={setSort} />
+        </div>
       </header>
       <div className="lo-body nx-body">
         {state === 'error' && !cards.length ? (
           <div className="nx-empty"><p>Nexus Mods did not answer.</p><small>{error}</small>
             <button type="button" className="lo-text-btn" onClick={() => setTries(t => t + 1)}>Try again</button></div>
         ) : state === 'ok' && !cards.length ? (
-          <div className="nx-empty"><p>No mods match "{query}".</p></div>
+          <div className="nx-empty"><p>No mods match these filters.</p>
+            <button type="button" className="lo-text-btn" onClick={clear}>Clear filters</button></div>
         ) : (
           <div className={`nx-grid${first ? ' is-loading' : ''}`} aria-busy={state === 'loading'}>
             {first
@@ -137,22 +202,23 @@ function NexusCard({ c, path }: { c: Card; path?: string }) {
     <article className="nx-card">
       <button type="button" className="nx-card-image" onClick={open} title={`Open ${name} on Nexus Mods`} tabIndex={-1}>
         {c.thumbnailLargeUrl ? <img src={c.thumbnailLargeUrl} alt="" loading="lazy" /> : <span className="nx-card-noimage" />}
+        {c.modCategory && <span className="nx-card-cat">{c.modCategory.name}</span>}
       </button>
       <div className="nx-card-body">
         <button type="button" className="nx-card-name" onClick={open} title={`Open ${name} on Nexus Mods`}>{name}</button>
-        <span className="nx-card-by">by {plain(c.author)}</span>
+        <span className="nx-card-by">{plain(c.author)}<span aria-hidden="true"> · </span><span title={new Date(c.updatedAt).toLocaleString()}>updated {ago(c.updatedAt)}</span></span>
         <p className="nx-card-summary">{plain(c.summary)}</p>
         <div className="nx-card-foot">
           <span className="nx-stat" title={`${c.endorsements.toLocaleString()} endorsements`}><Heart size={12} aria-hidden="true" />{count.format(c.endorsements)}</span>
           <span className="nx-stat" title={`${c.downloads.toLocaleString()} downloads`}><Download size={12} aria-hidden="true" />{count.format(c.downloads)}</span>
           {u && path ? (
-            <button type="button" className="lo-text-btn nx-act is-update" onClick={() => getNexusFile(u.modId, u.fileId, path)} title={`Version ${u.version} is out`} aria-label={`Update ${name} to ${u.version}`}>
+            <button type="button" className="nx-act is-update" onClick={() => getNexusFile(u.modId, u.fileId, path)} title={`Version ${u.version} is out`} aria-label={`Update ${name} to ${u.version}`}>
               <ArrowUpCircle size={13} aria-hidden="true" /> Update
             </button>
           ) : path ? (
-            <span className="nx-installed"><Check size={13} aria-hidden="true" /> Installed</span>
+            <span className="nx-act is-installed"><Check size={13} aria-hidden="true" /> Installed</span>
           ) : (
-            <button type="button" className="lo-text-btn nx-act" onClick={() => installFromNexus(c.modId)} aria-label={`Install ${name}`}><Download size={13} aria-hidden="true" /> Install</button>
+            <button type="button" className="nx-act" onClick={() => installFromNexus(c.modId)} aria-label={`Install ${name}`}><Download size={13} aria-hidden="true" /> Install</button>
           )}
         </div>
       </div>

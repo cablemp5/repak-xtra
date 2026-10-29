@@ -5,10 +5,11 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { ExternalLink, KeyRound, LogOut, X } from 'lucide-react'
+import { ExternalLink, HelpCircle, KeyRound, LogOut, X } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import type { NexusSource } from './nexusSource'
 import nexusLogo from './logos/nexus.png'
+import keyShot from './logos/nexus-api-key.png'
 import { ownsTop, useDialogFocus } from './dialogFocus'
 
 type Alert = ReturnType<typeof useAlert>
@@ -29,7 +30,8 @@ const listeners = new Set<() => void>()
 const notify = () => listeners.forEach(l => l())
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
 export const useNexusAccount = () => useSyncExternalStore(subscribe, () => account)
-const useChecked = () => useSyncExternalStore(subscribe, () => checked)
+/** The saved key was looked at (or there was none): until then the account is unknown, not signed out. */
+export const useNexusReady = () => useSyncExternalStore(subscribe, () => checked)
 const loadAccount = () => invoke<Account | null>('xtra_nexus_account')
   .then(a => { account = a }, () => { account = null }) // the key was turned down: Settings asks for it again
   .finally(() => { checked = true; notify() })
@@ -227,15 +229,15 @@ export function NexusPictures({ ids, onPick, onClose }: { ids: number[]; onPick:
   )
 }
 
-/** Settings > General > Nexus Mods: paste a personal API key, or see who is signed in and sign out. */
-export function NexusSetting() {
-  const a = useNexusAccount()
-  const ready = useChecked()
+/** Paste a personal API key and save it (Settings, Setup and the signed-out Nexus Mods tab). Where the key is on Nexus's
+ *  page, in words and in a picture: a preview on hover, shown in full under the words on a click. */
+export function NexusKeyForm() {
+  const ready = useNexusReady()
   const [key, setKey] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [shown, setShown] = useState(false)
   const field = useRef<HTMLInputElement>(null)
-  const open = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
   const save = async () => {
     setBusy(true); setError(null)
     try {
@@ -244,6 +246,50 @@ export function NexusSetting() {
       notify()
     } catch (e) { setError(String(e)); field.current?.focus() } finally { setBusy(false) }
   }
+  return (
+    <div className="nx-key">
+      <p className="setting-subtext nx-key-where">
+        <span>Get your key opens your Nexus account settings. <strong>Scroll all the way down to Personal API Key</strong>, click Request Api Key, then copy the key here.</span>
+        <span className={`nx-hint${shown ? ' is-open' : ''}`}>
+          <button type="button" className="su-link nx-hint-btn" aria-expanded={shown} onClick={() => setShown(v => !v)}><HelpCircle size={13} aria-hidden="true" /> Show me</button>
+          {!shown && <span className="nx-hint-pop" role="tooltip"><img src={keyShot} alt="" /></span>}
+        </span>
+      </p>
+      {shown && <img className="nx-hint-full" src={keyShot} alt="The Personal API Key section at the bottom of the Nexus Mods API keys page, with its orange Request Api Key button" />}
+      <div className="nx-key-row">
+        <input ref={field} className="nx-key-input" type="password" value={key} placeholder={ready ? 'Personal API key' : 'Checking…'} autoComplete="off" spellCheck={false}
+          aria-label="Nexus Mods personal API key" onChange={e => setKey(e.target.value)} onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter' && key.trim()) save() }} />
+        <button type="button" className="action-btn" disabled={busy || !key.trim()} onClick={save}><KeyRound size={14} /> {busy ? 'Checking…' : 'Save key'}</button>
+        <button type="button" className="action-btn" onClick={() => openOutside(KEYS_URL)}><ExternalLink size={14} /> Get your key</button>
+      </div>
+      {error && <p className="setting-subtext nx-key-error" role="alert">{error}</p>}
+    </div>
+  )
+}
+
+const openOutside = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
+
+/** Setup's Nexus Mods card: optional, signed in or the key form. */
+export function NexusSetupCard() {
+  const a = useNexusAccount()
+  return (
+    <section className="su-card">
+      <div className="su-card-head">
+        <div>
+          <h3>Nexus Mods</h3>
+          <p>Optional. Browse, install, and update Nexus mods in repakxtra with your own personal API key.</p>
+        </div>
+        <span className={`su-chip ${a ? 'is-installed' : 'is-missing'}`}>{a ? 'Signed in' : 'Not signed in'}</span>
+      </div>
+      {a ? <p className="su-note">{a.name ? `Signed in as ${a.name}. Sign out in Settings > General.` : 'Key saved. Nexus Mods could not be reached to check it.'}</p> : <NexusKeyForm />}
+    </section>
+  )
+}
+
+/** Settings > General > Nexus Mods: paste a personal API key, or see who is signed in and sign out. */
+export function NexusSetting() {
+  const a = useNexusAccount()
+  const [error, setError] = useState<string | null>(null)
   const signOut = async () => {
     try {
       await invoke('xtra_nexus_forget_key')
@@ -269,15 +315,9 @@ export function NexusSetting() {
         ) : (
           <>
             <p className="setting-subtext xs-note">
-              Browsing Nexus and update checks work without an account. To install and update with one click, paste your personal API key.
-              repakxtra then opens Nexus Mod manager downloads, in place of any other mod manager.
+              Sign in with your personal API key to browse, install, and update Nexus mods in repakxtra. It then opens Nexus Mod manager downloads, in place of any other mod manager.
             </p>
-            <div className="nx-key-row">
-              <input ref={field} className="nx-key-input" type="password" value={key} placeholder={ready ? 'Personal API key' : 'Checking…'} autoComplete="off" spellCheck={false}
-                aria-label="Nexus Mods personal API key" onChange={e => setKey(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && key.trim()) save() }} />
-              <button type="button" className="action-btn" disabled={busy || !key.trim()} onClick={save}><KeyRound size={14} /> {busy ? 'Checking…' : 'Save key'}</button>
-              <button type="button" className="action-btn" onClick={() => open(KEYS_URL)}><ExternalLink size={14} /> Get your key</button>
-            </div>
+            <NexusKeyForm />
           </>
         )}
         {error && <p className="setting-subtext nx-key-error" role="alert">{error}</p>}
