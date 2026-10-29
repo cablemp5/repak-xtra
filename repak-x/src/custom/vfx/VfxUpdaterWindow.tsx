@@ -339,6 +339,13 @@ export function VfxUpdaterPanel() {
   const pickEditsRef = useRef(0)
   pickEditsRef.current = pickEdits
   const [reload, setReload] = useState(0)
+  // a newer USMAP (Check for updates, the automatic check, or a chosen file) can let waiting mods update: the list and
+  // its flags are read again. Not on the first one, which the first read already uses
+  const lastUsmap = useRef<string | null>(null)
+  useEffect(() => {
+    if (lastUsmap.current && usmap && usmap !== lastUsmap.current) setReload(n => n + 1)
+    lastUsmap.current = usmap
+  }, [usmap])
   const [loadError, setLoadError] = useState<string | null>(null) // the mods folder could not be read (the last list stays)
   const [scanProblems, setScanProblems] = useState<string[]>([]) // folders or mods the last read could not open
   const [held, setHeld] = useState<RunLock | null>(null) // who holds the run lock (prefs.ts), this window or another

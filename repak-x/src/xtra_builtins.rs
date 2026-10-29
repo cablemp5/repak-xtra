@@ -69,8 +69,20 @@ static FAILED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new())
 fn made_for(id: &str, s: &Saved, build: &str) -> String {
     let mut excluded = s.excluded.clone();
     excluded.sort();
-    // "enc": a build kept from before CustomQuake was encrypted is not put in
-    format!("{build}|{excluded:?}|{:?}|{}|enc", s.quake.clone().unwrap_or_default(), id == CUSTOM_QUAKE)
+    // "enc": a build kept from before CustomQuake was encrypted is not put in. repakxtra: and the recipe and the saved
+    // USMAP, so a kept build from an older recipe or USMAP is made again, and a failure is tried again with a new USMAP
+    let usmap = crate::vfx_updater::commands::saved_usmap_path().map(|u| Path::new(&u).file_name().unwrap_or_default().to_string_lossy().to_string()).unwrap_or_default();
+    format!("{build}|{excluded:?}|{:?}|{}|enc|r{}|{usmap}", s.quake.clone().unwrap_or_default(), id == CUSTOM_QUAKE, recipe(id))
+}
+
+/// repakxtra: the files a build in progress left out for want of a newer USMAP (that USMAP's file name and how many),
+/// saved with the build only once it is in the game (or kept for the next try), never before
+static WAITED: std::sync::Mutex<Vec<(String, Option<String>, usize)>> = std::sync::Mutex::new(Vec::new());
+
+fn take_waited(id: &str) -> (Option<String>, usize) {
+    let mut w = WAITED.lock().unwrap_or_else(|e| e.into_inner());
+    let found = w.iter().position(|(i, ..)| i == id).map(|n| w.remove(n));
+    found.map(|(_, u, n)| (u, n)).unwrap_or((None, 0))
 }
 
 fn failed_key(id: &str, s: &Saved, build: &str) -> String {
@@ -587,11 +599,9 @@ async fn make(tool: &Path, id: &str, excluded: &[String], quake: &crate::xtra_qu
                 usmap_ready(paks, &usmap, &inputs)?; // nothing to build yet: says so the usual way
             }
             let name = Path::new(&usmap).file_name().unwrap_or_default().to_string_lossy().to_string();
-            update(|all| {
-                let s = all.entry(id.to_string()).or_default();
-                s.waited_usmap = (!waiting.is_empty()).then_some(name);
-                s.waiting_files = waiting.len();
-            })?;
+            let mut w = WAITED.lock().unwrap_or_else(|e| e.into_inner());
+            w.retain(|(i, ..)| i != id);
+            w.push((id.to_string(), (!waiting.is_empty()).then_some(name), waiting.len()));
         }
     }
     #[cfg(feature = "extended")]
@@ -719,6 +729,7 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
             s.built_for = Some(game_build(paks));
             s.built_excluded = excluded;
             s.built_recipe = recipe(id);
+            (s.waited_usmap, s.waiting_files) = (None, 0);
             s.nothing = true;
             s.heroes = known;
             s.summary = Some("Every hero is excluded, so nothing is changed".to_string());
@@ -735,6 +746,8 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
         Some(summary) => (Ok((summary, Vec::new())), pending.join(stem(id))),
         None => (async { make(&get_uasset_tool_path(app)?, id, &excluded, &quake, paks, &work, &out_base).await }.await, out_base.clone()),
     };
+    // repakxtra: what this build left out for a newer USMAP, saved below only if it goes in (a kept one keeps its own)
+    let waited = if from.starts_with(&pending) { read_waited(&pending) } else { take_waited(id) };
     // the other quake mods that are on (a walk of ~mods), read off the async threads before any lock is taken
     #[cfg(not(feature = "extended"))]
     let overlaps: Vec<String> = Vec::new();
@@ -754,7 +767,7 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
     let blocked = app.try_state::<Arc<Mutex<AppState>>>().map_or(Ok(()), |st| game_guard(st.inner())).and_then(|_| crate::xtra_identity::upstream_guard()).err();
     let made = if game_build(paks) != build_at_start { Err("The game updated during the build. Check again to rebuild from the new game files".into()) } else { made };
     let result = match (made, &blocked) {
-        (Ok((summary, _)), Some(_)) => Err(match keep(&from, &pending, id, &made_for, &summary) {
+        (Ok((summary, _)), Some(_)) => Err(match keep(&from, &pending, id, &made_for, &summary, &waited) {
             Ok(()) => "Marvel Rivals or Repak X opened while it built, so the new build waits. Close it, then try again to put it in".to_string(),
             Err(e) => format!("Marvel Rivals or Repak X opened while it built, so the new build was not installed ({e}). Close it, then try again"),
         }),
@@ -783,6 +796,7 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
                 s.built_quake = (id == CUSTOM_QUAKE).then(|| quake.clone());
                 s.built_quake_packaging = id == CUSTOM_QUAKE;
                 s.built_recipe = recipe(id);
+                (s.waited_usmap, s.waiting_files) = waited.clone();
                 s.built_quake_encrypted = id == CUSTOM_QUAKE;
                 s.nothing = false;
                 s.built_at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_secs());
@@ -808,7 +822,7 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
 }
 
 /// Keeps a finished build (its .pak, .utoc and .ucas) for the next try, with what it was made for.
-fn keep(from: &Path, pending: &Path, id: &str, made_for: &str, summary: &str) -> Result<(), String> {
+fn keep(from: &Path, pending: &Path, id: &str, made_for: &str, summary: &str, waited: &(Option<String>, usize)) -> Result<(), String> {
     if from.starts_with(pending) {
         return Ok(()); // already the kept one
     }
@@ -818,7 +832,20 @@ fn keep(from: &Path, pending: &Path, id: &str, made_for: &str, summary: &str) ->
         std::fs::copy(from.with_extension(ext), pending.join(format!("{}.{ext}", stem(id)))).map_err(|e| e.to_string())?;
     }
     std::fs::write(pending.join("summary"), summary).map_err(|e| e.to_string())?;
+    // repakxtra: the files it left out for a newer USMAP go with it (read_waited)
+    std::fs::write(pending.join("waited"), waited.0.as_ref().map(|u| format!("{u}
+{}", waited.1)).unwrap_or_default()).map_err(|e| e.to_string())?;
     std::fs::write(pending.join("made-for"), made_for).map_err(|e| e.to_string())
+}
+
+/// What a kept build left out for a newer USMAP (keep): that USMAP's file name and how many files.
+fn read_waited(pending: &Path) -> (Option<String>, usize) {
+    let text = std::fs::read_to_string(pending.join("waited")).unwrap_or_default();
+    let mut lines = text.lines();
+    match (lines.next().filter(|u| !u.is_empty()), lines.next().and_then(|n| n.parse().ok())) {
+        (Some(u), n) => (Some(u.to_string()), n.unwrap_or(1)),
+        _ => (None, 0),
+    }
 }
 
 /// Removes a build's work folder (temp files, minutes of extracted game data), saying so when it cannot.
@@ -1313,12 +1340,12 @@ mod tests {
             std::fs::write(out.with_extension(ext), ext).unwrap();
         }
         let pending = d.path().join("pending").join(CUSTOM_QUAKE);
-        keep(&out, &pending, CUSTOM_QUAKE, "build|[]|opts", "31,011 textures set").unwrap();
+        keep(&out, &pending, CUSTOM_QUAKE, "build|[]|opts", "31,011 textures set", &(None, 0)).unwrap();
         assert_eq!(std::fs::read_to_string(pending.join("made-for")).unwrap(), "build|[]|opts");
         assert_eq!(std::fs::read_to_string(pending.join(format!("{}.utoc", stem(CUSTOM_QUAKE)))).unwrap(), "utoc");
-        keep(&pending.join(stem(CUSTOM_QUAKE)), &pending, CUSTOM_QUAKE, "build|[]|opts", "x").unwrap();
+        keep(&pending.join(stem(CUSTOM_QUAKE)), &pending, CUSTOM_QUAKE, "build|[]|opts", "x", &(None, 0)).unwrap();
         assert_eq!(std::fs::read_to_string(pending.join("summary")).unwrap(), "31,011 textures set", "the kept one is left as it is");
-        assert!(keep(&d.path().join("missing").join("x"), &d.path().join("p2"), CUSTOM_QUAKE, "k", "s").is_err(), "nothing to keep");
+        assert!(keep(&d.path().join("missing").join("x"), &d.path().join("p2"), CUSTOM_QUAKE, "k", "s", &(None, 0)).is_err(), "nothing to keep");
     }
 
     #[test]

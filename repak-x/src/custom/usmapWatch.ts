@@ -22,12 +22,15 @@ export function useUsmapWatch() {
       last = Date.now()
       busy = true
       try {
-        if (await invoke<boolean>('xtra_usmap_waiting')) { waited = true; first = false; return }
+        const r = await invoke<{ waiting: boolean; fetched: boolean }>('xtra_usmap_waiting')
+        // a USMAP saved by this check: the mod checks so far used the older one, so they run again
+        if (r.fetched) rescanVerdicts()
+        if (r.waiting) { waited = true; first = false; return }
         // The first check of a run also catches a USMAP that came out while repakxtra was closed: the launch's mod
         // checks may have fetched it first, so nothing here looks new, but a built-in that left files out for an older
         // USMAP is out of date by its own record and builds now (a no-op for the rest)
-        if (!waited && !first) return
-        if (waited) rescanVerdicts() // the launch's checks ran before it: once more with it
+        if (!waited && !first && !r.fetched) return
+        if (waited && !r.fetched) rescanVerdicts() // fetched elsewhere (the VFX Updater) while this one waited
         waited = false
         first = false
         await refreshBuiltins()

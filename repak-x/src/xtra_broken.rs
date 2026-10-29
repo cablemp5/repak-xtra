@@ -122,24 +122,41 @@ pub(crate) fn game_assets(paks: &Path) -> Option<Arc<GameAssets>> {
         }
     }
     let mut set = GameAssets::new();
+    let mut builds = AssetBuilds::default();
     for (utoc, _, at) in &containers {
+        let cl = container_cl(utoc).unwrap_or(0); // a base chunk: older than every patch
         match crate::utoc_utils::try_read_utoc(utoc) {
             Ok(entries) => {
                 for f in entries.iter().map(|e| &e.file_path).filter(|f| is_package(f)) {
                     let newest = set.entry(match_key(f)).or_insert(0);
                     *newest = (*newest).max(*at);
+                    let build = builds.by_package.entry(match_key(f)).or_insert(0);
+                    *build = (*build).max(cl);
                 }
             }
-            Err(e) => log::warn!("[broken] could not read {}: {e}", utoc.display()),
+            Err(e) => {
+                log::warn!("[broken] could not read {}: {e}", utoc.display());
+                builds.unread = builds.unread.max(cl);
+            }
         }
     }
     if set.is_empty() {
         return None; // the tool failed on every container: no verdicts rather than every mod "broken"
     }
     let set = Arc::new(set);
+    *GAME_BUILDS.lock().unwrap_or_else(|e| e.into_inner()) = Some((key.clone(), Arc::new(builds)));
     *GAME_ASSETS.lock().unwrap() = Some((key, set.clone()));
     Some(set)
 }
+
+/// Per package, the newest game build whose patch container holds it (0: only the base chunks), read with GameAssets.
+/// `unread`: the newest build among containers that could not be read (their packages are unknown).
+#[derive(Default)]
+pub(crate) struct AssetBuilds {
+    by_package: HashMap<String, u64>,
+    unread: u64,
+}
+static GAME_BUILDS: Mutex<Option<(String, Arc<AssetBuilds>)>> = Mutex::new(None);
 
 /// Of `files` (paths inside a mod), those whose game copy an update rewrote after `since` (seconds): cooked for an
 /// older game build. None when the game's files in `paks` (its Paks folder) cannot be read.
@@ -182,29 +199,27 @@ pub(crate) fn container_cl(utoc: &Path) -> Option<u64> {
     name.strip_suffix("_P")?.rsplit(['.', '_']).next()?.parse::<u64>().ok().filter(|cl| *cl > 100_000)
 }
 
-/// When the game's packages were last all cooked for `usmap`'s build: the newest of the base chunks and the patches of
-/// that build or before. A class layout change makes the cooker rewrite every package that uses the class, so a package
-/// not written since keeps the layout `usmap` reads right. None for a USMAP without a build in its name.
-fn usmap_written(paks: &Path, usmap: &str) -> Option<u64> {
-    let u = crate::xtra_niagara::usmap_build(usmap)?;
-    game_containers(paks)
-        .iter()
-        .filter(|(p, ..)| match container_cl(p) {
-            Some(cl) => cl <= u,
-            None => p.file_name().is_some_and(|n| n.to_string_lossy().to_ascii_lowercase().starts_with("pakchunk")),
-        })
-        .map(|c| c.2)
-        .max()
-}
-
-/// Of the game packages `files` names, those a patch newer than `usmap` rewrote: decoding them needs the USMAP of the
-/// installed game build, everything else reads right with `usmap`. Empty when `usmap` is not behind the game. None when
-/// it cannot be told (no game asset list): the caller waits.
+/// Of the game packages `files` names, those a patch newer than `usmap` rewrote, by the build in each patch container's
+/// name (never file dates, which a repair or copy can change): decoding them needs the USMAP of the installed game build.
+/// A class layout change makes the cooker rewrite every package using the class, so a package no newer patch holds
+/// keeps the layout `usmap` reads right. Empty when `usmap` is not behind the game. None when it cannot be told (no game
+/// asset list, a USMAP without a build, a newer patch that could not be read): the caller waits.
 pub(crate) fn changed_since_usmap(paks: &Path, usmap: &str, files: &[String]) -> Option<Vec<String>> {
     if crate::xtra_niagara::usmap_behind(usmap, paks).is_none() {
         return Some(Vec::new());
     }
-    rewritten_since(paks, files, usmap_written(paks, usmap)?)
+    let u = crate::xtra_niagara::usmap_build(usmap)?;
+    game_assets(paks)?;
+    let key = build_key(&game_containers(paks));
+    let builds = GAME_BUILDS.lock().unwrap_or_else(|e| e.into_inner()).as_ref().filter(|(k, _)| *k == key).map(|(_, b)| b.clone())?;
+    if builds.unread > u {
+        return None;
+    }
+    Some(changed_in(&builds.by_package, files, u))
+}
+
+fn changed_in(by_package: &HashMap<String, u64>, files: &[String], usmap_build: u64) -> Vec<String> {
+    files.iter().filter(|f| is_package(f) && by_package.get(&match_key(f)).is_some_and(|cl| *cl > usmap_build)).cloned().collect()
 }
 
 /// How many of the files the VFX Updater would decode from the mod at `utoc` a patch newer than `usmap` rewrote (all of
@@ -493,7 +508,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                 v.reason += &if v.usmap_wait > 0 {
                     format!(" It waits for the USMAP of game build {g}: the update changed {} of the files it rebuilds, which the saved USMAP (build {u}) would read wrong.", v.usmap_wait)
                 } else {
-                    format!(" The update did not change the files it rebuilds, so it can be updated now, before the USMAP of game build {g} is out.")
+                    format!(" No patch newer than the saved USMAP (build {u}) changed the files the VFX Updater rebuilds, so it can be updated now, before the USMAP of game build {g} is out.")
                 };
             }
         }
@@ -509,25 +524,19 @@ mod tests {
 
     #[test]
     fn packages_cooked_for_the_usmap_build_read_right_with_it() {
-        let paks = tempfile::tempdir().unwrap();
-        let at = |name: &str, secs: u64| {
-            let f = std::fs::File::create(paks.path().join(name)).unwrap();
-            f.set_modified(UNIX_EPOCH + std::time::Duration::from_secs(secs)).unwrap();
-        };
-        at("pakchunk0-Windows.utoc", 100);
-        at("Patch_-Windows_1.1.3962284_P.utoc", 200);
-        at("Patch_-Windows_1.1.3984769_P.utoc", 300);
-        at("global.utoc", 300); // rewritten by every patch, and it holds no packages
-        let usmap = |cl: u64| format!("5.3.2-{cl}+++depot_marvel+S10.5_release-Marvel.usmap");
-        assert_eq!(usmap_written(paks.path(), &usmap(3962284)), Some(200), "its own patch and the base chunks");
-        assert_eq!(usmap_written(paks.path(), &usmap(3939753)), Some(100), "older than every patch: the base chunks only");
-        assert_eq!(usmap_written(paks.path(), "custom.usmap"), None, "a USMAP without a build");
         assert_eq!(container_cl(Path::new("Patch_-Windows_1.1.3984769_P.utoc")), Some(3984769));
         assert_eq!(container_cl(Path::new("pakchunk0-Windows.utoc")), None);
-        // the game's assets: one written by today's patch, one last written by the USMAP's own
-        let game: GameAssets = [(match_key("Marvel/Content/Marvel/A.uasset"), 300), (match_key("Marvel/Content/Marvel/B.uasset"), 200)].into();
-        let files = v(&["../../../Marvel/Content/Marvel/A.uasset", "Marvel/Content/Marvel/B.uasset"]);
-        assert_eq!(stale_in(&game, &files, 200), v(&["../../../Marvel/Content/Marvel/A.uasset"]), "only what a newer patch rewrote waits");
+        // by build, never by date: A is in today's patch, B last in the USMAP's own, C only in the base chunks
+        let builds: HashMap<String, u64> = [
+            (match_key("Marvel/Content/Marvel/A.uasset"), 3984769),
+            (match_key("Marvel/Content/Marvel/B.uasset"), 3962284),
+            (match_key("Marvel/Content/Marvel/C.uasset"), 0),
+        ]
+        .into();
+        let files = v(&["../../../Marvel/Content/Marvel/A.uasset", "Marvel/Content/Marvel/B.uasset", "Marvel/Content/Marvel/C.uasset"]);
+        assert_eq!(changed_in(&builds, &files, 3962284), v(&["../../../Marvel/Content/Marvel/A.uasset"]), "only what a newer patch holds waits");
+        assert!(changed_in(&builds, &files, 3984769).is_empty(), "the USMAP of the installed build reads everything");
+        assert_eq!(changed_in(&builds, &files, 3939753).len(), 2, "an older USMAP: both newer patches count");
         assert!(decoded_by_vfx("Marvel/Content/X/MI_Glow.uasset") && decoded_by_vfx("x/NS_Hit.uasset"));
         assert!(!decoded_by_vfx("x/T_Glow_D.uasset") && !decoded_by_vfx("x/SK_Body.uasset") && !decoded_by_vfx("x/MI_Glow.uexp"));
     }

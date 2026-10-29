@@ -385,7 +385,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'xtra_game_build': return { updated: Math.floor(Date.now() / 1000) - 3600 * 5, cl: localStorage.getItem('mock.usmapBehind') === '1' ? 3962284 : 3939753 }
       // with mock.usmapBehind, mods whose name has 'wait' in it use files the patch changed
       case 'xtra_vfx_usmap_wait': return localStorage.getItem('mock.usmapBehind') === '1' && /wait/i.test(String(args?.modPath ?? '')) ? { usmap: 3939753, game: 3962284, changed: 3 } : null
-      case 'xtra_usmap_waiting': return localStorage.getItem('mock.usmapBehind') === '1'
+      case 'xtra_usmap_waiting': return { waiting: localStorage.getItem('mock.usmapBehind') === '1', fetched: false }
       // Installing: the file picker returns two fake paks, install adds them to the library and reports done. A folder
       // pick (the Sigeon folder) returns an unzipped Sigeon download.
       case 'plugin:dialog|open':

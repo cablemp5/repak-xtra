@@ -355,16 +355,23 @@ pub(crate) fn usmap_behind(usmap: &str, paks: &Path) -> Option<(u64, u64)> {
     (u < g).then_some((u, g))
 }
 
+/// usmapWatch.ts: whether the saved USMAP is still older than the installed game, and whether this call saved a newer one.
+#[derive(Serialize)]
+pub struct UsmapWaiting {
+    waiting: bool,
+    fetched: bool,
+}
+
 /// Fetches a newer USMAP when there is one (an ETag check, so cheap) and says whether the saved one is still older than
 /// the installed game. Once it is not, built-ins that waited for it may build again (usmapWatch.ts).
 #[tauri::command]
-pub async fn xtra_usmap_waiting(state: tauri::State<'_, std::sync::Arc<std::sync::Mutex<crate::AppState>>>) -> Result<bool, String> {
+pub async fn xtra_usmap_waiting(state: tauri::State<'_, std::sync::Arc<std::sync::Mutex<crate::AppState>>>) -> Result<UsmapWaiting, String> {
     let mods = state.lock().unwrap_or_else(|e| e.into_inner()).game_path.clone();
     let Some(paks) = mods.ancestors().find(|p| p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("Paks"))).map(Path::to_path_buf) else {
-        return Ok(false);
+        return Ok(UsmapWaiting { waiting: false, fetched: false });
     };
-    let _ = crate::vfx_updater::commands::vfx_check_usmap_update(false).await;
-    Ok(!crate::xtra_builtins::usmap_arrived(&paks))
+    let fetched = crate::vfx_updater::commands::vfx_check_usmap_update(false).await.is_ok_and(|r| r.updated);
+    Ok(UsmapWaiting { waiting: !crate::xtra_builtins::usmap_arrived(&paks), fetched })
 }
 
 /// The saved USMAP matches the game: mods made partial for want of one can now update fully (xtra_broken).

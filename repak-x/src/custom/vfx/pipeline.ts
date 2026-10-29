@@ -219,7 +219,8 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     const packAndPlace = async () => {
       // while the USMAP is older than the game only a whole update goes in: one with files left out would not look the
       // same in the game, so it waits for the USMAP instead
-      const missing = report.counts.left + report.counts.unreadable + report.assets.filter(a => a.kind === 'failed').length
+      // ownGame: a Niagara file whose edits could not be carried, so the game's own plays instead of the mod's
+      const missing = report.counts.left + report.counts.ownGame + report.counts.unreadable + report.assets.filter(a => a.kind === 'failed').length
       if (wait && missing) {
         report.error = `Not updated yet. With the saved USMAP (game build ${wait.usmap}) ${plural(missing, 'file')} of it could not be rebuilt, so the update would not look the same in the game. It can be updated once the USMAP for game build ${wait.game} is out.`
         log(report.error, 'warning')
