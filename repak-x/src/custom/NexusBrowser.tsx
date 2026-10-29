@@ -208,18 +208,24 @@ function NexusCard({ c, path }: { c: Card; path?: string }) {
   const later = (f: () => void, ms: number) => { clearTimeout(timer.current); timer.current = setTimeout(f, ms) }
   useEffect(() => () => clearTimeout(timer.current), [])
   const settle = useRef<ReturnType<typeof setTimeout>>()
+  const dismissed = useRef(false) // closed with Esc: it stays closed until the pointer leaves the picture
   useEffect(() => () => clearTimeout(settle.current), [])
   const hover = {
     onMouseEnter: () => {
+      if (dismissed.current) return
       later(() => setPeek(true), peek ? 0 : PEEK_OPEN_MS)
       clearTimeout(settle.current); settle.current = setTimeout(() => { void loadGallery(c.modId) }, PEEK_READ_MS) // a pointer passing over reads nothing
     },
-    onMouseLeave: () => { clearTimeout(settle.current); later(() => setPeek(false), PEEK_CLOSE_MS) },
+    onMouseLeave: () => { dismissed.current = false; clearTimeout(settle.current); later(() => setPeek(false), PEEK_CLOSE_MS) },
   }
   return (
     <article className="nx-card">
-      {peek && picture.current && <NexusPeek modId={c.modId} name={name} first={c.thumbnailLargeUrl} anchor={picture.current} hover={hover} onOpen={open} onClose={() => setPeek(false)} />}
-      <button ref={picture} type="button" className="nx-card-image" onClick={open} title={`Open ${name} on Nexus Mods`} tabIndex={-1} {...(c.thumbnailLargeUrl ? hover : {})}>
+      {peek && picture.current && <NexusPeek modId={c.modId} name={name} first={c.thumbnailLargeUrl} anchor={picture.current} hover={hover} onOpen={open} onClose={() => { dismissed.current = true; clearTimeout(timer.current); setPeek(false) }} />}
+      {/* by keyboard: Tab onto the picture opens the gallery (arrow keys page it, Esc closes, Enter opens the mod's page) */}
+      <button ref={picture} type="button" className="nx-card-image" onClick={open} title={`Open ${name} on Nexus Mods`}
+        aria-label={`${name}: pictures, Enter opens the mod's page`} {...(c.thumbnailLargeUrl ? hover : {})}
+        onFocus={e => { if (c.thumbnailLargeUrl && e.currentTarget.matches(':focus-visible')) { void loadGallery(c.modId); setPeek(true) } }}
+        onBlur={e => { if (!(e.relatedTarget instanceof Element && e.relatedTarget.closest('.nx-peek'))) setPeek(false) }}>
         {c.thumbnailLargeUrl ? <img src={c.thumbnailLargeUrl} alt="" loading="lazy" /> : <span className="nx-card-noimage" />}
         {c.modCategory && <span className="nx-card-cat">{c.modCategory.name}</span>}
       </button>

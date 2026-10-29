@@ -6,12 +6,16 @@ $desktop = [Environment]::GetFolderPath('Desktop')
 if (-not $desktop) { throw 'Windows did not return a desktop folder.' }
 $iconDir = Join-Path $root 'dist\icons'
 $builds = @(
-    @{ Name = 'repakxtratest'; Exe = 'dist\repakxtra-Test\repakxtra.exe'; PreviousExe = 'dist\Repak-X-Test\repakxtra.exe'; Icon = 'repakxtra-test-green.ico'; Degrees = -80 },
-    @{ Name = 'repakxploit'; OldName = 'repakxtra Extended Stable'; Exe = 'dist\repakxtra-Extended\repakxtra.exe'; Icon = 'repakxploit-stable-red.ico'; Degrees = 140 },
-    @{ Name = 'repakxploit test'; OldName = 'repakxtra Extended Test'; Exe = 'dist\repakxtra-Test-Extended\repakxtra.exe'; PreviousExe = 'dist\Repak-X-Test-Extended\repakxtra.exe'; Icon = 'repakxploit-test-purple.ico'; Degrees = 60 }
+    @{ Name = 'repakxtratest'; Exe = @('dist\repakxtra-Test\repakxtra.exe'); PreviousExe = @('dist\Repak-X-Test\repakxtra.exe'); Icon = 'repakxtra-test-green.ico'; Degrees = -80 },
+    # repakxploit's exe is repakxploit.exe since build.ps1 names it by edition; a copy built before that keeps repakxtra.exe
+    # until its next build, so the shortcut takes whichever is there and accepts either as its own
+    @{ Name = 'repakxploit'; OldName = 'repakxtra Extended Stable'; Exe = @('dist\repakxtra-Extended\repakxploit.exe', 'dist\repakxtra-Extended\repakxtra.exe'); Icon = 'repakxploit-stable-red.ico'; Degrees = 140 },
+    @{ Name = 'repakxploit test'; OldName = 'repakxtra Extended Test'; Exe = @('dist\repakxtra-Test-Extended\repakxploit.exe', 'dist\repakxtra-Test-Extended\repakxtra.exe'); PreviousExe = @('dist\Repak-X-Test-Extended\repakxtra.exe'); Icon = 'repakxploit-test-purple.ico'; Degrees = 60 }
 )
 foreach ($build in $builds) {
-    if (-not (Test-Path -LiteralPath (Join-Path $root $build.Exe))) { throw "Build $($build.Name) first." }
+    $found = @($build.Exe | Where-Object { Test-Path -LiteralPath (Join-Path $root $_) })
+    if (-not $found.Count) { throw "Build $($build.Name) first." }
+    $build.Target = $found[0]
 }
 New-Item -ItemType Directory -Force -Path $iconDir | Out-Null
 Add-Type -AssemblyName System.Drawing
@@ -71,11 +75,10 @@ function Write-TintedIcon([string]$path, [double]$degrees) {
 
 $shell = New-Object -ComObject WScript.Shell
 foreach ($build in $builds) {
-    $exe = Join-Path $root $build.Exe
+    $exe = Join-Path $root $build.Target
     $icon = Join-Path $iconDir $build.Icon
     $link = Join-Path $desktop ($build.Name + '.lnk')
-    $allowedTargets = @($exe)
-    if ($build.PreviousExe) { $allowedTargets += Join-Path $root $build.PreviousExe }
+    $allowedTargets = @(@($build.Exe) + @($build.PreviousExe | Where-Object { $_ }) | ForEach-Object { Join-Path $root $_ })
     if ($build.OldName -and -not (Test-Path -LiteralPath $link)) {
         $oldLink = Join-Path $desktop ($build.OldName + '.lnk')
         if (Test-Path -LiteralPath $oldLink) {

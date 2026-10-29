@@ -156,17 +156,25 @@ pub async fn xtra_nexus_gql(query: String, variables: Value) -> Result<Value, St
 
 /// A mod's gallery, full size, in page order: no API lists it, and Nexus's bot check turns plain requests away, so a
 /// hidden copy of the Nexus window (its profile, so the check is already passed) opens the mod's Images tab and reports
-/// the pictures it names (the Nexus Mods tab's hover preview). Empty after 12 s without an answer: the tab then shows the
-/// main picture. One mod at a time, each in a fresh hidden window.
+/// the pictures it names (the Nexus Mods tab's hover preview). Empty after 12 s without an answer, and right away for a
+/// request a newer one has replaced while it waited (the pointer moved on to another card): the tab then shows the main
+/// picture and asks again next time. One mod at a time, each in a hidden window of its own.
 #[tauri::command]
 pub async fn xtra_nexus_images(app: AppHandle, mod_id: u64) -> Result<Vec<String>, String> {
     static ONE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    static LATEST: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    use std::sync::atomic::Ordering::SeqCst;
+    let me = LATEST.fetch_add(1, SeqCst) + 1;
     let _turn = ONE.lock().await;
+    if LATEST.load(SeqCst) != me {
+        return Ok(Vec::new());
+    }
     let (tx, rx) = tokio::sync::oneshot::channel();
-    *SCOUT.lock().unwrap() = Some((mod_id, tx));
+    let tx = std::sync::Mutex::new(Some(tx));
     let url = url::Url::parse(&format!("https://www.nexusmods.com/{GAME}/mods/{mod_id}?tab=images")).map_err(|e| e.to_string())?;
     let (profile, extensions) = browser_dirs(&app)?;
-    WebviewWindowBuilder::new(&app, SCOUT_WINDOW, WebviewUrl::External(url))
+    // its own label: the last read's window may still be closing (a destroyed window goes a moment later)
+    let window = WebviewWindowBuilder::new(&app, format!("nexus-scout-{me}"), WebviewUrl::External(url))
         .visible(false)
         .focused(false) // never takes focus from the app (the gallery waiting on it would lose its hover)
         .skip_taskbar(true)
@@ -178,23 +186,18 @@ pub async fn xtra_nexus_images(app: AppHandle, mod_id: u64) -> Result<Vec<String
             if u.host_str() != Some("repakxtra.invalid") {
                 return is_nexus(u);
             }
-            let found: Vec<String> = u.query_pairs().find(|(k, _)| k == "page").map(|(_, page)| gallery(&page, scout_mod())).unwrap_or_default();
-            if let Some((_, tx)) = SCOUT.lock().unwrap().take() { let _ = tx.send(found); }
+            let found: Vec<String> = u.query_pairs().find(|(k, _)| k == "page").map(|(_, page)| gallery(&page, mod_id)).unwrap_or_default();
+            if let Some(tx) = tx.lock().unwrap().take() { let _ = tx.send(found); }
             false
         })
         .build()
         .map_err(|e| e.to_string())?;
     let found = tokio::time::timeout(std::time::Duration::from_secs(12), rx).await.ok().and_then(|r| r.ok()).unwrap_or_default();
-    SCOUT.lock().unwrap().take();
     // gone again right away: a hidden window left open would keep the app running after its main window closes
-    if let Some(w) = app.get_webview_window(SCOUT_WINDOW) { let _ = w.destroy(); }
+    let _ = window.destroy();
     Ok(found)
 }
 
-const SCOUT_WINDOW: &str = "nexus-scout";
-/// The mod the hidden window is reading, and where its pictures go.
-static SCOUT: std::sync::Mutex<Option<(u64, tokio::sync::oneshot::Sender<Vec<String>>)>> = std::sync::Mutex::new(None);
-fn scout_mod() -> u64 { SCOUT.lock().unwrap().as_ref().map(|(id, _)| *id).unwrap_or(0) }
 /// In the hidden window: once a mod page (not the bot check) has loaded, its markup goes back through a navigation the
 /// window's handler stops and reads (gallery picks the pictures out of it).
 const SCOUT_SCRIPT: &str = r#"document.addEventListener('DOMContentLoaded', () => setTimeout(() => {
@@ -325,6 +328,7 @@ pub async fn xtra_nexus_open(app: AppHandle, url: String) -> Result<(), String> 
                     let name = destination.file_name().map(|n| n.to_owned());
                     if let (Ok(dir), Some(name)) = (loader.path().app_cache_dir().map(|d| d.join("nexus-downloads")), name) {
                         let _ = std::fs::create_dir_all(&dir);
+                        prune(&dir); // downloads over a day old, installed long ago
                         *destination = dir.join(name);
                     }
                 }
