@@ -210,7 +210,7 @@ fn prune(dir: &std::path::Path) {
 /// Opens a nexusmods.com page in the app's own Nexus window (one window, reused). A Mod manager download clicked there
 /// is caught before Windows sees it.
 #[tauri::command]
-pub async fn xtra_nexus_open(app: AppHandle, url: String, accent: Option<String>) -> Result<(), String> {
+pub async fn xtra_nexus_open(app: AppHandle, url: String) -> Result<(), String> {
     let url = url::Url::parse(&url).map_err(|e| e.to_string())?;
     if !is_nexus(&url) {
         return Err("Only nexusmods.com pages open here.".into());
@@ -230,7 +230,7 @@ pub async fn xtra_nexus_open(app: AppHandle, url: String, accent: Option<String>
         .data_directory(profile)
         .browser_extensions_enabled(true)
         .extensions_path(extensions)
-        .initialization_script(theme_script(accent.as_deref()))
+        .initialization_script(theme_script())
         .on_navigation(move |u| {
             if u.scheme() == "nxm" {
                 return !on_link(u.as_str(), &handle);
@@ -254,11 +254,9 @@ const UBOL_ZIP: &[u8] = include_bytes!("../resources/ubol/uBOLite.edge.zip");
 const UBOL_VERSION: &str = "2026.1026.1812";
 
 /// repakxtra's look on nexusmods.com (resources/nexus-theme.css), put on each page of the Nexus window and inside its
-/// web components by resources/nexus-theme.js, which runs before the page's own scripts. `accent` is the build's logo
-/// color (a #rrggbb from the app, anything else falls back to the stable blue).
-fn theme_script(accent: Option<&str>) -> String {
-    let accent = accent.filter(|a| a.len() == 7 && a.starts_with('#') && a[1..].chars().all(|c| c.is_ascii_hexdigit())).unwrap_or("#346bf1");
-    let css = include_str!("../resources/nexus-theme.css").replace("__ACCENT__", accent);
+/// web components by resources/nexus-theme.js, which runs before the page's own scripts.
+fn theme_script() -> String {
+    let css = include_str!("../resources/nexus-theme.css");
     include_str!("../resources/nexus-theme.js").replace("__CSS__", &serde_json::to_string(&css).unwrap_or_default())
 }
 

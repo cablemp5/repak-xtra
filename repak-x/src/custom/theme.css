@@ -2549,15 +2549,12 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 /* A newer version on Nexus: the tag reads Update in the accent (the app's one color for "do this"), not Nexus orange */
 .mod-type-badge.nexus-badge.is-update { --tag: var(--accent-primary); }
 .nx-update { color: var(--accent-primary) !important; }
-/* Settings > General > Nexus Mods (custom/nexus.tsx): the key field is a quiet field, its buttons beside it */
+/* Settings > General > Nexus Mods (custom/nexus.tsx): its logo, and the key field (a quiet field) its steps share */
 .nx-setting-logo { width: 18px; height: 18px; flex: none; }
-.nx-key-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .nx-key-input { flex: 1 1 220px; min-width: 0; height: 32px; padding: 0 10px !important; background: var(--field-bg) !important;
   border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important; color: var(--text-primary) !important;
   font: 13px var(--font-mono) !important; outline: none !important; box-shadow: none !important; transition: border-color 0.15s ease; }
 .nx-key-input:focus { border-color: color-mix(in srgb, var(--text-primary), transparent 84%) !important; }
-/* Save key without a key: visibly not ready */
-.nx-key-row .action-btn:disabled { opacity: 0.45; cursor: default; }
 .settings-content .nx-key-error { margin: 6px 0 0 !important; padding: 0 !important; color: var(--text-primary) !important; }
 
 /* Type hint under the type badges in mod details (custom/typeHints.tsx) */
@@ -3208,26 +3205,11 @@ button.nx-act:hover { background: var(--quiet-hover) !important; border-color: c
 .nx-step-save:not(:disabled) { background: var(--text-primary) !important; border-color: var(--text-primary) !important; color: var(--bg-darkest) !important; }
 .nx-step-save:not(:disabled):hover { opacity: 0.9; }
 .nx-step-save:disabled { opacity: 0.45; cursor: default; }
+/* Settings > General: the same steps under the section's words, the picture no wider than the key field */
+.nx-setting-steps { margin-top: 14px; max-width: 560px; }
 .nx-step-error { font-size: 12.5px; line-height: 1.45; color: var(--text-primary); }
 .nx-signin-foot { margin: 0; padding-top: 18px; border-top: 1px solid var(--panel-border); font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 html[data-motion="off"] .nx-card.is-skeleton, html[data-motion="off"] .nx-card-image img { animation: none; transition: none; }
-
-/* The key form (custom/nexus.tsx NexusKeyForm): where the key is, in yellow, then a Show me that previews Nexus's page
-   on hover and shows it in full under the words on a click */
-.nx-key { display: flex; flex-direction: column; gap: 10px; }
-.nx-key .nx-key-where { margin: 0 !important; line-height: 1.5; }
-.nx-key-where strong { color: #facc15; font-weight: 600; }
-[data-theme="light"] .nx-key-where strong { color: #8a6a00; }
-.nx-hint { position: relative; display: inline-block; margin-left: 6px; }
-.nx-hint-btn { display: inline-flex !important; align-items: center; gap: 4px; font-size: inherit; }
-.nx-hint-pop { position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; width: 340px; padding: 6px; border-radius: 10px; pointer-events: none;
-  background: var(--bg-darker); border: 1px solid var(--panel-border); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
-  opacity: 0; transform: translateY(-4px); transition: opacity 0.15s ease, transform 0.15s ease; }
-.nx-hint-pop img { display: block; width: 100%; border-radius: 6px; }
-.nx-hint:hover .nx-hint-pop, .nx-hint-btn:focus-visible + .nx-hint-pop { opacity: 1; transform: none; }
-.nx-hint-full { display: block; width: 100%; max-width: 560px; border-radius: 8px; border: 1px solid var(--panel-border);
-  animation: t-dropdown-open var(--dropdown-open-dur, 0.16s) var(--dropdown-ease, ease-out) backwards; }
-html[data-motion="off"] .nx-hint-pop, html[data-motion="off"] .nx-hint-full { transition: none; animation: none; }
 
 /* A Nexus mod with a newer version: the orange Nexus tag stays, a blue arrow dot on its corner */
 .mod-type-badge.nexus-badge.has-update { position: relative; overflow: visible !important; }

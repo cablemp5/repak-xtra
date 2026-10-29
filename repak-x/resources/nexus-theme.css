@@ -1,7 +1,7 @@
 /* repakxtra: its look on nexusmods.com, in the app's Nexus window (nexus-theme.js puts it on each page and inside each
    web component). Nexus builds its pages from a few color families (zinc greys, orange accents, in four naming
-   schemes): each is set to repakxtra's neutral greys and the build's accent (the color of the logo's "xtra"). Ad slots
-   (left empty by the bundled uBlock Origin Lite), the Premium trial bar, the Vortex ads and the site footer fold away */
+   schemes): its greys are set to repakxtra's neutral ones, its orange stays. Ad slots (left empty by the bundled
+   uBlock Origin Lite), the Premium trial bar, the Vortex ads and the site footer fold away */
 :root:root, html body[class], :host {
   /* greys: the app's neutral ones, not Nexus's blue-tinted zinc */
   --zinc-950: #101010 !important; --zinc-900: #1a1a1a !important; --zinc-800: #242424 !important; --zinc-700: #323232 !important;
@@ -21,33 +21,8 @@
   --color-zinc-300: #cfcfcf !important; --color-zinc-400: #a7a7a7 !important; --color-zinc-500: #7a7a7a !important;
   --color-zinc-600: #4a4a4a !important; --color-zinc-700: #323232 !important; --color-zinc-800: #242424 !important;
   --color-zinc-900: #1a1a1a !important; --color-zinc-950: #101010 !important;
-  /* accents: the build's own color (the logo's "xtra", filled in by xtra_nexus_api.rs) in place of Nexus orange, as a scale */
-  --rx-accent: __ACCENT__;
-  --rx-50: color-mix(in srgb, var(--rx-accent) 10%, white); --rx-100: color-mix(in srgb, var(--rx-accent) 20%, white);
-  --rx-200: color-mix(in srgb, var(--rx-accent) 40%, white); --rx-300: color-mix(in srgb, var(--rx-accent) 60%, white);
-  --rx-400: color-mix(in srgb, var(--rx-accent) 80%, white); --rx-500: color-mix(in srgb, var(--rx-accent) 90%, white);
-  --rx-600: var(--rx-accent); --rx-700: color-mix(in srgb, var(--rx-accent) 80%, black); --rx-800: color-mix(in srgb, var(--rx-accent) 65%, black);
-  --rx-900: color-mix(in srgb, var(--rx-accent) 50%, black); --rx-950: color-mix(in srgb, var(--rx-accent) 30%, black);
-  --color-orange-50: var(--rx-50) !important; --color-orange-100: var(--rx-100) !important; --color-orange-200: var(--rx-200) !important;
-  --color-orange-300: var(--rx-300) !important; --color-orange-400: var(--rx-400) !important; --color-orange-500: var(--rx-500) !important;
-  --color-orange-600: var(--rx-600) !important; --color-orange-700: var(--rx-700) !important; --color-orange-800: var(--rx-800) !important;
-  --color-orange-900: var(--rx-900) !important; --color-orange-950: var(--rx-950) !important;
-  --orange-50: var(--rx-50) !important; --orange-100: var(--rx-100) !important; --orange-200: var(--rx-200) !important; --orange-300: var(--rx-300) !important;
-  --orange-400: var(--rx-400) !important; --orange-500: var(--rx-500) !important; --orange-600: var(--rx-600) !important; --orange-700: var(--rx-700) !important;
-  --orange-800: var(--rx-800) !important; --orange-900: var(--rx-900) !important; --orange-950: var(--rx-950) !important;
-  --tw-color-orange-50: var(--rx-50) !important; --tw-color-orange-100: var(--rx-100) !important; --tw-color-orange-200: var(--rx-200) !important;
-  --tw-color-orange-300: var(--rx-300) !important; --tw-color-orange-400: var(--rx-400) !important; --tw-color-orange-500: var(--rx-500) !important;
-  --tw-color-orange-600: var(--rx-600) !important; --tw-color-orange-700: var(--rx-700) !important; --tw-color-orange-800: var(--rx-800) !important;
-  --tw-color-orange-900: var(--rx-900) !important; --tw-color-orange-950: var(--rx-950) !important;
-  --primitive-orange-300: var(--rx-300) !important; --primitive-orange-400: var(--rx-400) !important;
-  --primitive-orange-500: var(--rx-500) !important; --primitive-orange-700: var(--rx-700) !important;
-  --primary-subdued: var(--rx-500) !important; --primary-moderate: var(--rx-400) !important; --primary-strong: var(--rx-300) !important;
-  --theme-primary: var(--rx-400) !important; --theme-primary-translucent: color-mix(in srgb, var(--rx-400) 85%, transparent) !important;
 }
 html body[class] { background-color: #101010 !important; }
-/* the download buttons' own orange, written as a color rather than a token */
-.nxm-button-flamework { background-color: var(--rx-600) !important; }
-::selection { background: var(--rx-600); color: #fff; }
 
 /* ads, upsells and the footer */
 .ads-holder, .ad, .ad-billboard, [id^="billboard_"], a.rj-btn[href*="/vortex"],
@@ -61,8 +36,7 @@ div.h-full:has(> [data-headlessui-state]:nth-child(6)) > [data-headlessui-state]
 button.nxm-button:has(> svg path[d^="M9,16V10H5L12,3"]),
 div:has(> button[aria-label="Show notifications"]), div:has(> a[aria-label="View messages"]) { display: none !important; }
 
-/* a mod page's tabs (Description, Files, Images...): sentence case, room on both sides, the count as Nexus draws it */
-.modtabs > li { text-transform: none !important; letter-spacing: 0 !important; }
+/* a mod page's tabs (Description, Files, Images...): Nexus's own capitals and count, with room on both sides */
 .modtabs > li > a { display: flex !important; align-items: center; gap: 7px; height: 44px; padding: 0 18px !important; box-sizing: border-box;
   font-size: 14px !important; font-weight: 500 !important; }
 
