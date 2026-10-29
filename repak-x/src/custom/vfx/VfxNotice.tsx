@@ -80,7 +80,7 @@ export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () =>
   const when = new Date(updated * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
   return (
     <div className="vfx-notice" role="status">
-      <AlertTriangle size={16} className="vfx-notice-icon" aria-hidden="true" />
+      <AlertTriangle size={20} className="vfx-notice-icon" aria-hidden="true" />
       {/* the risk first as a headline, the counts below it (Von Restorff, progressive disclosure) */}
       <p><strong className="vfx-notice-head">{noticeHead(n, when)}</strong>{noticeDetail(n, ready.length, waiting)}</p>
       <button type="button" className="lo-text-btn" onClick={() => { localStorage.setItem(DISMISSED, seen); setDismissed(seen) }}

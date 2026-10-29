@@ -3158,7 +3158,7 @@ html[data-motion="off"] .upd-progress > span, html[data-motion="off"] .repakx-pr
 .nx-filters .nx-type.custom-dropdown-container { width: 170px; }
 .nx-type .custom-dropdown-img.is-glyph { width: 14px; height: 14px; background: transparent; }
 .nx-type-dot { width: 8px; height: 8px; border-radius: 50%; }
-.nx-type-dot.is-all { box-sizing: border-box; border: 1.5px solid var(--text-secondary); }
+.nx-type-dot.is-all { box-sizing: border-box; border: 2px solid var(--text-secondary); }
 [data-theme="light"] .nx-card-type { --c: color-mix(in srgb, var(--type, var(--text-primary)), #000 38%); }
 .nx-clear { margin-left: 6px; font-size: 12.5px; white-space: nowrap; }
 .nx-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; gap: 24px; }
