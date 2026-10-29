@@ -3214,10 +3214,10 @@ button.nx-act:hover { background: var(--quiet-hover) !important; border-color: c
   border-color: color-mix(in srgb, var(--accent-primary), transparent 60%) !important; }
 button.nx-act.is-install:hover { background: color-mix(in srgb, var(--accent-primary), transparent 78%) !important; border-color: color-mix(in srgb, var(--accent-primary), transparent 40%) !important; }
 [data-theme="light"] .nx-act.is-install { color: var(--accent-primary) !important; }
-/* Top this week: four equal cards as pictures, the words on a dark fade at the bottom, set apart from
+/* Top this week: three equal cards as pictures, the words on a dark fade at the bottom, set apart from
    All mods below by a rule (Common region) */
 .nx-spot { padding-bottom: 20px; border-bottom: 1px solid var(--panel-border); }
-.nx-spot-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; height: 240px; }
+.nx-spot-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; height: 240px; }
 .nx-spot .nx-card { position: relative; }
 .nx-spot .nx-card-image { position: absolute !important; inset: 0; height: 100%; aspect-ratio: auto; }
 .nx-spot .nx-card-body { position: relative; flex: none; margin-top: auto; padding: 56px 14px 12px; pointer-events: none;
@@ -3226,6 +3226,13 @@ button.nx-act.is-install:hover { background: color-mix(in srgb, var(--accent-pri
 .nx-spot .nx-card-name { color: #fff; }
 .nx-spot .nx-card-by, .nx-spot .nx-stat { color: rgba(255, 255, 255, 0.72); }
 .nx-spot .nx-card-summary { display: none; }
+/* its place as a medal in the corner: gold, silver, bronze, a metal sheen and a dark number */
+.nx-medal { position: absolute; left: 10px; top: 10px; z-index: 2; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+  font: 700 14px var(--font-primary); font-variant-numeric: tabular-nums; color: rgba(20, 16, 8, 0.88); pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.55), inset 0 -2px 0 rgba(0, 0, 0, 0.18); }
+.nx-medal.is-1 { background: linear-gradient(145deg, #fff1a8 0%, #f2c94c 45%, #b8860b 100%); }
+.nx-medal.is-2 { background: linear-gradient(145deg, #ffffff 0%, #cfd6dd 45%, #8d98a3 100%); }
+.nx-medal.is-3 { background: linear-gradient(145deg, #f6c79a 0%, #cd7f32 45%, #8a4b17 100%); }
 /* who, when, and the hero on one line here (on the grid's cards they stack: .nx-card-facts adds no box there) */
 .nx-card-facts { display: contents; }
 .nx-spot .nx-card-facts { display: flex; align-items: center; gap: 12px; margin-top: 6px; min-width: 0; }

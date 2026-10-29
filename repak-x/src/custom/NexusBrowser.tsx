@@ -141,11 +141,11 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
     return () => { on = false }
   }, [live, query, hero, type, days, sort, tries, more])
 
-  // Top this week: the four most endorsed mods uploaded in the last 7 days, over the grid while nothing narrows it
+  // Top this week: the three most endorsed mods uploaded in the last 7 days, over the grid while nothing narrows it
   const [top, setTop] = useState<Card[]>([])
   useEffect(() => {
     if (!live || top.length) return
-    gql<Page>(QUERY, { f: filterOf('', '', 'all', '7', 'endorsements'), s: [{ endorsements: { direction: 'DESC' } }], o: 0, c: 4 })
+    gql<Page>(QUERY, { f: filterOf('', '', 'all', '7', 'endorsements'), s: [{ endorsements: { direction: 'DESC' } }], o: 0, c: 3 })
       .then(d => setTop(d.mods.nodes), () => undefined) // no spotlight then, the grid still shows
   }, [live, top.length])
   const portrait = useHeroPortrait()
@@ -157,7 +157,7 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
   // the time window counts uploads, or updates under Recently updated (filterOf): screen readers hear which
   const period = sort === 'updatedAt' ? 'Updated' : 'Uploaded'
   const criteria = [query && `"${query}"`, hero, type !== 'all' && type, days !== 'all' && WINDOWS.find(w => w.value === days)?.label].filter(Boolean).join(', ')
-  const spot = !narrowed && top.length === 4
+  const spot = !narrowed && top.length === 3
 
   if (view !== 'nexus') return null
   if (!account) return (
@@ -194,7 +194,7 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
         {spot && (
           <section className="nx-section nx-spot" aria-labelledby="nx-top-title">
             <div className="nx-section-head"><h3 id="nx-top-title" className="nx-section-title">Top this week</h3><span className="nx-section-note">Most endorsed uploads of the last 7 days</span></div>
-            <div className="nx-spot-grid">{top.map(c => <NexusCard key={c.modId} c={c} path={installed.get(c.modId)} look={look} />)}</div>
+            <div className="nx-spot-grid">{top.map((c, i) => <NexusCard key={c.modId} c={c} path={installed.get(c.modId)} look={look} rank={i + 1} />)}</div>
           </section>
         )}
         <section className="nx-section" aria-labelledby="nx-all-title">
@@ -242,7 +242,8 @@ const ErrorDetails = ({ error }: { error: string }) => (
   <details className="nx-details"><summary>Details</summary><code>{error}</code></details>
 )
 
-function NexusCard({ c, path, look }: { c: Card; path?: string; look: Look }) {
+/** rank: its place in Top this week (1 to 3), a gold, silver, or bronze medal in its corner */
+function NexusCard({ c, path, look, rank }: { c: Card; path?: string; look: Look; rank?: number }) {
   const u = path ? updateOf(sourceOf(path)) : undefined
   const name = plain(c.name)
   const open = () => openNexusPage(c.modId)
@@ -256,6 +257,7 @@ function NexusCard({ c, path, look }: { c: Card; path?: string; look: Look }) {
   const install = () => { setPreparing(true); void installFromNexus(c.modId).finally(() => setPreparing(false)) }
   return (
     <article className="nx-card">
+      {rank && <span className={`nx-medal is-${rank}`} aria-label={`Number ${rank} this week`}>{rank}</span>}
       {peek && <NexusPeek modId={c.modId} name={name} first={c.thumbnailLargeUrl} onOpen={open} onClose={() => setPeek(false)} />}
       <button ref={picture} type="button" className="nx-card-image" title={pictures} aria-label={pictures}
         onClick={() => { if (c.thumbnailLargeUrl) setPeek(true); else open() }}>
