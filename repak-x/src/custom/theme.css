@@ -57,6 +57,8 @@
 :root[data-edition="extended"][data-amoled] .drop-folder-item:hover { background: #191919; }
 /* AMOLED toasts: black like the panels, their hairline border keeps them apart from what is under them */
 :root[data-edition="extended"][data-amoled] .toast-item { --toast-bg: #000; }
+/* AMOLED hover tooltips: black too (they were a grey glass), the same hairline border */
+:root[data-edition="extended"][data-amoled] .global-tooltip { background: #000; }
 
 /* Geist and Geist Mono (OFL, bundled in ./fonts, one variable file each covering 100-900): UI and code */
 @font-face {
@@ -3223,7 +3225,9 @@ button.nx-act.is-install:hover { background: color-mix(in srgb, var(--accent-pri
 .nx-spot .nx-card-body { position: relative; flex: none; margin-top: auto; padding: 68px 14px 12px; /* the fade reaches a little higher than the words */ pointer-events: none;
   background: linear-gradient(rgba(6, 6, 8, 0), rgba(6, 6, 8, 0.93) 50%, rgba(6, 6, 8, 0.98)); }
 .nx-spot .nx-card-body > * { pointer-events: auto; }
-.nx-spot .nx-card-name { color: #fff; }
+.nx-spot .nx-card-name { color: #fff; font-size: 16px; line-height: 21px; }
+/* the picture fills from its top edge: faces and titles sit at the top of most mod pictures */
+.nx-spot .nx-card-image img { object-position: center top; }
 .nx-spot .nx-card-by, .nx-spot .nx-stat { color: rgba(255, 255, 255, 0.72); }
 .nx-spot .nx-card-summary { display: none; }
 /* its place in the corner: a flat medal, a smooth rim in the light metal, a darker disc, the number in the rim's color */
