@@ -1005,7 +1005,6 @@ pub async fn make(
         .into_iter()
         .filter(|p| !hero(p).is_some_and(|h| excluded.contains(&h)))
         .collect();
-    let waits = paths.iter().filter(|p| waiting.contains(&p.to_ascii_lowercase())).count();
     let paths: Vec<String> = paths.into_iter().filter(|p| !waiting.contains(&p.to_ascii_lowercase())).collect();
     if paths.is_empty() {
         return Err("Every effect hero is excluded".into());
@@ -1092,9 +1091,6 @@ pub async fn make(
     );
     if missing > 0 {
         summary += &format!(". {missing} listed assets are not in this game version");
-    }
-    if waits > 0 {
-        summary += &format!(". {waits} more wait for the USMAP of game build {}", crate::xtra_vfx::game_cl(paks).unwrap_or(0));
     }
     Ok((summary, heroes))
 }

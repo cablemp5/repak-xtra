@@ -122,6 +122,9 @@ struct Saved {
     /// USMAP is saved the build is out of date, and the next refresh builds it with everything
     #[serde(default)]
     waited_usmap: Option<String>,
+    /// How many of its game files that build left out (waited_usmap)
+    #[serde(default)]
+    waiting_files: usize,
     /// repakxtra: the recipe its files were made with (`recipe`): an app update that changes how one is built rebuilds it
     #[serde(default)]
     built_recipe: u32,
@@ -134,6 +137,10 @@ fn recipe(id: &str) -> u32 {
         "no-impact" | "no-tracers" | "no-screen-shake" => 1,
         _ => 0,
     }
+}
+
+fn is_zero(n: &usize) -> bool {
+    *n == 0
 }
 
 /// The build left files out for want of a newer USMAP, and one has been saved since.
@@ -167,6 +174,9 @@ pub struct BuiltinView {
     /// Its last build for these options failed in this run: the automatic checks do not try it again (FAILED)
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     gave_up: bool,
+    /// repakxtra: in the game but partly built, these many game files left out until the game's new USMAP is out
+    #[serde(skip_serializing_if = "is_zero")]
+    partial: usize,
 }
 
 fn store_path() -> PathBuf {
@@ -275,6 +285,7 @@ fn view(id: &str, s: &Saved, dir: &Path, build: &str) -> BuiltinView {
         quake: (id == CUSTOM_QUAKE).then(|| s.quake.clone().unwrap_or_default()),
         overlaps: if s.on { s.overlaps.clone() } else { Vec::new() },
         gave_up: s.error.is_some() && FAILED.lock().unwrap_or_else(|e| e.into_inner()).contains(&failed_key(id, s, build)),
+        partial: if s.on && s.waited_usmap.is_some() { s.waiting_files.max(1) } else { 0 },
     };
     #[cfg(feature = "extended")]
     // the supplied list's heroes, and the newer ones the last build found
@@ -576,7 +587,11 @@ async fn make(tool: &Path, id: &str, excluded: &[String], quake: &crate::xtra_qu
                 usmap_ready(paks, &usmap, &inputs)?; // nothing to build yet: says so the usual way
             }
             let name = Path::new(&usmap).file_name().unwrap_or_default().to_string_lossy().to_string();
-            update(|all| all.entry(id.to_string()).or_default().waited_usmap = (!waiting.is_empty()).then_some(name))?;
+            update(|all| {
+                let s = all.entry(id.to_string()).or_default();
+                s.waited_usmap = (!waiting.is_empty()).then_some(name);
+                s.waiting_files = waiting.len();
+            })?;
         }
     }
     #[cfg(feature = "extended")]

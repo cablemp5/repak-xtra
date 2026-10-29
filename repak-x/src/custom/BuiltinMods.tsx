@@ -23,7 +23,9 @@ import { ROLES, type Role } from './heroRoles'
 /** CustomQuake's options (xtra_quake.rs Options): colors as 6 hex digits */
 export type Quake = { base: string; sky: string; hidePlants: boolean; lobby: boolean }
 export type Builtin = { id: string; on: boolean; excluded: string[]; current: boolean; active: boolean; builtAt?: number; summary?: string; heroes: string[]; error?: string; path: string; size: number
-  quake?: Quake; overlaps?: string[]; gaveUp?: boolean }
+  quake?: Quake; overlaps?: string[]; gaveUp?: boolean
+  /** In the game but partly built: these many game files the last patch changed wait for its USMAP (xtra_builtins.rs) */
+  partial?: number }
 
 // icon: a pixel-grid drawing (PixelIcon.tsx), sharp at any display scale. A new built-in adds its drawing there
 const ABOUT: Record<string, { name: string; what: string; icon: BuiltinIconComponent }> = {
@@ -178,6 +180,10 @@ function useProgress(on: boolean) {
 /** What a CustomQuake build says besides its stage: the stage's count, then where the files are. Pure. */
 export const buildNote = (b: Builtin, progress: Progress | null) => [progress?.detail, b.active ? 'The last build stays in use' : 'Not in the game yet'].filter(Boolean).join('. ')
 
+/** A partly built one's line: what is missing in the game, and that it completes by itself. */
+export const partialText = (n: number) =>
+  `In the game, but ${n === 1 ? '1 file' : `${n} files`} the last patch changed ${n === 1 ? 'is' : 'are'} left as the game ships ${n === 1 ? 'it' : 'them'} until the game's new USMAP is out. Then it completes by itself`
+
 function status(b: Builtin, building: boolean, progress?: Progress | null) {
   const long = EXTENDED && b.id === 'custom-quake' ? ', about 10 minutes' : ''
   if (building && wanted.get(b.id) === false) return 'Stopping the build…'
@@ -186,6 +192,7 @@ function status(b: Builtin, building: boolean, progress?: Progress | null) {
   if (!b.on) return ABOUT[b.id].what
   if (b.error) return b.active ? `${b.error}. The last build is still in use` : retryable(b.error) ? `${b.error}. Not in the game` : b.error
   if (b.overlaps?.length) return overlapText(b.overlaps, b.id)
+  if (b.current && b.partial) return partialText(b.partial)
   if (b.current) return [b.summary ?? 'Up to date', b.builtAt ? `Built ${ago(b.builtAt)} for this game version` : ''].filter(Boolean).join('. ')
   return 'Waiting to rebuild for this game version'
 }
@@ -418,7 +425,7 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
       <div className="bi-row">
         <span className="bi-icon" aria-hidden="true"><Icon size={20} /></span>
         <div className="bi-text">
-          <span className="bi-name">{about.name}</span>
+          <span className="bi-name">{about.name}{b.current && b.partial ? <span className="bi-partial" tabIndex={0} title={`${partialText(b.partial)}. ${b.summary ?? ''}`}>Partly built</span> : null}</span>
           <span className={`bi-status${warn ? ' is-warn' : ''}`} title={text} aria-live="polite">
             {warn && <TriangleAlert size={13} aria-hidden="true" />}
             {building ? <span className="t-shimmer"><SwapText text={text} /></span> : <SwapText text={text} />}

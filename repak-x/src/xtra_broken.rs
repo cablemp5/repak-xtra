@@ -217,14 +217,14 @@ pub(crate) fn usmap_wait(paks: &Path, usmap: &str, utoc: &Path) -> usize {
     changed_since_usmap(paks, usmap, &files).map_or(files.len().max(1), |c| c.len())
 }
 
-/// The VFX Updater's gate for one mod (pipeline.ts): Some while the update would decode files a patch newer than the
-/// USMAP rewrote, with the builds and that count.
+/// The VFX Updater's gate for one mod (pipeline.ts): Some while the USMAP is older than the game, with the builds and
+/// how many files the update would decode that the newer patch rewrote (it waits when that is not 0).
 #[tauri::command]
 pub fn xtra_vfx_usmap_wait(mod_path: String, game_paks: String, usmap_path: String) -> Option<UsmapWait> {
     let paks = Path::new(&game_paks);
     let (usmap, game) = crate::xtra_niagara::usmap_behind(&usmap_path, paks)?;
     let changed = usmap_wait(paks, &usmap_path, &Path::new(&mod_path).with_extension("utoc"));
-    (changed > 0).then_some(UsmapWait { usmap, game, changed })
+    Some(UsmapWait { usmap, game, changed })
 }
 
 #[derive(Serialize)]
