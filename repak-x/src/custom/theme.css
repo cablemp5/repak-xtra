@@ -2806,6 +2806,8 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 [data-theme="light"] .mod-type-badge.broken-badge, [data-theme="light"] .mod-state-filter button.is-broken, [data-theme="light"] .mod-state-filter button.is-broken .mod-state-count { color: #7f6900 !important; }
 .mod-type-badge.broken-badge.is-broken { background: color-mix(in srgb, #f5d342, transparent 88%) !important; }
 .mod-type-badge.broken-badge.is-risky, .mod-type-badge.broken-badge.is-vfx { background: transparent !important; }
+/* Needs VFX update that waits for the game's new USMAP: grey, nothing to do yet (custom/VerdictBadge.tsx) */
+.mod-type-badge.broken-badge.is-waiting, [data-theme="light"] .mod-type-badge.broken-badge.is-waiting { color: var(--text-secondary) !important; border-color: color-mix(in srgb, var(--text-secondary), transparent 60%) !important; }
 /* the header's VFX Updater button: a yellow dot (the Needs VFX update tag's) while VFX mods need an update (custom/vfx/VfxNotice.tsx) */
 .btn-vfx { position: relative; }
 .vfx-dot { position: absolute; top: -4px; right: -4px; width: 9px; height: 9px; border-radius: 50%; pointer-events: none;

@@ -44,6 +44,34 @@ fn hero(path: &str) -> Option<String> {
                 .map(str::to_string)
         })
 }
+/// The game packages a build of `id` reads (Marvel/Content/... paths), for xtra_builtins.rs usmap_ready. FOV Slider also
+/// lists the game packages its own Blueprints import: a patch that changed the classes they use recooks those.
+pub(crate) fn inputs(id: &str, excluded: &[String]) -> Option<Vec<String>> {
+    if id == FOV {
+        let mut out = vec![LAYOUT.to_string(), WIDGET.to_string()];
+        let recipe: Value = serde_json::from_str(include_str!("../resources/visual-builtins/fov-widget.json")).ok()?;
+        let mut zip = zip::ZipArchive::new(std::io::Cursor::new(include_bytes!("../resources/visual-builtins/fov-logic.zip"))).ok()?;
+        let mut docs = vec![recipe];
+        for i in 0..zip.len() {
+            let mut text = String::new();
+            std::io::Read::read_to_string(&mut zip.by_index(i).ok()?, &mut text).ok()?;
+            docs.extend(serde_json::from_str::<Value>(text.trim_start_matches('\u{feff}')).ok());
+        }
+        for doc in &docs {
+            for import in doc["Imports"].as_array().into_iter().flatten() {
+                if let Some(game) = import["ObjectName"].as_str().and_then(|n| n.strip_prefix("/Game/")).filter(|n| !n.starts_with("FOV/")) {
+                    out.push(format!("Marvel/Content/{game}"));
+                }
+            }
+        }
+        out.sort();
+        out.dedup();
+        return Some(out);
+    }
+    let paths = effect_paths(id)?;
+    Some(paths.lines().filter(|p| !hero(p).is_some_and(|h| excluded.contains(&h))).map(str::to_string).collect())
+}
+
 pub(crate) fn effect_heroes(id: &str) -> Option<Vec<String>> {
     let paths = effect_paths(id)?;
     let mut heroes: Vec<_> = paths.lines().filter_map(hero).collect();
@@ -1311,6 +1339,25 @@ mod tests {
         .unwrap();
         assert!(legacy.join(format!("{real}.uexp")).is_file());
         println!("extraction tolerates a missing listed asset");
+    }
+
+    /// The USMAP gate on the installed game: with the saved USMAP one build behind (3962284 for 3984769, 2026-10-29),
+    /// only built-ins whose game files the patch rewrote wait. Expected from the patch's own package list.
+    #[test]
+    #[ignore]
+    fn usmap_gate_real() {
+        let root = std::path::PathBuf::from(std::env::var("REPAKXTRA_REFERENCES").expect("REPAKXTRA_REFERENCES"));
+        let c = read(&root.join("context.json")).unwrap();
+        let (paks, usmap) = (Path::new(c["paks"].as_str().unwrap()), c["usmap"].as_str().unwrap());
+        let gate = |inputs: Vec<String>| crate::xtra_builtins::usmap_ready(paks, usmap, &inputs);
+        let waits = |r: Result<(), String>| r.err().map(|e| e.split(" of the ").next().unwrap_or_default().rsplit(' ').next().unwrap_or_default().to_string());
+        assert_eq!(waits(gate(inputs(NO_IMPACT, &[]).unwrap())), None, "No Impact reads nothing the patch changed");
+        assert_eq!(waits(gate(inputs(NO_TRACERS, &[]).unwrap())), None);
+        assert_eq!(waits(gate(inputs(NO_SHAKE, &[]).unwrap())).as_deref(), Some("23"), "23 montages were rewritten");
+        assert_eq!(waits(gate(inputs(FOV, &[]).unwrap())).as_deref(), Some("1"), "one material its Blueprints import");
+        assert_eq!(waits(gate(vec!["Marvel/Content/Marvel/Data/DataTable/UI/Login/MarvelLogoVideoTable".into()])), None);
+        assert_eq!(waits(gate(vec!["Marvel/Content/Marvel/Data/DataTable/MarvelHeroSkinTable".into(), "Marvel/Content/Marvel/Data/DataTable/HeroGallery/UISkinTable".into()])).as_deref(), Some("2"));
+        println!("USMAP gate matches the patch: impact, tracers and logos build, screen shake, FOV and default skin wait");
     }
 
     /// Builds No Screen Shake from the installed game (no hero excluded) and reads the encrypted package back.

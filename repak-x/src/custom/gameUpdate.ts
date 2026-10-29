@@ -5,19 +5,21 @@
 // counts (Hick), and it waits for the checks so the number it shows is the number in the Problems tab (Doherty).
 import { createElement, useEffect, useRef, type ReactNode } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { flaggedCount, fullScan } from './brokenMods'
+import { flaggedCount, fullScan, waitingCount } from './brokenMods'
 import { setView } from './loadoutStore'
 import { plural } from './modName'
 
 type GameUpdate = { updated: number; previous: number }
 type Alert = { info: (title: string, text?: string, options?: { color?: 'info'; duration?: number; action?: ReactNode }) => number }
 
-/** The toast's text. `updated` is unix seconds. */
-export function updateText(updated: number, flagged: number): string {
+/** The toast's text. `updated` is unix seconds. `waiting`: of the flagged, the ones whose update waits for the game's
+ *  new USMAP (the rest can be updated now). */
+export function updateText(updated: number, flagged: number, waiting = 0): string {
   const day = new Date(updated * 1000).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
   // the count, short: what each one needs is in the Problems view the action opens
   const who = flagged === 0 ? 'No mod needs' : `${plural(flagged, 'mod')} ${flagged === 1 ? 'needs' : 'need'}`
-  return `${who} attention after the ${day} update.`
+  const wait = waiting ? ` ${plural(waiting, 'mod')} ${waiting === 1 ? 'waits' : 'wait'} for the game's new USMAP before ${waiting === 1 ? 'it' : 'they'} can be updated.` : ''
+  return `${who} attention after the ${day} update.${wait}`
 }
 
 /** Mounted once in App. `loading` and `count` are the mod list's: the check waits for the first load to finish, so a slow
@@ -52,7 +54,7 @@ export function useGameUpdateWatch(alert: Alert, loading: boolean, count: number
           const { alert, showFlagged } = live.current
           // the info color, not primary: Fewer pop-ups skips primary toasts without an action, and this one must show
           // before it is marked seen
-          alert.info('Game updated', updateText(found.updated, flagged), {
+          alert.info('Game updated', updateText(found.updated, flagged, waitingCount()), {
             color: 'info',
             duration: 15000,
             // a short label on one line (the toast's own action button wraps, for long mod names)
@@ -78,6 +80,7 @@ if (import.meta.env.DEV) {
   const noon = Date.UTC(2026, 9, 26, 12) / 1000
   console.assert(/^3 mods need attention after the .+ update\.$/.test(updateText(noon, 3)), 'flagged count', updateText(noon, 3))
   console.assert(updateText(noon, 1).startsWith('1 mod needs attention after the '), 'one mod', updateText(noon, 1))
+  console.assert(updateText(noon, 3, 1).endsWith(" update. 1 mod waits for the game's new USMAP before it can be updated."), 'waiting mods', updateText(noon, 3, 1))
   console.assert(updateText(noon, 0).startsWith('No mod needs attention after the '), 'none flagged', updateText(noon, 0))
   console.assert(!/[;\u2014]/.test(updateText(noon, 2)), 'no semicolons or em dashes')
 }

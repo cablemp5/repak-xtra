@@ -858,6 +858,7 @@ pub async fn make(tool: &Path, usmap: &str, paks: &Path, work: &Path, out_base: 
             .await
             .map_err(|e| e.to_string())??;
             lap("listing the textures");
+            crate::xtra_builtins::usmap_ready(paks, usmap, &listed)?; // repakxtra: none of them changed since the USMAP's build
             let t = read_settings(tool, usmap, paks, &listed, &work.join("read"), stop).await?;
             lap("reading their settings");
             if let Err(e) = save_cache(build, &t) {

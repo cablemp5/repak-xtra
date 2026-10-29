@@ -348,22 +348,11 @@ pub(crate) fn usmap_matches(usmap: &str, paks: &Path) -> bool {
 
 /// The USMAP's build and the game's, when both are known and the USMAP is the older one. A patch can insert properties
 /// into classes (NiagaraSystem in 3962284), and an older USMAP then reads every later property under the wrong name
-/// without any error, so built-ins and VFX updates wait for the new one.
+/// without any error, so whatever decodes a file such a patch rewrote waits for the new one (xtra_broken.rs
+/// changed_since_usmap).
 pub(crate) fn usmap_behind(usmap: &str, paks: &Path) -> Option<(u64, u64)> {
     let (u, g) = (usmap_build(usmap)?, crate::xtra_vfx::game_cl(paks)?);
     (u < g).then_some((u, g))
-}
-
-#[derive(Serialize)]
-pub struct UsmapBehind {
-    usmap: u64,
-    game: u64,
-}
-
-/// The VFX Updater's gate: Some when `usmap_path` is older than the game in `game_paks`.
-#[tauri::command]
-pub fn xtra_usmap_behind(game_paks: String, usmap_path: String) -> Option<UsmapBehind> {
-    usmap_behind(&usmap_path, Path::new(&game_paks)).map(|(usmap, game)| UsmapBehind { usmap, game })
 }
 
 /// Fetches a newer USMAP when there is one (an ETag check, so cheap) and says whether the saved one is still older than
@@ -732,9 +721,11 @@ pub(crate) async fn run(game_paks: &str, usmap: &str, mod_extract: &Path, files:
     let Some(build) = usmap_build(usmap) else {
         return Ok(NiagaraRun { why: Some("The USMAP's game build is not in its name".into()), ..Default::default() });
     };
-    if !usmap_matches(usmap, Path::new(game_paks)) {
+    // a USMAP behind the game still reads the files no newer patch rewrote (xtra_broken.rs changed_since_usmap)
+    let changed = crate::xtra_broken::changed_since_usmap(Path::new(game_paks), usmap, files).map_or(files.len().max(1), |c| c.len());
+    if changed > 0 {
         let game = crate::xtra_vfx::game_cl(Path::new(game_paks)).unwrap_or(0);
-        return Ok(NiagaraRun { why: Some(format!("The USMAP is for build {build} and the game is on {game}")), ..Default::default() });
+        return Ok(NiagaraRun { why: Some(format!("The USMAP is for build {build} and the game is on {game}, whose update changed {changed} of these Niagara files")), ..Default::default() });
     }
     let rels: Vec<String> = files.iter().map(|f| rel_no_ext(f)).collect();
     let emit = |n: usize, msg: String| progress.emit(VfxPipelineProgress { stage: "Rebuilding Niagara effects".into(), step: 7, current: n, total: rels.len(), message: msg });

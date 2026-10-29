@@ -21,7 +21,7 @@ import { canonKey } from '../loadoutIdentity'
 import { modKey, useLoadouts } from '../loadoutStore'
 import { FIXED_EVENT, onHandoff, openLoadoutInMain, onReport, takeHandoff, takeReport, utocOf, type Fixed } from './handoff'
 import { KEEP_NAME, ORIGINALS, claimRun, newRunToken, onRunChange, readNaming, readOriginals, releaseRun, runLock, type Naming, type Originals, type RunLock } from './prefs'
-import { STEPS, fixVfxMod, usmapWaitText, type AssetKind, type VfxReport } from './pipeline'
+import { STEPS, fixVfxMod, type AssetKind, type VfxReport } from './pipeline'
 import { checkVfxMod, checkWords } from './quick'
 import { rescanVerdicts, verdictsChanged } from '../brokenMods'
 import { HeroFilter, heroOfName } from '../heroFilter'
@@ -31,7 +31,7 @@ type Status = 'waiting' | 'running' | 'fixed' | 'nothing' | 'failed' | 'cancelle
 type Run = { status: Status; step?: number; sub?: string; report?: VfxReport }
 type Mod = { path: string; utoc: string; enabled: boolean; name: string; hero?: string | null; modified?: number; niagara?: boolean; materials?: boolean }
 type ModList = { mods: Mod[]; problems: string[] }
-type Verdict = { path: string; kind: string; reason: string; staleNiagara?: number }
+type Verdict = { path: string; kind: string; reason: string; staleNiagara?: number; usmapWait?: number }
 type Log = { time: string; text: string; type: string }
 type Usmap = { updated: boolean; upToDate: boolean; skipped: boolean; localPath?: string | null; filename?: string | null; version?: string | null; buildNumber?: number | null; commitDate?: string | null; message: string }
 type GameBuild = { updated: number; cl?: number | null }
@@ -168,8 +168,8 @@ function Report({ r, onRetry, onUsmap, busy }: { r: VfxReport; onRetry: () => vo
 
 /** A VFX mod: its tick, name, the loadouts holding it and its On badge, and once it ran its step, progress or result. Why it
  *  needs an update is its tooltip. */
-function Row({ mod, rowKey, loadouts, run, needs, partial, picked, open, busy, onPick, onToggle, onRetry, onUsmap }: {
-  mod: Mod; rowKey: string; loadouts: { id: string; name: string }[]; run?: Run; needs?: string; partial?: number; picked: boolean; open: boolean; busy: boolean; onPick: (v: boolean) => void; onToggle: () => void; onRetry: () => void; onUsmap: () => void
+function Row({ mod, rowKey, loadouts, run, needs, partial, waits, picked, open, busy, onPick, onToggle, onRetry, onUsmap }: {
+  mod: Mod; rowKey: string; loadouts: { id: string; name: string }[]; run?: Run; needs?: string; partial?: number; waits?: number; picked: boolean; open: boolean; busy: boolean; onPick: (v: boolean) => void; onToggle: () => void; onRetry: () => void; onUsmap: () => void
 }) {
   const status = run?.status
   const running = status === 'running'
@@ -177,7 +177,7 @@ function Row({ mod, rowKey, loadouts, run, needs, partial, picked, open, busy, o
   const whyId = useId()
   return (
     <li className={`mod-row vf-row${status ? ` is-${status}` : ''}${picked ? ' is-picked' : ''}`} title={needs ?? (run ? undefined : NO_NEED)} data-key={rowKey}>
-      <Checkbox size="sm" className="vf-pick" checked={picked} isDisabled={busy} disabled={busy} onChange={onPick} aria-describedby={needs ? whyId : undefined}>
+      <Checkbox size="sm" className="vf-pick" checked={picked && !waits} isDisabled={busy || Boolean(waits)} disabled={busy || Boolean(waits)} onChange={onPick} aria-describedby={needs ? whyId : undefined}>
         <span className={`vf-row-name${running ? ' t-shimmer' : ''}`} title={mod.path}>{mod.name}</span>
         {mod.enabled && <span className="on-dot" role="img" aria-label="On now" title="This mod is on now" />}
       </Checkbox>
@@ -185,7 +185,8 @@ function Row({ mod, rowKey, loadouts, run, needs, partial, picked, open, busy, o
       {/* why it needs an update, read with its tick (the row's tooltip says it on hover) */}
       {needs && <span id={whyId} className="xtra-sr-only">{needs}</span>}
       {/* in Material mods (not under Needs an update): which of them need one */}
-      {needs && mod.materials && !run && <span className="vf-needs" tabIndex={0} title={needs}>Needs update</span>}
+      {waits ? <span className="vf-needs is-waiting" tabIndex={0} title={needs}>Waits for USMAP</span>
+        : needs && mod.materials && !run && <span className="vf-needs" tabIndex={0} title={needs}>Needs update</span>}
       {mod.niagara && !partial && <span className="vf-niagara" tabIndex={0} title="Has Niagara effects (particle systems). When a game update changes them, the update rebuilds them on the new game files.">Niagara</span>}
       {partial && !run?.report ? (
         <span className="vf-partial" tabIndex={0} title={`${plural(partial, 'Niagara file')} ${partial === 1 ? 'was' : 'were'} made for an older game build. ${partial === 1 ? 'It' : 'They'} will be left out, so ${partial === 1 ? 'that effect shows' : 'those effects show'} the game's usual colors. The rest still updates, and the original is kept, off.`}>Partial</span>
@@ -302,6 +303,10 @@ export function VfxUpdaterPanel() {
   const [mods, setMods] = useState<Mod[] | null>(null)
   const [needs, setNeeds] = useState<Map<string, string>>(new Map()) // a mod's main file (norm) -> why it needs an update
   const [stale, setStale] = useState<Map<string, number>>(new Map()) // a mod's .utoc (norm) -> its Niagara files an update will leave out
+  // a mod's .utoc (norm) -> files it rebuilds that a patch newer than the USMAP changed: it waits for that patch's USMAP
+  const [waits, setWaits] = useState<Map<string, number>>(new Map())
+  const waitsRef = useRef(waits)
+  waitsRef.current = waits
   const [runs, setRuns] = useState<Record<string, Run>>({}) // by norm(utoc)
   const [picked, setPicked] = useState<Set<string>>(new Set()) // norm(utoc)
   const [q, setQ] = useState('')
@@ -315,8 +320,6 @@ export function VfxUpdaterPanel() {
   const [usmap, setUsmap] = useState<string | null>(null)
   const [usmapInfo, setUsmapInfo] = useState<Usmap | null>(null)
   const [usmapOk, setUsmapOk] = useState<boolean | null>(null)
-  // the USMAP is older than the game: updates wait, unless material-only mods are updated with it anyway (this window only)
-  const [previousUsmap, setPreviousUsmap] = useState(false)
   const [checking, setChecking] = useState(true)
   const [naming, setNaming] = useState<Naming>(readNaming)
   const [originals, setOriginals] = useState<Originals>(readOriginals)
@@ -407,6 +410,7 @@ export function VfxUpdaterPanel() {
         const n = new Map(verdicts.filter(v => v.kind === 'vfx').map(v => [norm(v.path), v.reason]))
         const utocs = new Map(list.map(m => [norm(m.path), norm(m.utoc)]))
         setStale(new Map(verdicts.filter(v => v.kind === 'vfx' && v.staleNiagara && utocs.has(norm(v.path))).map(v => [utocs.get(norm(v.path))!, v.staleNiagara!])))
+        setWaits(new Map(verdicts.filter(v => v.kind === 'vfx' && v.usmapWait && utocs.has(norm(v.path))).map(v => [utocs.get(norm(v.path))!, v.usmapWait!])))
         setMods(list)
         setScanProblems(problems)
         setNeeds(n)
@@ -518,15 +522,16 @@ export function VfxUpdaterPanel() {
   }
 
   const elsewhere = busy || !held || held.token === myToken.current ? null : held
-  const usmapBuild = usmapCl(usmap ? fileName(usmap) : null)
-  const waiting = Boolean(usmapBuild && build?.cl && usmapBuild < build.cl) && !previousUsmap
-  const lock = busy ? null : elsewhere ? `Updating ${elsewhere.name ?? 'a mod'} elsewhere. Update waits for it.` : checking ? 'Checking for a newer USMAP…' : !usmap ? 'Choose a USMAP file in Advanced first' : usmapOk === false ? 'The USMAP file is missing' : !paks ? 'Set the game folder in Setup first' : waiting ? `Waiting for a USMAP of game build ${build!.cl}` : null
+  const lock = busy ? null : elsewhere ? `Updating ${elsewhere.name ?? 'a mod'} elsewhere. Update waits for it.` : checking ? 'Checking for a newer USMAP…' : !usmap ? 'Choose a USMAP file in Advanced first' : usmapOk === false ? 'The USMAP file is missing' : !paks ? 'Set the game folder in Setup first' : null
 
   const run = useCallback(async (keys?: string[]) => {
     const byKey = new Map((modsRef.current ?? []).map(m => [norm(m.utoc), m]))
     const rank = new Map(orderRef.current.map((k, i) => [k, i]))
-    const todo = (keys ?? [...picked].filter(k => !isDone(runsRef.current[k]?.status))).filter(k => byKey.has(k))
+    const asked = (keys ?? [...picked].filter(k => !isDone(runsRef.current[k]?.status))).filter(k => byKey.has(k))
+    const todo = asked.filter(k => !waitsRef.current.has(k))
       .sort((a, b) => (rank.get(a) ?? Infinity) - (rank.get(b) ?? Infinity)) // top of the list first
+    const skipped = asked.length - todo.length // their update waits for the USMAP of this game build
+    if (skipped) addLog(`${plural(skipped, 'mod')} ${skipped === 1 ? 'waits' : 'wait'} for the USMAP of this game build and ${skipped === 1 ? 'was' : 'were'} skipped.`, 'warning')
     if (!todo.length || !usmap || !paks) return
     const token = newRunToken()
     if (!(await claimRun(token, byKey.get(todo[0])?.name))) { addLog('Another update is running. Try again when it is done.', 'warning'); return }
@@ -549,7 +554,7 @@ export function VfxUpdaterPanel() {
       modStart.current = performance.now()
       addLog(`Updating ${mod.name}`)
       const r = await fixVfxMod({
-        modPath: mod.utoc, usmapPath: usmap, gamePaksPath: paks, turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash', keepName, filter, previousUsmap,
+        modPath: mod.utoc, usmapPath: usmap, gamePaksPath: paks, turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash', keepName, filter,
         log: addLog, cancelled: () => cancel.current,
         onStep: s => patch(key, { step: s.step, sub: undefined }),
         onProgress: (_, __, message) => patch(key, { sub: message }),
@@ -587,7 +592,7 @@ export function VfxUpdaterPanel() {
     setEnded({ text: `${parts.join(', ')}${parts.length > 1 ? ',' : ''} in ${took(performance.now() - startedAt)}.`, retry, edits: pickEditsRef.current })
     cue(failed ? 'warning' : 'success', { emphasis: fixed > 1 ? undefined : 'subtle' }) // a problem is a warning, never an error sound
     setBusy(false); setCancelling(false)
-  }, [picked, usmap, paks, originals, keepName, previousUsmap, addLog])
+  }, [picked, usmap, paks, originals, keepName, addLog])
 
   // the Library's notice updates exactly the mods it sent, as soon as the list and the USMAP are ready (after a run in
   // progress)
@@ -776,17 +781,13 @@ export function VfxUpdaterPanel() {
           </p>
         )}
         {behind && !usmapMissing && (
-          <div className="vf-warn vf-usmap-behind" role="note">
+          <p className="vf-warn" role="note">
             <AlertTriangle size={14} aria-hidden="true" />
-            <div>
-              <span>{usmapWaitText({ usmap: cl, game: build!.cl! })}{' '}
-                <button type="button" className="su-link" disabled={checking || busy} onClick={() => usmapCheck(true)}>{checking ? 'Checking…' : 'Check for updates'}</button></span>
-              <Checkbox size="sm" className="vf-previous" checked={previousUsmap} isDisabled={busy} disabled={busy} onChange={v => setPreviousUsmap(Boolean(v))}>
-                Update mods made only of material instances with the previous USMAP
-              </Checkbox>
-              <span className="vf-previous-hint">Material layouts rarely change in a patch, but a season update can change them. Mods with blueprints still wait{previousUsmap && stale.size > 0 ? `, and ${plural(stale.size, 'mod')} with Niagara effects only partially update` : ''}.</span>
-            </div>
-          </div>
+            <span>The USMAP is for game build {cl} and the game is on {build!.cl}. {waits.size
+              ? `${plural(waits.size, 'mod')} ${waits.size === 1 ? 'uses' : 'use'} files this update changed and ${waits.size === 1 ? 'waits' : 'wait'} for the new USMAP. Every other mod updates now`
+              : 'This update did not change the files any of these mods rebuild, so they all update now'}.{' '}
+              <button type="button" className="su-link" disabled={checking || busy} onClick={() => usmapCheck(true)}>{checking ? 'Checking…' : 'Check for updates'}</button></span>
+          </p>
         )}
         {mods === null
           ? <p className="lp-empty" aria-live="polite">Reading the mods folder{scan ? `: ${scan.done} of ${plural(scan.total, 'mod')}` : '…'}</p>
@@ -799,7 +800,7 @@ export function VfxUpdaterPanel() {
                   {g.mods.map(m => {
                     const key = norm(m.utoc)
                     return (
-                      <Row key={key} rowKey={key} mod={m} loadouts={inLoadouts(m)} run={runs[key]} needs={needsOf(m)} partial={behind ? stale.get(key) : undefined} picked={picked.has(key)} open={open.has(key)} busy={busy}
+                      <Row key={key} rowKey={key} mod={m} loadouts={inLoadouts(m)} run={runs[key]} needs={needsOf(m)} partial={behind ? stale.get(key) : undefined} waits={waits.get(key)} picked={picked.has(key)} open={open.has(key)} busy={busy}
                         onPick={v => userPick([key], v)} onUsmap={openUsmap}
                         onToggle={() => setOpen(o => { const n = new Set(o); n.has(key) ? n.delete(key) : n.add(key); return n })}
                         onRetry={() => void run([key])} />

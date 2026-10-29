@@ -463,7 +463,7 @@ pub(crate) fn usmap_arrived(paks: &Path) -> bool {
     let here = crate::vfx_updater::commands::saved_usmap_path().is_some_and(|u| Path::new(&u).is_file() && crate::xtra_niagara::usmap_behind(&u, paks).is_none());
     if here {
         let build = game_build(paks);
-        let waited: Vec<String> = load().iter().filter(|(_, s)| s.error.as_deref() == Some(MAPPINGS_BEHIND)).map(|(id, s)| failed_key(id, s, &build)).collect();
+        let waited: Vec<String> = load().iter().filter(|(_, s)| s.error.as_deref().is_some_and(|e| e.starts_with(WAITING))).map(|(id, s)| failed_key(id, s, &build)).collect();
         FAILED.lock().unwrap_or_else(|e| e.into_inner()).retain(|k| !waited.contains(k));
     }
     here
@@ -488,7 +488,7 @@ fn write_json(p: &Path, v: &Value) -> Result<(), String> {
 }
 
 /// The USMAP the VFX Updater keeps current (rivals-depot), fetched when there is none yet.
-async fn usmap(paks: &Path) -> Result<String, String> {
+async fn usmap() -> Result<String, String> {
     if cfg!(test) {
         if let Ok(p) = std::env::var("REPAKXTRA_USMAP") {
             return Ok(p); // builtins_real with a gapped mappings file while the feed is behind the patch
@@ -498,19 +498,31 @@ async fn usmap(paks: &Path) -> Result<String, String> {
     let path = |s: crate::vfx_updater::models::VfxSettings| s.usmap_path.filter(|p| Path::new(p).exists());
     let settings = || std::fs::read_to_string(store_path().with_file_name("vfx_settings.json")).ok()
         .and_then(|t| serde_json::from_str::<crate::vfx_updater::models::VfxSettings>(&t).ok()).unwrap_or_default();
-    let found = match path(settings()) {
-        Some(p) => p,
-        None => {
-            crate::vfx_updater::commands::vfx_check_usmap_update(true).await?;
-            path(settings()).ok_or_else(|| "No USMAP mappings file yet: open the VFX Updater once to fetch it".to_string())?
-        }
-    };
-    // repakxtra: an older USMAP misreads what a patch changed without any error: wait for this game build's one
-    if crate::xtra_niagara::usmap_behind(&found, paks).is_some() {
-        return Err(MAPPINGS_BEHIND.to_string());
+    if let Some(p) = path(settings()) {
+        return Ok(p);
     }
-    Ok(found)
+    crate::vfx_updater::commands::vfx_check_usmap_update(true).await?;
+    path(settings()).ok_or_else(|| "No USMAP mappings file yet: open the VFX Updater once to fetch it".to_string())
 }
+
+/// repakxtra: Err while a patch newer than `usmap` rewrote one of `inputs` (the game packages a built-in reads, as
+/// Marvel/Content/... paths). Only the USMAP of the installed build reads those right, and an older one misreads them
+/// without any error. A built-in whose files the patch left alone builds with the saved USMAP.
+pub(crate) fn usmap_ready(paks: &Path, usmap: &str, inputs: &[String]) -> Result<(), String> {
+    let files: Vec<String> = inputs.iter().map(|p| if p.ends_with(".uasset") { p.clone() } else { format!("{p}.uasset") }).collect();
+    let changed = crate::xtra_broken::changed_since_usmap(paks, usmap, &files);
+    if changed.as_ref().is_some_and(Vec::is_empty) {
+        return Ok(());
+    }
+    let game = crate::xtra_vfx::game_cl(paks).unwrap_or(0);
+    Err(match changed {
+        Some(c) => format!("{WAITING} The game update changed {} of the {} game files it is built from, and the USMAP for game build {game} is not out yet. It builds as soon as it is", c.len(), files.len()),
+        None => format!("{WAITING} The USMAP for game build {game} is not out yet. It builds as soon as it is"),
+    })
+}
+
+/// How every wait for support files starts: the row offers no Try again, the app retries by itself.
+const WAITING: &str = "Not active yet.";
 
 /// Extracts, edits, checks and packs one built-in into `out_dir`. Returns the summary and the hero ids seen.
 async fn make(tool: &Path, id: &str, excluded: &[String], quake: &crate::xtra_quake_options::Options, paks: &Path, work: &Path, out_base: &Path) -> Result<(String, Vec<String>), String> {
@@ -520,7 +532,16 @@ async fn make(tool: &Path, id: &str, excluded: &[String], quake: &crate::xtra_qu
     let s = |p: &Path| p.to_string_lossy().to_string();
     let tool = tool.to_path_buf();
     ensure_vfx_uat_session(&tool).await?;
-    let usmap = usmap(paks).await?;
+    let usmap = usmap().await?;
+    // repakxtra: the game files it reads must be ones no patch newer than the USMAP rewrote (CustomQuake checks its
+    // textures once it has listed them)
+    if [DEFAULT_SKIN, SKIP_INTRO].contains(&id) {
+        usmap_ready(paks, &usmap, &(if id == DEFAULT_SKIN { [SKIN, UI].map(String::from).to_vec() } else { vec![LOGO.to_string()] }))?;
+    }
+    #[cfg(feature = "extended")]
+    if let Some(inputs) = crate::xtra_visual_builtins::inputs(id, excluded) {
+        usmap_ready(paks, &usmap, &inputs)?;
+    }
     #[cfg(feature = "extended")]
     if [crate::xtra_visual_builtins::NO_IMPACT, crate::xtra_visual_builtins::NO_TRACERS, crate::xtra_visual_builtins::NO_SHAKE, crate::xtra_visual_builtins::FOV].contains(&id) {
         let made = crate::xtra_visual_builtins::make(&tool, &usmap, id, excluded, paks, work, out_base, stopped).await?;

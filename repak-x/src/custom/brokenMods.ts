@@ -5,7 +5,9 @@ import { useEffect, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, listen } from '@tauri-apps/api/event'
 
-export type Verdict = { path: string; kind: 'broken' | 'vfx' | 'risky'; reason: string }
+/** usmapWait (Needs VFX update only): files it rebuilds that a patch newer than the saved USMAP changed. While it is not
+ *  0 the update waits for that patch's USMAP (xtra_broken.rs changed_since_usmap). */
+export type Verdict = { path: string; kind: 'broken' | 'vfx' | 'risky'; reason: string; usmapWait?: number }
 /** A verdict's badge text. */
 export const verdictLabel = (kind: Verdict['kind']) => (kind === 'broken' ? 'Broken' : kind === 'vfx' ? 'Needs VFX update' : 'May crash')
 
@@ -37,6 +39,8 @@ const queued = (run: () => Promise<boolean>) => { const next = queue.then(run, r
 export const fullScan = (): Promise<boolean> | null => (runFull ? queued(runFull) : null)
 /** How many mods carry a verdict now. */
 export const flaggedCount = () => verdicts.size
+/** Of those, how many need an update that waits for the USMAP of the installed game build. */
+export const waitingCount = () => [...verdicts.values()].filter(v => v.usmapWait).length
 
 /** Re-checks a moment after mods are added, removed or replaced, at every launch and on every Scan (the first run after a
  *  game update reads the game's asset list, which takes a while: the badges appear when it is done). */
