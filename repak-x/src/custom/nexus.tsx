@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { ExternalLink, KeyRound, LogOut, X } from 'lucide-react'
+import { ExternalLink, KeyRound, LogOut, TriangleAlert, X } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import type { NexusSource } from './nexusSource'
 import nexusLogo from './logos/nexus.png'
@@ -346,7 +346,9 @@ function AutoInstallPref() {
       </Checkbox>
       <p className="setting-subtext">
         Install clicks Slow download for you in a hidden Nexus window. If it has not finished after 40 seconds the window shows.
-        Nexus asks free accounts to download on its site, so it may limit or ban accounts that automate this.
+      </p>
+      <p className="nx-auto-warn"><TriangleAlert size={14} aria-hidden="true" />
+        Turning this on risks a ban of your Nexus Mods account. Nexus asks free accounts to download on its site, and automated downloads break its rules.
       </p>
     </div>
   )
