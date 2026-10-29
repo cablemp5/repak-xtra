@@ -4,7 +4,7 @@
 // Mods installed before that (or by another app) get theirs once, from the Nexus downloads still in Downloads.
 import { useEffect, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { ArrowUp, ArrowUpCircle, ExternalLink } from 'lucide-react'
+import { ArrowUpCircle, ExternalLink } from 'lucide-react'
 import { nameKey } from './loadoutStore'
 import { installedKey } from './installLoadout'
 import { savedItem } from './storageCarryOver'
@@ -153,7 +153,7 @@ export function NexusTag({ path }: { path: string }) {
       {tag}
       <button type="button" className="mod-type-badge nexus-update-chip" title={`Version ${u.version} is on Nexus Mods (uploaded ${day(u.date)}). Click to update`}
         aria-label={`Update from Nexus Mods to ${v}`} onClick={e => { e.stopPropagation(); getNexusFile(u.modId, u.fileId, path) }}>
-        <ArrowUp size={12} strokeWidth={2.5} aria-hidden="true" />{v}</button>
+        <ArrowUpCircle size={13} strokeWidth={2.25} aria-hidden="true" />{v}</button>
     </span>
   )
 }
