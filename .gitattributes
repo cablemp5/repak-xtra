@@ -19,3 +19,6 @@ repak-x/resources/utoc-bypass/dsound.dll -filter -diff -merge binary
 
 # repakxtra: applied to the UAssetToolRivals submodule by build.ps1 (uassettool-patches/apply.ps1), byte for byte as written
 uassettool-patches/*.patch -text
+
+# repakxtra: uBlock Origin Lite for the Nexus window, compiled into the exe (include_bytes!): a real file, never an LFS pointer
+repak-x/resources/ubol/uBOLite.edge.zip -filter -diff -merge binary

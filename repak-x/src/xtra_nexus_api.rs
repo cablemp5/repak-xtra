@@ -222,9 +222,15 @@ pub async fn xtra_nexus_open(app: AppHandle, url: String) -> Result<(), String> 
         return Ok(());
     }
     let handle = app.clone();
+    let (profile, extensions) = browser_dirs(&app)?;
     WebviewWindowBuilder::new(&app, WINDOW, WebviewUrl::External(url))
         .title("Nexus Mods")
         .inner_size(1180.0, 860.0)
+        // its own browser profile: extensions need a WebView2 environment of their own, and the app's window has none
+        .data_directory(profile)
+        .browser_extensions_enabled(true)
+        .extensions_path(extensions)
+        .initialization_script(theme_script())
         .on_navigation(move |u| {
             if u.scheme() == "nxm" {
                 return !on_link(u.as_str(), &handle);
@@ -240,6 +246,36 @@ pub async fn xtra_nexus_open(app: AppHandle, url: String) -> Result<(), String> 
         .build()
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// uBlock Origin Lite for Edge, bundled (resources/ubol, its license beside it), unpacked once per version for the
+/// Nexus window. A new version replaces the old folder.
+const UBOL_ZIP: &[u8] = include_bytes!("../resources/ubol/uBOLite.edge.zip");
+const UBOL_VERSION: &str = "2026.1026.1812";
+
+/// repakxtra's look on nexusmods.com (resources/nexus-theme.css), added to each page of the Nexus window before its own
+/// scripts run (the page has no root element yet then: the style goes in at DOMContentLoaded).
+fn theme_script() -> String {
+    let css = serde_json::to_string(include_str!("../resources/nexus-theme.css")).unwrap_or_default();
+    format!("(() => {{ const add = () => {{ const root = document.head || document.documentElement; if (!root || document.getElementById('repakxtra-theme')) return; const s = document.createElement('style'); s.id = 'repakxtra-theme'; s.textContent = {css}; root.appendChild(s) }}; document.addEventListener('DOMContentLoaded', add); add() }})()")
+}
+
+/// The Nexus window's profile folder and its extensions folder (uBOL unpacked in it).
+fn browser_dirs(app: &AppHandle) -> Result<(std::path::PathBuf, std::path::PathBuf), String> {
+    let base = app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("nexus-browser");
+    let extensions = base.join("extensions");
+    let ubol = extensions.join(format!("ubol-{UBOL_VERSION}"));
+    if !ubol.join("manifest.json").is_file() {
+        let _ = std::fs::remove_dir_all(&extensions); // an older version
+        let part = base.join("ubol.part");
+        let _ = std::fs::remove_dir_all(&part);
+        zip::ZipArchive::new(std::io::Cursor::new(UBOL_ZIP))
+            .and_then(|mut z| z.extract(&part))
+            .map_err(|e| format!("The ad blocker could not be unpacked: {e}"))?;
+        std::fs::create_dir_all(&extensions).map_err(|e| e.to_string())?;
+        std::fs::rename(&part, &ubol).map_err(|e| e.to_string())?;
+    }
+    Ok((base.join("profile"), extensions))
 }
 
 /// Links that came before the window listened; None once it does.

@@ -1,0 +1,12 @@
+/* repakxtra: its look on nexusmods.com, in the app's Nexus window (xtra_nexus_api.rs theme_script). Nexus's own grey
+   tokens set to the app's. Its orange stays: every button and count on the page uses it, not only the tokens. Ad slots
+   (left empty by the bundled uBlock Origin Lite) and the Vortex app ad fold away */
+html body[class] {
+  --tw-color-surface-base: #141414 !important;
+  --tw-color-surface-low: #1a1a1a !important;
+  --tw-color-surface-mid: #202020 !important;
+  --tw-color-surface-high: #2a2a2a !important;
+  background-color: #141414 !important;
+}
+
+.ads-holder, .ad, .ad-billboard, [id^="billboard_"], a.rj-btn[href*="/vortex"] { display: none !important; }
