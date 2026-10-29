@@ -3717,8 +3717,11 @@ async fn update_mod(
     };
 
     // repakxtra: a new version under another name left the old files where they were: they go to Recently deleted now
-    let mut old_deleted = old_files.iter().all(|p| !p.exists());
-    let leftover: Vec<&PathBuf> = old_files.iter().filter(|p| p.exists()).collect();
+    // under the same name the install already swapped the old files out: those paths now hold the new version
+    let key = |p: &Path| p.to_string_lossy().replace('/', "\\").to_lowercase();
+    let new_files: Vec<String> = ["pak", "utoc", "ucas"].iter().map(|e| key(&new_mod_path.with_extension(e))).collect();
+    let leftover: Vec<&PathBuf> = old_files.iter().filter(|p| p.exists() && !new_files.contains(&key(p))).collect();
+    let mut old_deleted = leftover.is_empty();
     if !leftover.is_empty() {
         match xtra_trash::reserve(None) {
             Ok(trash) => {
