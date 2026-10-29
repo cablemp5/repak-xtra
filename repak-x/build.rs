@@ -20,6 +20,14 @@ fn main() {
         let actual = std::fs::read_to_string("dist/edition.json").unwrap_or_default();
         assert_eq!(actual.trim(), expected, "Build the matching frontend first: use build.ps1 -Edition {edition}");
     }
+    // repakxtra: Task Manager names a running app by its exe's description, which tauri-build takes from productName
+    // ("RepakX"): each edition gets its own name there (the app's own config, identifier and data stay as they are)
+    let name = if std::env::var_os("CARGO_FEATURE_EXTENDED").is_some() { "repakxploit" } else { "repakxtra" };
+    let config = match std::env::var("TAURI_CONFIG") {
+        Ok(c) if c.trim_start().starts_with('{') && c.trim() != "{}" => format!("{{\"productName\":\"{name}\",{}", &c.trim_start()[1..]),
+        _ => format!("{{\"productName\":\"{name}\"}}"),
+    };
+    std::env::set_var("TAURI_CONFIG", config);
     // Tauri build - handles icons and resources
     tauri_build::build();
     // repakxtra: tauri-build only watches tauri.conf.json, so a new icon kept the old one in the exe until a clean build
