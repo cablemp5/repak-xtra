@@ -141,11 +141,11 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
     return () => { on = false }
   }, [live, query, hero, type, days, sort, tries, more])
 
-  // Top this week: the three most endorsed mods uploaded in the last 7 days, over the grid while nothing narrows it
+  // Top this week: the four most endorsed mods uploaded in the last 7 days, over the grid while nothing narrows it
   const [top, setTop] = useState<Card[]>([])
   useEffect(() => {
     if (!live || top.length) return
-    gql<Page>(QUERY, { f: filterOf('', '', 'all', '7', 'endorsements'), s: [{ endorsements: { direction: 'DESC' } }], o: 0, c: 3 })
+    gql<Page>(QUERY, { f: filterOf('', '', 'all', '7', 'endorsements'), s: [{ endorsements: { direction: 'DESC' } }], o: 0, c: 4 })
       .then(d => setTop(d.mods.nodes), () => undefined) // no spotlight then, the grid still shows
   }, [live, top.length])
   const portrait = useHeroPortrait()
@@ -157,7 +157,7 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
   // the time window counts uploads, or updates under Recently updated (filterOf): screen readers hear which
   const period = sort === 'updatedAt' ? 'Updated' : 'Uploaded'
   const criteria = [query && `"${query}"`, hero, type !== 'all' && type, days !== 'all' && WINDOWS.find(w => w.value === days)?.label].filter(Boolean).join(', ')
-  const spot = !narrowed && top.length === 3
+  const spot = !narrowed && top.length === 4
 
   if (view !== 'nexus') return null
   if (!account) return (
