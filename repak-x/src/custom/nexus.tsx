@@ -128,10 +128,14 @@ async function download(link: Link, alert: Alert, oldPath?: string) {
     un.then(f => f())
     alert.dismissAlert(id)
   }
-  // one install or update at a time, each to its end (its loadout too): downloads may finish together
-  const run = applying.then(() => (oldPath ? handlers?.update(oldPath, archive) : handlers?.install(archive))) // the cache copy goes a day later
+  await apply(archive, oldPath) // the cache copy goes a day later
+}
+
+/** One install or update at a time, each to its end (its loadout too): downloads may finish together. */
+function apply(archive: string, oldPath?: string) {
+  const run = applying.then(() => (oldPath ? handlers?.update(oldPath, archive) : handlers?.install(archive)))
   applying = run.catch(() => undefined)
-  await run
+  return run
 }
 
 /** Gets a file of a Nexus mod and installs it, or updates the installed mod at `oldPath`. Premium downloads it now;
@@ -178,9 +182,11 @@ export function useNexus(h: Handlers) {
       void fetchAndApply(link, w && Date.now() - w.at < WAIT_MS ? w.oldPath : undefined)
     }
     const un = listen<Link>('nexus-nxm', e => take(e.payload))
+    // a plain download in the Nexus window (xtra_nexus_open's on_download) installs the same way
+    const file = listen<string>('nexus-file', e => { void apply(e.payload) })
     // once listening: the links that came first (one that started the app)
     un.then(() => invoke<Link[]>('xtra_nexus_pending')).then(held => held.forEach(take)).catch(() => undefined)
-    return () => { un.then(f => f()) }
+    return () => { un.then(f => f()); file.then(f => f()) }
   }, [])
 }
 
@@ -264,7 +270,7 @@ export function NexusSignIn() {
         </div>
       </header>
       <NexusSteps />
-      <p className="nx-signin-foot">The key stays in Windows Credential Manager on this PC. Free accounts work too: each download asks for one click on Slow download.</p>
+      <p className="nx-signin-foot">The key stays in Windows Credential Manager on this PC. Free accounts work too: Install opens the mod's file in the Nexus window, and one click on Slow download there installs it here.</p>
     </section>
   )
 }
@@ -278,8 +284,9 @@ function NexusSteps() {
         <li>
           <span className="nx-step-n" aria-hidden="true">1</span>
           <div className="nx-step-body">
-            <b>Sign in to Nexus Mods in your browser</b>
-            <button type="button" className="lo-text-btn nx-step-btn" onClick={() => openOutside(KEYS_URL)}><ExternalLink size={14} aria-hidden="true" /> Open API keys page</button>
+            <b>Sign in to Nexus Mods, once</b>
+            <span>The API keys page opens in {APP_NAME}'s Nexus window. Sign in there if it asks. You stay signed in, and installs use it too.</span>
+            <button type="button" className="lo-text-btn nx-step-btn" onClick={() => { void openWindow(KEYS_URL).catch(() => openOutside(KEYS_URL)) }}><ExternalLink size={14} aria-hidden="true" /> Open API keys page</button>
           </div>
         </li>
         <li>

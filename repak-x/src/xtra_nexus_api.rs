@@ -11,6 +11,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 const GAME: &str = "marvelrivals";
+const GAME_ID: u32 = 7106; // Marvel Rivals in Nexus's picture folders
 const API: &str = "https://api.nexusmods.com";
 const WINDOW: &str = "nexus";
 
@@ -153,6 +154,67 @@ pub async fn xtra_nexus_gql(query: String, variables: Value) -> Result<Value, St
     Ok(body["data"].clone())
 }
 
+/// A mod's gallery, full size, in page order: no API lists it, and Nexus's bot check turns plain requests away, so a
+/// hidden copy of the Nexus window (its profile, so the check is already passed) opens the mod's Images tab and reports
+/// the pictures it names (the Nexus Mods tab's hover preview). Empty after 12 s without an answer: the tab then shows the
+/// main picture. One mod at a time, each in a fresh hidden window.
+#[tauri::command]
+pub async fn xtra_nexus_images(app: AppHandle, mod_id: u64) -> Result<Vec<String>, String> {
+    static ONE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    let _turn = ONE.lock().await;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    *SCOUT.lock().unwrap() = Some((mod_id, tx));
+    let url = url::Url::parse(&format!("https://www.nexusmods.com/{GAME}/mods/{mod_id}?tab=images")).map_err(|e| e.to_string())?;
+    let (profile, extensions) = browser_dirs(&app)?;
+    WebviewWindowBuilder::new(&app, SCOUT_WINDOW, WebviewUrl::External(url))
+        .visible(false)
+        .skip_taskbar(true)
+        .data_directory(profile)
+        .browser_extensions_enabled(true)
+        .extensions_path(extensions)
+        .initialization_script(SCOUT_SCRIPT)
+        .on_navigation(move |u| {
+            if u.host_str() != Some("repakxtra.invalid") {
+                return is_nexus(u);
+            }
+            let found: Vec<String> = u.query_pairs().find(|(k, _)| k == "page").map(|(_, page)| gallery(&page, scout_mod())).unwrap_or_default();
+            if let Some((_, tx)) = SCOUT.lock().unwrap().take() { let _ = tx.send(found); }
+            false
+        })
+        .build()
+        .map_err(|e| e.to_string())?;
+    let found = tokio::time::timeout(std::time::Duration::from_secs(12), rx).await.ok().and_then(|r| r.ok()).unwrap_or_default();
+    SCOUT.lock().unwrap().take();
+    // gone again right away: a hidden window left open would keep the app running after its main window closes
+    if let Some(w) = app.get_webview_window(SCOUT_WINDOW) { let _ = w.destroy(); }
+    Ok(found)
+}
+
+const SCOUT_WINDOW: &str = "nexus-scout";
+/// The mod the hidden window is reading, and where its pictures go.
+static SCOUT: std::sync::Mutex<Option<(u64, tokio::sync::oneshot::Sender<Vec<String>>)>> = std::sync::Mutex::new(None);
+fn scout_mod() -> u64 { SCOUT.lock().unwrap().as_ref().map(|(id, _)| *id).unwrap_or(0) }
+/// In the hidden window: once a mod page (not the bot check) has loaded, its markup goes back through a navigation the
+/// window's handler stops and reads (gallery picks the pictures out of it).
+const SCOUT_SCRIPT: &str = r#"document.addEventListener('DOMContentLoaded', () => setTimeout(() => {
+  if (!location.hostname.endsWith('nexusmods.com') || !document.querySelector('#mainContent, .modpage')) return
+  const page = [...document.querySelectorAll('[href*="staticdelivery"], [src*="staticdelivery"], [data-src*="staticdelivery"]')]
+    .map(e => e.getAttribute('href') || e.getAttribute('data-src') || e.getAttribute('src')).join(' ')
+  location.href = 'https://repakxtra.invalid/scout?page=' + encodeURIComponent(page)
+}, 300))"#;
+
+/// The full-size gallery pictures named in a mod page, each once (thumbnails live in another folder).
+fn gallery(page: &str, mod_id: u64) -> Vec<String> {
+    let re = regex_lite::Regex::new(&format!(r"https://staticdelivery\.nexusmods\.com/mods/{GAME_ID}/images/{mod_id}/[A-Za-z0-9._-]+")).unwrap();
+    let mut out: Vec<String> = Vec::new();
+    for m in re.find_iter(page) {
+        if !out.iter().any(|u| u == m.as_str()) {
+            out.push(m.as_str().to_string());
+        }
+    }
+    out
+}
+
 /// Downloads one file into the app's cache under Nexus's own file name (xtra_nexus.rs reads its id, version and upload
 /// time from it) and returns the path. `key` and `expires` come from an nxm:// link; without them only Premium works.
 #[tauri::command]
@@ -222,6 +284,7 @@ pub async fn xtra_nexus_open(app: AppHandle, url: String) -> Result<(), String> 
         return Ok(());
     }
     let handle = app.clone();
+    let loader = app.clone();
     let (profile, extensions) = browser_dirs(&app)?;
     WebviewWindowBuilder::new(&app, WINDOW, WebviewUrl::External(url))
         .title("Nexus Mods")
@@ -235,11 +298,31 @@ pub async fn xtra_nexus_open(app: AppHandle, url: String) -> Result<(), String> 
             if u.scheme() == "nxm" {
                 return !on_link(u.as_str(), &handle);
             }
-            // a link in a mod's description to another site opens in the browser, not in this window
-            if u.scheme() == "https" && !is_nexus(u) {
+            // a link in a mod's description to another site opens in the browser, not in this window (signing in to
+            // Nexus with another account stays here, so the sign-in lands in this window's profile)
+            if u.scheme() == "https" && !is_nexus(u) && !u.host_str().is_some_and(|h| SIGN_IN.contains(&h)) {
                 #[allow(deprecated)] // the shell plugin's open, as the frontend uses it
                 let _ = tauri_plugin_shell::ShellExt::shell(&handle).open(u.as_str(), None);
                 return false;
+            }
+            true
+        })
+        // a plain download (a Manual download, or a file link outside the Files tab) still installs through the app:
+        // it lands in the app's Nexus cache, then the main window gets it like a Mod manager download
+        .on_download(move |_, event| {
+            match event {
+                tauri::webview::DownloadEvent::Requested { destination, .. } => {
+                    let name = destination.file_name().map(|n| n.to_owned());
+                    if let (Ok(dir), Some(name)) = (loader.path().app_cache_dir().map(|d| d.join("nexus-downloads")), name) {
+                        let _ = std::fs::create_dir_all(&dir);
+                        *destination = dir.join(name);
+                    }
+                }
+                tauri::webview::DownloadEvent::Finished { path: Some(path), success: true, .. } => {
+                    let _ = loader.emit_to("main", "nexus-file", path.to_string_lossy().into_owned());
+                    if let Some(w) = loader.get_webview_window(WINDOW) { let _ = w.close(); }
+                }
+                _ => {}
             }
             true
         })
@@ -257,7 +340,9 @@ const UBOL_VERSION: &str = "2026.1026.1812";
 /// web components by resources/nexus-theme.js, which runs before the page's own scripts.
 fn theme_script() -> String {
     let css = include_str!("../resources/nexus-theme.css");
-    include_str!("../resources/nexus-theme.js").replace("__CSS__", &serde_json::to_string(&css).unwrap_or_default())
+    include_str!("../resources/nexus-theme.js")
+        .replace("__CSS__", &serde_json::to_string(&css).unwrap_or_default())
+        .replace("__APP__", &serde_json::to_string(crate::xtra_edition::APP_NAME).unwrap_or_default())
 }
 
 /// The Nexus window's profile folder and its extensions folder (uBOL unpacked in it).
@@ -286,6 +371,9 @@ static HELD: std::sync::Mutex<Option<Vec<NxmLink>>> = std::sync::Mutex::new(Some
 pub fn xtra_nexus_pending() -> Vec<NxmLink> {
     HELD.lock().unwrap().take().unwrap_or_default()
 }
+
+/// Sign-in pages Nexus sends people to (its Google, Discord, Steam, Apple and Facebook options, and its bot check).
+const SIGN_IN: &[&str] = &["accounts.google.com", "discord.com", "steamcommunity.com", "appleid.apple.com", "www.facebook.com", "challenges.cloudflare.com"];
 
 fn is_nexus(url: &url::Url) -> bool {
     url.scheme() == "https" && url.host_str().is_some_and(|h| h == "nexusmods.com" || h.ends_with(".nexusmods.com"))
@@ -346,6 +434,19 @@ pub fn on_link(url: &str, app: &AppHandle) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gallery_reads_full_size_pictures_once() {
+        let page = r#"<img src="https://staticdelivery.nexusmods.com/mods/7106/images/thumbnails/2940/2940-1-2.png">
+            <a href="https://staticdelivery.nexusmods.com/mods/7106/images/2940/2940-1746281003-494200017.png">
+            <img src="https://staticdelivery.nexusmods.com/mods/7106/images/2940/2940-1746281003-494200017.png">
+            <img src="https://staticdelivery.nexusmods.com/mods/7106/images/29401/29401-1-1.png">
+            <img src="https://staticdelivery.nexusmods.com/mods/7106/images/2940/2940-1746392615-1299286637.jpg">"#;
+        assert_eq!(gallery(page, 2940), vec![
+            "https://staticdelivery.nexusmods.com/mods/7106/images/2940/2940-1746281003-494200017.png",
+            "https://staticdelivery.nexusmods.com/mods/7106/images/2940/2940-1746392615-1299286637.jpg",
+        ]);
+    }
 
     #[test]
     fn reads_mod_manager_links() {

@@ -4,7 +4,9 @@
 // picture or name opens the mod's page in the app's Nexus window. Stays mounted while hidden, so the search and the cards
 // are still there on the way back.
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUpCircle, Check, Download, Heart, Search, X } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { invoke } from '@tauri-apps/api/core'
+import { ArrowUpCircle, Check, ChevronLeft, ChevronRight, Download, Heart, Search, X } from 'lucide-react'
 import CustomDropdown from '../components/CustomDropdown'
 import { NexusSignIn, gql, getNexusFile, installFromNexus, openNexusPage, plain, updateOf, useNexusAccount, useNexusReady, useNexusUpdates } from './nexus'
 import { sourceOf, useNexusVersion } from './nexusSource'
@@ -144,6 +146,7 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
         <div className="nx-title">
           <h2>Nexus Mods</h2>
           <span className="nx-total" role="status">{state === 'ok' ? `${total.toLocaleString()} ${total === 1 ? 'mod' : 'mods'}` : ''}</span>
+          {!account.premium && <span className="nx-how">To install, click <b>Install</b>, then <b>Slow download</b> in the Nexus window.</span>}
         </div>
         <div className="nx-filters" role="search">
           <label className="lp-search nx-search">
@@ -186,13 +189,25 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
   )
 }
 
+/** How long the pointer rests on a card's picture before its gallery opens, and how long it may be away from both the
+ *  picture and the gallery before the gallery closes (time to move from one to the other). */
+const PEEK_OPEN_MS = 450
+const PEEK_CLOSE_MS = 160
+
 function NexusCard({ c, path }: { c: Card; path?: string }) {
   const u = path ? updateOf(sourceOf(path)) : undefined
   const name = plain(c.name)
   const open = () => openNexusPage(c.modId)
+  const picture = useRef<HTMLButtonElement>(null)
+  const [peek, setPeek] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout>>()
+  const later = (f: () => void, ms: number) => { clearTimeout(timer.current); timer.current = setTimeout(f, ms) }
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const hover = { onMouseEnter: () => later(() => setPeek(true), peek ? 0 : PEEK_OPEN_MS), onMouseLeave: () => later(() => setPeek(false), PEEK_CLOSE_MS) }
   return (
     <article className="nx-card">
-      <button type="button" className="nx-card-image" onClick={open} title={`Open ${name} on Nexus Mods`} tabIndex={-1}>
+      {peek && picture.current && <NexusPeek modId={c.modId} name={name} first={c.thumbnailLargeUrl} anchor={picture.current} hover={hover} onOpen={open} onClose={() => setPeek(false)} />}
+      <button ref={picture} type="button" className="nx-card-image" onClick={open} title={`Open ${name} on Nexus Mods`} tabIndex={-1} {...(c.thumbnailLargeUrl ? hover : {})}>
         {c.thumbnailLargeUrl ? <img src={c.thumbnailLargeUrl} alt="" loading="lazy" /> : <span className="nx-card-noimage" />}
         {c.modCategory && <span className="nx-card-cat">{c.modCategory.name}</span>}
       </button>
@@ -215,5 +230,57 @@ function NexusCard({ c, path }: { c: Card; path?: string }) {
         </div>
       </div>
     </article>
+  )
+}
+
+const galleries = new Map<number, string[]>() // by mod id, once read this session
+
+/** A card's gallery, larger, over the card while the pointer rests on its picture: every picture on the mod's Nexus page
+ *  (xtra_nexus_images), paged with arrows or the arrow keys. Until they load, or when Nexus turns the request away, the
+ *  card's own picture. A click on the picture opens the mod's page. */
+function NexusPeek({ modId, name, first, anchor, hover, onOpen, onClose }: {
+  modId: number; name: string; first: string | null; anchor: HTMLElement
+  hover: { onMouseEnter: () => void; onMouseLeave: () => void }; onOpen: () => void; onClose: () => void
+}) {
+  const [urls, setUrls] = useState<string[]>(() => galleries.get(modId) ?? (first ? [first] : []))
+  const [at, setAt] = useState(0)
+  useEffect(() => {
+    if (galleries.has(modId)) return
+    let on = true
+    invoke<string[]>('xtra_nexus_images', { modId }).then(found => {
+      if (!found.length) return
+      galleries.set(modId, found)
+      if (on) setUrls(found)
+    }, () => undefined)
+    return () => { on = false }
+  }, [modId])
+  const step = (d: number) => setAt(i => (i + d + urls.length) % urls.length)
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); onClose() }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); step(e.key === 'ArrowLeft' ? -1 : 1) }
+    }
+    window.addEventListener('keydown', key, true)
+    return () => window.removeEventListener('keydown', key, true)
+  }) // eslint-disable-line react-hooks/exhaustive-deps
+  if (!urls.length) return null
+  // centered on the card's picture, as big as the window allows, never past its edges
+  const r = anchor.getBoundingClientRect()
+  const w = Math.min(720, window.innerWidth - 32), h = Math.round(w * 9 / 16)
+  const left = Math.max(16, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 16))
+  const top = Math.max(16, Math.min(r.top + r.height / 2 - h / 2, window.innerHeight - h - 16))
+  const shown = urls[Math.min(at, urls.length - 1)]
+  return createPortal(
+    <div className="nx-peek" style={{ left, top, width: w, height: h }} role="dialog" aria-label={`Pictures of ${name}`} {...hover}>
+      <button type="button" className="nx-peek-image" onClick={onOpen} aria-label={`Open ${name} on Nexus Mods`}>
+        <img key={shown} src={shown} alt={`${name}, picture ${at + 1} of ${urls.length}`} />
+      </button>
+      {urls.length > 1 && <>
+        <button type="button" className="lo-media-arrow is-prev" aria-label="Previous picture" title="Previous picture" onClick={() => step(-1)}><ChevronLeft size={16} /></button>
+        <button type="button" className="lo-media-arrow is-next" aria-label="Next picture" title="Next picture" onClick={() => step(1)}><ChevronRight size={16} /></button>
+        <span className="nx-peek-count" aria-live="polite">{at + 1} / {urls.length}</span>
+      </>}
+    </div>,
+    document.body,
   )
 }

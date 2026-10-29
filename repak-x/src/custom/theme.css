@@ -55,6 +55,8 @@
 :root[data-edition="extended"][data-amoled] .dropzone-card { --bg-lighter: #000; }
 :root[data-edition="extended"][data-amoled] .dropzone-card:is(:hover, .active) { box-shadow: 0 0 40px color-mix(in srgb, var(--accent-primary), transparent 85%); }
 :root[data-edition="extended"][data-amoled] .drop-folder-item:hover { background: #191919; }
+/* AMOLED toasts: black like the panels, their hairline border keeps them apart from what is under them */
+:root[data-edition="extended"][data-amoled] .toast-item { --toast-bg: #000; }
 
 /* Geist and Geist Mono (OFL, bundled in ./fonts, one variable file each covering 100-900): UI and code */
 @font-face {
@@ -2553,6 +2555,12 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
   border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important; color: var(--text-primary) !important;
   font: 13px var(--font-mono) !important; outline: none !important; box-shadow: none !important; transition: border-color 0.15s ease; }
 .nx-key-input:focus { border-color: color-mix(in srgb, var(--text-primary), transparent 84%) !important; }
+/* the field's own show-key eye (Edge's password reveal): light on the dark field, like its text */
+.nx-key-input { color-scheme: dark; }
+.nx-key-input::-ms-reveal { filter: invert(1); opacity: 0.7; }
+.nx-key-input::-ms-reveal:hover { opacity: 1; }
+[data-theme="light"] .nx-key-input { color-scheme: light; }
+[data-theme="light"] .nx-key-input::-ms-reveal { filter: none; }
 .settings-content .nx-key-error { margin: 6px 0 0 !important; padding: 0 !important; color: var(--text-primary) !important; }
 
 /* Type hint under the type badges in mod details (custom/typeHints.tsx) */
@@ -3123,6 +3131,9 @@ html[data-motion="off"] .upd-progress > span, html[data-motion="off"] .repakx-pr
 .nx-head { display: flex; flex-direction: column; gap: 14px; padding: 18px 22px 14px; border-bottom: 1px solid var(--panel-border); }
 .nx-title { display: flex; align-items: baseline; gap: 10px; }
 .nx-title h2 { margin: 0; }
+/* free accounts: how an install goes, beside the count */
+.nx-how { margin-left: auto; font-size: 12.5px; color: var(--text-secondary); text-wrap: pretty; }
+.nx-how b { color: var(--text-primary); font-weight: 600; }
 .nx-total { font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .nx-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .nx-filters .nx-search { flex: 1 1 220px; max-width: 360px; width: auto; }
@@ -3201,13 +3212,24 @@ button.nx-act:hover { background: var(--quiet-hover) !important; border-color: c
 .nx-step-key .nx-key-input { flex: 1; font-family: var(--font-primary) !important; }
 .nx-step-save { flex: none; }
 .nx-step-save:not(:disabled) { background: var(--text-primary) !important; border-color: var(--text-primary) !important; color: var(--bg-darkest) !important; }
-.nx-step-save:not(:disabled):hover { opacity: 0.9; }
+.nx-step-save:not(:disabled):hover { background: color-mix(in srgb, var(--text-primary) 86%, var(--bg-darkest)) !important; color: var(--bg-darkest) !important; }   /* stays light: the quiet buttons' dark hover hid its words */
 .nx-step-save:disabled { opacity: 0.45; cursor: default; }
 /* Settings > General: the same steps under the section's words, the picture no wider than the key field */
 .nx-setting-steps { margin-top: 14px; max-width: 560px; }
 .nx-step-error { font-size: 12.5px; line-height: 1.45; color: var(--text-primary); }
 .nx-signin-foot { margin: 0; padding-top: 18px; border-top: 1px solid var(--panel-border); font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 html[data-motion="off"] .nx-card.is-skeleton, html[data-motion="off"] .nx-card-image img { animation: none; transition: none; }
+/* A card's gallery (NexusBrowser.tsx NexusPeek): a larger picture over the card after a short rest on it, the loadout
+   cards' arrows to page, a count in the corner */
+.nx-peek { position: fixed; z-index: 60; overflow: hidden; border-radius: 12px; background: var(--bg-darkest); border: 1px solid var(--panel-border);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.6); animation: t-dropdown-open var(--dropdown-open-dur, 0.16s) var(--dropdown-ease, ease-out) backwards; }
+.nx-peek-image { display: block !important; width: 100%; height: 100%; padding: 0 !important; border: none !important; border-radius: 0 !important;
+  background: transparent !important; cursor: pointer; }
+.nx-peek-image img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.nx-peek .lo-media-arrow { opacity: 1; }
+.nx-peek-count { position: absolute; right: 10px; bottom: 10px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-variant-numeric: tabular-nums;
+  color: #fff; background: rgba(10, 11, 14, 0.72); border: 1px solid rgba(255, 255, 255, 0.12); pointer-events: none; }
+html[data-motion="off"] .nx-peek { animation: none; }
 
 /* A Nexus mod with a newer version: one split badge (cable's pick, 2026-10-29), the orange Nexus half as always, a blue
    half joined to it with the new version. The accent says "do this", the arrow says what */

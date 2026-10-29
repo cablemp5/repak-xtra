@@ -153,7 +153,7 @@ export function NexusTag({ path }: { path: string }) {
       {tag}
       <button type="button" className="mod-type-badge nexus-update-chip" title={`Version ${u.version} is on Nexus Mods (uploaded ${day(u.date)}). Click to update`}
         aria-label={`Update from Nexus Mods to ${v}`} onClick={e => { e.stopPropagation(); getNexusFile(u.modId, u.fileId, path) }}>
-        <ArrowUpCircle size={13} strokeWidth={2.25} aria-hidden="true" />{v}</button>
+        <ArrowUpCircle size={13} strokeWidth={2.25} aria-hidden="true" />{v} available</button>
     </span>
   )
 }

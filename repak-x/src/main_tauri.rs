@@ -8771,6 +8771,8 @@ fn main() {
             xtra_nexus_api::xtra_nexus_open,
             #[cfg(feature = "extended")]
             xtra_nexus_api::xtra_nexus_pending,
+            #[cfg(feature = "extended")]
+            xtra_nexus_api::xtra_nexus_images,
             xtra_previews::get_preview_emotes, // repakxtra: emote sounds over animation previews
             xtra_previews::get_preview_audio,
             xtra_offfiles::xtra_stage_off_files, // repakxtra: .pak.off files
