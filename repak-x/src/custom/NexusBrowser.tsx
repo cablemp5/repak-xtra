@@ -154,10 +154,9 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
   const showMore = () => { wanted.current = loaded.current + 1; setMore(n => n + 1) }
   const narrowed = Boolean(query || hero || type !== 'all' || days !== 'all')
   const clear = () => { setText(''); setQuery(''); setHero(''); setType('all'); setDays('all') }
-  // the time window counts uploads, or updates under Recently updated (filterOf): its label says which
+  // the time window counts uploads, or updates under Recently updated (filterOf): screen readers hear which
   const period = sort === 'updatedAt' ? 'Updated' : 'Uploaded'
-  const windows = WINDOWS.map(w => (w.value === 'all' ? w : { ...w, label: `${period}: ${w.label}` }))
-  const criteria = [query && `"${query}"`, hero, type !== 'all' && type, days !== 'all' && windows.find(w => w.value === days)?.label].filter(Boolean).join(', ')
+  const criteria = [query && `"${query}"`, hero, type !== 'all' && type, days !== 'all' && WINDOWS.find(w => w.value === days)?.label].filter(Boolean).join(', ')
   const spot = !narrowed && top.length === 3
 
   if (view !== 'nexus') return null
@@ -185,7 +184,7 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
           </label>
           <HeroFilter heroes={heroes} value={hero} onChange={setHero} always />
           <CustomDropdown className="lp-hero nx-type" options={TYPES} value={type} onChange={setType} ariaLabel="Mod type" />
-          <CustomDropdown className="lp-hero nx-window" options={windows} value={days} onChange={setDays} ariaLabel={`${period} in`} />
+          <CustomDropdown className="lp-hero nx-window" options={WINDOWS} value={days} onChange={setDays} ariaLabel={`${period} in`} />
           {narrowed && <button type="button" className="su-link nx-clear" onClick={clear}>Clear filters</button>}
           <CustomDropdown className="lp-hero nx-sort" options={query ? SORTS : SORTS.slice(0, -1)} value={sort} onChange={setSort} ariaLabel="Sort" />
         </div>

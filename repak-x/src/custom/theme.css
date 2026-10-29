@@ -3142,7 +3142,7 @@ html[data-motion="off"] .upd-progress > span, html[data-motion="off"] .repakx-pr
 .nx-filters .nx-search { height: 34px; }
 .nx-filters .nx-search:focus-within { border-color: color-mix(in srgb, var(--text-primary), transparent 55%); } /* neutral, never the blue ring */
 .nx-filters .lp-hero.custom-dropdown-container { width: 170px; }
-.nx-filters .nx-window.custom-dropdown-container { width: 160px; }
+.nx-filters .nx-window.custom-dropdown-container { width: 120px; }
 .nx-filters .nx-sort.custom-dropdown-container { width: 170px; margin-left: auto; }
 /* the sort sits at the right edge: its menu opens leftward, inside the window */
 .nx-filters .nx-sort .custom-dropdown-menu { left: auto; right: 0; }
