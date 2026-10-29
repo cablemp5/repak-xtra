@@ -3,7 +3,7 @@
 // pages of cards. Install gets the mod's main file (nexus.tsx installFromNexus), Update replaces the copy you have, and the
 // picture or name opens the mod's page in the app's Nexus window. Stays mounted while hidden, so the search and the cards
 // are still there on the way back.
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
 import { ArrowUpCircle, Check, ChevronLeft, ChevronRight, Download, Heart, Loader2, Search, X } from 'lucide-react'
@@ -11,7 +11,7 @@ import CustomDropdown from '../components/CustomDropdown'
 import { NexusSignIn, gql, getNexusFile, installFromNexus, openNexusPage, plain, updateOf, useNexusAccount, useNexusPending, useNexusReady, useNexusUpdates } from './nexus'
 import { sourceOf, useNexusVersion } from './nexusSource'
 import { useView } from './loadoutStore'
-import { HeroFilter, useHeroNames } from './heroFilter'
+import { HeroFilter, heroInTitle, useHeroNames, useHeroPortrait } from './heroFilter'
 
 type Card = {
   modId: number; name: string; author: string; summary: string; endorsements: number; downloads: number
@@ -32,10 +32,16 @@ const WINDOWS = [
   { value: 'all', label: 'All time' }, { value: '1', label: '24 hours' }, { value: '7', label: '7 days' },
   { value: '14', label: '14 days' }, { value: '28', label: '28 days' }, { value: '365', label: '1 year' },
 ]
-// Nexus's top categories for Marvel Rivals (hero mods are Characters or a hero's own category)
-const TYPES = [{ value: 'all', label: 'All types' }, ...['Characters', 'Audio', 'User Interface', 'Visuals', 'Gameplay', 'Miscellaneous'].map(c => ({ value: c, label: c }))]
+// Nexus's top categories for Marvel Rivals, each in its own color on the cards (hero mods are Characters or a hero's own
+// category, which a card shows as the hero's portrait in the Characters color)
+const TYPE_COLOR: Record<string, string> = {
+  Characters: '#5cc8ff', Audio: '#9d7bff', 'User Interface': '#ff7ad9', Visuals: '#3ecf6e', Gameplay: '#f5d342', Miscellaneous: '#a7a7a7',
+}
+const TYPES = [{ value: 'all', label: 'All types' }, ...Object.keys(TYPE_COLOR).map(t => ({ value: t, label: t }))]
 // where a Nexus category name differs from the game's hero name
 const CATEGORY_OF: Record<string, string> = { 'Doctor Strange': 'Dr. Strange', Deadpool: 'DeadPool' }
+const HERO_OF = Object.fromEntries(Object.entries(CATEGORY_OF).map(([hero, category]) => [category, hero]))
+type Look = { portrait: ReturnType<typeof useHeroPortrait>; heroes: string[] }
 const PAGE = 24
 const QUERY = `query($f: ModsFilter, $s: [ModsSort!], $o: Int, $c: Int) {
   mods(filter: $f, sort: $s, offset: $o, count: $c) { totalCount nodes { modId name author summary endorsements downloads thumbnailLargeUrl updatedAt modCategory { name } } } }`
@@ -129,6 +135,16 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
     return () => { on = false }
   }, [live, query, hero, type, days, sort, tries, more])
 
+  // Top this week: the three most endorsed mods uploaded in the last 7 days, over the grid while nothing narrows it
+  const [top, setTop] = useState<Card[]>([])
+  useEffect(() => {
+    if (!live || top.length) return
+    gql<Page>(QUERY, { f: filterOf('', '', 'all', '7', 'endorsements'), s: [{ endorsements: { direction: 'DESC' } }], o: 0, c: 3 })
+      .then(d => setTop(d.mods.nodes), () => undefined) // no spotlight then, the grid still shows
+  }, [live, top.length])
+  const portrait = useHeroPortrait()
+  const look = useMemo(() => ({ portrait, heroes }), [portrait, heroes.join()]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const showMore = () => { wanted.current = loaded.current + 1; setMore(n => n + 1) }
   const narrowed = Boolean(query || hero || type !== 'all' || days !== 'all')
   const clear = () => { setText(''); setQuery(''); setHero(''); setType('all'); setDays('all') }
@@ -165,6 +181,13 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
         </div>
       </header>
       <div className="lo-body nx-body">
+        {!narrowed && top.length === 3 && (
+          <section className="nx-spot" aria-label="Top this week">
+            <h3 className="nx-spot-title">Top this week</h3>
+            <div className="nx-spot-grid">{top.map(c => <NexusCard key={c.modId} c={c} path={installed.get(c.modId)} look={look} />)}</div>
+          </section>
+        )}
+        {!narrowed && top.length === 3 && <h3 className="nx-spot-title">All mods</h3>}
         {state === 'error' && !cards.length ? (
           <div className="nx-empty"><p>Nexus Mods did not answer.</p><small>{error}</small>
             <button type="button" className="lo-text-btn" onClick={() => setTries(t => t + 1)}>Try again</button></div>
@@ -175,7 +198,7 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
           <div className={`nx-grid${first ? ' is-loading' : ''}`} aria-busy={state === 'loading'}>
             {first
               ? Array.from({ length: 8 }, (_, i) => <div key={i} className="nx-card is-skeleton" aria-hidden="true" />)
-              : cards.map(c => <NexusCard key={c.modId} c={c} path={installed.get(c.modId)} />)}
+              : cards.map(c => <NexusCard key={c.modId} c={c} path={installed.get(c.modId)} look={look} />)}
           </div>
         )}
         {cards.length > 0 && !done && (
@@ -191,56 +214,29 @@ export default function NexusBrowser({ mods }: { mods: { path: string }[] }) {
   )
 }
 
-/** How long the pointer rests on a card's picture before its gallery opens, and how long it may be away from both the
- *  picture and the gallery before the gallery closes (time to move from one to the other). */
-const PEEK_OPEN_MS = 450
-const PEEK_CLOSE_MS = 160
-/** How long the pointer rests on a picture before its gallery starts loading (it takes a few seconds). */
-const PEEK_READ_MS = 150
-/** When Tab was last pressed: keyboard focus opens a gallery only when Tab put it there, not when a closing dialog
- *  hands focus back to a card's picture. */
-let tabbedAt = 0
-window.addEventListener('keydown', e => { tabbedAt = e.key === 'Tab' ? Date.now() : 0 }, true)
-
-function NexusCard({ c, path }: { c: Card; path?: string }) {
+function NexusCard({ c, path, look }: { c: Card; path?: string; look: Look }) {
   const u = path ? updateOf(sourceOf(path)) : undefined
   const name = plain(c.name)
   const open = () => openNexusPage(c.modId)
   const waiting = useNexusPending(c.modId)
   const picture = useRef<HTMLButtonElement>(null)
   const [peek, setPeek] = useState(false)
-  const timer = useRef<ReturnType<typeof setTimeout>>()
-  const later = (f: () => void, ms: number) => { clearTimeout(timer.current); timer.current = setTimeout(f, ms) }
-  useEffect(() => () => clearTimeout(timer.current), [])
-  const settle = useRef<ReturnType<typeof setTimeout>>()
-  const dismissed = useRef(false) // closed with Esc: it stays closed until the pointer leaves the picture
-  useEffect(() => () => clearTimeout(settle.current), [])
-  const hover = {
-    onMouseEnter: () => {
-      if (dismissed.current) return
-      later(() => setPeek(true), peek ? 0 : PEEK_OPEN_MS)
-      clearTimeout(settle.current); settle.current = setTimeout(() => { void loadGallery(c.modId) }, PEEK_READ_MS) // a pointer passing over reads nothing
-    },
-    onMouseLeave: () => { dismissed.current = false; clearTimeout(settle.current); later(() => setPeek(false), PEEK_CLOSE_MS) },
-  }
+  const pictures = c.thumbnailLargeUrl ? `See the pictures of ${name}` : `Open ${name} on Nexus Mods` // no picture: its page
   return (
     <article className="nx-card">
-      {peek && picture.current && <NexusPeek modId={c.modId} name={name} first={c.thumbnailLargeUrl} anchor={picture.current} hover={hover} onOpen={open} onClose={() => { dismissed.current = true; clearTimeout(timer.current); setPeek(false) }} />}
-      {/* by keyboard: Tab onto the picture opens the gallery (arrow keys page it, Esc closes, Enter opens the mod's page) */}
-      <button ref={picture} type="button" className="nx-card-image" onClick={open} title={`Open ${name} on Nexus Mods`}
-        aria-label={`${name}: pictures, Enter opens the mod's page`} {...(c.thumbnailLargeUrl ? hover : {})}
-        onFocus={() => { if (c.thumbnailLargeUrl && Date.now() - tabbedAt < 500) { void loadGallery(c.modId); setPeek(true) } }}
-        onBlur={e => { if (!(e.relatedTarget instanceof Element && e.relatedTarget.closest('.nx-peek'))) setPeek(false) }}>
+      {peek && <NexusPeek modId={c.modId} name={name} first={c.thumbnailLargeUrl} onOpen={open} onClose={() => { setPeek(false); picture.current?.focus() }} />}
+      <button ref={picture} type="button" className="nx-card-image" title={pictures} aria-label={pictures}
+        onClick={() => { if (c.thumbnailLargeUrl) setPeek(true); else open() }}>
         {c.thumbnailLargeUrl ? <img src={c.thumbnailLargeUrl} alt="" loading="lazy" /> : <span className="nx-card-noimage" />}
-        {c.modCategory && <span className="nx-card-cat">{c.modCategory.name}</span>}
       </button>
       <div className="nx-card-body">
         <button type="button" className="nx-card-name" onClick={open} title={`Open ${name} on Nexus Mods`}>{name}</button>
         <span className="nx-card-by">{plain(c.author)}<span aria-hidden="true"> · </span><span title={new Date(c.updatedAt).toLocaleString()}>updated {ago(c.updatedAt)}</span></span>
+        <TypeLine category={c.modCategory?.name ?? ''} title={name} look={look} />
         <p className="nx-card-summary">{plain(c.summary)}</p>
         <div className="nx-card-foot">
-          <span className="nx-stat" title={`${c.endorsements.toLocaleString()} endorsements`}><Heart size={12} aria-hidden="true" />{count.format(c.endorsements)}</span>
-          <span className="nx-stat" title={`${c.downloads.toLocaleString()} downloads`}><Download size={12} aria-hidden="true" />{count.format(c.downloads)}</span>
+          <span className="nx-stat is-endorsed" title={`${c.endorsements.toLocaleString()} endorsements`}><Heart size={12} aria-hidden="true" />{count.format(c.endorsements)}</span>
+          <span className="nx-stat is-downloads" title={`${c.downloads.toLocaleString()} downloads`}><Download size={12} aria-hidden="true" />{count.format(c.downloads)}</span>
           {u && path ? (
             <button type="button" className="nx-act is-update" onClick={() => getNexusFile(u.modId, u.fileId, path)} title={`Version ${u.version} is out`} aria-label={`Update ${name} to ${u.version}`}>
               <ArrowUpCircle size={13} aria-hidden="true" /> Update
@@ -252,12 +248,29 @@ function NexusCard({ c, path }: { c: Card; path?: string }) {
             <button type="button" className="nx-act is-waiting" onClick={() => installFromNexus(c.modId)} title="Click Slow download in the Nexus window"
               aria-label={`Waiting for Nexus. Click Slow download in the Nexus window to install ${name}`}><Loader2 size={13} aria-hidden="true" /> Waiting for Nexus</button>
           ) : (
-            <button type="button" className="nx-act" onClick={() => installFromNexus(c.modId)} aria-label={`Install ${name}`}><Download size={13} aria-hidden="true" /> Install</button>
+            <button type="button" className="nx-act is-install" onClick={() => installFromNexus(c.modId)} aria-label={`Install ${name}`}><Download size={13} aria-hidden="true" /> Install</button>
           )}
           {waiting && <span className="xtra-sr-only" role="status">Click Slow download in the Nexus window to install {name}.</span>}
         </div>
       </div>
     </article>
+  )
+}
+
+/** A card's hero, with its portrait in the Characters color: the hero's own category, or the hero its title names (a
+ *  Visuals skin too). Otherwise its type, in the type's color. */
+function TypeLine({ category, title, look }: { category: string; title: string; look: Look }) {
+  const own = HERO_OF[category] ?? category
+  const hero = !TYPE_COLOR[category] && look.portrait(own, false) ? own
+    : heroInTitle(title, look.heroes)
+  const face = hero ? look.portrait(hero) : undefined
+  const label = hero || own
+  if (!label) return null
+  const color = hero ? TYPE_COLOR.Characters : TYPE_COLOR[category]
+  return (
+    <span className="nx-card-type" style={color ? { '--type': color } as CSSProperties : undefined}>
+      {face && <img src={face} alt="" />}{label}
+    </span>
   )
 }
 
@@ -273,13 +286,10 @@ const loadGallery = (modId: number) => {
   return read
 }
 
-/** A card's gallery, larger, over the card while the pointer rests on its picture: every picture on the mod's Nexus page
+/** A card's gallery, opened by a click on its picture, over the dimmed app: every picture on the mod's Nexus page
  *  (xtra_nexus_images), paged with arrows or the arrow keys. Until they load, or when Nexus turns the request away, the
- *  card's own picture. A click on the picture opens the mod's page. */
-function NexusPeek({ modId, name, first, anchor, hover, onOpen, onClose }: {
-  modId: number; name: string; first: string | null; anchor: HTMLElement
-  hover: { onMouseEnter: () => void; onMouseLeave: () => void }; onOpen: () => void; onClose: () => void
-}) {
+ *  card's own picture. A click on the picture opens the mod's page, Esc or a click beside it closes it. */
+function NexusPeek({ modId, name, first, onOpen, onClose }: { modId: number; name: string; first: string | null; onOpen: () => void; onClose: () => void }) {
   const [urls, setUrls] = useState<string[]>(() => (first ? [first] : []))
   const [loading, setLoading] = useState(true)
   const [at, setAt] = useState(0)
@@ -313,24 +323,19 @@ function NexusPeek({ modId, name, first, anchor, hover, onOpen, onClose }: {
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); step(e.key === 'ArrowLeft' ? -1 : 1) }
     }
     window.addEventListener('keydown', key, true)
-    // the pointer can leave without a mouseleave (onto the title bar, which drags the window): closed then too
-    const away = () => onClose()
-    document.documentElement.addEventListener('mouseleave', away)
-    return () => { window.removeEventListener('keydown', key, true); document.documentElement.removeEventListener('mouseleave', away) }
+    return () => window.removeEventListener('keydown', key, true)
   }) // eslint-disable-line react-hooks/exhaustive-deps
+  const close = useRef<HTMLButtonElement>(null)
+  useEffect(() => close.current?.focus(), []) // keyboard users land in the gallery
   if (!urls.length) return null
-  // centered on the card's picture, as big as the window allows, never past its edges
-  const r = anchor.getBoundingClientRect()
-  const w = Math.min(720, window.innerWidth - 32), h = Math.round(w * 9 / 16)
-  const left = Math.max(16, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 16))
-  const top = Math.max(16, Math.min(r.top + r.height / 2 - h / 2, window.innerHeight - h - 16))
+  // centered in the window, as big as it allows up to 960 wide
+  const w = Math.min(960, window.innerWidth - 64, Math.round((window.innerHeight - 64) * 16 / 9)), h = Math.round(w * 9 / 16)
   return createPortal(<>
-    {/* the rest of the app dims behind the pictures; it takes no pointer, so leaving still closes them */}
-    <div className="nx-peek-dim" aria-hidden="true" />
-    <div className="nx-peek" style={{ left, top, width: w, height: h }} role="dialog" aria-label={`Pictures of ${name}`} {...hover}>
+    <div className="nx-peek-dim" aria-hidden="true" onClick={onClose} />
+    <div className="nx-peek" style={{ left: (window.innerWidth - w) / 2, top: (window.innerHeight - h) / 2, width: w, height: h }} role="dialog" aria-modal="true" aria-label={`Pictures of ${name}`}>
       <div className="nx-peek-bar">
         <span className="nx-peek-name">{name}</span>
-        <button type="button" className="nx-peek-close" aria-label="Close pictures" title="Close (Esc)" onClick={onClose}><X size={14} /></button>
+        <button ref={close} type="button" className="nx-peek-close" aria-label="Close pictures" title="Close (Esc)" onClick={onClose}><X size={14} /></button>
       </div>
       <button type="button" className="nx-peek-image" onClick={onOpen} aria-label={`Open ${name} on Nexus Mods`}>
         {onScreen && <img src={onScreen} alt={`${name}, picture ${at + 1} of ${urls.length}`} />}

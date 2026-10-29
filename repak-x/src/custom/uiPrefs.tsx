@@ -89,8 +89,9 @@ export function newDefaultsOnce<T extends { autoOpenDetails?: boolean; holdToDel
 
 /** Fewer pop-ups (stored as minimal toasts): an everyday confirmation (success or info with nothing to click, not a progress toast) is skipped.
  *  Errors, warnings, crash reports, update offers and deletions (they carry Undo) still show. */
-export const quietToast = (t: { color?: string; action?: unknown; isLoading?: boolean }) =>
-  minimalToasts() && (!t.color || t.color === 'success' || t.color === 'primary' || t.color === 'default') && !t.action && !t.isLoading
+/** keep: a confirmation that also says what to do next, shown even with Minimal toasts */
+export const quietToast = (t: { color?: string; action?: unknown; isLoading?: boolean; keep?: unknown }) =>
+  minimalToasts() && (!t.color || t.color === 'success' || t.color === 'primary' || t.color === 'default') && !t.action && !t.isLoading && !t.keep
 
 const apply = () => {
   document.documentElement.toggleAttribute('data-amoled', amoledOn())

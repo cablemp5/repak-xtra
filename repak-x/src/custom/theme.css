@@ -3139,12 +3139,13 @@ html[data-motion="off"] .upd-progress > span, html[data-motion="off"] .repakx-pr
 .nx-filters .nx-search { flex: 1 1 220px; max-width: 360px; width: auto; }
 .nx-filters .custom-dropdown-container { flex: none; height: 32px; }
 .nx-filters .lp-hero.custom-dropdown-container { width: 170px; }
-.nx-filters .nx-type.custom-dropdown-container { width: 150px; }
 .nx-filters .nx-window.custom-dropdown-container { width: 120px; }
 .nx-filters .nx-sort.custom-dropdown-container { width: 170px; margin-left: auto; }
 /* the sort sits at the right edge: its menu opens leftward, inside the window */
 .nx-filters .nx-sort .custom-dropdown-menu { left: auto; right: 0; }
 .nx-filters .custom-dropdown-menu { max-height: min(320px, calc(100vh - 220px)); }
+.nx-filters .nx-type.custom-dropdown-container { width: 150px; }
+[data-theme="light"] .nx-card-type { --c: color-mix(in srgb, var(--type, var(--text-primary)), #000 38%); }
 .nx-clear { margin-left: 6px; font-size: 12.5px; white-space: nowrap; }
 .nx-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .nx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
@@ -3158,18 +3159,23 @@ html[data-motion="off"] .upd-progress > span, html[data-motion="off"] .repakx-pr
 .nx-card-image img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.25s ease; }
 .nx-card:hover .nx-card-image img { transform: scale(1.03); }
 .nx-card-noimage { display: block; width: 100%; height: 100%; }
-.nx-card-cat { position: absolute; left: 8px; top: 8px; max-width: calc(100% - 16px); padding: 2px 8px; border-radius: 999px; overflow: hidden; text-overflow: ellipsis;
-  white-space: nowrap; font-size: 11px; font-weight: 500; color: #fff; background: rgba(10, 11, 14, 0.72); border: 1px solid rgba(255, 255, 255, 0.12); }
+.nx-card-image:has(img) { cursor: zoom-in; } /* a click opens its pictures */
 .nx-card-body { display: flex; flex-direction: column; padding: 12px 14px; min-height: 0; flex: 1; }
 .nx-card-name { all: unset; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text-primary); line-height: 1.3; text-wrap: balance;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .nx-card-name:hover { text-decoration: underline; text-underline-offset: 2px; }
 .nx-card-name:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; border-radius: 3px; }
 .nx-card-by { margin-top: 3px; font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the type line: the hero's portrait and name in the Characters color, or the type's name in its color */
+.nx-card-type { --c: var(--type, var(--text-secondary)); display: flex; align-items: center; gap: 6px; margin-top: 7px; min-width: 0; font-size: 12px;
+  font-weight: 500; color: var(--c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nx-card-type img { flex: none; width: 18px; height: 18px; border-radius: 50%; object-fit: cover; background: var(--bg-lighter); }
 .nx-card-summary { margin: 8px 0 0; font-size: 12.5px; line-height: 1.45; color: color-mix(in srgb, var(--text-secondary) 88%, var(--text-primary));
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-wrap: pretty; }
 .nx-card-foot { display: flex; align-items: center; gap: 12px; margin-top: auto; padding-top: 12px; }
 .nx-stat { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.nx-stat.is-endorsed svg { color: #f2555a; } /* red heart: cable's pick (2026-10-29) */
+.nx-stat.is-downloads svg { color: var(--accent-primary); }
 /* the action: one box for all three states, so Installed sits exactly where Install was */
 .nx-act { margin-left: auto; display: inline-flex !important; align-items: center; gap: 5px; height: 28px !important; min-height: 0 !important; padding: 0 10px !important;
   border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important; background: transparent !important;
@@ -3184,6 +3190,27 @@ html[data-motion="off"] .nx-act.is-waiting svg { animation: none; }
 .nx-act.is-installed { cursor: default; color: #3ecf6e !important; border-color: color-mix(in srgb, #3ecf6e, transparent 60%) !important;
   background: color-mix(in srgb, #3ecf6e, transparent 92%) !important; }
 [data-theme="light"] .nx-act.is-installed { color: #1f7a3f !important; }
+/* Install: the one tinted button on a card (Von Restorff) */
+.nx-act.is-install { color: color-mix(in srgb, var(--accent-primary), #fff 45%) !important; background: color-mix(in srgb, var(--accent-primary), transparent 88%) !important;
+  border-color: color-mix(in srgb, var(--accent-primary), transparent 60%) !important; }
+button.nx-act.is-install:hover { background: color-mix(in srgb, var(--accent-primary), transparent 78%) !important; border-color: color-mix(in srgb, var(--accent-primary), transparent 40%) !important; }
+[data-theme="light"] .nx-act.is-install { color: var(--accent-primary) !important; }
+/* Top this week: three cards as pictures, the words on a dark fade at the bottom, one wide and two narrow, set apart from
+   All mods below by a rule (Common region) */
+.nx-spot { padding-bottom: 28px; border-bottom: 1px solid var(--panel-border); }
+.nx-spot + .nx-spot-title { margin-bottom: -18px; } /* the body's 28px gap: All mods sits 10px over its cards, as Top this week does */
+.nx-spot-title { margin: 0 0 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+.nx-spot-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 16px; height: 260px; }
+.nx-spot .nx-card { position: relative; }
+.nx-spot .nx-card-image { position: absolute !important; inset: 0; height: 100%; aspect-ratio: auto; }
+.nx-spot .nx-card-body { position: relative; flex: none; margin-top: auto; padding: 56px 14px 12px; pointer-events: none;
+  background: linear-gradient(rgba(6, 6, 8, 0), rgba(6, 6, 8, 0.93) 50%, rgba(6, 6, 8, 0.98)); }
+.nx-spot .nx-card-body > * { pointer-events: auto; }
+.nx-spot .nx-card-name { color: #fff; }
+.nx-spot .nx-card:first-child .nx-card-name { font-size: 17px; }
+.nx-spot .nx-card-by, .nx-spot .nx-stat { color: rgba(255, 255, 255, 0.72); }
+.nx-spot .nx-card-summary, .nx-spot .nx-card:not(:first-child) .nx-card-by { display: none; }
+.nx-spot .nx-card-foot { padding-top: 8px; }
 .nx-more { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 20px 0 4px; }
 .nx-more small { font-size: 12px; color: var(--text-secondary); }
 .nx-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 64px 0; text-align: center; color: var(--text-secondary); }
@@ -3224,8 +3251,8 @@ html[data-motion="off"] .nx-act.is-waiting svg { animation: none; }
 .nx-step-error { font-size: 12.5px; line-height: 1.45; color: var(--text-primary); }
 .nx-signin-foot { margin: 0; padding-top: 18px; border-top: 1px solid var(--panel-border); font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 html[data-motion="off"] .nx-card.is-skeleton, html[data-motion="off"] .nx-card-image img { animation: none; transition: none; }
-/* A card's gallery (NexusBrowser.tsx NexusPeek): a larger picture over the card after a short rest on it, the loadout
-   cards' arrows to page, a count in the corner */
+/* A card's gallery (NexusBrowser.tsx NexusPeek): a click on its picture opens it larger in the middle of the window, the
+   loadout cards' arrows to page, a count in the corner, a click beside it closes it */
 .nx-peek { position: fixed; z-index: 10001; overflow: hidden; border-radius: 12px; background: var(--bg-darkest); border: 1px solid var(--panel-border);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.6); animation: t-dropdown-open var(--dropdown-open-dur, 0.16s) var(--dropdown-ease, ease-out) backwards; }
 .nx-peek-image { display: block !important; width: 100%; height: 100%; padding: 0 !important; border: none !important; border-radius: 0 !important;
@@ -3243,7 +3270,7 @@ html[data-motion="off"] .nx-card.is-skeleton, html[data-motion="off"] .nx-card-i
 .nx-peek-count { position: absolute; right: 10px; bottom: 10px; height: 28px; box-sizing: border-box; display: inline-flex; align-items: center;
   padding: 0 10px; border-radius: 999px; font: 500 12px var(--font-primary); pointer-events: none;   /* the app's font: the gallery sits on <body>, outside it */
   color: #fff; background: rgba(10, 11, 14, 0.62); border: 1px solid rgba(255, 255, 255, 0.12); }   /* a loadout card's label pill */
-.nx-peek-dim { position: fixed; inset: 0; z-index: 10000; pointer-events: none; background: rgba(0, 0, 0, 0.35); animation: nx-peek-dim 0.2s ease-out backwards; }
+.nx-peek-dim { position: fixed; inset: 0; z-index: 10000; cursor: default; background: rgba(0, 0, 0, 0.35); animation: nx-peek-dim 0.2s ease-out backwards; }
 @keyframes nx-peek-dim { from { opacity: 0; } }
 html[data-motion="off"] .nx-peek, html[data-motion="off"] .nx-peek-dim { animation: none; }
 

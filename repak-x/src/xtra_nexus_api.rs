@@ -307,7 +307,10 @@ pub async fn xtra_nexus_open(app: AppHandle, url: String) -> Result<(), String> 
                 if u.path() == "/key-copied" {
                     let _ = handle.emit_to("main", "nexus-key-copied", ());
                     let h = handle.clone();
-                    std::thread::spawn(move || if let Some(w) = h.get_webview_window(WINDOW) { let _ = w.close(); });
+                    std::thread::spawn(move || {
+                        if let Some(w) = h.get_webview_window(WINDOW) { let _ = w.close(); }
+                        if let Some(m) = h.get_webview_window("main") { let _ = m.set_focus(); } // its toast is seen
+                    });
                 }
                 return false;
             }
