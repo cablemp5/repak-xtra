@@ -587,7 +587,7 @@ html:not([data-show-encrypted]) .mod-lock { display: none !important; }
   background: color-mix(in srgb, var(--tag), transparent 92%) !important; border: 1px solid color-mix(in srgb, var(--tag), transparent 65%) !important;
   color: color-mix(in srgb, var(--tag) 40%, var(--text-secondary)) !important;
   font-size: 11px !important; font-weight: 600 !important; line-height: normal !important; }   /* the type badges' text */
-.mod-type-badge.mod-lock svg.lucide { flex: none; width: 10px !important; height: 10px !important; color: var(--tag); }   /* past the 14px icon rule */
+.mod-type-badge.mod-lock svg.lucide { flex: none; width: 12px !important; height: 12px !important; color: var(--tag); }   /* past the 14px icon rule */
 [data-theme="light"] .mod-type-badge.mod-lock { --tag: #6d28d9; }
 /* Broken warnings off: no Broken or May crash badges (the Broken tab and the switch-on warnings are left out in code) */
 html:not([data-show-broken]) .broken-badge { display: none !important; }
@@ -2688,12 +2688,13 @@ html[data-motion="off"] .vfx-dot { animation: none; }
 .center-panel .mod-list-grid { padding-bottom: 72px !important; }
 .bulk-actions-toolbar .custom-dropdown-menu { top: auto !important; bottom: calc(100% + 12px) !important; }
 .bulk-actions-toolbar .selection-info, .bulk-actions-toolbar .bulk-controls { display: flex; align-items: center !important; gap: 4px !important; }
-.bulk-actions-toolbar .selection-info { padding-right: 4px; margin-right: 4px; border-right: 1px solid rgba(255, 255, 255, 0.12); }
+.bulk-actions-toolbar .selection-info { align-self: stretch; margin: -5px 4px -5px 0; padding: 5px 4px 5px 0; border-right: 1px solid rgba(255, 255, 255, 0.12); }   /* the divider runs the bar's full height */
 .bulk-count-label { max-width: none !important; margin: 0 12px 0 0 !important; font-size: 13px !important; font-weight: 500 !important;
   line-height: 20px !important; opacity: 1 !important; color: var(--text-primary) !important; }
-.bulk-count { min-width: 0 !important; height: 36px !important; padding: 0 0 0 4px !important; margin: 0 8px 0 0 !important; background: none !important; display: flex; align-items: center; }
-.bulk-count-value { display: inline-grid; place-items: center; box-sizing: border-box; height: 24px; min-width: 24px; padding: 0 8px;
-  border-radius: 6px; background: var(--accent-primary); color: #fff; font-size: 12px; font-weight: 600; line-height: 1;
+.bulk-count { min-width: 0 !important; height: 36px !important; padding: 0 0 0 12px !important; margin: 0 4px 0 0 !important; background: none !important; display: flex; align-items: center; }
+/* plain text, all white: the number in 600, then "selected", on the buttons' line */
+.bulk-count-value { display: inline-block; height: auto; min-width: 0; padding: 0;
+  border-radius: 0; background: none; color: var(--text-primary); font-size: 13px; font-weight: 600; line-height: 20px;
   font-variant-numeric: tabular-nums; transform: none !important; }
 .bulk-actions-toolbar svg { width: 16px !important; height: 16px !important; flex: none; color: currentColor !important; opacity: 1 !important; stroke-width: 2; }
 .bulk-actions-toolbar .btn-ghost, .bulk-actions-toolbar .bulk-field .custom-dropdown-trigger { height: 36px !important; min-height: 0 !important;
