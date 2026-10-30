@@ -587,7 +587,7 @@ html:not([data-show-encrypted]) .mod-lock { display: none !important; }
   background: color-mix(in srgb, var(--tag), transparent 92%) !important; border: 1px solid color-mix(in srgb, var(--tag), transparent 65%) !important;
   color: color-mix(in srgb, var(--tag) 40%, var(--text-secondary)) !important;
   font-size: 11px !important; font-weight: 600 !important; line-height: normal !important; }   /* the type badges' text */
-.mod-type-badge.mod-lock svg.lucide { flex: none; width: 8px !important; height: 8px !important; color: var(--tag); }   /* past the 14px icon rule */
+.mod-type-badge.mod-lock svg.lucide { flex: none; width: 10px !important; height: 10px !important; color: var(--tag); }   /* past the 14px icon rule */
 [data-theme="light"] .mod-type-badge.mod-lock { --tag: #6d28d9; }
 /* Broken warnings off: no Broken or May crash badges (the Broken tab and the switch-on warnings are left out in code) */
 html:not([data-show-broken]) .broken-badge { display: none !important; }
@@ -2684,8 +2684,8 @@ html[data-motion="off"] .vfx-dot { animation: none; }
   transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms cubic-bezier(0.22, 1, 0.36, 1), display 200ms allow-discrete; }
 .bulk-actions-toolbar.inactive { transform: translate(-50%, 16px); opacity: 0; pointer-events: none; transition-duration: 120ms; }
 @starting-style { .bulk-actions-toolbar:not(.inactive) { transform: translate(-50%, 16px); opacity: 0; } }
-/* room under the last rows while the bar covers them */
-.center-panel:has(.bulk-actions-toolbar:not(.inactive)) .mod-list-grid { padding-bottom: 72px !important; }
+/* room under the last rows for the bar, always there: adding it only while the bar shows moved the rows near the end */
+.center-panel .mod-list-grid { padding-bottom: 72px !important; }
 .bulk-actions-toolbar .custom-dropdown-menu { top: auto !important; bottom: calc(100% + 12px) !important; }
 .bulk-actions-toolbar .selection-info, .bulk-actions-toolbar .bulk-controls { display: flex; align-items: center !important; gap: 4px !important; }
 .bulk-actions-toolbar .selection-info { padding-right: 4px; margin-right: 4px; border-right: 1px solid rgba(255, 255, 255, 0.12); }
