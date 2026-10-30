@@ -3945,7 +3945,7 @@ function App() {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.5 }}
                 >
-                  <PlayArrowIcon fontSize="small" /> Launch Game
+                  <PlayArrowIcon fontSize="small" /> Launch
                 </motion.span>
               )}
             </AnimatePresence>

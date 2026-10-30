@@ -879,7 +879,7 @@ html[data-motion="off"] .lo-card-add-icon { transition: none; }
 .vfx-input-group button:hover:not(:disabled), .btn-secondary:hover, .vfx-cancel-btn:hover {
   background: var(--quiet-hover) !important; border-color: rgba(255, 255, 255, 0.14) !important;
 }
-/* The one primary action, styled like Launch Game */
+/* The one primary action, styled like Launch */
 .vfx-start-btn, .btn-save {
   background: #ededed !important; color: #0a0a0a !important; border: 1px solid #ededed !important;
   border-radius: var(--quiet-radius) !important; text-transform: none !important; letter-spacing: 0 !important;
