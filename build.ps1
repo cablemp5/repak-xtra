@@ -23,6 +23,7 @@ if ($Release) {
 }
 if ($Release) {
     git fetch -q origin main
+    if ($LASTEXITCODE -ne 0) { throw 'Could not reach GitHub to check main. Nothing was built.' }
     if ((git rev-parse HEAD) -ne (git rev-parse origin/main)) { throw 'Release what GitHub has: run git pull on main first.' }
     $ver = [regex]::Match((Get-Content -Raw repak-x\src\custom\version.ts), "REPAKXTRA_VERSION = '([^']+)'").Groups[1].Value
     if (-not $ver) { throw 'No REPAKXTRA_VERSION in repak-x\src\custom\version.ts.' }
