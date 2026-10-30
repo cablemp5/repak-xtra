@@ -1263,6 +1263,11 @@ html[data-motion="off"] .lo-gen-bar i { transition: none; animation: none; }
 .lo-screen-head h2 { grid-area: title; }
 .lo-screen-head .lo-search { grid-area: search; }
 .lo-screen-head .lo-show { grid-area: show; }
+/* every control in the row 36px, the Nexus Mods row's height (the switches' buttons fill their track) */
+.lo-screen-head .lo-search, .lo-screen-head .mod-state-filter { height: 36px !important; min-height: 0 !important; box-sizing: border-box; }
+.lo-screen-head .mod-state-filter { align-items: stretch; }
+.lo-screen-head .mod-state-filter button { height: auto !important; min-height: 0 !important; }
+.lo-screen-head .lo-new > button, .lo-screen-head .lo-gen button { height: 36px !important; min-height: 0 !important; }
 @media (max-width: 1000px) {
   .lo-screen-head { grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "title title title title" "search show . view" "tools tools tools tools"; }
 }
