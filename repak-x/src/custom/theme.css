@@ -1256,6 +1256,16 @@ html[data-motion="off"] .lo-gen-bar i { transition: none; animation: none; }
   .lo-screen-head { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main view" "tools tools"; }
   .lo-screen-head .lo-head-tools { justify-content: flex-start; flex-wrap: wrap; }
 }
+/* The title on its own row, with search, All / On, the actions, and the view controls in one row under it, the Nexus Mods
+   screen's layout (2026-10-30). The title block and its row step aside (display: contents), so their parts are grid items */
+.lo-screen-head .lo-head-main, .lo-screen-head .lo-title-row { display: contents; }
+.lo-screen-head { grid-template-columns: auto auto minmax(0, 1fr) auto auto; grid-template-areas: "title title title title title" "search show . tools view"; align-items: center; row-gap: 16px; }
+.lo-screen-head h2 { grid-area: title; }
+.lo-screen-head .lo-search { grid-area: search; }
+.lo-screen-head .lo-show { grid-area: show; }
+@media (max-width: 1000px) {
+  .lo-screen-head { grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "title title title title" "search show . view" "tools tools tools tools"; }
+}
 .lo-search { width: 220px; padding-right: 4px; }
 .lo-search .lo-icon { width: 24px; height: 24px !important; }
 .lp-types { display: flex; flex-wrap: wrap; gap: 4px; }
