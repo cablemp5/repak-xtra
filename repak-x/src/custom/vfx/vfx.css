@@ -243,3 +243,15 @@ html[data-motion="off"] .vfx-notice { animation: none; }
 .vf-eta { font-weight: 600; color: var(--text-primary); }
 /* ticked mods a filter hides: a line of its own above the estimate */
 .vf-hidden-line { display: block; margin-bottom: 2px; }
+
+/* Hierarchy (2026-10-30): the mod groups are the job, so they keep the strongest heading (14px 600). Advanced is settings,
+   so its label steps down to a quiet 13px 500 and its parts indent under it, aligned with its text (nesting by position,
+   no box). In each part: the title, its description, then the control, and the note about the pick 12px and fainter,
+   close under the control it explains (Law of Proximity). Switches fit their labels instead of stretching */
+.vf-adv-title > .ia-toggle { font-size: 13px !important; font-weight: 500 !important; color: var(--text-secondary) !important; }
+.vf-adv-title > .ia-toggle:hover { color: var(--text-primary) !important; }
+.vf-adv-body { padding-left: 24px; }
+.vf-set { padding: 16px 0; }
+.vf-set-note { margin-top: 8px; font-size: 12px; color: color-mix(in srgb, var(--text-secondary) 80%, transparent); }
+.vf-seg { width: fit-content !important; max-width: 100%; }
+.vf-seg button { flex: none !important; }
