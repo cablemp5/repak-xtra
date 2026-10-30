@@ -145,11 +145,12 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 .header-actions-right .btn-settings[data-launch="idle"]:hover { background: #fff !important; }
 
 /* ---------- search, sort, tags, install ---------- */
-.main-action-bar { gap: 8px; height: 40px; align-items: center; }
-.main-action-bar .action-controls, .main-action-bar [aria-label="add mods button group"] { height: 40px; align-items: center; }
-.main-action-bar .search-wrapper { padding: 0 4px 0 8px !important; height: 40px; }
+.main-action-bar { gap: 8px; height: 36px; align-items: center; }
+.main-action-bar .action-controls, .main-action-bar [aria-label="add mods button group"] { height: 36px; align-items: center; }
+.main-action-bar .search-wrapper { padding: 0 4px 0 8px !important; height: 36px; min-height: 0; box-sizing: border-box; }   /* 36px like the Loadouts and Nexus Mods rows */
 .main-search-input { font-size: 14px !important; padding: 8px 8px !important; }
-.main-action-bar .custom-dropdown-trigger, .main-action-bar .MuiButton-root { height: 40px !important; }
+.main-action-bar .custom-dropdown-trigger, .main-action-bar .MuiButton-root { height: 36px !important; min-height: 0 !important; }
+.main-action-bar .install-btn, .main-action-bar .install-btn > * { height: 36px !important; min-height: 0 !important; }
 .header h1.font-logo { font-size: 26px !important; line-height: 1 !important; }
 .header { padding-top: 8px !important; padding-bottom: 8px !important; }
 .search-wrapper,
