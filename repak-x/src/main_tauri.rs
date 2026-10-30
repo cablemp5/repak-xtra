@@ -7,7 +7,6 @@ mod asset_explorer;
 mod xtra_classify; // repakxtra: extra mod types, Project Galacta check
 mod xtra_made; // repakxtra: installed mods keep when they were made (the Needs VFX update check)
 mod xtra_vfx_check; // repakxtra: Check for VFX update (built for this game version or an older one)
-mod xtra_legacy_setup;
 mod xtra_edition;
 mod xtra_setup; // repakxtra: Setup panel (signature bypass, Project Galacta)
 mod xtra_project;
@@ -8759,8 +8758,6 @@ fn main() {
             xtra_capture::capture_game_now,
             xtra_capture::capture_game_hotkey,
             xtra_capture::capture_game_cancel,
-            xtra_legacy_setup::legacy_setup_status,
-            xtra_legacy_setup::legacy_setup_disable,
             xtra_setup::setup_bypass_status, // repakxtra: Setup panel
             xtra_setup::setup_bypass,
             xtra_setup::setup_galacta_status,

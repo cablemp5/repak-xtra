@@ -125,7 +125,7 @@ function EncryptPanel() {
     return () => { void un.then(off => off()) }
   }, [])
 
-  // the Library's mods (Project Galacta and the Sigeon loader left out, as the Library leaves them out), again after a run
+  // the Library's mods (the Project Galacta loader left out, as the Library leaves it out), again after a run
   useEffect(() => {
     if (busy) return
     let live = true
