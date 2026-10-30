@@ -1261,7 +1261,7 @@ html[data-motion="off"] .lo-gen-bar i { transition: none; animation: none; }
 .lo-screen-head .lo-head-main, .lo-screen-head .lo-title-row { display: contents; }
 .lo-screen-head { grid-template-columns: auto auto minmax(0, 1fr) auto auto; grid-template-areas: "title title title title title" "search show . tools view"; align-items: center; row-gap: 16px; }
 .lo-screen-head h2 { grid-area: title; }
-.lo-screen-head .lo-search { grid-area: search; }
+.lo-screen-head .lo-search { grid-area: search; width: 360px; max-width: 100%; }   /* the Nexus Mods search width */
 .lo-screen-head .lo-show { grid-area: show; }
 /* every control in the row 36px, the Nexus Mods row's height (the switches' buttons fill their track) */
 .lo-screen-head .lo-search, .lo-screen-head .mod-state-filter { height: 36px !important; min-height: 0 !important; box-sizing: border-box; }
