@@ -49,9 +49,6 @@ pub struct VfxUatRequest<'a> {
     /// repakxtra: convert on 75% of the cores instead of 50%, for `create_mod_iostore`
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parallel: Option<bool>,
-    /// CustomQuake's V6 container layout (ordinary mod packing keeps its current format).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub quake_packaging: Option<bool>,
     /// repakxtra: leave out the bulk data (pixels, audio), for `extract_iostore_legacy`. Only the command line takes it
     /// (xtra_uat_cli.rs): the library extracts everything, and a request is not sent to it with this field.
     #[serde(skip)]
@@ -520,7 +517,6 @@ pub async fn extract_vanilla_assets(
 /// another package defines: a Blueprint's generated class or a user-defined struct or enum. Their schemas come from that
 /// package on disk, so it is extracted with its dependencies. Conservative: a name that only appears in a string still
 /// counts (the extract then takes its dependencies, as before). A file that is not there needs nothing.
-// repakxtra: pub(crate) for the effect built-ins' edit cache (xtra_visual_builtins.rs keys these files on their dependencies too)
 pub(crate) fn uses_outside_schemas(uasset: &Path) -> bool {
     const MARKERS: [&[u8]; 3] = [b"BlueprintGeneratedClass", b"UserDefinedStruct", b"UserDefinedEnum"];
     fs::read(uasset).is_ok_and(|bytes| MARKERS.iter().any(|m| bytes.windows(m.len()).any(|w| w == *m)))

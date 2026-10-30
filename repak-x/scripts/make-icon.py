@@ -2,7 +2,7 @@
 transparency. With --mesh it is filled with the logo's old mesh gradient instead (the long tilted color blobs that cross
 the logo's x, blurred into each other and bent along smooth noise, over the base color; custom/WordmarkMesh.tsx). Writes icons/RepakIcon.png (512) and icons/RepakIcon.ico (16 to
 256), which tauri.conf.json bundles into the exe: the taskbar, the window and the desktop shortcut all show it, and
-icons/builds/ (each test, dev and repakxploit copy's own color, picked by build.rs). Colors are
+icons/builds/ (the test and dev copies' own colors, picked by build.rs). Colors are
 theme.css .wm's. Run from repak-x/ with any Python that has Pillow and numpy:
     python scripts/make-icon.py [--mesh] [--test-ico path.ico] [--sheet contact.png]
 --test-ico writes the same icon in the test build's green, for the test copy's desktop shortcut (kept outside the repo).
@@ -121,7 +121,7 @@ def save_ico(path, colors=SOLID, degrees=0):
 
 # Each other copy's exe icon (build.rs picks one; Task Manager and Explorer show it): the stable icon's hues turned as far
 # as xtra_buildmark.rs turns the window icon, so the two always match
-BUILDS = {'test': -80, 'dev': 170, 'xploit': 140, 'xploit-test': 60, 'xploit-dev': 100}
+BUILDS = {'test': -80, 'dev': 170}
 
 
 def turned(img, degrees):

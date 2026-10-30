@@ -1,7 +1,7 @@
 // repakxtra: the app's name as its logo, both words in Geist 900 (the README banner's letters): "repak" white, "xtra"
 // solid in one color. Both suffixes use the same outlined weight and -0.02em tracking. Colors live in theme.css (.wm).
 // The earlier mesh gradient fill is kept in WordmarkMesh.tsx and wordmark-mesh.css.
-import { EXTENDED, APP_NAME } from './edition'
+import { APP_NAME } from './edition'
 
 export type Glyph = [number, string]   // [x offset, path] in font units (baseline at 0, y up)
 export const REPAK: Glyph[] = [
@@ -19,28 +19,17 @@ export const XTRA: Glyph[] = [
   [3934, 'M56 0V540H244L248 440Q258 480 284 501Q317 540 377 540H423V386H375Q332 386 304 378Q277 369 264 348Q250 327 250 289V0Z'],
   [4339, 'M227 -12Q142 -12 87 27Q32 66 32 136Q32 208 80 246Q127 285 215 304L377 338Q377 380 359 402Q341 424 309 424Q275 424 256 408Q238 391 233 359L41 365Q57 463 126 508Q195 552 309 552Q441 552 506 495Q571 438 571 322V164Q571 138 580 130Q588 122 603 122H614V0Q605 -3 585 -6Q565 -8 546 -8Q517 -8 486 2Q455 12 434 40Q420 60 415 100Q408 66 391 44Q366 17 326 2Q285 -12 227 -12ZM281 110Q308 110 330 121Q351 132 364 154Q377 177 377 212V230L289 208Q264 202 248 188Q231 175 231 154Q231 133 243 122Q255 110 281 110Z'],
 ]
-// Same 900-weight outlines and kerning as repak/xtra; shared letters reuse the original paths.
-export const XPLOIT: Glyph[] = [
-  [2840, XTRA[0][1]],
-  [3471, REPAK[2][1]],
-  [4106, 'M220 0Q142 0 99 39Q56 78 56 166V710H250V188Q250 160 263 148.50Q276 137 300 137H329V0Z'],
-  [4417, 'M324 -12Q236 -12 170.50 23Q105 58 68.50 121.50Q32 185 32 270Q32 355 68.50 418Q105 481 170.50 516.50Q236 552 324 552Q412 552 477.50 516.50Q543 481 579.50 418Q616 355 616 270Q616 185 579.50 121.50Q543 58 477.50 23Q412 -12 324 -12ZM324 127Q369 127 393 164Q417 201 417 270Q417 338 393 375.50Q369 413 324 413Q279 413 255 375.50Q231 338 231 270Q231 201 255 164Q279 127 324 127Z'],
-  [5035, 'M56 0V540H250V0ZM53 594V730H253V594Z'],
-  [5299, XTRA[1][1]],
-]
 export const LEFT = 40, TOP = 725, W = 4950, H = 890   // the viewBox: x from 40, 725 units above the baseline to 165 below
 
 /** `height` in px */
 export default function Wordmark({ height, className = '' }: { height: number; className?: string }) {
   const glyphs = (items: Glyph[]) => items.map(([x, d]) => <path key={x} transform={`translate(${x} 0)`} d={d} />)
   const letters = `translate(${-LEFT} ${TOP}) scale(1 -1)`
-  const width = EXTENDED ? 5754 : W
-  const viewHeight = EXTENDED ? H + 10 : H
   return (
-    <svg className={`wm ${className}`} viewBox={`0 ${EXTENDED ? -10 : 0} ${width} ${viewHeight}`} height={height} width={(height * width) / viewHeight}
+    <svg className={`wm ${className}`} viewBox={`0 0 ${W} ${H}`} height={height} width={(height * W) / H}
       role="img" aria-label={APP_NAME}>
       <g className="wm-repak" transform={letters}>{glyphs(REPAK)}</g>
-      <g className="wm-xtra" transform={letters}>{glyphs(EXTENDED ? XPLOIT : XTRA)}</g>
+      <g className="wm-xtra" transform={letters}>{glyphs(XTRA)}</g>
     </svg>
   )
 }

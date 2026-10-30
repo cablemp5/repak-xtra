@@ -305,7 +305,7 @@ const ModItem = memo(function ModItem({
     const heroImage = (showHeroIcons || showHeroBg) && !builtin ? getHeroImage(characterName, characterData, modDetails?.character_id) : null
     const isCardView = viewMode === 'grid' || viewMode === 'compact'
     const showSize = useUiPref('mod-size') // repakxtra
-    const typeHint = useTypeHint(category) // repakxtra: badge tooltip for Audio, and UI under Sigeon
+    const typeHint = useTypeHint(category) // repakxtra: badge tooltip for Audio
     const sizeTag = showSize && <span className="mod-size-tag">{formatFileSize(mod.file_size ?? 0)}</span> // repakxtra
 
     // Detect heroes for multi-hero mods - check both characterName and mod_type

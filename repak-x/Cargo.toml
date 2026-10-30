@@ -88,14 +88,11 @@ discord-rich-presence = "1.1.0"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
-keyring = { version = "4", optional = true } # repakxtra: the Nexus API key in Windows Credential Manager (repakxploit)
 
 [features]
 default = []
-extended = ["dep:keyring"]
 # Serves frontend from embedded assets instead of dev server (required for production builds)
 custom-protocol = ["tauri/custom-protocol"]
 
 [build-dependencies]
-sha2 = "0.10.9"
 tauri-build = { version = "2.0", features = [] }

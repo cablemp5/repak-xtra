@@ -1,4 +1,4 @@
-import { EXTENDED, LOADER_NAME } from './edition'
+import { LOADER_NAME } from './edition'
 // repakxtra: Copy setup report (Settings > Help & Community, and Setup). Plain text a helper can read in Discord: the
 // app and loader state first, then the mods that are on, so the summary survives Discord's 2,000 character cut. No
 // absolute path and no Windows user name: mods are named from ~mods down.
@@ -27,7 +27,7 @@ export const DISCORD_LIMIT = 2000
 /** notes: what the app knows about the mod (needs a VFX update, may crash, Niagara), why: the reason it gives */
 export type ReportMod = { name: string; type: string; hero: string; date: string; extra?: string; notes?: string[]; why?: string }
 export type ReportInput = {
-  version: string; repakx?: string; launcher: string; bypass: string; galacta: string; sigeon: string
+  version: string; repakx?: string; launcher: string; bypass: string; galacta: string
   on: ReportMod[]; off: number; conflicts: string; crash: string
   crashLines?: string[] // more on the newest crash, one indented line each
   flags?: string // how many mods that are on need an update, may crash or carry Niagara
@@ -71,7 +71,6 @@ export function buildReport(r: ReportInput) {
     `repakxtra ${r.version}${r.repakx ? ` (RepakX ${r.repakx})` : ''}, ${r.launcher}`,
     `Signature bypass: ${r.bypass}`,
     `${LOADER_NAME}: ${r.galacta}`,
-    ...(EXTENDED ? [`SigeonLoader.asi config: ${r.sigeon}`] : []),
     `Mods: ${r.on.length} on, ${r.off} off`,
     ...(r.flags ? [`Mods that are on: ${r.flags}`] : []),
     `Conflicts: ${r.conflicts}`,
@@ -103,23 +102,21 @@ type Crash = {
 }
 const BYPASS: Record<string, string> = { installed: 'installed', disabled: 'off', partial: 'incomplete', other: 'a different version', missing: 'not installed' }
 
-/** This edition's loader pak (!ProjectGalacta_9999999_P, or !ProjectSigeon_9999999_P in repakxploit), on or off. The other
- *  edition's loader stays listed: on, it means two loaders. */
+/** The loader pak (!ProjectGalacta_9999999_P), on or off. Another loader stays listed: on, it means two loaders. */
 const isOwnLoader = (path: string) =>
-  new RegExp(String.raw`^!?project${EXTENDED ? 'sigeon' : 'galacta'}(_\d+)?(_p)?\.(pak|bak_repak)$`, 'i').test(path.split(/[\\/]/).pop() ?? '')
+  new RegExp(String.raw`^!?projectgalacta(_\d+)?(_p)?\.(pak|bak_repak)$`, 'i').test(path.split(/[\\/]/).pop() ?? '')
 
 /** Reads everything the report needs; whatever cannot be read says "unknown". */
 export async function gatherReport(): Promise<string> {
   const src = reportSource.get?.() ?? { mods: [], modDetails: {}, launcherType: '', gamePath: '' }
-  const [repakx, bypass, galacta, sigeon, clashes, crash] = await Promise.all([
+  const [repakx, bypass, galacta, clashes, crash] = await Promise.all([
     settled(invoke<string>('get_app_version')),
     settled(invoke<{ state: string }>('setup_bypass_status')),
     settled(invoke<Galacta>('setup_galacta_status', { online: false })),
-    EXTENDED ? settled(invoke<{ state: string; configured: boolean }>('sigeon_status')) : Promise.resolve(null),
     settled(invoke<{ file_path: string; mod_paths: string[]; files?: string[] }[]>('check_mod_clashes', { quiet: true })),
     settled(invoke<Crash | null>('xtra_newest_crash')),
   ])
-  // the edition's own loader has its line above, so it is not counted or listed as a mod too
+  // the loader has its line above, so it is not counted or listed as a mod too
   const mods = src.mods.filter(m => !isOwnLoader(m.path))
   const onPaths = mods.filter(m => m.enabled).map(m => m.path)
   // what the app knows about the mods that are on: checked now, not from the last background scan
@@ -187,7 +184,6 @@ export async function gatherReport(): Promise<string> {
     launcher: src.launcherType === 'epic' ? 'Epic' : src.launcherType === 'steam' ? 'Steam' : 'launcher unknown',
     bypass: bypass ? BYPASS[bypass.state] ?? bypass.state : 'unknown',
     galacta: galactaText,
-    sigeon: !sigeon ? 'unknown' : !sigeon.configured ? 'not set up' : sigeon.state === 'off' ? 'off' : `on, config "${sigeon.state}"`,
     on,
     off: mods.filter(m => !m.enabled).length,
     conflicts: clashes ? plural(groupConflicts(clashes).length, 'group') : 'unknown',
@@ -207,8 +203,8 @@ if (import.meta.env.DEV) {
   const root = 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\MarvelRivals\\MarvelGame\\Marvel\\Content\\Paks\\~mods'
   console.assert(relativeToMods(`${root}\\Sub\\A_9999999_P.pak`, root) === '~mods/Sub/A_9999999_P.pak', 'mods relative to ~mods')
   console.assert(relativeToMods('D:\\Elsewhere\\B.pak', root) === 'B.pak', 'outside ~mods: the file name only')
-  console.assert(isOwnLoader(`${root}\\${EXTENDED ? '!ProjectSigeon' : '!ProjectGalacta'}_9999999_P.pak`) && !isOwnLoader(`${root}\\${EXTENDED ? 'ProjectSigeonFan' : 'BuckySwap_ProjectGalacta'}_P.pak`)
-    && !isOwnLoader(`${root}\\${EXTENDED ? '!ProjectGalacta' : '!ProjectSigeon'}_9999999_P.pak`), 'only this edition\'s own loader leaves the mod list')
+  console.assert(isOwnLoader(`${root}\\!ProjectGalacta_9999999_P.pak`) && !isOwnLoader(`${root}\\BuckySwap_ProjectGalacta_P.pak`)
+    && !isOwnLoader(`${root}\\!ProjectSigeon_9999999_P.pak`), 'only its own loader leaves the mod list')
   console.assert(scrub('C:\\Users\\someone\\Desktop\\x and D:/Games/MarvelRivals/~mods/a.pak') === '%USERPROFILE%\\…\\x and ~mods/a.pak', 'no user name, no drive paths', scrub('C:\\Users\\someone\\Desktop\\x and D:/Games/MarvelRivals/~mods/a.pak'))
   console.assert(scrub('at C:\\Users\\First Last\\Marvel\\x.cpp') === 'at %USERPROFILE%\\…\\x.cpp', 'a user folder with a space goes whole', scrub('at C:\\Users\\First Last\\Marvel\\x.cpp'))
   console.assert(scrub('C:\\Users\\x\\OneDrive - Contoso Ltd\\Games\\a.pak') === '%USERPROFILE%\\…\\a.pak', 'no folders under the user folder', scrub('C:\\Users\\x\\OneDrive - Contoso Ltd\\Games\\a.pak'))
@@ -220,16 +216,16 @@ if (import.meta.env.DEV) {
   console.assert(scrub('at //SERVER/Shared Folder/Alice/file.cpp') === 'at <network path>', 'a forward-slash network path goes whole', scrub('at //SERVER/Shared Folder/Alice/file.cpp'))
   console.assert(scrub('C:/Program Files (x86)/Steam/MarvelRivals/~mods/a.pak') === '~mods/a.pak', 'a mods folder under a spaced path', scrub('C:/Program Files (x86)/Steam/MarvelRivals/~mods/a.pak'))
   console.assert(scrub('C:/a/b.pak and D:/c d/e.pak') === 'b.pak and e.pak', 'two paths on a line keep both file names', scrub('C:/a/b.pak and D:/c d/e.pak'))
-  const text = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', sigeon: 'off',
+  const text = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed',
     on: [{ name: '~mods/A.pak', type: 'Mesh', hero: 'Black Panther', date: '2026-10-01' }], off: 3, conflicts: '0 groups', crash: 'none found' })
   console.assert(text.indexOf('Newest crash') < text.indexOf('~mods/A.pak | Mesh | Black Panther | 2026-10-01'), 'summary before the mod list', text)
-  const flagged = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', sigeon: 'off', conflicts: '0 groups',
+  const flagged = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', conflicts: '0 groups',
     crash: '2026-10-24 21:03, Access Violation', crashLines: ['7 min into the game', 'message: boom D:\\build\\x\\y.cpp'], flags: '1 need a VFX update, 0 may crash, 0 broken, 1 with Niagara',
     on: [{ name: '~mods/A.pak', type: 'VFX', hero: '', date: '2026-10-01', notes: ['Needs VFX update', 'Niagara'], why: 'made before the game update' }], off: 0 })
   console.assert(flagged.includes('~mods/A.pak | VFX | - | 2026-10-01 | Needs VFX update, Niagara\n  why: made before the game update'), 'notes and reason on the mod line', flagged)
   console.assert(flagged.includes('  7 min into the game') && flagged.includes('message: boom y.cpp') && flagged.includes('Mods that are on: 1 need a VFX update'), 'crash lines indented, paths cut to a file name, flags summarised', flagged)
   console.assert(!flagged.includes('System:') && !flagged.includes('Out of memory') && !flagged.includes('Crash stack'), 'no crash file facts, no lines for them', flagged)
-  const diagnosed = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', sigeon: 'off', conflicts: '0 groups', off: 0,
+  const diagnosed = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', conflicts: '0 groups', off: 0,
     crash: '2026-10-25 20:55, ObjectSerializationError', system: 'AMD Ryzen 5 5600X, AMD Radeon RX 6700 XT (Adrenalin 26.10.1, D3D12), 16 GB, Windows 10',
     faulting: 'nvwgf2umx (GPU driver)', thirdParty: 'dsound.dll, MarvelRivalsUTOCSignatureBypass.asi', oom: true, thread: 'RenderThread 1',
     stack: ['nvwgf2umx + 12ab (GPU driver)', 'Marvel-Win64-Shipping + 10c296b (game)'],
@@ -239,6 +235,6 @@ if (import.meta.env.DEV) {
     .every(l => summary.includes(`\n${l}`)), 'crash diagnosis in the top summary block', summary)
   console.assert(diagnosed.includes('\n\nCrash stack, top 2 (RenderThread 1):\n  nvwgf2umx + 12ab (GPU driver)\n  Marvel-Win64-Shipping + 10c296b (game)\n\n')
     && diagnosed.indexOf('Crash stack') < diagnosed.indexOf('~mods/A.pak'), 'stack frames indented, below the summary, above the mods', diagnosed)
-  console.assert(!buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', sigeon: 'off', conflicts: '0 groups', off: 0, crash: 'x', oom: false, on: [] })
+  console.assert(!buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', conflicts: '0 groups', off: 0, crash: 'x', oom: false, on: [] })
     .includes('Out of memory'), 'out of memory only when true')
 }

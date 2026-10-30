@@ -1,4 +1,4 @@
-import { EXTENDED, LOADER_NAME, LOADER_PAK, APP_NAME } from './edition'
+import { LOADER_NAME, LOADER_PAK, APP_NAME } from './edition'
 // repakxtra: Setup, what the game needs to load mods (backend: xtra_setup.rs). The UTOC signature bypass ships inside
 // repakxtra; Project Galacta comes from its GitHub releases, with an update check and the release notes.
 import { useEffect, useState } from 'react'
@@ -19,7 +19,7 @@ import { offerUndoDelete } from './undoDelete'
 
 type Alert = ReturnType<typeof useAlert>
 type FileCheck = { name: string; place: string; size: number; sha256: string; found: 'missing' | 'same' | 'other' }
-type Bypass = { state: 'installed' | 'disabled' | 'partial' | 'other' | 'missing'; files: FileCheck[]; sigeon_on: boolean }
+type Bypass = { state: 'installed' | 'disabled' | 'partial' | 'other' | 'missing'; files: FileCheck[] }
 type Galacta = { installed: string | null; disabled: boolean; latest: string | null; published: string | null; notes: string | null; url: string | null; up_to_date: boolean | null }
 
 const AUTO_KEY = 'repakxtra.setup.autoCheck'
@@ -323,14 +323,13 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                 </div>
                 {bypassOn && <span className="su-part-links">
                   {b.state === 'installed' && <button type="button" className="su-link" disabled={Boolean(busy)}
-                    onClick={() => (EXTENDED && b.sigeon_on ? setConfirmOff('disable') : act('disable'))}>Turn off</button>}
+                    onClick={() => act('disable')}>Turn off</button>}
                   <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => setConfirmOff('remove')}>Remove</button>
                 </span>}
               </li>
             </ul>
             {confirmOff && <ConfirmRow yes={confirmOff === 'remove' ? 'Remove' : 'Turn off anyway'} onYes={() => act(confirmOff)} onNo={() => setConfirmOff(null)}
-              text={confirmOff === 'disable' ? 'Sigeon loads through the same loader, so it turns off too.'
-                : `Remove the loader and bypass? Mods stop loading${EXTENDED && b?.sigeon_on ? ', and Sigeon turns off too' : ''}.`} />}
+              text="Remove the loader and bypass? Mods stop loading." />}
             {/* its progress above the buttons, like Galacta's and the preview kit's */}
             <BypassTrack on={busy === 'install' || busy === 'enable'}
               done={finished === 'install' ? 'Installed. Mods load from the next game launch.' : finished === 'enable' ? 'On again. Mods load from the next game launch.' : undefined} />
@@ -376,7 +375,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
             <div className="su-card-head">
               <div>
                 <h3>{LOADER_NAME}</h3>
-                <p>{EXTENDED ? 'Project Sigeon Minimal is included with repakxploit and updates with the app.' : <>Loads more types of mods and lets you toggle mods in game. By <a onClick={() => open(GALACTA)}>0xSaturno</a>.</>}</p>
+                <p>{<>Loads more types of mods and lets you toggle mods in game. By <a onClick={() => open(GALACTA)}>0xSaturno</a>.</>}</p>
               </div>
               <span className={`su-chip ${g?.up_to_date === false ? 'is-update' : g?.installed ? 'is-installed' : 'is-missing'}`}>{g ? galactaState : 'Checking…'}</span>
             </div>
@@ -389,11 +388,11 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                   {/* like the preview kit's line: its version (known once a check finds it matches), where, then What's new */}
                   <span>
                     {!g ? 'Checking…' : [g.installed && g.up_to_date && g.latest, g.installed ? `in ${where}${g.disabled ? ', off in the Library' : ''}` : 'Not installed'].filter(Boolean).join(' · ')}
-                    {g?.latest && <> · <button type="button" className="su-link" onClick={() => setNotes("What's new")}>{g.up_to_date === false ? `${g.latest} ${EXTENDED ? "bundled" : "on GitHub"}` : `What's new in ${g.latest}`}</button></>}
+                    {g?.latest && <> · <button type="button" className="su-link" onClick={() => setNotes("What's new")}>{g.up_to_date === false ? `${g.latest} on GitHub` : `What's new in ${g.latest}`}</button></>}
                   </span>
                 </div>
                 <span className="su-part-links">
-                  <button type="button" className="su-link" disabled={Boolean(busy)} onClick={check} title={EXTENDED ? "Check against the bundled version" : `Ask GitHub for the newest ${LOADER_NAME}`}>
+                  <button type="button" className="su-link" disabled={Boolean(busy)} onClick={check} title={`Ask GitHub for the newest ${LOADER_NAME}`}>
                     {busy === 'check' ? 'Checking…' : 'Check for updates'}
                   </button>
                   {g?.installed && <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => setAskGalacta(true)}
@@ -447,7 +446,7 @@ export default function SetupButton({ alert }: { alert: Alert }) {
   }, [])
 
   const recheck = () => invoke<Bypass>('setup_bypass_status').then(b => setAttention(b.state !== 'installed')).catch(() => {})
-  useEffect(() => {   // the Sigeon setup installs the bypass too
+  useEffect(() => {
     window.addEventListener('bypass-changed', recheck)
     return () => window.removeEventListener('bypass-changed', recheck)
   }, [])

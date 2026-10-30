@@ -1,28 +1,15 @@
 // extern crate winres; // Disabled for Tauri - Tauri handles icons
 fn main() {
     println!("cargo:rerun-if-env-changed=REPAKXTRA_BUILD");
-    println!("cargo:rerun-if-changed=resources/extended/activation.sha256");
-    if std::env::var_os("CARGO_FEATURE_EXTENDED").is_some() {
-        let hash = std::fs::read_to_string("resources/extended/activation.sha256").unwrap_or_default();
-        let hash = hash.trim();
-        let valid = hash.len() == 64 && hash.bytes().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase());
-        assert!(valid || std::env::var_os("CARGO_FEATURE_CUSTOM_PROTOCOL").is_none(), "Configure the shared extended code with scripts/Set-ExtendedUnlockCode.ps1 before building.");
-        // Only sha256(hash) ships: the hash itself is the saved receipt, so it must not be readable from the exe.
-        use sha2::{Digest, Sha256};
-        let bundled = if valid { format!("{:x}", Sha256::digest(hash.as_bytes())) } else { String::new() };
-        println!("cargo:rustc-env=REPAKXTRA_UNLOCK_HASH={bundled}");
-    }
-    // A direct Cargo build must not embed the other edition's previously built frontend.
+    // A direct Cargo build must not embed a frontend built for another edition (edition.json is checked by installed updaters).
     println!("cargo:rerun-if-changed=dist/edition.json");
     if std::env::var_os("CARGO_FEATURE_CUSTOM_PROTOCOL").is_some() {
-        let edition = if std::env::var_os("CARGO_FEATURE_EXTENDED").is_some() { "extended" } else { "standard" };
-        let expected = format!("{{\"edition\":\"{edition}\"}}");
         let actual = std::fs::read_to_string("dist/edition.json").unwrap_or_default();
-        assert_eq!(actual.trim(), expected, "Build the matching frontend first: use build.ps1 -Edition {edition}");
+        assert_eq!(actual.trim(), "{\"edition\":\"standard\"}", "Build the frontend first: use build.ps1");
     }
     // repakxtra: Task Manager names a running app by its exe's description, which tauri-build takes from productName
-    // ("RepakX"): each edition gets its own name there (the app's own config, identifier and data stay as they are)
-    let name = if std::env::var_os("CARGO_FEATURE_EXTENDED").is_some() { "repakxploit" } else { "repakxtra" };
+    // ("RepakX"): it gets repakxtra there (the app's own config, identifier and data stay as they are)
+    let name = "repakxtra";
     let config = match std::env::var("TAURI_CONFIG") {
         Ok(c) if c.trim_start().starts_with('{') && c.trim() != "{}" => format!("{{\"productName\":\"{name}\",{}", &c.trim_start()[1..]),
         _ => format!("{{\"productName\":\"{name}\"}}"),
@@ -30,14 +17,11 @@ fn main() {
     std::env::set_var("TAURI_CONFIG", config);
     // The exe's own icon (Task Manager and Explorer show it) in this copy's color, as xtra_buildmark.rs colors the window's:
     // icons/builds/ from scripts/make-icon.py. The stable repakxtra keeps the blue icons/RepakIcon.ico
-    let extended = std::env::var_os("CARGO_FEATURE_EXTENDED").is_some();
     let kind = if std::env::var("PROFILE").as_deref() == Ok("debug") { "dev" }
         else if std::env::var("REPAKXTRA_BUILD").as_deref() == Ok("test") { "test" } else { "" };
-    let icon = match (extended, kind) {
-        (false, "") => "icons/RepakIcon.ico".to_string(),
-        (false, k) => format!("icons/builds/RepakIcon-{k}.ico"),
-        (true, "") => "icons/builds/RepakIcon-xploit.ico".to_string(),
-        (true, k) => format!("icons/builds/RepakIcon-xploit-{k}.ico"),
+    let icon = match kind {
+        "" => "icons/RepakIcon.ico".to_string(),
+        k => format!("icons/builds/RepakIcon-{k}.ico"),
     };
     println!("cargo:rerun-if-changed={icon}");
     // Tauri build - handles icons and resources

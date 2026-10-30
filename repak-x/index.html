@@ -155,11 +155,6 @@
     html[data-build] .splash-build { display: block; }
     html[data-build="test"] .splash-build { color: #3ecf6e; }
     html[data-build="dev"] .splash-build { color: #f5a524; }
-    html[data-edition="extended"]:not([data-build="dev"]) .splash-x { color: #ef4444; }
-    html[data-edition="extended"][data-build="test"] .splash-x,
-    html[data-edition="extended"][data-build="test"] .splash-build { color: #a855f7; }
-    html[data-edition="extended"][data-build="dev"] .splash-x,
-    html[data-edition="extended"][data-build="dev"] .splash-build { color: #ec4899; }
     .subtitle, .icon-container, .status-detail { display: none !important; }
     .status-text { font-family: 'Geist', sans-serif; font-size: 0.875rem !important; font-weight: 400 !important; color: #8f8f8f !important; margin-top: 1rem; }
     .splash-progress-container { height: 2px !important; max-width: 200px; margin: 1.5rem auto 0 !important; background: rgba(255, 255, 255, 0.08) !important; }
@@ -213,8 +208,6 @@
     // repakxtra: test and dev copies mark the splash like the header (custom/version.ts). Vite fills in %MODE% and
     // %VITE_REPAKXTRA_TEST% when it serves or builds this page (an unset one stays as written, so it never matches)
     var BUILD = '%MODE%' === 'development' ? 'dev' : '%VITE_REPAKXTRA_TEST%' === '1' ? 'test' : '';
-    document.documentElement.setAttribute('data-edition', '%VITE_REPAKXTRA_EDITION%' === 'extended' ? 'extended' : 'standard');
-    if ('%VITE_REPAKXTRA_EDITION%' === 'extended') document.querySelector('.splash-x').textContent = 'xploit';
     if (BUILD) {
       document.documentElement.setAttribute('data-build', BUILD);
       document.querySelector('.splash-build').textContent = BUILD + ' build';

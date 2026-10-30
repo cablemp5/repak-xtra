@@ -8,11 +8,10 @@ try {
   const { installedReleaseNotes } = await server.ssrLoadModule('/src/custom/releaseNotes.ts')
   const releases = [
     { tag_name: 'v0.26.0', body: 'standard notes' },
-    { tag_name: 'extended-v0.26.0', body: 'extended notes' },
-    { tag_name: 'extended-v0.27.0', body: 'newer notes' },
-    { tag_name: 'extended-v0.28.0', body: 'draft notes', draft: true },
+    { tag_name: 'v0.27.0', body: 'newer notes' },
+    { tag_name: 'v0.28.0', body: 'draft notes', draft: true },
   ]
-  for (const [prefix, expected] of [['v', 'standard notes'], ['extended-v', 'extended notes']]) {
+  for (const [prefix, expected] of [['v', 'standard notes']]) {
     const urls = []
     const request = async url => {
       urls.push(url)
@@ -23,9 +22,9 @@ try {
     assert(urls.every(url => !url.endsWith('/latest')))
   }
   const direct = async () => ({ ok: true, json: async () => releases[1] })
-  assert.equal(await installedReleaseNotes('v0.26.0', 'extended-v', direct), 'extended notes')
+  assert.equal(await installedReleaseNotes('v0.27.0', 'v', direct), 'newer notes')
   const fallback = async url => ({ ok: !url.includes('/tags/'), json: async () => releases })
-  assert.equal(await installedReleaseNotes('0.25.0', 'extended-v', fallback), '')
-  assert.equal(await installedReleaseNotes('0.28.0', 'extended-v', fallback), '')
-  console.log('Release notes: edition, exact-version, direct, fallback, and draft checks passed')
+  assert.equal(await installedReleaseNotes('0.25.0', 'v', fallback), '')
+  assert.equal(await installedReleaseNotes('0.28.0', 'v', fallback), '')
+  console.log('Release notes: exact-version, direct, fallback, and draft checks passed')
 } finally { await server.close() }

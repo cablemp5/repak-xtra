@@ -1,4 +1,4 @@
-import { EXTENDED, LOADER_NAME, APP_NAME } from './edition'
+import { LOADER_NAME, APP_NAME } from './edition'
 // repakxtra: the first-launch setup. On the first launch it opens on what loadouts are (WelcomeIntro.tsx), then one
 // screen, top to bottom: the game folder, the signature bypass, Project Galacta, the first mods, then under Optional mod
 // previews and the desktop shortcut. Setup > Guided setup opens it again on the steps. Closing it, or dropping mods on the window, marks it
@@ -185,7 +185,7 @@ export default function FirstRun({ alert, gamePath, onAutoDetect, onBrowse, onAd
 
           <Step n={3} done={galactaOn} title={`Install ${LOADER_NAME}`}
             action={!galacta?.installed && <button type="button" className="btn-primary" disabled={noGame || Boolean(busy)} onClick={installGalacta}
-              title={noGame ? 'Find the game first' : EXTENDED ? 'Installs the bundled Minimal variant' : 'Downloads the newest release from GitHub'}>{busy === 'galacta' ? 'Installing…' : 'Install'}</button>}>
+              title={noGame ? 'Find the game first' : 'Downloads the newest release from GitHub'}>{busy === 'galacta' ? 'Installing…' : 'Install'}</button>}>
             <p>{galacta?.installed && !galactaOn ? 'Installed but switched off. Turn it on in the Library.'
               : galactaOn ? 'Installed.'
               : 'Most skin mods need it. It also lets you switch mods in game.'}</p>

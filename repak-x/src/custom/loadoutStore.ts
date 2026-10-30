@@ -523,7 +523,7 @@ if (!localStorage.getItem('repakxtra.hotkeysPinned')) {
   }
 }
 
-/** Which main view shows: Home (loadout cards), Library (the full mod list) or Nexus (custom/NexusBrowser.tsx). Remembered; Home on first start.
+/** Which main view shows: Home (loadout cards) or Library (the full mod list). Remembered; Home on first start.
  *  Mirrored on <html data-view> so theme.css hides the other view (both stay mounted, keeping their state). */
 export type View = 'home' | 'library' | 'nexus'
 const savedView = savedItem('repakxtra.view')
