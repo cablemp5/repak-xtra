@@ -2675,11 +2675,13 @@ html[data-motion="off"] .vfx-dot { animation: none; }
    header, its top tucked behind the header so it reads as the header's extension. The header's own surface and border,
    the count as "Selected" with its number in the All / On / Off pill, every action the app's outlined button, Delete in
    red. custom/selectionScroll.ts keeps the row you clicked under the cursor as it opens ---------- */
-.center-header { position: relative; z-index: 2; }   /* above the drawer, so its top hides behind the header */
+.center-header { position: relative; z-index: 2; background: inherit !important; }   /* above the drawer, and opaque, so its top hides behind the header */
+/* the page has no panels since 2026-10-30: the drawer is a full-width band under the header, its hairline the one under both */
+.center-header:has(+ .bulk-actions-toolbar:not(.inactive)) { border-bottom-color: transparent !important; }
 .bulk-actions-toolbar { --tuck: 11px; position: relative !important; z-index: 1; flex: none; box-sizing: border-box;
-  height: calc(52px + var(--tuck)); margin: calc(-1 * var(--tuck)) 16px 0 !important; padding: var(--tuck) 8px 0 16px !important; gap: 12px !important;
-  border-radius: 0 0 10px 10px !important; background: var(--panel-bg) !important; border: 1px solid var(--panel-border) !important;
-  border-top: none !important; box-shadow: none !important; align-items: flex-end !important;
+  height: calc(52px + var(--tuck)); margin: calc(-1 * var(--tuck)) 0 0 !important; padding: var(--tuck) 16px 0 !important; gap: 12px !important;
+  border-radius: 0 !important; background: transparent !important; border: none !important;
+  border-bottom: 1px solid var(--panel-border) !important; box-shadow: none !important; align-items: flex-end !important;
   transition: height var(--acc-expand) var(--acc-ease), display var(--acc-expand) allow-discrete; }
 /* transitions.dev Accordion: it grows out of the header and folds back into it. Its buttons ride its bottom edge, the
    header hides what is above that, and the list moves with it (its height changes, so selectionScroll.ts follows) */
@@ -2904,3 +2906,8 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .mod-rows > .mod-row:last-child { border-bottom-left-radius: 9px; border-bottom-right-radius: 9px; }
 .combined-input-group .action-btn { border-radius: 4px !important; }
 .segmented-control .segment-btn { border-radius: 4px !important; }
+
+/* Launcher (Settings > General): the picked launcher gets the selected fill the app's other switches use (All, On, Off).
+   SettingsPanel.css gave it the panel color, which is the track's own black in AMOLED */
+.segmented-control .segment-btn { transition: background-color 150ms ease, color 150ms ease !important; }
+.segmented-control .segment-btn.active { background: var(--bg-lighter) !important; border-color: transparent !important; box-shadow: none !important; color: var(--text-primary) !important; }
