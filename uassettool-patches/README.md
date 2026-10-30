@@ -18,6 +18,8 @@ take them out again (`apply.ps1`), so the submodule itself is never changed or f
 
 | `0008-extract-can-leave-out-bulk-data.patch` | `extract_iostore_legacy` takes `--no-bulk`: the conversion is told to leave out the bulk data (`.ubulk`, `.uptnl`, `.m.ubulk`), a flag `ZenToLegacyConverter.Convert` already had and nothing set. The `.uasset` and `.uexp` are the same. CustomQuake's settings read needs only those (the game's textures hold 32 GB of pixel data). The command line and `serve` both take it (the library's JSON request does not). An older command line ignores the flag and extracts everything. | 1,000 real textures: 8.8 s to 6.2 s, 1,111 MB to 151 MB, 2,000 of 2,000 `.uasset` and `.uexp` byte for byte the same. CustomQuake's `real_read` test: 8,000 textures read the same settings as the earlier read with pixel data |
 
+| `0011-cli-to-json-streams-unindented.patch` | The command line's `to_json` writes unindented JSON straight into the file, as `batch_to_json` does since 0002, instead of building an indented string first (a Niagara system's is up to 30 MB). The effect built-ins decode through it, one process per file, several at once. Same values, whitespace only. | 16 Niagara files, 8 one after another 8.0 s to 7.0 s, 8 at once 3.5 s to 2.8 s. The three effect built-ins built from it come out byte for byte the same |
+
 Patches stack: each applies on top of the ones before it, in name order.
 
 `0010-encrypt-existing-iostore.patch` adds `encrypt_iostore` and `encrypt_pak` JSON actions. They write to separate staging

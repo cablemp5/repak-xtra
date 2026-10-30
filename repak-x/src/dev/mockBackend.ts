@@ -90,7 +90,19 @@ const builtins: any[] = ['force-default-skin', 'skip-intro-movies', 'custom-quak
 // 'mock.quakeSlow' = '1' makes its build last a minute so the progress bar can be seen
 let quakeStart = 0
 const quakeLength = () => (localStorage.getItem('mock.quakeSlow') === '1' ? 60000 : 2500)
+// an effect built-in's build (No impact and the others): reading, then a count with the cache's line. mock.effectReuse=1
+// shows a rebuild that reuses the last build's edits
+let effectStart = 0
+const EFFECTS = ['no-impact', 'no-tracers', 'no-screen-shake']
+const effectProgress = () => {
+  const s = (Date.now() - effectStart) / 1000
+  if (s < 4) return { stage: "Reading the game's effect files", detail: null, fraction: 0 }
+  const reuse = localStorage.getItem('mock.effectReuse') === '1', total = reuse ? 40 : 817
+  const n = Math.min(total, Math.floor(((s - 4) * (reuse ? 2 : 4)) / 8) * 8)
+  return { stage: 'Changing the effects', detail: reuse ? `${n} of ${total} to read, 777 reused from the last build` : `${n} of ${total} to read. Rebuilds reuse these and take about a minute`, fraction: 0.3 + (0.6 * n) / total }
+}
 const quakeProgress = () => {
+  if (effectStart) return effectProgress()
   if (!quakeStart) return null
   const f = Math.min(0.99, (Date.now() - quakeStart) / quakeLength())
   const stage = f < 0.04 ? 0 : f < 0.64 ? 1 : f < 0.8 ? 2 : f < 0.86 ? 3 : 4
@@ -133,8 +145,10 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         if (args?.on !== undefined) b.on = args.on
         if (!b.on) { b.current = b.active = false; b.overlaps = undefined; quakeStart = 0; return structuredClone(builtins) }
         if (b.id === 'custom-quake') quakeStart = Date.now()
-        return new Promise(r => setTimeout(r, b.id === 'custom-quake' ? quakeLength() : 2500)).then(() => {
+        if (EFFECTS.includes(b.id)) effectStart = Date.now()
+        return new Promise(r => setTimeout(r, b.id === 'custom-quake' ? quakeLength() : EFFECTS.includes(b.id) ? 240000 : 2500)).then(() => {
           if (b.id === 'custom-quake') quakeStart = 0
+          if (EFFECTS.includes(b.id)) effectStart = 0
           if (b.id === 'custom-quake' && localStorage.getItem('mock.quakeError') === '1') {
             Object.assign(b, { current: false, error: localStorage.getItem('mock.quakeErrorKind') === 'write' ? 'Could not write the packages: a file is in use' : 'Not active yet. The game updated and repakxtra waits for the support files for it. It checks for them at every start' })
             throw b.error

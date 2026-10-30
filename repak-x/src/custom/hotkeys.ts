@@ -52,6 +52,7 @@ export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
       { keys: ['Ctrl', '+'], action: 'Zoom in' },
       { keys: ['Ctrl', '-'], action: 'Zoom out' },
       { keys: ['Ctrl', '0'], action: 'Reset zoom' },
+      { keys: ['F3'], action: 'Show / hide the frame rate counter' },
     ],
   },
   {

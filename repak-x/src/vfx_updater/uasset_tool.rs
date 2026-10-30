@@ -520,7 +520,8 @@ pub async fn extract_vanilla_assets(
 /// another package defines: a Blueprint's generated class or a user-defined struct or enum. Their schemas come from that
 /// package on disk, so it is extracted with its dependencies. Conservative: a name that only appears in a string still
 /// counts (the extract then takes its dependencies, as before). A file that is not there needs nothing.
-fn uses_outside_schemas(uasset: &Path) -> bool {
+// repakxtra: pub(crate) for the effect built-ins' edit cache (xtra_visual_builtins.rs keys these files on their dependencies too)
+pub(crate) fn uses_outside_schemas(uasset: &Path) -> bool {
     const MARKERS: [&[u8]; 3] = [b"BlueprintGeneratedClass", b"UserDefinedStruct", b"UserDefinedEnum"];
     fs::read(uasset).is_ok_and(|bytes| MARKERS.iter().any(|m| bytes.windows(m.len()).any(|w| w == *m)))
 }

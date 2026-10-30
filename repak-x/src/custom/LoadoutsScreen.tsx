@@ -23,7 +23,7 @@ import { PreviewsUnavailable, dismissPreviewSummary, generateAllLoadouts, loadou
 import {
   type Loadout, type Mod, OTHER, OTHER_LABEL, addGroup, captureKey, changesToTurnOff, changesToTurnOn, deleteGroup, displayName, groupKey,
   inGroup, isActive, modKey, moveGroup, moveLoadout, movedBeside, nextLoadoutName, openLoadout, patchLoadout, placeLoadout, placed, readLoadouts, renameGroup,
-  setView, snapshotLoadout, sweepMediaOnce, useGroups, useLoadouts, useOpenLoadout, useView, writeLoadouts,
+  setView, snapshotLoadout, sweepMediaOnce, useGroups, useLoadouts, useOpenLoadout, useView, writeLoadouts, modsByKey,
 } from './loadoutStore'
 import { savedItem } from './storageCarryOver'
 import { useUpstreamWatch } from './upstream'
@@ -143,7 +143,7 @@ type CardProps = {
 /** One loadout card on Home. Memoized: it re-renders only when its loadout, the mods or its own state change. */
 const LoadoutCard = memo(function LoadoutCard({ p, l, groupBy, canGenerate, busy, anyBusy, renaming, draft, placeholder, hovered,
   onPick, onToggle, onStartRename, onDraft, onCommit, onCancelRename }: CardProps) {
-  const byKey = useMemo(() => new Map(p.mods.map(m => [modKey(m.path), m])), [p.mods])
+  const byKey = modsByKey(p.mods)
   const active = isActive(l, p.mods)
   const keys = new Set(l.on.map(displayName))
   const present = [...keys].filter(k => byKey.has(k)).length
@@ -194,7 +194,17 @@ const LoadoutCard = memo(function LoadoutCard({ p, l, groupBy, canGenerate, busy
   )
 })
 
+/** Home. Mounted on its first visit and then kept, hidden while another view shows: remounting made every switch back
+ *  rebuild each card and decode its picture again (a pause before the cards appeared). */
 export default function LoadoutsScreen(p: LoadoutProps) {
+  const home = useView() === 'home'
+  const [seen, setSeen] = useState(home)
+  if (home && !seen) setSeen(true)
+  if (!seen) return null
+  return <div style={{ display: home ? 'contents' : 'none' }}><LoadoutsHome {...p} /></div>
+}
+
+function LoadoutsHome(p: LoadoutProps) {
   const newStrip = useUiPref('new-strip') // Settings > Library > Show New this week, off by default
   const builtins = useUiPref('builtins') // Settings > Library > Hide built-in mods, shown by default
   const view = useView()
@@ -311,6 +321,12 @@ export default function LoadoutsScreen(p: LoadoutProps) {
 
   // The cards' handlers keep one identity, so a card re-renders only when its own data changes (a drag reorders the
   // cards on every step; re-rendering all of them made it stutter)
+  // The cards' p changes only with what they show: App passes a new props object on every render of its own (the game
+  // lock, mod details, an inline menu handler), and each one re-rendered every card. Its functions read the live props
+  const live = useRef(p)
+  live.current = p
+  const cardP = useMemo<LoadoutProps>(() => ({ ...live.current, reload: () => live.current.reload(), isBlocked: () => live.current.isBlocked(),
+    onModContextMenu: (e, m, rename) => live.current.onModContextMenu?.(e, m, rename) }), [p.mods, p.modDetails, p.alert, p.blocked, p.scopeMods, p.scopeLabel])
   const pickCard = useStableCallback((e: React.PointerEvent<HTMLElement>, id: string) => { if (!filtered) drag.onPointerDown(e, id) }) // no reordering a filtered view
   const toggleCard = useStableCallback((l: Loadout, on: boolean) => toggle(l, on))
   const startRename = useStableCallback((l: Loadout) => { setDraft(l.name); setRenaming(l.id) })
@@ -383,6 +399,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   }, [genMenu])
   // A preview run lives in the Generate all previews button (its count, and Stop in its menu), not in a row of its own.
   // Its menu closes when a run starts or ends, so it never shows the other menu's choices by surprise
+  useEffect(() => { if (view !== 'home') { setNewMenu(false); setGenMenu(false) } }, [view])
   useEffect(() => setGenMenu(false), [Boolean(batch)]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (batch) runJobs.current = Math.max(runJobs.current, batch.jobs) }, [batch?.jobs]) // eslint-disable-line react-hooks/exhaustive-deps
   // When the whole run has ended: its result as a toast (once), unless a failure toast already said it
@@ -395,7 +412,6 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     if (/made/.test(lastRun)) p.alert.success('Previews done', jobs > 1 ? `${plural(jobs, 'loadout')} rendered.` : `${lastRun}.`)
     else p.alert.info(lastRun === 'Stopped' ? 'Previews stopped' : 'Previews', `${lastRun}.`)
   }, [batch, lastRun]) // eslint-disable-line react-hooks/exhaustive-deps
-  if (view !== 'home') return null
 
   const toggle = async (l: Loadout, on: boolean) => {
     setBusy(l.id)
@@ -438,7 +454,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
     setRenaming(null)
   }
 
-  const byKey = new Map(p.mods.map(m => [modKey(m.path), m]))
+  const byKey = modsByKey(p.mods)
   const dragFrom = drag.dragId ? loadouts.find(l => l.id === drag.dragId)?.label : undefined
   // Collection mode: every saved collection in its order (empty ones too, as drop targets), then Other for the rest
   // (kept while its last card is dragged out, so it can go back)
@@ -475,6 +491,9 @@ export default function LoadoutsScreen(p: LoadoutProps) {
   )
 
   // repakxtra: Smart loadouts, a page of its own (Back or Esc returns to the cards)
+  // Hidden behind another view: a loadout page or Smart loadouts is not kept, nor an open menu (their window key
+  // handlers would keep taking keys in the Library). Only the cards stay, which is what makes coming back instant
+  if (view !== 'home' && (open || smart)) return null
   if (smart) return <div className="lo-screen sl-screen" aria-label="Smart loadouts"><SmartLoadouts p={p} onBack={() => { setSmart(false); requestAnimationFrame(() => newRef.current?.focus()) }} /></div>
 
   if (open) {
@@ -636,7 +655,7 @@ export default function LoadoutsScreen(p: LoadoutProps) {
             {list.length === 0 && <p className="lo-group-empty">Empty. Drag a loadout card here, or pick this collection on a loadout's page.</p>}
             <div className="lo-grid">
               {list.map(l => (
-                <LoadoutCard key={l.id} p={p} l={l} groupBy={groupBy} canGenerate={canGenerate} busy={busy === l.id} anyBusy={busy !== null}
+                <LoadoutCard key={l.id} p={cardP} l={l} groupBy={groupBy} canGenerate={canGenerate} busy={busy === l.id} anyBusy={busy !== null}
                   renaming={renaming === l.id} draft={renaming === l.id ? draft : ''} placeholder={drag.dragId === l.id} hovered={hovered}
                   onPick={pickCard} onToggle={toggleCard} onStartRename={startRename} onDraft={setDraft} onCommit={commitCard} onCancelRename={cancelRename} />
               ))}

@@ -1463,20 +1463,8 @@ html[data-motion="off"] .t-shimmer-all { animation: none !important; -webkit-mas
   --text-swap-dur: 150ms; --text-swap-translate-y: 4px; --text-swap-blur: 2px; --text-swap-ease: ease-in-out;
   --icon-swap-start-scale: 0.25;
 }
-/* transitions.dev: Texts reveal. Loadout cards and mod rows rise in one after another (first 12 staggered) */
+/* transitions.dev: Texts reveal (the VFX notice and dot). List items have no entrance: a list mounts items as it scrolls, so each one faded in as it came into view */
 @keyframes t-rise-in { from { opacity: 0; transform: translateY(var(--stagger-distance)); filter: blur(var(--stagger-blur)); } }
-.lo-card, .mod-row { animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; }
-.lo-card:nth-child(2), .mod-row:nth-child(2) { animation-delay: calc(var(--stagger-stagger) * 1); }
-.lo-card:nth-child(3), .mod-row:nth-child(3) { animation-delay: calc(var(--stagger-stagger) * 2); }
-.lo-card:nth-child(4), .mod-row:nth-child(4) { animation-delay: calc(var(--stagger-stagger) * 3); }
-.lo-card:nth-child(5), .mod-row:nth-child(5) { animation-delay: calc(var(--stagger-stagger) * 4); }
-.lo-card:nth-child(6), .mod-row:nth-child(6) { animation-delay: calc(var(--stagger-stagger) * 5); }
-.lo-card:nth-child(7), .mod-row:nth-child(7) { animation-delay: calc(var(--stagger-stagger) * 6); }
-.lo-card:nth-child(8), .mod-row:nth-child(8) { animation-delay: calc(var(--stagger-stagger) * 7); }
-.lo-card:nth-child(9), .mod-row:nth-child(9) { animation-delay: calc(var(--stagger-stagger) * 8); }
-.lo-card:nth-child(10), .mod-row:nth-child(10) { animation-delay: calc(var(--stagger-stagger) * 9); }
-.lo-card:nth-child(11), .mod-row:nth-child(11) { animation-delay: calc(var(--stagger-stagger) * 10); }
-.lo-card:nth-child(n+12), .mod-row:nth-child(n+12) { animation-delay: calc(var(--stagger-stagger) * 11); }
 /* transitions.dev: Accordion. A hero's skins grow open under it; the chevron turns on the same clock */
 .t-acc-panel { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--acc-collapse) var(--acc-ease); }
 .t-acc-panel[data-open="true"] { grid-template-rows: 1fr; transition: grid-template-rows var(--acc-expand) var(--acc-ease); }
@@ -1503,7 +1491,13 @@ html[data-motion="off"] .t-shimmer-all { animation: none !important; -webkit-mas
 /* transitions.dev: Menu dropdown. The Sigeon menu opens like the other menus */
 .sigeon-menu { transform-origin: top right; animation: t-dropdown-open var(--dropdown-open-dur) var(--dropdown-ease) backwards; }
 
-html[data-motion="off"] .lo-card, html[data-motion="off"] .mod-row, html[data-motion="off"] .t-num-pop, html[data-motion="off"] .t-text-in, html[data-motion="off"] .sigeon-menu, html[data-motion="off"] .lp-more-view { animation: none !important; }
+/* the Library's upstream card entrance (ModsList.css) off too, for the same reason */
+.mod-list-grid .mod-card:not(.mod-leaving) { animation: none !important; }
+/* F3 frame rate counter (fpsMeter.ts) */
+.xtra-fps { position: fixed; right: 8px; bottom: 52px; z-index: 99999; padding: 3px 7px; border-radius: 6px; pointer-events: none;
+  font: 600 11px var(--font-mono); white-space: pre; color: var(--text-secondary); background: rgba(6, 7, 9, 0.8); }
+.xtra-fps.is-slow { color: #f2b155; }
+html[data-motion="off"] .t-num-pop, html[data-motion="off"] .t-text-in, html[data-motion="off"] .sigeon-menu, html[data-motion="off"] .lp-more-view { animation: none !important; }
 html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner, html[data-motion="off"] .t-icon-swap .t-icon, html[data-motion="off"] .lo-card-image img, html[data-motion="off"] .mod-preview-frame img { transition: none !important; }
 
 /* Install panel: Save as a loadout (2+ mods), left of Cancel / Install */
@@ -2658,7 +2652,6 @@ html[data-tags-off] .context-menu-item.tag-submenu { display: none !important; }
 .lo-drag-ghost.is-lifted .lo-card { transform: scale(1.04); border-color: rgba(255, 255, 255, 0.22);
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.55), 0 6px 14px rgba(0, 0, 0, 0.35); }
 .lo-drag-ghost.is-landing .lo-card, .lo-drag-ghost.is-returning .lo-card { transition: transform 260ms var(--drag-slide-ease), box-shadow 260ms ease; }
-.lo-card[data-in], html.is-dragging-card .lo-card { animation: none !important; }
 .lo-card.is-placeholder { background: rgba(255, 255, 255, 0.02) !important; border: 1.5px dashed rgba(255, 255, 255, 0.16) !important; box-shadow: none !important; }
 .lo-card.is-placeholder > * { visibility: hidden; }
 html.is-dragging-card, html.is-dragging-card * { cursor: grabbing !important; user-select: none !important; }
@@ -3059,7 +3052,7 @@ html[data-motion="off"] .setting-sub, html[data-motion="off"] .bulk-actions-tool
 .cp-preset:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 3px; }
 html[data-motion="off"] .cp-pop, html[data-motion="off"] .cp-swatch, html[data-motion="off"] .cp-preset { animation: none !important; transition: none !important; }
 /* a CustomQuake build's bar, under its status line: the VFX Updater's thin bar, its fill shimmering (the shared rule below) */
-.bi-bar { height: 4px; margin-top: 6px; border-radius: 999px; overflow: hidden; background: var(--bg-lighter); }
+.bi-bar { height: 4px; margin: 0 12px 10px; border-radius: 999px; overflow: hidden; background: var(--bg-lighter); }
 .bi-bar i { display: block; height: 100%; transition: width 0.4s var(--acc-ease); }
 .bi-count { flex: none; font-variant-numeric: tabular-nums; }
 .bi-count::before { content: "\00b7"; margin-right: 7px; }   /* a dot between the stage and its numbers */
@@ -3197,15 +3190,12 @@ html[data-motion="off"] .upd-progress > span, html[data-motion="off"] .repakx-pr
 .nx-meta svg { flex: none; color: var(--text-secondary); }
 /* the type line: the hero's portrait and name in the Characters color, or the type's name in its color */
 .nx-card-type { --c: var(--type, var(--text-secondary)); display: flex; align-items: center; gap: 6px; margin-top: 8px; min-width: 0; font-size: 12px;
-  font-weight: 500; color: var(--c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  font-weight: 700; color: var(--c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nx-card-type svg { flex: none; }
 .nx-card-type img { flex: none; width: 18px; height: 18px; border-radius: 50%; object-fit: cover; background: var(--bg-lighter); }
-.nx-card-summary { margin: 8px 0 0; font-size: 12.5px; line-height: 1.45; color: color-mix(in srgb, var(--text-secondary) 88%, var(--text-primary));
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-wrap: pretty; }
 .nx-card-foot { display: flex; align-items: center; gap: 12px; margin-top: auto; padding-top: 12px; }
 /* the numbers sized to sit level with the 32px Install beside them */
 .nx-stat { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 400; color: color-mix(in srgb, var(--text-primary) 78%, transparent); font-variant-numeric: tabular-nums; }
-.nx-stat.is-endorsed svg { color: #f2555a; } /* red heart: cable's pick (2026-10-29) */
 /* the action: one box for all three states, so Installed sits exactly where Install was */
 .nx-act { margin-left: auto; display: inline-flex !important; align-items: center; gap: 5px; height: 32px !important; min-height: 0 !important; padding: 0 12px !important;
   border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important; background: transparent !important;
@@ -3214,8 +3204,8 @@ button.nx-act:hover { background: var(--quiet-hover) !important; border-color: c
 .nx-act svg { width: 13px; height: 13px; }
 .nx-act.is-update { color: var(--accent-primary) !important; border-color: color-mix(in srgb, var(--accent-primary), transparent 55%) !important; }
 .nx-act.is-waiting { color: var(--text-secondary) !important; }
-.nx-act.is-installed { cursor: default; color: #3ecf6e !important; border-color: color-mix(in srgb, #3ecf6e, transparent 60%) !important;
-  background: color-mix(in srgb, #3ecf6e, transparent 92%) !important; }
+/* Installed is plain green words and its check: no outline, no tint (cable's pick), so only Install is a filled shape */
+.nx-act.is-installed { cursor: default; color: #3ecf6e !important; border-color: transparent !important; background: transparent !important; }
 [data-theme="light"] .nx-act.is-installed { color: #1f7a3f !important; }
 /* Install: the one tinted button on a card (Von Restorff) */
 .nx-act.is-install { color: color-mix(in srgb, var(--accent-primary), #fff 45%) !important; background: color-mix(in srgb, var(--accent-primary), transparent 88%) !important;
@@ -3229,13 +3219,15 @@ button.nx-act.is-install:hover { background: color-mix(in srgb, var(--accent-pri
 .nx-spot .nx-card { position: relative; }
 .nx-spot .nx-card-image { position: absolute !important; inset: 0; height: 100%; aspect-ratio: auto; }
 .nx-spot .nx-card-body { position: relative; flex: none; margin-top: auto; padding: 82px 14px 12px; /* the fade reaches a little higher than the words */ pointer-events: none;
-  background: linear-gradient(rgba(6, 6, 8, 0), rgba(6, 6, 8, 0.93) 50%, rgba(6, 6, 8, 0.98)); }
+  /* solid where the words are: at 98% the picture's bright lines showed through as faint white streaks */
+  background: linear-gradient(rgba(6, 6, 8, 0), rgba(6, 6, 8, 0.93) 50%, rgb(6, 6, 8) 82%); }
 .nx-spot .nx-card-body > * { pointer-events: auto; }
-.nx-spot .nx-card-name { color: #fff; font-size: 16px; line-height: 21px; }
+.nx-spot .nx-card-name { color: #fff; font-size: 19px; line-height: 24px; }
+/* white words on a light picture at the fade's top edge */
+.nx-spot .nx-card-name, .nx-spot .nx-card-facts { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); }
 /* the picture fills from its top edge: faces and titles sit at the top of most mod pictures */
 .nx-spot .nx-card-image img { object-position: center top; }
 .nx-spot .nx-card-by, .nx-spot .nx-stat { color: rgba(255, 255, 255, 0.72); }
-.nx-spot .nx-card-summary { display: none; }
 /* its place in the corner: a flat medal, a smooth rim in the light metal, a darker disc, the number in the rim's color */
 .nx-medal { --rim: #fbe06a; --disc: #f2b62b; position: absolute; left: 10px; top: 10px; z-index: 2; width: 36px; height: 36px; pointer-events: none;
   filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.45)); }
@@ -3246,11 +3238,14 @@ button.nx-act.is-install:hover { background: color-mix(in srgb, var(--accent-pri
 .nx-medal text { fill: var(--rim); font: 700 9px var(--font-primary); }
 /* who, when, and the hero on one line here (on the grid's cards they stack: .nx-card-facts adds no box there) */
 .nx-card-facts { display: contents; }
-.nx-spot .nx-card-facts { display: flex; align-items: center; gap: 12px; margin-top: 6px; min-width: 0; }
+/* who, when, and the numbers on one line over the title, Install beside the title (cable's pick B) */
+.nx-spot .nx-card-facts { display: flex; align-items: center; gap: 12px; margin: 0 0 6px; min-width: 0; font-size: 12px; }
+.nx-spot .nx-card-facts .nx-stat { flex: none; font-size: 12px; }
+.nx-spot-row { display: flex; align-items: flex-end; gap: 24px; min-width: 0; }
+.nx-spot-row .nx-card-title { flex: 1; min-width: 0; }
+.nx-spot-row .nx-act { flex: none; }
 .nx-spot .nx-card-facts > * { margin-top: 0; }
 .nx-spot .nx-card-by { flex: 0 1 auto; min-width: 0; }
-.nx-spot .nx-card-type { flex: none; }
-.nx-spot .nx-card-foot { padding-top: 8px; }
 .nx-more { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 20px 0 4px; }
 .nx-more small { font-size: 12px; color: var(--text-secondary); }
 .nx-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 64px 0; text-align: center; color: var(--text-secondary); }
@@ -3403,3 +3398,53 @@ html[data-motion="off"] .nx-pics { animation: none; }
 .ct-chip.cap-bg-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .ct-chip.cap-bg-remove { width: 26px; padding: 0 !important; }
 html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation: none; transition: none; }
+/* Nexus review (N1): the title leads, the hero or type under it, then who and when quieter (no description, cable's pick) */
+.nx-card-name { font-size: 15px; line-height: 19px; }
+.nx-card-type { margin-top: 6px; }
+.nx-card-by { margin-top: 6px; color: color-mix(in srgb, var(--text-primary) 62%, transparent); gap: 10px; }
+.nx-card-foot { padding-top: 10px; }
+/* (N3) the hero, type, and author are filters: plain at rest, underlined on hover, inert while they are the filter */
+.nx-filter-link { all: unset; box-sizing: border-box; cursor: pointer; }
+.nx-filter-link.nx-card-type { display: flex; align-items: center; gap: 6px; max-width: 100%; margin-top: 6px; font-size: 12px; font-weight: 700; color: var(--c); }
+.nx-filter-link.nx-meta { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.nx-filter-link:hover:not(:disabled) > span:last-child, .nx-filter-link.nx-card-type:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 2px; }
+.nx-filter-link:disabled { cursor: default; }
+.nx-filter-link:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; border-radius: 3px; }
+/* (N4) the next step while Nexus waits, on the card; Installed opens the mod in the Library */
+.nx-card-note { margin: 8px 0 0; font-size: 12px; line-height: 1.4; color: var(--text-secondary); }
+.nx-spot .nx-card-note { color: rgba(255, 255, 255, 0.72); }
+button.nx-act.is-installed { cursor: pointer; }
+button.nx-act.is-installed:hover { background: var(--quiet-hover) !important; border-color: transparent !important; }
+.nx-act.is-installed svg { animation: t-dropdown-open 160ms var(--dropdown-ease) backwards; }
+/* (N5) a set filter swaps its chevron for an X that clears it alone; the sort box has no fill (ordering, not a filter) */
+.nx-filter { position: relative; display: inline-flex; }
+.nx-filter.is-set .custom-dropdown-trigger { background-image: none !important; }
+.nx-filter.is-set .custom-dropdown-text { color: var(--text-primary); font-weight: 500; }
+.nx-filter-x { all: unset; position: absolute; right: 8px; top: 50%; translate: 0 -50%; width: 20px; height: 20px; display: grid; place-items: center;
+  border-radius: 5px; color: var(--text-secondary); cursor: pointer; }
+.nx-filter-x:hover { color: var(--text-primary); background: var(--quiet-hover); }
+.nx-filter-x:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
+.nx-filters .nx-window.custom-dropdown-container { width: 196px; }
+.nx-filters .nx-search { flex-basis: 140px; min-width: 140px; } /* gives way to an author chip and Clear filters before the sort wraps */
+.nx-filters .nx-sort .custom-dropdown-trigger { background-color: transparent !important; color: var(--text-secondary); }
+.nx-filters .nx-sort .custom-dropdown-trigger:hover, .nx-filters .nx-sort .custom-dropdown-trigger.open { color: var(--text-primary); }
+.nx-filters .custom-dropdown-icon { color: var(--text-secondary); opacity: 1; }
+.nx-chip { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--panel-border); font-size: 12.5px; color: var(--text-primary); white-space: nowrap; }
+.nx-chip:hover { background: var(--quiet-hover); }
+.nx-chip:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.nx-chip svg { flex: none; color: var(--text-secondary); }
+/* (N8) the empty state takes filters off one at a time */
+.nx-empty-parts { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; }
+/* (N9) the picture opens a gallery: a pill says so on hover */
+.nx-card-pics { position: absolute; right: 8px; bottom: 8px; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 999px;
+  background: rgba(10, 11, 14, 0.62); border: 1px solid rgba(255, 255, 255, 0.12); color: #fff; font-size: 11.5px; font-weight: 500; pointer-events: none;
+  opacity: 0; transition: opacity 0.12s ease; }
+.nx-card:hover .nx-card-pics, .nx-card:focus-within .nx-card-pics { opacity: 1; }
+.nx-spot .nx-card-pics { display: none; }
+html[data-motion="off"] .nx-card-pics { transition: none; }
+html[data-motion="off"] .nx-act.is-installed svg { animation: none; }
+/* Install is the card's one filled shape: the action, never confused with the facts around it (Von Restorff, cable's pick) */
+.nx-act.is-install { background: var(--accent-primary) !important; border-color: var(--accent-primary) !important; color: #fff !important; }
+button.nx-act.is-install:hover { background: color-mix(in srgb, var(--accent-primary), #000 14%) !important; border-color: color-mix(in srgb, var(--accent-primary), #000 14%) !important; }
+[data-theme="light"] .nx-act.is-install { color: #fff !important; }

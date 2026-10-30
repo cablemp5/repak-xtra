@@ -607,12 +607,6 @@ export function VfxUpdaterPanel() {
     if (autoRun.current && mods && !lock && !busy) { const keys = autoRun.current; autoRun.current = null; void run(keys) }
   }, [mods, lock, busy, run])
 
-  // the mod being updated stays in view
-  const runningKey = batch.find(k => runs[k]?.status === 'running')
-  useEffect(() => {
-    if (runningKey) document.querySelector(`[data-key="${CSS.escape(runningKey)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [runningKey])
-
   const showAdvanced = (on: boolean) => {
     setAdvanced(on)
     localStorage.setItem(ADVANCED, on ? '1' : '0')
@@ -713,6 +707,7 @@ export function VfxUpdaterPanel() {
   const partialTodo = behind ? [...picked].filter(k => !isDone(runs[k]?.status) && stale.has(k)).length : 0
   const usmapState = checking ? 'Checking for a newer one…' : !usmap ? 'None chosen' : usmapOk === false ? 'File missing' : usmapInfo?.upToDate || usmapInfo?.updated ? 'Up to date' : 'Ready'
   const usmapMissing = !checking && (!usmap || usmapOk === false)
+  const runningKey = batch.find(k => runs[k]?.status === 'running')
   const runningMod = runningKey ? (mods ?? []).find(m => norm(m.utoc) === runningKey) : undefined
   const rest = list.filter(m => !first(m) && !isAdded(m))
   orderRef.current = [...list.filter(isAdded), ...list.filter(first), ...rest.filter(m => !m.materials), ...rest.filter(m => m.materials)].map(m => norm(m.utoc))

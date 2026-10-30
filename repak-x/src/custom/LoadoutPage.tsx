@@ -14,7 +14,7 @@ import { HeroFilter, heroOfName } from './heroFilter'
 import {
   type Loadout, type Mod, OTHER, OTHER_LABEL, loadoutable, addGroup, captureKey, addModToLoadout, displayName, duplicateLoadout, groupKey, setLoadoutGroup,
   useGroups, hotkeyOf, hotkeySlots, isActive, modKey, openLoadout, patchLoadout, pinHotkey, readLoadouts, removeModFromLoadout,
-  renameModKey, repakXOpen, takeFresh, useLoadouts, memberName, nameKey, pickMember,
+  renameModKey, repakXOpen, takeFresh, useLoadouts, memberName, nameKey, pickMember, modsByKey,
 } from './loadoutStore'
 import { candidatesFor, keysByName, memberFolder } from './loadoutIdentity'
 import { renameSource, sourceOf } from './nexusSource'
@@ -148,7 +148,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
   // A loadout just made opens with its name selected, so making one starts with naming it
   useEffect(() => { if (takeFresh(l.id)) { freshId.current = l.id; nameRef.current?.focus(); nameRef.current?.select() } }, [l.id])
 
-  const byKey = new Map(p.mods.map(m => [modKey(m.path), m]))
+  const byKey = modsByKey(p.mods)
   const byName = (a: string, b: string) => memberName(a).localeCompare(memberName(b)) || a.localeCompare(b)
   const mine = [...new Set(l.on.map(displayName))].sort(byName)
   const inLoadout = new Set(mine)

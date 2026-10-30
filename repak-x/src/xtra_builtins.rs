@@ -28,6 +28,9 @@ const SKIN: &str = "Marvel/Content/Marvel/Data/DataTable/MarvelHeroSkinTable";
 const UI: &str = "Marvel/Content/Marvel/Data/DataTable/HeroGallery/UISkinTable";
 const LOGO: &str = "Marvel/Content/Marvel/Data/DataTable/UI/Login/MarvelLogoVideoTable";
 const LOGO_FLAGS: [&str; 4] = ["bUsedInCn", "bUsedInHkMoTw", "bUsedInJpKr", "bUsedInEnRegion"];
+/// The photosensitivity warning before the login screen: it moves on once its progress bar (Anim_ProgressBar, 4.75 s)
+/// has filled. Skip startup logos shortens that animation to a tick.
+const WARN: &str = "Marvel/Content/Marvel/UI/Blueprints/Login/WBP_Login_Panel_Warn";
 pub const DEFAULT_SKIN: &str = "force-default-skin";
 pub const SKIP_INTRO: &str = "skip-intro-movies";
 pub const CUSTOM_QUAKE: &str = "custom-quake"; // repakxtra: xtra_quake.rs
@@ -65,9 +68,16 @@ async fn wait_for_build(id: &str, stop: bool) {
 /// The switch and Try again still build them.
 static FAILED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
+/// The heroes a build of `id` leaves alone: only Force default skin keeps heroes out. The effect built-ins (No impact,
+/// No tracers, No screen shake) change every hero, and a choice saved before that is ignored, so their old builds are
+/// made again with every hero.
+fn excluded_of(id: &str, s: &Saved) -> Vec<String> {
+    if id == DEFAULT_SKIN { s.excluded.clone() } else { Vec::new() }
+}
+
 /// What a build of `id` is made from: the game build and its options (a kept build and a failed try are keyed on it).
 fn made_for(id: &str, s: &Saved, build: &str) -> String {
-    let mut excluded = s.excluded.clone();
+    let mut excluded = excluded_of(id, s);
     excluded.sort();
     // "enc": a build kept from before CustomQuake was encrypted is not put in. repakxtra: and the recipe and the saved
     // USMAP, so a kept build from an older recipe or USMAP is made again, and a failure is tried again with a new USMAP
@@ -147,6 +157,8 @@ struct Saved {
 fn recipe(id: &str) -> u32 {
     match id {
         "no-impact" | "no-tracers" | "no-screen-shake" => 1,
+        // the photosensitivity warning joined the startup logos: older builds rebuild with it
+        SKIP_INTRO => 1,
         _ => 0,
     }
 }
@@ -253,7 +265,7 @@ fn parked(dir: &Path, id: &str) -> PathBuf {
 fn fits(id: &str, s: &Saved, build: &str) -> bool {
     let mut made = s.built_excluded.clone();
     made.sort();
-    let mut wanted = s.excluded.clone();
+    let mut wanted = excluded_of(id, s);
     wanted.sort();
     s.built_for.as_deref() == Some(build) && made == wanted && !usmap_moved(s) && s.built_recipe == recipe(id) && s.built_quake.clone().unwrap_or_default() == s.quake.clone().unwrap_or_default()
         && (s.built_quake.is_none() || (s.built_quake_packaging && s.built_quake_encrypted))
@@ -491,6 +503,54 @@ fn check_paths(a: &[u8], b: &[u8], names: &[String], edits: &[Edit]) -> Result<(
     Ok(())
 }
 
+/// The warning's progress bar cut to one tick: every frame number at its end (the section, its curve key, the evaluation
+/// field and the cached times: the last frame, and the playback range's exclusive bound one past it) becomes 1 (and 2).
+/// Same-size, in place. The end is read from the decoded animation. Outside the animation's compiled copy (CompiledData,
+/// which the JSON shows only as raw bytes, and which the game plays from) the raw file must hold exactly as many of those
+/// values as the decoded one, so a changed layout stops the build. `header`: the .uasset's length (export offsets count
+/// from its start). Returns how many values changed.
+fn shorten_warning(doc: &Value, raw: &mut [u8], header: usize) -> Result<usize, String> {
+    let range = doc["Exports"].as_array().into_iter().flatten()
+        .filter(|e| e["ObjectName"] == "Anim_ProgressBar")
+        .flat_map(|e| e["Data"].as_array().into_iter().flatten())
+        .find(|p| p["Name"] == "PlaybackRange")
+        .ok_or("the warning has no Anim_ProgressBar playback range")?;
+    let range = &range["Value"][0]["Value"];
+    let end = range["UpperBound"]["Value"]["Value"].as_i64().ok_or("the warning's animation has no end")? as i32;
+    if range["LowerBound"]["Value"]["Value"].as_i64() != Some(0) || end < 1000 {
+        return Err(format!("the warning's animation is not 0 to {end} as expected"));
+    }
+    let last = end - 1;
+    // the frame numbers the decoded file holds: what the raw one must match
+    let text = doc.to_string();
+    let count = |v: i32| text.matches(&format!("FFrameNumber, UAssetAPI\",\"Value\":{v}}}")).count();
+    // where the compiled copy sits in the .uexp
+    let compiled: Vec<(usize, usize)> = doc["Exports"].as_array().into_iter().flatten()
+        .filter(|e| e["ObjectName"] == "CompiledData" && e["$type"].as_str().is_some_and(|t| t.contains("RawExport")))
+        .filter_map(|e| Some(((e["SerialOffset"].as_u64()? as usize).checked_sub(header)?, e["SerialSize"].as_u64()? as usize)))
+        .collect();
+    let outside = |i: usize| !compiled.iter().any(|&(at, len)| i >= at && i < at + len);
+    let in_raw = |v: i32| raw.windows(4).enumerate().filter(|(i, w)| *w == v.to_le_bytes() && outside(*i)).count();
+    let (want_last, want_end) = (count(last), count(end));
+    if want_last == 0 || in_raw(last) != want_last || in_raw(end) != want_end {
+        return Err(format!("the warning's animation is laid out differently ({} and {} in the file, {want_last} and {want_end} decoded)", in_raw(last), in_raw(end)));
+    }
+    let mut changed = 0;
+    for (from, to) in [(last, 1i32), (end, 2i32)] {
+        let mut i = 0;
+        while i + 4 <= raw.len() {
+            if raw[i..i + 4] == from.to_le_bytes() {
+                raw[i..i + 4].copy_from_slice(&to.to_le_bytes());
+                changed += 1;
+                i += 4;
+            } else {
+                i += 1;
+            }
+        }
+    }
+    Ok(changed)
+}
+
 /// Exactly `flipped` bytes changed, each 01 -> 00, size kept.
 fn check_flags(a: &[u8], b: &[u8], flipped: usize) -> Result<(), String> {
     if a.len() != b.len() {
@@ -582,7 +642,7 @@ async fn make(tool: &Path, id: &str, excluded: &[String], quake: &crate::xtra_qu
     // repakxtra: the game files it reads must be ones no patch newer than the USMAP rewrote (CustomQuake checks its
     // textures once it has listed them)
     if [DEFAULT_SKIN, SKIP_INTRO].contains(&id) {
-        usmap_ready(paks, &usmap, &(if id == DEFAULT_SKIN { [SKIN, UI].map(String::from).to_vec() } else { vec![LOGO.to_string()] }))?;
+        usmap_ready(paks, &usmap, &(if id == DEFAULT_SKIN { [SKIN, UI].map(String::from).to_vec() } else { vec![LOGO.to_string(), WARN.to_string()] }))?;
     }
     // FOV Slider needs every file it reads. The effect ones build from the files the patch left alone now, and put the
     // rest in once its USMAP is out (waited_usmap)
@@ -623,7 +683,10 @@ async fn make(tool: &Path, id: &str, excluded: &[String], quake: &crate::xtra_qu
     let tables: &[&str] = if id == DEFAULT_SKIN { &[SKIN, UI] } else { &[LOGO] };
     let (legacy, json, edited, rt, staged) = (work.join("legacy"), work.join("json"), work.join("edited"), work.join("rt"), work.join("mod"));
     let sink = NoOpProgressSink;
-    let filters: Vec<String> = tables.iter().map(|t| t.to_string()).collect();
+    let mut filters: Vec<String> = tables.iter().map(|t| t.to_string()).collect();
+    if id == SKIP_INTRO {
+        filters.push(WARN.to_string());
+    }
     extract_vanilla_assets(&tool, &s(paks), &s(&legacy), &filters, &sink).await?;
     convert_uassets_to_json(&tool, &usmap, &s(&legacy), &s(&json), &sink).await?;
 
@@ -650,7 +713,21 @@ async fn make(tool: &Path, id: &str, excluded: &[String], quake: &crate::xtra_qu
             return Err("No startup logo video was on: the game changed how they are listed".to_string());
         }
         heroes_seen = Vec::new();
-        summary = format!("{flipped} startup logo videos turned off");
+        // and the photosensitivity warning, edited in place (not through JSON): only its frame numbers change
+        let warned = match read_json(&json.join(format!("{WARN}.json"))) {
+            Ok(doc) => {
+                let mut raw = std::fs::read(legacy.join(format!("{WARN}.uexp"))).map_err(|e| format!("{WARN}.uexp: {e}"))?;
+                let header = std::fs::metadata(legacy.join(format!("{WARN}.uasset"))).map_err(|e| e.to_string())?.len() as usize;
+                let changed = shorten_warning(&doc, &mut raw, header).map_err(|e| format!("The warning screen could not be skipped: {e}"))?;
+                let dst = staged.join(WARN);
+                std::fs::create_dir_all(dst.parent().unwrap()).map_err(|e| e.to_string())?;
+                std::fs::copy(legacy.join(format!("{WARN}.uasset")), dst.with_extension("uasset")).map_err(|e| format!("{WARN}.uasset: {e}"))?;
+                std::fs::write(dst.with_extension("uexp"), raw).map_err(|e| e.to_string())?;
+                changed > 0
+            }
+            Err(_) => false, // a game without this screen: the logos still go
+        };
+        summary = format!("{flipped} startup logo videos turned off{}", if warned { ", and the photosensitivity warning skipped" } else { "" });
         write_json(&edited.join(format!("{LOGO}.json")), &logo)?;
     }
     if logs.iter().all(Vec::is_empty) && id == DEFAULT_SKIN {
@@ -706,7 +783,7 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
         return result.map(|_| ());
     }
     let all = load();
-    let excluded = all.get(id).map(|s| s.excluded.clone()).unwrap_or_default();
+    let excluded = all.get(id).map(|s| excluded_of(id, s)).unwrap_or_default();
     let quake = all.get(id).and_then(|s| s.quake.clone()).unwrap_or_default();
     let build_at_start = game_build(paks);
     let work = std::env::temp_dir().join("repak-x").join("xbuiltin").join(id);
@@ -943,7 +1020,7 @@ pub async fn xtra_builtins_set(app: tauri::AppHandle, id: String, on: Option<boo
         return Err(format!("No built-in mod called {id}"));
     }
     if quake.is_some() && id != CUSTOM_QUAKE { return Err("Color options apply only to CustomQuake".into()); }
-    if excluded.is_some() && ![DEFAULT_SKIN, "no-impact", "no-tracers", "no-screen-shake"].contains(&id.as_str()) { return Err("This built-in has no hero exclusions".into()); }
+    if excluded.is_some() && id != DEFAULT_SKIN { return Err("This built-in has no hero exclusions".into()); }
     if !crate::xtra_edition::EXTENDED && quake.is_some() {
         return Err("These options are unavailable in Standard".into());
     }
@@ -1271,11 +1348,14 @@ mod tests {
         assert!(!files_of(&dir, DEFAULT_SKIN)[0].exists() && parked(&dir, DEFAULT_SKIN).exists(), "off: the game no longer loads it");
         assert!(!view(DEFAULT_SKIN, &s, &dir, "b1").active);
         s.on = true;
-        assert!(fits(SKIP_INTRO, &s, "b1"));
+        assert!(fits(DEFAULT_SKIN, &s, "b1"));
         unpark(&dir, DEFAULT_SKIN).unwrap();
         assert!(view(DEFAULT_SKIN, &s, &dir, "b1").current, "on again: current with no build");
         // a hero change or a game update means a rebuild
-        assert!(!fits(SKIP_INTRO, &Saved { excluded: vec!["1011".into()], ..s.clone() }, "b1") && !fits(SKIP_INTRO, &s, "b2"));
+        assert!(!fits(DEFAULT_SKIN, &Saved { excluded: vec!["1011".into()], ..s.clone() }, "b1") && !fits(DEFAULT_SKIN, &s, "b2"));
+        // the effect built-ins keep no heroes out: a choice saved before is ignored, and a build made with one is redone
+        assert!(fits("no-impact", &Saved { excluded: vec!["1011".into()], built_excluded: vec![], built_recipe: 1, ..s.clone() }, "b1"));
+        assert!(!fits("no-impact", &Saved { built_excluded: vec!["1011".into()], built_recipe: 1, ..s.clone() }, "b1"));
         // a new build replaces the set-aside one, and removing takes every file
         park(&dir, DEFAULT_SKIN).unwrap();
         remove(&dir, DEFAULT_SKIN).unwrap();
@@ -1285,7 +1365,7 @@ mod tests {
 
     #[test]
     fn old_quake_packaging_rebuilds_once() {
-        let mut s = Saved { built_for: Some("b1".into()), built_quake: Some(Default::default()), ..Default::default() };
+        let mut s = Saved { built_for: Some("b1".into()), built_quake: Some(Default::default()), built_recipe: recipe(SKIP_INTRO), ..Default::default() };
         assert!(!fits(SKIP_INTRO, &s, "b1"));
         s.built_quake_packaging = true;
         assert!(!fits(SKIP_INTRO, &s, "b1"), "an unencrypted build rebuilds once, encrypted");
@@ -1306,6 +1386,21 @@ mod tests {
         assert!(!v.current && v.active);
         assert!(!view(DEFAULT_SKIN, &s, &dir, "b2").active); // a game update makes the files stale
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_warning_bar_shrinks_to_a_tick() {
+        let f = |v: i32| json!({ "$type": "UAssetAPI.UnrealTypes.FFrameNumber, UAssetAPI", "Value": v });
+        let doc = json!({ "Exports": [
+            { "ObjectName": "Anim_ProgressBar", "Data": [{ "Name": "PlaybackRange", "Value": [{ "Value": { "LowerBound": { "Value": f(0) }, "UpperBound": { "Value": f(285001) } } }] }] },
+            { "ObjectName": "Section", "Data": [{ "Value": f(285000) }, { "Value": f(285000) }] },
+            // bytes 16 to 20 of the .uexp (a 100-byte header before it): the compiled copy, raw in the JSON
+            { "ObjectName": "CompiledData", "$type": "UAssetAPI.ExportTypes.RawExport, UAssetAPI", "SerialOffset": 116, "SerialSize": 4 }] });
+        let mut raw = [&7i32.to_le_bytes()[..], &285000i32.to_le_bytes(), &285001i32.to_le_bytes(), &285000i32.to_le_bytes(), &285000i32.to_le_bytes()].concat();
+        assert_eq!(shorten_warning(&doc, &mut raw, 100).unwrap(), 4, "the compiled copy shortens with the rest");
+        assert_eq!(raw, [&7i32.to_le_bytes()[..], &1i32.to_le_bytes(), &2i32.to_le_bytes(), &1i32.to_le_bytes(), &1i32.to_le_bytes()].concat());
+        let mut extra = [&285000i32.to_le_bytes()[..], &285000i32.to_le_bytes(), &285000i32.to_le_bytes(), &285001i32.to_le_bytes(), &0i32.to_le_bytes()].concat();
+        assert!(shorten_warning(&doc, &mut extra, 100).is_err(), "a value outside the compiled copy the decoded file does not show stops the build");
     }
 
     #[test]
@@ -1357,8 +1452,9 @@ mod tests {
         assert!(view(SKIP_INTRO, &s, dir, "b1").gave_up);
         assert!(!view(SKIP_INTRO, &s, dir, "b2").gave_up, "a game update tries again");
         assert!(!view(DEFAULT_SKIN, &s, dir, "b1").gave_up, "another built-in is its own");
+        FAILED.lock().unwrap().push(failed_key(DEFAULT_SKIN, &s, "b1"));
         s.excluded = vec!["1011".into()];
-        assert!(!view(SKIP_INTRO, &s, dir, "b1").gave_up, "new options try again");
+        assert!(!view(DEFAULT_SKIN, &s, dir, "b1").gave_up, "new options try again");
         s.excluded.clear();
         s.error = None;
         assert!(!view(SKIP_INTRO, &s, dir, "b1").gave_up, "switched on again (the error is cleared): it builds");
@@ -1373,7 +1469,8 @@ mod tests {
         let paks = PathBuf::from(std::env::var("REPAKXTRA_PAKS").expect("REPAKXTRA_PAKS"));
         let rt = tokio::runtime::Runtime::new().unwrap();
         let only = std::env::var("REPAKXTRA_BUILTIN").ok();
-        for (id, excluded) in [(DEFAULT_SKIN, vec!["1026".to_string()]), (SKIP_INTRO, vec![]), (CUSTOM_QUAKE, vec![])].into_iter().filter(|(id, _)| only.as_deref().is_none_or(|o| o == *id)) {
+        // every built-in of this edition built from game files (Skip login video copies loose movies: no build, no USMAP)
+        for (id, excluded) in IDS.iter().filter(|&&id| id != "skip-login-video").map(|&id| (id, if id == DEFAULT_SKIN { vec!["1026".to_string()] } else { vec![] })).filter(|(id, _)| only.as_deref().is_none_or(|o| o == *id)) {
             let work = std::env::temp_dir().join("repak-x").join("xbuiltin-test").join(id);
             let _ = std::fs::remove_dir_all(&work);
             std::fs::create_dir_all(work.join("out")).unwrap();

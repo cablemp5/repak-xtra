@@ -58,6 +58,7 @@ import ModStateFilter, { matchesState, type ModState } from './custom/ModStateFi
 import './custom/keyboardClickables'
 import { dialogOpen } from './custom/hotkeys' // repakxtra: extra shortcuts
 import { modalOpen, topModal } from './custom/dialogFocus' // repakxtra: one "a dialog is open" contract for every shortcut
+import './custom/fpsMeter' // repakxtra: F3 frame rate counter
 import './custom/selectionScroll' // repakxtra: the clicked row stays put when the selection bar opens
 import { focusRow, relink, useLibraryFocus } from './custom/libraryFocus' // repakxtra: keyboard focus follows the viewed mod
 import FilterPanel, { filterScope } from './custom/FilterPanel'
@@ -65,7 +66,7 @@ import LoadoutHotkeys, { AddToLoadoutField, LoadoutMenuItems } from './custom/Lo
 import LoadoutsScreen, { ViewTabs } from './custom/LoadoutsScreen'
 import NexusBrowser from './custom/NexusBrowser' // repakxtra: the Nexus tab
 import ViewModeMenu from './custom/ViewModeMenu' // repakxtra: view buttons folded into one when narrow
-import { loadoutable, modKey, nameKey, renameModKey, syncLoadoutKeys } from './custom/loadoutStore' // repakxtra
+import { loadoutable, modKey, nameKey, renameModKey, setView, syncLoadoutKeys } from './custom/loadoutStore' // repakxtra
 import { setModsRoot } from './custom/loadoutIdentity' // repakxtra
 import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
@@ -2807,6 +2808,19 @@ function App() {
   // render, so without this every row in the list re-renders whenever any App
   // state changes — including on each selection click.
   const stableModSelect = useStableCallback(handleModSelect)
+  // repakxtra: a Nexus card's Installed opens that mod in the Library
+  // filters that would hide it are cleared first (as the Asset Explorer's reveal does) and it is selected with its
+  // details open, never toggled shut when it was already the one on show
+  const showInLibrary = useStableCallback((path: string) => {
+    const m = mods.find(x => x.path === path)
+    setView('library')
+    if (!m) return
+    setSelectedFolderId('all'); setLocalSearch(''); setSearchQuery(''); setSelectedCharacters(new Set()); setSelectedCategories(new Set()); setFilterTag(''); setModState('all')
+    lastRevealedModRef.current = null // scroll to it even when it is already selected
+    setSelectedMod(m)
+    if (!isRightPanelOpen) { setLeftPanelWidth(lastPanelWidth > 60 ? lastPanelWidth : 70); setIsRightPanelOpen(true) }
+    focusRow(path)
+  })
   const stableToggleModSelection = useStableCallback(handleToggleModSelection)
   const stableToggleMod = useStableCallback(handleToggleMod)
   const stableDeleteMod = useStableCallback(handleDeleteMod)
