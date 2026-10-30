@@ -8,30 +8,46 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
  *  Lucide shape (24 units) onto the grid, for parts that are not straight anyway. */
 type Draw = (n: number, k: number) => ReactNode
 
+// Every icon on screen, snapped together once a frame: all positions read first, then all offsets written, so a scroll
+// costs one layout. Snapping one icon at a time (clear its offset, read, write) forced a layout per icon per frame: a
+// Loadouts scroll ran at 20 fps.
+const icons = new Map<SVGSVGElement, [number, number]>()
+let frame = 0
+function snapAll() {
+  frame = 0
+  const d = window.devicePixelRatio || 1
+  // the offset in effect is part of the rect, so take it off to get where the layout put the icon
+  const moves = [...icons].map(([svg, [x, y]]) => {
+    const r = svg.getBoundingClientRect(), left = r.left - x, top = r.top - y
+    return [svg, Math.round(left * d) / d - left, Math.round(top * d) / d - top] as const
+  })
+  for (const [svg, x, y] of moves) {
+    const was = icons.get(svg)
+    if (!was || (was[0] === x && was[1] === y)) continue
+    icons.set(svg, [x, y])
+    svg.style.transform = `translate(${x}px, ${y}px)`
+  }
+}
+const later = () => { if (!frame && icons.size) frame = requestAnimationFrame(snapAll) }
+// again whenever the layout around them may have moved them by a fraction of a pixel: the list loading or resizing,
+// a scroll, a zoom, a row's reveal animation ending
+new ResizeObserver(later).observe(document.body)
+for (const e of ['resize', 'scroll', 'transitionend', 'animationend']) window.addEventListener(e, later, { capture: true, passive: true })
+
 function PixelIcon({ size, draw }: { size?: number | string; draw: Draw }) {
   const ref = useRef<SVGSVGElement>(null)
   const [dpr, setDpr] = useState(() => window.devicePixelRatio || 1)
   const n = Math.max(12, 2 * Math.round(((Number(size) || 16) * dpr) / 2))
   useLayoutEffect(() => {
-    let frame = 0
-    const snap = () => {
-      const svg = ref.current
-      if (!svg) return
-      const d = window.devicePixelRatio || 1
-      if (d !== dpr) { setDpr(d); return }
-      svg.style.transform = ''
-      const r = svg.getBoundingClientRect()
-      svg.style.transform = `translate(${Math.round(r.left * d) / d - r.left}px, ${Math.round(r.top * d) / d - r.top}px)`
-    }
-    // again whenever the layout around it may have moved it by a fraction of a pixel: the list loading or resizing,
-    // a scroll, a zoom, a row's reveal animation ending
-    const later = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(snap) }
-    snap()
-    const ro = new ResizeObserver(later)
-    ro.observe(document.body)
-    const events = ['resize', 'scroll', 'transitionend', 'animationend'] as const
-    events.forEach(e => window.addEventListener(e, later, { capture: true, passive: true }))
-    return () => { cancelAnimationFrame(frame); ro.disconnect(); events.forEach(e => window.removeEventListener(e, later, { capture: true })) }
+    const svg = ref.current
+    if (!svg) return
+    svg.style.transform = ''
+    icons.set(svg, [0, 0])
+    later() // next frame, with every icon that mounts in this one
+    // a zoom changes the pixel grid: redraw at the new size
+    const zoom = () => { if ((window.devicePixelRatio || 1) !== dpr) setDpr(window.devicePixelRatio || 1) }
+    window.addEventListener('resize', zoom)
+    return () => { icons.delete(svg); window.removeEventListener('resize', zoom) }
   }, [dpr, n])
   return (
     <svg ref={ref} width={n / dpr} height={n / dpr} viewBox={`0 0 ${n} ${n}`} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

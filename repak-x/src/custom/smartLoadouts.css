@@ -47,8 +47,7 @@
 .sl-list-head .sl-link:disabled { opacity: 0.4; cursor: default; }
 .sl-list ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
 .sl-item { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 8px; border-radius: 8px; border: 1px solid transparent;
-  transition: background-color 150ms ease, border-color 150ms ease;
-  animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; animation-delay: calc(var(--stagger-stagger) * var(--i, 0)); }
+  transition: background-color 150ms ease, border-color 150ms ease; }
 .sl-item:hover { background: var(--quiet-hover); }
 .sl-item.is-sel { background: var(--quiet-active); }
 .sl-tick { flex: none; }
@@ -148,7 +147,6 @@
 .sl-simple { flex: 1; min-height: 0; overflow-y: auto; padding: var(--sl-gap) var(--sl-inset) var(--sl-inset); }
 .sl-simple-head { padding: 0 0 var(--sl-gap-sm); }
 .sl-tiles { list-style: none; margin: 0 -10px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); column-gap: 4px; row-gap: 0; }
-.sl-tile { animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; animation-delay: calc(var(--stagger-stagger) * var(--i, 0)); }
 .sl-tile-btn { width: 100%; display: flex !important; align-items: center; justify-content: flex-start !important; gap: 10px; height: 40px !important; min-height: 0 !important; padding: 0 10px !important;
   border: none !important; border-radius: 8px !important; background: transparent !important; color: var(--text-primary) !important; text-align: left; cursor: pointer;
   transition: background-color 150ms ease; }

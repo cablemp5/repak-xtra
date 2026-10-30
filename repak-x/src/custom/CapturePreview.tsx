@@ -9,7 +9,7 @@ import { Camera, Lock, RotateCcw } from 'lucide-react'
 import { MatrixLoader } from './motion'
 import { playShutter, primeShutter } from './sounds'
 import type { LoadoutProps } from './Loadouts'
-import { type Loadout, displayName, modKey } from './loadoutStore'
+import { type Loadout, displayName, modKey, modsByKey } from './loadoutStore'
 import { getAdditionalCategories } from '../utils'
 import './capture.css'
 import example from './capture-example.webp'
@@ -146,7 +146,7 @@ function CaptureDialog({ p, l, hero, onUse, onClose }: {
 /** The loadout page's button: shown for loadouts with a Mesh or Texture mod, usable while Marvel Rivals runs. */
 /** Whether a capture fits the loadout (it holds a skin, mesh or texture mod) and whose picture it takes. */
 export function captureTarget(p: LoadoutProps, l: Loadout) {
-  const byKey = new Map(p.mods.map(m => [modKey(m.path), m]))
+  const byKey = modsByKey(p.mods)
   const details = [...new Set(l.on.map(displayName))].map(k => byKey.get(k)).map(m => (m ? p.modDetails?.[m.path] : undefined))
   const visual = details.filter(d => [d?.category, ...getAdditionalCategories(d)].some(c => VISUAL.has(c ?? '')))
   // "Black Panther - Skin" -> "Black Panther", from a skin mod first

@@ -4,7 +4,7 @@ import { Ban, Camera, ChevronLeft, ChevronRight, Image as ImageIcon, ImagePlus, 
 import Switch from '../components/ui/Switch'
 import type { LoadoutProps } from './Loadouts'
 import { useMediaUrl } from './loadoutMedia'
-import { COVERS, type Cover, type Loadout, type Mod, captureKey, coverFills, displayName, flipMods, memberName, modKey, nameKey, patchLoadout, pickCover } from './loadoutStore'
+import { COVERS, type Cover, type Loadout, type Mod, captureKey, coverFills, displayName, flipMods, memberName, modKey, modsByKey, nameKey, patchLoadout, pickCover } from './loadoutStore'
 import { ModName } from './modName'
 import { revealOnLoad } from './motion'
 import { formKeys, hasPreview, noPreviewPossible, previewMade, previewSetKey, useCovers, usePreviewStage, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
@@ -37,7 +37,7 @@ function usePreviewSlides(p: LoadoutProps, l: Loadout) {
   usePreviewVersion()
   const set = previewSetKey(l.id)
   const info = useCovers(set)
-  const byKey = new Map(p.mods.map(m => [modKey(m.path), m]))
+  const byKey = modsByKey(p.mods)
   // Previews are cached by name (nameKey), not by member key: each member's preview is its mod's, by that mod's name
   const members = [...new Set(l.on.map(displayName))]
   const byName = new Map(members.map(k => { const m = byKey.get(k); return [m ? nameKey(m.path) : memberName(k), m] as const }))
@@ -210,7 +210,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
             ? <span className="lo-media-multi">{slide.keys.map(k => <SlideImage key={k} k={k} />)}</span>
           : video
             ? <video src={video} autoPlay loop muted playsInline />
-            : <img key={src} src={live?.url ?? src} alt="" className={src === warm ? 'is-loaded' : undefined}
+            : <img key={src} src={live?.url ?? src} alt="" className={src === warm ? 'is-loaded' : undefined} decoding="async" loading={page ? undefined : 'lazy'}
                 onLoad={e => { revealOnLoad(e); if (audible && live && hovering.current && e.currentTarget.src === live.url) playEmoteSound(audible, live.seconds) }} />}
       </button>
       {slides.length > 1 && !working && ( /* no paging while a new preview renders */
@@ -230,10 +230,8 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
           is closed) */}
       {page && empty && !working && !editing && (
         <div className="lo-media-cta">
-          {cover === 'preview' && (impossible
-            ? <><small>Nothing in this loadout can be rendered.</small>
-                <button type="button" className={ctaButton} aria-disabled="true" title="Nothing to render: try Capture, Image, or Text"><Lock size={14} aria-hidden="true" /> Generate previews</button></>
-            : <><small>Renders this loadout on its hero, on this PC.</small>{generate!(ctaButton)}</>)}
+          {/* "Nothing to show" is remembered from the last run, which an older preview kit made: it can always try again */}
+          {cover === 'preview' && <><small>{impossible ? 'The last run found nothing to render here.' : 'Renders this loadout on its hero, on this PC.'}</small>{generate!(ctaButton)}</>}
           {cover === 'capture' && (capture?.show
             ? capture.button(ctaButton, 'Capture screenshot', true)
             : <><small>Capture needs a skin, mesh, or texture mod in this loadout.</small>
@@ -299,7 +297,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
       <div className="cover-tabs" role="radiogroup" aria-label="The card shows">
         {COVERS.map(c => {
           // a source that cannot work for this loadout shows a lock, as Capture does while the game is closed
-          const locked = (c === 'preview' && impossible) || (c === 'capture' && capture && !capture.show)
+          const locked = c === 'capture' && capture && !capture.show
           const Icon = locked ? Lock : COVER_ICON[c]
           return (
             <button key={c} type="button" role="radio" aria-checked={cover === c} className={`cover-tab${fills[c] ? ' is-filled' : ''}`} onClick={() => pick(c)}

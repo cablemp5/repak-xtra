@@ -935,6 +935,113 @@ pub(crate) fn inject_fov(layout: &mut Value, widget: &mut Value) -> Result<(), S
     Ok(())
 }
 
+/// One file's edit for the cache: the hash of its game bytes (.uasset then .uexp), how many values it changed, and the
+/// changed byte runs in its .uexp (offset, hex). Same bytes in, same edit out: the patches read nothing else.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
+struct Edits {
+    hash: String,
+    count: usize,
+    runs: Vec<(usize, String)>,
+}
+
+impl Edits {
+    /// The edit that turns `before` into `after` (same length: the patches overwrite, never insert).
+    fn between(hash: String, count: usize, before: &[u8], after: &[u8]) -> Self {
+        let mut runs = Vec::new();
+        let mut i = 0;
+        while i < before.len() {
+            if before[i] == after[i] {
+                i += 1;
+                continue;
+            }
+            let at = i;
+            while i < before.len() && before[i] != after[i] {
+                i += 1;
+            }
+            runs.push((at, after[at..i].iter().map(|b| format!("{b:02x}")).collect()));
+        }
+        Self { hash, count, runs }
+    }
+
+    /// Writes the runs into `raw`. false when one does not fit (then the file is decoded instead).
+    fn apply(&self, raw: &mut [u8]) -> bool {
+        for (at, hex) in &self.runs {
+            let bytes: Option<Vec<u8>> = (0..hex.len()).step_by(2).map(|i| hex.get(i..i + 2).and_then(|h| u8::from_str_radix(h, 16).ok())).collect();
+            match bytes {
+                Some(b) if at + b.len() <= raw.len() => raw[*at..at + b.len()].copy_from_slice(&b),
+                _ => return false,
+            }
+        }
+        true
+    }
+}
+
+/// Bumped when a patch, or the decoder (UAssetToolRivals or a uassettool-patches change to what it reads), changes what
+/// an edit comes out as, so the cache's old edits are not used again.
+const EDIT_RECIPE: u32 = 1;
+
+fn edit_cache_path(id: &str) -> std::path::PathBuf {
+    dirs::config_dir().unwrap_or_else(|| ".".into()).join("Repak-X").join("builtin-cache").join(format!("{id}.json"))
+}
+
+fn bytes_hash(header: &[u8], raw: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update((header.len() as u64).to_le_bytes());
+    h.update(header);
+    h.update(raw);
+    h.finalize().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// The same file decodes the same only with the same USMAP: its hash is part of the cache's identity.
+fn usmap_hash(usmap: &str) -> String {
+    std::fs::read(usmap).map(|b| bytes_hash(&[], &b)).unwrap_or_default()
+}
+
+fn load_edit_cache(path: &Path, usmap: &str) -> HashMap<String, Edits> {
+    #[derive(serde::Deserialize)]
+    struct File { recipe: u32, usmap: String, files: HashMap<String, Edits> }
+    std::fs::read(path).ok().and_then(|b| serde_json::from_slice::<File>(&b).ok()).filter(|f| f.recipe == EDIT_RECIPE && f.usmap == usmap).map(|f| f.files).unwrap_or_default()
+}
+
+/// Written whole beside it, then swapped in, so a build stopped mid-write never leaves half a cache. A cache that
+/// cannot be written only means the next build decodes again.
+fn save_edit_cache(path: &Path, usmap: &str, files: &HashMap<String, Edits>) {
+    let _ = std::fs::create_dir_all(path.parent().unwrap_or(Path::new(".")));
+    let Ok(text) = serde_json::to_vec(&json!({ "recipe": EDIT_RECIPE, "usmap": usmap, "files": files })) else { return };
+    let part = path.with_extension(format!("{}.part", std::process::id()));
+    if std::fs::write(&part, text).is_ok() && std::fs::rename(&part, path).is_err() {
+        let _ = std::fs::remove_file(&part);
+    }
+}
+
+/// One decode through the command line, stopped (and the process ended) when the build is. Err carries its stderr.
+fn decode_with_cli(cli: &Path, uasset: &Path, usmap: &str, out: &Path, cancelled: fn() -> bool) -> Result<(), String> {
+    let mut cmd = std::process::Command::new(cli);
+    cmd.arg("to_json").arg(uasset).arg(usmap).arg(out).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW: hundreds of decodes, no console flashing up
+    }
+    let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+    // stderr is read on its own thread, so a chatty decode never blocks on a full pipe
+    let err = child.stderr.take().map(|mut e| std::thread::spawn(move || { let mut s = String::new(); let _ = std::io::Read::read_to_string(&mut e, &mut s); s }));
+    let status = loop {
+        if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
+            break status;
+        }
+        if cancelled() {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("Build stopped".into());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    };
+    let err = err.and_then(|h| h.join().ok()).unwrap_or_default();
+    if status.success() { Ok(()) } else { Err(err.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("no message").trim().to_string()) }
+}
+
 pub async fn make(
     tool: &Path,
     usmap: &str,
@@ -1009,7 +1116,15 @@ pub async fn make(
     if paths.is_empty() {
         return Err("Every effect hero is excluded".into());
     }
-    extract_vanilla_assets(tool, &s(paks), &s(&legacy), &paths, &sink).await?;
+    // the card's bar: reading takes about a third, the batches most of the rest
+    let _finished = crate::xtra_quake::Finished;
+    let bar = |stage: &str, f: f32, detail: Option<String>| crate::xtra_quake::report_other(stage, f, detail);
+    bar("Reading the game's effect files", 0.0, None);
+    let began = std::time::Instant::now();
+    // without their dependencies (the split extract still adds them for one that uses another package's class or
+    // struct): No impact pulled 7,028 packages, 1.2 GB, for its 817 files, and the edits come out byte for byte the same
+    crate::vfx_updater::uasset_tool::extract_vanilla_assets_split(tool, &s(paks), &s(&legacy), &paths, &paths, &sink).await?;
+    let extracted = began.elapsed();
     // A game update can drop or rename a listed asset: build the rest instead of nothing.
     let listed = paths.len();
     let paths: Vec<String> = paths
@@ -1019,56 +1134,156 @@ pub async fn make(
     if paths.is_empty() {
         return Err("None of the listed effect assets exist in this game version".into());
     }
-    let mut count = 0;
-    // Niagara JSON contains large script arrays. Decode bounded batches and discard them immediately.
-    for batch in paths.chunks(8) {
-        if cancelled() {
-            return Err("Build stopped".into());
+    let changing = if id == NO_SHAKE { "Changing the camera shakes" } else { "Changing the effects" };
+    let patch = if id == NO_SHAKE { disable_shake } else { disable_emitters };
+    let workers = std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(2, 8);
+    let pool = rayon::ThreadPoolBuilder::new().num_threads(workers).build().map_err(|e| e.to_string())?;
+    use rayon::prelude::*;
+    // The files the game did not change since an earlier build are patched from the cache (their edits, keyed by the
+    // hash of their bytes), without decoding: decoding was about 90% of a build
+    let cache_path = edit_cache_path(id);
+    let usmap_id = usmap_hash(usmap);
+    let cache = load_edit_cache(&cache_path, &usmap_id);
+    let write_out = |rel: &str, header: &[u8], raw: &[u8]| -> Result<(), String> {
+        let dest = staged.join(rel);
+        std::fs::create_dir_all(dest.parent().unwrap()).map_err(|e| e.to_string())?;
+        std::fs::write(dest.with_extension("uasset"), header).map_err(|e| e.to_string())?;
+        std::fs::write(dest.with_extension("uexp"), raw).map_err(|e| e.to_string())
+    };
+    // A file that reads a class or struct from another package decodes by that package too: those packages (the
+    // dependencies the split extract added, a few dozen) are part of its key, so a change in any decodes it again
+    let deps_id = {
+        let listed: HashSet<String> = paths.iter().map(|p| p.to_ascii_lowercase()).collect();
+        let mut deps: Vec<(String, Vec<u8>)> = walkdir::WalkDir::new(&legacy).into_iter().flatten()
+            .filter(|e| e.file_type().is_file())
+            .filter_map(|e| {
+                let rel = e.path().strip_prefix(&legacy).ok()?.to_string_lossy().replace('\\', "/");
+                let stem = rel.rsplit_once('.').map_or(rel.as_str(), |(a, _)| a).to_ascii_lowercase();
+                (!listed.contains(&stem)).then(|| std::fs::read(e.path()).ok().map(|b| (rel, b))).flatten()
+            })
+            .collect();
+        deps.sort();
+        let names: Vec<u8> = deps.iter().flat_map(|(n, b)| [n.as_bytes(), &(b.len() as u64).to_le_bytes()[..]].concat()).collect();
+        bytes_hash(&names, &deps.iter().flat_map(|(_, b)| b.iter().copied()).collect::<Vec<u8>>())
+    };
+    let load = |rel: &str| -> Result<(Vec<u8>, Vec<u8>, String), String> {
+        let header = std::fs::read(legacy.join(format!("{rel}.uasset"))).map_err(|e| format!("{rel}: {e}"))?;
+        let raw = std::fs::read(legacy.join(format!("{rel}.uexp"))).map_err(|e| format!("{rel}: {e}"))?;
+        let mut hash = bytes_hash(&header, &raw);
+        if crate::vfx_updater::uasset_tool::uses_outside_schemas(&legacy.join(format!("{rel}.uasset"))) {
+            hash = bytes_hash(hash.as_bytes(), deps_id.as_bytes());
         }
-        use crate::vfx_updater::uasset_tool::{run_vfx_uat_request, VfxUatRequest};
-        let request = VfxUatRequest {
-            action: "batch_to_json",
-            file_paths: Some(
-                batch
-                    .iter()
-                    .map(|rel| s(&legacy.join(format!("{rel}.uasset"))))
-                    .collect(),
-            ),
-            usmap_path: Some(usmap),
-            output_path: Some(s(&json_dir)),
-            base_path: Some(s(&legacy)),
-            ..Default::default()
-        };
-        let response = run_vfx_uat_request(tool, &request).await?;
-        if !response.success {
-            return Err(format!(
-                "Effect assets could not be decoded: {}",
-                response.message
-            ));
-        }
-        for rel in batch {
-            let doc = read(&json_dir.join(format!("{rel}.json")))?;
-            let header = std::fs::read(legacy.join(format!("{rel}.uasset")))
-                .map_err(|e| format!("{rel}: {e}"))?;
-            let mut raw =
-                std::fs::read(legacy.join(format!("{rel}.uexp"))).map_err(|e| e.to_string())?;
-            let patch = if id == NO_SHAKE {
-                disable_shake
-            } else {
-                disable_emitters
-            };
-            let edits = patch(&doc, &mut raw, header.len()).map_err(|e| format!("{rel}: {e}"))?;
-            if edits == 0 {
-                continue; // already off in the game: the original stays in use
+        Ok((header, raw, hash))
+    };
+    let known = pool.install(|| {
+        paths.par_iter().map(|rel| -> Result<Option<(String, Edits)>, String> {
+            if cancelled() {
+                return Err("Build stopped".into());
             }
-            count += edits;
-            let dest = staged.join(rel);
-            std::fs::create_dir_all(dest.parent().unwrap()).map_err(|e| e.to_string())?;
-            std::fs::write(dest.with_extension("uasset"), header).map_err(|e| e.to_string())?;
-            std::fs::write(dest.with_extension("uexp"), raw).map_err(|e| e.to_string())?;
+            let Some(done) = cache.get(rel) else { return Ok(None) };
+            let (header, mut raw, hash) = load(rel)?;
+            if done.hash != hash || !done.apply(&mut raw) {
+                return Ok(None);
+            }
+            if done.count > 0 {
+                write_out(rel, &header, &raw)?;
+            }
+            Ok(Some((rel.clone(), done.clone())))
+        }).collect::<Result<Vec<_>, _>>()
+    })?;
+    let mut edits: HashMap<String, Edits> = known.into_iter().flatten().collect();
+    let todo: Vec<&String> = paths.iter().filter(|rel| !edits.contains_key(*rel)).collect();
+    log::info!("[built-in] {id}: {} of {} files from the cache, {} to decode", edits.len(), paths.len(), todo.len());
+    // one file's edit from its decoded JSON: the changed bytes go to the mod (and the cache), an unchanged file stays the game's
+    let apply = |rel: &str, doc: &Value| -> Result<Edits, String> {
+        let (header, mut raw, hash) = load(rel)?;
+        let before = raw.clone();
+        let count = patch(doc, &mut raw, header.len()).map_err(|e| format!("{rel}: {e}"))?;
+        if count > 0 {
+            write_out(rel, &header, &raw)?;
         }
-        std::fs::remove_dir_all(&json_dir).map_err(|e| e.to_string())?;
+        Ok(Edits::between(hash, count, &before, &raw))
+    };
+    let total = todo.len();
+    let reused = edits.len();
+    // the card says how many came from the last build, or that the next one is quicker: a first build takes minutes
+    let note = if reused > 0 { format!(", {reused} reused from the last build") } else { ". Rebuilds reuse these and take about a minute".to_string() };
+    // workers finish out of order: the bar only moves forward
+    let shown = std::sync::Mutex::new(0usize);
+    let step = |n: usize| {
+        let mut last = shown.lock().unwrap_or_else(|e| e.into_inner());
+        if n % 8 == 0 && (n > *last || n == 0) {
+            *last = n;
+            bar(changing, 0.3 + 0.6 * n as f32 / total.max(1) as f32, Some(format!("{n} of {total} to read{note}")));
+        }
+    };
+    if total == 0 {
+        bar(changing, 0.85, Some(format!("All {reused} reused from the last build")));
+    } else {
+        step(0);
     }
+    // decodes the command line could not do go to the library below (blocked, damaged, or a file it fails on)
+    let mut library: Vec<&String> = Vec::new();
+    if let Some(cli) = crate::xtra_uat_cli::cli() {
+        // The command line decodes a file in about the time the library does, so one process per file, a few at once
+        // (each writes a JSON of up to 30 MB, so 8 at once is about 2.3 times faster, not 8)
+        let done = std::sync::atomic::AtomicUsize::new(0);
+        let one = |rel: &&String| -> Result<Option<(String, Edits)>, String> {
+            if cancelled() {
+                return Err("Build stopped".into());
+            }
+            // each file its own folder: the command line names the JSON after the file, and names repeat across heroes
+            let out = json_dir.join(rel.as_str()).with_extension("");
+            std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
+            let name = Path::new(rel.as_str()).file_name().unwrap_or_default().to_string_lossy().to_string();
+            let json = out.join(format!("{name}.json"));
+            match decode_with_cli(&cli, &legacy.join(format!("{rel}.uasset")), usmap, &out, cancelled) {
+                Err(e) if e == "Build stopped" => return Err(e),
+                Err(e) => { log::warn!("[built-in] {rel}: the command line could not decode it ({e}), using the library"); return Ok(None) }
+                Ok(()) if !json.is_file() => return Ok(None),
+                Ok(()) => {}
+            }
+            let made = apply(rel, &read(&json)?)?;
+            let _ = std::fs::remove_dir_all(&out); // the JSON is large: gone as soon as it is used
+            step(done.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1);
+            Ok(Some(((*rel).clone(), made)))
+        };
+        let made = pool.install(|| todo.par_iter().map(|rel| one(rel).map(|m| (rel, m))).collect::<Result<Vec<_>, _>>())?;
+        for (rel, m) in made {
+            match m { Some((k, e)) => { edits.insert(k, e); } None => library.push(rel) }
+        }
+    } else {
+        library = todo.clone();
+    }
+    {
+        // the in-process library, in bounded batches (Niagara JSON holds large script arrays, discarded at once)
+        for (n, batch) in library.chunks(8).enumerate() {
+            step(n * 8);
+            if cancelled() {
+                return Err("Build stopped".into());
+            }
+            use crate::vfx_updater::uasset_tool::{run_vfx_uat_request, VfxUatRequest};
+            let request = VfxUatRequest {
+                action: "batch_to_json",
+                file_paths: Some(batch.iter().map(|rel| s(&legacy.join(format!("{rel}.uasset")))).collect()),
+                usmap_path: Some(usmap),
+                output_path: Some(s(&json_dir)),
+                base_path: Some(s(&legacy)),
+                ..Default::default()
+            };
+            let response = run_vfx_uat_request(tool, &request).await?;
+            if !response.success {
+                return Err(format!("Effect assets could not be decoded: {}", response.message));
+            }
+            for rel in batch {
+                edits.insert((*rel).clone(), apply(rel, &read(&json_dir.join(format!("{rel}.json")))?)?);
+            }
+            std::fs::remove_dir_all(&json_dir).map_err(|e| e.to_string())?;
+        }
+    }
+    let count: usize = edits.values().map(|e| e.count).sum();
+    // this game's files only: a file a patch removed or rewrote leaves the cache with its old bytes
+    save_edit_cache(&cache_path, &usmap_id, &edits);
     if cancelled() {
         return Err("Build stopped".into());
     }
@@ -1077,7 +1292,10 @@ pub async fn make(
             "Nothing to change in these game files: the game layout may have changed".into(),
         );
     }
+    let decoded = began.elapsed();
+    bar("Packing", 0.9, None);
     pack_to_iostore(tool, usmap, &s(&staged), &s(out), None, &sink).await?;
+    log::info!("[built-in] {id}: {} files, extract {:.1} s, decode and patch {:.1} s, pack {:.1} s", paths.len(), extracted.as_secs_f32(), (decoded - extracted).as_secs_f32(), (began.elapsed() - decoded).as_secs_f32());
     let mut heroes: Vec<_> = heroes.into_iter().collect();
     heroes.sort();
     let missing = listed - paths.len();
@@ -1098,6 +1316,21 @@ pub async fn make(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cached_edits_rebuild_the_same_bytes() {
+        let before = vec![1u8, 2, 3, 63, 0, 0, 0, 9, 9, 63, 0];
+        let mut after = before.clone();
+        after[3] = 0;
+        after[9] = 0;
+        after[10] = 7;
+        let e = Edits::between("h".into(), 2, &before, &after);
+        assert_eq!(e.runs, vec![(3, "00".to_string()), (9, "0007".to_string())]);
+        let mut again = before.clone();
+        assert!(e.apply(&mut again) && again == after, "the cache writes what the patch wrote");
+        assert!(!e.apply(&mut [0u8; 4]), "a run past the end means decode instead");
+        assert_ne!(bytes_hash(b"ab", b"c"), bytes_hash(b"a", b"bc"), "the header and body boundary is part of the hash");
+    }
 
     #[test]
     fn emitter_patch_changes_only_a_uniquely_located_mask() {

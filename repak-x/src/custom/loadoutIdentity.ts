@@ -10,7 +10,7 @@ const PRIORITY = /(_\d+_P)+$/i
 
 let root = '' // the mods folder, lowercase with "/"; empty until App knows it
 /** App passes its game path (the mods folder) here, so keys are relative to it. */
-export const setModsRoot = (path: string) => { root = (path || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase() }
+export const setModsRoot = (path: string) => { root = (path || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase(); keyCache.clear() }
 
 /** File name without on/off extension and priority suffix ("!" kept): the preview cache key, and the name a mod shows.
  *  A member key gives its name. */
@@ -33,10 +33,18 @@ const folderOf = (path: string) => {
 
 export const isMemberKey = (key: string) => key.includes(SEP)
 /** A mod path's member key; a member key comes back in its one spelling. */
+// Keys by path, for this mods folder: every card and list asks for every mod's key on each render (a few regexes each)
+const keyCache = new Map<string, string>()
 export const memberKey = (path: string) => {
-  if (!isMemberKey(path)) return `${folderOf(path)}${SEP}${bare(nameKey(path))}`
-  const at = path.lastIndexOf(SEP)
-  return `${path.slice(0, at).replace(/\\/g, '/').toLowerCase()}${SEP}${bare(path.slice(at + 1))}`
+  let k = keyCache.get(path)
+  if (k !== undefined) return k
+  if (!isMemberKey(path)) k = `${folderOf(path)}${SEP}${bare(nameKey(path))}`
+  else {
+    const at = path.lastIndexOf(SEP)
+    k = `${path.slice(0, at).replace(/\\/g, '/').toLowerCase()}${SEP}${bare(path.slice(at + 1))}`
+  }
+  keyCache.set(path, k)
+  return k
 }
 /** A stored key in its one spelling: member keys normalized, legacy names only without their priority suffix. */
 export const canonKey = (key: string) => (isMemberKey(key) ? memberKey(key) : key.replace(PRIORITY, ''))

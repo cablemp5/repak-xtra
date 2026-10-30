@@ -445,8 +445,13 @@ fn report(stage: usize, within: f32, saved: bool, detail: Option<String>) {
     *PROGRESS.lock().unwrap_or_else(|e| e.into_inner()) = Some(Progress { stage: STAGES[stage].0.to_string(), detail, fraction: fraction(stage, within, saved) });
 }
 
+/// Another built-in's progress on the same bar (only one built-in builds at a time): the effect built-ins.
+pub(crate) fn report_other(stage: &str, fraction: f32, detail: Option<String>) {
+    *PROGRESS.lock().unwrap_or_else(|e| e.into_inner()) = Some(Progress { stage: stage.into(), detail, fraction: fraction.clamp(0.0, 1.0) });
+}
+
 /// Clears the progress when a build ends, whichever way.
-struct Finished;
+pub(crate) struct Finished;
 impl Drop for Finished {
     fn drop(&mut self) {
         *PROGRESS.lock().unwrap_or_else(|e| e.into_inner()) = None;
@@ -464,27 +469,55 @@ fn cache_path() -> std::path::PathBuf {
     dirs::config_dir().unwrap_or_else(|| ".".into()).join("Repak-X").join("repakxtra-quake-settings.json")
 }
 
-/// The game's settings for its map textures, kept for the game build they were read from. Reading them is two thirds of a
-/// first build and they change only when the game does, so a rebuild for new options skips it. Pure.
-fn cache_text(build: &str, textures: &[Vanilla]) -> String {
-    serde_json::json!({ "v": 1, "build": build, "textures": textures.iter().map(|t| (&t.path, &t.compression, &t.lod_group, t.srgb_off)).collect::<Vec<_>>() }).to_string()
+/// The game's settings for its map textures, kept for the game build they were read from, each with its stamp in the game
+/// (xtra_broken::package_stamps, "" when unknown). Reading them is two thirds of a first build and they change only when
+/// the game does: a rebuild for new options skips it, and after a game update only the textures it changed are read. Pure.
+fn cache_text(build: &str, textures: &[Vanilla], stamps: &HashMap<String, String>) -> String {
+    let rows: Vec<_> = textures.iter().map(|t| (&t.path, &t.compression, &t.lod_group, t.srgb_off, stamps.get(&t.path).map_or("", String::as_str))).collect();
+    serde_json::json!({ "v": 2, "build": build, "textures": rows }).to_string()
+}
+
+/// Every saved texture with its stamp, and whether they were read from this game build. None when there is no cache.
+/// A cache from before stamps (v1) still serves its own game build, with no stamps. Pure.
+fn cache_rows(text: &str, build: &str) -> Option<(bool, Vec<(Vanilla, String)>)> {
+    let v: Value = serde_json::from_str(text).ok()?;
+    let rows: Vec<(Vanilla, String)> = if v["v"] == 2 {
+        let rows: Vec<(String, String, String, bool, String)> = serde_json::from_value(v["textures"].clone()).ok()?;
+        rows.into_iter().map(|(path, compression, lod_group, srgb_off, stamp)| (Vanilla { path, compression, lod_group, srgb_off }, stamp)).collect()
+    } else if v["v"] == 1 {
+        let rows: Vec<(String, String, String, bool)> = serde_json::from_value(v["textures"].clone()).ok()?;
+        rows.into_iter().map(|(path, compression, lod_group, srgb_off)| (Vanilla { path, compression, lod_group, srgb_off }, String::new())).collect()
+    } else {
+        return None;
+    };
+    (!rows.is_empty()).then_some((v["build"] == build, rows))
 }
 
 /// The saved settings, when they were read from this game build. None for anything else. Pure.
 fn cache_from(text: &str, build: &str) -> Option<Vec<Vanilla>> {
-    let v: Value = serde_json::from_str(text).ok()?;
-    if v["v"] != 1 || v["build"] != build {
-        return None;
-    }
-    let rows: Vec<(String, String, String, bool)> = serde_json::from_value(v["textures"].clone()).ok()?;
-    (!rows.is_empty()).then(|| rows.into_iter().map(|(path, compression, lod_group, srgb_off)| Vanilla { path, compression, lod_group, srgb_off }).collect())
+    let (same, rows) = cache_rows(text, build)?;
+    same.then(|| rows.into_iter().map(|(t, _)| t).collect())
 }
 
-fn save_cache(build: &str, textures: &[Vanilla]) -> Result<(), String> {
+/// After a game update: the listed textures whose saved stamp is the one they have now (the update left them alone), and
+/// the rest, which are read again. A texture without a stamp either side is read again. Pure.
+fn split_by_stamp(listed: &[String], stamps: &[String], saved: Vec<(Vanilla, String)>) -> (Vec<Vanilla>, Vec<String>) {
+    let mut saved: HashMap<String, (Vanilla, String)> = saved.into_iter().map(|(t, s)| (t.path.to_ascii_lowercase(), (t, s))).collect();
+    let (mut kept, mut read) = (Vec::new(), Vec::new());
+    for (path, stamp) in listed.iter().zip(stamps) {
+        match saved.remove(&path.to_ascii_lowercase()) {
+            Some((t, s)) if !stamp.is_empty() && s == *stamp => kept.push(t),
+            _ => read.push(path.clone()),
+        }
+    }
+    (kept, read)
+}
+
+fn save_cache(build: &str, textures: &[Vanilla], stamps: &HashMap<String, String>) -> Result<(), String> {
     let path = cache_path();
     std::fs::create_dir_all(path.parent().ok_or("no folder")?).map_err(|e| e.to_string())?;
     let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, cache_text(build, textures)).map_err(|e| e.to_string())?;
+    std::fs::write(&tmp, cache_text(build, textures, stamps)).map_err(|e| e.to_string())?;
     std::fs::rename(&tmp, &path).map_err(|e| e.to_string())
 }
 
@@ -539,8 +572,10 @@ fn vanilla_of(vfs: &str, json: &Value) -> Option<Vanilla> {
 
 const STOPPED: &str = "Stopped: switched off while it built";
 
-/// Reads the settings of every listed texture, `BATCH` at a time, each batch deleted before the next.
-async fn read_settings(tool: &Path, usmap: &str, paks: &Path, listed: &[String], work: &Path, stop: fn() -> bool) -> Result<Vec<Vanilla>, String> {
+/// Reads the settings of every listed texture, `BATCH` at a time, each batch deleted before the next. `reused`: how many
+/// came from the last build's read instead (the card says so).
+async fn read_settings(tool: &Path, usmap: &str, paks: &Path, listed: &[String], work: &Path, stop: fn() -> bool, reused: usize) -> Result<Vec<Vanilla>, String> {
+    let more = if reused > 0 { format!(", {} reused from the last build", group_digits(reused)) } else { String::new() };
     let mut all = Vec::with_capacity(listed.len());
     let mut done = 0;
     for batch in listed.chunks(BATCH) {
@@ -548,7 +583,7 @@ async fn read_settings(tool: &Path, usmap: &str, paks: &Path, listed: &[String],
             return Err(STOPPED.into());
         }
         if done == 0 {
-            report(READING, 0.0, false, Some(format!("0 of {}", group_digits(listed.len()))));
+            report(READING, 0.0, false, Some(format!("0 of {}{more}", group_digits(listed.len()))));
         }
         let (legacy, json) = (work.join("legacy"), work.join("json"));
         remove_dirs(vec![legacy.clone(), json.clone()]).await;
@@ -606,7 +641,7 @@ async fn read_settings(tool: &Path, usmap: &str, paks: &Path, listed: &[String],
         log::info!("[quake] {} textures read: extract {:.1} s, to JSON {:.1} s, parse {:.1} s", batch.len(), extracted.as_secs_f32(), (converted - extracted).as_secs_f32(), (began.elapsed() - converted).as_secs_f32());
         all.extend(found);
         done += batch.len();
-        report(READING, done as f32 / listed.len() as f32, false, Some(format!("{} of {}", group_digits(done), group_digits(listed.len()))));
+        report(READING, done as f32 / listed.len() as f32, false, Some(format!("{} of {}{more}", group_digits(done), group_digits(listed.len()))));
     }
     all_read(listed, &all)?;
     remove_dirs(vec![work.join("legacy"), work.join("json")]).await;
@@ -859,9 +894,27 @@ pub async fn make(tool: &Path, usmap: &str, paks: &Path, work: &Path, out_base: 
             .map_err(|e| e.to_string())??;
             lap("listing the textures");
             crate::xtra_builtins::usmap_ready(paks, usmap, &listed)?; // repakxtra: none of them changed since the USMAP's build
-            let t = read_settings(tool, usmap, paks, &listed, &work.join("read"), stop).await?;
+            // after a game update, only the textures it changed are read: the rest keep the settings read last time
+            let stamps = {
+                let (paks, listed) = (paks.to_path_buf(), listed.clone());
+                blocking(move || Ok::<_, String>(crate::xtra_broken::package_stamps(&paks, &listed))).await?
+            };
+            let earlier = std::fs::read_to_string(cache_path()).ok().and_then(|t| cache_rows(&t, build)).map(|(_, rows)| rows).unwrap_or_default();
+            let (mut t, to_read) = match &stamps {
+                Some(s) => split_by_stamp(&listed, s, earlier),
+                None => (Vec::new(), listed.clone()),
+            };
+            log::info!("[quake] {} textures kept from the last read, {} to read", t.len(), to_read.len());
+            if !to_read.is_empty() {
+                let read = read_settings(tool, usmap, paks, &to_read, &work.join("read"), stop, t.len()).await?;
+                t.extend(read);
+            }
+            all_read(&listed, &t)?;
+            // in the game's listing order (sorted), however they were read: a rebuild plans them as a full read does
+            t.sort_by(|a, b| a.path.cmp(&b.path));
             lap("reading their settings");
-            if let Err(e) = save_cache(build, &t) {
+            let stamps: HashMap<String, String> = stamps.map(|s| listed.iter().cloned().zip(s).collect()).unwrap_or_default();
+            if let Err(e) = save_cache(build, &t, &stamps) {
                 log::warn!("[quake] the game's settings were not kept for the next build: {e}");
             }
             t
@@ -1135,20 +1188,48 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
+    /// Every map texture of the installed game gets a stamp (REPAKXTRA_PAKS: its Paks folder). Reads the game, writes nothing.
+    #[test]
+    #[ignore]
+    fn stamps_real() {
+        let paks = std::path::PathBuf::from(std::env::var("REPAKXTRA_PAKS").expect("REPAKXTRA_PAKS"));
+        let listed = list_textures(&paks).unwrap();
+        let started = std::time::Instant::now();
+        let stamps = crate::xtra_broken::package_stamps(&paks, &listed).expect("every container read");
+        assert_eq!(stamps.len(), listed.len());
+        let mut by: HashMap<&str, usize> = HashMap::new();
+        for s in &stamps { *by.entry(s.as_str()).or_default() += 1 }
+        assert!(stamps.iter().all(|s| !s.ends_with(":0")), "every texture is in a container with a write time");
+        println!("{} textures, {} distinct stamps in {:.1}s: {:?}", listed.len(), by.len(), started.elapsed().as_secs_f32(), { let mut v: Vec<_> = by.into_iter().collect(); v.sort_by_key(|(_, n)| std::cmp::Reverse(*n)); v.into_iter().take(6).collect::<Vec<_>>() });
+        assert_eq!(crate::xtra_broken::package_stamps(&paks, &listed).unwrap(), stamps, "the same game gives the same stamps");
+    }
+
     #[test]
     fn the_games_settings_are_kept_for_one_game_build() {
         let textures = vec![
             Vanilla { path: "Marvel/Content/Marvel/Environment/A/T_A_N".into(), compression: "TC_Normalmap".into(), lod_group: "TEXTUREGROUP_WorldNormalMap".into(), srgb_off: true },
             Vanilla { path: "Marvel/Content/Marvel/Environment/A/T_B".into(), ..Default::default() },
         ];
-        let text = cache_text("build-1", &textures);
+        let stamps: HashMap<String, String> = [(textures[0].path.clone(), "5:100".to_string())].into();
+        let text = cache_text("build-1", &textures, &stamps);
         let back = cache_from(&text, "build-1").expect("the same build reads it back");
         assert_eq!(back.len(), 2);
         assert_eq!((back[0].path.as_str(), back[0].compression.as_str(), back[0].lod_group.as_str(), back[0].srgb_off), (textures[0].path.as_str(), "TC_Normalmap", "TEXTUREGROUP_WorldNormalMap", true));
         assert_eq!((back[1].compression.as_str(), back[1].srgb_off), ("", false));
         assert!(cache_from(&text, "build-2").is_none(), "another game build reads nothing");
         assert!(cache_from("not json", "build-1").is_none());
-        assert!(cache_from(&cache_text("build-1", &[]), "build-1").is_none(), "an empty list is not a cache");
+        assert!(cache_from(&cache_text("build-1", &[], &HashMap::new()), "build-1").is_none(), "an empty list is not a cache");
+        // another game build: the textures whose stamp did not change keep their settings, the rest are read again
+        let (same, rows) = cache_rows(&text, "build-2").unwrap();
+        assert!(!same);
+        let listed = vec![textures[0].path.clone(), textures[1].path.clone(), "Marvel/Content/Marvel/Environment/A/T_New".to_string()];
+        let (kept, read) = split_by_stamp(&listed, &["5:100".into(), "".into(), "7:300".into()], rows.clone());
+        assert_eq!((kept.len(), kept[0].compression.as_str()), (1, "TC_Normalmap"));
+        assert_eq!(read, vec![listed[1].clone(), listed[2].clone()], "no stamp, or a new texture, is read");
+        let (kept, _) = split_by_stamp(&listed, &["6:100".into(), "".into(), "".into()], rows);
+        assert!(kept.is_empty(), "a texture in a newer patch is read again");
+        let v1 = serde_json::json!({ "v": 1, "build": "build-1", "textures": [["Marvel/Content/Marvel/Environment/A/T_B", "", "", false]] }).to_string();
+        assert_eq!(cache_from(&v1, "build-1").map(|t| t.len()), Some(1), "a cache from before stamps serves its own build");
     }
 
     /// Rows of quakeV6 (2026-10-26): the game's name and compression, and the pixel V6 gave it.
@@ -1462,7 +1543,7 @@ mod tests {
         uasset_toolkit::init_global_toolkit().expect("toolkit");
         let rt = tokio::runtime::Runtime::new().unwrap();
         let t = std::time::Instant::now();
-        let mut got = rt.block_on(read_settings(Path::new("."), &usmap, Path::new(&paks), &listed, &work, || false)).unwrap();
+        let mut got = rt.block_on(read_settings(Path::new("."), &usmap, Path::new(&paks), &listed, &work, || false, 0)).unwrap();
         println!("{} textures read in {:.1} s", got.len(), t.elapsed().as_secs_f32());
         want.sort_by(|a, b| a.path.cmp(&b.path));
         got.sort_by(|a, b| a.path.cmp(&b.path));

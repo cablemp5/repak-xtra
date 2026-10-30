@@ -91,8 +91,8 @@ button.vf-loadouts:focus-visible { outline: 2px solid var(--accent-primary); out
 .vf-pill.is-failed, .vf-pill.is-partial {color: #f5d342 !important; background: color-mix(in srgb, #f5d342, transparent 88%) !important; }
 .vf-pill:hover { filter: brightness(1.15); }
 .vf-pill, .vf-status { animation: t-swap-in var(--icon-swap-dur) var(--icon-swap-ease) backwards; }
-/* the label 2px down: on the pill's line Geist's capitals sit 2px above its middle (measured), the caret stays put */
-.vf-pill-label { position: relative; top: 2px; }
+/* the label's box trimmed to its capitals and baseline, so flex centers the letters themselves (a fixed 2px nudge sat low) */
+.vf-pill-label { text-box: trim-both cap alphabetic; }
 .vf-caret { flex: none; opacity: 0.8; transition: transform var(--acc-chevron) var(--acc-ease); }
 .vf-pill[aria-expanded="true"] .vf-caret { transform: rotate(180deg); }
 
