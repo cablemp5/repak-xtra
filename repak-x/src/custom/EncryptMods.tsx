@@ -1,4 +1,4 @@
-import { LockKeyhole } from 'lucide-react'
+import { Lock } from 'lucide-react'
 import { openEncrypt } from './EncryptWindow'
 
 export { openEncrypt }
@@ -8,7 +8,7 @@ export default function EncryptMods() {
   return (
     <button type="button" className="btn-settings" data-tour="encrypt-btn" title="Encrypt mods so they are harder to unpack"
       onClick={() => void openEncrypt().catch(e => console.error('[Encrypt] Window error:', e))}>
-      <LockKeyhole size={16} aria-hidden="true" /> Encrypt
+      <Lock size={16} aria-hidden="true" /> Encrypt
     </button>
   )
 }

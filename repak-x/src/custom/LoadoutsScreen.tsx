@@ -630,9 +630,10 @@ function LoadoutsHome(p: LoadoutProps) {
           </div>
         )}
 
+        {/* nothing matches the search or On only: a quiet centered note, not the first-run box (cable, 2026-10-30) */}
         {filtered && loadouts.length > 0 && groups.length === 0 && (
-          <div className="lo-first-run">
-            <p>{q ? `No ${onlyOn ? 'loadouts that are on' : 'loadouts'} match “${q}”.` : 'No loadouts are on.'}</p>
+          <div className="lo-no-match" role="status">
+            <p>{q ? `No ${onlyOn ? 'loadouts that are on' : 'loadouts'} match “${q}”` : 'No loadouts are on'}</p>
             <div className="lo-first-actions">
               {q && <button type="button" className="lo-text-btn" onClick={clearSearch}>Clear search</button>}
               {onlyOn && <button type="button" className="lo-text-btn" onClick={() => setOnlyOn(false)}>Show all loadouts</button>}
@@ -666,7 +667,7 @@ function LoadoutsHome(p: LoadoutProps) {
           )
         })}
 
-        {loadouts.length > 0 && (
+        {loadouts.length > 0 && !(filtered && groups.length === 0) && (
           <div className="lo-grid">
             {/* A real card's parts, unseen, give it a real card's size at every width; the plus and words sit on top */}
             <div className="lo-card lo-card-new" data-flip="new">

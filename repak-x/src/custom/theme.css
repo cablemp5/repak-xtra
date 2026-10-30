@@ -1221,6 +1221,10 @@ html[data-motion="off"] .lo-gen-bar i { transition: none; animation: none; }
 .lo-first-run h3 { margin: 0 0 6px; font-size: 16px; font-weight: 700; }
 .lo-first-run p { margin: 0 0 16px; color: var(--text-secondary); font-size: 13px; max-width: 584px; }
 .lo-first-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Loadouts with nothing matching the search or On only: centered in the page, the way out under it */
+.lo-no-match { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 64px 16px; text-align: center; }
+.lo-no-match p { margin: 0; font-size: 14px; color: var(--text-secondary); }
+.lo-no-match .lo-first-actions { justify-content: center; }
 .lo-text-btn.is-primary { background: var(--accent-primary) !important; border-color: var(--accent-primary) !important; color: #fff !important; }
 
 /* Loadout page */
@@ -2504,6 +2508,10 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 
 /* ---------- Crash suspects (custom/CrashSuspects.tsx): the crash toast's two buttons, and the suspects list ---------- */
 .cs-toast-actions { display: inline-flex; gap: 6px; }
+/* The two buttons sit under the text, not beside it: beside, they left the asset path a narrow column that wrapped to five lines */
+.toast-item:has(.cs-toast-actions) { flex-wrap: wrap; align-items: flex-start !important; }
+.toast-item:has(.cs-toast-actions) .toast-content { flex-basis: calc(100% - 32px); }   /* 32px = icon 20 + gap 12 */
+.toast-item:has(.cs-toast-actions) .toast-end-content { max-width: none; margin-left: 32px; }
 .cs-modal { width: min(560px, 92vw) !important; max-width: none !important; max-height: 80vh; display: flex; flex-direction: column; padding: 0 !important; }
 .cs-modal .modal-header { padding: 16px 20px !important; border-bottom: 1px solid var(--panel-border); align-items: flex-start; }
 .cs-modal .modal-header h2 { margin: 0; font-size: 16px !important; font-weight: 700; }

@@ -50,6 +50,7 @@ mod xtra_library_files; // repakxtra: the part of a mod's file list the Library 
 mod xtra_details_cache; // repakxtra: the mod details cache kept between launches
 mod xtra_vfx; // repakxtra: VFX fixing after game updates
 mod xtra_niagara; // repakxtra: the VFX Updater's Niagara step
+mod xtra_mi_layout; // repakxtra: the VFX Updater rewrites materials cooked in an older property layout
 mod xtra_uat_cli; // repakxtra: IoStore extracts through UAssetTool's parallel command line
 mod xtra_builtins; // repakxtra: built-in mods made from the game's own tables
 #[cfg(feature = "extended")]
@@ -8758,6 +8759,7 @@ fn main() {
             xtra_builtins::xtra_skin_table_hero,
             xtra_niagara::xtra_vfx_layout_scan,
             xtra_niagara::xtra_vfx_old_layout,
+            xtra_mi_layout::xtra_vfx_relayout, // repakxtra: materials in an older property layout
             xtra_niagara::xtra_usmap_waiting, // repakxtra: checks again once the USMAP of this game build is out
             xtra_broken::xtra_vfx_usmap_wait, // repakxtra: a VFX update waits only when the patch changed its files
             xtra_nexus::xtra_nexus_sources, // repakxtra: Nexus source

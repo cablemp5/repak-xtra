@@ -406,7 +406,7 @@ async fn download_usmap(url: &str, to: &Path) -> Result<(), String> {
 
 /// Older depot USMAPs than `build`, newest first, downloaded into the managed folder when missing. Without a connection,
 /// the ones already there.
-async fn older_usmaps(build: u64) -> Vec<String> {
+pub(crate) async fn older_usmaps(build: u64) -> Vec<String> {
     let dir = crate::vfx_updater::commands::managed_usmap_dir();
     let mut have: Vec<(u64, PathBuf)> = std::fs::read_dir(&dir)
         .into_iter()

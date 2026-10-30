@@ -1,7 +1,8 @@
 // repakxtra: the VFX Updater, one mod at a time: rebuilds a VFX mod's materials and blueprints from the installed game's own
 // files and carries the mod's edits onto them (assets.ts), so a game update that changed those files no longer breaks it.
 // Started from the upstream VFX Updater's usePipeline; its Rust steps (vfx_updater/) do the UAssetTool work.
-//   1 Extract the mod, read each asset's type (Niagara systems, textures and meshes by name: they always pass through)
+//   1 Extract the mod, rewrite materials and blueprints cooked in an older property layout in today's (xtra_mi_layout.rs),
+//     read each asset's type (Niagara systems, textures and meshes by name: they always pass through)
 //   2 The mod's materials and blueprints to JSON (converted in place, from a list)
 //   3 Read what to carry: material parameters, color properties
 //   4 The game's own copies of those assets, extracted once per game build and kept for the next mod (xtra_vfx.rs)
@@ -36,9 +37,10 @@ export type VfxReport = {
   assets: AssetResult[]
   warnings: string[]
   /** left: Niagara files made for an older game build, left out until a USMAP for the game is out (a partial update).
+   *  relaid: materials and blueprints rewritten from an older game build's property layout (they crash the game as they were).
    *  ownGame: ones the Niagara step could not carry with today's USMAP, left out for good: the game's own is used, and
    *  the update is still a full one (no later USMAP would change them) */
-  counts: { updated: number; same: number; added: number; passed: number; left: number; ownGame: number; unreadable: number; changes: number }
+  counts: { updated: number; same: number; added: number; passed: number; left: number; ownGame: number; unreadable: number; changes: number; relaid: number }
   ms: number
   steps: { step: number; ms: number }[]
 }
@@ -121,7 +123,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
   const log = o.log ?? (() => {})
   const t0 = performance.now()
   const report: VfxReport = { mod: o.modPath, name: stem(o.modPath).replace(/(_\d+)?_P$/i, ''), status: 'failed', assets: [], warnings: [],
-    counts: { updated: 0, same: 0, added: 0, passed: 0, left: 0, ownGame: 0, unreadable: 0, changes: 0 }, ms: 0, steps: [] }
+    counts: { updated: 0, same: 0, added: 0, passed: 0, left: 0, ownGame: 0, unreadable: 0, changes: 0, relaid: 0 }, ms: 0, steps: [] }
   let step = 0, stepAt = t0
   const enter = (n: number) => {
     if (o.cancelled?.()) throw new Cancelled()
@@ -131,7 +133,12 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     o.onStep?.({ step: n, title: STEPS[n - 1] })
   }
   const check = () => { if (o.cancelled?.()) throw new Cancelled() }
-  const asset = (path: string, kind: AssetKind, detail: string) => { report.assets.push({ name: stem(path), path, kind, detail }); if (kind in report.counts) report.counts[kind as keyof typeof report.counts]++ }
+  const relaid = new Set<string>() // file names rewritten in today's layout
+  let layoutUnknown = false // the layout check failed: a Nothing to update is then not trusted (xtra_broken.rs)
+  const asset = (path: string, kind: AssetKind, detail: string) => {
+    if (relaid.has(fileName(path).toLowerCase())) detail = detail.replace(/kept as it was/i, m => `${m[0]}ept, rewritten in the new game build's layout`)
+    report.assets.push({ name: stem(path), path, kind, detail }); if (kind in report.counts) report.counts[kind as keyof typeof report.counts]++
+  }
   const warn = (w: string) => { report.warnings.push(w); log(w, 'warning') }
 
   try {
@@ -152,6 +159,18 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     const rel = (p: string) => relativeTo(p, dirs.modExtract)
     const manifest = extracted.map(rel)
     const ask = extracted.filter(p => !PASS_BY_NAME.test(fileName(p)))
+    // a patch that inserts properties into a class moves every later one (3984769: material overrides), and a file cooked
+    // before it crashes the game and reads as nothing to change. Rewritten in today's layout here, every step below reads it
+    const older = ask.filter(p => !NIAGARA_BY_NAME.test(fileName(p))).map(p => rel(p).replace(/\.uasset$/i, ''))
+    const re = older.length ? await invoke<{ files: string[]; failed: string[]; oldBuild: number | null }>('xtra_vfx_relayout', { modPath: src, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath, modExtract: dirs.modExtract, files: older, stageDir: dirs.stage })
+      .catch(e => { layoutUnknown = true; warn(`Could not check its material layout (${e}).`); return null }) : null
+    check()
+    re?.files.forEach(f => relaid.add(fileName(f).toLowerCase() + '.uasset'))
+    report.counts.relaid = re?.files.length ?? 0
+    // in the old layout but not rewritten safely: passed on as they are they can crash the game, so the update stops below
+    const unrewritten = re?.failed.length ?? 0
+    if (unrewritten) warn(`${plural(unrewritten, 'material or blueprint', 'materials and blueprints')} in an older game build's layout could not be rewritten.`)
+    if (re?.files.length) log(`Rewrote ${plural(re.files.length, 'material or blueprint', 'materials and blueprints')} cooked in an older game build's layout${re.oldBuild ? ` (build ${re.oldBuild})` : ''}.`, 'warning')
     log(`Read ${plural(extracted.length, 'asset')}. Reading the type of ${ask.length}.`)
     const found = ask.length ? await invoke<Record<string, Detected>>('xtra_vfx_detect', { usmapPath: o.usmapPath, paths: ask }) : {}
     check()
@@ -244,7 +263,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
         report.error = `${plural(report.counts.unreadable, 'asset')} could not be read, so it is not known whether ${report.counts.unreadable === 1 ? 'it needs' : 'they need'} rebuilding. Check the USMAP in Advanced, then try again.`
         return report // failed: Try again stays
       }
-      if (report.counts.left) {
+      if (report.counts.left || report.counts.relaid) {
         await rebuildNiagara()
         // the rebuilt Niagara files, or at least the rest without the stale ones, which no longer crashes the game
         if (keep.length || niagaraDone) await packAndPlace()
@@ -377,8 +396,9 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
 
     // an incomplete rebuild is not placed: one failed or unread asset may be the one that broke, so the mod stays as it was
     const failedN = report.assets.filter(a => a.kind === 'failed').length
-    if (failedN || report.counts.unreadable) {
-      const why = [failedN && plural(failedN, 'material or blueprint', 'materials and blueprints') + ' could not be rebuilt', report.counts.unreadable && plural(report.counts.unreadable, 'asset') + ' could not be read'].filter(Boolean).join(', and ')
+    if (failedN || report.counts.unreadable || unrewritten) {
+      const why = [failedN && plural(failedN, 'material or blueprint', 'materials and blueprints') + ' could not be rebuilt', report.counts.unreadable && plural(report.counts.unreadable, 'asset') + ' could not be read',
+        unrewritten && plural(unrewritten, 'material or blueprint', 'materials and blueprints') + " could not be rewritten in the new game build's layout"].filter(Boolean).join(', and ')
       report.error = `Not updated: ${why}. The mod was not changed. Check the USMAP in Advanced, then try again.`
       log(report.error, 'warning')
       return report // failed: Try again stays
@@ -388,25 +408,29 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
 
     // ---- 8: back to assets ----
     enter(8)
+    // rewritten in today's layout and still in the update (one that matches the game is left out)
+    const relaidKept = report.assets.filter(a => relaid.has(fileName(a.path).toLowerCase()) && a.kind !== 'same').length
     if (report.counts.updated > niagaraUpdated) {
       const built = await invoke<string[]>('vfx_convert_json_to_uassets', { usmapPath: o.usmapPath, inputDir: dirs.editedJson, outputDir: dirs.finalUassets })
       const expected = keep.length + own.length + report.counts.updated - niagaraUpdated
       if (built.length < expected) warn(`Only ${built.length} of ${expected} assets are in the rebuilt mod.`)
     }
     // nothing rebuilt or left out, only kept: the "update" would be the original again, under a new name
-    if (swapped && !report.counts.updated && !report.counts.same && !report.counts.left && !niagaraDone) {
+    if (swapped && !report.counts.updated && !report.counts.same && !report.counts.left && !niagaraDone && !relaidKept) {
       report.status = 'nothing'
       report.error = "Nothing to update: its materials and blueprints use other materials or meshes than the game's, which an update cannot carry, so the original stays as it is."
       return report
     }
-    if (!report.counts.updated && !report.counts.added && !niagaraDone && !((report.counts.left || report.counts.ownGame) && keep.length)) {
+    if (!report.counts.updated && !report.counts.added && !niagaraDone && !relaidKept && !((report.counts.left || report.counts.ownGame) && keep.length)) {
       if (report.counts.left || report.counts.ownGame) { report.error = allStale(); return report }
       // every material and blueprint was read and matches the game (anything else stopped above): it works as it is
       if (report.counts.same || swapped) {
         report.status = 'nothing'
         report.error = swapped
           ? "Nothing to update: its materials and blueprints use other materials or meshes than the game's, which an update cannot carry, so the original stays as it is."
-          : 'Nothing to update: every material and blueprint already matches the game, so the original works as it is.'
+          : report.counts.relaid
+            ? "Nothing to update: every material and blueprint matches the game, but the original was made for an older game build and can crash it. Turn it off, the game's own files look the same."
+            : 'Nothing to update: every material and blueprint already matches the game, so the original works as it is.'
       } else report.error = 'Not updated: none of its materials or blueprints could be rebuilt. Check the USMAP in Advanced, then try again.'
       return report
     }
@@ -424,7 +448,8 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     if (step) report.steps.push({ step, ms: now - stepAt })
     report.ms = now - t0
     // here, where the early returns pass too: Needs VFX update stops flagging it until the mod or the game changes (xtra_broken.rs)
-    if (report.status === 'nothing') await invoke('xtra_vfx_no_update', { modPath: o.modPath }).catch(e => log(`Could not note that it needs nothing: ${e}`, 'warning'))
+    // not when its materials were rewritten: the original stays installed in the old layout and still needs turning off
+    if (report.status === 'nothing' && !layoutUnknown && !report.counts.relaid) await invoke('xtra_vfx_no_update', { modPath: o.modPath }).catch(e => log(`Could not note that it needs nothing: ${e}`, 'warning'))
   }
   return report
 }
