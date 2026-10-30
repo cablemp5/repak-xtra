@@ -4018,7 +4018,7 @@ function App() {
             <input
               ref={searchInputRef}
               type="text"
-              placeholder="Search installed mods..."
+              placeholder="Search mods"
               aria-label="Search installed mods"
               value={localSearch}
               onChange={handleSearchChange}

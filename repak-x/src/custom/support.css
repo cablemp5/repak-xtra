@@ -8,13 +8,13 @@
 
 /* The words being typed sit where the card shows them: the same size (the card's container units) and the same middle, so
    nothing jumps between typing and showing */
-.lo-caption-wrap { container-type: inline-size; padding: 52px 14px !important; gap: 0 !important; }
+.lo-caption-wrap { container-type: inline-size; padding: 52px 16px !important; gap: 0 !important; }
 .lo-caption-wrap svg.lo-cap-icon + .lo-caption-edit { margin-top: 4cqi; }   /* cqi here is the wrap's: the card's svg + span margin */
 .lo-caption-wrap svg.lo-cap-icon { width: clamp(24px, 22cqi, 72px) !important; height: clamp(24px, 22cqi, 72px) !important; }
 .lo-caption-wrap .lo-caption-edit { font-size: clamp(15px, 12cqi, 44px) !important; line-height: 1.08 !important; }
 
 /* Encrypt window (EncryptWindow.tsx): a failed mod's reason, under its name like a VFX report's note */
-.vf-row .enc-error { margin: -6px 0 10px; padding-left: 28px; }
+.vf-row .enc-error { margin: -8px 0 12px; padding-left: 28px; }
 /* its pills hold a word only (no caret): even padding, the word in the middle */
-.vf-row .enc-pill { padding: 0 9px !important; }
-.vf-row .enc-pill.is-failed { padding-left: 7px !important; }
+.vf-row .enc-pill { padding: 0 8px !important; }
+.vf-row .enc-pill.is-failed { padding-left: 8px !important; }

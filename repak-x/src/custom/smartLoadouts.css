@@ -9,30 +9,30 @@
 .sl-top { display: flex; align-items: flex-end; gap: var(--sl-gap); padding: var(--sl-inset) var(--sl-inset) var(--sl-gap); border-bottom: 1px solid var(--panel-border); }
 .sl-back { display: inline-flex !important; margin: 0 0 var(--sl-gap); }   /* as a loadout's page: 20px down to the title */
 .sl-title { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
-.sl-title h2 { margin: 0; font-size: 20px; line-height: 26px; font-weight: 800; letter-spacing: -0.02em; }
+.sl-title h2 { margin: 0; font-size: 20px; line-height: 26px; font-weight: 600; letter-spacing: -0.02em; }
 .sl-title p { margin: 2px 0 0; max-width: 92ch; font-size: 13px; line-height: 1.45; color: var(--text-secondary); text-wrap: pretty; }
 .sl-top-actions { flex: none; display: flex; align-items: center; gap: var(--sl-gap-sm); }
 .sl-create { width: auto !important; height: var(--sl-ctl) !important; margin-left: var(--sl-gap-sm); min-height: 0 !important; padding: 0 16px !important; border-radius: 8px !important;
-  font-size: 13px !important; font-weight: 600 !important; font-variant-numeric: tabular-nums; white-space: nowrap; display: inline-flex !important; align-items: center; gap: 7px !important; }
+  font-size: 13px !important; font-weight: 600 !important; font-variant-numeric: tabular-nums; white-space: nowrap; display: inline-flex !important; align-items: center; gap: 8px !important; }
 
 /* the rules, once there are any: a chip each with its own remove */
-.sl-rules { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px var(--sl-inset); border-bottom: 1px solid var(--panel-border); }
+.sl-rules { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px var(--sl-inset); border-bottom: 1px solid var(--panel-border); }
 .sl-rules-label { margin-right: 4px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
-.sl-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 280px; height: 26px; padding: 0 3px 0 10px; border: 1px solid var(--panel-border); border-radius: 999px;
+.sl-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 280px; height: 28px; padding: 0 4px 0 12px; border: 1px solid var(--panel-border); border-radius: 999px;
   font-size: 12px; font-weight: 500; color: var(--text-primary); background: var(--bg-darker); animation: t-text-in var(--text-swap-dur) var(--text-swap-ease) backwards; }
 .sl-chip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* the count in its own small pill, a step away from the name (as the app's group counts are) */
-.sl-chip-n { flex: none; margin-left: 3px; padding: 0 6px; border-radius: 999px; background: var(--quiet-hover); font-size: 11px; line-height: 16px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.sl-chip-n { flex: none; margin-left: 4px; padding: 0 8px; border-radius: 999px; background: var(--quiet-hover); font-size: 11px; line-height: 16px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .sl-chip button { flex: none; display: grid; place-items: center; width: 20px; height: 20px !important; min-height: 0 !important; padding: 0 !important; border: none !important;
   border-radius: 50% !important; background: transparent !important; color: var(--text-secondary) !important; cursor: pointer; }
 .sl-chip button:hover { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
-.sl-chip-form { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 4px 0 10px; border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 999px;
+.sl-chip-form { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 4px 0 12px; border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 999px;
   background: var(--field-bg); font-size: 12px; color: var(--text-secondary); }
 .sl-chip-form input { width: 120px; height: 100%; padding: 0 !important; border: none !important; background: transparent !important; outline: none !important; box-shadow: none !important;
-  font: 500 12.5px var(--font-primary) !important; color: var(--text-primary) !important; }
+  font: 500 13px var(--font-primary) !important; color: var(--text-primary) !important; }
 .sl-rules-none { font-size: 12px; color: var(--text-secondary); opacity: 0.7; margin-right: 4px; }
 /* the two ways to add a word rule: chip height, so the bar is one even line */
-.sl-rules .sl-rule-add { display: inline-flex !important; align-items: center; gap: 5px; height: 26px !important; min-height: 0 !important; padding: 0 10px 0 8px !important;
+.sl-rules .sl-rule-add { display: inline-flex !important; align-items: center; gap: 4px; height: 28px !important; min-height: 0 !important; padding: 0 12px 0 8px !important;
   border-radius: 999px !important; font-size: 12px !important; font-weight: 500 !important; }
 .sl-rules-reset { margin-left: auto; font-size: 12px !important; }
 /* Previews, beside Create: what Create also does */
@@ -42,7 +42,7 @@
 .sl-panes { flex: 1; min-height: 0; display: grid; grid-template-columns: 280px minmax(0, 1fr); }
 .sl-list { min-height: 0; overflow-y: auto; padding: var(--sl-gap-sm) var(--sl-gap-sm) var(--sl-inset); border-right: 1px solid var(--panel-border); }
 /* the list's own head: how many are picked, Select all and Clear */
-.sl-list-head { display: flex; align-items: center; gap: 12px; height: 30px; padding: 0 8px 4px 10px; }
+.sl-list-head { display: flex; align-items: center; gap: 12px; height: 32px; padding: 0 8px 4px 12px; }
 .sl-list-count { flex: 1; min-width: 0; font-size: 12px; font-weight: 500; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .sl-list-head .sl-link:disabled { opacity: 0.4; cursor: default; }
 .sl-list ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
@@ -58,7 +58,7 @@
 .sl-item.is-off .sl-item-name, .sl-item.is-off .sl-face, .sl-item.is-off .sl-pill { opacity: 0.42; }
 .sl-item-name, .sl-face, .sl-pill { transition: opacity var(--text-swap-dur) var(--text-swap-ease); }
 /* how many mods a loadout makes: "8 mods" in a quiet pill, as the app's other counts */
-.sl-pill { flex: none; padding: 0 7px; border-radius: 999px; background: var(--quiet-hover); font-size: 11.5px; line-height: 18px; font-weight: 500;
+.sl-pill { flex: none; padding: 0 8px; border-radius: 999px; background: var(--quiet-hover); font-size: 12px; line-height: 18px; font-weight: 500;
   color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sl-pill > span { display: inline-block; }
 .sl-face { flex: none; width: 20px; height: 20px; border-radius: 50%; object-fit: cover; background: var(--bg-light); }
@@ -69,37 +69,37 @@
 .sl-detail { min-height: 0; overflow-y: auto; padding: var(--sl-gap) var(--sl-inset) var(--sl-inset); display: flex; flex-direction: column; gap: var(--sl-gap);
   animation: t-text-in var(--text-swap-dur) var(--text-swap-ease) backwards; }
 .sl-head { display: flex; align-items: center; gap: var(--sl-gap-md); min-width: 0; }
-.sl-head-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.sl-name { width: 100%; min-width: 0; margin: 0 -9px; padding: 1px 8px; font: 800 20px/1.25 var(--font-primary); letter-spacing: -0.02em; color: var(--text-primary);
+.sl-head-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.sl-name { width: 100%; min-width: 0; margin: 0 -8px; padding: 1px 8px; font: 600 20px/1.25 var(--font-primary); letter-spacing: -0.02em; color: var(--text-primary);
   background: transparent; border: 1px solid transparent; border-radius: 8px; outline: none; transition: border-color 150ms ease, background-color 150ms ease; }
 .sl-name:hover { border-color: var(--panel-border); }
 .sl-name:focus { border-color: rgba(255, 255, 255, 0.16); background: var(--field-bg); }
-.sl-why { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 12.5px; line-height: 22px; color: var(--text-secondary); }
+.sl-why { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 13px; line-height: 22px; color: var(--text-secondary); }
 /* the picked loadout's tools, close under its name (they act on it) */
 .sl-tools { display: flex; flex-wrap: wrap; gap: var(--sl-gap-sm); margin-top: calc(var(--sl-gap-md) - var(--sl-gap)); }
-.sl-tool { display: inline-flex !important; align-items: center; gap: 6px; height: var(--sl-ctl) !important; min-height: 0 !important; padding: 0 12px 0 10px !important; font-size: 12.5px !important; }
+.sl-tool { display: inline-flex !important; align-items: center; gap: 8px; height: var(--sl-ctl) !important; min-height: 0 !important; padding: 0 12px 0 12px !important; font-size: 13px !important; }
 /* a section of the picked loadout: a small title with its count, then its rows in one panel */
 .sl-section { flex-shrink: 0; display: flex; flex-direction: column; gap: var(--sl-gap-sm); }
-.sl-section-title { margin: 0; display: flex; align-items: center; gap: 6px; padding-left: 2px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
-.sl-section-n { padding: 0 6px; border-radius: 999px; background: var(--quiet-hover); font-size: 11px; line-height: 16px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.sl-section-title { margin: 0; display: flex; align-items: center; gap: 8px; padding-left: 2px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.sl-section-n { padding: 0 8px; border-radius: 999px; background: var(--quiet-hover); font-size: 11px; line-height: 16px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .sl-rows { list-style: none; margin: 0; padding: 0; border: 1px solid var(--panel-border); border-radius: 12px; overflow: hidden; }
-.sl-row { display: flex; align-items: center; gap: var(--sl-gap-md); min-width: 0; height: 42px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--panel-border); }
+.sl-row { display: flex; align-items: center; gap: var(--sl-gap-md); min-width: 0; height: 44px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--panel-border); }
 .sl-row:last-child { border-bottom: none; }
 .sl-row-name { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .sl-row-meta { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--text-secondary); }
 .sl-row-btn { flex: none; height: var(--sl-ctl) !important; min-height: 0 !important; padding: 0 12px !important; font-size: 12px !important; }
 /* a word that groups: the accent, as it is highlighted in the mods' names below */
-.sl-word { display: inline-flex !important; align-items: center; height: 22px !important; min-height: 0 !important; padding: 0 7px !important; border-radius: 6px !important; cursor: pointer;
+.sl-word { display: inline-flex !important; align-items: center; height: 24px !important; min-height: 0 !important; padding: 0 8px !important; border-radius: 6px !important; cursor: pointer;
   border: 1px solid color-mix(in srgb, var(--accent-primary), transparent 50%) !important; background: color-mix(in srgb, var(--accent-primary), transparent 85%) !important;
   font: 500 12px var(--font-primary) !important; color: var(--text-primary) !important; transition: border-color 150ms ease; }
 .sl-word:hover { border-color: color-mix(in srgb, var(--accent-primary), transparent 15%) !important; }
 .sl-link { height: auto !important; min-height: 0 !important; padding: 0 !important; border: none !important; background: transparent !important; cursor: pointer;
-  font: 500 12.5px var(--font-primary) !important; color: color-mix(in srgb, var(--text-secondary), var(--text-primary) 35%) !important; text-decoration: none; transition: color 150ms ease; }   /* plain words, brighter on hover */
+  font: 500 13px var(--font-primary) !important; color: color-mix(in srgb, var(--text-secondary), var(--text-primary) 35%) !important; text-decoration: none; transition: color 150ms ease; }   /* plain words, brighter on hover */
 .sl-link:hover:not(:disabled) { color: var(--text-primary) !important; }
 
 /* its mods, one line each: tick, the name with its grouping words marked, Move to on hover */
 .sl-mods { flex-shrink: 0; list-style: none; margin: 0; padding: 0; border: 1px solid var(--panel-border); border-radius: 12px; overflow: hidden; }
-.sl-mod { display: flex; align-items: center; gap: 10px; min-width: 0; height: 42px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--panel-border);
+.sl-mod { display: flex; align-items: center; gap: 12px; min-width: 0; height: 44px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--panel-border);
   transition: opacity 150ms ease, background-color 150ms ease; }
 .sl-mod:last-child { border-bottom: none; }
 .sl-mod:hover { background: rgba(255, 255, 255, 0.02); }
@@ -108,26 +108,26 @@
   transition: opacity var(--text-swap-dur) var(--text-swap-ease); }
 .sl-mod-name mark { background: none; color: var(--text-primary); font-weight: 600; }   /* the words that grouped it: brighter and bold, nothing more */
 .sl-pin { flex: none; color: color-mix(in srgb, var(--accent-primary), white 35%); }
-.sl-move { flex: none; height: var(--sl-ctl) !important; min-height: 0 !important; padding: 0 10px !important; font-size: 12px !important; opacity: 0; transition: opacity 150ms ease; }
+.sl-move { flex: none; height: var(--sl-ctl) !important; min-height: 0 !important; padding: 0 12px !important; font-size: 12px !important; opacity: 0; transition: opacity 150ms ease; }
 .sl-mod:hover .sl-move, .sl-mod:focus-within .sl-move, .sl-move[aria-expanded="true"] { opacity: 1; }
 
 /* menus: a title saying what the pick does, then the choices (long lists scroll) */
 .sigeon-menu.sl-menu { width: 280px; z-index: 10001; transform-origin: top left; }
-.sl-menu-title { padding: 6px 10px 5px; font-size: 11.5px; font-weight: 500; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sl-menu-title { padding: 8px 12px 4px; font-size: 12px; font-weight: 500; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sl-menu-items { max-height: 306px; overflow-y: auto; }
 /* a long list's search, as the app's other search fields */
-.sl-menu-search { display: block; width: calc(100% - 8px); height: 32px; margin: 0 4px 4px; padding: 0 10px !important; border: 1px solid var(--panel-border) !important;
-  border-radius: var(--quiet-radius) !important; background: var(--field-bg) !important; font: 500 12.5px var(--font-primary) !important; color: var(--text-primary) !important;
+.sl-menu-search { display: block; width: calc(100% - 8px); height: 32px; margin: 0 4px 4px; padding: 0 12px !important; border: 1px solid var(--panel-border) !important;
+  border-radius: var(--quiet-radius) !important; background: var(--field-bg) !important; font: 500 13px var(--font-primary) !important; color: var(--text-primary) !important;
   outline: none !important; box-shadow: none !important; }
 .sl-menu-search:focus { border-color: rgba(255, 255, 255, 0.2) !important; }
 .sl-menu-search::placeholder { color: var(--text-secondary); opacity: 1; }
 .sl-menu .sigeon-item.is-pinned { color: var(--text-secondary) !important; }
 .sl-menu .sigeon-item.is-pinned + .sigeon-item:not(.is-pinned) { margin-top: 4px; box-shadow: 0 -1px 0 var(--panel-border); border-top-left-radius: 0 !important; border-top-right-radius: 0 !important; }
-.sl-menu-none { padding: 8px 10px; font-size: 12.5px; color: var(--text-secondary); }
-.sl-menu .sigeon-item { gap: 10px; }
+.sl-menu-none { padding: 8px 12px; font-size: 13px; color: var(--text-secondary); }
+.sl-menu .sigeon-item { gap: 12px; }
 .sl-menu-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
-.sl-menu .sigeon-item small { flex: none; font-size: 11.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-.sl-menu .sigeon-item:has(.is-two) { height: auto !important; padding-block: 7px !important; }
+.sl-menu .sigeon-item small { flex: none; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.sl-menu .sigeon-item:has(.is-two) { height: auto !important; padding-block: 8px !important; }
 .sl-menu-label.is-two { display: flex; flex-direction: column; gap: 1px; white-space: normal; }
 .sl-menu-label.is-two small { font-weight: 400; }
 /* keyboard focus in a menu is the hover fill, as in the install dialog's menus, not a ring */
@@ -146,8 +146,8 @@
    the page's inset so their ticks line up with the count above */
 .sl-simple { flex: 1; min-height: 0; overflow-y: auto; padding: var(--sl-gap) var(--sl-inset) var(--sl-inset); }
 .sl-simple-head { padding: 0 0 var(--sl-gap-sm); }
-.sl-tiles { list-style: none; margin: 0 -10px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); column-gap: 4px; row-gap: 0; }
-.sl-tile-btn { width: 100%; display: flex !important; align-items: center; justify-content: flex-start !important; gap: 10px; height: 40px !important; min-height: 0 !important; padding: 0 10px !important;
+.sl-tiles { list-style: none; margin: 0 -12px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); column-gap: 4px; row-gap: 0; }
+.sl-tile-btn { width: 100%; display: flex !important; align-items: center; justify-content: flex-start !important; gap: 12px; height: 40px !important; min-height: 0 !important; padding: 0 12px !important;
   border: none !important; border-radius: 8px !important; background: transparent !important; color: var(--text-primary) !important; text-align: left; cursor: pointer;
   transition: background-color 150ms ease; }
 .sl-tile-btn:hover { background: var(--quiet-hover) !important; }
@@ -157,7 +157,7 @@
 /* rename: a pencil at the row's end, shown on hover (simple) or always (advanced), and the name typed in place */
 .sl-tile { position: relative; }
 .sl-tile .sl-tile-btn { padding-right: 40px !important; }   /* room for the pencil, so a long name ends before it */
-.sl-rename { flex: none; display: grid !important; place-items: center; width: 26px; height: 26px !important; min-height: 0 !important; padding: 0 !important;
+.sl-rename { flex: none; display: grid !important; place-items: center; width: 28px; height: 28px !important; min-height: 0 !important; padding: 0 !important;
   border: none !important; border-radius: 6px !important; background: transparent !important; color: var(--text-secondary) !important; cursor: pointer;
   transition: opacity 150ms ease, background-color 150ms ease, color 150ms ease; }
 .sl-rename:hover { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
@@ -167,7 +167,7 @@
 .sl-tile-input { flex: 1; min-width: 0; height: 28px; padding: 0 8px; border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 6px; background: var(--field-bg);
   font: 500 13px var(--font-primary); color: var(--text-primary); outline: none; }
 /* advanced: the picked loadout's name, a field with a pencil after it (a click anywhere on the pair puts the cursor in) */
-.sl-name-wrap { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; cursor: text; }
+.sl-name-wrap { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-width: 0; cursor: text; }
 .sl-name-wrap .sl-name { width: auto; field-sizing: content; min-width: 4ch; max-width: 100%; }
 .sl-name-pencil { flex: none; color: var(--text-secondary); transition: color 150ms ease; }
 .sl-name-wrap:hover .sl-name-pencil, .sl-name-wrap:focus-within .sl-name-pencil { color: var(--text-primary); }
