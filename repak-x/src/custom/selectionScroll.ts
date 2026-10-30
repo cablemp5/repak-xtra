@@ -20,8 +20,8 @@ const scale = (el: HTMLElement) => el.getBoundingClientRect().height / (el.offse
 /** The room the bar takes in the column, in screen pixels: nothing while hidden, else its height and margins. */
 const roomOf = (bar: HTMLElement) => {
   const h = bar.getBoundingClientRect().height
-  if (!h) return 0
   const cs = getComputedStyle(bar)
+  if (!h || cs.position === 'absolute') return 0 // floating over the list (theme.css since 2026-10-30): nothing moves
   return h + (parseFloat(cs.marginTop) + parseFloat(cs.marginBottom)) * scale(bar)
 }
 
