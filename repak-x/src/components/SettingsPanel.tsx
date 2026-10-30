@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AnimatedThemeToggler } from './ui/AnimatedThemeToggler'
 import Checkbox from './ui/Checkbox'
-import { AmoledSection, UiScaleSection, MotionSection, InstallingSection, HeaderButtonsSection, ModPrefs, WarningPrefs, NewStripPref, BuiltinsPref, resetUiPrefs } from '../custom/uiPrefs' // repakxtra
+import { UiScaleSection, MotionSection, InstallingSection, HeaderButtonsSection, ModPrefs, WarningPrefs, NewStripPref, BuiltinsPref, resetUiPrefs } from '../custom/uiPrefs' // repakxtra
 import RecentlyDeleted from '../custom/RecentlyDeleted' // repakxtra: Settings > Recently deleted
 import { useDialogFocus } from '../custom/dialogFocus' // repakxtra
 import TailInput from './ui/TailInput'
@@ -29,8 +29,7 @@ import AppFiles from '../custom/AppFiles' // repakxtra: Check app files and Repa
 import Support from '../custom/Support'
 import { invoke } from '@tauri-apps/api/core'
 import { ShortcutSetting } from '../custom/shortcut' // repakxtra
-import { NexusSetting } from '../custom/nexus' // repakxtra
-import { APP_NAME, EXTENDED } from '../custom/edition' // repakxtra
+import { APP_NAME } from '../custom/edition' // repakxtra
 import './SettingsPanel.css'
 import { useAlert } from './AlertHandler'
 import { motion } from 'framer-motion'
@@ -356,7 +355,6 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
             {activeCategory === 'interface' && (
               <>
                 <UiScaleSection />
-                <AmoledSection onEnable={() => setTheme('dark')} />
                 <MotionSection extra={
                   <div className="setting-item">
                     <Checkbox

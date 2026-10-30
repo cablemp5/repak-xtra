@@ -21,13 +21,6 @@ repakxtra is a fork of **[Repak X](https://github.com/X-zant/Repak-X)** by **Xza
 > [!NOTE]
 > repakxtra is an unofficial fork: not made by the Repak X team, and not affiliated with NetEase or Marvel.
 
-
-**repakxtra (standard)** is the default download on the [latest release page](https://github.com/cablemp5/repak-xtra/releases/latest). Current users move to standard through the normal in-app update.
-
-
-
-See [edition builds and release channels](EDITIONS.md) for build commands and publishing details.
-
 ## How to install repakxtra and your first mod
 
 You need a Windows PC with Marvel Rivals and a mod you downloaded. The mod is a `.pak`, `.zip`, `.rar` or `.7z` file;
@@ -146,8 +139,8 @@ game crashes. The VFX Updater rebuilds them on the new game files, many at once.
 > [!NOTE]
 > Rendered previews need the preview kit and [Blender](https://www.blender.org/download/) (free). **Setup > Mod previews** installs both.
 
-heroes that keep their own skins) and **Skip startup logos** (the game opens without the Marvel, NetEase and Unreal
-Engine logo videos). Both start off. repakxtra makes them from your own game files when you turn one on, and rebuilds them
+**Built-in mods:** **Skip startup logos** (the game opens without the Marvel, NetEase and Unreal Engine logo videos).
+It starts off. repakxtra makes it from your own game files when you turn it on, and rebuilds it
 after every game update, so they never go stale. They sit at the bottom of the Loadouts screen and at the top of the
 Library with a blue **Built-in** badge.
 
@@ -161,6 +154,7 @@ with Undo. Mods installed from a Nexus Mods download get an orange **Nexus** tag
 in mod details ("Nexus 12890, uploaded Sep 13, 2026" with **Open page**), read from the download's file name. On its
 first launch repakxtra finds the source of mods you installed earlier from the Nexus downloads still in your Downloads
 folder. Project Galacta mods get a magenta tag. File sizes are a setting (**Settings > Interface > On each mod**), and
+**Settings > Interface > On each mod** hides the Nexus tag and the Broken and Conflict warnings.
 
 **Installing:** drop zips, rars and 7zs as they are, no need to extract. Reinstalling or updating a mod builds the
 new version first and keeps the old one in **Recently deleted**, so a failed install leaves your mod as it was. `.pak.off`, `.utoc.off` and `.ucas.off` files
@@ -170,8 +164,9 @@ new version first and keeps the old one in **Recently deleted**, so a failed ins
 (or else change the hero it names), checked, to turn off together with Undo. **Copy setup report** (in **Setup** and
 **Settings > Help & Community**) copies your setup, conflicts, newest crash and the mods that are on as text for a help
 channel, with no folder paths or user name. Audio and UI mods say in their details when they only look broken
+(cooldown sounds in the practice range).
 
-**Setup:** the signature bypass ships inside the app (with an "Is it safe?" report), Project Galacta installs and updates in one click in standard (extended uses bundled Project Sigeon Minimal), and the preview kit and Blender install from here. Every install shows its steps as it goes.
+**Setup:** the signature bypass ships inside the app (with an "Is it safe?" report), Project Galacta installs and updates in one click, and the preview kit and Blender install from here. Every install shows its steps as it goes.
 
 
 ## See it in action
@@ -222,6 +217,7 @@ want until it says **All resolved**.
   </tr>
   <tr>
     <td width="50%"><img src=".github/screenshots/settings.png" alt="Settings"><br><sub>Settings: UI scale, sound and motion</sub></td>
+    <td width="50%"></td>
   </tr>
 </table>
 
@@ -292,15 +288,6 @@ updates. Without either, the **Capture** cover on a loadout's page uses a screen
 
 **Settings > Updates > Check Now.** When a newer release is out, **Download update** fetches it and
 **Install and restart** replaces the app and opens the new version. Loadouts, settings and pictures carry over.
-
-</details>
-
-<details>
-<br>
-
-It never shows it. The key stays out of the editor's window: **Open in Notepad** opens the config so you can paste the
-key after `licenseKey=` yourself, and every save writes the key line back exactly as it was. The editor follows the
-current `SigeonLoader.ini` format (base, n64, low, mid and high configs, Hide UID, gamma and sharpening).
 
 </details>
 
@@ -433,13 +420,9 @@ This serves the interface in a normal browser with a mock backend (`src/dev/mock
 - **[Repak X](https://github.com/X-zant/Repak-X)** by Xzant and Saturn, and everyone credited in its Credits panel.
 - **Ultimate ASI Loader** by [ThirteenAG](https://github.com/ThirteenAG/Ultimate-ASI-Loader) (MIT), and the **Marvel Rivals UTOC Signature Bypass** from [Nexus Mods](https://www.nexusmods.com/marvelrivals/mods/2940).
 - **[Project Galacta](https://github.com/0xSaturno/ProjectGalacta)** by 0xSaturno.
-- **Sigeon V2** by its authors ([Discord](https://discord.gg/oinkers)); repakxtra only edits your own configs.
 - [cuelume](https://cuelume-site.pages.dev/) sounds, [transitions.dev](https://transitions.dev/) motion recipes, [Geist](https://vercel.com/font) and [Lucide](https://lucide.dev/) icons.
 
 ## License
 
 GPL-3.0, the same as Repak X. See [LICENSE](LICENSE).
 
-### Standard and Extended builds
-
-See [edition builds and release channels](EDITIONS.md) for the two build commands, bundled Sigeon setup, and publishing both editions in this repository.

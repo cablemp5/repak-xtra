@@ -8,10 +8,9 @@ import { ChevronDown, ChevronUp, ImagePlus } from 'lucide-react'
 import CaptionBackground from './CaptionBackground'
 import type { Loadout } from './loadoutStore'
 import type { LoadoutProps } from './Loadouts'
-import nexusLogo from './logos/nexus.png'
 
-export function CardTools({ l, text, top, alert, onImage, onNexus }: {
-  l: Loadout; text: boolean; top: boolean; alert: LoadoutProps['alert']; onImage: () => void; onNexus?: () => void
+export function CardTools({ l, text, top, alert, onImage }: {
+  l: Loadout; text: boolean; top: boolean; alert: LoadoutProps['alert']; onImage: () => void
 }) {
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
@@ -39,7 +38,6 @@ export function CardTools({ l, text, top, alert, onImage, onNexus }: {
             </div>
           ) : <>
             <button type="button" className="ct-row" onClick={run(onImage)}><ImagePlus aria-hidden="true" /> Change image</button>
-            {onNexus && <button type="button" className="ct-row" onClick={run(onNexus)}><img src={nexusLogo} alt="" className="nx-btn-logo" /> Picture from Nexus</button>}
           </>}
         </div>
       )}

@@ -1,4 +1,4 @@
-import { EXTENDED, LOADER_NAME } from './edition'
+import { LOADER_NAME } from './edition'
 // repakxtra: install progress for Setup and the guided setup (FirstRun.tsx), one look for every install: the signature
 // bypass, Project Galacta, the preview kit and Blender. The VFX Updater's look (cable's pick, 2026-10-25, in place of a
 // spinner): what is happening now in shimmer text, how far along it is ("38 MB of 108 MB · 35%", or "step 2 of 3"
@@ -68,7 +68,7 @@ export function GalactaTrack({ on, done }: { on: boolean; done?: string }) {
   }, [on])
   if (!on && !done) return null
   const at = !p ? 0 : GALACTA_STEPS.indexOf(p.stage === 'check' ? 'Find release' : p.stage === 'download' ? 'Download' : 'Install')
-  const text = !p || p.stage === 'check' ? EXTENDED ? 'Reading the bundled loader' : 'Asking GitHub for the newest release'
+  const text = !p || p.stage === 'check' ? 'Asking GitHub for the newest release'
     : p.stage === 'download' ? `Downloading ${LOADER_NAME}` : 'Putting it in your mods folder'
   return (
     <InstallTrack steps={GALACTA_STEPS} at={at} text={text} done={on ? undefined : done}

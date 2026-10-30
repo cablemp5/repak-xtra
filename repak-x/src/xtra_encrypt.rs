@@ -71,21 +71,6 @@ fn tool(action: &str, from: &Path, to: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Encrypts a fresh build outside the library (`base` + .pak, .utoc and .ucas, as xtra_builtins makes them) in place:
-/// CustomQuake after every build. All three are written beside it first, so a failure leaves the build as it was.
-pub fn encrypt_built(base: &Path) -> Result<(), String> {
-    let name = base.file_name().ok_or("The build has no file name")?;
-    let work = tempfile::Builder::new().prefix(".repakxtra-encrypt-").tempdir_in(base.parent().ok_or("The build has no folder")?).map_err(|e| e.to_string())?;
-    let out = work.path().join(name);
-    tool("encrypt_iostore", &base.with_extension("utoc"), &out.with_extension("utoc"))?;
-    tool("encrypt_pak", &base.with_extension("pak"), &out.with_extension("pak"))?;
-    let exts = ["ucas", "utoc", "pak"];
-    if let Some(x) = exts.iter().find(|x| !out.with_extension(x).is_file()) { return Err(format!("Encryption made no .{x}")); }
-    // shortcut: a rename failing after the first leaves a mixed set in the temp build, which the caller then drops (it
-    // fails the build), so nothing mixed reaches the game
-    for x in exts { fs::rename(out.with_extension(x), base.with_extension(x)).map_err(|e| e.to_string())?; }
-    Ok(())
-}
 
 fn encrypt(path: &Path) -> Result<Encrypted, String> {
     crate::xtra_identity::upstream_guard()?;

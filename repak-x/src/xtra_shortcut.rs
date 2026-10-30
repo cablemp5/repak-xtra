@@ -9,10 +9,7 @@ use std::io::Write;
 use std::path::PathBuf;
 
 fn shortcut_name() -> &'static str {
-    match (crate::xtra_edition::EXTENDED, option_env!("REPAKXTRA_BUILD") == Some("test")) {
-        (false, true) => "repakxtratest.lnk",
-        (false, false) => "repakxtra.lnk",
-    }
+    if option_env!("REPAKXTRA_BUILD") == Some("test") { "repakxtratest.lnk" } else { "repakxtra.lnk" }
 }
 const SCRIPT: &str = "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:RX_LNK); $s.TargetPath = $env:RX_EXE; \
     $s.WorkingDirectory = $env:RX_DIR; $s.IconLocation = $env:RX_EXE + ',0'; $s.Description = $env:RX_NAME; $s.Save()";

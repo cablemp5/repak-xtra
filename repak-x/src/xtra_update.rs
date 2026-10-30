@@ -159,9 +159,7 @@ mod tests {
         assert!(version > semver::Version::parse("0.25.0").unwrap());
         assert_eq!(release["tag_name"], "v0.26.0");
         assert_eq!(legacy::asset(release).unwrap()["browser_download_url"], "https://example.com/standard.zip");
-        if !crate::xtra_edition::EXTENDED {
-            assert_eq!(newest(list).unwrap().0, version, "after migration, Standard stays on the same channel");
-        }
+        assert_eq!(newest(list).unwrap().0, version, "after migration, Standard stays on the same channel");
     }
 
     #[test]
@@ -181,9 +179,7 @@ mod tests {
         }
         zip.finish().unwrap();
         legacy::check_update_zip(&path).unwrap();
-        if !crate::xtra_edition::EXTENDED {
-            check_update_zip(&path).unwrap();
-        }
+        check_update_zip(&path).unwrap();
     }
 
     #[test]
@@ -250,7 +246,7 @@ mod tests {
             release(crate::xtra_edition::TAG_PREFIX, "0.2.0", crate::xtra_edition::NAME),
             release(crate::xtra_edition::TAG_PREFIX, "0.3.1", crate::xtra_edition::NAME),
             draft,
-            release(if crate::xtra_edition::EXTENDED { "v" } else { "extended-v" }, "99.0.0", if crate::xtra_edition::EXTENDED { "standard" } else { "extended" }),
+            release("extended-v", "99.0.0", "extended"),
             release(crate::xtra_edition::TAG_PREFIX, "88.0.0", "wrong-edition"),
             serde_json::json!({"tag_name": format!("{}77.0.0", crate::xtra_edition::TAG_PREFIX)}),
         ];

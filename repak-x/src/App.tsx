@@ -64,7 +64,6 @@ import { focusRow, relink, useLibraryFocus } from './custom/libraryFocus' // rep
 import FilterPanel, { filterScope } from './custom/FilterPanel'
 import LoadoutHotkeys, { AddToLoadoutField, LoadoutMenuItems } from './custom/Loadouts'
 import LoadoutsScreen, { ViewTabs } from './custom/LoadoutsScreen'
-import NexusBrowser from './custom/NexusBrowser' // repakxtra: the Nexus tab
 import ViewModeMenu from './custom/ViewModeMenu' // repakxtra: view buttons folded into one when narrow
 import { loadoutable, modKey, nameKey, renameModKey, setView, syncLoadoutKeys } from './custom/loadoutStore' // repakxtra
 import { setModsRoot } from './custom/loadoutIdentity' // repakxtra
@@ -79,12 +78,11 @@ import { canUpdateVfx, checkVfxModInPlace, updateVfxModInPlace } from './custom/
 import { PREF_TOGGLED, type PrefToggled, fewerPopups, liteOn, newDefaultsOnce, setPref } from './custom/uiPrefs' // repakxtra
 import { reportSource } from './custom/setupReport' // repakxtra: Copy setup report reads the live list
 import { finishInstallLoadout } from './custom/installLoadout'
-import SigeonControl from './custom/SigeonControl'
 import SetupButton from './custom/SetupPanel'
 import { REPAKXTRA_VERSION, latestRelease, versionTag } from './custom/version'
 import { installedReleaseNotes } from './custom/releaseNotes'
 import LegacySetup from './custom/LegacySetup'
-import { APP_NAME, EXTENDED } from './custom/edition'
+import { APP_NAME } from './custom/edition'
 import FirstRun from './custom/FirstRun' // repakxtra: first-launch setup
 import { installDroppedKit } from './custom/previewKit'
 import { useGlobalTooltips } from './hooks/useGlobalTooltips'
@@ -150,7 +148,6 @@ import Wordmark from './custom/Wordmark' // repakxtra: the logo
 import ConflictsPanel from './custom/ConflictsPanel' // repakxtra: in place of Repak X's ClashPanel (grouped, in words)
 import { keepThisOne } from './custom/keepOne' // repakxtra: Keep this one
 import { NEXUS_TYPE, recordSourceAs, recordSources, renameSource, sourceOf, useNexusScan, useNexusSources } from './custom/nexusSource' // repakxtra: Nexus source
-import { CHECK_EVERY, checkUpdates, useNexus } from './custom/nexus' // repakxtra: Nexus account, update checks and downloads
 import { stageOffFiles } from './custom/offFiles' // repakxtra: .pak.off files
 import CrashSuspects, { previousCrashes, withSuspects } from './custom/CrashSuspects' // repakxtra: crash suspects
 import { revealBuiltin, toggleBuiltin, useBuiltins, watchBuiltins } from './custom/BuiltinMods' // repakxtra: built-in mods
@@ -449,12 +446,6 @@ function App() {
   useNexusScan(mods) // repakxtra: Nexus sources for mods installed before they were recorded, once
   const brokenVersion = useBrokenVersion() // repakxtra: the Broken filter re-runs when the verdicts land
   const nexusSources = useNexusSources() // repakxtra: and the Nexus type filter when a source is recorded
-    if (!EXTENDED) return
-    const run = () => checkUpdates(mods.map(m => sourceOf(m.path)))
-    run()
-    const t = setInterval(run, CHECK_EVERY)
-    return () => clearInterval(t)
-  }, [mods, nexusSources])
   const conflictCount = useConflictCount() // repakxtra
   reportSource.get = () => ({ mods, modDetails, launcherType, gamePath }) // repakxtra: setup report
   // repakxtra: Show all, beside the Library's title: every folder, no hero, type or tag filter and no search (the All / On /
@@ -487,7 +478,6 @@ function App() {
   const [launchSuccess, setLaunchSuccess] = useState(false)
   const [characterData, setCharacterData] = useState<CharacterDataEntry[]>(characterDataStatic as CharacterDataEntry[])
   const { list: builtinList, busy: builtinBusy } = useBuiltins() // repakxtra: built-in mods, listed in the Library
-  const builtinHeroName = useCallback((id: string) => characterData.find(c => c.id === id)?.name, [characterData])
   const [isDragging, setIsDragging] = useState(false)
   const [dropTargetFolder, setDropTargetFolder] = useState<string | null>(null)
   const [renamingModPath, setRenamingModPath] = useState<string | null>(null) // Track which mod should start inline renaming
@@ -1287,8 +1277,8 @@ function App() {
       return
     }
     const targetMods = mods.filter(m => selectedMods.has(m.path) && m.enabled !== enable)
-    // repakxtra: checked built-ins switch too (each rebuilds or removes its own files), not waited for: a CustomQuake
-    // build takes minutes and the other mods switch at once
+    // repakxtra: checked built-ins switch too (each rebuilds or removes its own files), not waited for: a build takes a
+    // while and the other mods switch at once
     const builtinTargets = builtinList.filter(b => selectedMods.has(b.path) && b.on !== enable && !builtinBusy.has(b.id))
     void (async () => { for (const b of builtinTargets) await toggleBuiltin(b.id, enable, alert) })()
     if (targetMods.length === 0) return
@@ -2808,19 +2798,6 @@ function App() {
   // render, so without this every row in the list re-renders whenever any App
   // state changes — including on each selection click.
   const stableModSelect = useStableCallback(handleModSelect)
-  // repakxtra: a Nexus card's Installed opens that mod in the Library
-  // filters that would hide it are cleared first (as the Asset Explorer's reveal does) and it is selected with its
-  // details open, never toggled shut when it was already the one on show
-  const showInLibrary = useStableCallback((path: string) => {
-    const m = mods.find(x => x.path === path)
-    setView('library')
-    if (!m) return
-    setSelectedFolderId('all'); setLocalSearch(''); setSearchQuery(''); setSelectedCharacters(new Set()); setSelectedCategories(new Set()); setFilterTag(''); setModState('all')
-    lastRevealedModRef.current = null // scroll to it even when it is already selected
-    setSelectedMod(m)
-    if (!isRightPanelOpen) { setLeftPanelWidth(lastPanelWidth > 60 ? lastPanelWidth : 70); setIsRightPanelOpen(true) }
-    focusRow(path)
-  })
   const stableToggleModSelection = useStableCallback(handleToggleModSelection)
   const stableToggleMod = useStableCallback(handleToggleMod)
   const stableDeleteMod = useStableCallback(handleDeleteMod)
@@ -3108,7 +3085,7 @@ function App() {
 
   // repakxtra: the built-in mods head the list (custom/builtinRows.ts), unless a hero, type or tag filter or a folder
   // narrows it: a search matches their names, the On / Off switch their state
-  const builtinRows = useBuiltinRows(builtinHeroName)
+  const builtinRows = useBuiltinRows()
   const libraryMods = useMemo(() => selectedCharacters.size || selectedCategories.size || filterTag || selectedFolderId !== 'all' ? filteredMods
     : [...builtinRows.filter(r => (!searchQuery || r.custom_name.toLowerCase().includes(searchQuery.toLowerCase())) && matchesState(modState, isEncrypted)(r as ModRecord)), ...filteredMods],
   [filteredMods, builtinRows, selectedCharacters, selectedCategories, filterTag, selectedFolderId, searchQuery, modState, isEncrypted, brokenVersion])
@@ -3325,33 +3302,6 @@ function App() {
     setExpandedFolders(newExpanded)
   }
 
-  // repakxtra: Nexus downloads (custom/nexus.tsx): a new mod opens the Install dialog, as a dropped file does (save it
-  // as a loadout or not, or cancel), an update applies in place keeping the mod's name, folder and loadouts
-  useNexus({
-    alert,
-    install: async archive => {
-      const parsed = await invoke<DroppedModParse[]>('parse_dropped_files', { paths: [archive] })
-      if (!parsed.length) { alert.error('Nothing to install', 'The Nexus download holds no mod repakxtra can install.'); return }
-      if (panelsRef.current.install) setModsToInstall(prev => [...prev, ...parsed])
-      else { setModsToInstall(parsed); setPanel('install', true) }
-    },
-    update: async (oldPath, archive) => {
-      // by its key (folder and name, on or off alike), so a mod switched while it downloaded is still found
-      const mod = mods.find(m => m.path === oldPath) ?? mods.find(m => modKey(m.path) === modKey(oldPath))
-      if (!mod) { alert.warning('Update not applied', `${nameKey(oldPath)} is no longer in your mods folder, so the download was not used.`); return }
-      const parsed = await invoke<unknown[]>('parse_dropped_files', { paths: [archive] })
-        .catch(e => { alert.error('Update not applied', `The download could not be read: ${e}`); return null })
-      if (!parsed) return
-      // only a download of exactly one mod replaces it: with several (or none found) the Install dialog shows them
-      if (parsed.length !== 1) {
-        alert.info('Pick what to update', `The update holds ${parsed.length} mods. Install the ones you want, then remove the old ${nameKey(oldPath)}.`)
-        setModsToInstall(parsed)
-        setPanel('install', true)
-        return
-      }
-      await handleConfirmUpdate(true, false, { mod, newSourcePath: archive })
-    },
-  })
 
   const handleInstallMods = async (sent: InstallModPayload[]) => {
     const modsWithSettings = sent.filter(m => m.enabled !== false) // repakxtra: left-out archive mods go to the backend only, to be skipped
@@ -4017,7 +3967,6 @@ function App() {
           </button>
           <EncryptMods />{/* repakxtra */}
 
-          <SigeonControl alert={alert} />{/* repakxtra */}
           <SetupButton alert={alert} />{/* repakxtra: signature bypass and Project Galacta */}
           <button
             onClick={() => setPanel('sharing', true)}

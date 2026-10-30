@@ -621,6 +621,7 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
 pub async fn xtra_vfx_place(source: String, staged_base: String, turn_off_original: bool, keep_name: Option<bool>, trash_original: Option<bool>, partial: Option<bool>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Placed, String> {
     // repakxtra: file moves on a blocking thread, never on the async workers every other command shares
     let state = state.inner().clone();
+    crate::xtra_builtins::fixed_place(Path::new(&source))?; // its own app rebuilds it for the new game build
     crate::blocking(move || {
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?;
@@ -1157,6 +1158,7 @@ mod tests {
             "xtra_vfx_source" => json!(xtra_vfx_source(s(a, "modPath"))),
             "xtra_skin_table_hero" => json!(crate::xtra_builtins::table_hero(&s(a, "modPath"), Path::new(&s(a, "gamePaks"))).await?),
             "xtra_vfx_old_layout" => json!(crate::xtra_niagara::xtra_vfx_old_layout(s(a, "modPath"), s(a, "gamePaks"), s(a, "usmapPath"), list(a, "files"), a.get("modExtract").and_then(Value::as_str).map(String::from)).await?),
+            "xtra_vfx_relayout" => json!(crate::xtra_mi_layout::run(&s(a, "modPath"), &s(a, "gamePaks"), &s(a, "usmapPath"), &s(a, "modExtract"), &list(a, "files"), &s(a, "stageDir"), p).await?),
             "xtra_vfx_niagara" => {
                 let vanilla = PathBuf::from(s(a, "vanillaExtract")).parent().map(Path::to_path_buf).unwrap_or_default();
                 let work = PathBuf::from(s(a, "stageDir")).join("niagara");

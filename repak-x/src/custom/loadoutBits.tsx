@@ -16,8 +16,6 @@ import { GAME_RUNNING } from './keepOne'
 import { CaptionIcon, CaptionStyleBar } from './captionStyle'
 import { loadoutHero, silhouetteOf } from './silhouettes'
 import { CardTools } from './CardTools'
-import { NexusPictures } from './nexus'
-import nexusLogo from './logos/nexus.png'
 import './support.css'
 import { captionBackgroundKey } from './loadoutStore'
 
@@ -88,16 +86,10 @@ export type CaptureSlot = { show: boolean; hero?: string; button: (className: st
  *  (an icon above the words, in a picked color). The card shows the picked source (cover), or the first it has.
  *  With generate (the loadout page) a Cover switch under the card picks the source; an empty source holds its own way
  *  to fill it (Generate, Capture, choose a file, type), and a filled one keeps it in a corner with an X to remove it. */
-export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage, onRemoveCapture, emptyText = 'Click to add an image, or paste one', generate, capture, nexus }: {
+export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage, onRemoveCapture, emptyText = 'Click to add an image, or paste one', generate, capture }: {
   p: LoadoutProps; l: Loadout; className?: string; title: string; onClick: () => void; onRemoveImage?: () => void; onRemoveCapture?: () => void
   emptyText?: string; generate?: (className: string) => React.ReactNode; capture?: CaptureSlot
-  /** The page's From Nexus beside Choose an image: the loadout's Nexus mods, and where a picked picture goes */
-  nexus?: { ids: number[]; onPick: (image: Blob) => Promise<boolean> }
 }) {
-  const [nexusOpen, setNexusOpen] = useState(false)
-  const fromNexus = (cls: string) => nexus?.ids.length
-    ? <button type="button" className={cls} onClick={() => setNexusOpen(true)} title="Use a mod's picture from its Nexus Mods page"><img src={nexusLogo} alt="" className="nx-btn-logo" /> From Nexus</button>
-    : null
   usePreviewVersion()
   const page = Boolean(generate)
   const ownUrl = useMediaUrl(l.id, l.mediaRev)
@@ -241,7 +233,6 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
             <small>Shows your own picture, GIF, or video on the card. You can also paste one.</small>
             <span className="nx-cta-pair">
               <button type="button" className={ctaButton} onClick={onClick}><ImagePlus size={14} aria-hidden="true" /> Choose an image</button>
-              {fromNexus(ctaButton)}
             </span>
           </>}
         </div>
@@ -270,10 +261,8 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
       )}
       {/* Image and Text keep their tools behind one arrow in the corner (CardTools.tsx) */}
       {page && !working && ((cover === 'image' && !empty) || (cover === 'text' && CAPTION_BACKGROUND)) && (
-        <CardTools l={l} text={cover === 'text'} top={editing} alert={p.alert} onImage={onClick}
-          onNexus={nexus?.ids.length ? () => setNexusOpen(true) : undefined} />
+        <CardTools l={l} text={cover === 'text'} top={editing} alert={p.alert} onImage={onClick} />
       )}
-      {nexusOpen && nexus && cover === 'image' && <NexusPictures ids={nexus.ids} onPick={nexus.onPick} onClose={() => setNexusOpen(false)} />}
       {remove?.run && (
         <button type="button" className="lo-media-remove" title={`Remove the ${remove.what}`} aria-label={`Remove the ${remove.what}`} onClick={remove.run}>
           <X size={14} />

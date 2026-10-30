@@ -1,12 +1,12 @@
 //! repakxtra: test and dev copies mark their window (and so taskbar) icon in their color, like the "xtra" in the header
 //! (custom/version.ts): green for a test build (`build.ps1 -Test` sets REPAKXTRA_BUILD=test for the Rust build), amber for
+//! the dev copy (dev.ps1 runs a debug build).
 //! The icon is the app's own x with its blues turned to that color.
 
 /// How far this copy turns the icon's blues around the color wheel, in degrees, or None for the stable copy.
 fn mark() -> Option<f32> {
     if cfg!(debug_assertions) {
-    } else if crate::xtra_edition::EXTENDED {
-        Some(if option_env!("REPAKXTRA_BUILD") == Some("test") { 60.0 } else { 140.0 }) // purple test, red stable
+        Some(170.0) // dev, amber
     } else if option_env!("REPAKXTRA_BUILD") == Some("test") {
         Some(-80.0) // test, green
     } else {
@@ -70,7 +70,7 @@ mod tests {
     #[test]
     fn debug_builds_use_the_correct_dev_color() {
         if cfg!(debug_assertions) {
-            assert_eq!(mark(), Some(if crate::xtra_edition::EXTENDED { 100.0 } else { 170.0 }));
+            assert_eq!(mark(), Some(170.0));
         }
     }
 
@@ -84,14 +84,4 @@ mod tests {
         assert!(out[1] > out[2] && out[1] > out[0], "the blue turned green: {:?}", &out[..3]);
     }
 
-    #[test]
-    fn extended_stable_and_test_have_distinct_colors() {
-        let blue = [0x03, 0x4E, 0xFE, 255];
-        let purple = recolor(&blue, 60.0);
-        let red = recolor(&blue, 140.0);
-        assert!(purple[2] > purple[0] && purple[0] > purple[1]);
-        assert!(red[0] > red[1] && red[0] > red[2]);
-        assert_eq!(purple[3], 255);
-        assert_eq!(red[3], 255);
-    }
 }

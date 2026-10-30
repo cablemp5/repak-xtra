@@ -17,12 +17,11 @@ import {
   renameModKey, repakXOpen, takeFresh, useLoadouts, memberName, nameKey, pickMember, modsByKey,
 } from './loadoutStore'
 import { candidatesFor, keysByName, memberFolder } from './loadoutIdentity'
-import { renameSource, sourceOf } from './nexusSource'
+import { renameSource } from './nexusSource'
 import { plural } from './modName'
 import { SwapText } from './motion'
 import { GeneratePreviewsButton, previewSetKey } from './previews'
 import { CaptureButton, captureTarget } from './CapturePreview'
-import { EXTENDED } from './edition'
 
 const PAGE = 60
 
@@ -121,14 +120,13 @@ function MoreMenu({ items, danger, l, loadouts }: { items: MoreItem[]; danger: M
 /** Windows file names cannot hold these; the zip is named after the loadout. */
 const fileName = (name: string) => name.replace(/[<>:"/\\|?*]+/g, '_').trim() || 'loadout'
 
-export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia, onSetMedia, onSetCapture }: {
+export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia, onSetCapture }: {
   p: LoadoutProps
   l: Loadout
   busy: boolean
   onToggle: (on: boolean) => void
   onBack: () => void
   onPickMedia: () => void
-  onSetMedia: (image: Blob) => Promise<boolean>
   onSetCapture: (image: Blob) => Promise<boolean>
 }) {
   const [name, setName] = useState(l.name)
@@ -271,7 +269,6 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
         {/* The picture card and its Cover switch: Preview, Capture, Image or Text, each with its own way to fill it. A new
             empty loadout has it too (its placeholder), so every loadout's page has the same shape */}
         <CardMedia p={p} l={l} className="lp-media" onClick={onPickMedia} onRemoveImage={removeImage} onRemoveCapture={removeCapture}
-          nexus={EXTENDED ? { ids: [...new Set(mine.map(k => byKey.get(k)).map(m => m && sourceOf(m.path)?.id).filter((id): id is number => Boolean(id)))], onPick: onSetMedia } : undefined}
           title={hasMedia ? 'Change image or video (or paste one)' : 'Add an image, GIF, or video (or paste one)'}
           capture={{ ...target, button: (className, label, note) => <CaptureButton p={p} l={l} onUse={onSetCapture} className={className} label={label} note={note} /> }}
           generate={className => <GeneratePreviewsButton className={className} label="Generate previews" set={previewSetKey(l.id)} name={l.name} stopOnly

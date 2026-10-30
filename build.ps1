@@ -1,44 +1,20 @@
-# Editions: .\build.ps1 -Test -Edition Standard | .\build.ps1 -Test -Edition Extended
-# Release tags: v<version> for Standard; extended-v<version> for Extended, in the SAME repository.
-# Extended's first build: add -SigeonArchive <path>. The staged ZIP is ignored by Git.
 # Local builds are TEST ONLY. Stable applications update through the in-app updater.
-# .\build.ps1 -Test -Edition Standard
+# .\build.ps1 -Test
 # -Release prepares a separate update ZIP; it never replaces an installed stable app.
 param(
     [switch]$Test,
     [switch]$Release,
-    [switch]$SkipTools,
-    [string]$SigeonArchive
+    [switch]$SkipTools
 )
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
-$isExtended = $Edition -ne 'Standard'
-$editionName = if ($isExtended) { 'extended' } else { 'standard' }
-$editionSuffix = if ($isExtended) { '-Extended' } else { '' }
-$tagPrefix = if ($isExtended) { 'extended-v' } else { 'v' }
+# Installed copies check "standard" in the update ZIP's name and edition.json
+$editionName = 'standard'
+$appName = 'repakxtra'
+$tagPrefix = 'v'
 if (-not $Test -and -not $Release) { throw 'Stable apps update only through the app. Use -Test for local builds, or -Release to prepare separate update artifacts.' }
 if ($Test -and $Release) { throw 'Choose -Test or -Release, not both.' }
 if ($Release -and $SkipTools) { throw 'Release builds require clean main and freshly built tools.' }
-if ($isExtended) {
-    $unlockHash = Join-Path $PSScriptRoot 'repak-x\resources\extended\activation.sha256'
-    if (-not (Test-Path -LiteralPath $unlockHash) -or (Get-Content -Raw -LiteralPath $unlockHash).Trim() -cnotmatch '^[0-9a-f]{64}$') {
-        throw 'Configure the shared code first: powershell -File scripts/Set-ExtendedUnlockCode.ps1'
-    }
-    $staged = Join-Path $PSScriptRoot 'repak-x\resources\extended\ProjectSigeon.zip'
-    if ($SigeonArchive) {
-        $source = (Resolve-Path -LiteralPath $SigeonArchive).Path
-        New-Item -ItemType Directory -Force (Split-Path $staged) | Out-Null
-        if ($source -ne $staged) { Copy-Item -LiteralPath $source -Destination $staged -Force }
-    }
-    if (-not (Test-Path -LiteralPath $staged)) { throw 'Extended needs -SigeonArchive <path-to-ProjectSigeon-V2.0.0.zip> on its first build.' }
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
-    $archive = [IO.Compression.ZipFile]::OpenRead($staged)
-    try {
-        foreach ($extension in @('pak', 'utoc', 'ucas')) {
-            if (-not $archive.GetEntry("Minimal/!ProjectSigeon_9999999_P.$extension")) { throw "Sigeon archive is missing the Minimal .$extension file." }
-        }
-    } finally { $archive.Dispose() }
-}
 
 if ($Release) {
     $branch = (git rev-parse --abbrev-ref HEAD)
@@ -47,6 +23,7 @@ if ($Release) {
 }
 if ($Release) {
     git fetch -q origin main
+    if ($LASTEXITCODE -ne 0) { throw 'Could not reach GitHub to check main. Nothing was built.' }
     if ((git rev-parse HEAD) -ne (git rev-parse origin/main)) { throw 'Release what GitHub has: run git pull on main first.' }
     $ver = [regex]::Match((Get-Content -Raw repak-x\src\custom\version.ts), "REPAKXTRA_VERSION = '([^']+)'").Groups[1].Value
     if (-not $ver) { throw 'No REPAKXTRA_VERSION in repak-x\src\custom\version.ts.' }
@@ -63,15 +40,15 @@ function Run([scriptblock]$cmd) { & $cmd; if ($LASTEXITCODE -ne 0) { throw "Fail
 
 # A junction can move while a process keeps running from its original target. Probe the files, not process paths.
 . .\scripts\build-output.ps1
-$link = "dist\repakxtra-Test$editionSuffix"
+$link = "dist\repakxtra-Test"
 if ($Release) {
-    $out = "dist\Repak-X-Release$editionSuffix"   # never run from, so a fresh folder holds exactly what ships
+    $out = "dist\Repak-X-Release"   # never run from, so a fresh folder holds exactly what ships
     if (-not (Test-BuildOutputAvailable $out)) { throw 'Close the release copy before rebuilding it.' }
     $releasePath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot $out))
     if (-not $releasePath.StartsWith((Join-Path $PSScriptRoot 'dist') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Release output escaped dist.' }
     if (Test-Path -LiteralPath $releasePath) { Remove-Item -LiteralPath $releasePath -Recurse -Force }
 } elseif ($Test) {
-    $out = Get-FreeBuildOutput "dist\Repak-X-Test$editionSuffix" "dist\Repak-X-Test-next$editionSuffix"
+    $out = Get-FreeBuildOutput "dist\Repak-X-Test" "dist\Repak-X-Test-next"
 }
 
 # repakxtra's fixes to UAssetToolRivals (uassettool-patches\, see its README): applied for the publish and taken out again,
@@ -97,22 +74,21 @@ Use-UatPatches {
 }
 Push-Location repak-x
 Run { npm install }
-$env:VITE_REPAKXTRA_EDITION = $editionName
+# Test copies mark themselves green. Release branding is blue.
 $env:VITE_REPAKXTRA_TEST = if ($Test) { '1' } else { '' }
 $env:REPAKXTRA_BUILD = if ($Test) { 'test' } else { '' }
 Run { npm run build }
-Run { node scripts/check-edition.mjs }
 Pop-Location
 $env:SKIP_UASSET_TOOL_BUILD = '1'
-$features = if ($isExtended) { 'custom-protocol,extended' } else { 'custom-protocol' }
-Run { cargo build --release --target x86_64-pc-windows-msvc --features $features }
+Run { cargo build --release --target x86_64-pc-windows-msvc --features custom-protocol }
 
 if (-not (Test-BuildOutputAvailable $out)) { throw 'The selected copy was opened during the build. Close it and run the build again.' }
 New-Item -ItemType Directory -Force "$out\data" | Out-Null
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot "$out\edition.json"), "{`"edition`":`"$editionName`"}")
-# older repakxtra.exe), so a shortcut still pointing at it fails instead of opening a stale copy.
+# cargo names the exe after upstream's bin (REPAK-X); it ships as repakxtra.exe (Task Manager and Explorer show that
+# name). An older build's REPAK-X.exe goes, so a shortcut still pointing at it fails instead of opening a stale copy.
+$exeName = 'repakxtra.exe'
 Copy-Item target\x86_64-pc-windows-msvc\release\REPAK-X.exe "$out\$exeName" -Force
-if ($isExtended) { Remove-Item "$out\repakxtra.exe" -ErrorAction SilentlyContinue }
 Copy-Item target\uassettool\* $out -Recurse -Force
 Remove-Item "$out\*.pdb", "$out\UAssetTool.exe", "$out\REPAK-X.exe" -ErrorAction SilentlyContinue
 Copy-Item target\uassettool-cli\UAssetTool.exe "$out\uassettool-cli.exe" -Force
@@ -160,7 +136,7 @@ if ($Release) {
     [IO.File]::WriteAllText((Join-Path $PWD $notes), ($body -join "`n") + "`n")
     Write-Host "Notes: $notes" -ForegroundColor Green
     # On the clipboard as one line: a wrapped terminal line copied by hand can pick up a line break and fail to parse
-    $releaseFlags = if ($isExtended) { '--prerelease --latest=false' } else { '--latest' }
+    $releaseFlags = '--latest'
     $publish = "gh release create $tagPrefix$ver $zip $sum -R cablemp5/repak-xtra --target main $releaseFlags --title `"$appName $ver`" --notes-file $notes"
     Set-Clipboard -Value $publish
     Write-Host 'The publish command is on the clipboard: paste it and press Enter:'

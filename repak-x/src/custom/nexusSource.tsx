@@ -4,12 +4,12 @@
 // Mods installed before that (or by another app) get theirs once, from the Nexus downloads still in Downloads.
 import { useEffect, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { ArrowUpCircle, ExternalLink } from 'lucide-react'
+import { ExternalLink } from 'lucide-react'
 import { nameKey } from './loadoutStore'
 import { installedKey } from './installLoadout'
 import { savedItem } from './storageCarryOver'
 import nexusLogo from './logos/nexus.png'
-import { getNexusFile, openNexusPage, pageUrl, updateOf, useNexusUpdates } from './nexus'
+import { openNexusPage, pageUrl } from './nexus'
 
 export type NexusSource = { id: number; version: string; uploaded: number }
 type Found = NexusSource & { paks?: string[] }
@@ -112,7 +112,6 @@ export const useNexusVersion = () => useSyncExternalStore(subscribe, () => saved
 
 const useSource = (path: string) => {
   useNexusVersion()
-  useNexusUpdates()
   return sourceOf(path)
 }
 
@@ -126,40 +125,24 @@ if (import.meta.env.DEV) {
 export function NexusSourceLine({ path }: { path: string }) {
   const s = useSource(path)
   if (!s) return null
-  const u = updateOf(s)
   return (
     <div className="detail-item nx-source">
       <span className="detail-label">Source:</span>
       <span className="detail-value" title={`File version ${s.version}, uploaded ${new Date(s.uploaded * 1000).toUTCString()}`}>
         Nexus Mods, uploaded {day(s.uploaded)}
         <button type="button" className="su-link nx-open" onClick={() => openNexusPage(s.id)}><ExternalLink size={12} /> Open page</button>
-        {u && <button type="button" className="su-link nx-open nx-update" onClick={() => getNexusFile(u.modId, u.fileId, path)}
-          title={`${u.name}, uploaded ${day(u.date)}`}><ArrowUpCircle size={12} /> Update to {u.version}</button>}
       </span>
     </div>
   )
 }
 
-/** The Library row's Nexus tag (Settings > On each mod hides it): a click opens the mod's Nexus page. With a newer
- *  version out the tag splits: its blue half shows the version, and a click there gets it in place of this one (nexus.tsx getNexusFile). */
+/** The Library row's Nexus tag (Settings > On each mod hides it): a click opens the mod's Nexus page. */
 export function NexusTag({ path }: { path: string }) {
   const s = useSource(path)
   if (!s) return null
-  const u = updateOf(s)
-  const tag = (
+  return (
     <button type="button" className="mod-type-badge nexus-badge" title={`Installed from Nexus Mods, uploaded ${day(s.uploaded)}. Click to open its page`}
       onClick={e => { e.stopPropagation(); openNexusPage(s.id) }}><img className="tag-logo" src={nexusLogo} alt="" />Nexus</button>
-  )
-  if (!u) return tag
-  // a newer version: one split badge, the orange Nexus half opens the page, the blue half with the version updates
-  const v = /^v/i.test(u.version) ? u.version : `v${u.version}`
-  return (
-    <span className="nexus-split">
-      {tag}
-      <button type="button" className="mod-type-badge nexus-update-chip" title={`Version ${u.version} is on Nexus Mods (uploaded ${day(u.date)}). Click to update`}
-        aria-label={`Update from Nexus Mods to ${v}`} onClick={e => { e.stopPropagation(); getNexusFile(u.modId, u.fileId, path) }}>
-        <ArrowUpCircle size={13} strokeWidth={2.25} aria-hidden="true" />{v} available</button>
-    </span>
   )
 }
 

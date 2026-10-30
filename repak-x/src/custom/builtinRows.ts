@@ -1,40 +1,28 @@
-import { EXTENDED } from './edition'
 // repakxtra: the built-in mods (xtra_builtins.rs, custom/BuiltinMods.tsx) as rows of the Library's list, with a blue
 // Built-in badge. Their switch turns the built-in on or off. They are not real library entries: never selected,
 // renamed, deleted, given a priority or put in loadouts, so App.tsx and ModsList.tsx check isBuiltin before those.
 import { useEffect, useMemo } from 'react'
-import { type Builtin, QUAKE_DEFAULT, builtinAbout, loadBuiltins, useBuiltins } from './BuiltinMods'
-import { colorName } from './colorName'
+import { builtinAbout, loadBuiltins, useBuiltins } from './BuiltinMods'
 import { useUiPref } from './uiPrefs'
 
-/** A built-in's file (its .pak under ~mods/.repakxtra-builtin), by path. */
-export const isBuiltin = (path: string) => /[\\/]\.repakxtra-builtin[\\/]/i.test(path)
-
-const listOf = (names: string[]) => names.length <= 2 ? names.join(' and ') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`
-
-/** What it is and what it is set to: Force default skin "(Except Black Panther)", CustomQuake "(Slate Map, Light Blue Sky,
- *  Hidden Plants, Includes Lobby)" (the two colors always, a switch only when it is on). */
-export function builtinName(b: Pick<Builtin, 'id' | 'excluded' | 'quake'>, heroName: (id: string) => string | undefined) {
-  const base = builtinAbout(b.id)?.name ?? b.id
-  if (EXTENDED && b.id === 'custom-quake') {
-    const q = b.quake ?? QUAKE_DEFAULT
-    return `${base} (${[`${colorName(q.base)} Map`, `${colorName(q.sky)} Sky`, q.hidePlants && 'Hidden Plants', q.lobby && 'Includes Lobby'].filter(Boolean).join(', ')})`
-  }
-  if (!EXTENDED || !['force-default-skin', 'no-impact', 'no-tracers', 'no-screen-shake'].includes(b.id) || !b.excluded.length) return base
-  return `${base} (Except ${listOf(b.excluded.map(id => heroName(id) ?? `hero ${id}`).sort())})`
+/** One of this app's built-ins (its .pak under ~mods/.repakxtra-builtin), by path. Another app's built-ins in that
+ *  folder are ordinary Library mods (xtra_builtins.rs is_own). */
+export const isBuiltin = (path: string) => {
+  const id = /[\\/]\.repakxtra-builtin[\\/]repakxtra-(.+?)_\d+_P\.[^.\\/]+$/i.exec(path)?.[1]
+  return Boolean(id && builtinAbout(id))
 }
 
 /** The Library's rows for the built-ins, shaped like mod records. */
-export function useBuiltinRows(heroName: (id: string) => string | undefined) {
+export function useBuiltinRows() {
   const { list } = useBuiltins()
   const shown = useUiPref('builtins') // Settings > Library > Hide built-in mods
   useEffect(() => { if (!list.length) void loadBuiltins() }, [list.length])
   return useMemo(() => !shown ? [] : list.map(b => ({
-    path: b.path, custom_name: builtinName(b, heroName), enabled: b.on, file_size: b.size, priority: 0, builtin: b.id,
-  })), [list, heroName, shown])
+    path: b.path, custom_name: builtinAbout(b.id)?.name ?? b.id, enabled: b.on, file_size: b.size, priority: 0, builtin: b.id,
+  })), [list, shown])
 }
 
 if (import.meta.env.DEV) {
-  console.assert(isBuiltin('C:/G/Paks/~mods/.repakxtra-builtin/repakxtra-skip-intro-movies_9999999_P.pak') && !isBuiltin('C:/G/Paks/~mods/a.pak'), 'built-in paths')
-  console.assert(listOf(['A', 'B', 'C', 'D']) === 'A, B and 2 more' && listOf(['A', 'B']) === 'A and B', 'excluded heroes in the name')
+  console.assert(isBuiltin('C:/G/Paks/~mods/.repakxtra-builtin/repakxtra-skip-intro-movies_9999999_P.pak') && !isBuiltin('C:/G/Paks/~mods/a.pak')
+    && !isBuiltin('C:/G/Paks/~mods/.repakxtra-builtin/repakxtra-some-thing_9999999_P.pak'), "built-in paths, another app's are ordinary mods")
 }

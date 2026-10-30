@@ -17,7 +17,7 @@ import { BuiltinIcon, revealBuiltin, useBuiltins } from '../custom/BuiltinMods' 
 import { NexusTag } from '../custom/nexusSource' // repakxtra
 import { LoadoutTag } from '../custom/LoadoutTag' // repakxtra
 import { useVfxUpdating } from '../custom/vfx/quick' // repakxtra
-import { LockKeyhole } from 'lucide-react' // repakxtra: the encrypted mark
+import { Lock } from 'lucide-react' // repakxtra: the encrypted mark
 import { detectHeroesWithData } from '../utils/heroes'
 import { useHoverTextReveal } from '../hooks/useHoverTextReveal'
 import { FALLBACK_HERO_ID, resolveHeroImage, useHeroImages } from '../utils/heroImages'
@@ -305,7 +305,7 @@ const ModItem = memo(function ModItem({
     const heroImage = (showHeroIcons || showHeroBg) && !builtin ? getHeroImage(characterName, characterData, modDetails?.character_id) : null
     const isCardView = viewMode === 'grid' || viewMode === 'compact'
     const showSize = useUiPref('mod-size') // repakxtra
-    const typeHint = useTypeHint(category) // repakxtra: badge tooltip for Audio, and UI under Sigeon
+    const typeHint = useTypeHint(category) // repakxtra: badge tooltip for Audio
     const sizeTag = showSize && <span className="mod-size-tag">{formatFileSize(mod.file_size ?? 0)}</span> // repakxtra
 
     // Detect heroes for multi-hero mods - check both characterName and mod_type
@@ -505,7 +505,7 @@ const ModItem = memo(function ModItem({
                             onClick={(e) => { e.stopPropagation(); revealBuiltin(mod.builtin) }}>Built-in</button>
                     )}
                     <NexusTag path={mod.path} />{/* repakxtra: installed from Nexus Mods (custom/nexusSource.tsx), right of the file size */}
-                    {modDetails?.is_encrypted && <span className="mod-type-badge mod-lock" title="This mod is encrypted"><LockKeyhole size={9} aria-hidden="true" />Encrypted</span>}{/* repakxtra: Settings > On each mod hides it */}
+                    {modDetails?.is_encrypted && <span className="mod-type-badge mod-lock" title="This mod is encrypted"><Lock size={9} aria-hidden="true" />Encrypted</span>}{/* repakxtra: Settings > On each mod hides it */}
                     {!builtin && <LoadoutTag path={mod.path} />}{/* repakxtra: the loadouts it is in (custom/LoadoutTag.tsx) */}
                     {/* repakxtra: Project Galacta compatible mods (xtra_classify.rs) */}
                     {typeof modDetails?.mod_type === 'string' && /\[[^\]]*Project Galacta[^\]]*\]$/.test(modDetails.mod_type) && (

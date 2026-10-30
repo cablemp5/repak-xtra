@@ -7,14 +7,8 @@ mod asset_explorer;
 mod xtra_classify; // repakxtra: extra mod types, Project Galacta check
 mod xtra_made; // repakxtra: installed mods keep when they were made (the Needs VFX update check)
 mod xtra_vfx_check; // repakxtra: Check for VFX update (built for this game version or an older one)
-#[cfg(feature = "extended")]
-mod xtra_activation;
-#[cfg(not(feature = "extended"))]
 mod xtra_legacy_setup;
 mod xtra_edition;
-mod xtra_quake_options;
-#[cfg(feature = "extended")]
-mod xtra_sigeon; // repakxtra: Sigeon V2 switch
 mod xtra_setup; // repakxtra: Setup panel (signature bypass, Project Galacta)
 mod xtra_project;
 mod xtra_kit; // repakxtra: preview kit (previews on other PCs)
@@ -31,7 +25,6 @@ mod xtra_crash; // repakxtra: crash facts for the setup report, crash suspects
 mod xtra_broken; // repakxtra: mods that will not work in the installed game version
 mod xtra_layout; // repakxtra: May crash from the game classes an update changed
 mod xtra_nexus; // repakxtra: Nexus source from archive names
-#[cfg(feature = "extended")]
 mod xtra_offfiles; // repakxtra: .pak.off files install like .pak
 mod xtra_bundle; // repakxtra: a mod's pak/utoc/ucas found and moved as one set
 mod xtra_encrypt;
@@ -41,20 +34,15 @@ mod xtra_repair; // repakxtra: Settings > Check app files and Repair
 mod xtra_conflicts; // repakxtra: conflict comparison by normalized asset path, cached file lists
 mod xtra_heroes; // repakxtra: the hero and skin folder of an asset path
 mod xtra_game; // repakxtra: the game update notice
-#[cfg(feature = "extended")]
-mod xtra_quake; // repakxtra: CustomQuake built-in (flat map textures)
 mod xtra_role; // repakxtra: Claim role on cable's Discord card
 mod xtra_extract; // repakxtra: unpacks only archives whose paths stay inside the output folder
 mod xtra_library_files; // repakxtra: the part of a mod's file list the Library reads
 mod xtra_details_cache; // repakxtra: the mod details cache kept between launches
 mod xtra_vfx; // repakxtra: VFX fixing after game updates
 mod xtra_niagara; // repakxtra: the VFX Updater's Niagara step
+mod xtra_mi_layout; // repakxtra: the VFX Updater rewrites materials cooked in an older property layout
 mod xtra_uat_cli; // repakxtra: IoStore extracts through UAssetTool's parallel command line
 mod xtra_builtins; // repakxtra: built-in mods made from the game's own tables
-#[cfg(feature = "extended")]
-mod xtra_visual_builtins;
-#[cfg(feature = "extended")]
-mod xtra_login_video;
 mod character_data;
 mod crash_monitor;
 mod discord_presence;
@@ -658,12 +646,12 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
     let mut mods = Vec::new();
 
     // Scan root ~mods directory and all subdirectories recursively (no depth limit)
-    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::not_staging) /* repakxtra */.filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::library_walk) /* repakxtra */.filter_map(|e| e.ok()) {
         let path = entry.path();
 
         // Skip directories themselves (repakxtra: the walk already knows, no extra disk stat per file)
-        if entry.file_type().is_dir() {
-            continue;
+        if entry.file_type().is_dir() || crate::xtra_builtins::is_own(path) {
+            continue; // repakxtra: and this app's own built-ins, which are its built-in rows
         }
 
         let ext = path.extension().and_then(|s| s.to_str());
@@ -682,7 +670,7 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
 
             // Determine folder_id based on relative path from game_path
             let folder_id = if let Some(parent) = path.parent() {
-                if parent == game_path {
+                if parent == game_path || crate::xtra_builtins::in_folder(path) { // repakxtra: another app's built-ins show at the top
                     // Mod is directly in root - use root folder name (e.g., "~mods")
                     Some(root_folder_name)
                 } else {
@@ -756,7 +744,7 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
                 path: path.to_path_buf(),
                 utoc_path,
                 enabled: is_enabled,
-                custom_name: None,
+                custom_name: crate::xtra_builtins::in_folder(path).then(|| crate::xtra_builtins::shown_name(path)).flatten(), // repakxtra
                 folder_id,
                 custom_tags,
                 file_size,
@@ -907,6 +895,7 @@ async fn set_mod_priority(
     priority: usize,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<(), String> {
+    crate::xtra_builtins::fixed_place(Path::new(&mod_path))?; // repakxtra
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let path = PathBuf::from(&mod_path);
@@ -3512,6 +3501,7 @@ async fn update_mod(
     window: Window,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<UpdateModResult, String> {
+    crate::xtra_builtins::fixed_place(Path::new(&old_mod_path))?; // repakxtra
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     info!(
@@ -3990,6 +3980,7 @@ async fn rename_mod(
     window: Window,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<String, String> {
+    crate::xtra_builtins::fixed_place(Path::new(&mod_path))?; // repakxtra
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let old_path_buf = PathBuf::from(&mod_path);
@@ -4593,6 +4584,7 @@ async fn assign_mod_to_folder(
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
 ) -> Result<(), String> {
+    crate::xtra_builtins::fixed_place(Path::new(&mod_path))?; // repakxtra
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let state = state.lock().unwrap();
@@ -7744,10 +7736,10 @@ fn scan_mod_clashes(quiet: bool, game_path: &Path, state: &Arc<Mutex<AppState>>)
     let mut mods_info: Vec<crate::xtra_conflicts::Container> = Vec::new();
 
     // Scan all enabled mods
-    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::not_staging) /* repakxtra */.filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::library_walk) /* repakxtra */.filter_map(|e| e.ok()) {
         let path = entry.path();
 
-        if path.is_dir() {
+        if path.is_dir() || crate::xtra_builtins::is_own(path) {
             continue;
         }
 
@@ -7990,10 +7982,10 @@ async fn check_single_mod_conflicts(
     let mut conflicts: Vec<SingleModConflict> = Vec::new();
 
     // Scan all other enabled mods
-    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::not_staging) /* repakxtra */.filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::library_walk) /* repakxtra */.filter_map(|e| e.ok()) {
         let path = entry.path();
 
-        if path.is_dir() {
+        if path.is_dir() || crate::xtra_builtins::is_own(path) {
             continue;
         }
 
@@ -8385,8 +8377,6 @@ fn register_protocol_handler() -> Result<(), Box<dyn std::error::Error>> {
 
 fn handle_deep_link_url(url: &str, app_handle: &tauri::AppHandle) {
     if xtra_role::on_link(url, app_handle) { return; } // repakxtra: Claim role's answer, before the log line (its state stays out of the log)
-    #[cfg(feature = "extended")]
-    if xtra_nexus_api::on_link(url, app_handle) { return; } // repakxtra: a Nexus Mod manager download (its key stays out of the log)
     info!("Processing deep link URL: {}", url);
 
     if let Ok(parsed) = url::Url::parse(url) {
@@ -8614,6 +8604,7 @@ fn main() {
 
             // Check if args contains a repakx:// URL
             for arg in args.iter() {
+                if arg.starts_with("repakx://") {
                     info!("Received deep link from second instance: {}", arg.split('?').next().unwrap_or(""));
                     handle_deep_link_url(arg, app);
                 }
@@ -8646,8 +8637,6 @@ fn main() {
                     );
                 } else {
                     info!("Successfully registered repakx:// protocol handler");
-                    #[cfg(feature = "extended")]
-                    xtra_nexus_api::reclaim_nxm(app.handle()); // repakxtra: Nexus download links, when a key is saved
                     ui_log::debug("Startup", "repakx:// protocol handler registered");
                 }
             }
@@ -8679,6 +8668,7 @@ fn main() {
 
                 for arg in args.iter().skip(1) {
                     // Skip the exe path itself
+                    if arg.starts_with("repakx://") {
                         info!("Found cold-start deep link URL: {}", arg.split('?').next().unwrap_or("")); // repakxtra: no query
                         handle_deep_link_url(arg, &startup_app_handle);
                         break; // Only process the first repakx:// URL
@@ -8741,8 +8731,6 @@ fn main() {
             xtra_vfx::xtra_niagara_mods, // repakxtra: setup report
             xtra_builtins::xtra_builtins_list, // repakxtra: built-in mods
             xtra_builtins::xtra_builtins_set,
-            #[cfg(feature = "extended")]
-            xtra_quake::xtra_quake_progress, // repakxtra: CustomQuake's build progress
             xtra_builtins::xtra_builtins_refresh,
             xtra_vfx::xtra_vfx_claim,
             xtra_vfx::xtra_vfx_release,
@@ -8755,27 +8743,12 @@ fn main() {
             xtra_builtins::xtra_skin_table_hero,
             xtra_niagara::xtra_vfx_layout_scan,
             xtra_niagara::xtra_vfx_old_layout,
+            xtra_mi_layout::xtra_vfx_relayout, // repakxtra: materials in an older property layout
             xtra_niagara::xtra_usmap_waiting, // repakxtra: checks again once the USMAP of this game build is out
             xtra_broken::xtra_vfx_usmap_wait, // repakxtra: a VFX update waits only when the patch changed its files
             xtra_nexus::xtra_nexus_sources, // repakxtra: Nexus source
             xtra_nexus::xtra_nexus_downloads, // repakxtra: Nexus downloads still in Downloads, for the one-time scan
             xtra_nexus::xtra_install_paks, // repakxtra: the paks an install puts in place, for loadouts made at install
-            #[cfg(feature = "extended")]
-            xtra_nexus_api::xtra_nexus_account, // repakxtra: Nexus account, downloads and its in-app window
-            #[cfg(feature = "extended")]
-            xtra_nexus_api::xtra_nexus_set_key,
-            #[cfg(feature = "extended")]
-            xtra_nexus_api::xtra_nexus_forget_key,
-            #[cfg(feature = "extended")]
-            xtra_nexus_api::xtra_nexus_gql,
-            #[cfg(feature = "extended")]
-            xtra_nexus_api::xtra_nexus_download,
-            #[cfg(feature = "extended")]
-            xtra_nexus_api::xtra_nexus_open,
-            #[cfg(feature = "extended")]
-            xtra_nexus_api::xtra_nexus_pending,
-            #[cfg(feature = "extended")]
-            xtra_nexus_api::xtra_nexus_images,
             xtra_previews::get_preview_emotes, // repakxtra: emote sounds over animation previews
             xtra_previews::get_preview_audio,
             xtra_offfiles::xtra_stage_off_files, // repakxtra: .pak.off files
@@ -8786,35 +8759,7 @@ fn main() {
             xtra_capture::capture_game_now,
             xtra_capture::capture_game_hotkey,
             xtra_capture::capture_game_cancel,
-            #[cfg(feature = "extended")]
-            xtra_activation::extended_access_status,
-            #[cfg(feature = "extended")]
-            xtra_activation::extended_unlock,
-            #[cfg(feature = "extended")]
-            xtra_sigeon::sigeon_status,
-            #[cfg(feature = "extended")]
-            xtra_sigeon::sigeon_set,
-            #[cfg(feature = "extended")]
-            xtra_sigeon::sigeon_read, // repakxtra: Sigeon editor
-            #[cfg(feature = "extended")]
-            xtra_sigeon::sigeon_save,
-            #[cfg(feature = "extended")]
-            xtra_sigeon::sigeon_create,
-            #[cfg(feature = "extended")]
-            xtra_sigeon::sigeon_rename,
-            #[cfg(feature = "extended")]
-            xtra_sigeon::sigeon_delete,
-            #[cfg(feature = "extended")]
-            xtra_sigeon::sigeon_restore,
-            #[cfg(feature = "extended")]
-            xtra_sigeon::sigeon_storage,
-            #[cfg(feature = "extended")]
-            xtra_sigeon::sigeon_set_storage,
-            #[cfg(feature = "extended")]
-            xtra_sigeon::sigeon_open,
-            #[cfg(not(feature = "extended"))]
             xtra_legacy_setup::legacy_setup_status,
-            #[cfg(not(feature = "extended"))]
             xtra_legacy_setup::legacy_setup_disable,
             xtra_setup::setup_bypass_status, // repakxtra: Setup panel
             xtra_setup::setup_bypass,

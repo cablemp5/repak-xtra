@@ -198,7 +198,7 @@ fn parked_path(pak: &Path) -> PathBuf {
 
 pub fn select(mods: &Path) -> Result<bool, String> {
     // Most calls (every launch, every app open) find nothing to switch: those must never wait on or fail a guard.
-    if plan(mods, crate::xtra_edition::EXTENDED)?.is_empty() {
+    if plan(mods, false)?.is_empty() {
         return Ok(false);
     }
     let _exclusive = crate::xtra_mutation::encrypt()?;
@@ -206,9 +206,7 @@ pub fn select(mods: &Path) -> Result<bool, String> {
     if crate::is_game_process_running() {
         return Err("Close Marvel Rivals before switching project loaders.".into());
     }
-    #[cfg(feature = "extended")]
-    crate::xtra_activation::require()?;
-    switch(mods, crate::xtra_edition::EXTENDED)
+    switch(mods, false)
 }
 
 pub fn on_open(app: &tauri::AppHandle) {
@@ -452,33 +450,4 @@ mod tests {
         assert!(temp.path().join("ProjectSigeon.pak").exists());
     }
 
-    #[cfg(feature = "extended")]
-    #[test]
-    fn first_successful_unlock_switches_projects_after_saving_the_receipt() {
-        use sha2::{Digest, Sha256};
-        let temp = tempfile::tempdir().unwrap();
-        let mods = temp.path().join("mods");
-        fs::create_dir(&mods).unwrap();
-        fs::write(mods.join("ProjectGalacta.pak"), b"galacta").unwrap();
-        fs::write(mods.join("ProjectSigeon.bak_repak"), b"sigeon").unwrap();
-        let receipt = temp.path().join("settings/receipt");
-        let hash = format!("{:x}", Sha256::digest(b"fixture-only"));
-        let bundled = format!("{:x}", Sha256::digest(hash.as_bytes()));
-        assert!(
-            crate::xtra_activation::unlock_then("wrong", &bundled, &receipt, || panic!(
-                "invalid unlock must never switch"
-            ))
-            .is_err()
-        );
-        assert!(!receipt.exists());
-        assert!(mods.join("ProjectGalacta.pak").exists());
-        assert!(!mods.join("ProjectSigeon.pak").exists());
-        crate::xtra_activation::unlock_then("fixture-only", &bundled, &receipt, || {
-            assert_eq!(fs::read_to_string(&receipt).unwrap(), hash);
-            switch(&mods, true).unwrap();
-        })
-        .unwrap();
-        assert_eq!(fs::read(mods.join("ProjectSigeon.pak")).unwrap(), b"sigeon");
-        assert!(!mods.join("ProjectGalacta.pak").exists());
-    }
 }

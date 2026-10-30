@@ -28,7 +28,6 @@ import {
 import { savedItem } from './storageCarryOver'
 import { useUpstreamWatch } from './upstream'
 import { useUiPref } from './uiPrefs'
-import { EXTENDED } from './edition'
 
 type GroupBy = 'group' | 'hero'
 const GROUP_BY_KEY = 'repakxtra.loadoutGroupBy'
@@ -116,19 +115,17 @@ function GroupHead({ p, name, count, at, total, editing, setEditing, folded, onF
   )
 }
 
-/** Home | Library | Nexus Mods switch for the app header (Nexus Mods unless Settings hides it). Its own class: the 1/2/3 hotkeys click the first .mod-state-filter. The
+/** Home | Library switch for the app header. Its own class: the 1/2/3 hotkeys click the first .mod-state-filter. The
  *  Loadouts tab lands on the cards (not a loadout page left open). The Library tab and L keep the Library as it was
  *  (search, filters, folder, checked and viewed mods, scroll): its Show all button is the deliberate reset (App.tsx). */
 export function ViewTabs() {
   const view = useView()
-  useEffect(() => { if (!nexus && view === 'nexus') setView('library') }, [nexus, view])
+  useEffect(() => { if (view === 'nexus') setView('library') }, [view]) // a view another edition saved
   return (
-    <div className={`view-tabs${nexus ? '' : ' is-two'}`} role="tablist" aria-label="View" data-tour="view-tabs">
+    <div className="view-tabs is-two" role="tablist" aria-label="View" data-tour="view-tabs">
       <button type="button" role="tab" aria-selected={view === 'home'} onClick={() => { openLoadout(null); setView('home') }} title="Loadouts and new mods (L)">Loadouts</button>
       <button type="button" role="tab" aria-selected={view === 'library'} onClick={() => setView('library')}
         title="Every mod, with filters and folders (L)">Library</button>
-      {nexus && <button type="button" role="tab" aria-selected={view === 'nexus'} onClick={() => setView('nexus')}
-        title="Find and install mods from Nexus Mods">Nexus Mods</button>}
     </div>
   )
 }
@@ -502,7 +499,7 @@ function LoadoutsHome(p: LoadoutProps) {
         {hidden}
         <div className="lo-body">
           <LoadoutPage p={p} l={open} busy={busy === open.id} onToggle={on => toggle(open, on)} onBack={closePage}
-            onPickMedia={() => pickMedia(open.id)} onSetMedia={image => setMedia(open.id, image)} onSetCapture={image => setMedia(open.id, image, 'capture')} />
+            onPickMedia={() => pickMedia(open.id)} onSetCapture={image => setMedia(open.id, image, 'capture')} />
         </div>
       </div>
     )
@@ -629,9 +626,10 @@ function LoadoutsHome(p: LoadoutProps) {
           </div>
         )}
 
+        {/* nothing matches the search or On only: a quiet centered note, not the first-run box (cable, 2026-10-30) */}
         {filtered && loadouts.length > 0 && groups.length === 0 && (
-          <div className="lo-first-run">
-            <p>{q ? `No ${onlyOn ? 'loadouts that are on' : 'loadouts'} match “${q}”.` : 'No loadouts are on.'}</p>
+          <div className="lo-no-match" role="status">
+            <p>{q ? `No ${onlyOn ? 'loadouts that are on' : 'loadouts'} match “${q}”` : 'No loadouts are on'}</p>
             <div className="lo-first-actions">
               {q && <button type="button" className="lo-text-btn" onClick={clearSearch}>Clear search</button>}
               {onlyOn && <button type="button" className="lo-text-btn" onClick={() => setOnlyOn(false)}>Show all loadouts</button>}
@@ -665,7 +663,7 @@ function LoadoutsHome(p: LoadoutProps) {
           )
         })}
 
-        {loadouts.length > 0 && (
+        {loadouts.length > 0 && !(filtered && groups.length === 0) && (
           <div className="lo-grid">
             {/* A real card's parts, unseen, give it a real card's size at every width; the plus and words sit on top */}
             <div className="lo-card lo-card-new" data-flip="new">

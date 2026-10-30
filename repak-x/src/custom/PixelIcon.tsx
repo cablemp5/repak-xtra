@@ -60,16 +60,6 @@ function PixelIcon({ size, draw }: { size?: number | string; draw: Draw }) {
 export type BuiltinIconComponent = (props: { size?: number | string }) => ReactNode
 const pixelIcon = (draw: Draw): BuiltinIconComponent => ({ size }) => <PixelIcon size={size} draw={draw} />
 
-/** Force default skin: Lucide's square-user-round, a hero framed like a portrait card. */
-export const PortraitCardIcon = pixelIcon(n => {
-  const cx = n / 2, head = Math.round(n * 0.2), cy = Math.round(n * 0.44), sh = Math.round(n * 0.27)
-  return <>
-    <rect x={1} y={1} width={n - 2} height={n - 2} rx={Math.round(n * 0.15)} />
-    <circle cx={cx} cy={cy} r={head} />
-    <path d={`M${cx - sh} ${n - 1}a${sh} ${sh} 0 0 1 ${2 * sh} 0`} />
-  </>
-})
-
 /** Skip startup logos: Lucide's clapperboard. Both parts are fitted with one scale, so the clapper keeps its size against
  *  the board: Lucide's drawing (x 2 to 21, y 1.6 to 21) fills the grid's 1 px margin. The board's corners are then
  *  rounded onto whole pixels, the tilted clapper keeps Lucide's shape (a slant is never on whole pixels), its line 2 px. */
@@ -88,17 +78,3 @@ export const ClapperboardIcon = pixelIcon(n => {
     </g>
   </>
 })
-
-/** CustomQuake: a map flattened to plain tiles, a rounded square split into four. Every line on whole pixels. */
-export const FlatTilesIcon = pixelIcon(n => {
-  const m = n / 2, r = Math.round(n * 0.15)
-  return <>
-    <rect x={1} y={1} width={n - 2} height={n - 2} rx={r} />
-    <path d={`M${m} 1V${n - 1}M1 ${m}H${n - 1}`} />
-  </>
-})
-
-export const ImpactIcon = pixelIcon((n, k) => <><path d={`M${3*k} ${3*k}l${18*k} ${18*k}M${12*k} ${2*k}v${4*k}m0 ${12*k}v${4*k}M${2*k} ${12*k}h${4*k}m${12*k} 0h${4*k}`} /><circle cx={n/2} cy={n/2} r={5*k} /></>)
-export const TracerIcon = pixelIcon((n, k) => <><path d={`M${3*k} ${5*k}l${18*k} ${14*k}M${3*k} ${12*k}h${5*k}m${3*k} 0h${4*k}m${3*k} 0h${3*k}`} /></>)
-export const ShakeIcon = pixelIcon((n, k) => <><path d={`M${7*k} ${7*k}h${10*k}v${10*k}h-${10*k}zM${3*k} ${9*k}v${6*k}M${21*k} ${9*k}v${6*k}M${9*k} ${3*k}h${6*k}M${9*k} ${21*k}h${6*k}`} /></>)
-export const FovIcon = pixelIcon((n, k) => <><path d={`M${3*k} ${4*k}v${16*k}l${18*k}-${5*k}v-${6*k}zM${7*k} ${12*k}h${10*k}`} /></>)

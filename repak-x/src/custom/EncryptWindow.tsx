@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, listen } from '@tauri-apps/api/event'
 import { open as choose } from '@tauri-apps/plugin-dialog'
-import { AlertTriangle, ChevronRight, FilePlus, LockKeyhole, Search, X } from 'lucide-react'
+import { AlertTriangle, ChevronRight, FilePlus, Lock, Search, X } from 'lucide-react'
 import TitleBar from '../components/TitleBar'
 import Checkbox from '../components/ui/Checkbox'
 import { useGlobalTooltips } from '../hooks/useGlobalTooltips'
@@ -292,7 +292,7 @@ function EncryptPanel() {
         <div className="vf-foot-actions">
           {busy && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={stop}>{cancelling ? 'Cancelling…' : 'Cancel'}</button>}
           <button type="button" className="btn-primary" disabled={busy || !todo.length} onClick={() => void run()}>
-            <LockKeyhole size={14} aria-hidden="true" />{busy ? 'Encrypting…' : todo.length ? <>Encrypt <Num id="enc-todo" value={todo.length} /> {todo.length === 1 ? 'mod' : 'mods'}</> : 'Encrypt'}
+            <Lock size={14} aria-hidden="true" />{busy ? 'Encrypting…' : todo.length ? <>Encrypt <Num id="enc-todo" value={todo.length} /> {todo.length === 1 ? 'mod' : 'mods'}</> : 'Encrypt'}
           </button>
         </div>
       </footer>

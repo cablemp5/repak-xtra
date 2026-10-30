@@ -5,7 +5,6 @@ import './dev/mockBackend' // repakxtra: fake backend for the browser preview, i
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
-import ExtendedAccess from './custom/ExtendedAccess'
 import VfxUpdaterWindow from './custom/vfx/VfxUpdaterWindow' // repakxtra: in place of the upstream VFX Updater's page
 import EncryptWindow from './custom/EncryptWindow' // repakxtra
 import StartedOk from './custom/startedOk' // repakxtra: an update keeps its rollback until the window has rendered
@@ -38,7 +37,7 @@ const rootView = secondary ? secondary.view() : <App />
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <ExtendedAccess>{rootView}</ExtendedAccess>
+    {rootView}
     {!secondary && <StartedOk />}{/* repakxtra */}
   </React.StrictMode>,
 )

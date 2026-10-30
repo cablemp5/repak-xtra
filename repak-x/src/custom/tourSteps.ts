@@ -1,4 +1,3 @@
-import { EXTENDED } from './edition'
 // repakxtra: the tour (components/OnboardingTour.tsx draws it). Only the essentials: what a loadout is, making one,
 // switching and editing it, collections, the Library and adding mods, its filters, then Setup and Launch. One or two
 // short sentences each: people skim a tour, the details live in tooltips where the control is. Each step shows the view its target
@@ -42,7 +41,7 @@ export const TOUR_STEPS: TourStep[] = [
   {
     target: '.bi-section .lo-group-head',
     title: 'Built-in mods',
-    description: EXTENDED ? 'Force default skin, CustomQuake, and Skip startup logos, made from your own game files. Turn one on and it is rebuilt after every game update.' : 'Skip startup logos is made from your own game files. Turn it on and it is rebuilt after every game update.',
+    description: 'Skip startup logos is made from your own game files. Turn it on and it is rebuilt after every game update.',
     placement: 'top',
     onEnter: () => { home(); document.querySelector('.bi-section')?.scrollIntoView({ block: 'center' }) },
   },

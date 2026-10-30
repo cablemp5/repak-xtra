@@ -35,28 +35,11 @@ const slow = () => Number(localStorage.getItem('mock.slow') || 0)
 const wait = (k: number) => new Promise(r => setTimeout(r, slow() * k))
 const baseName = (p: string) => (p.split(/[\\/]/).pop() || p).replace(/(_\d+_P)?\.(pak|bak_repak|pak_disabled)$/i, '').toLowerCase()
 
-let sigeonState = 'off'
-// ?sigeon=unset in the page URL: no Sigeon yet (header > Sigeon not configured opens the setup); a folder whose name
-// has "Sigeon" in it has the loader
-const sigeonUnset = location.search.includes('sigeon=unset')
-const sigeonHome = { path: 'C:\\Users\\you\\Desktop\\Sigeon V2', default: true, loader: !sigeonUnset }
-let sigeonDir = sigeonHome
-// Fake Sigeon configs as the editor sees them (xtra_sigeon.rs Line); the license is only ever a placeholder line
-const sigeonLine = (key: string, value: string, on = true) => ({ kind: 'entry', key, value, on })
-const sigeonPresets: Record<string, any[]> = sigeonUnset ? {} : Object.fromEntries(['base', 'high'].map(v => [v, [
-  { kind: 'comment', text: ' SigeonLoader configuration.' }, { kind: 'blank' }, { kind: 'license', set: true }, { kind: 'blank' },
-  sigeonLine('variant', v), sigeonLine('lowLatency', '0'), sigeonLine('stretched', '1.0'), sigeonLine('darkHair', '0'),
-  sigeonLine('fontAA', '1'), sigeonLine('fixDarkMaps', '1'), sigeonLine('gamma', '0', false), { kind: 'blank' },
-  { kind: 'section', name: 'Overrides' }, { kind: 'comment', text: ' ---- Invisible: streaming, threading ----' },
-  sigeonLine('r.Streaming.PoolSize', '3072'), sigeonLine('r.OneFrameThreadLag', '1'), { kind: 'comment', text: ' Small shadow extras' },
-  sigeonLine('r.ContactShadows', '0'), sigeonLine('r.DetailMode', '1'), { kind: 'blank' },
-]]))
-const sigeonDeleted: Record<string, any[]> = {}
-let mockBypass = sigeonUnset || fresh ? 'missing' : 'installed'   // a fresh PC has neither
+let mockBypass = fresh ? 'missing' : 'installed'   // a fresh PC has neither
 let mockGalacta: any = { installed: fresh ? null : 'C:/Game/~mods', disabled: false, up_to_date: false }
 const galactaRelease = { latest: 'v1.4.1', published: '2026-10-14T14:29:44Z', url: 'https://github.com/0xSaturno/ProjectGalacta/releases/tag/v1.4.1',
   notes: "## What's new:\n\n### Mod Loader:\n- Mods that add custom VFX to abilities are no longer blocked." }
-const setupBypass = () => ({ state: mockBypass, sigeon_on: true, license: 'MIT License\n\nCopyright (c) 2023 ThirteenAG',
+const setupBypass = () => ({ state: mockBypass, license: 'MIT License\n\nCopyright (c) 2023 ThirteenAG',
   files: [{ name: 'dsound.dll', place: 'Binaries\\Win64', size: 415232, sha256: 'bb8767f918c52a2ad055d2de9baffd2478598643b9894f09abd20d1f1ffd170c', found: mockBypass === 'installed' ? 'same' : 'missing' },
     { name: 'MarvelRivalsUTOCSignatureBypass.asi', place: 'Binaries\\Win64\\plugins', size: 44032, sha256: '2f8b183149f30c94319a5f6636491ff39aa22afbbf3f5cbc5fb8f7ecc287a62d', found: mockBypass === 'missing' ? 'missing' : 'same' }] })
 const trash = new Map<string, any>() // trash id -> the deleted mod record
@@ -83,33 +66,9 @@ const setCovers = new Map<string, { covers: string[]; members: string[] | null }
 // one entry per call. window.__previewStep sets the ms between events (600).
 const previewMode = (): string => (Array.isArray(mock.__previewMock) ? mock.__previewMock.shift() : mock.__previewMock) ?? 'ok'
 
-// repakxtra: the built-in mods' saved state (xtra_builtins.rs BuiltinView); heroes are the skin table's 10xx rows
-const builtins: any[] = ['force-default-skin', 'skip-intro-movies', 'custom-quake', 'no-impact', 'no-tracers', 'no-screen-shake', 'fov-slider', 'skip-login-video'].map(id => ({ id, on: false, excluded: [], current: false, active: false, heroes: [] as string[], path: `C:/Mock/Paks/~mods/.repakxtra-builtin/repakxtra-${id}_9999999_P.pak`, size: 150000,
-  ...(id === 'custom-quake' ? { quake: { base: '5d7a80', sky: '82c6ed', hidePlants: false, lobby: true } } : {}) }))
-// CustomQuake (xtra_quake.rs): localStorage 'mock.quakeError' = '1' fails its build, 'mock.quakeOverlap' = '1' says quakeV6 is on too,
-// 'mock.quakeSlow' = '1' makes its build last a minute so the progress bar can be seen
-let quakeStart = 0
-const quakeLength = () => (localStorage.getItem('mock.quakeSlow') === '1' ? 60000 : 2500)
-// an effect built-in's build (No impact and the others): reading, then a count with the cache's line. mock.effectReuse=1
-// shows a rebuild that reuses the last build's edits
-let effectStart = 0
-const EFFECTS = ['no-impact', 'no-tracers', 'no-screen-shake']
-const effectProgress = () => {
-  const s = (Date.now() - effectStart) / 1000
-  if (s < 4) return { stage: "Reading the game's effect files", detail: null, fraction: 0 }
-  const reuse = localStorage.getItem('mock.effectReuse') === '1', total = reuse ? 40 : 817
-  const n = Math.min(total, Math.floor(((s - 4) * (reuse ? 2 : 4)) / 8) * 8)
-  return { stage: 'Changing the effects', detail: reuse ? `${n} of ${total} to read, 777 reused from the last build` : `${n} of ${total} to read. Rebuilds reuse these and take about a minute`, fraction: 0.3 + (0.6 * n) / total }
-}
-const quakeProgress = () => {
-  if (effectStart) return effectProgress()
-  if (!quakeStart) return null
-  const f = Math.min(0.99, (Date.now() - quakeStart) / quakeLength())
-  const stage = f < 0.04 ? 0 : f < 0.64 ? 1 : f < 0.8 ? 2 : f < 0.86 ? 3 : 4
-  const names = ["Listing the game's textures", "Reading the game's texture settings", 'Writing the packages', 'Packing', 'Checking the new container']
-  const count = (of: number, from: number, to: number) => Math.round(of * Math.min(1, (f - from) / (to - from))).toLocaleString('en-US')
-  return { stage: names[stage], detail: stage === 1 ? `${count(32855, 0.04, 0.64)} of 32,855` : stage === 2 ? `${count(31191, 0.64, 0.8)} of 31,191` : null, fraction: f }
-}
+// repakxtra: the built-in mods' saved state (xtra_builtins.rs BuiltinView)
+const builtins: any[] = ['skip-intro-movies'].map(id => ({ id, on: false, current: false, active: false,
+  path: `C:/Mock/Paks/~mods/.repakxtra-builtin/repakxtra-${id}_9999999_P.pak`, size: 150000 }))
 
 if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
   mockWindows('main')
@@ -137,25 +96,12 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       // repakxtra: built-in mods (xtra_builtins.rs): a build takes a few seconds, like the real one's 10 to 25
       case 'xtra_builtins_list': return structuredClone(builtins)
       case 'xtra_builtins_refresh': return structuredClone(builtins)
-      case 'xtra_quake_progress': return quakeProgress()
       case 'xtra_builtins_set': {
         const b = builtins.find(x => x.id === args?.id)!
-        if (args?.excluded) b.excluded = args.excluded
-        if (args?.quake) b.quake = args.quake
         if (args?.on !== undefined) b.on = args.on
-        if (!b.on) { b.current = b.active = false; b.overlaps = undefined; quakeStart = 0; return structuredClone(builtins) }
-        if (b.id === 'custom-quake') quakeStart = Date.now()
-        if (EFFECTS.includes(b.id)) effectStart = Date.now()
-        return new Promise(r => setTimeout(r, b.id === 'custom-quake' ? quakeLength() : EFFECTS.includes(b.id) ? 240000 : 2500)).then(() => {
-          if (b.id === 'custom-quake') quakeStart = 0
-          if (EFFECTS.includes(b.id)) effectStart = 0
-          if (b.id === 'custom-quake' && localStorage.getItem('mock.quakeError') === '1') {
-            Object.assign(b, { current: false, error: localStorage.getItem('mock.quakeErrorKind') === 'write' ? 'Could not write the packages: a file is in use' : 'Not active yet. The game updated and repakxtra waits for the support files for it. It checks for them at every start' })
-            throw b.error
-          }
-          Object.assign(b, { current: true, active: true, builtAt: Math.floor(Date.now() / 1000), error: undefined,
-            ...(b.id === 'custom-quake' && localStorage.getItem('mock.quakeOverlap') === '1' ? { overlaps: ['C:/Program Files (x86)/Steam/steamapps/common/MarvelRivals/MarvelGame/Marvel/Content/Paks/~mods/quakeV6_9999999_P.pak'] } : {}),
-            summary: b.id === 'skip-intro-movies' ? '12 startup logo videos turned off' : b.id === 'custom-quake' ? '31,191 textures set in 9 minutes' : `${53 - b.excluded.length} heroes, ${697 - b.excluded.length * 13} skins set to default` })
+        if (!b.on) { b.current = b.active = false; return structuredClone(builtins) }
+        return new Promise(r => setTimeout(r, 2500)).then(() => {
+          Object.assign(b, { current: true, active: true, builtAt: Math.floor(Date.now() / 1000), error: undefined, summary: '12 startup logo videos turned off' })
           return structuredClone(builtins)
         })
       }
@@ -163,31 +109,6 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'plugin:webview|set_webview_zoom': // the browser has no webview zoom; CSS zoom stands in
         document.documentElement.style.zoom = String(args?.value ?? 1)
         return null
-      case 'sigeon_status':
-        return { state: sigeonState, configured: sigeonDir.loader, presets: Object.keys(sigeonPresets).sort(), storage: sigeonDir.path, plugins: '',
-          game_running: false, problem: sigeonDir.loader ? null : `${sigeonDir.path}\\SigeonLoader.asi not found` }
-      case 'sigeon_read': return structuredClone(sigeonPresets[args?.preset])
-      case 'sigeon_save':
-        sigeonPresets[args?.preset] = args?.lines
-        return { state: sigeonState, applied: sigeonState === args?.preset }
-      case 'sigeon_create':
-        sigeonPresets[args?.name] = args?.from ? structuredClone(sigeonPresets[args?.from]) : [
-          { kind: 'license', set: false }, { kind: 'blank' }, sigeonLine('variant', 'base'), sigeonLine('lowLatency', '0'), sigeonLine('stretched', '1.0'),
-          sigeonLine('darkHair', '0'), sigeonLine('fontAA', '0'), sigeonLine('fixDarkMaps', '0'), sigeonLine('gamma', '0', false),
-          sigeonLine('enableCAS', '1', false), { kind: 'blank' }, { kind: 'section', name: 'Overrides' }]
-        return null
-      case 'sigeon_storage': return { ...sigeonDir }
-      case 'sigeon_set_storage':
-        sigeonDir = args?.path ? { path: args.path, default: false, loader: /sigeon/i.test(args.path) } : sigeonHome
-        return { ...sigeonDir }
-      case 'sigeon_open': return null
-      case 'sigeon_rename':
-        sigeonPresets[args?.to] = sigeonPresets[args?.from]; delete sigeonPresets[args?.from]
-        if (sigeonState === args?.from) sigeonState = args?.to
-        return null
-      case 'sigeon_delete':
-        if (sigeonState === args?.name) throw new Error(`${args?.name} is the config in use.`)
-        sigeonDeleted[args?.name] = sigeonPresets[args?.name]; delete sigeonPresets[args?.name]; return null
       // Setup panel: fake bypass files and a fake Galacta release (no game folder, no network)
       case 'setup_bypass_status': return setupBypass()
       case 'setup_bypass': return wait(0.6).then(() => {
@@ -199,10 +120,6 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         mockGalacta = { installed: 'C:/Game/~mods', disabled: false, up_to_date: true }
         return { ...mockGalacta, ...galactaRelease }
       })
-      case 'sigeon_restore': sigeonPresets[args?.name] = sigeonDeleted[args?.name]; return null
-      case 'sigeon_set':
-        sigeonState = args?.preset ?? 'off'
-        return sigeonState
       case 'get_hero_image_ids': return data.heroIds ?? []
       case 'list_mod_previews': // copies of %APPDATA%\Repak-X\previews in src/dev/previews.local
         return Object.keys(previewUrls).map(f => f.replace(/^.*\/|\.(png|webp)$/g, ''))
@@ -401,9 +318,9 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'xtra_vfx_usmap_wait': return localStorage.getItem('mock.usmapBehind') === '1' && /wait/i.test(String(args?.modPath ?? '')) ? { usmap: 3939753, game: 3962284, changed: 3 } : null
       case 'xtra_usmap_waiting': return { waiting: localStorage.getItem('mock.usmapBehind') === '1', fetched: false }
       // Installing: the file picker returns two fake paks, install adds them to the library and reports done. A folder
-      // pick (the Sigeon folder) returns an unzipped Sigeon download.
+      // pick returns a fake folder.
       case 'plugin:dialog|open':
-        if (args?.options?.directory) return 'C:\\Users\\you\\Downloads\\Sigeon V2'
+        if (args?.options?.directory) return 'C:\\Users\\you\\Downloads\\Folder'
         if (localStorage.getItem('mock.pick')) return JSON.parse(localStorage.getItem('mock.pick')!) // a JSON list of paths
         return ['C:/Fake/Drop/Alpha_Skin_9999999_P.pak', 'C:/Fake/Drop/Beta_Icons_9999999_P.pak']
       // localStorage 'mock.dropType' sets the dropped mods' type (e.g. 'Daredevil - Mesh [Blueprint]')
@@ -486,6 +403,12 @@ function mockVfx(cmd: string, args: any): unknown {
     case 'xtra_vfx_lock': return vfxLock
     case 'xtra_vfx_stale': return mockStale(String(args.modPath)) ? (args.files as string[]).filter(f => /NS_/.test(f)) : []
     case 'xtra_vfx_old_layout': return []
+    // repakxtra: materials in an older layout (xtra_mi_layout.rs): mock.relayout = 'rewrote', 'failed' or 'error'
+    case 'xtra_vfx_relayout': {
+      const m = localStorage.getItem('mock.relayout')
+      if (m === 'error') throw new Error('UAssetTool could not read the materials')
+      return { files: m === 'rewrote' ? (args?.files ?? []).slice(0, 2) : [], failed: m === 'failed' ? (args?.files ?? []).slice(0, 1) : [], oldBuild: m ? 3962284 : null }
+    }
     case 'xtra_vfx_layout_scan': return 0
     case 'xtra_layout_scan': return 0
     case 'xtra_vfx_source': return String(args.modPath)

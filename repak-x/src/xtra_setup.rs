@@ -17,12 +17,8 @@ const BYPASS: &str = "MarvelRivalsUTOCSignatureBypass.asi";
 const LOADER_BYTES: &[u8] = include_bytes!("../resources/utoc-bypass/dsound.dll");
 const BYPASS_BYTES: &[u8] = include_bytes!("../resources/utoc-bypass/MarvelRivalsUTOCSignatureBypass.asi");
 const LICENSE_TEXT: &str = include_str!("../resources/utoc-bypass/Ultimate ASI Loader License.txt");
-#[cfg(not(feature = "extended"))]
 const GALACTA_API: &str = "https://api.github.com/repos/0xSaturno/ProjectGalacta/releases/latest";
-#[cfg(not(feature = "extended"))]
 const GALACTA_STEM: &str = "!ProjectGalacta_9999999_P";
-#[cfg(feature = "extended")]
-const GALACTA_STEM: &str = "!ProjectSigeon_9999999_P";
 
 fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
@@ -73,7 +69,6 @@ pub struct BypassStatus {
     state: String,
     files: Vec<FileCheck>,
     license: String,
-    sigeon_on: bool,
 }
 
 fn check(path: &Path, name: &str, place: &str, bundled: &[u8]) -> FileCheck {
@@ -100,7 +95,6 @@ fn bypass_status(win64: &Path) -> BypassStatus {
         state: state.into(),
         files: vec![loader, asi],
         license: LICENSE_TEXT.into(),
-        sigeon_on: win64.join("plugins").join("SigeonLoader.asi").exists(),
     }
 }
 
@@ -230,19 +224,12 @@ fn find_loader_matching(mods: &Path, stem: &str, enabled_only: bool) -> Option<P
 }
 
 /// The release zip's entries: (file name, bytes), only Galacta's own container files.
-#[cfg(feature = "extended")]
-async fn latest_release(app: Option<&AppHandle>) -> Result<(String, String, String, String, Vec<u8>), String> {
-    tell(app, "check", 0, 0);
-        include_bytes!("../resources/extended/ProjectSigeon.zip").to_vec()))
-}
 
 fn zip_files(zip: &[u8]) -> Result<Vec<(String, Vec<u8>)>, String> {
     let mut archive = zip::ZipArchive::new(Cursor::new(zip)).map_err(|e| format!("The download is not a zip: {e}"))?;
     let mut out = Vec::new();
     for i in 0..archive.len() {
         let mut f = archive.by_index(i).map_err(|e| e.to_string())?;
-        #[cfg(feature = "extended")]
-        if !f.name().starts_with("Minimal/") { continue; }
         let Some(name) = f.enclosed_name().and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string())) else { continue };
         if f.is_file() && name.starts_with(GALACTA_STEM) && [".pak", ".ucas", ".utoc"].iter().any(|x| name.ends_with(x)) {
             let mut bytes = Vec::new();
@@ -267,7 +254,7 @@ fn install_galacta(mods: &Path, target: &Path, files: &[(String, Vec<u8>)], back
     if !target.starts_with(mods) {
         return Err("The loader goes inside the mods folder".into());
     }
-    let other = if crate::xtra_edition::EXTENDED { "!ProjectGalacta_9999999_P" } else { "!ProjectSigeon_9999999_P" };
+    let other = "!ProjectSigeon_9999999_P";
     if find_enabled_loader(mods, other).is_some() {
         return Err("Turn off the other Project Galacta / Project Sigeon loader in the Library before installing this one.".into());
     }
@@ -310,7 +297,6 @@ fn tell(app: Option<&AppHandle>, stage: &'static str, done: u64, total: u64) {
 }
 
 /// The newest release and its mod zip (downloaded once per tag). With `app`, says how the download goes.
-#[cfg(not(feature = "extended"))]
 async fn latest_release(app: Option<&AppHandle>) -> Result<(String, String, String, String, Vec<u8>), String> {
     tell(app, "check", 0, 0);
     let client = reqwest::Client::new();
@@ -372,8 +358,6 @@ fn galacta_local(mods: &Path) -> (Option<PathBuf>, bool) {
 /// What is installed; with `online`, also the latest release, its notes and whether the installed copy matches it.
 #[tauri::command]
 pub async fn setup_galacta_status(online: bool, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<GalactaStatus, String> {
-    #[cfg(feature = "extended")]
-    crate::xtra_activation::require()?;
     let mods = state.lock().unwrap().game_path.clone();
     let (dir, disabled) = galacta_local(&mods);
     let mut s = GalactaStatus { installed: dir.as_ref().map(|d| d.display().to_string()), disabled, latest: None, published: None, notes: None, url: None, up_to_date: None };
@@ -389,8 +373,6 @@ pub async fn setup_galacta_status(online: bool, state: State<'_, Arc<Mutex<crate
 /// Installs the latest release into `folder` (a ~mods subfolder; empty = ~mods itself, or where it already is).
 #[tauri::command]
 pub async fn setup_galacta_install(app: AppHandle, folder: Option<String>, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<GalactaStatus, String> {
-    #[cfg(feature = "extended")]
-    crate::xtra_activation::require()?;
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // both apps change the game's files: not while Repak X is open
     if crate::is_game_process_running() {
@@ -467,7 +449,6 @@ mod tests {
         bypass_action(&win, "install").unwrap();
         let s = bypass_status(&win);
         assert_eq!(s.state, "installed");
-        assert!(s.sigeon_on);
         assert_eq!(fs::read(win.join("dsound.dll.repakxtra-backup")).unwrap(), b"an older loader", "a different loader is kept");
         assert!(is_bundled_bypass(&win.join(LOADER)) && is_bundled_bypass(&win.join("plugins").join(BYPASS)));
         assert!(!is_bundled_bypass(&win.join("dsound.dll.repakxtra-backup")) && !is_bundled_bypass(&win.join("plugins").join("SigeonLoader.asi")));
@@ -486,7 +467,7 @@ mod tests {
         let mut w = zip::ZipWriter::new(Cursor::new(Vec::new()));
         let opts = zip::write::SimpleFileOptions::default();
         for (n, b) in [(".pak", &b"pak"[..]), (".ucas", ucas), (".utoc", &b"utoc"[..])] {
-            w.start_file(format!("{}{GALACTA_STEM}{n}", if crate::xtra_edition::EXTENDED { "Minimal/" } else { "" }), opts).unwrap();
+            w.start_file(format!("{GALACTA_STEM}{n}"), opts).unwrap();
             w.write_all(b).unwrap();
         }
         w.start_file("readme.txt", opts).unwrap();
@@ -496,7 +477,7 @@ mod tests {
     #[test]
     fn loaders_cannot_be_installed_together() {
         let root = tempfile::tempdir().unwrap();
-        let other = if crate::xtra_edition::EXTENDED { "!ProjectGalacta_9999999_P" } else { "!ProjectSigeon_9999999_P" };
+        let other = "!ProjectSigeon_9999999_P";
         for extension in ["pak", "utoc"] {
             fs::write(root.path().join(format!("{other}.{extension}")), b"other loader").unwrap();
         }
@@ -509,7 +490,7 @@ mod tests {
     #[test]
     fn a_disabled_copy_does_not_hide_an_enabled_loader() {
         let root = tempfile::tempdir().unwrap();
-        let other = if crate::xtra_edition::EXTENDED { "!ProjectGalacta_9999999_P" } else { "!ProjectSigeon_9999999_P" };
+        let other = "!ProjectSigeon_9999999_P";
         // The root is visited first and contains a disabled copy.
         fs::write(root.path().join(format!("{other}.utoc")), b"disabled").unwrap();
         fs::write(root.path().join(format!("{other}.bak_repak")), b"disabled").unwrap();
@@ -525,20 +506,6 @@ mod tests {
         assert!(find_enabled_loader(root.path(), other).is_none());
     }
 
-    #[cfg(feature = "extended")]
-    #[test]
-    fn bundled_sigeon_selects_only_minimal() {
-        let bytes = include_bytes!("../resources/extended/ProjectSigeon.zip");
-        let files = zip_files(bytes).unwrap();
-        assert_eq!(files.len(), 3);
-        let mut archive = zip::ZipArchive::new(Cursor::new(bytes.as_slice())).unwrap();
-        for (name, contents) in files {
-            assert!(name.starts_with("!ProjectSigeon_"));
-            let mut expected = Vec::new();
-            archive.by_name(&format!("Minimal/{name}")).unwrap().read_to_end(&mut expected).unwrap();
-            assert_eq!(contents, expected);
-        }
-    }
 
     #[test]
     fn loaders_in_parent_paks_block_installation_without_writing_files() {
@@ -546,7 +513,7 @@ mod tests {
         let paks = root.path().join("Content").join("Paks");
         let mods = paks.join("~mods");
         fs::create_dir_all(&mods).unwrap();
-        let other = if crate::xtra_edition::EXTENDED { "ProjectGalacta" } else { "ProjectSigeon" };
+        let other = "ProjectSigeon";
         let files = zip_files(&release_zip(b"new loader")).unwrap();
         let target = mods.join("new-loader");
         let backups = root.path().join("backups");

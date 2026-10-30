@@ -47,6 +47,15 @@ fn is_niagara(key: &str) -> bool {
     ["ns_", "ne_", "curveatlas_"].iter().any(|p| name.starts_with(p))
 }
 
+/// The game build that inserted properties into material instances' overrides (xtra_mi_layout.rs): one cooked before
+/// it crashes the game when it overrides a later property.
+const MATERIAL_LAYOUT_BUILD: u64 = 3984769;
+
+/// When the installed game took that build (its first patch container from it on), None before it.
+fn material_layout_patched(containers: &[(PathBuf, u64, u64)]) -> Option<u64> {
+    containers.iter().filter(|(p, ..)| container_cl(p).is_some_and(|cl| cl >= MATERIAL_LAYOUT_BUILD)).map(|c| c.2).min()
+}
+
 fn is_material_instance(key: &str) -> bool {
     key.rsplit('/').next().unwrap_or(key).starts_with("mi_")
 }
@@ -158,55 +167,11 @@ pub(crate) struct AssetBuilds {
 }
 static GAME_BUILDS: Mutex<Option<(String, Arc<AssetBuilds>)>> = Mutex::new(None);
 
-/// Each file's stamp in the installed game: the newest patch build holding it and when that container was written. A file
-/// the game updated sits in a newer patch container, and a container replaced in place has a new write time, so the same
-/// stamp means the same bytes. None when a container could not be read (every file is then read again).
-pub(crate) fn package_stamps(paks: &Path, files: &[String]) -> Option<Vec<String>> {
-    let assets = game_assets(paks)?;
-    let key = build_key(&game_containers(paks));
-    let builds = GAME_BUILDS.lock().unwrap_or_else(|e| e.into_inner()).as_ref().filter(|(k, _)| *k == key).map(|(_, b)| b.clone())?;
-    if builds.unread > 0 {
-        return None;
-    }
-    Some(files.iter().map(|f| {
-        let k = match_key(f);
-        format!("{}:{}", builds.by_package.get(&k).copied().unwrap_or(0), assets.get(&k).copied().unwrap_or(0))
-    }).collect())
-}
-
 /// Of `files` (paths inside a mod), those whose game copy an update rewrote after `since` (seconds): cooked for an
 /// older game build. None when the game's files in `paks` (its Paks folder) cannot be read.
 pub(crate) fn rewritten_since(paks: &Path, files: &[String], since: u64) -> Option<Vec<String>> {
     let game = game_assets(paks)?;
     Some(stale_in(&game, files, since))
-}
-
-static EFFECTS: Mutex<Option<(String, Arc<Vec<String>>)>> = Mutex::new(None);
-
-/// The game's Niagara systems and camera shakes, as Marvel/... package paths in their own case without an extension,
-/// read once per game build (about 6 s). The effect built-ins find newer heroes' effects in it (xtra_visual_builtins.rs).
-pub(crate) fn game_effects(paks: &Path) -> Arc<Vec<String>> {
-    let containers = game_containers(paks);
-    let key = build_key(&containers);
-    if let Some((k, list)) = EFFECTS.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
-        if *k == key {
-            return list.clone();
-        }
-    }
-    let mut out = std::collections::BTreeSet::new();
-    for (utoc, ..) in &containers {
-        for e in crate::utoc_utils::try_read_utoc(utoc).unwrap_or_default() {
-            let path = e.file_path.trim_start_matches("../../../");
-            let Some(path) = path.strip_suffix(".uasset") else { continue };
-            let name = path.rsplit('/').next().unwrap_or(path).to_ascii_lowercase();
-            if name.starts_with("ns_") || name.starts_with("camerashake") {
-                out.insert(path.to_string());
-            }
-        }
-    }
-    let list = Arc::new(out.into_iter().collect::<Vec<_>>());
-    *EFFECTS.lock().unwrap_or_else(|e| e.into_inner()) = Some((key, list.clone()));
-    list
 }
 
 /// The game build in a patch container's name (Patch_-Windows_1.1.3962284_P.utoc), None for a base chunk.
@@ -292,6 +257,8 @@ struct Facts<'a> {
     /// its classes against the game's (xtra_layout.rs): None not checked yet, Some(None) they match, Some(Some(reason))
     /// the game's have what its copies lack
     layout: Option<Option<String>>,
+    /// made before MATERIAL_LAYOUT_BUILD with no update beside it, and no update since found nothing to rewrite in it
+    old_materials: bool,
 }
 
 /// The verdict for one mod, or None when it looks fine. Pure: the facts come in, the words go out.
@@ -357,6 +324,21 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
             usmap_wait: 0,
         });
     }
+    // its material instances in the older layout, whether or not the game rewrote them: the game can crash loading them
+    let mi = packages.iter().filter(|k| is_material_instance(k)).count();
+    if m.old_materials && mi > 0 {
+        return Some(Verdict {
+            path: path.to_string(),
+            kind: "vfx",
+            reason: format!(
+                "Made before the game update that changed how materials are stored, so {} can crash the game. The VFX Updater rewrites {} in the new layout.",
+                if mi == 1 { "its material".to_string() } else { format!("its {mi} materials") },
+                if mi == 1 { "it" } else { "them" }
+            ),
+            stale_niagara: 0,
+            usmap_wait: 0,
+        });
+    }
     // On or off: the warning matters most before a loadout switches it on
     let risky = |reason: String| Some(Verdict { path: path.to_string(), kind: "risky", reason, stale_niagara: 0, usmap_wait: 0 });
     match &m.layout {
@@ -380,6 +362,10 @@ struct Checked {
     game: u64,
     #[serde(default)]
     outdated: bool,
+    /// written by an update that rewrites older material layouts (xtra_mi_layout.rs): an earlier "nothing to update"
+    /// could not read such materials, so it does not stop that flag
+    #[serde(default)]
+    material_layout: bool,
 }
 
 fn checked_store() -> PathBuf {
@@ -404,10 +390,15 @@ fn checked_now(store: &HashMap<String, Checked>, utoc: &Path, game_updated: u64)
     store.get(&checked_key(utoc)).filter(|c| file_stamp(utoc) == Some((c.size, c.modified)) && game_updated <= c.game).map(|c| c.outdated)
 }
 
+/// A "nothing to update" for `utoc` as it is now, from an update that rewrites older material layouts.
+fn layout_cleared(store: &HashMap<String, Checked>, utoc: &Path, game_updated: u64) -> bool {
+    store.get(&checked_key(utoc)).is_some_and(|c| file_stamp(utoc) == Some((c.size, c.modified)) && game_updated <= c.game && !c.outdated && c.material_layout)
+}
+
 fn remember_checked(store: &Path, utoc: &Path, game_updated: u64, outdated: bool) -> Result<(), String> {
     let (size, modified) = file_stamp(utoc).ok_or_else(|| format!("{} is not there", utoc.display()))?;
     let mut all = load_checked(store);
-    all.insert(checked_key(utoc), Checked { size, modified, game: game_updated, outdated });
+    all.insert(checked_key(utoc), Checked { size, modified, game: game_updated, outdated, material_layout: true });
     let tmp = store.with_extension("json.tmp");
     std::fs::write(&tmp, serde_json::to_string(&all).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
     std::fs::rename(&tmp, store).map_err(|e| e.to_string())
@@ -440,6 +431,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
         let Some(paks) = paks_dir(&mods_dir) else { return Vec::new() };
         let Some(game) = game_assets(&paks) else { return Vec::new() };
         let game_updated = game_containers(&paks).iter().map(|c| c.2).max().unwrap_or(0);
+        let layout_patched = material_layout_patched(&game_containers(&paks));
         let base = |p: &Path| p.with_extension("").to_string_lossy().to_lowercase();
         let installed_mods: HashSet<String> = mod_paths.iter().map(|p| base(Path::new(p))).collect();
         let checked = load_checked(&checked_store());
@@ -477,6 +469,11 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
             .iter()
             .filter_map(|p| {
                 let path = PathBuf::from(p);
+                // repakxtra: another app's built-in is judged by the game build its app last built it for
+                if crate::xtra_builtins::in_folder(&path) {
+                    return crate::xtra_builtins::outdated_elsewhere(&path, &paks)
+                        .map(|reason| Verdict { path: p.clone(), kind: "risky", reason, stale_niagara: 0, usmap_wait: 0 });
+                }
                 if can_finish(&path) {
                     return Some(Verdict {
                         path: p.clone(),
@@ -511,6 +508,8 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                     installed,
                     old_layout: details.category == "VFX" && crate::xtra_niagara::known_old_layout(&path),
                     layout: crate::xtra_layout::found_now(&layouts, &path.with_extension("utoc"), game_updated, &usmap_id),
+                    old_materials: layout_patched.is_some_and(|at| installed > 0 && installed < at) && !has_fix(&path)
+                        && !layout_cleared(&checked, &path.with_extension("utoc"), game_updated),
                 };
                 judge(p, &facts, game_updated, &game)
             })
@@ -574,8 +573,14 @@ mod tests {
     fn v(files: &[&str]) -> Vec<String> {
         files.iter().map(|s| s.to_string()).collect()
     }
+    #[test]
+    fn the_material_layout_patch_is_its_first_container_from_that_build_on() {
+        let c = |n: &str, at| (PathBuf::from(format!("Paks/{n}")), 1, at);
+        assert_eq!(material_layout_patched(&[c("pakchunk0-Windows.utoc", 5), c("Patch_-Windows_1.1.3962284_P.utoc", 10)]), None);
+        assert_eq!(material_layout_patched(&[c("Patch_-Windows_1.1.3962284_P.utoc", 10), c("Patch_-Windows_1.1.3984769_P.utoc", 20), c("Patch_-Windows_1.1.3990000_P.utoc", 30)]), Some(20));
+    }
     fn facts(files: &[String], installed: u64) -> Facts<'_> {
-        Facts { files, galacta: false, vfx: false, materials: false, fixed: false, has_blueprint: false, installed, old_layout: false, layout: None }
+        Facts { files, galacta: false, vfx: false, materials: false, fixed: false, has_blueprint: false, installed, old_layout: false, layout: None, old_materials: false }
     }
     const LIVE: &str = "Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uasset";
 
@@ -649,6 +654,9 @@ mod tests {
         assert_eq!(judge("m.pak", &vfx(150), 200, &game()).map(|j| j.kind), Some("risky"), "made after its files changed: only the Blueprint warning");
         assert_eq!(judge("m.pak", &Facts { vfx: true, ..facts(&files, 150) }, 200, &game()), None);
         assert_eq!(judge("m.pak", &Facts { vfx: true, old_layout: true, ..facts(&files, 150) }, 200, &game()).map(|j| j.kind), Some("vfx"), "newer than the update, still in the old layout");
+        let mats = v(&["Marvel/Content/Marvel/Characters/1026/1026001/Materials/Lobby/MI_1026001_Eyes.uasset", LIVE]);
+        assert_eq!(judge("m.pak", &Facts { materials: true, old_materials: true, ..facts(&mats, 150) }, 200, &game()).map(|j| j.kind), Some("vfx"), "materials from before the layout change");
+        assert_eq!(judge("m.pak", &Facts { old_materials: true, ..facts(&files, 150) }, 200, &game()), None, "no material instance, nothing to rewrite");
         assert_eq!(judge("m.pak", &Facts { vfx: false, ..facts(&files, 50) }, 200, &game()), None, "only VFX mods");
         assert_eq!(judge("m.pak", &Facts { fixed: true, ..vfx(50) }, 200, &game()).map(|j| j.kind), Some("risky"), "fixed already: its copy is judged instead");
     }
@@ -713,6 +721,8 @@ mod tests {
         let t = std::time::Instant::now();
         let again = game_assets(&paks).expect("cached");
         println!("second read: {} in {:?}", again.len(), t.elapsed());
+        let patched = material_layout_patched(&game_containers(&paks));
+        println!("material layout patch installed at {patched:?}");
         for e in std::fs::read_dir(paks.join("~mods")).unwrap().flatten() {
             let p = e.path();
             if !p.extension().is_some_and(|x| x == "pak" || x == "bak_repak") {
@@ -724,7 +734,7 @@ mod tests {
             let newer = files.iter().filter(|f| is_package(f) && game.get(&match_key(f)).is_some_and(|at| *at > installed)).count();
             let pk = files.iter().filter(|f| is_package(f)).count();
             let vfx = p.to_string_lossy().to_lowercase().contains("vfx");
-            let v = judge(&p.to_string_lossy(), &Facts { vfx, ..facts(&files, installed) }, 0, &game).map(|v| v.kind).unwrap_or("ok");
+            let v = judge(&p.to_string_lossy(), &Facts { vfx, old_materials: patched.is_some_and(|at| installed < at), ..facts(&files, installed) }, 0, &game).map(|v| v.kind).unwrap_or("ok");
             println!("{v:7} {hits:4}/{pk:<4} newer {newer:4} {}", p.file_name().unwrap().to_string_lossy());
         }
     }
@@ -763,6 +773,7 @@ mod tests {
                 installed,
                 old_layout: vfx && crate::xtra_niagara::known_old_layout(&p),
                 layout,
+                old_materials: false,
             };
             let label = |v: Option<Verdict>| v.map_or("ok", |v| match v.kind {
                 "risky" => "May crash",

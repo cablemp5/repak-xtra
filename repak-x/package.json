@@ -7,7 +7,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:unit": "node scripts/run-asserts.mjs && node scripts/check-loadout-warnings.mjs",
-    "test:editions": "node scripts/check-extended-access.mjs && node scripts/check-amoled.mjs && node scripts/check-release-notes.mjs"
+    "test:release-notes": "node scripts/check-release-notes.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
