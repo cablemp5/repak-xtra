@@ -69,7 +69,7 @@ export const TOUR_STEPS: TourStep[] = [
   {
     target: '[data-tour="setup-btn"]',
     title: 'Setup and Launch',
-    description: 'Setup installs what mods need. Launch Game starts Marvel Rivals, and Settings replays this tour.',
+    description: 'Setup installs what mods need. Launch starts Marvel Rivals, and Settings replays this tour.',
     placement: 'bottom',
     onEnter: home,
   },

@@ -3,14 +3,14 @@
 .fr-modal { position: relative; }
 .fr-intro-close.modal-close { position: absolute; top: 14px; right: 14px; z-index: 2; }
 .wi { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
-.wi-head { padding: 24px 26px 6px; }
+.wi-head { padding: 24px 28px 8px; }
 .wi-title { display: flex; align-items: baseline; gap: 0.28em; margin: 0; font: 800 28px/1.15 var(--font-primary); letter-spacing: -0.025em; color: var(--text-primary); }
 .wi-title .wm { align-self: baseline; transform: translateY(18.5%); }
-.wi-lede { margin: 10px 0 0; max-width: 60ch; font-size: 13.5px; line-height: 1.55; color: var(--text-secondary); }
+.wi-lede { margin: 12px 0 0; max-width: 60ch; font-size: 14px; line-height: 1.55; color: var(--text-secondary); }
 
 .wi-demos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 18px 26px 26px; }   /* room above the footer line now the table is gone */
 .wi-demo { margin: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.wi-stage { position: relative; height: 178px; display: grid; place-items: center; overflow: hidden; border-radius: 12px;
+.wi-stage { position: relative; height: 180px; display: grid; place-items: center; overflow: hidden; border-radius: 12px;
   border: 1px solid var(--panel-border); background: radial-gradient(120% 90% at 50% 0%, rgba(255, 255, 255, 0.05), transparent 70%), var(--bg-dark); }
 .wi-demo figcaption { display: flex; flex-direction: column; gap: 3px; }
 .wi-demo figcaption b { font-size: 13.5px; font-weight: 700; color: var(--text-primary); }
@@ -24,8 +24,8 @@
 .wi-card-body b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9.5px; font-weight: 700; color: var(--text-primary); }
 
 /* A switch, on by default; .is-off or the demo's keyframes turn it off */
-.wi-switch { position: relative; flex: none; width: 24px; height: 14px; border-radius: 999px; background: var(--accent-primary); }
-.wi-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: #fff; transform: translateX(10px); }
+.wi-switch { position: relative; flex: none; width: 24px; height: 16px; border-radius: 999px; background: var(--accent-primary); }
+.wi-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transform: translateX(10px); }
 
 /* 1. See the look first: the card renders (dark, a light band sweeping), then its picture fades in. The loop starts
    on the finished picture (56% in), so the first thing a newcomer sees is a preview, not a dark "Rendering" box */
@@ -34,19 +34,19 @@
   animation: wi-render 6s ease-in-out -3.36s infinite; }
 .wi-render::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.09), transparent);
   animation: lo-skel-sweep 1.6s ease-in-out infinite; }
-.wi-render span { position: relative; z-index: 1; font-size: 10px; font-weight: 600; color: var(--text-primary); }
+.wi-render span { position: relative; z-index: 1; font-size: 11px; font-weight: 600; color: var(--text-primary); }
 @keyframes wi-shot { 0%, 42% { opacity: 0; filter: blur(8px); } 56%, 92% { opacity: 1; filter: blur(0); } 100% { opacity: 0; filter: blur(8px); } }
 @keyframes wi-render { 0%, 40% { opacity: 1; } 52%, 100% { opacity: 0; } }
 
 /* 2. One switch, the whole set: the switch flips and every row of the set lights up after it */
-.wi-set { display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 10px; padding: 14px; place-items: initial; }
-.wi-set-head { display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; color: var(--text-primary); }
-.wi-set ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
-.wi-set li { display: flex; align-items: center; gap: 8px; height: 22px; padding: 0 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.035);
+.wi-set { display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 12px; padding: 16px; place-items: initial; }
+.wi-set-head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--text-primary); }
+.wi-set ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.wi-set li { display: flex; align-items: center; gap: 8px; height: 24px; padding: 0 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.035);
   font-size: 11px; color: var(--text-primary); animation: wi-row 5s ease infinite; animation-delay: calc(var(--i) * 0.12s); }
 .wi-set li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wi-set li small { font-size: 10px; color: var(--text-secondary); }
-.wi-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #3ecf6e; animation: wi-dot 5s ease infinite; animation-delay: inherit; }
+.wi-set li small { font-size: 11px; color: var(--text-secondary); }
+.wi-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #3ecf6e; animation: wi-dot 5s ease infinite; animation-delay: inherit; }
 .wi-set .wi-switch { animation: wi-track 5s ease infinite; }
 .wi-set .wi-switch::after { animation: wi-knob 5s ease infinite; }
 @keyframes wi-track { 0%, 16% { background: rgba(255, 255, 255, 0.18); } 22%, 78% { background: var(--accent-primary); } 84%, 100% { background: rgba(255, 255, 255, 0.18); } }
@@ -70,7 +70,7 @@
 @keyframes wi-knob-b { 0%, 46% { transform: none; } 52%, 94% { transform: translateX(10px); } 100% { transform: none; } }
 
 
-.wi-next { display: inline-flex !important; align-items: center; gap: 6px; min-width: 0 !important; padding: 0 14px !important; }
+.wi-next { display: inline-flex !important; align-items: center; gap: 8px; min-width: 0 !important; padding: 0 16px !important; }
 
 @media (max-width: 640px) {
   .wi-demos { grid-template-columns: minmax(0, 1fr); }

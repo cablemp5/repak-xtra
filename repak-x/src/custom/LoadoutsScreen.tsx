@@ -523,7 +523,7 @@ function LoadoutsHome(p: LoadoutProps) {
             {loadouts.length > 0 && (
               <label className="lp-search lo-search">
                 <Search size={14} aria-hidden="true" />
-                <input ref={searchRef} value={query} placeholder="Search loadouts..." aria-label="Search loadouts by name or collection" onChange={e => search(e.target.value)}
+                <input ref={searchRef} value={query} placeholder="Search loadouts" aria-label="Search loadouts by name or collection" onChange={e => search(e.target.value)}
                   onKeyDown={e => { e.stopPropagation(); if (e.key === 'Escape') search('') }} />
                 {query && <button type="button" className="lo-icon" aria-label="Clear search" title="Clear search" onClick={clearSearch}><X size={13} /></button>}
               </label>

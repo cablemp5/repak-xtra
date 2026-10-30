@@ -9,14 +9,14 @@
 .vf-groups { display: flex; flex-direction: column; gap: 4px; }
 .vf-grp:not(.is-folded) + .vf-grp { margin-top: 16px; }
 .vf-body > * { flex-shrink: 0; }   /* a long list scrolls, nothing in it is squeezed */
-.vf-hint { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.vf-hint { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 
 /* search and sort: a loadout's Add mods row, the field taking the width, with a clear button once there is something to clear */
 .vf-body .vf-filters { flex-wrap: nowrap; align-items: stretch; margin: 0; }
-.vf-body .vf-search { flex: 1; width: auto; min-width: 0; height: auto; padding: 0 6px 0 12px; gap: 10px; }
-.vf-search input { font-size: 13.5px !important; }
+.vf-body .vf-search { flex: 1; width: auto; min-width: 0; height: auto; padding: 0 8px 0 12px; gap: 12px; }
+.vf-search input { font-size: 14px !important; }
 .vf-search input::placeholder { color: var(--text-secondary); opacity: 1; }
-.vf-search-clear { flex: none; width: 26px; height: 26px !important; min-height: 0 !important; }
+.vf-search-clear { flex: none; width: 28px; height: 28px !important; min-height: 0 !important; }
 /* the hero filter: as tall as the search and sort beside it (the loadout page's is 32px) */
 .vf-body .vf-filters .lp-hero.custom-dropdown-container { height: auto; }
 .vf-body .vf-add { flex: none; margin-left: auto; height: auto !important; min-height: 32px !important; } /* as tall as the search beside it */
@@ -32,7 +32,7 @@
 .vf-grp-fold:hover .vf-grp-caret, .vf-grp-fold:focus-visible .vf-grp-caret { color: var(--text-primary); }
 .vf-grp-caret { flex: none; transition: transform var(--acc-chevron) var(--acc-ease); }
 .vf-grp-fold[aria-expanded="true"] .vf-grp-caret { transform: rotate(90deg); }
-.vf-grp-count { min-width: 20px; height: 18px; padding: 0 6px; display: inline-grid; place-items: center; border-radius: 999px;
+.vf-grp-count { min-width: 20px; height: 20px; padding: 0 8px; display: inline-grid; place-items: center; border-radius: 999px;
   font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-secondary); background: var(--quiet-active); }
 /* Needs an update: its count in the problem yellow, as the Library's Needs VFX update tag */
 .vf-grp.is-needs .vf-grp-count { color: #f5d342; background: color-mix(in srgb, #f5d342, transparent 86%); }
@@ -43,8 +43,8 @@
 .vf-grp.is-done .vf-grp-name { color: #3ecf6e; }
 [data-theme="light"] .vf-grp.is-done .vf-grp-count, [data-theme="light"] .vf-grp.is-done .vf-grp-name { color: #166236; }
 .vf-selects { flex: none; display: inline-flex; gap: 2px; }
-.vf-select { flex: none; height: 28px !important; min-height: 0 !important; padding: 0 10px !important; border: none !important; border-radius: var(--quiet-radius) !important;
-  background: none !important; font-size: 12.5px !important; font-weight: 500 !important; color: var(--text-secondary) !important; cursor: pointer; }
+.vf-select { flex: none; height: 28px !important; min-height: 0 !important; padding: 0 12px !important; border: none !important; border-radius: var(--quiet-radius) !important;
+  background: none !important; font-size: 13px !important; font-weight: 500 !important; color: var(--text-secondary) !important; cursor: pointer; }
 .vf-select:hover:not(:disabled) { color: var(--text-primary) !important; background: var(--quiet-active) !important; }
 .vf-select:disabled { opacity: 0.4; cursor: default; }
 
@@ -61,14 +61,14 @@
 /* the loadouts holding it: a quiet tag the size of the Library's, the first name and how many more */
 /* will only partly update (old Niagara files left out): the Library's Needs VFX update badge look, so it reads as that kind
    of warning; the footer says it once more for the picked mods */
-.vf-partial, .vf-needs { flex: none; height: 22px; display: inline-flex; align-items: center; padding: 0 7px; border-radius: 6px; font-size: 11px; font-weight: 600;
+.vf-partial, .vf-needs { flex: none; height: 24px; display: inline-flex; align-items: center; padding: 0 8px; border-radius: 6px; font-size: 11px; font-weight: 600;
   color: #f5d342; border: 1px solid color-mix(in srgb, #f5d342, transparent 55%); cursor: help; white-space: nowrap; }
 .vf-partial-n { font-weight: 500; color: #f5d342; }
 [data-theme="light"] .vf-partial, [data-theme="light"] .vf-needs, [data-theme="light"] .vf-partial-n { color: #665400; }
 /* needs an update the saved USMAP cannot make yet: grey, nothing to do until the new USMAP is out */
 .vf-needs.is-waiting, [data-theme="light"] .vf-needs.is-waiting { color: var(--text-secondary); border-color: color-mix(in srgb, var(--text-secondary), transparent 60%); }
-.vf-loadouts {flex: 0 1 auto; min-width: 0; max-width: 34%; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px;
-  border: 1px solid var(--panel-border); border-radius: 6px; font-size: 11.5px; font-weight: 500; color: var(--text-secondary); }
+.vf-loadouts {flex: 0 1 auto; min-width: 0; max-width: 34%; display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px;
+  border: 1px solid var(--panel-border); border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--text-secondary); }
 /* a button: opens that loadout's page in the main window */
 /* the tag's own size, not the app's 36px buttons, and a quiet hover: only the loadout's name brightens a little */
 button.vf-loadouts { min-height: 0; background: none; font-family: inherit; line-height: normal; cursor: pointer; transition: none; }
@@ -79,11 +79,11 @@ button.vf-loadouts:focus-visible { outline: 2px solid var(--accent-primary); out
 .vf-loadouts span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vf-loadouts i { flex: none; font-style: normal; font-weight: 400; color: var(--text-secondary); }
 .vf-loadouts b { flex: none; margin-left: 2px; font-weight: 500; color: var(--text-secondary); white-space: pre; }
-.vf-status { flex: none; font-size: 12.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.vf-status { flex: none; font-size: 13px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .vf-status.is-running { color: var(--text-primary); }
 .vf-status.is-cancelled { color: var(--text-secondary); }
 /* the result, which opens the report: a pill button */
-.vf-pill { flex: none; display: inline-flex !important; align-items: center; gap: 4px; height: 24px !important; min-height: 0 !important; padding: 0 6px 0 9px !important;
+.vf-pill { flex: none; display: inline-flex !important; align-items: center; gap: 4px; height: 24px !important; min-height: 0 !important; padding: 0 8px 0 8px !important;
   border: none !important; border-radius: 999px !important; font-size: 12px !important; font-weight: 600 !important; line-height: 1; cursor: pointer;
   color: var(--text-secondary) !important; background: var(--quiet-active) !important; }
 .vf-pill.is-fixed { color: #3ecf6e !important; background: color-mix(in srgb, #3ecf6e, transparent 88%) !important; }
@@ -106,46 +106,46 @@ button.vf-loadouts:focus-visible { outline: 2px solid var(--accent-primary); out
   background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-primary) 38%, color-mix(in srgb, var(--accent-primary), white 45%) 50%,
     var(--accent-primary) 62%, var(--accent-primary) 100%) 0 0 / 250% 100% no-repeat;
   animation: t-shimmer var(--shimmer-dur, 2s) var(--shimmer-ease, linear) infinite; }
-.vf-step { margin: 8px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 12.5px; color: var(--text-secondary); }
+.vf-step { margin: 8px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 8px; font-size: 13px; color: var(--text-secondary); }
 /* a long path (Packing the update) cuts off with an ellipsis inside the pill, never past the row */
 /* 2px on top of an 18px line: on a plain 20px line Geist's capitals sit 1px above the pill's middle (measured) */
-.vf-count { display: inline-block; box-sizing: border-box; max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 18px; height: 20px; padding: 2px 8px 0; border-radius: 999px; font-size: 11.5px; font-weight: 500;
+.vf-count { display: inline-block; box-sizing: border-box; max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 18px; height: 20px; padding: 2px 8px 0; border-radius: 999px; font-size: 12px; font-weight: 500;
   font-variant-numeric: tabular-nums; color: var(--text-secondary); background: var(--quiet-active); }
-.vf-pill.is-running { height: 20px !important; padding: 0 7px !important; font-size: 11px !important; cursor: default; color: color-mix(in srgb, var(--accent-primary), white 35%) !important; background: color-mix(in srgb, var(--accent-primary), transparent 84%) !important;
+.vf-pill.is-running { height: 20px !important; padding: 0 8px !important; font-size: 11px !important; cursor: default; color: color-mix(in srgb, var(--accent-primary), white 35%) !important; background: color-mix(in srgb, var(--accent-primary), transparent 84%) !important;
   font-variant-numeric: tabular-nums; }
 .vf-pill.is-running:hover { filter: none; }
 [data-theme="light"] .vf-pill.is-running { color: color-mix(in srgb, var(--accent-primary), black 25%) !important; }
 
 /* a mod's report, under its row */
 .vf-row-panel { flex-basis: 100%; }
-.vf-report { padding: 2px 0 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
-.vf-note { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); overflow-wrap: anywhere; text-wrap: pretty; }
+.vf-report { padding: 2px 0 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.vf-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); overflow-wrap: anywhere; text-wrap: pretty; }
 .vf-note code { font: 12px var(--font-mono); color: var(--text-primary); }
 .vf-warnings { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; align-self: stretch; }
-.vf-warnings li { position: relative; padding-left: 14px; font-size: 12.5px; line-height: 1.5; color: var(--text-primary); overflow-wrap: anywhere; }
-.vf-warnings li::before { content: ''; position: absolute; left: 2px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: #f5d342; }
+.vf-warnings li { position: relative; padding-left: 16px; font-size: 13px; line-height: 1.5; color: var(--text-primary); overflow-wrap: anywhere; }
+.vf-warnings li::before { content: ''; position: absolute; left: 2px; top: 8px; width: 4px; height: 4px; border-radius: 50%; background: #f5d342; }
 .vf-warnings li.vf-more::before { display: none; }
 /* a report's asset list toggle, at the end of the report (its numbers are in the row's heading) */
 .vf-stats { align-self: stretch; display: flex; justify-content: flex-end; }
 button.vf-assets-toggle { flex: none; display: inline-flex !important; align-items: center; gap: 2px; border: none !important; background: none !important; cursor: pointer;
-  height: 24px !important; min-height: 0 !important; padding: 0 !important; font-size: 12.5px !important; color: var(--text-secondary) !important; }
+  height: 24px !important; min-height: 0 !important; padding: 0 !important; font-size: 13px !important; color: var(--text-secondary) !important; }
 button.vf-assets-toggle:hover { color: var(--text-primary) !important; }
 .vf-assets-caret { transition: transform var(--acc-chevron) var(--acc-ease); }
 .vf-assets-toggle[aria-expanded="true"] .vf-assets-caret { transform: rotate(90deg); }
 .vf-report > .t-acc-panel { align-self: stretch; }
 .vf-assets { margin-top: 4px; padding: 8px 12px; border-radius: 8px; background: var(--bg-dark); }
-.vf-group h4 { margin: 8px 0 4px; font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
+.vf-group h4 { margin: 8px 0 4px; font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .vf-group:first-child h4 { margin-top: 0; }
 .vf-group h4 span { margin-left: 4px; color: var(--text-secondary); font-weight: 500; }
 .vf-group ul { margin: 0; padding: 0; list-style: none; }
-.vf-group li { display: grid; grid-template-columns: minmax(140px, 38%) 1fr; gap: 12px; padding: 3px 0; font-size: 12px; line-height: 1.45; }
+.vf-group li { display: grid; grid-template-columns: minmax(140px, 38%) 1fr; gap: 12px; padding: 4px 0; font-size: 12px; line-height: 1.45; }
 .vf-asset { font: 12px var(--font-mono); color: var(--text-primary); overflow-wrap: anywhere; }
 .vf-detail { color: var(--text-secondary); overflow-wrap: anywhere; }
 
 /* Updates: each choice is a settings row, its label at the left, a compact segmented control at the right, and what the
    picked one does right under the control (close to what it explains, apart from the next row) */
 
-.vf-warn { margin: 10px 0 0; display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.vf-warn { margin: 12px 0 0; display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 .vf-warn svg { flex: none; margin-top: 2px; color: #f5d342; }
 
 /* Advanced: the install card's fold (.ia) under the lists. Its parts are Settings sections: an icon and heading, one
@@ -155,34 +155,34 @@ button.vf-assets-toggle:hover { color: var(--text-primary) !important; }
 .vf-adv-title > .ia-toggle { gap: 8px; height: 32px !important; margin-left: -2px; font-size: 14px !important; font-weight: 600 !important; color: var(--text-primary) !important; }   /* a heading like the groups' */
 .vf-adv-title > .ia-toggle .ia-caret { color: var(--text-secondary); }
 .vf-adv-body { display: flex; flex-direction: column; padding: 4px 0 0 0; }
-.vf-set { padding: 18px 0 20px; }
+.vf-set { padding: 20px 0 20px; }
 .vf-set + .vf-set { border-top: 1px solid var(--panel-border); }
 .vf-set > h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .vf-set > h3 > svg { flex: none; color: var(--text-secondary); }
-.vf-set-state { margin-left: 2px; font-size: 12.5px; font-weight: 400; color: var(--text-secondary); }
+.vf-set-state { margin-left: 2px; font-size: 13px; font-weight: 400; color: var(--text-secondary); }
 .vf-set-state .is-warn { color: #f5d342; }
 .vf-set > h3 + :not(.vf-set-about) { margin-top: 12px; }   /* a part without a description line (Log) keeps the same gap */
-.vf-set-about { margin: 4px 0 12px; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
-.vf-set-note { margin: 8px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.vf-set-about { margin: 4px 0 12px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.vf-set-note { margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 /* a choice of a few: Settings' Launcher switch, equal parts across the section */
 .vf-seg { display: flex !important; width: 100%; max-width: 560px; }
-.vf-seg button { flex: 1 1 0; min-width: 0; height: 32px !important; min-height: 0 !important; padding: 0 10px !important; display: inline-flex !important; align-items: center; justify-content: center; white-space: nowrap; font-size: 12.5px !important; }
+.vf-seg button { flex: 1 1 0; min-width: 0; height: 32px !important; min-height: 0 !important; padding: 0 12px !important; display: inline-flex !important; align-items: center; justify-content: center; white-space: nowrap; font-size: 13px !important; }
 /* USMAP: Setup's part row, between hairlines */
-.vf-usmap { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 0; border-top: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); }
+.vf-usmap { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 8px 0; border-top: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel-border); }
 .vf-usmap .su-part-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vf-set .vf-warn { margin-top: 10px; }
+.vf-set .vf-warn { margin-top: 12px; }
 /* the USMAP is older than the game: a yellow-edged note under it, the mismatch first, then what it means for updates */
-.vf-behind { margin-top: 12px; padding: 12px 14px; border-radius: 10px; display: flex; flex-direction: column; gap: 6px;
+.vf-behind { margin-top: 12px; padding: 12px 16px; border-radius: 10px; display: flex; flex-direction: column; gap: 8px;
   border: 1px solid color-mix(in srgb, #f5d342, transparent 70%); background: color-mix(in srgb, #f5d342, transparent 94%); }
-.vf-behind p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.vf-behind p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 .vf-behind b { font-weight: 600; color: #f5d342; }
 .su-part-mark.is-behind { color: #f5d342; }
 .su-part-mark.is-behind::before { display: none; } /* the warning icon takes the empty circle's place */
 [data-theme="light"] .vf-behind b, [data-theme="light"] .su-part-mark.is-behind { color: #665400; }
 .vf-names { display: flex; flex-direction: column; gap: 12px; }   /* Color names: two labelled fields */
-.vf-names label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-primary); }
+.vf-names label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--text-primary); }
 .vf-names input {
-  height: 34px; padding: 0 10px; font: 12.5px var(--font-mono); color: var(--text-primary);
+  height: 36px; padding: 0 12px; font: 13px var(--font-mono); color: var(--text-primary);
   background: var(--input-bg); border: 1px solid var(--input-border); border-radius: var(--quiet-radius); outline: none;
 }
 .vf-names input:focus { border-color: color-mix(in srgb, var(--text-primary), transparent 50%); }
@@ -193,17 +193,17 @@ button.vf-assets-toggle:hover { color: var(--text-primary) !important; }
 .vf-log .is-error { color: var(--text-primary); font-weight: 600; }
 .vf-log .is-warning { color: #f5a524; }
 .vf-log .is-success { color: #46a758; }
-.vf-copy-log { margin-top: 10px; }
+.vf-copy-log { margin-top: 12px; }
 
 .vf-foot { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 24px; border-top: 1px solid var(--panel-border); }
 /* the note has its own row above the buttons and wraps there: never cut off, never squeezed beside them */
-.vf-state { flex: 1 1 280px; min-width: 0; margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.vf-state { flex: 1 1 280px; min-width: 0; margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 .vf-foot-actions { flex: none; margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .vf-spin { animation: vf-spin 1.1s linear infinite; }
 @keyframes vf-spin { to { transform: rotate(360deg); } }
 html[data-motion="off"] .vf-spin { animation: none; }
 .vf-foot .btn-primary {
-  height: 32px !important; min-height: 0 !important; padding: 0 16px 0 14px !important; font-size: 13px !important; border-radius: var(--quiet-radius) !important;
+  height: 32px !important; min-height: 0 !important; padding: 0 16px 0 16px !important; font-size: 13px !important; border-radius: var(--quiet-radius) !important;
   display: inline-flex !important; align-items: center; gap: 4px; width: auto !important; flex: none;
 }
 .vf-foot .btn-primary svg { margin-right: 4px; }
@@ -218,11 +218,11 @@ html[data-motion="off"] .vf-pill, html[data-motion="off"] .vf-status { animation
   animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards;
 }
 .vfx-notice p { flex: 1; min-width: 0; margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-secondary); }
-.vfx-notice-head { display: block; margin-bottom: 2px; font-size: 15px; font-weight: 700; line-height: 1.35; color: var(--text-primary); }
+.vfx-notice-head { display: block; margin-bottom: 2px; font-size: 16px; font-weight: 600; line-height: 1.35; color: var(--text-primary); }
 .vfx-notice-icon { flex: none; color: #f5d342; }
 .vfx-notice .btn-primary {
-  height: 32px !important; min-height: 0 !important; padding: 0 14px !important; font-size: 13px !important; border-radius: var(--quiet-radius) !important;
-  display: inline-flex !important; align-items: center; gap: 7px; width: auto !important; flex: none; white-space: nowrap;
+  height: 32px !important; min-height: 0 !important; padding: 0 16px !important; font-size: 13px !important; border-radius: var(--quiet-radius) !important;
+  display: inline-flex !important; align-items: center; gap: 8px; width: auto !important; flex: none; white-space: nowrap;
 }
 .vfx-notice .lo-text-btn { flex: none; white-space: nowrap; }
 html[data-motion="off"] .vfx-notice { animation: none; }
@@ -237,9 +237,21 @@ html[data-motion="off"] .vfx-notice { animation: none; }
 
 /* a mod with Niagara effects (particle systems) */
 .vf-niagara:focus-visible, .vf-partial:focus-visible, .vf-needs:focus-visible { outline-offset: 1px !important; }
-.vf-niagara { flex: none; height: 22px; display: inline-flex; align-items: center; padding: 0 7px; border-radius: 6px; font-size: 11px; font-weight: 600;
+.vf-niagara { flex: none; height: 24px; display: inline-flex; align-items: center; padding: 0 8px; border-radius: 6px; font-size: 11px; font-weight: 600;
   color: #b9a4ff; border: 1px solid color-mix(in srgb, #9b7bff, transparent 55%); cursor: help; white-space: nowrap; }
 [data-theme="light"] .vf-niagara { color: #5b3fc4; }
 .vf-eta { font-weight: 600; color: var(--text-primary); }
 /* ticked mods a filter hides: a line of its own above the estimate */
 .vf-hidden-line { display: block; margin-bottom: 2px; }
+
+/* Hierarchy (2026-10-30): the mod groups are the job, so they keep the strongest heading (14px 600). Advanced is settings,
+   so its label steps down to a quiet 13px 500 and its parts indent under it, aligned with its text (nesting by position,
+   no box). In each part: the title, its description, then the control, and the note about the pick 12px and fainter,
+   close under the control it explains (Law of Proximity). Switches fit their labels instead of stretching */
+.vf-adv-title > .ia-toggle { font-size: 13px !important; font-weight: 500 !important; color: var(--text-secondary) !important; }
+.vf-adv-title > .ia-toggle:hover { color: var(--text-primary) !important; }
+.vf-adv-body { padding-left: 24px; }
+.vf-set { padding: 16px 0; }
+.vf-set-note { margin-top: 8px; font-size: 12px; color: color-mix(in srgb, var(--text-secondary) 80%, transparent); }
+.vf-seg { width: fit-content !important; max-width: 100%; }
+.vf-seg button { flex: none !important; }

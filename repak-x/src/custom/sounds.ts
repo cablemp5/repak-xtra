@@ -1,9 +1,13 @@
-// repakxtra: UI sounds with cuelume (synthesized live, no audio files), mech theme. One click listener maps the
+// repakxtra: UI sounds with cuelume (synthesized live, no audio files), in the pack picked in Settings (mech by default). One click listener maps the
 // control under the pointer to a cue and one key listener plays typing in text fields, so upstream components need no
 // changes; alerts add success, error, warning and loading. Settings > Interface > Sound effects turns it off (uiPrefs.tsx calls setSoundOn).
-import { play, setEnabled, setTheme, setVolume, unlock, type PlayOptions, type SoundName } from 'cuelume'
+import { play, setEnabled, setTheme, setVolume, themes, unlock, type PlayOptions, type SoundName, type ThemeName } from 'cuelume'
 
-setTheme('mech') // the mech preset for every sound
+/** cuelume's four packs (default, mech, bubble, press), picked in Settings > Sound effects (uiPrefs.tsx) */
+export const SOUND_PACKS = themes
+export const soundPackOf = (saved: string | null): ThemeName => themes.includes(saved as ThemeName) ? saved as ThemeName : 'mech'
+export const setSoundPack = (saved: string | null) => setTheme(soundPackOf(saved))
+setSoundPack(null)
 setVolume(0.7)
 
 let soundOn = true
@@ -20,11 +24,12 @@ type Cue = [SoundName, PlayOptions?]
 export function cueFor(target: Element): Cue | null {
   const el = target.closest('button, a[href], [role="button"], [role="tab"], [role="switch"], [role="checkbox"], [role="option"], .custom-dropdown-item, input[type="checkbox"]')
   if (!el || el.matches(':disabled, [aria-disabled="true"]')) return null
+  if (el.closest('.sound-pack')) return null // the pack picker plays its own cue, in the pack just picked
   const on = el.getAttribute('aria-checked') === 'true' || (el as HTMLInputElement).checked === true
   if (el.matches('[role="switch"], [role="checkbox"], input[type="checkbox"]')) return ['toggle', { direction: on ? 'back' : 'forward' }]
   if (el.closest('.lo-media-arrow')) return ['navigate', { direction: el.classList.contains('is-prev') ? 'back' : 'forward', emphasis: 'subtle' }]
   if (el.closest('.lp-back')) return ['navigate', { direction: 'back' }]
-  if (el.closest('.view-tabs')) return ['navigate', { direction: el.textContent === 'Loadouts' ? 'back' : 'forward' }]
+  if (el.closest('.view-tabs')) return ['select'] // Loadouts and Library sound like All, On, and Off
   if (el.matches('.bi-role')) return ['toggle', { direction: el.getAttribute('aria-pressed') === 'true' ? 'back' : 'forward' }] // a role kept or let go
   if (el.matches('.loadout-badge, .vf-loadouts')) return ['navigate', { direction: 'forward' }] // the In loadout tag opens that loadout
   if (el.matches('.sl-count')) return el.getAttribute('aria-expanded') === 'true' ? ['close', { emphasis: 'subtle' }] : ['open'] // Smart loadouts: a group's mods
@@ -108,6 +113,7 @@ if (import.meta.env.DEV) {
   console.assert(cueFor(r)?.[0] === 'toggle' && cueFor(r)?.[1]?.direction === 'forward', 'a role button keeping its heroes toggles forward')
   const s = document.createElement('span')
   console.assert(cueFor(s) === null, 'plain text is silent')
+  console.assert(soundPackOf('bubble') === 'bubble' && soundPackOf(null) === 'mech' && soundPackOf('nope') === 'mech', 'unknown packs fall back to mech')
   const k = (key: string, more = {}) => typingKey({ key, ctrlKey: false, metaKey: false, altKey: false, repeat: false, ...more })
   console.assert(k('a') === 'printable' && k(' ') === 'space' && k('Backspace') === 'delete' && k('Enter') === 'enter', 'typing roles')
   console.assert(k('ArrowLeft') === null && k('a', { ctrlKey: true }) === null && k('a', { repeat: true }) === null, 'non-typing keys are silent')

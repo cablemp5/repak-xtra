@@ -245,7 +245,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                 <div className="setting-section">
                   <h3 className="setting-icon-label"><LuRocket size={18} aria-hidden="true" />Launcher</h3>
                   <div className="setting-group">
-                    <p className="setting-hint">Which launcher Launch Game uses.</p>
+                    <p className="setting-hint">Which launcher Launch uses.</p>
 
                     <div className="segmented-control" style={{ maxWidth: '400px' }}>
                       <button
