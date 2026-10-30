@@ -123,6 +123,12 @@ pub fn not_staging(e: &walkdir::DirEntry) -> bool {
     !(e.file_type().is_dir() && e.file_name().to_string_lossy().starts_with(".repakxtra-"))
 }
 
+/// The Library's walk: not_staging, but into the built-ins folder too. Built-ins another app put there list as ordinary
+/// mods. This app's own are its built-in rows instead (xtra_builtins::is_own).
+pub fn library_walk(e: &walkdir::DirEntry) -> bool {
+    not_staging(e) || (e.file_type().is_dir() && e.file_name() == crate::xtra_builtins::FOLDER)
+}
+
 /// Removes staging folders a closed or crashed run left under `mods` (one level of subfolders deep), so the game
 /// never loads a half-built copy. Only names `staging_dir` makes are touched; the replaced files are in the trash.
 pub fn sweep_staging(mods: &Path) {

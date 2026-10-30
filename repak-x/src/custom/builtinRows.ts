@@ -5,8 +5,12 @@ import { useEffect, useMemo } from 'react'
 import { builtinAbout, loadBuiltins, useBuiltins } from './BuiltinMods'
 import { useUiPref } from './uiPrefs'
 
-/** A built-in's file (its .pak under ~mods/.repakxtra-builtin), by path. */
-export const isBuiltin = (path: string) => /[\\/]\.repakxtra-builtin[\\/]/i.test(path)
+/** One of this app's built-ins (its .pak under ~mods/.repakxtra-builtin), by path. Another app's built-ins in that
+ *  folder are ordinary Library mods (xtra_builtins.rs is_own). */
+export const isBuiltin = (path: string) => {
+  const id = /[\\/]\.repakxtra-builtin[\\/]repakxtra-(.+?)_\d+_P\.[^.\\/]+$/i.exec(path)?.[1]
+  return Boolean(id && builtinAbout(id))
+}
 
 /** The Library's rows for the built-ins, shaped like mod records. */
 export function useBuiltinRows() {
@@ -19,5 +23,6 @@ export function useBuiltinRows() {
 }
 
 if (import.meta.env.DEV) {
-  console.assert(isBuiltin('C:/G/Paks/~mods/.repakxtra-builtin/repakxtra-skip-intro-movies_9999999_P.pak') && !isBuiltin('C:/G/Paks/~mods/a.pak'), 'built-in paths')
+  console.assert(isBuiltin('C:/G/Paks/~mods/.repakxtra-builtin/repakxtra-skip-intro-movies_9999999_P.pak') && !isBuiltin('C:/G/Paks/~mods/a.pak')
+    && !isBuiltin('C:/G/Paks/~mods/.repakxtra-builtin/repakxtra-some-thing_9999999_P.pak'), "built-in paths, another app's are ordinary mods")
 }

@@ -21,7 +21,7 @@ use crate::vfx_updater::progress::NoOpProgressSink;
 use crate::vfx_updater::uasset_tool::{convert_json_to_uassets, convert_uassets_to_json, ensure_vfx_uat_session, extract_vanilla_assets, pack_to_iostore};
 use crate::AppState;
 
-const FOLDER: &str = ".repakxtra-builtin";
+pub(crate) const FOLDER: &str = ".repakxtra-builtin";
 const SKIN: &str = "Marvel/Content/Marvel/Data/DataTable/MarvelHeroSkinTable";
 const LOGO: &str = "Marvel/Content/Marvel/Data/DataTable/UI/Login/MarvelLogoVideoTable";
 const LOGO_FLAGS: [&str; 4] = ["bUsedInCn", "bUsedInHkMoTw", "bUsedInJpKr", "bUsedInEnRegion"];
@@ -160,9 +160,31 @@ fn load() -> HashMap<String, Saved> {
     std::fs::read_to_string(store_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
 }
 
-/// Every saved built-in this app does not have is set off, so the app that had it does not rebuild it on its own.
-pub(crate) fn disable_legacy_choices() -> Result<(), String> {
-    update(|all| all.iter_mut().filter(|(id, _)| !IDS.contains(&id.as_str())).for_each(|(_, saved)| saved.on = false))
+/// In the built-ins folder. Another app's built-ins there show in the Library as ordinary mods, but keep the name and
+/// place that app looks for them under.
+pub(crate) fn in_folder(path: &Path) -> bool {
+    path.parent().and_then(Path::file_name).is_some_and(|n| n == FOLDER)
+}
+
+/// A file of this app's own built-ins (its built-in rows), not another app's in the same folder.
+pub(crate) fn is_own(path: &Path) -> bool {
+    in_folder(path) && path.file_name().and_then(|n| n.to_str()).is_some_and(|n| IDS.iter().any(|id| n.starts_with(&format!("{}.", stem(id)))))
+}
+
+/// Refuses a rename, move or replacement of a file in the built-ins folder: the app that made it would build it again.
+pub(crate) fn fixed_place(path: &Path) -> Result<(), String> {
+    if in_folder(path) {
+        return Err("This mod keeps the name and folder the app that made it looks for. Turn it on or off, or delete it.".into());
+    }
+    Ok(())
+}
+
+/// Another app's built-in as the Library names it: "repakxtra-some-thing_9999999_P.pak" is "Some Thing".
+pub(crate) fn shown_name(path: &Path) -> Option<String> {
+    let stem = path.file_stem()?.to_str()?;
+    let id = stem.strip_prefix("repakxtra-")?.split('_').next()?;
+    let word = |w: &str| { let mut c = w.chars(); c.next().map(|f| f.to_uppercase().chain(c).collect::<String>()) };
+    Some(id.split('-').filter_map(word).collect::<Vec<_>>().join(" "))
 }
 
 /// Held for every read-change-save of the state, never across a build: two commands never write over each other.
@@ -878,17 +900,28 @@ mod tests {
     }
 
     #[test]
+    fn another_apps_built_ins_list_as_ordinary_mods() {
+        let dir = Path::new("C:/G/Paks/~mods").join(FOLDER);
+        let own = dir.join(format!("{}.pak", stem(SKIP_INTRO)));
+        let theirs = dir.join("repakxtra-some-thing_9999999_P.bak_repak");
+        assert!(is_own(&own) && is_own(&dir.join(format!("{}.bak_repak", stem(SKIP_INTRO)))));
+        assert!(!is_own(&theirs) && in_folder(&theirs) && fixed_place(&theirs).is_err());
+        assert!(fixed_place(Path::new("C:/G/Paks/~mods/my-skin.pak")).is_ok());
+        assert_eq!(shown_name(&theirs).as_deref(), Some("Some Thing"));
+    }
+
+    #[test]
     fn another_editions_entries_and_fields_survive_a_save() {
         // the other edition's older builds need these on every entry (no serde defaults there)
         #[derive(Deserialize)]
         #[allow(dead_code)]
-        struct Theirs { on: bool, excluded: Vec<String>, heroes: Vec<String>, quake: Option<Value> }
-        let mut all: HashMap<String, Saved> = serde_json::from_str(r#"{"custom-quake":{"on":true,"excluded":[],"heroes":["1011"],"quake":{"base":"5d7a80"}}}"#).unwrap();
+        struct Theirs { on: bool, excluded: Vec<String>, heroes: Vec<String>, look: Option<Value> }
+        let mut all: HashMap<String, Saved> = serde_json::from_str(r#"{"some-thing":{"on":true,"excluded":[],"heroes":["1011"],"look":{"base":"5d7a80"}}}"#).unwrap();
         all.entry(SKIP_INTRO.to_string()).or_default().on = true;
         compat(&mut all);
         let text = serde_json::to_string(&all).unwrap();
         let theirs: HashMap<String, Theirs> = serde_json::from_str(&text).unwrap();
-        assert!(theirs["custom-quake"].on && theirs["custom-quake"].heroes == ["1011"] && theirs["custom-quake"].quake.is_some());
+        assert!(theirs["some-thing"].on && theirs["some-thing"].heroes == ["1011"] && theirs["some-thing"].look.is_some());
         assert!(theirs[SKIP_INTRO].on && theirs[SKIP_INTRO].excluded.is_empty());
     }
 

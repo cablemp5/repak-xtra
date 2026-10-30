@@ -621,6 +621,7 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
 pub async fn xtra_vfx_place(source: String, staged_base: String, turn_off_original: bool, keep_name: Option<bool>, trash_original: Option<bool>, partial: Option<bool>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Placed, String> {
     // repakxtra: file moves on a blocking thread, never on the async workers every other command shares
     let state = state.inner().clone();
+    crate::xtra_builtins::fixed_place(Path::new(&source))?; // its own app rebuilds it for the new game build
     crate::blocking(move || {
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?;

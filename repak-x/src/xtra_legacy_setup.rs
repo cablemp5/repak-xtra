@@ -12,10 +12,7 @@ fn discover(selected: &Path) -> Vec<Item> {
     for entry in walkdir::WalkDir::new(root).follow_links(false).into_iter().filter_map(Result::ok) {
         if !entry.file_type().is_file() { continue; }
         let name = entry.file_name().to_string_lossy();
-        let label = if name.eq_ignore_ascii_case("!ProjectSigeon_9999999_P.pak") { "Project Sigeon" }
-            else if name.eq_ignore_ascii_case("repakxtra-custom-quake_9999999_P.pak") { "Custom Quake" }
-            else if name.eq_ignore_ascii_case("repakxtra-force-default-skin_9999999_P.pak") { "Force default skin" }
-            else { continue };
+        let label = if name.eq_ignore_ascii_case("!ProjectSigeon_9999999_P.pak") { "Project Sigeon" } else { continue };
         items.push(Item { path: entry.into_path(), label });
     }
     if let Some(game) = root.parent().and_then(Path::parent).and_then(Path::parent) {
@@ -59,7 +56,7 @@ pub fn legacy_setup_disable(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Re
     crate::xtra_identity::upstream_guard()?;
     if crate::is_game_process_running() { return Err("Close Marvel Rivals before disabling the older setup.".into()); }
     let path = state.lock().unwrap().game_path.clone();
-    disable(&discover(&path), crate::xtra_builtins::disable_legacy_choices)
+    disable(&discover(&path), || Ok(()))
 }
 
 #[cfg(test)]
@@ -95,25 +92,23 @@ mod tests {
     }
 
     #[test]
-    fn cleanup_detects_quake_and_asi_but_preserves_configs() {
+    fn cleanup_detects_the_asi_but_preserves_configs_and_built_ins() {
         let temp = tempfile::tempdir().unwrap();
         let mods = temp.path().join("Marvel/Content/Paks/~mods");
         let builtins = mods.join(".repakxtra-builtin");
         let plugins = temp.path().join("Marvel/Binaries/Win64/plugins");
         std::fs::create_dir_all(&builtins).unwrap();
         std::fs::create_dir_all(&plugins).unwrap();
-        let quake = builtins.join("repakxtra-custom-quake_9999999_P.pak");
-        let skins = builtins.join("repakxtra-force-default-skin_9999999_P.pak");
+        let built = builtins.join("repakxtra-some-thing_9999999_P.pak");
         let asi = plugins.join("SigeonLoader.asi");
         let ini = plugins.join("SigeonLoader.ini");
-        std::fs::write(&quake, b"quake").unwrap();
-        std::fs::write(&skins, b"skins").unwrap();
+        std::fs::write(&built, b"built").unwrap();
         std::fs::write(&asi, b"asi").unwrap();
         std::fs::write(&ini, b"unchanged config").unwrap();
         let items = discover(&mods);
-        assert_eq!(items.len(), 3);
+        assert_eq!(items.len(), 1, "built-ins are ordinary Library mods now, not an older setup");
         disable(&items, || Ok(())).unwrap();
-        assert!(!quake.exists() && !skins.exists() && !asi.exists());
+        assert!(built.exists() && !asi.exists());
         assert_eq!(std::fs::read(ini).unwrap(), b"unchanged config");
     }
 }

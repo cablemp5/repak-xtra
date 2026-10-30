@@ -646,12 +646,12 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
     let mut mods = Vec::new();
 
     // Scan root ~mods directory and all subdirectories recursively (no depth limit)
-    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::not_staging) /* repakxtra */.filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::library_walk) /* repakxtra */.filter_map(|e| e.ok()) {
         let path = entry.path();
 
         // Skip directories themselves (repakxtra: the walk already knows, no extra disk stat per file)
-        if entry.file_type().is_dir() {
-            continue;
+        if entry.file_type().is_dir() || crate::xtra_builtins::is_own(path) {
+            continue; // repakxtra: and this app's own built-ins, which are its built-in rows
         }
 
         let ext = path.extension().and_then(|s| s.to_str());
@@ -670,7 +670,7 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
 
             // Determine folder_id based on relative path from game_path
             let folder_id = if let Some(parent) = path.parent() {
-                if parent == game_path {
+                if parent == game_path || crate::xtra_builtins::in_folder(path) { // repakxtra: another app's built-ins show at the top
                     // Mod is directly in root - use root folder name (e.g., "~mods")
                     Some(root_folder_name)
                 } else {
@@ -744,7 +744,7 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
                 path: path.to_path_buf(),
                 utoc_path,
                 enabled: is_enabled,
-                custom_name: None,
+                custom_name: crate::xtra_builtins::in_folder(path).then(|| crate::xtra_builtins::shown_name(path)).flatten(), // repakxtra
                 folder_id,
                 custom_tags,
                 file_size,
@@ -895,6 +895,7 @@ async fn set_mod_priority(
     priority: usize,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<(), String> {
+    crate::xtra_builtins::fixed_place(Path::new(&mod_path))?; // repakxtra
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let path = PathBuf::from(&mod_path);
@@ -3500,6 +3501,7 @@ async fn update_mod(
     window: Window,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<UpdateModResult, String> {
+    crate::xtra_builtins::fixed_place(Path::new(&old_mod_path))?; // repakxtra
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     info!(
@@ -3978,6 +3980,7 @@ async fn rename_mod(
     window: Window,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<String, String> {
+    crate::xtra_builtins::fixed_place(Path::new(&mod_path))?; // repakxtra
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let old_path_buf = PathBuf::from(&mod_path);
@@ -4581,6 +4584,7 @@ async fn assign_mod_to_folder(
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
 ) -> Result<(), String> {
+    crate::xtra_builtins::fixed_place(Path::new(&mod_path))?; // repakxtra
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let state = state.lock().unwrap();
@@ -7732,10 +7736,10 @@ fn scan_mod_clashes(quiet: bool, game_path: &Path, state: &Arc<Mutex<AppState>>)
     let mut mods_info: Vec<crate::xtra_conflicts::Container> = Vec::new();
 
     // Scan all enabled mods
-    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::not_staging) /* repakxtra */.filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::library_walk) /* repakxtra */.filter_map(|e| e.ok()) {
         let path = entry.path();
 
-        if path.is_dir() {
+        if path.is_dir() || crate::xtra_builtins::is_own(path) {
             continue;
         }
 
@@ -7978,10 +7982,10 @@ async fn check_single_mod_conflicts(
     let mut conflicts: Vec<SingleModConflict> = Vec::new();
 
     // Scan all other enabled mods
-    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::not_staging) /* repakxtra */.filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::library_walk) /* repakxtra */.filter_map(|e| e.ok()) {
         let path = entry.path();
 
-        if path.is_dir() {
+        if path.is_dir() || crate::xtra_builtins::is_own(path) {
             continue;
         }
 
