@@ -2691,7 +2691,7 @@ html[data-motion="off"] .vfx-dot { animation: none; }
 .bulk-actions-toolbar .selection-info { align-self: stretch; margin: -5px 4px -5px 0; padding: 5px 4px 5px 0; border-right: 1px solid rgba(255, 255, 255, 0.12); }   /* the divider runs the bar's full height */
 .bulk-count-label { max-width: none !important; margin: 0 12px 0 0 !important; display: flex !important; align-items: center; font-size: 13px !important; font-weight: 500 !important;
   line-height: normal !important; opacity: 1 !important; color: var(--text-primary) !important; }
-.bulk-count { min-width: 0 !important; height: 36px !important; padding: 0 0 0 12px !important; margin: 0 !important; background: none !important; display: flex; align-items: center; }
+.bulk-count { min-width: 0 !important; height: 36px !important; padding: 0 0 0 12px !important; margin: 0 12px 0 0 !important; white-space: nowrap; background: none !important; display: flex; align-items: center; }
 /* plain text, all white: "2 selected" read as one phrase (the 4px gap is a space), on the buttons' line height so the glyphs sit level */
 .bulk-count-value { display: inline-block; height: auto; min-width: 0; padding: 0;
   border-radius: 0; background: none; color: var(--text-primary); font-size: 13px; font-weight: 500; line-height: normal;

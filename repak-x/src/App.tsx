@@ -4255,8 +4255,7 @@ function App() {
               {/* Bulk Actions Toolbar */}
               <div className={`bulk-actions-toolbar ${selectedMods.size === 0 ? 'inactive' : ''}`}>
                 <div className="selection-info">
-                  <span className="bulk-count"><span className="bulk-count-value"><Num id="bulk-count" value={selectedMods.size} /></span></span>{/* repakxtra: transitions.dev Number pop-in */}
-                  <span className="bulk-count-label">selected</span>
+                  <span className="bulk-count"><span className="bulk-count-value"><Num id="bulk-count" value={`${selectedMods.size} selected`} /></span></span>{/* repakxtra: transitions.dev Number pop-in, the whole phrase rolls */}
                   <button onClick={() => {
                     const allPaths = libraryMods.map(m => m.path) // repakxtra: the built-in rows shown too
                     setSelectedMods(new Set(allPaths))
