@@ -222,9 +222,10 @@ fn parked(dir: &Path, id: &str) -> PathBuf {
     dir.join(format!("{}.bak_repak", stem(id)))
 }
 
-/// The files on disk were made for this game build.
+/// The files on disk were made for this game build. A newer recipe counts too: the other edition sharing this folder may
+/// build one, and rebuilding it back on every switch between the apps would take a minute each time.
 fn fits(id: &str, s: &Saved, build: &str) -> bool {
-    s.built_for.as_deref() == Some(build) && !usmap_moved(s) && s.built_recipe == recipe(id)
+    s.built_for.as_deref() == Some(build) && !usmap_moved(s) && s.built_recipe >= recipe(id)
 }
 
 /// Off: the .pak goes aside, the rest stays, so turning it on again needs no rebuild.
@@ -955,8 +956,9 @@ mod tests {
         assert!(fits(SKIP_INTRO, &s, "b1"));
         unpark(&dir, SKIP_INTRO).unwrap();
         assert!(view(SKIP_INTRO, &s, &dir, "b1").current, "on again: current with no build");
-        // a game update means a rebuild
+        // a game update means a rebuild, an older recipe too, a newer one (the other edition's) does not
         assert!(!fits(SKIP_INTRO, &s, "b2"));
+        assert!(!fits(SKIP_INTRO, &Saved { built_recipe: 0, ..s.clone() }, "b1") && fits(SKIP_INTRO, &Saved { built_recipe: 9, ..s.clone() }, "b1"));
         // a new build replaces the set-aside one, and removing takes every file
         park(&dir, SKIP_INTRO).unwrap();
         remove(&dir, SKIP_INTRO).unwrap();
