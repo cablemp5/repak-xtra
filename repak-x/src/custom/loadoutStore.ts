@@ -258,10 +258,10 @@ export const modsByKey = (mods: Mod[]) => {
   return m
 }
 
-/** Mods a loadout may hold: not the Project Galacta or Project Sigeon loader, which every mod made for it needs on (a
- *  loadout switching it off would break all the others). The same names xtra_project.rs treats as a loader: an optional
- *  _digits and an optional _P, each on its own. */
-export const loadoutable = (key: string) => !/^!?project(galacta|sigeon)(_\d+)?(_p)?$/i.test(memberName(key))
+/** Mods a loadout may hold: not the Project Galacta loader, which every mod made for it needs on (a loadout switching
+ *  it off would break all the others), and which Setup manages. An optional _digits and an optional _P, each on its own.
+ *  Other loaders (Project Sigeon) are ordinary mods here. */
+export const loadoutable = (key: string) => !/^!?projectgalacta(_\d+)?(_p)?$/i.test(memberName(key))
 
 /** Stored keys normalized, so loadouts saved before the suffix was dropped still match. */
 const keySet = (keys: string[]) => new Set(keys.map(normKey))
@@ -559,14 +559,15 @@ window.addEventListener('keydown', e => {
 })
 
 if (import.meta.env.DEV) {
-  console.assert(['C:/g/~mods/!ProjectGalacta_9999999_P.pak', 'C:/g/~mods/!ProjectSigeon_9999999_P.bak_repak'].every(x => !loadoutable(modKey(x)))
-    && loadoutable(modKey('C:/g/~mods/ProjectSigeonFan_9999999_P.pak')), 'loadoutable: neither loader, other mods yes')
-  console.assert(['ProjectSigeon_P', 'ProjectGalacta_12', '!ProjectSigeon_3_P'].every(n => !loadoutable(modKey(`C:/g/~mods/${n}.pak`)))
-    && loadoutable(modKey('C:/g/~mods/ProjectGalacta_Compat_P.pak')), 'loadoutable: the loader names xtra_project.rs accepts')
+  console.assert(['C:/g/~mods/!ProjectGalacta_9999999_P.pak', 'C:/g/~mods/!ProjectGalacta_9999999_P.bak_repak'].every(x => !loadoutable(modKey(x)))
+    && loadoutable(modKey('C:/g/~mods/!ProjectSigeon_9999999_P.pak')) && loadoutable(modKey('C:/g/~mods/ProjectGalactaFan_9999999_P.pak')),
+    'loadoutable: not the Galacta loader, other mods and other loaders yes')
+  console.assert(['ProjectGalacta_P', 'ProjectGalacta_12', '!ProjectGalacta_3_P'].every(n => !loadoutable(modKey(`C:/g/~mods/${n}.pak`)))
+    && loadoutable(modKey('C:/g/~mods/ProjectGalacta_Compat_P.pak')), 'loadoutable: the Galacta loader names only')
   {
     const mod = (name: string, enabled: boolean) => ({ path: `C:/g/~mods/${name}.pak`, enabled }) as Mod
-    const old: Loadout = { id: 'x', name: 'x', label: 'Other', scope: [], on: [modKey('C:/g/~mods/!ProjectSigeon_9999999_P.pak'), modKey('C:/g/~mods/Skin.pak')] }
-    console.assert(isActive(old, [mod('!ProjectSigeon_9999999_P', false), mod('Skin', true)]), 'isActive: a loader saved in an old loadout does not count')
+    const old: Loadout = { id: 'x', name: 'x', label: 'Other', scope: [], on: [modKey('C:/g/~mods/!ProjectGalacta_9999999_P.pak'), modKey('C:/g/~mods/Skin.pak')] }
+    console.assert(isActive(old, [mod('!ProjectGalacta_9999999_P', false), mod('Skin', true)]), 'isActive: a loader saved in an old loadout does not count')
   }
   const base: Loadout = { id: 'a', name: 'a', label: 'Other', scope: [], on: [] }
   console.assert(byRecent([{ ...base, id: 'old' }, { ...base, id: 'b', edited: 1 }, { ...base, id: 'c', edited: 2 }, { ...base, id: 'old2' }]).map(l => l.id).join() === 'c,b,old,old2',

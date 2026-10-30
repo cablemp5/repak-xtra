@@ -81,7 +81,6 @@ import { finishInstallLoadout } from './custom/installLoadout'
 import SetupButton from './custom/SetupPanel'
 import { REPAKXTRA_VERSION, latestRelease, versionTag } from './custom/version'
 import { installedReleaseNotes } from './custom/releaseNotes'
-import LegacySetup from './custom/LegacySetup'
 import { APP_NAME } from './custom/edition'
 import FirstRun from './custom/FirstRun' // repakxtra: first-launch setup
 import { installDroppedKit } from './custom/previewKit'
@@ -2997,7 +2996,7 @@ function App() {
   const baseFilteredMods = useMemo(() => mods.filter(mod => {
     // Project Galacta is managed from its own Tools panel toggle, not the mods list
     if (projectGalactaMod && mod.path === projectGalactaMod.path) return false
-    // repakxtra: Project Galacta and the Project Sigeon loader never show in the Library, by name too (before their files are read)
+    // repakxtra: the Project Galacta loader never shows in the Library, by name too (before its files are read). Setup manages it
     if (!loadoutable(modKey(mod.path))) return false
 
     // Search query
@@ -3996,7 +3995,6 @@ function App() {
       </header>
 
       <div className="container">
-        <LegacySetup gamePath={gamePath} reload={loadMods} />
         <VfxNotice mods={mods} reload={loadMods} />{/* repakxtra: the game updated, VFX mods to fix */}
         {/* repakxtra: Home view (custom/LoadoutsScreen.tsx); the action bar and panels below are the Library */}
         <LoadoutsScreen

@@ -2804,8 +2804,6 @@ html[data-motion="off"] .transfer-progress-view .progress-info span:first-child,
 html[data-motion="off"] .upd-progress > span, html[data-motion="off"] .repakx-progress-label { animation: none !important; background-position: 50% 0 !important; }
 
 
-.legacy-setup { margin: 12px 0; padding: 16px; border: 1px solid #a16207; border-radius: 10px; background: #713f121a; }
-.legacy-setup p { margin: 8px 0; font-size: 14px; line-height: 1.5; }
 
 /* One marker for every numbered guide (the guided setup, the capture dialog, cable 2026-10-29): the
    number in a 28px ring, a thin line down to the next one. The ring is an inset shadow, not a border, so the guided

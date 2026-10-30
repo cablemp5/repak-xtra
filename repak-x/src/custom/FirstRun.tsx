@@ -30,7 +30,7 @@ const openUrl = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.
  *  folder, the bypass). Its steps show what is done. */
 const firstLaunch = () => !localStorage.getItem(SEEN)
 
-/** One numbered step: its number (a check once done), title, text and its action on the right. Sigeon's setup uses it too. */
+/** One numbered step: its number (a check once done), title, text and its action on the right. */
 export function Step({ n, done, title, optional, recommended, wide, children, action }: {
   n: number; done: boolean; title: string; optional?: boolean; recommended?: boolean; wide?: boolean; children: React.ReactNode; action?: React.ReactNode
 }) {
