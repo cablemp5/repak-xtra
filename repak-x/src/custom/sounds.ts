@@ -29,7 +29,7 @@ export function cueFor(target: Element): Cue | null {
   if (el.matches('[role="switch"], [role="checkbox"], input[type="checkbox"]')) return ['toggle', { direction: on ? 'back' : 'forward' }]
   if (el.closest('.lo-media-arrow')) return ['navigate', { direction: el.classList.contains('is-prev') ? 'back' : 'forward', emphasis: 'subtle' }]
   if (el.closest('.lp-back')) return ['navigate', { direction: 'back' }]
-  if (el.closest('.view-tabs')) return ['navigate', { direction: el.textContent === 'Loadouts' ? 'back' : 'forward' }]
+  if (el.closest('.view-tabs')) return ['select'] // Loadouts and Library sound like All, On, and Off
   if (el.matches('.bi-role')) return ['toggle', { direction: el.getAttribute('aria-pressed') === 'true' ? 'back' : 'forward' }] // a role kept or let go
   if (el.matches('.loadout-badge, .vf-loadouts')) return ['navigate', { direction: 'forward' }] // the In loadout tag opens that loadout
   if (el.matches('.sl-count')) return el.getAttribute('aria-expanded') === 'true' ? ['close', { emphasis: 'subtle' }] : ['open'] // Smart loadouts: a group's mods
