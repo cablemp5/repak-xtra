@@ -1,0 +1,44 @@
+diff --git a/src/UAssetTool/Program.cs b/src/UAssetTool/Program.cs
+index a6e2189..7debfcc 100644
+--- a/src/UAssetTool/Program.cs
++++ b/src/UAssetTool/Program.cs
+@@ -2193,6 +2193,15 @@ public partial class Program
+         return failCount > 0 ? 1 : 0;
+     }
+     
++    // repakxtra: unindented, straight into the file (as batch_to_json does since 0002): a Niagara system's indented
++    // JSON was built as one string of up to 30 MB first, and the built-ins decode hundreds of them, several at once
++    private static void WriteJson(UAsset asset, string path, bool compact)
++    {
++        if (compact) { File.WriteAllText(path, CompactJsonSerializer.Serialize(asset), System.Text.Encoding.UTF8); return; }
++        using var writer = new StreamWriter(path, false, new System.Text.UTF8Encoding(true), 1 << 16);
++        asset.SerializeJson(writer, Newtonsoft.Json.Formatting.None);
++    }
++
+     private static int CliToJson(string[] args)
+     {
+         if (args.Length < 2)
+@@ -2241,10 +2250,7 @@ public partial class Program
+ 
+                     var asset = LoadAsset(file, usmapPath);
+                     PreloadReferencedAssetsForSchemas(asset);
+-                    string json = compact
+-                        ? CompactJsonSerializer.Serialize(asset)
+-                        : asset.SerializeJson(true);
+-                    File.WriteAllText(jsonOutputPath, json, System.Text.Encoding.UTF8);
++                    WriteJson(asset, jsonOutputPath, compact);
+                     Console.WriteLine($"Converted{(compact ? " (compact)" : "")}: {file} -> {jsonOutputPath}");
+                     successCount++;
+                 }
+@@ -2275,10 +2281,7 @@ public partial class Program
+ 
+                 var asset = LoadAsset(inputPath, usmapPath);
+                 PreloadReferencedAssetsForSchemas(asset);
+-                string json = compact
+-                    ? CompactJsonSerializer.Serialize(asset)
+-                    : asset.SerializeJson(true);
+-                File.WriteAllText(jsonOutputPath, json, System.Text.Encoding.UTF8);
++                WriteJson(asset, jsonOutputPath, compact);
+                 Console.WriteLine($"Asset exported to JSON{(compact ? " (compact)" : "")}: {jsonOutputPath}");
+                 successCount = 1;
+             }

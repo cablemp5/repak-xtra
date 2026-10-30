@@ -164,8 +164,23 @@ export const useDeletedLoadouts = (): DeletedLoadout[] | null => {
   } catch { return null }
 }
 
-export const useLoadouts = (): Loadout[] =>
-  decode(useSyncExternalStore(subscribe, () => savedItem(STORAGE) || '[]'))
+/** The list decoded once per save, and each loadout the same object while its own data stays the same: every card is a
+ *  memo keyed on its loadout, so decoding on each render redrew all of them on every step of a card drag (20 fps). */
+let shared: { json: string; list: Loadout[]; each: Map<string, [string, Loadout]> } | null = null
+export const useLoadouts = (): Loadout[] => {
+  const json = useSyncExternalStore(subscribe, () => savedItem(STORAGE) || '[]')
+  if (shared?.json !== json) {
+    const each = new Map<string, [string, Loadout]>()
+    const list = decode(json).map(l => {
+      const text = JSON.stringify(l), was = shared?.each.get(l.id)
+      const kept = was && was[0] === text ? was[1] : l
+      each.set(l.id, [text, kept])
+      return kept
+    })
+    shared = { json, list, each }
+  }
+  return shared.list
+}
 
 /** The loadouts holding each mod (by canonKey), built once per change of the saved list: every Library row reads it. */
 let holders: { json: string; by: Map<string, { id: string; name: string }[]> } | null = null
@@ -234,6 +249,14 @@ const normKey = canonKey
 /** The loadout member key of a mod path (loadoutIdentity.ts): its folder and name, the same through on/off and every
  *  priority. Display names and preview keys use nameKey. */
 export const modKey = memberKey
+
+const byKeyCache = new WeakMap<Mod[], Map<string, Mod>>()
+/** The mods by modKey, built once per mods list (each card, slide and page made its own copy on every render). */
+export const modsByKey = (mods: Mod[]) => {
+  let m = byKeyCache.get(mods)
+  if (!m) byKeyCache.set(mods, (m = new Map(mods.map(x => [modKey(x.path), x]))))
+  return m
+}
 
 /** Mods a loadout may hold: not the Project Galacta or Project Sigeon loader, which every mod made for it needs on (a
  *  loadout switching it off would break all the others). The same names xtra_project.rs treats as a loader: an optional
@@ -445,7 +468,9 @@ export const placed = (list: Loadout[], id: string, group: string, beside?: { id
   const from = list.findIndex(l => l.id === id)
   if (from < 0 || beside?.id === id) return list
   const rest = list.filter(l => l.id !== id)
-  const moved = { ...list[from], label: group.trim() || OTHER }
+  const label = group.trim() || OTHER
+  // the same object while its collection stays, so its card (memo) does not redraw on every move of a drag
+  const moved = list[from].label === label ? list[from] : { ...list[from], label }
   let at = beside ? rest.findIndex(l => l.id === beside.id) : -1
   if (at >= 0) at += beside!.after ? 1 : 0
   else { const last = rest.map(l => inGroup(l, moved.label)).lastIndexOf(true); at = last >= 0 ? last + 1 : rest.length }

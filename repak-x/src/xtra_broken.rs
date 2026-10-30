@@ -158,6 +158,22 @@ pub(crate) struct AssetBuilds {
 }
 static GAME_BUILDS: Mutex<Option<(String, Arc<AssetBuilds>)>> = Mutex::new(None);
 
+/// Each file's stamp in the installed game: the newest patch build holding it and when that container was written. A file
+/// the game updated sits in a newer patch container, and a container replaced in place has a new write time, so the same
+/// stamp means the same bytes. None when a container could not be read (every file is then read again).
+pub(crate) fn package_stamps(paks: &Path, files: &[String]) -> Option<Vec<String>> {
+    let assets = game_assets(paks)?;
+    let key = build_key(&game_containers(paks));
+    let builds = GAME_BUILDS.lock().unwrap_or_else(|e| e.into_inner()).as_ref().filter(|(k, _)| *k == key).map(|(_, b)| b.clone())?;
+    if builds.unread > 0 {
+        return None;
+    }
+    Some(files.iter().map(|f| {
+        let k = match_key(f);
+        format!("{}:{}", builds.by_package.get(&k).copied().unwrap_or(0), assets.get(&k).copied().unwrap_or(0))
+    }).collect())
+}
+
 /// Of `files` (paths inside a mod), those whose game copy an update rewrote after `since` (seconds): cooked for an
 /// older game build. None when the game's files in `paks` (its Paks folder) cannot be read.
 pub(crate) fn rewritten_since(paks: &Path, files: &[String], since: u64) -> Option<Vec<String>> {

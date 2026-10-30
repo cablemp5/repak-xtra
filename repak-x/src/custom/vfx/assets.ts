@@ -114,6 +114,39 @@ const DEP_LISTS = ['SerializationBeforeSerializationDependencies', 'CreateBefore
 
 const valueField = (entry: Json) => (Array.isArray(entry?.Value) ? entry.Value.find((p: Json) => p?.Name === 'ParameterValue') : undefined)
 
+/** A mod saved with versioned properties: its struct headers carry no fragments (its association is a ByteProperty). */
+const versioned = (entry: Json) => entry?.OriginalStructHeader != null && entry.OriginalStructHeader.Fragments == null
+
+/** The game's entry carrying the mod's value. A versioned entry copied whole into the game's unversioned file made
+ *  UAssetTool's write fail ("Object reference not set to an instance of an object": a header without fragments,
+ *  bp-invisible-vfx and RemovePantherPassive on the S10.5 mappings, 2026-10-29). Its header is dropped so UAssetAPI
+ *  rebuilds it from the values (the value may turn zero or nonzero). */
+function carryValue(game: Json, mod: Json): Json {
+  const out = structuredClone(game)
+  const to = valueField(out), from = valueField(mod)
+  if (to && from) { to.Value = structuredClone(from.Value); rezero(to) }
+  out.OriginalStructHeader = null
+  return out
+}
+
+/** A value UAssetAPI writes as zero: 0, false, null, or a float string such as "+0". */
+const zeroValue = (v: unknown) => v === 0 || v === false || v === null || (typeof v === 'string' && /^[+-]?0+(\.0+)?$/.test(v))
+
+/** IsZero set from the carried values, down through structs (a vector's R, G, B, A), each struct's header dropped so
+ *  UAssetAPI rebuilds it: the game's zero flag kept on a nonzero value made it skip writing that value. A value that is
+ *  an object (a name, a path) keeps its flag. Returns whether it is zero. */
+function rezero(p: Json): boolean {
+  if (Array.isArray(p.Value)) {
+    const zero = p.Value.map((c: Json) => (c && typeof c === 'object' ? rezero(c) : zeroValue(c))).every(Boolean)
+    if ('OriginalStructHeader' in p) p.OriginalStructHeader = null
+    p.IsZero = zero
+    return zero
+  }
+  if (p.Value && typeof p.Value === 'object') return Boolean(p.IsZero)
+  p.IsZero = zeroValue(p.Value)
+  return p.IsZero
+}
+
 /** Every parameter of the mod's material instance that the filter does not exclude. */
 export function readModParams(json: Json, filter: ColorFilter): ModParam[] {
   const out: ModParam[] = []
@@ -147,7 +180,7 @@ export function portParam(json: Json, p: ModParam): PortResult {
   if (!values || i < 0) return 'missing'
   if (p.texture === 'unportable') return 'unportable'
   // The entry's own Name is its array slot, which is the game's, not the mod's
-  const next = { ...structuredClone(p.entry), Name: values[i].Name }
+  const next = { ...(versioned(p.entry) ? carryValue(values[i], p.entry) : structuredClone(p.entry)), Name: values[i].Name }
   if (p.texture) {
     const field = valueField(next)
     const was = JSON.stringify(json.Imports ?? []), names = (json.NameMap ?? []).length
@@ -279,6 +312,17 @@ if (import.meta.env.DEV) {
   console.assert((game.Exports[0].CreateBeforeSerializationDependencies as number[]).includes(at), 'the export depends on the new texture like the mod did')
   console.assert(portParam(game, p) === 'unchanged' && game.Imports.length === 6, 'a second port adds nothing')
   console.assert(nameBase('T_X_02') === 'T_X_02' && nameBase('T_X_2') === 'T_X' && nameBase('T_X_0') === 'T_X', 'name numbers follow FName rules')
+  // a zero in the game, nonzero in a versioned mod: the carried value is written, its zero flags follow it
+  const scalarGame = { Name: '0', OriginalStructHeader: { Fragments: [] }, Value: [{ Name: 'ParameterInfo', Value: [] }, { Name: 'ParameterValue', Value: '+0', IsZero: true }] }
+  const scalarMod = { Name: '0', OriginalStructHeader: {}, Value: [{ Name: 'ParameterInfo', Value: [] }, { Name: 'ParameterValue', Value: 1, IsZero: false }] }
+  const carried = carryValue(scalarGame, scalarMod)
+  console.assert(valueField(carried).Value === 1 && valueField(carried).IsZero === false && carried.OriginalStructHeader === null, 'zero to nonzero: written')
+  const color = (r: number) => ({ Name: 'ParameterValue', OriginalStructHeader: { Fragments: [] }, IsZero: r === 0, Value: [{ Name: 'R', Value: r, IsZero: r === 0 }, { Name: 'G', Value: 0, IsZero: true }] })
+  const vec = carryValue({ Value: [color(0)] }, { OriginalStructHeader: {}, Value: [color(2)] })
+  const v = valueField(vec)
+  console.assert(v.IsZero === false && v.OriginalStructHeader === null && v.Value[0].IsZero === false && v.Value[1].IsZero === true, 'a vector rebuilds its flags and header')
+  const off = valueField(carryValue({ Value: [color(2)] }, { OriginalStructHeader: {}, Value: [color(0)] }))
+  console.assert(off.IsZero === true && off.Value[0].IsZero === true, 'nonzero to zero: flagged zero')
 }
 
 /** Packages the mod's copy points at and the game's copy does not, other than textures its carried parameters name: edits

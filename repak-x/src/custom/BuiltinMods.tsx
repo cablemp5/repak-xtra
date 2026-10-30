@@ -5,7 +5,7 @@ import { EXTENDED } from './edition'
 // colors and two switches), each applied in one rebuild. The app rebuilds them
 // after a game update on its own (refreshBuiltins at start, from App.tsx, and again here once the game closes), so the
 // rows only show where each one stands. The switch is the saved choice, the blue icon and the count mean a working build.
-import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { memo, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { Check, ChevronDown, ChevronRight, RotateCcw, Search, Shirt, Square, TriangleAlert, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
@@ -47,9 +47,8 @@ const QUAKE_PRESETS = { base: ['5d7a80', '808080', 'a69b8a', '6f8f6a', '3d4a5c',
 export const sameQuake = (a: Quake, b: Quake) =>
   a.base.toLowerCase() === b.base.toLowerCase() && a.sky.toLowerCase() === b.sky.toLowerCase() && a.hidePlants === b.hidePlants && a.lobby === b.lobby
 const FOLD_KEY = 'repakxtra.builtins.folded'
-const heroPicker = (id: string) => EXTENDED && ['force-default-skin', 'no-impact', 'no-tracers', 'no-screen-shake'].includes(id)
-/** What a hero picker's checked heroes keep */
-const keptOf = (id: string) => id === 'force-default-skin' ? 'skins' : id === 'no-screen-shake' ? 'screen shake' : 'effects'
+// only Force default skin keeps some heroes out (the effect built-ins change every hero)
+const heroPicker = (id: string) => EXTENDED && id === 'force-default-skin'
 const BLOCKED = 'Close Marvel Rivals to change built-in mods'
 
 // one store for every remount: the list, which ones are building, and the switch each was last set to
@@ -160,16 +159,40 @@ async function turnOffOverlaps(paths: string[], alert: LoadoutProps['alert']) {
 /** A mappings error clears itself once new mappings are out (checked at every start): no Try again for it. Pure. */
 export const retryable = (error?: string) => Boolean(error) && !error!.startsWith('Not active yet.')
 
-/** xtra_quake.rs Progress: the stage a CustomQuake build is in, its count where it has one, and how far the whole build is (0 to 1) */
-type Progress = { stage: string; detail?: string | null; fraction: number }
+/** xtra_quake.rs Progress: the stage a long build is in, its count where it has one, and how far the whole build is (0 to 1) */
+type Progress = { stage: string; detail?: string | null; fraction: number; eta?: string }
 
-/** The running build's progress, asked once a second while it builds (nothing to ask for the other built-ins). */
+/** The built-ins that build for a while: a progress bar and a Stop button while they do (xtra_quake.rs Progress). */
+const LONG = ['custom-quake', 'no-impact', 'no-tracers', 'no-screen-shake']
+
+/** The time left at the bar's pace over the last 20 seconds of this step (`seen`: when each fraction was read, cleared
+ *  when the step changes). None until it has moved for 5 seconds, so a step that reads files without a count shows no
+ *  guess. Pure. */
+export function etaOf(seen: [number, number][], now: number) {
+  const recent = seen.filter(([t]) => now - t <= 20000)
+  if (recent.length < 2) return undefined
+  const [t0, f0] = recent[0], [t1, f1] = recent[recent.length - 1]
+  if (t1 - t0 < 5000 || f1 <= f0 || f1 >= 0.99) return undefined
+  const left = ((1 - f1) * (t1 - t0)) / (f1 - f0) / 1000
+  return left < 60 ? 'Less than a minute left' : `About ${Math.round(left / 60)} min left`
+}
+
+/** The running build's progress, asked once a second while it builds (nothing to ask for the other built-ins), with
+ *  the time left once the bar moves (etaOf) */
 function useProgress(on: boolean) {
   const [progress, setProgress] = useState<Progress | null>(null)
   useEffect(() => {
     if (!EXTENDED || !on) { setProgress(null); return }
     let live = true
-    const ask = () => invoke<Progress | null>('xtra_quake_progress').then(p => { if (live) setProgress(p) }).catch(() => undefined)
+    const seen: [number, number][] = []
+    let stage = ''
+    const ask = () => invoke<Progress | null>('xtra_quake_progress').then(p => {
+      if (!live) return
+      // each step its own pace: the jump from one step to the next is not progress at the next one's speed
+      if (p && p.stage !== stage) { stage = p.stage; seen.length = 0 }
+      if (p) { seen.push([Date.now(), p.fraction]); if (seen.length > 40) seen.shift() }
+      setProgress(p && { ...p, eta: etaOf(seen, Date.now()) })
+    }).catch(() => undefined)
     void ask()
     const t = setInterval(ask, 1000)
     return () => { live = false; clearInterval(t) }
@@ -177,15 +200,16 @@ function useProgress(on: boolean) {
   return progress
 }
 
-/** What a CustomQuake build says besides its stage: the stage's count, then where the files are. Pure. */
-export const buildNote = (b: Builtin, progress: Progress | null) => [progress?.detail, b.active ? 'The last build stays in use' : 'Not in the game yet'].filter(Boolean).join('. ')
+/** What a long build says besides its stage: the stage's count, then where the files are. Pure. */
+export const buildNote = (b: Builtin, progress: Progress | null) => [progress?.detail, progress?.eta, b.active ? 'The last build stays in use' : 'Not in the game yet'].filter(Boolean).join('. ')
 
 /** A partly built one's line: what is missing in the game, and that it completes by itself. */
 export const partialText = (n: number) =>
   `In the game, but ${n === 1 ? '1 file' : `${n} files`} the last patch changed ${n === 1 ? 'is' : 'are'} left as the game ships ${n === 1 ? 'it' : 'them'} until the game's new USMAP is out. Then it completes by itself`
 
 function status(b: Builtin, building: boolean, progress?: Progress | null) {
-  const long = EXTENDED && b.id === 'custom-quake' ? ', about 10 minutes' : ''
+  // how long, before the bar has a pace: the effect built-ins reuse the last build's edits, so only the first is slow
+  const long = !EXTENDED ? '' : b.id === 'custom-quake' ? ', about 10 minutes' : LONG.includes(b.id) ? ', a few minutes the first time and about a minute after that' : ''
   if (building && wanted.get(b.id) === false) return 'Stopping the build…'
   if (building && progress) return progress.stage
   if (building) return b.active ? `Rebuilding from your game files${long}. The last build stays in use` : `Building from your game files${long}. Not in the game yet`
@@ -225,7 +249,7 @@ function HeroPicker({ id, b, open, building, blocked, onDone, alert }: { id: str
   useHeroImages()
   const { heroes, loaded } = useHeroes(b.heroes)
   const skin = b.id === 'force-default-skin'
-  const keptThing = keptOf(b.id)
+  const keptThing = 'skins'
   const [kept, setKept] = useState(() => new Set(b.excluded))
   const [query, setQuery] = useState('')
   const [at, setAt] = useState(0) // the hero that holds the group's one tab stop
@@ -412,8 +436,8 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
   const pick = useRef<HTMLButtonElement>(null)
   const Icon = about.icon
   const warn = !building && b.on && Boolean(b.error || b.overlaps?.length)
-  const quakeBuilding = building && EXTENDED && b.id === 'custom-quake'
-  const progress = useProgress(quakeBuilding)
+  const longBuilding = building && EXTENDED && LONG.includes(b.id)
+  const progress = useProgress(longBuilding)
   const text = status(b, building, progress)
   const stopping = wanted.get(b.id) === false
   const pct = Math.round((progress?.fraction ?? 0) * 100)
@@ -429,18 +453,13 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
           <span className={`bi-status${warn ? ' is-warn' : ''}`} title={text} aria-live="polite">
             {warn && <TriangleAlert size={13} aria-hidden="true" />}
             {building ? <span className="t-shimmer"><SwapText text={text} /></span> : <SwapText text={text} />}
-            {quakeBuilding && !stopping && progress && <span className="bi-count">{buildNote(b, progress)}</span>}
+            {longBuilding && !stopping && progress && <span className="bi-count">{buildNote(b, progress)}</span>}
           </span>
-          {quakeBuilding && (
-            <div className="bi-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="CustomQuake build progress">
-              <i style={{ width: `${pct}%` }} />
-            </div>
-          )}
         </div>
         {heroPicker(b.id) && (
           <button type="button" ref={pick} className="lo-text-btn bi-pick" aria-expanded={picking} aria-controls={pickerId} onClick={() => setPicking(v => !v)}
-            title={`Pick heroes that keep their own ${keptOf(b.id)}`}>
-            {kept ? `${kept} ${kept === 1 ? 'hero keeps' : 'heroes keep'} ${keptOf(b.id)}` : 'Keep some heroes'}
+            title={`Pick heroes that keep their own skins`}>
+            {kept ? `${kept} ${kept === 1 ? 'hero keeps' : 'heroes keep'} skins` : 'Keep some heroes'}
             <ChevronDown size={13} className="bi-chev" aria-hidden="true" />
           </button>
         )}
@@ -457,7 +476,7 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
             {b.overlaps!.length === 1 ? `Turn off ${nameKey(b.overlaps![0])}` : 'Turn them off'}
           </button>
         )}
-        {building && EXTENDED && ['custom-quake', 'no-impact', 'no-tracers', 'no-screen-shake'].includes(b.id) && wanted.get(b.id) !== false && (
+        {longBuilding && wanted.get(b.id) !== false && (
           <button type="button" className="lo-text-btn" disabled={blocked} onClick={() => stopBuild(b.id, alert)} title={blocked ? BLOCKED : 'Stops after the current batch. Nothing new goes into the game'}><Square size={11} fill="currentColor" aria-hidden="true" /> Stop building</button>
         )}
         {warn && retryable(b.error) && (
@@ -467,13 +486,19 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
         <Switch size="sm" checked={wanted.get(b.id) ?? b.on} isDisabled={building || blocked} onChange={on => change(b.id, { on }, alert)}
           aria-label={about.name} title={blocked ? BLOCKED : about.what} />
       </div>
+      {longBuilding && (
+        <div className="bi-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={`${about.name} build progress`}>
+          <i style={{ width: `${pct}%` }} />
+        </div>
+      )}
       {heroPicker(b.id) && <HeroPicker id={pickerId} b={b} open={picking} building={building} blocked={blocked} onDone={done} alert={alert} />}
       {EXTENDED && b.id === 'custom-quake' && <QuakeOptions id={pickerId} b={b} open={picking} building={building} blocked={blocked} onDone={done} alert={alert} />}
     </li>
   )
 }
 
-export default function BuiltinMods({ blocked, alert }: { blocked: boolean; alert: LoadoutProps['alert'] }) {
+// memo: Loadouts redraws on every move of a card drag, and this section (every hero picker) has nothing to do with it
+export default memo(function BuiltinMods({ blocked, alert }: { blocked: boolean; alert: LoadoutProps['alert'] }) {
   const { list, busy } = useStore()
   const foldKey = FOLD_KEY
   const [folded, setFolded] = useState(() => savedItem(foldKey) === '1')
@@ -511,7 +536,7 @@ export default function BuiltinMods({ blocked, alert }: { blocked: boolean; aler
       </div>
     </section>
   )
-}
+})
 
 if (import.meta.env.DEV) {
   console.assert(sameQuake(QUAKE_DEFAULT, { ...QUAKE_DEFAULT, base: '5D7A80' }) && !sameQuake(QUAKE_DEFAULT, { ...QUAKE_DEFAULT, hidePlants: true }), 'only a real option change rebuilds')
@@ -524,4 +549,11 @@ if (import.meta.env.DEV) {
   console.assert(Object.values(ABOUT).every(a => !/[;\u2014]/.test(a.what)), 'no semicolons or em dashes')
   console.assert(heroName('Iron Fist (lin Lie)') === 'Iron Fist' && heroName('Cloak & Dagger') === 'Cloak & Dagger', 'a note in brackets goes')
   console.assert(unreleased('Hive**') && !unreleased('Hulk'), 'placeholders are not heroes yet')
+}
+
+if (import.meta.env.DEV) {
+  const at = (s: number, f: number): [number, number] => [s * 1000, f]
+  console.assert(etaOf([at(0, 0.1), at(10, 0.2)], 10000) === 'About 1 min left', 'a tenth in 10 s with 0.8 to go: 80 s')
+  console.assert(etaOf([at(0, 0.5), at(10, 0.6)], 10000) === 'Less than a minute left', '40 s left')
+  console.assert(etaOf([at(0, 0.3), at(10, 0.3)], 10000) === undefined && etaOf([at(0, 0.3), at(3, 0.4)], 3000) === undefined, 'no guess while still, or too soon')
 }

@@ -20,11 +20,9 @@ const SPEED = 16    // px per frame at the very edge (about 1000 px a second)
 const LAND = 260    // ms the copy takes to glide into its slot
 const FOLLOW = 0.4  // how much of the way to the pointer the copy moves per 60 Hz frame (1 = glued to it)
 const TILT = 6      // degrees the copy leans at most when moved sideways fast
-
-// A card's entrance (theme.css t-rise-in) plays once: moving a card in the page re-inserts it, which would replay it
-document.addEventListener('animationend', e => {
-  if (e.animationName === 't-rise-in' && e.target instanceof HTMLElement && e.target.matches('.lo-card')) e.target.dataset.in = '1'
-})
+// ms between two reorders at most: each one lays the whole screen out again and slides every card, so a fast swipe
+// over many cards reordered on every frame and dropped frames. The spot where the pointer stops is still taken.
+const REORDER = 90
 
 /** What slides when the order changes: every card (by loadout id), each collection's title and the New loadout card
  *  (data-flip), so a collection that grows or shrinks moves the rest smoothly instead of making them jump. */
@@ -125,7 +123,7 @@ export function useCardDrag({ zoom, scroller, onMove, onDrop, ownGroupOnly = fal
     if (e.button !== 0 || dragId || (e.target as Element).closest('input, textarea, label, .lo-icon, .lo-expand, .lo-media-arrow, .lo-media-mute, [role="switch"]')) return
     const card = e.currentTarget
     const startX = e.clientX, startY = e.clientY
-    let x = startX, y = startY, started = false, spot: Spot | null = null, frame = 0, dirty = false
+    let x = startX, y = startY, started = false, spot: Spot | null = null, frame = 0, dirty = false, moved = 0
     let ghost: HTMLDivElement | null = null, offX = 0, offY = 0
     // The copy's own position and tilt: it eases toward the pointer each frame (FOLLOW of the way per 60 Hz frame,
     // the same at any refresh rate) and leans into sideways movement, settling upright when the pointer rests
@@ -143,13 +141,17 @@ export function useCardDrag({ zoom, scroller, onMove, onDrop, ownGroupOnly = fal
       tilt += (lean - tilt) * k
       ghost.style.transform = `translate(${gx}px, ${gy}px) rotate(${tilt.toFixed(2)}deg)`
     }
-    const track = () => {
+    /** false: a new spot is due but the last reorder was too recent, so look again next frame */
+    const track = (now: number) => {
+      if (now - moved < REORDER) return false
       const s = spotAt(x, y, id, live.current.zoom, live.current.ownGroupOnly)
-      if (s === undefined || same(s, spot)) return
+      if (s === undefined || same(s, spot)) return true
+      moved = now
       const forward = spot && 'index' in spot && 'index' in s && s.group === spot.group ? s.index > spot.index : true
       spot = s
       cue('select', { emphasis: 'subtle', direction: forward ? 'forward' : 'back', volume: 0.6 })
       live.current.onMove(id, spot)
+      return true
     }
     // Once per frame: the copy follows the pointer, the landing spot is looked up, and near an edge the list scrolls
     // (faster the closer to the edge)
@@ -163,7 +165,7 @@ export function useCardDrag({ zoom, scroller, onMove, onDrop, ownGroupOnly = fal
         if (step) sc.scrollTop += step
       }
       place(now)   // every frame: the copy keeps easing in after the pointer stops
-      if (dirty || step) { track(); dirty = false }
+      if ((dirty || step) && track(now)) dirty = false
       frame = requestAnimationFrame(tick)
     }
     const begin = () => {
@@ -200,8 +202,6 @@ export function useCardDrag({ zoom, scroller, onMove, onDrop, ownGroupOnly = fal
       const finish = () => {
         if (done) return
         done = true
-        // Every card on screen has entered by now: un-hiding them must not start their entrance
-        document.querySelectorAll<HTMLElement>('.lo-card').forEach(c => { c.dataset.in = '1' })
         document.documentElement.classList.remove('is-dragging-card')
         setDragId(null)
         // The card shows again first and the copy over it goes once that is on screen: removed in the same frame, a
@@ -241,6 +241,7 @@ export function useCardDrag({ zoom, scroller, onMove, onDrop, ownGroupOnly = fal
       const swallow = (ev: MouseEvent) => { ev.stopPropagation(); ev.preventDefault() }
       window.addEventListener('click', swallow, { capture: true, once: true })
       setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 0)
+      if (drop) { moved = -Infinity; track(performance.now()) } // the spot under the pointer now, even within REORDER
       const made = drop ? spot : null
       if (!made) cue('navigate', { direction: 'back', emphasis: 'subtle' })
       else cue('close', { emphasis: 'subtle' })

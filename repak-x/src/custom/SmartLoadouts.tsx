@@ -338,7 +338,7 @@ export default function SmartLoadouts({ p, onBack }: { p: LoadoutProps; onBack: 
                 const tick = <span className="sl-tile-tick" aria-hidden="true">{ticked && <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 12 9 17 20 6" /></svg>}</span>
                 const face = x.hero ? <img className="sl-face" src={portrait(x.hero)} alt="" /> : <span className="sl-face is-none"><Users size={11} /></span>
                 return (
-                  <li key={x.id} style={{ '--i': Math.min(i, 11) } as React.CSSProperties} className={`sl-tile${ticked ? '' : ' is-off'}`}>
+                  <li key={x.id} className={`sl-tile${ticked ? '' : ' is-off'}`}>
                     {renaming === x.id ? (
                       // named in place: Enter or leaving the field saves it, Esc keeps the old name
                       <div className="sl-tile-btn is-editing">
@@ -379,7 +379,7 @@ export default function SmartLoadouts({ p, onBack }: { p: LoadoutProps; onBack: 
                 {proposals.map((x, i) => {
                   const isOff = !isPicked(x)
                   return (
-                    <li key={x.id} style={{ '--i': Math.min(i, 11) } as React.CSSProperties}
+                    <li key={x.id}
                       className={`sl-item${x.id === g.id ? ' is-sel' : ''}${isOff ? ' is-off' : ''}`}>
                       <Checkbox checked={!isOff} onChange={() => togglePick(x)} size="sm" color="primary" className="sl-tick" aria-label={`Make ${x.name}`} />
                       <button type="button" className="sl-item-main" aria-current={x.id === g.id ? 'true' : undefined} onClick={() => setSel(x.id)} onDoubleClick={() => nameIt(x.id)}>
