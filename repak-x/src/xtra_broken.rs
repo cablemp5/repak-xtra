@@ -469,6 +469,11 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
             .iter()
             .filter_map(|p| {
                 let path = PathBuf::from(p);
+                // repakxtra: another app's built-in is judged by the game build its app last built it for
+                if crate::xtra_builtins::in_folder(&path) {
+                    return crate::xtra_builtins::outdated_elsewhere(&path, &paks)
+                        .map(|reason| Verdict { path: p.clone(), kind: "risky", reason, stale_niagara: 0, usmap_wait: 0 });
+                }
                 if can_finish(&path) {
                     return Some(Verdict {
                         path: p.clone(),

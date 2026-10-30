@@ -179,6 +179,22 @@ pub(crate) fn fixed_place(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Another app's built-in made for an older game build than the installed one, as that app saved it in the shared state:
+/// nothing here rebuilds it, and an old table edit can crash the game. The words for the Library's warning, or None.
+pub(crate) fn outdated_elsewhere(path: &Path, paks: &Path) -> Option<String> {
+    if !in_folder(path) || is_own(path) {
+        return None;
+    }
+    let id = path.file_stem()?.to_str()?.strip_prefix("repakxtra-")?.split('_').next()?.to_string();
+    stale_reason(load().get(&id), &game_build(paks))
+}
+
+fn stale_reason(saved: Option<&Saved>, build: &str) -> Option<String> {
+    (saved.and_then(|s| s.built_for.as_deref()) != Some(build)).then(|| {
+        "Made for an older game version, and repakxtra does not rebuild it. It can crash the game. Turn it off until the app that made it builds it again.".to_string()
+    })
+}
+
 /// Another app's built-in as the Library names it: "repakxtra-some-thing_9999999_P.pak" is "Some Thing".
 pub(crate) fn shown_name(path: &Path) -> Option<String> {
     let stem = path.file_stem()?.to_str()?;
@@ -908,6 +924,11 @@ mod tests {
         assert!(!is_own(&theirs) && in_folder(&theirs) && fixed_place(&theirs).is_err());
         assert!(fixed_place(Path::new("C:/G/Paks/~mods/my-skin.pak")).is_ok());
         assert_eq!(shown_name(&theirs).as_deref(), Some("Some Thing"));
+        // flagged until its own app builds it for this game build
+        let built = |b: &str| Saved { built_for: Some(b.into()), ..Default::default() };
+        assert!(stale_reason(None, "b2").is_some() && stale_reason(Some(&built("b1")), "b2").is_some());
+        assert!(stale_reason(Some(&built("b2")), "b2").is_none());
+        assert!(outdated_elsewhere(&own, Path::new("nowhere")).is_none(), "this app's own are its built-in rows");
     }
 
     #[test]
