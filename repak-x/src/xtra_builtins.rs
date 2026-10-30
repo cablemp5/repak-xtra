@@ -173,8 +173,19 @@ fn update<R>(f: impl FnOnce(&mut HashMap<String, Saved>) -> R) -> Result<R, Stri
     let _held = STATE.lock().unwrap_or_else(|e| e.into_inner());
     let mut all = load();
     let r = f(&mut all);
+    compat(&mut all);
     save(&all)?;
     Ok(r)
+}
+
+/// The other edition's older builds read every entry with these two lists (no serde defaults there): an entry made here
+/// gets them empty, so that app can still read the file.
+fn compat(all: &mut HashMap<String, Saved>) {
+    for s in all.values_mut() {
+        for k in ["excluded", "heroes"] {
+            s.other.entry(k).or_insert_with(|| Value::Array(Vec::new()));
+        }
+    }
 }
 
 fn save(all: &HashMap<String, Saved>) -> Result<(), String> {
@@ -863,6 +874,21 @@ mod tests {
             { "Name": "DefaultSkinItemID", "Value": 1 },
             { "Name": "SkinSpecs", "Value": [spec(1, "Default"), spec(2, "Fancy")] },
         ] })
+    }
+
+    #[test]
+    fn another_editions_entries_and_fields_survive_a_save() {
+        // the other edition's older builds need these on every entry (no serde defaults there)
+        #[derive(Deserialize)]
+        #[allow(dead_code)]
+        struct Theirs { on: bool, excluded: Vec<String>, heroes: Vec<String>, quake: Option<Value> }
+        let mut all: HashMap<String, Saved> = serde_json::from_str(r#"{"custom-quake":{"on":true,"excluded":[],"heroes":["1011"],"quake":{"base":"5d7a80"}}}"#).unwrap();
+        all.entry(SKIP_INTRO.to_string()).or_default().on = true;
+        compat(&mut all);
+        let text = serde_json::to_string(&all).unwrap();
+        let theirs: HashMap<String, Theirs> = serde_json::from_str(&text).unwrap();
+        assert!(theirs["custom-quake"].on && theirs["custom-quake"].heroes == ["1011"] && theirs["custom-quake"].quake.is_some());
+        assert!(theirs[SKIP_INTRO].on && theirs[SKIP_INTRO].excluded.is_empty());
     }
 
     #[test]
