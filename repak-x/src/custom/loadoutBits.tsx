@@ -16,6 +16,7 @@ import { GAME_RUNNING } from './keepOne'
 import { CaptionIcon, CaptionStyleBar } from './captionStyle'
 import { loadoutHero, silhouetteOf } from './silhouettes'
 import { CardTools } from './CardTools'
+import { CarouselSlide } from './Carousel'
 import './support.css'
 import { captionBackgroundKey } from './loadoutStore'
 
@@ -104,7 +105,8 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   const cover: Cover | null = page ? (l.cover ?? auto ?? 'preview') : auto
   const slides = cover === 'preview' ? previewSlides : []
   const [index, setIndex] = useState(0)
-  const [paged, setPaged] = useState(false) // only paging animates the image, not the first paint
+  const [dir, setDir] = useState<1 | -1>(1)
+  const turn = (d: 1 | -1) => { setDir(d); setIndex(at + d) }
   const at = slides.length ? ((index % slides.length) + slides.length) % slides.length : 0
   const slide = slides[at]
   const generated = usePreviewUrl(cover === 'preview' ? slide?.key || undefined : undefined)
@@ -171,7 +173,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   const ctaButton = 'lo-text-btn lo-media-gen-btn'
 
   const media = (
-    <div className={`lo-media ${className}${paged ? ' is-paged' : ''}${working ? ` is-${working.kind}` : ''}`} onMouseEnter={enter} onMouseLeave={leave}>
+    <div className={`lo-media ${className}${working ? ` is-${working.kind}` : ''}`} onMouseEnter={enter} onMouseLeave={leave}>
       {/* transitions.dev: Skeleton loader. Shown over the card while its preview renders or waits; the new image
           blurs in when it lands (revealOnLoad). One sign of work, the sweep, with what the render is doing written on it */}
       {working && (
@@ -199,18 +201,20 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
                 ? <span className="lo-card-placeholder is-none"><Ban size={28} aria-hidden="true" /><span>No render possible. Open it to type text, or hover and paste an image.</span></span>
                 : <span className="lo-card-placeholder"><ImagePlus size={28} aria-hidden="true" /><span>{emptyText}</span></span>
           : slide?.keys
-            ? <span className="lo-media-multi">{slide.keys.map(k => <SlideImage key={k} k={k} />)}</span>
+            ? <CarouselSlide slide={at} dir={dir}><span className="lo-media-multi">{slide.keys.map(k => <SlideImage key={k} k={k} />)}</span></CarouselSlide>
           : video
             ? <video src={video} autoPlay loop muted playsInline />
-            : <img key={src} src={live?.url ?? src} alt="" className={src === warm ? 'is-loaded' : undefined} decoding="async" loading={page ? undefined : 'lazy'}
-                onLoad={e => { revealOnLoad(e); if (audible && live && hovering.current && e.currentTarget.src === live.url) playEmoteSound(audible, live.seconds) }} />}
+            : <CarouselSlide slide={slides.length > 1 ? at : 0} dir={dir}>
+                <img key={src} src={live?.url ?? src} alt="" className={src === warm ? 'is-loaded' : undefined} decoding="async" loading={page ? undefined : 'lazy'}
+                  onLoad={e => { revealOnLoad(e); if (audible && live && hovering.current && e.currentTarget.src === live.url) playEmoteSound(audible, live.seconds) }} />
+              </CarouselSlide>}
       </button>
       {slides.length > 1 && !working && ( /* no paging while a new preview renders */
         <>
-          <button type="button" className="lo-media-arrow is-prev" title="Previous preview" aria-label="Previous preview" onClick={() => { setPaged(true); setIndex(at - 1) }}>
+          <button type="button" className="lo-media-arrow is-prev" title="Previous preview" aria-label="Previous preview" onClick={() => turn(-1)}>
             <ChevronLeft size={16} />
           </button>
-          <button type="button" className="lo-media-arrow is-next" title="Next preview" aria-label="Next preview" onClick={() => { setPaged(true); setIndex(at + 1) }}>
+          <button type="button" className="lo-media-arrow is-next" title="Next preview" aria-label="Next preview" onClick={() => turn(1)}>
             <ChevronRight size={16} />
           </button>
           <span className="lo-media-label">{slide.label}</span>

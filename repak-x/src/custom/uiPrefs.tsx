@@ -8,7 +8,7 @@ import { ChevronDown, Download, EyeOff, PanelTop, Tags, Trash2, TriangleAlert, V
 import type { useAlert } from '../components/AlertHandler'
 import { MotionGlobalConfig } from 'framer-motion'
 import Checkbox from '../components/ui/Checkbox'
-import { cue, setSoundOn, unlockSound } from './sounds'
+import { SOUND_PACKS, cue, setSoundOn, setSoundPack, soundPackOf, unlockSound } from './sounds'
 import { savedItem } from './storageCarryOver'
 
 // `on`: shown until switched off (the rest start hidden). Stored as '1' or '0' once changed.
@@ -38,6 +38,7 @@ const BASE_ZOOM = 1.2
 const SCALE_KEY = 'repakxtra.uiScale2'
 const HIDE_TAGS_KEY = 'repakxtra.hideTags' // tags show by default, so this one stores the hidden state
 const SOUND_KEY = 'repakxtra.sound'   // on by default: '0' = off
+const SOUND_PACK_KEY = 'repakxtra.soundPack' // unset = mech
 // unset or 'system' = follow Windows (System), '1' = on, '0' = off. System is saved, not removed: storageCarryOver would
 // copy an old-prefix '0' back over a missing key at the next start.
 const MOTION_KEY = 'repakxtra.motion'
@@ -55,6 +56,7 @@ const isOn = (key: string) => { const v = savedItem(storageKey(key)); return v =
 const getScale = () => { const s = Number(savedItem(SCALE_KEY)); return SCALES.includes(s) ? s : 100 }
 const tagsHidden = () => savedItem(HIDE_TAGS_KEY) === '1'
 const soundOn = () => savedItem(SOUND_KEY) !== '0'
+const soundPack = () => soundPackOf(savedItem(SOUND_PACK_KEY))
 /** Animations on: a saved '1' or '0' is the user's choice, anything else follows the OS reduce motion setting.
  *  index.html repeats this for the splash, before any module runs. */
 export const resolveMotion = (saved: string | null, osReduce: boolean) => saved === '1' ? true : saved === '0' ? false : !osReduce
@@ -97,6 +99,7 @@ const apply = () => {
   document.documentElement.toggleAttribute('data-lite', liteOn()) // theme.css drops blur and glass
   MotionGlobalConfig.skipAnimations = !motionOn()
   setSoundOn(soundOn())
+  setSoundPack(savedItem(SOUND_PACK_KEY))
   getCurrentWebview().setZoom(getScale() / 100 * BASE_ZOOM).catch(e => console.warn('[uiPrefs] zoom failed', e))
 }
 apply()
@@ -242,7 +245,7 @@ function PrefBox({ k, label }: { k: string; label: string }) {
     </div>
   )
 }
-const useAll = () => useSyncExternalStore(subscribe, () => PREFS.map(p => (isOn(p.key) ? 1 : 0)).join('') + '|' + getScale() + '|' + soundOn() + motionOn() + liteOn() +minimalToasts() + installsPlain() + tagsOff())
+const useAll = () => useSyncExternalStore(subscribe, () => PREFS.map(p => (isOn(p.key) ? 1 : 0)).join('') + '|' + getScale() + '|' + soundOn() + soundPack() + motionOn() + liteOn() +minimalToasts() + installsPlain() + tagsOff())
 
 /** Settings > Interface, top: UI scale. */
 export function UiScaleSection() {
@@ -274,6 +277,14 @@ export function MotionSection({ extra }: { extra?: React.ReactNode }) {
             <span>Sound effects</span>
           </Checkbox>
           <p className="setting-subtext">Click sounds on buttons, typing, switches, and alerts, and an emote's sound when you hover its preview.</p>
+          <div className={`setting-sub${soundOn() ? '' : ' is-off'}`}>
+            <div className="mod-state-filter sound-pack" role="group" aria-label="Sound pack">
+              {SOUND_PACKS.map(pack => (
+                <button key={pack} type="button" aria-pressed={soundPack() === pack} disabled={!soundOn()}
+                  onClick={() => { update(SOUND_PACK_KEY, pack); cue('select') }}>{pack[0].toUpperCase() + pack.slice(1)}</button>
+              ))}
+            </div>
+          </div>
         </div>
         <div className="setting-item">
           <Checkbox checked={motionOn()} onChange={(checked: boolean) => update(MOTION_KEY, checked ? '1' : '0')}>
@@ -395,7 +406,7 @@ export function WarningPrefs() {
 /** Every Interface setting kept in this file back to how it starts (App's own ones are reset by SettingsPanel). */
 export function resetUiPrefs() {
   for (const p of PREFS) localStorage.removeItem(storageKey(p.key))
-  for (const k of [SCALE_KEY, SOUND_KEY, MOTION_KEY, LITE_KEY, MINIMAL_TOASTS_KEY, PLAIN_INSTALL_KEY, TAGS_OFF_KEY, HIDE_TAGS_KEY]) localStorage.removeItem(k)
+  for (const k of [SCALE_KEY, SOUND_KEY, SOUND_PACK_KEY, MOTION_KEY, LITE_KEY, MINIMAL_TOASTS_KEY, PLAIN_INSTALL_KEY, TAGS_OFF_KEY, HIDE_TAGS_KEY]) localStorage.removeItem(k)
   apply()
   listeners.forEach(l => l())
 }
