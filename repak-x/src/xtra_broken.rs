@@ -64,8 +64,9 @@ fn is_material_instance(key: &str) -> bool {
 /// 144,420 material instances the layout patch rewrote are not (M_Herodetail_BlackBG_1030, PP_Sceen_Effect_Dying_Ins:
 /// 117 of them UI materials), and a copy cooked before it crashes the game all the same. So a mod with another package
 /// that patch or a later one rewrote has its container listed with classes (xtra_uat_cli::classes, about 0.3 s), once
-/// per file. Without the command line only the MI_ names count.
-pub(crate) fn material_instances(paks: &Path, utoc: &Path, files: &[String]) -> Vec<String> {
+/// per file. Also whether that is all of them: false when the listing was needed but could not be read (no command line,
+/// a failed listing, classes it could not name), so only the MI_ names are in, and the caller must not call it clean.
+pub(crate) fn material_instances(paks: &Path, utoc: &Path, files: &[String]) -> (Vec<String>, bool) {
     let keys: Vec<String> = files.iter().filter(|f| is_package(f)).map(|f| match_key(f)).collect();
     let mut out: Vec<String> = keys.iter().filter(|k| is_material_instance(k)).cloned().collect();
     let rewritten = asset_builds(paks).is_some_and(|b| {
@@ -73,27 +74,31 @@ pub(crate) fn material_instances(paks: &Path, utoc: &Path, files: &[String]) -> 
         let other = |k: &str| ["t_", "sk_", "sm_", "ns_", "ne_"].iter().any(|p| k.rsplit('/').next().unwrap_or(k).starts_with(p));
         keys.iter().any(|k| !is_material_instance(k) && !other(k) && b.by_package.get(k).is_some_and(|cl| *cl >= MATERIAL_LAYOUT_BUILD))
     });
-    if rewritten {
-        out.extend(listed_materials(paks, utoc));
-    }
+    let listed = if rewritten { listed_materials(paks, utoc) } else { Some(Vec::new()) };
+    let complete = listed.is_some();
+    out.extend(listed.unwrap_or_default());
     out.sort();
     out.dedup();
-    out
+    (out, complete)
 }
 
 /// The material instances in the container `utoc` by their class, kept per file (its size and time written).
-fn listed_materials(paks: &Path, utoc: &Path) -> Vec<String> {
+fn listed_materials(paks: &Path, utoc: &Path) -> Option<Vec<String>> {
     static SEEN: Mutex<Option<HashMap<String, ((u64, u64), Vec<String>)>>> = Mutex::new(None);
     let (key, stamp) = (checked_key(utoc), file_stamp(utoc));
     if let Some((_, found)) = SEEN.lock().unwrap().as_ref().and_then(|m| m.get(&key)).filter(|(s, _)| Some(*s) == stamp) {
-        return found.clone();
+        return Some(found.clone());
     }
-    let Some(listed) = crate::xtra_uat_cli::classes(utoc, paks) else { return Vec::new() };
+    let listed = crate::xtra_uat_cli::classes(utoc, paks)?;
+    // a class it could not name (no script objects): not known, and asked again next time
+    if listed.is_empty() || listed.iter().any(|(_, c)| c.is_empty() || c.to_ascii_lowercase().contains("unknown")) {
+        return None;
+    }
     let found: Vec<String> = listed.iter().filter(|(_, c)| c.starts_with("MaterialInstance")).map(|(p, _)| match_key(p)).collect();
     if let Some(s) = stamp {
         SEEN.lock().unwrap().get_or_insert_with(HashMap::new).insert(key, (s, found.clone()));
     }
-    found
+    Some(found)
 }
 
 /// The game's Paks folder above a mods folder (~mods, or a subfolder of it).
@@ -557,7 +562,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                 let details = crate::compute_mod_details(&path, &state).ok()?;
                 let installed = std::fs::metadata(&path).and_then(|m| m.modified()).ok()?.duration_since(UNIX_EPOCH).ok()?.as_secs();
                 let vfx = details.category == "VFX";
-                let mics = material_instances(&paks, &path.with_extension("utoc"), &details.files);
+                let (mics, _) = material_instances(&paks, &path.with_extension("utoc"), &details.files);
                 let facts = Facts {
                     files: &details.files,
                     galacta: details.mod_type.contains("Project Galacta"),
@@ -847,7 +852,7 @@ mod tests {
                 galacta: d.mod_type.contains("Project Galacta"),
                 vfx,
                 materials: !vfx && crate::xtra_vfx::updatable(&d.category, &d.files),
-                mics: material_instances(&paks, &p.with_extension("utoc"), &d.files),
+                mics: material_instances(&paks, &p.with_extension("utoc"), &d.files).0,
                 ui: d.category == "UI",
                 fixed: false,
                 has_blueprint: true,

@@ -28,6 +28,17 @@ pub struct Relaid {
     pub(crate) failed: Vec<String>,
     /// The build whose USMAP read the newest of them
     old_build: Option<u64>,
+    /// Every file's layout was told (none left unread, or unsettled for want of an older USMAP)
+    pub(crate) complete: bool,
+}
+
+/// Where relayout finds the game's current copies, for files both layouts read whole.
+pub(crate) enum Game<'a> {
+    None,
+    /// already decoded with today's USMAP, under this folder
+    Json(&'a Path),
+    /// extracted from this Paks folder when needed: only the material instances today's USMAP reads whole
+    Fetch(&'a str),
 }
 
 /// Each export's properties, or None when the tool could not read one (it keeps such an export as raw bytes).
@@ -111,15 +122,27 @@ fn decode(dir: &Path, rel: &str) -> Option<Value> {
 /// `rels` (packages inside `mod_extract`) in an older layout, rewritten there in the layout of `usmap`'s build. A file
 /// cooked from the game's files (unversioned) mostly reads whole in both layouts, just with other values (2026-10-31:
 /// MI_1026300_LobbyTrail_13_309 reads TwoSided true with today's USMAP, false with 3962284's). `game_json`: the game's
-/// current copies decoded with `usmap`, where the reading whose overrides match the game's tells the layout. Without
-/// one, or when neither matches, `older` decides (the mod was written before the game's last update: the old one).
-pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], older: bool, game_json: Option<&Path>, work: &Path, progress: &dyn VfxProgressSink) -> Result<Relaid, String> {
+/// current copies, where the reading whose overrides match the game's tells the layout. Without one, or when neither
+/// matches, `older` decides (the mod was written before the game's last update: the old one).
+pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], older: bool, game: Game<'_>, work: &Path, progress: &dyn VfxProgressSink) -> Result<Relaid, String> {
     let mut out = Relaid::default();
     let Some(build) = usmap_build(usmap) else { return Ok(out) };
     let (now, now_json) = (work.join("now"), work.join("now_json"));
     stage(mod_extract, &now, rels, true)?;
     to_json(usmap, &now, &now_json, progress).await?;
-    let game: std::collections::HashMap<&String, Value> = game_json.map_or_else(Default::default, |g| rels.iter().filter_map(|r| Some((r, decode(g, r)?))).collect());
+    let fetched = match game {
+        Game::Fetch(paks) => {
+            // only what the copies could settle: material instances today's USMAP reads whole
+            let ask: Vec<String> = rels.iter().filter(|r| decode(&now_json, r).filter(|j| decoded(j).is_some()).is_some_and(|j| overrides(&j).is_some())).cloned().collect();
+            if ask.is_empty() { None } else { game_copies(paks, usmap, &ask, work).await }
+        }
+        _ => None,
+    };
+    let game_dir = match game {
+        Game::Json(d) => Some(d),
+        _ => fetched.as_deref(),
+    };
+    let game: std::collections::HashMap<&String, Value> = game_dir.map_or_else(Default::default, |g| rels.iter().filter_map(|r| Some((r, decode(g, r)?))).collect());
     // (package, today's decode when it read whole)
     let mut pending: Vec<(String, Option<Value>)> = rels
         .iter()
@@ -129,6 +152,7 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
         })
         .collect();
     if pending.is_empty() {
+        out.complete = true;
         return Ok(out);
     }
     let fixed_json = work.join("fixed_json");
@@ -163,6 +187,7 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
             false
         });
     }
+    out.complete = pending.is_empty();
     out.unread = pending.into_iter().filter(|(_, today)| today.is_none()).map(|(r, _)| r).collect();
     if out.files.is_empty() {
         return Ok(out);
@@ -207,10 +232,10 @@ pub(crate) async fn run(mod_path: &str, game_paks: &str, usmap_path: &str, mod_e
     let written = std::fs::metadata(mod_path).and_then(|m| m.modified()).ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs());
     let updated = crate::xtra_broken::game_containers(Path::new(game_paks)).iter().map(|c| c.2).max().unwrap_or(0);
     let work = Path::new(stage_dir).join("relayout");
-    // newer than the update, its date cannot say a file both layouts read whole is old: the game's copies tell (one
-    // extract, no dependencies, so only then)
-    let game = if written < updated { None } else { game_copies(game_paks, usmap_path, files, &work).await };
-    let r = relayout(usmap_path, Path::new(mod_extract), files, written < updated, game.as_deref(), &work, progress).await;
+    // newer than the update, its date cannot say a file both layouts read whole is old: the game's copies tell (an
+    // extract of only those, no dependencies, so only then)
+    let game = if written < updated { Game::None } else { Game::Fetch(game_paks) };
+    let r = relayout(usmap_path, Path::new(mod_extract), files, written < updated, game, &work, progress).await;
     let _ = std::fs::remove_dir_all(&work);
     r
 }
@@ -287,10 +312,10 @@ mod tests {
         };
         assert!(crate::vfx_updater::uasset_tool::run_vfx_uat_request(Path::new(""), &req).await.unwrap().success);
         let rel = "Marvel/Content/Marvel/Characters/1026/1026001/Materials/Lobby/MI_1026001_Eyes".to_string();
-        let r = relayout(&usmap, &x, std::slice::from_ref(&rel), true, None, &work.join("w"), &NoOpProgressSink).await.unwrap();
+        let r = relayout(&usmap, &x, std::slice::from_ref(&rel), true, Game::None, &work.join("w"), &NoOpProgressSink).await.unwrap();
         assert_eq!(r.files, vec![rel.clone()], "rewritten: {r:?}");
         // again, as the update (written after the game update): in today's layout, nothing left to rewrite
-        let again = relayout(&usmap, &x, std::slice::from_ref(&rel), false, None, &work.join("w2"), &NoOpProgressSink).await.unwrap();
+        let again = relayout(&usmap, &x, std::slice::from_ref(&rel), false, Game::None, &work.join("w2"), &NoOpProgressSink).await.unwrap();
         assert!(again.files.is_empty() && again.unread.is_empty() && again.failed.is_empty(), "{again:?}");
         let _ = std::fs::remove_dir_all(&work);
     }

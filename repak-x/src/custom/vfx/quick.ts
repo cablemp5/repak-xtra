@@ -120,13 +120,15 @@ function resultToast(r: VfxReport, name: string, alert: Alert) {
 }
 
 /** What Check for VFX update found (xtra_vfx_check.rs): the mod's material instances by the game version they were built for. */
-export type VfxCheck = { verdict: 'outdated' | 'current' | 'unknown' | 'none'; outdated: string[]; current: string[]; unknown: string[]; oldLayout?: string[]; why?: 'empty' | 'unreadable' | 'elsewhere' | null }
+export type VfxCheck = { verdict: 'outdated' | 'current' | 'unknown' | 'none'; outdated: string[]; current: string[]; unknown: string[]; oldLayout?: string[]; why?: 'empty' | 'unreadable' | 'elsewhere' | 'layout' | 'classes' | null }
 
 /** Why a check could not tell, for one material and for several, in words that never guess past what it saw. */
 const WHY = {
   empty: ['carries no shader data of its own to compare', 'carry no shader data of their own to compare'],
   unreadable: ["could not be compared, since the game's older files could not be read", "could not be compared, since the game's older files could not be read"],
   elsewhere: ['matches no game version (the modder built it)', 'match no game version (the modder built them)'],
+  layout: ["could not have its layout read (no older USMAP read it)", "could not have their layout read (no older USMAP read them)"],
+  classes: ['could not be listed by type, so materials not named MI_ may be missing', 'could not be listed by type, so materials not named MI_ may be missing'],
 } as const
 
 /** Checks one mod's materials against this game version and the earlier ones still in the game (its flag follows). */
@@ -144,6 +146,7 @@ export function checkWords(c: VfxCheck, name: string): { title: string; text: st
   if (c.verdict === 'outdated' && layout) return { color: 'warning', title: `${name} needs a VFX update`, text: `${some(layout)} stored in an older game build's layout, which can crash the game. The update rewrites ${layout === 1 ? 'it' : 'them'}.` }
   if (c.verdict === 'outdated') return { color: 'warning', title: `${name} needs a VFX update`, text: `${some(c.outdated.length)} still built for an earlier game version.` }
   if (c.verdict === 'current') return { color: 'success', title: `${name} is up to date`, text: `${all === 1 ? 'Its material is' : `All ${all} of its materials are`} built for this game version.` }
+  if (c.verdict === 'unknown' && !c.unknown.length) return { color: 'default', title: `Not known if ${name} needs an update`, text: 'Its files could not be listed by type, so materials not named MI_ may be missing. It is checked again later.' }
   if (c.verdict === 'unknown') {
     const one = c.unknown.length === 1
     return { color: 'default', title: `Not known if ${name} needs an update`, text: `${one ? 'Its material' : `${c.unknown.length} of its materials`} ${WHY[c.why ?? 'elsewhere'][one ? 0 : 1]}, so its date decides as before.` }
