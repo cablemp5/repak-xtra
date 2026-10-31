@@ -34,6 +34,7 @@ export type ReportInput = {
   // from the newest crash file: summary lines, so a pasted summary still carries the diagnosis
   system?: string; faulting?: string; thirdParty?: string; oom?: boolean
   stack?: string[]; thread?: string // the top frames, below the summary
+  dumpLines?: string[] // the assets in the crash dump, below the stack: the summary above must fit Discord's cut
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -82,6 +83,7 @@ export function buildReport(r: ReportInput) {
     ...(r.oom ? ['Out of memory: yes'] : []),
     '',
     ...(r.stack?.length ? [`Crash stack, top ${r.stack.length}${r.thread ? ` (${r.thread})` : ''}:`, ...r.stack.map(l => `  ${l}`), ''] : []),
+    ...(r.dumpLines?.length ? ['Assets in the crash dump (in memory then, not always the cause), held by:', ...r.dumpLines.map(l => `  ${l}`), ''] : []),
     r.on.length ? 'Mods that are on (name | type | hero | file date | notes):' : 'No mods are on.',
     ...r.on.flatMap(m => [
       [m.name, m.type, m.hero || '-', m.date, ...(m.notes?.length ? [m.notes.join(', ')] : []), ...(m.extra ? [m.extra] : [])].join(' | '),
@@ -98,7 +100,7 @@ type Opt = string | null | undefined
 type Crash = {
   time: number; crash_type?: Opt; asset_path?: Opt; character_id?: Opt; seconds_since_start?: number | null; message?: Opt; detail?: Opt
   build_version?: Opt; engine_version?: Opt; cpu?: Opt; gpu?: Opt; gpu_driver?: Opt; rhi?: Opt; os?: Opt; ram_gb?: number | null
-  oom?: boolean; thread?: Opt; faulting_module?: Opt; faulting_class?: Opt; stack?: string[]; third_party?: string[]
+  oom?: boolean; thread?: Opt; faulting_module?: Opt; faulting_class?: Opt; stack?: string[]; third_party?: string[]; dump_assets?: string[]
 }
 const BYPASS: Record<string, string> = { installed: 'installed', disabled: 'off', partial: 'incomplete', other: 'a different version', missing: 'not installed' }
 
@@ -127,7 +129,14 @@ export async function gatherReport(): Promise<string> {
       ? settled(invoke<Tiered[]>('xtra_crash_tiers', { assetPath: crash.asset_path ?? '', heroId: crash.character_id ?? null, modPaths: onPaths }))
       : Promise.resolve([] as Tiered[]),
   ])
+  // the assets the crash dump holds (a crash that names none still has these), and which mods that are on hold each
+  const dumpHeld = await Promise.all((crash?.dump_assets ?? []).slice(0, 5).map(async asset => {
+    const t = await settled(invoke<Tiered[]>('xtra_crash_tiers', { assetPath: asset, heroId: null, modPaths: onPaths }))
+    return { asset, held: t && t.filter(x => x.tier === 'asset').map(x => x.path) }
+  }))
+  const inDump = dumpHeld.map(({ asset, held }) => `${asset}: ${!held ? 'not checked' : holders(held.map(p => relativeToMods(p, src.gamePath)))}`)
   const key = (p: string) => p.replace(/\//g, '\\').toLowerCase().replace(/\.(pak|bak_repak)$/, '')
+  const dumpSuspect = new Set(dumpHeld.flatMap(d => d.held ?? []).map(key)) // hold an asset the crash dump has
   const verdictOf = new Map((verdicts ?? []).map(v => [key(v.path), v]))
   const hasNiagara = new Set((niagara ?? []).map(key))
   const g = galacta && galactaChecked?.installed === galacta.installed ? { ...galacta, ...galactaChecked } : galacta
@@ -141,23 +150,24 @@ export async function gatherReport(): Promise<string> {
     const d = src.modDetails[m.path]
     const v = verdictOf.get(key(m.path))
     const s = suspect.has(key(m.path))
-    const changedSince = s && crash && m.modified_date && m.modified_date > crash.time ? ', changed since that crash' : ''
+    const inDumpToo = !s && dumpSuspect.has(key(m.path))
+    const changedSince = (s || inDumpToo) && crash && m.modified_date && m.modified_date > crash.time ? ', changed since that crash' : ''
     return {
       name: relativeToMods(m.path, src.gamePath),
       type: d?.category || 'Unknown',
       hero: d?.character_name || '',
       date: m.modified_date ? day(new Date(m.modified_date * 1000)) : '-',
       extra: sourceOf(m.path) ? `Nexus ${sourceOf(m.path)!.id}` : undefined,
-      notes: [...(v ? [verdictLabel(v.kind)] : []), ...(s ? ['Crash suspect'] : []), ...(hasNiagara.has(key(m.path)) ? ['Niagara'] : [])],
+      notes: [...(v ? [verdictLabel(v.kind)] : []), ...(s || inDumpToo ? ['Crash suspect'] : []), ...(hasNiagara.has(key(m.path)) ? ['Niagara'] : [])],
       why: [
         v?.reason.split(/\.\s/)[0].slice(0, 140), // the first sentence: a long list of flagged mods must still fit
-        s ? `holds the asset the newest crash names${changedSince}` : undefined,
+        s ? `holds the asset the newest crash names${changedSince}` : inDumpToo ? `holds an asset in the newest crash's dump${changedSince}` : undefined,
       ].filter(Boolean).join('. ') || undefined,
     }
   }).sort((a, b) => a.name.localeCompare(b.name))
   const count = (kind: Verdict['kind']) => (verdicts ?? []).filter(v => v.kind === kind).length // only the mods that are on were asked about
   // a crash suspect may crash too, unless it already counts as broken
-  const mayCrash = onPaths.filter(p => verdictOf.get(key(p))?.kind === 'risky' || (suspect.has(key(p)) && verdictOf.get(key(p))?.kind !== 'broken')).length
+  const mayCrash = onPaths.filter(p => verdictOf.get(key(p))?.kind === 'risky' || ((suspect.has(key(p)) || dumpSuspect.has(key(p))) && verdictOf.get(key(p))?.kind !== 'broken')).length
   const flags = !verdicts ? 'not checked' : [
     `${count('vfx')} need a VFX update`, `${mayCrash} may crash`, `${count('broken')} broken`, `${hasNiagara.size} with Niagara`,
   ].join(', ')
@@ -196,8 +206,12 @@ export async function gatherReport(): Promise<string> {
     oom: crash?.oom,
     stack: crash?.stack,
     thread: crash?.thread || undefined,
+    dumpLines: inDump,
   })
 }
+
+/** The mods that hold an asset: the first two by name, then how many more (a shared asset must not fill the report). */
+const holders = (names: string[]) => !names.length ? 'no mod that is on' : names.length <= 2 ? names.join(', ') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`
 
 if (import.meta.env.DEV) {
   const root = 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\MarvelRivals\\MarvelGame\\Marvel\\Content\\Paks\\~mods'
@@ -237,4 +251,12 @@ if (import.meta.env.DEV) {
     && diagnosed.indexOf('Crash stack') < diagnosed.indexOf('~mods/A.pak'), 'stack frames indented, below the summary, above the mods', diagnosed)
   console.assert(!buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', conflicts: '0 groups', off: 0, crash: 'x', oom: false, on: [] })
     .includes('Out of memory'), 'out of memory only when true')
+  const asset = (n: number) => `/Game/Marvel/VFX/Materials/Characters/1026/Curves/CurveAtlas_1026_${n}`
+  const withDump = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', conflicts: '0 groups', off: 0, crash: 'x',
+    system: 'Intel i7, NVIDIA RTX 3050 (621.01, D3D12), 16 GB, Windows 11', faulting: 'Marvel-Win64-Shipping (game)', thirdParty: 'none', oom: true, stack: ['a + 1 (game)'], thread: 'FAsyncLoadingThread',
+    dumpLines: [1, 2, 3, 4, 5].map(n => `${asset(n)}: ${holders(Array.from({ length: 10 }, (_, i) => `~mods/Some Mod Name ${i}_9999999_P.pak`))}`),
+    on: [{ name: '~mods/A.pak', type: 'Mesh', hero: '', date: '2026-10-01' }] })
+  console.assert(withDump.indexOf('Out of memory') < DISCORD_LIMIT, 'the summary fits Discord whatever the dump holds', withDump.indexOf('Out of memory'))
+  console.assert(withDump.indexOf('Crash stack') < withDump.indexOf('Assets in the crash dump') && withDump.indexOf('Assets in the crash dump') < withDump.indexOf('~mods/A.pak |')
+    && withDump.includes('Some Mod Name 1_9999999_P.pak and 8 more'), 'dump lines below the stack, above the mods, holders cut to two and a count', withDump)
 }

@@ -41,6 +41,8 @@ pub struct NewestCrash {
     stack: Vec<String>,
     /// File names of the loaded modules that are not the game's, Windows' or the GPU driver's (.asi, proxy DLLs)
     third_party: Vec<String>,
+    /// Game assets the crash dump holds as text, besides the crashed asset: what the game had in memory (not always the cause)
+    dump_assets: Vec<String>,
 }
 
 /// The newest crash the game left, if any. Reads only; the startup crash check keeps its own bookkeeping.
@@ -75,7 +77,7 @@ fn newest_crash() -> Option<NewestCrash> {
         crash_type: r(error_type.or(info.crash_type)),
         character_id: info.error_message.as_deref().and_then(crash_monitor::extract_character_id),
         // no user names: a game asset path holds none, and a changed path would break the suspect lookup
-        asset_path: asset_path.map(|s| redact(&s, &[])),
+        asset_path: asset_path.clone().map(|s| redact(&s, &[])),
         seconds_since_start: info.seconds_since_start,
         message: r(message),
         detail: r(detail.and_then(|d| first_line(&d))),
@@ -95,7 +97,61 @@ fn newest_crash() -> Option<NewestCrash> {
         third_party: modules.iter()
             .filter(|p| class_of_path(p, &root) == ModuleClass::ThirdParty && !crate::xtra_setup::is_bundled_bypass(std::path::Path::new(p)))
             .map(|p| redact(p.rsplit(['\\', '/']).next().unwrap_or(p), &users)).collect(),
+        // a path that redact() would change holds a name or id: dropped, not shown cut (a changed path breaks the lookup)
+        dump_assets: dump_assets(&read_capped(&folder.join("UEMinidump.dmp"), MAX_DUMP)).into_iter()
+            .filter(|a| redact(a, &users) == *a && asset_path.as_deref().is_none_or(|c| asset_key(c) != asset_key(a))).collect(),
     })
+}
+
+const MAX_DUMP: usize = 64_000_000;
+const MAX_DUMP_ASSETS: usize = 8;
+/// Bounds on the scan: paths longer than this are not game assets, and this many candidates is more than a report shows.
+const MAX_ASSET_LEN: usize = 300;
+const MAX_CANDIDATES: usize = 200;
+
+/// The file's bytes, or nothing when it is over `max` (checked before reading, and while reading in case it grows).
+fn read_capped(path: &std::path::Path, max: usize) -> Vec<u8> {
+    use std::io::Read;
+    let mut buf = Vec::new();
+    if let Ok(f) = std::fs::File::open(path) {
+        if f.metadata().is_ok_and(|m| m.len() <= max as u64) {
+            let _ = f.take(max as u64 + 1).read_to_end(&mut buf);
+        }
+    }
+    if buf.len() > max {
+        buf.clear();
+    }
+    buf
+}
+
+/// Game asset paths ("/Game/Marvel/<folder>/<name>") a crash dump holds as text. The engine keeps them as UTF-16, in the
+/// order the dump has them. Left out: a path inside a file path ("D:/Game/Marvel/..."), one that is cut short (no
+/// terminator, a trailing slash, a last part with no "_" as every asset name has), a folder (the start of a longer
+/// path) and a second spelling of one asset.
+fn dump_assets(dump: &[u8]) -> Vec<String> {
+    const START: &[u8] = b"/\0G\0a\0m\0e\0/\0M\0a\0r\0v\0e\0l\0";
+    let unit = |at: usize| dump.get(at..at + 2).map(|c| u16::from_le_bytes([c[0], c[1]]));
+    let path_char = |u: u16| u8::try_from(u).ok().map(char::from).filter(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '/' | '-'));
+    let (mut found, mut seen, mut at): (Vec<String>, std::collections::HashSet<String>, usize) = (Vec::new(), Default::default(), 0);
+    while found.len() < MAX_CANDIDATES {
+        let Some(i) = dump[at..].windows(START.len()).position(|w| w == START) else { break };
+        let start = at + i;
+        at = start + START.len();
+        if start >= 2 && unit(start - 2).is_some_and(|u| path_char(u).is_some() || matches!(u8::try_from(u), Ok(b':' | b'\\' | b'.'))) {
+            continue;
+        }
+        let path: String = dump[start..].chunks_exact(2).take(MAX_ASSET_LEN)
+            .map_while(|c| path_char(u16::from_le_bytes([c[0], c[1]]))).collect();
+        let ended = unit(start + 2 * path.len()).is_some_and(|u| path_char(u).is_none());
+        let name = path.rsplit('/').next().unwrap_or("");
+        if ended && path.matches('/').count() >= 4 && name.contains('_') && seen.insert(asset_key(&path)) {
+            found.push(path);
+        }
+    }
+    let all = found.clone();
+    found.retain(|p| !all.iter().any(|o| o.strip_prefix(p.as_str()).is_some_and(|rest| rest.starts_with('/')))); // a folder, not an asset
+    found.truncate(MAX_DUMP_ASSETS);
+    found
 }
 
 /// The `<Thread>` block whose IsCrashed is true.
@@ -487,6 +543,40 @@ mod tests {
         assert!(holds_asset(&v(&["../../../Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uexp"]), crash));
         assert!(holds_asset(&v(&["marvel/content/marvel/characters/1026/1026001/meshes/sk_1026_1026001.ubulk"]), crash), "case differs");
         assert!(holds_asset(&v(&[r"Marvel\Content\Marvel\Characters\1026\1026001\Meshes\SK_1026_1026001.uasset"]), crash), "backslashes");
+    }
+
+    #[test]
+    fn dump_assets_are_read_as_utf16_without_folders_cut_paths_or_file_paths() {
+        let wide = |s: &str| s.encode_utf16().flat_map(u16::to_le_bytes).collect::<Vec<u8>>();
+        let got = |entries: &[&str], cut_off: bool| {
+            let mut dump = b"noise /Game/Marvel/Ascii/Only_Ignored ".to_vec(); // ASCII copies are not what the engine keeps
+            for s in entries {
+                dump.extend(wide(&format!("{s} \u{1}")));
+                dump.push(7); // an odd offset still reads
+            }
+            if cut_off {
+                dump.extend(wide("/Game/Marvel/VFX/Curves/CurveAt_1")); // ends with the dump
+            }
+            dump_assets(&dump)
+        };
+        let curve = "/Game/Marvel/VFX/Curves/CurveAtlas_1026_13";
+        assert_eq!(got(&[curve, "/Game/Marvel/VFX/Curves/CurveAtlas_1026_13_301.CurveAtlas_1026_13_301", "/Game/Marvel/VFX/CURVES/CURVEATLAS_1026_13"], false),
+            v(&[curve, "/Game/Marvel/VFX/Curves/CurveAtlas_1026_13_301"]), "an object suffix is cut and a second spelling is one asset");
+        assert!(got(&["/Game/Mar", "/Game/Marvel/VFX/Curves", "/Game/Marvel/VFX/Curves/", "/Game/Marvel/1026001/Meshes"], true).is_empty(),
+            "no folder (alone or with a trailing slash), no name-less path, nothing cut off at the end");
+        assert!(got(&["D:/Game/Marvel/Users/Alice/Stuff_1", r"C:\Game/Marvel/A/B_1", "Users/x/Game/Marvel/A/B_1"], false).is_empty(), "inside a file path it is no game path");
+        assert_eq!(got(&["/Game/Marvel/VFX/Merge_Mats", "/Game/Marvel/VFX/Merge_Mats/Child_1"], false), v(&["/Game/Marvel/VFX/Merge_Mats/Child_1"]), "a folder with a child");
+        assert!(dump_assets(&[]).is_empty());
+    }
+
+    #[test]
+    fn a_dump_over_the_cap_is_not_read() {
+        let file = std::env::temp_dir().join("repakxtra-dump-cap-test.bin");
+        std::fs::write(&file, vec![1u8; 33]).unwrap();
+        assert_eq!(read_capped(&file, 32).len(), 0, "over the cap");
+        assert_eq!(read_capped(&file, 33).len(), 33, "at the cap");
+        assert!(read_capped(&file.with_extension("missing"), 32).is_empty());
+        let _ = std::fs::remove_file(&file);
     }
 
     #[test]
