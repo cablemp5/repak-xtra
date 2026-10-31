@@ -10,7 +10,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open as pick } from '@tauri-apps/plugin-dialog'
 import { motion } from 'framer-motion'
-import { ArrowRight, Check, ChevronDown, Download, ExternalLink, FileArchive, FileCog, FolderOpen, Package, Plus, ShieldCheck, Upload, Volume2, VolumeX } from 'lucide-react'
+import { ArrowRight, Check, ChevronDown, CopyPlus, Download, ExternalLink, File, FileArchive, FolderOpen, Package, ShieldCheck, Upload, Volume2, VolumeX } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import Switch from '../components/ui/Switch'
 import { DoctorProblems } from './SetupPanel'
@@ -104,8 +104,8 @@ function Folder({ f }: { f: Flow }) {
   ]
   const row = ([name, note, state]: [string, string, Row], i: number) => (
     <li key={name} className={`is-${state}`} style={{ '--d': i } as React.CSSProperties}>
-      {i ? <FileCog size={15} /> : <><ChevronDown size={14} className="ob-caret" /><FolderOpen size={15} /></>}
-      <span><b>{name}</b><small>{state === 'busy' ? 'Installing' : state === 'off' ? 'Switched off' : note}</small></span>
+      {i ? <File size={15} /> : <><ChevronDown size={14} className="ob-caret" /><FolderOpen size={15} /></>}
+      <span><b>{name}</b>{i > 0 && <small>{state === 'busy' ? 'Installing' : state === 'off' ? 'Switched off' : note}</small>}</span>
       {(state === 'done' || state === 'kept') && <Check size={14} strokeWidth={2.75} />}
     </li>
   )
@@ -238,15 +238,15 @@ function AutoSetup({ f }: { f: Flow }) {
         <BypassTrack on={f.busy === 'bypass'} done={f.finished === 'bypass' ? 'Signature bypass installed' : undefined} />
         <GalactaTrack on={f.busy === 'galacta'} done={f.finished === 'galacta' ? `${LOADER_NAME} is in your mods folder` : undefined} /></>
     : <p className="ob-done"><Check size={16} strokeWidth={2.75} aria-hidden="true" />
-        <span>{did.length ? `Installed ${did.join(' and ')}.` : off ? '' : 'Everything mods need is already set up.'}{other}{off}{' '}
-          <button type="button" className="su-link" onClick={() => { f.close(); window.dispatchEvent(new Event('repakxtra-open-setup')) }}>Open Setup</button></span></p>
+        <span>{did.length ? `Installed ${did.join(' and ')}.` : off ? '' : 'Everything mods need is already set up.'}{other}{off}
+</span></p>
   return <div className="ob-split"><div className="ob-col ob-status" aria-live="polite">{status}</div><Folder f={f} /></div>
 }
 const auto: Page = { id: 'auto', title: 'Setting up mods', when: b => !b.guided, sub: () => `The signature bypass and ${LOADER_NAME}, only what is missing.`, body: f => <AutoSetup f={f} /> }
 
 const TYPES: [string, string, typeof Package][] = [['.pak', 'Mod file', Package], ['.zip', 'Archive', FileArchive], ['.rar', 'Archive', FileArchive], ['.7z', 'Archive', FileArchive]]
 /** Smart loadouts in miniature: loose mods, each dot the color of the look it belongs to, sorted into two loadouts. */
-const SMART_ROWS: [string, string, number][] = [['Catboy mesh', 'Mesh', 0], ['Ultimate suit', 'Mesh', 1], ['Catboy trail', 'VFX', 0], ['Ultimate icons', 'UI', 1]]
+const SMART_ROWS: [string, string, number][] = [['Catboy Mesh', 'Mesh', 0], ['Ultimate Suit', 'Mesh', 1], ['Catboy Trail', 'VFX', 0], ['Ultimate Icons', 'UI', 1]]
 const Smart = () => (
   <span className="ob-smart">
     <span className="ob-smart-mods">{SMART_ROWS.map(([name, type, g], i) => <span key={name} className={`is-g${g}`} style={{ '--i': i } as React.CSSProperties}><i />{name}<small>{type}</small></span>)}</span>
@@ -293,7 +293,7 @@ const loadout: Page = {
           title="Group my mods into loadouts" text="Mods that share a look become one loadout, each with a tick to keep. Opens when you finish." />
       )}
       <Choice onClick={() => { f.setPending('empty'); f.next() }} title="Start one by hand" text="An empty loadout, named and filled on its page when you finish."
-        stage={<span className="wi-card ob-empty"><Plus size={20} /></span>} />
+        stage={<span className="wi-card ob-empty"><CopyPlus size={30} strokeWidth={1.75} /></span>} />
       {!f.hasMods && f.newMods.length === 0 && <p className="fr-hint">No mods yet. Back adds some first, or the checklist on Loadouts home reminds you later.</p>}
     </div>
   ),
