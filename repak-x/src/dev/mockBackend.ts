@@ -35,8 +35,10 @@ const slow = () => Number(localStorage.getItem('mock.slow') || 0)
 const wait = (k: number) => new Promise(r => setTimeout(r, slow() * k))
 const baseName = (p: string) => (p.split(/[\\/]/).pop() || p).replace(/(_\d+_P)?\.(pak|bak_repak|pak_disabled)$/i, '').toLowerCase()
 
-let mockBypass = fresh ? 'missing' : 'installed'   // a fresh PC has neither
-let mockGalacta: any = { installed: fresh ? null : 'C:/Game/~mods', disabled: false, up_to_date: false }
+// 'mock.unset' = '1': the library as it is, but neither installed yet (the README's have-mods demo)
+const unset = fresh || localStorage.getItem('mock.unset') === '1'
+let mockBypass = unset ? 'missing' : 'installed'   // a fresh PC has neither
+let mockGalacta: any = { installed: unset ? null : 'C:/Game/~mods', disabled: false, up_to_date: false }
 const galactaRelease = { latest: 'v1.4.1', published: '2026-10-14T14:29:44Z', url: 'https://github.com/0xSaturno/ProjectGalacta/releases/tag/v1.4.1',
   notes: "## What's new:\n\n### Mod Loader:\n- Mods that add custom VFX to abilities are no longer blocked." }
 const setupBypass = () => ({ state: mockBypass, license: 'MIT License\n\nCopyright (c) 2023 ThirteenAG',
