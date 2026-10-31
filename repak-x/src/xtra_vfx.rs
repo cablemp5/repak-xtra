@@ -112,6 +112,14 @@ pub fn xtra_vfx_release(window: Window, token: String) {
     announce(window.app_handle());
 }
 
+/// Whether a background scan may take its next mod: not while an update runs (it uses the same tool and folders), a
+/// Check for update the user started runs, or the game runs (its frame rate matters more). Every background scan asks
+/// before each mod, so any of those stops them within one mod, and the next scan goes on where they stopped (each keeps
+/// its progress per mod).
+pub(crate) fn background_may_run() -> bool {
+    xtra_vfx_lock().is_none() && !crate::xtra_vfx_check::user_checking() && !crate::is_game_process_running()
+}
+
 /// Who holds the run lock, if anyone.
 #[tauri::command]
 pub fn xtra_vfx_lock() -> Option<RunLock> {

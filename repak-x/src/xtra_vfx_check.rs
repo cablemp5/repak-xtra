@@ -283,11 +283,21 @@ async fn check_in(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, wo
     Ok(out)
 }
 
+static USER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Whether a Check for update the user started is running (background scans step aside).
+pub(crate) fn user_checking() -> bool {
+    USER.load(std::sync::atomic::Ordering::Relaxed) > 0
+}
+
 /// Check for VFX update: whether the mod at `mod_path` (its .pak or .bak_repak) was built for this game version.
 #[tauri::command]
 pub async fn xtra_vfx_check(mod_path: String, usmap_path: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<VfxCheck, String> {
     let state = state.inner().clone();
-    check(Path::new(&mod_path), &usmap_path, &state, true).await
+    USER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let r = check(Path::new(&mod_path), &usmap_path, &state, true).await;
+    USER.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+    r
 }
 
 // ---- the same check in the background, for the date check's blind spot ----
@@ -332,7 +342,7 @@ pub async fn xtra_vfx_check_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mu
     let mut found = 0;
     for p in mod_paths {
         // an update runs, or the game: the next scan goes on from here
-        if crate::xtra_vfx::xtra_vfx_lock().is_some() || crate::is_game_process_running() {
+        if !crate::xtra_vfx::background_may_run() {
             break;
         }
         let path = PathBuf::from(&p);

@@ -74,9 +74,14 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     // the quick check at once, never behind a background scan in flight (one can run for many minutes after a game
     // update), so new mods get their badges in the Library and on loadouts right away
     const t = setTimeout(() => { void check(); void full() }, 1500)
+    // the background scans stop for the game, an update or a check (xtra_vfx.rs background_may_run): back in the app,
+    // they go on where they stopped, at most every 5 minutes (a scan with nothing left to do is quick)
+    let lastResume = Date.now()
+    const resume = () => { if (Date.now() - lastResume > 300_000) { lastResume = Date.now(); void full() } }
+    window.addEventListener('focus', resume)
     const again = listen(VERDICTS_CHANGED, () => { void check() })
     const rescan = listen(VERDICTS_RESCAN, () => { void full() })
-    return () => { live = false; if (runFull === chain) runFull = null; clearTimeout(t); void again.then(f => f()); void rescan.then(f => f()) }
+    return () => { live = false; window.removeEventListener('focus', resume); if (runFull === chain) runFull = null; clearTimeout(t); void again.then(f => f()); void rescan.then(f => f()) }
   }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 

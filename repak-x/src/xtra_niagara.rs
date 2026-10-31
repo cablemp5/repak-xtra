@@ -611,7 +611,7 @@ static SCANNING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 #[tauri::command]
 pub async fn xtra_vfx_layout_scan(mod_paths: Vec<String>, state: tauri::State<'_, std::sync::Arc<std::sync::Mutex<crate::AppState>>>) -> Result<usize, String> {
     let Ok(_one) = SCANNING.try_lock() else { return Ok(0) };
-    if crate::xtra_vfx::xtra_vfx_lock().is_some() {
+    if !crate::xtra_vfx::background_may_run() {
         return Ok(0);
     }
     let state = state.inner().clone();
@@ -646,7 +646,7 @@ pub async fn xtra_vfx_layout_scan(mod_paths: Vec<String>, state: tauri::State<'_
             Err(e) => log::warn!("[vfx layout] {}: {e}", utoc.display()),
         }
         save_layouts(&cache);
-        if crate::xtra_vfx::xtra_vfx_lock().is_some() {
+        if !crate::xtra_vfx::background_may_run() {
             break; // an update started: it uses the same tool, the rest waits for the next scan
         }
     }

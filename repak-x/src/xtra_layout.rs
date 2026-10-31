@@ -548,7 +548,7 @@ pub async fn xtra_layout_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
     let mut all = load(&store);
     let mut checked = 0;
     for p in mod_paths {
-        if crate::xtra_vfx::xtra_vfx_lock().is_some() {
+        if !crate::xtra_vfx::background_may_run() {
             break; // an update uses the same tool: the rest waits for the next scan
         }
         let path = PathBuf::from(&p);
