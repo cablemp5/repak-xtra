@@ -79,25 +79,31 @@
 .ob-col .fr-step .fr-action { margin-top: -6px; }
 .ob-all { align-self: flex-start; width: auto !important; height: 36px !important; min-height: 0 !important; padding: 0 18px !important; }
 /* The game folder as a file tree: no card, the folder open (its caret down), the two files under it on a guide line */
+/* The game folder as Windows Explorer's navigation pane draws it (Option 1, cable's pick 2026-10-31): the folder open,
+   its files well indented with typed icons, a blue bar and wash on the row going in, the status in its own column */
 .ob-tree, .ob-tree ul { list-style: none; margin: 0; padding: 0; }
-.ob-tree { align-self: center; display: flex; flex-direction: column; gap: 2px; padding: 20px 18px; border: 1px solid var(--panel-border); border-radius: 12px; background: var(--bg-darker); }
-.ob-tree-kids { position: relative; margin-left: 13px; padding-left: 28px; }
+.ob-tree { align-self: center; display: flex; flex-direction: column; gap: 2px; padding: 14px 12px; border: 1px solid var(--panel-border); border-radius: 12px; background: var(--bg-darker); }
 .ob-tree-kids ul { display: flex; flex-direction: column; gap: 2px; }
-.ob-tree li:not(.ob-tree-kids) { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px;
-  color: var(--text-secondary); transition: background 0.3s, color 0.3s, opacity 0.3s; }
-.ob-tree > li:first-child { grid-template-columns: auto auto minmax(0, 1fr) auto; }
-.ob-caret { color: var(--text-secondary); margin-right: -2px; }
-.ob-tree li > span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ob-tree li:not(.ob-tree-kids) { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) 16px; align-items: center; gap: 8px; min-height: 30px;
+  padding: 4px 8px; border-radius: 6px; color: var(--text-secondary); transition: background 0.3s, color 0.3s, opacity 0.3s; }
+.ob-tree > li:first-child { grid-template-columns: auto auto minmax(0, 1fr) 16px; gap: 7px; }
+.ob-tree-kids li:not(.ob-tree-kids) { padding-left: 42px; }
+.ob-caret { color: var(--text-secondary); }
+.ob-dir { color: #d9a84a; }
+.ob-dll { color: #5b8def; }
+.ob-pak { color: #58b887; }
+.ob-tree li > span { display: flex; flex-direction: column; gap: 1px; min-width: 0; line-height: 1.25; }
 .ob-tree li b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 12px var(--font-mono); color: inherit; }
 .ob-tree > li:first-child b { font: 600 12.5px var(--font-primary); }
-.ob-tree li small { font-size: 11.5px; color: var(--text-secondary); }
-.ob-tree li > svg:last-child:not(:first-child) { color: #3ecf6e; }
-.ob-tree li.is-todo { opacity: 0.5; }
+.ob-tree li small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--text-secondary); }
+.ob-end { display: grid; place-items: center; width: 16px; height: 16px; font-style: normal; color: #3ecf6e; }
+.ob-tree li.is-todo { opacity: 0.45; }
 .ob-tree li.is-done, .ob-tree li.is-kept { color: var(--text-primary); animation: ob-land 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards; animation-delay: calc(var(--d) * 70ms); }
-.ob-tree li.is-busy small { color: var(--accent-primary); }
-.ob-tree li.is-busy { color: var(--text-primary); background: color-mix(in srgb, var(--accent-primary), transparent 92%); position: relative; overflow: hidden; }
-.ob-tree li.is-busy::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
-  animation: lo-skel-sweep 1.4s ease-in-out infinite; }
+.ob-tree li.is-busy { color: var(--text-primary); background: color-mix(in srgb, var(--accent-primary), transparent 90%); }
+.ob-tree li.is-busy::before { content: ''; position: absolute; left: 0; top: 7px; bottom: 7px; width: 3px; border-radius: 2px; background: var(--accent-primary); }
+.ob-tree li.is-busy small, .ob-tree li.is-busy .ob-end { color: var(--accent-primary); }
+.ob-spin { animation: ob-spin 1s linear infinite; }
+@keyframes ob-spin { to { transform: rotate(360deg); } }
 @keyframes ob-land { from { opacity: 0.4; transform: translateY(4px); } }
 
 /* The background setup: its status beside the folder */
@@ -194,7 +200,7 @@
   .ob-split, .ob-prefs { grid-template-columns: minmax(0, 1fr); }
   .fr-tiles { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
 }
-html[data-motion="off"] :is(.ob-tree li, .ob-tree li::after, .ob-float) { animation: none !important; }
+html[data-motion="off"] :is(.ob-tree li, .ob-spin, .ob-float) { animation: none !important; }
 
 /* Getting started: a quiet card above the loadouts, rows ticked as the app finds them done */
 .gs-card { width: fit-content; max-width: 100%; padding: 14px 18px 12px; border: 1px solid var(--panel-border); border-radius: 12px; background: var(--bg-dark); }

@@ -10,7 +10,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open as pick } from '@tauri-apps/plugin-dialog'
 import { motion } from 'framer-motion'
-import { ArrowRight, Check, ChevronDown, CopyPlus, ExternalLink, File, FileArchive, FolderOpen, Package, Plus, ShieldCheck, Upload, Volume2, VolumeX } from 'lucide-react'
+import { ArrowRight, Check, ChevronDown, CopyPlus, ExternalLink, FileArchive, FileCode, FolderOpen, LoaderCircle, Package, Plus, ShieldCheck, Upload, Volume2, VolumeX } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import Switch from '../components/ui/Switch'
 import { DoctorProblems } from './SetupPanel'
@@ -102,11 +102,13 @@ function Folder({ f }: { f: Flow }) {
     ['dsound.dll', b === 'other' ? 'Your own bypass, kept' : 'The signature bypass, next to the game', f.busy === 'bypass' ? 'busy' : b === 'installed' ? 'done' : b === 'other' ? 'kept' : 'todo'],
     [LOADER_PAK, `${LOADER_NAME}, in ~mods`, f.busy === 'galacta' ? 'busy' : !f.galacta?.installed ? 'todo' : f.galacta.disabled ? 'off' : 'done'],
   ]
+  // Option 1, Windows Explorer's navigation pane (cable's pick, 2026-10-31): typed icons, a bar on the row going in
   const row = ([name, note, state]: [string, string, Row], i: number) => (
     <li key={name} className={`is-${state}`} style={{ '--d': i } as React.CSSProperties}>
-      {i ? <File size={15} /> : <><ChevronDown size={14} className="ob-caret" /><FolderOpen size={15} /></>}
-      <span><b>{name}</b>{i > 0 && <small>{state === 'busy' ? 'Installing' : state === 'off' ? 'Switched off' : note}</small>}</span>
-      {(state === 'done' || state === 'kept') && <Check size={14} strokeWidth={2.75} />}
+      {i ? (i === 1 ? <FileCode size={15} className="ob-dll" /> : <Package size={15} className="ob-pak" />)
+        : <><ChevronDown size={14} className="ob-caret" /><FolderOpen size={15} className="ob-dir" /></>}
+      <span title={name}><b>{name}</b>{i > 0 && <small>{state === 'busy' ? 'Installing' : state === 'off' ? 'Switched off' : note}</small>}</span>
+      <i className="ob-end">{state === 'busy' ? <LoaderCircle size={13} className="ob-spin" /> : (state === 'done' || state === 'kept') && <Check size={14} strokeWidth={2.75} />}</i>
     </li>
   )
   return (
