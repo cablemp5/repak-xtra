@@ -39,6 +39,11 @@ mod xtra_library_files; // repakxtra: the part of a mod's file list the Library 
 mod xtra_details_cache; // repakxtra: the mod details cache kept between launches
 mod xtra_vfx; // repakxtra: VFX fixing after game updates
 mod xtra_niagara; // repakxtra: the VFX Updater's Niagara step
+mod xtra_mesh; // repakxtra: mesh mods against the game's rebuilt skeletons
+mod xtra_stamp; // repakxtra: what each update the Mod Updater made was built for
+mod xtra_tables; // repakxtra: DataTable and StringTable mods carried onto the game's current tables
+mod xtra_usmap_diff; // repakxtra: what each game patch moved, from the USMAPs
+mod xtra_safe_off; // repakxtra: mods turned off because they can crash the game stay off
 mod xtra_mi_layout; // repakxtra: the VFX Updater rewrites materials cooked in an older property layout
 mod xtra_uat_cli; // repakxtra: IoStore extracts through UAssetTool's parallel command line
 mod xtra_builtins; // repakxtra: built-in mods made from the game's own tables
@@ -3206,6 +3211,8 @@ async fn install_mods(
                     .ok();
             }
 
+            // repakxtra: an install from the Library never replaces a mod already installed under its name
+            installable_mods.iter_mut().for_each(|m| m.keep_both = true);
             let install_results = install_mods_in_viewport(
                 &mut installable_mods,
                 &mod_directory,
@@ -4744,6 +4751,14 @@ async fn toggle_mod(
 
     // Check current state
     let is_enabled = path.extension().and_then(|s| s.to_str()) == Some("pak");
+
+    // repakxtra: a mod the Mod Updater turned off because it can crash the game stays off (xtra_safe_off.rs)
+    if !is_enabled {
+        let mods_dir = state.lock().unwrap().game_path.clone();
+        if let Some(why) = xtra_safe_off::blocked(&mods_dir, &path) {
+            return Err(format!("{}{why}", xtra_safe_off::MARK));
+        }
+    }
 
     // Toggle by renaming
     let new_path = if is_enabled {
@@ -8441,6 +8456,7 @@ fn handle_deep_link_url(url: &str, app_handle: &tauri::AppHandle) {
 fn main() {
     xtra_vfx::tune_dotnet_gc(); // repakxtra: before UAssetTool loads, while no other thread runs
     xtra_identity::carry_over_webview_storage(); // repakxtra: before the window opens
+    std::thread::spawn(xtra_vfx::sweep_work_dirs); // repakxtra: work folders an app closed mid-check left in %TEMP%
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
             // Cleanup old uassettool folder from previous versions
@@ -8722,9 +8738,19 @@ fn main() {
             xtra_vfx_check::xtra_vfx_check, // repakxtra: Check for VFX update
             xtra_vfx_check::xtra_vfx_check_scan, // repakxtra: the same check in the background, for the date's blind spot
             xtra_layout::xtra_layout_scan, // repakxtra: Blueprint mods compared with the game's classes, in the background
+            xtra_mesh::xtra_mesh_scan, // repakxtra: mesh mods against the game's rebuilt skeletons, in the background
             xtra_vfx::xtra_vfx_dirs, // repakxtra: VFX Updater
             xtra_vfx::xtra_vfx_detect,
             xtra_vfx::xtra_vfx_place,
+            xtra_vfx::xtra_vfx_turn_off, // repakxtra
+            xtra_safe_off::xtra_safe_off_allow, // repakxtra
+            xtra_safe_off::xtra_safe_off_kept, // repakxtra
+            xtra_usmap_diff::xtra_layout_moves, // repakxtra
+            xtra_tables::xtra_vfx_merge_tables, // repakxtra
+            xtra_vfx::xtra_vfx_classes, // repakxtra
+            xtra_vfx::xtra_vfx_pak_half, // repakxtra
+            xtra_stamp::xtra_vfx_stamp, // repakxtra
+            xtra_mi_layout::xtra_vfx_verify, // repakxtra
             xtra_vfx::xtra_game_build,
             xtra_vfx::xtra_vfx_mods,
             xtra_vfx::xtra_niagara_mods, // repakxtra: setup report

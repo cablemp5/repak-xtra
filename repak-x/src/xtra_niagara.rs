@@ -611,7 +611,7 @@ static SCANNING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 #[tauri::command]
 pub async fn xtra_vfx_layout_scan(mod_paths: Vec<String>, state: tauri::State<'_, std::sync::Arc<std::sync::Mutex<crate::AppState>>>) -> Result<usize, String> {
     let Ok(_one) = SCANNING.try_lock() else { return Ok(0) };
-    if crate::xtra_vfx::xtra_vfx_lock().is_some() {
+    if !crate::xtra_vfx::background_may_run() {
         return Ok(0);
     }
     let state = state.inner().clone();
@@ -646,7 +646,7 @@ pub async fn xtra_vfx_layout_scan(mod_paths: Vec<String>, state: tauri::State<'_
             Err(e) => log::warn!("[vfx layout] {}: {e}", utoc.display()),
         }
         save_layouts(&cache);
-        if crate::xtra_vfx::xtra_vfx_lock().is_some() {
+        if !crate::xtra_vfx::background_may_run() {
             break; // an update started: it uses the same tool, the rest waits for the next scan
         }
     }
@@ -709,6 +709,10 @@ pub struct NiagaraFile {
     edits: usize,
     /// Why it stays left out
     error: Option<String>,
+    /// That reason may pass (a download, a read or a write that failed), so the update stays partial and is tried again,
+    /// rather than the mod's edits being given up for the game's own for good
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    retry: bool,
 }
 
 #[derive(Serialize, Debug, Default)]
@@ -775,7 +779,9 @@ pub(crate) async fn run(game_paks: &str, usmap: &str, mod_extract: &Path, files:
     }
     let Some(old) = chosen else {
         let why = if candidates.is_empty() { "No USMAP for an older game build could be downloaded" } else { "No older USMAP reads the mod's Niagara files" };
-        return Ok(NiagaraRun { ready: true, why: Some(why.into()), files: files.iter().map(|f| NiagaraFile { file: f.clone(), edits: 0, error: Some(why.into()) }).collect(), ..Default::default() });
+        // no USMAP to read them with can pass (a connection, a newer depot): tried again
+        let retry = candidates.is_empty();
+        return Ok(NiagaraRun { ready: true, why: Some(why.into()), files: files.iter().map(|f| NiagaraFile { file: f.clone(), edits: 0, error: Some(why.into()), retry }).collect(), ..Default::default() });
     };
     lap("finding the old build", &mut since);
     emit(0, format!("Reading the mod's {} Niagara files", rels.len()));
@@ -794,17 +800,18 @@ pub(crate) async fn run(game_paks: &str, usmap: &str, mod_extract: &Path, files:
         use rayon::prelude::*;
         jobs.par_iter()
             .map(|(f, r)| {
-                let res = (|| -> Result<usize, String> {
+                // (why, whether it may pass): only a shape the edits cannot be carried onto is final
+                let res = (|| -> Result<usize, (String, bool)> {
                     if !have.contains(r) {
-                        return Err("The game's copy could not be read".into());
+                        return Err(("The game's copy could not be read".into(), true));
                     }
-                    let m = read_json(&json.join(format!("{r}.json"))).map_err(|_| "The mod's copy could not be read".to_string())?;
-                    let g = read_json(&gj.join(format!("{r}.json")))?;
-                    let (mb, _) = read_package(&mod_extract.join(format!("{r}.uasset")))?;
-                    let (gb, head) = read_package(&gx.join(format!("{r}.uasset")))?;
-                    let (bytes, edits) = carry(&m, &g, &mb, &gb, is_atlas(r)).map_err(|e| e.why)?;
+                    let m = read_json(&json.join(format!("{r}.json"))).map_err(|_| ("The mod's copy could not be read".to_string(), true))?;
+                    let g = read_json(&gj.join(format!("{r}.json"))).map_err(|e| (e, true))?;
+                    let (mb, _) = read_package(&mod_extract.join(format!("{r}.uasset"))).map_err(|e| (e, true))?;
+                    let (gb, head) = read_package(&gx.join(format!("{r}.uasset"))).map_err(|e| (e, true))?;
+                    let (bytes, edits) = carry(&m, &g, &mb, &gb, is_atlas(r)).map_err(|e| (e.why, false))?;
                     let to = out.join(r);
-                    std::fs::create_dir_all(to.parent().unwrap_or(&out)).map_err(|e| e.to_string())?;
+                    std::fs::create_dir_all(to.parent().unwrap_or(&out)).map_err(|e| (e.to_string(), true))?;
                     let bulk = gx.join(format!("{r}.ubulk"));
                     let written = std::fs::write(to.with_extension("uasset"), &bytes[..head])
                         .and_then(|_| std::fs::write(to.with_extension("uexp"), &bytes[head..]))
@@ -812,13 +819,13 @@ pub(crate) async fn run(game_paks: &str, usmap: &str, mod_extract: &Path, files:
                     if let Err(e) = written {
                         // a package with only some of its files would be packed: none of it stays
                         ["uasset", "uexp", "ubulk"].iter().for_each(|x| { let _ = std::fs::remove_file(to.with_extension(x)); });
-                        return Err(format!("Could not be written ({e})"));
+                        return Err((format!("Could not be written ({e})"), true));
                     }
                     Ok(edits)
                 })();
                 match res {
-                    Ok(edits) => NiagaraFile { file: f.clone(), edits, error: None },
-                    Err(e) => NiagaraFile { file: f.clone(), edits: 0, error: Some(e) },
+                    Ok(edits) => NiagaraFile { file: f.clone(), edits, error: None, retry: false },
+                    Err((e, retry)) => NiagaraFile { file: f.clone(), edits: 0, error: Some(e), retry },
                 }
             })
             .collect()

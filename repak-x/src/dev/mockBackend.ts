@@ -308,13 +308,14 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'xtra_broken_mods':
         // with 'mock.vfxStale' some also have 6 Niagara files the update rewrote (a partial update, mockStale)
         if (localStorage.getItem('mock.broken') === 'vfx') return (args?.modPaths ?? []).filter((p: string) => /vfx/i.test(p) && !/_UPDATED_|_PARTIAL_|_ORIGINAL_/i.test(p)).map((path: string) => ({ path, kind: 'vfx',
-          reason: 'A game update changed 381 of the game files this VFX mod replaces, so its effects may look wrong or crash the game. The VFX Updater rebuilds it on the new game files.',
+          reason: 'A game update changed 381 of the game files this VFX mod replaces, so its effects may look wrong or crash the game. The Mod Updater rebuilds it on the new game files.',
           ...(mockStale(path) ? { staleNiagara: 6 } : {}) }))
         return localStorage.getItem('mock.broken') ? (args?.modPaths ?? []).slice(0, 2).map((path: string, i: number) => ({ path,
           kind: i ? 'risky' : 'broken', reason: i ? 'A Blueprint mod installed before the last game update.' : 'None of the 3 game files it replaces exist in this game version.' })) : []
       // the VFX Updater's list: mods with VFX in their name stand in for the VFX type (no originals with an update beside them)
-      case 'xtra_vfx_mods': return { problems: [], mods: data.mods.filter((m: any) => /vfx/i.test(m.path) && !/_BROKEN(_\d+)?_P\./i.test(m.path)).map((m: any) => ({
-        path: m.path, utoc: m.utoc_path || m.path.replace(/\.(pak|bak_repak)$/i, '.utoc'), enabled: m.enabled, hero: m.character_name ?? null, modified: m.modified_date ?? 0,
+      // UI mods (ui in the name) stand in for the UI mods group
+      case 'xtra_vfx_mods': return { problems: [], mods: data.mods.filter((m: any) => /vfx|(^|[^a-z])ui([^a-z]|$)/i.test(m.path) && !/_BROKEN(_\d+)?_P\./i.test(m.path)).map((m: any) => ({
+        ...(/vfx/i.test(m.path) ? {} : { materials: true, ui: true }), path: m.path, utoc: m.utoc_path || m.path.replace(/\.(pak|bak_repak)$/i, '.utoc'), enabled: m.enabled, hero: m.character_name ?? null, modified: m.modified_date ?? 0,
         name: m.custom_name || m.path.split(/[\\/]/).pop().replace(/\.[^.]+$/, '').replace(/(_\d+)?_P$/i, '') })) }
       // the mock USMAP is 3939753: localStorage 'mock.usmapBehind' = '1' puts the game a build ahead of it, so updates wait
       case 'xtra_game_build': return { updated: Math.floor(Date.now() / 1000) - 3600 * 5, cl: localStorage.getItem('mock.usmapBehind') === '1' ? 3962284 : 3939753 }
@@ -366,7 +367,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         return mod?.enabled ?? null
       }
       default: {
-        const vfx = mockVfx(cmd, args) // the VFX Updater window's commands
+        const vfx = mockVfx(cmd, args) // the Mod Updater window's commands
         if (vfx !== undefined) return vfx
         console.debug('[mockBackend] unhandled', cmd, args)
         return null
@@ -407,11 +408,21 @@ function mockVfx(cmd: string, args: any): unknown {
     case 'xtra_vfx_lock': return vfxLock
     case 'xtra_vfx_stale': return mockStale(String(args.modPath)) ? (args.files as string[]).filter(f => /NS_/.test(f)) : []
     case 'xtra_vfx_old_layout': return []
+    // repakxtra: rebuilt files read back whole, and turning off says it did (the mock's files stay as they are)
+    case 'xtra_vfx_verify': return []
+    case 'xtra_safe_off_kept': return null
+    case 'xtra_vfx_merge_tables': return (args?.files ?? []).map((file: string) => ({ file, carried: 2, added: 1, kept: 0 }))
+    case 'xtra_vfx_classes': return null
+    case 'xtra_vfx_pak_half': return []
+    case 'xtra_vfx_stamp': return null
+    case 'xtra_layout_moves': return { newest: { build: 3984769, from: 3962284, structs: ['MaterialInstanceBasePropertyOverrides', 'MassSummonedPawnBase'] }, notHandled: ['MassSummonedPawnBase'] }
+    case 'xtra_safe_off_allow': return null
+    case 'xtra_vfx_turn_off': return /\.pak$/i.test(String(args?.modPath ?? '')) ? String(args.modPath).replace(/\.pak$/i, '.bak_repak') : null
     // repakxtra: materials in an older layout (xtra_mi_layout.rs): mock.relayout = 'rewrote', 'failed' or 'error'
     case 'xtra_vfx_relayout': {
       const m = localStorage.getItem('mock.relayout')
       if (m === 'error') throw new Error('UAssetTool could not read the materials')
-      return { files: m === 'rewrote' ? (args?.files ?? []).slice(0, 2) : [], failed: m === 'failed' ? (args?.files ?? []).slice(0, 1) : [], oldBuild: m ? 3962284 : null }
+      return { files: m === 'rewrote' ? (args?.files ?? []).slice(0, 2) : [], failed: m === 'failed' ? (args?.files ?? []).slice(0, 1) : [], unread: [], untold: [], complete: true, oldBuild: m ? 3962284 : null }
     }
     case 'xtra_vfx_layout_scan': return 0
     case 'xtra_layout_scan': return 0

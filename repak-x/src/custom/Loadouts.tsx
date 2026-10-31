@@ -1,5 +1,6 @@
 // repakxtra: loadout pieces the Library uses (state lives in loadoutStore.ts): the selection bar's Add to loadout, the
 // right-click Add to loadout items, switching with its guards (runChanges), and Ctrl+N for a loadout pinned to N.
+import { showKeptOff } from './safeOff'
 import { useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { looksOf, skinLabel, skinLooks, type SkinDetails } from './loadoutSkins'
@@ -159,12 +160,14 @@ export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], ve
     const flagged = verb === 'on' && brokenShown() ? changes.map(m => verdictOf(m.path)).filter((v): v is Verdict => Boolean(v)) : []
     const failed = await flipMods(changes)
     await p.reload()
+    showKeptOff(p.alert, failed.keptOff ?? [], p.reload) // repakxtra: mods turned off because they can crash stay off
     const flipped = new Set(changes.filter(m => !failed.includes(m)).map(m => m.path))
     const after = p.mods.map(m => (flipped.has(m.path) ? { ...m, enabled: !m.enabled } : m))
-    if (failed.length) {
-      p.alert.warning(`${l.name} partly ${verb}`, failed.reason ?? `Could not switch ${failed.map(m => nameKey(m.path)).join(', ')}. Close anything using those files, then try again.`)
+    const stuck = failed.filter(m => !failed.keptOff?.some(k => k.path === m.path)) // kept off: its own toast above
+    if (stuck.length) {
+      p.alert.warning(`${l.name} partly ${verb}`, failed.reason ?? `Could not switch ${stuck.map(m => nameKey(m.path)).join(', ')}. Close anything using those files, then try again.`)
     } else {
-      p.alert.success(`${l.name} ${verb}`, `${plural(changes.length, 'mod')} switched.`)
+      p.alert.success(`${l.name} ${verb}`, `${plural(changes.length - failed.length, 'mod')} switched.`)
     }
     if (verb === 'off') {
       const alsoOff = wasOn.filter(o => !isActive(o, after))
@@ -174,7 +177,7 @@ export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], ve
     const risky = flagged.filter(v => v.kind === 'risky').map(v => nameKey(v.path))
     const broken = flagged.filter(v => v.kind === 'broken').map(v => nameKey(v.path))
     const vfx = flagged.filter(v => v.kind === 'vfx').map(v => nameKey(v.path))
-    if (vfx.length) p.alert.warning('Made for the old game files', `${vfx.join(', ')} ${vfx.length === 1 ? 'is a VFX or material mod' : 'are VFX or material mods'} from before the last game update. The VFX Updater (Update VFX mods at the top, or right-click > For modders > Send to VFX Updater) rebuilds ${vfx.length === 1 ? 'it' : 'them'}.`, { duration: 15000 })
+    if (vfx.length) p.alert.warning('Made for the old game files', `${vfx.join(', ')} ${vfx.length === 1 ? 'is a VFX, UI, or material mod' : 'are VFX, UI, or material mods'} from before the last game update. The Mod Updater (Update mods at the top, or right-click > For modders > Send to Mod Updater) rebuilds ${vfx.length === 1 ? 'it' : 'them'}.`, { duration: 15000 })
     if (risky.length) p.alert.warning('May crash the game', `${risky.join(', ')} ${risky.length === 1 ? 'is a Blueprint mod' : 'are Blueprint mods'} from before the last game update. If the game crashes, turn ${risky.length === 1 ? 'it' : 'them'} off and look for an updated version.`, { duration: 15000 })
     if (broken.length) p.alert.warning('Will not work in this game version', `${broken.join(', ')} ${broken.length === 1 ? 'replaces' : 'replace'} game files an update renamed or removed.`, { duration: 15000 })
     const mine = looksOf(after, details, l)

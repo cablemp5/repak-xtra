@@ -72,8 +72,9 @@ import { useConflictCount, useConflictWatch } from './custom/conflicts' // repak
 import { rescanVerdicts, useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
 import { useGameUpdateWatch } from './custom/gameUpdate' // repakxtra
 import { useUsmapWatch } from './custom/usmapWatch' // repakxtra
-import { fixInVfxWindow } from './custom/vfx/handoff' // repakxtra: the VFX Updater window
+import { fixInVfxWindow } from './custom/vfx/handoff' // repakxtra: the Mod Updater window
 import VfxNotice, { VfxDot } from './custom/vfx/VfxNotice' // repakxtra: the game updated, VFX mods to fix
+import { blockedReason, showKeptOff } from './custom/safeOff' // repakxtra: mods turned off because they can crash stay off
 import { canUpdateVfx, checkVfxModInPlace, updateVfxModInPlace } from './custom/vfx/quick' // repakxtra: Update VFX in the right-click menu
 import { PREF_TOGGLED, type PrefToggled, fewerPopups, liteOn, newDefaultsOnce, setPref } from './custom/uiPrefs' // repakxtra
 import { reportSource } from './custom/setupReport' // repakxtra: Copy setup report reads the live list
@@ -637,7 +638,7 @@ function App() {
       : null
 
     if (!utocPath) {
-      alert.warning('No UTOC Metadata', 'Selected mod does not include backend .utoc metadata for VFX Updater.')
+      alert.warning('No UTOC Metadata', 'Selected mod does not include backend .utoc metadata for Mod Updater.')
       return
     }
 
@@ -1287,6 +1288,7 @@ function App() {
       const oldPaths = new Set(selectedMods)
       const normalizeToggleKey = (path: string) => path.replace(/\.(pak|bak_repak|pak_disabled)$/i, '')
       let count = 0
+      const keptOff: { path: string; reason: string }[] = [] // repakxtra
 
       console.debug('[BulkToggle] Starting', {
         target: enable ? 'enable' : 'disable',
@@ -1299,9 +1301,12 @@ function App() {
           await invoke('toggle_mod', { modPath: mod.path })
           count++
         } catch (e) {
-          console.error(`Failed to toggle ${mod.path}:`, e)
+          const why = blockedReason(e) // repakxtra: turned off because it can crash the game
+          if (why) keptOff.push({ path: mod.path, reason: why })
+          else console.error(`Failed to toggle ${mod.path}:`, e)
         }
       }
+      showKeptOff(alert, keptOff, loadMods) // repakxtra
 
       setStatus(`Turned ${enable ? 'on' : 'off'} ${count} mods.`)
       const refreshedMods = await loadMods()
@@ -2268,7 +2273,9 @@ function App() {
 
       scheduleSafeModsRefresh('single-toggle-post-reload')
     } catch (error) {
-      setStatus('Error toggling mod: ' + error)
+      const why = blockedReason(error) // repakxtra: turned off because it can crash the game
+      if (why) showKeptOff(alert, [{ path: modPath, reason: why }], loadMods)
+      else setStatus('Error toggling mod: ' + error)
     } finally {
       togglingModsRef.current.delete(toggleKey)
     }
@@ -3955,13 +3962,13 @@ function App() {
           <button
             className="btn-settings btn-vfx"
             data-tour="vfx-updater-btn"
-            title="Open Repak VFX Updater"
+            title="Open the Mod Updater"
             onClick={async () => {
               await openVfxUpdaterWindow()
             }}
           >
             <GiLightningTrio style={{ marginRight: '6px' }} />
-            <span>VFX Updater</span>
+            <span>Mod Updater</span>
             <VfxDot mods={mods} />{/* repakxtra: VFX mods need an update */}
           </button>
           <EncryptMods />{/* repakxtra */}
@@ -4534,8 +4541,8 @@ function App() {
             onCheckConflicts={() => contextMenu.mod && handleCheckSingleModClashes(contextMenu.mod)}
             onUpdateMod={() => contextMenu.mod && handleInitiateUpdate(contextMenu.mod)}
             onSendToVfxUpdater={() => contextMenu.mod && handleSendToVfxUpdater(contextMenu.mod)}
-            onUpdateVfx={contextMenu.mod && canUpdateVfx(modDetails[contextMenu.mod.path]) ? (m => () => void updateVfxModInPlace(m, alert, loadMods))(contextMenu.mod) : undefined /* repakxtra */}
-            onCheckVfx={contextMenu.mod && canUpdateVfx(modDetails[contextMenu.mod.path]) ? (m => () => void checkVfxModInPlace(m, alert, loadMods))(contextMenu.mod) : undefined /* repakxtra */}
+            onUpdateVfx={contextMenu.mod && canUpdateVfx(modDetails[contextMenu.mod.path], contextMenu.mod.path) ? (m => () => void updateVfxModInPlace(m, alert, loadMods))(contextMenu.mod) : undefined /* repakxtra */}
+            onCheckVfx={contextMenu.mod && canUpdateVfx(modDetails[contextMenu.mod.path], contextMenu.mod.path) ? (m => () => void checkVfxModInPlace(m, alert, loadMods))(contextMenu.mod) : undefined /* repakxtra */}
             onShowInAssetExplorer={() => {
               if (!contextMenu.mod) return
               // Same selection rule as onMoveTo: acting on a mod inside the

@@ -1,5 +1,7 @@
 //! repakxtra: a loadout's mods as one zip (Loadout page > More > Export as zip). Each mod's .pak goes in with its .utoc
-//! and .ucas; a mod that is off goes in under its enabled name, so the zip installs like any mod download. The zip is
+//! and .ucas; a mod that is off goes in under its enabled name, so the zip installs like any mod download. Each entry
+//! keeps its file's date, so a mod installed from the zip keeps when it was made (xtra_made.rs), and with it the
+//! Needs update and May crash checks that go by that date (it was the export's time before). The zip is
 //! written to its own temp file beside the target and moved into place only when complete, so a failed or concurrent
 //! export never leaves half a zip. Also the rename guard: a mod's new name must not be any other mod's file.
 use std::collections::HashMap;
@@ -58,7 +60,8 @@ fn write_zip(paths: &[String], dest: &Path) -> io::Result<usize> {
                 Some(_) => return Err(io::Error::other(format!("Two mods would both be '{name}' in the zip. Rename one, then export again."))),
                 None => { seen.insert(name.to_lowercase(), src.clone()); }
             }
-            zip.start_file(name.as_str(), opts)?;
+            let made = std::fs::metadata(&src).and_then(|m| m.modified()).ok().and_then(crate::xtra_made::to_zip_time);
+            zip.start_file(name.as_str(), made.map_or(opts, |t| opts.last_modified_time(t)))?;
             io::copy(&mut File::open(&src)?, &mut zip)?;
             count += 1;
         }
@@ -103,6 +106,13 @@ mod tests {
         let mut names: Vec<String> = zip::ZipArchive::new(File::open(&dest).unwrap()).unwrap().file_names().map(String::from).collect();
         names.sort();
         assert_eq!(names, ["A_9999999_P.pak", "A_9999999_P.ucas", "A_9999999_P.utoc", "B.pak"]);
+        // each entry keeps its file's date (to zip's 2 seconds), not the export's
+        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(40 * 86_400);
+        File::options().write(true).open(dir.path().join("B.pak")).unwrap().set_modified(old).unwrap();
+        write_zip(&paths, &dest).unwrap();
+        let mut z = zip::ZipArchive::new(File::open(&dest).unwrap()).unwrap();
+        let at = crate::xtra_made::zip_time(z.by_name("B.pak").unwrap().last_modified()).unwrap();
+        assert!(at.duration_since(old).unwrap_or_default().as_secs() <= 2 && old.duration_since(at).unwrap_or_default().as_secs() <= 2);
     }
 
     #[test]

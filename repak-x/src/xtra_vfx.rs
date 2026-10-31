@@ -34,6 +34,37 @@ pub(crate) fn tune_dotnet_gc() {
     }
 }
 
+/// The background checks' work folders, one per app run (temp/repak-x/<kind>/<process id>): each check clears its own,
+/// but an app closed mid-check leaves it (49 of them, 42.8 GB, here on 2026-10-31). At start, those of runs no longer
+/// alive go; another copy's (the stable app beside the dev copy) stays while it runs.
+pub(crate) fn sweep_work_dirs() {
+    sweep_in(&std::env::temp_dir().join("repak-x"));
+}
+
+fn sweep_in(root: &Path) {
+    use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System};
+    let mut left: Vec<(PathBuf, u32)> = Vec::new();
+    for kind in ["xcheck", "xclass", "xmesh", "pakhalf"] {
+        for e in std::fs::read_dir(root.join(kind)).into_iter().flatten().flatten() {
+            // "<pid>" or "<pid>-<n>"
+            let n = e.file_name().to_string_lossy().to_string();
+            if let Ok(pid) = n.split('-').next().unwrap_or_default().parse::<u32>() {
+                left.push((e.path(), pid));
+            }
+        }
+    }
+    if left.is_empty() {
+        return;
+    }
+    let s = System::new_with_specifics(RefreshKind::new().with_processes(ProcessRefreshKind::new()));
+    let me = std::process::id();
+    for (dir, pid) in left {
+        if pid != me && s.process(Pid::from_u32(pid)).is_none() {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+}
+
 fn base_dir() -> PathBuf {
     std::env::temp_dir().join("repak-x").join("xvfx")
 }
@@ -110,6 +141,14 @@ pub fn xtra_vfx_release(window: Window, token: String) {
         }
     }
     announce(window.app_handle());
+}
+
+/// Whether a background scan may take its next mod: not while an update runs (it uses the same tool and folders), a
+/// Check for update the user started runs, or the game runs (its frame rate matters more). Every background scan asks
+/// before each mod, so any of those stops them within one mod, and the next scan goes on where they stopped (each keeps
+/// its progress per mod).
+pub(crate) fn background_may_run() -> bool {
+    xtra_vfx_lock().is_none() && !crate::xtra_vfx_check::user_checking() && !crate::is_game_process_running()
 }
 
 /// Who holds the run lock, if anyone.
@@ -449,6 +488,8 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
         (fixed_stem_among(&base, &stems_in(dir)), base.clone())
     };
     let trash_original = trash_original && !partial;
+    // made again from the original: the update it replaces is on or off, and the new one follows it
+    let update_on = if superseded.is_none() && !target.eq_ignore_ascii_case(&stem) && !files(&target).is_empty() { dir.join(format!("{target}.pak")).exists() } else { update_on };
     let eq = |a: &str, b: &str| a.eq_ignore_ascii_case(b);
     // an update made again from itself (a _PARTIAL one): the new one replaces it
     let replace = eq(&target, &kept);
@@ -644,6 +685,28 @@ pub async fn xtra_vfx_place(source: String, staged_base: String, turn_off_origin
     }).await
 }
 
+/// Turns the mod at `mod_path` (its .utoc, .pak or .bak_repak) off when it is on: what an update could not make safe,
+/// and a May crash mod the updater cannot rebuild, stay off rather than crash the game. Its off copy, or None when it
+/// was off already. Not while the game runs, as every other mod change. `reason` keeps it off (xtra_safe_off.rs) until
+/// the mod or the game changes, or the user turns it on anyway.
+#[tauri::command]
+pub async fn xtra_vfx_turn_off(window: Window, mod_path: String, reason: Option<String>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Option<String>, String> {
+    let pak = Path::new(&mod_path).with_extension("pak");
+    if let Some(why) = reason.as_deref() {
+        let mods_dir = state.lock().unwrap().game_path.clone();
+        crate::xtra_safe_off::remember(&mods_dir, &pak, why); // off already too: it stays off
+    }
+    if !pak.is_file() {
+        return Ok(None);
+    }
+    let bypass = state.lock().map(|s| s.bypass_game_running_lock).unwrap_or(false);
+    if !bypass && crate::is_game_process_running() {
+        return Err("Marvel Rivals is running. Close it, then try again.".into());
+    }
+    crate::toggle_mod(pak.to_string_lossy().to_string(), window, state).await?;
+    Ok(Some(pak.with_extension("bak_repak").to_string_lossy().to_string()))
+}
+
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct VfxMods {
@@ -669,6 +732,8 @@ pub struct VfxMod {
     niagara: bool,
     /// Not a VFX mod: listed for its material instances (a skin's glow), grouped apart in the window
     materials: bool,
+    /// A UI mod (the Library's UI type) listed for its UI materials, in the window's UI mods group
+    ui: bool,
 }
 
 /// The mods folder's VFX mods (the Library's VFX type) the VFX Updater can update: IoStore mods, no originals with an update
@@ -680,6 +745,7 @@ pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>
     tauri::async_runtime::spawn_blocking(move || {
         // the Library's scan skips what it cannot open: walk again and keep those, so a partial list says so
         let root = state.lock().unwrap().game_path.clone();
+        let paks = crate::xtra_broken::paks_dir(&root);
         let mut problems: Vec<String> = walkdir::WalkDir::new(&root)
             .into_iter()
             .filter_entry(crate::xtra_bundle::not_staging)
@@ -717,7 +783,10 @@ pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>
                         return None;
                     }
                 };
-                updatable(&details.category, &details.files).then(|| VfxMod {
+                // by class too: a UI material named M_..._Inst is no MI_ (xtra_broken::material_instances)
+                let listed = updatable(&details.category, &details.files)
+                    || paks.as_ref().is_some_and(|p| !crate::xtra_broken::material_instances(p, &utoc, &details.files).0.is_empty());
+                listed.then(|| VfxMod {
                     name: m.custom_name.clone().filter(|n| !n.trim().is_empty()).unwrap_or_else(|| split_priority(&stem).0.to_string()),
                     // the mod list leaves it empty for most mods: the details name it (the window's hero filter)
                     hero: m.character_name.clone().filter(|c| !c.is_empty()).or_else(|| Some(details.character_name.clone()).filter(|c| !c.is_empty())),
@@ -727,6 +796,7 @@ pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>
                     modified: m.modified_date,
                     niagara: has_niagara(&details.files),
                     materials: details.category != "VFX",
+                    ui: details.category == "UI",
                 })
             })
             .collect::<Vec<_>>();
@@ -735,6 +805,75 @@ pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>
     })
     .await
     .map_err(|e| e.to_string())
+}
+
+/// A hybrid mod's .pak half (the legacy .pak beside its .utoc; `main` is any of the mod's files): its packages and raw
+/// files (audio banks, configs) extracted into `out` beside what is there, never over it. Their paths under `out`:
+/// packages by their .uasset or .umap, raw files as they are. Empty when the .pak holds only the IoStore chunk list.
+/// Without this an update read and packed only the .utoc half, and the rest of the mod was gone from it.
+pub(crate) fn pak_half(main: &Path, out: &Path) -> Result<Vec<String>, String> {
+    let pak = ["pak", "bak_repak"].iter().map(|x| main.with_extension(x)).find(|p| p.is_file()).ok_or("the mod's .pak is not there")?;
+    let aes = Some(crate::install_mod::AES_KEY_HEX);
+    let own = |f: &str| {
+        let l = f.to_ascii_lowercase();
+        !l.contains("chunknames") && !l.contains("patched_files")
+    };
+    let listed = uasset_toolkit::list_pak_files(&pak.to_string_lossy(), aes).map_err(|e| format!("{}: {e}", pak.display()))?;
+    if !listed.iter().any(|f| own(f)) {
+        return Ok(Vec::new());
+    }
+    static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let tmp = std::env::temp_dir().join("repak-x").join("pakhalf").join(format!("{}-{}", std::process::id(), N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+    let _ = std::fs::remove_dir_all(&tmp);
+    let r = (|| {
+        crate::xtra_extract::extract_pak_all(&pak.to_string_lossy(), &tmp.to_string_lossy(), aes)?;
+        let mut found = Vec::new();
+        for e in walkdir::WalkDir::new(&tmp).into_iter().flatten().filter(|e| e.file_type().is_file()) {
+            let Ok(rel) = e.path().strip_prefix(&tmp) else { continue };
+            let rel_s = rel.to_string_lossy().replace('\\', "/");
+            if !own(&rel_s) {
+                continue;
+            }
+            let to = out.join(rel);
+            if to.exists() {
+                continue; // the .utoc half's copy stands
+            }
+            std::fs::create_dir_all(to.parent().unwrap_or(out)).map_err(|e| e.to_string())?;
+            std::fs::rename(e.path(), &to).or_else(|_| std::fs::copy(e.path(), &to).map(|_| ())).map_err(|e| e.to_string())?;
+            let x = rel_s.rsplit('.').next().unwrap_or_default().to_ascii_lowercase();
+            if !["uexp", "ubulk", "uptnl"].contains(&x.as_str()) {
+                found.push(to.to_string_lossy().replace('\\', "/"));
+            }
+        }
+        Ok::<_, String>(found)
+    })();
+    let _ = std::fs::remove_dir_all(&tmp);
+    r
+}
+
+/// pipeline.ts: pak_half for the mod at `mod_path` into the run's mod extract.
+#[tauri::command]
+pub async fn xtra_vfx_pak_half(mod_path: String, mod_extract: String) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || pak_half(Path::new(&mod_path), Path::new(&mod_extract))).await.map_err(|e| e.to_string())?
+}
+
+/// The mod's packages by class, keyed by their path in the mod (lowercase, no extension), from its container's listing
+/// (xtra_uat_cli::classes): pipeline.ts reads a material or blueprint named like a texture or mesh (T_, SK_, SM_) as
+/// what it is, never passing it on unread. None without the command line.
+#[tauri::command]
+pub async fn xtra_vfx_classes(mod_path: String, game_paks: String) -> Option<HashMap<String, String>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let listed = crate::xtra_uat_cli::classes(&Path::new(&mod_path).with_extension("utoc"), Path::new(&game_paks))?;
+        let key = |p: &str| {
+            let p = p.replace('\\', "/").to_lowercase();
+            let p = p.trim_start_matches("../");
+            p.strip_suffix(".uasset").unwrap_or(p).to_string()
+        };
+        Some(listed.into_iter().map(|(p, c)| (key(&p), c)).collect())
+    })
+    .await
+    .ok()
+    .flatten()
 }
 
 /// Whether a mod's files hold a Niagara system or emitter (NS_ or NE_).
@@ -801,19 +940,43 @@ fn stale(mod_path: &str, game_paks: &str, files: &[String]) -> Result<Vec<String
     let path = Path::new(mod_path);
     let written = std::fs::metadata(path).and_then(|m| m.modified()).map_err(|e| format!("{}: {e}", path.display()))?;
     let written = written.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    let written = crate::xtra_stamp::made(path, written);
     // the game set in Setup, never one guessed from the mod's folder: a mod chosen from Downloads is checked too
     Ok(crate::xtra_broken::rewritten_since(Path::new(game_paks), files, written).unwrap_or_default())
 }
 
-/// What an update of `mod_path` (a .utoc) starts from: a partial update lacks the Niagara files it left out, so its kept
-/// `<name>_ORIGINAL` is updated instead when it is there.
-fn source_of(mod_path: &Path) -> PathBuf {
-    let Some(stem) = mod_path.file_stem().map(|s| s.to_string_lossy().to_string()) else { return mod_path.to_path_buf() };
-    if !partial_stem(&stem).eq_ignore_ascii_case(&stem) {
-        return mod_path.to_path_buf();
+/// The original an update at `mod_path` (a .utoc) was made from, when it is still beside it: `<name>_ORIGINAL` for a
+/// partial update, `<name>_BROKEN` for one that kept the mod's name, the original `<name>_..._P` for a `_UPDATED` one.
+pub(crate) fn original_of(mod_path: &Path) -> Option<PathBuf> {
+    let stem = mod_path.file_stem()?.to_string_lossy().to_string();
+    let dir = mod_path.parent()?;
+    // the file as it is spelled on disk (stems_in is lowercase)
+    let utoc = |s: &str| {
+        std::fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).find(|p| {
+            p.extension().is_some_and(|x| x.eq_ignore_ascii_case("utoc")) && p.file_stem().is_some_and(|f| f.to_string_lossy().eq_ignore_ascii_case(s))
+        })
+    };
+    if partial_stem(&stem).eq_ignore_ascii_case(&stem) {
+        return utoc(&original_stem(&stem));
     }
-    let original = mod_path.with_file_name(format!("{}.utoc", original_stem(&stem)));
-    if original.exists() { original } else { mod_path.to_path_buf() }
+    let broken = broken_stem(&stem);
+    if !broken.eq_ignore_ascii_case(&stem) {
+        if let Some(o) = utoc(&broken) {
+            return Some(o);
+        }
+    }
+    if is_update(&stem) {
+        let siblings = stems_in(dir);
+        let me = stem.to_lowercase();
+        return siblings.iter().find(|t| **t != me && !is_update(t) && fixed_stem_among(t, &siblings).eq_ignore_ascii_case(&stem)).and_then(|t| utoc(t));
+    }
+    None
+}
+
+/// What an update of `mod_path` (a .utoc) starts from: the original it was made from when that is still there (an
+/// earlier update can lack what it left out, or carry what an older version of the updater got wrong), else itself.
+fn source_of(mod_path: &Path) -> PathBuf {
+    original_of(mod_path).unwrap_or_else(|| mod_path.to_path_buf())
 }
 
 #[tauri::command(async)]
@@ -832,6 +995,35 @@ mod tests {
     use crate::vfx_updater::{commands as c, file_ops, logging, pipeline, progress::NoOpProgressSink};
     use serde_json::{json, Value};
     use std::io::{BufRead, Write};
+
+    #[test]
+    fn work_folders_of_runs_no_longer_alive_go_and_live_ones_stay() {
+        let root = tempfile::tempdir().unwrap();
+        let me = std::process::id();
+        let dead = 4_000_000_001u32; // above any Windows process id
+        for d in [format!("xcheck/{me}"), format!("xcheck/{dead}"), format!("pakhalf/{dead}-3"), format!("xmesh/{me}"), "xcheck/notapid".to_string()] {
+            std::fs::create_dir_all(root.path().join(d).join("game")).unwrap();
+        }
+        sweep_in(root.path());
+        assert!(root.path().join(format!("xcheck/{me}")).exists() && root.path().join(format!("xmesh/{me}")).exists(), "this run's stay");
+        assert!(!root.path().join(format!("xcheck/{dead}")).exists() && !root.path().join(format!("pakhalf/{dead}-3")).exists(), "a closed run's go");
+        assert!(root.path().join("xcheck/notapid").exists(), "what is not a run's is left alone");
+    }
+
+    #[test]
+    fn an_update_starts_again_from_the_original_beside_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let touch = |s: &str| std::fs::write(dir.path().join(format!("{s}.utoc")), b"t").unwrap();
+        let p = |s: &str| dir.path().join(format!("{s}.utoc"));
+        for s in ["A_9999999_P", "A_BROKEN_9999999_P", "B_100_P", "B_UPDATED_9999999_P", "C_PARTIAL_9999999_P", "C_ORIGINAL_9999999_P", "D_9999999_P"] {
+            touch(s);
+        }
+        assert_eq!(original_of(&p("A_9999999_P")), Some(p("A_BROKEN_9999999_P")), "kept the name: its _BROKEN original");
+        assert_eq!(original_of(&p("B_UPDATED_9999999_P")), Some(p("B_100_P")), "an _UPDATED one: the original it was named after");
+        assert_eq!(original_of(&p("C_PARTIAL_9999999_P")), Some(p("C_ORIGINAL_9999999_P")));
+        assert_eq!(original_of(&p("D_9999999_P")), None, "no original beside it: it starts from itself");
+        assert_eq!(original_of(&p("A_BROKEN_9999999_P")), None, "the original itself");
+    }
 
     #[test]
     fn niagara_is_an_ns_or_ne_uasset() {
@@ -958,13 +1150,14 @@ mod tests {
         assert!(mods.join("A_9999999_P.bak_repak").exists() && !mods.join("A_9999999_P.pak").exists(), "the original is off");
         assert_eq!(std::fs::read_to_string(mods.join("A_UPDATED_9999999_P.ucas")).unwrap(), "new");
 
-        // an off original makes an off fix, and is left alone
+        // made again from the off original: the new fix is on or off like the fix it replaces, the original left alone
         for x in ["utoc", "ucas", "pak"] {
             touch(&root.join(format!("stage/out.{x}")), "newer");
         }
         let (placed, ..) = place(&mods.join("A_9999999_P.utoc"), &root.join("stage/out"), true, false, false, false, &root.join("trash")).unwrap();
         assert!(!placed.turned_off && placed.replaced, "the previous fix went to Recently deleted");
-        assert!(mods.join("A_UPDATED_9999999_P.bak_repak").exists() && !mods.join("A_UPDATED_9999999_P.pak").exists());
+        assert!(mods.join("A_UPDATED_9999999_P.pak").exists() && !mods.join("A_UPDATED_9999999_P.bak_repak").exists(), "on, like the fix it replaces");
+        assert!(mods.join("A_9999999_P.bak_repak").exists(), "the original stays off");
         assert_eq!(std::fs::read_to_string(mods.join("A_UPDATED_9999999_P.ucas")).unwrap(), "newer");
         assert_eq!(std::fs::read_dir(root.join("trash")).unwrap().count(), 1, "the old fix is in the trash given, never the app's");
         let _ = std::fs::remove_dir_all(&root);
@@ -1005,8 +1198,8 @@ mod tests {
         stage("newest");
         let (placed, ..) = place(&mods.join("A_BROKEN_9999999_P.utoc"), &root.join("stage/out"), true, true, false, false, &root.join("trash")).unwrap();
         assert!(placed.replaced && !placed.turned_off, "the broken copy was off already");
-        assert_eq!(std::fs::read_to_string(mods.join("A_9999999_P.bak_repak")).unwrap(), "newest", "off, like the copy it was made from");
-        assert!(!mods.join("A_9999999_P.pak").exists(), "the earlier update is in Recently deleted");
+        assert_eq!(std::fs::read_to_string(mods.join("A_9999999_P.pak")).unwrap(), "newest", "on, like the update it replaces");
+        assert!(!mods.join("A_9999999_P.bak_repak").exists(), "the earlier update is in Recently deleted");
         assert_eq!(std::fs::read_to_string(mods.join("A_BROKEN_9999999_P.bak_repak")).unwrap(), "new");
         assert_eq!(std::fs::read_dir(root.join("trash")).unwrap().count(), 2);
         let _ = std::fs::remove_dir_all(&root);
@@ -1164,6 +1357,13 @@ mod tests {
                 let work = PathBuf::from(s(a, "stageDir")).join("niagara");
                 json!(crate::xtra_niagara::run(&s(a, "gamePaks"), &s(a, "usmapPath"), Path::new(&s(a, "modExtract")), &list(a, "files"), Path::new(&s(a, "finalUassets")), &work, &vanilla, p).await?)
             }
+            // repakxtra 0.39: the commands the pipeline gained
+            "xtra_vfx_classes" => json!(xtra_vfx_classes(s(a, "modPath"), s(a, "gamePaks")).await),
+            "xtra_vfx_pak_half" => json!(pak_half(Path::new(&s(a, "modPath")), Path::new(&s(a, "modExtract")))?),
+            "xtra_vfx_verify" => json!(crate::xtra_mi_layout::verify(&s(a, "usmapPath"), &s(a, "dir"), &list(a, "rels"), &s(a, "jsonDir"), &s(a, "stageDir"), p).await?),
+            "xtra_vfx_merge_tables" => json!(crate::xtra_tables::merge_tables(&s(a, "gamePaks"), &s(a, "usmapPath"), &s(a, "modExtract"), &list(a, "files"), &s(a, "out"), &s(a, "stageDir"), p).await?),
+            "xtra_game_build" => json!(Path::new(&s(a, "gamePaks")).is_dir().then(|| game_build(Path::new(&s(a, "gamePaks")))).unwrap_or_else(|| game_build(Path::new(&format!("{}", std::env::var("REPAKXTRA_PAKS").unwrap_or_default()))))),
+            "xtra_vfx_usmap_wait" => json!(crate::xtra_broken::xtra_vfx_usmap_wait(s(a, "modPath"), s(a, "gamePaks"), s(a, "usmapPath"))),
             _ => return Err(format!("unknown command {cmd}")),
         })
     }

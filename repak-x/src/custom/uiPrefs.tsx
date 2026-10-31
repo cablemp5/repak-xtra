@@ -14,7 +14,7 @@ import { savedItem } from './storageCarryOver'
 // `on`: shown until switched off (the rest start hidden). Stored as '1' or '0' once changed.
 // `group`: the Settings section it is drawn in (Header buttons, On each mod), or its own place elsewhere.
 const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod' | 'warn' }[] = [
-  { key: 'vfx-updater', label: 'VFX Updater', on: true, group: 'header' },
+  { key: 'vfx-updater', label: 'Mod Updater', on: true, group: 'header' },
   { key: 'encrypt', label: 'Encrypt', group: 'header' }, // hidden by default: Settings > Header buttons shows it
   { key: 'asset-explorer', label: 'Asset Explorer', group: 'header' },
   { key: 'share', label: 'Share', group: 'header' },

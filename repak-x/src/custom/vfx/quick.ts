@@ -8,13 +8,13 @@ import { useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit } from '@tauri-apps/api/event'
 import type { useAlert } from '../../components/AlertHandler'
-import { verdictsChanged } from '../brokenMods'
+import { verdictOf, verdictsChanged } from '../brokenMods'
 import { modKey, nameKey, renameModKey } from '../loadoutStore'
 import { renameSource } from '../nexusSource'
 import { readFilter } from './filter'
 import { openVfxWindow, sendReport, utocOf } from './handoff'
 import { STEPS, fixVfxMod, type VfxReport } from './pipeline'
-import { claimRun, newRunToken, readNaming, readOriginals, releaseRun, runLock } from './prefs'
+import { claimRun, newRunToken, readNaming, readOriginals, readSafeOff, releaseRun, runLock } from './prefs'
 
 type Alert = ReturnType<typeof useAlert>
 let reserved = false // one right-click update at a time in this window, taken before anything is awaited
@@ -33,9 +33,10 @@ const nameOf = (p: string) => fileName(p).replace(/\.[^.]+$/, '').replace(/(_\d+
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
 /** Whether the VFX Updater can update a mod: VFX, or any mod with a material instance (MI_*.uasset) or a KO prompt
- *  (WBP_Battle_Kill_*.uasset), as xtra_vfx.rs `updatable` decides (a skin's glow or shine material sorts as Mesh or Texture). */
-export const canUpdateVfx = (d?: { category?: string; files?: string[] } | null) =>
-  d?.category === 'VFX' || Boolean(d?.files?.some(f => /^(mi_|wbp_battle_kill_).*\.uasset$/i.test(fileName(f))))
+ *  (WBP_Battle_Kill_*.uasset), as xtra_vfx.rs `updatable` decides (a skin's glow or shine material sorts as Mesh or Texture).
+ *  A Needs VFX update flag counts too: the backend finds material instances by class (a UI material named M_..._Inst). */
+export const canUpdateVfx = (d?: { category?: string; files?: string[] } | null, path?: string) =>
+  d?.category === 'VFX' || Boolean(d?.files?.some(f => /^(mi_|wbp_battle_kill_).*\.uasset$/i.test(fileName(f)))) || (path !== undefined && verdictOf(path)?.kind === 'vfx')
 
 if (import.meta.env.DEV) {
   console.assert(canUpdateVfx({ category: 'VFX' }) && canUpdateVfx({ category: 'Texture', files: ['Marvel\\Content\\X\\mi_Body_Glow.uasset'] }), 'VFX or a material instance')
@@ -54,7 +55,7 @@ async function findUsmap(): Promise<string | null> {
 /** Updates one VFX mod in place, with a toast for progress and one for the result. */
 export async function updateVfxModInPlace(mod: { path: string; utoc_path?: string | null }, alert: Alert, reload: () => unknown) {
   const name = nameOf(mod.path)
-  const open = { label: 'Open VFX Updater', onClick: () => { void openVfxWindow() } }
+  const open = { label: 'Open Mod Updater', onClick: () => { void openVfxWindow() } }
   const busy = (what?: string | null) => alert.warning(`${name} was not updated`, `${what ? `${what} is` : 'Another mod is'} updating. Try again when it is done.`, { action: open })
   if (reserved) { busy(); return }
   reserved = true // before the first await: a second click finds it taken
@@ -64,7 +65,7 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
     const paks = await invoke<string | null>('get_game_path').then(d => (d ? d.replace(/[\\/][^\\/]*$/, '') : null)).catch(() => null)
     const usmap = await findUsmap()
     if (!paks || !usmap) {
-      alert.warning(`${name} was not updated`, !paks ? 'Set the game folder in Setup first.' : 'There is no USMAP yet. Open the VFX Updater to get one.', { action: open })
+      alert.warning(`${name} was not updated`, !paks ? 'Set the game folder in Setup first.' : 'There is no USMAP yet. Open the Mod Updater to get one.', { action: open })
       return
     }
     if (!(await claimRun(token, name))) { busy((await runLock())?.name); return }
@@ -74,6 +75,7 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
     const r = await fixVfxMod({
       modPath: mod.utoc_path || utocOf(mod.path), usmapPath: usmap, gamePaksPath: paks, filter: readFilter(),
       keepName: naming === 'broken', turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash',
+      safeOff: readSafeOff() && Boolean(verdictOf(mod.path)), // flagged: off when it could not be made safe
       onStep: s => { if (id !== null) alert.updateToast(id, { description: `Step ${s.step} of ${STEPS.length}: ${s.title}`, progressValue: ((s.step - 0.5) / STEPS.length) * 100 }) },
     })
     if (r.status === 'fixed' && r.placed) {
@@ -111,35 +113,42 @@ function resultToast(r: VfxReport, name: string, alert: Alert) {
       ].filter(Boolean).join(' '),
     })
   } else if (r.status === 'nothing') {
-    alert.showAlert({ color: 'default', duration: 6000, title: `${name} needs no update`, description: r.error ?? '' })
+    alert.showAlert({ color: r.turnedOff ? 'warning' : 'default', duration: r.turnedOff ? 0 : 6000, title: r.turnedOff ? `${name} was turned off` : `${name} needs no update`,
+      description: `${r.error ?? ''}${r.turnedOff ? ' It is off now, so it cannot crash the game.' : ''}` })
   } else {
     // a problem is yellow, never red
-    alert.showAlert({ color: 'warning', duration: 0, title: `${name} was not updated`, description: r.error ?? 'Something went wrong.', action: show })
+    alert.showAlert({ color: 'warning', duration: 0, title: `${name} was not updated`, description: `${r.error ?? 'Something went wrong.'}${r.turnedOff ? ' It was turned off, so it cannot crash the game.' : ''}`, action: show })
   }
 }
 
 /** What Check for VFX update found (xtra_vfx_check.rs): the mod's material instances by the game version they were built for. */
-export type VfxCheck = { verdict: 'outdated' | 'current' | 'unknown' | 'none'; outdated: string[]; current: string[]; unknown: string[]; why?: 'empty' | 'unreadable' | 'elsewhere' | null }
+export type VfxCheck = { verdict: 'outdated' | 'current' | 'unknown' | 'none'; outdated: string[]; current: string[]; unknown: string[]; oldLayout?: string[]; why?: 'empty' | 'unreadable' | 'elsewhere' | 'layout' | 'classes' | null }
 
 /** Why a check could not tell, for one material and for several, in words that never guess past what it saw. */
 const WHY = {
   empty: ['carries no shader data of its own to compare', 'carry no shader data of their own to compare'],
   unreadable: ["could not be compared, since the game's older files could not be read", "could not be compared, since the game's older files could not be read"],
   elsewhere: ['matches no game version (the modder built it)', 'match no game version (the modder built them)'],
+  layout: ["could not have its layout read (no older USMAP read it)", "could not have their layout read (no older USMAP read them)"],
+  classes: ['could not be listed by type, so materials not named MI_ may be missing', 'could not be listed by type, so materials not named MI_ may be missing'],
 } as const
 
 /** Checks one mod's materials against this game version and the earlier ones still in the game (its flag follows). */
 export async function checkVfxMod(path: string): Promise<VfxCheck> {
   const usmap = await findUsmap()
-  if (!usmap) throw new Error('There is no USMAP yet. Open the VFX Updater to get one.')
+  if (!usmap) throw new Error('There is no USMAP yet. Open the Mod Updater to get one.')
   return invoke<VfxCheck>('xtra_vfx_check', { modPath: path, usmapPath: usmap })
 }
 
 /** What a check means, in words: a toast's title and text (the VFX Updater's log uses them too). */
 export function checkWords(c: VfxCheck, name: string): { title: string; text: string; color: 'warning' | 'success' | 'default' } {
   const all = c.outdated.length + c.current.length + c.unknown.length
-  if (c.verdict === 'outdated') return { color: 'warning', title: `${name} needs a VFX update`, text: `${c.outdated.length === all ? (all === 1 ? 'Its material is' : `All ${all} of its materials are`) : `${c.outdated.length} of its ${all} materials are`} still built for an earlier game version.` }
+  const some = (n: number) => (n === all ? (all === 1 ? 'Its material is' : `All ${all} of its materials are`) : `${n} of its ${all} materials ${n === 1 ? 'is' : 'are'}`)
+  const layout = c.oldLayout?.length ?? 0
+  if (c.verdict === 'outdated' && layout) return { color: 'warning', title: `${name} needs a VFX update`, text: `${some(layout)} stored in an older game build's layout, which can crash the game. The update rewrites ${layout === 1 ? 'it' : 'them'}.` }
+  if (c.verdict === 'outdated') return { color: 'warning', title: `${name} needs a VFX update`, text: `${some(c.outdated.length)} still built for an earlier game version.` }
   if (c.verdict === 'current') return { color: 'success', title: `${name} is up to date`, text: `${all === 1 ? 'Its material is' : `All ${all} of its materials are`} built for this game version.` }
+  if (c.verdict === 'unknown' && !c.unknown.length) return { color: 'default', title: `Not known if ${name} needs an update`, text: 'Its files could not be listed by type, so materials not named MI_ may be missing. It is checked again later.' }
   if (c.verdict === 'unknown') {
     const one = c.unknown.length === 1
     return { color: 'default', title: `Not known if ${name} needs an update`, text: `${one ? 'Its material' : `${c.unknown.length} of its materials`} ${WHY[c.why ?? 'elsewhere'][one ? 0 : 1]}, so its date decides as before.` }
@@ -155,7 +164,7 @@ export async function checkVfxModInPlace(mod: { path: string; utoc_path?: string
     const c = await checkVfxMod(mod.path)
     alert.dismissAlert(id)
     const w = checkWords(c, name)
-    const update = { label: 'Update VFX', onClick: () => { void updateVfxModInPlace(mod, alert, reload) } }
+    const update = { label: 'Update', onClick: () => { void updateVfxModInPlace(mod, alert, reload) } }
     alert.showAlert({ color: w.color, duration: c.verdict === 'outdated' ? 0 : 6000, title: w.title, description: w.text, action: c.verdict === 'outdated' ? update : undefined })
     await verdictsChanged() // its Needs VFX update flag follows the check
   } catch (e) {

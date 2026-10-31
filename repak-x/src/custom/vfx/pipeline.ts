@@ -34,6 +34,8 @@ export type VfxReport = {
   /** The fixed mod: its .pak or .bak_repak beside the original (or the .utoc packed into outputDir) */
   output?: string
   placed?: Placed
+  /** Could not be made safe, so it was turned off (FixOptions.safeOff) */
+  turnedOff?: boolean
   assets: AssetResult[]
   warnings: string[]
   /** left: Niagara files made for an older game build, left out until a USMAP for the game is out (a partial update).
@@ -56,6 +58,9 @@ export type FixOptions = {
   keepName?: boolean
   /** The original goes to Recently deleted (off, so a restore never clashes with the update) */
   trashOriginal?: boolean
+  /** The mod is flagged (Needs VFX update, May crash): when the run fails, it is turned off rather than left on to crash.
+   *  A run that finds its materials only in the old layout turns it off unless this is false */
+  safeOff?: boolean
   filter?: ColorFilter
   log?: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void
   onStep?: (s: { step: number; title: string }) => void
@@ -76,7 +81,7 @@ export const usmapWaitText = (w: UsmapWait) =>
 type Dirs = { modExtract: string; modJson: string; editedJson: string; finalUassets: string; stage: string; vanillaExtract: string; vanillaJson: string; vanillaIndex: string }
 type Detected = { kind: 'material_instance' | 'blueprint' | 'maybe' | 'other'; class: string | null; error: string | null }
 type VanillaIndex = { have: string[] } // an older index's "absent" list is not read (see step 4)
-type NiagaraRun = { ready: boolean; why?: string | null; oldBuild?: number | null; files: { file: string; edits: number; error?: string | null }[] }
+type NiagaraRun = { ready: boolean; why?: string | null; oldBuild?: number | null; files: { file: string; edits: number; error?: string | null; retry?: boolean }[] }
 
 class Cancelled extends Error {}
 
@@ -144,24 +149,37 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     // ---- 1: extract and sort ----
     enter(1)
 
-    // a partial update lacks the Niagara files it left out: its kept original is what gets updated
+    // an earlier update starts again from the original beside it (_BROKEN, _ORIGINAL, or the one an _UPDATED copy was
+    // named after): it can lack what it left out, or carry what an older updater got wrong
     const src = await invoke<string>('xtra_vfx_source', { modPath: o.modPath }).catch(() => o.modPath)
-    if (src !== o.modPath) log(`Starting from ${stem(src)}, the original kept with its Niagara files.`)
+    if (src !== o.modPath) log(`Starting from its original, ${stem(src)}.`)
     // the USMAP may be older than the game: fine unless the patch rewrote files this update decodes
     const wait = await invoke<UsmapWait | null>('xtra_vfx_usmap_wait', { modPath: src, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath }).catch(() => null)
     if (wait?.changed) { report.error = `Not updated yet. ${usmapWaitText(wait)}`; return report }
+    // the game as it is now: an update that lands mid-run makes this one stale, so placing checks it again
+    const buildAt = await invoke<{ updated: number }>('xtra_game_build').then(b => b.updated).catch(() => 0)
     const runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
     const dirs = await invoke<Dirs>('xtra_vfx_dirs', { gamePaks: o.gamePaksPath, runId, usmapPath: o.usmapPath }) // the game files' cache is per USMAP too
     const extracted = await invoke<string[]>('vfx_extract_mod_assets', { gamePaks: o.gamePaksPath, modPath: src, outputDir: dirs.modExtract })
     check()
+    // a hybrid mod's .pak half: its packages are read and checked like the rest, its raw files (audio banks, configs)
+    // go along into the update's .pak. Without it the update would lose them
+    const half = await invoke<string[]>('xtra_vfx_pak_half', { modPath: src, modExtract: dirs.modExtract })
+      .catch(e => { throw new Error(`Its .pak half could not be read (${e}), and an update without it would lose part of the mod`) })
+    const raw = half.filter(p => !/\.(uasset|umap)$/i.test(p))
+    extracted.push(...half.filter(p => /\.(uasset|umap)$/i.test(p)))
+    if (half.length) log(`Read its .pak half too: ${plural(half.length - raw.length, 'package')} and ${plural(raw.length, 'other file')}.`)
     if (!extracted.length) throw new Error('No assets could be read from the mod. Check the game folder in Setup and that the mod is a .utoc mod.')
     const rel = (p: string) => relativeTo(p, dirs.modExtract)
     const manifest = extracted.map(rel)
-    const ask = extracted.filter(p => !PASS_BY_NAME.test(fileName(p)))
+    // by name, unless the mod's listing says a file named like a texture or mesh is a material or blueprint
+    const classes = await invoke<Record<string, string> | null>('xtra_vfx_classes', { modPath: src, gamePaks: o.gamePaksPath }).catch(() => null)
+    const passes = (p: string) => PASS_BY_NAME.test(fileName(p)) && !/^(MaterialInstance|.*BlueprintGeneratedClass$|DataTable$|StringTable$)/i.test(classes?.[assetKey(rel(p))] ?? '')
+    const ask = extracted.filter(p => !passes(p))
     // a patch that inserts properties into a class moves every later one (3984769: material overrides), and a file cooked
     // before it crashes the game and reads as nothing to change. Rewritten in today's layout here, every step below reads it
     const older = ask.filter(p => !NIAGARA_BY_NAME.test(fileName(p))).map(p => rel(p).replace(/\.uasset$/i, ''))
-    const re = older.length ? await invoke<{ files: string[]; failed: string[]; oldBuild: number | null }>('xtra_vfx_relayout', { modPath: src, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath, modExtract: dirs.modExtract, files: older, stageDir: dirs.stage })
+    const re = older.length ? await invoke<{ files: string[]; failed: string[]; unread: string[]; untold: string[]; complete: boolean; oldBuild: number | null }>('xtra_vfx_relayout', { modPath: src, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath, modExtract: dirs.modExtract, files: older, stageDir: dirs.stage })
       .catch(e => { warn(`Could not check its material layout (${e}).`); return undefined }) : null
     check()
     re?.files.forEach(f => relaid.add(fileName(f).toLowerCase() + '.uasset'))
@@ -169,9 +187,15 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     // not checked, or in the old layout and not rewritten: passed on as they are they can crash the game, so the mod stays
     // as it was before any step can pack it
     const unrewritten = re?.failed.length ?? 0
-    if (re === undefined || unrewritten) {
+    // a material read in no layout, or not told for want of an older USMAP: not known to be safe either. Only materials:
+    // what the layout patch moved is theirs, and widgets and blueprints keep exports the tool never reads in any layout
+    // (the game's own KO prompt does), which the class check judges instead
+    const isMaterial = (r: string) => /^MaterialInstance/i.test(classes?.[assetKey(r)] ?? '') || /^MI_/i.test(r.split('/').pop() ?? '')
+    const untold = re ? [...re.unread, ...re.untold].filter(isMaterial).length : 0
+    if (re === undefined || unrewritten || untold) {
       const why = re === undefined ? 'its material layout could not be checked'
-        : `${plural(unrewritten, 'material or blueprint', 'materials and blueprints')} could not be rewritten in the new game build's layout`
+        : unrewritten ? `${plural(unrewritten, 'material or blueprint', 'materials and blueprints')} could not be rewritten in the new game build's layout`
+          : `the layout of ${plural(untold, 'material or blueprint', 'materials and blueprints')} could not be told (no older USMAP read ${untold === 1 ? 'it' : 'them'})`
       report.error = `Not updated: ${why}. The mod was not changed. Check the USMAP in Advanced, then try again.`
       log(report.error, 'warning')
       return report // failed: Try again stays
@@ -188,11 +212,11 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     let editable: string[] = [], keep: string[] = []
     const maybe = new Map<string, string>()
     for (const p of extracted) {
-      const d = PASS_BY_NAME.test(fileName(p)) ? undefined : types.get(assetKey(slash(p)))
+      const d = passes(p) ? undefined : types.get(assetKey(slash(p)))
       if (d && d.kind !== 'other') { editable.push(p); if (d.kind === 'maybe') maybe.set(assetKey(rel(p)), d.class ?? ''); continue }
       keep.push(p)
       if (d?.error) asset(p, 'unreadable', `Could not be read (${d.error}). Kept as it was.`)
-      else if (!d && !PASS_BY_NAME.test(fileName(p))) asset(p, 'unreadable', 'Its type could not be read. Kept as it was.')
+      else if (!d && !passes(p)) asset(p, 'unreadable', 'Its type could not be read. Kept as it was.')
       else asset(p, 'passed', d?.class ? `${d.class}, kept as it was.` : 'Kept as it was.')
     }
     // Niagara files a game update rewrote after the mod was made are still cooked for the old game and can crash it. They
@@ -202,7 +226,10 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     // newer than the update but still in the old layout (an earlier update made with an old USMAP, an old mod installed
     // again): its date says current, so one of its Niagara systems is decoded to tell (xtra_niagara.rs)
     if (niagara.length && !staleList.length) {
-      staleList = await invoke<string[]>('xtra_vfx_old_layout', { modPath: src, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath, files: niagara.map(rel), modExtract: dirs.modExtract }).catch(() => [])
+      const told = await invoke<string[]>('xtra_vfx_old_layout', { modPath: src, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath, files: niagara.map(rel), modExtract: dirs.modExtract }).catch(e => String(e))
+      // not checked is not "none stale": passed on unchecked, an old Niagara file can crash the game
+      if (typeof told === 'string') { report.error = `Not updated: its Niagara layout could not be checked (${told}). The mod was not changed.`; log(report.error, 'warning'); return report }
+      staleList = told
       if (staleList.length) log(`Its Niagara files are in an older game build's layout, although the mod is newer. Rebuilding ${plural(staleList.length, 'Niagara file')}.`, 'warning')
     }
     const stale = new Set(staleList.map(assetKey))
@@ -215,8 +242,43 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       keep = keep.filter(p => !stale.has(assetKey(rel(p))))
       log(`Leaving out ${plural(stale.size, 'Niagara file')} made for an older game build.`, 'warning')
     }
-    const allStale = () => `Not updated: everything it changes is ${plural(report.counts.left + report.counts.ownGame, 'Niagara file')} made for an older game build that could not be rebuilt, and the game can crash on them. Turn the mod off until its author updates it.`
+    // Animation Blueprints the game cooked again since the mod was made (3984769 moved how they are stored): nothing here
+    // rebuilds them, so they are left out and the game's own play. shortcut: by date, like the Niagara files above
+    const anims = keep.filter(p => /^ABP_/i.test(fileName(p)) || /^AnimBlueprint/i.test(types.get(assetKey(slash(p)))?.class ?? ''))
+    const staleAnims = new Set((anims.length ? await invoke<string[]>('xtra_vfx_stale', { modPath: src, gamePaks: o.gamePaksPath, files: anims.map(rel) }) : []).map(assetKey))
+    if (staleAnims.size) {
+      for (const a of report.assets) if (staleAnims.has(assetKey(rel(a.path)))) {
+        report.counts.passed--; report.counts.ownGame++
+        a.kind = 'left'; a.detail = "An Animation Blueprint the game rebuilt since the mod was made. Left out, so the game's own plays: nothing here can rebuild it."
+      }
+      keep = keep.filter(p => !staleAnims.has(assetKey(rel(p))))
+      log(`Leaving out ${plural(staleAnims.size, 'Animation Blueprint')} the game rebuilt since the mod was made.`, 'warning')
+    }
+    // DataTables and StringTables the game rewrote since the mod was made: the mod's values go onto the game's current
+    // table (xtra_tables.rs), so the rows, keys and fields the update added stay. One that cannot be merged is kept as it was
+    const tables = keep.filter(p => /^(DataTable|CompositeDataTable|StringTable)$/i.test(types.get(assetKey(slash(p)))?.class ?? ''))
+    const staleTables = tables.length ? await invoke<string[]>('xtra_vfx_stale', { modPath: src, gamePaks: o.gamePaksPath, files: tables.map(rel) }) : []
+    let tablesUpdated = 0
+    if (staleTables.length) {
+      const merged = await invoke<{ file: string; carried: number; added: number; kept: number; error?: string | null }[]>('xtra_vfx_merge_tables', {
+        gamePaks: o.gamePaksPath, usmapPath: o.usmapPath, modExtract: dirs.modExtract, files: staleTables.map(f => f.replace(/\.uasset$/i, '')), out: dirs.finalUassets, stageDir: dirs.stage,
+      }).catch(e => { warn(`Could not merge its tables (${e}). They are kept as they were.`); return [] })
+      const done = new Map(merged.filter(m => !m.error).map(m => [assetKey(m.file), m]))
+      for (const m of merged.filter(m => m.error)) warn(`${m.file.split('/').pop()}: could not be merged onto the game's table (${m.error}). Kept as it was.`)
+      for (const a of report.assets) {
+        const m = done.get(assetKey(rel(a.path)))
+        if (!m) continue
+        report.counts.passed--; report.counts.updated++; tablesUpdated++; report.counts.changes += m.carried + m.added
+        a.kind = 'updated'
+        a.detail = `Merged onto the game's new table: ${plural(m.carried, 'value')} carried, ${plural(m.added, 'row or key', 'rows and keys')} of its own added${m.kept ? `, ${plural(m.kept, 'object reference')} left as the game's` : ''}.`
+      }
+      keep = keep.filter(p => !done.has(assetKey(rel(p))))
+      if (done.size) log(`Merged ${plural(done.size, 'table')} onto the game's new ${done.size === 1 ? 'one' : 'ones'}.`)
+    }
+    const allStale = () => `Not updated: everything it changes is ${plural(report.counts.left + report.counts.ownGame, 'file')} made for an older game build that could not be rebuilt, and the game can crash on them. Turn the mod off until its author updates it.`
     if (keep.length) await invoke('vfx_copy_uasset_files', { sourcePaths: keep, sourceBaseDir: dirs.modExtract, destBaseDir: dirs.finalUassets })
+    // the .pak half's raw files, as they are (the pack puts them in the update's .pak)
+    if (raw.length) await invoke('vfx_copy_uasset_files', { sourcePaths: raw, sourceBaseDir: dirs.modExtract, destBaseDir: dirs.finalUassets })
 
     // ---- 7 (after 6, or early when the mod changes only Niagara files): rebuild the stale Niagara files ----
     let niagaraDone = 0, niagaraUpdated = 0 // carried, and of those the ones counted as updated (the rest match the game)
@@ -231,6 +293,8 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
         const f = a.kind === 'left' ? results.get(assetKey(rel(a.path))) : undefined
         if (!f) continue
         // rebuilt with today's USMAP or not at all: no later USMAP changes that, so it is final and the update stays full
+        // a reason that may pass keeps it left out, so the update is partial, its original stays, and it is tried again
+        if (f.error && f.retry) { a.detail = `Made for an older game build. Not rebuilt this time (${f.error}), so it is left out and tried again on the next update.`; continue }
         if (f.error) { report.counts.left--; report.counts.ownGame++; a.detail = `Made for an older game build and could not be carried (${f.error}). Left out, so the game uses its own.`; continue }
         report.counts.left--; niagaraDone++
         if (f.edits) { a.kind = 'updated'; report.counts.updated++; niagaraUpdated++; report.counts.changes += f.edits; a.detail = `Rebuilt on the game's new file with ${plural(f.edits, 'edit')}.` }
@@ -252,12 +316,31 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
         return
       }
       enter(9)
+      const buildNow = await invoke<{ updated: number }>('xtra_game_build').then(b => b.updated).catch(() => 0)
+      if (buildAt && buildNow !== buildAt) { report.error = 'Not updated: the game updated while this ran, so the update was made from old game files. Update it again.'; log(report.error, 'warning'); return }
+      // what was rebuilt must read back whole with today's USMAP: one that does not would crash the game (Niagara files
+      // are checked by their own step, and decoding them again is slow)
+      const rebuilt = report.assets.filter(a => a.kind === 'updated' && !NIAGARA_BY_NAME.test(fileName(a.path))).map(a => rel(a.path).replace(/\.uasset$/i, ''))
+      const unread = await invoke<string[]>('xtra_vfx_verify', { usmapPath: o.usmapPath, dir: dirs.finalUassets, rels: rebuilt, jsonDir: dirs.editedJson, stageDir: dirs.stage })
+      if (unread.length) {
+        report.error = `Not updated: ${plural(unread.length, 'rebuilt file')} ${unread.length === 1 ? 'does' : 'do'} not read back with the new game build's USMAP (${unread.slice(0, 3).map(r => r.split('/').pop()).join(', ')}${unread.length > 3 ? ', and more' : ''}). The mod was not changed.`
+        log(report.error, 'warning')
+        return
+      }
       const base = o.outputDir ? `${slash(o.outputDir)}/${fixedName(o.modPath)}` : `${dirs.stage}/fixed`
       const utoc = await invoke<string>('vfx_pack_to_iostore', { usmapPath: o.usmapPath, inputDir: dirs.finalUassets, outputBase: base, allowedAssets: manifest })
       if (o.outputDir) report.output = utoc
       else {
+        // turned off earlier because it could crash: the safe update goes in on, as the mod was before
+        const kept = await invoke<string | null>('xtra_safe_off_kept', { modPath: src }).catch(() => null)
         report.placed = await invoke<Placed>('xtra_vfx_place', { source: src, stagedBase: base, turnOffOriginal: o.turnOffOriginal ?? true, keepName: o.keepName ?? true, trashOriginal: o.trashOriginal ?? false, partial: report.counts.left > 0 })
+        if (kept && /\.bak_repak$/i.test(report.placed.fixed) && await invoke('toggle_mod', { modPath: report.placed.fixed }).then(() => true, () => false)) {
+          report.placed.fixed = report.placed.fixed.replace(/\.bak_repak$/i, '.pak')
+          log('It was off because it could crash the game: the update is on.')
+        }
         report.output = report.placed.fixed
+        // what it was made for, so a copy or repack later never looks older than this game (xtra_stamp.rs)
+        await invoke('xtra_vfx_stamp', { modPath: report.placed.fixed, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath }).catch(e => log(`Could not stamp the update: ${e}`, 'warning'))
         if (report.placed.warning) warn(report.placed.warning)
       }
       report.status = 'fixed'
@@ -269,10 +352,10 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
         report.error = `${plural(report.counts.unreadable, 'asset')} could not be read, so it is not known whether ${report.counts.unreadable === 1 ? 'it needs' : 'they need'} rebuilding. Check the USMAP in Advanced, then try again.`
         return report // failed: Try again stays
       }
-      if (report.counts.left || report.counts.relaid) {
+      if (report.counts.left || report.counts.ownGame || report.counts.relaid || tablesUpdated) {
         await rebuildNiagara()
         // the rebuilt Niagara files, or at least the rest without the stale ones, which no longer crashes the game
-        if (keep.length || niagaraDone) await packAndPlace()
+        if (keep.length || niagaraDone || tablesUpdated) await packAndPlace()
         else report.error = allStale()
         return report
       }
@@ -415,10 +498,12 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     enter(8)
     // rewritten in today's layout and still in the update (one that matches the game is left out)
     const relaidKept = report.assets.filter(a => relaid.has(fileName(a.path).toLowerCase()) && a.kind !== 'same').length
-    if (report.counts.updated > niagaraUpdated) {
+    // merged tables are already in the update's folder (xtra_tables.rs): only the edited JSON converts here
+    if (report.counts.updated > niagaraUpdated + tablesUpdated) {
       const built = await invoke<string[]>('vfx_convert_json_to_uassets', { usmapPath: o.usmapPath, inputDir: dirs.editedJson, outputDir: dirs.finalUassets })
       const expected = keep.length + own.length + report.counts.updated - niagaraUpdated
-      if (built.length < expected) warn(`Only ${built.length} of ${expected} assets are in the rebuilt mod.`)
+      // a short rebuild leaves the game's own copy, or nothing, where the mod's was: never placed
+      if (built.length < expected) { report.error = `Not updated: only ${built.length} of ${expected} assets came out of the rebuild. The mod was not changed.`; log(report.error, 'warning'); return report }
     }
     // nothing rebuilt or left out, only kept: the "update" would be the original again, under a new name
     if (swapped && !report.counts.updated && !report.counts.same && !report.counts.left && !niagaraDone && !relaidKept) {
@@ -455,6 +540,13 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     // here, where the early returns pass too: Needs VFX update stops flagging it until the mod or the game changes (xtra_broken.rs)
     // not when its materials were rewritten: the original stays installed in the old layout and still needs turning off
     if (report.status === 'nothing' && !report.counts.relaid) await invoke('xtra_vfx_no_update', { modPath: o.modPath }).catch(e => log(`Could not note that it needs nothing: ${e}`, 'warning'))
+    // not made safe: off, so it cannot crash the game. Its flag stays, and a later update starts from the off copy
+    const unsafe = (report.status === 'failed' && o.safeOff) || (report.status === 'nothing' && report.counts.relaid > 0 && o.safeOff !== false)
+    if (unsafe && !o.outputDir) {
+      report.turnedOff = await invoke<string | null>('xtra_vfx_turn_off', { modPath: o.modPath, reason: report.error ?? 'An update could not make it safe.' }).then(Boolean)
+        .catch(e => { log(`Could not turn it off: ${e}`, 'warning'); return false })
+      if (report.turnedOff) log(`Turned ${stem(o.modPath)} off, so it cannot crash the game. Update it again later, or turn it back on in the Library.`, 'warning')
+    }
   }
   return report
 }

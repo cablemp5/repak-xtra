@@ -25,6 +25,13 @@ pub fn zip_time(d: Option<zip::DateTime>) -> Option<SystemTime> {
     plausible(at.into())
 }
 
+/// `t` as a zip entry's time (local, to the 2 seconds zip keeps): what zip_time reads back. None before 1980.
+pub fn to_zip_time(t: SystemTime) -> Option<zip::DateTime> {
+    use chrono::{Datelike, Timelike};
+    let l: chrono::DateTime<chrono::Local> = t.into();
+    zip::DateTime::from_date_and_time(u16::try_from(l.year()).ok()?, l.month() as u8, l.day() as u8, l.hour() as u8, l.minute() as u8, l.second() as u8).ok()
+}
+
 /// Sets an extracted file's modified time to its archive entry's.
 pub fn keep_time(file: &File, at: Option<SystemTime>) {
     if let Some(at) = at {
@@ -117,5 +124,8 @@ mod tests {
         assert_eq!(plausible(SystemTime::UNIX_EPOCH), None);
         assert_eq!(zip_time(zip::DateTime::from_date_and_time(1980, 1, 1, 0, 0, 0).ok()), None, "zip's empty date");
         assert!(zip_time(zip::DateTime::from_date_and_time(2025, 6, 1, 12, 0, 0).ok()).is_some());
+        let made = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_790_000_000); // 2026-09
+        let back = zip_time(to_zip_time(made)).unwrap();
+        assert!(made.duration_since(back).unwrap_or_default().as_secs() <= 2 && back.duration_since(made).unwrap_or_default().as_secs() <= 2, "a file's date survives a zip");
     }
 }

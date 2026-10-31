@@ -147,7 +147,7 @@ pub async fn xtra_encrypt_mods(window: tauri::Window, paths: Vec<String>) -> Res
     if RUNNING.swap(true, Ordering::SeqCst) { return Err("Encryption is already running.".into()); }
     let hold = Hold;
     let token = uuid::Uuid::new_v4().to_string();
-    if !crate::xtra_vfx::xtra_vfx_claim(window.clone(), token.clone(), Some("Encrypting mods".into())) { return Err("Wait for the VFX Updater before encrypting mods.".into()); }
+    if !crate::xtra_vfx::xtra_vfx_claim(window.clone(), token.clone(), Some("Encrypting mods".into())) { return Err("Wait for the Mod Updater before encrypting mods.".into()); }
     let result = tauri::async_runtime::spawn_blocking(move || {
         let _hold = hold;
         let _mutation = crate::xtra_mutation::encrypt()?;

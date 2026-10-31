@@ -21,13 +21,26 @@ use crate::xtra_niagara::{older_usmaps, read_json, stage, to_json, usmap_build};
 #[serde(rename_all = "camelCase")]
 pub struct Relaid {
     /// Rewritten in today's layout (package paths without extension, as given)
-    files: Vec<String>,
+    pub(crate) files: Vec<String>,
     /// In no layout a USMAP here reads, so kept as they were
     unread: Vec<String>,
     /// In an older layout but not rewritten safely (staging, writing or the read-back failed): the update stops on them
-    failed: Vec<String>,
+    pub(crate) failed: Vec<String>,
     /// The build whose USMAP read the newest of them
     old_build: Option<u64>,
+    /// Every file's layout was told (none left unread, or unsettled for want of an older USMAP)
+    pub(crate) complete: bool,
+    /// Read whole today, but no older USMAP read them to tell whether they are in its layout
+    untold: Vec<String>,
+}
+
+/// Where relayout finds the game's current copies, for files both layouts read whole.
+pub(crate) enum Game<'a> {
+    None,
+    /// already decoded with today's USMAP, under this folder
+    Json(&'a Path),
+    /// extracted from this Paks folder when needed: only the material instances today's USMAP reads whole
+    Fetch(&'a str),
 }
 
 /// Each export's properties, or None when the tool could not read one (it keeps such an export as raw bytes).
@@ -62,7 +75,7 @@ fn bare(v: &mut Value) {
 /// The JSON with every name's base in its NameMap: the tool reads "/Game/.../M_StandardBasic_1026" as the name
 /// "/Game/.../M_StandardBasic" numbered 1026, as Unreal does, and cannot write it when only the whole string is listed
 /// (a mod's NameMap often is: "Attempt to serialize dummy FName").
-fn to_tool_json(j: &mut Value) -> Vec<u8> {
+pub(crate) fn to_tool_json(j: &mut Value) -> Vec<u8> {
     if let Some(names) = j.get_mut("NameMap").and_then(Value::as_array_mut) {
         let have: HashSet<String> = names.iter().filter_map(Value::as_str).map(String::from).collect();
         let mut bases: Vec<String> = have
@@ -77,29 +90,71 @@ fn to_tool_json(j: &mut Value) -> Vec<u8> {
     serde_json::to_vec(j).unwrap_or_default()
 }
 
+/// The material overrides (MOVED) a decode read, by property name: what tells two layouts' readings apart, since a mod
+/// recolors parameters and keeps the game's overrides.
+fn overrides(j: &Value) -> Option<Vec<(&str, &Value)>> {
+    fn find(v: &Value) -> Option<&Value> {
+        match v {
+            Value::Object(m) if m.get("StructType").and_then(Value::as_str).is_some_and(|t| MOVED.contains(&t)) => Some(v),
+            Value::Object(m) => m.values().find_map(find),
+            Value::Array(a) => a.iter().find_map(find),
+            _ => None,
+        }
+    }
+    let props = find(j.get("Exports")?)?.get("Value")?.as_array()?;
+    Some(props.iter().map(|p| (p.get("Name").and_then(Value::as_str).unwrap_or_default(), p.get("Value").or_else(|| p.get("EnumValue")).unwrap_or(&Value::Null))).collect())
+}
+
+/// For a file both layouts read whole: whether the older layout's reading (`then`) is the right one. The one whose
+/// overrides match the game's copy is, else the date (`older`).
+fn old_reading_right(today: &Value, then: &Value, game: Option<&Value>, older: bool) -> bool {
+    match game.and_then(overrides) {
+        Some(g) if overrides(today).as_ref() == Some(&g) => false,
+        Some(g) if overrides(then).as_ref() == Some(&g) => true,
+        _ => older,
+    }
+}
+
 fn decode(dir: &Path, rel: &str) -> Option<Value> {
     let mut j = read_json(&dir.join(format!("{rel}.json"))).ok()?;
     bare(&mut j);
     Some(j)
 }
 
-/// `rels` (packages inside `mod_extract`) in an older layout, rewritten there in the layout of `usmap`'s build. `older`:
-/// the mod was written before the game's last update, so a file both layouts read whole but differently is the old one.
-pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], older: bool, work: &Path, progress: &dyn VfxProgressSink) -> Result<Relaid, String> {
+/// `rels` (packages inside `mod_extract`) in an older layout, rewritten there in the layout of `usmap`'s build. A file
+/// cooked from the game's files (unversioned) mostly reads whole in both layouts, just with other values (2026-10-31:
+/// MI_1026300_LobbyTrail_13_309 reads TwoSided true with today's USMAP, false with 3962284's). `game_json`: the game's
+/// current copies, where the reading whose overrides match the game's tells the layout. Without one, or when neither
+/// matches, `older` decides (the mod was written before the game's last update: the old one).
+pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], older: bool, game: Game<'_>, work: &Path, progress: &dyn VfxProgressSink) -> Result<Relaid, String> {
     let mut out = Relaid::default();
     let Some(build) = usmap_build(usmap) else { return Ok(out) };
     let (now, now_json) = (work.join("now"), work.join("now_json"));
     stage(mod_extract, &now, rels, true)?;
     to_json(usmap, &now, &now_json, progress).await?;
+    let fetched = match game {
+        Game::Fetch(paks) => {
+            // only what the copies could settle: material instances today's USMAP reads whole
+            let ask: Vec<String> = rels.iter().filter(|r| decode(&now_json, r).filter(|j| decoded(j).is_some()).is_some_and(|j| overrides(&j).is_some())).cloned().collect();
+            if ask.is_empty() { None } else { game_copies(paks, usmap, &ask, work).await }
+        }
+        _ => None,
+    };
+    let game_dir = match game {
+        Game::Json(d) => Some(d),
+        _ => fetched.as_deref(),
+    };
+    let game: std::collections::HashMap<&String, Value> = game_dir.map_or_else(Default::default, |g| rels.iter().filter_map(|r| Some((r, decode(g, r)?))).collect());
     // (package, today's decode when it read whole)
     let mut pending: Vec<(String, Option<Value>)> = rels
         .iter()
         .filter_map(|r| {
             let today = decode(&now_json, r).filter(|j| decoded(j).is_some());
-            (today.is_none() || older).then(|| (r.clone(), today))
+            (today.is_none() || older || game.contains_key(r)).then(|| (r.clone(), today))
         })
         .collect();
     if pending.is_empty() {
+        out.complete = true;
         return Ok(out);
     }
     let fixed_json = work.join("fixed_json");
@@ -120,6 +175,9 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
             if today.as_ref().and_then(decoded).is_some_and(|t| t == then) {
                 return false; // the same in both layouts: nothing to rewrite
             }
+            if today.as_ref().is_some_and(|t| !old_reading_right(t, &j, game.get(r), older)) {
+                return false; // both read whole and today's reading is the right one
+            }
             let to = fixed_json.join(format!("{r}.json"));
             let moved = std::fs::create_dir_all(to.parent().unwrap_or(&fixed_json)).and_then(|_| std::fs::write(&to, to_tool_json(&mut j.clone())));
             if moved.is_ok() {
@@ -131,6 +189,8 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
             false
         });
     }
+    out.complete = pending.is_empty();
+    out.untold = pending.iter().filter(|(_, today)| today.is_some()).map(|(r, _)| r.clone()).collect();
     out.unread = pending.into_iter().filter(|(_, today)| today.is_none()).map(|(r, _)| r).collect();
     if out.files.is_empty() {
         return Ok(out);
@@ -173,11 +233,75 @@ pub async fn xtra_vfx_relayout(window: Window, mod_path: String, game_paks: Stri
 /// xtra_vfx_relayout without a window (xtra_vfx.rs vfx_rpc runs the pipeline headless).
 pub(crate) async fn run(mod_path: &str, game_paks: &str, usmap_path: &str, mod_extract: &str, files: &[String], stage_dir: &str, progress: &dyn VfxProgressSink) -> Result<Relaid, String> {
     let written = std::fs::metadata(mod_path).and_then(|m| m.modified()).ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs());
+    let written = crate::xtra_stamp::made(Path::new(mod_path), written);
     let updated = crate::xtra_broken::game_containers(Path::new(game_paks)).iter().map(|c| c.2).max().unwrap_or(0);
     let work = Path::new(stage_dir).join("relayout");
-    let r = relayout(usmap_path, Path::new(mod_extract), files, written < updated, &work, progress).await;
+    // newer than the update, its date cannot say a file both layouts read whole is old: the game's copies tell (an
+    // extract of only those, no dependencies, so only then)
+    let game = if written < updated { Game::None } else { Game::Fetch(game_paks) };
+    let r = relayout(usmap_path, Path::new(mod_extract), files, written < updated, game, &work, progress).await;
     let _ = std::fs::remove_dir_all(&work);
     r
+}
+
+/// How many of a decode's exports the tool kept as raw bytes (it could not read them).
+fn raw_exports(j: &Value) -> usize {
+    j.get("Exports").and_then(Value::as_array).map_or(0, |a| a.iter().filter(|e| e.get("$type").and_then(Value::as_str).unwrap_or_default().contains("RawExport")).count())
+}
+
+/// pipeline.ts, before packing: of `rels` (rebuilt packages under `dir`, no extension), those that do not read back
+/// with `usmap` as well as the JSON they were written from (under `json_dir`): no decode at all, or more exports the
+/// tool cannot read than that JSON had. The game's own files keep a few such exports (a KO prompt's widget: 6 of 562,
+/// 2026-10-31), so a rebuild is held to its source, not to none. A rebuild that reads worse would crash the game.
+#[tauri::command]
+pub async fn xtra_vfx_verify(window: Window, usmap_path: String, dir: String, rels: Vec<String>, json_dir: String, stage_dir: String) -> Result<Vec<String>, String> {
+    verify(&usmap_path, &dir, &rels, &json_dir, &stage_dir, &TauriVfxProgressSink::new(&window)).await
+}
+
+/// xtra_vfx_verify without a window (xtra_vfx.rs vfx_rpc runs the pipeline headless).
+pub(crate) async fn verify(usmap_path: &str, dir: &str, rels: &[String], json_dir: &str, stage_dir: &str, progress: &dyn VfxProgressSink) -> Result<Vec<String>, String> {
+    if rels.is_empty() {
+        return Ok(Vec::new());
+    }
+    let work = Path::new(&stage_dir).join("verify");
+    let (input, json) = (work.join("in"), work.join("json"));
+    let r = async {
+        stage(Path::new(dir), &input, rels, true)?;
+        to_json(usmap_path, &input, &json, progress).await?;
+        let source = |r: &str| read_json(&Path::new(json_dir).join(format!("{r}.json"))).ok();
+        Ok::<_, String>(
+            rels.iter()
+                .filter(|r| match (read_json(&json.join(format!("{r}.json"))).ok(), source(r)) {
+                    (Some(back), Some(src)) => raw_exports(&back) > raw_exports(&src),
+                    (Some(back), None) => raw_exports(&back) > 0, // no source JSON (a merged table): whole, or not
+                    (None, _) => true,
+                })
+                .cloned()
+                .collect(),
+        )
+    }
+    .await;
+    let _ = std::fs::remove_dir_all(&work);
+    r
+}
+
+/// The game's current copies of `rels` decoded with `usmap`, under `work`/game_json. None when they could not be read.
+pub(crate) async fn game_copies(game_paks: &str, usmap: &str, rels: &[String], work: &Path) -> Option<std::path::PathBuf> {
+    let (out, json) = (work.join("game"), work.join("game_json"));
+    let _ = std::fs::remove_dir_all(&out);
+    let req = crate::vfx_updater::uasset_tool::VfxUatRequest {
+        action: "extract_iostore_legacy",
+        game_paks: Some(game_paks.to_string()),
+        output_path: Some(out.to_string_lossy().to_string()),
+        filter_patterns: Some(rels.to_vec()),
+        with_deps: Some(false),
+        ..Default::default()
+    };
+    crate::vfx_updater::uasset_tool::run_vfx_uat_request(Path::new(""), &req).await.ok().filter(|r| r.success)?;
+    let have: Vec<String> = rels.iter().filter(|r| out.join(format!("{r}.uasset")).is_file()).cloned().collect();
+    stage(&out, &work.join("game_in"), &have, true).ok()?;
+    to_json(usmap, &work.join("game_in"), &json, &NoOpProgressSink).await.ok()?;
+    Some(json)
 }
 
 #[cfg(test)]
@@ -197,6 +321,27 @@ mod tests {
         let mut j = json!({ "NameMap": ["/Game/M_Basic_1026", "MI_A_0", "T_01", "Plain"] });
         let out: Value = serde_json::from_slice(&to_tool_json(&mut j)).unwrap();
         assert_eq!(out["NameMap"], json!(["/Game/M_Basic_1026", "MI_A_0", "T_01", "Plain", "/Game/M_Basic", "MI_A"]), "bases of numbered names, not of _01");
+    }
+
+    #[test]
+    fn exports_the_tool_cannot_read_are_counted() {
+        // a KO prompt's widget keeps some in the game's own copy: a rebuild is held to its source's count
+        let j = json!({ "Exports": [{ "$type": "UAssetAPI.ExportTypes.RawExport, UAssetAPI" }, { "$type": "UAssetAPI.ExportTypes.NormalExport, UAssetAPI" }, { "$type": "UAssetAPI.ExportTypes.RawExport, UAssetAPI" }] });
+        assert_eq!(raw_exports(&j), 2);
+        assert_eq!(raw_exports(&json!({})), 0);
+    }
+
+    #[test]
+    fn the_reading_that_matches_the_games_overrides_tells_the_layout() {
+        // MI_1026300_LobbyTrail_13_309 (2026-10-31): today's USMAP reads TwoSided true, 3962284's false
+        let mi = |two_sided: bool| json!({ "Exports": [{ "Data": [{ "Name": "BasePropertyOverrides", "StructType": "MaterialInstanceBasePropertyOverrides",
+            "Value": [{ "Name": "bOverride_TwoSided", "Value": true }, { "Name": "TwoSided", "Value": two_sided }] }] }] });
+        let (new, old) = (mi(true), mi(false));
+        assert!(!old_reading_right(&new, &old, Some(&new), true), "matches the game's today: new layout, whatever the date");
+        assert!(old_reading_right(&old, &new, Some(&new), false), "the old reading matches the game's: old layout, whatever the date");
+        assert!(old_reading_right(&new, &old, None, true) && !old_reading_right(&new, &old, None, false), "no game copy: the date");
+        let other = mi(true);
+        assert!(!old_reading_right(&old, &old, Some(&other), false), "neither matches: the date");
     }
 
     /// The catboy eyes material (CatboyPantherBodyLights, cooked before 3984769) from the installed mods: rewritten, it
@@ -220,10 +365,10 @@ mod tests {
         };
         assert!(crate::vfx_updater::uasset_tool::run_vfx_uat_request(Path::new(""), &req).await.unwrap().success);
         let rel = "Marvel/Content/Marvel/Characters/1026/1026001/Materials/Lobby/MI_1026001_Eyes".to_string();
-        let r = relayout(&usmap, &x, std::slice::from_ref(&rel), true, &work.join("w"), &NoOpProgressSink).await.unwrap();
+        let r = relayout(&usmap, &x, std::slice::from_ref(&rel), true, Game::None, &work.join("w"), &NoOpProgressSink).await.unwrap();
         assert_eq!(r.files, vec![rel.clone()], "rewritten: {r:?}");
         // again, as the update (written after the game update): in today's layout, nothing left to rewrite
-        let again = relayout(&usmap, &x, std::slice::from_ref(&rel), false, &work.join("w2"), &NoOpProgressSink).await.unwrap();
+        let again = relayout(&usmap, &x, std::slice::from_ref(&rel), false, Game::None, &work.join("w2"), &NoOpProgressSink).await.unwrap();
         assert!(again.files.is_empty() && again.unread.is_empty() && again.failed.is_empty(), "{again:?}");
         let _ = std::fs::remove_dir_all(&work);
     }

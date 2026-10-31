@@ -9,7 +9,7 @@ import { emit, listen } from '@tauri-apps/api/event'
  *  0 the update waits for that patch's USMAP (xtra_broken.rs changed_since_usmap). */
 export type Verdict = { path: string; kind: 'broken' | 'vfx' | 'risky'; reason: string; usmapWait?: number }
 /** A verdict's badge text. */
-export const verdictLabel = (kind: Verdict['kind']) => (kind === 'broken' ? 'Broken' : kind === 'vfx' ? 'Needs VFX update' : 'May crash')
+export const verdictLabel = (kind: Verdict['kind']) => (kind === 'broken' ? 'Broken' : kind === 'vfx' ? 'Needs update' : 'May crash')
 
 /** One spelling per mod: slashes and case may differ between the mod list and the backend, and turning a mod on or off
  *  renames .bak_repak to .pak (or back), so the badge stays put through a switch instead of waiting for the next check. */
@@ -68,13 +68,23 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       .then(found => (live && found ? check() : undefined))
       .then(() => (live ? invoke<number>('xtra_layout_scan', { modPaths: mods.map(m => m.path) }) : 0))
       .then(checked => (live && checked ? check() : undefined))
+      // and mesh mods whose skeleton the game rebuilt: more bones than it has gets May crash (xtra_mesh.rs)
+      .then(() => (live ? invoke<number>('xtra_mesh_scan', { modPaths: mods.map(m => m.path) }) : 0))
+      .then(checked => (live && checked ? check() : undefined))
       .then(() => live, e => { console.warn('[brokenMods] background scan failed', e); return false })
     const full = () => queued(chain)
     runFull = chain
-    const t = setTimeout(() => { void full() }, 1500)
+    // the quick check at once, never behind a background scan in flight (one can run for many minutes after a game
+    // update), so new mods get their badges in the Library and on loadouts right away
+    const t = setTimeout(() => { void check(); void full() }, 1500)
+    // the background scans stop for the game, an update or a check (xtra_vfx.rs background_may_run): back in the app,
+    // they go on where they stopped, at most every 5 minutes (a scan with nothing left to do is quick)
+    let lastResume = Date.now()
+    const resume = () => { if (Date.now() - lastResume > 300_000) { lastResume = Date.now(); void full() } }
+    window.addEventListener('focus', resume)
     const again = listen(VERDICTS_CHANGED, () => { void check() })
     const rescan = listen(VERDICTS_RESCAN, () => { void full() })
-    return () => { live = false; if (runFull === chain) runFull = null; clearTimeout(t); void again.then(f => f()); void rescan.then(f => f()) }
+    return () => { live = false; window.removeEventListener('focus', resume); if (runFull === chain) runFull = null; clearTimeout(t); void again.then(f => f()); void rescan.then(f => f()) }
   }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 

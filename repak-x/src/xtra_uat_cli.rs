@@ -72,7 +72,7 @@ pub(crate) async fn extract(request: &VfxUatRequest<'_>) -> Option<Result<VfxUat
             #[cfg(windows)]
             {
                 use std::os::windows::process::CommandExt;
-                cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW: no console flashing up
+                cmd.creation_flags(0x0800_0000 | 0x0000_4000); // CREATE_NO_WINDOW (no console flashing up), BELOW_NORMAL_PRIORITY_CLASS (the PC stays responsive)
             }
             // the long-lived command line first (the game's containers stay loaded between calls), else a one-shot run
             let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().to_string()).collect();
@@ -133,6 +133,27 @@ struct Server {
 
 static SERVER: std::sync::Mutex<Option<Server>> = std::sync::Mutex::new(None);
 
+/// Each package in the container `utoc` with its class (`list_iostore --types`, about 0.3 s for a mod): (path, class).
+/// None without the command line or when it fails.
+pub(crate) fn classes(utoc: &Path, paks: &Path) -> Option<Vec<(String, String)>> {
+    let mut cmd = std::process::Command::new(cli()?);
+    cmd.arg("list_iostore").arg(utoc).arg("--types").arg("--game-paks").arg(paks);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000 | 0x0000_4000); // CREATE_NO_WINDOW, BELOW_NORMAL_PRIORITY_CLASS
+    }
+    let out = cmd.output().ok().filter(|o| o.status.success())?;
+    Some(String::from_utf8_lossy(&out.stdout).lines().filter_map(class_line).collect())
+}
+
+/// One listing line: `  ../../../Marvel/Content/X/MI_A.uasset [no bulk]  <MaterialInstanceConstant>  (export=1b)`.
+fn class_line(line: &str) -> Option<(String, String)> {
+    let (path, rest) = line.trim_start().split_once(" [")?;
+    let class = rest.split_once("]")?.1.split_once('<')?.1.split_once('>')?.0;
+    Some((path.to_string(), class.to_string()))
+}
+
 fn start(exe: &Path) -> std::io::Result<Server> {
     use std::process::Stdio;
     let mut cmd = std::process::Command::new(exe);
@@ -140,7 +161,7 @@ fn start(exe: &Path) -> std::io::Result<Server> {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        cmd.creation_flags(0x0800_0000 | 0x0000_4000); // CREATE_NO_WINDOW, BELOW_NORMAL_PRIORITY_CLASS
     }
     let mut child = cmd.spawn()?;
     let (stdin, out) = (child.stdin.take(), child.stdout.take());
@@ -239,6 +260,14 @@ fn uniq() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_listing_line_gives_the_package_and_its_class() {
+        let l = "  ../../../Marvel/Content/Marvel/UI/Materials/Battle/PP_Sceen_Effect_Dying_Ins.uasset [no bulk]  <MaterialInstanceConstant>  (export=2,793b)";
+        assert_eq!(class_line(l), Some(("../../../Marvel/Content/Marvel/UI/Materials/Battle/PP_Sceen_Effect_Dying_Ins.uasset".into(), "MaterialInstanceConstant".into())));
+        assert_eq!(class_line("  Summary: 4 packages, 0 with .ubulk"), None);
+        assert_eq!(class_line("=== Patch_-Windows_1.1.3984769_P.utoc ==="), None);
+    }
 
     #[test]
     fn an_extract_without_class_names_is_told_apart() {

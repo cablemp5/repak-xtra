@@ -1,4 +1,5 @@
 // repakxtra: small pieces shared by Home (LoadoutsScreen.tsx), the loadout page and the New strip.
+import { showKeptOff } from './safeOff'
 import { useEffect, useRef, useState } from 'react'
 import { Ban, Camera, ChevronLeft, ChevronRight, Image as ImageIcon, ImagePlus, Lock, Pencil, Type, Volume2, VolumeX, WandSparkles, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
@@ -327,7 +328,8 @@ export async function toggleMod(p: LoadoutProps, mod: Mod) {
     return
   }
   const failed = await flipMods([mod])
-  if (failed.length) p.alert.warning('Not switched', failed.reason ?? `${nameKey(mod.path)} could not be switched.`)
+  if (failed.keptOff?.length) showKeptOff(p.alert, failed.keptOff, p.reload) // repakxtra: turned off because it can crash
+  else if (failed.length) p.alert.warning('Not switched', failed.reason ?? `${nameKey(mod.path)} could not be switched.`)
   await p.reload()
 }
 

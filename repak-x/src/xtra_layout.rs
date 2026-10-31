@@ -382,8 +382,9 @@ fn holds_class(j: &Value) -> bool {
     arr(&j["Exports"]).iter().any(|e| matches!(type_of(e), "ClassExport" | "FunctionExport" | "DataTableExport" | "StringTableExport"))
 }
 
-/// Packages read per mod: a few seconds each pair. A mod with more is flagged on what these show, never cleared on them.
-const MAX_PACKAGES: usize = 40;
+/// Packages read per mod: a few seconds each pair, in the background scan. A mod with more is flagged on what these
+/// show, never cleared on them (was 40, which left the rest of a large Blueprint mod unread).
+const MAX_PACKAGES: usize = 400;
 
 /// What one check found: the May crash reason (None: its copies match), and whether it read all of the mod's packages.
 pub(crate) struct Outcome {
@@ -398,7 +399,7 @@ pub(crate) struct Outcome {
 /// The game's copies are kept under `vanilla` for the next mod.
 pub(crate) async fn check_mod(paks: &Path, usmap: &str, utoc: &Path, files: &[String], work: &Path, vanilla: &Path) -> Result<Outcome, String> {
     let have = crate::xtra_broken::rewritten_since(paks, files, 0).ok_or("the game's file list could not be read")?;
-    let mut all: BTreeSet<String> = have.iter().filter(|f| is_layout_package(f)).map(|f| crate::xtra_niagara::package_rel(f)).collect();
+    let all: BTreeSet<String> = have.iter().filter(|f| is_layout_package(f)).map(|f| crate::xtra_niagara::package_rel(f)).collect();
     if all.is_empty() {
         return Ok(Outcome { reason: None, complete: true });
     }
@@ -406,11 +407,7 @@ pub(crate) async fn check_mod(paks: &Path, usmap: &str, utoc: &Path, files: &[St
     if !utoc.is_file() {
         return Err(format!("{} is not there", utoc.display()));
     }
-    // only what the .utoc holds: a hybrid mod's .pak packages would come back as the game's own copies too
-    let in_utoc: HashSet<String> = crate::utoc_utils::try_read_utoc(utoc)?.iter().map(|e| crate::xtra_broken::match_key(&e.file_path)).collect();
-    let listed = all.len();
-    all.retain(|r| in_utoc.contains(&crate::xtra_broken::match_key(&format!("{r}.uasset"))));
-    let complete = all.len() == listed && all.len() <= MAX_PACKAGES;
+    let complete = all.len() <= MAX_PACKAGES;
     let rels: Vec<String> = all.into_iter().take(MAX_PACKAGES).collect();
     if rels.is_empty() {
         return Ok(Outcome { reason: None, complete });
@@ -432,6 +429,8 @@ pub(crate) async fn check_mod(paks: &Path, usmap: &str, utoc: &Path, files: &[St
     if !r.success {
         return Err(format!("the mod's copies could not be read: {}", r.message));
     }
+    // a hybrid mod's .pak half too: the .utoc extract hands back the game's own copies for those, which always match
+    let half_read = crate::xtra_vfx::pak_half(utoc, &x).is_ok();
     // each one where the extract wrote it: plugin content lands under Marvel/Plugins/<name>/Content, whatever the mod's
     // list calls it
     let written: HashMap<String, String> = walkdir::WalkDir::new(&x)
@@ -466,7 +465,7 @@ pub(crate) async fn check_mod(paks: &Path, usmap: &str, utoc: &Path, files: &[St
     let before_update = crate::xtra_broken::file_stamp(utoc).is_some_and(|(_, modified)| modified < game_updated);
     let reason = reason(&found, before_update);
     // unreadable and nothing found: kept as not complete, so the date rule stays and it is not read again for nothing
-    Ok(Outcome { complete: complete && (reason.is_some() || unreadable == 0), reason })
+    Ok(Outcome { complete: complete && half_read && (reason.is_some() || unreadable == 0), reason })
 }
 
 // ---- kept per mod file, game update and USMAP, like xtra_broken's Checked store ----
@@ -549,7 +548,7 @@ pub async fn xtra_layout_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
     let mut all = load(&store);
     let mut checked = 0;
     for p in mod_paths {
-        if crate::xtra_vfx::xtra_vfx_lock().is_some() {
+        if !crate::xtra_vfx::background_may_run() {
             break; // an update uses the same tool: the rest waits for the next scan
         }
         let path = PathBuf::from(&p);
