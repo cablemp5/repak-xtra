@@ -1,0 +1,193 @@
+/* repakxtra: the KO Editor view (KoEditor.tsx). Heroes, the stage and the colors in flat columns like the Library's,
+   split by hairlines. The stage is the only colored region: the prompt's own colors on a dark field. */
+/* the kill text's face in the game, Refrigerator Deluxe Heavy (render.ts KO_FONT) */
+@font-face { font-family: 'Refrigerator KO'; src: url('../fonts/RefrigeratorDeluxe-Heavy.woff2') format('woff2'); font-weight: 400 900; font-display: block; }
+.ko { flex: 1; min-height: 0; display: flex; margin-top: 24px; animation: t-page-from-right var(--page-slide-dur) var(--page-slide-ease) backwards; }
+.ko[hidden] { display: none; }
+html[data-view="ko"] .view-tabs::before { transform: translateX(calc(200% + 4px)); }
+
+.ko-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 250px minmax(0, 1fr) 320px; }
+.ko-h { margin: 0; font-size: 16px; font-weight: 600; color: var(--text-primary); }
+.ko-note { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.ko-pad { padding: 4px 8px; }
+.ko-label { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+
+/* the side columns: flat on the page like the Library's sidebar, one hairline toward the stage */
+.ko-col { display: flex; flex-direction: column; min-height: 0; }
+.ko-col-head { display: flex; align-items: center; justify-content: space-between; min-height: 32px; padding: 0 8px 8px; box-sizing: border-box; }
+.ko-heroes { padding: 12px 8px 8px; border-right: 1px solid var(--panel-border); }   /* the Library sidebar's insets */
+.ko-colors { padding: 12px 0 0 16px; border-left: 1px solid var(--panel-border); }
+.ko-colors .ko-col-head { padding-right: 0; }
+
+/* heroes */
+.ko-search { display: flex; align-items: center; gap: 8px; height: 36px; margin: 0 0 8px; padding: 0 8px 0 10px; box-sizing: border-box; border: 1px solid var(--panel-border);
+  border-radius: 8px; background: var(--field-bg); color: var(--text-secondary); transition: border-color 150ms ease; }
+.ko-search:focus-within { border-color: color-mix(in srgb, var(--text-primary), transparent 50%); }
+.ko-search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--text-primary); font: inherit; font-size: 14px; }
+.ko-search input::placeholder { color: var(--text-secondary); }
+.ko-hero-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.12) transparent; }
+.ko-hero { display: flex; align-items: center; gap: 8px; height: 32px; flex: none; padding: 0 8px; border: 0; border-radius: 6px; background: transparent;
+  color: var(--text-secondary); font: inherit; font-size: 13px; text-align: left; cursor: pointer; transition: background-color 150ms ease, color 150ms ease; }
+.ko-hero:hover { background: var(--quiet-hover); color: var(--text-primary); }
+.ko-hero[aria-selected="true"] { background: var(--quiet-active); color: var(--text-primary); font-weight: 600; }
+.ko-hero img { width: 20px; height: 20px; flex: none; border-radius: 50%; object-fit: cover; background: var(--bg-light); }
+.ko-hero span:not(.ko-dot) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ko-dot { width: 6px; height: 6px; flex: none; margin-right: 2px; border-radius: 50%; background: var(--accent-primary); }
+.ko-hero.is-ghost, .ko-role.is-ghost { pointer-events: none; background: linear-gradient(90deg, rgba(255,255,255,0.03), rgba(255,255,255,0.06), rgba(255,255,255,0.03)) 0 0 / 200% 100%;
+  animation: ko-shimmer 1.4s linear infinite; }
+.ko-hero.is-ghost { height: 28px; margin: 2px 0; }
+@keyframes ko-shimmer { to { background-position: -200% 0; } }
+
+/* center: a header like the Library's list header, then the stage and its transport */
+.ko-center { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.ko-center-head { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 12px 16px; box-sizing: border-box; border-bottom: 1px solid var(--panel-border); }
+.ko-title { margin: 0; line-height: 32px; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ko-center-head .ob-seg button { height: 28px; padding: 0 10px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.ko-speed { width: 96px; flex: none; }
+/* the transport sits at the window's bottom: its menu opens upward, grown from the trigger */
+.ko-speed .custom-dropdown-menu { top: auto !important; bottom: calc(100% + 4px) !important; transform-origin: bottom center; min-width: 0; }
+.ko-speed .custom-dropdown-trigger { height: 36px !important; min-height: 0 !important; font-size: 13px; font-variant-numeric: tabular-nums; }
+.ko-speed .custom-dropdown-text { flex: 1; text-align: center; }
+.ko-speed .custom-dropdown-item { justify-content: center; font-variant-numeric: tabular-nums; }
+.ko-stage { position: relative; flex: 1; min-height: 220px; margin: 16px 16px 0; border: 1px solid var(--panel-border); border-radius: 12px; overflow: hidden; background: #0b0b0b; }
+.ko-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.ko-stage-msg { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px;
+  text-align: center; color: var(--text-secondary); font-size: 13px; background: rgba(11, 11, 11, 0.72); }
+.ko-stage-msg strong { color: var(--text-primary); font-size: 16px; font-weight: 600; }
+/* first load: a bar that fills step by step, and the step now in a shimmer that sweeps while it runs */
+.ko-load { display: flex; flex-direction: column; align-items: center; gap: 12px; width: min(400px, 80%); }
+.ko-load .ko-note { text-wrap: balance; }
+.ko-load-bar { width: 100%; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.ko-load-bar span { display: block; height: 100%; border-radius: 2px; transition: width 300ms cubic-bezier(0.22, 1, 0.36, 1);
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.45) 50%, transparent 100%) 0 0 / 50% 100% no-repeat, var(--accent-primary);
+  animation: ko-bar-shine 1.4s cubic-bezier(0.45, 0, 0.55, 1) infinite; }   /* a light running along the filled part */
+@keyframes ko-bar-shine { from { background-position: -100% 0, 0 0; } to { background-position: 200% 0, 0 0; } }
+.ko-load-step { font-size: 13px; animation: ko-step-in var(--text-swap-dur, 150ms) var(--text-swap-ease, ease-in-out) both; }
+@keyframes ko-step-in { from { opacity: 0; transform: translateY(var(--text-swap-translate-y, 4px)); filter: blur(var(--text-swap-blur, 2px)); } }
+.ko-shimmer { color: transparent; background: linear-gradient(90deg, var(--text-secondary) 0%, var(--text-secondary) 40%, var(--text-primary) 50%, var(--text-secondary) 60%, var(--text-secondary) 100%) 0 0 / 250% 100%;
+  -webkit-background-clip: text; background-clip: text; animation: ko-text-shimmer 1.8s linear infinite; }
+@keyframes ko-text-shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+
+.ko-transport { display: flex; align-items: center; gap: 12px; height: 36px; margin-top: 12px; padding: 0 16px 18px; box-sizing: content-box; }
+/* play and pause: the icon alone, swapping in place (transitions.dev icon swap) */
+.ko-play { display: inline-grid; place-items: center; width: 36px; height: 36px; flex: none; border: 0; border-radius: 8px; background: transparent; color: var(--text-primary); cursor: pointer;
+  transition: background-color 150ms ease, transform 150ms ease; }
+.ko-play:hover:not(:disabled) { background: var(--quiet-hover); }
+.ko-play:active:not(:disabled) { transform: scale(0.92); }
+.ko-play:disabled { opacity: 0.4; cursor: default; }
+.ko-play:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.ko-play:active:not(:disabled) { transform: scale(0.94); }
+.ko-play:disabled { opacity: 0.4; cursor: default; }
+.ko-timeline { position: relative; flex: 1; min-width: 160px; display: flex; align-items: center; height: 36px; }   /* the track on the play icon's line, labels hang under it */
+.ko-phases { position: absolute; left: 0; right: 0; top: 27px; display: flex; gap: 3px; }
+.ko-phases button { display: block !important; flex-basis: 0; min-width: 0; height: auto !important; min-height: 0 !important; padding: 0 !important; border: 0 !important; background: none !important; color: var(--text-secondary); font: inherit; font-size: 13px; font-weight: 500; text-align: left !important;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; transition: color 150ms ease; }
+.ko-phases button:hover, .ko-phases button.is-now { color: var(--text-primary); }
+.ko-timeline input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 20px; margin: 0; background: transparent; cursor: pointer; }
+.ko-timeline input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px;
+  background: var(--ko-gaps, none), linear-gradient(90deg, var(--accent-primary) var(--ko-at, 0%), rgba(255, 255, 255, 0.12) var(--ko-at, 0%)); }
+.ko-timeline input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 3px; height: 18px; margin-top: -6px; border-radius: 2px; background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6); }   /* a playhead bar, not a knob */
+.ko-timeline input[type="range"]:disabled { cursor: default; }
+/* while a prompt loads: an empty track with a light passing over it, no old fill and no playhead */
+.ko-timeline.is-loading input[type="range"]::-webkit-slider-runnable-track { background: rgba(255, 255, 255, 0.06); }
+.ko-timeline.is-loading input[type="range"]::-webkit-slider-thumb { opacity: 0; }
+.ko-track-wait { position: absolute; left: 0; right: 0; top: 50%; height: 6px; margin-top: -3px; border-radius: 3px; pointer-events: none;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.10) 50%, transparent 100%) 0 0 / 40% 100% no-repeat;
+  animation: ko-track-wait 1.6s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+@keyframes ko-track-wait { from { background-position: -70% 0; } to { background-position: 170% 0; } }
+
+/* colors */
+/* group headers: the hero roles, and the parts of the prompt the color rows color (hovering one shows only its part) */
+.ko-group-head { padding: 12px 8px 4px; font-size: 13px; font-weight: 600; color: var(--text-secondary); list-style: none; }
+.ko-hero-group:first-child .ko-group-head, .ko-roles > .ko-group-head:first-child { padding-top: 4px; }
+.ko-roles > .ko-group-head { cursor: default; border-radius: 6px; transition: color 150ms ease; }
+.ko-roles > .ko-group-head:hover, .ko-roles > .ko-group-head.is-focus { color: var(--text-primary); }
+.ko-hero-group { display: flex; flex-direction: column; gap: 1px; }
+
+/* the hue shift: the first row, All colors, turning every role at once */
+.ko-all { margin-bottom: 2px; }
+.ko-wheel { width: 24px; height: 24px; flex: none; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  background: conic-gradient(from 90deg, #ff5e5e, #ffd35e, #7cff5e, #5effe1, #5e8bff, #c05eff, #ff5e5e); }
+.ko-all .ko-role-name { flex: none; }
+.ko-all input[type="range"] { -webkit-appearance: none; appearance: none; flex: 1; min-width: 0; height: 18px; margin: 0 2px 0 6px; background: transparent; cursor: pointer; }
+.ko-all input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px;
+  background: var(--ko-hue-track, linear-gradient(90deg, hsl(0 70% 55%), hsl(120 70% 50%), hsl(240 70% 60%), hsl(360 70% 55%))); }
+.ko-all input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -4px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); }
+.ko-all input[type="range"]:disabled { opacity: 0.4; cursor: default; }
+
+.ko-roles { flex: 1; min-height: 0; overflow-y: auto; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 1px; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.12) transparent; }
+.ko-role { display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 1px 4px 1px 8px; border-radius: 6px; transition: background-color 150ms ease; }
+.ko-role.is-ghost { height: 32px; min-height: 0; margin: 4px 0; }
+.ko-role:not(.is-ghost):hover, .ko-role:focus-within, .ko-role.is-focus { background: var(--quiet-hover); }
+/* the color picker (ColorPicker.tsx): the swatch, and a popover in the app's own surface */
+/* the app's buttons carry a 36px floor and their own padding: the swatch and dots set theirs outright */
+.kcp-swatch { flex: none; width: 24px; height: 24px !important; min-height: 0 !important; padding: 0 !important; border: 0 !important; border-radius: 6px !important; background: none !important; cursor: pointer;
+  transition: border-color var(--text-swap-dur) var(--text-swap-ease), transform 150ms var(--toggle-ease); }
+.kcp-swatch:hover:not(:disabled), .kcp-swatch[aria-expanded="true"] { transform: scale(1.08); }
+.kcp-swatch:active:not(:disabled) { transform: scale(0.94); }
+.kcp-swatch:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.kcp-fill { display: block; width: 100%; height: 100%; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16); }
+.kcp-pop { position: fixed; z-index: 3000; display: flex; flex-direction: column; gap: 12px; padding: 12px; box-sizing: border-box; background: var(--bg-dark); border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55); transform-origin: top left; animation: kcp-in var(--dropdown-open-dur, 200ms) var(--dropdown-ease, ease) both; }
+@keyframes kcp-in { from { opacity: 0; transform: translateY(-4px) scale(var(--dropdown-pre-scale, 0.97)); filter: blur(2px); } }
+.kcp-sv { position: relative; height: 128px; border-radius: 8px; cursor: crosshair; touch-action: none; box-shadow: 0 0 0 1px var(--panel-border);
+  background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, var(--hue)); }
+.kcp-hue { position: relative; height: 12px; margin: 0 2px; border-radius: 999px; cursor: pointer; touch-action: none; box-shadow: 0 0 0 1px var(--panel-border);
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+.kcp-sv:focus-visible, .kcp-hue:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+/* the handle carries the color it sits on, in a white ring, so it reads on any color */
+.kcp-dot { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55); pointer-events: none; }
+.kcp-presets { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; }
+.kcp-preset { width: 18px; height: 18px !important; min-height: 0 !important; padding: 0 !important; border: none !important; border-radius: 50% !important; flex: none; cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12); transition: transform var(--text-swap-dur) var(--text-swap-ease), box-shadow var(--text-swap-dur) var(--text-swap-ease); }
+.kcp-preset:hover { transform: scale(1.12); }
+/* the picked dot's ring reaches 3px out: the 8px between dots keeps it clear of its neighbors */
+.kcp-preset[aria-checked="true"] { box-shadow: 0 0 0 1.5px var(--bg-dark), 0 0 0 3px var(--sw); }
+.kcp-preset:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.ko-role-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ko-role-name em { font-style: normal; color: var(--text-secondary); font-weight: 400; }
+.ko-hex { width: 72px; height: 28px; padding: 0 6px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--text-secondary);
+  font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; font-variant-numeric: tabular-nums; transition: border-color 150ms ease, color 150ms ease; }
+.ko-hex:hover { border-color: var(--panel-border); }
+.ko-hex:focus { outline: none; border-color: var(--panel-border); background: var(--field-bg); color: var(--text-primary); }
+.ko-role.is-changed .ko-hex { color: var(--text-primary); }
+.ko-reset { display: grid; place-items: center; width: 28px; height: 28px; flex: none; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); cursor: pointer;
+  transition: opacity 150ms ease, background-color 150ms ease, color 150ms ease; }
+.ko-reset:hover:not(:disabled) { background: var(--quiet-active); color: var(--text-primary); }
+.ko-reset:disabled { opacity: 0.35; cursor: default; }
+
+.ko-out { display: flex; flex-direction: column; gap: 12px; padding: 16px 0 0 8px; margin-top: 8px; border-top: 1px solid var(--panel-border); }
+.ko-out .ko-label { margin-bottom: -6px; }
+.ko-out { padding-bottom: 8px; }
+.ko-input { height: 36px; padding: 0 12px; box-sizing: border-box; border: 1px solid var(--panel-border); border-radius: 8px; background: var(--field-bg); color: var(--text-primary);
+  font: inherit; font-size: 14px; transition: border-color 150ms ease; }
+.ko-input:focus { outline: none; border-color: color-mix(in srgb, var(--text-primary), transparent 50%); }
+/* while it works: quiet, the step's words shimmering, never the dimmed disabled look. Done: green words and a check, no box */
+.lo-text-btn.ko-install.is-working { background: transparent !important; border-color: var(--panel-border) !important; color: var(--text-secondary) !important; opacity: 1 !important; cursor: default; }
+.lo-text-btn.ko-install.is-installed { background: transparent !important; border-color: transparent !important; color: #3ecf6e !important; opacity: 1 !important; cursor: default; }
+.lo-text-btn.ko-install { display: inline-flex !important; align-items: center; justify-content: center; gap: 8px; height: 36px !important; font-weight: 600 !important; }   /* the Library's Install height */
+/* what Install makes: the mod alone, or the mod and a loadout with this frame as its picture */
+.ko-make { display: flex !important; }
+.ko-make { padding: 2px !important; }
+.ko-make button { flex: 1; justify-content: center; height: 26px !important; min-height: 0 !important; padding-top: 0 !important; padding-bottom: 0 !important; font-size: 12px; }   /* a setting for the Install under it: smaller than the button */
+.ko-taken { display: flex; flex-direction: column; gap: 12px; padding: 12px; border: 1px solid var(--panel-border); border-radius: 8px; background: var(--field-bg); font-size: 13px; }
+.ko-taken div { display: flex; justify-content: flex-end; gap: 8px; }
+
+html[data-motion="off"] .ko, html[data-motion="off"] .ko-shimmer, html[data-motion="off"] .ko-load-step, html[data-motion="off"] .ko-load-bar span, html[data-motion="off"] .ko-track-wait, html[data-motion="off"] .ko-hero.is-ghost, html[data-motion="off"] .ko-role.is-ghost { animation: none; }
+
+/* transitions.dev: Skeleton reveal. The prompt cross-blurs in once its files are read */
+.ko-stage canvas { opacity: 0; filter: blur(var(--reveal-blur)); transition: opacity var(--reveal-dur) var(--reveal-ease), filter var(--reveal-dur) var(--reveal-ease); }
+.ko-stage canvas.is-ready { opacity: 1; filter: blur(0); }
+/* transitions.dev: Staggered rise. A hero's colors rise in, Banner first */
+.ko-roles .t-rise { animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; animation-delay: calc(var(--i, 0) * var(--stagger-stagger)); }
+/* the icon beside its word, centered on it: also while it rises in (t-text-in alone would make it inline-block) */
+.ko-btn-in, .ko-btn-in.t-text-in { display: inline-flex; align-items: center; gap: 8px; line-height: 1; }
+.ko-btn-in svg { flex: none; display: block; }
+html[data-motion="off"] .ko-stage canvas, html[data-motion="off"] .ko-roles .t-rise, html[data-motion="off"] .ko-play, html[data-motion="off"] .kcp-pop { animation: none !important; transition: none !important; }
+/* Reset all: the Clear pill's shape without its outline, quiet beside the Colors title */
+.ko-colors .fp-clear { border: 0 !important; }
+.ko-colors .fp-clear:hover { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
+/* play and speed sit level with the track and its labels as one block, not the track alone */
+.ko-transport > .ko-play, .ko-transport > .ko-speed { translate: 0 8px; }

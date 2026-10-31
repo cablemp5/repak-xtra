@@ -1,17 +1,15 @@
-// repakxtra: a loadout card's tools on its page (loadoutBits.tsx CardMedia), behind one small arrow in a corner of the
-// card: for an Image cover, change it or take a mod's picture from Nexus, for a Text cover, the picture behind the words
-// (the icon and color stay in the bar along the card's bottom while typing). The arrow sits bottom left, or top left while
+// repakxtra: a Text cover's tools on its loadout page (loadoutBits.tsx CardMedia), behind one small arrow in a corner of
+// the card: the picture behind the words (the icon and color stay in the bar along the card's bottom while typing). An
+// Image cover has its own Change image button instead. The arrow sits bottom left, or top left while
 // typing, where the bar is not. A popover on the card, after its arrow so Tab goes from one into the other: Esc or a
 // click outside closes it.
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronUp, ImagePlus } from 'lucide-react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import CaptionBackground from './CaptionBackground'
 import type { Loadout } from './loadoutStore'
 import type { LoadoutProps } from './Loadouts'
 
-export function CardTools({ l, text, top, alert, onImage }: {
-  l: Loadout; text: boolean; top: boolean; alert: LoadoutProps['alert']; onImage: () => void
-}) {
+export function CardTools({ l, top, alert }: { l: Loadout; top: boolean; alert: LoadoutProps['alert'] }) {
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -22,7 +20,6 @@ export function CardTools({ l, text, top, alert, onImage }: {
     document.addEventListener('mousedown', out)
     return () => { window.removeEventListener('keydown', key, true); document.removeEventListener('mousedown', out) }
   }, [open])
-  const run = (f: () => void) => () => { setOpen(false); f() }
   const Arrow = top ? ChevronDown : ChevronUp
   return (
     <div className={`ct${open ? ' is-open' : ''}${top ? ' is-top' : ''}`} ref={box} onMouseDown={e => { if (top) e.preventDefault() }}>
@@ -31,14 +28,10 @@ export function CardTools({ l, text, top, alert, onImage }: {
       </button>
       {open && (
         <div className="ct-pop" role="dialog" aria-label="Card options">
-          {text ? (
-            <div className="ct-field is-stacked">
-              <span>Background</span>
-              <CaptionBackground l={l} alert={alert} />
-            </div>
-          ) : <>
-            <button type="button" className="ct-row" onClick={run(onImage)}><ImagePlus aria-hidden="true" /> Change image</button>
-          </>}
+          <div className="ct-field is-stacked">
+            <span>Background</span>
+            <CaptionBackground l={l} alert={alert} />
+          </div>
         </div>
       )}
     </div>

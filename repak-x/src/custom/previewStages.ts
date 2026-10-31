@@ -29,6 +29,7 @@ const STEPS: Record<string, string> = {
   rig: 'Exporting the clips and the model',
   anim: 'Rendering the animation',
   webp: 'Saving the animation',
+  ko: 'Recording the KO prompt', // custom/ko/koPreview.ts, not the kit
   sound: 'Reading the sound banks',
 }
 const UNKNOWN = 'Generating the preview'

@@ -21,6 +21,7 @@ export type Loadout = {
   image?: string          // legacy: small data URL kept in localStorage
   mediaType?: 'image' | 'video'
   mediaRev?: number       // set when a file is stored in IndexedDB (loadoutMedia.ts); bumps on change
+  mediaBeat?: number      // seconds: a KO Editor video. Cards with one start each loop on the same clock, so they play together
   hotkey?: number         // 1 to 9: Ctrl+N toggles it, set in its page's More menu; unpinned loadouts have no hotkey
   muted?: boolean         // its animation previews play without their emote sound on hover (the card's speaker button)
   caption?: string        // words shown big on its card while it has no picture or preview (typed on its page)
@@ -534,9 +535,9 @@ if (!localStorage.getItem('repakxtra.hotkeysPinned')) {
 
 /** Which main view shows: Home (loadout cards) or Library (the full mod list). Remembered; Home on first start.
  *  Mirrored on <html data-view> so theme.css hides the other view (both stay mounted, keeping their state). */
-export type View = 'home' | 'library' | 'nexus'
+export type View = 'home' | 'library' | 'nexus' | 'ko'
 const savedView = savedItem('repakxtra.view')
-let view: View = savedView === 'library' || savedView === 'nexus' ? savedView : 'home'
+let view: View = savedView === 'library' || savedView === 'nexus' || savedView === 'ko' ? savedView : 'home'
 const applyView = () => { document.documentElement.dataset.view = view }
 applyView()
 export const setView = (v: View) => { view = v; localStorage.setItem('repakxtra.view', v); applyView(); notify() }

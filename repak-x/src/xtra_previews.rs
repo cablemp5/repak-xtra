@@ -67,8 +67,9 @@ fn valid_key(key: &str) -> bool {
     !key.is_empty() && !key.contains(['/', '\\', ':']) && !key.contains("..")
 }
 
-/// A preview is a PNG, or an animated WebP for animation mods (a clip on a gray model).
-const PREVIEW_EXTS: [&str; 2] = [".png", ".webp"];
+/// A preview is a PNG, an animated WebP for animation mods (a clip on a gray model), or a WebM for KO prompt mods
+/// (xtra_ko.rs: the app records those, so they play on one clock).
+const PREVIEW_EXTS: [&str; 3] = [".png", ".webp", ".webm"];
 
 #[tauri::command(async)]
 pub fn list_mod_previews() -> Vec<String> {

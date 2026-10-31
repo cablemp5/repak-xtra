@@ -4,7 +4,7 @@
 // together as one image (key previewSetKey(id)); loadout cards page through the previews (loadoutBits.tsx).
 // One run at a time (the generator holds a lock); asking while another runs puts the request in a queue that starts
 // when the current run ends. Unchanged mods report their existing preview without rendering again; Regenerate forces.
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { ListPlus, WandSparkles, X } from 'lucide-react'
@@ -14,6 +14,8 @@ import { type Loadout, coverFills, displayName, memberName, modKey, nameKey, pat
 import { revealOnLoad } from './motion'
 import { EGG_MS, stepEgg, stepText } from './previewStages'
 import { plural } from './modName'
+import { koPreview } from './ko/koPreview'
+import { KO_BEAT } from './ko/render'
 
 const NOTHING = 'Nothing to show for this mod: previews cover skins, meshes, textures, animations, UI icons, VFX colors, and sounds.'
 const FAILED = 'The last render failed. The full error is in Logs.'
@@ -54,7 +56,7 @@ const coverLoads = new Map<string, { rev: number; p: Promise<unknown> }>()
 /** Forget a key's cached image and covers (its revision changed, or it has none now). */
 const dropCached = (key: string) => {
   const u = urls.get(key)
-  if (u) URL.revokeObjectURL(u.url)
+  if (u) { URL.revokeObjectURL(u.url); videoUrls.delete(u.url) }
   urls.delete(key)
   urlLoads.delete(key)
   covers.delete(key)
@@ -152,7 +154,9 @@ listen('mod-previews-busy', () => { // the generator refused: another one holds 
   queue.length = 0
   notify()
 }).catch(() => undefined)
-listen<boolean>('mod-previews-done', e => {
+listen<boolean>('mod-previews-done', e => finish(e.payload)).catch(() => undefined)
+/** A run's end: the kit's done event, or the KO renderer's when the kit had nothing to do (ok: it ran through). */
+function finish(ok: boolean) {
   if (!active) return // a window that did not start this run (Asset Explorer, VFX Updater) stays quiet
   active = false
   const left = pending.size
@@ -167,7 +171,7 @@ listen<boolean>('mod-previews-done', e => {
     run.stopping && left && `${left} skipped`, run.setResult === 'failed' && '1 loadout render failed']
   // Stopped before anything was made is a stop, not a failure
   const stoppedEarly = run.stopping && !run.made && !run.none && !run.failed
-  const summary = run.quiet ? '' : run.busy || (stoppedEarly ? 'Stopped' : e.payload || run.made || run.none || run.failed ? parts.filter(Boolean).join(' · ') : FAILED)
+  const summary = run.quiet ? '' : run.busy || (stoppedEarly ? 'Stopped' : ok || run.made || run.none || run.failed ? parts.filter(Boolean).join(' · ') : FAILED)
   const stopped = run.stopping
   run = { ...run, stopping: false, summary }
   // Previews made for a loadout become what its card shows when asked for (not on Stop: the user ended it)
@@ -179,10 +183,14 @@ listen<boolean>('mod-previews-done', e => {
   syncPreviewList()
   startNext()
   if (!running()) batchDone = 0
-}).catch(() => undefined)
+}
 
 export const usePreviewVersion = () => useSyncExternalStore(subscribe, () => version)
 export const hasPreview = (key: string) => revs.has(key)
+// Mods the KO renderer makes previews for: the kit never sees them, so a loadout's combined render was not made for them
+const KO_KEYS = 'repakxtra.koPreviews'
+const koKeys = new Set<string>((() => { try { return JSON.parse(localStorage.getItem(KO_KEYS) || '[]') } catch { return [] } })())
+export const isKoPreview = (key: string) => koKeys.has(key)
 /** Key of a loadout's combined character render. */
 export const previewSetKey = (loadoutId: string) => `loadout-${loadoutId}`
 /** A loadout has previews when its combined render exists or any of its mods has its own (loadouts of only VFX, UI or
@@ -215,9 +223,40 @@ export function useCovers(setKey: string): Covers | undefined {
   return rev !== undefined && cached?.rev === rev ? cached : undefined
 }
 
-/** PNG, or an animated WebP (animation mods): told apart by the file's signature ("RIFF....WEBP"). */
-const imageType = (bytes: ArrayBuffer) =>
-  new TextDecoder().decode(new Uint8Array(bytes, 0, Math.min(12, bytes.byteLength))).slice(8) === 'WEBP' ? 'image/webp' : 'image/png'
+/** PNG, an animated WebP (animation mods), or a WebM (KO prompt mods): told apart by the file's signature. */
+const imageType = (bytes: ArrayBuffer) => {
+  const head = new Uint8Array(bytes, 0, Math.min(12, bytes.byteLength))
+  if (head[0] === 0x1a && head[1] === 0x45 && head[2] === 0xdf && head[3] === 0xa3) return 'video/webm'
+  return new TextDecoder().decode(head).slice(8) === 'WEBP' ? 'image/webp' : 'image/png'
+}
+const videoUrls = new Set<string>()
+/** The preview at this URL is a video (a KO prompt mod's): it plays in a BeatVideo, not an img. */
+export const isVideoPreview = (url: string | null | undefined) => Boolean(url && videoUrls.has(url))
+
+/** A KO prompt video (a loadout card's, or a KO mod's preview): each play starts on the next beat of one shared clock, so every such card plays the same frame
+ *  at the same time. The recording is shorter than the beat: it rests on its last frame (the empty grid) until then. */
+export function BeatVideo({ src, beat }: { src: string; beat: number }) {
+  const ref = useRef<HTMLVideoElement>(null)
+  useEffect(() => {
+    const v = ref.current
+    if (!v) return
+    let t: number | undefined
+    const next = () => {
+      clearTimeout(t)
+      t = window.setTimeout(() => { v.currentTime = 0; v.play().catch(() => undefined) }, beat * 1000 - (Date.now() % (beat * 1000)))
+    }
+    // a card that appears mid-beat joins at the clock's point instead of waiting for the next one
+    const join = () => {
+      const at = (Date.now() % (beat * 1000)) / 1000
+      if (at < v.duration - 0.1) { v.currentTime = at; v.play().catch(() => undefined) } else next()
+    }
+    v.addEventListener('ended', next)
+    v.addEventListener('loadedmetadata', join, { once: true })
+    return () => { clearTimeout(t); v.removeEventListener('ended', next); v.removeEventListener('loadedmetadata', join) }
+  }, [src, beat])
+  return <video ref={ref} src={src} muted playsInline preload="auto" />
+}
+
 
 /** A preview's object URL at this revision: cached, or read once however many cards ask. Resolves to the URL, null
  *  when the read failed, or undefined when the revision was dropped or replaced before it finished. */
@@ -229,7 +268,8 @@ function loadUrl(key: string, rev: number): Promise<string | null | undefined> {
   const p: Promise<string | null | undefined> = invoke<ArrayBuffer>('get_mod_preview', { key }).then(bytes => {
     if (urlLoads.get(key)?.p !== p || revs.get(key) !== rev) return undefined // stale: the bytes are dropped unused
     urlLoads.delete(key)
-    const url = URL.createObjectURL(new Blob([bytes], { type: imageType(bytes) }))
+    const type = imageType(bytes), url = URL.createObjectURL(new Blob([bytes], { type }))
+    if (type === 'video/webm') videoUrls.add(url)
     urls.set(key, { rev, url })
     return url
   }, () => {
@@ -313,8 +353,29 @@ const start = async (job: QueuedJob): Promise<string | null> => {
   run = { id: job.id, total: jobs.length, made: 0, none: 0, failed: 0, stopping: false, summary: '', set: job.set, name: job.name, setResult: undefined, busy: '',
     show: Boolean(job.show), step: undefined, quiet: Boolean(job.quiet) }
   notify()
+  // KO prompt mods: the KO Editor's renderer plays theirs into an animated WebP (custom/ko/koPreview.ts), the kit the rest
+  const kit: typeof jobs = []
+  for (const [dir, k] of jobs) {
+    if (run.stopping) break
+    const path = job.paths.find(p => nameKey(p) === k)!
+    try {
+      if (await koPreview(path, k, () => { run.step = 'ko'; notify() })) { koKeys.add(k); localStorage.setItem(KO_KEYS, JSON.stringify([...koKeys])) }
+      else kit.push([dir, k])
+    } catch (e) {
+      console.warn(`KO preview of ${k} failed:`, e)
+      outcome.set(k, FAILED)
+      if (pending.delete(k)) run.failed++
+      notify()
+    }
+  }
+  if (run.stopping || !kit.length) {
+    if (job.set && !run.stopping) run.setResult = 'none' // nothing left for a combined render to show
+    finish(true)
+    return null
+  }
+  run.step = undefined
   try {
-    if (await invoke<boolean>('generate_mod_previews', { jobs, set: job.set ?? null, force: Boolean(job.force) })) return null
+    if (await invoke<boolean>('generate_mod_previews', { jobs: kit, set: job.set ?? null, force: Boolean(job.force) })) return null
     return refuse(job, 'Another preview run is still going.')
   } catch (e) {
     return refuse(job, String(e))
@@ -457,7 +518,7 @@ export function ModPreview({ path }: { path: string }) {
     <div className="detail-section mod-preview">
       {url && (
         <div className={`mod-preview-frame${forms.length ? ' has-forms' : ''}`}>
-          <img src={url} alt="Generated preview" onLoad={revealOnLoad} />
+          {isVideoPreview(url) ? <BeatVideo src={url} beat={KO_BEAT} /> : <img src={url} alt="Generated preview" onLoad={revealOnLoad} />}
           {forms.map(k => <FormImage key={k} k={k} />)}
         </div>
       )}
