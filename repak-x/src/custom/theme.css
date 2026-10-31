@@ -1425,9 +1425,9 @@ html[data-motion="off"] .has-seg-pill::before { transition: none !important; }
 .cr-slide.is-out.is-next { animation: cr-sink var(--cr-dur) var(--cr-ease) both; }
 .cr-slide.is-out.is-prev { animation: cr-leave var(--cr-dur) var(--cr-ease) both; }
 .cr-slide.is-in.is-prev { animation: cr-rise var(--cr-dur) var(--cr-ease) both; }
-.cr-slide.is-out.is-next::after, .cr-slide.is-in.is-prev::after { content: ''; position: absolute; inset: 0; background: #000; pointer-events: none;
+/* only the picture being left darkens as it sinks: the one coming back (previous) shows at full brightness at once */
+.cr-slide.is-out.is-next::after { content: ''; position: absolute; inset: 0; background: #000; pointer-events: none;
   animation: cr-dim var(--cr-dur) var(--cr-ease) both; }
-.cr-slide.is-in.is-prev::after { animation-direction: reverse; }
 .cr-slide.is-out img { opacity: 1 !important; filter: none !important; }
 :root { --cr-dur: 450ms; --cr-ease: cubic-bezier(0.22, 1, 0.36, 1); }
 @keyframes cr-enter { from { transform: translate3d(100%, 0, 0); } }
@@ -2745,6 +2745,9 @@ html[data-motion="off"] .vfx-dot { animation: none; }
 .bulk-count-label { max-width: none !important; margin: 0 12px 0 0 !important; display: flex !important; align-items: center; font-size: 13px !important; font-weight: 500 !important;
   line-height: normal !important; opacity: 1 !important; color: var(--text-primary) !important; }
 .bulk-count { min-width: 0 !important; height: 36px !important; padding: 0 0 0 12px !important; margin: 0 12px 0 0 !important; white-space: nowrap; background: none !important; display: flex; align-items: center; }
+/* the count is set apart from Select all and Clear by a full-height line, as the actions are (.selection-info) */
+.bulk-actions-toolbar .bulk-count { align-self: stretch; height: auto !important; margin: -5px 4px -5px 0 !important; padding-right: 12px !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.12); border-radius: 0 !important; }
 /* plain text, all white: "2 selected" read as one phrase (the 4px gap is a space), on the buttons' line height so the glyphs sit level */
 .bulk-count-value { display: inline-block; height: auto; min-width: 0; padding: 0;
   border-radius: 0; background: none; color: var(--text-primary); font-size: 13px; font-weight: 500; line-height: normal;
