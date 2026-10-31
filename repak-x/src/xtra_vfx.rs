@@ -70,7 +70,7 @@ fn base_dir() -> PathBuf {
 }
 
 /// The game's Paks folder's build: changes whenever an update rewrites a container (xtra_broken::build_key).
-fn build_hash(game_paks: &Path) -> String {
+pub(crate) fn build_hash(game_paks: &Path) -> String {
     let key = crate::xtra_broken::build_key(&crate::xtra_broken::game_containers(game_paks));
     let mut h = std::collections::hash_map::DefaultHasher::new();
     key.hash(&mut h);

@@ -235,7 +235,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
     }
   }
 
-  const removeImage = () => { deleteMedia(l.id); patchLoadout(l.id, { image: undefined, mediaRev: undefined, mediaType: undefined }) }
+  const removeImage = () => { deleteMedia(l.id); patchLoadout(l.id, { image: undefined, mediaRev: undefined, mediaType: undefined, mediaBeat: undefined }) }
   const removeCapture = () => { deleteMedia(captureKey(l.id)); patchLoadout(l.id, { captureRev: undefined }) }
   const target = captureTarget(p, l)
 

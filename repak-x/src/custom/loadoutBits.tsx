@@ -1,5 +1,6 @@
 // repakxtra: small pieces shared by Home (LoadoutsScreen.tsx), the loadout page and the New strip.
 import { showKeptOff } from './safeOff'
+import { KO_BEAT } from './ko/render'
 import { useEffect, useRef, useState } from 'react'
 import { Ban, Camera, ChevronLeft, ChevronRight, Image as ImageIcon, ImagePlus, Lock, Pencil, Type, Volume2, VolumeX, WandSparkles, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
@@ -8,7 +9,7 @@ import { useMediaUrl } from './loadoutMedia'
 import { COVERS, type Cover, type Loadout, type Mod, captureKey, coverFills, displayName, flipMods, memberName, modKey, modsByKey, nameKey, patchLoadout, pickCover } from './loadoutStore'
 import { ModName } from './modName'
 import { revealOnLoad } from './motion'
-import { formKeys, hasPreview, isDecoded, noPreviewPossible, previewMade, previewSetKey, readyPreview, useCovers, usePreviewStage, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
+import { BeatVideo, formKeys, hasPreview, isDecoded, isKoPreview, isVideoPreview, noPreviewPossible, previewMade, previewSetKey, readyPreview, useCovers, usePreviewStage, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
 import { playEmoteSound, stopEmoteSound, useEmoteSound, webpSeconds } from './emoteSound'
 import { useVerdict } from './brokenMods'
 import { VerdictBadge } from './VerdictBadge'
@@ -54,7 +55,7 @@ function usePreviewSlides(p: LoadoutProps, l: Loadout) {
     return k === g[0] ? [{ key: k, keys: g, label: `${g.length} ${categoryOf(k)}` }] : []
   })
   if (hasPreview(set)) {
-    const installed = new Set(mine.filter(k => byName.get(k)))
+    const installed = new Set(mine.filter(k => byName.get(k) && !isKoPreview(k))) // KO prompts never go to the kit's render
     const older = info !== undefined && !(info.members && info.members.length === installed.size && info.members.every(k => installed.has(k)))
     const kinds = [...new Set(covered.map(categoryOf).filter((c): c is string => Boolean(c)))].sort((a, b) => rank(a) - rank(b))
     slides.unshift({ key: set, label: older ? 'Older render' : kinds.join(' + ') || 'Character', older }) // e.g. "Mesh + Texture + Material"
@@ -214,10 +215,10 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
           : slide?.keys
             ? <CarouselSlide slide={at} dir={dir}><span className="lo-media-multi">{slide.keys.map(k => <SlideImage key={k} k={k} />)}</span></CarouselSlide>
           : video
-            ? <video src={video} autoPlay loop muted playsInline />
+            ? l.mediaBeat ? <BeatVideo src={video} beat={l.mediaBeat} /> : <video src={video} autoPlay loop muted playsInline />
             : <CarouselSlide slide={slides.length > 1 ? at : 0} dir={dir}>
-                <img key={src} src={live?.url ?? src} alt="" className={src === warm || isDecoded(src) ? 'is-loaded' : undefined} decoding="async" loading={page ? undefined : 'lazy'}
-                  onLoad={e => { revealOnLoad(e); if (audible && live && hovering.current && e.currentTarget.src === live.url) playEmoteSound(audible, live.seconds) }} />
+                {isVideoPreview(src) ? <BeatVideo key={src} src={src} beat={KO_BEAT} /> : <img key={src} src={live?.url ?? src} alt="" className={src === warm || isDecoded(src) ? 'is-loaded' : undefined} decoding="async" loading={page ? undefined : 'lazy'}
+                  onLoad={e => { revealOnLoad(e); if (audible && live && hovering.current && e.currentTarget.src === live.url) playEmoteSound(audible, live.seconds) }} />}
               </CarouselSlide>}
       </button>
       {slides.length > 1 && !working && ( /* no paging while a new preview renders */
@@ -274,10 +275,14 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
           {cover === 'capture' && capture?.show && capture.button('lo-media-chip', 'Capture again')}
         </div>
       )}
-      {/* Image and Text keep their tools behind one arrow in the corner (CardTools.tsx) */}
-      {page && !working && ((cover === 'image' && !empty) || (cover === 'text' && CAPTION_BACKGROUND)) && (
-        <CardTools l={l} text={cover === 'text'} top={editing} alert={p.alert} onImage={onClick} />
+      {/* An Image cover's way to swap it: one button in the corner, like the preview's Regenerate. Text keeps its
+          background picker behind the arrow (CardTools.tsx) */}
+      {page && !working && !editing && cover === 'image' && !empty && (
+        <div className="lo-media-gen">
+          <button type="button" className="lo-media-chip" onClick={onClick}><ImagePlus size={14} aria-hidden="true" /> Change image</button>
+        </div>
       )}
+      {page && !working && cover === 'text' && CAPTION_BACKGROUND && <CardTools l={l} top={editing} alert={p.alert} />}
       {remove?.run && (
         <button type="button" className="lo-media-remove" title={`Remove the ${remove.what}`} aria-label={`Remove the ${remove.what}`} onClick={remove.run}>
           <X size={14} />
@@ -322,7 +327,8 @@ const HOVER_MS = 250
 function SlideImage({ k }: { k: string }) {
   const src = usePreviewUrl(k)
   const [warm] = useState(src)
-  return src ? <img src={src} alt="" className={src === warm || isDecoded(src) ? 'is-loaded' : undefined} onLoad={revealOnLoad} /> : <span />
+  return !src ? <span /> : isVideoPreview(src) ? <BeatVideo src={src} beat={KO_BEAT} />
+    : <img src={src} alt="" className={src === warm || isDecoded(src) ? 'is-loaded' : undefined} onLoad={revealOnLoad} />
 }
 
 /** How many of a loadout's installed mods are on: green all, yellow some, red none. */

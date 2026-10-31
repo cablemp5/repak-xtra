@@ -121,10 +121,11 @@ export function ViewTabs() {
   const view = useView()
   useEffect(() => { if (view === 'nexus') setView('library') }, [view]) // a view another edition saved
   return (
-    <div className="view-tabs is-two" role="tablist" aria-label="View" data-tour="view-tabs">
+    <div className="view-tabs" role="tablist" aria-label="View" data-tour="view-tabs">
       <button type="button" role="tab" aria-selected={view === 'home'} onClick={() => { openLoadout(null); setView('home') }} title="Loadouts and new mods (L)">Loadouts</button>
       <button type="button" role="tab" aria-selected={view === 'library'} onClick={() => setView('library')}
         title="Every mod, with filters and folders (L)">Library</button>
+      <button type="button" role="tab" aria-selected={view === 'ko'} onClick={() => setView('ko')} title="Recolor a hero's KO prompt">KO Editor</button>
     </div>
   )
 }
@@ -311,7 +312,7 @@ function LoadoutsHome(p: LoadoutProps) {
     try {
       const { blob, type } = await prepareMedia(file)
       await putMedia(as === 'capture' ? captureKey(id) : id, blob)
-      patchLoadout(id, as === 'capture' ? { captureRev: Date.now(), cover: 'capture' } : { mediaType: type, mediaRev: Date.now(), image: undefined, cover: 'image' })
+      patchLoadout(id, as === 'capture' ? { captureRev: Date.now(), cover: 'capture' } : { mediaType: type, mediaRev: Date.now(), mediaBeat: undefined, image: undefined, cover: 'image' })
       return true
     } catch (e) {
       p.alert.warning('Media not saved', e instanceof Error ? e.message : String(e))
