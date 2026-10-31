@@ -24,8 +24,10 @@ const spaced = (s: string) => s.toLowerCase().replace(/&/g, ' and ').replace(/[^
  *  ("Jeff" for Jeff the Landshark), or "Dr" for Doctor. */
 const spellings = (hero: string) => {
   const n = spaced(hero)
-  return [...new Set([n, n.replace(/ /g, ''), n.replace(/^the /, ''), n.split(' the ')[0], n.replace(/^doctor /, 'dr ')])]
+  return [...new Set([n, n.replace(/ /g, ''), n.replace(/^the /, ''), n.split(' the ')[0], n.replace(/^doctor /, 'dr '), ...(NICKNAMES[n] ?? [])])]
 }
+/** Heroes titles often name by one word (cable, 2026-10-30: "Luna" or "Snow" is a Luna Snow mod) */
+const NICKNAMES: Record<string, string[]> = { 'luna snow': ['luna', 'snow'] }
 /** The hero a mod's title names ("Vegeta as Iron Man" -> Iron Man), or '' for none. With two heroes and "replace" in
  *  it ("Venom replaces Hulk"), the second. */
 export function heroInTitle(title: string, heroes: string[]) {

@@ -10,7 +10,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open as pick } from '@tauri-apps/plugin-dialog'
 import { motion } from 'framer-motion'
-import { Check, Download, FileCog, FolderOpen, Plus, ShieldCheck, Upload, Volume2, VolumeX } from 'lucide-react'
+import { ArrowRight, Check, ChevronDown, Download, ExternalLink, FileArchive, FileCog, FolderOpen, Package, Plus, ShieldCheck, Upload, Volume2, VolumeX } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import Switch from '../components/ui/Switch'
 import { DoctorProblems } from './SetupPanel'
@@ -21,6 +21,8 @@ import WelcomeIntro, { MiniCard } from './WelcomeIntro'
 import catboy from './covers/welcome/catboy.webp'
 import ultimate from './covers/welcome/ultimate.webp'
 import godspeed from './covers/welcome/godspeed.webp'
+import jiraSnow from './covers/welcome/jira-snow.webp'
+import esuBlack from './covers/welcome/esu-black.webp'
 import silhouette from './covers/silhouettes/1011.webp'
 import { ShortcutButton, useShortcut } from './shortcut'
 import { ownsTop, useDialogFocus } from './dialogFocus'
@@ -87,8 +89,8 @@ function Choice({ stage, title, text, suggested, onClick }: { stage: React.React
     </button>
   )
 }
-const SHOTS: [string, string][] = [['Catboy', catboy], ['Ultimate', ultimate], ['Godspeed', godspeed]]
-/** Three loadout cards fanned out: mods that became loadouts. */
+const SHOTS: [string, string][] = [['Jira Snow', jiraSnow], ['Godspeed', godspeed], ['ESU Black', esuBlack]]
+/** Three loadout cards fanned out, Godspeed in front: mods that became loadouts. */
 const Fan = () => <span className="ob-fan">{SHOTS.map(([name, src]) => <MiniCard key={name} name={name} src={src} />)}</span>
 
 type Row = 'done' | 'busy' | 'todo' | 'kept' | 'off'
@@ -100,18 +102,18 @@ function Folder({ f }: { f: Flow }) {
     ['dsound.dll', b === 'other' ? 'Your own bypass, kept' : 'The signature bypass, next to the game', f.busy === 'bypass' ? 'busy' : b === 'installed' ? 'done' : b === 'other' ? 'kept' : 'todo'],
     [LOADER_PAK, `${LOADER_NAME}, in ~mods`, f.busy === 'galacta' ? 'busy' : !f.galacta?.installed ? 'todo' : f.galacta.disabled ? 'off' : 'done'],
   ]
+  const row = ([name, note, state]: [string, string, Row], i: number) => (
+    <li key={name} className={`is-${state}`} style={{ '--d': i } as React.CSSProperties}>
+      {i ? <FileCog size={15} /> : <><ChevronDown size={14} className="ob-caret" /><FolderOpen size={15} /></>}
+      <span><b>{name}</b><small>{state === 'busy' ? 'Installing' : state === 'off' ? 'Switched off' : note}</small></span>
+      {(state === 'done' || state === 'kept') && <Check size={14} strokeWidth={2.75} />}
+    </li>
+  )
   return (
-    <div className="wi-stage ob-folder" aria-hidden="true">
-      <ul>
-        {rows.map(([name, note, state], i) => (
-          <li key={name} className={`is-${state}`} style={{ '--d': i } as React.CSSProperties}>
-            {i ? <FileCog size={15} /> : <FolderOpen size={15} />}
-            <span><b>{name}</b><small>{state === 'busy' ? 'Installing' : state === 'off' ? 'Switched off' : note}</small></span>
-            {(state === 'done' || state === 'kept') && <Check size={14} strokeWidth={2.75} />}
-          </li>
-        ))}
-      </ul>
-    </div>
+    <ul className="ob-tree" aria-hidden="true">
+      {row(rows[0], 0)}
+      <li className="ob-tree-kids"><ul>{rows.slice(1).map((r, i) => row(r, i + 1))}</ul></li>
+    </ul>
   )
 }
 
@@ -242,20 +244,31 @@ function AutoSetup({ f }: { f: Flow }) {
 }
 const auto: Page = { id: 'auto', title: 'Setting up mods', when: b => !b.guided, sub: () => `The signature bypass and ${LOADER_NAME}, only what is missing.`, body: f => <AutoSetup f={f} /> }
 
+const TYPES: [string, string, typeof Package][] = [['.pak', 'Mod file', Package], ['.zip', 'Archive', FileArchive], ['.rar', 'Archive', FileArchive], ['.7z', 'Archive', FileArchive]]
+/** Smart loadouts in miniature: loose mods, each dot the color of the look it belongs to, sorted into two loadouts. */
+const SMART_ROWS: [string, string, number][] = [['Catboy mesh', 'Mesh', 0], ['Ultimate suit', 'Mesh', 1], ['Catboy trail', 'VFX', 0], ['Ultimate icons', 'UI', 1]]
+const Smart = () => (
+  <span className="ob-smart">
+    <span className="ob-smart-mods">{SMART_ROWS.map(([name, type, g], i) => <span key={name} className={`is-g${g}`} style={{ '--i': i } as React.CSSProperties}><i />{name}<small>{type}</small></span>)}</span>
+    <ArrowRight size={16} className="ob-smart-arrow" />
+    <span className="ob-smart-out"><MiniCard name="Catboy" src={catboy} className="is-g0" /><MiniCard name="Ultimate" src={ultimate} className="is-g1" /></span>
+  </span>
+)
+
 const mods: Page = {
   id: 'mods', title: 'Your first mod', when: b => b.guided || !b.hasMods,
   sub: () => 'Mod files or zips, straight from the download. No need to unzip.',
   body: f => (
     <div className="ob-drop">
-      <span className="ob-drop-art" aria-hidden="true">
-        {['.pak', '.zip', '.rar', '.7z'].map((x, i) => <i key={x} style={{ '--i': i } as React.CSSProperties}>{x}</i>)}
-        <b><Download size={24} /></b>
-      </span>
+      <span className="ob-drop-icon" aria-hidden="true"><Upload size={22} /></span>
       <b>Drop mods anywhere on this window</b>
       <span>This screen steps aside for the install and comes back after.</span>
+      <span className="ob-types" aria-label="File types">
+        {TYPES.map(([ext, what, Icon]) => <span key={ext}><Icon size={16} aria-hidden="true" /><b>{ext}</b><small>{what}</small></span>)}
+      </span>
       <span className="ob-drop-actions">
         <button type="button" className="btn-primary" disabled={!f.gamePath} onClick={f.addFiles} title={f.gamePath ? undefined : 'Find the game first'}><Upload size={14} aria-hidden="true" /> Choose files…</button>
-        <a className="su-link" href={NEXUS} onClick={e => { e.preventDefault(); openUrl(NEXUS) }}>Find mods on Nexus Mods</a>
+        <a className="su-link ob-out" href={NEXUS} onClick={e => { e.preventDefault(); openUrl(NEXUS) }}>Find mods on Nexus Mods <ExternalLink size={13} aria-hidden="true" /></a>
       </span>
       {f.newMods.length > 0 && <p className="ob-done"><Check size={16} strokeWidth={2.75} aria-hidden="true" /><span>{plural(f.newMods.length, 'mod')} installed. Next makes a loadout from them.</span></p>}
     </div>
@@ -276,7 +289,7 @@ const loadout: Page = {
           title={`From the ${plural(f.newMods.length, 'mod')} you added`} text="Made now, waiting on Loadouts home when you finish." />
       )}
       {f.hasMods && (
-        <Choice suggested={!f.made && !f.newMods.length} onClick={() => { f.setPending('smart'); f.next() }} stage={<Fan />}
+        <Choice suggested={!f.made && !f.newMods.length} onClick={() => { f.setPending('smart'); f.next() }} stage={<Smart />}
           title="Group my mods into loadouts" text="Mods that share a look become one loadout, each with a tick to keep. Opens when you finish." />
       )}
       <Choice onClick={() => { f.setPending('empty'); f.next() }} title="Start one by hand" text="An empty loadout, named and filled on its page when you finish."
@@ -288,6 +301,8 @@ const loadout: Page = {
 
 const TRY: [SoundName, string][] = [['tap', 'Click'], ['toggle', 'Switch'], ['success', 'Done'], ['error', 'Oops']]
 /** One Make it yours setting: a picture of what it does, its words, and its control. */
+/** The app's icon, the Geist x (scripts/make-icon.py draws the real one the same way). */
+const AppMark = () => <b className="ob-mark">x</b>
 function Pref({ stage, title, children, action, wide }: { stage?: React.ReactNode; title: string; children: React.ReactNode; action?: React.ReactNode; wide?: boolean }) {
   return (
     <section className={`ob-pref${wide ? ' is-wide' : ''}`}>
@@ -314,11 +329,11 @@ function Yours({ f }: { f: Flow }) {
         <KitTrack plan={f.kit.plan} p={f.kit.progress} done={f.kit.finished ?? undefined} />
         <DoctorProblems d={f.kit.doctor} />
       </Pref>
-      <Pref title="Show it on Discord" stage={<span className="ob-presence"><i /><span><small>Playing</small><b>{APP_NAME}</b><small>Switching loadouts</small></span></span>}
+      <Pref title="Show it on Discord" stage={<span className="ob-presence"><AppMark /><span><small>Playing</small><b>{APP_NAME}</b><small>Switching loadouts</small></span></span>}
         action={<Switch size="sm" checked={f.enableDrp} onChange={f.onSetDrp} aria-label={`Show ${APP_NAME} in your Discord status`} />}>
         <p>Your Discord status shows {APP_NAME} while it is open. Off keeps it to yourself.</p>
       </Pref>
-      <Pref title="Desktop shortcut" stage={<span className="ob-icon"><b>x</b><small>{APP_NAME}</small></span>}
+      <Pref title="Desktop shortcut" stage={<span className="ob-icon"><AppMark /><small>{APP_NAME}</small></span>}
         action={f.shortcut.exists ? <span className="ob-ok"><Check size={14} strokeWidth={2.75} /> On your desktop</span> : <ShortcutButton s={f.shortcut} />}>
         <p>Start {APP_NAME} from your desktop.</p>
       </Pref>
@@ -532,7 +547,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, installing, e
           <button type="button" className="lo-text-btn" onClick={() => move(-1)}>Back</button>
           {(page.choice || unfinished) && !last
             ? <button type="button" className="lo-text-btn" disabled={working} onClick={() => move(1)}>{unfinished ? 'Skip for now' : 'Skip'}</button>
-            : <button type="button" className="btn-primary" disabled={working} onClick={last ? finishFlow : () => move(1)}>{last ? 'Finish' : 'Next'}</button>}
+            : <button type="button" className="btn-primary ob-next" disabled={working} onClick={last ? finishFlow : () => move(1)}>{last ? <>Finish <Check size={15} aria-hidden="true" /></> : <>Next <ArrowRight size={15} aria-hidden="true" /></>}</button>}
         </div>
         </>}
       </motion.div>

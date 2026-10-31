@@ -11,7 +11,7 @@
 .wi-demos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 18px 26px 26px; }   /* room above the footer line now the table is gone */
 .wi-demo { margin: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .wi-stage { position: relative; height: 180px; display: grid; place-items: center; overflow: hidden; border-radius: 12px;
-  border: 1px solid var(--panel-border); background: radial-gradient(120% 90% at 50% 0%, rgba(255, 255, 255, 0.05), transparent 70%), var(--bg-dark); }
+  border: 1px solid var(--panel-border); background: var(--bg-dark); }   /* flat, no glow (cable, 2026-10-30) */
 .wi-demo figcaption { display: flex; flex-direction: column; gap: 3px; }
 .wi-demo figcaption b { font-size: 13.5px; font-weight: 700; color: var(--text-primary); }
 .wi-demo figcaption span { font-size: 12px; line-height: 1.45; color: var(--text-secondary); text-wrap: pretty; }
