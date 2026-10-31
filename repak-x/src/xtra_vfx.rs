@@ -34,6 +34,37 @@ pub(crate) fn tune_dotnet_gc() {
     }
 }
 
+/// The background checks' work folders, one per app run (temp/repak-x/<kind>/<process id>): each check clears its own,
+/// but an app closed mid-check leaves it (49 of them, 42.8 GB, here on 2026-10-31). At start, those of runs no longer
+/// alive go; another copy's (the stable app beside the dev copy) stays while it runs.
+pub(crate) fn sweep_work_dirs() {
+    sweep_in(&std::env::temp_dir().join("repak-x"));
+}
+
+fn sweep_in(root: &Path) {
+    use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System};
+    let mut left: Vec<(PathBuf, u32)> = Vec::new();
+    for kind in ["xcheck", "xclass", "xmesh", "pakhalf"] {
+        for e in std::fs::read_dir(root.join(kind)).into_iter().flatten().flatten() {
+            // "<pid>" or "<pid>-<n>"
+            let n = e.file_name().to_string_lossy().to_string();
+            if let Ok(pid) = n.split('-').next().unwrap_or_default().parse::<u32>() {
+                left.push((e.path(), pid));
+            }
+        }
+    }
+    if left.is_empty() {
+        return;
+    }
+    let s = System::new_with_specifics(RefreshKind::new().with_processes(ProcessRefreshKind::new()));
+    let me = std::process::id();
+    for (dir, pid) in left {
+        if pid != me && s.process(Pid::from_u32(pid)).is_none() {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+}
+
 fn base_dir() -> PathBuf {
     std::env::temp_dir().join("repak-x").join("xvfx")
 }
@@ -964,6 +995,20 @@ mod tests {
     use crate::vfx_updater::{commands as c, file_ops, logging, pipeline, progress::NoOpProgressSink};
     use serde_json::{json, Value};
     use std::io::{BufRead, Write};
+
+    #[test]
+    fn work_folders_of_runs_no_longer_alive_go_and_live_ones_stay() {
+        let root = tempfile::tempdir().unwrap();
+        let me = std::process::id();
+        let dead = 4_000_000_001u32; // above any Windows process id
+        for d in [format!("xcheck/{me}"), format!("xcheck/{dead}"), format!("pakhalf/{dead}-3"), format!("xmesh/{me}"), "xcheck/notapid".to_string()] {
+            std::fs::create_dir_all(root.path().join(d).join("game")).unwrap();
+        }
+        sweep_in(root.path());
+        assert!(root.path().join(format!("xcheck/{me}")).exists() && root.path().join(format!("xmesh/{me}")).exists(), "this run's stay");
+        assert!(!root.path().join(format!("xcheck/{dead}")).exists() && !root.path().join(format!("pakhalf/{dead}-3")).exists(), "a closed run's go");
+        assert!(root.path().join("xcheck/notapid").exists(), "what is not a run's is left alone");
+    }
 
     #[test]
     fn an_update_starts_again_from_the_original_beside_it() {
