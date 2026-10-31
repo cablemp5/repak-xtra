@@ -23,11 +23,12 @@
   transition: border-color 0.18s ease, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease; }
 .ob-choice:hover { border-color: color-mix(in srgb, var(--accent-primary), transparent 45%); }
 .ob-choice:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
-.ob-choice.is-suggested { border-color: color-mix(in srgb, var(--accent-primary), transparent 35%); }
 .ob-choice .ob-stage { align-self: stretch; height: 172px; border: none; border-bottom: 1px solid var(--panel-border); border-radius: 0; }
 .ob-choice-text { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; width: 100%; box-sizing: border-box; padding: 14px 16px 16px; text-align: left; }
-.ob-choice-text b { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+.ob-choice-text b { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
 .ob-choice-text span { font-size: 13.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.ob-yes { flex: none; color: #3ecf6e; }
+.ob-no { flex: none; color: #f2555a; }
 .fr-hint { grid-column: 1 / -1; margin: 0; font-size: 13px; color: var(--text-secondary); }
 
 /* Pictures for the cards: loadouts fanned out (no switches, they are pictures here), an empty card to fill, an empty
@@ -117,24 +118,14 @@
 .ob-status .ob-done { gap: 12px; font-size: 18px; font-weight: 600; line-height: 1.4; letter-spacing: -0.01em; }   /* the page's whole result: said large */
 .ob-status .ob-done > svg.lucide { width: 22px !important; height: 22px !important; margin-top: 2px; }
 
-/* The first mod: one drop zone, the file types it takes floating in its corners */
-.ob-drop { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 300px; box-sizing: border-box; margin-top: 8px; padding: 28px 24px 24px; text-align: center;
+/* The first mod: one drop zone */
+.ob-drop { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 260px; box-sizing: border-box; margin-top: 8px; padding: 28px 24px 24px; text-align: center;
   border: 1.5px dashed var(--panel-border); border-radius: 16px; background: var(--bg-darker); }
+.modal-content.fr-modal .ob-drop .ob-drop-icon svg.lucide { width: 22px !important; height: 22px !important; }   /* past the app's 16px icon size */
 .ob-drop-icon { width: 48px; height: 48px; display: grid; place-items: center; margin-bottom: 8px; border-radius: 13px; color: var(--accent-primary);
   background: color-mix(in srgb, var(--accent-primary), transparent 88%); }
 .ob-drop > b { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; color: var(--text-primary); }
 .ob-drop > span:not([class]) { font-size: 14px; color: var(--text-secondary); }
-.ob-float { position: absolute; display: inline-flex; align-items: center; gap: 8px; padding: 9px 12px 9px 10px; border: 1px solid var(--panel-border);
-  border-radius: 10px; background: var(--bg-dark); box-shadow: 0 10px 22px -14px rgba(0, 0, 0, 0.9);
-  animation: ob-drift 7s ease-in-out infinite alternate; animation-delay: calc(var(--i) * -1.7s); }
-.ob-float svg { flex: none; color: var(--text-secondary); }
-.ob-float b { font: 600 12px/1 var(--font-mono); color: var(--text-primary); }
-.ob-float:nth-of-type(1) { left: 11%; top: 18%; }
-.ob-float:nth-of-type(2) { right: 11%; top: 22%; }
-.ob-float:nth-of-type(3) { left: 15%; bottom: 20%; }
-.ob-float:nth-of-type(4) { right: 14%; bottom: 18%; }
-/* a slow bob with a little sideways drift, each tile on its own clock */
-@keyframes ob-drift { 0% { transform: translate(-3px, -4px) rotate(-1.5deg); } 50% { transform: translate(3px, 1px) rotate(0.5deg); } 100% { transform: translate(-1px, 5px) rotate(1.5deg); } }
 .ob-drop-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 20px; margin-top: 20px; }
 .ob-drop-actions .btn-primary { display: inline-flex !important; align-items: center; gap: 8px; width: auto !important; height: 36px !important; min-height: 0 !important; padding: 0 16px !important; }
 .ob-drop-actions .ob-out, .ob-drop-actions .ob-out:hover { display: inline-flex; align-items: center; gap: 5px; line-height: 1; text-decoration: none !important; }
@@ -149,6 +140,7 @@
 .ob-pref .ob-stage { height: 110px; border: none; border-bottom: 1px solid var(--panel-border); border-radius: 0; }
 .ob-pref .ob-stage .wi-card { width: 66px; }
 .ob-shot .wi-card-body { display: none; }
+.ob-pref .wi-render span { font-size: 9.5px; }   /* part of the picture (hidden from screen readers), sized to its little card */
 .ob-pref-text { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 0; flex: 1; }
 .ob-pref-text h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary); }
 .ob-pref-text p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
@@ -165,45 +157,46 @@
 /* The app's mark: the shortcut's icon and the Discord status's picture are the same tile */
 .ob-mark { width: 52px; height: 52px; display: grid; place-items: center; flex: none; border-radius: 12px; background: #0e1014; border: 1px solid var(--panel-border);
   font: 800 38px/1 var(--font-primary); color: var(--accent-primary); box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.8); }
-.ob-mark::first-line { line-height: 0.9; }
+.ob-mark { box-sizing: border-box; padding-bottom: 0.14em; }   /* a lowercase x sits low in its line: lift the ink to the tile's middle */
 .ob-presence { display: flex; align-items: center; gap: 12px; padding: 10px 16px 10px 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); }
 .ob-presence .ob-mark { width: 44px; height: 44px; font-size: 32px; border-radius: 10px; }
 .ob-presence > span { display: flex; flex-direction: column; justify-content: center; gap: 2px; line-height: 1.2; }
 .ob-presence small { font-size: 11px; color: var(--text-secondary); }
 .ob-presence > span b { font-size: 13px; color: var(--text-primary); }
+.ob-presence > span small:last-child { color: #3ecf6e; }
 .ob-icon { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .ob-icon small { font-size: 10.5px; color: var(--text-primary); }
 
-/* Sound tiles: Off and each pack, a name to pick and four small buttons to hear it, two by two */
-.fr-tiles { display: grid; grid-template-columns: minmax(96px, 0.6fr) repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
-.fr-tile { display: flex; flex-direction: column; gap: 8px; padding: 8px; border: 1px solid var(--panel-border); border-radius: 11px; background: var(--bg-dark);
-  transition: border-color 0.15s, background 0.15s; }
-.fr-tile.is-on { border-color: var(--accent-primary); background: color-mix(in srgb, var(--accent-primary), transparent 92%); }
-.fr-tile-pick { display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 6px; border: none; border-radius: 7px; background: transparent;
-  color: var(--text-primary); font: 600 13px var(--font-primary); text-align: left; cursor: pointer; }
-.fr-tile-pick svg { flex: none; color: var(--text-secondary); }
-.fr-tile.is-on .fr-tile-pick, .fr-tile.is-on .fr-tile-pick svg { color: var(--accent-primary); }
-.fr-tile-pick:hover { background: var(--quiet-hover); }
-.fr-tile-try { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
-.fr-tile-try button { height: 24px; padding: 0 2px; border: 1px solid var(--panel-border); border-radius: 6px; background: transparent; color: var(--text-secondary);
-  font: 500 11px var(--font-primary); cursor: pointer; transition: color 0.15s, background 0.15s; }
-.fr-tile-try button:hover { color: var(--text-primary); background: var(--quiet-hover); }
-.fr-tile-none { padding: 0 6px; font-size: 11.5px; line-height: 1.4; color: var(--text-secondary); }
+/* Sounds: a segmented pick, then one row of samples for the pack the pointer or focus rests on, else the picked one */
+.ob-sounds { margin-top: 10px; }
+.ob-seg { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--panel-border); border-radius: 9px; background: var(--bg-dark); }
+.ob-seg button { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent;
+  color: var(--text-secondary); font: 500 13px var(--font-primary); cursor: pointer; transition: color 0.15s, background 0.15s; }
+.ob-seg button:hover { color: var(--text-primary); background: var(--quiet-hover); }
+.ob-seg button[aria-checked="true"] { color: var(--text-primary); background: rgba(255, 255, 255, 0.07); font-weight: 600; }
+.ob-seg button[aria-checked="true"] svg { color: var(--accent-primary); }
+.ob-try { display: flex; align-items: center; gap: 6px; min-height: 26px; margin-top: 10px; font-size: 12.5px; color: var(--text-secondary); }
+.ob-try-label { margin-right: 4px; }
+.ob-try-label b { font-weight: 600; color: var(--text-primary); }
+.ob-try button { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px 0 8px; border: 1px solid var(--panel-border); border-radius: 7px;
+  background: transparent; color: var(--text-secondary); font: 500 12px var(--font-primary); cursor: pointer; transition: color 0.15s, background 0.15s, transform 0.1s; }
+.ob-try button:hover { color: var(--text-primary); background: var(--quiet-hover); }
+.ob-try button:active { transform: scale(0.95); }
 
 /* Where they are: the five steps by name, the same five whatever the answers (Goal-gradient: the end in sight) */
 .fr-rail { display: flex; align-items: center; gap: 14px; margin: 0 auto 0 0; padding: 0; list-style: none; font-size: 12px; color: color-mix(in srgb, var(--text-secondary), transparent 35%); white-space: nowrap; }
 .fr-rail li { display: inline-flex; align-items: center; gap: 6px; }
 .fr-rail li::before { content: ''; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--panel-border); transition: background 0.2s; }
 .fr-rail li.is-done { color: var(--text-secondary); }
-.fr-rail li.is-done::before { background: color-mix(in srgb, var(--accent-primary), transparent 45%); }
+.fr-rail li.is-done::before { display: none; }
+.fr-rail li.is-done svg { flex: none; color: #3ecf6e; }
 .fr-rail li.is-now { color: var(--text-primary); font-weight: 600; }
 .fr-rail li.is-now::before { background: var(--accent-primary); }
 
 @media (max-width: 760px) {
   .ob-split, .ob-prefs { grid-template-columns: minmax(0, 1fr); }
-  .fr-tiles { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
 }
-html[data-motion="off"] :is(.ob-tree li, .ob-spin, .ob-float) { animation: none !important; }
+html[data-motion="off"] :is(.ob-tree li, .ob-spin) { animation: none !important; }
 
 /* Getting started: a quiet card above the loadouts, rows ticked as the app finds them done */
 .gs-card { width: fit-content; max-width: 100%; padding: 14px 18px 12px; border: 1px solid var(--panel-border); border-radius: 12px; background: var(--bg-dark); }

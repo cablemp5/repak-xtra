@@ -10,7 +10,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open as pick } from '@tauri-apps/plugin-dialog'
 import { motion } from 'framer-motion'
-import { ArrowRight, Check, ChevronDown, CopyPlus, ExternalLink, FileArchive, FileCode, FolderOpen, LoaderCircle, Package, Plus, ShieldCheck, Upload, Volume2, VolumeX } from 'lucide-react'
+import { ArrowRight, Check, ChevronDown, CircleCheck, CircleX, CopyPlus, ExternalLink, FileCode, FolderOpen, LoaderCircle, Package, Play, Plus, ShieldCheck, Upload } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import Switch from '../components/ui/Switch'
 import { DoctorProblems } from './SetupPanel'
@@ -84,11 +84,11 @@ export function Step({ n, icon, done, title, optional, children, action }: {
 }
 
 /** A pick with a picture on top, like the welcome page's demos (Jakob: it reads like the loadout cards it leads to). */
-function Choice({ stage, title, text, suggested, onClick }: { stage: React.ReactNode; title: string; text: string; suggested?: boolean; onClick: () => void }) {
+function Choice({ stage, title, text, icon, onClick }: { stage: React.ReactNode; title: string; text: string; icon?: React.ReactNode; onClick: () => void }) {
   return (
-    <button type="button" className={`ob-choice${suggested ? ' is-suggested' : ''}`} onClick={onClick}>
+    <button type="button" className="ob-choice" onClick={onClick}>
       <span className="wi-stage ob-stage" aria-hidden="true">{stage}</span>
-      <span className="ob-choice-text"><b>{title}</b><span>{text}</span></span>
+      <span className="ob-choice-text"><b>{icon}{title}</b><span>{text}</span></span>
     </button>
   )
 }
@@ -142,9 +142,9 @@ const ask: Page = {
   sub: f => f.hasMods ? `Your game folder already has ${plural(f.installedCount, 'mod')}.` : undefined,
   body: f => (
     <div className="ob-choices">
-      <Choice suggested={f.hasMods} onClick={() => f.answer(true)} stage={<Fan />}
+      <Choice icon={<CircleCheck size={18} className="ob-yes" aria-hidden="true" />} onClick={() => f.answer(true)} stage={<Fan />}
         title="Yes, I have mods" text="Setup runs by itself, then your mods become loadouts." />
-      <Choice onClick={() => f.answer(false)} title="Not yet" text="Three short steps get mods working, then your first mod and loadout."
+      <Choice icon={<CircleX size={18} className="ob-no" aria-hidden="true" />} onClick={() => f.answer(false)} title="Not yet" text="Three short steps get mods working, then your first mod and loadout."
         stage={<span className="ob-fan ob-ghosts"><i /><i><Plus size={22} /></i><i /></span>} />
     </div>
   ),
@@ -249,7 +249,6 @@ function AutoSetup({ f }: { f: Flow }) {
 }
 const auto: Page = { id: 'auto', title: 'Setting up mods', step: 'Setup', when: b => !b.guided, body: f => <AutoSetup f={f} /> }
 
-const TYPES: [string, typeof Package][] = [['.pak', Package], ['.zip', FileArchive], ['.rar', FileArchive], ['.7z', FileArchive]]
 /** Smart loadouts in miniature: loose mods, each dot the color of the look it belongs to, sorted into two loadouts. */
 const SMART_ROWS: [string, string, number][] = [['Catboy Mesh', 'Mesh', 0], ['Ultimate Suit', 'Mesh', 1], ['Catboy Trail', 'VFX', 0], ['Ultimate Icons', 'UI', 1]]
 /** Smart loadouts in miniature, from the person's own mods when there are groups to show: two of their mods from each
@@ -281,7 +280,6 @@ const mods: Page = {
   id: 'mods', title: 'Your first mod', step: 'First mod', when: b => b.guided || !b.hasMods,
   body: f => (
     <div className="ob-drop">
-      {TYPES.map(([ext, Icon], i) => <span key={ext} className="ob-float" style={{ '--i': i } as React.CSSProperties}><Icon size={16} aria-hidden="true" /><b>{ext}</b></span>)}
       <span className="ob-drop-icon" aria-hidden="true"><Upload size={22} /></span>
       <b>Drop mods anywhere on this window</b>
       <span>This screen steps aside for the install and comes back after.</span>
@@ -300,15 +298,15 @@ const loadout: Page = {
   body: f => (
     <div className="ob-choices">
       {f.made && (
-        <Choice suggested onClick={() => f.finish(f.made!.id)} stage={<MiniCard name={f.made.name} src={silhouette} />}
+        <Choice onClick={() => f.finish(f.made!.id)} stage={<MiniCard name={f.made.name} src={silhouette} />}
           title={`Continue with ${f.made.name}`} text="The install saved your new mods as this loadout. Opens it now." />
       )}
       {f.newMods.length > 0 && !f.made && (
-        <Choice suggested onClick={() => f.finish(createFromMods(f.newMods).id)} stage={<MiniCard name="New loadout" src={silhouette} />}
+        <Choice onClick={() => f.finish(createFromMods(f.newMods).id)} stage={<MiniCard name="New loadout" src={silhouette} />}
           title={`From the ${plural(f.newMods.length, 'mod')} you added`} text="Made now and opened, ready to switch on." />
       )}
       {f.hasMods && (
-        <Choice suggested={!f.made && !f.newMods.length} onClick={() => f.finish('smart')} stage={<Smart f={f} />}
+        <Choice onClick={() => f.finish('smart')} stage={<Smart f={f} />}
           title="Group my mods into loadouts" text={f.smart.length
             ? `Your ${plural(f.freeCount, 'mod')} make ${plural(f.smart.length, 'loadout')}, each with a tick to keep.`
             : 'Mods that share a look become one loadout, each with a tick to keep.'} />
@@ -320,6 +318,32 @@ const loadout: Page = {
   ),
 }
 
+/** The sound pack: a segmented pick, and under it the four samples of the pack the pointer (or focus) last rested on,
+ *  else the picked one. Trying never picks. .sound-pack keeps the global click cue quiet so each sample plays alone. */
+function Sounds() {
+  const choice = useSoundChoice()
+  const [rest, setRest] = useState<string | null>(null)
+  const shown = rest ?? choice
+  const name = (pack: string) => pack === 'off' ? 'Off' : pack[0].toUpperCase() + pack.slice(1)
+  return (
+    <div className="ob-sounds sound-pack" onMouseLeave={() => setRest(null)}>
+      <div className="ob-seg" role="radiogroup" aria-label="Sound pack">
+        {(['off', ...SOUND_PACKS] as const).map(pack => (
+          <button key={pack} type="button" role="radio" aria-checked={choice === pack} onMouseEnter={() => setRest(pack)} onFocus={() => setRest(pack)}
+            onClick={() => { setSoundChoice(pack); if (pack !== 'off') cue('select') }}>
+            {choice === pack && <Check size={13} strokeWidth={2.75} aria-hidden="true" />}{name(pack)}
+          </button>
+        ))}
+      </div>
+      <div className="ob-try">
+        {shown === 'off' ? <span className="ob-try-label">No sounds</span> : <>
+          <span className="ob-try-label">Try <b>{name(shown)}</b></span>
+          {TRY.map(([cueName, label]) => <button key={cueName} type="button" onClick={() => tryCue(cueName, shown as typeof SOUND_PACKS[number])}><Play size={11} aria-hidden="true" />{label}</button>)}
+        </>}
+      </div>
+    </div>
+  )
+}
 const TRY: [SoundName, string][] = [['tap', 'Click'], ['toggle', 'Switch'], ['success', 'Done'], ['error', 'Oops']]
 /** One Make it yours setting: a picture of what it does, its words, and its control. */
 /** The app's icon, the Geist x (scripts/make-icon.py draws the real one the same way). */
@@ -335,7 +359,6 @@ function Pref({ stage, title, children, action, wide }: { stage?: React.ReactNod
 }
 /** Make it yours: four settings, each already in Settings (previews, Discord, the shortcut, the sound pack), all optional. */
 function Yours({ f }: { f: Flow }) {
-  const choice = useSoundChoice()
   const kitReady = Boolean(f.kit.kit?.version && f.kit.kit?.blender)
   const size = f.kit.latest?.size ? `${Math.round(f.kit.latest.size / 1048576)} MB, plus Blender` : 'a download, plus Blender'
   return (
@@ -360,19 +383,7 @@ function Yours({ f }: { f: Flow }) {
       </Pref>
       <Pref wide title="App sounds">
         <p>Small sounds on clicks, switches, and alerts. Try a pack, then pick it.</p>
-        {/* .sound-pack: the global click cue stays quiet here, each tile plays its own pack */}
-        <div className="fr-tiles sound-pack" role="group" aria-label="App sounds">
-          {(['off', ...SOUND_PACKS] as const).map(pack => (
-            <div key={pack} className={`fr-tile${choice === pack ? ' is-on' : ''}`}>
-              <button type="button" className="fr-tile-pick" aria-pressed={choice === pack} onClick={() => { setSoundChoice(pack); if (pack !== 'off') cue('select') }}>
-                {choice === pack ? <Check size={13} strokeWidth={2.75} aria-hidden="true" /> : pack === 'off' ? <VolumeX size={13} aria-hidden="true" /> : <Volume2 size={13} aria-hidden="true" />}
-                {pack === 'off' ? 'Off' : pack[0].toUpperCase() + pack.slice(1)}
-              </button>
-              {pack === 'off' ? <span className="fr-tile-none">No sounds</span>
-                : <span className="fr-tile-try">{TRY.map(([name, label]) => <button key={name} type="button" onClick={() => tryCue(name, pack)} title={`Play ${label.toLowerCase()} in ${pack}`}>{label}</button>)}</span>}
-            </div>
-          ))}
-        </div>
+        <Sounds />
       </Pref>
     </div>
   )
@@ -394,7 +405,7 @@ export const PAGES: Page[] = [
  *  the flow getting longer). A step a path skips shows as done once passed. */
 const RAIL = [...new Set(PAGES.flatMap(p => p.step ? [p.step] : []))]
 
-export default function FirstRun({ alert, gamePath, mods: allMods, details, installing, enableDrp, onSetDrp, onAutoDetect, onBrowse, onAddFiles, onStartTour }: {
+export default function FirstRun({ alert, gamePath, mods: allMods, details, installing, enableDrp, onSetDrp, onAutoDetect, onBrowse, onAddFiles }: {
   alert: Alert
   installing: boolean // App's install panel is open
   gamePath: string
@@ -405,7 +416,6 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
   onAutoDetect: () => Promise<void>
   onBrowse: () => Promise<void>
   onAddFiles: (paths: string[]) => Promise<void>
-  onStartTour: () => void
 }) {
   const [open, setOpen] = useState(firstLaunch)
   const [at, setAt] = useState('welcome')
@@ -563,16 +573,14 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
         <div key={at} className="modal-body fr-body t-rise-in">{page.body(f)}</div>
         <div className="modal-footer fr-foot">
           <ol className="fr-rail" aria-label={`Step ${railAt + 1} of ${RAIL.length}`}>
-            {RAIL.map((s, i) => <li key={s} className={i < railAt ? 'is-done' : i === railAt ? 'is-now' : ''} aria-current={i === railAt ? 'step' : undefined}>{s}</li>)}
+            {RAIL.map((s, i) => <li key={s} className={i < railAt ? 'is-done' : i === railAt ? 'is-now' : ''} aria-current={i === railAt ? 'step' : undefined}>{i < railAt && <Check size={12} strokeWidth={3} aria-hidden="true" />}{s}</li>)}
           </ol>
-          {/* leaving early is quiet, so it never outshines the page; the checklist on Loadouts home picks up the rest */}
-          {last
-            ? <button type="button" className="lo-text-btn" onClick={() => { finishFlow(); onStartTour() }}>Finish and take the 1-minute tour</button>
-            : <button type="button" className="lo-text-btn" onClick={close}>Finish later</button>}
+          {/* Back and one way on: the X above closes for later (the checklist picks up the rest), a choice page moves on
+              by its cards, and the last page can end without a pick */}
           <button type="button" className="lo-text-btn" onClick={() => move(-1)}>Back</button>
-          {(page.choice || unfinished) && !last
-            ? <button type="button" className="lo-text-btn" disabled={working} onClick={() => move(1)}>{unfinished ? 'Skip for now' : 'Skip'}</button>
-            : <button type="button" className="btn-primary ob-next" disabled={working} onClick={last ? () => finishFlow() : () => move(1)}>{last ? <>Finish <Check size={15} aria-hidden="true" /></> : <>Next <ArrowRight size={15} aria-hidden="true" /></>}</button>}
+          {last ? <button type="button" className="lo-text-btn" onClick={() => finishFlow()}>Finish without one</button>
+            : unfinished ? <button type="button" className="lo-text-btn" disabled={working} onClick={() => move(1)}>Skip for now</button>
+            : !page.choice && <button type="button" className="btn-primary ob-next" disabled={working} onClick={() => move(1)}>Next <ArrowRight size={15} aria-hidden="true" /></button>}
         </div>
         </>}
       </motion.div>
