@@ -899,6 +899,7 @@ fn stale(mod_path: &str, game_paks: &str, files: &[String]) -> Result<Vec<String
     let path = Path::new(mod_path);
     let written = std::fs::metadata(path).and_then(|m| m.modified()).map_err(|e| format!("{}: {e}", path.display()))?;
     let written = written.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    let written = crate::xtra_stamp::made(path, written);
     // the game set in Setup, never one guessed from the mod's folder: a mod chosen from Downloads is checked too
     Ok(crate::xtra_broken::rewritten_since(Path::new(game_paks), files, written).unwrap_or_default())
 }

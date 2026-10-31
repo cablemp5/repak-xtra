@@ -335,6 +335,8 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
           log('It was off because it could crash the game: the update is on.')
         }
         report.output = report.placed.fixed
+        // what it was made for, so a copy or repack later never looks older than this game (xtra_stamp.rs)
+        await invoke('xtra_vfx_stamp', { modPath: report.placed.fixed, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath }).catch(e => log(`Could not stamp the update: ${e}`, 'warning'))
         if (report.placed.warning) warn(report.placed.warning)
       }
       report.status = 'fixed'

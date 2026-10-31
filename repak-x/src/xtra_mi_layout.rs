@@ -230,6 +230,7 @@ pub async fn xtra_vfx_relayout(window: Window, mod_path: String, game_paks: Stri
 /// xtra_vfx_relayout without a window (xtra_vfx.rs vfx_rpc runs the pipeline headless).
 pub(crate) async fn run(mod_path: &str, game_paks: &str, usmap_path: &str, mod_extract: &str, files: &[String], stage_dir: &str, progress: &dyn VfxProgressSink) -> Result<Relaid, String> {
     let written = std::fs::metadata(mod_path).and_then(|m| m.modified()).ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs());
+    let written = crate::xtra_stamp::made(Path::new(mod_path), written);
     let updated = crate::xtra_broken::game_containers(Path::new(game_paks)).iter().map(|c| c.2).max().unwrap_or(0);
     let work = Path::new(stage_dir).join("relayout");
     // newer than the update, its date cannot say a file both layouts read whole is old: the game's copies tell (an

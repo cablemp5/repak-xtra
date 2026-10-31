@@ -39,6 +39,7 @@ mod xtra_library_files; // repakxtra: the part of a mod's file list the Library 
 mod xtra_details_cache; // repakxtra: the mod details cache kept between launches
 mod xtra_vfx; // repakxtra: VFX fixing after game updates
 mod xtra_niagara; // repakxtra: the VFX Updater's Niagara step
+mod xtra_stamp; // repakxtra: what each update the Mod Updater made was built for
 mod xtra_tables; // repakxtra: DataTable and StringTable mods carried onto the game's current tables
 mod xtra_usmap_diff; // repakxtra: what each game patch moved, from the USMAPs
 mod xtra_safe_off; // repakxtra: mods turned off because they can crash the game stay off
@@ -8743,6 +8744,7 @@ fn main() {
             xtra_tables::xtra_vfx_merge_tables, // repakxtra
             xtra_vfx::xtra_vfx_classes, // repakxtra
             xtra_vfx::xtra_vfx_pak_half, // repakxtra
+            xtra_stamp::xtra_vfx_stamp, // repakxtra
             xtra_mi_layout::xtra_vfx_verify, // repakxtra
             xtra_vfx::xtra_game_build,
             xtra_vfx::xtra_vfx_mods,
