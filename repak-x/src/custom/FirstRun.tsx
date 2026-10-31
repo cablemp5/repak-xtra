@@ -5,7 +5,7 @@ import { LOADER_NAME, LOADER_PAK, APP_NAME } from './edition'
 // background setup that installs only what is missing, then the first loadout, then Make it yours (previews, Discord,
 // the shortcut, sounds). Finish lands on Loadouts home, where the Getting started checklist (GettingStarted.tsx) picks
 // up whatever was skipped. Mods dropped on the window hide the flow for the install, and it comes back after.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open as pick } from '@tauri-apps/plugin-dialog'
@@ -27,7 +27,10 @@ import silhouette from './covers/silhouettes/1011.webp'
 import { ShortcutButton, useShortcut } from './shortcut'
 import { ownsTop, useDialogFocus } from './dialogFocus'
 import { createFromMods } from './Loadouts'
-import { type Mod, modKey, openLoadout, setView, useLoadouts } from './loadoutStore'
+import { type Mod, memberName, modKey, openLoadout, setView, useLoadouts } from './loadoutStore'
+import { freeMods, smartRules } from './SmartLoadouts'
+import { type Proposal, propose } from './smartGroups'
+import { useHeroPortrait } from './heroFilter'
 import { plural } from './modName'
 import { SOUND_PACKS, type SoundName, cue, tryCue } from './sounds'
 import { setSoundChoice, useSoundChoice } from './uiPrefs'
@@ -46,7 +49,7 @@ const firstLaunch = () => !localStorage.getItem(ONBOARDED)
 
 /** Everything a page reads and does: the flow's state lives in FirstRun, so Back and Next keep it. */
 export type Flow = {
-  alert: Alert; gamePath: string; hasMods: boolean; installedCount: number; newMods: string[]; made?: { id: string; name: string } // the loadout the install saved them as
+  alert: Alert; gamePath: string; hasMods: boolean; installedCount: number; smart: Proposal[]; freeCount: number; newMods: string[]; made?: { id: string; name: string } // the loadout the install saved them as
   busy: string | null; finished: string | null; bypass: Bypass | null; bypassError: string | null; galacta: Galacta | null
   auto: Auto; setAuto: (a: Auto) => void
   checkStatus: () => void; run: (what: string, f: () => Promise<void>) => Promise<void>
@@ -60,7 +63,7 @@ export type Flow = {
 /** Which pages apply: guided (no mods on hand, or "Not yet") or the background setup, and whether mods are installed. */
 export type Branch = { guided: boolean; hasMods: boolean }
 /** A page: `when` leaves it out of the sequence, a `choice` page moves on by a pick (its footer offers Skip, not Next). */
-export type Page = { id: string; title: string; sub?: (f: Flow) => React.ReactNode | undefined; choice?: boolean; when?: (b: Branch) => boolean; body: (f: Flow) => React.ReactNode }
+export type Page = { id: string; title: string; step?: string; sub?: (f: Flow) => React.ReactNode | undefined; choice?: boolean; when?: (b: Branch) => boolean; body: (f: Flow) => React.ReactNode }
 /** The ids of the pages that apply, in order. Pure. */
 export const sequence = (pages: Page[], b: Branch) => pages.filter(p => !p.when || p.when(b)).map(p => p.id)
 
@@ -135,7 +138,7 @@ const findGame = (f: Flow) => {
 const welcome: Page = { id: 'welcome', title: 'Welcome', body: () => null } // drawn by WelcomeIntro, below
 
 const ask: Page = {
-  id: 'ask', title: 'Got mods already?', choice: true,
+  id: 'ask', title: 'Got mods already?', step: 'Your mods', choice: true,
   sub: f => f.hasMods ? `Your game folder already has ${plural(f.installedCount, 'mod')}.` : undefined,
   body: f => (
     <div className="ob-choices">
@@ -148,7 +151,7 @@ const ask: Page = {
 }
 
 const setup: Page = {
-  id: 'setup', title: 'Get mods working', when: b => b.guided,
+  id: 'setup', title: 'Get mods working', step: 'Setup', when: b => b.guided,
   sub: f => {
     const n = [f.gamePath, f.bypass?.state === 'installed', f.galacta?.installed && !f.galacta.disabled].filter(Boolean).length
     return n === 3 ? 'Mods are ready to go.' : <>Three steps, <b className="fr-progress">{n} of 3 done</b>. Close the game first.</>
@@ -244,12 +247,27 @@ function AutoSetup({ f }: { f: Flow }) {
 </span></p>
   return <div className="ob-split"><div className="ob-col ob-status" aria-live="polite">{status}</div><Folder f={f} /></div>
 }
-const auto: Page = { id: 'auto', title: 'Setting up mods', when: b => !b.guided, body: f => <AutoSetup f={f} /> }
+const auto: Page = { id: 'auto', title: 'Setting up mods', step: 'Setup', when: b => !b.guided, body: f => <AutoSetup f={f} /> }
 
 const TYPES: [string, typeof Package][] = [['.pak', Package], ['.zip', FileArchive], ['.rar', FileArchive], ['.7z', FileArchive]]
 /** Smart loadouts in miniature: loose mods, each dot the color of the look it belongs to, sorted into two loadouts. */
 const SMART_ROWS: [string, string, number][] = [['Catboy Mesh', 'Mesh', 0], ['Ultimate Suit', 'Mesh', 1], ['Catboy Trail', 'VFX', 0], ['Ultimate Icons', 'UI', 1]]
-const Smart = () => (
+/** Smart loadouts in miniature, from the person's own mods when there are groups to show: two of their mods from each
+ *  of the first two loadouts it would make, then those loadouts with their heroes' portraits. */
+function Smart({ f }: { f: Flow }) {
+  const portrait = useHeroPortrait()
+  const two = f.smart.slice(0, 2)
+  if (!two.length) return <SampleSmart />
+  const rows = two.flatMap((l, g) => l.keys.slice(0, 2).map(k => [memberName(k), g] as const))
+  return (
+    <span className="ob-smart">
+      <span className="ob-smart-mods">{rows.map(([name, g]) => <span key={`${g}${name}`} className={`is-g${g}`}><i /><em>{name}</em></span>)}</span>
+      <ArrowRight size={16} className="ob-smart-arrow" />
+      <span className="ob-smart-out">{two.map((l, g) => <MiniCard key={l.id} name={l.name} src={(l.hero && portrait(l.hero, false)) || silhouette} className={`is-g${g}`} />)}</span>
+    </span>
+  )
+}
+const SampleSmart = () => (
   <span className="ob-smart">
     <span className="ob-smart-mods">{SMART_ROWS.map(([name, type, g], i) => <span key={name} className={`is-g${g}`} style={{ '--i': i } as React.CSSProperties}><i />{name}<small>{type}</small></span>)}</span>
     <ArrowRight size={16} className="ob-smart-arrow" />
@@ -258,7 +276,7 @@ const Smart = () => (
 )
 
 const mods: Page = {
-  id: 'mods', title: 'Your first mod', when: b => b.guided || !b.hasMods,
+  id: 'mods', title: 'Your first mod', step: 'First mod', when: b => b.guided || !b.hasMods,
   body: f => (
     <div className="ob-drop">
       {TYPES.map(([ext, Icon], i) => <span key={ext} className="ob-float" style={{ '--i': i } as React.CSSProperties}><Icon size={16} aria-hidden="true" /><b>{ext}</b></span>)}
@@ -275,7 +293,7 @@ const mods: Page = {
 }
 
 const loadout: Page = {
-  id: 'loadout', title: 'Your first loadout', choice: true,
+  id: 'loadout', title: 'Your first loadout', step: 'Loadout', choice: true,
   sub: () => 'A set of mods that turn on and off together.',
   body: f => (
     <div className="ob-choices">
@@ -288,8 +306,10 @@ const loadout: Page = {
           title={`From the ${plural(f.newMods.length, 'mod')} you added`} text="Made now and opened, ready to switch on." />
       )}
       {f.hasMods && (
-        <Choice suggested={!f.made && !f.newMods.length} onClick={() => f.finish('smart')} stage={<Smart />}
-          title="Group my mods into loadouts" text="Mods that share a look become one loadout, each with a tick to keep." />
+        <Choice suggested={!f.made && !f.newMods.length} onClick={() => f.finish('smart')} stage={<Smart f={f} />}
+          title="Group my mods into loadouts" text={f.smart.length
+            ? `Your ${plural(f.freeCount, 'mod')} make ${plural(f.smart.length, 'loadout')}, each with a tick to keep.`
+            : 'Mods that share a look become one loadout, each with a tick to keep.'} />
       )}
       <Choice onClick={() => f.finish('empty')} title="Start one by hand" text="An empty loadout, named and filled on its page."
         stage={<span className="wi-card ob-empty"><CopyPlus size={30} strokeWidth={1.75} /></span>} />
@@ -355,7 +375,7 @@ function Yours({ f }: { f: Flow }) {
     </div>
   )
 }
-const yours: Page = { id: 'yours', title: 'Make it yours', sub: () => 'All optional. Change these later in Setup and Settings.', body: f => <Yours f={f} /> }
+const yours: Page = { id: 'yours', title: 'Make it yours', step: 'Make it yours', sub: () => 'All optional. Change these later in Setup and Settings.', body: f => <Yours f={f} /> }
 
 /** The flow, in order. Another edition's pages go on the line below yours, before the first loadout (always last: a
  *  pick there finishes the flow). */
@@ -368,12 +388,16 @@ export const PAGES: Page[] = [
   yours,
   loadout,
 ]
+/** The rail's steps by name, in order, the same five whatever the answers (a count that grew after a question read as
+ *  the flow getting longer). A step a path skips shows as done once passed. */
+const RAIL = [...new Set(PAGES.flatMap(p => p.step ? [p.step] : []))]
 
-export default function FirstRun({ alert, gamePath, mods: allMods, installing, enableDrp, onSetDrp, onAutoDetect, onBrowse, onAddFiles, onStartTour }: {
+export default function FirstRun({ alert, gamePath, mods: allMods, details, installing, enableDrp, onSetDrp, onAutoDetect, onBrowse, onAddFiles, onStartTour }: {
   alert: Alert
   installing: boolean // App's install panel is open
   gamePath: string
   mods: Mod[]
+  details?: Record<string, { character_name?: string | null } | undefined> // App's modDetails, for the heroes Smart loadouts groups by
   enableDrp: boolean
   onSetDrp: (on: boolean) => void
   onAutoDetect: () => Promise<void>
@@ -406,10 +430,11 @@ export default function FirstRun({ alert, gamePath, mods: allMods, installing, e
   const ids = sequence(PAGES, { guided, hasMods })
   const newMods = startMods.current ? installed.map(m => m.path).filter(p => !startMods.current!.has(p)) : []
   const made = newMods.length ? loadouts.find(l => newMods.every(p => l.scope.includes(modKey(p)))) : undefined
+  const free = useMemo(() => freeMods(allMods, details, loadouts), [allMods, details, loadouts])
+  const smart = useMemo(() => free.length ? propose(free, loadouts.map(l => l.name), smartRules()) : [], [free, loadouts])
   const begin = () => { startMods.current = new Set(installed.map(m => m.path)) } // leaving the welcome: what is there now is not "just added"
   const page = PAGES.find(p => p.id === at) ?? welcome
-  const steps = ids.slice(1) // the rail: every page after the welcome
-  const stepAt = steps.indexOf(at)
+  const railAt = RAIL.indexOf(page.step ?? '')
   const move = (d: 1 | -1, list = ids) => setAt(list[Math.max(0, Math.min(list.length - 1, list.indexOf(at) + d))])
 
   useEffect(() => {
@@ -507,7 +532,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, installing, e
   const answer = (yes: boolean) => { const p = yes ? 'yes' : 'no'; setPath(p); move(1, sequence(PAGES, { guided: !yes, hasMods })) }
 
   const f: Flow = {
-    alert, gamePath, hasMods, installedCount: installed.length, newMods, made, auto, setAuto, busy, finished, bypass, bypassError, galacta, checkStatus, run, installBypass, installGalacta,
+    alert, gamePath, hasMods, installedCount: installed.length, smart, freeCount: free.length, newMods, made, auto, setAuto, busy, finished, bypass, bypassError, galacta, checkStatus, run, installBypass, installGalacta,
     setUpAll, setUpMissing, onAutoDetect, onBrowse, addFiles, kit, shortcut, enableDrp, onSetDrp, finish: finishFlow, answer,
     next: () => move(1), back: () => move(-1), close,
   }
@@ -535,10 +560,9 @@ export default function FirstRun({ alert, gamePath, mods: allMods, installing, e
         {/* transitions.dev: each page rises in; the key remounts it so Back and Next both play it */}
         <div key={at} className="modal-body fr-body t-rise-in">{page.body(f)}</div>
         <div className="modal-footer fr-foot">
-          <span className="fr-rail" role="status" aria-label={`Step ${stepAt + 1} of ${steps.length}`}>
-            {steps.map((id, i) => <i key={id} className={i < stepAt ? 'is-done' : i === stepAt ? 'is-now' : ''} />)}
-            <span>Step {stepAt + 1} of {steps.length}</span>
-          </span>
+          <ol className="fr-rail" aria-label={`Step ${railAt + 1} of ${RAIL.length}`}>
+            {RAIL.map((s, i) => <li key={s} className={i < railAt ? 'is-done' : i === railAt ? 'is-now' : ''} aria-current={i === railAt ? 'step' : undefined}>{s}</li>)}
+          </ol>
           {/* leaving early is quiet, so it never outshines the page; the checklist on Loadouts home picks up the rest */}
           {last
             ? <button type="button" className="lo-text-btn" onClick={() => { finishFlow(); onStartTour() }}>Finish and take the 1-minute tour</button>

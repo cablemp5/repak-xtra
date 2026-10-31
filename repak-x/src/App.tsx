@@ -4568,7 +4568,7 @@ function App() {
         isOpen={showOnboarding}
         onClose={handleCloseTour}
       />
-      <FirstRun alert={alert} gamePath={gamePath} mods={mods} installing={panels.install} enableDrp={enableDrp} onSetDrp={on => saveAllSettings({ enableDrp: on })}
+      <FirstRun alert={alert} gamePath={gamePath} mods={mods} details={modDetails} installing={panels.install} enableDrp={enableDrp} onSetDrp={on => saveAllSettings({ enableDrp: on })}
         onAutoDetect={handleAutoDetect} onBrowse={handleBrowseGamePath} onAddFiles={handleFileDrop} onStartTour={() => setShowOnboarding(true)} />{/* repakxtra */}
     </div >
   )

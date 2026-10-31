@@ -98,6 +98,21 @@ function Menu({ at, onClose }: { at: MenuAt; onClose: () => void }) {
     </div>, document.body)
 }
 
+/** The mods no loadout holds (built-in mods and the loader are not here), each with the hero it is for: what Smart
+ *  loadouts groups. The first-launch flow (FirstRun.tsx) previews the same groups. */
+export function freeMods(mods: { path: string }[], details: Record<string, { character_name?: string | null } | undefined> | undefined, loadouts: { on: string[] }[]): Candidate[] {
+  const held = new Set(loadouts.flatMap(l => l.on.map(canonKey)))
+  const seen = new Set<string>()
+  return mods.flatMap((m): Candidate[] => {
+    const key = modKey(m.path)
+    if (seen.has(key) || !loadoutable(key) || held.has(canonKey(key)) || LEFTOVER.test(memberName(key))) return []
+    seen.add(key)
+    return [{ key, hero: heroOfName(details?.[m.path]?.character_name) }]
+  })
+}
+/** The rules saved on the Smart loadouts page. */
+export const smartRules = () => readRules(localStorage.getItem(RULES))
+
 export default function SmartLoadouts({ p, onBack }: { p: LoadoutProps; onBack: () => void }) {
   const loadouts = useLoadouts()
   const canGenerate = usePreviewsAvailable()
@@ -118,16 +133,7 @@ export default function SmartLoadouts({ p, onBack }: { p: LoadoutProps; onBack: 
   const [renaming, setRenaming] = useState<string | null>(null) // the simple view's loadout being named in place
 
   // The mods no loadout holds (built-in mods and the Project Galacta loader are not here), each with the hero it is for
-  const free = useMemo(() => {
-    const held = new Set(loadouts.flatMap(l => l.on.map(canonKey)))
-    const seen = new Set<string>()
-    return p.mods.flatMap((m): Candidate[] => {
-      const key = modKey(m.path)
-      if (seen.has(key) || !loadoutable(key) || held.has(canonKey(key)) || LEFTOVER.test(memberName(key))) return []
-      seen.add(key)
-      return [{ key, hero: heroOfName(p.modDetails?.[m.path]?.character_name) }]
-    })
-  }, [p.mods, p.modDetails, loadouts])
+  const free = useMemo(() => freeMods(p.mods, p.modDetails, loadouts), [p.mods, p.modDetails, loadouts])
   const heroOf = useMemo(() => new Map(free.map(c => [c.key, c.hero])), [free])
   const taken = useMemo(() => loadouts.map(l => l.name), [loadouts])
   // The list keeps the order it first showed in: a move or a rule changes counts, and re-sorting by size would make the

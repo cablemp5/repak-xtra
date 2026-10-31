@@ -70,6 +70,7 @@
 @keyframes wi-knob-b { 0%, 46% { transform: none; } 52%, 94% { transform: translateX(10px); } 100% { transform: none; } }
 
 
+.wi-time { margin-right: auto; font-size: 13px; color: var(--text-secondary); }   /* the time it takes, said before it starts */
 .wi-next { display: inline-flex !important; align-items: center; gap: 8px; min-width: 0 !important; padding: 0 16px !important; }
 
 @media (max-width: 640px) {
