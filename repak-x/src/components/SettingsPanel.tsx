@@ -3,6 +3,7 @@ import { AnimatedThemeToggler } from './ui/AnimatedThemeToggler'
 import Checkbox from './ui/Checkbox'
 import { UiScaleSection, MotionSection, InstallingSection, HeaderButtonsSection, ModPrefs, WarningPrefs, NewStripPref, BuiltinsPref, resetUiPrefs } from '../custom/uiPrefs' // repakxtra
 import RecentlyDeleted from '../custom/RecentlyDeleted' // repakxtra: Settings > Recently deleted
+import CrashReports from '../custom/CrashReports' // repakxtra: Settings > Crash reports
 import { TriangleAlert } from 'lucide-react' // repakxtra: setting warnings
 import { useDialogFocus } from '../custom/dialogFocus' // repakxtra
 import TailInput from './ui/TailInput'
@@ -12,6 +13,7 @@ import {
   MdRefresh,
   MdArticle,
   MdTune,
+  MdBugReport, // repakxtra: Crash reports
   MdPalette,
   MdHelpOutline,
   MdRestoreFromTrash,
@@ -49,6 +51,7 @@ const CATEGORIES = [
   { id: 'interface', label: 'Interface', icon: MdPalette },
   { id: 'library', label: 'Library', icon: MdViewList }, // repakxtra: Interface's mod and Library settings, its own page
   { id: 'trash', label: 'Recently deleted', icon: MdRestoreFromTrash }, // repakxtra
+  { id: 'crashes', label: 'Crash reports', icon: MdBugReport }, // repakxtra
   { id: 'help', label: 'Help & Community', icon: MdHelpOutline }
 ] as const;
 
@@ -461,6 +464,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
             )}
 
             {activeCategory === 'trash' && <RecentlyDeleted />}{/* repakxtra */}
+            {activeCategory === 'crashes' && <CrashReports />}{/* repakxtra */}
 
             {activeCategory === 'help' && (
               <>

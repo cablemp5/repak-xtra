@@ -103,6 +103,35 @@ fn newest_crash() -> Option<NewestCrash> {
     })
 }
 
+#[derive(Serialize)]
+pub struct RecentCrash {
+    time: u64,
+    crash_type: Option<String>,
+    asset_path: Option<String>,
+}
+
+/// The newest five crashes, newest first: when, what kind, and the asset each names (the setup report's crash list).
+#[tauri::command]
+pub async fn xtra_recent_crashes() -> Vec<RecentCrash> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let users = user_names();
+        // newest folders first, so only five crash files are read however many the game kept
+        let mut folders: Vec<(std::time::SystemTime, std::path::PathBuf)> = std::fs::read_dir(crash_monitor::get_crash_log_path())
+            .into_iter().flatten().flatten()
+            .filter_map(|e| Some((e.metadata().ok().filter(|m| m.is_dir())?.created().ok()?, e.path()))).collect();
+        folders.sort_by(|a, b| b.0.cmp(&a.0));
+        folders.iter().filter_map(|(_, folder)| crash_monitor::parse_crash_info(folder, Vec::new())).take(5)
+            .map(|info| {
+                let (asset_path, error_type, _) = crash_monitor::parse_error_details(info.error_message.as_deref().unwrap_or(""));
+                RecentCrash {
+                    time: info.timestamp.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
+                    crash_type: error_type.or(info.crash_type).map(|s| redact(&s, &users)),
+                    asset_path: asset_path.map(|s| redact(&s, &[])),
+                }
+            }).collect()
+    }).await.unwrap_or_default()
+}
+
 const MAX_DUMP: usize = 64_000_000;
 const MAX_DUMP_ASSETS: usize = 8;
 /// Bounds on the scan: paths longer than this are not game assets, and this many candidates is more than a report shows.

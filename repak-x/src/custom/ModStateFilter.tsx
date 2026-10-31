@@ -83,17 +83,10 @@ export default function ModStateFilter({ value, onChange, mods, encrypted }: Pro
     return () => { document.removeEventListener('mousedown', outside); window.removeEventListener('keydown', esc, true) }
   }, [open])
   useEffect(() => { if (!folded) setOpen(false) }, [folded])
-  // the tabs fade back in when they unfold (not every time the Library opens)
-  const [unfolding, setUnfolding] = useState(false)
-  const wasFolded = useRef(folded)
-  useEffect(() => {
-    if (wasFolded.current && !folded) { setUnfolding(true); const t = setTimeout(() => setUnfolding(false), 200); wasFolded.current = folded; return () => clearTimeout(t) }
-    wasFolded.current = folded
-  }, [folded])
   const [, label, count] = options.find(([s]) => s === value) ?? options[0]
 
   return (
-    <div className={`mod-state${folded ? ' is-folded' : ''}${unfolding ? ' is-unfolding' : ''}`} ref={wrap} data-tour="mod-state">
+    <div className={`mod-state${folded ? ' is-folded' : ''}`} ref={wrap} data-tour="mod-state">
       <div className="mod-state-filter" role="group" aria-label="Show mods" ref={tabs} aria-hidden={folded || undefined}>
         {options.map(([state, label, count]) => (
           <button key={state} type="button" aria-pressed={value === state} onClick={() => onChange(state)} tabIndex={folded ? -1 : undefined}

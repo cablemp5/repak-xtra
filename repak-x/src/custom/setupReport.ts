@@ -27,7 +27,7 @@ export const DISCORD_LIMIT = 2000
 /** notes: what the app knows about the mod (needs a VFX update, may crash, Niagara), why: the reason it gives */
 export type ReportMod = { name: string; type: string; hero: string; date: string; extra?: string; notes?: string[]; why?: string }
 export type ReportInput = {
-  version: string; repakx?: string; launcher: string; bypass: string; galacta: string
+  version: string; repakx?: string; launcher: string; bypass: string; galacta: string; kit?: string
   on: ReportMod[]; off: number; conflicts: string; crash: string
   crashLines?: string[] // more on the newest crash, one indented line each
   flags?: string // how many mods that are on need an update, may crash or carry Niagara
@@ -35,6 +35,7 @@ export type ReportInput = {
   system?: string; faulting?: string; thirdParty?: string; oom?: boolean
   stack?: string[]; thread?: string // the top frames, below the summary
   dumpLines?: string[] // the assets in the crash dump, below the stack: the summary above must fit Discord's cut
+  recent?: string[] // the newest five crashes, one line each
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -72,6 +73,7 @@ export function buildReport(r: ReportInput) {
     `repakxtra ${r.version}${r.repakx ? ` (RepakX ${r.repakx})` : ''}, ${r.launcher}`,
     `Signature bypass: ${r.bypass}`,
     `${LOADER_NAME}: ${r.galacta}`,
+    ...(r.kit ? [`Preview kit: ${r.kit}`] : []),
     `Mods: ${r.on.length} on, ${r.off} off`,
     ...(r.flags ? [`Mods that are on: ${r.flags}`] : []),
     `Conflicts: ${r.conflicts}`,
@@ -84,6 +86,7 @@ export function buildReport(r: ReportInput) {
     '',
     ...(r.stack?.length ? [`Crash stack, top ${r.stack.length}${r.thread ? ` (${r.thread})` : ''}:`, ...r.stack.map(l => `  ${l}`), ''] : []),
     ...(r.dumpLines?.length ? ['Assets in the crash dump (in memory then, not always the cause), held by:', ...r.dumpLines.map(l => `  ${l}`), ''] : []),
+    ...(r.recent?.length ? ['Crash reports (newest first, mods matched against what is installed now):', ...r.recent.map(l => `  ${l}`), ''] : []),
     r.on.length ? 'Mods that are on (name | type | hero | file date | notes):' : 'No mods are on.',
     ...r.on.flatMap(m => [
       [m.name, m.type, m.hero || '-', m.date, ...(m.notes?.length ? [m.notes.join(', ')] : []), ...(m.extra ? [m.extra] : [])].join(' | '),
@@ -111,12 +114,14 @@ const isOwnLoader = (path: string) =>
 /** Reads everything the report needs; whatever cannot be read says "unknown". */
 export async function gatherReport(): Promise<string> {
   const src = reportSource.get?.() ?? { mods: [], modDetails: {}, launcherType: '', gamePath: '' }
-  const [repakx, bypass, galacta, clashes, crash] = await Promise.all([
+  const [repakx, bypass, galacta, clashes, crash, kit, recent] = await Promise.all([
     settled(invoke<string>('get_app_version')),
     settled(invoke<{ state: string }>('setup_bypass_status')),
     settled(invoke<Galacta>('setup_galacta_status', { online: false })),
     settled(invoke<{ file_path: string; mod_paths: string[]; files?: string[] }[]>('check_mod_clashes', { quiet: true })),
     settled(invoke<Crash | null>('xtra_newest_crash')),
+    settled(invoke<{ version?: string | null }>('preview_kit_status')),
+    settled(invoke<{ time: number; crash_type?: Opt; asset_path?: Opt }[]>('xtra_recent_crashes')),
   ])
   // the loader has its line above, so it is not counted or listed as a mod too
   const mods = src.mods.filter(m => !isOwnLoader(m.path))
@@ -185,6 +190,11 @@ export async function gatherReport(): Promise<string> {
     ...(crash.build_version ? [`game build ${crash.build_version}${crash.engine_version ? ` (${crash.engine_version})` : ''}`] : []),
     ...(crash.asset_path || crash.character_id ? tierLines(suspects, p => relativeToMods(p, src.gamePath)) : []),
   ]
+  const recentLines = (await recentCrashes(mods.map(m => m.path), recent)).map(c => {
+    const head = `${when(c.time)}, ${c.asset ? `crashed loading ${c.asset}` : `crashed (${c.type})`}`
+    const held = c.held?.map(p => relativeToMods(p, src.gamePath))
+    return !c.asset ? head : `${head}: ${!held ? 'not checked' : held.length ? `replaced by ${held.join(', ')}` : 'no installed mod replaces it'}`
+  })
   const gpuInfo = [crash?.gpu_driver, crash?.rhi].filter(Boolean).join(', ')
   const system = [crash?.cpu, crash?.gpu && `${crash.gpu}${gpuInfo ? ` (${gpuInfo})` : ''}`, crash?.ram_gb != null && `${crash.ram_gb} GB`, crash?.os]
     .filter(Boolean).join(', ')
@@ -194,6 +204,7 @@ export async function gatherReport(): Promise<string> {
     launcher: src.launcherType === 'epic' ? 'Epic' : src.launcherType === 'steam' ? 'Steam' : 'launcher unknown',
     bypass: bypass ? BYPASS[bypass.state] ?? bypass.state : 'unknown',
     galacta: galactaText,
+    kit: kit === undefined ? 'unknown' : kit.version ? `v${kit.version}` : 'not installed',
     on,
     off: mods.filter(m => !m.enabled).length,
     conflicts: clashes ? plural(groupConflicts(clashes).length, 'group') : 'unknown',
@@ -207,7 +218,22 @@ export async function gatherReport(): Promise<string> {
     stack: crash?.stack,
     thread: crash?.thread || undefined,
     dumpLines: inDump,
+    recent: recentLines,
   })
+}
+
+export type RecentCrash = { time: number; type: string; asset?: string; held?: string[] }
+/** The newest five crashes (xtra_recent_crashes): when, what kind, the asset each crashed loading (its name), and the
+ *  installed mods (`modPaths`, on or off) that replace that asset, undefined when the check failed. For the setup report
+ *  and Settings > Crash reports. `listed` skips the backend call when the caller already has the crashes. */
+export async function recentCrashes(modPaths: string[], listed?: { time: number; crash_type?: Opt; asset_path?: Opt }[]): Promise<RecentCrash[]> {
+  const list = listed ?? await settled(invoke<{ time: number; crash_type?: Opt; asset_path?: Opt }[]>('xtra_recent_crashes')) ?? []
+  return Promise.all(list.map(async c => {
+    const base = { time: c.time, type: c.crash_type || 'Crash', asset: c.asset_path?.split('/').pop() || undefined }
+    if (!c.asset_path) return base
+    const t = await settled(invoke<Tiered[]>('xtra_crash_tiers', { assetPath: c.asset_path, heroId: null, modPaths }))
+    return { ...base, held: t?.filter(x => x.tier === 'asset').map(x => x.path) }
+  }))
 }
 
 /** The mods that hold an asset: the first two by name, then how many more (a shared asset must not fill the report). */
@@ -232,6 +258,9 @@ if (import.meta.env.DEV) {
   console.assert(scrub('C:/a/b.pak and D:/c d/e.pak') === 'b.pak and e.pak', 'two paths on a line keep both file names', scrub('C:/a/b.pak and D:/c d/e.pak'))
   const text = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed',
     on: [{ name: '~mods/A.pak', type: 'Mesh', hero: 'Black Panther', date: '2026-10-01' }], off: 3, conflicts: '0 groups', crash: 'none found' })
+  const listed = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', kit: 'v3', on: [], off: 0, conflicts: '0 groups', crash: 'x',
+    recent: ['2026-10-30 00:59, crashed loading MI_1026001_Eyes: no installed mod replaces it'] })
+  console.assert(listed.includes('\nPreview kit: v3\n') && listed.includes('Crash reports (newest first') && listed.includes('\n  2026-10-30 00:59, crashed loading MI_1026001_Eyes'), 'kit version and crash list', listed)
   console.assert(text.indexOf('Newest crash') < text.indexOf('~mods/A.pak | Mesh | Black Panther | 2026-10-01'), 'summary before the mod list', text)
   const flagged = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', conflicts: '0 groups',
     crash: '2026-10-24 21:03, Access Violation', crashLines: ['7 min into the game', 'message: boom D:\\build\\x\\y.cpp'], flags: '1 need a VFX update, 0 may crash, 0 broken, 1 with Niagara',

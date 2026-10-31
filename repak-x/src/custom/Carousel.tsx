@@ -1,7 +1,6 @@
 // repakxtra: the page turn of Skiper UI's Carousel_005 (a Swiper "creative" effect), redone in CSS (theme.css .cr-slide)
-// without Swiper. Going forward the picture being left sinks back and darkens while the next one slides in over it from
-// the right. Going back the picture on screen slides out to the right and the earlier one rises from behind it. A
-// loadout's previews (loadoutBits.tsx) page with it. Animations off: a plain swap.
+// without Swiper. The picture being left sinks back and darkens while the new one slides in over it: from the right
+// going forward, from the left going back. A loadout's previews (loadoutBits.tsx) page with it. Animations off: a plain swap.
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 
 type Leaving = { slide: string | number; node: ReactNode; dir: 1 | -1 }
@@ -22,7 +21,7 @@ export function CarouselSlide({ slide, dir, children }: { slide: string | number
   return <>
     {leaving && leaving.slide !== slide && (
       <span key={leaving.slide} className={`cr-slide is-out ${way}`} aria-hidden="true"
-        onAnimationEnd={e => { if (e.target === e.currentTarget) setLeaving(null) }}>{leaving.node}</span>
+        onAnimationEnd={e => { if (e.target === e.currentTarget && !e.pseudoElement) setLeaving(null) }}>{leaving.node}</span>
     )}
     <span key={slide} className={`cr-slide${leaving ? ` is-in ${way}` : ''}`}>{children}</span>
   </>

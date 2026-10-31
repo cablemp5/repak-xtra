@@ -247,6 +247,21 @@ export const cachedPreviewUrl = (key: string | undefined) => {
   return rev !== undefined && c?.rev === rev ? c.url : null
 }
 
+const decodedUrls = new Set<string>()
+/** Whether readyPreview already decoded this URL: its image can show at once, without the blur-in. */
+export const isDecoded = (url: string | null | undefined) => Boolean(url && decodedUrls.has(url))
+/** A preview read and its picture decoded, so a carousel turns onto an image that is already there (no blank frame). */
+export async function readyPreview(key: string | undefined): Promise<void> {
+  const rev = key !== undefined ? revs.get(key) : undefined
+  if (key === undefined || rev === undefined) return
+  const url = await loadUrl(key, rev)
+  if (!url || decodedUrls.has(url)) return
+  const img = new Image()
+  img.src = url
+  await img.decode().catch(() => undefined)
+  decodedUrls.add(url)
+}
+
 /** Object URL of the mod's preview, or null while none exists. The URL is shared: unmounting never revokes it. */
 export function usePreviewUrl(key: string | undefined) {
   usePreviewVersion()

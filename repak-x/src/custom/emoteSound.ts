@@ -64,14 +64,21 @@ const soundBuffer = (s: Sound) => {
 }
 listen('mod-previews-done', () => { decoded.clear(); load() }).catch(() => undefined) // a run may have changed them
 
-/** The sound exactly `seconds` long: cut, or padded with silence, so one loop of it is one loop of the clip. */
+/** The sound exactly `seconds` long: cut, or padded with silence, so one loop of it is one loop of the clip. Its ends
+ *  fade over a few milliseconds: a cut mid-wave jumped from loud to the start each loop, heard as a pop. */
 function fitted(b: AudioBuffer, seconds: number) {
   const out = ctx!.createBuffer(b.numberOfChannels, Math.max(1, Math.round(seconds * b.sampleRate)), b.sampleRate)
-  for (let c = 0; c < b.numberOfChannels; c++) out.copyToChannel(b.getChannelData(c).subarray(0, out.length), c)
+  const edge = Math.min(Math.round(b.sampleRate * FADE), Math.floor(out.length / 2))
+  for (let c = 0; c < b.numberOfChannels; c++) {
+    out.copyToChannel(b.getChannelData(c).subarray(0, out.length), c)
+    const d = out.getChannelData(c)
+    for (let i = 0; i < edge; i++) { d[i] *= i / edge; d[out.length - 1 - i] *= i / edge }
+  }
   return out
 }
+const FADE = 0.01 // seconds
 
-let playing: AudioBufferSourceNode | null = null
+let playing: { node: AudioBufferSourceNode; gain: GainNode } | null = null
 let turn = 0 // a stop (or a newer play) while the sound is still loading cancels it
 /** Plays the sound from its start, looping every `loopSeconds` with the clip (once, whole, without a length). */
 export async function playEmoteSound(sound: Sound, loopSeconds: number) {
@@ -86,14 +93,22 @@ export async function playEmoteSound(sound: Sound, loopSeconds: number) {
   node.buffer = loopSeconds > 0 ? fitted(b, loopSeconds) : b
   node.loop = loopSeconds > 0
   const gain = ctx.createGain()
-  gain.gain.value = 0.6 // 60%: a hover preview, quieter than the game
+  // 60%: a hover preview, quieter than the game. Ramped in and out: a sound that starts or stops at full level clicks
+  gain.gain.setValueAtTime(0, ctx.currentTime)
+  gain.gain.linearRampToValueAtTime(0.6, ctx.currentTime + FADE)
   node.connect(gain).connect(ctx.destination)
   node.start()
-  playing = node
+  playing = { node, gain }
 }
 export function stopEmoteSound() {
   turn++
-  try { playing?.stop() } catch { /* already ended */ }
+  if (playing && ctx) {
+    const { node, gain } = playing, t = ctx.currentTime
+    gain.gain.cancelScheduledValues(t)
+    gain.gain.setValueAtTime(gain.gain.value, t)
+    gain.gain.linearRampToValueAtTime(0, t + FADE * 3)
+    try { node.stop(t + FADE * 3) } catch { /* already ended */ }
+  }
   playing = null
 }
 

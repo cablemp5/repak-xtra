@@ -8,7 +8,7 @@ import { useMediaUrl } from './loadoutMedia'
 import { COVERS, type Cover, type Loadout, type Mod, captureKey, coverFills, displayName, flipMods, memberName, modKey, modsByKey, nameKey, patchLoadout, pickCover } from './loadoutStore'
 import { ModName } from './modName'
 import { revealOnLoad } from './motion'
-import { formKeys, hasPreview, noPreviewPossible, previewMade, previewSetKey, useCovers, usePreviewStage, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
+import { formKeys, hasPreview, isDecoded, noPreviewPossible, previewMade, previewSetKey, readyPreview, useCovers, usePreviewStage, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
 import { playEmoteSound, stopEmoteSound, useEmoteSound, webpSeconds } from './emoteSound'
 import { useVerdict } from './brokenMods'
 import { VerdictBadge } from './VerdictBadge'
@@ -107,8 +107,15 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   const slides = cover === 'preview' ? previewSlides : []
   const [index, setIndex] = useState(0)
   const [dir, setDir] = useState<1 | -1>(1)
-  const turn = (d: 1 | -1) => { setDir(d); setIndex(at + d) }
   const at = slides.length ? ((index % slides.length) + slides.length) % slides.length : 0
+  // a turn waits until the next picture is read and decoded, so it slides in whole instead of blank, then popping in
+  const slideAt = (i: number) => slides[((i % slides.length) + slides.length) % slides.length]
+  const ready = (i: number) => Promise.all((slideAt(i)?.keys ?? [slideAt(i)?.key]).map(k => readyPreview(k || undefined)))
+  const target = useRef(index)
+  const turn = (d: 1 | -1) => {
+    const to = target.current = target.current + d
+    void ready(to).then(() => { if (target.current === to) { setDir(d); setIndex(to) } })
+  }
   const slide = slides[at]
   const generated = usePreviewUrl(cover === 'preview' ? slide?.key || undefined : undefined)
   const src = cover === 'image' ? own : cover === 'capture' ? shot : cover === 'preview' ? generated : undefined
@@ -130,7 +137,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   // picking Text goes straight into its field, the cursor in it ready to type (also when the field was already showing)
   const captionRef = useRef<HTMLTextAreaElement>(null)
   useEffect(() => { if (typing) captionRef.current?.focus() }, [typing, cover])
-  const pick = (c: Cover) => { setTyping(c === 'text'); setIndex(0); if (l.cover !== c) patchLoadout(l.id, { cover: c }) }
+  const pick = (c: Cover) => { setTyping(c === 'text'); setIndex(0); target.current = 0; if (l.cover !== c) patchLoadout(l.id, { cover: c }) }
   const tint = l.captionColor ? { '--cap': l.captionColor } as React.CSSProperties : undefined
   // An animation slide whose emote has a sound in this loadout: while hovered, the clip restarts (a fresh copy of its
   // image) and the sound plays once the restarted clip is on screen (custom/emoteSound.ts). The restart belongs to the
@@ -161,7 +168,10 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   const hoverTimer = useRef<ReturnType<typeof setTimeout>>()
   useEffect(() => () => { clearTimeout(hoverTimer.current); if (hovering.current) stopEmoteSound() }, []) // this card's sound ends with it, no other card's
   const live = restart && restart.key === slideKey ? restart : null
-  const enter = () => { hovering.current = true; clearTimeout(hoverTimer.current); hoverTimer.current = setTimeout(startRestart, HOVER_MS) }
+  const enter = () => {
+    hovering.current = true; clearTimeout(hoverTimer.current); hoverTimer.current = setTimeout(startRestart, HOVER_MS)
+    if (slides.length > 1) { void ready(index + 1); void ready(index - 1) } // the neighbors decode while the pointer is on its way to an arrow
+  }
   const leave = () => { hovering.current = false; clearTimeout(hoverTimer.current); dropRestart() }
 
   // On the page a click on the card does what its source is for: choose a file, or edit the text
@@ -206,7 +216,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
           : video
             ? <video src={video} autoPlay loop muted playsInline />
             : <CarouselSlide slide={slides.length > 1 ? at : 0} dir={dir}>
-                <img key={src} src={live?.url ?? src} alt="" className={src === warm ? 'is-loaded' : undefined} decoding="async" loading={page ? undefined : 'lazy'}
+                <img key={src} src={live?.url ?? src} alt="" className={src === warm || isDecoded(src) ? 'is-loaded' : undefined} decoding="async" loading={page ? undefined : 'lazy'}
                   onLoad={e => { revealOnLoad(e); if (audible && live && hovering.current && e.currentTarget.src === live.url) playEmoteSound(audible, live.seconds) }} />
               </CarouselSlide>}
       </button>
@@ -312,7 +322,7 @@ const HOVER_MS = 250
 function SlideImage({ k }: { k: string }) {
   const src = usePreviewUrl(k)
   const [warm] = useState(src)
-  return src ? <img src={src} alt="" className={src === warm ? 'is-loaded' : undefined} onLoad={revealOnLoad} /> : <span />
+  return src ? <img src={src} alt="" className={src === warm || isDecoded(src) ? 'is-loaded' : undefined} onLoad={revealOnLoad} /> : <span />
 }
 
 /** How many of a loadout's installed mods are on: green all, yellow some, red none. */
