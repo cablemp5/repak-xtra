@@ -413,6 +413,21 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
             if anims == 1 { "it" } else { "them" }
         ));
     }
+    // a skeletal mesh whose skeleton the game rebuilt since the mod was made (3962284 rebuilt Black Panther's default
+    // skeletons): the mod's mesh is bound to the old one, and the game can crash loading it. By the game's file list and
+    // the mod's date (a zip keeps it now, xtra_export.rs), no decoding
+    let skeletons: Vec<&String> = packages
+        .iter()
+        .filter(|k| k.rsplit('/').next().is_some_and(|n| n.starts_with("sk_") && !n.ends_with("_skeleton") && !n.ends_with("_physicsasset")))
+        .filter(|k| game.get(&format!("{k}_skeleton")).is_some_and(|at| *at > m.installed))
+        .collect();
+    if !m.fixed && m.installed > 0 && !skeletons.is_empty() {
+        let names: Vec<&str> = skeletons.iter().map(|k| k.rsplit('/').next().unwrap_or(k)).collect();
+        return risky(format!(
+            "A game update rebuilt the skeleton of {} since this mod was made, so its mesh is bound to the old one and the game can crash loading it. Turn it off until its author updates it.",
+            if names.len() == 1 { names[0].to_uppercase() } else { format!("{} meshes ({})", names.len(), names.iter().take(3).map(|n| n.to_uppercase()).collect::<Vec<_>>().join(", ")) }
+        ));
+    }
     match &m.layout {
         _ if !m.has_blueprint => None,
         // what the update changed decides, whatever the date: one made after it from old files is caught too
@@ -797,6 +812,19 @@ mod tests {
         game.insert(match_key("/Game/Marvel/UI/Blueprints/Battle/Custom/1026/WBP_Battle_Kill_1026_V3.uasset"), 100);
         let verdict = judge("m.pak", &Facts { materials: true, ..facts(&v(&[ko]), 50) }, 200, &game).unwrap();
         assert_eq!((verdict.kind, verdict.reason.contains("changed the KO prompt")), ("vfx", true), "a KO prompt the update rewrote");
+    }
+
+    #[test]
+    fn a_mesh_whose_skeleton_the_game_rebuilt_may_crash() {
+        let mesh = "Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uasset";
+        let mut game = game();
+        game.insert(match_key(mesh), 10);
+        game.insert(match_key("/Game/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001_Skeleton.uasset"), 100);
+        let files = v(&[mesh]);
+        let found = judge("m.pak", &facts(&files, 50), 200, &game).unwrap();
+        assert_eq!((found.kind, found.reason.contains("skeleton of SK_1026_1026001")), ("risky", true), "{}", found.reason);
+        assert_eq!(judge("m.pak", &facts(&files, 150), 200, &game), None, "made after the skeleton changed");
+        assert_eq!(judge("m.pak", &Facts { fixed: true, ..facts(&files, 50) }, 200, &game), None);
     }
 
     #[test]
