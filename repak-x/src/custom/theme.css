@@ -2327,6 +2327,11 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 .settings-content .action-btn svg.xs-heart { color: #ef4444 !important; }
 .settings-content .action-btn svg.xs-star { color: #facc15 !important; }
 [data-theme="light"] .settings-content .action-btn svg.xs-star { color: #ca8a04 !important; }
+/* A risky setting's warning, in the app's warning amber. No box: the icon sits in the checkbox's 20px column and the words
+   start where the checkbox's own words do (28px in), so the setting reads as one block */
+.setting-warn { display: grid; grid-template-columns: 20px 1fr; column-gap: 8px; align-items: start; margin: 8px 0 0; font-size: 13px; line-height: 1.45; color: #f5a524; }
+.setting-warn svg { justify-self: center; margin-top: 2px; }
+[data-theme="light"] .setting-warn { color: #9a5b00; }
 .settings-content .xs-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .settings-content .xs-label { font-size: 13px; font-weight: 400; color: var(--text-primary); }
 .settings-content .xs-text .setting-subtext { padding: 0 !important; margin: 0 !important; }
