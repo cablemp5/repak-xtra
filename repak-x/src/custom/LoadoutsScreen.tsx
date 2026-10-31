@@ -9,7 +9,6 @@ import { type LoadoutProps, deleteWithUndo, runChanges } from './Loadouts'
 import LoadoutPage from './LoadoutPage'
 import NewStrip from './NewStrip'
 import SmartLoadouts from './SmartLoadouts' // repakxtra
-import GettingStarted from './GettingStarted'
 import BuiltinMods from './BuiltinMods'
 import { matchesLoadout } from './homeSearch'
 import { isTyping } from './hotkeys'
@@ -249,8 +248,9 @@ function LoadoutsHome(p: LoadoutProps) {
   const [smart, setSmart] = useState(false) // repakxtra: the Smart loadouts dialog
   // a loadout opened from elsewhere (an In loadout tag, a toast) shows its page, not the Smart page over it
   useEffect(() => { if (openId) setSmart(false) }, [openId])
-  useEffect(() => { // the first-launch flow's and the checklist's "Group my mods into loadouts" (FirstRun.tsx, GettingStarted.tsx)
-    const show = () => { openLoadout(null); setSmart(true) }
+  useEffect(() => { // the first-launch flow's "Group my mods into loadouts" (FirstRun.tsx)
+    const show = () => { sessionStorage.removeItem('repakxtra.smartPending'); openLoadout(null); setSmart(true) }
+    if (sessionStorage.getItem('repakxtra.smartPending')) show() // asked before this screen mounted
     window.addEventListener('repakxtra-smart-loadouts', show)
     return () => window.removeEventListener('repakxtra-smart-loadouts', show)
   }, [])
@@ -609,8 +609,6 @@ function LoadoutsHome(p: LoadoutProps) {
         </div>
       </header>
       <div className="lo-body" ref={setCardsEl}>
-        <GettingStarted p={p} />{/* the checklist after the first-launch flow, until its rows are done */}
-
         {loadouts.length === 0 && (
           <div className="lo-first-run">
             <h3>No loadouts yet</h3>

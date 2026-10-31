@@ -1,5 +1,4 @@
-/* repakxtra: the first-launch flow's pages (custom/FirstRun.tsx) and the Getting started checklist on Loadouts home
-   (custom/GettingStarted.tsx). Every page wears the welcome page's look (welcome.css): its big title and lede, and
+/* repakxtra: the first-launch flow's pages (custom/FirstRun.tsx). Every page wears the welcome page's look (welcome.css): its big title and lede, and
    pictures on the same .wi-stage panels, so the flow reads as one piece. Animations off: theme.css zeroes every
    animation, so each page and each folder row simply shows its finished state. */
 
@@ -184,7 +183,8 @@
 .ob-try-label b { font-weight: 600; color: inherit; }   /* one color with "Try" */
 .ob-try button { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px 0 8px; border: 1px solid var(--panel-border); border-radius: 7px;
   background: transparent; color: var(--text-secondary); font: 500 12px var(--font-primary); cursor: pointer; transition: color 0.15s, background 0.15s, transform 0.1s; }
-.ob-try button:hover { color: var(--text-primary); background: var(--quiet-hover); }
+.fr-modal .ob-try button:hover:not(:disabled) { color: var(--text-primary); background: var(--quiet-hover); border-color: var(--text-secondary); }
+.fr-modal .ob-try button svg.lucide { width: 12px !important; height: 12px !important; }
 .ob-try button:active { transform: scale(0.95); }
 /* no loud ring: keyboard focus is a lighter border, like hover */
 .app .ob-try button:focus-visible, .app .ob-seg button:focus-visible { outline: none !important; border-color: var(--text-secondary); color: var(--text-primary); }
@@ -204,31 +204,4 @@
 }
 html[data-motion="off"] :is(.ob-tree li, .ob-spin, .ob-pop) { animation: none !important; }
 
-/* Getting started: a quiet card above the loadouts, rows ticked as the app finds them done */
-.gs-card { width: fit-content; max-width: 100%; padding: 14px 18px 12px; border: 1px solid var(--panel-border); border-radius: 12px; background: var(--bg-dark); }
-.gs-card header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.gs-card h3 { margin: 0; font-size: 14px; font-weight: 600; }
-.gs-count { margin-right: auto; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-.gs-card ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.gs-card li { display: flex; align-items: center; gap: 10px; min-height: 30px; font-size: 13px; color: var(--text-primary); }
-.gs-card li.is-done { color: var(--text-secondary); }
-.gs-card li small { font-size: 12px; color: var(--text-secondary); }
-.gs-card li .lo-text-btn { margin-left: 4px; height: 24px !important; min-height: 0 !important; padding: 0 10px !important; font-size: 12px !important; }
-.gs-mark { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--panel-border); display: grid; place-items: center; color: #3ecf6e; }
-.is-done .gs-mark { border-color: transparent; }
-.gs-label { display: inline-flex; align-items: center; gap: 8px; }
-/* Show me the switch: the first loadout card's switch pulses for a few seconds */
-.gs-point .repakx-switch-track { animation: gs-point 1.1s ease-in-out 3; }
-@keyframes gs-point { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent-primary), transparent 55%); } }
-
-/* The first loadout switched on: one card, once, with cable's note */
-.gs-party { padding: 14px 18px; border: 1px solid color-mix(in srgb, var(--accent-primary), transparent 50%); border-radius: 12px;
-  background: color-mix(in srgb, var(--accent-primary), transparent 92%); }
-.gs-party-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-primary); }
-.gs-party-head svg.lucide:first-child { color: var(--accent-primary); }
-.gs-party-head span { color: var(--text-secondary); }
-.gs-party-head .lo-icon { margin-left: auto; }
-.gs-note { margin: 10px 0 0; padding: 0 0 0 12px; border-left: 2px solid color-mix(in srgb, var(--accent-primary), transparent 40%); font-size: 13px; line-height: 1.5; color: var(--text-primary); }
-.gs-note p { margin: 0; max-width: 62ch; text-wrap: pretty; }
-.gs-note footer { margin-top: 6px; display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--text-secondary); }
 .ob-choice .wi-card.ob-empty svg.lucide { width: 20px !important; height: 20px !important; }   /* past the app's button icon size */

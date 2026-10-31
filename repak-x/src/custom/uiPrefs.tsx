@@ -291,7 +291,7 @@ export function MotionSection({ extra }: { extra?: React.ReactNode }) {
             <div className="mod-state-filter sound-pack" role="group" aria-label="Sound pack">
               {SOUND_PACKS.map(pack => (
                 <button key={pack} type="button" aria-pressed={soundPack() === pack} disabled={!soundOn()}
-                  onClick={() => { update(SOUND_PACK_KEY, pack); cue('select') }}>{pack[0].toUpperCase() + pack.slice(1)}</button>
+                  onClick={() => { update(SOUND_PACK_KEY, pack); cue('select') }}>{pack === 'default' ? 'Bell' : pack[0].toUpperCase() + pack.slice(1)}</button>
               ))}
             </div>
           </div>

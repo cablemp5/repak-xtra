@@ -62,7 +62,7 @@ const dropCached = (key: string) => {
 }
 /** What a run is for: its mods, the loadout's combined render key (if any), a name to show ("Electric Blue"), and
  *  force (Regenerate: render even when nothing changed). */
-type Job = { paths: string[]; set?: string; name: string; force?: boolean; show?: boolean }
+type Job = { paths: string[]; set?: string; name: string; force?: boolean; show?: boolean; quiet?: boolean } // quiet: ends without a summary or failure toast (a background render)
 type QueuedJob = Job & { id: string }
 /** A job's identity: its loadout render key, else its mods in any order. The name is for display only (a loadout can be
  *  renamed mid-run). Pure. */
@@ -73,7 +73,7 @@ let active = false // a run was accepted and its done event has not arrived yet
 let batchDone = 0  // jobs finished since the queue was last empty, for Home's "3 of 21"
 type SetResult = 'ok' | 'none' | 'failed' | undefined
 let run = { id: '', total: 0, made: 0, none: 0, failed: 0, stopping: false, summary: '', set: undefined as string | undefined, name: '', setResult: undefined as SetResult, busy: '',
-  show: false, step: undefined as string | undefined }
+  show: false, step: undefined as string | undefined, quiet: false }
 let version = 0
 const listeners = new Set<() => void>()
 const notify = () => { version++; listeners.forEach(l => l()) }
@@ -143,7 +143,7 @@ listen<string>('mod-preview-failed', e => { // its last good preview stays
 // A mod the generator could not read (encrypted with a key other than the game's): its preview, or the loadout render it
 // belongs to, would not show it. The window that started the run says so (usePreviewFailureToast)
 const warnListeners = new Set<(key: string) => void>()
-listen<string>('mod-preview-warn', e => { if (active) warnListeners.forEach(l => l(e.payload)) }).catch(() => undefined)
+listen<string>('mod-preview-warn', e => { if (active && !run.quiet) warnListeners.forEach(l => l(e.payload)) }).catch(() => undefined)
 listen('mod-previews-busy', () => { // the generator refused: another one holds its lock. Nothing starts until done
   if (!active) return
   run.busy = BUSY
@@ -167,12 +167,12 @@ listen<boolean>('mod-previews-done', e => {
     run.stopping && left && `${left} skipped`, run.setResult === 'failed' && '1 loadout render failed']
   // Stopped before anything was made is a stop, not a failure
   const stoppedEarly = run.stopping && !run.made && !run.none && !run.failed
-  const summary = run.busy || (stoppedEarly ? 'Stopped' : e.payload || run.made || run.none || run.failed ? parts.filter(Boolean).join(' · ') : FAILED)
+  const summary = run.quiet ? '' : run.busy || (stoppedEarly ? 'Stopped' : e.payload || run.made || run.none || run.failed ? parts.filter(Boolean).join(' · ') : FAILED)
   const stopped = run.stopping
   run = { ...run, stopping: false, summary }
   // Previews made for a loadout become what its card shows when asked for (not on Stop: the user ended it)
   if (run.set && !stopped && (run.setResult === 'ok' || run.made > 0)) showPreviewCover(run.set, run.show)
-  if (!run.busy && (failed || run.setResult === 'failed')) failureListeners.forEach(f => f({ name: run.name, failed, setFailed: run.setResult === 'failed' }))
+  if (!run.quiet && !run.busy && (failed || run.setResult === 'failed')) failureListeners.forEach(f => f({ name: run.name, failed, setFailed: run.setResult === 'failed' }))
   play(run.busy ? 'warning' : stoppedEarly ? 'close' : run.made && !failed && run.setResult !== 'failed' ? 'ready' : run.made ? 'warning' : 'error')
   batchDone++
   notify()
@@ -282,7 +282,7 @@ const refuse = (job: Job, reason: string) => {
   pending.clear()
   for (const j of [job, ...queue]) keysOf(j).forEach(k => outcome.set(k, reason))
   queue.length = 0
-  run.summary = reason
+  run.summary = job.quiet ? '' : reason
   notify()
   return reason
 }
@@ -296,7 +296,7 @@ const start = async (job: QueuedJob): Promise<string | null> => {
   jobs.forEach(([, k]) => { pending.add(k); outcome.delete(k) })
   if (job.set) outcome.delete(job.set)
   run = { id: job.id, total: jobs.length, made: 0, none: 0, failed: 0, stopping: false, summary: '', set: job.set, name: job.name, setResult: undefined, busy: '',
-    show: Boolean(job.show), step: undefined }
+    show: Boolean(job.show), step: undefined, quiet: Boolean(job.quiet) }
   notify()
   try {
     if (await invoke<boolean>('generate_mod_previews', { jobs, set: job.set ?? null, force: Boolean(job.force) })) return null

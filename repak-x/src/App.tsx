@@ -83,7 +83,6 @@ import { REPAKXTRA_VERSION, latestRelease, versionTag } from './custom/version'
 import { installedReleaseNotes } from './custom/releaseNotes'
 import { APP_NAME } from './custom/edition'
 import FirstRun from './custom/FirstRun' // repakxtra: first-launch setup
-import { markLaunched } from './custom/GettingStarted' // repakxtra
 import { installDroppedKit } from './custom/previewKit'
 import { useGlobalTooltips } from './hooks/useGlobalTooltips'
 import { useAprilFools } from './hooks/useAprilFools'
@@ -1642,7 +1641,7 @@ function App() {
     const unlistenDragDrop = listen('tauri://drag-drop', (event: any) => {
       const files = event.payload.paths || event.payload
       setIsDragging(false)
-      handleFileDrop(files)
+      handleFileDrop(files).finally(() => window.dispatchEvent(new Event('repakxtra-drop-done'))) // repakxtra: the first-launch flow comes back when no install panel opened
     })
 
     // Listen for Tauri file-drop event
@@ -3908,7 +3907,6 @@ function App() {
               if (gameRunning || launchSuccess) return
               try {
                 await invoke('launch_game')
-                markLaunched() // repakxtra: the Getting started checklist's last row
                 setStatus('Game launched')
                 setLaunchSuccess(true)
                 setTimeout(() => setLaunchSuccess(false), 3000)

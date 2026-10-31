@@ -3,14 +3,14 @@ import { LOADER_NAME, LOADER_PAK, APP_NAME } from './edition'
 // Setup > Guided setup. PAGES is the one ordered list: what loadouts are (WelcomeIntro.tsx), "Got mods already?"
 // (always asked, the mods already installed named in it), then either the guided steps (game, bypass, loader) and the first mod, or a
 // background setup that installs only what is missing, then the first loadout, then Make it yours (previews, Discord,
-// the shortcut, sounds). Finish lands on Loadouts home, where the Getting started checklist (GettingStarted.tsx) picks
-// up whatever was skipped. Mods dropped on the window hide the flow for the install, and it comes back after.
+// the shortcut, sounds). Finish lands on Loadouts home. Mods dropped on the window hide the flow for the install,
+// and it comes back after.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open as pick } from '@tauri-apps/plugin-dialog'
 import { motion } from 'framer-motion'
-import { ArrowRight, Check, ChevronDown, CircleCheck, CircleX, CopyPlus, Gamepad2, ExternalLink, FileCode, FolderOpen, LoaderCircle, Package, Play, Plus, ShieldCheck, Upload } from 'lucide-react'
+import { ArrowRight, Check, ChevronDown, CircleCheck, CircleX, CopyPlus, Gamepad2, ExternalLink, FileCode, FolderOpen, LoaderCircle, Package, Plus, ShieldCheck, Upload, Volume2 } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import Switch from '../components/ui/Switch'
 import { DoctorProblems } from './SetupPanel'
@@ -27,17 +27,16 @@ import silhouette from './covers/silhouettes/1011.webp'
 import { ShortcutButton, useShortcut } from './shortcut'
 import { ownsTop, useDialogFocus } from './dialogFocus'
 import { createFromMods } from './Loadouts'
-import { type Mod, memberName, modKey, openLoadout, setView, useLoadouts } from './loadoutStore'
+import { type Mod, loadoutable, memberName, modKey, openLoadout, setView, useLoadouts } from './loadoutStore'
+import { isBuiltin } from './builtinRows'
 import { freeMods, smartRules } from './SmartLoadouts'
 import { type Proposal, propose } from './smartGroups'
 import { silhouetteOf } from './silhouettes'
 import { generatePreviews, hasPreview, refreshPreviewsAvailable, usePreviewUrl, usePreviewVersion } from './previews'
 import { nameKey } from './loadoutIdentity'
-import { getAdditionalCategories } from '../utils'
 import { plural } from './modName'
 import { SOUND_PACKS, type SoundName, cue, tryCue } from './sounds'
 import { setSoundChoice, useSoundChoice } from './uiPrefs'
-import { ONBOARDED, markOnboarded, realMods } from './GettingStarted'
 import './onboarding.css'
 
 type Alert = ReturnType<typeof useAlert>
@@ -47,6 +46,9 @@ type Pending = 'smart' | 'empty' | string | null // what Finish opens on Loadout
 type Auto = 'checking' | 'game-open' | 'no-game' | 'working' | 'failed' | 'done'
 
 const NEXUS = 'https://www.nexusmods.com/marvelrivals/mods'
+const ONBOARDED = 'repakxtra.onboarded2'
+/** Mods a person installed: not the loader pak or built-ins. */
+const realMods = (mods: Mod[]) => mods.filter(m => loadoutable(modKey(m.path)) && !isBuiltin(m.path))
 const openUrl = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
 const firstLaunch = () => !localStorage.getItem(ONBOARDED)
 
@@ -283,19 +285,20 @@ function SmartCard({ hero, path, g }: { hero: string; path?: string; g: number }
     </span>
   )
 }
-const VISUAL = new Set(['Mesh', 'Static Mesh', 'Texture']) // what a preview can show (CapturePreview.tsx's list)
+const VISUAL = ['Mesh', 'Static Mesh', 'Texture'] // what a preview can show (CapturePreview.tsx's list), best first
 type Details = { character_name?: string | null; category?: string | null; mod_type?: string; additional_categories?: string[] }
-/** The Smart loadouts card's two suggestions and the mod each one previews: a mod with a mesh or texture (a look a
- *  render can show), from two loadouts on different heroes when there are. A mod that already has a preview wins. Pure
- *  apart from the preview list. */
+/** The Smart loadouts card's two suggestions and the mod each one previews: a mod whose own type is a look a render can
+ *  show, a mesh before a static mesh before a texture (a UI mod with textures among its extras is not one), from two
+ *  loadouts on different heroes when there are. A mod that already has a preview wins within its loadout. Pure apart
+ *  from the preview list. */
 export function smartShots(smart: Proposal[], mods: { path: string }[], details: Record<string, Details | undefined> | undefined) {
   const pathOf = new Map(mods.map(m => [modKey(m.path), m.path]))
-  const shows = (path: string) => [details?.[path]?.category, ...getAdditionalCategories(details?.[path])].some(c => VISUAL.has(c ?? ''))
+  const rank = (path: string) => VISUAL.indexOf(details?.[path]?.category ?? '')
+  const seen = (path: string) => (hasPreview(nameKey(path)) ? 0 : 1)
   const picks = smart.flatMap(l => {
-    const paths = l.keys.flatMap(k => pathOf.get(k) ?? []).filter(shows)
-    const path = paths.find(p => hasPreview(nameKey(p))) ?? paths[0]
+    const path = l.keys.flatMap(k => pathOf.get(k) ?? []).filter(p => rank(p) >= 0).sort((a, b) => seen(a) - seen(b) || rank(a) - rank(b))[0]
     return path ? [{ l, path }] : []
-  })
+  }).sort((a, b) => rank(a.path) - rank(b.path)) // loadouts with a mesh first
   const first = picks[0]
   const second = picks.find(x => x !== first && x.l.hero && x.l.hero !== first?.l.hero) ?? picks[1]
   return first ? second ? [first, second] : [first] : []
@@ -345,7 +348,7 @@ const loadout: Page = {
       )}
       <Choice onClick={() => f.finish('empty')} title="Start one by hand" text="An empty loadout, named and filled on its page."
         stage={<span className="wi-card ob-empty"><CopyPlus size={30} strokeWidth={1.25} /></span>} />
-      {!f.hasMods && f.newMods.length === 0 && <p className="fr-hint">No mods yet. Back adds some first, or the checklist on Loadouts home reminds you later.</p>}
+      {!f.hasMods && f.newMods.length === 0 && <p className="fr-hint">No mods yet. Go back to add some, or add them later in the Library.</p>}
     </div>
   ),
 }
@@ -356,7 +359,7 @@ function Sounds() {
   const choice = useSoundChoice()
   const [rest, setRest] = useState<string | null>(null)
   const shown = rest ?? choice
-  const name = (pack: string) => pack === 'off' ? 'Off' : pack[0].toUpperCase() + pack.slice(1)
+  const name = (pack: string) => pack === 'off' ? 'Off' : pack === 'default' ? 'Bell' : pack[0].toUpperCase() + pack.slice(1)
   return (
     <div className="ob-sounds sound-pack" onMouseLeave={() => setRest(null)}>
       <div className="ob-seg" role="radiogroup" aria-label="Sound pack">
@@ -369,8 +372,8 @@ function Sounds() {
       </div>
       <div className="ob-try">
         {shown === 'off' ? <span className="ob-try-label">No sounds</span> : <>
-          <span className="ob-try-label">Try <b>{name(shown)}</b></span>
-          {TRY.map(([cueName, label]) => <button key={cueName} type="button" onClick={() => tryCue(cueName, shown as typeof SOUND_PACKS[number])}><Play size={11} aria-hidden="true" />{label}</button>)}
+          <span className="ob-try-label"><b>Try {name(shown)}</b></span>
+          {TRY.map(([cueName, label]) => <button key={cueName} type="button" onClick={() => tryCue(cueName, shown as typeof SOUND_PACKS[number])}><Volume2 size={12} aria-hidden="true" />{label}</button>)}
         </>}
       </div>
     </div>
@@ -487,7 +490,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
     const pair = paths.join('|')
     if (!open || !kitReady || !paths.length || rendered.current === pair) return
     rendered.current = pair
-    void refreshPreviewsAvailable().then(() => generatePreviews({ paths, name: 'Smart loadouts' }))
+    void refreshPreviewsAvailable().then(() => generatePreviews({ paths, name: 'Smart loadouts', quiet: true }))
   }, [open, kitReady, shots])
   const begin = () => { startMods.current = new Set(installed.map(m => m.path)) } // leaving the welcome: what is there now is not "just added"
   const page = PAGES.find(p => p.id === at) ?? welcome
@@ -499,7 +502,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
     window.addEventListener('repakxtra-first-run', show)
     return () => window.removeEventListener('repakxtra-first-run', show)
   }, [hasMods])
-  const close = () => { markOnboarded(); setOpen(false) }
+  const close = () => { localStorage.setItem(ONBOARDED, '1'); setOpen(false) }
   /** Out of the way for an install (App's drop handler shows its panel), back when the panel closes, installed or
    *  cancelled. Not marked seen: a restart while hidden shows the flow again. */
   const hide = () => { resume.current = { count: installed.length, seen: false }; setOpen(false) }
@@ -512,6 +515,11 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
     setOpen(true)
     if (at === 'mods' && installed.length > r.count) setAt('yours') // installed: on to the next page
   }, [installing, installed.length])
+  useEffect(() => { // a drop the install panel refused or could not read: hidden for it, so back now (App.tsx)
+    const dropped = () => { if (resume.current && !resume.current.seen) { resume.current = null; setOpen(true) } }
+    window.addEventListener('repakxtra-drop-done', dropped)
+    return () => window.removeEventListener('repakxtra-drop-done', dropped)
+  }, [])
   useEffect(() => { if (open && at !== 'welcome') title.current?.focus() }, [open, at]) // a screen reader hears the new page
   const checkStatus = () => {
     const id = ++asked.current
@@ -582,7 +590,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
   const finishFlow = (pending: Pending = null) => {
     close()
     setView('home')
-    if (pending === 'smart') window.dispatchEvent(new Event('repakxtra-smart-loadouts'))
+    if (pending === 'smart') { sessionStorage.setItem('repakxtra.smartPending', '1'); window.dispatchEvent(new Event('repakxtra-smart-loadouts')) } // Loadouts home may mount after this event
     else if (pending === 'empty') openLoadout(createFromMods([]).id, true)
     else if (pending) openLoadout(pending)
   }
@@ -620,7 +628,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
           <ol className="fr-rail" aria-label={`Step ${railAt + 1} of ${RAIL.length}`}>
             {RAIL.map((s, i) => <li key={s} className={i < railAt ? 'is-done' : i === railAt ? 'is-now' : ''} aria-current={i === railAt ? 'step' : undefined}>{i < railAt && <Check size={12} strokeWidth={3} aria-hidden="true" />}{s}</li>)}
           </ol>
-          {/* Back and one way on: the X above closes for later (the checklist picks up the rest), a choice page moves on
+          {/* Back and one way on: the X above closes for later, a choice page moves on
               by its cards, and the last page can end without a pick */}
           <button type="button" className="lo-text-btn" onClick={() => move(-1)}>Back</button>
           {last ? <button type="button" className="lo-text-btn" onClick={() => finishFlow()}>Finish without one</button>
@@ -634,6 +642,8 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
 }
 
 if (import.meta.env.DEV) {
+  const installedMods = [{ path: 'C:/G/~mods/skin_9999999_P.pak' }, { path: `C:/G/~mods/${LOADER_PAK}` }, { path: 'C:/G/~mods/.repakxtra-builtin/repakxtra-skip-intro-movies_9999999_P.pak' }]
+  console.assert(realMods(installedMods).length === 1 && realMods(installedMods)[0].path.includes('skin'), 'realMods leaves out the loader and the built-ins')
   {
     const mods = ['C:/m/HulkUi_P.pak', 'C:/m/HulkMesh_P.pak', 'C:/m/HulkTex_P.pak', 'C:/m/StormTex_P.pak'].map(path => ({ path }))
     const [ui, mesh, tex, storm] = mods.map(m => m.path)
@@ -641,7 +651,7 @@ if (import.meta.env.DEV) {
     const why = {} as Proposal['why']
     const smart: Proposal[] = [{ id: 'a', name: 'A', named: true, hero: 'Hulk', keys: [k(ui), k(mesh)], why }, { id: 'b', name: 'B', named: true, hero: 'Hulk', keys: [k(tex)], why },
       { id: 'c', name: 'C', named: true, hero: 'Storm', keys: [k(storm)], why }]
-    const details = { [ui]: { category: 'UI' }, [mesh]: { category: 'Mesh' }, [tex]: { category: 'Texture' }, [storm]: { category: 'Texture' } }
+    const details = { [ui]: { category: 'UI', additional_categories: ['Texture'] }, [mesh]: { category: 'Mesh' }, [tex]: { category: 'Texture' }, [storm]: { category: 'Texture' } }
     const got = smartShots(smart, mods, details).map(x => `${x.l.id}:${x.path}`).join()
     console.assert(got === `a:${mesh},c:${storm}`, 'smartShots: a mesh or texture mod, then another hero', got)
   }

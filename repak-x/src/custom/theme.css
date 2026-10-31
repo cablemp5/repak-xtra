@@ -1122,6 +1122,8 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
   outline: 2px solid var(--focus-ring) !important; outline-offset: 2px !important;
   transition-duration: 0s !important;   /* MUI animates all properties: the ring grew in from 0px */
 }
+.app [data-pointer-focus]:focus-visible, .app [data-pointer-focus].Mui-focusVisible { outline: none !important; }
+.app .repakx-checkbox-control[data-pointer-focus]:focus-visible .repakx-checkbox-box { box-shadow: none; }
 /* The filter line gives way first (it shrinks 100x faster than the folder name), ending in an ellipsis */
 .header-title-scope { color: var(--text-secondary); font-weight: 500; margin-left: 0.3em; min-width: 0; flex: 0 100 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -1135,6 +1137,7 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 html:not([data-view="library"]) .container > .main-action-bar,
 html:not([data-view="library"]) .container > .main-panels,
 html:not([data-view="library"]) .container > .config-warning { display: none !important; }
+html:not([data-view="library"]) .container { padding-top: 0; }
 .lo-screen { position: relative !important; inset: auto !important; z-index: auto !important; animation: none !important;
   flex: 1 1 auto; min-height: 0; background: transparent !important; }   /* no frame: the cards are the boxes (Law of Common Region) */
 .lo-screen-head { padding: 20px 24px 16px; }
