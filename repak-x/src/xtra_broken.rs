@@ -35,6 +35,10 @@ pub struct Verdict {
     /// not 0 the update waits for the USMAP of the installed build (changed_since_usmap)
     #[serde(skip_serializing_if = "is_zero")]
     usmap_wait: usize,
+    /// For "risky": nothing the Mod Updater does fixes it (a mesh with bones its skeleton lacks), so it turns the mod
+    /// off rather than rebuild its materials and call it safe
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    off_only: bool,
 }
 
 fn is_zero(n: &usize) -> bool {
@@ -357,6 +361,7 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
             ),
             stale_niagara: 0,
             usmap_wait: 0,
+        off_only: false,
         });
     }
     // A VFX mod carries cooked copies of the game's materials and blueprints: an update that rewrote them leaves it stale
@@ -370,6 +375,7 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
             reason: "Its Niagara effects are in the layout of an older game build, although the file is newer than the last game update (an earlier update made with an old USMAP, or an old mod installed again). The game can crash on them. The Mod Updater rebuilds them on the new game files.".into(),
             stale_niagara: niagara.max(1),
             usmap_wait: 0,
+        off_only: false,
         });
     }
     if m.vfx && !m.fixed && m.installed > 0 && changed > 0 {
@@ -381,6 +387,7 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
             ),
             stale_niagara: stale.iter().filter(|k| is_niagara(k)).count(),
             usmap_wait: 0,
+        off_only: false,
         });
     }
     // A material mod: the updater rebuilds only its material instances and KO prompts, so a rewritten texture alone does not count
@@ -402,6 +409,7 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
             ),
             stale_niagara: 0,
             usmap_wait: 0,
+        off_only: false,
         });
     }
     // its material instances in the older layout, whether or not the game rewrote them: the game can crash loading them
@@ -417,10 +425,11 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
             ),
             stale_niagara: 0,
             usmap_wait: 0,
+        off_only: false,
         });
     }
     // On or off: the warning matters most before a loadout switches it on
-    let risky = |reason: String| Some(Verdict { path: path.to_string(), kind: "risky", reason, stale_niagara: 0, usmap_wait: 0 });
+    let risky = |reason: String| Some(Verdict { path: path.to_string(), kind: "risky", reason, stale_niagara: 0, usmap_wait: 0, off_only: false });
     // an Animation Blueprint the game cooked again since the mod was made (3984769 moved AnimBlueprintGeneratedConstantData
     // and cooked 9 again): whatever its functions look like, nothing here rebuilds it
     let anims = stale.iter().filter(|k| is_anim_blueprint(k)).count();
@@ -433,7 +442,7 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
     }
     // a mesh with more bones than the skeleton the game rebuilt since the mod was made (xtra_mesh.rs read both)
     if let Some(reason) = m.mesh.as_ref().filter(|_| !m.fixed) {
-        return risky(reason.clone());
+        return Some(Verdict { off_only: true, ..risky(reason.clone())? });
     }
     match &m.layout {
         _ if !m.has_blueprint => None,
@@ -577,7 +586,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                 // repakxtra: another app's built-in is judged by the game build its app last built it for
                 if crate::xtra_builtins::in_folder(&path) {
                     return crate::xtra_builtins::outdated_elsewhere(&path, &paks)
-                        .map(|reason| Verdict { path: p.clone(), kind: "risky", reason, stale_niagara: 0, usmap_wait: 0 });
+                        .map(|reason| Verdict { path: p.clone(), kind: "risky", reason, stale_niagara: 0, usmap_wait: 0, off_only: false });
                 }
                 if can_finish(&path) {
                     return Some(Verdict {
@@ -586,6 +595,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                         reason: "Updated without its Niagara effects while the USMAP was older than the game. The USMAP matches the game now, so the Mod Updater can try a full update from its kept original.".into(),
                         stale_niagara: 0,
                         usmap_wait: 0,
+                    off_only: false,
                     });
                 }
                 // a check found it built for an older game version: flagged whatever its date says
@@ -602,6 +612,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                         },
                         stale_niagara: 0,
                         usmap_wait: 0,
+                    off_only: false,
                     });
                 }
                 let details = crate::compute_mod_details(&path, &state).ok()?;
@@ -832,7 +843,7 @@ mod tests {
         let files = v(&[mesh]);
         assert_eq!(judge("m.pak", &facts(&files, 50), 200, &game), None, "a rebuilt skeleton alone (24 working swaps had one)");
         let found = judge("m.pak", &Facts { mesh: Some("SK_X has 302 bones and the game's skeleton 242".into()), ..facts(&files, 50) }, 200, &game).unwrap();
-        assert_eq!(found.kind, "risky");
+        assert_eq!((found.kind, found.off_only), ("risky", true), "the Mod Updater turns it off, it cannot rebuild a mesh");
     }
 
     #[test]

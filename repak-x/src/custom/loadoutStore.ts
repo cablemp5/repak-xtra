@@ -380,7 +380,12 @@ export const flipMods = async (changes: Mod[]) => {
     try { await invoke('toggle_mod', { modPath: m.path }) } catch (e) {
       // turned off because it can crash the game (custom/safeOff.ts): kept off, said apart from the failures
       const why = blockedReason(e)
-      if (why) { (failed.keptOff ??= []).push({ path: m.path, reason: why }); continue }
+      if (why) {
+        // not switched: a failure to every caller (none reports it switched), its reason kept for Turn on anyway
+        (failed.keptOff ??= []).push({ path: m.path, reason: why })
+        failed.push(m)
+        continue
+      }
       failed.push(m)
       failed.reason = repakXOpen(e) ?? undefined
       if (failed.reason) { failed.push(...changes.slice(i + 1)); break }

@@ -34,7 +34,7 @@ type Mod = { path: string; utoc: string; enabled: boolean; name: string; hero?: 
   risky?: string }
 type ModList = { mods: Mod[]; problems: string[] }
 type PakFile = { path: string; utoc_path?: string | null; enabled: boolean; custom_name?: string | null; character_name?: string | null; modified_date?: number }
-type Verdict = { path: string; kind: string; reason: string; staleNiagara?: number; usmapWait?: number }
+type Verdict = { path: string; kind: string; reason: string; staleNiagara?: number; usmapWait?: number; offOnly?: boolean }
 type Log = { time: string; text: string; type: string }
 type Usmap = { updated: boolean; upToDate: boolean; skipped: boolean; localPath?: string | null; filename?: string | null; version?: string | null; buildNumber?: number | null; commitDate?: string | null; message: string }
 type GameBuild = { updated: number; cl?: number | null }
@@ -432,7 +432,9 @@ export function VfxUpdaterPanel() {
           return { path: v.path, utoc: m?.utoc_path || utocOf(v.path), enabled: true, name: m?.custom_name?.trim() || fileName(v.path).replace(/\.[^.]+$/, '').replace(/(_\d+)?_P$/i, ''),
             hero: m?.character_name ?? null, modified: m?.modified_date, risky: v.reason }
         })
-        const list = [...listed, ...risky]
+        // a listed mod with a May crash nothing here fixes (a mesh with bones its skeleton lacks): turned off, not rebuilt
+        const offOnly = new Map(verdicts.filter(v => v.offOnly).map(v => [norm(v.path), v.reason]))
+        const list = [...listed.map(m => (offOnly.has(norm(m.path)) && /\.pak$/i.test(m.path) ? { ...m, risky: offOnly.get(norm(m.path)) } : m)), ...risky]
         // a VFX or material mod that may crash is rebuilt like one that needs an update (its blueprints on the game's)
         const n = new Map(verdicts.filter(v => v.kind === 'vfx' || v.kind === 'risky').map(v => [norm(v.path), v.reason]))
         const utocs = new Map(list.map(m => [norm(m.path), norm(m.utoc)]))

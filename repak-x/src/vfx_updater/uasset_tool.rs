@@ -829,7 +829,8 @@ pub async fn pack_to_iostore(
     let mut raw = 0usize;
     for e in walkdir::WalkDir::new(input_dir).into_iter().flatten().filter(|e| e.file_type().is_file()) {
         let x = e.path().extension().map(|x| x.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
-        if ["uasset", "uexp", "ubulk", "uptnl", "umap", "json", "txt"].contains(&x.as_str()) {
+        // packages are packed as such; uasset_list.txt is the pipeline's own list, never the mod's
+        if ["uasset", "uexp", "ubulk", "uptnl", "umap"].contains(&x.as_str()) || e.file_name().eq_ignore_ascii_case("uasset_list.txt") {
             continue;
         }
         raw += 1;

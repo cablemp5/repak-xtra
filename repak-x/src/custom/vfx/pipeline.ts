@@ -275,7 +275,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       keep = keep.filter(p => !done.has(assetKey(rel(p))))
       if (done.size) log(`Merged ${plural(done.size, 'table')} onto the game's new ${done.size === 1 ? 'one' : 'ones'}.`)
     }
-    const allStale = () => `Not updated: everything it changes is ${plural(report.counts.left + report.counts.ownGame, 'Niagara file')} made for an older game build that could not be rebuilt, and the game can crash on them. Turn the mod off until its author updates it.`
+    const allStale = () => `Not updated: everything it changes is ${plural(report.counts.left + report.counts.ownGame, 'file')} made for an older game build that could not be rebuilt, and the game can crash on them. Turn the mod off until its author updates it.`
     if (keep.length) await invoke('vfx_copy_uasset_files', { sourcePaths: keep, sourceBaseDir: dirs.modExtract, destBaseDir: dirs.finalUassets })
     // the .pak half's raw files, as they are (the pack puts them in the update's .pak)
     if (raw.length) await invoke('vfx_copy_uasset_files', { sourcePaths: raw, sourceBaseDir: dirs.modExtract, destBaseDir: dirs.finalUassets })
@@ -352,7 +352,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
         report.error = `${plural(report.counts.unreadable, 'asset')} could not be read, so it is not known whether ${report.counts.unreadable === 1 ? 'it needs' : 'they need'} rebuilding. Check the USMAP in Advanced, then try again.`
         return report // failed: Try again stays
       }
-      if (report.counts.left || report.counts.relaid || tablesUpdated) {
+      if (report.counts.left || report.counts.ownGame || report.counts.relaid || tablesUpdated) {
         await rebuildNiagara()
         // the rebuilt Niagara files, or at least the rest without the stale ones, which no longer crashes the game
         if (keep.length || niagaraDone || tablesUpdated) await packAndPlace()

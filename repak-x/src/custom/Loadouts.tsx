@@ -163,10 +163,11 @@ export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], ve
     showKeptOff(p.alert, failed.keptOff ?? [], p.reload) // repakxtra: mods turned off because they can crash stay off
     const flipped = new Set(changes.filter(m => !failed.includes(m)).map(m => m.path))
     const after = p.mods.map(m => (flipped.has(m.path) ? { ...m, enabled: !m.enabled } : m))
-    if (failed.length) {
-      p.alert.warning(`${l.name} partly ${verb}`, failed.reason ?? `Could not switch ${failed.map(m => nameKey(m.path)).join(', ')}. Close anything using those files, then try again.`)
+    const stuck = failed.filter(m => !failed.keptOff?.some(k => k.path === m.path)) // kept off: its own toast above
+    if (stuck.length) {
+      p.alert.warning(`${l.name} partly ${verb}`, failed.reason ?? `Could not switch ${stuck.map(m => nameKey(m.path)).join(', ')}. Close anything using those files, then try again.`)
     } else {
-      p.alert.success(`${l.name} ${verb}`, `${plural(changes.length, 'mod')} switched.`)
+      p.alert.success(`${l.name} ${verb}`, `${plural(changes.length - failed.length, 'mod')} switched.`)
     }
     if (verb === 'off') {
       const alsoOff = wasOn.filter(o => !isActive(o, after))
