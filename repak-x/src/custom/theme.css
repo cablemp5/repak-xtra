@@ -1138,6 +1138,8 @@ html:not([data-view="library"]) .container > .main-action-bar,
 html:not([data-view="library"]) .container > .main-panels,
 html:not([data-view="library"]) .container > .config-warning { display: none !important; }
 html:not([data-view="library"]) .container { padding-top: 0; }
+/* the Library's 24px under the header (the container's padding there), and 24px above the title (its head's 20px padding below) */
+html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .lo-screen { position: relative !important; inset: auto !important; z-index: auto !important; animation: none !important;
   flex: 1 1 auto; min-height: 0; background: transparent !important; }   /* no frame: the cards are the boxes (Law of Common Region) */
 .lo-screen-head { padding: 20px 24px 16px; }
