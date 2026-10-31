@@ -39,6 +39,7 @@ mod xtra_library_files; // repakxtra: the part of a mod's file list the Library 
 mod xtra_details_cache; // repakxtra: the mod details cache kept between launches
 mod xtra_vfx; // repakxtra: VFX fixing after game updates
 mod xtra_niagara; // repakxtra: the VFX Updater's Niagara step
+mod xtra_mesh; // repakxtra: mesh mods against the game's rebuilt skeletons
 mod xtra_stamp; // repakxtra: what each update the Mod Updater made was built for
 mod xtra_tables; // repakxtra: DataTable and StringTable mods carried onto the game's current tables
 mod xtra_usmap_diff; // repakxtra: what each game patch moved, from the USMAPs
@@ -8736,6 +8737,7 @@ fn main() {
             xtra_vfx_check::xtra_vfx_check, // repakxtra: Check for VFX update
             xtra_vfx_check::xtra_vfx_check_scan, // repakxtra: the same check in the background, for the date's blind spot
             xtra_layout::xtra_layout_scan, // repakxtra: Blueprint mods compared with the game's classes, in the background
+            xtra_mesh::xtra_mesh_scan, // repakxtra: mesh mods against the game's rebuilt skeletons, in the background
             xtra_vfx::xtra_vfx_dirs, // repakxtra: VFX Updater
             xtra_vfx::xtra_vfx_detect,
             xtra_vfx::xtra_vfx_place,

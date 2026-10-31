@@ -68,6 +68,9 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       .then(found => (live && found ? check() : undefined))
       .then(() => (live ? invoke<number>('xtra_layout_scan', { modPaths: mods.map(m => m.path) }) : 0))
       .then(checked => (live && checked ? check() : undefined))
+      // and mesh mods whose skeleton the game rebuilt: more bones than it has gets May crash (xtra_mesh.rs)
+      .then(() => (live ? invoke<number>('xtra_mesh_scan', { modPaths: mods.map(m => m.path) }) : 0))
+      .then(checked => (live && checked ? check() : undefined))
       .then(() => live, e => { console.warn('[brokenMods] background scan failed', e); return false })
     const full = () => queued(chain)
     runFull = chain

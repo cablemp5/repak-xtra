@@ -250,6 +250,22 @@ pub(crate) fn changed_since_usmap(paks: &Path, usmap: &str, files: &[String]) ->
     Some(changed_in(&builds.by_package, files, u))
 }
 
+/// Of `files` (paths inside a mod), its skeletal meshes whose skeleton (`<mesh>_Skeleton`) the game rebuilt after `made`:
+/// the ones xtra_mesh.rs reads. Package paths without the extension.
+pub(crate) fn meshes_with_rebuilt_skeleton(paks: &Path, files: &[String], made: u64) -> Vec<String> {
+    let Some(game) = game_assets(paks) else { return Vec::new() };
+    files
+        .iter()
+        .filter(|f| is_package(f))
+        .filter(|f| {
+            let k = match_key(f);
+            let name = k.rsplit('/').next().unwrap_or(&k).to_string();
+            name.starts_with("sk_") && !name.ends_with("_skeleton") && !name.ends_with("_physicsasset") && game.get(&format!("{k}_skeleton")).is_some_and(|at| *at > made)
+        })
+        .map(|f| f.replace('\\', "/").trim_end_matches(".uasset").to_string())
+        .collect()
+}
+
 /// The game's packages' builds (AssetBuilds), read with its asset list.
 fn asset_builds(paks: &Path) -> Option<Arc<AssetBuilds>> {
     game_assets(paks)?;
@@ -321,6 +337,8 @@ struct Facts<'a> {
     mics: Vec<String>,
     /// a UI mod (the Library's UI type): its reasons name its UI materials
     ui: bool,
+    /// a mesh with more bones than its rebuilt skeleton (xtra_mesh.rs), the reason
+    mesh: Option<String>,
 }
 
 /// The verdict for one mod, or None when it looks fine. Pure: the facts come in, the words go out.
@@ -413,20 +431,9 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
             if anims == 1 { "it" } else { "them" }
         ));
     }
-    // a skeletal mesh whose skeleton the game rebuilt since the mod was made (3962284 rebuilt Black Panther's default
-    // skeletons): the mod's mesh is bound to the old one, and the game can crash loading it. By the game's file list and
-    // the mod's date (a zip keeps it now, xtra_export.rs), no decoding
-    let skeletons: Vec<&String> = packages
-        .iter()
-        .filter(|k| k.rsplit('/').next().is_some_and(|n| n.starts_with("sk_") && !n.ends_with("_skeleton") && !n.ends_with("_physicsasset")))
-        .filter(|k| game.get(&format!("{k}_skeleton")).is_some_and(|at| *at > m.installed))
-        .collect();
-    if !m.fixed && m.installed > 0 && !skeletons.is_empty() {
-        let names: Vec<&str> = skeletons.iter().map(|k| k.rsplit('/').next().unwrap_or(k)).collect();
-        return risky(format!(
-            "A game update rebuilt the skeleton of {} since this mod was made, so its mesh is bound to the old one and the game can crash loading it. Turn it off until its author updates it.",
-            if names.len() == 1 { names[0].to_uppercase() } else { format!("{} meshes ({})", names.len(), names.iter().take(3).map(|n| n.to_uppercase()).collect::<Vec<_>>().join(", ")) }
-        ));
+    // a mesh with more bones than the skeleton the game rebuilt since the mod was made (xtra_mesh.rs read both)
+    if let Some(reason) = m.mesh.as_ref().filter(|_| !m.fixed) {
+        return risky(reason.clone());
     }
     match &m.layout {
         _ if !m.has_blueprint => None,
@@ -533,6 +540,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
         let installed_mods: HashSet<String> = mod_paths.iter().map(|p| base(Path::new(p))).collect();
         let checked = load_checked(&checked_store());
         let (layouts, usmap_id) = (crate::xtra_layout::load_done(), crate::xtra_layout::usmap_id());
+        let meshes = crate::xtra_mesh::load_done();
         // an update beside it: <name>_UPDATED next to the original, or the original renamed <name>_BROKEN next to the update
         // each folder's stems, so an _UPDATED name that takes the priority (two originals that would clash) is found
         let mut by_dir: HashMap<PathBuf, HashSet<String>> = HashMap::new();
@@ -616,6 +624,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                     materials: !vfx && (crate::xtra_vfx::updatable(&details.category, &details.files) || !mics.is_empty()),
                     mics,
                     ui: details.category == "UI",
+                    mesh: crate::xtra_mesh::found_now(&meshes, &path.with_extension("utoc"), game_updated),
                     // an update found nothing to rebuild in it (this file, this game): judged like one with its fix beside it
                     fixed: has_fix(&path) || found == Some(false),
                     has_blueprint: details.has_blueprint,
@@ -696,7 +705,7 @@ mod tests {
     fn facts(files: &[String], installed: u64) -> Facts<'_> {
         // the MI_ names, as material_instances finds them without listing classes
         let mics = files.iter().filter(|f| is_package(f)).map(|f| match_key(f)).filter(|k| is_material_instance(k)).collect();
-        Facts { files, galacta: false, vfx: false, materials: false, fixed: false, has_blueprint: false, installed, old_layout: false, layout: None, old_materials: false, mics, ui: false }
+        Facts { files, galacta: false, vfx: false, materials: false, fixed: false, has_blueprint: false, installed, old_layout: false, layout: None, old_materials: false, mics, ui: false, mesh: None }
     }
     const LIVE: &str = "Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uasset";
 
@@ -815,16 +824,15 @@ mod tests {
     }
 
     #[test]
-    fn a_mesh_whose_skeleton_the_game_rebuilt_may_crash() {
+    fn a_mesh_is_flagged_only_when_it_has_bones_its_rebuilt_skeleton_lacks() {
         let mesh = "Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uasset";
         let mut game = game();
         game.insert(match_key(mesh), 10);
         game.insert(match_key("/Game/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001_Skeleton.uasset"), 100);
         let files = v(&[mesh]);
-        let found = judge("m.pak", &facts(&files, 50), 200, &game).unwrap();
-        assert_eq!((found.kind, found.reason.contains("skeleton of SK_1026_1026001")), ("risky", true), "{}", found.reason);
-        assert_eq!(judge("m.pak", &facts(&files, 150), 200, &game), None, "made after the skeleton changed");
-        assert_eq!(judge("m.pak", &Facts { fixed: true, ..facts(&files, 50) }, 200, &game), None);
+        assert_eq!(judge("m.pak", &facts(&files, 50), 200, &game), None, "a rebuilt skeleton alone (24 working swaps had one)");
+        let found = judge("m.pak", &Facts { mesh: Some("SK_X has 302 bones and the game's skeleton 242".into()), ..facts(&files, 50) }, 200, &game).unwrap();
+        assert_eq!(found.kind, "risky");
     }
 
     #[test]
@@ -924,6 +932,7 @@ mod tests {
                 materials: !vfx && crate::xtra_vfx::updatable(&d.category, &d.files),
                 mics: material_instances(&paks, &p.with_extension("utoc"), &d.files).0,
                 ui: d.category == "UI",
+                mesh: None,
                 fixed: false,
                 has_blueprint: true,
                 installed,
