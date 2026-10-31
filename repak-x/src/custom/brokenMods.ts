@@ -9,7 +9,7 @@ import { emit, listen } from '@tauri-apps/api/event'
  *  0 the update waits for that patch's USMAP (xtra_broken.rs changed_since_usmap). */
 export type Verdict = { path: string; kind: 'broken' | 'vfx' | 'risky'; reason: string; usmapWait?: number }
 /** A verdict's badge text. */
-export const verdictLabel = (kind: Verdict['kind']) => (kind === 'broken' ? 'Broken' : kind === 'vfx' ? 'Needs VFX update' : 'May crash')
+export const verdictLabel = (kind: Verdict['kind']) => (kind === 'broken' ? 'Broken' : kind === 'vfx' ? 'Needs update' : 'May crash')
 
 /** One spelling per mod: slashes and case may differ between the mod list and the backend, and turning a mod on or off
  *  renames .bak_repak to .pak (or back), so the badge stays put through a switch instead of waiting for the next check. */
@@ -71,7 +71,9 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       .then(() => live, e => { console.warn('[brokenMods] background scan failed', e); return false })
     const full = () => queued(chain)
     runFull = chain
-    const t = setTimeout(() => { void full() }, 1500)
+    // the quick check at once, never behind a background scan in flight (one can run for many minutes after a game
+    // update), so new mods get their badges in the Library and on loadouts right away
+    const t = setTimeout(() => { void check(); void full() }, 1500)
     const again = listen(VERDICTS_CHANGED, () => { void check() })
     const rescan = listen(VERDICTS_RESCAN, () => { void full() })
     return () => { live = false; if (runFull === chain) runFull = null; clearTimeout(t); void again.then(f => f()); void rescan.then(f => f()) }

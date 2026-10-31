@@ -443,7 +443,7 @@ async fn usmap() -> Result<String, String> {
         return Ok(p);
     }
     crate::vfx_updater::commands::vfx_check_usmap_update(true).await?;
-    path(settings()).ok_or_else(|| "No USMAP mappings file yet: open the VFX Updater once to fetch it".to_string())
+    path(settings()).ok_or_else(|| "No USMAP mappings file yet: open the Mod Updater once to fetch it".to_string())
 }
 
 /// repakxtra: Err while a patch newer than `usmap` rewrote one of `inputs` (the game packages a built-in reads, as

@@ -55,7 +55,7 @@ async function findUsmap(): Promise<string | null> {
 /** Updates one VFX mod in place, with a toast for progress and one for the result. */
 export async function updateVfxModInPlace(mod: { path: string; utoc_path?: string | null }, alert: Alert, reload: () => unknown) {
   const name = nameOf(mod.path)
-  const open = { label: 'Open VFX Updater', onClick: () => { void openVfxWindow() } }
+  const open = { label: 'Open Mod Updater', onClick: () => { void openVfxWindow() } }
   const busy = (what?: string | null) => alert.warning(`${name} was not updated`, `${what ? `${what} is` : 'Another mod is'} updating. Try again when it is done.`, { action: open })
   if (reserved) { busy(); return }
   reserved = true // before the first await: a second click finds it taken
@@ -65,7 +65,7 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
     const paks = await invoke<string | null>('get_game_path').then(d => (d ? d.replace(/[\\/][^\\/]*$/, '') : null)).catch(() => null)
     const usmap = await findUsmap()
     if (!paks || !usmap) {
-      alert.warning(`${name} was not updated`, !paks ? 'Set the game folder in Setup first.' : 'There is no USMAP yet. Open the VFX Updater to get one.', { action: open })
+      alert.warning(`${name} was not updated`, !paks ? 'Set the game folder in Setup first.' : 'There is no USMAP yet. Open the Mod Updater to get one.', { action: open })
       return
     }
     if (!(await claimRun(token, name))) { busy((await runLock())?.name); return }
@@ -136,7 +136,7 @@ const WHY = {
 /** Checks one mod's materials against this game version and the earlier ones still in the game (its flag follows). */
 export async function checkVfxMod(path: string): Promise<VfxCheck> {
   const usmap = await findUsmap()
-  if (!usmap) throw new Error('There is no USMAP yet. Open the VFX Updater to get one.')
+  if (!usmap) throw new Error('There is no USMAP yet. Open the Mod Updater to get one.')
   return invoke<VfxCheck>('xtra_vfx_check', { modPath: path, usmapPath: usmap })
 }
 
@@ -164,7 +164,7 @@ export async function checkVfxModInPlace(mod: { path: string; utoc_path?: string
     const c = await checkVfxMod(mod.path)
     alert.dismissAlert(id)
     const w = checkWords(c, name)
-    const update = { label: 'Update VFX', onClick: () => { void updateVfxModInPlace(mod, alert, reload) } }
+    const update = { label: 'Update', onClick: () => { void updateVfxModInPlace(mod, alert, reload) } }
     alert.showAlert({ color: w.color, duration: c.verdict === 'outdated' ? 0 : 6000, title: w.title, description: w.text, action: c.verdict === 'outdated' ? update : undefined })
     await verdictsChanged() // its Needs VFX update flag follows the check
   } catch (e) {

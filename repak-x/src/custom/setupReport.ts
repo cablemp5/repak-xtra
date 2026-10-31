@@ -235,8 +235,8 @@ if (import.meta.env.DEV) {
   console.assert(text.indexOf('Newest crash') < text.indexOf('~mods/A.pak | Mesh | Black Panther | 2026-10-01'), 'summary before the mod list', text)
   const flagged = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', conflicts: '0 groups',
     crash: '2026-10-24 21:03, Access Violation', crashLines: ['7 min into the game', 'message: boom D:\\build\\x\\y.cpp'], flags: '1 need a VFX update, 0 may crash, 0 broken, 1 with Niagara',
-    on: [{ name: '~mods/A.pak', type: 'VFX', hero: '', date: '2026-10-01', notes: ['Needs VFX update', 'Niagara'], why: 'made before the game update' }], off: 0 })
-  console.assert(flagged.includes('~mods/A.pak | VFX | - | 2026-10-01 | Needs VFX update, Niagara\n  why: made before the game update'), 'notes and reason on the mod line', flagged)
+    on: [{ name: '~mods/A.pak', type: 'VFX', hero: '', date: '2026-10-01', notes: ['Needs update', 'Niagara'], why: 'made before the game update' }], off: 0 })
+  console.assert(flagged.includes('~mods/A.pak | VFX | - | 2026-10-01 | Needs update, Niagara\n  why: made before the game update'), 'notes and reason on the mod line', flagged)
   console.assert(flagged.includes('  7 min into the game') && flagged.includes('message: boom y.cpp') && flagged.includes('Mods that are on: 1 need a VFX update'), 'crash lines indented, paths cut to a file name, flags summarised', flagged)
   console.assert(!flagged.includes('System:') && !flagged.includes('Out of memory') && !flagged.includes('Crash stack'), 'no crash file facts, no lines for them', flagged)
   const diagnosed = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', conflicts: '0 groups', off: 0,

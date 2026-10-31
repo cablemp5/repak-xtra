@@ -21,7 +21,7 @@ type Props = {
   encrypted?: (path: string) => boolean // repakxtra: the Encrypted tab, shown while any mod is encrypted
 }
 
-const BROKEN_TITLE = 'Mods marked Broken (will not work in this game version), Needs VFX update or May crash. Hover a badge for why'
+const BROKEN_TITLE = 'Mods marked Broken (will not work in this game version), Needs update or May crash. Hover a badge for why'
 
 /** Whether the tabs fit beside the header's title and buttons, measured live. */
 function useFolded(tabs: React.RefObject<HTMLDivElement | null>) {

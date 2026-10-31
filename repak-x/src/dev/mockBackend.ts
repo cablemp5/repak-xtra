@@ -308,7 +308,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'xtra_broken_mods':
         // with 'mock.vfxStale' some also have 6 Niagara files the update rewrote (a partial update, mockStale)
         if (localStorage.getItem('mock.broken') === 'vfx') return (args?.modPaths ?? []).filter((p: string) => /vfx/i.test(p) && !/_UPDATED_|_PARTIAL_|_ORIGINAL_/i.test(p)).map((path: string) => ({ path, kind: 'vfx',
-          reason: 'A game update changed 381 of the game files this VFX mod replaces, so its effects may look wrong or crash the game. The VFX Updater rebuilds it on the new game files.',
+          reason: 'A game update changed 381 of the game files this VFX mod replaces, so its effects may look wrong or crash the game. The Mod Updater rebuilds it on the new game files.',
           ...(mockStale(path) ? { staleNiagara: 6 } : {}) }))
         return localStorage.getItem('mock.broken') ? (args?.modPaths ?? []).slice(0, 2).map((path: string, i: number) => ({ path,
           kind: i ? 'risky' : 'broken', reason: i ? 'A Blueprint mod installed before the last game update.' : 'None of the 3 game files it replaces exist in this game version.' })) : []
@@ -367,7 +367,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         return mod?.enabled ?? null
       }
       default: {
-        const vfx = mockVfx(cmd, args) // the VFX Updater window's commands
+        const vfx = mockVfx(cmd, args) // the Mod Updater window's commands
         if (vfx !== undefined) return vfx
         console.debug('[mockBackend] unhandled', cmd, args)
         return null

@@ -9,7 +9,7 @@ export function VerdictBadge({ path, verdict }: { path: string; verdict: Verdict
   if (verdict.kind !== 'vfx') return <span className={cls} title={verdict.reason}>{verdictLabel(verdict.kind)}</span>
   // waits for the USMAP of this game build: still opens the VFX Updater, which says why
   return (
-    <button type="button" className={`${cls} is-action${verdict.usmapWait ? ' is-waiting' : ''}`} title={`${verdict.reason} Click to open it in the VFX Updater.`}
+    <button type="button" className={`${cls} is-action${verdict.usmapWait ? ' is-waiting' : ''}`} title={`${verdict.reason} Click to open it in the Mod Updater.`}
       onClick={e => { e.stopPropagation(); void fixInVfxWindow([path], false) }}>
       {verdict.usmapWait ? 'Waiting' : verdictLabel(verdict.kind)}
     </button>

@@ -25,7 +25,7 @@ export async function openVfxWindow() {
   const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
   const existing = await WebviewWindow.getByLabel('vfx-updater')
   if (existing) { await existing.unminimize().catch(() => {}); await existing.setFocus(); return }
-  const w = new WebviewWindow('vfx-updater', { url: '/vfx-updater', title: 'VFX Updater', width: 760, height: 820, minWidth: 600, minHeight: 560, center: true, resizable: true, decorations: false })
+  const w = new WebviewWindow('vfx-updater', { url: '/vfx-updater', title: 'Mod Updater', width: 760, height: 820, minWidth: 600, minHeight: 560, center: true, resizable: true, decorations: false })
   w.once('tauri://error', e => console.error('[VFX] Failed to create window:', e))
 }
 

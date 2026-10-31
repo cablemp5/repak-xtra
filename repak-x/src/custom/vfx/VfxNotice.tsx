@@ -86,7 +86,7 @@ export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () =>
       <button type="button" className="lo-text-btn" onClick={() => { localStorage.setItem(DISMISSED, seen); setDismissed(seen) }}
         title={waiting ? 'Hide this until the next game update, or until the new USMAP is out' : 'Hide this until the next game update'}>Not now</button>
       {ready.length > 0 && <button type="button" className="btn-primary" onClick={() => fixInVfxWindow(ready.map(m => m.utoc_path || utocOf(m.path)), true)}>
-        <RefreshCw size={14} aria-hidden="true" />{waiting ? `Update ${ready.length === 1 ? '1 mod' : `${ready.length} mods`}` : 'Update VFX mods'}</button>}
+        <RefreshCw size={14} aria-hidden="true" />{waiting ? `Update ${ready.length === 1 ? '1 mod' : `${ready.length} mods`}` : 'Update mods'}</button>}
     </div>
   )
 }

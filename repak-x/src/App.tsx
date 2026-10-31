@@ -72,7 +72,7 @@ import { useConflictCount, useConflictWatch } from './custom/conflicts' // repak
 import { rescanVerdicts, useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
 import { useGameUpdateWatch } from './custom/gameUpdate' // repakxtra
 import { useUsmapWatch } from './custom/usmapWatch' // repakxtra
-import { fixInVfxWindow } from './custom/vfx/handoff' // repakxtra: the VFX Updater window
+import { fixInVfxWindow } from './custom/vfx/handoff' // repakxtra: the Mod Updater window
 import VfxNotice, { VfxDot } from './custom/vfx/VfxNotice' // repakxtra: the game updated, VFX mods to fix
 import { canUpdateVfx, checkVfxModInPlace, updateVfxModInPlace } from './custom/vfx/quick' // repakxtra: Update VFX in the right-click menu
 import { PREF_TOGGLED, type PrefToggled, fewerPopups, liteOn, newDefaultsOnce, setPref } from './custom/uiPrefs' // repakxtra
@@ -637,7 +637,7 @@ function App() {
       : null
 
     if (!utocPath) {
-      alert.warning('No UTOC Metadata', 'Selected mod does not include backend .utoc metadata for VFX Updater.')
+      alert.warning('No UTOC Metadata', 'Selected mod does not include backend .utoc metadata for Mod Updater.')
       return
     }
 
@@ -3955,13 +3955,13 @@ function App() {
           <button
             className="btn-settings btn-vfx"
             data-tour="vfx-updater-btn"
-            title="Open Repak VFX Updater"
+            title="Open the Mod Updater"
             onClick={async () => {
               await openVfxUpdaterWindow()
             }}
           >
             <GiLightningTrio style={{ marginRight: '6px' }} />
-            <span>VFX Updater</span>
+            <span>Mod Updater</span>
             <VfxDot mods={mods} />{/* repakxtra: VFX mods need an update */}
           </button>
           <EncryptMods />{/* repakxtra */}

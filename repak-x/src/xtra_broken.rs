@@ -343,7 +343,7 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
         return Some(Verdict {
             path: path.to_string(),
             kind: "vfx",
-            reason: "Its Niagara effects are in the layout of an older game build, although the file is newer than the last game update (an earlier update made with an old USMAP, or an old mod installed again). The game can crash on them. The VFX Updater rebuilds them on the new game files.".into(),
+            reason: "Its Niagara effects are in the layout of an older game build, although the file is newer than the last game update (an earlier update made with an old USMAP, or an old mod installed again). The game can crash on them. The Mod Updater rebuilds them on the new game files.".into(),
             stale_niagara: niagara.max(1),
             usmap_wait: 0,
         });
@@ -353,7 +353,7 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
             path: path.to_string(),
             kind: "vfx",
             reason: format!(
-                "A game update changed {changed} of the game files this VFX mod replaces, so its effects may look wrong or crash the game. The VFX Updater rebuilds it on the new game files."
+                "A game update changed {changed} of the game files this VFX mod replaces, so its effects may look wrong or crash the game. The Mod Updater rebuilds it on the new game files."
             ),
             stale_niagara: stale.iter().filter(|k| is_niagara(k)).count(),
             usmap_wait: 0,
@@ -372,7 +372,7 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
             path: path.to_string(),
             kind: "vfx",
             reason: format!(
-                "A game update changed {what} this mod replaces, so {} may look wrong. The VFX Updater rebuilds {} on the new game files.",
+                "A game update changed {what} this mod replaces, so {} may look wrong. The Mod Updater rebuilds {} on the new game files.",
                 if stale_mi == 0 { "it" } else { "its materials" },
                 if stale_mi + stale_ko == 1 { "it" } else { "them" }
             ),
@@ -387,7 +387,7 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
             path: path.to_string(),
             kind: "vfx",
             reason: format!(
-                "Made before the game update that changed how materials are stored, so {} can crash the game. The VFX Updater rewrites {} in the new layout.",
+                "Made before the game update that changed how materials are stored, so {} can crash the game. The Mod Updater rewrites {} in the new layout.",
                 if mi == 1 { format!("its {}material", if m.ui { "UI " } else { "" }) } else { format!("its {mi} {}materials", if m.ui { "UI " } else { "" }) },
                 if mi == 1 { "it" } else { "them" }
             ),
@@ -554,7 +554,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                     return Some(Verdict {
                         path: p.clone(),
                         kind: "vfx",
-                        reason: "Updated without its Niagara effects while the USMAP was older than the game. The USMAP matches the game now, so the VFX Updater can try a full update from its kept original.".into(),
+                        reason: "Updated without its Niagara effects while the USMAP was older than the game. The USMAP matches the game now, so the Mod Updater can try a full update from its kept original.".into(),
                         stale_niagara: 0,
                         usmap_wait: 0,
                     });
@@ -567,9 +567,9 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                         path: p.clone(),
                         kind: "vfx",
                         reason: if record.is_some_and(|c| c.old_layout) {
-                            "Its materials are stored in the layout of an older game build, whatever the file's date says, so the game can crash loading them. The VFX Updater rewrites them in the new layout.".into()
+                            "Its materials are stored in the layout of an older game build, whatever the file's date says, so the game can crash loading them. The Mod Updater rewrites them in the new layout.".into()
                         } else {
-                            "Check for VFX update found its materials still built for an earlier game version, so they may look wrong. The VFX Updater rebuilds them on the new game files.".into()
+                            "Check for update found its materials still built for an earlier game version, so they may look wrong. The Mod Updater rebuilds them on the new game files.".into()
                         },
                         stale_niagara: 0,
                         usmap_wait: 0,
@@ -607,7 +607,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                 v.reason += &if v.usmap_wait > 0 {
                     format!(" It waits for the USMAP of game build {g}: the update changed {} of the files it rebuilds, which the saved USMAP (build {u}) would read wrong.", v.usmap_wait)
                 } else {
-                    format!(" No patch newer than the saved USMAP (build {u}) changed the files the VFX Updater rebuilds, so it can be updated now, before the USMAP of game build {g} is out.")
+                    format!(" No patch newer than the saved USMAP (build {u}) changed the files the Mod Updater rebuilds, so it can be updated now, before the USMAP of game build {g} is out.")
                 };
             }
         }

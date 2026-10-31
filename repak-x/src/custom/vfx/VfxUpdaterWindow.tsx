@@ -188,10 +188,9 @@ function Row({ mod, rowKey, loadouts, run, needs, partial, waits, picked, open, 
       {/* the badges take focus, so their explanation (a tooltip, useGlobalTooltips) reaches the keyboard too */}
       {/* why it needs an update, read with its tick (the row's tooltip says it on hover) */}
       {needs && <span id={whyId} className="xtra-sr-only">{needs}</span>}
-      {/* in Material mods (not under Needs an update): which of them need one */}
+      {/* a May crash mod Update turns off says so */}
       {waits ? <span className="vf-needs is-waiting" tabIndex={0} title={needs}>Waiting</span>
-        : needs && mod.risky && !run ? <span className="vf-needs" tabIndex={0} title={needs}>May crash</span>
-        : needs && mod.materials && !run && <span className="vf-needs" tabIndex={0} title={needs}>Needs update</span>}
+        : needs && mod.risky && !run && <span className="vf-needs" tabIndex={0} title={`${needs} Update turns it off: nothing here can rebuild it.`}>May crash, turns off</span>}
       {mod.niagara && !partial && <span className="vf-niagara" tabIndex={0} title="Has Niagara effects (particle systems). When a game update changes them, the update rebuilds them on the new game files.">Niagara</span>}
       {partial && !run?.report ? (
         <span className="vf-partial" tabIndex={0} title={`${plural(partial, 'Niagara file')} ${partial === 1 ? 'was' : 'were'} made for an older game build. ${partial === 1 ? 'It' : 'They'} will be left out, so ${partial === 1 ? 'that effect shows' : 'those effects show'} the game's usual colors. The rest still updates, and the original is kept, off.`}>Partial</span>
@@ -704,8 +703,9 @@ export function VfxUpdaterPanel() {
   const updatedNow = (m: Mod) => runs[norm(m.utoc)]?.status === 'fixed'
   const addedKeys = new Set(added.map(m => norm(m.utoc)))
   const isAdded = (m: Mod) => !updatedNow(m) && addedKeys.has(norm(m.utoc)) // chosen by hand, above the rest
-  // material mods stay in their own group (the ones that need an update at its top), so the VFX mods stay easy to find
-  const first = (m: Mod) => !updatedNow(m) && !isAdded(m) && !m.materials && !m.risky && Boolean(needsOf(m) || runs[norm(m.utoc)])
+  // every mod that needs an update, whatever its kind (VFX, UI, material, or May crash to turn off), with any that ran
+  // this session and did not update; the rest sorted by kind below
+  const first = (m: Mod) => !updatedNow(m) && !isAdded(m) && Boolean(needsOf(m) || runs[norm(m.utoc)])
   const group = (id: string, title: string, ms: Mod[], count = ms.length) => {
     const keys = ms.map(m => norm(m.utoc))
     return { id, title, mods: ms, count, keys, all: keys.length > 0 && keys.every(k => picked.has(k)), none: !keys.some(k => picked.has(k)) }
@@ -714,17 +714,16 @@ export function VfxUpdaterPanel() {
   const done = shown.filter(updatedNow)
   const chosen = shown.filter(isAdded)
   const others = shown.filter(m => !first(m) && !updatedNow(m) && !isAdded(m))
-  groupOf.current = new Map(shown.map(m => [norm(m.utoc), updatedNow(m) ? 'updated' : isAdded(m) ? 'added' : first(m) ? 'needs' : m.risky ? 'risky' : m.ui ? 'ui' : m.materials ? 'materials' : 'rest']))
+  groupOf.current = new Map(shown.map(m => [norm(m.utoc), updatedNow(m) ? 'updated' : isAdded(m) ? 'added' : first(m) ? 'needs' : m.ui ? 'ui' : m.materials ? 'materials' : 'rest']))
   const groups = [
     group('added', 'Chosen files', chosen),
     group('needs', 'Needs an update', needing, needing.filter(m => needsOf(m) && !isDone(runs[norm(m.utoc)]?.status)).length),
-    // mods that may crash and are on, which nothing here rebuilds: Update turns them off
-    group('risky', 'May crash: Update turns these off', others.filter(m => m.risky)),
-    group('rest', chosen.length || needing.length ? 'Other VFX mods' : 'VFX mods', others.filter(m => !m.materials && !m.risky)),
-    // skins listed for their material instances, apart so the VFX mods stay easy to find
-    group('materials', 'Material mods', others.filter(m => m.materials && !m.ui)),
+    // the ones that need nothing, by kind
+    group('rest', 'VFX mods', others.filter(m => !m.materials)),
     // UI mods listed for their UI materials (a game update rewrote nearly all of them in 3984769)
     group('ui', 'UI mods', others.filter(m => m.ui)),
+    // skins listed for their material instances
+    group('materials', 'Material mods', others.filter(m => m.materials && !m.ui)),
     group('updated', 'Updated', done), // last: what is done goes below what is left to do
   ]
   const inLoadouts = (m: Mod) => { const k = canonKey(modKey(m.path)); return loadouts.filter(l => l.on.some(x => canonKey(x) === k)).map(l => ({ id: l.id, name: l.name })) }
@@ -744,7 +743,7 @@ export function VfxUpdaterPanel() {
   const runningKey = batch.find(k => runs[k]?.status === 'running')
   const runningMod = runningKey ? (mods ?? []).find(m => norm(m.utoc) === runningKey) : undefined
   const rest = list.filter(m => !first(m) && !isAdded(m))
-  orderRef.current = [...list.filter(isAdded), ...list.filter(first), ...rest.filter(m => m.risky), ...rest.filter(m => !m.materials && !m.risky), ...rest.filter(m => m.materials && !m.ui), ...rest.filter(m => m.ui)].map(m => norm(m.utoc))
+  orderRef.current = [...list.filter(isAdded), ...list.filter(first), ...rest.filter(m => !m.materials), ...rest.filter(m => m.ui), ...rest.filter(m => m.materials && !m.ui)].map(m => norm(m.utoc))
   const byUtoc = new Map((mods ?? []).map(m => [norm(m.utoc), m]))
   const times = readTimes()
   // while a batch runs: the mod in progress (its expected time less the time it has run) and the ones after it
@@ -783,12 +782,12 @@ export function VfxUpdaterPanel() {
           {(mods === null || list.length > SEARCH_FROM || Boolean(needle || hero)) && <>
             <label className="lp-search vf-search">
               <Search size={15} aria-hidden="true" />
-              <input value={q} placeholder="Search VFX mods" aria-label="Search VFX mods" onChange={e => setQ(e.target.value)}
+              <input value={q} placeholder="Search mods" aria-label="Search mods" onChange={e => setQ(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Escape') setQ('') }} />
               {q && <button type="button" className="lo-icon vf-search-clear" onClick={() => setQ('')} aria-label="Clear the search" title="Clear the search"><X size={14} /></button>}
             </label>
             <HeroFilter heroes={heroes} value={hero} onChange={setHero} always={mods === null} />
-            <div className="mod-state-filter lp-sort" role="group" aria-label="Sort VFX mods">
+            <div className="mod-state-filter lp-sort" role="group" aria-label="Sort mods">
               <button type="button" aria-pressed={sort === 'newest'} onClick={() => sortBy('newest')}>Newest</button>
               <button type="button" aria-pressed={sort === 'name'} onClick={() => sortBy('name')}>A to Z</button>
             </div>
@@ -829,7 +828,7 @@ export function VfxUpdaterPanel() {
         {mods === null
           ? <p className="lp-empty" aria-live="polite">Reading the mods folder{scan ? `: ${scan.done} of ${plural(scan.total, 'mod')}` : '…'}</p>
           : shown.length === 0
-            ? (loadError && !needle ? null : <p className="lp-empty">{needle || hero ? `No VFX mods match${needle ? ` “${q.trim()}”` : ''}${hero ? ` for ${hero}` : ''}.` : 'No VFX mods in the mods folder. VFX mods and mods with material instances (MI_ files) appear here. Add .utoc takes any other mod.'}</p>)
+            ? (loadError && !needle ? null : <p className="lp-empty">{needle || hero ? `No mods match${needle ? ` “${q.trim()}”` : ''}${hero ? ` for ${hero}` : ''}.` : 'No VFX mods in the mods folder. VFX mods and mods with material instances (MI_ files) appear here. Add .utoc takes any other mod.'}</p>)
             : <div className="vf-groups">{groups.map(g => g.mods.length > 0 && (
               <Group key={g.id} title={g.title} count={g.count} tone={g.id === 'needs' ? 'needs' : g.id === 'updated' ? 'done' : undefined} busy={busy} all={g.all} none={g.none}
                 open={Boolean(needle || hero) || !foldedIds.includes(g.id)} onFold={() => fold(g.id)} onPick={on => userPick(g.keys, on)}>
@@ -959,7 +958,7 @@ export default function VfxUpdaterWindow() {
   useGlobalTooltips() // the app's tooltips, as the main window's: on hover and on keyboard focus, read out with the element
   return (
     <div className="vfx-window-container vf-window">
-      <TitleBar title="VFX Updater" hideMaximize={true} />
+      <TitleBar title="Mod Updater" hideMaximize={true} />
       <VfxUpdaterPanel />
     </div>
   )
