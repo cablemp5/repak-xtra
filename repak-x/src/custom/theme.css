@@ -2299,12 +2299,12 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
   background: var(--quiet-hover); border: 1px solid var(--panel-border); }
 .rd-confirm span { margin-right: auto; }
 /* Settings > Crash reports (custom/CrashReports.tsx): its folder button on the title's row, rows as Recently deleted */
-.crs-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.crs-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .crs-row { align-items: flex-start; padding-block: 12px; }
 .crs-row .rd-name { white-space: normal; overflow-wrap: anywhere; }
 .crs-row .rd-name b { font-weight: 600; }
 .crs-time { font-size: 12px; font-variant-numeric: tabular-nums; }
-.settings-content .crs-note { margin-top: 8px; }
+.settings-content .setting-section > .setting-subtext.crs-note { margin-top: 4px !important; }   /* beats the -8px every section note gets */
 .cf-modal:focus { outline: none; }   /* the dialog itself takes focus when it opens; its controls show the ring */
 
 /* ---------- batch 2, last round ---------- */

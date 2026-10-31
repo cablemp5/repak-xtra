@@ -42,6 +42,7 @@ export default function CrashReports() {
                     <div className="rd-text">
                       <span className="rd-meta crs-time">{when(c.time)}</span>
                       <span className="rd-name">{c.asset ? <>Crashed loading <b>{c.asset}</b></> : `Crashed (${c.type})`}</span>
+                      {!c.asset && <span className="rd-meta">The game crashed in its own code and named no file, so no mod can be matched to it.</span>}
                       {c.asset && (
                         <span className="rd-meta">
                           {!c.held ? 'Could not check which mods replace that file.'
