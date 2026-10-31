@@ -3210,6 +3210,8 @@ async fn install_mods(
                     .ok();
             }
 
+            // repakxtra: an install from the Library never replaces a mod already installed under its name
+            installable_mods.iter_mut().for_each(|m| m.keep_both = true);
             let install_results = install_mods_in_viewport(
                 &mut installable_mods,
                 &mod_directory,

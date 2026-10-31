@@ -253,6 +253,22 @@ fn install_staged(output_dir: &Path, base: &str, source: &Path, build: impl FnOn
     result
 }
 
+/// `name` (a canonical `Name_9999999_P`), or the first `Name (1)_9999999_P`, `Name (2)_...` no installed mod in
+/// `output_dir` holds yet: none of its on, off or IoStore copies, none under another priority, none of the Mod Updater's
+/// copies of it (existing_mod_variants). A copy named `Name (1)` already gets `(2)`, never `Name (1) (1)`.
+pub fn free_name(output_dir: &Path, name: &str) -> String {
+    if existing_mod_variants(output_dir, name).is_empty() {
+        return name.to_string();
+    }
+    let (bang, base, nines) = split_mod_name(name);
+    // `Name (3)` counts on from its own name: the number is the copy's, not part of the mod's name
+    let root = base.rsplit_once(" (").filter(|(_, n)| n.strip_suffix(')').is_some_and(|d| !d.is_empty() && d.bytes().all(|b| b.is_ascii_digit()))).map_or(base.as_str(), |(r, _)| r).to_string();
+    (1..)
+        .map(|n| format!("{}{root} ({n})_{}_P", if bang { "!" } else { "" }, "9".repeat(nines.unwrap_or(BASE_MOD_NINES))))
+        .find(|c| existing_mod_variants(output_dir, c).is_empty())
+        .unwrap_or_else(|| name.to_string())
+}
+
 /// Recursively copy a directory and all its contents to a destination
 fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
     if !dst.exists() {
@@ -384,6 +400,10 @@ pub fn install_mods_in_viewport(
                 .max(BASE_MOD_NINES)
         };
         installable_mod.mod_name = normalize_mod_base_name(&installable_mod.mod_name, min_nines);
+        // repakxtra: never over a mod already installed under this name (the install from the Library)
+        if installable_mod.keep_both {
+            installable_mod.mod_name = free_name(&output_directory, &installable_mod.mod_name);
+        }
 
         // Debug logging for install path tracing
         crate::install_mod::write_install_debug(&format!(
@@ -726,6 +746,21 @@ mod tests {
         assert!(found.contains(&stale_utoc), "stale companion is replaced");
         assert!(!found.contains(&other), "a different mod must be left alone");
         assert!(stale.exists(), "listing never deletes");
+    }
+
+    #[test]
+    fn a_name_already_installed_gets_the_next_number() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(free_name(dir.path(), "Foo_9999999_P"), "Foo_9999999_P", "nothing there: its own name");
+        fs::write(dir.path().join("Foo_9999999_P.bak_repak"), b"x").unwrap();
+        assert_eq!(free_name(dir.path(), "Foo_9999999_P"), "Foo (1)_9999999_P", "an off copy holds the name too");
+        fs::write(dir.path().join("Foo (1)_9999999_P.pak"), b"x").unwrap();
+        assert_eq!(free_name(dir.path(), "Foo_9999999_P"), "Foo (2)_9999999_P");
+        assert_eq!(free_name(dir.path(), "Foo (1)_9999999_P"), "Foo (2)_9999999_P", "a copy's own number counts on");
+        fs::write(dir.path().join("!Bar_99999999_P.utoc"), b"x").unwrap();
+        assert_eq!(free_name(dir.path(), "!Bar_9999999_P"), "!Bar (1)_9999999_P", "another priority holds it, the ! stays");
+        fs::write(dir.path().join("Baz_BROKEN_9999999_P.bak_repak"), b"x").unwrap();
+        assert_eq!(free_name(dir.path(), "Baz_9999999_P"), "Baz (1)_9999999_P", "the Mod Updater's kept original holds it");
     }
 
     #[test]

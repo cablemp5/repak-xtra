@@ -48,6 +48,10 @@ pub struct InstallableMod {
     /// companion PAK instead of dropping them. Set by the frontend; defaults off.
     #[serde(default)]
     pub hybrid: bool,
+    /// repakxtra: a mod already installed under this name stays, and this one is named `<name> (1)`, `(2)`... as
+    /// Windows does. The install from the Library sets it; updating a mod replaces on purpose and does not
+    #[serde(default)]
+    pub keep_both: bool,
 }
 
 impl Default for InstallableMod {
@@ -75,6 +79,7 @@ impl Default for InstallableMod {
             parallel_processing: false,
             obfuscate: false,
             hybrid: false,
+            keep_both: false,
         }
     }
 }
