@@ -57,9 +57,15 @@ fn is_anim_blueprint(key: &str) -> bool {
     key.rsplit('/').next().unwrap_or(key).starts_with("abp_")
 }
 
-/// When the installed game took that build (its first patch container from it on), None before it.
+/// When the installed game took that build (its first patch container from it on), None before it. A later patch that
+/// moves the overrides again (xtra_usmap_diff.rs reads the USMAPs on disk) takes its place, with no app update.
 fn material_layout_patched(containers: &[(PathBuf, u64, u64)]) -> Option<u64> {
-    containers.iter().filter(|(p, ..)| container_cl(p).is_some_and(|cl| cl >= MATERIAL_LAYOUT_BUILD)).map(|c| c.2).min()
+    let build = crate::xtra_usmap_diff::last_moved("MaterialInstanceBasePropertyOverrides").map_or(MATERIAL_LAYOUT_BUILD, |b| b.max(MATERIAL_LAYOUT_BUILD));
+    layout_patched_at(containers, build)
+}
+
+fn layout_patched_at(containers: &[(PathBuf, u64, u64)], build: u64) -> Option<u64> {
+    containers.iter().filter(|(p, ..)| container_cl(p).is_some_and(|cl| cl >= build)).map(|c| c.2).min()
 }
 
 fn is_material_instance(key: &str) -> bool {
@@ -660,8 +666,8 @@ mod tests {
     #[test]
     fn the_material_layout_patch_is_its_first_container_from_that_build_on() {
         let c = |n: &str, at| (PathBuf::from(format!("Paks/{n}")), 1, at);
-        assert_eq!(material_layout_patched(&[c("pakchunk0-Windows.utoc", 5), c("Patch_-Windows_1.1.3962284_P.utoc", 10)]), None);
-        assert_eq!(material_layout_patched(&[c("Patch_-Windows_1.1.3962284_P.utoc", 10), c("Patch_-Windows_1.1.3984769_P.utoc", 20), c("Patch_-Windows_1.1.3990000_P.utoc", 30)]), Some(20));
+        assert_eq!(layout_patched_at(&[c("pakchunk0-Windows.utoc", 5), c("Patch_-Windows_1.1.3962284_P.utoc", 10)], MATERIAL_LAYOUT_BUILD), None);
+        assert_eq!(layout_patched_at(&[c("Patch_-Windows_1.1.3962284_P.utoc", 10), c("Patch_-Windows_1.1.3984769_P.utoc", 20), c("Patch_-Windows_1.1.3990000_P.utoc", 30)], MATERIAL_LAYOUT_BUILD), Some(20));
     }
     fn facts(files: &[String], installed: u64) -> Facts<'_> {
         // the MI_ names, as material_instances finds them without listing classes

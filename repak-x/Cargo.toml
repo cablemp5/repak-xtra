@@ -53,6 +53,7 @@ unrar = "0.5.8"
 zip = "2.6.1"
 sevenz-rust2 = "0.20.1"
 walkdir = "2.5.0"
+zstd = "0.13" # repakxtra: depot USMAPs are zstd-compressed (xtra_usmap_diff.rs), the same version the workspace already builds
 
 # Update checking
 reqwest = { version = "0.12.8", features = ["json", "rustls-tls", "stream"] }

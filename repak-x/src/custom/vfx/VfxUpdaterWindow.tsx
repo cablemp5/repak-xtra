@@ -38,6 +38,8 @@ type Verdict = { path: string; kind: string; reason: string; staleNiagara?: numb
 type Log = { time: string; text: string; type: string }
 type Usmap = { updated: boolean; upToDate: boolean; skipped: boolean; localPath?: string | null; filename?: string | null; version?: string | null; buildNumber?: number | null; commitDate?: string | null; message: string }
 type GameBuild = { updated: number; cl?: number | null }
+/** xtra_usmap_diff.rs: what the newest game build on disk moved, and of that what nothing here handles yet */
+type LayoutNews = { newest?: { build: number; from: number; structs: string[] } | null; notHandled: string[] }
 
 // How long updates took on this PC, the last 12 of each kind (with Niagara effects, without), for the time left. Its
 // own key since 0.20.0: runs from before the speed work (one of 409 s read as 110 minutes for 20 mods) never count
@@ -328,6 +330,8 @@ export function VfxUpdaterPanel() {
   const [naming, setNaming] = useState<Naming>(readNaming)
   const [originals, setOriginals] = useState<Originals>(readOriginals)
   const [safeOff, setSafeOff] = useState(readSafeOff)
+  const [moved, setMoved] = useState<LayoutNews | null>(null)
+  useEffect(() => { void invoke<LayoutNews>('xtra_layout_moves').then(setMoved, () => {}) }, [usmapInfo])
   const keepName = naming === 'broken'
   const [advanced, setAdvanced] = useState(() => localStorage.getItem(ADVANCED) === '1')
   const [busy, setBusy] = useState(false)
@@ -907,6 +911,12 @@ export function VfxUpdaterPanel() {
                       <p><b>This USMAP does not match the game.</b> It is for build {cl}, and the game updated to build {build!.cl}.</p>
                       <p>Until a USMAP for build {build!.cl} is out, VFX mods with Niagara effects can only partially update. Their materials are rebuilt, and Niagara files made for the old build are left out (marked Partial in the list). Those mods need the new USMAP for a full update.</p>
                       <p>rivals-depot usually publishes one soon after a game update. Check for updates gets it.</p>
+                    </div>
+                  ) : null}
+                  {moved?.newest?.structs.length ? (
+                    <div className={moved.notHandled.length ? 'vf-behind' : 'vf-moved'} role="note">
+                      <p>Game build {moved.newest.build} moved the property layout of {plural(moved.newest.structs.length, 'class or struct', 'classes and structs')} since build {moved.newest.from}, read from the USMAPs.</p>
+                      {moved.notHandled.length ? <p>The Mod Updater does not rewrite {moved.notHandled.length === 1 ? 'this one' : `${moved.notHandled.length} of them`} itself: {moved.notHandled.slice(0, 4).join(', ')}{moved.notHandled.length > 4 ? `, and ${moved.notHandled.length - 4} more` : ''}. Blueprint mods holding the game's classes get May crash from their class check.</p> : null}
                     </div>
                   ) : null}
                 </Section>
