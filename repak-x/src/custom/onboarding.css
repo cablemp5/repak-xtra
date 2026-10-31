@@ -1,0 +1,81 @@
+/* repakxtra: the first-launch flow's pages (custom/FirstRun.tsx) and the Getting started checklist on Loadouts home
+   (custom/GettingStarted.tsx). The steps themselves keep theme.css's .fr-step look. Animations off: theme.css zeroes
+   every animation, so each page simply appears. */
+
+/* A page rises in (transitions.dev Stagger), remounted on Back and Next */
+.fr-body { padding: 4px 24px 20px !important; overflow-y: auto; animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; }
+.fr-modal .fr-body { gap: 0; }
+.fr-body .fr-steps { padding: 0 !important; }
+.fr-page { display: flex; flex-direction: column; gap: 14px; padding-top: 12px; }
+.fr-page .fr-drop { margin: 0; }
+
+/* The question pages: two or three big choices, one pick moves on (Hick's law: few options, each one line) */
+.fr-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; padding-top: 12px; }
+.fr-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 16px 18px; text-align: left; cursor: pointer;
+  border: 1px solid var(--panel-border); border-radius: 12px; background: var(--bg-dark); color: var(--text-primary); font: inherit; transition: border-color 0.15s, background 0.15s; }
+.fr-choice:hover { border-color: color-mix(in srgb, var(--accent-primary), transparent 40%); background: var(--quiet-hover); }
+.fr-choice:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.fr-choice b { font-size: 14px; font-weight: 600; }
+.fr-choice span { font-size: 12.5px; line-height: 1.45; color: var(--text-secondary); text-wrap: pretty; }
+.fr-hint { grid-column: 1 / -1; margin: 0; font-size: 13px; color: var(--text-secondary); }
+
+/* A row with an icon instead of a number (Make it yours), no line joining the rows */
+.fr-plain .fr-step::before, .fr-plain .fr-step::after { display: none; }
+.fr-step.is-icon .fr-num { color: var(--text-secondary); background: var(--bg-lighter); box-shadow: none; }
+.fr-step.is-icon.is-done .fr-num { color: #3ecf6e; background: transparent; }
+.fr-admin { display: flex; align-items: center; gap: 6px; color: var(--text-primary) !important; }   /* the system prompt, said before it shows */
+.fr-admin svg { flex: none; color: var(--text-secondary); }
+
+/* The background setup: a waiting note, then one line saying what changed */
+.fr-wait { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding-top: 12px; font-size: 13px; color: var(--text-secondary); }
+.fr-wait p { margin: 0; }
+.fr-wait .su-track { align-self: stretch; margin: 0; }
+.fr-line { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding-top: 12px; font-size: 13px; line-height: 1.5; color: var(--text-primary); }
+.fr-line > svg { flex: none; margin-top: 2px; color: #3ecf6e; }
+.fr-body > .fr-line { padding-top: 16px; }
+
+/* Sound tiles: Off and each pack, a name to pick and small buttons to hear it */
+.fr-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; margin-top: 10px; width: 100%; }
+.fr-tile { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--panel-border); border-radius: 10px; background: var(--bg-dark); transition: border-color 0.15s; }
+.fr-tile.is-on { border-color: var(--accent-primary); }
+.fr-tile-pick { height: 28px; padding: 0 8px; border: none; border-radius: 6px; background: transparent; color: var(--text-primary); font: 600 13px var(--font-primary); text-align: left; cursor: pointer; }
+.fr-tile-pick:hover { background: var(--quiet-hover); }
+.fr-tile-pick[aria-pressed="true"] { color: var(--accent-primary); }
+.fr-tile-try { display: flex; flex-wrap: wrap; gap: 4px; }
+.fr-tile-try button { height: 22px; padding: 0 7px; border: 1px solid var(--panel-border); border-radius: 999px; background: transparent; color: var(--text-secondary); font: 500 11px var(--font-primary); cursor: pointer; }
+.fr-tile-try button:hover { color: var(--text-primary); background: var(--quiet-hover); }
+
+/* Where they are: a dot per page after the welcome, the current one wide, and "Step 2 of 5" (Goal-gradient: the end in sight) */
+.fr-rail { display: inline-flex; align-items: center; gap: 4px; margin-right: auto; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.fr-rail i { width: 6px; height: 6px; border-radius: 999px; background: var(--panel-border); transition: width 0.2s, background 0.2s; }
+.fr-rail i.is-done { background: color-mix(in srgb, var(--accent-primary), transparent 45%); }
+.fr-rail i.is-now { width: 16px; background: var(--accent-primary); }
+.fr-rail > span { margin-left: 6px; }
+
+/* Getting started: a quiet card above the loadouts, rows ticked as the app finds them done */
+.gs-card { width: fit-content; max-width: 100%; padding: 14px 18px 12px; border: 1px solid var(--panel-border); border-radius: 12px; background: var(--bg-dark); }
+.gs-card header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.gs-card h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.gs-count { margin-right: auto; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.gs-card ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.gs-card li { display: flex; align-items: center; gap: 10px; min-height: 30px; font-size: 13px; color: var(--text-primary); }
+.gs-card li.is-done { color: var(--text-secondary); }
+.gs-card li small { font-size: 12px; color: var(--text-secondary); }
+.gs-card li .lo-text-btn { margin-left: 4px; height: 24px !important; min-height: 0 !important; padding: 0 10px !important; font-size: 12px !important; }
+.gs-mark { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--panel-border); display: grid; place-items: center; color: #3ecf6e; }
+.is-done .gs-mark { border-color: transparent; }
+.gs-label { display: inline-flex; align-items: center; gap: 8px; }
+
+/* The first loadout switched on: one card, once, with cable's note */
+.gs-party { padding: 14px 18px; border: 1px solid color-mix(in srgb, var(--accent-primary), transparent 50%); border-radius: 12px;
+  background: color-mix(in srgb, var(--accent-primary), transparent 92%); }
+.gs-party-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-primary); }
+.gs-party-head svg.lucide:first-child { color: var(--accent-primary); }
+.gs-party-head span { color: var(--text-secondary); }
+.gs-party-head .lo-icon { margin-left: auto; }
+.gs-note { margin: 10px 0 0; padding: 0 0 0 12px; border-left: 2px solid color-mix(in srgb, var(--accent-primary), transparent 40%); font-size: 13px; line-height: 1.5; color: var(--text-primary); }
+.gs-note p { margin: 0; max-width: 62ch; text-wrap: pretty; }
+.gs-note footer { margin-top: 6px; display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--text-secondary); }
+
+/* the page title takes focus on each page for screen readers (FirstRun.tsx), no ring for a heading */
+.fr-welcome:focus { outline: none; }

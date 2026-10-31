@@ -27,7 +27,7 @@ export default function WelcomeIntro({ onNext, onSkip }: { onNext: () => void; o
     <div className="wi">
       <div className="wi-head">
         <h2 className="wi-title">Welcome to <Wordmark height={26} /></h2>
-        <p className="wi-lede">Group mods into loadouts. One switch turns a whole look on or off.</p>
+        <p className="wi-lede">Group mods into loadouts. One switch turns a whole look on or off, and you see it before you play.</p>
       </div>
 
       <div className="wi-demos">
@@ -62,7 +62,7 @@ export default function WelcomeIntro({ onNext, onSkip }: { onNext: () => void; o
       </div>
 
       <div className="modal-footer fr-foot">
-        <button type="button" className="lo-text-btn" onClick={onSkip}>Skip setup</button>
+        <button type="button" className="lo-text-btn" onClick={onSkip}>Finish later</button>
         <button type="button" className="btn-primary wi-next" onClick={onNext}>Set up {APP_NAME} <ArrowRight size={15} /></button>
       </div>
     </div>

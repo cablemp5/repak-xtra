@@ -8,7 +8,7 @@ import { ChevronDown, Download, EyeOff, PanelTop, Tags, Trash2, TriangleAlert, V
 import type { useAlert } from '../components/AlertHandler'
 import { MotionGlobalConfig } from 'framer-motion'
 import Checkbox from '../components/ui/Checkbox'
-import { SOUND_PACKS, cue, setSoundOn, setSoundPack, soundPackOf, unlockSound } from './sounds'
+import { SOUND_PACKS, type ThemeName, cue, setSoundOn, setSoundPack, soundPackOf, unlockSound } from './sounds'
 import { savedItem } from './storageCarryOver'
 
 // `on`: shown until switched off (the rest start hidden). Stored as '1' or '0' once changed.
@@ -127,6 +127,16 @@ const update = (key: string, value: string) => {
 const subscribe = (l: () => void) => {
   listeners.add(l)
   return () => listeners.delete(l)
+}
+
+/** The first-launch flow's sound tiles (FirstRun.tsx): Off or a pack, the same keys Sound effects below uses. */
+export type SoundChoice = ThemeName | 'off'
+export const useSoundChoice = () => useSyncExternalStore(subscribe, (): SoundChoice => (soundOn() ? soundPack() : 'off'))
+export const setSoundChoice = (c: SoundChoice) => {
+  if (c === 'off') { update(SOUND_KEY, '0'); return }
+  localStorage.setItem(SOUND_PACK_KEY, c)
+  update(SOUND_KEY, '1')
+  unlockSound()
 }
 
 /** Whether a show/hide pref is on, re-rendering when it changes (e.g. 'mod-size'). */

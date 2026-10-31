@@ -11,6 +11,8 @@ const PRIORITY = /(_\d+_P)+$/i
 let root = '' // the mods folder, lowercase with "/"; empty until App knows it
 /** App passes its game path (the mods folder) here, so keys are relative to it. */
 export const setModsRoot = (path: string) => { root = (path || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase(); keyCache.clear() }
+/** Whether App knows the game yet (the Getting started checklist's first row). */
+export const hasModsRoot = () => root !== ''
 
 /** File name without on/off extension and priority suffix ("!" kept): the preview cache key, and the name a mod shows.
  *  A member key gives its name. */

@@ -83,6 +83,7 @@ import { REPAKXTRA_VERSION, latestRelease, versionTag } from './custom/version'
 import { installedReleaseNotes } from './custom/releaseNotes'
 import { APP_NAME } from './custom/edition'
 import FirstRun from './custom/FirstRun' // repakxtra: first-launch setup
+import { markLaunched } from './custom/GettingStarted' // repakxtra
 import { installDroppedKit } from './custom/previewKit'
 import { useGlobalTooltips } from './hooks/useGlobalTooltips'
 import { useAprilFools } from './hooks/useAprilFools'
@@ -3907,6 +3908,7 @@ function App() {
               if (gameRunning || launchSuccess) return
               try {
                 await invoke('launch_game')
+                markLaunched() // repakxtra: the Getting started checklist's last row
                 setStatus('Game launched')
                 setLaunchSuccess(true)
                 setTimeout(() => setLaunchSuccess(false), 3000)
@@ -4566,8 +4568,8 @@ function App() {
         isOpen={showOnboarding}
         onClose={handleCloseTour}
       />
-      <FirstRun alert={alert} gamePath={gamePath} onAutoDetect={handleAutoDetect} onBrowse={handleBrowseGamePath}
-        onAddFiles={handleFileDrop} onStartTour={() => setShowOnboarding(true)} />{/* repakxtra */}
+      <FirstRun alert={alert} gamePath={gamePath} mods={mods} installing={panels.install} enableDrp={enableDrp} onSetDrp={on => saveAllSettings({ enableDrp: on })}
+        onAutoDetect={handleAutoDetect} onBrowse={handleBrowseGamePath} onAddFiles={handleFileDrop} onStartTour={() => setShowOnboarding(true)} />{/* repakxtra */}
     </div >
   )
 }
