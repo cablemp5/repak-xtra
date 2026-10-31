@@ -10,13 +10,13 @@
   <a href="https://github.com/X-zant/Repak-X"><img src="https://img.shields.io/badge/built%20on-Repak%20X-111111?style=flat-square" alt="Built on Repak X"></a>
 </p>
 
-**A Marvel Rivals mod manager built on [Repak X](https://github.com/X-zant/Repak-X), with loadouts, generated previews and one-click setup.**
+**A Marvel Rivals mod manager built on [Repak X](https://github.com/X-zant/Repak-X), with loadouts, generated previews, Smart loadouts that sort your mods for you, and a first-launch setup that gets mods working in a few clicks.**
 
 <img src=".github/screenshots/loadouts.png" alt="The Loadouts screen" width="100%">
 
 ## Built on Repak X
 
-repakxtra is a fork of **[Repak X](https://github.com/X-zant/Repak-X)** by **Xzant** (backend, founder) and **Saturn** (frontend), with thanks to **Trumank**, **Krisan Thyme**, **Natimerry**, **amMatt** and the **Marvel Rivals Modding Server**. It adds loadouts, previews and guided setup on top; installing, conflict checks, the Asset Explorer, the VFX Updater and the rest of the core are Repak X's work. Please support the original project.
+repakxtra is a fork of **[Repak X](https://github.com/X-zant/Repak-X)** by **Xzant** (backend, founder) and **Saturn** (frontend), with thanks to **Trumank**, **Krisan Thyme**, **Natimerry**, **amMatt** and the **Marvel Rivals Modding Server**. It adds loadouts, Smart loadouts, previews and the guided first-launch setup on top. Installing, conflict checks, the Asset Explorer, the VFX Updater and the rest of the core are Repak X's work. Please support the original project.
 
 > [!NOTE]
 > repakxtra is an unofficial fork: not made by the Repak X team, and not affiliated with NetEase or Marvel.
@@ -33,43 +33,69 @@ you do not need to unzip it.
 3. **Close Marvel Rivals** if it is open.
 4. **Open repakxtra.** Double-click `repakxtra.exe` in the folder. If Windows says "Windows protected your PC", click
    **More info**, then **Run anyway**.
-5. **Follow the welcome screen.** It opens by itself the first time and starts with what loadouts are. Click
-   **Set up repakxtra** for the steps.
-   - **Find the game** usually has a blue check already. If not, click **Find it**.
-   - **Install the signature bypass:** click **Install**. Without it, the game does not load mods.
-   - **Install Project Galacta:** click **Install**. Most skin mods need it.
-   - **Mod previews** is recommended: click **Set up previews** and every mod and loadout gets a picture of how it
-     looks in the game. It downloads the free preview kit (about 110 MB) and installs Blender; if Windows asks whether
-     to allow changes, click **Yes**.
-   - **Desktop shortcut** is optional.
-6. **Add your mod.** Drag the mod file from your Downloads folder onto the repakxtra window and drop it on
-   **Install Mods**. You can also click **Choose files...** under **Add your first mods** and pick it.
-7. **Click Install and save loadout.** It installs the mod and saves it as a loadout too (see below). Leave
-   **Advanced** as it is; it is for special mods.
-8. **Check that it is on.** Click **Library** at the top. Your mod is in the list with a blue switch, which means on.
-9. **Play.** Click **Launch Game**. The mod loads when the game starts.
+5. **Click Set up repakxtra.** The welcome screen opens by itself the first time and shows what loadouts are. Setup
+   takes about two minutes, and the rail at the bottom shows its five steps.
+6. **Answer "Got mods already?"** Click **Not yet** for a fresh start. (Mods in the game folder already? See
+   [the next section](#how-to-set-up-repakxtra-when-you-already-have-mods).)
+7. **Get mods working.** Click **Set up all three**. It finds the game, installs the signature bypass (without it the
+   game does not load mods) and installs Project Galacta (most skin mods need it), each with its progress, and the game
+   folder on the right lights up each file as it goes in. When it says **Mods are ready to go**, click **Next**.
+8. **Add your first mod.** Drag the mod file from your Downloads folder onto the window, or click **Choose files...**
+   and pick it. The setup steps aside for the install panel: click **Install and save loadout** (leave **Advanced** as
+   it is, it is for special mods). The mod installs, is saved as a loadout, and the setup comes back. Click **Next**.
+9. **Make it yours (all optional).** **Set up previews** downloads the free preview kit (about 110 MB) and installs
+   Blender, so every mod and loadout gets a picture of how it looks in game. If Windows asks whether to allow changes,
+   click **Yes**. You can also show repakxtra in your Discord status, make a desktop shortcut, and pick a sound pack
+   (try each one first). Click **Next**.
+10. **Pick your first loadout.** Click **Continue with** your mod's loadout. Its page opens with the mod on.
+11. **Play.** Click **Launch** at the top. The mod loads when the game starts.
 
-<img src=".github/screenshots/guide-first-mod.gif" alt="Installing the signature bypass and Project Galacta, dragging a mod file onto the window, installing it and seeing it on in the Library" width="100%">
+<img src=".github/screenshots/guide-first-mod.gif" alt="The first-launch setup on a fresh PC: Not yet, Set up all three, dropping a mod on the window, installing it, Make it yours, then opening its loadout" width="100%">
 
-To turn a mod off, click its switch in the Library. To remove one, right-click it and click **Delete**; it waits 7 days
-in **Settings > Recently deleted** in case you want it back.
+Close the setup any time with the **X**: **Setup > Guided setup** opens it again. To turn a mod off, click its
+switch in the Library. To remove one, right-click it and click **Delete**. It waits 7 days in
+**Settings > Recently deleted** in case you want it back.
 
 > [!WARNING]
 > Close the game before you install, turn on or turn off mods, or change anything in **Setup**.
+
+## How to set up repakxtra when you already have mods
+
+Coming from Repak X or another manager? repakxtra finds the mods already in your game folder and turns them into
+loadouts for you.
+
+1. **Click Set up repakxtra** on the welcome screen.
+2. **Click Yes, I have mods.** The page already counts the mods in your game folder.
+3. **Wait for Setting up mods.** It installs only what is missing (the signature bypass, Project Galacta) and changes
+   nothing else. A bypass or loader of your own stays as it is. If the game is open, close it and click
+   **Check again**. Click **Next**.
+4. **Make it yours** works as above. Click **Next**.
+5. **Click Group my mods into loadouts.** Smart loadouts opens with every mod that is in no loadout, sorted by look:
+   the mesh, effects, icons and textures of one skin end up together, each loadout in a collection named for its hero.
+6. **Check the list.** Untick any loadout you do not want, or click its pencil to rename it. **Advanced** moves mods
+   between loadouts, merges two, and adds word rules (a word to ignore, like a creator's tag, or one to group by).
+   Rules are saved for next time.
+7. **Click Create.** The loadouts appear on the Loadouts screen, and with **Generate previews** ticked each one renders
+   its picture, one after another.
+
+<img src=".github/screenshots/guide-have-mods.gif" alt="The first-launch setup with mods already installed: Yes, I have mods, the bypass and Project Galacta installing by themselves, Make it yours, then Smart loadouts grouping the mods and creating the loadouts" width="100%">
+
+Smart loadouts is always a click away: **Loadouts > New > Smart loadouts** sorts the mods you added since. With mods
+and no loadouts yet, the Loadouts screen offers **Group my mods into loadouts** right away.
 
 ## How to create your first loadout
 
 A loadout is a group of mods with one switch, like one look for a hero. It gets a picture of what the mods look like
 in the game.
 
-1. **Set up previews (only once).** Skip this if you did it on the welcome screen. Otherwise click **Setup** at the
+1. **Set up previews (only once).** Skip this if you did it in **Make it yours**. Otherwise click **Setup** at the
    top and, under **Mod previews**, click **Set up previews**. It downloads the free preview kit (about 110 MB) and
    installs Blender, the free program that draws the pictures. If Windows asks whether to allow changes, click **Yes**.
    When it says **Ready**, close Setup.
 2. **Install a mod** as in the steps above: drag the file onto the window and drop it on **Install Mods** (or click
    **Install** in the Library and pick it). To make the loadout yourself, click **Install without a loadout**.
    (**Install and save loadout** does steps 3 to 6 for you.)
-3. **Make a loadout.** Click **Loadouts** at the top, then **New loadout**.
+3. **Make a loadout.** Click **Loadouts** at the top, then **New** and **New loadout**.
 4. **Name it.** Type a name, like `Ultimate`, and press **Enter**.
 5. **Add your mod.** Under **Add mods**, type part of the mod's name in the search box, then click the **+** next to it.
    It moves up to **In this loadout**.
@@ -110,6 +136,9 @@ game crashes. The VFX Updater rebuilds them on the new game files, many at once.
 
 **Loadouts**
 - One click turns a set of mods on or off. Loadouts are independent, and you are warned when two that are on change the same hero.
+- **Smart loadouts** (**New > Smart loadouts**) makes loadouts from the mods that are in none: mods that share a look
+  become one loadout, and a lone mod gets its own. Simple is a ticked list. Advanced moves mods, merges loadouts and
+  keeps word rules for next time.
 - Collections or a view by hero. Drag a card to reorder it or move it to another collection; the pencils rename
   loadouts and collections. **−** and **+** in the header (or `Ctrl` + scroll) change the card size, and **Search
   loadouts...** finds one by name or collection.
@@ -127,7 +156,8 @@ game crashes. The VFX Updater rebuilds them on the new game files, many at once.
 
 **Previews**
 - Character mods render on the hero in the lobby pose, using the mods' real materials. A loadout's mods render together.
-- Heroes with forms get one picture per form the mod changes (Magik and Darkchylde, Hulk's three); cards page through them.
+- Heroes with forms get one picture per form the mod changes (Magik and Darkchylde, Hulk's three). A card's pictures
+  turn like a carousel with its arrows.
 - Animations get a looping clip, VFX mods a palette of the colors they change, UI mods an icon sheet, sound mods a list.
   When a loadout has an emote's sound mod, hovering the emote's clip plays its sound (each card can mute it).
 - Mods that put another skin on a hero's default through the skin table render as that skin.
@@ -160,13 +190,19 @@ folder. Project Galacta mods get a magenta tag. File sizes are a setting (**Sett
 new version first and keeps the old one in **Recently deleted**, so a failed install leaves your mod as it was. `.pak.off`, `.utoc.off` and `.ucas.off` files
 (how RivalsFPS turns mods off, and how they often get shared) install like any other mod, each set as one mod, on.
 
-**When something breaks:** a crash alert's **See suspects** lists the mods that were on and hold the asset that crashed
-(or else change the hero it names), checked, to turn off together with Undo. **Copy setup report** (in **Setup** and
+**When something breaks:** a crash alert's **See suspects** lists the mods that were on, ranked by how closely they
+match the crash (the asset that crashed, then the skin, then the hero it names), checked, to turn off together with Undo. **Copy setup report** (in **Setup** and
 **Settings > Help & Community**) copies your setup, conflicts, newest crash and the mods that are on as text for a help
 channel, with no folder paths or user name. Audio and UI mods say in their details when they only look broken
 (cooldown sounds in the practice range).
 
-**Setup:** the signature bypass ships inside the app (with an "Is it safe?" report), Project Galacta installs and updates in one click, and the preview kit and Blender install from here. Every install shows its steps as it goes.
+**Setup:** the signature bypass ships inside the app (with an "Is it safe?" report), Project Galacta installs and updates in one click, and the preview kit and Blender install from here. Every install shows its steps as it goes. **Guided setup** opens the first-launch setup again.
+
+**Encrypt:** right-click mods in the Library and click **Encrypt** to keep them from being extracted in FModel. The
+originals are kept as backups, and each mod stays on or off as it was.
+
+**Make it yours:** a sound pack (Bell, Mech, Bubble or Press, or none) in **Settings > Interface**, next to UI scale,
+animations and lighter graphics for slower PCs. `F3` shows a frame rate counter.
 
 
 ## See it in action
@@ -201,6 +237,7 @@ want until it says **All resolved**.
 | `L` | Switch between Loadouts and the Library |
 | `Ctrl+1` to `Ctrl+9` | Turn the loadout pinned to that number on or off (pick it in More > Hotkey on the loadout's page) |
 | `Ctrl+G` | Launch the game |
+| `F3` | Show or hide the frame rate counter |
 | `Ctrl+O` | Install PAKs or archives |
 | `Ctrl+Shift+X` (in game) | [Capture the loadout's picture](#features), once **Capture screenshot** is open |
 
@@ -216,7 +253,11 @@ want until it says **All resolved**.
     <td width="50%"><img src=".github/screenshots/setup.png" alt="Setup"><br><sub>Setup</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src=".github/screenshots/settings.png" alt="Settings"><br><sub>Settings: UI scale, sound and motion</sub></td>
+    <td width="50%"><img src=".github/screenshots/onboarding.png" alt="The first-launch setup asking Got mods already?"><br><sub>The first-launch setup</sub></td>
+    <td width="50%"><img src=".github/screenshots/smart-loadouts.png" alt="Smart loadouts"><br><sub>Smart loadouts</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src=".github/screenshots/settings.png" alt="Settings"><br><sub>Settings: UI scale, sound packs and motion</sub></td>
     <td width="50%"></td>
   </tr>
 </table>
@@ -228,7 +269,7 @@ want until it says **All resolved**.
 <br>
 
 No. repakxtra is an unofficial fork of [Repak X](https://github.com/X-zant/Repak-X). Installing, conflict checks,
-the Asset Explorer and the VFX Updater are Repak X's work; repakxtra adds loadouts, previews and guided setup.
+the Asset Explorer and the VFX Updater are Repak X's work. repakxtra adds loadouts, Smart loadouts, previews and guided setup.
 Bugs in repakxtra belong here, not with the Repak X team.
 
 </details>
