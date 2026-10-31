@@ -51,9 +51,7 @@
 .ob-choice:hover .ob-ghosts i:nth-child(1) { transform: rotate(-12deg) translate(-8px, 4px); }
 .ob-choice:hover .ob-ghosts i:nth-child(3) { transform: rotate(12deg) translate(8px, 4px); }
 .ob-choice:hover .ob-ghosts i:nth-child(2) { border-color: var(--accent-primary); }
-.wi-card.ob-empty { display: grid !important; place-items: center; width: 88px !important; aspect-ratio: 1358 / 1920; border: none; color: var(--text-secondary);
-  /* the New loadout card's own dashed outline (theme.css .lo-card-new), at this size */
-  background: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='9' ry='9' stroke='rgba(255,255,255,0.22)' stroke-width='3' stroke-dasharray='4%2c 4' stroke-linecap='round'/%3e%3c/svg%3e"); }
+.wi-card.ob-empty { display: grid !important; place-items: center; width: var(--ob-card) !important; aspect-ratio: 1358 / 1920; border: 1.5px dashed rgba(255, 255, 255, 0.28); background: transparent; color: var(--text-secondary); }   /* thin and finely dashed, like the New loadout card */
 
 .ob-smart { --g0: var(--accent-primary); --g1: #3ecf6e; display: flex; align-items: center; gap: 12px; }
 .ob-smart-mods { display: flex; flex-direction: column; gap: 5px; }
@@ -65,7 +63,8 @@
 .ob-smart-mods .is-g1 i { background: var(--g1); }
 .ob-smart-arrow { flex: none; color: var(--text-secondary); }
 .ob-smart-out { display: flex; gap: 6px; }
-.ob-smart-out .wi-card { width: 88px; }
+.ob-choices { --ob-card: 88px; }   /* the loadout cards in Smart loadouts and Start one by hand, one size */
+.ob-smart-out .wi-card { width: var(--ob-card); }
 .ob-smart-out .wi-card-body { display: none; }
 .ob-smart-out .wi-card.is-g0 { border-color: color-mix(in srgb, var(--g0), transparent 30%); }
 .ob-smart-out .wi-card.is-g1 { border-color: color-mix(in srgb, var(--g1), transparent 40%); }
@@ -82,7 +81,7 @@
 /* The game folder as a file tree: no card, the folder open (its caret down), the two files under it on a guide line */
 .ob-tree, .ob-tree ul { list-style: none; margin: 0; padding: 0; }
 .ob-tree { align-self: center; display: flex; flex-direction: column; gap: 2px; padding: 20px 18px; border: 1px solid var(--panel-border); border-radius: 12px; background: var(--bg-darker); }
-.ob-tree-kids { position: relative; margin-left: 13px; padding-left: 14px; }
+.ob-tree-kids { position: relative; margin-left: 13px; padding-left: 28px; }
 .ob-tree-kids ul { display: flex; flex-direction: column; gap: 2px; }
 .ob-tree li:not(.ob-tree-kids) { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px;
   color: var(--text-secondary); transition: background 0.3s, color 0.3s, opacity 0.3s; }
@@ -131,7 +130,7 @@
 @keyframes ob-drift { 0% { transform: translate(-3px, -4px) rotate(-1.5deg); } 50% { transform: translate(3px, 1px) rotate(0.5deg); } 100% { transform: translate(-1px, 5px) rotate(1.5deg); } }
 .ob-drop-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 20px; margin-top: 20px; }
 .ob-drop-actions .btn-primary { display: inline-flex !important; align-items: center; gap: 8px; width: auto !important; height: 36px !important; min-height: 0 !important; padding: 0 16px !important; }
-.ob-drop-actions .ob-out { display: inline-flex; align-items: center; gap: 5px; line-height: 1; }
+.ob-drop-actions .ob-out, .ob-drop-actions .ob-out:hover { display: inline-flex; align-items: center; gap: 5px; line-height: 1; text-decoration: none !important; }
 .ob-out svg.lucide { flex: none; }
 .ob-drop .ob-done { margin-top: 14px; font-size: 13px; }
 .ob-next { display: inline-flex !important; align-items: center; justify-content: center; gap: 7px; }
@@ -221,4 +220,4 @@ html[data-motion="off"] :is(.ob-tree li, .ob-tree li::after, .ob-float) { animat
 .gs-note { margin: 10px 0 0; padding: 0 0 0 12px; border-left: 2px solid color-mix(in srgb, var(--accent-primary), transparent 40%); font-size: 13px; line-height: 1.5; color: var(--text-primary); }
 .gs-note p { margin: 0; max-width: 62ch; text-wrap: pretty; }
 .gs-note footer { margin-top: 6px; display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--text-secondary); }
-.ob-choice .wi-card.ob-empty svg.lucide { width: 24px !important; height: 24px !important; }   /* past the app's button icon size */
+.ob-choice .wi-card.ob-empty svg.lucide { width: 20px !important; height: 20px !important; }   /* past the app's button icon size */
