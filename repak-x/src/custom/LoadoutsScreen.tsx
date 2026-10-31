@@ -18,7 +18,6 @@ import { CardZoomControl, useCardZoom, useWheelZoom } from './cardZoom'
 import { type Spot, playFlip, snapshotCards, useCardDrag } from './cardDrag'
 import { prepareMedia, putMedia } from './loadoutMedia'
 import { plural } from './modName'
-import { Num } from './motion'
 import { PreviewsUnavailable, dismissPreviewSummary, generateAllLoadouts, loadoutHasPreview, stopPreviews, usePreviewFailureToast, usePreviewsAvailable, usePreviewBatch, usePreviewStage, usePreviewSummary, usePreviewVersion } from './previews'
 import {
   type Loadout, type Mod, OTHER, OTHER_LABEL, addGroup, captureKey, changesToTurnOff, changesToTurnOn, deleteGroup, displayName, groupKey,
@@ -103,7 +102,7 @@ function GroupHead({ p, name, count, at, total, editing, setEditing, folded, onF
       {real && !editing && (
         <button type="button" className="lo-icon lo-group-pen" aria-label={`Rename ${name}`} title="Rename collection" onClick={() => { setDraft(name); setEditing(name) }}><Pencil size={13} /></button>
       )}
-      <span className="lo-group-count"><Num id={`group-${groupKey(name)}`} value={count} /></span>
+      <span className="lo-group-count">{count}</span>
       {real && !editing && (
         <span className="lo-group-tools">
           <button type="button" className="lo-icon" aria-label={`Move ${name} up`} title="Move up" disabled={at === 0} onClick={() => moveGroup(name, -1)}><ChevronUp size={14} /></button>
@@ -653,7 +652,7 @@ function LoadoutsHome(p: LoadoutProps) {
               ? <GroupHead p={p} name={group} count={list.length} at={savedGroups.findIndex(g => groupKey(g) === groupKey(group))} total={savedGroups.length} folded={isFolded} onFold={() => fold(foldId)}
                   editing={editingGroup !== null && groupKey(editingGroup) === groupKey(group)} setEditing={setEditingGroup} />
               : <div className="lo-group-head" data-flip={`head:${group}`}><FoldButton name={group} folded={isFolded} onFold={() => fold(foldId)} />
-                  <span className="lo-group-name" role="heading" aria-level={3} onClick={() => fold(foldId)} title={`Click to ${isFolded ? 'show' : 'collapse'}`}>{group}</span><span className="lo-group-count"><Num id={`hero-${group}`} value={list.length} /></span></div>}
+                  <span className="lo-group-name" role="heading" aria-level={3} onClick={() => fold(foldId)} title={`Click to ${isFolded ? 'show' : 'collapse'}`}>{group}</span><span className="lo-group-count">{list.length}</span></div>}
             {isFolded ? null : <>
             {list.length === 0 && <p className="lo-group-empty">Empty. Drag a loadout card here, or pick this collection on a loadout's page.</p>}
             <div className="lo-grid">

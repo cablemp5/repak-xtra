@@ -287,12 +287,12 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
         </div>
         <div className="context-menu-separator" />
         <div className="context-menu-item" onClick={() => { onCreateFolder({ parentId: folder.id }); onClose(); }}>
-          + New folder…
+          + New folder
         </div>
 
         {onMoveFolderTo && (
           <div className="context-menu-item submenu-trigger" onMouseEnter={handleSubmenuEnter}>
-            Move to…
+            Move to
             <div className="submenu">
               {canMoveToRoot && (
                 <div className="context-menu-item" onClick={() => { onMoveFolderTo(null); onClose(); }}>
@@ -300,7 +300,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
                 </div>
               )}
               <div className="context-menu-item" onClick={() => { onCreateFolder({ moveFolderId: folder.id }); onClose(); }}>
-                + New folder…
+                + New folder
               </div>
               {moveCandidates.length > 0 && (
                 <>
@@ -359,7 +359,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
       {onCheckVfx && <div className="context-menu-item" onClick={() => { onCheckVfx(); onClose(); }}>Check for update</div>}{/* repakxtra */}
       <div className="context-menu-separator" />
       <div className="context-menu-item submenu-trigger" onMouseEnter={handleSubmenuEnter}>
-        {selectionCount > 1 ? `Move ${selectionCount} mods to…` : 'Move to…'}
+        {selectionCount > 1 ? `Move ${selectionCount} mods to` : 'Move to'}
         {/* Same order as the folder submenu above: root first, then New Folder,
             then the list. It used to trail the root entry after the list. */}
         <div className="submenu">
@@ -368,7 +368,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
           </div>
           {/* Inside "Move to...", creating a folder must also perform the move */}
           <div className="context-menu-item" onClick={() => { onCreateFolder({ moveMods: true }); onClose(); }}>
-            + New folder…
+            + New folder
           </div>
           <div className="context-menu-separator" />
           <div className="scrollable-menu-list" style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }}>
@@ -383,12 +383,12 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
       {/* repakxtra: Add to loadout (custom/Loadouts.tsx LoadoutMenuItems) */}
       {loadoutMenu && (
         <div className="context-menu-item submenu-trigger" onMouseEnter={handleSubmenuEnter}>
-          {selectionCount > 1 ? `Add ${selectionCount} mods to loadout…` : 'Add to loadout…'}
+          {selectionCount > 1 ? `Add ${selectionCount} mods to loadout` : 'Add to loadout'}
           <div className="submenu">{loadoutMenu(onClose)}</div>
         </div>
       )}
       <div className="context-menu-item submenu-trigger tag-submenu" onMouseEnter={handleSubmenuEnter}>{/* repakxtra: class, hidden with Hide tag features */}
-        Assign tag…
+        Assign tag
         <div className="submenu">
           <div className="context-menu-item" onClick={() => {
             onNewTag((tag) => {
@@ -396,7 +396,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
             });
             onClose();
           }}>
-            + New tag…
+            + New tag
           </div>
           {allTags && allTags.length > 0 && <div className="context-menu-separator" />}
           {allTags && allTags.map(tag => (
@@ -424,7 +424,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
         Check Conflicts <IoLayersSharp className="warning-icon-small" style={{ fill: 'var(--accent-primary)' }} />
       </div>
       <div className="context-menu-item" onClick={() => { if (onUpdateMod) onUpdateMod(); onClose(); }}>
-        Replace file…
+        Replace file
       </div>
       {onEncrypt && <div className="context-menu-item" onClick={() => { onEncrypt(); onClose(); }}>{selectionCount > 1 ? `Encrypt ${selectionCount} mods` : 'Encrypt'}</div>}{/* repakxtra */}
       <div className="context-menu-item" onClick={async () => {
@@ -439,7 +439,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
       </div>
       {/* repakxtra: the tools for mod makers in one submenu, so the everyday actions come first (Hick's law) */}
       <div className="context-menu-item submenu-trigger" onMouseEnter={handleSubmenuEnter}>
-        For modders…
+        For modders
         <div className="submenu">
           <div className="context-menu-item" onClick={() => { if (onSendToVfxUpdater) onSendToVfxUpdater(mod); onClose(); }}>
             Send to Mod Updater

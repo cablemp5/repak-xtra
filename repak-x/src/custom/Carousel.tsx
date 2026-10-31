@@ -22,7 +22,7 @@ export function CarouselSlide({ slide, dir, children }: { slide: string | number
   return <>
     {leaving && leaving.slide !== slide && (
       <span key={leaving.slide} className={`cr-slide is-out ${way}`} aria-hidden="true"
-        onAnimationEnd={e => { if (e.target === e.currentTarget) setLeaving(null) }}>{leaving.node}</span>
+        onAnimationEnd={e => { if (e.target === e.currentTarget && !e.pseudoElement) setLeaving(null) }}>{leaving.node}</span>
     )}
     <span key={slide} className={`cr-slide${leaving ? ` is-in ${way}` : ''}`}>{children}</span>
   </>

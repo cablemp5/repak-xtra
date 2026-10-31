@@ -12,6 +12,7 @@ import AssetExplorerPage from './modules/asset-explorer/AssetExplorerPage'
 import './custom/theme.css' // repakxtra: theme for every window, last so it wins the cascade
 import './custom/uiPrefs' // repakxtra: UI scale and optional controls in every window
 import './custom/smoothCaret' // repakxtra: the gliding caret in every text field
+import './custom/segSlide' // repakxtra: the sliding pill on every segmented bar
 
 // Disable default browser context menu
 document.addEventListener('contextmenu', (e) => {

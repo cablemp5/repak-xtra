@@ -162,7 +162,7 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
   min-height: 40px;
 }
 .search-wrapper:focus-within { border-color: color-mix(in srgb, var(--text-primary), transparent 50%) !important; box-shadow: none !important; }
-.main-search-input { background: transparent !important; border: none !important; font-size: 14px; }
+.main-search-input { background: transparent !important; border: none !important; font-size: 14px; caret-color: var(--text-primary); }   /* white, not the accent blue, as every other field */
 .custom-dropdown-trigger { font-size: 13px !important; font-weight: 500 !important; }
 .custom-dropdown-trigger:hover { background: var(--bg-dark) !important; }
 /* The dropdown arrow upstream draws as a background image: the background shorthands above wiped it and left its 40px
@@ -348,7 +348,7 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 .mod-state.is-folded .mod-state-filter { position: absolute; visibility: hidden; pointer-events: none; }   /* kept for its width and the 1/2/3 keys */
 /* Folding and unfolding cross over softly (a short fade and settle), not a jump */
 /* transitions.dev: Icon swap. The tabs and their menu trade places with a short blur-in */
-.mod-state-btn, .mod-state.is-unfolding .mod-state-filter { animation: t-swap-in var(--icon-swap-dur) var(--icon-swap-ease) backwards; }
+.mod-state-btn { animation: t-swap-in var(--icon-swap-dur) var(--icon-swap-ease) backwards; }
 .mod-state-btn { display: inline-flex !important; align-items: center; gap: 8px; height: 32px !important; min-height: 0 !important; padding: 0 8px 0 12px !important;
   font-size: 13px !important; font-weight: 500 !important; color: var(--text-primary) !important; white-space: nowrap; }
 .mod-state-btn.is-broken, .mod-state-menu .sigeon-item.is-broken { color: #f5d342 !important; }
@@ -1401,22 +1401,39 @@ html[data-view="library"] .view-tabs::before { transform: translateX(calc(100% +
 .view-tabs.is-two::before { width: calc((100% - 6px) / 2); }
 .view-tabs button { position: relative; z-index: 1; transition: color var(--tabs-dur) var(--tabs-ease) !important; }
 .view-tabs button[aria-selected="true"] { background: transparent !important; }
+/* The same pill on every segmented bar (custom/segSlide.ts measures the picked button into --seg-x/y/w/h) */
+.has-seg-pill { position: relative; isolation: isolate; }
+.has-seg-pill::before { content: ''; position: absolute; top: 0; left: 0; z-index: -1; width: var(--seg-w); height: var(--seg-h);
+  transform: translate(var(--seg-x), var(--seg-y)); border-radius: 6px; background: var(--seg-pill, var(--bg-lighter)); pointer-events: none; }
+.has-seg-pill.seg-ready::before { transition: transform var(--tabs-dur) var(--tabs-ease), width var(--tabs-dur) var(--tabs-ease), height var(--tabs-dur) var(--tabs-ease); }
+.has-seg-pill > :is([aria-pressed="true"], [aria-checked="true"], .active) { background: transparent !important; }
+.has-seg-pill.ob-seg { --seg-pill: rgba(255, 255, 255, 0.07); }
+.has-seg-pill.segmented-control::before { border-radius: 4px; }
+html[data-motion="off"] .has-seg-pill::before { transition: none !important; }
 @keyframes t-swap-in { from { opacity: 0; filter: blur(var(--icon-swap-blur)); } }
 /* Carousel (custom/Carousel.tsx), Skiper UI Carousel_005's creative effect: next sinks the old picture back and slides
    the new one in from the right over it, previous slides the old one out to the right and raises the earlier one */
-.cr-slide { display: block; width: 100%; height: 100%; }
+.cr-slide { position: relative; display: block; width: 100%; height: 100%; }
+/* the slide leaving is always laid over the parent, never in the flow: in the flow (previous) it pushed the earlier one
+   out of view until the turn ended, then the picture jumped in */
 .cr-slide.is-out { position: absolute; inset: 0; pointer-events: none; }
-.cr-slide.is-in.is-next, .cr-slide.is-out.is-prev { position: relative; z-index: 1; }
+.cr-slide.is-in.is-next, .cr-slide.is-out.is-prev { z-index: 1; }
+/* only transform and opacity move, both on the compositor: the darkening is a black layer fading, not a filter */
+.cr-slide.is-in, .cr-slide.is-out { will-change: transform; backface-visibility: hidden; }
 .cr-slide.is-in.is-next { animation: cr-enter var(--cr-dur) var(--cr-ease) both; }
 .cr-slide.is-out.is-next { animation: cr-sink var(--cr-dur) var(--cr-ease) both; }
 .cr-slide.is-out.is-prev { animation: cr-leave var(--cr-dur) var(--cr-ease) both; }
 .cr-slide.is-in.is-prev { animation: cr-rise var(--cr-dur) var(--cr-ease) both; }
+.cr-slide.is-out.is-next::after, .cr-slide.is-in.is-prev::after { content: ''; position: absolute; inset: 0; background: #000; pointer-events: none;
+  animation: cr-dim var(--cr-dur) var(--cr-ease) both; }
+.cr-slide.is-in.is-prev::after { animation-direction: reverse; }
 .cr-slide.is-out img { opacity: 1 !important; filter: none !important; }
 :root { --cr-dur: 450ms; --cr-ease: cubic-bezier(0.22, 1, 0.36, 1); }
-@keyframes cr-enter { from { transform: translateX(100%); } }
-@keyframes cr-leave { to { transform: translateX(100%); } }
-@keyframes cr-sink { to { transform: perspective(1200px) translateZ(-400px); filter: brightness(0.35); } }
-@keyframes cr-rise { from { transform: perspective(1200px) translateZ(-400px); filter: brightness(0.35); } }
+@keyframes cr-enter { from { transform: translate3d(100%, 0, 0); } }
+@keyframes cr-leave { to { transform: translate3d(100%, 0, 0); } }
+@keyframes cr-sink { to { transform: scale(0.75); } }
+@keyframes cr-rise { from { transform: scale(0.75); } }
+@keyframes cr-dim { from { opacity: 0; } to { opacity: 0.65; } }
 /* Smooth caret (custom/smoothCaret.ts): one bar glides to the caret and blinks once it rests. Animations off: not drawn */
 .has-smooth-caret { caret-color: transparent !important; }
 .smooth-caret { position: fixed; top: 0; left: 0; width: 2px; border-radius: 1px; pointer-events: none; z-index: 2147483647;
@@ -2709,6 +2726,9 @@ html[data-motion="off"] .vfx-dot { animation: none; }
   transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms cubic-bezier(0.22, 1, 0.36, 1), display 200ms allow-discrete; }
 .bulk-actions-toolbar.inactive { transform: translate(-50%, 16px); opacity: 0; pointer-events: none; transition-duration: 120ms; }
 @starting-style { .bulk-actions-toolbar:not(.inactive) { transform: translate(-50%, 16px); opacity: 0; } }
+.mods-list-wrapper::after { content: none; }   /* no fade over the last rows (ModsList.css) */
+/* dark theme: the menus' surface and edge, not the lighter button gray */
+:root:not([data-theme="light"]) .bulk-actions-toolbar { background: var(--bg-dark) !important; border-color: rgba(255, 255, 255, 0.09) !important; }
 /* room under the last rows for the bar, always there: adding it only while the bar shows moved the rows near the end */
 .center-panel .mod-list-grid { padding-bottom: 72px !important; }
 .bulk-actions-toolbar .custom-dropdown-menu { top: auto !important; bottom: calc(100% + 12px) !important; }

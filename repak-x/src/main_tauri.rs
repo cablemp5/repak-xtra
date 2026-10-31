@@ -8729,6 +8729,7 @@ fn main() {
             xtra_identity::xtra_upstream_running, // repakxtra: beside Repak X
             xtra_identity::xtra_protocol_reclaim,
             xtra_crash::xtra_newest_crash, // repakxtra: setup report
+            xtra_crash::xtra_recent_crashes, // repakxtra: setup report crash list
             xtra_crash::xtra_crash_suspects, // repakxtra: crash suspects
             xtra_crash::xtra_crash_tiers, // repakxtra: crash suspects by asset, skin and hero
             xtra_game::xtra_game_update_check, xtra_game::xtra_game_update_seen, // repakxtra: game update notice

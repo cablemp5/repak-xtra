@@ -1,7 +1,7 @@
 // repakxtra: UI sounds with cuelume (synthesized live, no audio files), in the pack picked in Settings (mech by default). One click listener maps the
 // control under the pointer to a cue and one key listener plays typing in text fields, so upstream components need no
 // changes; alerts add success, error, warning and loading. Settings > Interface > Sound effects turns it off (uiPrefs.tsx calls setSoundOn).
-import { play, setEnabled, setTheme, setVolume, themes, unlock, type PlayOptions, type SoundName, type ThemeName } from 'cuelume'
+import { play as playNow, setEnabled, setTheme, setVolume, themes, unlock, type PlayOptions, type SoundName, type ThemeName } from 'cuelume'
 
 /** cuelume's four packs (default, mech, bubble, press), picked in Settings > Sound effects (uiPrefs.tsx) */
 export const SOUND_PACKS = themes
@@ -9,6 +9,24 @@ export const soundPackOf = (saved: string | null): ThemeName => themes.includes(
 export const setSoundPack = (saved: string | null) => setTheme(soundPackOf(saved))
 setSoundPack(null)
 setVolume(0.7)
+
+/** Cues that land together (several toasts at once, background tasks finishing in one tick) used to stack into one
+ *  loud pop through cuelume's boosted output. Within this gap a cue plays only when it differs from the ones already
+ *  playing and at most two sound (a click and the toast it causes still both play). A cue while the window is hidden is
+ *  dropped, so none queue up and burst out together when it comes back. */
+const STACK_MS = 60
+let burst: { at: number; names: SoundName[] } = { at: -Infinity, names: [] }
+function admits(name: SoundName, now: number, hidden: boolean) {
+  if (hidden) return false
+  if (name === 'type') return true // every key: fast typing is under the gap
+  if (now - burst.at >= STACK_MS) { burst = { at: now, names: [name] }; return true }
+  if (burst.names.length >= 2 || burst.names.includes(name)) return false
+  burst.names.push(name)
+  return true
+}
+function play(name: SoundName, options?: PlayOptions) {
+  if (admits(name, performance.now(), document.visibilityState === 'hidden')) playNow(name, options)
+}
 
 let soundOn = true
 export const setSoundOn = (on: boolean) => { soundOn = on; setEnabled(on) }
@@ -120,6 +138,11 @@ if (import.meta.env.DEV) {
   console.assert(cueFor(r)?.[0] === 'toggle' && cueFor(r)?.[1]?.direction === 'forward', 'a role button keeping its heroes toggles forward')
   const s = document.createElement('span')
   console.assert(cueFor(s) === null, 'plain text is silent')
+  burst = { at: -Infinity, names: [] }
+  console.assert(admits('tap', 1000, false) && admits('success', 1010, false) && !admits('error', 1020, false) && !admits('tap', 1030, true),
+    'two different cues together, not a third, none while hidden')
+  console.assert(!admits('success', 1040, false) && admits('success', 1100, false) && admits('type', 1101, false), 'no repeat within the gap, typing always')
+  burst = { at: -Infinity, names: [] }
   console.assert(soundPackOf('bubble') === 'bubble' && soundPackOf(null) === 'mech' && soundPackOf('nope') === 'mech', 'unknown packs fall back to mech')
   const k = (key: string, more = {}) => typingKey({ key, ctrlKey: false, metaKey: false, altKey: false, repeat: false, ...more })
   console.assert(k('a') === 'printable' && k(' ') === 'space' && k('Backspace') === 'delete' && k('Enter') === 'enter', 'typing roles')

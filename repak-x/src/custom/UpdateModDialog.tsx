@@ -78,7 +78,7 @@ function Dialog({ onClose, onConfirm, oldMod, newSourcePath, initialObfuscate }:
         onClick={e => e.stopPropagation()} initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.15 }}>
         <div className="modal-header">
           <div className="um-head-text">
-            {/* named as the menus that open it (Replace file…) */}
+            {/* named as the menus that open it (Replace file) */}
             <h2 id="um-title">Replace file</h2>
             <p className="um-sub">{title} gets the new file and stays on or off as it is now.</p>
           </div>
