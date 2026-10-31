@@ -49,6 +49,9 @@ pub struct VfxUatRequest<'a> {
     /// repakxtra: convert on 75% of the cores instead of 50%, for `create_mod_iostore`
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parallel: Option<bool>,
+    /// repakxtra: raw files (audio banks, configs) in the input go into the companion .pak, for `create_mod_iostore`
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hybrid: Option<bool>,
     /// repakxtra: leave out the bulk data (pixels, audio), for `extract_iostore_legacy`. Only the command line takes it
     /// (xtra_uat_cli.rs): the library extracts everything, and a request is not sent to it with this field.
     #[serde(skip)]
@@ -822,6 +825,22 @@ pub async fn pack_to_iostore(
         }
     };
 
+    // repakxtra: a hybrid mod's raw files (its .pak half: audio banks, configs) go along, into the companion .pak
+    let mut raw = 0usize;
+    for e in walkdir::WalkDir::new(input_dir).into_iter().flatten().filter(|e| e.file_type().is_file()) {
+        let x = e.path().extension().map(|x| x.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+        if ["uasset", "uexp", "ubulk", "uptnl", "umap", "json", "txt"].contains(&x.as_str()) {
+            continue;
+        }
+        raw += 1;
+        if pack_dir != input_dir {
+            let rel = e.path().strip_prefix(input_dir).map_err(|e| e.to_string())?;
+            let to = Path::new(&pack_dir).join(rel);
+            fs::create_dir_all(to.parent().unwrap_or(Path::new(&pack_dir))).map_err(|e| e.to_string())?;
+            fs::copy(e.path(), &to).map_err(|e| format!("[VFX] Could not stage {}: {e}", rel.display()))?;
+        }
+    }
+
     let mut uasset_files = Vec::new();
     find_uasset_paths(Path::new(&pack_dir), &mut uasset_files)?;
 
@@ -855,6 +874,7 @@ pub async fn pack_to_iostore(
         input_dir: Some(pack_dir.clone()),
         compress: Some(true),
         parallel: Some(true), // repakxtra: the packing is the only work running then
+        hybrid: (raw > 0).then_some(true),
         ..Default::default()
     };
 

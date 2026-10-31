@@ -766,6 +766,56 @@ pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>
     .map_err(|e| e.to_string())
 }
 
+/// A hybrid mod's .pak half (the legacy .pak beside its .utoc; `main` is any of the mod's files): its packages and raw
+/// files (audio banks, configs) extracted into `out` beside what is there, never over it. Their paths under `out`:
+/// packages by their .uasset or .umap, raw files as they are. Empty when the .pak holds only the IoStore chunk list.
+/// Without this an update read and packed only the .utoc half, and the rest of the mod was gone from it.
+pub(crate) fn pak_half(main: &Path, out: &Path) -> Result<Vec<String>, String> {
+    let pak = ["pak", "bak_repak"].iter().map(|x| main.with_extension(x)).find(|p| p.is_file()).ok_or("the mod's .pak is not there")?;
+    let aes = Some(crate::install_mod::AES_KEY_HEX);
+    let own = |f: &str| {
+        let l = f.to_ascii_lowercase();
+        !l.contains("chunknames") && !l.contains("patched_files")
+    };
+    let listed = uasset_toolkit::list_pak_files(&pak.to_string_lossy(), aes).map_err(|e| format!("{}: {e}", pak.display()))?;
+    if !listed.iter().any(|f| own(f)) {
+        return Ok(Vec::new());
+    }
+    static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let tmp = std::env::temp_dir().join("repak-x").join("pakhalf").join(format!("{}-{}", std::process::id(), N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+    let _ = std::fs::remove_dir_all(&tmp);
+    let r = (|| {
+        crate::xtra_extract::extract_pak_all(&pak.to_string_lossy(), &tmp.to_string_lossy(), aes)?;
+        let mut found = Vec::new();
+        for e in walkdir::WalkDir::new(&tmp).into_iter().flatten().filter(|e| e.file_type().is_file()) {
+            let Ok(rel) = e.path().strip_prefix(&tmp) else { continue };
+            let rel_s = rel.to_string_lossy().replace('\\', "/");
+            if !own(&rel_s) {
+                continue;
+            }
+            let to = out.join(rel);
+            if to.exists() {
+                continue; // the .utoc half's copy stands
+            }
+            std::fs::create_dir_all(to.parent().unwrap_or(out)).map_err(|e| e.to_string())?;
+            std::fs::rename(e.path(), &to).or_else(|_| std::fs::copy(e.path(), &to).map(|_| ())).map_err(|e| e.to_string())?;
+            let x = rel_s.rsplit('.').next().unwrap_or_default().to_ascii_lowercase();
+            if !["uexp", "ubulk", "uptnl"].contains(&x.as_str()) {
+                found.push(to.to_string_lossy().replace('\\', "/"));
+            }
+        }
+        Ok::<_, String>(found)
+    })();
+    let _ = std::fs::remove_dir_all(&tmp);
+    r
+}
+
+/// pipeline.ts: pak_half for the mod at `mod_path` into the run's mod extract.
+#[tauri::command]
+pub async fn xtra_vfx_pak_half(mod_path: String, mod_extract: String) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || pak_half(Path::new(&mod_path), Path::new(&mod_extract))).await.map_err(|e| e.to_string())?
+}
+
 /// The mod's packages by class, keyed by their path in the mod (lowercase, no extension), from its container's listing
 /// (xtra_uat_cli::classes): pipeline.ts reads a material or blueprint named like a texture or mesh (T_, SK_, SM_) as
 /// what it is, never passing it on unread. None without the command line.

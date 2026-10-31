@@ -161,6 +161,13 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     const dirs = await invoke<Dirs>('xtra_vfx_dirs', { gamePaks: o.gamePaksPath, runId, usmapPath: o.usmapPath }) // the game files' cache is per USMAP too
     const extracted = await invoke<string[]>('vfx_extract_mod_assets', { gamePaks: o.gamePaksPath, modPath: src, outputDir: dirs.modExtract })
     check()
+    // a hybrid mod's .pak half: its packages are read and checked like the rest, its raw files (audio banks, configs)
+    // go along into the update's .pak. Without it the update would lose them
+    const half = await invoke<string[]>('xtra_vfx_pak_half', { modPath: src, modExtract: dirs.modExtract })
+      .catch(e => { throw new Error(`Its .pak half could not be read (${e}), and an update without it would lose part of the mod`) })
+    const raw = half.filter(p => !/\.(uasset|umap)$/i.test(p))
+    extracted.push(...half.filter(p => /\.(uasset|umap)$/i.test(p)))
+    if (half.length) log(`Read its .pak half too: ${plural(half.length - raw.length, 'package')} and ${plural(raw.length, 'other file')}.`)
     if (!extracted.length) throw new Error('No assets could be read from the mod. Check the game folder in Setup and that the mod is a .utoc mod.')
     const rel = (p: string) => relativeTo(p, dirs.modExtract)
     const manifest = extracted.map(rel)
@@ -266,6 +273,8 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     }
     const allStale = () => `Not updated: everything it changes is ${plural(report.counts.left + report.counts.ownGame, 'Niagara file')} made for an older game build that could not be rebuilt, and the game can crash on them. Turn the mod off until its author updates it.`
     if (keep.length) await invoke('vfx_copy_uasset_files', { sourcePaths: keep, sourceBaseDir: dirs.modExtract, destBaseDir: dirs.finalUassets })
+    // the .pak half's raw files, as they are (the pack puts them in the update's .pak)
+    if (raw.length) await invoke('vfx_copy_uasset_files', { sourcePaths: raw, sourceBaseDir: dirs.modExtract, destBaseDir: dirs.finalUassets })
 
     // ---- 7 (after 6, or early when the mod changes only Niagara files): rebuild the stale Niagara files ----
     let niagaraDone = 0, niagaraUpdated = 0 // carried, and of those the ones counted as updated (the rest match the game)
