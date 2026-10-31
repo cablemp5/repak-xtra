@@ -31,6 +31,9 @@ import { type Mod, memberName, modKey, openLoadout, setView, useLoadouts } from 
 import { freeMods, smartRules } from './SmartLoadouts'
 import { type Proposal, propose } from './smartGroups'
 import { silhouetteOf } from './silhouettes'
+import { generatePreviews, hasPreview, refreshPreviewsAvailable, usePreviewUrl, usePreviewVersion } from './previews'
+import { nameKey } from './loadoutIdentity'
+import { getAdditionalCategories } from '../utils'
 import { plural } from './modName'
 import { SOUND_PACKS, type SoundName, cue, tryCue } from './sounds'
 import { setSoundChoice, useSoundChoice } from './uiPrefs'
@@ -49,7 +52,7 @@ const firstLaunch = () => !localStorage.getItem(ONBOARDED)
 
 /** Everything a page reads and does: the flow's state lives in FirstRun, so Back and Next keep it. */
 export type Flow = {
-  alert: Alert; gamePath: string; hasMods: boolean; installedCount: number; smart: Proposal[]; freeCount: number; newMods: string[]; made?: { id: string; name: string } // the loadout the install saved them as
+  alert: Alert; gamePath: string; hasMods: boolean; installedCount: number; smart: Proposal[]; shots: { l: Proposal; path: string }[]; freeCount: number; newMods: string[]; made?: { id: string; name: string } // the loadout the install saved them as
   busy: string | null; finished: string | null; bypass: Bypass | null; bypassError: string | null; galacta: Galacta | null
   auto: Auto; setAuto: (a: Auto) => void
   checkStatus: () => void; run: (what: string, f: () => Promise<void>) => Promise<void>
@@ -254,19 +257,48 @@ const SMART_ROWS: [string, string, number][] = [['Catboy Mesh', 'Mesh', 0], ['Ul
 /** Smart loadouts in miniature, from the person's own mods when there are groups to show: two of their mods from each
  *  of the first two loadouts it would make, then those loadouts as their heroes' silhouettes. */
 function Smart({ f }: { f: Flow }) {
-  const two = f.smart.slice(0, 2)
+  const two = f.shots.length ? f.shots.map(s => s.l) : f.smart.slice(0, 2)
   if (!two.length) return <SampleSmart />
-  const rows = two.flatMap((l, g) => l.keys.slice(0, 2).map(k => [memberName(k), g] as const))
+  // each loadout's rows lead with the mod its picture shows
+  const rows = two.flatMap((l, g) => {
+    const shown = f.shots[g] ? modKey(f.shots[g].path) : undefined
+    return (shown ? [shown, ...l.keys.filter(k => k !== shown)] : l.keys).slice(0, 2).map(k => [memberName(k), g] as const)
+  })
   return (
     <span className="ob-smart">
       <span className="ob-smart-mods">{rows.map(([name, g]) => <span key={`${g}${name}`} className={`is-g${g}`}><i /><em>{name}</em></span>)}</span>
       <ArrowRight size={16} className="ob-smart-arrow" />
-      <span className="ob-smart-out">{two.map((l, g) => {
-        const shape = `url(${silhouetteOf(l.hero) ?? silhouette})` // drawn like a loadout card's shape while its preview renders (.lo-skel-shape)
-        return <span key={l.id} className={`wi-card is-g${g}`}><span className="wi-card-img"><span className="lo-skel-shape" style={{ maskImage: shape, WebkitMaskImage: shape }} /></span></span>
-      })}</span>
+      <span className="ob-smart-out">{two.map((l, g) => <SmartCard key={l.id} hero={l.hero} path={f.shots[g]?.path} g={g} />)}</span>
     </span>
   )
+}
+/** One suggested loadout: its mod's preview once there is one, else the hero's silhouette, drawn like a loadout card's
+ *  shape while its preview renders (.lo-skel-shape). */
+function SmartCard({ hero, path, g }: { hero: string; path?: string; g: number }) {
+  const url = usePreviewUrl(path ? nameKey(path) : undefined)
+  const shape = `url(${silhouetteOf(hero) ?? silhouette})`
+  return (
+    <span className={`wi-card is-g${g}`}>
+      <span className="wi-card-img">{url ? <img className="wi-shot ob-pop" src={url} alt="" /> : <span className="lo-skel-shape" style={{ maskImage: shape, WebkitMaskImage: shape }} />}</span>
+    </span>
+  )
+}
+const VISUAL = new Set(['Mesh', 'Static Mesh', 'Texture']) // what a preview can show (CapturePreview.tsx's list)
+type Details = { character_name?: string | null; category?: string | null; mod_type?: string; additional_categories?: string[] }
+/** The Smart loadouts card's two suggestions and the mod each one previews: a mod with a mesh or texture (a look a
+ *  render can show), from two loadouts on different heroes when there are. A mod that already has a preview wins. Pure
+ *  apart from the preview list. */
+export function smartShots(smart: Proposal[], mods: { path: string }[], details: Record<string, Details | undefined> | undefined) {
+  const pathOf = new Map(mods.map(m => [modKey(m.path), m.path]))
+  const shows = (path: string) => [details?.[path]?.category, ...getAdditionalCategories(details?.[path])].some(c => VISUAL.has(c ?? ''))
+  const picks = smart.flatMap(l => {
+    const paths = l.keys.flatMap(k => pathOf.get(k) ?? []).filter(shows)
+    const path = paths.find(p => hasPreview(nameKey(p))) ?? paths[0]
+    return path ? [{ l, path }] : []
+  })
+  const first = picks[0]
+  const second = picks.find(x => x !== first && x.l.hero && x.l.hero !== first?.l.hero) ?? picks[1]
+  return first ? second ? [first, second] : [first] : []
 }
 const SampleSmart = () => (
   <span className="ob-smart">
@@ -410,7 +442,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
   installing: boolean // App's install panel is open
   gamePath: string
   mods: Mod[]
-  details?: Record<string, { character_name?: string | null } | undefined> // App's modDetails, for the heroes Smart loadouts groups by
+  details?: Record<string, Details | undefined> // App's modDetails: the heroes Smart loadouts groups by, the types a preview can show
   enableDrp: boolean
   onSetDrp: (on: boolean) => void
   onAutoDetect: () => Promise<void>
@@ -444,6 +476,18 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
   const made = newMods.length ? loadouts.find(l => newMods.every(p => l.scope.includes(modKey(p)))) : undefined
   const free = useMemo(() => freeMods(allMods, details, loadouts), [allMods, details, loadouts])
   const smart = useMemo(() => free.length ? propose(free, loadouts.map(l => l.name), smartRules()) : [], [free, loadouts])
+  const previews = usePreviewVersion()
+  const shots = useMemo(() => smartShots(smart, allMods, details), [smart, allMods, details, previews])
+  // Previews set up from Make it yours: the Smart loadouts card's two mods render in the background, so their pictures
+  // are there by the last page. Only when they were set up here (ready now, not when the flow opened)
+  const kitReady = Boolean(kit.kit?.version && kit.kit?.blender)
+  const kitWas = useRef(kitReady)
+  useEffect(() => {
+    const now = kitReady && !kitWas.current
+    kitWas.current = kitReady
+    const paths = shots.map(s => s.path).filter(p => !hasPreview(nameKey(p)))
+    if (now && paths.length) void refreshPreviewsAvailable().then(() => generatePreviews({ paths, name: 'Smart loadouts' }))
+  }, [kitReady])
   const begin = () => { startMods.current = new Set(installed.map(m => m.path)) } // leaving the welcome: what is there now is not "just added"
   const page = PAGES.find(p => p.id === at) ?? welcome
   const railAt = RAIL.indexOf(page.step ?? '')
@@ -544,7 +588,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
   const answer = (yes: boolean) => { const p = yes ? 'yes' : 'no'; setPath(p); move(1, sequence(PAGES, { guided: !yes, hasMods })) }
 
   const f: Flow = {
-    alert, gamePath, hasMods, installedCount: installed.length, smart, freeCount: free.length, newMods, made, auto, setAuto, busy, finished, bypass, bypassError, galacta, checkStatus, run, installBypass, installGalacta,
+    alert, gamePath, hasMods, installedCount: installed.length, smart, shots, freeCount: free.length, newMods, made, auto, setAuto, busy, finished, bypass, bypassError, galacta, checkStatus, run, installBypass, installGalacta,
     setUpAll, setUpMissing, onAutoDetect, onBrowse, addFiles, kit, shortcut, enableDrp, onSetDrp, finish: finishFlow, answer,
     next: () => move(1), back: () => move(-1), close,
   }
@@ -589,6 +633,17 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
 }
 
 if (import.meta.env.DEV) {
+  {
+    const mods = ['C:/m/HulkUi_P.pak', 'C:/m/HulkMesh_P.pak', 'C:/m/HulkTex_P.pak', 'C:/m/StormTex_P.pak'].map(path => ({ path }))
+    const [ui, mesh, tex, storm] = mods.map(m => m.path)
+    const k = (path: string) => modKey(path)
+    const why = {} as Proposal['why']
+    const smart: Proposal[] = [{ id: 'a', name: 'A', named: true, hero: 'Hulk', keys: [k(ui), k(mesh)], why }, { id: 'b', name: 'B', named: true, hero: 'Hulk', keys: [k(tex)], why },
+      { id: 'c', name: 'C', named: true, hero: 'Storm', keys: [k(storm)], why }]
+    const details = { [ui]: { category: 'UI' }, [mesh]: { category: 'Mesh' }, [tex]: { category: 'Texture' }, [storm]: { category: 'Texture' } }
+    const got = smartShots(smart, mods, details).map(x => `${x.l.id}:${x.path}`).join()
+    console.assert(got === `a:${mesh},c:${storm}`, 'smartShots: a mesh or texture mod, then another hero', got)
+  }
   console.assert(sequence(PAGES, { guided: true, hasMods: false }).join() === 'welcome,ask,setup,mods,yours,loadout', 'no mods, not yet: the guided path')
   console.assert(sequence(PAGES, { guided: false, hasMods: true }).join() === 'welcome,ask,auto,yours,loadout', 'mods installed: still asked, then the background setup')
   console.assert(sequence(PAGES, { guided: false, hasMods: false }).join() === 'welcome,ask,auto,mods,yours,loadout', 'yes but nothing installed: add mods first')
