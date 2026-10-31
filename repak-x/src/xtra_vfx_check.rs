@@ -150,7 +150,9 @@ fn alone(container: &Path, bases: &[PathBuf], name: &str) -> Option<PathBuf> {
 /// One check at a time: they share the command line's cached game and their work folders.
 static CHECKING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-async fn check(mod_path: &Path, usmap: &str, state: &Arc<Mutex<AppState>>) -> Result<VfxCheck, String> {
+/// `deep`: also walk the game's older containers for the build the shader data matches (the slow part). The background
+/// scan does not: it looks for what crashes, the layout, and leaves looks to Check for update and the Mod Updater's Scan.
+async fn check(mod_path: &Path, usmap: &str, state: &Arc<Mutex<AppState>>, deep: bool) -> Result<VfxCheck, String> {
     let _one = CHECKING.lock().await;
     let mods_dir = state.lock().unwrap().game_path.clone();
     let paks = mods_dir
@@ -162,7 +164,7 @@ async fn check(mod_path: &Path, usmap: &str, state: &Arc<Mutex<AppState>>) -> Re
     // beside the game's Paks (never in it: the game reads only Paks), for a game on another drive than the temp folder
     let beside = paks.parent().map(|c| c.join(".repakxtra-check"));
     let bases: Vec<PathBuf> = [Some(work.clone()), beside.clone()].into_iter().flatten().collect();
-    let r = check_in(mod_path, usmap, &mods_dir, &paks, &work, &bases, state).await;
+    let r = check_in(mod_path, usmap, &mods_dir, &paks, &work, &bases, state, deep).await;
     // every exit, the early ones too
     let _ = std::fs::remove_dir_all(&work);
     if let Some(b) = beside {
@@ -171,7 +173,7 @@ async fn check(mod_path: &Path, usmap: &str, state: &Arc<Mutex<AppState>>) -> Re
     r
 }
 
-async fn check_in(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, work: &Path, bases: &[PathBuf], state: &Arc<Mutex<AppState>>) -> Result<VfxCheck, String> {
+async fn check_in(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, work: &Path, bases: &[PathBuf], state: &Arc<Mutex<AppState>>, deep: bool) -> Result<VfxCheck, String> {
     let details = crate::compute_mod_details(&mod_path.to_path_buf(), state)?;
     let utoc = mod_path.with_extension("utoc");
     // by class where the name does not tell (a UI material named M_..._Inst), bare names for the extract's filter. The
@@ -194,7 +196,7 @@ async fn check_in(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, wo
     // the older copies: each game container alone, newest first, until every one of the mod's is placed (or none is left)
     let mut containers: Vec<_> = crate::xtra_broken::game_containers(paks).into_iter().filter(|c| !c.0.file_stem().is_some_and(|s| s.eq_ignore_ascii_case("global"))).collect();
     containers.sort_by(|a, b| b.2.cmp(&a.2).then(a.0.cmp(&b.0)));
-    for (i, (container, _, _)) in containers.iter().enumerate() {
+    for (i, (container, _, _)) in containers.iter().enumerate().filter(|_| deep) {
         let open: Vec<String> = verdicts(&mine, &versions).into_iter().filter(|(_, b)| *b == Built::Unknown).map(|(k, _)| k).collect();
         if open.is_empty() {
             break;
@@ -284,7 +286,7 @@ async fn check_in(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, wo
 #[tauri::command]
 pub async fn xtra_vfx_check(mod_path: String, usmap_path: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<VfxCheck, String> {
     let state = state.inner().clone();
-    check(Path::new(&mod_path), &usmap_path, &state).await
+    check(Path::new(&mod_path), &usmap_path, &state, true).await
 }
 
 // ---- the same check in the background, for the date check's blind spot ----
@@ -328,7 +330,8 @@ pub async fn xtra_vfx_check_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mu
     let mut done = load_scanned(&store);
     let mut found = 0;
     for p in mod_paths {
-        if crate::xtra_vfx::xtra_vfx_lock().is_some() {
+        // an update runs, or the game: the next scan goes on from here
+        if crate::xtra_vfx::xtra_vfx_lock().is_some() || crate::is_game_process_running() {
             break;
         }
         let path = PathBuf::from(&p);
@@ -341,7 +344,7 @@ pub async fn xtra_vfx_check_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mu
         let (pk, u) = (paks.clone(), utoc.clone());
         let mics = tauri::async_runtime::spawn_blocking(move || details.map(|d| crate::xtra_broken::material_instances(&pk, &u, &d.files))).await.ok().flatten();
         if mics.as_ref().is_some_and(|(m, all)| !m.is_empty() || !all) {
-            match check(&path, &usmap, &state).await {
+            match check(&path, &usmap, &state, false).await {
                 Ok(c) if c.verdict == "outdated" => found += 1,
                 Ok(c) if matches!(c.why, Some("layout" | "classes")) => continue, // not settled: looked at again next scan
                 Ok(_) => {}

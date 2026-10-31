@@ -72,7 +72,7 @@ pub(crate) async fn extract(request: &VfxUatRequest<'_>) -> Option<Result<VfxUat
             #[cfg(windows)]
             {
                 use std::os::windows::process::CommandExt;
-                cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW: no console flashing up
+                cmd.creation_flags(0x0800_0000 | 0x0000_4000); // CREATE_NO_WINDOW (no console flashing up), BELOW_NORMAL_PRIORITY_CLASS (the PC stays responsive)
             }
             // the long-lived command line first (the game's containers stay loaded between calls), else a one-shot run
             let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().to_string()).collect();
@@ -141,7 +141,7 @@ pub(crate) fn classes(utoc: &Path, paks: &Path) -> Option<Vec<(String, String)>>
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        cmd.creation_flags(0x0800_0000 | 0x0000_4000); // CREATE_NO_WINDOW, BELOW_NORMAL_PRIORITY_CLASS
     }
     let out = cmd.output().ok().filter(|o| o.status.success())?;
     Some(String::from_utf8_lossy(&out.stdout).lines().filter_map(class_line).collect())
@@ -161,7 +161,7 @@ fn start(exe: &Path) -> std::io::Result<Server> {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        cmd.creation_flags(0x0800_0000 | 0x0000_4000); // CREATE_NO_WINDOW, BELOW_NORMAL_PRIORITY_CLASS
     }
     let mut child = cmd.spawn()?;
     let (stdin, out) = (child.stdin.take(), child.stdout.take());
