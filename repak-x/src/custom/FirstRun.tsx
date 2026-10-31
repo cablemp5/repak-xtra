@@ -10,7 +10,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open as pick } from '@tauri-apps/plugin-dialog'
 import { motion } from 'framer-motion'
-import { ArrowRight, Check, ChevronDown, CopyPlus, Download, ExternalLink, File, FileArchive, FolderOpen, Package, ShieldCheck, Upload, Volume2, VolumeX } from 'lucide-react'
+import { ArrowRight, Check, ChevronDown, CopyPlus, ExternalLink, File, FileArchive, FolderOpen, Package, Plus, ShieldCheck, Upload, Volume2, VolumeX } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import Switch from '../components/ui/Switch'
 import { DoctorProblems } from './SetupPanel'
@@ -60,7 +60,7 @@ export type Flow = {
 /** Which pages apply: guided (no mods on hand, or "Not yet") or the background setup, and whether mods are installed. */
 export type Branch = { guided: boolean; hasMods: boolean }
 /** A page: `when` leaves it out of the sequence, a `choice` page moves on by a pick (its footer offers Skip, not Next). */
-export type Page = { id: string; title: string; sub?: (f: Flow) => React.ReactNode; choice?: boolean; when?: (b: Branch) => boolean; body: (f: Flow) => React.ReactNode }
+export type Page = { id: string; title: string; sub?: (f: Flow) => React.ReactNode | undefined; choice?: boolean; when?: (b: Branch) => boolean; body: (f: Flow) => React.ReactNode }
 /** The ids of the pages that apply, in order. Pure. */
 export const sequence = (pages: Page[], b: Branch) => pages.filter(p => !p.when || p.when(b)).map(p => p.id)
 
@@ -119,7 +119,7 @@ function Folder({ f }: { f: Flow }) {
 
 /** Step 1 of the guided setup, also the fallback when the background setup cannot find the game. */
 const findGame = (f: Flow) => {
-  const where = f.gamePath.replace(/^.*[\\/](MarvelRivals|Marvel Rivals)[\\/]/i, '…\\$1\\')
+  const where = '…\\' + f.gamePath.split(/[\\/]/).filter(Boolean).slice(-2).join('\\') // the last two folders, the whole path in its tooltip
   return (
     <Step n={1} done={Boolean(f.gamePath)} title="Find the game"
       action={!f.gamePath && <>
@@ -134,13 +134,13 @@ const welcome: Page = { id: 'welcome', title: 'Welcome', body: () => null } // d
 
 const ask: Page = {
   id: 'ask', title: 'Got mods already?', choice: true,
-  sub: f => f.hasMods ? `Your game folder already has ${plural(f.installedCount, 'mod')}.` : 'Downloaded from Nexus Mods or anywhere else.',
+  sub: f => f.hasMods ? `Your game folder already has ${plural(f.installedCount, 'mod')}.` : undefined,
   body: f => (
     <div className="ob-choices">
       <Choice suggested={f.hasMods} onClick={() => f.answer(true)} stage={<Fan />}
         title="Yes, I have mods" text="Setup runs by itself, then your mods become loadouts." />
       <Choice onClick={() => f.answer(false)} title="Not yet" text="Three short steps get mods working, then your first mod and loadout."
-        stage={<span className="ob-slot"><b><Download size={22} /></b><span>{['.pak', '.zip', '.rar', '.7z'].map(x => <i key={x}>{x}</i>)}</span></span>} />
+        stage={<span className="ob-fan ob-ghosts"><i /><i><Plus size={22} /></i><i /></span>} />
     </div>
   ),
 }
@@ -242,9 +242,9 @@ function AutoSetup({ f }: { f: Flow }) {
 </span></p>
   return <div className="ob-split"><div className="ob-col ob-status" aria-live="polite">{status}</div><Folder f={f} /></div>
 }
-const auto: Page = { id: 'auto', title: 'Setting up mods', when: b => !b.guided, sub: () => `The signature bypass and ${LOADER_NAME}, only what is missing.`, body: f => <AutoSetup f={f} /> }
+const auto: Page = { id: 'auto', title: 'Setting up mods', when: b => !b.guided, body: f => <AutoSetup f={f} /> }
 
-const TYPES: [string, string, typeof Package][] = [['.pak', 'Mod file', Package], ['.zip', 'Archive', FileArchive], ['.rar', 'Archive', FileArchive], ['.7z', 'Archive', FileArchive]]
+const TYPES: [string, typeof Package][] = [['.pak', Package], ['.zip', FileArchive], ['.rar', FileArchive], ['.7z', FileArchive]]
 /** Smart loadouts in miniature: loose mods, each dot the color of the look it belongs to, sorted into two loadouts. */
 const SMART_ROWS: [string, string, number][] = [['Catboy Mesh', 'Mesh', 0], ['Ultimate Suit', 'Mesh', 1], ['Catboy Trail', 'VFX', 0], ['Ultimate Icons', 'UI', 1]]
 const Smart = () => (
@@ -257,15 +257,12 @@ const Smart = () => (
 
 const mods: Page = {
   id: 'mods', title: 'Your first mod', when: b => b.guided || !b.hasMods,
-  sub: () => 'Mod files or zips, straight from the download. No need to unzip.',
   body: f => (
     <div className="ob-drop">
+      {TYPES.map(([ext, Icon], i) => <span key={ext} className="ob-float" style={{ '--i': i } as React.CSSProperties}><Icon size={16} aria-hidden="true" /><b>{ext}</b></span>)}
       <span className="ob-drop-icon" aria-hidden="true"><Upload size={22} /></span>
       <b>Drop mods anywhere on this window</b>
       <span>This screen steps aside for the install and comes back after.</span>
-      <span className="ob-types" aria-label="File types">
-        {TYPES.map(([ext, what, Icon]) => <span key={ext}><Icon size={16} aria-hidden="true" /><b>{ext}</b><small>{what}</small></span>)}
-      </span>
       <span className="ob-drop-actions">
         <button type="button" className="btn-primary" disabled={!f.gamePath} onClick={f.addFiles} title={f.gamePath ? undefined : 'Find the game first'}><Upload size={14} aria-hidden="true" /> Choose files…</button>
         <a className="su-link ob-out" href={NEXUS} onClick={e => { e.preventDefault(); openUrl(NEXUS) }}>Find mods on Nexus Mods <ExternalLink size={13} aria-hidden="true" /></a>
@@ -277,7 +274,7 @@ const mods: Page = {
 
 const loadout: Page = {
   id: 'loadout', title: 'Your first loadout', choice: true,
-  sub: () => 'A set of mods that turn on and off together. Pick how to start.',
+  sub: () => 'A set of mods that turn on and off together.',
   body: f => (
     <div className="ob-choices">
       {f.made && (
@@ -319,7 +316,7 @@ function Yours({ f }: { f: Flow }) {
   const size = f.kit.latest?.size ? `${Math.round(f.kit.latest.size / 1048576)} MB, plus Blender` : 'a download, plus Blender'
   return (
     <div className="ob-prefs">
-      <Pref title="Pictures of your mods" stage={<MiniCard name="Catboy" src={catboy} className="wi-reveal"><span className="wi-render"><span>Rendering</span></span></MiniCard>}
+      <Pref title="Pictures of your mods" stage={<MiniCard name="Catboy" src={catboy} className="wi-reveal ob-shot"><span className="wi-render"><span>Rendering</span></span></MiniCard>}
         action={kitReady ? <span className="ob-ok"><Check size={14} strokeWidth={2.75} /> Ready</span>
           : !f.kit.plan && <button type="button" className="btn-primary" disabled={Boolean(f.kit.busy) || (f.kit.latest === null && !f.kit.kit?.version)} onClick={() => f.kit.setUp()}
             title={f.kit.latest === null ? 'No kit published yet: drop a kit zip on the window' : 'Downloads the preview kit and installs Blender if it is missing'}>
@@ -531,7 +528,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, installing, e
         <button className="modal-close fr-intro-close" onClick={close} aria-label="Close">×</button>
         <div className="wi-head ob-head">
           <h2 className="wi-title fr-welcome" id="fr-title" ref={title} tabIndex={-1}>{page.title}</h2>
-          {page.sub && <p className="wi-lede">{page.sub(f)}</p>}
+          {page.sub?.(f) && <p className="wi-lede">{page.sub(f)}</p>}
         </div>
         {/* transitions.dev: each page rises in; the key remounts it so Back and Next both play it */}
         <div key={at} className="modal-body fr-body t-rise-in">{page.body(f)}</div>
