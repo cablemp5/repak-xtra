@@ -1,0 +1,207 @@
+/* repakxtra: the first-launch flow's pages (custom/FirstRun.tsx). Every page wears the welcome page's look (welcome.css): its big title and lede, and
+   pictures on the same .wi-stage panels, so the flow reads as one piece. Animations off: theme.css zeroes every
+   animation, so each page and each folder row simply shows its finished state. */
+
+/* Room for a picture beside the steps; the welcome page shares the width */
+.modal-content.fr-modal { width: min(860px, 94vw) !important; }
+
+/* A page rises in (transitions.dev Stagger), remounted on Back and Next */
+.fr-body { padding: 8px 28px 26px !important; overflow-y: auto; animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; }
+.fr-modal .fr-body { gap: 0; }
+.ob-head { padding-right: 64px; }
+.ob-head .wi-lede { margin-top: 4px; font-size: 15px; }
+.fr-body .fr-text h3 { font-size: 15px; }
+.fr-body .fr-text p { font-size: 14px; }   /* clear of the close button */
+.ob-head .fr-progress { color: var(--text-primary); }
+.app .fr-welcome[tabindex="-1"]:focus-visible, .fr-welcome:focus { outline: none !important; }   /* the title takes focus on each page for screen readers, no ring for a heading */
+
+/* Question pages: big cards with a picture on top, one pick moves on (Hick: two or three choices) */
+.ob-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; padding-top: 10px; }
+.ob-choice { display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; gap: 0; padding: 0; overflow: hidden; text-align: left; cursor: pointer;
+  border: 1px solid var(--panel-border); border-radius: 14px; background: var(--bg-darker); color: var(--text-primary); font: inherit;
+  transition: border-color 0.18s ease, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease; }
+.ob-choice:hover { border-color: color-mix(in srgb, var(--accent-primary), transparent 45%); }
+.ob-choice:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.ob-choice .ob-stage { align-self: stretch; height: 172px; border: none; border-bottom: 1px solid var(--panel-border); border-radius: 0; }
+.ob-choice-text { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; width: 100%; box-sizing: border-box; padding: 14px 16px 16px; text-align: left; }
+.ob-choice-text b { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+.ob-choice-text span { font-size: 13.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.ob-yes { flex: none; color: #3ecf6e; }
+.ob-no { flex: none; color: #f2555a; }
+.fr-hint { grid-column: 1 / -1; margin: 0; font-size: 13px; color: var(--text-secondary); }
+
+/* Pictures for the cards: loadouts fanned out (no switches, they are pictures here), an empty card to fill, an empty
+   slot for downloads, and Smart loadouts sorting loose mods into two looks */
+.ob-fan { display: flex; align-items: center; justify-content: center; }
+.ob-fan .wi-card { width: 86px; margin: 0 -12px; box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.8); transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1); }
+.ob-fan .wi-card-body { display: none; }
+.ob-fan .wi-card:nth-child(1) { transform: rotate(-8deg) translateY(6px); }
+.ob-fan .wi-card:nth-child(2) { position: relative; z-index: 1; width: 98px; }
+.ob-fan .wi-card:nth-child(3) { transform: rotate(8deg) translateY(6px); }
+.ob-choice:hover .ob-fan .wi-card:nth-child(1) { transform: rotate(-12deg) translate(-8px, 4px); }
+.ob-choice:hover .ob-fan .wi-card:nth-child(3) { transform: rotate(12deg) translate(8px, 4px); }
+.ob-choice .ob-stage > .wi-card { width: 88px; }
+.ob-ghosts i { display: grid; place-items: center; width: 86px; aspect-ratio: 1358 / 1920; margin: 0 -12px; box-sizing: border-box; border-radius: 9px;
+  border: 1px dashed color-mix(in srgb, var(--text-secondary), transparent 55%); background: var(--bg-dark); color: var(--accent-primary);
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.25s ease; }
+.ob-ghosts i:nth-child(1) { transform: rotate(-8deg) translateY(6px); }
+.ob-ghosts i:nth-child(2) { position: relative; z-index: 1; width: 98px; border: 1px dashed color-mix(in srgb, var(--accent-primary), transparent 35%);
+  background: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-dark)); }
+.ob-ghosts i:nth-child(3) { transform: rotate(8deg) translateY(6px); }
+.ob-choice:hover .ob-ghosts i:nth-child(1) { transform: rotate(-12deg) translate(-8px, 4px); }
+.ob-choice:hover .ob-ghosts i:nth-child(3) { transform: rotate(12deg) translate(8px, 4px); }
+.ob-choice:hover .ob-ghosts i:nth-child(2) { border-color: var(--accent-primary); }
+.wi-card.ob-empty { display: grid !important; place-items: center; width: var(--ob-card) !important; aspect-ratio: 1358 / 1920; border: 1.5px dashed rgba(255, 255, 255, 0.28); background: transparent; color: var(--text-secondary); }   /* thin and finely dashed, like the New loadout card */
+
+.ob-smart { --g0: var(--accent-primary); --g1: #3ecf6e; display: flex; align-items: center; gap: 12px; }
+.ob-smart-mods { display: flex; flex-direction: column; gap: 5px; }
+.ob-smart-mods > span { display: flex; align-items: center; gap: 7px; width: 128px; height: 22px; padding: 0 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.04);
+  font-size: 10.5px; color: var(--text-primary); white-space: nowrap; }
+.ob-smart-mods small { margin-left: auto; font-size: 10px; color: var(--text-secondary); }
+.ob-smart-mods em { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-style: normal; }   /* a real mod's name, cut to the row */
+.ob-smart-mods i { flex: none; width: 7px; height: 7px; border-radius: 50%; }
+.ob-smart-mods .is-g0 i { background: var(--g0); }
+.ob-smart-mods .is-g1 i { background: var(--g1); }
+.ob-smart-arrow { flex: none; color: var(--text-secondary); }
+.ob-smart-out { display: flex; gap: 6px; }
+.ob-choices { --ob-card: 88px; }   /* the loadout cards in Smart loadouts and Start one by hand, one size */
+.ob-smart-out .wi-card { width: var(--ob-card); }
+.ob-pop { animation: ob-pop 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards; }   /* a preview that rendered in the background arrives */
+@keyframes ob-pop { from { opacity: 0; transform: scale(1.04); } }
+.ob-smart-out .wi-card-body { display: none; }
+.ob-smart-out .wi-card.is-g0 { border-color: color-mix(in srgb, var(--g0), transparent 30%); }
+.ob-smart-out .wi-card.is-g1 { border-color: color-mix(in srgb, var(--g1), transparent 40%); }
+
+/* Setup: the steps on the left, the game folder on the right lighting up as each file goes in */
+.ob-split { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 22px; align-items: start; padding-top: 6px; }
+.ob-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.ob-col .fr-steps { padding: 0 !important; }
+.ob-col .fr-step { padding: 12px 0; align-items: start; }
+/* number and button level with the step's title, not the middle of its text (a 28px ring and a 32px button on a 20px title line) */
+.ob-col .fr-step .fr-num { margin-top: -4px; }
+.ob-col .fr-step .fr-action { margin-top: -6px; }
+.ob-all { align-self: flex-start; width: auto !important; height: 36px !important; min-height: 0 !important; padding: 0 18px !important; }
+/* The game folder as a file tree: no card, the folder open (its caret down), the two files under it on a guide line */
+/* The game folder as Windows Explorer's navigation pane draws it (Option 1, cable's pick 2026-10-31): the folder open,
+   its files well indented with typed icons, a blue bar and wash on the row going in, the status in its own column */
+.ob-tree, .ob-tree ul { list-style: none; margin: 0; padding: 0; }
+.ob-tree { align-self: center; display: flex; flex-direction: column; gap: 2px; padding: 14px 12px; border: 1px solid var(--panel-border); border-radius: 12px; background: var(--bg-darker); }
+.ob-tree-kids ul { display: flex; flex-direction: column; gap: 2px; }
+.ob-tree li:not(.ob-tree-kids) { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) 16px; align-items: center; gap: 8px; min-height: 30px;
+  padding: 4px 8px; border-radius: 6px; color: var(--text-secondary); transition: background 0.3s, color 0.3s, opacity 0.3s; }
+.ob-tree > li:first-child { grid-template-columns: auto auto minmax(0, 1fr) 16px; gap: 7px; }
+.ob-tree-kids li:not(.ob-tree-kids) { padding-left: 42px; }
+.ob-caret { color: var(--text-secondary); }
+.ob-dir { color: #d9a84a; }
+.ob-dll { color: #5b8def; }
+.ob-pak { color: #58b887; }
+.ob-tree li > span { display: flex; flex-direction: column; gap: 1px; min-width: 0; line-height: 1.25; }
+.ob-tree li b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 12px var(--font-mono); color: inherit; }
+.ob-tree > li:first-child b { font: 600 12.5px var(--font-primary); }
+.ob-tree li small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--text-secondary); }
+.ob-end { display: grid; place-items: center; width: 16px; height: 16px; font-style: normal; color: #3ecf6e; }
+.ob-tree li.is-todo { opacity: 0.45; }
+.ob-tree li.is-done, .ob-tree li.is-kept { color: var(--text-primary); animation: ob-land 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards; animation-delay: calc(var(--d) * 70ms); }
+.ob-tree li.is-busy { color: var(--text-primary); background: color-mix(in srgb, var(--accent-primary), transparent 90%); }
+.ob-tree li.is-busy::before { content: ''; position: absolute; left: 0; top: 7px; bottom: 7px; width: 3px; border-radius: 2px; background: var(--accent-primary); }
+.ob-tree li.is-busy small, .ob-tree li.is-busy .ob-end { color: var(--accent-primary); }
+.ob-spin { animation: ob-spin 1s linear infinite; }
+@keyframes ob-spin { to { transform: rotate(360deg); } }
+@keyframes ob-land { from { opacity: 0.4; transform: translateY(4px); } }
+
+/* The background setup: its status beside the folder */
+.ob-status { align-self: center; font-size: 13.5px; line-height: 1.55; color: var(--text-secondary); }
+.ob-status p { margin: 0; }
+.ob-status .su-track { align-self: stretch; margin: 0; }
+.ob-status .btn-primary { align-self: flex-start; width: auto !important; height: 34px !important; min-height: 0 !important; padding: 0 16px !important; }
+.ob-done { display: flex; align-items: flex-start; gap: 10px; margin: 0; font-size: 14px; line-height: 1.55; color: var(--text-primary); }
+.ob-done > svg { flex: none; margin-top: 3px; color: #3ecf6e; }
+.ob-status .ob-done { gap: 12px; font-size: 18px; font-weight: 600; line-height: 1.4; letter-spacing: -0.01em; }   /* the page's whole result: said large */
+.ob-status .ob-done > svg.lucide { width: 22px !important; height: 22px !important; margin-top: 2px; }
+
+/* The first mod: one drop zone */
+.ob-drop { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 260px; box-sizing: border-box; margin-top: 8px; padding: 28px 24px 24px; text-align: center;
+  border: 1.5px dashed var(--panel-border); border-radius: 16px; background: var(--bg-darker); }
+.modal-content.fr-modal .ob-drop .ob-drop-icon svg.lucide { width: 22px !important; height: 22px !important; }   /* past the app's 16px icon size */
+.ob-drop-icon { width: 48px; height: 48px; display: grid; place-items: center; margin-bottom: 8px; border-radius: 13px; color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary), transparent 88%); }
+.ob-drop > b { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; color: var(--text-primary); }
+.ob-drop > span:not([class]) { font-size: 14px; color: var(--text-secondary); }
+.ob-drop-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 20px; margin-top: 20px; }
+.ob-drop-actions .btn-primary { display: inline-flex !important; align-items: center; gap: 8px; width: auto !important; height: 36px !important; min-height: 0 !important; padding: 0 16px !important; }
+.ob-out, .ob-out:hover { display: inline-flex; align-items: center; gap: 5px; line-height: 1; text-decoration: none !important; }
+.ob-out svg.lucide { flex: none; }
+.wi-lede .ob-out { vertical-align: bottom; line-height: inherit; }   /* inside a sentence: on the text's own line */
+.wi-lede .ob-out svg.lucide { transform: translateY(2.5px); }   /* the icon centered on the words, not the taller line */
+.ob-drop .ob-done { margin-top: 14px; font-size: 13px; }
+.ob-next { display: inline-flex !important; align-items: center; justify-content: center; gap: 7px; }
+
+/* Make it yours: settings as cards, each with a picture of what it does and its control at the foot, so the three line
+   up; sounds across the bottom */
+.ob-prefs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding-top: 6px; }
+.ob-pref { display: flex; flex-direction: column; min-width: 0; overflow: hidden; border: 1px solid var(--panel-border); border-radius: 14px; background: var(--bg-darker); }
+.ob-pref .ob-stage { height: 110px; border: none; border-bottom: 1px solid var(--panel-border); border-radius: 0; }
+.ob-pref .ob-stage .wi-card { width: 66px; }
+.ob-shot .wi-card-body { display: none; }
+.ob-pref .wi-render span { font-size: 9.5px; }   /* part of the picture (hidden from screen readers), sized to its little card */
+.ob-pref-text { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 0; flex: 1; }
+.ob-pref-text h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.ob-pref-text p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.ob-pref-action { display: flex; align-items: center; min-height: 32px; padding: 12px 16px 16px; }
+.ob-pref-action > * { max-width: 100%; }
+.ob-pref-action :is(.btn-primary, .lo-text-btn) { width: auto !important; height: 32px !important; min-height: 0 !important; padding: 0 14px !important; white-space: nowrap; }
+.ob-pref.is-wide { grid-column: 1 / -1; padding-bottom: 16px; }
+.ob-pref.is-wide .ob-pref-text { padding-top: 14px; flex: none; }
+.ob-ok { display: inline-flex; align-items: center; gap: 6px; height: 32px; font-size: 13px; font-weight: 600; color: #3ecf6e; }
+.fr-admin { display: flex; align-items: center; gap: 6px; color: var(--text-primary) !important; }   /* the system prompt, said before it shows */
+.fr-admin svg { flex: none; color: var(--text-secondary); }
+.ob-pref .su-track { margin: 4px 0 0; }
+
+/* The app's mark: the shortcut's icon and the Discord status's picture are the same tile */
+.ob-mark { width: 52px; height: 52px; display: grid; place-items: center; flex: none; border-radius: 12px; background: #0e1014; border: 1px solid var(--panel-border);
+  font: 800 38px/1 var(--font-primary); color: var(--accent-primary); box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.8); }
+.ob-mark { box-sizing: border-box; padding-bottom: 0.14em; }   /* a lowercase x sits low in its line: lift the ink to the tile's middle */
+.ob-presence { display: flex; align-items: center; gap: 12px; padding: 10px 16px 10px 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); }
+.ob-presence .ob-mark { width: 44px; height: 44px; font-size: 32px; border-radius: 10px; }
+.ob-presence > span { display: flex; flex-direction: column; justify-content: center; gap: 2px; line-height: 1.2; }
+.ob-presence small { font-size: 11px; color: var(--text-secondary); }
+.ob-presence > span b { font-size: 13px; color: var(--text-primary); }
+.ob-presence > span small:last-child { color: #3ecf6e; }
+.ob-activity { display: inline-flex; align-items: center; gap: 4px; }   /* the activity line and its controller, as Discord draws a game */
+.ob-icon { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.ob-icon small { font-size: 10.5px; color: var(--text-primary); }
+
+/* Sounds: a segmented pick, then one row of samples for the pack the pointer or focus rests on, else the picked one */
+.ob-sounds { margin-top: 10px; }
+.ob-seg { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--panel-border); border-radius: 9px; background: var(--bg-dark); }
+.ob-seg button { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent;
+  color: var(--text-secondary); font: 500 13px var(--font-primary); cursor: pointer; transition: color 0.15s, background 0.15s; }
+.ob-seg button:hover { color: var(--text-primary); background: var(--quiet-hover); }
+.ob-seg button[aria-checked="true"] { color: var(--text-primary); background: rgba(255, 255, 255, 0.07); font-weight: 600; }
+.ob-try { display: flex; align-items: center; gap: 6px; min-height: 26px; margin-top: 10px; font-size: 12.5px; color: var(--text-secondary); }
+.ob-try-label { margin-right: 4px; }
+.ob-try-label b { font-weight: 600; color: inherit; }   /* one color with "Try" */
+.ob-try button { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px 0 8px; border: 1px solid var(--panel-border); border-radius: 7px;
+  background: transparent; color: var(--text-secondary); font: 500 12px var(--font-primary); cursor: pointer; transition: color 0.15s, background 0.15s, transform 0.1s; }
+.fr-modal .ob-try button:hover:not(:disabled) { color: var(--text-primary); background: var(--quiet-hover); border-color: var(--text-secondary); }
+.fr-modal .ob-try button svg.lucide { width: 12px !important; height: 12px !important; }
+.ob-try button:active { transform: scale(0.95); }
+/* no loud ring: keyboard focus is a lighter border, like hover */
+.app .ob-try button:focus-visible, .app .ob-seg button:focus-visible { outline: none !important; border-color: var(--text-secondary); color: var(--text-primary); }
+
+/* Where they are: the five steps by name, the same five whatever the answers (Goal-gradient: the end in sight) */
+.fr-rail { display: flex; align-items: center; gap: 14px; margin: 0 auto 0 0; padding: 0; list-style: none; font-size: 12px; color: color-mix(in srgb, var(--text-secondary), transparent 35%); white-space: nowrap; }
+.fr-rail li { display: inline-flex; align-items: center; gap: 6px; }
+.fr-rail li::before { content: ''; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--panel-border); transition: background 0.2s; }
+.fr-rail li.is-done { color: var(--text-secondary); }
+.fr-rail li.is-done::before { display: none; }
+.fr-rail li.is-done svg { flex: none; color: #3ecf6e; }
+.fr-rail li.is-now { color: var(--text-primary); font-weight: 600; }
+.fr-rail li.is-now::before { background: var(--accent-primary); }
+
+@media (max-width: 760px) {
+  .ob-split, .ob-prefs { grid-template-columns: minmax(0, 1fr); }
+}
+html[data-motion="off"] :is(.ob-tree li, .ob-spin, .ob-pop) { animation: none !important; }
+
+.ob-choice .wi-card.ob-empty svg.lucide { width: 20px !important; height: 20px !important; }   /* past the app's button icon size */

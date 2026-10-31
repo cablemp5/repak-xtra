@@ -80,6 +80,8 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'get_folders': return data.folders
       case 'get_app_settings':
         return localStorage.getItem('mock.bypass') === 'false' ? { ...data.settings, bypassGameRunningLock: false } : data.settings
+      case 'save_app_settings': Object.assign(data.settings, args?.settings); return null // the first-launch flow's Discord switch
+      case 'discord_connect': case 'discord_disconnect': case 'discord_set_managing_mods': case 'discord_set_theme': case 'launch_game': return null
       case 'get_game_path': return data.gamePath
       case 'get_all_tags': return data.tags
       case 'delete_tag_from_all_mods':

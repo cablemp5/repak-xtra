@@ -761,7 +761,7 @@ html[data-motion="off"] .lo-screen { animation: none; }
   transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform var(--acc-expand) var(--acc-ease); }
 .lo-card-new:hover .lo-card-add-icon, .lo-card-add:focus-visible .lo-card-add-icon { color: var(--text-primary); transform: translateY(-2px); }
 .lo-card-add-title { display: block; max-width: 100%; min-height: 24px; margin: 0; font-size: 18px; font-weight: 600; line-height: 24px; letter-spacing: -0.01em; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lo-card-add .lo-card-meta { display: block; max-width: 100%; margin-top: 8px !important; font-size: 14px; line-height: 20px;
+.lo-card-add .lo-card-meta { display: block; max-width: 100%; margin-top: 8px !important; font-size: 14px; font-weight: 400; line-height: 20px;
   white-space: normal; overflow: visible; text-overflow: clip; text-wrap: balance; }   /* wraps on narrow cards (a status line is one line, this is not) */
 .lo-card-add svg.lucide { width: 32px !important; height: 32px !important; stroke-width: 1.75; }   /* the copy-plus icon (a new card) alone, no circle */
 html[data-motion="off"] .lo-card-add-icon { transition: none; }
@@ -1122,6 +1122,8 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
   outline: 2px solid var(--focus-ring) !important; outline-offset: 2px !important;
   transition-duration: 0s !important;   /* MUI animates all properties: the ring grew in from 0px */
 }
+.app [data-pointer-focus]:focus-visible, .app [data-pointer-focus].Mui-focusVisible { outline: none !important; }
+.app .repakx-checkbox-control[data-pointer-focus]:focus-visible .repakx-checkbox-box { box-shadow: none; }
 /* The filter line gives way first (it shrinks 100x faster than the folder name), ending in an ellipsis */
 .header-title-scope { color: var(--text-secondary); font-weight: 500; margin-left: 0.3em; min-width: 0; flex: 0 100 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -1135,6 +1137,7 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 html:not([data-view="library"]) .container > .main-action-bar,
 html:not([data-view="library"]) .container > .main-panels,
 html:not([data-view="library"]) .container > .config-warning { display: none !important; }
+html:not([data-view="library"]) .container { padding-top: 0; }
 .lo-screen { position: relative !important; inset: auto !important; z-index: auto !important; animation: none !important;
   flex: 1 1 auto; min-height: 0; background: transparent !important; }   /* no frame: the cards are the boxes (Law of Common Region) */
 .lo-screen-head { padding: 20px 24px 16px; }
@@ -1807,7 +1810,7 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .fr-step::before, .fr-step::after { content: ''; position: absolute; left: 13.5px; width: 1px; background: var(--panel-border); }
 .fr-step::before { top: 0; bottom: calc(50% + 20px); }
 .fr-step::after { top: calc(50% + 20px); bottom: 0; }
-.fr-step:first-child::before, .fr-divider + .fr-step::before, .fr-step:last-child::after, .fr-step:has(+ .fr-divider)::after { display: none; }
+.fr-step:first-child::before, .fr-step:last-child::after { display: none; }
 .fr-step.is-wide { align-items: start; }   /* the drop card under the title: the number stays level with the title */
 /* A step's marker: the shared ring (.nx-step-n), a small green check in its place once done */
 .fr-step.is-done .fr-num { color: #3ecf6e; background: transparent; box-shadow: none; }   /* done: the check alone, no ring */
@@ -1817,11 +1820,9 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .fr-text p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
 .fr-text code { font: 12px var(--font-mono); color: var(--text-primary); }
 .fr-step.is-done .fr-text h3 { color: var(--text-secondary); }
-/* The guided setup's "Optional" label between the first mods and the extras, and its "1 of 3 done" */
-.fr-divider { padding: 20px 0 2px; font-size: 11px; font-weight: 500; color: var(--text-secondary); }   /* the sidebar's section label look (.fp-section-label) */
+/* The guided setup's "1 of 3 done" */
 .fr-progress { font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .fr-optional { padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--text-secondary); background: var(--bg-lighter); }
-.fr-recommended { color: var(--accent-primary); background: color-mix(in srgb, var(--accent-primary), transparent 86%); }   /* Mod previews: worth doing, unlike the Optional extras */
 .fr-action { display: flex; align-items: center; gap: 8px; }
 .fr-text .fr-drop { margin-top: 8px; }
 .fr-action .btn-primary, .fr-foot .btn-primary { width: auto !important; flex: none; min-width: 84px; height: 32px !important; min-height: 0 !important;
@@ -1838,7 +1839,6 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .fr-drop a { color: color-mix(in srgb, var(--accent-primary), white 30%); cursor: pointer; margin-left: auto; }
 .fr-drop a:hover { text-decoration: underline; }
 .fr-foot { padding: 16px 24px !important; border-top: 1px solid var(--panel-border); display: flex; align-items: center; gap: 12px; }
-.fr-foot .su-sub { margin: 0 auto 0 0; }
 
 /* Preview kit: what the PC check found missing (Setup and the first-launch setup) */
 /* Install progress (installTrack.tsx): one status line, no box and no bar. A small spinner, what is happening in the
@@ -2330,6 +2330,11 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 .settings-content .action-btn svg.xs-heart { color: #ef4444 !important; }
 .settings-content .action-btn svg.xs-star { color: #facc15 !important; }
 [data-theme="light"] .settings-content .action-btn svg.xs-star { color: #ca8a04 !important; }
+/* A risky setting's warning, in the app's warning amber. No box: the icon sits in the checkbox's 20px column and the words
+   start where the checkbox's own words do (28px in), so the setting reads as one block */
+.setting-warn { display: grid; grid-template-columns: 20px 1fr; column-gap: 8px; align-items: start; margin: 8px 0 0; font-size: 13px; line-height: 1.45; color: #f5a524; }
+.setting-warn svg { justify-self: center; margin-top: 2px; }
+[data-theme="light"] .setting-warn { color: #9a5b00; }
 .settings-content .xs-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .settings-content .xs-label { font-size: 13px; font-weight: 400; color: var(--text-primary); }
 .settings-content .xs-text .setting-subtext { padding: 0 !important; margin: 0 !important; }

@@ -218,7 +218,7 @@ html[data-motion="off"] .vf-pill, html[data-motion="off"] .vf-status { animation
   animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards;
 }
 .vfx-notice p { flex: 1; min-width: 0; margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-secondary); }
-.vfx-notice-head { display: block; margin-bottom: 2px; font-size: 16px; font-weight: 600; line-height: 1.35; color: var(--text-primary); }
+.vfx-notice-head { display: block; margin-bottom: 0; font-size: 16px; font-weight: 600; line-height: 1.25; color: var(--text-primary); }
 .vfx-notice-icon { flex: none; color: #f5d342; }
 .vfx-notice .btn-primary {
   height: 32px !important; min-height: 0 !important; padding: 0 16px !important; font-size: 13px !important; border-radius: var(--quiet-radius) !important;

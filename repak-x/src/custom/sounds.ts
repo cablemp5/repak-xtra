@@ -17,6 +17,13 @@ export const isSoundOn = () => soundOn
 export const unlockSound = () => { unlock().catch(() => undefined) }
 /** A cue for something that is not a click (dragging a card, cardDrag.ts); silent with Sound effects off. */
 export const cue = (name: SoundName, options?: PlayOptions) => play(name, options)
+/** A cue in a pack that is not the picked one (the first-launch sound tiles, FirstRun.tsx): heard even with sound off,
+ *  and the picked pack stays as it is. */
+export const tryCue = (name: SoundName, theme: ThemeName) => {
+  if (!soundOn) { setEnabled(true); setTimeout(() => setEnabled(soundOn), 800) } // a short cue, then off again
+  play(name, { theme })
+}
+export type { SoundName, ThemeName }
 
 type Cue = [SoundName, PlayOptions?]
 

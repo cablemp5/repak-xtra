@@ -2,6 +2,21 @@
 // activatable with Enter/Space without touching the upstream components.
 const SELECTOR = '.filter-section-header, .folder-tree .node-content'
 
+// Chromium reveals the last mouse-clicked control's focus ring on any letter shortcut, even without moving focus.
+let pointerFocus: HTMLElement | null = null
+const clearPointerFocus = () => { pointerFocus?.removeAttribute('data-pointer-focus'); pointerFocus = null }
+document.addEventListener('pointerdown', e => {
+  clearPointerFocus()
+  const control = e.target instanceof Element ? e.target.closest<HTMLElement>('button, a[href], [tabindex], [role="button"]') : null
+  if (!control || control.matches('input, textarea, select, [contenteditable="true"]')) return
+  pointerFocus = control
+  control.setAttribute('data-pointer-focus', '')
+}, true)
+document.addEventListener('focusout', e => { if (e.target === pointerFocus) clearPointerFocus() }, true)
+document.addEventListener('keydown', e => {
+  if (['Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter', ' ', 'Escape'].includes(e.key)) clearPointerFocus()
+}, true)
+
 let queued = false
 const markAll = () => {
   queued = false

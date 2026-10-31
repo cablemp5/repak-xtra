@@ -142,7 +142,8 @@ export function NexusTag({ path }: { path: string }) {
   if (!s) return null
   return (
     <button type="button" className="mod-type-badge nexus-badge" title={`Installed from Nexus Mods, uploaded ${day(s.uploaded)}. Click to open its page`}
-      onClick={e => { e.stopPropagation(); openNexusPage(s.id) }}><img className="tag-logo" src={nexusLogo} alt="" />Nexus</button>
+      onClick={e => { e.stopPropagation(); openNexusPage(s.id) }}
+      onAuxClick={e => { if (e.button === 1) { e.preventDefault(); e.stopPropagation(); openNexusPage(s.id) } }}><img className="tag-logo" src={nexusLogo} alt="" />Nexus</button>
   )
 }
 

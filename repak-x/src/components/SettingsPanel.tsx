@@ -3,6 +3,7 @@ import { AnimatedThemeToggler } from './ui/AnimatedThemeToggler'
 import Checkbox from './ui/Checkbox'
 import { UiScaleSection, MotionSection, InstallingSection, HeaderButtonsSection, ModPrefs, WarningPrefs, NewStripPref, BuiltinsPref, resetUiPrefs } from '../custom/uiPrefs' // repakxtra
 import RecentlyDeleted from '../custom/RecentlyDeleted' // repakxtra: Settings > Recently deleted
+import { TriangleAlert } from 'lucide-react' // repakxtra: setting warnings
 import { useDialogFocus } from '../custom/dialogFocus' // repakxtra
 import TailInput from './ui/TailInput'
 import { LuFolderInput, LuFolderOpen, LuLibrary, LuLifeBuoy, LuRefreshCw, LuRocket, LuRotateCcw, LuSlidersHorizontal, LuTags, LuUsers } from "react-icons/lu"
@@ -445,11 +446,13 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                       >
                         <span>Allow mod changes while the game runs</span>
                       </Checkbox>
-                      <p className={`setting-subtext ${bypassGameRunningLock ? 'is-warning' : ''}`}>
+                      <p className="setting-subtext">
                         {bypassGameRunningLock
-                          ? 'Renaming, moving, switching, deleting, and priority changes stay on while the game runs. A change can crash the game or not load until a restart.'
+                          ? 'Renaming, moving, switching, deleting, and priority changes stay on while the game runs.'
                           : 'Off: mod changes wait until the game is closed.'}
                       </p>
+                      {/* repakxtra: the risk as a warning line under the setting, the same look as other risky settings */}
+                      {bypassGameRunningLock && <p className="setting-warn"><TriangleAlert size={14} aria-hidden="true" />A change can crash the game or not load until a restart.</p>}
                     </div>
                   </div>
                 </div>

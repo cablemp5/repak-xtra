@@ -1641,7 +1641,7 @@ function App() {
     const unlistenDragDrop = listen('tauri://drag-drop', (event: any) => {
       const files = event.payload.paths || event.payload
       setIsDragging(false)
-      handleFileDrop(files)
+      handleFileDrop(files).finally(() => window.dispatchEvent(new Event('repakxtra-drop-done'))) // repakxtra: the first-launch flow comes back when no install panel opened
     })
 
     // Listen for Tauri file-drop event
@@ -4566,8 +4566,8 @@ function App() {
         isOpen={showOnboarding}
         onClose={handleCloseTour}
       />
-      <FirstRun alert={alert} gamePath={gamePath} onAutoDetect={handleAutoDetect} onBrowse={handleBrowseGamePath}
-        onAddFiles={handleFileDrop} onStartTour={() => setShowOnboarding(true)} />{/* repakxtra */}
+      <FirstRun alert={alert} gamePath={gamePath} mods={mods} details={modDetails} installing={panels.install} enableDrp={enableDrp} onSetDrp={on => saveAllSettings({ enableDrp: on })}
+        onAutoDetect={handleAutoDetect} onBrowse={handleBrowseGamePath} onAddFiles={handleFileDrop} />{/* repakxtra */}
     </div >
   )
 }
