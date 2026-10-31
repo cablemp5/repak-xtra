@@ -164,7 +164,10 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     if (!extracted.length) throw new Error('No assets could be read from the mod. Check the game folder in Setup and that the mod is a .utoc mod.')
     const rel = (p: string) => relativeTo(p, dirs.modExtract)
     const manifest = extracted.map(rel)
-    const ask = extracted.filter(p => !PASS_BY_NAME.test(fileName(p)))
+    // by name, unless the mod's listing says a file named like a texture or mesh is a material or blueprint
+    const classes = await invoke<Record<string, string> | null>('xtra_vfx_classes', { modPath: src, gamePaks: o.gamePaksPath }).catch(() => null)
+    const passes = (p: string) => PASS_BY_NAME.test(fileName(p)) && !/^(MaterialInstance|.*BlueprintGeneratedClass$|DataTable$|StringTable$)/i.test(classes?.[assetKey(rel(p))] ?? '')
+    const ask = extracted.filter(p => !passes(p))
     // a patch that inserts properties into a class moves every later one (3984769: material overrides), and a file cooked
     // before it crashes the game and reads as nothing to change. Rewritten in today's layout here, every step below reads it
     const older = ask.filter(p => !NIAGARA_BY_NAME.test(fileName(p))).map(p => rel(p).replace(/\.uasset$/i, ''))
@@ -198,11 +201,11 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     let editable: string[] = [], keep: string[] = []
     const maybe = new Map<string, string>()
     for (const p of extracted) {
-      const d = PASS_BY_NAME.test(fileName(p)) ? undefined : types.get(assetKey(slash(p)))
+      const d = passes(p) ? undefined : types.get(assetKey(slash(p)))
       if (d && d.kind !== 'other') { editable.push(p); if (d.kind === 'maybe') maybe.set(assetKey(rel(p)), d.class ?? ''); continue }
       keep.push(p)
       if (d?.error) asset(p, 'unreadable', `Could not be read (${d.error}). Kept as it was.`)
-      else if (!d && !PASS_BY_NAME.test(fileName(p))) asset(p, 'unreadable', 'Its type could not be read. Kept as it was.')
+      else if (!d && !passes(p)) asset(p, 'unreadable', 'Its type could not be read. Kept as it was.')
       else asset(p, 'passed', d?.class ? `${d.class}, kept as it was.` : 'Kept as it was.')
     }
     // Niagara files a game update rewrote after the mod was made are still cooked for the old game and can crash it. They

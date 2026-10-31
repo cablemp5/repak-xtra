@@ -766,6 +766,25 @@ pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>
     .map_err(|e| e.to_string())
 }
 
+/// The mod's packages by class, keyed by their path in the mod (lowercase, no extension), from its container's listing
+/// (xtra_uat_cli::classes): pipeline.ts reads a material or blueprint named like a texture or mesh (T_, SK_, SM_) as
+/// what it is, never passing it on unread. None without the command line.
+#[tauri::command]
+pub async fn xtra_vfx_classes(mod_path: String, game_paks: String) -> Option<HashMap<String, String>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let listed = crate::xtra_uat_cli::classes(&Path::new(&mod_path).with_extension("utoc"), Path::new(&game_paks))?;
+        let key = |p: &str| {
+            let p = p.replace('\\', "/").to_lowercase();
+            let p = p.trim_start_matches("../");
+            p.strip_suffix(".uasset").unwrap_or(p).to_string()
+        };
+        Some(listed.into_iter().map(|(p, c)| (key(&p), c)).collect())
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
 /// Whether a mod's files hold a Niagara system or emitter (NS_ or NE_).
 fn has_niagara(files: &[String]) -> bool {
     files.iter().any(|f| {

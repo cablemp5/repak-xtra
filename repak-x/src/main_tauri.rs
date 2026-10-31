@@ -8741,6 +8741,7 @@ fn main() {
             xtra_safe_off::xtra_safe_off_kept, // repakxtra
             xtra_usmap_diff::xtra_layout_moves, // repakxtra
             xtra_tables::xtra_vfx_merge_tables, // repakxtra
+            xtra_vfx::xtra_vfx_classes, // repakxtra
             xtra_mi_layout::xtra_vfx_verify, // repakxtra
             xtra_vfx::xtra_game_build,
             xtra_vfx::xtra_vfx_mods,
