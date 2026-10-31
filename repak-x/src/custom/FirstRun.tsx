@@ -54,7 +54,7 @@ export type Flow = {
   onAutoDetect: () => Promise<void>; onBrowse: () => Promise<void>; addFiles: () => void
   kit: ReturnType<typeof usePreviewKit>; shortcut: ReturnType<typeof useShortcut>
   enableDrp: boolean; onSetDrp: (on: boolean) => void
-  pending: Pending; setPending: (p: Pending) => void
+  finish: (p?: Pending) => void
   answer: (yes: boolean) => void; next: () => void; back: () => void; close: () => void
 }
 /** Which pages apply: guided (no mods on hand, or "Not yet") or the background setup, and whether mods are installed. */
@@ -278,18 +278,18 @@ const loadout: Page = {
   body: f => (
     <div className="ob-choices">
       {f.made && (
-        <Choice suggested onClick={() => { f.setPending(f.made!.id); f.next() }} stage={<MiniCard name={f.made.name} src={silhouette} />}
-          title={`Continue with ${f.made.name}`} text="The install saved your new mods as this loadout. It opens when you finish." />
+        <Choice suggested onClick={() => f.finish(f.made!.id)} stage={<MiniCard name={f.made.name} src={silhouette} />}
+          title={`Continue with ${f.made.name}`} text="The install saved your new mods as this loadout. Opens it now." />
       )}
       {f.newMods.length > 0 && !f.made && (
-        <Choice suggested onClick={() => { createFromMods(f.newMods); f.setPending(null); f.next() }} stage={<MiniCard name="New loadout" src={silhouette} />}
-          title={`From the ${plural(f.newMods.length, 'mod')} you added`} text="Made now, waiting on Loadouts home when you finish." />
+        <Choice suggested onClick={() => f.finish(createFromMods(f.newMods).id)} stage={<MiniCard name="New loadout" src={silhouette} />}
+          title={`From the ${plural(f.newMods.length, 'mod')} you added`} text="Made now and opened, ready to switch on." />
       )}
       {f.hasMods && (
-        <Choice suggested={!f.made && !f.newMods.length} onClick={() => { f.setPending('smart'); f.next() }} stage={<Smart />}
-          title="Group my mods into loadouts" text="Mods that share a look become one loadout, each with a tick to keep. Opens when you finish." />
+        <Choice suggested={!f.made && !f.newMods.length} onClick={() => f.finish('smart')} stage={<Smart />}
+          title="Group my mods into loadouts" text="Mods that share a look become one loadout, each with a tick to keep." />
       )}
-      <Choice onClick={() => { f.setPending('empty'); f.next() }} title="Start one by hand" text="An empty loadout, named and filled on its page when you finish."
+      <Choice onClick={() => f.finish('empty')} title="Start one by hand" text="An empty loadout, named and filled on its page."
         stage={<span className="wi-card ob-empty"><CopyPlus size={30} strokeWidth={1.75} /></span>} />
       {!f.hasMods && f.newMods.length === 0 && <p className="fr-hint">No mods yet. Back adds some first, or the checklist on Loadouts home reminds you later.</p>}
     </div>
@@ -355,15 +355,16 @@ function Yours({ f }: { f: Flow }) {
 }
 const yours: Page = { id: 'yours', title: 'Make it yours', sub: () => 'All optional. Change these later in Setup and Settings.', body: f => <Yours f={f} /> }
 
-/** The flow, in order. A page after Make it yours and before Finish goes on the line below yours. */
+/** The flow, in order. Another edition's pages go on the line below yours, before the first loadout (always last: a
+ *  pick there finishes the flow). */
 export const PAGES: Page[] = [
   welcome,
   ask,
   setup,
   auto,
   mods,
-  loadout,
   yours,
+  loadout,
 ]
 
 export default function FirstRun({ alert, gamePath, mods: allMods, installing, enableDrp, onSetDrp, onAutoDetect, onBrowse, onAddFiles, onStartTour }: {
@@ -381,7 +382,6 @@ export default function FirstRun({ alert, gamePath, mods: allMods, installing, e
   const [open, setOpen] = useState(firstLaunch)
   const [at, setAt] = useState('welcome')
   const [path, setPath] = useState<'yes' | 'no' | null>(null) // the answer; unasked, mods on hand mean yes
-  const [pending, setPending] = useState<Pending>(null)
   const [bypass, setBypass] = useState<Bypass | null>(null)
   const [bypassError, setBypassError] = useState<string | null>(null)
   const [galacta, setGalacta] = useState<Galacta | null>(null)
@@ -426,7 +426,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, installing, e
     if (!r.seen && installed.length <= r.count) return // the panel has not opened yet
     resume.current = null
     setOpen(true)
-    if (at === 'mods' && installed.length > r.count) setAt('loadout') // installed: on to the first loadout
+    if (at === 'mods' && installed.length > r.count) setAt('yours') // installed: on to the next page
   }, [installing, installed.length])
   useEffect(() => { if (open && at !== 'welcome') title.current?.focus() }, [open, at]) // a screen reader hears the new page
   const checkStatus = () => {
@@ -495,7 +495,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, installing, e
     if (resume.current && !resume.current.seen) { resume.current = null; setOpen(true) } // nothing to install: the panel never opened
   }
   /** Done: Loadouts home, plus what the first loadout page picked. */
-  const finishFlow = () => {
+  const finishFlow = (pending: Pending = null) => {
     close()
     setView('home')
     if (pending === 'smart') window.dispatchEvent(new Event('repakxtra-smart-loadouts'))
@@ -506,7 +506,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, installing, e
 
   const f: Flow = {
     alert, gamePath, hasMods, installedCount: installed.length, newMods, made, auto, setAuto, busy, finished, bypass, bypassError, galacta, checkStatus, run, installBypass, installGalacta,
-    setUpAll, setUpMissing, onAutoDetect, onBrowse, addFiles, kit, shortcut, enableDrp, onSetDrp, pending, setPending, answer,
+    setUpAll, setUpMissing, onAutoDetect, onBrowse, addFiles, kit, shortcut, enableDrp, onSetDrp, finish: finishFlow, answer,
     next: () => move(1), back: () => move(-1), close,
   }
   const last = at === ids[ids.length - 1]
@@ -544,7 +544,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, installing, e
           <button type="button" className="lo-text-btn" onClick={() => move(-1)}>Back</button>
           {(page.choice || unfinished) && !last
             ? <button type="button" className="lo-text-btn" disabled={working} onClick={() => move(1)}>{unfinished ? 'Skip for now' : 'Skip'}</button>
-            : <button type="button" className="btn-primary ob-next" disabled={working} onClick={last ? finishFlow : () => move(1)}>{last ? <>Finish <Check size={15} aria-hidden="true" /></> : <>Next <ArrowRight size={15} aria-hidden="true" /></>}</button>}
+            : <button type="button" className="btn-primary ob-next" disabled={working} onClick={last ? () => finishFlow() : () => move(1)}>{last ? <>Finish <Check size={15} aria-hidden="true" /></> : <>Next <ArrowRight size={15} aria-hidden="true" /></>}</button>}
         </div>
         </>}
       </motion.div>
@@ -553,7 +553,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, installing, e
 }
 
 if (import.meta.env.DEV) {
-  console.assert(sequence(PAGES, { guided: true, hasMods: false }).join() === 'welcome,ask,setup,mods,loadout,yours', 'no mods, not yet: the guided path')
-  console.assert(sequence(PAGES, { guided: false, hasMods: true }).join() === 'welcome,ask,auto,loadout,yours', 'mods installed: still asked, then the background setup')
-  console.assert(sequence(PAGES, { guided: false, hasMods: false }).join() === 'welcome,ask,auto,mods,loadout,yours', 'yes but nothing installed: add mods first')
+  console.assert(sequence(PAGES, { guided: true, hasMods: false }).join() === 'welcome,ask,setup,mods,yours,loadout', 'no mods, not yet: the guided path')
+  console.assert(sequence(PAGES, { guided: false, hasMods: true }).join() === 'welcome,ask,auto,yours,loadout', 'mods installed: still asked, then the background setup')
+  console.assert(sequence(PAGES, { guided: false, hasMods: false }).join() === 'welcome,ask,auto,mods,yours,loadout', 'yes but nothing installed: add mods first')
 }
