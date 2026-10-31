@@ -10,13 +10,13 @@ import catboy from './covers/welcome/catboy.webp'
 import ultimate from './covers/welcome/ultimate.webp'
 import godspeed from './covers/welcome/godspeed.webp'
 
-/** A loadout card in miniature: its preview, name and switch. */
-function MiniCard({ name, src, className = '', children }: { name: string; src: string; className?: string; children?: React.ReactNode }) {
+/** A loadout card in miniature: its preview, name and switch. Spans, so it also fits inside the flow's choice buttons. */
+export function MiniCard({ name, src, className = '', children }: { name: string; src: string; className?: string; children?: React.ReactNode }) {
   return (
-    <div className={`wi-card ${className}`}>
-      <div className="wi-card-img"><img className="wi-shot" src={src} alt="" />{children}</div>
-      <div className="wi-card-body"><b>{name}</b><i className="wi-switch" /></div>
-    </div>
+    <span className={`wi-card ${className}`}>
+      <span className="wi-card-img"><img className="wi-shot" src={src} alt="" />{children}</span>
+      <span className="wi-card-body"><b>{name}</b><i className="wi-switch" /></span>
+    </span>
   )
 }
 

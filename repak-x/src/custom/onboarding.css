@@ -1,56 +1,161 @@
 /* repakxtra: the first-launch flow's pages (custom/FirstRun.tsx) and the Getting started checklist on Loadouts home
-   (custom/GettingStarted.tsx). The steps themselves keep theme.css's .fr-step look. Animations off: theme.css zeroes
-   every animation, so each page simply appears. */
+   (custom/GettingStarted.tsx). Every page wears the welcome page's look (welcome.css): its big title and lede, and
+   pictures on the same .wi-stage panels, so the flow reads as one piece. Animations off: theme.css zeroes every
+   animation, so each page and each folder row simply shows its finished state. */
+
+/* Room for a picture beside the steps; the welcome page shares the width */
+.modal-content.fr-modal { width: min(860px, 94vw) !important; }
 
 /* A page rises in (transitions.dev Stagger), remounted on Back and Next */
-.fr-body { padding: 4px 24px 20px !important; overflow-y: auto; animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; }
+.fr-body { padding: 8px 28px 26px !important; overflow-y: auto; animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; }
 .fr-modal .fr-body { gap: 0; }
-.fr-body .fr-steps { padding: 0 !important; }
-.fr-page { display: flex; flex-direction: column; gap: 14px; padding-top: 12px; }
-.fr-page .fr-drop { margin: 0; }
+.ob-head { padding-right: 64px; }   /* clear of the close button */
+.ob-head .fr-progress { color: var(--text-primary); }
+.app .fr-welcome[tabindex="-1"]:focus-visible, .fr-welcome:focus { outline: none !important; }   /* the title takes focus on each page for screen readers, no ring for a heading */
 
-/* The question pages: two or three big choices, one pick moves on (Hick's law: few options, each one line) */
-.fr-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; padding-top: 12px; }
-.fr-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 16px 18px; text-align: left; cursor: pointer;
-  border: 1px solid var(--panel-border); border-radius: 12px; background: var(--bg-dark); color: var(--text-primary); font: inherit; transition: border-color 0.15s, background 0.15s; }
-.fr-choice:hover { border-color: color-mix(in srgb, var(--accent-primary), transparent 40%); background: var(--quiet-hover); }
-.fr-choice:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
-.fr-choice b { font-size: 14px; font-weight: 600; }
-.fr-choice span { font-size: 12.5px; line-height: 1.45; color: var(--text-secondary); text-wrap: pretty; }
+/* Question pages: big cards with a picture on top, one pick moves on (Hick: two or three choices) */
+.ob-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; padding-top: 10px; }
+.ob-choice { display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden; text-align: left; cursor: pointer;
+  border: 1px solid var(--panel-border); border-radius: 14px; background: var(--bg-darker); color: var(--text-primary); font: inherit;
+  transition: border-color 0.18s ease, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease; }
+.ob-choice:hover { border-color: color-mix(in srgb, var(--accent-primary), transparent 45%); transform: translateY(-2px);
+  box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.7); }
+.ob-choice:active { transform: translateY(0); }
+.ob-choice:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.ob-choice.is-suggested { border-color: color-mix(in srgb, var(--accent-primary), transparent 35%); }
+.ob-choice .ob-stage { align-self: stretch; height: 172px; border: none; border-bottom: 1px solid var(--panel-border); border-radius: 0; }
+.ob-choice-text { display: flex; flex-direction: column; gap: 5px; padding: 14px 16px 16px; }
+.ob-choice-text b { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.ob-choice-text span { font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 .fr-hint { grid-column: 1 / -1; margin: 0; font-size: 13px; color: var(--text-secondary); }
 
-/* A row with an icon instead of a number (Make it yours), no line joining the rows */
-.fr-plain .fr-step::before, .fr-plain .fr-step::after { display: none; }
-.fr-step.is-icon .fr-num { color: var(--text-secondary); background: var(--bg-lighter); box-shadow: none; }
-.fr-step.is-icon.is-done .fr-num { color: #3ecf6e; background: transparent; }
+/* Pictures for the cards: loadouts fanned out, an empty card to fill, an empty slot for downloads */
+.ob-fan { display: flex; align-items: center; justify-content: center; }
+.ob-fan .wi-card { width: 62px; margin: 0 -8px; box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.8); transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1); }
+.ob-fan .wi-card:nth-child(1) { transform: rotate(-8deg) translateY(6px); }
+.ob-fan .wi-card:nth-child(2) { position: relative; z-index: 1; }
+.ob-fan .wi-card:nth-child(3) { transform: rotate(8deg) translateY(6px); }
+.ob-choice:hover .ob-fan .wi-card:nth-child(1) { transform: rotate(-12deg) translate(-8px, 4px); }
+.ob-choice:hover .ob-fan .wi-card:nth-child(3) { transform: rotate(12deg) translate(8px, 4px); }
+.ob-choice .ob-stage > .wi-card { width: 88px; }
+.ob-empty { display: grid !important; place-items: center; width: 88px !important; aspect-ratio: 1358 / 1920; border-style: dashed;
+  background: transparent; color: var(--text-secondary); }
+.ob-slot { display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--text-secondary); }
+.ob-slot > b { width: 56px; height: 56px; display: grid; place-items: center; border: 1px dashed var(--panel-border); border-radius: 14px; color: var(--accent-primary); }
+.ob-slot > span { display: flex; gap: 6px; }
+.ob-slot i, .ob-drop-art i { font: 600 10.5px var(--font-mono); font-style: normal; padding: 3px 7px; border-radius: 999px;
+  border: 1px solid var(--panel-border); background: var(--bg-dark); color: var(--text-secondary); }
+
+/* Setup: the steps on the left, the game folder on the right lighting up as each file goes in */
+.ob-split { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 22px; align-items: start; padding-top: 6px; }
+.ob-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.ob-col .fr-steps { padding: 0 !important; }
+.ob-col .fr-step { padding: 12px 0; }
+.ob-all { align-self: flex-start; width: auto !important; height: 36px !important; min-height: 0 !important; padding: 0 18px !important; }
+.ob-folder { height: auto; min-height: 196px; place-items: stretch; padding: 14px; align-content: center; }
+.ob-folder ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ob-folder li { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 9px;
+  background: rgba(255, 255, 255, 0.03); border: 1px solid transparent; color: var(--text-secondary); transition: background 0.3s, border-color 0.3s, color 0.3s; }
+.ob-folder li:nth-child(n + 2) { margin-left: 16px; }   /* inside the game folder */
+.ob-folder li > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ob-folder li b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 12px var(--font-mono); color: inherit; }
+.ob-folder li small { font-size: 11.5px; color: var(--text-secondary); }
+.ob-folder li > svg:last-child { color: #3ecf6e; }
+.ob-folder li.is-todo { opacity: 0.55; }
+.ob-folder li.is-done, .ob-folder li.is-kept { color: var(--text-primary); background: rgba(62, 207, 110, 0.06); border-color: rgba(62, 207, 110, 0.18);
+  animation: ob-land 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards; animation-delay: calc(var(--d) * 70ms); }
+.ob-folder li.is-busy { color: var(--text-primary); border-color: color-mix(in srgb, var(--accent-primary), transparent 50%); position: relative; overflow: hidden; }
+.ob-folder li.is-busy::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.07), transparent);
+  animation: lo-skel-sweep 1.4s ease-in-out infinite; }
+@keyframes ob-land { from { opacity: 0.4; transform: translateY(4px); } }
+
+/* The background setup: its status beside the folder */
+.ob-status { align-self: center; font-size: 13.5px; line-height: 1.55; color: var(--text-secondary); }
+.ob-status p { margin: 0; }
+.ob-status .su-track { align-self: stretch; margin: 0; }
+.ob-status .btn-primary { align-self: flex-start; width: auto !important; height: 34px !important; min-height: 0 !important; padding: 0 16px !important; }
+.ob-done { display: flex; align-items: flex-start; gap: 10px; margin: 0; font-size: 14px; line-height: 1.55; color: var(--text-primary); }
+.ob-done > svg { flex: none; margin-top: 3px; color: #3ecf6e; }
+
+/* The first mod: one big drop zone, the file types it takes floating in it */
+.ob-drop { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 8px; padding: 30px 24px 26px; text-align: center;
+  border: 1.5px dashed var(--panel-border); border-radius: 16px;
+  background: radial-gradient(90% 80% at 50% 0%, color-mix(in srgb, var(--accent-primary), transparent 92%), transparent 70%), var(--bg-darker); }
+.ob-drop > b { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; color: var(--text-primary); }
+.ob-drop > span:not(.ob-drop-art):not(.ob-drop-actions) { font-size: 13px; color: var(--text-secondary); }
+.ob-drop-art { position: relative; width: 220px; height: 92px; display: grid; place-items: center; margin-bottom: 6px; color: var(--accent-primary); }
+.ob-drop-art > b { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 14px;
+  background: color-mix(in srgb, var(--accent-primary), transparent 86%); }
+.ob-drop-art i { position: absolute; animation: ob-float 4.8s ease-in-out infinite; animation-delay: calc(var(--i) * -1.2s); }
+.ob-drop-art i:nth-of-type(1) { left: 6px; top: 10px; }
+.ob-drop-art i:nth-of-type(2) { right: 4px; top: 4px; }
+.ob-drop-art i:nth-of-type(3) { left: 30px; bottom: 2px; }
+.ob-drop-art i:nth-of-type(4) { right: 26px; bottom: 8px; }
+@keyframes ob-float { 50% { transform: translateY(-5px); } }
+.ob-drop-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 18px; margin-top: 12px; }
+.ob-drop-actions .btn-primary { display: inline-flex !important; align-items: center; gap: 8px; width: auto !important; height: 36px !important; min-height: 0 !important; padding: 0 16px !important; }
+.ob-drop .ob-done { margin-top: 14px; font-size: 13px; }
+
+/* Make it yours: settings as cards, each with a picture of what it does; sounds across the bottom */
+.ob-prefs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding-top: 6px; }
+.ob-pref { display: flex; flex-direction: column; min-width: 0; overflow: hidden; border: 1px solid var(--panel-border); border-radius: 14px; background: var(--bg-darker); }
+.ob-pref .ob-stage { height: 96px; border: none; border-bottom: 1px solid var(--panel-border); border-radius: 0; }
+.ob-pref .ob-stage .wi-card { width: 46px; }
+.ob-pref .ob-stage .wi-card-body { padding: 4px 5px; }
+.ob-pref-text { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 0; flex: 1; }
+.ob-pref-text h3 { margin: 0; font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.ob-pref-text p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.ob-pref-action { display: flex; align-items: center; padding: 12px 16px 16px; }
+.ob-pref-action .btn-primary { width: auto !important; height: 32px !important; min-height: 0 !important; padding: 0 14px !important; }
+.ob-pref.is-wide { grid-column: 1 / -1; padding-bottom: 14px; }
+.ob-pref.is-wide .fr-tiles { margin-top: 8px; }
+.ob-pref.is-wide .ob-pref-text { padding-top: 14px; flex: none; }
+.ob-ok { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #3ecf6e; }
 .fr-admin { display: flex; align-items: center; gap: 6px; color: var(--text-primary) !important; }   /* the system prompt, said before it shows */
 .fr-admin svg { flex: none; color: var(--text-secondary); }
+.ob-pref .su-track { margin: 4px 0 0; }
 
-/* The background setup: a waiting note, then one line saying what changed */
-.fr-wait { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding-top: 12px; font-size: 13px; color: var(--text-secondary); }
-.fr-wait p { margin: 0; }
-.fr-wait .su-track { align-self: stretch; margin: 0; }
-.fr-line { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding-top: 12px; font-size: 13px; line-height: 1.5; color: var(--text-primary); }
-.fr-line > svg { flex: none; margin-top: 2px; color: #3ecf6e; }
-.fr-body > .fr-line { padding-top: 16px; }
+/* Discord: a status in miniature */
+.ob-presence { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; background: rgba(255, 255, 255, 0.04); }
+.ob-presence > i { width: 34px; height: 34px; border-radius: 9px; background: var(--accent-primary); position: relative; }
+.ob-presence > i::after { content: 'x'; position: absolute; inset: 0; display: grid; place-items: center; font: 800 18px var(--font-primary); color: #fff; }
+.ob-presence > span { display: flex; flex-direction: column; line-height: 1.3; }
+.ob-presence small { font-size: 10px; color: var(--text-secondary); }
+.ob-presence b { font-size: 12px; color: var(--text-primary); }
+/* The shortcut: the app's icon on a desktop */
+.ob-icon { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.ob-icon b { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 11px; background: #0e1014; border: 1px solid var(--panel-border);
+  font: 800 30px/1 var(--font-primary); color: var(--accent-primary); box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.8); }
+.ob-icon small { font-size: 10.5px; color: var(--text-primary); }
 
 /* Sound tiles: Off and each pack, a name to pick and small buttons to hear it */
-.fr-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; margin-top: 10px; width: 100%; }
-.fr-tile { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--panel-border); border-radius: 10px; background: var(--bg-dark); transition: border-color 0.15s; }
-.fr-tile.is-on { border-color: var(--accent-primary); }
-.fr-tile-pick { height: 28px; padding: 0 8px; border: none; border-radius: 6px; background: transparent; color: var(--text-primary); font: 600 13px var(--font-primary); text-align: left; cursor: pointer; }
+.fr-tiles { display: grid; grid-template-columns: minmax(84px, 0.5fr) repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.fr-tile { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--panel-border); border-radius: 11px; background: var(--bg-dark);
+  transition: border-color 0.15s, background 0.15s; }
+.fr-tile.is-on { border-color: var(--accent-primary); background: color-mix(in srgb, var(--accent-primary), transparent 92%); }
+.fr-tile-pick { display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 6px; border: none; border-radius: 7px; background: transparent;
+  color: var(--text-primary); font: 600 13px var(--font-primary); text-align: left; cursor: pointer; }
+.fr-tile-pick svg { color: var(--text-secondary); }
+.fr-tile.is-on .fr-tile-pick, .fr-tile.is-on .fr-tile-pick svg { color: var(--accent-primary); }
 .fr-tile-pick:hover { background: var(--quiet-hover); }
-.fr-tile-pick[aria-pressed="true"] { color: var(--accent-primary); }
-.fr-tile-try { display: flex; flex-wrap: wrap; gap: 4px; }
-.fr-tile-try button { height: 22px; padding: 0 7px; border: 1px solid var(--panel-border); border-radius: 999px; background: transparent; color: var(--text-secondary); font: 500 11px var(--font-primary); cursor: pointer; }
+.fr-tile-try { display: flex; gap: 3px; }
+.fr-tile-try button { flex: 1; height: 22px; padding: 0 2px; border: 1px solid var(--panel-border); border-radius: 999px; background: transparent; color: var(--text-secondary);
+  font: 500 10.5px var(--font-primary); cursor: pointer; transition: color 0.15s, background 0.15s; }
 .fr-tile-try button:hover { color: var(--text-primary); background: var(--quiet-hover); }
+.fr-tile-none { padding: 0 6px; font-size: 11px; line-height: 22px; white-space: nowrap; color: var(--text-secondary); }
 
 /* Where they are: a dot per page after the welcome, the current one wide, and "Step 2 of 5" (Goal-gradient: the end in sight) */
 .fr-rail { display: inline-flex; align-items: center; gap: 4px; margin-right: auto; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-.fr-rail i { width: 6px; height: 6px; border-radius: 999px; background: var(--panel-border); transition: width 0.2s, background 0.2s; }
+.fr-rail i { width: 6px; height: 6px; border-radius: 999px; background: var(--panel-border); transition: width 0.25s cubic-bezier(0.22, 1, 0.36, 1), background 0.2s; }
 .fr-rail i.is-done { background: color-mix(in srgb, var(--accent-primary), transparent 45%); }
-.fr-rail i.is-now { width: 16px; background: var(--accent-primary); }
+.fr-rail i.is-now { width: 18px; background: var(--accent-primary); }
 .fr-rail > span { margin-left: 6px; }
+
+@media (max-width: 760px) {
+  .ob-split, .ob-prefs { grid-template-columns: minmax(0, 1fr); }
+  .fr-tiles { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
+}
+html[data-motion="off"] :is(.ob-folder li, .ob-drop-art i, .ob-folder li::after) { animation: none !important; }
 
 /* Getting started: a quiet card above the loadouts, rows ticked as the app finds them done */
 .gs-card { width: fit-content; max-width: 100%; padding: 14px 18px 12px; border: 1px solid var(--panel-border); border-radius: 12px; background: var(--bg-dark); }
@@ -76,6 +181,3 @@
 .gs-note { margin: 10px 0 0; padding: 0 0 0 12px; border-left: 2px solid color-mix(in srgb, var(--accent-primary), transparent 40%); font-size: 13px; line-height: 1.5; color: var(--text-primary); }
 .gs-note p { margin: 0; max-width: 62ch; text-wrap: pretty; }
 .gs-note footer { margin-top: 6px; display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--text-secondary); }
-
-/* the page title takes focus on each page for screen readers (FirstRun.tsx), no ring for a heading */
-.fr-welcome:focus { outline: none; }
