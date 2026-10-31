@@ -15,13 +15,13 @@ setVolume(0.7)
  *  playing and at most two sound (a click and the toast it causes still both play). A cue while the window is hidden is
  *  dropped, so none queue up and burst out together when it comes back. */
 const STACK_MS = 60
-let burst: { at: number; names: SoundName[] } = { at: -Infinity, names: [] }
+let recent: { at: number; name: SoundName }[] = [] // the cues admitted in the last STACK_MS, each expiring on its own
 function admits(name: SoundName, now: number, hidden: boolean) {
   if (hidden) return false
   if (name === 'type') return true // every key: fast typing is under the gap
-  if (now - burst.at >= STACK_MS) { burst = { at: now, names: [name] }; return true }
-  if (burst.names.length >= 2 || burst.names.includes(name)) return false
-  burst.names.push(name)
+  recent = recent.filter(c => now - c.at < STACK_MS)
+  if (recent.length >= 2 || recent.some(c => c.name === name)) return false
+  recent.push({ at: now, name })
   return true
 }
 function play(name: SoundName, options?: PlayOptions) {
@@ -138,11 +138,14 @@ if (import.meta.env.DEV) {
   console.assert(cueFor(r)?.[0] === 'toggle' && cueFor(r)?.[1]?.direction === 'forward', 'a role button keeping its heroes toggles forward')
   const s = document.createElement('span')
   console.assert(cueFor(s) === null, 'plain text is silent')
-  burst = { at: -Infinity, names: [] }
+  recent = []
   console.assert(admits('tap', 1000, false) && admits('success', 1010, false) && !admits('error', 1020, false) && !admits('tap', 1030, true),
     'two different cues together, not a third, none while hidden')
   console.assert(!admits('success', 1040, false) && admits('success', 1100, false) && admits('type', 1101, false), 'no repeat within the gap, typing always')
-  burst = { at: -Infinity, names: [] }
+  recent = []
+  console.assert(admits('tap', 0, false) && admits('open', 59, false) && admits('close', 60, false) && !admits('select', 61, false),
+    'a sliding window: never three cues within the gap, even across its edge')
+  recent = []
   console.assert(soundPackOf('bubble') === 'bubble' && soundPackOf(null) === 'mech' && soundPackOf('nope') === 'mech', 'unknown packs fall back to mech')
   const k = (key: string, more = {}) => typingKey({ key, ctrlKey: false, metaKey: false, altKey: false, repeat: false, ...more })
   console.assert(k('a') === 'printable' && k(' ') === 'space' && k('Backspace') === 'delete' && k('Enter') === 'enter', 'typing roles')
