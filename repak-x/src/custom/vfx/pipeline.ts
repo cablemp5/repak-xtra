@@ -81,7 +81,7 @@ export const usmapWaitText = (w: UsmapWait) =>
 type Dirs = { modExtract: string; modJson: string; editedJson: string; finalUassets: string; stage: string; vanillaExtract: string; vanillaJson: string; vanillaIndex: string }
 type Detected = { kind: 'material_instance' | 'blueprint' | 'maybe' | 'other'; class: string | null; error: string | null }
 type VanillaIndex = { have: string[] } // an older index's "absent" list is not read (see step 4)
-type NiagaraRun = { ready: boolean; why?: string | null; oldBuild?: number | null; files: { file: string; edits: number; error?: string | null }[] }
+type NiagaraRun = { ready: boolean; why?: string | null; oldBuild?: number | null; files: { file: string; edits: number; error?: string | null; retry?: boolean }[] }
 
 class Cancelled extends Error {}
 
@@ -256,6 +256,8 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
         const f = a.kind === 'left' ? results.get(assetKey(rel(a.path))) : undefined
         if (!f) continue
         // rebuilt with today's USMAP or not at all: no later USMAP changes that, so it is final and the update stays full
+        // a reason that may pass keeps it left out, so the update is partial, its original stays, and it is tried again
+        if (f.error && f.retry) { a.detail = `Made for an older game build. Not rebuilt this time (${f.error}), so it is left out and tried again on the next update.`; continue }
         if (f.error) { report.counts.left--; report.counts.ownGame++; a.detail = `Made for an older game build and could not be carried (${f.error}). Left out, so the game uses its own.`; continue }
         report.counts.left--; niagaraDone++
         if (f.edits) { a.kind = 'updated'; report.counts.updated++; niagaraUpdated++; report.counts.changes += f.edits; a.detail = `Rebuilt on the game's new file with ${plural(f.edits, 'edit')}.` }
