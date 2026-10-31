@@ -669,6 +669,8 @@ pub struct VfxMod {
     niagara: bool,
     /// Not a VFX mod: listed for its material instances (a skin's glow), grouped apart in the window
     materials: bool,
+    /// A UI mod (the Library's UI type) listed for its UI materials, in the window's UI mods group
+    ui: bool,
 }
 
 /// The mods folder's VFX mods (the Library's VFX type) the VFX Updater can update: IoStore mods, no originals with an update
@@ -680,6 +682,7 @@ pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>
     tauri::async_runtime::spawn_blocking(move || {
         // the Library's scan skips what it cannot open: walk again and keep those, so a partial list says so
         let root = state.lock().unwrap().game_path.clone();
+        let paks = crate::xtra_broken::paks_dir(&root);
         let mut problems: Vec<String> = walkdir::WalkDir::new(&root)
             .into_iter()
             .filter_entry(crate::xtra_bundle::not_staging)
@@ -717,7 +720,10 @@ pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>
                         return None;
                     }
                 };
-                updatable(&details.category, &details.files).then(|| VfxMod {
+                // by class too: a UI material named M_..._Inst is no MI_ (xtra_broken::material_instances)
+                let listed = updatable(&details.category, &details.files)
+                    || paks.as_ref().is_some_and(|p| !crate::xtra_broken::material_instances(p, &utoc, &details.files).is_empty());
+                listed.then(|| VfxMod {
                     name: m.custom_name.clone().filter(|n| !n.trim().is_empty()).unwrap_or_else(|| split_priority(&stem).0.to_string()),
                     // the mod list leaves it empty for most mods: the details name it (the window's hero filter)
                     hero: m.character_name.clone().filter(|c| !c.is_empty()).or_else(|| Some(details.character_name.clone()).filter(|c| !c.is_empty())),
@@ -727,6 +733,7 @@ pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>
                     modified: m.modified_date,
                     niagara: has_niagara(&details.files),
                     materials: details.category != "VFX",
+                    ui: details.category == "UI",
                 })
             })
             .collect::<Vec<_>>();

@@ -8,7 +8,7 @@ import { useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit } from '@tauri-apps/api/event'
 import type { useAlert } from '../../components/AlertHandler'
-import { verdictsChanged } from '../brokenMods'
+import { verdictOf, verdictsChanged } from '../brokenMods'
 import { modKey, nameKey, renameModKey } from '../loadoutStore'
 import { renameSource } from '../nexusSource'
 import { readFilter } from './filter'
@@ -33,9 +33,10 @@ const nameOf = (p: string) => fileName(p).replace(/\.[^.]+$/, '').replace(/(_\d+
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
 /** Whether the VFX Updater can update a mod: VFX, or any mod with a material instance (MI_*.uasset) or a KO prompt
- *  (WBP_Battle_Kill_*.uasset), as xtra_vfx.rs `updatable` decides (a skin's glow or shine material sorts as Mesh or Texture). */
-export const canUpdateVfx = (d?: { category?: string; files?: string[] } | null) =>
-  d?.category === 'VFX' || Boolean(d?.files?.some(f => /^(mi_|wbp_battle_kill_).*\.uasset$/i.test(fileName(f))))
+ *  (WBP_Battle_Kill_*.uasset), as xtra_vfx.rs `updatable` decides (a skin's glow or shine material sorts as Mesh or Texture).
+ *  A Needs VFX update flag counts too: the backend finds material instances by class (a UI material named M_..._Inst). */
+export const canUpdateVfx = (d?: { category?: string; files?: string[] } | null, path?: string) =>
+  d?.category === 'VFX' || Boolean(d?.files?.some(f => /^(mi_|wbp_battle_kill_).*\.uasset$/i.test(fileName(f)))) || (path !== undefined && verdictOf(path)?.kind === 'vfx')
 
 if (import.meta.env.DEV) {
   console.assert(canUpdateVfx({ category: 'VFX' }) && canUpdateVfx({ category: 'Texture', files: ['Marvel\\Content\\X\\mi_Body_Glow.uasset'] }), 'VFX or a material instance')
@@ -119,7 +120,7 @@ function resultToast(r: VfxReport, name: string, alert: Alert) {
 }
 
 /** What Check for VFX update found (xtra_vfx_check.rs): the mod's material instances by the game version they were built for. */
-export type VfxCheck = { verdict: 'outdated' | 'current' | 'unknown' | 'none'; outdated: string[]; current: string[]; unknown: string[]; why?: 'empty' | 'unreadable' | 'elsewhere' | null }
+export type VfxCheck = { verdict: 'outdated' | 'current' | 'unknown' | 'none'; outdated: string[]; current: string[]; unknown: string[]; oldLayout?: string[]; why?: 'empty' | 'unreadable' | 'elsewhere' | null }
 
 /** Why a check could not tell, for one material and for several, in words that never guess past what it saw. */
 const WHY = {
@@ -138,7 +139,10 @@ export async function checkVfxMod(path: string): Promise<VfxCheck> {
 /** What a check means, in words: a toast's title and text (the VFX Updater's log uses them too). */
 export function checkWords(c: VfxCheck, name: string): { title: string; text: string; color: 'warning' | 'success' | 'default' } {
   const all = c.outdated.length + c.current.length + c.unknown.length
-  if (c.verdict === 'outdated') return { color: 'warning', title: `${name} needs a VFX update`, text: `${c.outdated.length === all ? (all === 1 ? 'Its material is' : `All ${all} of its materials are`) : `${c.outdated.length} of its ${all} materials are`} still built for an earlier game version.` }
+  const some = (n: number) => (n === all ? (all === 1 ? 'Its material is' : `All ${all} of its materials are`) : `${n} of its ${all} materials ${n === 1 ? 'is' : 'are'}`)
+  const layout = c.oldLayout?.length ?? 0
+  if (c.verdict === 'outdated' && layout) return { color: 'warning', title: `${name} needs a VFX update`, text: `${some(layout)} stored in an older game build's layout, which can crash the game. The update rewrites ${layout === 1 ? 'it' : 'them'}.` }
+  if (c.verdict === 'outdated') return { color: 'warning', title: `${name} needs a VFX update`, text: `${some(c.outdated.length)} still built for an earlier game version.` }
   if (c.verdict === 'current') return { color: 'success', title: `${name} is up to date`, text: `${all === 1 ? 'Its material is' : `All ${all} of its materials are`} built for this game version.` }
   if (c.verdict === 'unknown') {
     const one = c.unknown.length === 1

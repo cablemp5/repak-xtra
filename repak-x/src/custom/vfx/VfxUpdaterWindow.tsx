@@ -29,7 +29,7 @@ import './vfx.css'
 
 type Status = 'waiting' | 'running' | 'fixed' | 'nothing' | 'failed' | 'cancelled'
 type Run = { status: Status; step?: number; sub?: string; report?: VfxReport }
-type Mod = { path: string; utoc: string; enabled: boolean; name: string; hero?: string | null; modified?: number; niagara?: boolean; materials?: boolean }
+type Mod = { path: string; utoc: string; enabled: boolean; name: string; hero?: string | null; modified?: number; niagara?: boolean; materials?: boolean; ui?: boolean }
 type ModList = { mods: Mod[]; problems: string[] }
 type Verdict = { path: string; kind: string; reason: string; staleNiagara?: number; usmapWait?: number }
 type Log = { time: string; text: string; type: string }
@@ -684,13 +684,15 @@ export function VfxUpdaterPanel() {
   const done = shown.filter(updatedNow)
   const chosen = shown.filter(isAdded)
   const others = shown.filter(m => !first(m) && !updatedNow(m) && !isAdded(m))
-  groupOf.current = new Map(shown.map(m => [norm(m.utoc), updatedNow(m) ? 'updated' : isAdded(m) ? 'added' : first(m) ? 'needs' : m.materials ? 'materials' : 'rest']))
+  groupOf.current = new Map(shown.map(m => [norm(m.utoc), updatedNow(m) ? 'updated' : isAdded(m) ? 'added' : first(m) ? 'needs' : m.ui ? 'ui' : m.materials ? 'materials' : 'rest']))
   const groups = [
     group('added', 'Chosen files', chosen),
     group('needs', 'Needs an update', needing, needing.filter(m => needsOf(m) && !isDone(runs[norm(m.utoc)]?.status)).length),
     group('rest', chosen.length || needing.length ? 'Other VFX mods' : 'VFX mods', others.filter(m => !m.materials)),
     // skins listed for their material instances, apart so the VFX mods stay easy to find
-    group('materials', 'Material mods', others.filter(m => m.materials)),
+    group('materials', 'Material mods', others.filter(m => m.materials && !m.ui)),
+    // UI mods listed for their UI materials (a game update rewrote nearly all of them in 3984769)
+    group('ui', 'UI mods', others.filter(m => m.ui)),
     group('updated', 'Updated', done), // last: what is done goes below what is left to do
   ]
   const inLoadouts = (m: Mod) => { const k = canonKey(modKey(m.path)); return loadouts.filter(l => l.on.some(x => canonKey(x) === k)).map(l => ({ id: l.id, name: l.name })) }
@@ -710,7 +712,7 @@ export function VfxUpdaterPanel() {
   const runningKey = batch.find(k => runs[k]?.status === 'running')
   const runningMod = runningKey ? (mods ?? []).find(m => norm(m.utoc) === runningKey) : undefined
   const rest = list.filter(m => !first(m) && !isAdded(m))
-  orderRef.current = [...list.filter(isAdded), ...list.filter(first), ...rest.filter(m => !m.materials), ...rest.filter(m => m.materials)].map(m => norm(m.utoc))
+  orderRef.current = [...list.filter(isAdded), ...list.filter(first), ...rest.filter(m => !m.materials), ...rest.filter(m => m.materials && !m.ui), ...rest.filter(m => m.ui)].map(m => norm(m.utoc))
   const byUtoc = new Map((mods ?? []).map(m => [norm(m.utoc), m]))
   const times = readTimes()
   // while a batch runs: the mod in progress (its expected time less the time it has run) and the ones after it

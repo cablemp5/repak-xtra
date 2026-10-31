@@ -313,8 +313,9 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         return localStorage.getItem('mock.broken') ? (args?.modPaths ?? []).slice(0, 2).map((path: string, i: number) => ({ path,
           kind: i ? 'risky' : 'broken', reason: i ? 'A Blueprint mod installed before the last game update.' : 'None of the 3 game files it replaces exist in this game version.' })) : []
       // the VFX Updater's list: mods with VFX in their name stand in for the VFX type (no originals with an update beside them)
-      case 'xtra_vfx_mods': return { problems: [], mods: data.mods.filter((m: any) => /vfx/i.test(m.path) && !/_BROKEN(_\d+)?_P\./i.test(m.path)).map((m: any) => ({
-        path: m.path, utoc: m.utoc_path || m.path.replace(/\.(pak|bak_repak)$/i, '.utoc'), enabled: m.enabled, hero: m.character_name ?? null, modified: m.modified_date ?? 0,
+      // UI mods (ui in the name) stand in for the UI mods group
+      case 'xtra_vfx_mods': return { problems: [], mods: data.mods.filter((m: any) => /vfx|(^|[^a-z])ui([^a-z]|$)/i.test(m.path) && !/_BROKEN(_\d+)?_P\./i.test(m.path)).map((m: any) => ({
+        ...(/vfx/i.test(m.path) ? {} : { materials: true, ui: true }), path: m.path, utoc: m.utoc_path || m.path.replace(/\.(pak|bak_repak)$/i, '.utoc'), enabled: m.enabled, hero: m.character_name ?? null, modified: m.modified_date ?? 0,
         name: m.custom_name || m.path.split(/[\\/]/).pop().replace(/\.[^.]+$/, '').replace(/(_\d+)?_P$/i, '') })) }
       // the mock USMAP is 3939753: localStorage 'mock.usmapBehind' = '1' puts the game a build ahead of it, so updates wait
       case 'xtra_game_build': return { updated: Math.floor(Date.now() / 1000) - 3600 * 5, cl: localStorage.getItem('mock.usmapBehind') === '1' ? 3962284 : 3939753 }

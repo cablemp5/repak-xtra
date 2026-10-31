@@ -4534,8 +4534,8 @@ function App() {
             onCheckConflicts={() => contextMenu.mod && handleCheckSingleModClashes(contextMenu.mod)}
             onUpdateMod={() => contextMenu.mod && handleInitiateUpdate(contextMenu.mod)}
             onSendToVfxUpdater={() => contextMenu.mod && handleSendToVfxUpdater(contextMenu.mod)}
-            onUpdateVfx={contextMenu.mod && canUpdateVfx(modDetails[contextMenu.mod.path]) ? (m => () => void updateVfxModInPlace(m, alert, loadMods))(contextMenu.mod) : undefined /* repakxtra */}
-            onCheckVfx={contextMenu.mod && canUpdateVfx(modDetails[contextMenu.mod.path]) ? (m => () => void checkVfxModInPlace(m, alert, loadMods))(contextMenu.mod) : undefined /* repakxtra */}
+            onUpdateVfx={contextMenu.mod && canUpdateVfx(modDetails[contextMenu.mod.path], contextMenu.mod.path) ? (m => () => void updateVfxModInPlace(m, alert, loadMods))(contextMenu.mod) : undefined /* repakxtra */}
+            onCheckVfx={contextMenu.mod && canUpdateVfx(modDetails[contextMenu.mod.path], contextMenu.mod.path) ? (m => () => void checkVfxModInPlace(m, alert, loadMods))(contextMenu.mod) : undefined /* repakxtra */}
             onShowInAssetExplorer={() => {
               if (!contextMenu.mod) return
               // Same selection rule as onMoveTo: acting on a mod inside the
