@@ -1407,6 +1407,7 @@ html[data-view="library"] .view-tabs::before { transform: translateX(calc(100% +
   transform: translate(var(--seg-x), var(--seg-y)); border-radius: 6px; background: var(--seg-pill, var(--bg-lighter)); pointer-events: none; }
 .has-seg-pill.seg-ready::before { transition: transform var(--tabs-dur) var(--tabs-ease), width var(--tabs-dur) var(--tabs-ease), height var(--tabs-dur) var(--tabs-ease); }
 .has-seg-pill > :is([aria-pressed="true"], [aria-checked="true"], .active) { background: transparent !important; }
+.has-seg-pill.segmented-control .segment-btn.active { background: transparent !important; }   /* beats theme.css .segmented-control .segment-btn.active */
 .has-seg-pill.ob-seg { --seg-pill: rgba(255, 255, 255, 0.07); }
 .has-seg-pill.segmented-control::before { border-radius: 4px; }
 html[data-motion="off"] .has-seg-pill::before { transition: none !important; }

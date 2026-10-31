@@ -197,7 +197,7 @@ export async function gatherReport(): Promise<string> {
     if (!c.asset_path) return head
     const t = await settled(invoke<Tiered[]>('xtra_crash_tiers', { assetPath: c.asset_path, heroId: null, modPaths: allPaths }))
     const held = t?.filter(x => x.tier === 'asset').map(x => relativeToMods(x.path, src.gamePath))
-    return `${head}: ${!held ? 'not checked' : held.length ? `replaced by ${holders(held)}` : 'no installed mod replaces it'}`
+    return `${head}: ${!held ? 'not checked' : held.length ? `replaced by ${held.join(', ')}` : 'no installed mod replaces it'}`
   }))
   const gpuInfo = [crash?.gpu_driver, crash?.rhi].filter(Boolean).join(', ')
   const system = [crash?.cpu, crash?.gpu && `${crash.gpu}${gpuInfo ? ` (${gpuInfo})` : ''}`, crash?.ram_gb != null && `${crash.ram_gb} GB`, crash?.os]
@@ -251,7 +251,7 @@ if (import.meta.env.DEV) {
   const listed = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', kit: 'v3', on: [], off: 0, conflicts: '0 groups', crash: 'x',
     recent: ['2026-10-30 00:59, crashed loading MI_1026001_Eyes: no installed mod replaces it'] })
   console.assert(listed.includes('\nPreview kit: v3\n') && listed.includes('Crash reports (newest first') && listed.includes('\n  2026-10-30 00:59, crashed loading MI_1026001_Eyes'), 'kit version and crash list', listed)
-  console.assert(text.indexOf('Newest crash') <text.indexOf('~mods/A.pak | Mesh | Black Panther | 2026-10-01'), 'summary before the mod list', text)
+  console.assert(text.indexOf('Newest crash') < text.indexOf('~mods/A.pak | Mesh | Black Panther | 2026-10-01'), 'summary before the mod list', text)
   const flagged = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', conflicts: '0 groups',
     crash: '2026-10-24 21:03, Access Violation', crashLines: ['7 min into the game', 'message: boom D:\\build\\x\\y.cpp'], flags: '1 need a VFX update, 0 may crash, 0 broken, 1 with Niagara',
     on: [{ name: '~mods/A.pak', type: 'VFX', hero: '', date: '2026-10-01', notes: ['Needs update', 'Niagara'], why: 'made before the game update' }], off: 0 })
