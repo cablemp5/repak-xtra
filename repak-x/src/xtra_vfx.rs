@@ -457,6 +457,8 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
         (fixed_stem_among(&base, &stems_in(dir)), base.clone())
     };
     let trash_original = trash_original && !partial;
+    // made again from the original: the update it replaces is on or off, and the new one follows it
+    let update_on = if superseded.is_none() && !target.eq_ignore_ascii_case(&stem) && !files(&target).is_empty() { dir.join(format!("{target}.pak")).exists() } else { update_on };
     let eq = |a: &str, b: &str| a.eq_ignore_ascii_case(b);
     // an update made again from itself (a _PARTIAL one): the new one replaces it
     let replace = eq(&target, &kept);
@@ -912,15 +914,38 @@ fn stale(mod_path: &str, game_paks: &str, files: &[String]) -> Result<Vec<String
     Ok(crate::xtra_broken::rewritten_since(Path::new(game_paks), files, written).unwrap_or_default())
 }
 
-/// What an update of `mod_path` (a .utoc) starts from: a partial update lacks the Niagara files it left out, so its kept
-/// `<name>_ORIGINAL` is updated instead when it is there.
-fn source_of(mod_path: &Path) -> PathBuf {
-    let Some(stem) = mod_path.file_stem().map(|s| s.to_string_lossy().to_string()) else { return mod_path.to_path_buf() };
-    if !partial_stem(&stem).eq_ignore_ascii_case(&stem) {
-        return mod_path.to_path_buf();
+/// The original an update at `mod_path` (a .utoc) was made from, when it is still beside it: `<name>_ORIGINAL` for a
+/// partial update, `<name>_BROKEN` for one that kept the mod's name, the original `<name>_..._P` for a `_UPDATED` one.
+pub(crate) fn original_of(mod_path: &Path) -> Option<PathBuf> {
+    let stem = mod_path.file_stem()?.to_string_lossy().to_string();
+    let dir = mod_path.parent()?;
+    // the file as it is spelled on disk (stems_in is lowercase)
+    let utoc = |s: &str| {
+        std::fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).find(|p| {
+            p.extension().is_some_and(|x| x.eq_ignore_ascii_case("utoc")) && p.file_stem().is_some_and(|f| f.to_string_lossy().eq_ignore_ascii_case(s))
+        })
+    };
+    if partial_stem(&stem).eq_ignore_ascii_case(&stem) {
+        return utoc(&original_stem(&stem));
     }
-    let original = mod_path.with_file_name(format!("{}.utoc", original_stem(&stem)));
-    if original.exists() { original } else { mod_path.to_path_buf() }
+    let broken = broken_stem(&stem);
+    if !broken.eq_ignore_ascii_case(&stem) {
+        if let Some(o) = utoc(&broken) {
+            return Some(o);
+        }
+    }
+    if is_update(&stem) {
+        let siblings = stems_in(dir);
+        let me = stem.to_lowercase();
+        return siblings.iter().find(|t| **t != me && !is_update(t) && fixed_stem_among(t, &siblings).eq_ignore_ascii_case(&stem)).and_then(|t| utoc(t));
+    }
+    None
+}
+
+/// What an update of `mod_path` (a .utoc) starts from: the original it was made from when that is still there (an
+/// earlier update can lack what it left out, or carry what an older version of the updater got wrong), else itself.
+fn source_of(mod_path: &Path) -> PathBuf {
+    original_of(mod_path).unwrap_or_else(|| mod_path.to_path_buf())
 }
 
 #[tauri::command(async)]
@@ -939,6 +964,21 @@ mod tests {
     use crate::vfx_updater::{commands as c, file_ops, logging, pipeline, progress::NoOpProgressSink};
     use serde_json::{json, Value};
     use std::io::{BufRead, Write};
+
+    #[test]
+    fn an_update_starts_again_from_the_original_beside_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let touch = |s: &str| std::fs::write(dir.path().join(format!("{s}.utoc")), b"t").unwrap();
+        let p = |s: &str| dir.path().join(format!("{s}.utoc"));
+        for s in ["A_9999999_P", "A_BROKEN_9999999_P", "B_100_P", "B_UPDATED_9999999_P", "C_PARTIAL_9999999_P", "C_ORIGINAL_9999999_P", "D_9999999_P"] {
+            touch(s);
+        }
+        assert_eq!(original_of(&p("A_9999999_P")), Some(p("A_BROKEN_9999999_P")), "kept the name: its _BROKEN original");
+        assert_eq!(original_of(&p("B_UPDATED_9999999_P")), Some(p("B_100_P")), "an _UPDATED one: the original it was named after");
+        assert_eq!(original_of(&p("C_PARTIAL_9999999_P")), Some(p("C_ORIGINAL_9999999_P")));
+        assert_eq!(original_of(&p("D_9999999_P")), None, "no original beside it: it starts from itself");
+        assert_eq!(original_of(&p("A_BROKEN_9999999_P")), None, "the original itself");
+    }
 
     #[test]
     fn niagara_is_an_ns_or_ne_uasset() {
@@ -1065,13 +1105,14 @@ mod tests {
         assert!(mods.join("A_9999999_P.bak_repak").exists() && !mods.join("A_9999999_P.pak").exists(), "the original is off");
         assert_eq!(std::fs::read_to_string(mods.join("A_UPDATED_9999999_P.ucas")).unwrap(), "new");
 
-        // an off original makes an off fix, and is left alone
+        // made again from the off original: the new fix is on or off like the fix it replaces, the original left alone
         for x in ["utoc", "ucas", "pak"] {
             touch(&root.join(format!("stage/out.{x}")), "newer");
         }
         let (placed, ..) = place(&mods.join("A_9999999_P.utoc"), &root.join("stage/out"), true, false, false, false, &root.join("trash")).unwrap();
         assert!(!placed.turned_off && placed.replaced, "the previous fix went to Recently deleted");
-        assert!(mods.join("A_UPDATED_9999999_P.bak_repak").exists() && !mods.join("A_UPDATED_9999999_P.pak").exists());
+        assert!(mods.join("A_UPDATED_9999999_P.pak").exists() && !mods.join("A_UPDATED_9999999_P.bak_repak").exists(), "on, like the fix it replaces");
+        assert!(mods.join("A_9999999_P.bak_repak").exists(), "the original stays off");
         assert_eq!(std::fs::read_to_string(mods.join("A_UPDATED_9999999_P.ucas")).unwrap(), "newer");
         assert_eq!(std::fs::read_dir(root.join("trash")).unwrap().count(), 1, "the old fix is in the trash given, never the app's");
         let _ = std::fs::remove_dir_all(&root);
@@ -1112,8 +1153,8 @@ mod tests {
         stage("newest");
         let (placed, ..) = place(&mods.join("A_BROKEN_9999999_P.utoc"), &root.join("stage/out"), true, true, false, false, &root.join("trash")).unwrap();
         assert!(placed.replaced && !placed.turned_off, "the broken copy was off already");
-        assert_eq!(std::fs::read_to_string(mods.join("A_9999999_P.bak_repak")).unwrap(), "newest", "off, like the copy it was made from");
-        assert!(!mods.join("A_9999999_P.pak").exists(), "the earlier update is in Recently deleted");
+        assert_eq!(std::fs::read_to_string(mods.join("A_9999999_P.pak")).unwrap(), "newest", "on, like the update it replaces");
+        assert!(!mods.join("A_9999999_P.bak_repak").exists(), "the earlier update is in Recently deleted");
         assert_eq!(std::fs::read_to_string(mods.join("A_BROKEN_9999999_P.bak_repak")).unwrap(), "new");
         assert_eq!(std::fs::read_dir(root.join("trash")).unwrap().count(), 2);
         let _ = std::fs::remove_dir_all(&root);

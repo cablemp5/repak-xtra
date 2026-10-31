@@ -583,7 +583,15 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                 }
                 let details = crate::compute_mod_details(&path, &state).ok()?;
                 let installed = std::fs::metadata(&path).and_then(|m| m.modified()).ok()?.duration_since(UNIX_EPOCH).ok()?.as_secs();
-                let installed = crate::xtra_stamp::made(&path, installed); // an update repakxtra made: the game it was made for
+                // an update repakxtra made: the game it was made for. One an earlier version made has no stamp: it counts as
+                // old as the original beside it, since it carries what that version could not rebuild
+                let installed = match crate::xtra_stamp::of(&path) {
+                    Some(_) => crate::xtra_stamp::made(&path, installed),
+                    None => crate::xtra_vfx::original_of(&path.with_extension("utoc"))
+                        .and_then(|o| std::fs::metadata(o).and_then(|m| m.modified()).ok())
+                        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                        .map_or(installed, |o| installed.min(o.as_secs())),
+                };
                 let vfx = details.category == "VFX";
                 let (mics, _) = material_instances(&paks, &path.with_extension("utoc"), &details.files);
                 let facts = Facts {
