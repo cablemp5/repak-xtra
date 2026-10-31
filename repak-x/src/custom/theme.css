@@ -2746,7 +2746,7 @@ html[data-motion="off"] .vfx-dot { animation: none; }
   line-height: normal !important; opacity: 1 !important; color: var(--text-primary) !important; }
 .bulk-count { min-width: 0 !important; height: 36px !important; padding: 0 0 0 12px !important; margin: 0 12px 0 0 !important; white-space: nowrap; background: none !important; display: flex; align-items: center; }
 /* the count is set apart from Select all and Clear by a full-height line, as the actions are (.selection-info) */
-.bulk-actions-toolbar .bulk-count { align-self: stretch; height: auto !important; margin: -5px 4px -5px 0 !important; padding-right: 12px !important;
+.bulk-actions-toolbar .bulk-count { align-self: stretch; height: auto !important; margin: -5px 4px -5px 0 !important; padding-right: 17px !important;
   border-right: 1px solid rgba(255, 255, 255, 0.12); border-radius: 0 !important; }
 /* plain text, all white: "2 selected" read as one phrase (the 4px gap is a space), on the buttons' line height so the glyphs sit level */
 .bulk-count-value { display: inline-block; height: auto; min-width: 0; padding: 0;
