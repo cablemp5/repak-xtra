@@ -108,8 +108,8 @@ button.vf-loadouts:focus-visible { outline: 2px solid var(--accent-primary); out
   animation: t-shimmer var(--shimmer-dur, 2s) var(--shimmer-ease, linear) infinite; }
 .vf-step { margin: 8px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 8px; font-size: 13px; color: var(--text-secondary); }
 /* a long path (Packing the update) cuts off with an ellipsis inside the pill, never past the row */
-/* 2px on top of an 18px line: on a plain 20px line Geist's capitals sit 1px above the pill's middle (measured) */
-.vf-count { display: inline-block; box-sizing: border-box; max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 18px; height: 20px; padding: 2px 8px 0; border-radius: 999px; font-size: 12px; font-weight: 500;
+/* the line trimmed to its capitals and baseline with even padding, like .vf-pill-label (the 2px top nudge sat low) */
+.vf-count { display: inline-block; box-sizing: border-box; max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; height: 20px; padding: 5.5px 8px; text-box: trim-both cap alphabetic; border-radius: 999px; font-size: 12px; font-weight: 500;
   font-variant-numeric: tabular-nums; color: var(--text-secondary); background: var(--quiet-active); }
 .vf-pill.is-running { height: 20px !important; padding: 0 8px !important; font-size: 11px !important; cursor: default; color: color-mix(in srgb, var(--accent-primary), white 35%) !important; background: color-mix(in srgb, var(--accent-primary), transparent 84%) !important;
   font-variant-numeric: tabular-nums; }
