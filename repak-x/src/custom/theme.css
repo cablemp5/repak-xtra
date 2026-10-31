@@ -1423,7 +1423,8 @@ html[data-motion="off"] .has-seg-pill::before { transition: none !important; }
 /* previous is next mirrored: the new picture comes in from the left instead of the right, the old one sinks back and darkens */
 .cr-slide.is-in.is-next { animation: cr-enter var(--cr-dur) var(--cr-ease) both; }
 .cr-slide.is-in.is-prev { animation: cr-enter-left var(--cr-dur) var(--cr-ease) both; }
-.cr-slide.is-out { animation: cr-sink var(--cr-dur) var(--cr-ease) both; }
+/* it fades out as it sinks, easing in (slow, then gone), so it never vanishes in one frame when the turn ends */
+.cr-slide.is-out { animation: cr-sink var(--cr-dur) var(--cr-ease) both, cr-fade var(--cr-dur) cubic-bezier(0.4, 0, 1, 1) both; }
 .cr-slide.is-out::after { content: ''; position: absolute; inset: 0; background: #000; pointer-events: none;
   animation: cr-dim var(--cr-dur) var(--cr-ease) both; }
 .cr-slide.is-out img { opacity: 1 !important; filter: none !important; }
@@ -1431,6 +1432,7 @@ html[data-motion="off"] .has-seg-pill::before { transition: none !important; }
 @keyframes cr-enter { from { transform: translate3d(100%, 0, 0); } }
 @keyframes cr-enter-left { from { transform: translate3d(-100%, 0, 0); } }
 @keyframes cr-sink { to { transform: scale(0.75); } }
+@keyframes cr-fade { to { opacity: 0; } }
 @keyframes cr-dim { from { opacity: 0; } to { opacity: 0.65; } }
 /* Smooth caret (custom/smoothCaret.ts): one bar glides to the caret and blinks once it rests. Animations off: not drawn */
 .has-smooth-caret { caret-color: transparent !important; }
