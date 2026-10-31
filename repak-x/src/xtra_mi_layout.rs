@@ -30,6 +30,8 @@ pub struct Relaid {
     old_build: Option<u64>,
     /// Every file's layout was told (none left unread, or unsettled for want of an older USMAP)
     pub(crate) complete: bool,
+    /// Read whole today, but no older USMAP read them to tell whether they are in its layout
+    untold: Vec<String>,
 }
 
 /// Where relayout finds the game's current copies, for files both layouts read whole.
@@ -188,6 +190,7 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
         });
     }
     out.complete = pending.is_empty();
+    out.untold = pending.iter().filter(|(_, today)| today.is_some()).map(|(r, _)| r.clone()).collect();
     out.unread = pending.into_iter().filter(|(_, today)| today.is_none()).map(|(r, _)| r).collect();
     if out.files.is_empty() {
         return Ok(out);
@@ -241,19 +244,41 @@ pub(crate) async fn run(mod_path: &str, game_paks: &str, usmap_path: &str, mod_e
     r
 }
 
+/// How many of a decode's exports the tool kept as raw bytes (it could not read them).
+fn raw_exports(j: &Value) -> usize {
+    j.get("Exports").and_then(Value::as_array).map_or(0, |a| a.iter().filter(|e| e.get("$type").and_then(Value::as_str).unwrap_or_default().contains("RawExport")).count())
+}
+
 /// pipeline.ts, before packing: of `rels` (rebuilt packages under `dir`, no extension), those that do not read back
-/// whole with `usmap`. A rebuild that cannot be read again would crash the game, so the update stops on any.
+/// with `usmap` as well as the JSON they were written from (under `json_dir`): no decode at all, or more exports the
+/// tool cannot read than that JSON had. The game's own files keep a few such exports (a KO prompt's widget: 6 of 562,
+/// 2026-10-31), so a rebuild is held to its source, not to none. A rebuild that reads worse would crash the game.
 #[tauri::command]
-pub async fn xtra_vfx_verify(window: Window, usmap_path: String, dir: String, rels: Vec<String>, stage_dir: String) -> Result<Vec<String>, String> {
+pub async fn xtra_vfx_verify(window: Window, usmap_path: String, dir: String, rels: Vec<String>, json_dir: String, stage_dir: String) -> Result<Vec<String>, String> {
+    verify(&usmap_path, &dir, &rels, &json_dir, &stage_dir, &TauriVfxProgressSink::new(&window)).await
+}
+
+/// xtra_vfx_verify without a window (xtra_vfx.rs vfx_rpc runs the pipeline headless).
+pub(crate) async fn verify(usmap_path: &str, dir: &str, rels: &[String], json_dir: &str, stage_dir: &str, progress: &dyn VfxProgressSink) -> Result<Vec<String>, String> {
     if rels.is_empty() {
         return Ok(Vec::new());
     }
     let work = Path::new(&stage_dir).join("verify");
     let (input, json) = (work.join("in"), work.join("json"));
     let r = async {
-        stage(Path::new(&dir), &input, &rels, true)?;
-        to_json(&usmap_path, &input, &json, &TauriVfxProgressSink::new(&window)).await?;
-        Ok::<_, String>(rels.iter().filter(|r| decode(&json, r).and_then(|j| decoded(&j).map(|_| ())).is_none()).cloned().collect())
+        stage(Path::new(dir), &input, rels, true)?;
+        to_json(usmap_path, &input, &json, progress).await?;
+        let source = |r: &str| read_json(&Path::new(json_dir).join(format!("{r}.json"))).ok();
+        Ok::<_, String>(
+            rels.iter()
+                .filter(|r| match (read_json(&json.join(format!("{r}.json"))).ok(), source(r)) {
+                    (Some(back), Some(src)) => raw_exports(&back) > raw_exports(&src),
+                    (Some(back), None) => raw_exports(&back) > 0, // no source JSON (a merged table): whole, or not
+                    (None, _) => true,
+                })
+                .cloned()
+                .collect(),
+        )
     }
     .await;
     let _ = std::fs::remove_dir_all(&work);
@@ -296,6 +321,14 @@ mod tests {
         let mut j = json!({ "NameMap": ["/Game/M_Basic_1026", "MI_A_0", "T_01", "Plain"] });
         let out: Value = serde_json::from_slice(&to_tool_json(&mut j)).unwrap();
         assert_eq!(out["NameMap"], json!(["/Game/M_Basic_1026", "MI_A_0", "T_01", "Plain", "/Game/M_Basic", "MI_A"]), "bases of numbered names, not of _01");
+    }
+
+    #[test]
+    fn exports_the_tool_cannot_read_are_counted() {
+        // a KO prompt's widget keeps some in the game's own copy: a rebuild is held to its source's count
+        let j = json!({ "Exports": [{ "$type": "UAssetAPI.ExportTypes.RawExport, UAssetAPI" }, { "$type": "UAssetAPI.ExportTypes.NormalExport, UAssetAPI" }, { "$type": "UAssetAPI.ExportTypes.RawExport, UAssetAPI" }] });
+        assert_eq!(raw_exports(&j), 2);
+        assert_eq!(raw_exports(&json!({})), 0);
     }
 
     #[test]

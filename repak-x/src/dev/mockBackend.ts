@@ -422,7 +422,7 @@ function mockVfx(cmd: string, args: any): unknown {
     case 'xtra_vfx_relayout': {
       const m = localStorage.getItem('mock.relayout')
       if (m === 'error') throw new Error('UAssetTool could not read the materials')
-      return { files: m === 'rewrote' ? (args?.files ?? []).slice(0, 2) : [], failed: m === 'failed' ? (args?.files ?? []).slice(0, 1) : [], unread: [], complete: true, oldBuild: m ? 3962284 : null }
+      return { files: m === 'rewrote' ? (args?.files ?? []).slice(0, 2) : [], failed: m === 'failed' ? (args?.files ?? []).slice(0, 1) : [], unread: [], untold: [], complete: true, oldBuild: m ? 3962284 : null }
     }
     case 'xtra_vfx_layout_scan': return 0
     case 'xtra_layout_scan': return 0

@@ -1312,6 +1312,13 @@ mod tests {
                 let work = PathBuf::from(s(a, "stageDir")).join("niagara");
                 json!(crate::xtra_niagara::run(&s(a, "gamePaks"), &s(a, "usmapPath"), Path::new(&s(a, "modExtract")), &list(a, "files"), Path::new(&s(a, "finalUassets")), &work, &vanilla, p).await?)
             }
+            // repakxtra 0.39: the commands the pipeline gained
+            "xtra_vfx_classes" => json!(xtra_vfx_classes(s(a, "modPath"), s(a, "gamePaks")).await),
+            "xtra_vfx_pak_half" => json!(pak_half(Path::new(&s(a, "modPath")), Path::new(&s(a, "modExtract")))?),
+            "xtra_vfx_verify" => json!(crate::xtra_mi_layout::verify(&s(a, "usmapPath"), &s(a, "dir"), &list(a, "rels"), &s(a, "jsonDir"), &s(a, "stageDir"), p).await?),
+            "xtra_vfx_merge_tables" => json!(crate::xtra_tables::merge_tables(&s(a, "gamePaks"), &s(a, "usmapPath"), &s(a, "modExtract"), &list(a, "files"), &s(a, "out"), &s(a, "stageDir"), p).await?),
+            "xtra_game_build" => json!(Path::new(&s(a, "gamePaks")).is_dir().then(|| game_build(Path::new(&s(a, "gamePaks")))).unwrap_or_else(|| game_build(Path::new(&format!("{}", std::env::var("REPAKXTRA_PAKS").unwrap_or_default()))))),
+            "xtra_vfx_usmap_wait" => json!(crate::xtra_broken::xtra_vfx_usmap_wait(s(a, "modPath"), s(a, "gamePaks"), s(a, "usmapPath"))),
             _ => return Err(format!("unknown command {cmd}")),
         })
     }

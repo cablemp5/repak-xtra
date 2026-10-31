@@ -179,7 +179,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     // a patch that inserts properties into a class moves every later one (3984769: material overrides), and a file cooked
     // before it crashes the game and reads as nothing to change. Rewritten in today's layout here, every step below reads it
     const older = ask.filter(p => !NIAGARA_BY_NAME.test(fileName(p))).map(p => rel(p).replace(/\.uasset$/i, ''))
-    const re = older.length ? await invoke<{ files: string[]; failed: string[]; unread: string[]; complete: boolean; oldBuild: number | null }>('xtra_vfx_relayout', { modPath: src, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath, modExtract: dirs.modExtract, files: older, stageDir: dirs.stage })
+    const re = older.length ? await invoke<{ files: string[]; failed: string[]; unread: string[]; untold: string[]; complete: boolean; oldBuild: number | null }>('xtra_vfx_relayout', { modPath: src, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath, modExtract: dirs.modExtract, files: older, stageDir: dirs.stage })
       .catch(e => { warn(`Could not check its material layout (${e}).`); return undefined }) : null
     check()
     re?.files.forEach(f => relaid.add(fileName(f).toLowerCase() + '.uasset'))
@@ -187,8 +187,11 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     // not checked, or in the old layout and not rewritten: passed on as they are they can crash the game, so the mod stays
     // as it was before any step can pack it
     const unrewritten = re?.failed.length ?? 0
-    // read in no layout, or not told for want of an older USMAP: not known to be safe either
-    const untold = re ? (re.complete ? 0 : Math.max(1, re.unread.length)) : 0
+    // a material read in no layout, or not told for want of an older USMAP: not known to be safe either. Only materials:
+    // what the layout patch moved is theirs, and widgets and blueprints keep exports the tool never reads in any layout
+    // (the game's own KO prompt does), which the class check judges instead
+    const isMaterial = (r: string) => /^MaterialInstance/i.test(classes?.[assetKey(r)] ?? '') || /^MI_/i.test(r.split('/').pop() ?? '')
+    const untold = re ? [...re.unread, ...re.untold].filter(isMaterial).length : 0
     if (re === undefined || unrewritten || untold) {
       const why = re === undefined ? 'its material layout could not be checked'
         : unrewritten ? `${plural(unrewritten, 'material or blueprint', 'materials and blueprints')} could not be rewritten in the new game build's layout`
@@ -318,7 +321,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       // what was rebuilt must read back whole with today's USMAP: one that does not would crash the game (Niagara files
       // are checked by their own step, and decoding them again is slow)
       const rebuilt = report.assets.filter(a => a.kind === 'updated' && !NIAGARA_BY_NAME.test(fileName(a.path))).map(a => rel(a.path).replace(/\.uasset$/i, ''))
-      const unread = await invoke<string[]>('xtra_vfx_verify', { usmapPath: o.usmapPath, dir: dirs.finalUassets, rels: rebuilt, stageDir: dirs.stage })
+      const unread = await invoke<string[]>('xtra_vfx_verify', { usmapPath: o.usmapPath, dir: dirs.finalUassets, rels: rebuilt, jsonDir: dirs.editedJson, stageDir: dirs.stage })
       if (unread.length) {
         report.error = `Not updated: ${plural(unread.length, 'rebuilt file')} ${unread.length === 1 ? 'does' : 'do'} not read back with the new game build's USMAP (${unread.slice(0, 3).map(r => r.split('/').pop()).join(', ')}${unread.length > 3 ? ', and more' : ''}). The mod was not changed.`
         log(report.error, 'warning')

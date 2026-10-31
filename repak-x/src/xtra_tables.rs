@@ -111,13 +111,18 @@ fn merge(game: &Value, ours: &Value) -> Result<(Value, Merged), String> {
 /// current copies and written into `out` (the update's folder). Each file's result; one that failed is left as it was.
 #[tauri::command]
 pub async fn xtra_vfx_merge_tables(window: Window, game_paks: String, usmap_path: String, mod_extract: String, files: Vec<String>, out: String, stage_dir: String) -> Result<Vec<Merged>, String> {
-    let work = Path::new(&stage_dir).join("tables");
-    let progress = TauriVfxProgressSink::new(&window);
+    merge_tables(&game_paks, &usmap_path, &mod_extract, &files, &out, &stage_dir, &TauriVfxProgressSink::new(&window)).await
+}
+
+/// xtra_vfx_merge_tables without a window (xtra_vfx.rs vfx_rpc).
+pub(crate) async fn merge_tables(game_paks: &str, usmap_path: &str, mod_extract: &str, files: &[String], out: &str, stage_dir: &str, progress: &dyn crate::vfx_updater::progress::VfxProgressSink) -> Result<Vec<Merged>, String> {
+    let (game_paks, usmap_path, mod_extract, out) = (game_paks.to_string(), usmap_path.to_string(), mod_extract.to_string(), out.to_string());
+    let work = Path::new(stage_dir).join("tables");
     let r = async {
         let (input, mine) = (work.join("mod"), work.join("mod_json"));
-        stage(Path::new(&mod_extract), &input, &files, true)?;
-        to_json(&usmap_path, &input, &mine, &progress).await?;
-        let game = crate::xtra_mi_layout::game_copies(&game_paks, &usmap_path, &files, &work).await.ok_or("the game's tables could not be read")?;
+        stage(Path::new(&mod_extract), &input, files, true)?;
+        to_json(&usmap_path, &input, &mine, progress).await?;
+        let game = crate::xtra_mi_layout::game_copies(&game_paks, &usmap_path, files, &work).await.ok_or("the game's tables could not be read")?;
         let merged_json = work.join("merged_json");
         let mut results: Vec<Merged> = files
             .iter()
@@ -139,7 +144,7 @@ pub async fn xtra_vfx_merge_tables(window: Window, game_paks: String, usmap_path
             .collect();
         if results.iter().any(|m| m.error.is_none()) {
             let built = work.join("built");
-            crate::vfx_updater::pipeline::step_convert_json_to_uassets(Path::new(""), &usmap_path, &merged_json.to_string_lossy(), &built.to_string_lossy(), &progress).await?;
+            crate::vfx_updater::pipeline::step_convert_json_to_uassets(Path::new(""), &usmap_path, &merged_json.to_string_lossy(), &built.to_string_lossy(), progress).await?;
             for m in results.iter_mut().filter(|m| m.error.is_none()) {
                 let copied = ["uasset", "uexp"].iter().all(|x| {
                     let (from, to) = (built.join(format!("{}.{x}", m.file)), Path::new(&out).join(format!("{}.{x}", m.file)));
