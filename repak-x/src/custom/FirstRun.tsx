@@ -87,7 +87,7 @@ export function Step({ n, icon, done, title, optional, children, action }: {
 }
 
 /** A pick with a picture on top, like the welcome page's demos (Jakob: it reads like the loadout cards it leads to). */
-function Choice({ stage, title, text, icon, onClick }: { stage: React.ReactNode; title: string; text: string; icon?: React.ReactNode; onClick: () => void }) {
+export function Choice({ stage, title, text, icon, onClick }: { stage: React.ReactNode; title: string; text: string; icon?: React.ReactNode; onClick: () => void }) {
   return (
     <button type="button" className="ob-choice" onClick={onClick}>
       <span className="wi-stage ob-stage" aria-hidden="true">{stage}</span>
@@ -644,7 +644,8 @@ if (import.meta.env.DEV) {
     const got = smartShots(smart, mods, details).map(x => `${x.l.id}:${x.path}`).join()
     console.assert(got === `a:${mesh},c:${storm}`, 'smartShots: a mesh or texture mod, then another hero', got)
   }
-  console.assert(sequence(PAGES, { guided: true, hasMods: false }).join() === 'welcome,ask,setup,mods,yours,loadout', 'no mods, not yet: the guided path')
-  console.assert(sequence(PAGES, { guided: false, hasMods: true }).join() === 'welcome,ask,auto,yours,loadout', 'mods installed: still asked, then the background setup')
-  console.assert(sequence(PAGES, { guided: false, hasMods: false }).join() === 'welcome,ask,auto,mods,yours,loadout', 'yes but nothing installed: add mods first')
+  const shared = (ids: string[]) => ids.filter(id => ['welcome', 'ask', 'setup', 'auto', 'mods', 'yours', 'loadout'].includes(id)).join() // another edition's pages left out
+  console.assert(shared(sequence(PAGES, { guided: true, hasMods: false })) === 'welcome,ask,setup,mods,yours,loadout', 'no mods, not yet: the guided path')
+  console.assert(shared(sequence(PAGES, { guided: false, hasMods: true })) === 'welcome,ask,auto,yours,loadout', 'mods installed: still asked, then the background setup')
+  console.assert(shared(sequence(PAGES, { guided: false, hasMods: false })) === 'welcome,ask,auto,mods,yours,loadout', 'yes but nothing installed: add mods first')
 }

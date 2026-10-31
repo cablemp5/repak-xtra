@@ -130,7 +130,7 @@
 .ob-drop > span:not([class]) { font-size: 14px; color: var(--text-secondary); }
 .ob-drop-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 20px; margin-top: 20px; }
 .ob-drop-actions .btn-primary { display: inline-flex !important; align-items: center; gap: 8px; width: auto !important; height: 36px !important; min-height: 0 !important; padding: 0 16px !important; }
-.ob-drop-actions .ob-out, .ob-drop-actions .ob-out:hover { display: inline-flex; align-items: center; gap: 5px; line-height: 1; text-decoration: none !important; }
+.ob-out, .ob-out:hover { display: inline-flex; align-items: center; gap: 5px; line-height: 1; text-decoration: none !important; }
 .ob-out svg.lucide { flex: none; }
 .ob-drop .ob-done { margin-top: 14px; font-size: 13px; }
 .ob-next { display: inline-flex !important; align-items: center; justify-content: center; gap: 7px; }
