@@ -1,5 +1,6 @@
 // repakxtra: loadout pieces the Library uses (state lives in loadoutStore.ts): the selection bar's Add to loadout, the
 // right-click Add to loadout items, switching with its guards (runChanges), and Ctrl+N for a loadout pinned to N.
+import { showKeptOff } from './safeOff'
 import { useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { looksOf, skinLabel, skinLooks, type SkinDetails } from './loadoutSkins'
@@ -159,6 +160,7 @@ export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], ve
     const flagged = verb === 'on' && brokenShown() ? changes.map(m => verdictOf(m.path)).filter((v): v is Verdict => Boolean(v)) : []
     const failed = await flipMods(changes)
     await p.reload()
+    showKeptOff(p.alert, failed.keptOff ?? [], p.reload) // repakxtra: mods turned off because they can crash stay off
     const flipped = new Set(changes.filter(m => !failed.includes(m)).map(m => m.path))
     const after = p.mods.map(m => (flipped.has(m.path) ? { ...m, enabled: !m.enabled } : m))
     if (failed.length) {

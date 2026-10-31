@@ -1,6 +1,7 @@
 // repakxtra: saved loadouts, shared by the sidebar list (Loadouts.tsx) and the cards screen
 // (LoadoutsScreen.tsx). A loadout is a set of mods: On switches them on, Off switches them off, nothing else is touched.
 // It also remembers the mods shown when it was saved (its scope), unused for now. Stored in localStorage.
+import { blockedReason } from './safeOff'
 import { useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { deleteMedia, sweepOrphanMedia } from './loadoutMedia'
@@ -374,9 +375,12 @@ export const repakXOpen = (e: unknown) => (/^Repak X is open/.test(String(e)) ? 
 /** Toggle each mod through the backend; returns the mods that could not be switched, with the reason when Repak X is
  *  open (then the rest are not tried: every one would be refused). */
 export const flipMods = async (changes: Mod[]) => {
-  const failed: Mod[] & { reason?: string } = []
+  const failed: Mod[] & { reason?: string; keptOff?: { path: string; reason: string }[] } = []
   for (const [i, m] of changes.entries()) {
     try { await invoke('toggle_mod', { modPath: m.path }) } catch (e) {
+      // turned off because it can crash the game (custom/safeOff.ts): kept off, said apart from the failures
+      const why = blockedReason(e)
+      if (why) { (failed.keptOff ??= []).push({ path: m.path, reason: why }); continue }
       failed.push(m)
       failed.reason = repakXOpen(e) ?? undefined
       if (failed.reason) { failed.push(...changes.slice(i + 1)); break }

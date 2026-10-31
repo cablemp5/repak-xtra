@@ -646,10 +646,15 @@ pub async fn xtra_vfx_place(source: String, staged_base: String, turn_off_origin
 
 /// Turns the mod at `mod_path` (its .utoc, .pak or .bak_repak) off when it is on: what an update could not make safe,
 /// and a May crash mod the updater cannot rebuild, stay off rather than crash the game. Its off copy, or None when it
-/// was off already. Not while the game runs, as every other mod change.
+/// was off already. Not while the game runs, as every other mod change. `reason` keeps it off (xtra_safe_off.rs) until
+/// the mod or the game changes, or the user turns it on anyway.
 #[tauri::command]
-pub async fn xtra_vfx_turn_off(window: Window, mod_path: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Option<String>, String> {
+pub async fn xtra_vfx_turn_off(window: Window, mod_path: String, reason: Option<String>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Option<String>, String> {
     let pak = Path::new(&mod_path).with_extension("pak");
+    if let Some(why) = reason.as_deref() {
+        let mods_dir = state.lock().unwrap().game_path.clone();
+        crate::xtra_safe_off::remember(&mods_dir, &pak, why); // off already too: it stays off
+    }
     if !pak.is_file() {
         return Ok(None);
     }

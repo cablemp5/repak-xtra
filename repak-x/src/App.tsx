@@ -74,6 +74,7 @@ import { useGameUpdateWatch } from './custom/gameUpdate' // repakxtra
 import { useUsmapWatch } from './custom/usmapWatch' // repakxtra
 import { fixInVfxWindow } from './custom/vfx/handoff' // repakxtra: the Mod Updater window
 import VfxNotice, { VfxDot } from './custom/vfx/VfxNotice' // repakxtra: the game updated, VFX mods to fix
+import { blockedReason, showKeptOff } from './custom/safeOff' // repakxtra: mods turned off because they can crash stay off
 import { canUpdateVfx, checkVfxModInPlace, updateVfxModInPlace } from './custom/vfx/quick' // repakxtra: Update VFX in the right-click menu
 import { PREF_TOGGLED, type PrefToggled, fewerPopups, liteOn, newDefaultsOnce, setPref } from './custom/uiPrefs' // repakxtra
 import { reportSource } from './custom/setupReport' // repakxtra: Copy setup report reads the live list
@@ -1287,6 +1288,7 @@ function App() {
       const oldPaths = new Set(selectedMods)
       const normalizeToggleKey = (path: string) => path.replace(/\.(pak|bak_repak|pak_disabled)$/i, '')
       let count = 0
+      const keptOff: { path: string; reason: string }[] = [] // repakxtra
 
       console.debug('[BulkToggle] Starting', {
         target: enable ? 'enable' : 'disable',
@@ -1299,9 +1301,12 @@ function App() {
           await invoke('toggle_mod', { modPath: mod.path })
           count++
         } catch (e) {
-          console.error(`Failed to toggle ${mod.path}:`, e)
+          const why = blockedReason(e) // repakxtra: turned off because it can crash the game
+          if (why) keptOff.push({ path: mod.path, reason: why })
+          else console.error(`Failed to toggle ${mod.path}:`, e)
         }
       }
+      showKeptOff(alert, keptOff, loadMods) // repakxtra
 
       setStatus(`Turned ${enable ? 'on' : 'off'} ${count} mods.`)
       const refreshedMods = await loadMods()
@@ -2268,7 +2273,9 @@ function App() {
 
       scheduleSafeModsRefresh('single-toggle-post-reload')
     } catch (error) {
-      setStatus('Error toggling mod: ' + error)
+      const why = blockedReason(error) // repakxtra: turned off because it can crash the game
+      if (why) showKeptOff(alert, [{ path: modPath, reason: why }], loadMods)
+      else setStatus('Error toggling mod: ' + error)
     } finally {
       togglingModsRef.current.delete(toggleKey)
     }

@@ -39,6 +39,7 @@ mod xtra_library_files; // repakxtra: the part of a mod's file list the Library 
 mod xtra_details_cache; // repakxtra: the mod details cache kept between launches
 mod xtra_vfx; // repakxtra: VFX fixing after game updates
 mod xtra_niagara; // repakxtra: the VFX Updater's Niagara step
+mod xtra_safe_off; // repakxtra: mods turned off because they can crash the game stay off
 mod xtra_mi_layout; // repakxtra: the VFX Updater rewrites materials cooked in an older property layout
 mod xtra_uat_cli; // repakxtra: IoStore extracts through UAssetTool's parallel command line
 mod xtra_builtins; // repakxtra: built-in mods made from the game's own tables
@@ -4745,6 +4746,14 @@ async fn toggle_mod(
     // Check current state
     let is_enabled = path.extension().and_then(|s| s.to_str()) == Some("pak");
 
+    // repakxtra: a mod the Mod Updater turned off because it can crash the game stays off (xtra_safe_off.rs)
+    if !is_enabled {
+        let mods_dir = state.lock().unwrap().game_path.clone();
+        if let Some(why) = xtra_safe_off::blocked(&mods_dir, &path) {
+            return Err(format!("{}{why}", xtra_safe_off::MARK));
+        }
+    }
+
     // Toggle by renaming
     let new_path = if is_enabled {
         path.with_extension("bak_repak")
@@ -8726,6 +8735,8 @@ fn main() {
             xtra_vfx::xtra_vfx_detect,
             xtra_vfx::xtra_vfx_place,
             xtra_vfx::xtra_vfx_turn_off, // repakxtra
+            xtra_safe_off::xtra_safe_off_allow, // repakxtra
+            xtra_safe_off::xtra_safe_off_kept, // repakxtra
             xtra_mi_layout::xtra_vfx_verify, // repakxtra
             xtra_vfx::xtra_game_build,
             xtra_vfx::xtra_vfx_mods,

@@ -292,7 +292,13 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       const utoc = await invoke<string>('vfx_pack_to_iostore', { usmapPath: o.usmapPath, inputDir: dirs.finalUassets, outputBase: base, allowedAssets: manifest })
       if (o.outputDir) report.output = utoc
       else {
+        // turned off earlier because it could crash: the safe update goes in on, as the mod was before
+        const kept = await invoke<string | null>('xtra_safe_off_kept', { modPath: src }).catch(() => null)
         report.placed = await invoke<Placed>('xtra_vfx_place', { source: src, stagedBase: base, turnOffOriginal: o.turnOffOriginal ?? true, keepName: o.keepName ?? true, trashOriginal: o.trashOriginal ?? false, partial: report.counts.left > 0 })
+        if (kept && /\.bak_repak$/i.test(report.placed.fixed) && await invoke('toggle_mod', { modPath: report.placed.fixed }).then(() => true, () => false)) {
+          report.placed.fixed = report.placed.fixed.replace(/\.bak_repak$/i, '.pak')
+          log('It was off because it could crash the game: the update is on.')
+        }
         report.output = report.placed.fixed
         if (report.placed.warning) warn(report.placed.warning)
       }
@@ -495,7 +501,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     // not made safe: off, so it cannot crash the game. Its flag stays, and a later update starts from the off copy
     const unsafe = (report.status === 'failed' && o.safeOff) || (report.status === 'nothing' && report.counts.relaid > 0 && o.safeOff !== false)
     if (unsafe && !o.outputDir) {
-      report.turnedOff = await invoke<string | null>('xtra_vfx_turn_off', { modPath: o.modPath }).then(Boolean)
+      report.turnedOff = await invoke<string | null>('xtra_vfx_turn_off', { modPath: o.modPath, reason: report.error ?? 'An update could not make it safe.' }).then(Boolean)
         .catch(e => { log(`Could not turn it off: ${e}`, 'warning'); return false })
       if (report.turnedOff) log(`Turned ${stem(o.modPath)} off, so it cannot crash the game. Update it again later, or turn it back on in the Library.`, 'warning')
     }

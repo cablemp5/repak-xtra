@@ -575,7 +575,7 @@ export function VfxUpdaterPanel() {
       void claimRun(token, mod.name) // the lock says which mod, for the other window's message
       if (mod.risky) {
         // nothing here rebuilds it: off, so it cannot crash the game, and its May crash flag says why
-        const off = await invoke<string | null>('xtra_vfx_turn_off', { modPath: mod.path }).then(() => ({ ok: true, why: '' }), e => ({ ok: false, why: String(e) }))
+        const off = await invoke<string | null>('xtra_vfx_turn_off', { modPath: mod.path, reason: `May crash: ${mod.risky}` }).then(() => ({ ok: true, why: '' }), e => ({ ok: false, why: String(e) }))
         const report: VfxReport = { mod: mod.utoc, name: mod.name, status: off.ok ? 'nothing' : 'failed', turnedOff: off.ok,
           error: off.ok ? `May crash: ${mod.risky} Turned off, so it cannot crash the game.` : `Could not turn it off: ${off.why}`,
           assets: [], warnings: [], counts: { updated: 0, same: 0, added: 0, passed: 0, left: 0, ownGame: 0, unreadable: 0, changes: 0, relaid: 0 }, ms: 0, steps: [] }
