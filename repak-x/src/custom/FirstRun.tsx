@@ -478,16 +478,17 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
   const smart = useMemo(() => free.length ? propose(free, loadouts.map(l => l.name), smartRules()) : [], [free, loadouts])
   const previews = usePreviewVersion()
   const shots = useMemo(() => smartShots(smart, allMods, details), [smart, allMods, details, previews])
-  // Previews set up from Make it yours: the Smart loadouts card's two mods render in the background, so their pictures
-  // are there by the last page. Only when they were set up here (ready now, not when the flow opened)
+  // With previews set up, before onboarding or from Make it yours, the Smart loadouts card's two mods render in the
+  // background while the flow is open, so their pictures are there by the last page. Each pair is asked for once
   const kitReady = Boolean(kit.kit?.version && kit.kit?.blender)
-  const kitWas = useRef(kitReady)
+  const rendered = useRef('')
   useEffect(() => {
-    const now = kitReady && !kitWas.current
-    kitWas.current = kitReady
     const paths = shots.map(s => s.path).filter(p => !hasPreview(nameKey(p)))
-    if (now && paths.length) void refreshPreviewsAvailable().then(() => generatePreviews({ paths, name: 'Smart loadouts' }))
-  }, [kitReady])
+    const pair = paths.join('|')
+    if (!open || !kitReady || !paths.length || rendered.current === pair) return
+    rendered.current = pair
+    void refreshPreviewsAvailable().then(() => generatePreviews({ paths, name: 'Smart loadouts' }))
+  }, [open, kitReady, shots])
   const begin = () => { startMods.current = new Set(installed.map(m => m.path)) } // leaving the welcome: what is there now is not "just added"
   const page = PAGES.find(p => p.id === at) ?? welcome
   const railAt = RAIL.indexOf(page.step ?? '')
