@@ -363,7 +363,7 @@ function Sounds() {
         {(['off', ...SOUND_PACKS] as const).map(pack => (
           <button key={pack} type="button" role="radio" aria-checked={choice === pack} onMouseEnter={() => setRest(pack)} onFocus={() => setRest(pack)}
             onClick={() => { setSoundChoice(pack); if (pack !== 'off') cue('select') }}>
-            {choice === pack && <Check size={13} strokeWidth={2.75} aria-hidden="true" />}{name(pack)}
+            {name(pack)}
           </button>
         ))}
       </div>

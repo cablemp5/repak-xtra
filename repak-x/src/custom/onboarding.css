@@ -179,14 +179,15 @@
   color: var(--text-secondary); font: 500 13px var(--font-primary); cursor: pointer; transition: color 0.15s, background 0.15s; }
 .ob-seg button:hover { color: var(--text-primary); background: var(--quiet-hover); }
 .ob-seg button[aria-checked="true"] { color: var(--text-primary); background: rgba(255, 255, 255, 0.07); font-weight: 600; }
-.ob-seg button[aria-checked="true"] svg { color: var(--accent-primary); }
 .ob-try { display: flex; align-items: center; gap: 6px; min-height: 26px; margin-top: 10px; font-size: 12.5px; color: var(--text-secondary); }
 .ob-try-label { margin-right: 4px; }
-.ob-try-label b { font-weight: 600; color: var(--text-primary); }
+.ob-try-label b { font-weight: 600; color: inherit; }   /* one color with "Try" */
 .ob-try button { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px 0 8px; border: 1px solid var(--panel-border); border-radius: 7px;
   background: transparent; color: var(--text-secondary); font: 500 12px var(--font-primary); cursor: pointer; transition: color 0.15s, background 0.15s, transform 0.1s; }
 .ob-try button:hover { color: var(--text-primary); background: var(--quiet-hover); }
 .ob-try button:active { transform: scale(0.95); }
+/* no loud ring: keyboard focus is a lighter border, like hover */
+.app .ob-try button:focus-visible, .app .ob-seg button:focus-visible { outline: none !important; border-color: var(--text-secondary); color: var(--text-primary); }
 
 /* Where they are: the five steps by name, the same five whatever the answers (Goal-gradient: the end in sight) */
 .fr-rail { display: flex; align-items: center; gap: 14px; margin: 0 auto 0 0; padding: 0; list-style: none; font-size: 12px; color: color-mix(in srgb, var(--text-secondary), transparent 35%); white-space: nowrap; }
