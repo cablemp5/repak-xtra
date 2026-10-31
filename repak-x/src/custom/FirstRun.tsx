@@ -340,8 +340,8 @@ const loadout: Page = {
       {f.hasMods && (
         <Choice onClick={() => f.finish('smart')} stage={<Smart f={f} />}
           title="Group my mods into loadouts" text={f.smart.length
-            ? `Your ${plural(f.freeCount, 'mod')} make ${plural(f.smart.length, 'loadout')}, each with a tick to keep.`
-            : 'Mods that share a look become one loadout, each with a tick to keep.'} />
+            ? `Automatically sorts your ${plural(f.freeCount, 'mod')} into ${plural(f.smart.length, 'loadout')} by look, so one switch turns a whole skin on. You keep the ones you want.`
+            : 'Automatically sorts your mods into loadouts by look, so one switch turns a whole skin on. You keep the ones you want.'} />
       )}
       <Choice onClick={() => f.finish('empty')} title="Start one by hand" text="An empty loadout, named and filled on its page."
         stage={<span className="wi-card ob-empty"><CopyPlus size={30} strokeWidth={1.25} /></span>} />
