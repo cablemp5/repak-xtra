@@ -1,10 +1,18 @@
 //! Ordinary mod changes may overlap as before; encryption reserves them all until publication finishes.
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use tokio::sync::{OwnedRwLockReadGuard, OwnedRwLockWriteGuard, RwLock};
 
+#[cfg(not(test))]
 fn gate() -> Arc<RwLock<()>> {
-    static GATE: OnceLock<Arc<RwLock<()>>> = OnceLock::new();
+    static GATE: std::sync::OnceLock<Arc<RwLock<()>>> = std::sync::OnceLock::new();
     GATE.get_or_init(|| Arc::new(RwLock::new(()))).clone()
+}
+
+// Tests run in parallel, each on its own thread: one gate per thread, so a test's mod change never blocks another's encryption
+#[cfg(test)]
+fn gate() -> Arc<RwLock<()>> {
+    thread_local!(static GATE: Arc<RwLock<()>> = Arc::new(RwLock::new(())));
+    GATE.with(Arc::clone)
 }
 
 pub fn edit() -> Result<OwnedRwLockReadGuard<()>, String> {
