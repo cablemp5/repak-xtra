@@ -73,7 +73,7 @@ fn bare(v: &mut Value) {
 /// The JSON with every name's base in its NameMap: the tool reads "/Game/.../M_StandardBasic_1026" as the name
 /// "/Game/.../M_StandardBasic" numbered 1026, as Unreal does, and cannot write it when only the whole string is listed
 /// (a mod's NameMap often is: "Attempt to serialize dummy FName").
-fn to_tool_json(j: &mut Value) -> Vec<u8> {
+pub(crate) fn to_tool_json(j: &mut Value) -> Vec<u8> {
     if let Some(names) = j.get_mut("NameMap").and_then(Value::as_array_mut) {
         let have: HashSet<String> = names.iter().filter_map(Value::as_str).map(String::from).collect();
         let mut bases: Vec<String> = have

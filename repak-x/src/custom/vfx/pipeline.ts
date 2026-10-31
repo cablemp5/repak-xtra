@@ -240,6 +240,27 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       keep = keep.filter(p => !staleAnims.has(assetKey(rel(p))))
       log(`Leaving out ${plural(staleAnims.size, 'Animation Blueprint')} the game rebuilt since the mod was made.`, 'warning')
     }
+    // DataTables and StringTables the game rewrote since the mod was made: the mod's values go onto the game's current
+    // table (xtra_tables.rs), so the rows, keys and fields the update added stay. One that cannot be merged is kept as it was
+    const tables = keep.filter(p => /^(DataTable|CompositeDataTable|StringTable)$/i.test(types.get(assetKey(slash(p)))?.class ?? ''))
+    const staleTables = tables.length ? await invoke<string[]>('xtra_vfx_stale', { modPath: src, gamePaks: o.gamePaksPath, files: tables.map(rel) }) : []
+    let tablesUpdated = 0
+    if (staleTables.length) {
+      const merged = await invoke<{ file: string; carried: number; added: number; kept: number; error?: string | null }[]>('xtra_vfx_merge_tables', {
+        gamePaks: o.gamePaksPath, usmapPath: o.usmapPath, modExtract: dirs.modExtract, files: staleTables.map(f => f.replace(/\.uasset$/i, '')), out: dirs.finalUassets, stageDir: dirs.stage,
+      }).catch(e => { warn(`Could not merge its tables (${e}). They are kept as they were.`); return [] })
+      const done = new Map(merged.filter(m => !m.error).map(m => [assetKey(m.file), m]))
+      for (const m of merged.filter(m => m.error)) warn(`${m.file.split('/').pop()}: could not be merged onto the game's table (${m.error}). Kept as it was.`)
+      for (const a of report.assets) {
+        const m = done.get(assetKey(rel(a.path)))
+        if (!m) continue
+        report.counts.passed--; report.counts.updated++; tablesUpdated++; report.counts.changes += m.carried + m.added
+        a.kind = 'updated'
+        a.detail = `Merged onto the game's new table: ${plural(m.carried, 'value')} carried, ${plural(m.added, 'row or key', 'rows and keys')} of its own added${m.kept ? `, ${plural(m.kept, 'object reference')} left as the game's` : ''}.`
+      }
+      keep = keep.filter(p => !done.has(assetKey(rel(p))))
+      if (done.size) log(`Merged ${plural(done.size, 'table')} onto the game's new ${done.size === 1 ? 'one' : 'ones'}.`)
+    }
     const allStale = () => `Not updated: everything it changes is ${plural(report.counts.left + report.counts.ownGame, 'Niagara file')} made for an older game build that could not be rebuilt, and the game can crash on them. Turn the mod off until its author updates it.`
     if (keep.length) await invoke('vfx_copy_uasset_files', { sourcePaths: keep, sourceBaseDir: dirs.modExtract, destBaseDir: dirs.finalUassets })
 
@@ -313,10 +334,10 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
         report.error = `${plural(report.counts.unreadable, 'asset')} could not be read, so it is not known whether ${report.counts.unreadable === 1 ? 'it needs' : 'they need'} rebuilding. Check the USMAP in Advanced, then try again.`
         return report // failed: Try again stays
       }
-      if (report.counts.left || report.counts.relaid) {
+      if (report.counts.left || report.counts.relaid || tablesUpdated) {
         await rebuildNiagara()
         // the rebuilt Niagara files, or at least the rest without the stale ones, which no longer crashes the game
-        if (keep.length || niagaraDone) await packAndPlace()
+        if (keep.length || niagaraDone || tablesUpdated) await packAndPlace()
         else report.error = allStale()
         return report
       }
@@ -459,7 +480,8 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     enter(8)
     // rewritten in today's layout and still in the update (one that matches the game is left out)
     const relaidKept = report.assets.filter(a => relaid.has(fileName(a.path).toLowerCase()) && a.kind !== 'same').length
-    if (report.counts.updated > niagaraUpdated) {
+    // merged tables are already in the update's folder (xtra_tables.rs): only the edited JSON converts here
+    if (report.counts.updated > niagaraUpdated + tablesUpdated) {
       const built = await invoke<string[]>('vfx_convert_json_to_uassets', { usmapPath: o.usmapPath, inputDir: dirs.editedJson, outputDir: dirs.finalUassets })
       const expected = keep.length + own.length + report.counts.updated - niagaraUpdated
       // a short rebuild leaves the game's own copy, or nothing, where the mod's was: never placed

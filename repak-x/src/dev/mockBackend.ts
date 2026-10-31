@@ -411,6 +411,7 @@ function mockVfx(cmd: string, args: any): unknown {
     // repakxtra: rebuilt files read back whole, and turning off says it did (the mock's files stay as they are)
     case 'xtra_vfx_verify': return []
     case 'xtra_safe_off_kept': return null
+    case 'xtra_vfx_merge_tables': return (args?.files ?? []).map((file: string) => ({ file, carried: 2, added: 1, kept: 0 }))
     case 'xtra_layout_moves': return { newest: { build: 3984769, from: 3962284, structs: ['MaterialInstanceBasePropertyOverrides', 'MassSummonedPawnBase'] }, notHandled: ['MassSummonedPawnBase'] }
     case 'xtra_safe_off_allow': return null
     case 'xtra_vfx_turn_off': return /\.pak$/i.test(String(args?.modPath ?? '')) ? String(args.modPath).replace(/\.pak$/i, '.bak_repak') : null
