@@ -364,6 +364,11 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
         off_only: false,
         });
     }
+    // a mesh with more bones than the skeleton the game rebuilt since the mod was made (xtra_mesh.rs read both): first,
+    // since rebuilding the mod's materials (any Needs update below) would leave the mesh as it is
+    if let Some(reason) = m.mesh.as_ref().filter(|_| !m.fixed) {
+        return Some(Verdict { path: path.to_string(), kind: "risky", reason: reason.clone(), stale_niagara: 0, usmap_wait: 0, off_only: true });
+    }
     // A VFX mod carries cooked copies of the game's materials and blueprints: an update that rewrote them leaves it stale
     let stale: Vec<&String> = packages.iter().filter(|k| game.get(*k).is_some_and(|at| *at > m.installed)).collect();
     let changed = stale.len();
@@ -439,10 +444,6 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
             if anims == 1 { "its Animation Blueprint".to_string() } else { format!("its {anims} Animation Blueprints") },
             if anims == 1 { "it" } else { "them" }
         ));
-    }
-    // a mesh with more bones than the skeleton the game rebuilt since the mod was made (xtra_mesh.rs read both)
-    if let Some(reason) = m.mesh.as_ref().filter(|_| !m.fixed) {
-        return Some(Verdict { off_only: true, ..risky(reason.clone())? });
     }
     match &m.layout {
         _ if !m.has_blueprint => None,
@@ -844,6 +845,11 @@ mod tests {
         assert_eq!(judge("m.pak", &facts(&files, 50), 200, &game), None, "a rebuilt skeleton alone (24 working swaps had one)");
         let found = judge("m.pak", &Facts { mesh: Some("SK_X has 302 bones and the game's skeleton 242".into()), ..facts(&files, 50) }, 200, &game).unwrap();
         assert_eq!((found.kind, found.off_only), ("risky", true), "the Mod Updater turns it off, it cannot rebuild a mesh");
+        let mi = "Marvel/Content/Marvel/Characters/1026/1026001/Materials/MI_1026001_Body.uasset";
+        game.insert(match_key(mi), 100);
+        let both = v(&[mesh, mi]);
+        let found = judge("m.pak", &Facts { materials: true, mesh: Some("x".into()), ..facts(&both, 50) }, 200, &game).unwrap();
+        assert_eq!((found.kind, found.off_only), ("risky", true), "stale materials too: still turned off, never rebuilt with the mesh kept");
     }
 
     #[test]
