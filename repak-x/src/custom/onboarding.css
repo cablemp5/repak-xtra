@@ -218,11 +218,6 @@ html[data-motion="off"] :is(.ob-tree li, .ob-spin, .ob-float) { animation: none 
 .gs-mark { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--panel-border); display: grid; place-items: center; color: #3ecf6e; }
 .is-done .gs-mark { border-color: transparent; }
 .gs-label { display: inline-flex; align-items: center; gap: 8px; }
-/* Dismissed, the list folds to this pill until its steps are done; a click brings it back */
-.gs-pill { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 14px; border: 1px solid var(--panel-border); border-radius: 999px;
-  background: var(--bg-dark); color: var(--text-secondary); font: 500 13px var(--font-primary); cursor: pointer; transition: border-color 0.15s, color 0.15s; }
-.gs-pill:hover { border-color: color-mix(in srgb, var(--accent-primary), transparent 45%); color: var(--text-primary); }
-.gs-pill b { font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 /* Show me the switch: the first loadout card's switch pulses for a few seconds */
 .gs-point .repakx-switch-track { animation: gs-point 1.1s ease-in-out 3; }
 @keyframes gs-point { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent-primary), transparent 55%); } }

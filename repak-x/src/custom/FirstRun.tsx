@@ -30,7 +30,7 @@ import { createFromMods } from './Loadouts'
 import { type Mod, memberName, modKey, openLoadout, setView, useLoadouts } from './loadoutStore'
 import { freeMods, smartRules } from './SmartLoadouts'
 import { type Proposal, propose } from './smartGroups'
-import { useHeroPortrait } from './heroFilter'
+import { silhouetteOf } from './silhouettes'
 import { plural } from './modName'
 import { SOUND_PACKS, type SoundName, cue, tryCue } from './sounds'
 import { setSoundChoice, useSoundChoice } from './uiPrefs'
@@ -253,9 +253,8 @@ const TYPES: [string, typeof Package][] = [['.pak', Package], ['.zip', FileArchi
 /** Smart loadouts in miniature: loose mods, each dot the color of the look it belongs to, sorted into two loadouts. */
 const SMART_ROWS: [string, string, number][] = [['Catboy Mesh', 'Mesh', 0], ['Ultimate Suit', 'Mesh', 1], ['Catboy Trail', 'VFX', 0], ['Ultimate Icons', 'UI', 1]]
 /** Smart loadouts in miniature, from the person's own mods when there are groups to show: two of their mods from each
- *  of the first two loadouts it would make, then those loadouts with their heroes' portraits. */
+ *  of the first two loadouts it would make, then those loadouts as their heroes' silhouettes. */
 function Smart({ f }: { f: Flow }) {
-  const portrait = useHeroPortrait()
   const two = f.smart.slice(0, 2)
   if (!two.length) return <SampleSmart />
   const rows = two.flatMap((l, g) => l.keys.slice(0, 2).map(k => [memberName(k), g] as const))
@@ -263,7 +262,10 @@ function Smart({ f }: { f: Flow }) {
     <span className="ob-smart">
       <span className="ob-smart-mods">{rows.map(([name, g]) => <span key={`${g}${name}`} className={`is-g${g}`}><i /><em>{name}</em></span>)}</span>
       <ArrowRight size={16} className="ob-smart-arrow" />
-      <span className="ob-smart-out">{two.map((l, g) => <MiniCard key={l.id} name={l.name} src={(l.hero && portrait(l.hero, false)) || silhouette} className={`is-g${g}`} />)}</span>
+      <span className="ob-smart-out">{two.map((l, g) => {
+        const shape = `url(${silhouetteOf(l.hero) ?? silhouette})` // drawn like a loadout card's shape while its preview renders (.lo-skel-shape)
+        return <span key={l.id} className={`wi-card is-g${g}`}><span className="wi-card-img"><span className="lo-skel-shape" style={{ maskImage: shape, WebkitMaskImage: shape }} /></span></span>
+      })}</span>
     </span>
   )
 }

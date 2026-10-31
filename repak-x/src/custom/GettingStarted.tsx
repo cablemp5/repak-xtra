@@ -2,12 +2,12 @@ import { LOADER_NAME } from './edition'
 // repakxtra: the Getting started checklist at the top of Loadouts home, once the first-launch flow (FirstRun.tsx) has
 // run. Each row reads what the app already knows (the game folder, the bypass and the loader, mods, loadouts, previews)
 // plus small flags under repakxtra.gettingStarted: a loadout once switched on stays ticked, and the Launch button
-// marks launched (App.tsx). "N of 7", Dismiss folds it to a pill, and it leaves by itself when the core rows are done. The first loadout
+// marks launched (App.tsx). "N of 7", Dismiss, and it leaves by itself when the core rows are done. The first loadout
 // switched on also brings a small celebration and cable's note (founderNote.ts), once.
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
-import { Check, ListChecks, PartyPopper, X } from 'lucide-react'
+import { Check, PartyPopper, X } from 'lucide-react'
 import type { LoadoutProps } from './Loadouts'
 import { type Mod, isActive, loadoutable, modKey, openLoadout, readLoadouts, setView, useLoadouts } from './loadoutStore'
 import { hasModsRoot } from './loadoutIdentity'
@@ -23,12 +23,9 @@ const KEY = 'repakxtra.gettingStarted'
 type Flags = { on?: 1; launched?: 1; dismissed?: 1; noted?: 1 }
 const listeners = new Set<() => void>()
 const read = (): Flags => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') } catch { return {} } }
-const flag = (k: keyof Flags, on = true) => {
-  if (Boolean(read()[k]) === on) return
-  const next = { ...read() }
-  if (on) next[k] = 1
-  else delete next[k]
-  localStorage.setItem(KEY, JSON.stringify(next))
+const flag = (k: keyof Flags) => {
+  if (read()[k]) return
+  localStorage.setItem(KEY, JSON.stringify({ ...read(), [k]: 1 }))
   listeners.forEach(l => l())
 }
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
@@ -98,10 +95,9 @@ export default function GettingStarted({ p }: { p: LoadoutProps }) {
     { label: 'Launched the game with mods', done: Boolean(flags.launched), action: ['Launch', launch] },
   ]
   const done = rows.filter(r => r.done).length
-  const open = rows.some(r => !r.done && !r.optional)
-  const show = !flags.dismissed && open
+  const show = !flags.dismissed && rows.some(r => !r.done && !r.optional) // Dismiss is for good
   const next = rows.find(r => !r.done) // one action at a time (Goal-gradient: the next step, not seven buttons)
-  if (!open && !party) return null
+  if (!show && !party) return null
   return (
     <>
       {party && (
@@ -115,11 +111,6 @@ export default function GettingStarted({ p }: { p: LoadoutProps }) {
             <footer>cable <button type="button" className="su-link" onClick={() => openUrl(FOUNDER_DISCORD)}>Join the Discord</button></footer>
           </blockquote>
         </motion.div>
-      )}
-      {!show && open && (
-        <button type="button" className="gs-pill" onClick={() => flag('dismissed', false)} aria-label={`Getting started, ${done} of ${rows.length} done. Show the list`}>
-          <ListChecks size={14} aria-hidden="true" />Getting started <b>{done} of {rows.length}</b>
-        </button>
       )}
       {show && (
         <section className="gs-card" aria-label="Getting started">
