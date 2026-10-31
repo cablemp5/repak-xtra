@@ -190,15 +190,11 @@ export async function gatherReport(): Promise<string> {
     ...(crash.build_version ? [`game build ${crash.build_version}${crash.engine_version ? ` (${crash.engine_version})` : ''}`] : []),
     ...(crash.asset_path || crash.character_id ? tierLines(suspects, p => relativeToMods(p, src.gamePath)) : []),
   ]
-  // each recent crash: when, and the asset it crashed loading with the installed mods (on or off) that replace it
-  const allPaths = mods.map(m => m.path)
-  const recentLines = await Promise.all((recent ?? []).map(async c => {
-    const head = `${when(c.time)}, ${c.asset_path ? `crashed loading ${c.asset_path.split('/').pop()}` : `crashed (${c.crash_type || 'Crash'})`}`
-    if (!c.asset_path) return head
-    const t = await settled(invoke<Tiered[]>('xtra_crash_tiers', { assetPath: c.asset_path, heroId: null, modPaths: allPaths }))
-    const held = t?.filter(x => x.tier === 'asset').map(x => relativeToMods(x.path, src.gamePath))
-    return `${head}: ${!held ? 'not checked' : held.length ? `replaced by ${held.join(', ')}` : 'no installed mod replaces it'}`
-  }))
+  const recentLines = (await recentCrashes(mods.map(m => m.path), recent)).map(c => {
+    const head = `${when(c.time)}, ${c.asset ? `crashed loading ${c.asset}` : `crashed (${c.type})`}`
+    const held = c.held?.map(p => relativeToMods(p, src.gamePath))
+    return !c.asset ? head : `${head}: ${!held ? 'not checked' : held.length ? `replaced by ${held.join(', ')}` : 'no installed mod replaces it'}`
+  })
   const gpuInfo = [crash?.gpu_driver, crash?.rhi].filter(Boolean).join(', ')
   const system = [crash?.cpu, crash?.gpu && `${crash.gpu}${gpuInfo ? ` (${gpuInfo})` : ''}`, crash?.ram_gb != null && `${crash.ram_gb} GB`, crash?.os]
     .filter(Boolean).join(', ')
@@ -224,6 +220,20 @@ export async function gatherReport(): Promise<string> {
     dumpLines: inDump,
     recent: recentLines,
   })
+}
+
+export type RecentCrash = { time: number; type: string; asset?: string; held?: string[] }
+/** The newest five crashes (xtra_recent_crashes): when, what kind, the asset each crashed loading (its name), and the
+ *  installed mods (`modPaths`, on or off) that replace that asset, undefined when the check failed. For the setup report
+ *  and Settings > Crash reports. `listed` skips the backend call when the caller already has the crashes. */
+export async function recentCrashes(modPaths: string[], listed?: { time: number; crash_type?: Opt; asset_path?: Opt }[]): Promise<RecentCrash[]> {
+  const list = listed ?? await settled(invoke<{ time: number; crash_type?: Opt; asset_path?: Opt }[]>('xtra_recent_crashes')) ?? []
+  return Promise.all(list.map(async c => {
+    const base = { time: c.time, type: c.crash_type || 'Crash', asset: c.asset_path?.split('/').pop() || undefined }
+    if (!c.asset_path) return base
+    const t = await settled(invoke<Tiered[]>('xtra_crash_tiers', { assetPath: c.asset_path, heroId: null, modPaths }))
+    return { ...base, held: t?.filter(x => x.tier === 'asset').map(x => x.path) }
+  }))
 }
 
 /** The mods that hold an asset: the first two by name, then how many more (a shared asset must not fill the report). */
