@@ -10,7 +10,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open as pick } from '@tauri-apps/plugin-dialog'
 import { motion } from 'framer-motion'
-import { ArrowRight, Check, ChevronDown, CircleCheck, CircleX, CopyPlus, ExternalLink, FileCode, FolderOpen, LoaderCircle, Package, Play, Plus, ShieldCheck, Upload } from 'lucide-react'
+import { ArrowRight, Check, ChevronDown, CircleCheck, CircleX, CopyPlus, Gamepad2, ExternalLink, FileCode, FolderOpen, LoaderCircle, Package, Play, Plus, ShieldCheck, Upload } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import Switch from '../components/ui/Switch'
 import { DoctorProblems } from './SetupPanel'
@@ -344,7 +344,7 @@ const loadout: Page = {
             : 'Mods that share a look become one loadout, each with a tick to keep.'} />
       )}
       <Choice onClick={() => f.finish('empty')} title="Start one by hand" text="An empty loadout, named and filled on its page."
-        stage={<span className="wi-card ob-empty"><CopyPlus size={30} strokeWidth={1.75} /></span>} />
+        stage={<span className="wi-card ob-empty"><CopyPlus size={30} strokeWidth={1.25} /></span>} />
       {!f.hasMods && f.newMods.length === 0 && <p className="fr-hint">No mods yet. Back adds some first, or the checklist on Loadouts home reminds you later.</p>}
     </div>
   ),
@@ -405,7 +405,7 @@ function Yours({ f }: { f: Flow }) {
         <KitTrack plan={f.kit.plan} p={f.kit.progress} done={f.kit.finished ?? undefined} />
         <DoctorProblems d={f.kit.doctor} />
       </Pref>
-      <Pref title="Show it on Discord" stage={<span className="ob-presence"><AppMark /><span><small>Playing</small><b>{APP_NAME}</b><small>Switching loadouts</small></span></span>}
+      <Pref title="Show it on Discord" stage={<span className="ob-presence"><AppMark /><span><small>Playing</small><b>{APP_NAME}</b><small className="ob-activity"><Gamepad2 size={12} aria-hidden="true" />Switching loadouts</small></span></span>}
         action={<Switch size="sm" checked={f.enableDrp} onChange={f.onSetDrp} aria-label={`Show ${APP_NAME} in your Discord status`} />}>
         <p>Your Discord status shows {APP_NAME} while it is open. Off keeps it to yourself.</p>
       </Pref>
