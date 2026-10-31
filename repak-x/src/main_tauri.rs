@@ -8725,6 +8725,8 @@ fn main() {
             xtra_vfx::xtra_vfx_dirs, // repakxtra: VFX Updater
             xtra_vfx::xtra_vfx_detect,
             xtra_vfx::xtra_vfx_place,
+            xtra_vfx::xtra_vfx_turn_off, // repakxtra
+            xtra_mi_layout::xtra_vfx_verify, // repakxtra
             xtra_vfx::xtra_game_build,
             xtra_vfx::xtra_vfx_mods,
             xtra_vfx::xtra_niagara_mods, // repakxtra: setup report

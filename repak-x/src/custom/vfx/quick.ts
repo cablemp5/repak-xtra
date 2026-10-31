@@ -14,7 +14,7 @@ import { renameSource } from '../nexusSource'
 import { readFilter } from './filter'
 import { openVfxWindow, sendReport, utocOf } from './handoff'
 import { STEPS, fixVfxMod, type VfxReport } from './pipeline'
-import { claimRun, newRunToken, readNaming, readOriginals, releaseRun, runLock } from './prefs'
+import { claimRun, newRunToken, readNaming, readOriginals, readSafeOff, releaseRun, runLock } from './prefs'
 
 type Alert = ReturnType<typeof useAlert>
 let reserved = false // one right-click update at a time in this window, taken before anything is awaited
@@ -75,6 +75,7 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
     const r = await fixVfxMod({
       modPath: mod.utoc_path || utocOf(mod.path), usmapPath: usmap, gamePaksPath: paks, filter: readFilter(),
       keepName: naming === 'broken', turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash',
+      safeOff: readSafeOff() && Boolean(verdictOf(mod.path)), // flagged: off when it could not be made safe
       onStep: s => { if (id !== null) alert.updateToast(id, { description: `Step ${s.step} of ${STEPS.length}: ${s.title}`, progressValue: ((s.step - 0.5) / STEPS.length) * 100 }) },
     })
     if (r.status === 'fixed' && r.placed) {
@@ -112,10 +113,11 @@ function resultToast(r: VfxReport, name: string, alert: Alert) {
       ].filter(Boolean).join(' '),
     })
   } else if (r.status === 'nothing') {
-    alert.showAlert({ color: 'default', duration: 6000, title: `${name} needs no update`, description: r.error ?? '' })
+    alert.showAlert({ color: r.turnedOff ? 'warning' : 'default', duration: r.turnedOff ? 0 : 6000, title: r.turnedOff ? `${name} was turned off` : `${name} needs no update`,
+      description: `${r.error ?? ''}${r.turnedOff ? ' It is off now, so it cannot crash the game.' : ''}` })
   } else {
     // a problem is yellow, never red
-    alert.showAlert({ color: 'warning', duration: 0, title: `${name} was not updated`, description: r.error ?? 'Something went wrong.', action: show })
+    alert.showAlert({ color: 'warning', duration: 0, title: `${name} was not updated`, description: `${r.error ?? 'Something went wrong.'}${r.turnedOff ? ' It was turned off, so it cannot crash the game.' : ''}`, action: show })
   }
 }
 

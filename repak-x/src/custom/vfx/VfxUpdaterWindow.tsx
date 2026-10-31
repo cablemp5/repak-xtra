@@ -20,7 +20,7 @@ import { DEFAULT_FILTER, parseWords, readFilter, resetFilter, writeFilter, type 
 import { canonKey } from '../loadoutIdentity'
 import { modKey, useLoadouts } from '../loadoutStore'
 import { FIXED_EVENT, onHandoff, openLoadoutInMain, onReport, takeHandoff, takeReport, utocOf, type Fixed } from './handoff'
-import { KEEP_NAME, ORIGINALS, claimRun, newRunToken, onRunChange, readNaming, readOriginals, releaseRun, runLock, type Naming, type Originals, type RunLock } from './prefs'
+import { KEEP_NAME, ORIGINALS, SAFE_OFF, claimRun, newRunToken, onRunChange, readNaming, readOriginals, readSafeOff, releaseRun, runLock, type Naming, type Originals, type RunLock } from './prefs'
 import { STEPS, fixVfxMod, type AssetKind, type VfxReport } from './pipeline'
 import { checkVfxMod, checkWords } from './quick'
 import { rescanVerdicts, verdictsChanged } from '../brokenMods'
@@ -29,8 +29,11 @@ import './vfx.css'
 
 type Status = 'waiting' | 'running' | 'fixed' | 'nothing' | 'failed' | 'cancelled'
 type Run = { status: Status; step?: number; sub?: string; report?: VfxReport }
-type Mod = { path: string; utoc: string; enabled: boolean; name: string; hero?: string | null; modified?: number; niagara?: boolean; materials?: boolean; ui?: boolean }
+type Mod = { path: string; utoc: string; enabled: boolean; name: string; hero?: string | null; modified?: number; niagara?: boolean; materials?: boolean; ui?: boolean
+  /** A May crash mod the updater cannot rebuild (not a VFX or material mod), with why: Update turns it off */
+  risky?: string }
 type ModList = { mods: Mod[]; problems: string[] }
+type PakFile = { path: string; utoc_path?: string | null; enabled: boolean; custom_name?: string | null; character_name?: string | null; modified_date?: number }
 type Verdict = { path: string; kind: string; reason: string; staleNiagara?: number; usmapWait?: number }
 type Log = { time: string; text: string; type: string }
 type Usmap = { updated: boolean; upToDate: boolean; skipped: boolean; localPath?: string | null; filename?: string | null; version?: string | null; buildNumber?: number | null; commitDate?: string | null; message: string }
@@ -91,7 +94,8 @@ const KIND_ORDER: AssetKind[] = ['failed', 'left', 'unreadable', 'added', 'updat
 const KIND_LABEL: Record<AssetKind, string> = { updated: 'Rebuilt', same: 'Match the game', added: 'The mod\'s own', passed: 'Kept as they were', left: 'Left out', unreadable: 'Could not be read', failed: 'Not updated' }
 /** An update that left out Niagara files made for an older game build: it works, without those effects' colors */
 const isPartial = (r?: VfxReport) => r?.status === 'fixed' && r.counts.left > 0
-const statusText = (r: VfxReport) => (isPartial(r) ? 'Partially updated' : STATUS[r.status])
+const statusText = (r: VfxReport) => (isPartial(r) ? 'Partially updated'
+  : r.turnedOff && r.status !== 'fixed' ? `${r.status === 'failed' ? 'Failed' : r.counts.relaid ? 'Not updated' : 'May crash'}, turned off` : STATUS[r.status])
 const leftText = (r: VfxReport) => `Left out ${plural(r.counts.left, 'Niagara file')} made for an older game build, so the game uses its own and ${r.counts.left === 1 ? 'that effect shows' : 'those effects show'} their usual colors.`
 /** Niagara files the update could not carry with today's USMAP: the game's own effect, for good (still a full update). */
 const ownText = (r: VfxReport) => (r.counts.ownGame ? `${plural(r.counts.ownGame, 'Niagara file')} could not be carried, so ${r.counts.ownGame === 1 ? 'that effect shows' : 'those effects show'} the game's own colors.` : '')
@@ -186,6 +190,7 @@ function Row({ mod, rowKey, loadouts, run, needs, partial, waits, picked, open, 
       {needs && <span id={whyId} className="xtra-sr-only">{needs}</span>}
       {/* in Material mods (not under Needs an update): which of them need one */}
       {waits ? <span className="vf-needs is-waiting" tabIndex={0} title={needs}>Waiting</span>
+        : needs && mod.risky && !run ? <span className="vf-needs" tabIndex={0} title={needs}>May crash</span>
         : needs && mod.materials && !run && <span className="vf-needs" tabIndex={0} title={needs}>Needs update</span>}
       {mod.niagara && !partial && <span className="vf-niagara" tabIndex={0} title="Has Niagara effects (particle systems). When a game update changes them, the update rebuilds them on the new game files.">Niagara</span>}
       {partial && !run?.report ? (
@@ -323,6 +328,7 @@ export function VfxUpdaterPanel() {
   const [checking, setChecking] = useState(true)
   const [naming, setNaming] = useState<Naming>(readNaming)
   const [originals, setOriginals] = useState<Originals>(readOriginals)
+  const [safeOff, setSafeOff] = useState(readSafeOff)
   const keepName = naming === 'broken'
   const [advanced, setAdvanced] = useState(() => localStorage.getItem(ADVANCED) === '1')
   const [busy, setBusy] = useState(false)
@@ -409,12 +415,23 @@ export function VfxUpdaterPanel() {
       .then(async ({ mods: fresh, problems }) => {
         // a read that missed folders or mods keeps the list from before (when there is one), and says so with Try again
         const read = problems.length && modsRef.current?.length ? modsRef.current : fresh
-        const list = [...read, ...addedRef.current.filter(a => !read.some(m => norm(m.utoc) === norm(a.utoc)))]
+        const listed = [...read, ...addedRef.current.filter(a => !read.some(m => norm(m.utoc) === norm(a.utoc)))]
         if (problems.length) addLog(`Part of the mods folder could not be read: ${problems.slice(0, 3).join('. ')}${problems.length > 3 ? ` and ${problems.length - 3} more` : ''}`, 'warning')
+        // every other mod too: one that may crash and is on is listed, and Update turns it off (nothing here rebuilds it)
+        const all = await invoke<PakFile[]>('get_pak_files').catch(() => [] as PakFile[])
         let verdicts: Verdict[] = [], failed = false
-        try { verdicts = await invoke<Verdict[]>('xtra_broken_mods', { modPaths: list.map(m => m.path) }) } catch (e) { failed = true; addLog(`Could not check which mods need an update: ${e}`, 'warning') }
+        try { verdicts = await invoke<Verdict[]>('xtra_broken_mods', { modPaths: [...new Set([...listed, ...all].map(m => m.path))] }) } catch (e) { failed = true; addLog(`Could not check which mods need an update: ${e}`, 'warning') }
         if (!live) return
-        const n = new Map(verdicts.filter(v => v.kind === 'vfx').map(v => [norm(v.path), v.reason]))
+        const inList = new Set(listed.map(m => norm(m.path)))
+        const files = new Map(all.map(m => [norm(m.path), m]))
+        const risky: Mod[] = verdicts.filter(v => v.kind === 'risky' && !inList.has(norm(v.path)) && /\.pak$/i.test(v.path)).map(v => {
+          const m = files.get(norm(v.path))
+          return { path: v.path, utoc: m?.utoc_path || utocOf(v.path), enabled: true, name: m?.custom_name?.trim() || fileName(v.path).replace(/\.[^.]+$/, '').replace(/(_\d+)?_P$/i, ''),
+            hero: m?.character_name ?? null, modified: m?.modified_date, risky: v.reason }
+        })
+        const list = [...listed, ...risky]
+        // a VFX or material mod that may crash is rebuilt like one that needs an update (its blueprints on the game's)
+        const n = new Map(verdicts.filter(v => v.kind === 'vfx' || v.kind === 'risky').map(v => [norm(v.path), v.reason]))
         const utocs = new Map(list.map(m => [norm(m.path), norm(m.utoc)]))
         setStale(new Map(verdicts.filter(v => v.kind === 'vfx' && v.staleNiagara && utocs.has(norm(v.path))).map(v => [utocs.get(norm(v.path))!, v.staleNiagara!])))
         setWaits(new Map(verdicts.filter(v => v.kind === 'vfx' && v.usmapWait && utocs.has(norm(v.path))).map(v => [utocs.get(norm(v.path))!, v.usmapWait!])))
@@ -551,17 +568,29 @@ export function VfxUpdaterPanel() {
     const startedAt = performance.now()
     todo.forEach(k => patch(k, { status: 'waiting', step: undefined, sub: undefined, report: undefined }))
     const filter = readFilter()
-    let fixed = 0, failed = 0, partial = 0, cleared = 0 // cleared: Nothing to update, so no longer flagged
+    let fixed = 0, failed = 0, partial = 0, cleared = 0, turnedOff = 0 // cleared: Nothing to update, so no longer flagged
     const retry: string[] = [], stopped: string[] = [], broke: string[] = []
     for (const key of todo) {
       if (cancel.current) { patch(key, { status: 'cancelled' }); stopped.push(key); retry.push(key); continue }
       const mod = byKey.get(key)!
       void claimRun(token, mod.name) // the lock says which mod, for the other window's message
+      if (mod.risky) {
+        // nothing here rebuilds it: off, so it cannot crash the game, and its May crash flag says why
+        const off = await invoke<string | null>('xtra_vfx_turn_off', { modPath: mod.path }).then(() => ({ ok: true, why: '' }), e => ({ ok: false, why: String(e) }))
+        const report: VfxReport = { mod: mod.utoc, name: mod.name, status: off.ok ? 'nothing' : 'failed', turnedOff: off.ok,
+          error: off.ok ? `May crash: ${mod.risky} Turned off, so it cannot crash the game.` : `Could not turn it off: ${off.why}`,
+          assets: [], warnings: [], counts: { updated: 0, same: 0, added: 0, passed: 0, left: 0, ownGame: 0, unreadable: 0, changes: 0, relaid: 0 }, ms: 0, steps: [] }
+        patch(key, { status: report.status, report })
+        addLog(off.ok ? `Turned ${mod.name} off: it may crash the game.` : `${mod.name}: ${report.error}`, 'warning')
+        if (off.ok) { turnedOff++; pick([key], false) } else { failed++; broke.push(key); retry.push(key) }
+        continue
+      }
       patch(key, { status: 'running', step: 1 })
       modStart.current = performance.now()
       addLog(`Updating ${mod.name}`)
       const r = await fixVfxMod({
         modPath: mod.utoc, usmapPath: usmap, gamePaksPath: paks, turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash', keepName, filter,
+        safeOff: safeOff && needs.has(norm(mod.path)), // only a flagged mod: an unflagged one that fails stays as it was
         log: addLog, cancelled: () => cancel.current,
         onStep: s => patch(key, { step: s.step, sub: undefined }),
         onProgress: (_, __, message) => patch(key, { sub: message }),
@@ -570,6 +599,7 @@ export function VfxUpdaterPanel() {
       if (r.status !== 'cancelled' && r.ms > 0) rememberTime(r.assets.some(a => /^(NS|NE)_/i.test(a.name)), r.ms)
       if (r.status === 'fixed') { fixed++; pick([key], false) }
       if (r.status === 'nothing') cleared++
+      if (r.turnedOff) turnedOff++
       if (r.status === 'failed' || isPartial(r)) failed++ // a partial update is a warning too
       if (isPartial(r)) partial++
       if (r.status === 'failed') { broke.push(key); retry.push(key) }
@@ -587,19 +617,19 @@ export function VfxUpdaterPanel() {
         setAdded(a => a.map(m => (norm(m.utoc) === key ? chosenMod(utocOf(fixedFile), fixedFile) : m))) // a chosen mod's update stays in the list
       }
     }
-    if (fixed) await emit('mods_dir_changed').catch(() => {})
+    if (fixed || turnedOff) await emit('mods_dir_changed').catch(() => {})
     if (cleared) await verdictsChanged() // the Library reads the flags again
     await releaseRun(token)
     myToken.current = null
     setLastTook(performance.now() - startedAt)
     const parts = [
       `${fixed === todo.length ? plural(fixed, 'mod') : `${fixed} of ${plural(todo.length, 'mod')}`} updated${partial ? ` (${partial === fixed ? (fixed === 1 ? 'partially' : 'all partially') : `${partial} partially`})` : ''}`,
-      broke.length ? `${broke.length} failed` : '', stopped.length ? `${stopped.length} cancelled` : '',
+      broke.length ? `${broke.length} failed` : '', turnedOff ? `${turnedOff} turned off so ${turnedOff === 1 ? 'it' : 'they'} cannot crash the game` : '', stopped.length ? `${stopped.length} cancelled` : '',
     ].filter(Boolean)
     setEnded({ text: `${parts.join(', ')}${parts.length > 1 ? ',' : ''} in ${took(performance.now() - startedAt)}.`, retry, edits: pickEditsRef.current })
     cue(failed ? 'warning' : 'success', { emphasis: fixed > 1 ? undefined : 'subtle' }) // a problem is a warning, never an error sound
     setBusy(false); setCancelling(false)
-  }, [picked, usmap, paks, originals, keepName, addLog])
+  }, [picked, usmap, paks, originals, keepName, safeOff, needs, addLog])
 
   // the Library's notice updates exactly the mods it sent, as soon as the list and the USMAP are ready (after a run in
   // progress)
@@ -675,7 +705,7 @@ export function VfxUpdaterPanel() {
   const addedKeys = new Set(added.map(m => norm(m.utoc)))
   const isAdded = (m: Mod) => !updatedNow(m) && addedKeys.has(norm(m.utoc)) // chosen by hand, above the rest
   // material mods stay in their own group (the ones that need an update at its top), so the VFX mods stay easy to find
-  const first = (m: Mod) => !updatedNow(m) && !isAdded(m) && !m.materials && Boolean(needsOf(m) || runs[norm(m.utoc)])
+  const first = (m: Mod) => !updatedNow(m) && !isAdded(m) && !m.materials && !m.risky && Boolean(needsOf(m) || runs[norm(m.utoc)])
   const group = (id: string, title: string, ms: Mod[], count = ms.length) => {
     const keys = ms.map(m => norm(m.utoc))
     return { id, title, mods: ms, count, keys, all: keys.length > 0 && keys.every(k => picked.has(k)), none: !keys.some(k => picked.has(k)) }
@@ -684,11 +714,13 @@ export function VfxUpdaterPanel() {
   const done = shown.filter(updatedNow)
   const chosen = shown.filter(isAdded)
   const others = shown.filter(m => !first(m) && !updatedNow(m) && !isAdded(m))
-  groupOf.current = new Map(shown.map(m => [norm(m.utoc), updatedNow(m) ? 'updated' : isAdded(m) ? 'added' : first(m) ? 'needs' : m.ui ? 'ui' : m.materials ? 'materials' : 'rest']))
+  groupOf.current = new Map(shown.map(m => [norm(m.utoc), updatedNow(m) ? 'updated' : isAdded(m) ? 'added' : first(m) ? 'needs' : m.risky ? 'risky' : m.ui ? 'ui' : m.materials ? 'materials' : 'rest']))
   const groups = [
     group('added', 'Chosen files', chosen),
     group('needs', 'Needs an update', needing, needing.filter(m => needsOf(m) && !isDone(runs[norm(m.utoc)]?.status)).length),
-    group('rest', chosen.length || needing.length ? 'Other VFX mods' : 'VFX mods', others.filter(m => !m.materials)),
+    // mods that may crash and are on, which nothing here rebuilds: Update turns them off
+    group('risky', 'May crash: Update turns these off', others.filter(m => m.risky)),
+    group('rest', chosen.length || needing.length ? 'Other VFX mods' : 'VFX mods', others.filter(m => !m.materials && !m.risky)),
     // skins listed for their material instances, apart so the VFX mods stay easy to find
     group('materials', 'Material mods', others.filter(m => m.materials && !m.ui)),
     // UI mods listed for their UI materials (a game update rewrote nearly all of them in 3984769)
@@ -712,7 +744,7 @@ export function VfxUpdaterPanel() {
   const runningKey = batch.find(k => runs[k]?.status === 'running')
   const runningMod = runningKey ? (mods ?? []).find(m => norm(m.utoc) === runningKey) : undefined
   const rest = list.filter(m => !first(m) && !isAdded(m))
-  orderRef.current = [...list.filter(isAdded), ...list.filter(first), ...rest.filter(m => !m.materials), ...rest.filter(m => m.materials && !m.ui), ...rest.filter(m => m.ui)].map(m => norm(m.utoc))
+  orderRef.current = [...list.filter(isAdded), ...list.filter(first), ...rest.filter(m => m.risky), ...rest.filter(m => !m.materials && !m.risky), ...rest.filter(m => m.materials && !m.ui), ...rest.filter(m => m.ui)].map(m => norm(m.utoc))
   const byUtoc = new Map((mods ?? []).map(m => [norm(m.utoc), m]))
   const times = readTimes()
   // while a batch runs: the mod in progress (its expected time less the time it has run) and the ones after it
@@ -844,6 +876,13 @@ export function VfxUpdaterPanel() {
                   <Seg label="Originals" value={originals} disabled={busy} note={ORIGINALS_NOTE[originals]}
                     options={[['off', 'Turn off'], ['trash', 'Move to Recently deleted'], ['keep', 'Leave as they are']]}
                     onChange={v => { setOriginals(v); localStorage.setItem(ORIGINALS, v) }} />
+                </Section>
+
+                <Section icon={<AlertTriangle size={15} aria-hidden="true" />} title="Safety" about="What happens to a flagged mod an update could not make safe.">
+                  <Seg label="Safety" value={safeOff ? 'off' : 'on'} disabled={busy}
+                    note={safeOff ? 'It is turned off, so it cannot crash the game. Its flag stays, and you can update it again later.' : 'It stays on as it was, and can crash the game.'}
+                    options={[['off', 'Turn it off'], ['on', 'Leave it on']]}
+                    onChange={v => { setSafeOff(v === 'off'); localStorage.setItem(SAFE_OFF, v === 'off' ? '1' : '0') }} />
                 </Section>
 
                 <Section icon={<MapIcon size={15} aria-hidden="true" />} title="USMAP"

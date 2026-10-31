@@ -408,6 +408,9 @@ function mockVfx(cmd: string, args: any): unknown {
     case 'xtra_vfx_lock': return vfxLock
     case 'xtra_vfx_stale': return mockStale(String(args.modPath)) ? (args.files as string[]).filter(f => /NS_/.test(f)) : []
     case 'xtra_vfx_old_layout': return []
+    // repakxtra: rebuilt files read back whole, and turning off says it did (the mock's files stay as they are)
+    case 'xtra_vfx_verify': return []
+    case 'xtra_vfx_turn_off': return /\.pak$/i.test(String(args?.modPath ?? '')) ? String(args.modPath).replace(/\.pak$/i, '.bak_repak') : null
     // repakxtra: materials in an older layout (xtra_mi_layout.rs): mock.relayout = 'rewrote', 'failed' or 'error'
     case 'xtra_vfx_relayout': {
       const m = localStorage.getItem('mock.relayout')

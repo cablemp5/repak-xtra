@@ -48,8 +48,14 @@ fn is_niagara(key: &str) -> bool {
 }
 
 /// The game build that inserted properties into material instances' overrides (xtra_mi_layout.rs): one cooked before
-/// it crashes the game when it overrides a later property.
+/// it crashes the game when it overrides a later property (scripts/usmap-diff.py lists what each patch moved).
 const MATERIAL_LAYOUT_BUILD: u64 = 3984769;
+
+/// An Animation Blueprint, by its name. shortcut: ABP_ names only, list classes (xtra_uat_cli::classes) if a mod ever
+/// names one otherwise.
+fn is_anim_blueprint(key: &str) -> bool {
+    key.rsplit('/').next().unwrap_or(key).starts_with("abp_")
+}
 
 /// When the installed game took that build (its first patch container from it on), None before it.
 fn material_layout_patched(containers: &[(PathBuf, u64, u64)]) -> Option<u64> {
@@ -391,6 +397,16 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
     }
     // On or off: the warning matters most before a loadout switches it on
     let risky = |reason: String| Some(Verdict { path: path.to_string(), kind: "risky", reason, stale_niagara: 0, usmap_wait: 0 });
+    // an Animation Blueprint the game cooked again since the mod was made (3984769 moved AnimBlueprintGeneratedConstantData
+    // and cooked 9 again): whatever its functions look like, nothing here rebuilds it
+    let anims = stale.iter().filter(|k| is_anim_blueprint(k)).count();
+    if !m.fixed && m.installed > 0 && anims > 0 {
+        return risky(format!(
+            "A game update changed how Animation Blueprints are stored and rebuilt the game's copy of {} since this mod was made, so the game can crash on it. Nothing here can rebuild {}: turn the mod off until its author updates it.",
+            if anims == 1 { "its Animation Blueprint".to_string() } else { format!("its {anims} Animation Blueprints") },
+            if anims == 1 { "it" } else { "them" }
+        ));
+    }
     match &m.layout {
         _ if !m.has_blueprint => None,
         // what the update changed decides, whatever the date: one made after it from old files is caught too
@@ -766,6 +782,17 @@ mod tests {
         game.insert(match_key("/Game/Marvel/UI/Blueprints/Battle/Custom/1026/WBP_Battle_Kill_1026_V3.uasset"), 100);
         let verdict = judge("m.pak", &Facts { materials: true, ..facts(&v(&[ko]), 50) }, 200, &game).unwrap();
         assert_eq!((verdict.kind, verdict.reason.contains("changed the KO prompt")), ("vfx", true), "a KO prompt the update rewrote");
+    }
+
+    #[test]
+    fn an_animation_blueprint_the_game_cooked_again_may_crash() {
+        let abp = "Marvel/Content/Marvel/Characters/1026/1026001/Animations/ABP_1026001.uasset";
+        let mut game = game();
+        game.insert(match_key(abp), 100);
+        let files = v(&[abp]);
+        let found = judge("m.pak", &Facts { has_blueprint: true, layout: Some(None), ..facts(&files, 50) }, 200, &game).unwrap();
+        assert_eq!((found.kind, found.reason.contains("Animation Blueprint")), ("risky", true), "whatever its class check found");
+        assert_eq!(judge("m.pak", &Facts { has_blueprint: true, layout: Some(None), ..facts(&files, 150) }, 200, &game), None, "made after the game's copy changed");
     }
 
     #[test]

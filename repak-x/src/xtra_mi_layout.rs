@@ -240,6 +240,25 @@ pub(crate) async fn run(mod_path: &str, game_paks: &str, usmap_path: &str, mod_e
     r
 }
 
+/// pipeline.ts, before packing: of `rels` (rebuilt packages under `dir`, no extension), those that do not read back
+/// whole with `usmap`. A rebuild that cannot be read again would crash the game, so the update stops on any.
+#[tauri::command]
+pub async fn xtra_vfx_verify(window: Window, usmap_path: String, dir: String, rels: Vec<String>, stage_dir: String) -> Result<Vec<String>, String> {
+    if rels.is_empty() {
+        return Ok(Vec::new());
+    }
+    let work = Path::new(&stage_dir).join("verify");
+    let (input, json) = (work.join("in"), work.join("json"));
+    let r = async {
+        stage(Path::new(&dir), &input, &rels, true)?;
+        to_json(&usmap_path, &input, &json, &TauriVfxProgressSink::new(&window)).await?;
+        Ok::<_, String>(rels.iter().filter(|r| decode(&json, r).and_then(|j| decoded(&j).map(|_| ())).is_none()).cloned().collect())
+    }
+    .await;
+    let _ = std::fs::remove_dir_all(&work);
+    r
+}
+
 /// The game's current copies of `rels` decoded with `usmap`, under `work`/game_json. None when they could not be read.
 pub(crate) async fn game_copies(game_paks: &str, usmap: &str, rels: &[String], work: &Path) -> Option<std::path::PathBuf> {
     let (out, json) = (work.join("game"), work.join("game_json"));

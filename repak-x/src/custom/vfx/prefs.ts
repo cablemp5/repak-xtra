@@ -12,6 +12,9 @@ export const ORIGINALS = 'repakxtra.vfx.originals' // what happens to an origina
 export type Naming = 'broken' | 'updated'
 export type Originals = 'off' | 'trash' | 'keep'
 
+export const SAFE_OFF = 'repakxtra.vfx.safeOff' // '0': a flagged mod that could not be made safe stays on
+/** Whether a flagged mod an update could not make safe is turned off (the default), rather than left on to crash. */
+export const readSafeOff = () => localStorage.getItem(SAFE_OFF) !== '0'
 export const readNaming = (): Naming => (localStorage.getItem(KEEP_NAME) === '0' ? 'updated' : 'broken')
 export function readOriginals(): Originals {
   const v = localStorage.getItem(ORIGINALS)

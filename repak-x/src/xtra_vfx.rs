@@ -644,6 +644,23 @@ pub async fn xtra_vfx_place(source: String, staged_base: String, turn_off_origin
     }).await
 }
 
+/// Turns the mod at `mod_path` (its .utoc, .pak or .bak_repak) off when it is on: what an update could not make safe,
+/// and a May crash mod the updater cannot rebuild, stay off rather than crash the game. Its off copy, or None when it
+/// was off already. Not while the game runs, as every other mod change.
+#[tauri::command]
+pub async fn xtra_vfx_turn_off(window: Window, mod_path: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Option<String>, String> {
+    let pak = Path::new(&mod_path).with_extension("pak");
+    if !pak.is_file() {
+        return Ok(None);
+    }
+    let bypass = state.lock().map(|s| s.bypass_game_running_lock).unwrap_or(false);
+    if !bypass && crate::is_game_process_running() {
+        return Err("Marvel Rivals is running. Close it, then try again.".into());
+    }
+    crate::toggle_mod(pak.to_string_lossy().to_string(), window, state).await?;
+    Ok(Some(pak.with_extension("bak_repak").to_string_lossy().to_string()))
+}
+
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct VfxMods {

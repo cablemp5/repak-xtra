@@ -34,6 +34,8 @@ export type VfxReport = {
   /** The fixed mod: its .pak or .bak_repak beside the original (or the .utoc packed into outputDir) */
   output?: string
   placed?: Placed
+  /** Could not be made safe, so it was turned off (FixOptions.safeOff) */
+  turnedOff?: boolean
   assets: AssetResult[]
   warnings: string[]
   /** left: Niagara files made for an older game build, left out until a USMAP for the game is out (a partial update).
@@ -56,6 +58,9 @@ export type FixOptions = {
   keepName?: boolean
   /** The original goes to Recently deleted (off, so a restore never clashes with the update) */
   trashOriginal?: boolean
+  /** The mod is flagged (Needs VFX update, May crash): when the run fails, it is turned off rather than left on to crash.
+   *  A run that finds its materials only in the old layout turns it off unless this is false */
+  safeOff?: boolean
   filter?: ColorFilter
   log?: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void
   onStep?: (s: { step: number; title: string }) => void
@@ -252,6 +257,15 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
         return
       }
       enter(9)
+      // what was rebuilt must read back whole with today's USMAP: one that does not would crash the game (Niagara files
+      // are checked by their own step, and decoding them again is slow)
+      const rebuilt = report.assets.filter(a => a.kind === 'updated' && !NIAGARA_BY_NAME.test(fileName(a.path))).map(a => rel(a.path).replace(/\.uasset$/i, ''))
+      const unread = await invoke<string[]>('xtra_vfx_verify', { usmapPath: o.usmapPath, dir: dirs.finalUassets, rels: rebuilt, stageDir: dirs.stage })
+      if (unread.length) {
+        report.error = `Not updated: ${plural(unread.length, 'rebuilt file')} ${unread.length === 1 ? 'does' : 'do'} not read back with the new game build's USMAP (${unread.slice(0, 3).map(r => r.split('/').pop()).join(', ')}${unread.length > 3 ? ', and more' : ''}). The mod was not changed.`
+        log(report.error, 'warning')
+        return
+      }
       const base = o.outputDir ? `${slash(o.outputDir)}/${fixedName(o.modPath)}` : `${dirs.stage}/fixed`
       const utoc = await invoke<string>('vfx_pack_to_iostore', { usmapPath: o.usmapPath, inputDir: dirs.finalUassets, outputBase: base, allowedAssets: manifest })
       if (o.outputDir) report.output = utoc
@@ -418,7 +432,8 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     if (report.counts.updated > niagaraUpdated) {
       const built = await invoke<string[]>('vfx_convert_json_to_uassets', { usmapPath: o.usmapPath, inputDir: dirs.editedJson, outputDir: dirs.finalUassets })
       const expected = keep.length + own.length + report.counts.updated - niagaraUpdated
-      if (built.length < expected) warn(`Only ${built.length} of ${expected} assets are in the rebuilt mod.`)
+      // a short rebuild leaves the game's own copy, or nothing, where the mod's was: never placed
+      if (built.length < expected) { report.error = `Not updated: only ${built.length} of ${expected} assets came out of the rebuild. The mod was not changed.`; log(report.error, 'warning'); return report }
     }
     // nothing rebuilt or left out, only kept: the "update" would be the original again, under a new name
     if (swapped && !report.counts.updated && !report.counts.same && !report.counts.left && !niagaraDone && !relaidKept) {
@@ -455,6 +470,13 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     // here, where the early returns pass too: Needs VFX update stops flagging it until the mod or the game changes (xtra_broken.rs)
     // not when its materials were rewritten: the original stays installed in the old layout and still needs turning off
     if (report.status === 'nothing' && !report.counts.relaid) await invoke('xtra_vfx_no_update', { modPath: o.modPath }).catch(e => log(`Could not note that it needs nothing: ${e}`, 'warning'))
+    // not made safe: off, so it cannot crash the game. Its flag stays, and a later update starts from the off copy
+    const unsafe = (report.status === 'failed' && o.safeOff) || (report.status === 'nothing' && report.counts.relaid > 0 && o.safeOff !== false)
+    if (unsafe && !o.outputDir) {
+      report.turnedOff = await invoke<string | null>('xtra_vfx_turn_off', { modPath: o.modPath }).then(Boolean)
+        .catch(e => { log(`Could not turn it off: ${e}`, 'warning'); return false })
+      if (report.turnedOff) log(`Turned ${stem(o.modPath)} off, so it cannot crash the game. Update it again later, or turn it back on in the Library.`, 'warning')
+    }
   }
   return report
 }
