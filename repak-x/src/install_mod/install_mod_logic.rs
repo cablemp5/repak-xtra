@@ -192,6 +192,15 @@ fn existing_mod_variants(output_dir: &Path, base_name: &str) -> Vec<PathBuf> {
         Err(_) => return found,
     };
 
+    // repakxtra: the Mod Updater's copies of this mod (its original kept as _BROKEN or _ORIGINAL, a _PARTIAL or _UPDATED
+    // update): a new version replaces them too, or the next update would start from the old original (xtra_vfx.rs
+    // original_of) and judge the new version by its date
+    let updater = [
+        crate::xtra_vfx::broken_stem(base_name),
+        crate::xtra_vfx::original_stem(base_name),
+        crate::xtra_vfx::partial_stem(base_name),
+        crate::xtra_vfx::fixed_stem(base_name),
+    ];
     for entry in entries.flatten() {
         if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
             continue;
@@ -202,6 +211,10 @@ fn existing_mod_variants(output_dir: &Path, base_name: &str) -> Vec<PathBuf> {
         };
         if stem.eq_ignore_ascii_case(base_name) {
             continue; // handled by the exact-name passes above
+        }
+        if updater.iter().any(|u| u.eq_ignore_ascii_case(&stem)) {
+            found.push(entry.path());
+            continue;
         }
         let (_, base, nines) = split_mod_name(&stem);
         // Require a 9-suffix so unrelated files that merely share the base name
@@ -713,6 +726,20 @@ mod tests {
         assert!(found.contains(&stale_utoc), "stale companion is replaced");
         assert!(!found.contains(&other), "a different mod must be left alone");
         assert!(stale.exists(), "listing never deletes");
+    }
+
+    #[test]
+    fn a_new_version_replaces_the_mod_updaters_copies_of_it_too() {
+        let dir = tempfile::tempdir().unwrap();
+        let files = ["Foo_BROKEN_9999999_P.bak_repak", "Foo_BROKEN_9999999_P.utoc", "Foo_ORIGINAL_9999999_P.bak_repak", "Foo_PARTIAL_9999999_P.pak", "Foo_UPDATED_9999999_P.pak", "FooBar_BROKEN_9999999_P.pak"];
+        for f in files {
+            fs::write(dir.path().join(f), b"x").unwrap();
+        }
+        let found = existing_mod_variants(dir.path(), "Foo_9999999_P");
+        for f in &files[..5] {
+            assert!(found.contains(&dir.path().join(f)), "{f}");
+        }
+        assert!(!found.contains(&dir.path().join("FooBar_BROKEN_9999999_P.pak")), "another mod's copies stay");
     }
 
     #[test]
