@@ -9,7 +9,7 @@ import { nameKey } from './loadoutStore'
 import { ModName } from './modName'
 import { type RecentCrash, recentCrashes, reportSource } from './setupReport'
 
-const when = (secs: number) => new Date(secs * 1000).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'medium' })
+const when = (secs: number) => new Date(secs * 1000).toLocaleString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' })
 
 export default function CrashReports() {
   const alert = useAlert()
@@ -54,11 +54,11 @@ export default function CrashReports() {
                 ))}
               </ul>
             )}
-        <p className="setting-subtext crs-note">
-          Mods are matched against what you have installed now. An older crash may have happened with a different set. A named
-          mod is a suspect, not a verdict: the game can crash on a file for its own reasons.
-        </p>
       </div>
+      <p className="setting-subtext crs-note">
+        Mods are matched against what you have installed now. An older crash may have happened with a different set. A named
+        mod is a suspect, not a verdict: the game can crash on a file for its own reasons.
+      </p>
     </div>
   )
 }
