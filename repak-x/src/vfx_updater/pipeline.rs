@@ -75,10 +75,19 @@ pub async fn step_extract_vanilla_assets(
     game_paks: &str,
     output_dir: &str,
     filter_patterns: &[String],
+    with_deps: bool,
     progress: &dyn VfxProgressSink,
 ) -> Result<Vec<String>, String> {
     vfx_info("=== Step 4: Extract Vanilla Assets ===");
-    extract_vanilla_assets(tool_path, game_paks, output_dir, filter_patterns, progress).await
+    extract_vanilla_assets(
+        tool_path,
+        game_paks,
+        output_dir,
+        filter_patterns,
+        with_deps,
+        progress,
+    )
+    .await
 }
 
 /// Step 7: Convert edited JSON back to UAssets

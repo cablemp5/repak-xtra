@@ -18,7 +18,9 @@ use super::pipeline::{
     step_pack_to_iostore,
 };
 use super::progress::TauriVfxProgressSink;
-use super::uasset_tool::{close_vfx_uat_session, ensure_vfx_uat_session};
+use super::uasset_tool::{
+    close_vfx_uat_session, ensure_vfx_uat_session, find_raw_assets, reconvert_uassets_to_json,
+};
 use serde::Serialize;
 
 /// App data directory matching the rest of Repak-X: %APPDATA%/Repak-X
@@ -92,6 +94,7 @@ pub async fn vfx_extract_vanilla_assets(
     game_paks: String,
     output_dir: String,
     filter_patterns: Vec<String>,
+    with_deps: bool,
 ) -> Result<Vec<String>, String> {
     let tool_path = get_uasset_tool_path(&app)?;
     let progress = TauriVfxProgressSink::new(&window);
@@ -101,6 +104,7 @@ pub async fn vfx_extract_vanilla_assets(
         &game_paks,
         &output_dir,
         &filter_patterns,
+        with_deps,
         &progress,
     )
     .await
@@ -769,4 +773,188 @@ async fn apply_listing(
         },
         ..Default::default()
     })
+}
+
+// ============================================================================
+// Older USMAPs for pre-update mods
+// ============================================================================
+
+// shortcut: only this many builds back are tried, raise it if a mod needs an older layout
+const MAX_OLDER_USMAPS: usize = 8;
+
+#[derive(Debug, Serialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct VfxRawMaterialRecovery {
+    /// Materials that parsed with an older usmap
+    pub recovered: usize,
+    /// Materials still unparsed, relative to the JSON dir
+    pub remaining: Vec<String>,
+}
+
+/// Depot usmaps below `current_build`, newest first, as (filename, download url).
+fn older_usmaps(listing: &serde_json::Value, current_build: u64) -> Vec<(String, String)> {
+    let mut usmaps: Vec<(u64, String, String)> = listing
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.get("name")?.as_str()?;
+            let url = entry.get("download_url")?.as_str()?;
+            let build = extract_usmap_build_number(name)?;
+            (name.ends_with(".usmap") && build < current_build)
+                .then(|| (build, name.to_string(), url.to_string()))
+        })
+        .collect();
+
+    usmaps.sort_by(|a, b| b.0.cmp(&a.0));
+    usmaps.dedup_by_key(|usmap| usmap.0);
+    usmaps
+        .into_iter()
+        .take(MAX_OLDER_USMAPS)
+        .map(|(_, name, url)| (name, url))
+        .collect()
+}
+
+/// Local path of a depot usmap, downloaded on first use so mods of the same era reuse it.
+async fn fetch_older_usmap(
+    client: &reqwest::Client,
+    name: &str,
+    url: &str,
+) -> Result<PathBuf, String> {
+    let path = usmap_dir().join(name);
+    if path.exists() {
+        return Ok(path);
+    }
+
+    vfx_info(&format!("Downloading older USMAP: {}", name));
+    let bytes = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("[VFX] Download failed: {}", e))?
+        .error_for_status()
+        .map_err(|e| format!("[VFX] Download HTTP error: {}", e))?
+        .bytes()
+        .await
+        .map_err(|e| format!("[VFX] Download body error: {}", e))?;
+
+    std::fs::create_dir_all(usmap_dir())
+        .map_err(|e| format!("[VFX] Failed to create usmap dir: {}", e))?;
+    std::fs::write(&path, &bytes).map_err(|e| format!("[VFX] Failed to write usmap: {}", e))?;
+    Ok(path)
+}
+
+/// Re-read `raw` with older depot usmaps until none are left, keeping what is still raw in it.
+async fn recover_with_older_usmaps(
+    tool_path: &Path,
+    usmap_path: &str,
+    input_dir: &str,
+    output_dir: &str,
+    raw: &mut Vec<String>,
+) -> Result<(), String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .user_agent("RepakX-VFX-Updater")
+        .build()
+        .map_err(|e| format!("[VFX] HTTP client error: {}", e))?;
+
+    let listing: serde_json::Value = client
+        .get(USMAP_REPO_API)
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .send()
+        .await
+        .map_err(|e| format!("[VFX] Listing failed: {}", e))?
+        .error_for_status()
+        .map_err(|e| format!("[VFX] Listing HTTP error: {}", e))?
+        .json()
+        .await
+        .map_err(|e| format!("[VFX] Failed to parse listing: {}", e))?;
+
+    // A custom usmap has no build in its name, so every depot build is a candidate.
+    let current_build = Path::new(usmap_path)
+        .file_name()
+        .and_then(|name| extract_usmap_build_number(&name.to_string_lossy()))
+        .unwrap_or(u64::MAX);
+
+    for (name, url) in older_usmaps(&listing, current_build) {
+        let older = fetch_older_usmap(&client, &name, &url).await?;
+        reconvert_uassets_to_json(
+            tool_path,
+            &older.to_string_lossy(),
+            input_dir,
+            output_dir,
+            raw,
+        )
+        .await?;
+
+        *raw = find_raw_assets(output_dir, raw);
+        vfx_info(&format!("{} leaves {} materials raw", name, raw.len()));
+        if raw.is_empty() {
+            break;
+        }
+    }
+
+    Ok(())
+}
+
+/// A layout change in an update leaves materials cooked before it unparseable under the new
+/// usmap, so they come out as raw exports with no parameters. Only their scalar and vector
+/// parameters are used here, and those sit ahead of the overrides such updates have shifted,
+/// so settling for the newest usmap that parses cannot change the values read.
+#[tauri::command]
+pub async fn vfx_recover_raw_materials(
+    app: AppHandle,
+    usmap_path: String,
+    input_dir: String,
+    output_dir: String,
+    material_assets: Vec<String>,
+) -> Result<VfxRawMaterialRecovery, String> {
+    let mut raw = find_raw_assets(&output_dir, &material_assets);
+    if raw.is_empty() {
+        return Ok(VfxRawMaterialRecovery::default());
+    }
+
+    let total = raw.len();
+    vfx_warn(&format!(
+        "{} materials did not parse with {}",
+        total, usmap_path
+    ));
+
+    // Being offline is not fatal: the assets that did parse can still update.
+    let tool_path = get_uasset_tool_path(&app)?;
+    if let Err(e) =
+        recover_with_older_usmaps(&tool_path, &usmap_path, &input_dir, &output_dir, &mut raw).await
+    {
+        vfx_warn(&format!("Older USMAP fallback stopped: {}", e));
+    }
+
+    Ok(VfxRawMaterialRecovery {
+        recovered: total - raw.len(),
+        remaining: raw,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn older_usmaps_are_newest_first_and_below_current() {
+        let listing = serde_json::json!([
+            {"name": "5.3.2-100+++depot_marvel+S1_release-Marvel.usmap", "download_url": "a"},
+            {"name": "5.3.2-300+++depot_marvel+S3_release-Marvel.usmap", "download_url": "c"},
+            {"name": "5.3.2-200+++depot_marvel+S2_release-Marvel.usmap", "download_url": "b"},
+            {"name": "5.3.2-200+++depot_marvel+S2_release-Marvel+PY.usmap", "download_url": "b2"},
+            {"name": "5.3.2-400+++depot_marvel+S4_release-Marvel.usmap", "download_url": "d"},
+            {"name": "5.3.2-150+++depot_marvel+S1_release-Marvel.txt", "download_url": "e"},
+        ]);
+
+        let urls: Vec<String> = older_usmaps(&listing, 400)
+            .into_iter()
+            .map(|(_, url)| url)
+            .collect();
+
+        assert_eq!(urls, ["c", "b", "a"]);
+    }
 }

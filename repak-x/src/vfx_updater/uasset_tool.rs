@@ -389,6 +389,50 @@ pub async fn convert_uassets_to_json(
     Ok(converted_files)
 }
 
+/// The assets whose JSON holds a raw export, i.e. the usmap used could not parse them.
+/// `assets` and the result are relative to `json_dir`.
+pub fn find_raw_assets(json_dir: &str, assets: &[String]) -> Vec<String> {
+    assets
+        .iter()
+        .filter(|asset| {
+            let json = Path::new(json_dir).join(asset.as_str()).with_extension("json");
+            fs::read_to_string(json)
+                .map_or(false, |text| text.contains("UAssetAPI.ExportTypes.RawExport,"))
+        })
+        .cloned()
+        .collect()
+}
+
+/// Convert only `assets` (relative to `input_dir`), replacing their JSON in `output_dir`.
+pub async fn reconvert_uassets_to_json(
+    tool_path: &Path,
+    usmap_path: &str,
+    input_dir: &str,
+    output_dir: &str,
+    assets: &[String],
+) -> Result<(), String> {
+    let file_paths = assets
+        .iter()
+        .map(|asset| Path::new(input_dir).join(asset).to_string_lossy().to_string())
+        .collect();
+
+    let request = VfxUatRequest {
+        action: "batch_to_json",
+        file_paths: Some(file_paths),
+        usmap_path: Some(usmap_path),
+        output_path: Some(output_dir.to_string()),
+        base_path: Some(input_dir.to_string()),
+        ..Default::default()
+    };
+
+    let response = run_vfx_uat_request(tool_path, &request).await?;
+    if response.success {
+        Ok(())
+    } else {
+        Err(format!("Batch conversion failed: {}", response.message))
+    }
+}
+
 pub async fn convert_json_to_uassets(
     tool_path: &Path,
     usmap_path: &str,
@@ -505,6 +549,7 @@ pub async fn extract_vanilla_assets(
     game_paks: &str,
     output_dir: &str,
     filter_patterns: &[String],
+    with_deps: bool,
     progress: &dyn VfxProgressSink,
 ) -> Result<Vec<String>, String> {
     fs::create_dir_all(output_dir).map_err(|e| e.to_string())?;
@@ -559,14 +604,15 @@ pub async fn extract_vanilla_assets(
     // Mirrors the legacy CLI `extract_iostore_legacy <game_paks> <output> --filter ...`,
     // passing the patterns inline (the JSON handler takes a `filter_patterns` list, so the
     // old temp-filter-file round-trip is no longer needed).
-    // Deps on: to_json pulls property schemas off referenced assets on disk (UAsset
-    // PullSchemasFromAnotherAsset), so imports missing from the tree degrade the JSON.
+    // Blueprints need deps: to_json pulls property schemas off referenced assets on disk
+    // (UAsset PullSchemasFromAnotherAsset), so imports missing from the tree degrade the JSON.
+    // Material instances are native classes, so deps would only drag in their textures.
     let request = VfxUatRequest {
         action: "extract_iostore_legacy",
         game_paks: Some(game_paks.to_string()),
         output_path: Some(output_dir.to_string()),
         filter_patterns: Some(package_patterns),
-        with_deps: Some(true),
+        with_deps: Some(with_deps),
         ..Default::default()
     };
 
@@ -713,12 +759,14 @@ fn stage_allowed_assets(input_dir: &Path, allowed: &[String]) -> Result<(PathBuf
 
         for entry in fs::read_dir(source_dir).map_err(|e| e.to_string())? {
             let entry = entry.map_err(|e| e.to_string())?;
-            let path = entry.path();
-            if !path.is_file() {
-                continue;
-            }
+            // Name first: this runs for every file in the folder, once per asset, and
+            // is_file hits the disk.
             let name = entry.file_name().to_string_lossy().to_string();
             if !name.starts_with(&prefix) {
+                continue;
+            }
+            let path = entry.path();
+            if !path.is_file() {
                 continue;
             }
             fs::copy(&path, dest_dir.join(&name))

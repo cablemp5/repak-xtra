@@ -273,6 +273,22 @@ export function usePipeline({
       addLog(`✓ Converted ${modJsonFiles.length} files to JSON`, "success");
       console.debug("[VFX] Step 2 complete", { modJsonFiles: modJsonFiles.length });
 
+      const recovery = await invoke<{ recovered: number; remaining: string[] }>("vfx_recover_raw_materials", {
+        usmapPath,
+        inputDir: processableModExtract,
+        outputDir: tempDirs.modJson,
+        materialAssets: updatableAssets.filter((p) => assetTypes[p] === "material_instance").map(toRelative),
+      });
+      checkCancel();
+      if (recovery.recovered > 0) {
+        addLog(`✓ Read ${recovery.recovered} pre-update materials with an older USMAP`, "success");
+      }
+      if (recovery.remaining.length > 0) {
+        const warning = `${recovery.remaining.length} materials could not be parsed; their edits are not carried over`;
+        addLog(`Warning: ${warning}`, "warning");
+        warnings.push(warning);
+      }
+
       // ===== STEP 3: Parse Colors =====
       checkCancel();
       setCurrentStep(3);
@@ -331,7 +347,11 @@ export function usePipeline({
       console.debug("[VFX] Step 3 complete", { colors: allColors.length, materialParams: materialParamCount });
 
       if (allColors.length === 0 && materialParamCount === 0) {
-        addLog("No parameters found - pipeline will create passthrough mod", "warning");
+        // Steps 4-7 only output assets they changed, so bypass assets are all Step 8 could pack.
+        if (nonUpdatableAssets.length === 0) {
+          throw new Error("No parameters found in the mod, so there is nothing to update");
+        }
+        addLog("No parameters found - only the bypass assets will be packed", "warning");
       }
 
       // ===== STEP 4: Extract Vanilla Assets =====
@@ -348,6 +368,7 @@ export function usePipeline({
         gamePaks: gamePaksPath,
         outputDir: tempDirs.vanillaExtract,
         filterPatterns,
+        withDeps: updatableAssets.some((p) => assetTypes[p] === "blueprint"),
       });
       checkCancel();
       stateRef.current.vanillaAssets = vanillaAssets;

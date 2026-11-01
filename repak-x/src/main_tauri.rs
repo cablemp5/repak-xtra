@@ -5851,6 +5851,7 @@ fn recompress_pak_file(pak_path: &Path) -> Result<u64, String> {
         Some("../../../"),
         None,
         Some(crate::install_mod::AES_KEY_HEX),
+        false,
     )
     .map_err(|e| format!("Failed to repack: {}", e))?;
 
@@ -7185,7 +7186,20 @@ fn log_dir() -> PathBuf {
     ui_log::log_dir()
 }
 
+/// Point UAssetTool's path dictionary (resolves `<hash>` entries of obfuscated mod
+/// paks) at the game's Paks folder, which is the parent of the mods folder.
+fn sync_pak_dictionary(state: &AppState) {
+    if let Some(paks_dir) = state.game_path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        uasset_toolkit::set_game_paks_dir(
+            paks_dir.to_path_buf(),
+            app_dir().join("game_pak_paths.json"),
+            Some(install_mod::AES_KEY_HEX),
+        );
+    }
+}
+
 fn save_state(state: &AppState) -> std::io::Result<()> {
+    sync_pak_dictionary(state);
     let dir = app_dir();
     std::fs::create_dir_all(&dir)?;
     let path = dir.join("state.json");
@@ -7209,6 +7223,7 @@ fn load_state() -> AppState {
     } else {
         AppState::default()
     };
+    sync_pak_dictionary(&state);
 
     state
 }
@@ -8816,6 +8831,7 @@ fn main() {
             vfx_updater::vfx_stop_session,
             vfx_updater::vfx_extract_mod_assets,
             vfx_updater::vfx_convert_uassets_to_json,
+            vfx_updater::vfx_recover_raw_materials,
             vfx_updater::vfx_extract_vanilla_assets,
             vfx_updater::vfx_convert_json_to_uassets,
             vfx_updater::vfx_pack_to_iostore,
