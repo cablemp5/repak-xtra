@@ -147,6 +147,8 @@ struct AppState {
     show_subfolder_mods: bool,
     #[serde(default)]
     bypass_game_running_lock: bool,
+    #[serde(default)]
+    allow_mod_overwrite: bool,
     #[serde(default = "default_true")]
     enable_drp: bool,
     #[serde(default = "default_launcher_type")]
@@ -203,6 +205,7 @@ impl Default for AppState {
             hold_to_delete: default_true(),
             show_subfolder_mods: default_true(),
             bypass_game_running_lock: false,
+            allow_mod_overwrite: false,
             enable_drp: default_true(),
             launcher_type: default_launcher_type(),
             enable_animations: default_true(),
@@ -318,6 +321,8 @@ struct AppSettings {
     hold_to_delete: bool,
     show_subfolder_mods: bool,
     bypass_game_running_lock: bool,
+    #[serde(default)]
+    allow_mod_overwrite: bool,
     enable_drp: bool,
     launcher_type: String,
     #[serde(default = "default_true")]
@@ -353,6 +358,7 @@ async fn get_app_settings(state: State<'_, Arc<Mutex<AppState>>>) -> Result<AppS
         hold_to_delete: state.hold_to_delete,
         show_subfolder_mods: state.show_subfolder_mods,
         bypass_game_running_lock: state.bypass_game_running_lock,
+        allow_mod_overwrite: state.allow_mod_overwrite,
         enable_drp: state.enable_drp,
         launcher_type: state.launcher_type.clone(),
         enable_animations: state.enable_animations,
@@ -383,6 +389,7 @@ async fn save_app_settings(
     state.hold_to_delete = settings.hold_to_delete;
     state.show_subfolder_mods = settings.show_subfolder_mods;
     state.bypass_game_running_lock = settings.bypass_game_running_lock;
+    state.allow_mod_overwrite = settings.allow_mod_overwrite;
     state.enable_drp = settings.enable_drp;
     state.launcher_type = settings.launcher_type;
     state.enable_animations = settings.enable_animations;
@@ -3950,9 +3957,78 @@ fn rename_mod_files(old: &Path, new: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Like [`rename_mod_files`], but replaces any mod already at `new`. Its files
+/// (.utoc and .ucas included, so none are left paired with the wrong mod) are set
+/// aside first and only deleted once the rename worked, otherwise they're put back.
+fn replace_mod_files(old: &Path, new: &Path) -> std::io::Result<()> {
+    if is_case_only_rename(old, new) {
+        return rename_mod_files(old, new);
+    }
+
+    let mut set_aside: Vec<(PathBuf, PathBuf)> = Vec::new();
+    let mut result = Ok(());
+    for path in [
+        new.to_path_buf(),
+        new.with_extension("utoc"),
+        new.with_extension("ucas"),
+    ] {
+        if !path.exists() {
+            continue;
+        }
+        let mut backup = path.clone().into_os_string();
+        backup.push(".repakx_replaced");
+        let backup = PathBuf::from(backup);
+        match std::fs::rename(&path, &backup) {
+            Ok(()) => set_aside.push((path, backup)),
+            Err(e) => {
+                result = Err(e);
+                break;
+            }
+        }
+    }
+
+    let result = result.and_then(|()| rename_mod_files(old, new));
+    for (path, backup) in set_aside {
+        if result.is_ok() {
+            let _ = std::fs::remove_file(&backup);
+        } else {
+            let _ = std::fs::rename(&backup, &path);
+        }
+    }
+    result
+}
+
 #[cfg(test)]
 mod rename_mod_files_tests {
-    use super::rename_mod_files;
+    use super::{rename_mod_files, replace_mod_files};
+
+    #[test]
+    fn replace_removes_the_old_mods_side_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = |name: &str| dir.path().join(name);
+        for name in ["a.pak", "b.pak", "b.utoc", "b.ucas"] {
+            std::fs::write(p(name), name).unwrap();
+        }
+
+        replace_mod_files(&p("a.pak"), &p("b.pak")).unwrap();
+        assert_eq!(std::fs::read_to_string(p("b.pak")).unwrap(), "a.pak");
+        assert!(!p("a.pak").exists() && !p("b.utoc").exists() && !p("b.ucas").exists());
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn failed_replace_restores_the_existing_mod() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = |name: &str| dir.path().join(name);
+        for name in ["b.pak", "b.utoc"] {
+            std::fs::write(p(name), name).unwrap();
+        }
+
+        // a.pak does not exist, so the rename step fails
+        assert!(replace_mod_files(&p("a.pak"), &p("b.pak")).is_err());
+        assert_eq!(std::fs::read_to_string(p("b.pak")).unwrap(), "b.pak");
+        assert_eq!(std::fs::read_to_string(p("b.utoc")).unwrap(), "b.utoc");
+    }
 
     #[test]
     fn failed_rename_leaves_all_three_files_in_place() {
@@ -4066,14 +4142,17 @@ async fn rename_mod(
     };
     let new_path = parent.join(&new_file_name);
 
-    if new_path.exists() && !is_case_only_rename(&old_path_buf, &new_path) {
+    let overwrite = is_pak_type && state.lock().unwrap().allow_mod_overwrite;
+    if !overwrite && new_path.exists() && !is_case_only_rename(&old_path_buf, &new_path) {
         let error_msg = format!("A file with name '{}' already exists", new_file_name);
         toast_events::emit_rename_failed(&window, &error_msg);
         return Err(error_msg);
     }
 
     // A .pak or .bak_repak carries its IoStore files (.ucas, .utoc) along
-    let renamed = if is_pak_type {
+    let renamed = if overwrite {
+        replace_mod_files(&old_path_buf, &new_path)
+    } else if is_pak_type {
         rename_mod_files(&old_path_buf, &new_path)
     } else {
         rename_path_case_safe(&old_path_buf, &new_path)
@@ -4572,14 +4651,19 @@ async fn assign_mod_to_folder(
     }
 
     // rename() replaces an existing file, which would erase the mod already there
-    if dest_path.exists() {
+    if dest_path.exists() && !state.allow_mod_overwrite {
         let error_msg = "A mod with this name already exists in that folder".to_string();
         toast_events::emit_move_failed(&window, &error_msg);
         return Err(error_msg);
     }
 
     // Move the mod together with its .utoc and .ucas files (IoStore files)
-    if let Err(e) = rename_mod_files(&source_path, &dest_path) {
+    let moved = if state.allow_mod_overwrite {
+        replace_mod_files(&source_path, &dest_path)
+    } else {
+        rename_mod_files(&source_path, &dest_path)
+    };
+    if let Err(e) = moved {
         let error_msg = format!("Failed to move mod: {}", e);
         toast_events::emit_move_failed(&window, &error_msg);
         return Err(error_msg);
@@ -4694,9 +4778,9 @@ async fn toggle_mod(
     };
 
     // rename() replaces an existing file, which would erase the other copy
-    if new_path.exists() {
+    if new_path.exists() && !state.lock().unwrap().allow_mod_overwrite {
         let error_msg = format!(
-            "Cannot toggle: \"{}\" already exists",
+            "Cannot toggle:\"{}\" already exists",
             new_path.file_name().unwrap_or_default().to_string_lossy()
         );
         toast_events::emit_toggle_failed(&window, &error_msg);
@@ -7185,20 +7269,7 @@ fn log_dir() -> PathBuf {
     ui_log::log_dir()
 }
 
-/// Point UAssetTool's path dictionary (resolves `<hash>` entries of obfuscated mod
-/// paks) at the game's Paks folder, which is the parent of the mods folder.
-fn sync_pak_dictionary(state: &AppState) {
-    if let Some(paks_dir) = state.game_path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        uasset_toolkit::set_game_paks_dir(
-            paks_dir.to_path_buf(),
-            app_dir().join("game_pak_paths.json"),
-            Some(install_mod::AES_KEY_HEX),
-        );
-    }
-}
-
 fn save_state(state: &AppState) -> std::io::Result<()> {
-    sync_pak_dictionary(state);
     let dir = app_dir();
     std::fs::create_dir_all(&dir)?;
     let path = dir.join("state.json");
@@ -7222,7 +7293,6 @@ fn load_state() -> AppState {
     } else {
         AppState::default()
     };
-    sync_pak_dictionary(&state);
 
     state
 }

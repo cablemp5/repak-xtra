@@ -241,6 +241,7 @@ type AppSettings = {
   holdToDelete: boolean
   showSubfolderMods: boolean
   bypassGameRunningLock: boolean
+  allowModOverwrite: boolean
   launcherType: 'steam' | 'epic'
   enableAnimations: boolean
 }
@@ -260,6 +261,7 @@ function App() {
   const [parallelProcessing, setParallelProcessing] = useState(false);
   const [holdToDelete, setHoldToDelete] = useState(true);
   const [bypassGameRunningLock, setBypassGameRunningLock] = useState(false);
+  const [allowModOverwrite, setAllowModOverwrite] = useState(false);
   const [launcherType, setLauncherType] = useState<'steam' | 'epic'>('steam');
   const [enableAnimations, setEnableAnimations] = useState(true);
   // CSS gates animations on [data-animations="off"]
@@ -279,7 +281,6 @@ function App() {
   const [showChangelogModal, setShowChangelogModal] = useState(false);
   // Captured at startup, before the marker is rewritten. Surfaced in Settings so
   // a user on a release build (no devtools) can read back what the check saw.
-  const [changelogMarker, setChangelogMarker] = useState<{ lastSeen: string; current: string; recorded: boolean } | null>(null);
   const [changelogContent, setChangelogContent] = useState('');
 
   // Panel visibility state - grouped for cleaner management
@@ -1727,7 +1728,6 @@ function App() {
 
       const normalizedVersion = String(ver || '').replace(/^v/, '')
       const versionRecorded = normalizedVersion ? await recordSeenVersion(ver) : false
-      setChangelogMarker({ lastSeen, current: String(ver || ''), recorded: versionRecorded })
 
       if (versionRecorded && lastSeen && lastSeen !== ver) {
         console.debug('[Changelog] Version change detected', { lastSeen, currentVersion: ver, normalizedVersion })
@@ -3378,6 +3378,7 @@ function App() {
     const newHoldToDelete = overrides.holdToDelete !== undefined ? overrides.holdToDelete : holdToDelete;
     const newShowSubfolderMods = overrides.showSubfolderMods !== undefined ? overrides.showSubfolderMods : showSubfolderMods;
     const newBypassGameRunningLock = overrides.bypassGameRunningLock !== undefined ? overrides.bypassGameRunningLock : bypassGameRunningLock;
+    const newAllowModOverwrite = overrides.allowModOverwrite !== undefined ? overrides.allowModOverwrite : allowModOverwrite;
     const newLauncherType = overrides.launcherType !== undefined ? overrides.launcherType : launcherType;
     const newEnableAnimations = overrides.enableAnimations !== undefined ? overrides.enableAnimations : enableAnimations;
 
@@ -3401,6 +3402,7 @@ function App() {
       holdToDelete: newHoldToDelete,
       showSubfolderMods: newShowSubfolderMods,
       bypassGameRunningLock: newBypassGameRunningLock,
+      allowModOverwrite: newAllowModOverwrite,
       launcherType: newLauncherType,
       enableAnimations: newEnableAnimations,
     };
@@ -3438,6 +3440,7 @@ function App() {
     if (overrides.holdToDelete !== undefined) setHoldToDelete(newHoldToDelete);
     if (overrides.showSubfolderMods !== undefined) setShowSubfolderMods(newShowSubfolderMods);
     if (overrides.bypassGameRunningLock !== undefined) setBypassGameRunningLock(newBypassGameRunningLock);
+    if (overrides.allowModOverwrite !== undefined) setAllowModOverwrite(newAllowModOverwrite);
     if (overrides.launcherType !== undefined) setLauncherType(newLauncherType);
     if (overrides.enableAnimations !== undefined) setEnableAnimations(newEnableAnimations);
 
@@ -3513,6 +3516,7 @@ function App() {
         setHoldToDelete(settings.holdToDelete);
         setShowSubfolderMods(settings.showSubfolderMods);
         setBypassGameRunningLock(settings.bypassGameRunningLock);
+        setAllowModOverwrite(settings.allowModOverwrite);
         setEnableDrp(settings.enableDrp);
         if (settings.launcherType) setLauncherType(settings.launcherType);
         setEnableAnimations(settings.enableAnimations !== false);
@@ -3605,7 +3609,7 @@ function App() {
 
       {panels.settings && (
         <SettingsPanel
-          settings={{ hideSuffix, autoOpenDetails, showHeroIcons, showHeroBg, showModType, showExperimental, enableDrp, parallelProcessing, autoCheckUpdates, holdToDelete, showSubfolderMods, bypassGameRunningLock, launcherType, enableAnimations }}
+          settings={{ hideSuffix, autoOpenDetails, showHeroIcons, showHeroBg, showModType, showExperimental, enableDrp, parallelProcessing, autoCheckUpdates, holdToDelete, showSubfolderMods, bypassGameRunningLock, allowModOverwrite, launcherType, enableAnimations }}
           onSave={handleSaveSettings}
           onClose={() => setPanel('settings', false)}
           theme={theme}
@@ -3619,7 +3623,6 @@ function App() {
           setParallelProcessing={handleSetParallelProcessing}
           onCheckForUpdates={handleCheckForUpdates}
           onViewChangelog={handleViewChangelog}
-          changelogMarker={changelogMarker}
           isCheckingUpdates={isCheckingUpdates}
           onReplayTour={handleReplayTour}
           onOpenShortcuts={() => setPanel('shortcuts', true)}

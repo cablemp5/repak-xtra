@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AnimatedThemeToggler } from './ui/AnimatedThemeToggler'
 import Switch from './ui/Switch'
 import Checkbox from './ui/Checkbox'
@@ -55,6 +55,7 @@ type SettingsPayload = {
   holdToDelete: boolean;
   showSubfolderMods: boolean;
   bypassGameRunningLock: boolean;
+  allowModOverwrite: boolean;
   launcherType: 'steam' | 'epic';
   enableAnimations: boolean;
 };
@@ -77,11 +78,10 @@ type SettingsPanelProps = {
   isCheckingUpdates: boolean;
   onReplayTour: () => void;
   onOpenShortcuts: () => void;
-  changelogMarker?: { lastSeen: string; current: string; recorded: boolean } | null;
 };
 
 
-export default function SettingsPanel({ settings, onSave, onClose, theme, setTheme, accentColor, setAccentColor, gamePath, onAutoDetectGamePath, onBrowseGamePath, isGamePathLoading, setParallelProcessing, onCheckForUpdates, onViewChangelog, isCheckingUpdates, onReplayTour, onOpenShortcuts, changelogMarker = null }: SettingsPanelProps) {
+export default function SettingsPanel({ settings, onSave, onClose, theme, setTheme, accentColor, setAccentColor, gamePath, onAutoDetectGamePath, onBrowseGamePath, isGamePathLoading, setParallelProcessing, onCheckForUpdates, onViewChangelog, isCheckingUpdates, onReplayTour, onOpenShortcuts }: SettingsPanelProps) {
   const alert = useAlert();
   const [activeCategory, setActiveCategory] = useState<CategoryId>('general');
   const [hideSuffix, setHideSuffix] = useState(settings.hideSuffix || false);
@@ -95,17 +95,11 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
   const [holdToDelete, setHoldToDelete] = useState(settings.holdToDelete !== false);
   const [showSubfolderMods, setShowSubfolderMods] = useState(settings.showSubfolderMods !== false);
   const [bypassGameRunningLock, setBypassGameRunningLock] = useState(settings.bypassGameRunningLock || false);
+  const [allowModOverwrite, setAllowModOverwrite] = useState(settings.allowModOverwrite || false);
   const [enableDrp, setEnableDrp] = useState(settings.enableDrp !== false);
   const [launcherType, setLauncherType] = useState<'steam' | 'epic'>(settings.launcherType || 'steam');
   const [enableAnimations, setEnableAnimations] = useState(settings.enableAnimations !== false);
   const [showRatMode, setShowRatMode] = useState(false);
-
-  const changelogStateMismatch = useMemo(() => {
-    if (!changelogMarker) return null;
-    const { lastSeen, current, recorded } = changelogMarker;
-    if (recorded && lastSeen === current) return null;
-    return { lastSeen: lastSeen || 'not recorded', current, recorded };
-  }, [changelogMarker]);
 
   // Easter egg: briefly show "Rat Mode" when switching to light theme
   const handleThemeToggle = (newTheme: string) => {
@@ -130,6 +124,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
       holdToDelete,
       showSubfolderMods,
       bypassGameRunningLock,
+      allowModOverwrite,
       launcherType,
       enableAnimations
     });
@@ -155,6 +150,10 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
   useEffect(() => {
     setBypassGameRunningLock(settings.bypassGameRunningLock || false);
   }, [settings.bypassGameRunningLock]);
+
+  useEffect(() => {
+    setAllowModOverwrite(settings.allowModOverwrite || false);
+  }, [settings.allowModOverwrite]);
 
   useEffect(() => {
     if (settings.launcherType) {
@@ -317,18 +316,6 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                       <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>Current Version: v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'}</span>
                     </div>
 
-                    {/* Only rendered when the recorded version disagrees with the
-                        running one, which is the exact state that makes the
-                        changelog reappear on every launch. Release builds have no
-                        devtools, so this is the only way to read it back. */}
-                    {changelogStateMismatch && (
-                      <p className="setting-subtext is-warning" style={{ paddingLeft: 0 }}>
-                        Changelog state: startup saw "{changelogStateMismatch.lastSeen}", running
-                        v{changelogStateMismatch.current}
-                        {!changelogStateMismatch.recorded && ' (could not be saved)'}. Please report this.
-                      </p>
-                    )}
-
                     <Checkbox
                       checked={autoCheckUpdates}
                       onChange={(checked: boolean) => setAutoCheckUpdates(checked)}
@@ -454,6 +441,19 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                         {!holdToDelete
                           ? 'Deleting mods is irreversible. Mods will be removed instantly on click.'
                           : 'Hold the delete button for 2 seconds to confirm deletion.'}
+                      </p>
+                    </div>
+                    <div className="setting-item">
+                      <Checkbox
+                        checked={allowModOverwrite}
+                        onChange={(checked: boolean) => setAllowModOverwrite(checked)}
+                      >
+                        <span>Allow overwriting mods with the same name</span>
+                      </Checkbox>
+                      <p className={`setting-subtext ${allowModOverwrite ? 'is-danger' : ''}`}>
+                        {allowModOverwrite
+                          ? 'Renaming, moving or toggling a mod onto an existing name permanently replaces the other mod, with no confirmation.'
+                          : 'Renaming, moving or toggling a mod onto an existing name is blocked.'}
                       </p>
                     </div>
                     <div className="setting-item">

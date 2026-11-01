@@ -8,3 +8,5 @@
 - Mods with no updatable parameters now stop with a clear message instead of producing a bypass-only mod
 - Deep dependencies are only pulled in for blueprints, which makes extraction faster for material mods
 
+### 🎨 Frontend / UI
+- Added an "Allow overwriting mods with the same name" option in Settings, off by default
