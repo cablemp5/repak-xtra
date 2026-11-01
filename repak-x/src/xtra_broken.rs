@@ -233,7 +233,9 @@ pub(crate) fn game_assets(paks: &Path) -> Option<Arc<GameAssets>> {
         return Some(set);
     }
     let t = std::time::Instant::now();
-    let (set, builds) = match load_saved(&saved_assets(), &key) {
+    // the saved list is for these containers and this version of the code that reads them (build_xtra.rs)
+    let saved_key = format!("{key}|{}", env!("REPAKXTRA_ASSETS_LOGIC"));
+    let (set, builds) = match load_saved(&saved_assets(), &saved_key) {
         Some(saved) => {
             log::info!("[broken] game asset list loaded: {} packages in {:?}", saved.0.len(), t.elapsed());
             saved
@@ -245,7 +247,7 @@ pub(crate) fn game_assets(paks: &Path) -> Option<Arc<GameAssets>> {
             }
             // a container that could not be read is tried again next launch, not saved as missing
             if complete {
-                if let Err(e) = save(&saved_assets(), &key, &set, &builds) {
+                if let Err(e) = save(&saved_assets(), &saved_key, &set, &builds) {
                     log::warn!("[broken] could not save the game asset list: {e}");
                 }
             }
@@ -289,34 +291,34 @@ fn saved_assets() -> PathBuf {
 
 const SAVED_MAGIC: &[u8; 8] = b"RXGAMES1";
 
-/// The saved list, when it was saved for exactly these containers (`key`, build_key). Layout, little-endian u64s after
-/// the magic: key length, key bytes, unread, count, then per package its fingerprint, GameAssets and AssetBuilds value.
+/// The next little-endian u64 of `r`, which moves past it.
+fn take_word(r: &mut &[u8]) -> Option<u64> {
+    let (w, rest) = r.split_first_chunk::<8>()?;
+    *r = rest;
+    Some(u64::from_le_bytes(*w))
+}
+
+/// The saved list, when it was saved for exactly this `key` (build_key plus the reading code's stamp). Layout,
+/// little-endian u64s after the magic: key length, key bytes, unread, count, then per package its fingerprint,
+/// GameAssets and AssetBuilds value.
 fn load_saved(file: &Path, key: &str) -> Option<(GameAssets, AssetBuilds)> {
     let bytes = std::fs::read(file).ok()?;
     let mut r = bytes.strip_prefix(SAVED_MAGIC.as_slice())?;
-    let mut word = || -> Option<u64> {
-        let (w, rest) = r.split_first_chunk::<8>()?;
-        r = rest;
-        Some(u64::from_le_bytes(*w))
-    };
-    let len = word()? as usize;
-    drop(word);
-    let saved_key = r.get(..len)?;
-    if saved_key != key.as_bytes() {
-        return None; // another game build's list
+    let len = usize::try_from(take_word(&mut r)?).ok()?;
+    if r.get(..len)? != key.as_bytes() {
+        return None; // another game build's list, or one the reading code has changed since
     }
     r = &r[len..];
-    let mut word = || -> Option<u64> {
-        let (w, rest) = r.split_first_chunk::<8>()?;
-        r = rest;
-        Some(u64::from_le_bytes(*w))
-    };
-    let unread = word()?;
-    let count = word()? as usize;
+    let unread = take_word(&mut r)?;
+    let count = usize::try_from(take_word(&mut r)?).ok()?;
+    // exactly `count` records left, checked before allocating: a damaged count is a reread, never a huge allocation
+    if count == 0 || count.checked_mul(24) != Some(r.len()) {
+        return None;
+    }
     let mut set = GameAssets(HashMap::with_capacity(count));
     let mut builds = AssetBuilds { by_package: GameAssets(HashMap::with_capacity(count)), unread };
     for _ in 0..count {
-        let (fp, at, cl) = (word()?, word()?, word()?);
+        let (fp, at, cl) = (take_word(&mut r)?, take_word(&mut r)?, take_word(&mut r)?);
         set.0.insert(fp, at);
         builds.by_package.0.insert(fp, cl);
     }
@@ -838,6 +840,12 @@ mod tests {
         let bytes = std::fs::read(&file).unwrap();
         std::fs::write(&file, &bytes[..bytes.len() - 5]).unwrap();
         assert!(load_saved(&file, "pakchunk0:1:2").is_none(), "a cut-off file is not used");
+        // the count after magic, key length, key and unread: a damaged one is refused before anything is allocated
+        let mut damaged = bytes.clone();
+        let at = 8 + 8 + "pakchunk0:1:2".len() + 8;
+        damaged[at..at + 8].copy_from_slice(&u64::MAX.to_le_bytes());
+        std::fs::write(&file, &damaged).unwrap();
+        assert!(load_saved(&file, "pakchunk0:1:2").is_none(), "a damaged count is not trusted");
         assert_ne!(fingerprint("marvel/a"), fingerprint("marvel/b"));
         assert_eq!(fingerprint("a"), 0xaf63_dc4c_8601_ec8c, "FNV-1a's published value: the saved list reads the same in every build");
     }

@@ -2,7 +2,7 @@
 #[path = "build_xtra.rs"]
 mod xtra; // repakxtra
 fn main() {
-    xtra::details_logic_stamp(); // repakxtra
+    xtra::cache_stamps(); // repakxtra
     println!("cargo:rerun-if-env-changed=REPAKXTRA_BUILD");
     // A direct Cargo build must not embed a frontend built for another edition (edition.json is checked by installed updaters).
     println!("cargo:rerun-if-changed=dist/edition.json");
