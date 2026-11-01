@@ -23,7 +23,7 @@ import './support.css'
 
 type Mod = { path: string; name: string; enabled: boolean; hero: string; modified: number; kind: 'mesh' | 'texture'; made: boolean }
 type Listed = Omit<Mod, 'hero'> & { hero?: string | null }
-type Made = { path: string; skins: string[]; leftOut: number }
+type Made = { path: string; skins: string[]; leftOut: number; note?: string | null }
 type Run = { status: 'waiting' | 'running' | 'done' | 'failed'; error?: string; made?: Made }
 
 const SORT = 'repakxtra.galacta.sort'
@@ -133,9 +133,7 @@ function GalactaPanel() {
         usmap ??= await usmapPath()
         const m = byKey.get(k)!
         const made = await invoke<Made>('xtra_galacta_make', { path: m.path, name: m.name, usmapPath: usmap, on: swap })
-        changed = true
-        // the Galacta version is on now: the original goes off, as the Library's switch does it
-        if (swap && m.enabled) await invoke('toggle_mod', { modPath: m.path })
+        changed = true // with swap on, the backend also turned the original off (xtra_galacta.rs)
         setRuns(r => ({ ...r, [k]: { status: 'done', made } }))
         setPicked(p => { const n = new Set(p); n.delete(k); return n })
       } catch (e) { setRuns(r => ({ ...r, [k]: { status: 'failed', error: String(e) } })) }
@@ -207,6 +205,7 @@ function GalactaPanel() {
                             {r?.status === 'running' && <span className="vf-pill is-running enc-pill">Converting</span>}
                             {r?.status === 'waiting' && <span className="vf-status">Queued</span>}
                             {(r?.status === 'done' || (!r && m.made)) && <span className="vf-pill is-fixed enc-pill" title={`${m.name} (Galacta) is beside it in the Library`}>Converted</span>}
+                            {r?.made?.note && <p className="setting-warn vf-row-panel gal-note"><AlertTriangle size={14} aria-hidden="true" /><span>{r.made.note}</span></p>}
                             {r?.made && r.made.leftOut > 0 && <p className="vf-note vf-row-panel enc-error">{plural(r.made.leftOut, 'file')} left out: Galacta swaps only the gameplay mesh, so lobby meshes, VFX, sounds, and UI stay in the original.</p>}
                             {r?.status === 'failed' && <>
                               <span className="vf-pill is-failed enc-pill"><AlertTriangle size={12} className="vf-pill-icon" aria-hidden="true" />Failed</span>

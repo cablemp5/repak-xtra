@@ -84,16 +84,22 @@ fn file_safe(name: &str) -> String {
     s.trim().trim_end_matches(['.', ' ']).chars().take(80).collect()
 }
 
-/// The copy's file stem: "<name> (Galacta)_9999999_P".
-fn copy_stem(name: &str) -> String {
-    format!("{} (Galacta)_9999999_P", file_safe(name))
+/// The copy's file stem from the original's file name (unique in its folder, unlike Library names, which can repeat):
+/// "Skin_9999999_P.pak" -> "Skin (Galacta)_9999999_P".
+fn copy_stem(original: &Path) -> String {
+    let file = original.file_name().unwrap_or_default().to_string_lossy();
+    format!("{} (Galacta)_9999999_P", file_safe(bare(crate::xtra_bundle::stem(&file))))
 }
 
-/// The copy's folder and name suffix: letters and digits only, never all digits (a trailing _<digits> would read as an
-/// FName number).
-fn folder_of(name: &str) -> String {
-    let s: String = name.chars().filter(char::is_ascii_alphanumeric).take(32).collect();
-    if s.chars().next().is_some_and(|c| c.is_ascii_alphabetic()) { s } else { format!("Mod{s}") }
+/// The copy's Galacta folder and name suffix, from the original's file name: its letters and digits, then a short id of
+/// the whole name, so "Suit.Red" and "SuitRed" (or two names of only other letters) never share a folder. Letters and
+/// digits only, starting with a letter: a trailing _<digits> would read as an FName number.
+fn folder_of(original: &Path) -> String {
+    let file = original.file_name().unwrap_or_default().to_string_lossy();
+    let stem = bare(crate::xtra_bundle::stem(&file)).to_lowercase();
+    let id = stem.bytes().fold(0x811c_9dc5u32, |h, b| (h ^ b as u32).wrapping_mul(0x0100_0193)); // FNV-1a
+    let s: String = stem.chars().filter(char::is_ascii_alphanumeric).take(32).collect();
+    format!("{}{s}G{:06x}", if s.starts_with(|c: char| c.is_ascii_alphabetic()) { "" } else { "Mod" }, id & 0xff_ffff)
 }
 
 /// A Library name without its load order suffix: "Skin_9999999_P" -> "Skin".
@@ -184,8 +190,9 @@ fn set_prop(asset: &mut Value, name: &str, value: Value) {
 /// Assets read for one run, by lowercase package path: (package path, .uasset file, JSON).
 type Assets = HashMap<String, (String, PathBuf, Value)>;
 
-/// Reads `files` (under `dir`) to JSON into `json` and adds them to `out`.
-async fn read(dir: &Path, files: Vec<PathBuf>, json: &Path, usmap: &str, out: &mut Assets) -> Result<(), String> {
+/// Reads `files` (under `dir`) to JSON into `json` and adds them to `out`. A file UAssetTool cannot read goes into
+/// `unread` (lowercase package path): fine while nothing the copy needs uses it, a stop when something does.
+async fn read(dir: &Path, files: Vec<PathBuf>, json: &Path, usmap: &str, out: &mut Assets, unread: &mut HashSet<String>) -> Result<(), String> {
     if files.is_empty() {
         return Ok(());
     }
@@ -193,10 +200,12 @@ async fn read(dir: &Path, files: Vec<PathBuf>, json: &Path, usmap: &str, out: &m
     uat(VfxUatRequest { action: "batch_to_json", file_paths: Some(paths), usmap_path: Some(usmap), output_path: Some(json.to_string_lossy().to_string()), base_path: Some(dir.to_string_lossy().to_string()), ..Default::default() }, "Reading the files").await?;
     for f in files {
         let r = rel(dir, &f);
-        // a file UAssetTool cannot read is left out (a mesh that is missing stops the run later)
-        let Ok(text) = std::fs::read_to_string(json.join(format!("{r}.json"))) else { continue };
-        let value: Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| e.to_string())?;
         let path = game_path(&r);
+        let Some(value) = std::fs::read_to_string(json.join(format!("{r}.json"))).ok()
+            .and_then(|text| serde_json::from_str::<Value>(text.trim_start_matches('\u{feff}')).ok()) else {
+            unread.insert(path.to_lowercase());
+            continue;
+        };
         out.insert(path.to_lowercase(), (path, f, value));
     }
     Ok(())
@@ -259,18 +268,20 @@ pub struct Made {
     skins: Vec<String>,
     /// How many of the mod's files are not in the copy (lobby meshes, VFX, sounds, UI)
     left_out: usize,
+    /// Something to tell even though the copy was made (the original could not be turned off)
+    note: Option<String>,
 }
 
 /// Builds the copy into `work`: a packed <stem>.pak/.utoc/.ucas under work/out. Returns its base path, its lines for
 /// Galacta's manifest (one per skin) and the number of mod files left out.
-async fn build(utoc: &Path, name: &str, paks: &Path, usmap: &str, work: &Path) -> Result<(PathBuf, Vec<String>, usize), String> {
+async fn build(utoc: &Path, original: &Path, name: &str, paks: &Path, usmap: &str, work: &Path) -> Result<(PathBuf, Vec<String>, usize), String> {
     let (ex, game, json, pack) = (work.join("mod"), work.join("game"), work.join("json"), work.join("pack"));
     std::fs::create_dir_all(&ex).map_err(|e| e.to_string())?;
     uat(VfxUatRequest { action: "extract_iostore_legacy", game_paks: Some(paks.to_string_lossy().to_string()), mod_path: Some(utoc.to_string_lossy().to_string()), output_path: Some(ex.to_string_lossy().to_string()), with_deps: Some(false), ..Default::default() }, "Reading the mod").await?;
     let mut files = Vec::new();
     uassets(&ex, &mut files);
-    let mut mine = Assets::new();
-    read(&ex, files, &json.join("mod"), usmap, &mut mine).await?;
+    let (mut mine, mut unread) = (Assets::new(), HashSet::new());
+    read(&ex, files, &json.join("mod"), usmap, &mut mine, &mut unread).await?;
 
     // the skins it changes, and whether it brings their gameplay mesh
     let mut skins: BTreeMap<(String, String), bool> = BTreeMap::new();
@@ -291,7 +302,7 @@ async fn build(utoc: &Path, name: &str, paks: &Path, usmap: &str, work: &Path) -
         extract(paks, &dir, need, false).await?;
         let mut found = Vec::new();
         uassets(&dir, &mut found);
-        read(&dir, found, &json.join("game1"), usmap, &mut theirs).await?;
+        read(&dir, found, &json.join("game1"), usmap, &mut theirs, &mut unread).await?;
         // a game mesh whose streamed data stayed in an older container: the copy needs it under its own name
         for (path, file, _) in theirs.values().filter(|(p, _, _)| skin_of(p).is_some_and(|(h, s)| p.eq_ignore_ascii_case(&mesh_of(&h, &s)))) {
             let (paks, path, bulk) = (paks.to_path_buf(), path.clone(), file.with_extension("ubulk"));
@@ -301,10 +312,14 @@ async fn build(utoc: &Path, name: &str, paks: &Path, usmap: &str, work: &Path) -
         }
     }
 
-    let folder = folder_of(name);
+    let folder = folder_of(original);
+    let cannot_read = |k: &str| format!("{} could not be read, so nothing was made.", short(k));
     let (mut used, mut made, mut out_json, mut checks, mut kept) = (HashSet::new(), Vec::new(), Vec::new(), Vec::new(), HashSet::new());
     for (round, ((hero, skin), _)) in skins.iter().enumerate() {
         let mesh = mesh_of(hero, skin).to_lowercase();
+        if unread.contains(&mesh) {
+            return Err(cannot_read(&mesh));
+        }
         if !mine.contains_key(&mesh) && !theirs.contains_key(&mesh) {
             continue; // not in the game (a removed skin): nothing to swap
         }
@@ -322,7 +337,7 @@ async fn build(utoc: &Path, name: &str, paks: &Path, usmap: &str, work: &Path) -
                 extract(paks, &dir, wanted.iter().map(|p| rel_path(p)).collect(), false).await?;
                 let mut found = Vec::new();
                 uassets(&dir, &mut found);
-                read(&dir, found, &json.join(format!("mi{round}")), usmap, &mut theirs).await?;
+                read(&dir, found, &json.join(format!("mi{round}")), usmap, &mut theirs, &mut unread).await?;
                 // shortcut: one level, the mesh's own material instances. A mod file used only by a parent of those stays out
                 for p in wanted {
                     let k = p.to_lowercase();
@@ -334,6 +349,14 @@ async fn build(utoc: &Path, name: &str, paks: &Path, usmap: &str, work: &Path) -
         }
         if !set.iter().any(|k| mine.contains_key(k)) {
             continue; // the mod's files of this skin are not on its gameplay mesh (lobby only, for one)
+        }
+        // a file the copy uses that UAssetTool could not read would keep pointing at the game's own: stop instead
+        for k in &set {
+            if let Some((_, _, a)) = mine.get(k).or_else(|| theirs.get(k)) {
+                if let Some(bad) = imports(a).into_iter().map(|i| i.to_lowercase()).find(|i| unread.contains(i)) {
+                    return Err(cannot_read(&bad));
+                }
+            }
         }
         kept.extend(set.iter().filter(|k| mine.contains_key(*k)).cloned());
         let dir = format!("/Game/Marvel/ProjectGalacta/Meshes/{hero}/{skin}/{folder}");
@@ -396,60 +419,107 @@ async fn build(utoc: &Path, name: &str, paks: &Path, usmap: &str, work: &Path) -
             return Err(format!("{} changed while it was renamed, so nothing was made.", to.file_stem().unwrap_or_default().to_string_lossy()));
         }
     }
-    let base = work.join("out").join(copy_stem(name));
+    let base = work.join("out").join(copy_stem(original));
     std::fs::create_dir_all(work.join("out")).map_err(|e| e.to_string())?;
     uat(VfxUatRequest { action: "create_mod_iostore", output_path: Some(base.to_string_lossy().to_string()), input_dir: Some(pack.to_string_lossy().to_string()), compress: Some(true), ..Default::default() }, "Packing the copy").await?;
     Ok((base, made, mine.len() - kept.len()))
 }
 
-/// Puts the packed copy beside the mod, on when `on` says so or an earlier copy there is on, else off (.bak_repak).
-/// All or nothing. An earlier copy in the other state goes, so there is never an on and an off copy at once.
-fn install(base: &Path, dir: &Path, stem: &str, on: bool) -> Result<PathBuf, String> {
+/// Undoes `install`: its files go, and the copy it replaced comes back from Recently deleted.
+struct Undo { new: Vec<PathBuf>, old: Vec<PathBuf>, trash: Option<PathBuf> }
+impl Undo {
+    fn run(self) {
+        for n in &self.new {
+            let _ = std::fs::remove_file(n);
+        }
+        if let Some(t) = &self.trash {
+            for o in &self.old {
+                let _ = crate::xtra_trash::put_back(t, o);
+            }
+            crate::xtra_trash::release_if_empty(t);
+        }
+    }
+}
+
+/// Puts the packed copy beside the mod in one step (xtra_bundle::replace_all_retiring): an earlier copy, on or off, goes
+/// to Recently deleted, and comes back if any file cannot move. On when `on` says so or an earlier copy is on, else off
+/// (.bak_repak), never both. Returns the copy's .pak or .bak_repak and the undo for a later step that fails.
+fn install(base: &Path, dir: &Path, stem: &str, on: bool) -> Result<(PathBuf, Undo), String> {
     let on = on || dir.join(format!("{stem}.pak")).is_file();
     let (ext, other) = if on { ("pak", "bak_repak") } else { ("bak_repak", "pak") };
     let pak = dir.join(format!("{stem}.{ext}"));
-    let parts = [("utoc", dir.join(format!("{stem}.utoc"))), ("ucas", dir.join(format!("{stem}.ucas"))), ("pak", pak.clone())];
-    let tmp = |to: &Path| to.with_file_name(format!("{}.galacta-new", to.file_name().unwrap_or_default().to_string_lossy()));
-    for (x, to) in &parts {
-        if let Err(e) = std::fs::copy(format!("{}.{x}", base.display()), tmp(to)) {
-            parts.iter().for_each(|(_, t)| { let _ = std::fs::remove_file(tmp(t)); });
+    let dests = [dir.join(format!("{stem}.utoc")), dir.join(format!("{stem}.ucas")), pak.clone()];
+    let retire = dir.join(format!("{stem}.{other}"));
+    let old: Vec<PathBuf> = dests.iter().chain([&retire]).filter(|p| p.exists()).cloned().collect();
+    let stage = crate::xtra_bundle::staging_dir(dir, "installing")?; // swept at the next start if the app closes midway
+    let mut moves = Vec::new();
+    for (x, to) in ["utoc", "ucas", "pak"].iter().zip(&dests) {
+        let staged = stage.join(to.file_name().unwrap_or_default());
+        if let Err(e) = std::fs::copy(format!("{}.{x}", base.display()), &staged) {
+            let _ = std::fs::remove_dir_all(&stage);
             return Err(format!("Could not copy the Galacta version into the mods folder: {e}"));
         }
+        moves.push((staged, to.clone()));
     }
-    for (_, to) in &parts {
-        std::fs::rename(tmp(to), to).map_err(|e| format!("Could not put the Galacta version in place: {e}"))?;
-    }
-    let _ = std::fs::remove_file(dir.join(format!("{stem}.{other}")));
-    Ok(pak)
+    let placed = crate::xtra_bundle::replace_all_retiring(&moves, &[retire]);
+    let _ = std::fs::remove_dir_all(&stage);
+    let trash = placed?.map(|id| crate::xtra_trash::trash_dir().join(id));
+    Ok((pak, Undo { new: dests.to_vec(), old, trash }))
 }
 
 /// Galacta's manifest, Content/Marvel/ProjectGalacta/skins.txt: one line per mod skin,
 /// hero|skin|mesh object|name|author|form, CRLF, as its Companion App writes it (compared with the app's own file,
 /// 2026-11-01, the format is not documented). Galacta skips a line without the form number (TargetSculptID, 0 for a hero
-/// with one form), which older app versions left out, so a kept line without it gets "|0". Lines for these meshes replace
-/// any earlier ones, the rest stay, and the old file is kept as skins.txt.bak like the app does.
+/// with one form), which older app versions left out, so a kept line without it gets "|0".
+/// Lines for these meshes, and earlier lines this app wrote for the same mod and skin (an older folder name), are
+/// replaced, everything else stays. Written beside the list first: `commit` puts it in place, so a failure before then
+/// leaves the list as it was. The old list is kept as skins.txt.bak, as the app does, and a list that cannot be read
+/// (not just missing) stops the run instead of being rewritten without its lines.
 /// shortcut: a copy turned off or deleted later keeps its line until the Companion App rescans.
-fn add_to_manifest(content: &Path, lines: &[String]) -> Result<(), String> {
+struct Manifest { file: PathBuf, staged: PathBuf }
+impl Manifest {
+    fn commit(self) -> Result<(), String> {
+        std::fs::rename(&self.staged, &self.file).map_err(|e| {
+            let _ = std::fs::remove_file(&self.staged);
+            format!("Could not write Galacta's skin list: {e}")
+        })
+    }
+    fn discard(self) {
+        let _ = std::fs::remove_file(&self.staged);
+    }
+}
+
+fn stage_manifest(content: &Path, lines: &[String]) -> Result<Manifest, String> {
+    let fail = |e: std::io::Error| format!("Could not write Galacta's skin list: {e}");
     let dir = content.join("Marvel").join("ProjectGalacta");
     let file = dir.join("skins.txt");
-    let old = std::fs::read_to_string(&file).unwrap_or_default();
-    let mesh = |l: &str| l.split('|').nth(2).map(str::to_ascii_lowercase);
-    let ours: HashSet<_> = lines.iter().filter_map(|l| mesh(l)).collect();
+    let old = match std::fs::read_to_string(&file) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(format!("Galacta's skin list could not be read, so it was left as it is: {e}")),
+    };
+    let field = |l: &str, n: usize| l.split('|').nth(n).map(str::to_ascii_lowercase);
+    let key = |l: &str| (field(l, 0), field(l, 1), field(l, 3), field(l, 4));
+    let ours: HashSet<_> = lines.iter().filter_map(|l| field(l, 2)).collect();
+    let same: HashSet<_> = lines.iter().map(|l| key(l)).collect();
     let mut all: Vec<String> = old.lines().map(str::trim_end)
-        .filter(|l| !l.is_empty() && !mesh(l).is_some_and(|m| ours.contains(&m)))
+        .filter(|l| !l.is_empty() && !field(l, 2).is_some_and(|m| ours.contains(&m)) && !same.contains(&key(l)))
         .map(|l| if l.split('|').count() == 5 { format!("{l}|0") } else { l.to_string() })
         .collect();
     all.extend(lines.iter().cloned());
-    std::fs::create_dir_all(&dir).map_err(|e| format!("Could not write Galacta's skin list: {e}"))?;
+    std::fs::create_dir_all(&dir).map_err(fail)?;
     if file.is_file() {
-        let _ = std::fs::copy(&file, dir.join("skins.txt.bak"));
+        std::fs::copy(&file, dir.join("skins.txt.bak")).map_err(fail)?;
     }
-    std::fs::write(&file, all.iter().map(|l| format!("{l}\r\n")).collect::<String>()).map_err(|e| format!("Could not write Galacta's skin list: {e}"))
+    let staged = dir.join("skins.txt.repakxtra-new");
+    std::fs::write(&staged, all.iter().map(|l| format!("{l}\r\n")).collect::<String>()).map_err(fail)?;
+    Ok(Manifest { file, staged })
 }
 
-/// Makes the Galacta copy of one mod (its .pak, .bak_repak or .utoc) and puts it beside the mod, on when `on` says so
-/// (the window then turns the original off with toggle_mod), else off. `name` is the mod's name in the Library: the
-/// copy is "<name> (Galacta)", and Galacta's Companion App shows `name`.
+/// Makes the Galacta copy of one mod (its .pak, .bak_repak or .utoc) and puts it beside the mod. With `on`: the copy is
+/// on, added to Galacta's skin list, and the original is turned off, all here, so closing the window midway still
+/// finishes the job. Without: the copy is off and nothing else changes. `name` is the mod's name in the Library, shown
+/// in Galacta's Skin Swapper. The copy is named after the original's file: "<file> (Galacta)".
 #[tauri::command]
 pub async fn xtra_galacta_make(window: tauri::Window, path: String, name: String, usmap_path: String, on: bool, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Made, String> {
     let _one = ONE.try_lock().map_err(|_| "A Galacta version is already being made.")?;
@@ -457,7 +527,8 @@ pub async fn xtra_galacta_make(window: tauri::Window, path: String, name: String
     if name.is_empty() {
         return Err("The mod needs a name.".into());
     }
-    let utoc = crate::xtra_bundle::companion(Path::new(&path), "utoc");
+    let original = PathBuf::from(&path);
+    let utoc = crate::xtra_bundle::companion(&original, "utoc");
     if !utoc.is_file() {
         return Err("Only IoStore mods (.utoc and .ucas) can be made Galacta compatible. Install it through repakxtra first.".into());
     }
@@ -467,13 +538,14 @@ pub async fn xtra_galacta_make(window: tauri::Window, path: String, name: String
         return Err("Wait for the Mod Updater to finish first.".into());
     }
     let work = std::env::temp_dir().join("repak-x").join("galacta").join(&token);
-    let built = build(&utoc, &name, &paks, &usmap_path, &work).await;
-    crate::xtra_vfx::xtra_vfx_release(window, token);
-    let result = match built {
+    let built = build(&utoc, &original, &name, &paks, &usmap_path, &work).await;
+    crate::xtra_vfx::xtra_vfx_release(window.clone(), token);
+    let placed = match built {
         Ok((base, lines, left_out)) => {
             let skins = lines.iter().filter_map(|l| l.split('|').nth(1)).map(str::to_string).collect();
             let content = paks.parent().ok_or("The game folder has no Content folder")?.to_path_buf();
             let dir = utoc.parent().ok_or("The mod has no folder")?.to_path_buf();
+            let stem = copy_stem(&original);
             let bypass = state.lock().unwrap().bypass_game_running_lock;
             crate::blocking(move || {
                 let _mutation = crate::xtra_mutation::edit()?;
@@ -481,18 +553,37 @@ pub async fn xtra_galacta_make(window: tauri::Window, path: String, name: String
                 if !bypass && crate::is_game_process_running() {
                     return Err("Marvel Rivals is running. Close it, then try again.".into());
                 }
-                let pak = install(&base, &dir, &copy_stem(&name), on)?;
-                if on {
-                    // listed in the Skin Swapper without a Companion App scan (it reads the manifest at every hero select)
-                    add_to_manifest(&content, &lines)?;
+                // the skin list is written beside the old one first, so a failure on either side changes neither
+                let manifest = if on { Some(stage_manifest(&content, &lines)?) } else { None };
+                let (pak, undo) = match install(&base, &dir, &stem, on) {
+                    Ok(done) => done,
+                    Err(e) => {
+                        manifest.map(Manifest::discard);
+                        return Err(e);
+                    }
+                };
+                if let Some(m) = manifest {
+                    if let Err(e) = m.commit() {
+                        undo.run();
+                        return Err(e);
+                    }
                 }
-                Ok(Made { path: pak.to_string_lossy().into_owned(), skins, left_out })
+                Ok(Made { path: pak.to_string_lossy().into_owned(), skins, left_out, note: None })
             }).await
         }
         Err(e) => Err(e),
     };
     let _ = std::fs::remove_dir_all(&work);
-    result
+    let mut made = placed?;
+    // the copy is on and listed: the original goes off the way the Library's switch does it. If it cannot, the copy
+    // stays (it only adds Galacta files) and the row says so
+    let original_on = original.extension().is_some_and(|x| x.eq_ignore_ascii_case("pak"));
+    if on && original_on {
+        if let Err(e) = crate::toggle_mod(path, window, state).await {
+            made.note = Some(format!("The original is still on: {e}"));
+        }
+    }
+    Ok(made)
 }
 
 /// One mod for the Galacta window's list.
@@ -523,7 +614,7 @@ pub async fn xtra_galacta_list(state: State<'_, Arc<Mutex<AppState>>>) -> Result
             let kind = kind_of(&files)?;
             let file = m.path.file_name()?.to_string_lossy().to_string();
             let name = m.custom_name.clone().filter(|c| !c.is_empty()).unwrap_or_else(|| bare(crate::xtra_bundle::stem(&file)).to_string());
-            let stem = copy_stem(&name);
+            let stem = copy_stem(&m.path);
             let made = ["pak", "bak_repak"].iter().any(|x| m.path.with_file_name(format!("{stem}.{x}")).is_file());
             // the mod list leaves the hero empty for most mods: it comes from their details, as in the Encrypt window
             let hero = m.character_name.clone().filter(|c| !c.is_empty())
@@ -545,9 +636,16 @@ mod tests {
         assert_eq!(skin_of("/Game/Marvel/Characters/1026/1026001"), None, "the folder itself");
         assert_eq!(bare("Black Skin_9999999_P"), "Black Skin");
         assert_eq!(bare("Skin_v2"), "Skin_v2");
-        assert_eq!(copy_stem("Gold: Suit?"), "Gold Suit (Galacta)_9999999_P");
-        assert_eq!(folder_of("bp-tung swap v1"), "bptungswapv1");
-        assert_eq!(folder_of("2099"), "Mod2099", "never all digits");
+        let p = |s: &str| PathBuf::from(format!("C:/mods/{s}"));
+        assert_eq!(copy_stem(&p("Gold Suit_9999999_P.pak")), "Gold Suit (Galacta)_9999999_P");
+        assert_eq!(copy_stem(&p("Gold Suit_9999999_P.bak_repak")), "Gold Suit (Galacta)_9999999_P", "off or on, the same copy");
+        let tung = folder_of(&p("bp-tung swap v1_9999999_P.pak"));
+        assert!(tung.starts_with("bptungswapv1G") && tung.len() == "bptungswapv1G".len() + 6, "{tung}");
+        assert_eq!(tung, folder_of(&p("bp-tung swap v1_9999999_P.bak_repak")), "stable: off or on");
+        assert_ne!(folder_of(&p("Suit.Red_9999999_P.pak")), folder_of(&p("SuitRed_9999999_P.pak")), "names that clean the same differ");
+        assert_ne!(folder_of(&p("\u{c2a4}\u{d0a8}_9999999_P.pak")), folder_of(&p("\u{c2a5}_9999999_P.pak")), "names without ASCII letters differ");
+        assert!(folder_of(&p("2099_9999999_P.pak")).starts_with("Mod2099G"), "starts with a letter");
+        assert!(!folder_of(&p("x_9999999_P.pak")).contains('_'), "no underscore, so never an FName number");
         assert_eq!(rel_path(&game_path("Marvel/Content/Marvel/X/Y")), "Marvel/Content/Marvel/X/Y");
     }
 
@@ -595,14 +693,21 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         // an old app's line (no form number), one of ours to replace, and another app's line with form 2
         std::fs::write(dir.join("skins.txt"), "1026|1026001|/Game/A/SK_A.SK_A|A|x\r\n1026|1026001|/Game/B/SK_B.SK_B|Old B|repakxtra|0\r\n1026|1026001|/Game/C/SK_C.SK_C|C|y|2\r\n").unwrap();
-        add_to_manifest(d.path(), &["1026|1026001|/Game/B/SK_B.SK_B|New B|repakxtra|0".into()]).unwrap();
+        stage_manifest(d.path(), &["1026|1026001|/Game/B/SK_B.SK_B|New B|repakxtra|0".into()]).unwrap().commit().unwrap();
         assert_eq!(std::fs::read(dir.join("skins.txt")).unwrap(),
             b"1026|1026001|/Game/A/SK_A.SK_A|A|x|0\r\n1026|1026001|/Game/C/SK_C.SK_C|C|y|2\r\n1026|1026001|/Game/B/SK_B.SK_B|New B|repakxtra|0\r\n",
             "CRLF, a 5-field line gets its form number, a form already there stays");
         assert!(std::fs::read_to_string(dir.join("skins.txt.bak")).unwrap().contains("Old B"));
         let fresh = tempfile::tempdir().unwrap();
-        add_to_manifest(fresh.path(), &["1|2|/Game/C.C|C|repakxtra".into()]).unwrap();
+        stage_manifest(fresh.path(), &["1|2|/Game/C.C|C|repakxtra|0".into()]).unwrap().commit().unwrap();
         assert!(fresh.path().join("Marvel/ProjectGalacta/skins.txt").is_file(), "made when Galacta has none yet");
+        // the same mod again under a new folder name: its old line goes, another mod's line with the same mesh name stays
+        stage_manifest(fresh.path(), &["1|2|/Game/D.D|C|repakxtra|0".into()]).unwrap().commit().unwrap();
+        assert_eq!(std::fs::read_to_string(fresh.path().join("Marvel/ProjectGalacta/skins.txt")).unwrap(), "1|2|/Game/D.D|C|repakxtra|0\r\n");
+        // staged but not committed: the list is as it was
+        stage_manifest(fresh.path(), &["1|2|/Game/E.E|E|repakxtra|0".into()]).unwrap().discard();
+        assert!(!std::fs::read_to_string(fresh.path().join("Marvel/ProjectGalacta/skins.txt")).unwrap().contains("/Game/E.E"));
+        assert!(!fresh.path().join("Marvel/ProjectGalacta/skins.txt.repakxtra-new").exists());
     }
 
     #[test]
@@ -612,11 +717,15 @@ mod tests {
         for x in ["pak", "utoc", "ucas"] { std::fs::write(format!("{}.{x}", base.display()), x).unwrap(); }
         let mods = d.path().join("mods");
         std::fs::create_dir(&mods).unwrap();
-        assert_eq!(install(&base, &mods, "S", false).unwrap(), mods.join("S.bak_repak"));
-        assert_eq!(install(&base, &mods, "S", true).unwrap(), mods.join("S.pak"));
-        assert!(!mods.join("S.bak_repak").exists(), "the old off copy goes");
-        assert_eq!(install(&base, &mods, "S", false).unwrap(), mods.join("S.pak"), "a copy that is on stays on");
+        // fresh installs only: replacing one sends the old copy to the real Recently deleted (replace_all_retiring)
+        let (pak, undo) = install(&base, &mods, "S", false).unwrap();
+        assert_eq!(pak, mods.join("S.bak_repak"));
         assert_eq!(std::fs::read(mods.join("S.ucas")).unwrap(), b"ucas");
+        undo.run();
+        assert_eq!(std::fs::read_dir(&mods).unwrap().count(), 0, "undone: nothing left, no staging folder either");
+        let (pak, _) = install(&base, &mods, "T", true).unwrap();
+        assert_eq!(pak, mods.join("T.pak"));
+        assert!(!mods.join("T.bak_repak").exists());
     }
 
     #[test]
@@ -633,4 +742,5 @@ mod tests {
         assert!(data.iter().any(|p| p["Name"] == "Author" && p["Value"] == AUTHOR));
     }
 }
+
 
