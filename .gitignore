@@ -42,6 +42,26 @@ ScriptObjectExportTest/
 # Sensitive files
 *.env
 *.env.local
+
+# Environment secrets
+.env.*
+!.env.example
+
+# Private credentials and signing keys
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+id_rsa
+id_ed25519
+credentials.json
+service-account*.json
+
+# Crash dumps and caches
+*.stackdump
+rustc-ice-*.txt
+__pycache__/
 # repakxtra: personal library snapshot for the browser preview
 repak-x/src/dev/fixture.local.json
 repak-x/src/dev/heroes.local/
