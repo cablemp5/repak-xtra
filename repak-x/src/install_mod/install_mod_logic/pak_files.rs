@@ -154,7 +154,6 @@ pub fn repak_dir(
         Some(&pak.mount_point),
         seed,
         Some(AES_KEY_HEX),
-        pak.obfuscate,
     )
     .map_err(|e| format!("Failed to create PAK: {}", e))?;
 

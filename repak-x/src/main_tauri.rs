@@ -5851,7 +5851,6 @@ fn recompress_pak_file(pak_path: &Path) -> Result<u64, String> {
         Some("../../../"),
         None,
         Some(crate::install_mod::AES_KEY_HEX),
-        false,
     )
     .map_err(|e| format!("Failed to repack: {}", e))?;
 
