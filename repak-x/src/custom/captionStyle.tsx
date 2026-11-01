@@ -1,5 +1,5 @@
 // repakxtra: the look of a loadout's typed card (loadoutBits.tsx CardMedia): an optional Lucide icon above its words
-// and a color from a few swatches, picked while typing. Stored on the loadout as captionIcon (a name below) and
+// and a color from a few swatches or the color picker, picked while typing. Stored on the loadout as captionIcon (a name below) and
 // captionColor (a hex). The bar's buttons keep focus in the text field (mousedown is prevented), so picking never ends
 // the typing.
 import { useState } from 'react'
@@ -7,6 +7,7 @@ import {
   Ban, Bomb, Cat, ChevronUp, Crosshair, Crown, Droplet, Eye, Flame, Gamepad2, Gem, Ghost, Headphones, Heart, Leaf, Moon, Mountain, Music,
   Palette, PawPrint, Plus, Rocket, Shield, Skull, Snowflake, Sparkles, Star, Sun, Swords, Target, Trophy, Wand2, Waves, Wind, Zap,
 } from 'lucide-react'
+import ColorPicker from './ko/ColorPicker'
 
 type Icon = typeof Flame
 /** The icons on offer, by the name stored on the loadout. Picked for loadouts: looks, elements, modes, music. */
@@ -60,6 +61,10 @@ export function CaptionStyleBar({ icon, color, onIcon, onColor }: {
           <button key={c} type="button" role="radio" aria-checked={shown === c} className="cap-swatch" style={{ background: c, '--sw': c } as React.CSSProperties}
             title={c === CAPTION_COLORS[0] ? 'White' : c} aria-label={`Color ${c}`} onClick={() => onColor(c === CAPTION_COLORS[0] ? undefined : c)} />
         ))}
+        {/* any other color, in the KO Editor's picker. Its hue ring fills with the color once it is not a swatch's */}
+        <ColorPicker value={shown.slice(1).toLowerCase()} label="Text color" presets={CAPTION_COLORS.map(c => c.slice(1))} keepFocus
+          className={`cap-custom${CAPTION_COLORS.includes(shown.toLowerCase()) ? '' : ' is-picked'}`}
+          onChange={hex => onColor(hex === 'ffffff' ? undefined : `#${hex}`)} />
       </span>
     </div>
   )

@@ -26,7 +26,7 @@ export type Loadout = {
   muted?: boolean         // its animation previews play without their emote sound on hover (the card's speaker button)
   caption?: string        // words shown big on its card while it has no picture or preview (typed on its page)
   captionIcon?: string    // a Lucide icon above those words (captionStyle.tsx CAPTION_ICONS)
-  captionColor?: string   // their color, one of captionStyle.tsx's swatches; white without one
+  captionColor?: string   // their color, a swatch's or one from captionStyle.tsx's picker; white without one
   captionBackgroundRev?: number
   captionBlur?: boolean
   captionDark?: boolean

@@ -4,6 +4,7 @@
 import { type CSSProperties, type KeyboardEvent, type PointerEvent, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { cue } from '../sounds'
+import './colorPicker.css'
 
 const clamp = (n: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, n))
 
@@ -32,9 +33,10 @@ if (import.meta.env?.DEV) {
 const WIDTH = 248 // nine 18px dots with room for the picked one's ring between them
 const HEIGHT = 224
 
-/** The swatch, and its popover while open. `presets` are suggested colors (hex), the first one the game's own. */
-export default function ColorPicker({ value, onChange, label, presets, disabled }: {
-  value: string; onChange: (hex: string) => void; label: string; presets: string[]; disabled?: boolean
+/** The swatch, and its popover while open. `presets` are suggested colors (hex), the first one the game's own.
+ *  `keepFocus`: the popover takes no focus (a text field being typed in keeps it, its parent prevents mousedown). */
+export default function ColorPicker({ value, onChange, label, presets, disabled, keepFocus, className }: {
+  value: string; onChange: (hex: string) => void; label: string; presets: string[]; disabled?: boolean; keepFocus?: boolean; className?: string
 }) {
   const [open, setOpenState] = useState(false)
   const [hsv, setHsv] = useState(() => hexToHsv(value))
@@ -64,7 +66,7 @@ export default function ColorPicker({ value, onChange, label, presets, disabled 
     document.addEventListener('pointerdown', away, true)
     window.addEventListener('resize', place)
     window.addEventListener('scroll', place, true)
-    square.current?.focus()
+    if (!keepFocus) square.current?.focus()
     return () => { document.removeEventListener('pointerdown', away, true); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true) }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -86,7 +88,7 @@ export default function ColorPicker({ value, onChange, label, presets, disabled 
 
   return (
     <>
-      <button type="button" ref={button} className="kcp-swatch" aria-label={`${label}, ${shown}`} aria-haspopup="dialog" aria-expanded={open} disabled={disabled}
+      <button type="button" ref={button} className={`kcp-swatch${className ? ` ${className}` : ''}`} aria-label={`${label}, ${shown}`} aria-haspopup="dialog" aria-expanded={open} disabled={disabled}
         title="Pick a color" onClick={() => setOpen(!open)}>
         <span className="kcp-fill" style={{ background: `#${value}` }} />
       </button>

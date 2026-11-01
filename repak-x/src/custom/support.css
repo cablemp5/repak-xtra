@@ -7,8 +7,8 @@
 .lo-caption-wrap { z-index: 2; }
 
 /* The words being typed sit where the card shows them: the same size (the card's container units) and the same middle, so
-   nothing jumps between typing and showing */
-.lo-caption-wrap { container-type: inline-size; padding: 52px 16px !important; gap: 0 !important; }
+   nothing jumps between typing and showing. 14px at the sides, the card's own, so 12cqi is the same size */
+.lo-caption-wrap { container-type: inline-size; padding: 52px 14px !important; gap: 0 !important; }
 .lo-caption-wrap svg.lo-cap-icon + .lo-caption-edit { margin-top: 4cqi; }   /* cqi here is the wrap's: the card's svg + span margin */
 .lo-caption-wrap svg.lo-cap-icon { width: clamp(24px, 22cqi, 72px) !important; height: clamp(24px, 22cqi, 72px) !important; }
 .lo-caption-wrap .lo-caption-edit { font-size: clamp(15px, 12cqi, 44px) !important; line-height: 1.08 !important; }
