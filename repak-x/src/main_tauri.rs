@@ -54,11 +54,7 @@ mod crash_monitor;
 mod discord_presence;
 mod hero_assets;
 mod install_mod;
-mod ip_obfuscation;
 mod merge_command;
-mod p2p_libp2p;
-mod p2p_manager;
-mod p2p_sharing;
 mod toast_events;
 mod uasset_api_integration;
 mod uasset_detection;
@@ -74,7 +70,6 @@ use serde::{Deserialize, Serialize};
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode, WriteLogger};
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Listener, Manager, State, Window};
 use uasset_detection::detect_texture_files_async;
@@ -87,13 +82,6 @@ use walkdir::WalkDir;
 
 struct WatcherState {
     watcher: Mutex<Option<RecommendedWatcher>>,
-    /// When true, the file watcher suppresses events (e.g. during P2P transfer)
-    paused: Arc<AtomicBool>,
-}
-
-/// P2P Sharing state management
-struct P2PState {
-    manager: Arc<p2p_manager::UnifiedP2PManager>,
 }
 
 /// Crash monitoring state
@@ -570,7 +558,6 @@ async fn start_file_watcher(
     // one every 500 ms while a big file copies (each reload re-lists the library and restarts its background scans).
     let (tx, rx) = std::sync::mpsc::channel::<Vec<std::path::PathBuf>>();
     let window_clone = window.clone();
-    let paused_at_emit = watcher_state.paused.clone();
     std::thread::spawn(move || {
         // Ends when the watcher (and with it the sender) is dropped
         while let Ok(first) = rx.recv() {
@@ -581,9 +568,6 @@ async fn start_file_watcher(
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => break,
                     Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
                 }
-            }
-            if paused_at_emit.load(Ordering::Relaxed) {
-                continue; // paused while these settled (a P2P transfer started): they are its own files
             }
             paths.sort();
             paths.dedup();
@@ -601,14 +585,9 @@ async fn start_file_watcher(
         }
     });
 
-    let paused = watcher_state.paused.clone();
     let watcher_result = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
         match res {
             Ok(event) => {
-                // Skip events while paused (e.g. during P2P transfer)
-                if paused.load(Ordering::Relaxed) {
-                    return;
-                }
                 // We only care about Create, Remove, Rename, and Modify events (files and directories)
                 if matches!(event.kind, EventKind::Create(_) | EventKind::Remove(_) | EventKind::Modify(_)) {
                     let _ = tx.send(event.paths);
@@ -6358,7 +6337,7 @@ async fn download_update(
     let temp_dir = crate::xtra_updater::update_dir(); // repakxtra: not Repak X's
     // repakxtra: the name comes from the release listing: one plain file name, so the download stays in temp_dir
     // repakxtra: only the release zip, which apply_update checks for the app and edition before installing
-    if !crate::p2p_sharing::safe_file_name(&asset_name) || !asset_name.to_ascii_lowercase().ends_with(".zip") {
+    if !crate::xtra_updater::safe_file_name(&asset_name) || !asset_name.to_ascii_lowercase().ends_with(".zip") {
         return Err(format!("Unexpected update file name: {asset_name}"));
     }
     if temp_dir.exists() {
@@ -6867,26 +6846,6 @@ async fn discord_set_installing(
 ) -> Result<(), String> {
     if discord_state.manager.is_connected() {
         discord_state.manager.set_installing_mod()
-    } else {
-        Ok(())
-    }
-}
-
-/// Set Discord activity to show sharing mods
-#[tauri::command]
-async fn discord_set_sharing(discord_state: State<'_, DiscordState>) -> Result<(), String> {
-    if discord_state.manager.is_connected() {
-        discord_state.manager.set_sharing_mods()
-    } else {
-        Ok(())
-    }
-}
-
-/// Set Discord activity to show receiving mods
-#[tauri::command]
-async fn discord_set_receiving(discord_state: State<'_, DiscordState>) -> Result<(), String> {
-    if discord_state.manager.is_connected() {
-        discord_state.manager.set_receiving_mods()
     } else {
         Ok(())
     }
@@ -8233,194 +8192,6 @@ async fn check_single_mod_conflicts(
 }
 
 // ============================================================================
-// P2P SHARING COMMANDS
-// ============================================================================
-
-/// Start sharing a mod pack
-#[tauri::command]
-async fn p2p_start_sharing(
-    name: String,
-    description: String,
-    mod_paths: Vec<String>,
-    creator: Option<String>,
-    p2p_state: State<'_, P2PState>,
-) -> Result<p2p_libp2p::ShareInfo, String> {
-    let paths: Vec<PathBuf> = mod_paths.iter().map(PathBuf::from).collect();
-    ui_log::info(
-        "P2P",
-        format!("Sharing \"{}\" ({} mod(s))...", name, paths.len()),
-    );
-
-    match p2p_state
-        .manager
-        .start_sharing(name.clone(), description, paths, creator)
-        .await
-    {
-        Ok(info) => {
-            ui_log::success("P2P", format!("Sharing \"{}\" - waiting for peers", name));
-            Ok(info)
-        }
-        Err(e) => {
-            ui_log::error("P2P", format!("Could not start sharing \"{}\": {}", name, e));
-            Err(e.to_string())
-        }
-    }
-}
-
-/// Stop sharing
-#[tauri::command]
-async fn p2p_stop_sharing(
-    share_code: String,
-    p2p_state: State<'_, P2PState>,
-) -> Result<(), String> {
-    ui_log::info("P2P", "Stopped sharing");
-    p2p_state
-        .manager
-        .stop_sharing(&share_code)
-        .map_err(|e| e.to_string())
-}
-
-/// Get current share session info
-#[tauri::command]
-async fn p2p_get_share_session(
-    p2p_state: State<'_, P2PState>,
-) -> Result<Option<p2p_libp2p::ShareInfo>, String> {
-    // Return the first active share if any
-    let shares = p2p_state.manager.active_shares.lock();
-    Ok(shares
-        .values()
-        .next()
-        .map(|s| s.session.clone())
-        .and_then(|session| {
-            // Convert ShareSession to ShareInfo
-            p2p_libp2p::ShareInfo::decode(&session.connection_string).ok()
-        }))
-}
-
-/// Check if currently sharing
-#[tauri::command]
-async fn p2p_is_sharing(p2p_state: State<'_, P2PState>) -> Result<bool, String> {
-    Ok(!p2p_state.manager.active_shares.lock().is_empty())
-}
-
-/// Start receiving mods from a connection string
-#[tauri::command]
-async fn p2p_start_receiving(
-    connection_string: String,
-    client_name: Option<String>,
-    folder_id: Option<String>,
-    window: Window,
-    state: State<'_, Arc<Mutex<AppState>>>,
-    p2p_state: State<'_, P2PState>,
-    watcher_state: State<'_, WatcherState>,
-) -> Result<(), String> {
-    // Pause file watcher so incoming files don't trigger mod-list spam
-    watcher_state.paused.store(true, Ordering::Relaxed);
-    info!("[P2P] File watcher paused for transfer");
-
-    let game_path = {
-        let state_guard = state.lock().unwrap();
-        state_guard.game_path.clone()
-    };
-
-    let output_dir = match folder_id {
-        Some(ref id) if !id.is_empty() => game_path.join(id),
-        _ => game_path,
-    };
-    ui_log::info(
-        "P2P",
-        format!("Connecting to peer - saving to {}", output_dir.display()),
-    );
-
-    match p2p_state
-        .manager
-        .start_receiving(&connection_string, output_dir, client_name, window)
-        .await
-    {
-        Ok(()) => {
-            ui_log::success("P2P", "Connected - transfer started");
-            Ok(())
-        }
-        Err(e) => {
-            // Leaving the watcher paused would silently stop the mod list from
-            // refreshing for the rest of the session.
-            watcher_state.paused.store(false, Ordering::Relaxed);
-            ui_log::error("P2P", format!("Could not connect to peer: {}", e));
-            Err(e.to_string())
-        }
-    }
-}
-
-/// Stop receiving
-#[tauri::command]
-async fn p2p_stop_receiving(
-    p2p_state: State<'_, P2PState>,
-    watcher_state: State<'_, WatcherState>,
-    window: Window,
-) -> Result<(), String> {
-    // Signal all active clients to stop, then clear
-    p2p_state.manager.stop_all_downloads();
-
-    // Unpause file watcher and emit one refresh so the mod list picks up new files
-    watcher_state.paused.store(false, Ordering::Relaxed);
-    ui_log::info("P2P", "Transfer stopped");
-    let _ = window.emit("mods_dir_changed", ());
-
-    Ok(())
-}
-
-/// Get current transfer progress
-#[tauri::command]
-async fn p2p_get_receive_progress(
-    p2p_state: State<'_, P2PState>,
-) -> Result<Option<p2p_sharing::TransferProgress>, String> {
-    let downloads = p2p_state.manager.active_downloads.lock();
-
-    // Return the first active download's progress (typically only one at a time)
-    if let Some((_, download)) = downloads.iter().next() {
-        Ok(Some(download.progress.clone()))
-    } else {
-        Ok(None)
-    }
-}
-
-/// Check if currently receiving
-#[tauri::command]
-async fn p2p_is_receiving(p2p_state: State<'_, P2PState>) -> Result<bool, String> {
-    Ok(!p2p_state.manager.active_downloads.lock().is_empty())
-}
-
-/// Create a shareable mod pack preview (total size and file count)
-#[tauri::command]
-async fn p2p_create_mod_pack_preview(
-    name: String,
-    description: String,
-    mod_paths: Vec<String>,
-    creator: Option<String>,
-) -> Result<p2p_sharing::PackPreview, String> {
-    let paths: Vec<PathBuf> = mod_paths.iter().map(PathBuf::from).collect();
-    p2p_sharing::create_mod_pack_preview(name, description, &paths, creator)
-        .map_err(|e| e.to_string())
-}
-
-/// Validate a connection string without connecting
-#[tauri::command]
-async fn p2p_validate_connection_string(connection_string: String) -> Result<bool, String> {
-    // Validate base64 ShareInfo format
-    match p2p_libp2p::ShareInfo::decode(&connection_string) {
-        Ok(_) => Ok(true),
-        Err(e) => Err(e.to_string()),
-    }
-}
-
-/// Calculate hash for a file (useful for verification)
-#[tauri::command]
-async fn p2p_hash_file(file_path: String) -> Result<String, String> {
-    let path = PathBuf::from(file_path);
-    p2p_sharing::hash_file(&path).map_err(|e| e.to_string())
-}
-
-// ============================================================================
 // PROTOCOL REGISTRATION (Portable App Support)
 // ============================================================================
 
@@ -8677,20 +8448,11 @@ fn main() {
     });
     let watcher_state = WatcherState {
         watcher: Mutex::new(None),
-        paused: Arc::new(AtomicBool::new(false)),
     };
     let crash_state = CrashMonitorState {
         game_start_time: Mutex::new(None),
         last_checked_crash: Mutex::new(None),
     };
-    let p2p_manager = tokio::runtime::Runtime::new()
-        .expect("Failed to create tokio runtime")
-        .block_on(p2p_manager::UnifiedP2PManager::new())
-        .expect("Failed to initialize P2P network");
-    let p2p_state = P2PState {
-        manager: Arc::new(p2p_manager),
-    };
-
     // Initialize Discord Rich Presence manager
     let discord_manager = discord_presence::create_discord_manager();
 
@@ -8739,7 +8501,6 @@ fn main() {
         .manage(state)
         .manage(watcher_state)
         .manage(crash_state)
-        .manage(p2p_state)
         .manage(discord_state)
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // This closure is called when a second instance is launched
@@ -9007,18 +8768,6 @@ fn main() {
             ui_log::get_ui_log_backlog,
             ui_log::get_app_log_path,
             ui_log::export_ui_logs,
-            // P2P sharing commands
-            p2p_start_sharing,
-            p2p_stop_sharing,
-            p2p_get_share_session,
-            p2p_is_sharing,
-            p2p_start_receiving,
-            p2p_stop_receiving,
-            p2p_get_receive_progress,
-            p2p_is_receiving,
-            p2p_create_mod_pack_preview,
-            p2p_validate_connection_string,
-            p2p_hash_file,
             // Discord Rich Presence commands
             discord_connect,
             discord_disconnect,
@@ -9026,8 +8775,6 @@ fn main() {
             discord_set_idle,
             discord_set_managing_mods,
             discord_set_installing,
-            discord_set_sharing,
-            discord_set_receiving,
             discord_clear_activity,
             discord_set_theme,
             discord_get_theme,

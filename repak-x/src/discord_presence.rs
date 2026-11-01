@@ -166,14 +166,6 @@ impl DiscordPresenceManager {
         self.set_activity("Installing mods", Some(DETAILS))
     }
 
-    pub fn set_sharing_mods(&self) -> Result<(), String> {
-        self.set_activity("Sharing mods", Some(DETAILS))
-    }
-
-    pub fn set_receiving_mods(&self) -> Result<(), String> {
-        self.set_activity("Receiving mods", Some(DETAILS))
-    }
-
     pub fn clear_activity(&self) -> Result<(), String> {
         self.queue(|client| {
             if let Some(c) = client.as_mut() {

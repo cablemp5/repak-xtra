@@ -8,7 +8,7 @@ import type React from 'react'
 
 const FOCUSABLE = 'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])'
 /** Every overlay that owns the screen while it shows. Dialogs declare aria-modal; the rest are upstream overlays. */
-export const MODAL = '[aria-modal="true"], .modal-overlay, .p2p-overlay, .input-prompt-overlay, .quick-organize-overlay, .extension-overlay'
+export const MODAL = '[aria-modal="true"], .modal-overlay, .input-prompt-overlay, .quick-organize-overlay, .extension-overlay'
 /** Never inert behind a dialog: the window's own title bar, toasts and their announcements, menus a dialog put on <body>. */
 const KEEP = '.titlebar, .toast-container, .xtra-live, body > [role="menu"], body > [role="listbox"]'
 /** Where focus goes when a dialog closes and its opener is gone (a menu item, say): the viewed mod, else the search. */

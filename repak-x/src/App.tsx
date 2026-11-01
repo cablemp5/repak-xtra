@@ -29,7 +29,7 @@ import { RiDeleteBin2Fill } from 'react-icons/ri'
 import { MdDriveFileMoveOutline } from "react-icons/md"
 import { IoLayersSharp } from "react-icons/io5"
 import { FaTag, FaToolbox, FaSort } from "react-icons/fa6"
-import { IoMdWifi, IoIosSettings, IoMdWarning } from "react-icons/io"
+import { IoIosSettings, IoMdWarning } from "react-icons/io"
 import { VscListTree } from "react-icons/vsc"
 import { GrInstall } from "react-icons/gr"
 import { GiLightningTrio } from "react-icons/gi"
@@ -145,7 +145,6 @@ import GalactaMods from './custom/GalactaMods' // repakxtra
 const SettingsPanel = lazy(() => import('./components/SettingsPanel')) // repakxtra: loaded when Settings first opens
 import CreditsPanel from './components/CreditsPanel'
 import ToolsPanel from './components/ToolsPanel'
-import SharingPanel from './components/SharingPanel'
 import Wordmark from './custom/Wordmark' // repakxtra: the logo
 import ConflictsPanel from './custom/ConflictsPanel' // repakxtra: in place of Repak X's ClashPanel (grouped, in words)
 import { keepThisOne } from './custom/keepOne' // repakxtra: Keep this one
@@ -186,7 +185,6 @@ type ClashRecord = {
 type PanelState = {
   settings: boolean
   tools: boolean
-  sharing: boolean
   credits: boolean
   install: boolean
   clash: boolean
@@ -348,7 +346,6 @@ function App() {
   const [panels, setPanels] = useState<PanelState>({
     settings: false,
     tools: false,
-    sharing: false,
     credits: false,
     install: false,
     clash: false,
@@ -387,7 +384,7 @@ function App() {
   const [isFiltersResizing, setIsFiltersResizing] = useState(false)
   const [selectedMods, setSelectedMods] = useState<Set<string>>(new Set())
   // repakxtra: the checked mods without the built-in rows (custom/builtinRows.ts): every file action (delete, move,
-  // tags, loadouts, sharing, the menu) uses this, only Enable and Disable reach a built-in, through its own switch
+  // tags, loadouts, the menu) uses this, only Enable and Disable reach a built-in, through its own switch
   const selectedFiles = useMemo(() => new Set([...selectedMods].filter(p => !isBuiltin(p))), [selectedMods])
   const [showBulkActions, setShowBulkActions] = useState(false)
   const [newTagInput, setNewTagInput] = useState('')
@@ -3154,7 +3151,6 @@ function App() {
         if (panels.shortcuts) setPanel('shortcuts', false)
         else if (panels.settings) setPanel('settings', false)
         else if (panels.tools) setPanel('tools', false)
-        else if (panels.sharing) setPanel('sharing', false)
         else if (panels.install) setPanel('install', false)
         else if (panels.clash) setPanel('clash', false)
         else if (modalOpen()) return // repakxtra: another dialog takes its own Esc, the Library behind it keeps its selection
@@ -3732,16 +3728,6 @@ function App() {
         />
       )}
 
-      {panels.sharing && (
-        <SharingPanel
-          onClose={() => setPanel('sharing', false)}
-          gamePath={gamePath}
-          installedMods={mods}
-          selectedMods={selectedFiles}
-          folders={folders}
-        />
-      )}
-
       {/* Drop Zone Overlay */}
       <DropZoneOverlay
         isVisible={isDragging}
@@ -3979,14 +3965,6 @@ function App() {
           <GalactaMods />{/* repakxtra */}
 
           <SetupButton alert={alert} />{/* repakxtra: signature bypass and Project Galacta */}
-          <button
-            onClick={() => setPanel('sharing', true)}
-            className="btn-settings"
-            data-tour="sharing-btn"
-            title="Share Mods"
-          >
-            <IoMdWifi size={20} /> Share
-          </button>
           <button
             onClick={() => setPanel('tools', true)}
             className="btn-settings"
