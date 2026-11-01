@@ -32,6 +32,9 @@ pub struct Relaid {
     pub(crate) complete: bool,
     /// Read whole today, but no older USMAP read them to tell whether they are in its layout
     untold: Vec<String>,
+    /// No older USMAP could be had to read them with (offline, or GitHub out of lookups): unread and untold ones may
+    /// be told on a later try
+    no_usmap: bool,
 }
 
 /// Where relayout finds the game's current copies, for files both layouts read whole.
@@ -160,11 +163,13 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
     }
     let fixed_json = work.join("fixed_json");
     let _ = std::fs::remove_dir_all(&fixed_json);
+    let mut read_any = false;
     for candidate in older_usmaps(build, (made > 0).then_some(made)).await {
         if pending.is_empty() {
             break;
         }
         let Some(old) = candidate.fetch().await else { continue };
+        read_any = true;
         let (input, json) = (work.join("old"), work.join("old_json"));
         let names: Vec<String> = pending.iter().map(|(r, _)| r.clone()).collect();
         stage(mod_extract, &input, &names, true)?;
@@ -192,6 +197,7 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
         });
     }
     out.complete = pending.is_empty();
+    out.no_usmap = !out.complete && !read_any;
     out.untold = pending.iter().filter(|(_, today)| today.is_some()).map(|(r, _)| r.clone()).collect();
     out.unread = pending.into_iter().filter(|(_, today)| today.is_none()).map(|(r, _)| r).collect();
     if out.files.is_empty() {
@@ -346,12 +352,17 @@ mod tests {
         assert!(!old_reading_right(&old, &old, Some(&other), false), "neither matches: the date");
     }
 
-    /// The catboy eyes material (CatboyPantherBodyLights, cooked before 3984769) from the installed mods: rewritten, it
-    /// reads whole with today's USMAP. Run with --ignored on a PC with the game, the mod and both USMAPs.
+    /// The catboy eyes material (CatboyPantherBodyLights, cooked before 3984769): rewritten, it reads whole with today's
+    /// USMAP. The installed copy was rewritten on 2026-10-30, so this reads a copy made before the update (the mods
+    /// project's 2026-10-22 build, or REPAKXTRA_OLD_LAYOUT_MOD). Run with --ignored on a PC with the game and that copy.
     #[tokio::test]
     #[ignore]
     async fn the_catboy_eyes_material_moves_to_the_new_layout() {
         let paks = r"C:\Program Files (x86)\Steam\steamapps\common\MarvelRivals\MarvelGame\Marvel\Content\Paks";
+        let utoc = std::env::var("REPAKXTRA_OLD_LAYOUT_MOD").unwrap_or_else(|_| {
+            let home = std::env::var("USERPROFILE").unwrap_or_default();
+            format!(r"{home}\Programming\Modding\Claude Assisted Mods\Misc\vfxupdate_20261022\iostore\CatboyPantherBodyLights_9999999_P.utoc")
+        });
         let usmap = crate::vfx_updater::commands::saved_usmap_path().expect("a saved USMAP");
         let work = std::env::temp_dir().join("repakxtra-relayout-test");
         let _ = std::fs::remove_dir_all(&work);
@@ -359,7 +370,7 @@ mod tests {
         let req = crate::vfx_updater::uasset_tool::VfxUatRequest {
             action: "extract_iostore_legacy",
             game_paks: Some(paks.into()),
-            mod_path: Some(format!(r"{paks}\~mods\CatboyPantherBodyLights_9999999_P.utoc")),
+            mod_path: Some(utoc.clone()),
             output_path: Some(x.to_string_lossy().into()),
             filter_patterns: Some(vec!["Lobby/MI_1026001_Eyes".into()]),
             with_deps: Some(false),
@@ -367,10 +378,14 @@ mod tests {
         };
         assert!(crate::vfx_updater::uasset_tool::run_vfx_uat_request(Path::new(""), &req).await.unwrap().success);
         let rel = "Marvel/Content/Marvel/Characters/1026/1026001/Materials/Lobby/MI_1026001_Eyes".to_string();
-        let r = relayout(&usmap, &x, std::slice::from_ref(&rel), true, 0, Game::None, &work.join("w"), &NoOpProgressSink).await.unwrap();
+        // as a run asks it: only USMAPs from before the mod was written
+        let made = std::fs::metadata(&utoc).unwrap().modified().unwrap().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        let made = crate::xtra_stamp::made(Path::new(&utoc), made);
+        let r = relayout(&usmap, &x, std::slice::from_ref(&rel), true, made, Game::None, &work.join("w"), &NoOpProgressSink).await.unwrap();
         assert_eq!(r.files, vec![rel.clone()], "rewritten: {r:?}");
         // again, as the update (written after the game update): in today's layout, nothing left to rewrite
-        let again = relayout(&usmap, &x, std::slice::from_ref(&rel), false, 0, Game::None, &work.join("w2"), &NoOpProgressSink).await.unwrap();
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        let again = relayout(&usmap, &x, std::slice::from_ref(&rel), false, now, Game::None, &work.join("w2"), &NoOpProgressSink).await.unwrap();
         assert!(again.files.is_empty() && again.unread.is_empty() && again.failed.is_empty(), "{again:?}");
         let _ = std::fs::remove_dir_all(&work);
     }
