@@ -3,8 +3,9 @@ import { LOADER_NAME, LOADER_PAK, APP_NAME } from './edition'
 // repakxtra; Project Galacta comes from its GitHub releases, with an update check and the release notes.
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { motion } from 'framer-motion'
-import { Check, ChevronRight, Copy, ExternalLink, ListChecks, ShieldCheck, Wrench } from 'lucide-react'
+import { Check, ChevronRight, Copy, ExternalLink, ListChecks, ShieldCheck, TriangleAlert, Wrench } from 'lucide-react'
 import { open as pickFile } from '@tauri-apps/plugin-dialog'
 import { type Doctor, isNewerKit, usePreviewKit } from './previewKit'
 import { BypassTrack, GalactaTrack, KitTrack, useFinished } from './installTrack'
@@ -20,7 +21,11 @@ import { offerUndoDelete } from './undoDelete'
 type Alert = ReturnType<typeof useAlert>
 type FileCheck = { name: string; place: string; size: number; sha256: string; found: 'missing' | 'same' | 'other' }
 type Bypass = { state: 'installed' | 'disabled' | 'partial' | 'other' | 'missing'; files: FileCheck[] }
-type Galacta = { installed: string | null; disabled: boolean; latest: string | null; published: string | null; notes: string | null; url: string | null; up_to_date: boolean | null }
+type Galacta = { installed: string | null; disabled: boolean; latest: string | null; published: string | null; notes: string | null; url: string | null; up_to_date: boolean | null; other_loader: string | null }
+/** What is wrong with the loader, for Setup's warning and the header dot: missing, off, or another loader on too. */
+const loaderProblem = (g: Galacta) => g.other_loader ? `${g.other_loader} is on too. Two loaders load the same mods twice, so turn one off in the Library.`
+  : !g.installed ? `${LOADER_NAME} is not installed. Galacta versions of mods and in-game skin swapping need it.`
+  : g.disabled ? `${LOADER_NAME} is off. Galacta versions of mods do not load until it is on.` : null
 
 const AUTO_KEY = 'repakxtra.setup.autoCheck'
 const autoCheck = () => savedItem(AUTO_KEY) !== '0'
@@ -410,6 +415,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                 </span>
               </li>
             </ul>
+            {g && loaderProblem(g) && <p className="setting-warn su-warn" role="status"><TriangleAlert size={14} aria-hidden="true" /><span>{loaderProblem(g)}</span></p>}
             {askGalacta && g?.installed && <ConfirmRow text={`Remove ${LOADER_NAME}? It goes to Recently deleted for 7 days.`} yes="Remove"
               onYes={removeGalacta} onNo={() => setAskGalacta(false)} />}
             <GalactaTrack on={busy === 'install-galacta'} done={finished === 'install-galacta' ? `${LOADER_NAME} ${galacta?.latest ?? ''} is in your mods folder`.replace('  ', ' ') : undefined} />
@@ -457,6 +463,13 @@ export default function SetupButton({ alert }: { alert: Alert }) {
   const [open, setOpen] = useState(false)
   const [focus, setFocus] = useState<string | null>(null)
   const [attention, setAttention] = useState(false)
+  const [warn, setWarn] = useState(false) // the loader is missing, off, or another one is on too: a yellow dot
+  const checkLoader = () => invoke<Galacta>('setup_galacta_status', { online: false }).then(g => setWarn(Boolean(loaderProblem(g)))).catch(() => {})
+  useEffect(() => {
+    checkLoader()
+    const un = listen('mods_dir_changed', checkLoader) // turned on or off in the Library
+    return () => { void un.then(off => off()) }
+  }, [])
   useEffect(() => { // openPreviewSetup (previews.tsx): a Generate button on a PC without the preview kit
     const show = (e: Event) => { setFocus((e as CustomEvent<string>).detail ?? null); setOpen(true) }
     window.addEventListener('repakxtra-open-setup', show)
@@ -495,9 +508,9 @@ export default function SetupButton({ alert }: { alert: Alert }) {
   return (
     <>
       <button type="button" className="btn-settings su-btn" data-tour="setup-btn" onClick={() => setOpen(true)} title="What the game needs to load mods">
-        <Wrench size={16} /> Setup {attention && <i className="su-dot" aria-label="Needs attention" />}
+        <Wrench size={16} /> Setup {(attention || warn) && <i className={`su-dot${warn ? ' is-warn' : ''}`} aria-label="Needs attention" />}
       </button>
-      {open && <SetupPanel alert={alert} focus={focus} onClose={() => { setOpen(false); setFocus(null); recheck() }} />}
+      {open && <SetupPanel alert={alert} focus={focus} onClose={() => { setOpen(false); setFocus(null); recheck(); checkLoader() }} />}
     </>
   )
 }

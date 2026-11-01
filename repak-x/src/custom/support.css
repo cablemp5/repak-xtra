@@ -20,3 +20,40 @@
 /* its pills hold a word only (no caret): even padding, the word in the middle */
 .vf-row .enc-pill { padding: 0 8px !important; }
 .vf-row .enc-pill.is-failed { padding-left: 8px !important; }
+/* repakxtra: the Galacta Converter footer switch reads like the footer line beside it */
+.vf-foot .gal-swap .repakx-checkbox-label { font-size: 13px; color: var(--text-secondary, inherit); }
+/* the footer line takes its own row, the switch and the button share the next */
+.vf-foot:has(.gal-swap) .vf-state { flex-basis: 100%; }
+
+/* repakxtra: the Galacta Converter's welcome card (GalactaWelcome.tsx), over the window's list. Type as in Setup's cards:
+   a 20px bold title (a welcome, a step above Setup's 16px card titles), 13px body. Rhythm: the title and its lead sit tight, the picture and the steps form the middle,
+   the warning closes it, and a bar under a hairline holds the choice and Got it, pinned while the middle scrolls */
+.gal-panel { position: relative; }
+.gal-about { flex: none; align-self: center; display: inline-flex !important; align-items: center; gap: 4px !important; font-size: 13px; }
+.gal-about svg { position: relative; top: 1px; }   /* centered on the word's lowercase letters, not its cap height */
+.gal-welcome { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; padding: 24px; background: color-mix(in srgb, var(--bg-darkest), transparent 25%); backdrop-filter: blur(6px); animation: gal-fade .18s ease-out; }
+.gal-welcome:focus { outline: none; }   /* holds focus while it shows, drawn without a ring */
+.gal-welcome-card { width: min(640px, 100%); max-height: 100%; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--panel-border); border-radius: 12px; background: var(--bg-dark); box-shadow: 0 24px 60px rgb(0 0 0 / .45); animation: gal-rise .22s cubic-bezier(.2, .8, .2, 1); }
+.gal-welcome-head { flex: none; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 24px 0; }
+.gal-welcome-head h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px !important; font-size: 20px !important; font-weight: 700 !important; line-height: 1.25; letter-spacing: -0.01em; color: var(--text-primary); }  /* a welcome's title, a step above the 16px card titles */
+.gal-welcome-head .lo-icon { flex: none; margin: -4px -8px 0 0; }
+.gal-welcome-lead { margin: 0; max-width: 62ch; font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.gal-welcome-body { min-height: 0; overflow-y: auto; padding: 20px 24px 16px; }
+.gal-welcome-shot { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; margin: 0; border: 1px solid var(--panel-border); border-radius: 8px; }
+.gal-welcome-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin: 16px 0 0; padding: 0; list-style: none; }
+.gal-welcome-steps li { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.gal-welcome-steps b { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-primary); }
+/* the step's place in the order, a quiet numbered disc so the three read left to right */
+.gal-step-n { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--panel-border); border-radius: 50%; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-secondary);
+  line-height: 1; padding-top: 1px; }   /* Geist's figures sit high in their line: centered by eye, measured 2026-11-01 */
+.gal-welcome-note.setting-warn { margin: 20px 0 0; grid-template-columns: 14px 1fr; }
+.gal-welcome-foot { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 24px; border-top: 1px solid var(--panel-border); }
+.gal-welcome-foot .repakx-checkbox { flex: none; white-space: nowrap; }
+.gal-welcome-foot .repakx-checkbox-label { font-size: 13px; color: var(--text-secondary); }
+.gal-welcome-foot .btn-primary { /* the window footer's Convert button size (vfx.css .vf-foot .btn-primary) */
+  height: 32px !important; min-height: 0 !important; padding: 0 16px !important; font-size: 13px !important; border-radius: var(--quiet-radius) !important;
+  flex: none; width: auto !important; min-width: 0; font-variant-numeric: tabular-nums; }
+@keyframes gal-fade { from { opacity: 0 } }
+@keyframes gal-rise { from { opacity: 0; transform: translateY(8px) scale(.98) } }
+@media (prefers-reduced-motion: reduce) { .gal-welcome, .gal-welcome-card { animation: none; } }
+@media (max-width: 620px) { .gal-welcome-steps { grid-template-columns: 1fr; gap: 12px; } }

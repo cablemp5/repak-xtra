@@ -141,6 +141,7 @@ import TitleBar from './components/TitleBar'
 
 import InstallModPanel from './custom/InstallPanel' // repakxtra: the install dialog redesigned around saving a loadout
 import EncryptMods, { openEncrypt } from './custom/EncryptMods' // repakxtra
+import GalactaMods from './custom/GalactaMods' // repakxtra
 const SettingsPanel = lazy(() => import('./components/SettingsPanel')) // repakxtra: loaded when Settings first opens
 import CreditsPanel from './components/CreditsPanel'
 import ToolsPanel from './components/ToolsPanel'
@@ -3974,6 +3975,7 @@ function App() {
             <VfxDot mods={mods} />{/* repakxtra: VFX mods need an update */}
           </button>
           <EncryptMods />{/* repakxtra */}
+          <GalactaMods />{/* repakxtra */}
 
           <SetupButton alert={alert} />{/* repakxtra: signature bypass and Project Galacta */}
           <button

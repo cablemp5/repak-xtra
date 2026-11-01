@@ -583,6 +583,7 @@ html:not([data-show-share]) [data-tour="sharing-btn"] { display: none !important
 html:not([data-show-tools]) [data-tour="tools-btn"] { display: none !important; }
 html:not([data-show-vfx-updater]) [data-tour="vfx-updater-btn"] { display: none !important; }
 html:not([data-show-encrypt]) [data-tour="encrypt-btn"] { display: none !important; }
+html:not([data-show-galacta]) [data-tour="galacta-btn"] { display: none !important; }
 html:not([data-show-conflicts]) .mod-type-badge.conflict-badge, html:not([data-show-conflicts]) .conflict-dot { display: none !important; }   /* Settings > On each mod */
 html:not([data-show-asset-explorer]) .btn-asset-explorer,
 html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { display: none !important; }
@@ -688,6 +689,10 @@ html:not([data-show-quick-organize]) .dropzone-container { max-width: 720px; }
 .tag-logo { flex: none; width: 12px; height: 12px; }
 .pg-logo { background: currentColor; -webkit-mask: url('./logos/galacta.png') center / contain no-repeat; mask: url('./logos/galacta.png') center / contain no-repeat; }
 [data-theme="light"] .mod-type-badge.pg-badge { --tag: #a3229a; }
+/* repakxtra: the Galacta Converter's icon, Galacta's mark, white like its source logo (the theme's text color in light mode, where white would vanish) */
+.gal-logo { display: inline-block; flex: none; color: #fff; }
+[data-theme="light"] .gal-logo { color: currentColor; }
+.vf-foot .btn-primary .gal-logo { margin-right: 4px; }  /* like the footer button's Lucide icons */
 .ui-scale button { font-variant-numeric: tabular-nums; }
 
 /* ---------- loadouts screen (custom/LoadoutsScreen.tsx) ---------- */
@@ -1737,6 +1742,10 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 /* ---------- Setup panel (SetupPanel.tsx): the signature bypass and Project Galacta, one card each ---------- */
 .su-btn { position: relative; gap: 8px !important; }
 .su-dot { background: var(--accent-primary); --dot-ring: var(--bg-darkest); }   /* the header behind it */
+.su-dot.is-warn { background: #f5d342; }   /* Project Galacta off, missing, or another loader on too (Setup says which) */
+.su-warn { margin: 0 20px 12px; }
+.su-card p.su-warn { color: #f5a524; }   /* over .su-card p's grey: the app's warning amber, as .setting-warn */
+[data-theme="light"] .su-card p.su-warn { color: #9a5b00; }
 .su-modal { width: min(760px, 94vw) !important; max-width: none !important; max-height: 90vh; display: flex; flex-direction: column; padding: 0 !important; }
 .su-modal .modal-header, .su-changelog .modal-header { padding: 16px 20px !important; border-bottom: 1px solid var(--panel-border); align-items: flex-start; }
 .su-sub { margin: 4px 0 0; font-size: 13px; color: var(--text-secondary); }

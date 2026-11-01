@@ -91,7 +91,7 @@ const isDone = (s?: Status) => s === 'fixed' || s === 'nothing'
 
 /** A mod not marked as needing an update, on hover: what ticking it does */
 const NO_NEED = "Not marked as needing an update. Updating it rebuilds it on the game's current files anyway."
-const STATUS: Record<Status, string> = { waiting: 'Waiting', running: 'Updating', fixed: 'Updated', nothing: 'Nothing to update', failed: 'Failed', cancelled: 'Cancelled' }
+const STATUS: Record<Status, string> = { waiting: 'Queued', running: 'Updating', fixed: 'Updated', nothing: 'Nothing to update', failed: 'Failed', cancelled: 'Cancelled' }
 const KIND_ORDER: AssetKind[] = ['failed', 'left', 'unreadable', 'added', 'updated', 'same', 'passed']
 const KIND_LABEL: Record<AssetKind, string> = { updated: 'Rebuilt', same: 'Match the game', added: 'The mod\'s own', passed: 'Kept as they were', left: 'Left out', unreadable: 'Could not be read', failed: 'Not updated' }
 /** An update that left out Niagara files made for an older game build: it works, without those effects' colors */
