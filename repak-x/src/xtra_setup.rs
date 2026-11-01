@@ -169,6 +169,9 @@ pub async fn setup_bypass(action: String, state: State<'_, Arc<Mutex<crate::AppS
 
 // ---------- Project Galacta ----------
 
+/// The other mod loader: both on at once load the same mods twice.
+const OTHER_LOADER: &str = "!ProjectSigeon_9999999_P";
+
 #[derive(Serialize, Clone)]
 pub struct GalactaStatus {
     /// Folder the installed copy sits in, if any
@@ -181,6 +184,8 @@ pub struct GalactaStatus {
     url: Option<String>,
     /// Some(true) when the installed files match the latest release byte for byte
     up_to_date: Option<bool>,
+    /// The other mod loader's name when it is on too (Setup warns, the header's Setup dot turns yellow)
+    other_loader: Option<String>,
 }
 
 /// Where Galacta's three files are now: the folder holding !ProjectGalacta_9999999_P.utoc (any ~mods subfolder).
@@ -254,8 +259,7 @@ fn install_galacta(mods: &Path, target: &Path, files: &[(String, Vec<u8>)], back
     if !target.starts_with(mods) {
         return Err("The loader goes inside the mods folder".into());
     }
-    let other = "!ProjectSigeon_9999999_P";
-    if find_enabled_loader(mods, other).is_some() {
+    if find_enabled_loader(mods, OTHER_LOADER).is_some() {
         return Err("Turn off the other Project Galacta / Project Sigeon loader in the Library before installing this one.".into());
     }
     fs::create_dir_all(target).map_err(|e| e.to_string())?;
@@ -360,7 +364,8 @@ fn galacta_local(mods: &Path) -> (Option<PathBuf>, bool) {
 pub async fn setup_galacta_status(online: bool, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<GalactaStatus, String> {
     let mods = state.lock().unwrap().game_path.clone();
     let (dir, disabled) = galacta_local(&mods);
-    let mut s = GalactaStatus { installed: dir.as_ref().map(|d| d.display().to_string()), disabled, latest: None, published: None, notes: None, url: None, up_to_date: None };
+    let other_loader = find_enabled_loader(&mods, OTHER_LOADER).map(|_| "Project Sigeon".to_string());
+    let mut s = GalactaStatus { installed: dir.as_ref().map(|d| d.display().to_string()), disabled, latest: None, published: None, notes: None, url: None, up_to_date: None, other_loader };
     if online {
         let (tag, published, notes, url, zip) = latest_release(None).await?;
         let files = zip_files(&zip)?;

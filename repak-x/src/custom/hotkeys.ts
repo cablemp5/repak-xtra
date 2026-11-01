@@ -6,6 +6,16 @@ import { togglePref, toggleTags } from './uiPrefs'
 import { modalOpen } from './dialogFocus'
 
 export type Shortcut = { keys: string[]; action: string }
+/** The header buttons Settings > Header buttons shows or hides, each on Shift + a letter, in every view. Shift+C stays
+ *  the conflict warnings, and a Shift key never also fires its plain letter. */
+const HEADER = [
+  { key: 'm', pref: 'vfx-updater', name: 'Mod Updater' },
+  { key: 'e', pref: 'encrypt', name: 'Encrypt' },
+  { key: 'g', pref: 'galacta', name: 'Galacta Converter' },
+  { key: 'a', pref: 'asset-explorer', name: 'Asset Explorer' },
+  { key: 's', pref: 'share', name: 'Share' },
+  { key: 't', pref: 'tools', name: 'Tools' },
+]
 export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
   {
     title: 'General',
@@ -55,6 +65,10 @@ export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
     ],
   },
   {
+    title: 'Header buttons',
+    items: HEADER.map(h => ({ keys: ['Shift', h.key.toUpperCase()], action: `Show / hide ${h.name}` })),
+  },
+  {
     title: 'Loadouts',
     items: [
       { keys: ['L'], action: 'Switch between Loadouts and Library' },
@@ -95,7 +109,10 @@ window.addEventListener('keydown', e => {
     else if (key === 'o') click('[data-tour="install-btn"]')
     return
   }
-  if (e.ctrlKey || e.altKey || e.metaKey || dialogOpen()) return
+  if (e.ctrlKey || e.altKey || e.metaKey) return
+  const header = e.shiftKey ? HEADER.find(h => h.key === key) : undefined
+  if (header) { e.preventDefault(); togglePref(header.pref, `${header.name} button`); return }
+  if (dialogOpen()) return
 
   // Shift+F10 or the Menu key opens the right-click menu for the selected mod: the browser fires it on the focused
   // element, and arrow keys leave focus on the page, so focus the selected row's name first

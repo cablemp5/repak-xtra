@@ -20,7 +20,7 @@ fn root() -> PathBuf {
     std::env::temp_dir().join("repak-x").join("ko")
 }
 
-fn paks(state: &State<'_, Arc<Mutex<AppState>>>) -> Result<PathBuf, String> {
+pub(crate) fn paks(state: &State<'_, Arc<Mutex<AppState>>>) -> Result<PathBuf, String> {
     let mods = state.lock().unwrap().game_path.clone();
     crate::xtra_broken::paks_dir(&mods).ok_or_else(|| "Set the game folder in Setup first.".to_string())
 }
@@ -36,7 +36,7 @@ fn build_dir(paks: &Path, usmap: &str) -> PathBuf {
     dir
 }
 
-async fn uat(request: VfxUatRequest<'_>, what: &str) -> Result<serde_json::Value, String> {
+pub(crate) async fn uat(request: VfxUatRequest<'_>, what: &str) -> Result<serde_json::Value, String> {
     let r = run_vfx_uat_request(Path::new(""), &request).await?;
     if !r.success {
         return Err(format!("{what} failed: {}", r.message));
@@ -44,7 +44,7 @@ async fn uat(request: VfxUatRequest<'_>, what: &str) -> Result<serde_json::Value
     Ok(r.data.unwrap_or_default())
 }
 
-async fn extract(paks: &Path, out: &Path, patterns: Vec<String>, with_deps: bool) -> Result<(), String> {
+pub(crate) async fn extract(paks: &Path, out: &Path, patterns: Vec<String>, with_deps: bool) -> Result<(), String> {
     std::fs::create_dir_all(out).map_err(|e| e.to_string())?;
     let request = VfxUatRequest {
         action: "extract_iostore_legacy",
@@ -57,7 +57,7 @@ async fn extract(paks: &Path, out: &Path, patterns: Vec<String>, with_deps: bool
     uat(request, "Reading the game's files").await.map(|_| ())
 }
 
-fn uassets(dir: &Path, out: &mut Vec<PathBuf>) {
+pub(crate) fn uassets(dir: &Path, out: &mut Vec<PathBuf>) {
     for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
         let p = e.path();
         if p.is_dir() {
@@ -69,7 +69,7 @@ fn uassets(dir: &Path, out: &mut Vec<PathBuf>) {
 }
 
 /// `dir`-relative path with forward slashes and no extension: Marvel/Content/Marvel/UI/...
-fn rel(dir: &Path, p: &Path) -> String {
+pub(crate) fn rel(dir: &Path, p: &Path) -> String {
     p.strip_prefix(dir).unwrap_or(p).with_extension("").to_string_lossy().replace('\\', "/")
 }
 
@@ -155,7 +155,7 @@ fn listed(dir: &Path, ext: &str) -> Vec<(String, String)> {
     out
 }
 
-fn game_path(r: &str) -> String {
+pub(crate) fn game_path(r: &str) -> String {
     format!("/Game/{}", r.trim_start_matches("Marvel/Content/"))
 }
 

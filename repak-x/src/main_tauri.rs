@@ -48,6 +48,7 @@ mod xtra_mi_layout; // repakxtra: the VFX Updater rewrites materials cooked in a
 mod xtra_uat_cli; // repakxtra: IoStore extracts through UAssetTool's parallel command line
 mod xtra_builtins; // repakxtra: built-in mods made from the game's own tables
 mod xtra_ko; // repakxtra: the KO Editor's game files
+mod xtra_galacta; // repakxtra: the Project Galacta maker
 mod character_data;
 mod crash_monitor;
 mod discord_presence;
@@ -8768,6 +8769,8 @@ fn main() {
             xtra_vfx::xtra_vfx_lock,
             xtra_encrypt::xtra_encrypt_mods,
             xtra_encrypt::xtra_encrypt_list,
+            xtra_galacta::xtra_galacta_list, // repakxtra
+            xtra_galacta::xtra_galacta_make,
             xtra_vfx::xtra_vfx_stale,
             xtra_vfx::xtra_vfx_source,
             xtra_niagara::xtra_vfx_niagara,

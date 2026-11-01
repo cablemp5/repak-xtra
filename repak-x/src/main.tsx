@@ -8,6 +8,7 @@ import App from './App'
 // repakxtra: each secondary window's code loads only in that window, so the main window never parses it
 const VfxUpdaterWindow = lazy(() => import('./custom/vfx/VfxUpdaterWindow')) // repakxtra: in place of the upstream VFX Updater's page
 const EncryptWindow = lazy(() => import('./custom/EncryptWindow')) // repakxtra
+const GalactaWindow = lazy(() => import('./custom/GalactaWindow')) // repakxtra
 import StartedOk from './custom/startedOk' // repakxtra: an update keeps its rollback until the window has rendered
 const AssetExplorerPage = lazy(() => import('./modules/asset-explorer/AssetExplorerPage'))
 import './custom/theme.css' // repakxtra: theme for every window, last so it wins the cascade
@@ -32,6 +33,7 @@ if (!rootElement) {
 const SECONDARY_WINDOWS: { route: string; view: () => JSX.Element }[] = [
   { route: 'vfx-updater', view: () => <VfxUpdaterWindow /> }, // repakxtra
   { route: '/encrypt', view: () => <EncryptWindow /> }, // repakxtra
+  { route: '/galacta', view: () => <GalactaWindow /> }, // repakxtra
   { route: 'asset-explorer', view: () => <AssetExplorerPage /> },
 ]
 

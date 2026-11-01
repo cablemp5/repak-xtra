@@ -16,6 +16,7 @@ import pgIconUrl from '../assets/tools/PG_icon.webp';
 import './SettingsPanel.css'; // Reuse the same styles
 import './ToolsPanel.css';
 import { useDialogFocus } from '../custom/dialogFocus'; // repakxtra
+import { GalactaLogo, openGalacta } from '../custom/GalactaMods'; // repakxtra
 
 /** Project Galacta's icon, tinted with the current theme accent color via CSS masking. */
 function ProjectGalactaIcon() {
@@ -295,6 +296,14 @@ export default function ToolsPanel({ onClose, onOpenAssetExplorer, projectGalact
                     ? { tone: 'on', label: 'On' }
                     : { tone: 'off', label: 'Off' },
             message: galactaStatusMsg
+        },
+        { // repakxtra: the Galacta Converter window
+            id: 'galacta-maker',
+            icon: () => <GalactaLogo size="1em" />,
+            title: 'Galacta Converter',
+            description: 'Convert mesh and texture mods for Project Galacta.',
+            onClick: () => { onClose(); void openGalacta(); },
+            busy: false,
         },
         {
             id: 'skip-launcher',

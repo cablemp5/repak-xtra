@@ -15,11 +15,12 @@ import { savedItem } from './storageCarryOver'
 // `on`: shown until switched off (the rest start hidden). Stored as '1' or '0' once changed.
 // `group`: the Settings section it is drawn in (Header buttons, On each mod), or its own place elsewhere.
 const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod' | 'warn' }[] = [
-  { key: 'vfx-updater', label: 'Mod Updater', on: true, group: 'header' },
-  { key: 'encrypt', label: 'Encrypt', group: 'header' }, // hidden by default: Settings > Header buttons shows it
-  { key: 'asset-explorer', label: 'Asset Explorer', group: 'header' },
-  { key: 'share', label: 'Share', group: 'header' },
-  { key: 'tools', label: 'Tools', group: 'header' },
+  { key: 'vfx-updater', label: 'Mod Updater (Shift+M)', on: true, group: 'header' },
+  { key: 'encrypt', label: 'Encrypt (Shift+E)', group: 'header' }, // hidden by default: Settings > Header buttons shows it
+  { key: 'galacta', label: 'Galacta Converter (Shift+G)', group: 'header' }, // hidden by default, also in Tools
+  { key: 'asset-explorer', label: 'Asset Explorer (Shift+A)', group: 'header' },
+  { key: 'share', label: 'Share (Shift+S)', group: 'header' },
+  { key: 'tools', label: 'Tools (Shift+T)', group: 'header' },
   { key: 'mod-size', label: 'File size', group: 'mod' },
   { key: 'priority', label: 'Load priority counter (P)', group: 'mod' },
   { key: 'nexus', label: 'Nexus tag on mods installed from Nexus Mods', on: true, group: 'mod' },
