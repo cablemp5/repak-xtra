@@ -127,8 +127,9 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   const state = usePreviewState(previewSetKey(l.id))
   const working = state && (cover === 'preview' || cover === null) ? state : null // a card showing another source stays put
   const stage = usePreviewStage(working?.kind === 'running')
-  // While it renders the hero's shape sits behind the status, under the shimmer, in place of any older picture
-  const shape = working ? silhouetteOf(loadoutHero(l.on, p.mods, p.modDetails)) : undefined
+  // While it renders the hero's shape sits behind the status, under the shimmer. A loadout that already has a picture
+  // keeps it, blurred under the shimmer, instead
+  const shape = working && !src ? silhouetteOf(loadoutHero(l.on, p.mods, p.modDetails)) : undefined
   const caption = l.caption?.trim() || ''
   const [typing, setTyping] = useState(false)
   const words = cover === 'text' && fills.text

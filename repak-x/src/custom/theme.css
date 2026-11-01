@@ -1721,7 +1721,7 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
   background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.07) 50%, transparent 100%);
   transform: translateX(-100%); animation: lo-skel-sweep 1.6s ease-in-out infinite; }
 @keyframes lo-skel-sweep { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
-/* The hero's shape behind the status while a preview renders, the sweep passing over it. An older picture steps aside */
+/* The hero's shape behind the status while a first preview renders, the sweep passing over it (an older picture stays, blurred) */
 .lo-media:has(.lo-skel-shape) .lo-card-image img, .lo-media:has(.lo-skel-shape) .lo-media-multi { visibility: hidden; }
 .lo-skel-shape { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.08) 55%, rgba(255, 255, 255, 0) 100%);
   mask-size: cover; mask-position: center bottom; mask-repeat: no-repeat; -webkit-mask-size: cover; -webkit-mask-position: center bottom; -webkit-mask-repeat: no-repeat; }
