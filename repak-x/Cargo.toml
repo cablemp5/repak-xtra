@@ -33,7 +33,6 @@ log = "0.4.26"
 simplelog = "0.12.2"
 
 # Core dependencies
-hex.workspace = true
 sha2 = "0.10.9"
 serde = { version = "1.0.218", features = ["derive"] }
 uuid = { version = "1.0", features = ["v4"] }
@@ -58,7 +57,6 @@ zstd = "0.13" # repakxtra: depot USMAPs are zstd-compressed (xtra_usmap_diff.rs)
 # Update checking
 reqwest = { version = "0.12.8", features = ["json", "rustls-tls", "stream"] }
 semver = "1.0.23"
-open = "5.3.0"
 
 # Process checking
 sysinfo = "0.32"
@@ -67,18 +65,8 @@ sysinfo = "0.32"
 tokio = { version = "1", features = ["full"] }
 parking_lot = "0.12"
 
-# P2P Secure Mod Sharing
-aes-gcm = "0.10"
 rand = "0.8"
 base64 = "0.22"
-local-ip-address = "0.6"
-bincode = "1.3"
-
-# UPnP port mapping for automatic NAT traversal
-igd-next = { version = "0.16", features = ["aio_tokio"] }
-
-# Free TCP relay tunnel (bore.pub) for NAT traversal fallback
-bore-cli = "0.6"
 
 # Character data management
 once_cell = "1.19"

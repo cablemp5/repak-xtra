@@ -29,7 +29,7 @@ import { RiDeleteBin2Fill } from 'react-icons/ri'
 import { MdDriveFileMoveOutline } from "react-icons/md"
 import { IoLayersSharp } from "react-icons/io5"
 import { FaTag, FaToolbox, FaSort } from "react-icons/fa6"
-import { IoMdWifi, IoIosSettings, IoMdWarning } from "react-icons/io"
+import { IoIosSettings, IoMdWarning } from "react-icons/io"
 import { VscListTree } from "react-icons/vsc"
 import { GrInstall } from "react-icons/gr"
 import { GiLightningTrio } from "react-icons/gi"
@@ -145,7 +145,6 @@ import GalactaMods from './custom/GalactaMods' // repakxtra
 const SettingsPanel = lazy(() => import('./components/SettingsPanel')) // repakxtra: loaded when Settings first opens
 import CreditsPanel from './components/CreditsPanel'
 import ToolsPanel from './components/ToolsPanel'
-import SharingPanel from './components/SharingPanel'
 import Wordmark from './custom/Wordmark' // repakxtra: the logo
 import ConflictsPanel from './custom/ConflictsPanel' // repakxtra: in place of Repak X's ClashPanel (grouped, in words)
 import { keepThisOne } from './custom/keepOne' // repakxtra: Keep this one
@@ -186,7 +185,6 @@ type ClashRecord = {
 type PanelState = {
   settings: boolean
   tools: boolean
-  sharing: boolean
   credits: boolean
   install: boolean
   clash: boolean
@@ -283,6 +281,7 @@ type AppSettings = {
   holdToDelete: boolean
   showSubfolderMods: boolean
   bypassGameRunningLock: boolean
+  allowModOverwrite: boolean
   launcherType: 'steam' | 'epic'
   enableAnimations: boolean
 }
@@ -321,6 +320,7 @@ function App() {
   const [parallelProcessing, setParallelProcessing] = useState(false);
   const [holdToDelete, setHoldToDelete] = useState(false); // repakxtra: off by default
   const [bypassGameRunningLock, setBypassGameRunningLock] = useState(false);
+  const [allowModOverwrite, setAllowModOverwrite] = useState(false);
   const [launcherType, setLauncherType] = useState<'steam' | 'epic'>('steam');
   const [enableAnimations, setEnableAnimations] = useState(true);
   // CSS gates animations on [data-animations="off"]
@@ -339,9 +339,6 @@ function App() {
   const [downloadedUpdatePath, setDownloadedUpdatePath] = useState<string | null>(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [showChangelogModal, setShowChangelogModal] = useState(false);
-  // Captured at startup, before the marker is rewritten. Surfaced in Settings so
-  // a user on a release build (no devtools) can read back what the check saw.
-  const [changelogMarker, setChangelogMarker] = useState<{ lastSeen: string; current: string; recorded: boolean } | null>(null);
   const [changelogContent, setChangelogContent] = useState('');
   const [changelogVersion, setChangelogVersion] = useState(REPAKXTRA_VERSION); // repakxtra: the version the shown notes belong to
 
@@ -349,7 +346,6 @@ function App() {
   const [panels, setPanels] = useState<PanelState>({
     settings: false,
     tools: false,
-    sharing: false,
     credits: false,
     install: false,
     clash: false,
@@ -388,7 +384,7 @@ function App() {
   const [isFiltersResizing, setIsFiltersResizing] = useState(false)
   const [selectedMods, setSelectedMods] = useState<Set<string>>(new Set())
   // repakxtra: the checked mods without the built-in rows (custom/builtinRows.ts): every file action (delete, move,
-  // tags, loadouts, sharing, the menu) uses this, only Enable and Disable reach a built-in, through its own switch
+  // tags, loadouts, the menu) uses this, only Enable and Disable reach a built-in, through its own switch
   const selectedFiles = useMemo(() => new Set([...selectedMods].filter(p => !isBuiltin(p))), [selectedMods])
   const [showBulkActions, setShowBulkActions] = useState(false)
   const [newTagInput, setNewTagInput] = useState('')
@@ -1826,7 +1822,6 @@ function App() {
 
       const normalizedVersion = String(xver || '').replace(/^v/, '')
       const versionRecorded = normalizedVersion ? await recordSeenVersion(xver) : false
-      setChangelogMarker({ lastSeen, current: String(xver || ''), recorded: versionRecorded })
 
       if (versionRecorded && lastSeen && lastSeen !== xver) {
         console.debug('[Changelog] Version change detected', { lastSeen, currentVersion: xver, normalizedVersion })
@@ -3156,7 +3151,6 @@ function App() {
         if (panels.shortcuts) setPanel('shortcuts', false)
         else if (panels.settings) setPanel('settings', false)
         else if (panels.tools) setPanel('tools', false)
-        else if (panels.sharing) setPanel('sharing', false)
         else if (panels.install) setPanel('install', false)
         else if (panels.clash) setPanel('clash', false)
         else if (modalOpen()) return // repakxtra: another dialog takes its own Esc, the Library behind it keeps its selection
@@ -3464,6 +3458,7 @@ function App() {
     const newHoldToDelete = overrides.holdToDelete !== undefined ? overrides.holdToDelete : holdToDelete;
     const newShowSubfolderMods = overrides.showSubfolderMods !== undefined ? overrides.showSubfolderMods : showSubfolderMods;
     const newBypassGameRunningLock = overrides.bypassGameRunningLock !== undefined ? overrides.bypassGameRunningLock : bypassGameRunningLock;
+    const newAllowModOverwrite = overrides.allowModOverwrite !== undefined ? overrides.allowModOverwrite : allowModOverwrite;
     const newLauncherType = overrides.launcherType !== undefined ? overrides.launcherType : launcherType;
     const newEnableAnimations = overrides.enableAnimations !== undefined ? overrides.enableAnimations : enableAnimations;
 
@@ -3487,6 +3482,7 @@ function App() {
       holdToDelete: newHoldToDelete,
       showSubfolderMods: newShowSubfolderMods,
       bypassGameRunningLock: newBypassGameRunningLock,
+      allowModOverwrite: newAllowModOverwrite,
       launcherType: newLauncherType,
       enableAnimations: newEnableAnimations,
     };
@@ -3524,6 +3520,7 @@ function App() {
     if (overrides.holdToDelete !== undefined) setHoldToDelete(newHoldToDelete);
     if (overrides.showSubfolderMods !== undefined) setShowSubfolderMods(newShowSubfolderMods);
     if (overrides.bypassGameRunningLock !== undefined) setBypassGameRunningLock(newBypassGameRunningLock);
+    if (overrides.allowModOverwrite !== undefined) setAllowModOverwrite(newAllowModOverwrite);
     if (overrides.launcherType !== undefined) setLauncherType(newLauncherType);
     if (overrides.enableAnimations !== undefined) setEnableAnimations(newEnableAnimations);
 
@@ -3600,6 +3597,7 @@ function App() {
         setHoldToDelete(settings.holdToDelete);
         setShowSubfolderMods(settings.showSubfolderMods);
         setBypassGameRunningLock(settings.bypassGameRunningLock);
+        setAllowModOverwrite(settings.allowModOverwrite);
         setEnableDrp(settings.enableDrp);
         if (settings.launcherType) setLauncherType(settings.launcherType);
         setEnableAnimations(settings.enableAnimations !== false);
@@ -3692,7 +3690,7 @@ function App() {
 
       {panels.settings && (
         <Suspense fallback={null}><SettingsPanel
-          settings={{ hideSuffix, autoOpenDetails, showHeroIcons, showHeroBg, showModType, showExperimental, enableDrp, parallelProcessing, autoCheckUpdates, holdToDelete, showSubfolderMods, bypassGameRunningLock, launcherType, enableAnimations }}
+          settings={{ hideSuffix, autoOpenDetails, showHeroIcons, showHeroBg, showModType, showExperimental, enableDrp, parallelProcessing, autoCheckUpdates, holdToDelete, showSubfolderMods, bypassGameRunningLock, allowModOverwrite, launcherType, enableAnimations }}
           onSave={handleSaveSettings}
           onClose={() => setPanel('settings', false)}
           theme={theme}
@@ -3706,7 +3704,6 @@ function App() {
           setParallelProcessing={handleSetParallelProcessing}
           onCheckForUpdates={handleCheckForUpdates}
           onViewChangelog={handleViewChangelog}
-          changelogMarker={changelogMarker}
           isCheckingUpdates={isCheckingUpdates}
           onReplayTour={handleReplayTour}
           onOpenShortcuts={() => setPanel('shortcuts', true)}
@@ -3728,16 +3725,6 @@ function App() {
           onToggleProjectGalacta={async () => {
             if (projectGalactaMod) await handleToggleMod(projectGalactaMod.path)
           }}
-        />
-      )}
-
-      {panels.sharing && (
-        <SharingPanel
-          onClose={() => setPanel('sharing', false)}
-          gamePath={gamePath}
-          installedMods={mods}
-          selectedMods={selectedFiles}
-          folders={folders}
         />
       )}
 
@@ -3978,14 +3965,6 @@ function App() {
           <GalactaMods />{/* repakxtra */}
 
           <SetupButton alert={alert} />{/* repakxtra: signature bypass and Project Galacta */}
-          <button
-            onClick={() => setPanel('sharing', true)}
-            className="btn-settings"
-            data-tour="sharing-btn"
-            title="Share Mods"
-          >
-            <IoMdWifi size={20} /> Share
-          </button>
           <button
             onClick={() => setPanel('tools', true)}
             className="btn-settings"

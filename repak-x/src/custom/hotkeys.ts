@@ -13,7 +13,6 @@ const HEADER = [
   { key: 'e', pref: 'encrypt', name: 'Encrypt' },
   { key: 'g', pref: 'galacta', name: 'Galacta Converter' },
   { key: 'a', pref: 'asset-explorer', name: 'Asset Explorer' },
-  { key: 's', pref: 'share', name: 'Share' },
   { key: 't', pref: 'tools', name: 'Tools' },
 ]
 export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
@@ -87,7 +86,7 @@ export const isTyping = (target: EventTarget | null) => {
   return Boolean(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable))
 }
 
-/** A dialog is open (dialogFocus.ts MODAL: Settings, Sharing, Tools, help...), or Home or Nexus is showing: the
+/** A dialog is open (dialogFocus.ts MODAL: Settings, Tools, help...), or Home or Nexus is showing: the
  *  Library's plain-letter shortcuts pause. */
 export const dialogOpen = () => modalOpen() || document.documentElement.dataset.view !== 'library'
 

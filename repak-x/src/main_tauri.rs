@@ -54,11 +54,7 @@ mod crash_monitor;
 mod discord_presence;
 mod hero_assets;
 mod install_mod;
-mod ip_obfuscation;
 mod merge_command;
-mod p2p_libp2p;
-mod p2p_manager;
-mod p2p_sharing;
 mod toast_events;
 mod uasset_api_integration;
 mod uasset_detection;
@@ -74,7 +70,6 @@ use serde::{Deserialize, Serialize};
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode, WriteLogger};
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Listener, Manager, State, Window};
 use uasset_detection::detect_texture_files_async;
@@ -87,13 +82,6 @@ use walkdir::WalkDir;
 
 struct WatcherState {
     watcher: Mutex<Option<RecommendedWatcher>>,
-    /// When true, the file watcher suppresses events (e.g. during P2P transfer)
-    paused: Arc<AtomicBool>,
-}
-
-/// P2P Sharing state management
-struct P2PState {
-    manager: Arc<p2p_manager::UnifiedP2PManager>,
 }
 
 /// Crash monitoring state
@@ -191,6 +179,8 @@ struct AppState {
     show_subfolder_mods: bool,
     #[serde(default)]
     bypass_game_running_lock: bool,
+    #[serde(default)]
+    allow_mod_overwrite: bool,
     #[serde(default = "default_true")]
     enable_drp: bool,
     #[serde(default = "default_launcher_type")]
@@ -247,6 +237,7 @@ impl Default for AppState {
             hold_to_delete: false, // repakxtra
             show_subfolder_mods: default_true(),
             bypass_game_running_lock: false,
+            allow_mod_overwrite: false,
             enable_drp: default_true(),
             launcher_type: default_launcher_type(),
             enable_animations: default_true(),
@@ -362,6 +353,8 @@ struct AppSettings {
     hold_to_delete: bool,
     show_subfolder_mods: bool,
     bypass_game_running_lock: bool,
+    #[serde(default)]
+    allow_mod_overwrite: bool,
     enable_drp: bool,
     launcher_type: String,
     #[serde(default = "default_true")]
@@ -397,6 +390,7 @@ async fn get_app_settings(state: State<'_, Arc<Mutex<AppState>>>) -> Result<AppS
         hold_to_delete: state.hold_to_delete,
         show_subfolder_mods: state.show_subfolder_mods,
         bypass_game_running_lock: state.bypass_game_running_lock,
+        allow_mod_overwrite: state.allow_mod_overwrite,
         enable_drp: state.enable_drp,
         launcher_type: state.launcher_type.clone(),
         enable_animations: state.enable_animations,
@@ -427,6 +421,7 @@ async fn save_app_settings(
     state.hold_to_delete = settings.hold_to_delete;
     state.show_subfolder_mods = settings.show_subfolder_mods;
     state.bypass_game_running_lock = settings.bypass_game_running_lock;
+    state.allow_mod_overwrite = settings.allow_mod_overwrite;
     state.enable_drp = settings.enable_drp;
     state.launcher_type = settings.launcher_type;
     state.enable_animations = settings.enable_animations;
@@ -563,7 +558,6 @@ async fn start_file_watcher(
     // one every 500 ms while a big file copies (each reload re-lists the library and restarts its background scans).
     let (tx, rx) = std::sync::mpsc::channel::<Vec<std::path::PathBuf>>();
     let window_clone = window.clone();
-    let paused_at_emit = watcher_state.paused.clone();
     std::thread::spawn(move || {
         // Ends when the watcher (and with it the sender) is dropped
         while let Ok(first) = rx.recv() {
@@ -574,9 +568,6 @@ async fn start_file_watcher(
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => break,
                     Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
                 }
-            }
-            if paused_at_emit.load(Ordering::Relaxed) {
-                continue; // paused while these settled (a P2P transfer started): they are its own files
             }
             paths.sort();
             paths.dedup();
@@ -594,14 +585,9 @@ async fn start_file_watcher(
         }
     });
 
-    let paused = watcher_state.paused.clone();
     let watcher_result = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
         match res {
             Ok(event) => {
-                // Skip events while paused (e.g. during P2P transfer)
-                if paused.load(Ordering::Relaxed) {
-                    return;
-                }
                 // We only care about Create, Remove, Rename, and Modify events (files and directories)
                 if matches!(event.kind, EventKind::Create(_) | EventKind::Remove(_) | EventKind::Modify(_)) {
                     let _ = tx.send(event.paths);
@@ -3315,9 +3301,11 @@ async fn install_mods(
         }
 
         // --- CLEANUP TEMP HYBRID FOLDERS ---
+        // Only our own merge folders: a user's folder with the same prefix must survive
+        let merge_temp_base = app_dir().join("temp");
         for path in unique_paths {
             if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
-                if file_name.starts_with("hybrid_merge_") {
+                if file_name.starts_with("hybrid_merge_") && path.starts_with(&merge_temp_base) {
                     if let Err(e) = std::fs::remove_dir_all(&path) {
                         let _ = window_for_logs.emit(
                             "install_log",
@@ -3984,6 +3972,186 @@ fn rename_path_case_safe(old: &Path, new: &Path) -> std::io::Result<()> {
     std::fs::rename(&temp_path, new)
 }
 
+/// Renames a mod's main file together with its IoStore side files (.utoc,
+/// .ucas). The three must always share one name, so if any rename fails the
+/// ones already done are undone and the mod is left as it was.
+fn rename_mod_files(old: &Path, new: &Path) -> std::io::Result<()> {
+    let mut pairs = vec![(old.to_path_buf(), new.to_path_buf())];
+    for ext in ["utoc", "ucas"] {
+        let old_side = crate::xtra_bundle::companion(old, ext); // repakxtra: keeps a .bak_repak name's earlier dots (Name.pak.bak_repak)
+        let new_side = crate::xtra_bundle::companion(new, ext);
+        // repakxtra: Name.pak.bak_repak to Name.bak_repak keeps the same .utoc and .ucas, which stay where they are
+        if old_side.exists() && old_side != new_side {
+            pairs.push((old_side, new_side));
+        }
+    }
+
+    let mut done: Vec<&(PathBuf, PathBuf)> = Vec::new();
+    for pair in &pairs {
+        let (from, to) = pair;
+        // rename() replaces an existing file, which would erase another mod's data
+        let result = if to.exists() && !is_case_only_rename(from, to) {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!("{} already exists", to.display()),
+            ))
+        } else {
+            rename_path_case_safe(from, to)
+        };
+        if let Err(e) = result {
+            for (from, to) in done.into_iter().rev() {
+                let _ = std::fs::rename(to, from);
+            }
+            return Err(e);
+        }
+        done.push(pair);
+    }
+    Ok(())
+}
+
+/// Like [`rename_mod_files`], but replaces any mod already at `new`. Its files
+/// (.utoc and .ucas included, so none are left paired with the wrong mod) are set
+/// aside first and only deleted once the rename worked, otherwise they're put back.
+fn replace_mod_files(old: &Path, new: &Path) -> std::io::Result<()> {
+    if is_case_only_rename(old, new) {
+        return rename_mod_files(old, new);
+    }
+    // repakxtra: an on or off copy of the mod at `new` shares its .utoc and .ucas, which replacing would take from it
+    let same = |a: &Path, b: &Path| a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase();
+    for ext in ["pak", "bak_repak", "pak_disabled", "pak.bak_repak"] {
+        let other = crate::xtra_bundle::companion(new, ext);
+        if other.exists() && !same(&other, new) && !same(&other, old) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!("{} is an on or off copy of the mod there, so nothing was replaced", other.display()),
+            ));
+        }
+    }
+
+    let mut set_aside: Vec<(PathBuf, PathBuf)> = Vec::new();
+    let mut result = Ok(());
+    // repakxtra: never the mod's own .utoc and .ucas, which it can share with `new` (Name.pak.bak_repak, Name.bak_repak)
+    let own = ["utoc", "ucas"].map(|x| crate::xtra_bundle::companion(old, x));
+    for path in [
+        new.to_path_buf(),
+        crate::xtra_bundle::companion(new, "utoc"),
+        crate::xtra_bundle::companion(new, "ucas"),
+    ] {
+        if !path.exists() || own.iter().any(|o| same(o, &path)) {
+            continue;
+        }
+        let mut backup = path.clone().into_os_string();
+        backup.push(".repakx_replaced");
+        let backup = PathBuf::from(backup);
+        match std::fs::rename(&path, &backup) {
+            Ok(()) => set_aside.push((path, backup)),
+            Err(e) => {
+                result = Err(e);
+                break;
+            }
+        }
+    }
+
+    let result = result.and_then(|()| rename_mod_files(old, new));
+    for (path, backup) in set_aside {
+        if result.is_ok() {
+            let _ = std::fs::remove_file(&backup);
+        } else {
+            let _ = std::fs::rename(&backup, &path);
+        }
+    }
+    result
+}
+
+#[cfg(test)]
+mod rename_mod_files_tests {
+    use super::{rename_mod_files, replace_mod_files};
+
+    #[test]
+    fn replace_removes_the_old_mods_side_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = |name: &str| dir.path().join(name);
+        for name in ["a.pak", "b.pak", "b.utoc", "b.ucas"] {
+            std::fs::write(p(name), name).unwrap();
+        }
+
+        replace_mod_files(&p("a.pak"), &p("b.pak")).unwrap();
+        assert_eq!(std::fs::read_to_string(p("b.pak")).unwrap(), "a.pak");
+        assert!(!p("a.pak").exists() && !p("b.utoc").exists() && !p("b.ucas").exists());
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn replace_never_takes_an_off_copys_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = |name: &str| dir.path().join(name);
+        for name in ["a.pak", "b.bak_repak", "b.utoc", "b.ucas"] {
+            std::fs::write(p(name), name).unwrap();
+        }
+
+        assert!(replace_mod_files(&p("a.pak"), &p("b.pak")).is_err());
+        for name in ["a.pak", "b.bak_repak", "b.utoc", "b.ucas"] {
+            assert_eq!(std::fs::read_to_string(p(name)).unwrap(), name, "{name} is untouched");
+        }
+        assert!(!p("b.pak").exists());
+    }
+
+    #[test]
+    fn an_old_style_off_name_keeps_its_shared_side_files() {
+        // A.pak.bak_repak and A.bak_repak share A.utoc and A.ucas: renaming between them moves only the main file
+        for replace in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let p = |name: &str| dir.path().join(name);
+            for name in ["A.pak.bak_repak", "A.utoc", "A.ucas"] {
+                std::fs::write(p(name), name).unwrap();
+            }
+            let r = if replace { replace_mod_files(&p("A.pak.bak_repak"), &p("A.bak_repak")) } else { rename_mod_files(&p("A.pak.bak_repak"), &p("A.bak_repak")) };
+            r.unwrap();
+            assert_eq!(std::fs::read_to_string(p("A.bak_repak")).unwrap(), "A.pak.bak_repak");
+            for name in ["A.utoc", "A.ucas"] {
+                assert_eq!(std::fs::read_to_string(p(name)).unwrap(), name, "{name} kept (replace: {replace})");
+            }
+            assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 3);
+        }
+    }
+
+    #[test]
+    fn failed_replace_restores_the_existing_mod() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = |name: &str| dir.path().join(name);
+        for name in ["b.pak", "b.utoc"] {
+            std::fs::write(p(name), name).unwrap();
+        }
+
+        // a.pak does not exist, so the rename step fails
+        assert!(replace_mod_files(&p("a.pak"), &p("b.pak")).is_err());
+        assert_eq!(std::fs::read_to_string(p("b.pak")).unwrap(), "b.pak");
+        assert_eq!(std::fs::read_to_string(p("b.utoc")).unwrap(), "b.utoc");
+    }
+
+    #[test]
+    fn failed_rename_leaves_all_three_files_in_place() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = |name: &str| dir.path().join(name);
+        for name in ["a.pak", "a.utoc", "a.ucas", "b.ucas"] {
+            std::fs::write(p(name), name).unwrap();
+        }
+
+        assert!(rename_mod_files(&p("a.pak"), &p("b.pak")).is_err());
+        for name in ["a.pak", "a.utoc", "a.ucas"] {
+            assert!(p(name).exists(), "{name} should be back");
+        }
+        assert!(!p("b.pak").exists() && !p("b.utoc").exists());
+        assert_eq!(std::fs::read_to_string(p("b.ucas")).unwrap(), "b.ucas");
+
+        std::fs::remove_file(p("b.ucas")).unwrap();
+        rename_mod_files(&p("a.pak"), &p("b.pak")).unwrap();
+        for name in ["b.pak", "b.utoc", "b.ucas"] {
+            assert!(p(name).exists(), "{name} should exist");
+        }
+    }
+}
+
 #[tauri::command]
 async fn rename_mod(
     mod_path: String,
@@ -4076,52 +4244,28 @@ async fn rename_mod(
     };
     let new_path = parent.join(&new_file_name);
 
-    if let Some(error_msg) = xtra_export::name_taken(parent, &old_stem, &new_stem) { // repakxtra: on, off and .utoc/.ucas names too
-        toast_events::emit_rename_failed(&window, &error_msg);
-        return Err(error_msg);
+    let overwrite = is_pak_type && state.lock().unwrap().allow_mod_overwrite;
+    if !overwrite {
+        if let Some(error_msg) = xtra_export::name_taken(parent, &old_stem, &new_stem) { // repakxtra: on, off and .utoc/.ucas names too
+            toast_events::emit_rename_failed(&window, &error_msg);
+            return Err(error_msg);
+        }
     }
-    if new_path.exists() && !is_case_only_rename(&old_path_buf, &new_path) {
+    if !overwrite && new_path.exists() && !is_case_only_rename(&old_path_buf, &new_path) {
         let error_msg = format!("A file with name '{}' already exists", new_file_name);
         toast_events::emit_rename_failed(&window, &error_msg);
         return Err(error_msg);
     }
 
-    // If it's a .pak or .bak_repak file, rename associated IoStore files (.ucas, .utoc) FIRST
-    // Do this before renaming the main file to ensure we have the correct old stem
-    if is_pak_type {
-        // Rename .ucas file if it exists
-        let old_ucas = parent.join(format!("{}.ucas", old_stem));
-        let new_ucas = parent.join(format!("{}.ucas", new_stem));
-        info!(
-            "rename_mod: checking ucas: {} exists={}",
-            old_ucas.display(),
-            old_ucas.exists()
-        );
-        if old_ucas.exists() {
-            match rename_path_case_safe(&old_ucas, &new_ucas) {
-                Ok(_) => info!("rename_mod: renamed ucas to {}", new_ucas.display()),
-                Err(e) => warn!("rename_mod: failed to rename ucas: {}", e),
-            }
-        }
-
-        // Rename .utoc file if it exists
-        let old_utoc = parent.join(format!("{}.utoc", old_stem));
-        let new_utoc = parent.join(format!("{}.utoc", new_stem));
-        info!(
-            "rename_mod: checking utoc: {} exists={}",
-            old_utoc.display(),
-            old_utoc.exists()
-        );
-        if old_utoc.exists() {
-            match rename_path_case_safe(&old_utoc, &new_utoc) {
-                Ok(_) => info!("rename_mod: renamed utoc to {}", new_utoc.display()),
-                Err(e) => warn!("rename_mod: failed to rename utoc: {}", e),
-            }
-        }
-    }
-
-    // Rename the main file
-    if let Err(e) = rename_path_case_safe(&old_path_buf, &new_path) {
+    // A .pak or .bak_repak carries its IoStore files (.ucas, .utoc) along
+    let renamed = if overwrite {
+        replace_mod_files(&old_path_buf, &new_path)
+    } else if is_pak_type {
+        rename_mod_files(&old_path_buf, &new_path)
+    } else {
+        rename_path_case_safe(&old_path_buf, &new_path)
+    };
+    if let Err(e) = renamed {
         let error_msg = format!("Failed to rename file: {}", e);
         toast_events::emit_rename_failed(&window, &error_msg);
         return Err(error_msg);
@@ -4624,34 +4768,29 @@ async fn assign_mod_to_folder(
         game_path.join(filename)
     };
 
+    if dest_path == source_path {
+        return Ok(());
+    }
+
     // repakxtra: on Windows a rename replaces the file already there, which would delete a same-named mod in that folder
-    // (on or off, and its .utoc/.ucas)
+    // (on or off, and its .utoc/.ucas). Unless Settings allows overwriting
     let taken = ["pak", "bak_repak", "pak_disabled", "utoc", "ucas"].iter().any(|x| dest_path.with_extension(x).exists());
-    if dest_path.parent() != source_path.parent() && taken {
+    if !state.allow_mod_overwrite && dest_path.parent() != source_path.parent() && taken {
         let error_msg = "A mod with the same file name is already in that folder".to_string();
         toast_events::emit_move_failed(&window, &error_msg);
         return Err(error_msg);
     }
 
-    // Move the main file
-    if let Err(e) = std::fs::rename(&source_path, &dest_path) {
+    // Move the mod together with its .utoc and .ucas files (IoStore files)
+    let moved = if state.allow_mod_overwrite {
+        replace_mod_files(&source_path, &dest_path)
+    } else {
+        rename_mod_files(&source_path, &dest_path)
+    };
+    if let Err(e) = moved {
         let error_msg = format!("Failed to move mod: {}", e);
         toast_events::emit_move_failed(&window, &error_msg);
         return Err(error_msg);
-    }
-
-    // Also move .utoc and .ucas files if they exist (IoStore files)
-    let utoc_source = source_path.with_extension("utoc");
-    let ucas_source = source_path.with_extension("ucas");
-
-    if utoc_source.exists() {
-        let utoc_dest = dest_path.with_extension("utoc");
-        let _ = std::fs::rename(&utoc_source, &utoc_dest);
-    }
-
-    if ucas_source.exists() {
-        let ucas_dest = dest_path.with_extension("ucas");
-        let _ = std::fs::rename(&ucas_source, &ucas_dest);
     }
 
     Ok(())
@@ -4773,7 +4912,7 @@ async fn toggle_mod(
     };
 
     // repakxtra: an on and an off copy can sit side by side; a rename on Windows would replace (delete) the other copy
-    if new_path.exists() {
+    if new_path.exists() && !state.lock().unwrap().allow_mod_overwrite {
         let error_msg = format!("Both an on and an off copy of {} are in the mods folder. Delete one of them, then switch it.",
             path.file_stem().and_then(|s| s.to_str()).unwrap_or("this mod"));
         toast_events::emit_toggle_failed(&window, &error_msg);
@@ -6065,7 +6204,7 @@ async fn check_for_updates(window: Window) -> Result<Option<UpdateInfo>, String>
     ui_log::info("Update", "Checking for a newer Repak-X release...");
 
     let client = reqwest::Client::new();
-    let url = "https://api.github.com/repos/XzantGaming/Repak-X/releases/latest";
+    let url = "https://api.github.com/repos/X-zant/Repak-X/releases/latest";
 
     let res = client
         .get(url)
@@ -6224,6 +6363,8 @@ struct ExtractionProgress {
     status: String, // "extracting", "complete", "error"
 }
 
+const UPDATE_ASSET_URL_PREFIX: &str = "https://github.com/cablemp5/repak-xtra/releases/download/"; // repakxtra: its own releases
+
 /// Download an update from the given URL
 /// Returns the path to the downloaded file
 #[tauri::command]
@@ -6236,11 +6377,16 @@ async fn download_update(
 
     info!("Starting update download from: {}", asset_url);
 
+    // Both values arrive from the UI: only fetch our own release assets (the name is checked below)
+    if !asset_url.starts_with(UPDATE_ASSET_URL_PREFIX) {
+        return Err(format!("Refusing update from unexpected URL: {}", asset_url));
+    }
+
     // Create temp directory for the update
     let temp_dir = crate::xtra_updater::update_dir(); // repakxtra: not Repak X's
     // repakxtra: the name comes from the release listing: one plain file name, so the download stays in temp_dir
     // repakxtra: only the release zip, which apply_update checks for the app and edition before installing
-    if !crate::p2p_sharing::safe_file_name(&asset_name) || !asset_name.to_ascii_lowercase().ends_with(".zip") {
+    if !crate::xtra_updater::safe_file_name(&asset_name) || !asset_name.to_ascii_lowercase().ends_with(".zip") {
         return Err(format!("Unexpected update file name: {asset_name}"));
     }
     if temp_dir.exists() {
@@ -6354,6 +6500,16 @@ async fn download_update(
         .map_err(|e| format!("Failed to flush file: {}", e))?;
     drop(file);
 
+    // A cut-off download must never be handed to apply_update
+    if let Some(total) = total_size {
+        if downloaded != total {
+            let _ = std::fs::remove_file(&download_path);
+            return Err(format!(
+                "Update download incomplete: got {} of {} bytes",
+                downloaded, total
+            ));
+        }
+    }
     // repakxtra: a corrupted or swapped download never reaches apply_update
     if let Err(error) = crate::xtra_update::verify_checksum(&client, &asset_url, &download_path).await {
         let _ = std::fs::remove_file(&download_path);
@@ -6744,26 +6900,6 @@ async fn discord_set_installing(
     }
 }
 
-/// Set Discord activity to show sharing mods
-#[tauri::command]
-async fn discord_set_sharing(discord_state: State<'_, DiscordState>) -> Result<(), String> {
-    if discord_state.manager.is_connected() {
-        discord_state.manager.set_sharing_mods()
-    } else {
-        Ok(())
-    }
-}
-
-/// Set Discord activity to show receiving mods
-#[tauri::command]
-async fn discord_set_receiving(discord_state: State<'_, DiscordState>) -> Result<(), String> {
-    if discord_state.manager.is_connected() {
-        discord_state.manager.set_receiving_mods()
-    } else {
-        Ok(())
-    }
-}
-
 /// Clear Discord activity
 #[tauri::command]
 async fn discord_clear_activity(discord_state: State<'_, DiscordState>) -> Result<(), String> {
@@ -7135,17 +7271,24 @@ fn save_state(state: &AppState) -> std::io::Result<()> {
     let path = dir.join("repakxtra-state.json"); // repakxtra: its own file, so an open Repak X never overwrites it
     // repakxtra: written beside it, then swapped in, so a crash mid-save never leaves half a file (load would reset it)
     let tmp = dir.join("repakxtra-state.json.tmp");
-    std::fs::write(&tmp, serde_json::to_vec_pretty(state)?)?;
-    std::fs::rename(&tmp, &path)?;
-    Ok(())
+    let file = File::create(&tmp)?;
+    serde_json::to_writer_pretty(&file, state)?;
+    file.sync_all()?;
+    drop(file);
+    std::fs::rename(&tmp, &path)
 }
 
 fn load_state() -> AppState {
     // repakxtra: its own state file; the first start reads Repak X's state.json (shared until now) as its starting point
     let own = app_dir().join("repakxtra-state.json");
     let path = if own.exists() { own } else { app_dir().join("state.json") };
-    let mut state = if let Ok(file) = File::open(path) {
-        serde_json::from_reader(file).unwrap_or_default()
+    let mut state = if let Ok(file) = File::open(&path) {
+        serde_json::from_reader(file).unwrap_or_else(|e| {
+            // Keep the unreadable file: the next save would otherwise overwrite it
+            error!("{} is unreadable ({}), starting with defaults", path.display(), e);
+            let _ = std::fs::copy(&path, path.with_extension("json.bad"));
+            AppState::default()
+        })
     } else {
         AppState::default()
     };
@@ -8098,194 +8241,6 @@ async fn check_single_mod_conflicts(
 }
 
 // ============================================================================
-// P2P SHARING COMMANDS
-// ============================================================================
-
-/// Start sharing a mod pack
-#[tauri::command]
-async fn p2p_start_sharing(
-    name: String,
-    description: String,
-    mod_paths: Vec<String>,
-    creator: Option<String>,
-    p2p_state: State<'_, P2PState>,
-) -> Result<p2p_libp2p::ShareInfo, String> {
-    let paths: Vec<PathBuf> = mod_paths.iter().map(PathBuf::from).collect();
-    ui_log::info(
-        "P2P",
-        format!("Sharing \"{}\" ({} mod(s))...", name, paths.len()),
-    );
-
-    match p2p_state
-        .manager
-        .start_sharing(name.clone(), description, paths, creator)
-        .await
-    {
-        Ok(info) => {
-            ui_log::success("P2P", format!("Sharing \"{}\" - waiting for peers", name));
-            Ok(info)
-        }
-        Err(e) => {
-            ui_log::error("P2P", format!("Could not start sharing \"{}\": {}", name, e));
-            Err(e.to_string())
-        }
-    }
-}
-
-/// Stop sharing
-#[tauri::command]
-async fn p2p_stop_sharing(
-    share_code: String,
-    p2p_state: State<'_, P2PState>,
-) -> Result<(), String> {
-    ui_log::info("P2P", "Stopped sharing");
-    p2p_state
-        .manager
-        .stop_sharing(&share_code)
-        .map_err(|e| e.to_string())
-}
-
-/// Get current share session info
-#[tauri::command]
-async fn p2p_get_share_session(
-    p2p_state: State<'_, P2PState>,
-) -> Result<Option<p2p_libp2p::ShareInfo>, String> {
-    // Return the first active share if any
-    let shares = p2p_state.manager.active_shares.lock();
-    Ok(shares
-        .values()
-        .next()
-        .map(|s| s.session.clone())
-        .and_then(|session| {
-            // Convert ShareSession to ShareInfo
-            p2p_libp2p::ShareInfo::decode(&session.connection_string).ok()
-        }))
-}
-
-/// Check if currently sharing
-#[tauri::command]
-async fn p2p_is_sharing(p2p_state: State<'_, P2PState>) -> Result<bool, String> {
-    Ok(!p2p_state.manager.active_shares.lock().is_empty())
-}
-
-/// Start receiving mods from a connection string
-#[tauri::command]
-async fn p2p_start_receiving(
-    connection_string: String,
-    client_name: Option<String>,
-    folder_id: Option<String>,
-    window: Window,
-    state: State<'_, Arc<Mutex<AppState>>>,
-    p2p_state: State<'_, P2PState>,
-    watcher_state: State<'_, WatcherState>,
-) -> Result<(), String> {
-    // Pause file watcher so incoming files don't trigger mod-list spam
-    watcher_state.paused.store(true, Ordering::Relaxed);
-    info!("[P2P] File watcher paused for transfer");
-
-    let game_path = {
-        let state_guard = state.lock().unwrap();
-        state_guard.game_path.clone()
-    };
-
-    let output_dir = match folder_id {
-        Some(ref id) if !id.is_empty() => game_path.join(id),
-        _ => game_path,
-    };
-    ui_log::info(
-        "P2P",
-        format!("Connecting to peer - saving to {}", output_dir.display()),
-    );
-
-    match p2p_state
-        .manager
-        .start_receiving(&connection_string, output_dir, client_name, window)
-        .await
-    {
-        Ok(()) => {
-            ui_log::success("P2P", "Connected - transfer started");
-            Ok(())
-        }
-        Err(e) => {
-            // Leaving the watcher paused would silently stop the mod list from
-            // refreshing for the rest of the session.
-            watcher_state.paused.store(false, Ordering::Relaxed);
-            ui_log::error("P2P", format!("Could not connect to peer: {}", e));
-            Err(e.to_string())
-        }
-    }
-}
-
-/// Stop receiving
-#[tauri::command]
-async fn p2p_stop_receiving(
-    p2p_state: State<'_, P2PState>,
-    watcher_state: State<'_, WatcherState>,
-    window: Window,
-) -> Result<(), String> {
-    // Signal all active clients to stop, then clear
-    p2p_state.manager.stop_all_downloads();
-
-    // Unpause file watcher and emit one refresh so the mod list picks up new files
-    watcher_state.paused.store(false, Ordering::Relaxed);
-    ui_log::info("P2P", "Transfer stopped");
-    let _ = window.emit("mods_dir_changed", ());
-
-    Ok(())
-}
-
-/// Get current transfer progress
-#[tauri::command]
-async fn p2p_get_receive_progress(
-    p2p_state: State<'_, P2PState>,
-) -> Result<Option<p2p_sharing::TransferProgress>, String> {
-    let downloads = p2p_state.manager.active_downloads.lock();
-
-    // Return the first active download's progress (typically only one at a time)
-    if let Some((_, download)) = downloads.iter().next() {
-        Ok(Some(download.progress.clone()))
-    } else {
-        Ok(None)
-    }
-}
-
-/// Check if currently receiving
-#[tauri::command]
-async fn p2p_is_receiving(p2p_state: State<'_, P2PState>) -> Result<bool, String> {
-    Ok(!p2p_state.manager.active_downloads.lock().is_empty())
-}
-
-/// Create a shareable mod pack preview (total size and file count)
-#[tauri::command]
-async fn p2p_create_mod_pack_preview(
-    name: String,
-    description: String,
-    mod_paths: Vec<String>,
-    creator: Option<String>,
-) -> Result<p2p_sharing::PackPreview, String> {
-    let paths: Vec<PathBuf> = mod_paths.iter().map(PathBuf::from).collect();
-    p2p_sharing::create_mod_pack_preview(name, description, &paths, creator)
-        .map_err(|e| e.to_string())
-}
-
-/// Validate a connection string without connecting
-#[tauri::command]
-async fn p2p_validate_connection_string(connection_string: String) -> Result<bool, String> {
-    // Validate base64 ShareInfo format
-    match p2p_libp2p::ShareInfo::decode(&connection_string) {
-        Ok(_) => Ok(true),
-        Err(e) => Err(e.to_string()),
-    }
-}
-
-/// Calculate hash for a file (useful for verification)
-#[tauri::command]
-async fn p2p_hash_file(file_path: String) -> Result<String, String> {
-    let path = PathBuf::from(file_path);
-    p2p_sharing::hash_file(&path).map_err(|e| e.to_string())
-}
-
-// ============================================================================
 // PROTOCOL REGISTRATION (Portable App Support)
 // ============================================================================
 
@@ -8542,20 +8497,11 @@ fn main() {
     });
     let watcher_state = WatcherState {
         watcher: Mutex::new(None),
-        paused: Arc::new(AtomicBool::new(false)),
     };
     let crash_state = CrashMonitorState {
         game_start_time: Mutex::new(None),
         last_checked_crash: Mutex::new(None),
     };
-    let p2p_manager = tokio::runtime::Runtime::new()
-        .expect("Failed to create tokio runtime")
-        .block_on(p2p_manager::UnifiedP2PManager::new())
-        .expect("Failed to initialize P2P network");
-    let p2p_state = P2PState {
-        manager: Arc::new(p2p_manager),
-    };
-
     // Initialize Discord Rich Presence manager
     let discord_manager = discord_presence::create_discord_manager();
 
@@ -8604,7 +8550,6 @@ fn main() {
         .manage(state)
         .manage(watcher_state)
         .manage(crash_state)
-        .manage(p2p_state)
         .manage(discord_state)
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // This closure is called when a second instance is launched
@@ -8872,18 +8817,6 @@ fn main() {
             ui_log::get_ui_log_backlog,
             ui_log::get_app_log_path,
             ui_log::export_ui_logs,
-            // P2P sharing commands
-            p2p_start_sharing,
-            p2p_stop_sharing,
-            p2p_get_share_session,
-            p2p_is_sharing,
-            p2p_start_receiving,
-            p2p_stop_receiving,
-            p2p_get_receive_progress,
-            p2p_is_receiving,
-            p2p_create_mod_pack_preview,
-            p2p_validate_connection_string,
-            p2p_hash_file,
             // Discord Rich Presence commands
             discord_connect,
             discord_disconnect,
@@ -8891,8 +8824,6 @@ fn main() {
             discord_set_idle,
             discord_set_managing_mods,
             discord_set_installing,
-            discord_set_sharing,
-            discord_set_receiving,
             discord_clear_activity,
             discord_set_theme,
             discord_get_theme,
@@ -8908,6 +8839,7 @@ fn main() {
             vfx_updater::vfx_stop_session,
             vfx_updater::vfx_extract_mod_assets,
             vfx_updater::vfx_convert_uassets_to_json,
+            vfx_updater::vfx_recover_raw_materials,
             vfx_updater::vfx_extract_vanilla_assets,
             vfx_updater::vfx_convert_json_to_uassets,
             vfx_updater::vfx_pack_to_iostore,

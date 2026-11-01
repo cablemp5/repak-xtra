@@ -579,7 +579,6 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 
 /* ---------- optional controls, off unless enabled in Settings > Interface (custom/uiPrefs.tsx) ---------- */
 html:not([data-show-priority]) .mod-card .number-input-container { display: none !important; }
-html:not([data-show-share]) [data-tour="sharing-btn"] { display: none !important; }
 html:not([data-show-tools]) [data-tour="tools-btn"] { display: none !important; }
 html:not([data-show-vfx-updater]) [data-tour="vfx-updater-btn"] { display: none !important; }
 html:not([data-show-encrypt]) [data-tour="encrypt-btn"] { display: none !important; }
@@ -2885,7 +2884,7 @@ button.mod-type-badge { display: inline-flex; align-items: center; min-height: 0
 .bi-item.is-flash { box-shadow: inset 0 0 0 1px var(--accent-primary); transition: box-shadow var(--reveal-dur) var(--reveal-ease); }
 
 /* Every loading bar in the app fills with the VFX Updater's shimmer sweep (transitions.dev: Shimmer), and the text that
-   says what is loading shimmers with it: install progress toasts, the log bar, sharing, the app update, the tools.
+   says what is loading shimmers with it: install progress toasts, the log bar, the app update, the tools.
    The auto-dismiss line of an ordinary toast is a timer, not loading, so it stays plain. */
 .toast-item.is-working .toast-progress-bar,
 .log-drawer-progress-bar:not(.indeterminate),

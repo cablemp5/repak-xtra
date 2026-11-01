@@ -10,6 +10,24 @@ pub fn update_dir() -> PathBuf {
     std::env::temp_dir().join("repakxtra_update")
 }
 
+/// One plain file name Windows accepts (no folders, drive, stream, device name or trailing dot or space), so joining
+/// it to update_dir can only name a file directly inside it.
+pub fn safe_file_name(name: &str) -> bool {
+    const RESERVED: [&str; 22] = [
+        "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
+        "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+    ];
+    let stem = name.split('.').next().unwrap_or("").to_ascii_lowercase();
+    !name.is_empty()
+        && name.len() <= 200
+        && name != "."
+        && name != ".."
+        && !name.ends_with('.')
+        && !name.ends_with(' ')
+        && !name.chars().any(|c| c.is_control() || "/\\:*?\"<>|".contains(c))
+        && !RESERVED.contains(&stem.as_str())
+}
+
 /// The downloaded update `path`, if it is a file the app downloaded itself (directly inside update_dir).
 pub fn owned_download(path: &Path) -> Result<PathBuf, String> {
     let file = std::fs::canonicalize(path).map_err(|e| format!("Downloaded update file not found: {e}"))?;
@@ -226,6 +244,14 @@ mod tests {
     use super::*;
     use std::fs;
     use std::io::Write;
+
+    #[test]
+    fn update_file_names_stay_in_the_update_folder() {
+        assert!(safe_file_name("repak-xtra-v0.46.0-windows.zip"));
+        for bad in ["", "..", "../a.zip", "a\\b.zip", "C:a.zip", "a.zip:x", "con.zip", "a.zip.", "a.zip "] {
+            assert!(!safe_file_name(bad), "{bad}");
+        }
+    }
 
     fn zip_with(path: &Path, files: &[(&str, &[u8])]) {
         let mut z = zip::ZipWriter::new(fs::File::create(path).unwrap());

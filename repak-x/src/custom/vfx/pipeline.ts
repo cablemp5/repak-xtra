@@ -179,7 +179,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     // a patch that inserts properties into a class moves every later one (3984769: material overrides), and a file cooked
     // before it crashes the game and reads as nothing to change. Rewritten in today's layout here, every step below reads it
     const older = ask.filter(p => !NIAGARA_BY_NAME.test(fileName(p))).map(p => rel(p).replace(/\.uasset$/i, ''))
-    const re = older.length ? await invoke<{ files: string[]; failed: string[]; unread: string[]; untold: string[]; complete: boolean; oldBuild: number | null }>('xtra_vfx_relayout', { modPath: src, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath, modExtract: dirs.modExtract, files: older, stageDir: dirs.stage })
+    const re = older.length ? await invoke<{ files: string[]; failed: string[]; unread: string[]; untold: string[]; complete: boolean; oldBuild: number | null; noUsmap: boolean }>('xtra_vfx_relayout', { modPath: src, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath, modExtract: dirs.modExtract, files: older, stageDir: dirs.stage })
       .catch(e => { warn(`Could not check its material layout (${e}).`); return undefined }) : null
     check()
     re?.files.forEach(f => relaid.add(fileName(f).toLowerCase() + '.uasset'))
@@ -193,10 +193,13 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     const isMaterial = (r: string) => /^MaterialInstance/i.test(classes?.[assetKey(r)] ?? '') || /^MI_/i.test(r.split('/').pop() ?? '')
     const untold = re ? [...re.unread, ...re.untold].filter(isMaterial).length : 0
     if (re === undefined || unrewritten || untold) {
+      // no older USMAP could be had at all (offline, or GitHub out of lookups for now): the connection, not the USMAP
+      const offline = Boolean(re?.noUsmap) && !unrewritten
       const why = re === undefined ? 'its material layout could not be checked'
         : unrewritten ? `${plural(unrewritten, 'material or blueprint', 'materials and blueprints')} could not be rewritten in the new game build's layout`
-          : `the layout of ${plural(untold, 'material or blueprint', 'materials and blueprints')} could not be told (no older USMAP read ${untold === 1 ? 'it' : 'them'})`
-      report.error = `Not updated: ${why}. The mod was not changed. Check the USMAP in Advanced, then try again.`
+          : offline ? `checking the layout of ${plural(untold, 'material or blueprint', 'materials and blueprints')} needs an older game build's USMAP, and none could be downloaded`
+            : `the layout of ${plural(untold, 'material or blueprint', 'materials and blueprints')} could not be told (no older USMAP read ${untold === 1 ? 'it' : 'them'})`
+      report.error = `Not updated: ${why}. The mod was not changed. ${offline ? 'Check the internet connection' : 'Check the USMAP in Advanced'}, then try again.`
       log(report.error, 'warning')
       return report // failed: Try again stays
     }

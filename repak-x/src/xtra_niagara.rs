@@ -404,30 +404,98 @@ async fn download_usmap(url: &str, to: &Path) -> Result<(), String> {
     std::fs::rename(&tmp, to).map_err(|e| e.to_string())
 }
 
-/// Older depot USMAPs than `build`, newest first, downloaded into the managed folder when missing. Without a connection,
-/// the ones already there.
-pub(crate) async fn older_usmaps(build: u64) -> Vec<String> {
+/// How many older USMAPs a run tries.
+const OLDER_DEPTH: usize = 8;
+
+/// An older depot USMAP: its place in the managed folder, and where to download it from while it is not there.
+pub(crate) struct OlderUsmap {
+    path: PathBuf,
+    url: Option<String>,
+}
+
+impl OlderUsmap {
+    /// Its path, downloaded first when missing (only the ones a run gets to). None when that fails.
+    pub(crate) async fn fetch(&self) -> Option<String> {
+        if !self.path.is_file() {
+            download_usmap(self.url.as_ref()?, &self.path).await.ok()?;
+        }
+        Some(self.path.to_string_lossy().to_string())
+    }
+}
+
+/// (build, file name, URL) newest first, one per build: of one build the copy already `here` (its +PY twin is the
+/// same build), else the depot's, which has a URL.
+fn newest_per_build(mut all: Vec<(u64, String, Option<String>)>, here: impl Fn(&str) -> bool) -> Vec<(u64, String, Option<String>)> {
+    all.sort_by(|a, b| b.0.cmp(&a.0).then(here(&b.1).cmp(&here(&a.1))).then(b.2.is_some().cmp(&a.2.is_some())));
+    all.dedup_by(|a, b| a.0 == b.0);
+    all
+}
+
+/// GitHub lookups of USMAP dates one call may make (60 an hour without a token). Each date is saved for good, so only a
+/// first run on a much older mod needs many.
+const DATE_LOOKUPS: usize = 20;
+
+/// When the depot got a USMAP, as UTC "YYYY-MM-DDTHH:MM:SSZ" (its first commit), saved once per file.
+async fn usmap_time(name: &str, times: &mut HashMap<String, String>, lookups: &mut usize) -> Option<String> {
+    if let Some(t) = times.get(name) {
+        return Some(t.clone());
+    }
+    if *lookups >= DATE_LOOKUPS {
+        return None;
+    }
+    *lookups += 1;
+    let url = reqwest::Url::parse_with_params("https://api.github.com/repos/SpaceDepot/rivals-depot/commits", &[("path", format!("usmap/{name}")), ("per_page", "100".into())]).ok()?;
+    let json: Value = http(20).ok()?.get(url).header("Accept", "application/vnd.github+json").send().await.ok()?.error_for_status().ok()?.json().await.ok()?;
+    // newest first: the last commit listed added the file
+    let t = json.as_array()?.last()?.pointer("/commit/committer/date")?.as_str()?.to_string();
+    times.insert(name.to_string(), t.clone());
+    Some(t)
+}
+
+/// Older depot USMAPs than `build`, newest first, one per build. `made`: when the mod was written (Unix seconds). The
+/// ones the depot got after it are left out: a mod is never cooked in a layout newer than itself, and a USMAP from after
+/// a layout change reads an old file just as today's does, so it would tell nothing (three game updates after 3984769,
+/// the three newest older USMAPs would all have been past it). A USMAP whose time is not known (offline, out of lookups)
+/// is left out too, until one older than the mod is found: the run then says the layout could not be told, and is tried
+/// again, rather than settle on a USMAP that may be too new. Without `made`, every one, as before.
+pub(crate) async fn older_usmaps(build: u64, made: Option<u64>) -> Vec<OlderUsmap> {
     let dir = crate::vfx_updater::commands::managed_usmap_dir();
-    let mut have: Vec<(u64, PathBuf)> = std::fs::read_dir(&dir)
+    let mut all: Vec<(u64, String, Option<String>)> = std::fs::read_dir(&dir)
         .into_iter()
         .flatten()
         .flatten()
-        .map(|e| e.path())
-        .filter_map(|p| Some((usmap_build(&p.to_string_lossy()).filter(|b| *b < build)?, p)))
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            Some((usmap_build(&name).filter(|b| *b < build && name.ends_with(".usmap"))?, name, None))
+        })
         .collect();
     if let Ok(listing) = depot_usmaps().await {
-        let mut older: Vec<_> = listing.into_iter().filter(|(b, ..)| *b < build).collect();
-        older.sort_by(|a, b| b.0.cmp(&a.0));
-        for (b, name, url) in older.into_iter().take(3) {
-            let to = dir.join(&name);
-            if !have.iter().any(|(_, p)| *p == to) && download_usmap(&url, &to).await.is_ok() {
-                have.push((b, to));
+        all.extend(listing.into_iter().filter(|(b, ..)| *b < build).map(|(b, name, url)| (b, name, Some(url))));
+    }
+    let all = newest_per_build(all, |name| dir.join(name).is_file());
+    // same format as GitHub's, so the strings compare as times
+    let made = made.and_then(|s| chrono::DateTime::from_timestamp(s as i64, 0)).map(|d| d.format("%Y-%m-%dT%H:%M:%SZ").to_string());
+    let store = dir.join("repakxtra-usmap-times.json");
+    let mut times: HashMap<String, String> = std::fs::read_to_string(&store).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+    let (mut out, mut lookups, mut before_mod) = (Vec::new(), 0, made.is_none());
+    for (_, name, url) in all {
+        if out.len() == OLDER_DEPTH {
+            break;
+        }
+        // shortcut: builds are added in order, so the ones older than the first USMAP from before the mod are taken
+        // undated. A depot file added out of order would need its own date checked
+        if !before_mod {
+            match usmap_time(&name, &mut times, &mut lookups).await {
+                Some(t) if made.as_ref().is_some_and(|m| t < *m) => before_mod = true,
+                _ => continue,
             }
         }
+        out.push(OlderUsmap { path: dir.join(&name), url });
     }
-    have.sort_by(|a, b| b.0.cmp(&a.0));
-    have.dedup_by(|a, b| a.0 == b.0);
-    have.into_iter().take(3).map(|(_, p)| p.to_string_lossy().to_string()).collect()
+    if lookups > 0 {
+        let _ = std::fs::write(&store, serde_json::to_string(&times).unwrap_or_default());
+    }
+    out
 }
 
 /// An extract filter for a package (a path without extension): its folder and name. The tool matches filters as part of
@@ -755,35 +823,40 @@ pub(crate) async fn run(game_paks: &str, usmap: &str, mod_extract: &Path, files:
 
     // the mod's copies, read with an older USMAP: the first, newest first, under which one of them decodes in the
     // game's shape. A wrong one reads garbage, which never matches
-    let candidates = older_usmaps(build).await;
+    // safe to try newest first: one from after the mod's layout decodes it in another shape than the game's, never a match
+    let candidates = older_usmaps(build, None).await;
     lap("older USMAPs", &mut since);
     let probe = have.first().copied();
     let mut chosen = None;
+    let mut read_any = false;
     if let Some(p) = probe {
         let (input, json) = (work.join("probe"), work.join("probe_json"));
         stage(mod_extract, &input, std::slice::from_ref(p), true)?;
         let game = read_json(&gj.join(format!("{p}.json")))?;
         let (gb, _) = read_package(&gx.join(format!("{p}.uasset")))?;
         let (mb, _) = read_package(&mod_extract.join(format!("{p}.uasset")))?;
-        for (n, u) in candidates.iter().enumerate() {
+        for (n, c) in candidates.iter().enumerate() {
             emit(0, format!("Finding the build the mod was made for ({} of {})", n + 1, candidates.len()));
-            if to_json(u, &input, &json, progress).await.is_err() {
+            let Some(u) = c.fetch().await else { continue };
+            read_any = true;
+            if to_json(&u, &input, &json, progress).await.is_err() {
                 continue;
             }
             let Ok(m) = read_json(&json.join(format!("{p}.json"))) else { continue };
             match carry(&m, &game, &mb, &gb, is_atlas(p)) {
                 Err(r) if r.shape => continue,
                 _ => {
-                    chosen = Some(u.clone());
+                    chosen = Some(u);
                     break;
                 }
             }
         }
     }
+    let read_any = read_any || (probe.is_none() && !candidates.is_empty()); // nothing to probe: as before
     let Some(old) = chosen else {
-        let why = if candidates.is_empty() { "No USMAP for an older game build could be downloaded" } else { "No older USMAP reads the mod's Niagara files" };
+        let why = if read_any { "No older USMAP reads the mod's Niagara files" } else { "No USMAP for an older game build could be downloaded" };
         // no USMAP to read them with can pass (a connection, a newer depot): tried again
-        let retry = candidates.is_empty();
+        let retry = !read_any;
         return Ok(NiagaraRun { ready: true, why: Some(why.into()), files: files.iter().map(|f| NiagaraFile { file: f.clone(), edits: 0, error: Some(why.into()), retry }).collect(), ..Default::default() });
     };
     lap("finding the old build", &mut since);
@@ -853,6 +926,30 @@ pub async fn xtra_vfx_niagara(window: Window, game_paks: String, usmap_path: Str
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn older_usmaps_go_newest_first_one_per_build_the_local_copy_kept() {
+        let s = |b: u64, n: &str, url: bool| (b, n.to_string(), url.then(|| format!("https://x/{n}")));
+        let all = vec![s(100, "100.usmap", true), s(300, "300+PY.usmap", true), s(300, "300.usmap", false), s(300, "300.usmap", true), s(200, "200.usmap", true)];
+        let got = newest_per_build(all, |n| n == "300.usmap");
+        let names: Vec<_> = got.iter().map(|(b, n, u)| (*b, n.as_str(), u.is_some())).collect();
+        // of build 300 the copy already here wins, and of those two the depot entry (it has the URL)
+        assert_eq!(names, [(300, "300.usmap", true), (200, "200.usmap", true), (100, "100.usmap", true)]);
+    }
+
+    /// Online: a game past 3984769 (the material layout change) and a mod made before the depot got 3984769's USMAP
+    /// (2026-10-29): that one would read the mod as today's does, so the mod's first older USMAP is 3962284's.
+    #[tokio::test]
+    #[ignore]
+    async fn a_mod_is_asked_with_usmaps_from_before_it_was_made() {
+        let made = chrono::NaiveDate::from_ymd_opt(2026, 10, 25).unwrap().and_hms_opt(12, 0, 0).unwrap().and_utc().timestamp() as u64;
+        let build = |c: &OlderUsmap| usmap_build(&c.path.to_string_lossy()).unwrap();
+        let dated: Vec<u64> = older_usmaps(4_000_000, Some(made)).await.iter().map(build).collect();
+        let any: Vec<u64> = older_usmaps(4_000_000, None).await.iter().map(build).collect();
+        assert_eq!(any.first(), Some(&3984769), "{any:?}");
+        assert_eq!(dated.first(), Some(&3962284), "{dated:?}");
+        assert!(dated.windows(2).all(|w| w[0] > w[1]) && dated.len() == OLDER_DEPTH, "{dated:?}");
+    }
 
     #[test]
     fn an_older_usmap_makes_updates_wait() {

@@ -1,8 +1,8 @@
 diff --git a/src/UAssetAPI/UAsset.cs b/src/UAssetAPI/UAsset.cs
-index 08dafef..3b7f29b 100644
+index 55a5d64..8d9acda 100644
 --- a/src/UAssetAPI/UAsset.cs
 +++ b/src/UAssetAPI/UAsset.cs
-@@ -3025,6 +3025,18 @@ namespace UAssetAPI
+@@ -3030,6 +3030,18 @@ namespace UAssetAPI
              return JsonConvert.SerializeObject(this, jsonFormatting, jsonSettings);
          }
  
@@ -22,10 +22,10 @@ index 08dafef..3b7f29b 100644
          /// Serializes an object as JSON.
          /// </summary>
 diff --git a/src/UAssetTool/Program.cs b/src/UAssetTool/Program.cs
-index b7bdc4d..71e62fa 100644
+index 79322e6..82bc067 100644
 --- a/src/UAssetTool/Program.cs
 +++ b/src/UAssetTool/Program.cs
-@@ -3585,45 +3585,47 @@ public partial class Program
+@@ -3585,23 +3585,25 @@ public partial class Program
              if (hasBatch)
              {
                  Usmap? mappings = LoadMappings(effectiveUsmapPath);
@@ -55,11 +55,14 @@ index b7bdc4d..71e62fa 100644
                          }
 -                        
 +
-                         var asset = LoadAssetWithMappings(path, mappings);
-                         string assetType = DetectAssetType(asset);
--                        
+                         // The class comes from the export and import maps, so the export data stays unread.
+                         // Only an asset those leave undecided needs its exports parsed.
+                         var asset = new UAsset(path, EngineVersion.VER_UE5_3, mappings, CustomSerializationFlags.SkipLoadingExports);
+@@ -3612,25 +3614,25 @@ public partial class Program
+                             assetType = DetectAssetType(asset);
+                         }
+ 
 -                        results.Add(new Dictionary<string, object?>
-+
 +                        results[i] = new Dictionary<string, object?>
                          {
                              ["path"] = path,
@@ -88,7 +91,7 @@ index b7bdc4d..71e62fa 100644
                  data["total_files"] = filePaths.Count;
              }
              
-@@ -8103,10 +8105,6 @@ public partial class Program
+@@ -8134,10 +8136,6 @@ public partial class Program
              {
                  var asset = LoadAssetWithMappings(fp, mappings);
                  PreloadReferencedAssetsForSchemas(asset);
@@ -99,7 +102,7 @@ index b7bdc4d..71e62fa 100644
  
                  // Determine output path: preserve relative directory structure if basePath is set
                  string jsonFileName;
-@@ -8123,8 +8121,18 @@ public partial class Program
+@@ -8154,8 +8152,18 @@ public partial class Program
                  string? jsonDir = Path.GetDirectoryName(jsonOutputPath);
                  if (!string.IsNullOrEmpty(jsonDir))
                      Directory.CreateDirectory(jsonDir);

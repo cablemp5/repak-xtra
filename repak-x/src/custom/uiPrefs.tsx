@@ -19,7 +19,6 @@ const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod
   { key: 'encrypt', label: 'Encrypt (Shift+E)', group: 'header' }, // hidden by default: Settings > Header buttons shows it
   { key: 'galacta', label: 'Galacta Converter (Shift+G)', group: 'header' }, // hidden by default, also in Tools
   { key: 'asset-explorer', label: 'Asset Explorer (Shift+A)', group: 'header' },
-  { key: 'share', label: 'Share (Shift+S)', group: 'header' },
   { key: 'tools', label: 'Tools (Shift+T)', group: 'header' },
   { key: 'mod-size', label: 'File size', group: 'mod' },
   { key: 'priority', label: 'Load priority counter (P)', group: 'mod' },
