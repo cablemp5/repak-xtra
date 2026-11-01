@@ -310,7 +310,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
               </div>
               <div className="detail-item">
                 <span className="detail-label">Assets Count:</span>
-                <span className="detail-value">{details.file_count}</span>
+                <span className="detail-value">{details.file_count?.toLocaleString() /* repakxtra */}</span>
               </div>
               <div className="detail-item">
                 <span className="detail-label">Size:</span>
@@ -341,7 +341,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
 
             <div className="detail-section">
               <div className="detail-section-header">
-                <h3>File Contents ({details.file_count} files)</h3>
+                <h3>File Contents ({(details.file_count ?? 0).toLocaleString()} {details.file_count === 1 ? 'file' : 'files'})</h3>{/* repakxtra: 1,284 files, 1 file */}
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <button
                     className="copy-paths-btn"

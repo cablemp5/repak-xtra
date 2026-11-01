@@ -3,7 +3,7 @@
 // view (header tabs, or L). On = its mods on, Off = its mods off; other mods and loadouts are never touched.
 import { type CSSProperties, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useStableCallback } from '../hooks/useStableCallback'
-import { ChevronDown, ChevronRight, ChevronUp, CopyPlus, FolderPlus, ListChecks, Pencil, Plus, Search, Shapes, Trash2, WandSparkles, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, FolderPlus, ListChecks, Pencil, Plus, Search, Shapes, Trash2, WandSparkles, X } from 'lucide-react'
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo, runChanges } from './Loadouts'
 import LoadoutPage from './LoadoutPage'
@@ -555,7 +555,7 @@ function LoadoutsHome(p: LoadoutProps) {
           {/* repakxtra: one + New for the three ways to make something, so the head fits one line (Hick's law: the rare ones
               are a click away, not always on screen) */}
           <div className="lo-new" ref={newWrap}>
-            <button type="button" ref={newRef} className="lo-text-btn" data-tour="new-loadout" aria-haspopup="menu" aria-expanded={newMenu}
+            <button type="button" ref={newRef} className="lo-text-btn is-primary" data-tour="new-loadout" aria-haspopup="menu" aria-expanded={newMenu}
               onClick={() => setNewMenu(v => !v)} title="Make a loadout, group your mods into loadouts, or add a collection">
               <Plus size={14} /> New <ChevronDown size={13} className="lo-new-chev" aria-hidden="true" />
             </button>
@@ -667,30 +667,6 @@ function LoadoutsHome(p: LoadoutProps) {
           </section>
           )
         })}
-
-        {loadouts.length > 0 && !(filtered && groups.length === 0) && (
-          <div className="lo-grid">
-            {/* A real card's parts, unseen, give it a real card's size at every width; the plus and words sit on top */}
-            <div className="lo-card lo-card-new" data-flip="new">
-              <div className="lo-card-ghost" aria-hidden="true" ref={el => el?.setAttribute('inert', '')}>
-                <div className="lo-card-image" />
-                <div className="lo-card-body">
-                  <div className="lo-card-title"><h3>&nbsp;</h3><Switch size="sm" checked={false} /></div>
-                  <p className="lo-card-meta">&nbsp;</p>
-                  <div className="lo-card-actions"><span className="lo-expand">&nbsp;</span></div>
-                </div>
-              </div>
-              {/* laid out like a real card: the plus where a preview goes, the name and status line below it */}
-              <button type="button" className="lo-card-add" onClick={createEmpty}>
-                <span className="lo-card-add-media"><span className="lo-card-add-icon"><CopyPlus size={20} /></span></span>
-                <span className="lo-card-add-body">
-                  <span className="lo-card-add-title">New loadout</span>
-                  <small className="lo-card-meta">Start empty, add mods later</small>
-                </span>
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* below the loadouts: Home is for switching them; this is the inbox of recent mods */}
         {builtins && <BuiltinMods blocked={p.blocked} alert={p.alert} />}

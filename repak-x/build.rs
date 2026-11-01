@@ -1,5 +1,8 @@
 // extern crate winres; // Disabled for Tauri - Tauri handles icons
+#[path = "build_xtra.rs"]
+mod xtra; // repakxtra
 fn main() {
+    xtra::cache_stamps(); // repakxtra
     println!("cargo:rerun-if-env-changed=REPAKXTRA_BUILD");
     // A direct Cargo build must not embed a frontend built for another edition (edition.json is checked by installed updaters).
     println!("cargo:rerun-if-changed=dist/edition.json");

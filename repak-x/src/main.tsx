@@ -2,13 +2,14 @@ import './custom/storageCarryOver' // repakxtra: settings saved under the old ke
 import './custom/devStorage' // repakxtra: the dev copy loads the app's saved loadouts; the app keeps that copy
 import './custom/buildMark' // repakxtra: test and dev copies color every window's taskbar icon
 import './dev/mockBackend' // repakxtra: fake backend for the browser preview, inert in the app
-import React from 'react'
+import React, { lazy, Suspense } from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
-import VfxUpdaterWindow from './custom/vfx/VfxUpdaterWindow' // repakxtra: in place of the upstream VFX Updater's page
-import EncryptWindow from './custom/EncryptWindow' // repakxtra
+// repakxtra: each secondary window's code loads only in that window, so the main window never parses it
+const VfxUpdaterWindow = lazy(() => import('./custom/vfx/VfxUpdaterWindow')) // repakxtra: in place of the upstream VFX Updater's page
+const EncryptWindow = lazy(() => import('./custom/EncryptWindow')) // repakxtra
 import StartedOk from './custom/startedOk' // repakxtra: an update keeps its rollback until the window has rendered
-import AssetExplorerPage from './modules/asset-explorer/AssetExplorerPage'
+const AssetExplorerPage = lazy(() => import('./modules/asset-explorer/AssetExplorerPage'))
 import './custom/theme.css' // repakxtra: theme for every window, last so it wins the cascade
 import './custom/uiPrefs' // repakxtra: UI scale and optional controls in every window
 import './custom/smoothCaret' // repakxtra: the gliding caret in every text field
@@ -35,7 +36,7 @@ const SECONDARY_WINDOWS: { route: string; view: () => JSX.Element }[] = [
 ]
 
 const secondary = SECONDARY_WINDOWS.find(w => window.location.href.includes(w.route))
-const rootView = secondary ? secondary.view() : <App />
+const rootView = secondary ? <Suspense fallback={null}>{secondary.view()}</Suspense> : <App />
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>

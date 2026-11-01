@@ -174,7 +174,7 @@ const FolderNode = ({ node, selectedFolderId, onSelect, onDelete, getCount, hasF
 
                 {!node.isVirtual && count !== undefined && (
                     <span className="folder-count">
-                        {count}
+                        {count.toLocaleString() /* repakxtra */}
                     </span>
                 )}
             </div>
@@ -231,7 +231,7 @@ const FolderTree = ({ folders, selectedFolderId, onSelect, onDelete, getCount, h
                         </span>
                         <span className="node-label">All Mods</span>
                         <span className="folder-count">
-                            {getCount('all')}
+                            {getCount('all').toLocaleString() /* repakxtra: 1,284 */}
                         </span>
                     </div>
                 </div>
@@ -270,7 +270,7 @@ const FolderTree = ({ folders, selectedFolderId, onSelect, onDelete, getCount, h
                         </span>
                         <span className="node-label">{rootFolder.name}</span>
                         <span className="folder-count">
-                            {getCount(rootFolder.id)}
+                            {getCount(rootFolder.id).toLocaleString() /* repakxtra */}
                         </span>
                     </div>
 

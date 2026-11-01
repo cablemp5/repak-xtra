@@ -8,7 +8,7 @@ import type { LoadoutProps } from './Loadouts'
 import { useMediaUrl } from './loadoutMedia'
 import { COVERS, type Cover, type Loadout, type Mod, captureKey, coverFills, displayName, flipMods, memberName, modKey, modsByKey, nameKey, patchLoadout, pickCover } from './loadoutStore'
 import { ModName } from './modName'
-import { revealOnLoad } from './motion'
+import { revealOnLoad, SwapText } from './motion'
 import { BeatVideo, formKeys, hasPreview, isDecoded, isKoPreview, isVideoPreview, noPreviewPossible, previewMade, previewSetKey, readyPreview, useCovers, usePreviewStage, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
 import { playEmoteSound, stopEmoteSound, useEmoteSound, webpSeconds } from './emoteSound'
 import { useVerdict } from './brokenMods'
@@ -112,14 +112,15 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   const at = slides.length ? ((index % slides.length) + slides.length) % slides.length : 0
   // a turn waits until the next picture is read and decoded, so it slides in whole instead of blank, then popping in
   const slideAt = (i: number) => slides[((i % slides.length) + slides.length) % slides.length]
-  const ready = (i: number) => Promise.all((slideAt(i)?.keys ?? [slideAt(i)?.key]).map(k => readyPreview(k || undefined)))
+  const ready = (i: number) => Promise.all((slideAt(i)?.keys ?? [slideAt(i)?.key]).map(k => readyPreview(k || undefined, !page)))
   const target = useRef(index)
   const turn = (d: 1 | -1) => {
     const to = target.current = target.current + d
     void ready(to).then(() => { if (target.current === to) { setDir(d); setIndex(to) } })
   }
   const slide = slides[at]
-  const generated = usePreviewUrl(cover === 'preview' ? slide?.key || undefined : undefined)
+  // a card draws the card-sized copy, a loadout's page the full picture
+  const generated = usePreviewUrl(cover === 'preview' ? slide?.key || undefined : undefined, !page)
   const src = cover === 'image' ? own : cover === 'capture' ? shot : cover === 'preview' ? generated : undefined
   const video = cover === 'image' && l.mediaType === 'video' ? ownUrl : undefined
   const [warm] = useState(src) // already cached when the card mounted: shown at once, without the blur-in
@@ -193,9 +194,10 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
         <span className="lo-skel" role="status">
           {shape && <span className="lo-skel-shape" aria-hidden="true" style={{ maskImage: `url(${shape})`, WebkitMaskImage: `url(${shape})` }} />}
           <span className="lo-skel-label">
-            {working.kind === 'running'
-              ? <span className="lo-skel-stage" key={stage}>{stage}</span>
-              : working.at === 1 ? 'Queued, up next' : `Queued, ${working.at} in line`}
+            {/* transitions.dev: Text states swap. One label from queued to each render step, so every change rises in */}
+            <span className={working.kind === 'running' ? 'lo-skel-stage' : undefined}>
+              <SwapText text={working.kind === 'running' ? stage : working.at === 1 ? 'Queued, up next' : `Queued, ${working.at} in line`} />
+            </span>
           </span>
         </span>
       )}
@@ -214,7 +216,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
                 ? <span className="lo-card-placeholder is-none"><Ban size={28} aria-hidden="true" /><span>No render possible. Open it to type text, or hover and paste an image.</span></span>
                 : <span className="lo-card-placeholder"><ImagePlus size={28} aria-hidden="true" /><span>{emptyText}</span></span>
           : slide?.keys
-            ? <CarouselSlide slide={at} dir={dir}><span className="lo-media-multi">{slide.keys.map(k => <SlideImage key={k} k={k} />)}</span></CarouselSlide>
+            ? <CarouselSlide slide={at} dir={dir}><span className="lo-media-multi">{slide.keys.map(k => <SlideImage key={k} k={k} thumb={!page} />)}</span></CarouselSlide>
           : video
             ? l.mediaBeat ? <BeatVideo src={video} beat={l.mediaBeat} /> : <video src={video} autoPlay loop muted playsInline />
             : <CarouselSlide slide={slides.length > 1 ? at : 0} dir={dir}>
@@ -327,8 +329,8 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
 const HOVER_MS = 250
 
 /** One preview of a slide that shows several (a loadout's VFX swatches). */
-function SlideImage({ k }: { k: string }) {
-  const src = usePreviewUrl(k)
+function SlideImage({ k, thumb }: { k: string; thumb: boolean }) {
+  const src = usePreviewUrl(k, thumb)
   const [warm] = useState(src)
   return !src ? <span /> : isVideoPreview(src) ? <BeatVideo src={src} beat={KO_BEAT} />
     : <img src={src} alt="" className={src === warm || isDecoded(src) ? 'is-loaded' : undefined} onLoad={revealOnLoad} />

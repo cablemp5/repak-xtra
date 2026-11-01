@@ -346,6 +346,9 @@ pub async fn xtra_vfx_check_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mu
             break;
         }
         let path = PathBuf::from(&p);
+        if crate::xtra_builtins::in_folder(&path) {
+            continue; // built-ins: xtra_builtins judges them by the game build they were made for, never these checks
+        }
         let utoc = path.with_extension("utoc");
         if !needs_scan(&done, &utoc, game) {
             continue;

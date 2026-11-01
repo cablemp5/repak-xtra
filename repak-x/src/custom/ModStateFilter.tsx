@@ -92,7 +92,7 @@ export default function ModStateFilter({ value, onChange, mods, encrypted }: Pro
           <button key={state} type="button" aria-pressed={value === state} onClick={() => onChange(state)} tabIndex={folded ? -1 : undefined}
             className={state === 'broken' ? 'is-broken' : undefined} title={state === 'broken' ? BROKEN_TITLE : undefined}>
             {label}
-            <span className="mod-state-count">{count}</span>
+            <span className="mod-state-count">{count.toLocaleString()}</span>
           </button>
         ))}
       </div>
@@ -100,7 +100,7 @@ export default function ModStateFilter({ value, onChange, mods, encrypted }: Pro
         <>
           <button type="button" className={`btn-ghost mod-state-btn${value === 'broken' ? ' is-broken' : ''}`} aria-haspopup="menu" aria-expanded={open}
             onClick={() => setOpen(v => !v)} title={`Show: ${label}`}>
-            {label}<span className="mod-state-count">{count}</span><ChevronDown size={13} aria-hidden="true" />
+            {label}<span className="mod-state-count">{count.toLocaleString()}</span><ChevronDown size={13} aria-hidden="true" />
           </button>
           {open && (
             <div className="sigeon-menu mod-state-menu" role="menu" aria-label="Show mods">
@@ -108,7 +108,7 @@ export default function ModStateFilter({ value, onChange, mods, encrypted }: Pro
                 <button key={state} type="button" role="menuitemradio" aria-checked={value === state}
                   className={`sigeon-item${state === 'broken' ? ' is-broken' : ''}`} onClick={() => { onChange(state); setOpen(false) }}
                   title={state === 'broken' ? BROKEN_TITLE : undefined}>
-                  {label}<span className="mod-state-count">{count}</span>{value === state && <Check size={14} aria-hidden="true" />}
+                  {label}<span className="mod-state-count">{count.toLocaleString()}</span>{value === state && <Check size={14} aria-hidden="true" />}
                 </button>
               ))}
             </div>

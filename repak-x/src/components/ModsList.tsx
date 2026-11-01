@@ -409,7 +409,8 @@ const ModItem = memo(function ModItem({
                         onDoubleClick={builtin ? undefined : startRename}
                         onMouseEnter={nameReveal.onMouseEnter}
                         onMouseLeave={nameReveal.onMouseLeave}
-                        title={builtin ? `${rawName}: open it on Home to change it` : `${rawName} (double-click to rename)`}
+                        // repakxtra: a renamed mod's tooltip names its file, so two mods renamed alike still tell apart
+                        title={builtin ? `${rawName}: open it on Home to change it` : `${rawName} (double-click to rename)${mod.custom_name ? `\nFile: ${mod.path.split(/[/\\]/).pop()}` : ''}`}
                     >
                         <span
                             ref={nameReveal.containerRef}
@@ -666,6 +667,12 @@ export default function ModsList({
                         )
                     })}
                     {win.bottom > 0 && <div className="mod-list-spacer" aria-hidden="true" style={{ height: win.bottom }} />}
+                    {/* repakxtra: only built-in rows and no filter: the library itself is empty */}
+                    {!emptyState && mods.every(m => isBuiltin(m.path)) && (
+                        <div className="empty-state">
+                            <p>No mods installed yet. Drag .pak files or archives here, or use Install.</p>
+                        </div>
+                    )}
                 </>)}
             </div>
         </div>

@@ -625,6 +625,9 @@ pub async fn xtra_vfx_layout_scan(mod_paths: Vec<String>, state: tauri::State<'_
     let mut found = 0;
     for p in mod_paths {
         let path = PathBuf::from(&p);
+        if crate::xtra_builtins::in_folder(&path) {
+            continue; // built-ins: xtra_builtins judges them by the game build they were made for, never these checks
+        }
         let utoc = path.with_extension("utoc");
         let Some(key) = layout_key(&utoc, &usmap) else { continue };
         if cache.contains_key(&key) {
