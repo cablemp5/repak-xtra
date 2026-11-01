@@ -71,7 +71,10 @@ export default function ColorPicker({ value, onChange, label, presets, disabled,
     window.addEventListener('resize', place)
     window.addEventListener('scroll', place, true)
     if (!keepFocus) square.current?.focus()
-    return () => { document.removeEventListener('pointerdown', away, true); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true) }
+    // focus stayed in the field being typed in: Escape closes only the picker, before the field's own Escape (revert) sees it
+    const esc = (e: globalThis.KeyboardEvent) => { if (keepFocus && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setOpen(false) } }
+    window.addEventListener('keydown', esc, true)
+    return () => { document.removeEventListener('pointerdown', away, true); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); window.removeEventListener('keydown', esc, true) }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = (next: [number, number, number]) => { setHsv(next); onChange(hsvToHex(...next)) }

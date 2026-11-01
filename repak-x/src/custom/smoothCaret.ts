@@ -48,18 +48,30 @@ function place() {
   mirror.style.whiteSpace = area ? 'pre-wrap' : 'pre'
   mirror.style.overflowWrap = area ? cs.overflowWrap : 'normal'
   mirror.style.setProperty('text-wrap-style', cs.getPropertyValue('text-wrap-style'))
-  // the whole text, the marker at the caret: a centered or balanced line sits where the field's does
+  // the whole text, so a centered or balanced line sits where the field's does. Mid-text the caret is a collapsed range
+  // in that unbroken text (a marker there would add a line break the field does not have), at the end the marker
   const text = el.type === 'password' ? String.fromCharCode(0x2022).repeat(el.value.length) : el.value
-  mirror.textContent = text.slice(0, el.selectionStart)
-  mirror.append(marker, text.slice(el.selectionStart))
+  const start = el.selectionStart
+  mirror.textContent = text
+  let left: number, top: number, line: number
+  if (start < text.length) {
+    const range = document.createRange()
+    range.setStart(mirror.firstChild!, start)
+    const at = range.getClientRects()[0] ?? range.getBoundingClientRect()
+    const m = mirror.getBoundingClientRect()
+    left = at.left - m.left; top = at.top - m.top; line = at.height
+  } else {
+    mirror.append(marker)
+    left = marker.offsetLeft; top = marker.offsetTop; line = marker.offsetHeight
+  }
 
   const r = el.getBoundingClientRect()
   const size = parseFloat(cs.fontSize)
-  const line = marker.offsetHeight || size * 1.2
+  line ||= size * 1.2
   const height = Math.round(Math.min(line, size * 1.3))
-  const x = r.left + el.clientLeft + marker.offsetLeft - el.scrollLeft
+  const x = r.left + el.clientLeft + left - el.scrollLeft
   // an input centers its one line in its height, a textarea stacks lines from its top padding
-  const y = area ? r.top + el.clientTop + marker.offsetTop - el.scrollTop + (line - height) / 2 : r.top + (r.height - height) / 2
+  const y = area ? r.top + el.clientTop + top - el.scrollTop + (line - height) / 2 : r.top + (r.height - height) / 2
   if (x < r.left - 1 || x > r.right + 1 || y < r.top - 1 || y + height > r.bottom + 1) return hide() // scrolled out of the field
 
   el.classList.add('has-smooth-caret')
