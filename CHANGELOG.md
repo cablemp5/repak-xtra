@@ -1,15 +1,12 @@
 # Repak X — Changelog
 
-## [2.0.1](https://github.com/XzantGaming/Repak-X/releases/latest)
+## [2.2.0](https://github.com/X-zant/Repak-X/releases/latest)
 
-### 🔧 Backend / Logic
-- Installing over a mod in use by the game now fails early instead of half-deleting it
-- Fixed mods installing into a `~mods/~mods` subfolder
-- Fixed deleting a mod also removing files of its enabled/disabled copy
-- Fixed mod details not refreshing after replacing a mod
-- Fixed removed mods still counting in the hero filter
+### ✨ VFX Updater
+- Mods made before a game update that couldn't be read now have their materials recovered using older USMAPs, so their parameters carry over
+- Materials that still can't be parsed are listed as a warning instead of failing silently
+- Mods with no updatable parameters now stop with a clear message instead of producing a bypass-only mod
+- Deep dependencies are only pulled in for blueprints, which makes extraction faster for material mods
 
 ### 🎨 Frontend / UI
-- Auto-open details now also closes the panel when clicking the viewed mod
-- Fixed ghost mod cards with enabled and disabled copies of the same mod
-- Minor UI improvements and bug fixes
+- Added an "Allow overwriting mods with the same name" option in Settings, off by default
