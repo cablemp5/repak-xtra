@@ -2635,7 +2635,7 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 /* cqi on the container itself would measure the next container out (the page): the gap is the words' margin, in the card's cqi */
 .lo-card-caption { container-type: inline-size; padding: 14px; gap: 0 !important; }
 .lo-card-caption > svg + span { margin-top: 4cqi; }
-.lo-card-placeholder.lo-card-caption > span { padding: 0; font: 600 clamp(19.5px, 15.6cqi, 57.2px)/1.08 var(--font-primary); letter-spacing: -0.02em;
+.lo-card-placeholder.lo-card-caption > span { padding: 0; font: 600 clamp(18px, 14.4cqi, 52.8px)/1.08 var(--font-primary); letter-spacing: -0.02em;
   color: var(--cap, var(--text-primary)); text-wrap: balance; overflow-wrap: anywhere;
   display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
 .lo-card-placeholder.lo-card-caption svg.lo-cap-icon { width: clamp(24px, 22cqi, 72px) !important; height: clamp(24px, 22cqi, 72px) !important;
