@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { Check, Download, RotateCcw, Search } from 'lucide-react'
-import ColorPicker from './ColorPicker'
+import ColorPicker, { RAINBOW } from './ColorPicker'
 import { ROLE_ORDER, heroRole } from './heroRoles'
 import CustomDropdown from '../../components/CustomDropdown'
 import { type LoadoutProps, createFromMods } from '../Loadouts'
@@ -345,7 +345,7 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
               return (
                 <li key={r.id} className={`ko-role${changed ? ' is-changed' : ''}${focus?.length === 1 && focus[0] === r.id ? ' is-focus' : ''}`} onMouseEnter={() => setFocus([r.id])} onFocus={() => setFocus([r.id])}>
                 <ColorPicker value={hex.slice(1).toLowerCase()} onChange={v => setColor(r, `#${v}`)} label={`${r.name} color`}
-                  presets={[game.slice(1).toLowerCase(), ...PRESETS.filter(p => p !== game.slice(1).toLowerCase())]} />
+                  presets={[game.slice(1).toLowerCase(), ...RAINBOW.filter(p => p !== game.slice(1).toLowerCase())]} />
                   <span className="ko-role-name" title={r.parts.length ? `Colors the ${list(r.parts.map(x => x.toLowerCase()))}` : undefined}>{r.name}</span>
                   <HexField value={hex} onCommit={v => { setColor(r, v); cue('select') }} label={`${r.name} hex`} />
                   <button type="button" className="ko-reset" disabled={!changed} onClick={() => { setColor(r, null); cue('toggle') }} title={`Back to the game's ${game}`} aria-label={`Reset ${r.name}`}>
@@ -389,7 +389,6 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
 }
 
 /** Suggested colors in the picker, after the game's own: white, then around the wheel. */
-const PRESETS = ['ffffff', 'ff4fd8', 'a14cff', '3f7bff', '2ee6d6', '7be317', 'ffc23d', 'ff6a2b']
 
 /** The color rows by the part of the prompt they color, in the order the eye reads it. */
 const PART_GROUPS = ['Banner', 'Text', 'Slashes', 'Bar', 'Other'] as const

@@ -7,7 +7,7 @@ import {
   Ban, Bomb, Cat, ChevronUp, Crosshair, Crown, Droplet, Eye, Flame, Gamepad2, Gem, Ghost, Headphones, Heart, Leaf, Moon, Mountain, Music,
   Palette, PawPrint, Plus, Rocket, Shield, Skull, Snowflake, Sparkles, Star, Sun, Swords, Target, Trophy, Wand2, Waves, Wind, Zap,
 } from 'lucide-react'
-import ColorPicker from './ko/ColorPicker'
+import ColorPicker, { RAINBOW } from './ko/ColorPicker'
 
 type Icon = typeof Flame
 /** The icons on offer, by the name stored on the loadout. Picked for loadouts: looks, elements, modes, music. */
@@ -62,7 +62,7 @@ export function CaptionStyleBar({ icon, color, onIcon, onColor }: {
             title={c === CAPTION_COLORS[0] ? 'White' : c} aria-label={`Color ${c}`} onClick={() => onColor(c === CAPTION_COLORS[0] ? undefined : c)} />
         ))}
         {/* any other color, in the KO Editor's picker. Its hue ring fills with the color once it is not a swatch's */}
-        <ColorPicker value={shown.slice(1).toLowerCase()} label="Text color" presets={CAPTION_COLORS.map(c => c.slice(1))} keepFocus
+        <ColorPicker value={shown.slice(1).toLowerCase()} label="Text color" presets={RAINBOW} gameFirst={false} keepFocus
           className={`cap-custom${CAPTION_COLORS.includes(shown.toLowerCase()) ? '' : ' is-picked'}`}
           onChange={hex => onColor(hex === 'ffffff' ? undefined : `#${hex}`)} />
       </span>
