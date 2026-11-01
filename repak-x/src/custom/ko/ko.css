@@ -7,6 +7,8 @@
 html[data-view="ko"] .view-tabs::before { transform: translateX(calc(200% + 4px)); }
 
 .ko-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 250px minmax(0, 1fr) 320px; }
+/* a narrow window (the 1200px minimum at a 110% or 125% UI scale): slimmer side columns, so the stage keeps its room */
+@media (max-width: 1000px) { .ko-grid { grid-template-columns: 200px minmax(0, 1fr) 280px; } }
 .ko-h { margin: 0; font-size: 16px; font-weight: 600; color: var(--text-primary); }
 .ko-note { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
 .ko-pad { padding: 4px 8px; }
@@ -47,8 +49,8 @@ html[data-view="ko"] .view-tabs::before { transform: translateX(calc(200% + 4px)
 /* the transport sits at the window's bottom: its menu opens upward, grown from the trigger */
 .ko-speed .custom-dropdown-menu { top: auto !important; bottom: calc(100% + 4px) !important; transform-origin: bottom center; min-width: 0; }
 .ko-speed .custom-dropdown-trigger { height: 36px !important; min-height: 0 !important; font-size: 13px; font-variant-numeric: tabular-nums; }
-.ko-speed .custom-dropdown-text { flex: 1; text-align: center; }
-.ko-speed .custom-dropdown-item { justify-content: center; font-variant-numeric: tabular-nums; }
+.ko-speed .custom-dropdown-text { flex: 1; text-align: left; }   /* left, like every other dropdown (cable, 2026-11-01) */
+.ko-speed .custom-dropdown-item { justify-content: flex-start; font-variant-numeric: tabular-nums; }
 .ko-stage { position: relative; flex: 1; min-height: 220px; margin: 16px 16px 0; border: 1px solid var(--panel-border); border-radius: 12px; overflow: hidden; background: #0b0b0b; }
 .ko-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .ko-stage-msg { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px;
@@ -70,9 +72,9 @@ html[data-view="ko"] .view-tabs::before { transform: translateX(calc(200% + 4px)
 
 .ko-transport { display: flex; align-items: center; gap: 12px; height: 36px; margin-top: 12px; padding: 0 16px 18px; box-sizing: content-box; }
 /* play and pause: the icon alone, swapping in place (transitions.dev icon swap) */
-.ko-play { display: inline-grid; place-items: center; width: 36px; height: 36px; flex: none; border: 0; border-radius: 8px; background: transparent; color: var(--text-primary); cursor: pointer;
+.ko-play { display: inline-grid; place-items: center; width: 36px; height: 36px; flex: none; box-sizing: border-box; border: 1px solid rgba(255, 255, 255, 0.09); border-radius: var(--quiet-radius, 8px); background: transparent; color: var(--text-primary); cursor: pointer;
   transition: background-color 150ms ease, transform 150ms ease; }
-.ko-play:hover:not(:disabled) { background: var(--quiet-hover); }
+.ko-play:hover:not(:disabled) { background: var(--quiet-hover); border-color: rgba(255, 255, 255, 0.14); }   /* outlined like the app's quiet buttons (cable, 2026-11-01) */
 .ko-play:active:not(:disabled) { transform: scale(0.92); }
 .ko-play:disabled { opacity: 0.4; cursor: default; }
 .ko-play:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
@@ -83,11 +85,12 @@ html[data-view="ko"] .view-tabs::before { transform: translateX(calc(200% + 4px)
 .ko-phases button { display: block !important; flex-basis: 0; min-width: 0; height: auto !important; min-height: 0 !important; padding: 0 !important; border: 0 !important; background: none !important; color: var(--text-secondary); font: inherit; font-size: 13px; font-weight: 500; text-align: left !important;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; transition: color 150ms ease; }
 .ko-phases button:hover, .ko-phases button.is-now { color: var(--text-primary); }
+.ko-phase-wait { font-size: 13px; font-weight: 500; color: var(--text-secondary); white-space: nowrap; }   /* where the phase labels go, while they load */
 .ko-timeline input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 20px; margin: 0; background: transparent; cursor: pointer; }
 .ko-timeline input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px;
   background: var(--ko-gaps, none), linear-gradient(90deg, var(--accent-primary) var(--ko-at, 0%), rgba(255, 255, 255, 0.12) var(--ko-at, 0%)); }
-.ko-timeline input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 3px; height: 18px; margin-top: -6px; border-radius: 2px; background: #fff;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6); }   /* a playhead bar, not a knob */
+.ko-timeline input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 3px; height: 18px; margin-top: -6px; border: 0; background: transparent;
+  box-shadow: none; }   /* no playhead mark (cable, 2026-11-01): the fill's edge shows where it is, the thumb stays for dragging */
 .ko-timeline input[type="range"]:disabled { cursor: default; }
 /* while a prompt loads: an empty track with a light passing over it, no old fill and no playhead */
 .ko-timeline.is-loading input[type="range"]::-webkit-slider-runnable-track { background: rgba(255, 255, 255, 0.06); }
@@ -191,3 +194,6 @@ html[data-motion="off"] .ko-stage canvas, html[data-motion="off"] .ko-roles .t-r
 .ko-colors .fp-clear:hover { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
 /* play and speed sit level with the track and its labels as one block, not the track alone */
 .ko-transport > .ko-play, .ko-transport > .ko-speed { translate: 0 8px; }
+/* why Install is off (a game running, nothing changed yet, no name), under the button in quiet text */
+.ko-why { margin: -2px 0 0; font-size: 12.5px; color: var(--text-secondary); text-align: center; }
+.app .ko-roles .ko-group-head:focus-visible { outline: none !important; color: var(--text-primary); }   /* focus shows like hover: the group lit, the stage showing only it */

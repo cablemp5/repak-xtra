@@ -268,6 +268,14 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
     finish('install-galacta')
     setNotes(wasInstalled ? `Updated to ${g.latest}` : `Installed ${g.latest}`)   // what changed, right away
   })
+  // On and off here, since the Library leaves it out (its count and list): the Library's own switch, a rename of the
+  // .pak to .bak_repak and back
+  const toggleGalacta = (on: boolean) => run(on ? 'galacta-on' : 'galacta-off', async () => {
+    const pak = `${galacta!.installed}\\${GALACTA_PAK}`
+    await invoke('toggle_mod', { modPath: on ? pak.replace(/\.pak$/i, '.bak_repak') : pak })
+    setGalacta(await invoke<Galacta>('setup_galacta_status', { online: false }))
+    alert.success(LOADER_NAME, on ? 'On again. Mods that need it load from the next game launch.' : 'Off. Mods that need it will not load.')
+  })
   // The Library's undoable delete: the .pak with its .ucas and .utoc (or the switched-off .bak_repak) go to the trash
   const removeGalacta = () => run('remove-galacta', async () => {
     setAskGalacta(false)
@@ -382,12 +390,12 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
             {/* One part row, the same as the preview kit's: state, where it is and the newest release, links on the right */}
             <ul className="su-parts">
               <li className="su-part">
-                <PartMark ok={Boolean(g?.installed)} />
+                <PartMark ok={Boolean(g?.installed && !g.disabled)} />
                 <div className="su-part-text">
                   <b>{GALACTA_PAK}</b>
                   {/* like the preview kit's line: its version (known once a check finds it matches), where, then What's new */}
                   <span>
-                    {!g ? 'Checking…' : [g.installed && g.up_to_date && g.latest, g.installed ? `in ${where}${g.disabled ? ', off in the Library' : ''}` : 'Not installed'].filter(Boolean).join(' · ')}
+                    {!g ? 'Checking…' : [g.installed && g.up_to_date && g.latest, g.installed ? `in ${where}${g.disabled ? ', switched off' : ''}` : 'Not installed'].filter(Boolean).join(' · ')}
                     {g?.latest && <> · <button type="button" className="su-link" onClick={() => setNotes("What's new")}>{g.up_to_date === false ? `${g.latest} on GitHub` : `What's new in ${g.latest}`}</button></>}
                   </span>
                 </div>
@@ -395,6 +403,8 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                   <button type="button" className="su-link" disabled={Boolean(busy)} onClick={check} title={`Ask GitHub for the newest ${LOADER_NAME}`}>
                     {busy === 'check' ? 'Checking…' : 'Check for updates'}
                   </button>
+                  {g?.installed && !g.disabled && <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => toggleGalacta(false)}
+                    title="Mods that need it stop loading. Turn it on again here">Turn off</button>}
                   {g?.installed && <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => setAskGalacta(true)}
                     title="Moves it to Recently deleted for 7 days">Remove</button>}
                 </span>
@@ -404,6 +414,14 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
               onYes={removeGalacta} onNo={() => setAskGalacta(false)} />}
             <GalactaTrack on={busy === 'install-galacta'} done={finished === 'install-galacta' ? `${LOADER_NAME} ${galacta?.latest ?? ''} is in your mods folder`.replace('  ', ' ') : undefined} />
             {/* Install or update, and where to: only when one is offered */}
+            {/* switched off: Turn on is the card's main button, like the bypass card's */}
+            {g?.installed && g.disabled && (
+              <div className="su-actions">
+                <button type="button" className="btn-primary su-main" disabled={Boolean(busy)} onClick={() => toggleGalacta(true)}>
+                  {busy === 'galacta-on' ? 'Turning on…' : 'Turn on'}
+                </button>
+              </div>
+            )}
             {(!g?.installed || g.up_to_date === false) && (
               <div className="su-actions">
                 <button type="button" className="btn-primary su-main" disabled={Boolean(busy)} onClick={install}>

@@ -43,7 +43,33 @@ pub fn blender() -> Option<PathBuf> {
         .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
         .and_then(|v| v["path"].as_str().map(PathBuf::from))
         .filter(|p| p.is_file());
+    if sandbox_blender() && !SANDBOX_BLENDER_IN.load(std::sync::atomic::Ordering::Relaxed) {
+        return None;
+    }
     picked.or_else(|| newest(installed_blenders()))
+}
+
+/// dev.ps1 -Sandbox (debug builds only): Blender counts as missing until a simulated winget install, so the whole
+/// previews setup can be tried on a PC that already has Blender.
+fn sandbox_blender() -> bool {
+    cfg!(debug_assertions) && std::env::var_os("REPAKXTRA_SANDBOX_BLENDER").is_some()
+}
+static SANDBOX_BLENDER_IN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// winget's messages and download for the sandbox, at about a real install's pace, its admin prompt a pause.
+fn simulate_winget(app: &AppHandle) -> Result<(Option<i32>, String), String> {
+    let say = |text: &str, done: u64, total: u64, ms: u64| {
+        let _ = app.emit("preview-kit-progress", Progress { stage: "blender", done, total, text: Some(text.into()) });
+        std::thread::sleep(std::time::Duration::from_millis(ms));
+    };
+    say("Found Blender [BlenderFoundation.Blender]", 0, 0, 2000);
+    for i in 0..=40u64 {
+        say("Downloading https://download.blender.org/release/blender-windows-x64.msi", i * 9_500_000, 380_000_000, 250);
+    }
+    say("Successfully verified installer hash", 0, 0, 1000);
+    say("Starting package install...", 0, 0, 8000);
+    SANDBOX_BLENDER_IN.store(true, std::sync::atomic::Ordering::Relaxed);
+    Ok((Some(0), "Successfully installed".into()))
 }
 
 /// The newest by version (version_of); the first found wins a tie.
@@ -332,7 +358,8 @@ pub async fn preview_kit_install_blender(app: AppHandle) -> Result<String, Strin
         return Ok(b.display().to_string());
     }
     crate::ui_log::info("Blender", "Installing Blender (winget package BlenderFoundation.Blender, from blender.org)");
-    let (code, last) = tauri::async_runtime::spawn_blocking(move || run_winget(&app)).await.map_err(|e| e.to_string())??;
+    let (code, last) = tauri::async_runtime::spawn_blocking(move || if sandbox_blender() { simulate_winget(&app) } else { run_winget(&app) })
+        .await.map_err(|e| e.to_string())??;
     if let Some(b) = blender() {
         crate::ui_log::success("Blender", format!("Installed: {}", b.display()));
         return Ok(b.display().to_string());
@@ -359,7 +386,7 @@ fn winget_progress(line: &str) -> Option<(u64, u64)> {
 fn run_winget(app: &AppHandle) -> Result<(Option<i32>, String), String> {
     use std::process::{Command, Stdio};
     let mut cmd = Command::new("winget");
-    cmd.args(["install", "--id", "BlenderFoundation.Blender", "--exact", "--silent", "--accept-package-agreements", "--accept-source-agreements"])
+    cmd.args(["install", "--id", "BlenderFoundation.Blender", "--exact", "--source", "winget", "--silent", "--accept-package-agreements", "--accept-source-agreements"])
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
     #[cfg(windows)]

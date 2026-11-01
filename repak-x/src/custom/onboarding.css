@@ -29,6 +29,10 @@
 .ob-yes { flex: none; color: #3ecf6e; }
 .ob-no { flex: none; color: #f2555a; }
 .fr-hint { grid-column: 1 / -1; margin: 0; font-size: 13px; color: var(--text-secondary); }
+/* one card alone (the first loadout page with no mods yet): centered, its hint under it centered too */
+.ob-choices:has(> .ob-choice:only-of-type) { display: flex; flex-direction: column; align-items: center; }
+.ob-choices:has(> .ob-choice:only-of-type) > .ob-choice { width: min(100%, 308px); }
+.ob-choices:has(> .ob-choice:only-of-type) > .fr-hint { text-align: center; }
 
 /* Pictures for the cards: loadouts fanned out (no switches, they are pictures here), an empty card to fill, an empty
    slot for downloads, and Smart loadouts sorting loose mods into two looks */
@@ -77,9 +81,9 @@
 .ob-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .ob-col .fr-steps { padding: 0 !important; }
 .ob-col .fr-step { padding: 12px 0; align-items: start; }
-/* number and button level with the step's title, not the middle of its text (a 28px ring and a 32px button on a 20px title line) */
-.ob-col .fr-step .fr-num { margin-top: -4px; }
-.ob-col .fr-step .fr-action { margin-top: -6px; }
+/* number (or check) and button in the middle of their step, title and text together (cable, 2026-11-01): the line between
+   steps is theme.css's, drawn for a ring in the row's middle */
+.ob-col .fr-step :is(.fr-num, .fr-action) { align-self: center; }
 .ob-all { align-self: flex-start; width: auto !important; height: 36px !important; min-height: 0 !important; padding: 0 18px !important; }
 /* The game folder as a file tree: no card, the folder open (its caret down), the two files under it on a guide line */
 /* The game folder as Windows Explorer's navigation pane draws it (Option 1, cable's pick 2026-10-31): the folder open,
@@ -129,7 +133,7 @@
 .ob-drop > span:not([class]) { font-size: 14px; color: var(--text-secondary); }
 .ob-drop-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 20px; margin-top: 20px; }
 .ob-drop-actions .btn-primary { display: inline-flex !important; align-items: center; gap: 8px; width: auto !important; height: 36px !important; min-height: 0 !important; padding: 0 16px !important; }
-.ob-out, .ob-out:hover { display: inline-flex; align-items: center; gap: 5px; line-height: 1; text-decoration: none !important; }
+.ob-out, .ob-out:hover, .su-link.ob-out { display: inline-flex; align-items: center; gap: 5px; line-height: 1; text-decoration: none !important; }   /* .su-link's display: inline lost the flex */
 .ob-out svg.lucide { flex: none; }
 .wi-lede .ob-out { vertical-align: bottom; line-height: inherit; }   /* inside a sentence: on the text's own line */
 .wi-lede .ob-out svg.lucide { transform: translateY(2.5px); }   /* the icon centered on the words, not the taller line */
@@ -149,13 +153,21 @@
 .ob-pref-text p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 .ob-pref-action { display: flex; align-items: center; min-height: 32px; padding: 12px 16px 16px; }
 .ob-pref-action > * { max-width: 100%; }
-.ob-pref-action :is(.btn-primary, .lo-text-btn) { width: auto !important; height: 32px !important; min-height: 0 !important; padding: 0 14px !important; white-space: nowrap; }
-.ob-pref.is-wide { grid-column: 1 / -1; padding-bottom: 16px; }
-.ob-pref.is-wide .ob-pref-text { padding-top: 14px; flex: none; }
+.ob-pref-action :is(.btn-primary, .lo-text-btn) { width: auto !important; height: 32px !important; min-height: 0 !important; padding: 0 14px !important; white-space: nowrap;
+  box-sizing: border-box !important; border-width: 1px !important; border-radius: 8px !important; font: 600 13px/1 var(--font-primary) !important; }   /* one size for every card's button */
+.ob-pref-action .btn-primary:not(.is-working) { border-color: transparent !important; }
+/* the outlined button beside the blue one: its edge a little brighter, so it reads as the same 32px (the faint panel border
+   melted into the card and made it look shorter) */
+.ob-pref-action .lo-text-btn:not(.is-working) { border-color: rgba(255, 255, 255, 0.14) !important; }
 .ob-ok { display: inline-flex; align-items: center; gap: 6px; height: 32px; font-size: 13px; font-weight: 600; color: #3ecf6e; }
-.fr-admin { display: flex; align-items: center; gap: 6px; color: var(--text-primary) !important; }   /* the system prompt, said before it shows */
-.fr-admin svg { flex: none; color: var(--text-secondary); }
+.ob-pref-text .fr-admin { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* one line */   /* the system prompt, said before it shows */
+.fr-admin svg { flex: none; color: #f5a524; }   /* the app's warning amber: a heads-up, on the icon only */
+.ob-pref-text .fr-admin.is-waiting { color: #f5a524; }   /* Windows is asking now: the whole line */
 .ob-pref .su-track { margin: 4px 0 0; }
+.ob-pref:not(:has(.ob-pref-action)) .ob-pref-text { padding-bottom: 18px; }   /* room under the progress bar while the button is away */
+.ob-pref-text li { overflow-wrap: anywhere; }   /* a problem naming a long path wraps inside the card */
+.ob-choice:disabled { cursor: default; opacity: 0.5; }
+.ob-choice:disabled:hover { border-color: var(--panel-border); }
 
 /* The app's mark: the shortcut's icon and the Discord status's picture are the same tile */
 .ob-mark { width: 52px; height: 52px; display: grid; place-items: center; flex: none; border-radius: 12px; background: #0e1014; border: 1px solid var(--panel-border);
@@ -171,23 +183,46 @@
 .ob-icon { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .ob-icon small { font-size: 10.5px; color: var(--text-primary); }
 
-/* Sounds: a segmented pick, then one row of samples for the pack the pointer or focus rests on, else the picked one */
-.ob-sounds { margin-top: 10px; }
+/* The segmented pick (also the KO Editor's Mod only / Mod and loadout) */
 .ob-seg { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--panel-border); border-radius: 9px; background: var(--bg-dark); }
 .ob-seg button { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent;
   color: var(--text-secondary); font: 500 13px var(--font-primary); cursor: pointer; transition: color 0.15s, background 0.15s; }
 .ob-seg button:hover { color: var(--text-primary); background: var(--quiet-hover); }
 .ob-seg button[aria-checked="true"] { color: var(--text-primary); background: rgba(255, 255, 255, 0.07); font-weight: 600; }
-.ob-try { display: flex; align-items: center; gap: 6px; min-height: 26px; margin-top: 10px; font-size: 12.5px; color: var(--text-secondary); }
-.ob-try-label { margin-right: 4px; }
-.ob-try-label b { font-weight: 600; color: inherit; }   /* one color with "Try" */
-.ob-try button { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px 0 8px; border: 1px solid var(--panel-border); border-radius: 7px;
-  background: transparent; color: var(--text-secondary); font: 500 12px var(--font-primary); cursor: pointer; transition: color 0.15s, background 0.15s, transform 0.1s; }
-.fr-modal .ob-try button:hover:not(:disabled) { color: var(--text-primary); background: var(--quiet-hover); border-color: var(--text-secondary); }
-.fr-modal .ob-try button svg.lucide { width: 12px !important; height: 12px !important; }
-.ob-try button:active { transform: scale(0.95); }
-/* no loud ring: keyboard focus is a lighter border, like hover */
-.app .ob-try button:focus-visible, .app .ob-seg button:focus-visible { outline: none !important; border-color: var(--text-secondary); color: var(--text-primary); }
+.app .ob-seg button:focus-visible { outline: none !important; color: var(--text-primary); }   /* no loud ring: focus reads like hover */
+
+/* App sounds (option D, cable's pick 2026-11-01): choose on the left, listen on the right, one card split by a rule
+   (Common Region). Each pack says what it sounds like, so picking needs no listening (Hick). In the app's own look: the
+   text as in the cards above, rows like the app's list rows (the picked one lit, no radio dot), the keys its quiet
+   buttons, on a picture strip's background */
+.ob-pref.ob-sound-band { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); grid-column: 1 / -1; }
+.ob-sound-pick { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 16px; border-right: 1px solid var(--panel-border); }
+.ob-sound-pick h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.ob-sound-pick > p { margin: 0 0 4px; font-size: 13.5px; line-height: 1.5; color: var(--text-secondary); }
+.ob-sound-list { display: flex; flex-direction: column; gap: 2px; margin: 0 -8px; }
+.ob-sound-list button { display: flex; align-items: center; justify-content: space-between; gap: 10px; height: 32px; padding: 0 8px;
+  border: 0; border-radius: var(--quiet-radius); background: transparent; color: var(--text-secondary); font: 500 13px var(--font-primary); text-align: left; cursor: pointer;
+  transition: color 0.15s, background 0.15s; }
+.ob-sound-list button:hover { color: var(--text-primary); background: var(--quiet-hover); }
+.ob-sound-list button[aria-checked="true"] { color: var(--text-primary); background: rgba(255, 255, 255, 0.07); font-weight: 600; }
+.ob-sound-list button > span { display: inline-flex; align-items: center; gap: 9px; }   /* each pack's icon before its name */
+.ob-sound-list button svg { flex: none; color: var(--text-secondary); }
+.ob-sound-list button[aria-checked="true"] svg { color: var(--text-primary); }
+.ob-sound-list small { font-size: 12.5px; font-weight: 400; color: var(--text-secondary); }
+.app .ob-sound-list button:focus-visible { outline: none !important; color: var(--text-primary); background: var(--quiet-hover); }
+.ob-sound-keys { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; background: var(--bg-dark); }
+.ob-sound-keys > div { display: flex; gap: 8px; }
+.ob-sound-keys > p { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.ob-key { width: 72px; height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 0; box-sizing: border-box;
+  border: 1px solid var(--panel-border); border-radius: var(--quiet-radius); background: transparent; color: var(--text-primary);
+  font: 500 12.5px var(--font-primary); cursor: pointer; transition: background 0.15s, border-color 0.15s, transform 0.1s; }   /* the app's quiet button (.lo-text-btn), stood up */
+.ob-key:hover:not(:disabled) { background: var(--quiet-hover); border-color: rgba(255, 255, 255, 0.14); }
+.ob-key:active:not(:disabled) { transform: scale(0.95); }
+.ob-key:disabled { opacity: 0.5; cursor: default; }   /* Off: locked, each key showing a lock */
+.ob-key svg { color: var(--text-secondary); }
+.modal-content.fr-modal .ob-key svg.lucide { width: 16px !important; height: 16px !important; }
+.app .ob-key:focus-visible { outline: none !important; border-color: var(--text-secondary); }
+html[data-motion="off"] .ob-key { transition: none; }
 
 /* Where they are: the five steps by name, the same five whatever the answers (Goal-gradient: the end in sight) */
 .fr-rail { display: flex; align-items: center; gap: 14px; margin: 0 auto 0 0; padding: 0; list-style: none; font-size: 12px; color: color-mix(in srgb, var(--text-secondary), transparent 35%); white-space: nowrap; }

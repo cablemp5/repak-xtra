@@ -450,6 +450,10 @@ pub fn get_current_pak_characteristics(mod_contents: Vec<String>) -> String {
 }
 
 pub fn find_marvel_rivals() -> Option<PathBuf> {
+    #[cfg(debug_assertions)]
+    if let Some(paks) = std::env::var_os("REPAKXTRA_SANDBOX_GAME") {
+        return Some(PathBuf::from(paks)); // repakxtra: dev.ps1 -Sandbox, a fake game folder
+    }
     let shit = get_steam_library_paths();
     if shit.is_empty() {
         return None;
@@ -541,36 +545,17 @@ pub(crate) fn get_steam_library_paths() -> Vec<PathBuf> { // repakxtra: pub(crat
 /// Get Steam installation path from Windows registry
 #[cfg(target_os = "windows")]
 fn get_steam_path_from_registry() -> Option<PathBuf> {
-    use std::process::Command;
-
-    // Query registry for Steam install path
-    // reg query "HKCU\Software\Valve\Steam" /v SteamPath
-    let output = Command::new("reg")
-        .args(["query", r"HKCU\Software\Valve\Steam", "/v", "SteamPath"])
-        .output()
-        .ok()?;
-
-    if !output.status.success() {
+    // repakxtra: read straight from the registry. Running reg.exe flashed a console window on every Steam lookup
+    // (first-launch game detection, every preview kit check), which looked like malware to users.
+    let path: String = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER)
+        .open_subkey(r"Software\Valve\Steam").ok()?
+        .get_value("SteamPath").ok()?;
+    let path = path.trim();
+    if path.is_empty() {
         return None;
     }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    // Parse output: "    SteamPath    REG_SZ    C:\Program Files (x86)\Steam"
-    for line in stdout.lines() {
-        if line.contains("SteamPath") && line.contains("REG_SZ") {
-            // Split by REG_SZ and take the path part
-            if let Some(path_part) = line.split("REG_SZ").nth(1) {
-                let path = path_part.trim();
-                if !path.is_empty() {
-                    info!("Found Steam path in registry: {}", path);
-                    return Some(PathBuf::from(path));
-                }
-            }
-        }
-    }
-
-    None
+    info!("Found Steam path in registry: {}", path);
+    Some(PathBuf::from(path))
 }
 
 #[cfg(not(target_os = "windows"))]

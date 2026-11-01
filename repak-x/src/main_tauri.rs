@@ -536,7 +536,7 @@ async fn auto_detect_game_path(
                 "GamePath",
                 "Could not auto-detect Marvel Rivals - set the mods folder manually in Settings",
             );
-            toast_events::emit_game_path_failed(&window, &error_msg);
+            // repakxtra: no toast here, the caller says it (first-launch setup shows "Not found yet" instead)
             Err(error_msg)
         }
     }
@@ -639,6 +639,9 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
 
     info!("Loading mods from: {}", game_path.display());
 
+    if game_path.as_os_str().is_empty() {
+        return Ok(Vec::new()); // repakxtra: no game folder yet (a first launch): no mods, not an error toast
+    }
     if !game_path.exists() {
         ui_log::error(
             "Mods",

@@ -62,7 +62,7 @@ export default function WelcomeIntro({ onNext, onSkip }: { onNext: () => void; o
       </div>
 
       <div className="modal-footer fr-foot">
-        <span className="wi-time">Five short steps, about two minutes</span>
+        <span className="wi-time">Four short steps, about two minutes</span>
         <button type="button" className="lo-text-btn" onClick={onSkip}>Set up later</button>
         <button type="button" className="btn-primary wi-next" onClick={onNext}>Set up {APP_NAME} <ArrowRight size={15} /></button>
       </div>

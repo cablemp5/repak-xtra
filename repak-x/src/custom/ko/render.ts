@@ -210,8 +210,9 @@ export function draw(ctx: CanvasRenderingContext2D, s: Scene, t: number, size: {
   // the backdrop is painted, not left transparent: additive layers need something under them (and a saved frame keeps it)
   if (o.ground) { ctx.fillStyle = o.ground; ctx.fillRect(0, 0, size.w, size.h) } // one flat color (drawClear)
   else if (o.background !== false) {
-    const g = ctx.createRadialGradient(size.w * 0.38, size.h * 0.4, 0, size.w * 0.38, size.h * 0.4, Math.max(size.w, size.h) * 0.75)
-    g.addColorStop(0, '#0e0e0e'); g.addColorStop(0.55, '#080808'); g.addColorStop(1, '#030303')
+    // the editor's grid sits on one flat color (cable, 2026-11-01: no glow behind it); other uses keep the soft light
+    const g = o.checker ? '#0b0b0b' : ctx.createRadialGradient(size.w * 0.38, size.h * 0.4, 0, size.w * 0.38, size.h * 0.4, Math.max(size.w, size.h) * 0.75)
+    if (typeof g !== 'string') { g.addColorStop(0, '#0e0e0e'); g.addColorStop(0.55, '#080808'); g.addColorStop(1, '#030303') }
     ctx.fillStyle = g; ctx.fillRect(0, 0, size.w, size.h)
     // the editor's stage: a dark line grid behind the prompt, a design canvas's ground
     if (o.checker) {

@@ -2115,7 +2115,7 @@ function App() {
     }
   }
 
-  const handleAutoDetect = async () => {
+  const handleAutoDetect = async (quiet = false) => {
     try {
       setLoading(true)
       const path = await invoke('auto_detect_game_path') as any
@@ -2125,6 +2125,7 @@ function App() {
       await loadFolders()
     } catch (error) {
       setStatus('Failed to auto-detect: ' + error)
+      if (!quiet) alert.error('Game not found', String(error)) // repakxtra: first-launch setup asks quietly and shows its own "Not found yet"
     } finally {
       setLoading(false)
     }
@@ -3698,7 +3699,7 @@ function App() {
           accentColor={accentColor}
           setAccentColor={handleAccentChange}
           gamePath={gamePath}
-          onAutoDetectGamePath={handleAutoDetect}
+          onAutoDetectGamePath={() => handleAutoDetect()}
           onBrowseGamePath={handleBrowseGamePath}
           isGamePathLoading={loading}
           setParallelProcessing={handleSetParallelProcessing}
@@ -4576,7 +4577,7 @@ function App() {
         onClose={handleCloseTour}
       />
       <FirstRun alert={alert} gamePath={gamePath} mods={mods} details={modDetails} installing={panels.install} enableDrp={enableDrp} onSetDrp={on => saveAllSettings({ enableDrp: on })}
-        onAutoDetect={handleAutoDetect} onBrowse={handleBrowseGamePath} onAddFiles={handleFileDrop} />{/* repakxtra */}
+        onAutoDetect={() => handleAutoDetect(true)} onBrowse={handleBrowseGamePath} onAddFiles={handleFileDrop} />{/* repakxtra */}
     </div >
   )
 }

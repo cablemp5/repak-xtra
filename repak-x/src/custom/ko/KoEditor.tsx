@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { Check, Download, Pause, Play, RotateCcw, Search } from 'lucide-react'
+import { Check, Download, RotateCcw, Search } from 'lucide-react'
 import ColorPicker from './ColorPicker'
 import { ROLE_ORDER, heroRole } from './heroRoles'
 import CustomDropdown from '../../components/CustomDropdown'
@@ -149,10 +149,10 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
     if (!scene || !playing || !shown) { paint(); return }
     let raf = 0, last = performance.now(), shownAt = 0
     const tick = (now: number) => {
-      // a beat of rest after the fade out, then again from the kill
+      // a short beat of rest after the fade out (0.6 s felt slow, cable 2026-11-01), then again from the kill
       timeRef.current += ((now - last) / 1000) * speed
       last = now
-      if (timeRef.current > total + 0.6) timeRef.current = 0
+      if (timeRef.current > total + 0.15) timeRef.current = 0
       paint()
       glide(timeRef.current) // the playhead every frame, so it glides
       if (now - shownAt > 80) { shownAt = now; setTime(timeRef.current) } // the phase names' highlight needs less
@@ -225,6 +225,17 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
     } finally { setStep(null) }
   }
 
+  /** Arrow keys, Home and End move focus through the heroes (one Tab stop for the list), Enter or Space picks. */
+  const moveInList = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const all = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="option"]')]
+    const at = all.indexOf(document.activeElement as HTMLButtonElement)
+    const to = e.key === 'ArrowDown' ? at + 1 : e.key === 'ArrowUp' ? at - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? all.length - 1 : null
+    if (to === null || !all.length) return
+    e.preventDefault()
+    all[Math.max(0, Math.min(all.length - 1, to))].focus()
+  }
+  // why Install is off, said under it (a tooltip alone hid it)
+  const why = !scene ? null : blocked ? 'Close Marvel Rivals first' : !edited.length ? 'Change a color first' : !name.trim() ? 'Give it a name first' : null
   const order = new Map(groupRoles(roles).flatMap(([, rs]) => rs).map((r, i) => [r.id, i]))
   const shownHeroes = (heroes ?? []).filter(h => h.name.toLowerCase().includes(query.trim().toLowerCase()))
   const phases = scene?.phases ?? []
@@ -239,7 +250,7 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
           <Search size={16} aria-hidden />
           <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search heroes" aria-label="Search heroes" />
         </label>
-        <div className="ko-hero-list" role="listbox" aria-label="Hero">
+        <div className="ko-hero-list" role="listbox" aria-label="Hero" onKeyDown={moveInList}>
           {!heroes && !listError && Array.from({ length: 10 }, (_, i) => <div key={i} className="ko-hero is-ghost" />)}
           {listError && <p className="ko-note ko-pad">{listError}</p>}
           {heroes && !shownHeroes.length && <p className="ko-note ko-pad">No hero matches “{query.trim()}”.</p>}
@@ -249,7 +260,8 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
               <div key={group} role="group" aria-label={group} className="ko-hero-group">
                 <div className="ko-group-head" aria-hidden>{group}</div>
                 {inGroup.map(h => (
-                  <button key={h.id} type="button" role="option" aria-selected={h.id === heroId} className="ko-hero" onClick={() => { setHeroId(h.id); cue('select') }}>
+                  <button key={h.id} type="button" role="option" aria-selected={h.id === heroId} className="ko-hero" onClick={() => { setHeroId(h.id); cue('select') }}
+                    tabIndex={h.id === (shownHeroes.some(x => x.id === heroId) ? heroId : shownHeroes[0]?.id) ? 0 : -1}>
                     <img src={portrait(h.name)} alt="" />
                     <span>{h.name}</span>
                     {(Object.keys(saved[h.id]?.colors ?? {}).length > 0 || Boolean(saved[h.id]?.hue)) && <span className="ko-dot" title="Has your colors" />}
@@ -288,13 +300,15 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
         <div className="ko-transport">
           <button type="button" className="ko-play t-icon-swap" data-state={playing ? 'a' : 'b'} onClick={() => { setPlaying(v => !v); cue('toggle') }} disabled={!scene}
             aria-label={playing ? 'Pause' : 'Play'} title={playing ? 'Pause (Space)' : 'Play (Space)'}>
-            <Pause className="t-icon" data-icon="a" size={18} strokeWidth={1.5} aria-hidden /><Play className="t-icon" data-icon="b" size={18} strokeWidth={1.5} aria-hidden />
+            <PauseGlyph /><PlayGlyph />
           </button>
           <div className={`ko-timeline${scene ? '' : ' is-loading'}`}>
             {!scene && <span className="ko-track-wait" aria-hidden />}
             <input ref={range} type="range" min={0} max={total} step={0.001} defaultValue={0} disabled={!scene} aria-label="Time"
+              aria-valuetext={`${phases.find(ph => time >= ph.start && time < ph.start + ph.length)?.label ?? 'End'}, ${time.toFixed(1)} seconds`}
               onChange={e => { setPlaying(false); seek(Number(e.target.value)) }} style={{ '--ko-gaps': gaps } as React.CSSProperties} />
             <div className="ko-phases" aria-hidden>
+              {!scene && <span className="ko-phase-wait">Waiting for timestamps</span>}{/* the labels' place while it loads */}
               {phases.map(ph => (
                 <button key={ph.label} type="button" tabIndex={-1} style={{ flexGrow: ph.length }} className={time >= ph.start && time < ph.start + ph.length ? 'is-now' : ''}
                   onClick={() => { setPlaying(false); seek(ph.start + 0.001) }}>{ph.label}</button>
@@ -324,8 +338,9 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
         </div>
         <ul key={heroId ?? 'none'} className="ko-roles" onMouseLeave={() => setFocus(null)}>
           {groupRoles(roles).flatMap(([group, rs]) => [
-            <li key={`g:${group}`} className={`ko-group-head${focus?.length === rs.length && rs.every(r => focus.includes(r.id)) ? ' is-focus' : ''}`}
-              onMouseEnter={() => setFocus(rs.map(r => r.id))} title={`Hover to see only the ${group.toLowerCase()}`}>{group}</li>,
+            <li key={`g:${group}`} className={`ko-group-head${focus?.length === rs.length && rs.every(r => focus.includes(r.id)) ? ' is-focus' : ''}`} tabIndex={0}
+              onMouseEnter={() => setFocus(rs.map(r => r.id))} onFocus={() => setFocus(rs.map(r => r.id))} onBlur={() => setFocus(null)}
+              title={`Hover or focus to see only the ${group.toLowerCase()}`}>{group}</li>,
             ...rs.map(r => {
               const game = hexOf(r.rgba), hex = colors.get(r.id) ?? game, changed = hex !== game
               return (
@@ -361,12 +376,13 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
             <button type="button" className={`lo-text-btn ko-install${step ? ' is-working' : installed ? ' is-installed' : ' is-primary'}`}
               onClick={() => { if (!step && !installed) install() }} aria-busy={Boolean(step)}
               disabled={!step && !installed && (!scene || !edited.length || !name.trim() || blocked)}
-              title={step ? undefined : blocked ? 'Close Marvel Rivals first' : !edited.length ? 'Change a color first' : "Built from your game's current files"}>
+              title={step ? undefined : why ?? "Built from your game's current files"}>
               {step ? <span key={step} className="t-text-in"><span className="t-shimmer">{step}</span></span>
                 : installed ? <span key="done" className="t-text-in ko-btn-in"><Check size={16} aria-hidden />Installed</span>
                   : <span key="idle" className="ko-btn-in"><Download size={16} aria-hidden />Install</span>}
             </button>
           )}
+          {!taken && !step && !installed && why && <p className="ko-why">{why}</p>}
         </div>
       </aside>
     </div>
@@ -410,3 +426,8 @@ async function snapshot(scene: Scene, kills: number, colors: Map<string, string>
   drawClear(c.getContext('2d')!, scene, (loop?.start ?? 0) + 0.25, size, { kills, colors, frame: frameFor(scene.core, size) })
   return new Promise(res => c.toBlob(b => res(b), 'image/png'))
 }
+
+/* Play and pause as solid glyphs, as media players draw them (option A, cable 2026-11-01): Lucide's are hollow outlines
+   that looked out of place on the transport. The icon swap (t-icon-swap) crossfades them by data-icon. */
+const PauseGlyph = () => <svg className="t-icon" data-icon="a" width={14} height={14} viewBox="0 0 24 24" fill="currentColor" aria-hidden><rect x={6} y={4} width={4} height={16} rx={1.2} /><rect x={14} y={4} width={4} height={16} rx={1.2} /></svg>
+const PlayGlyph = () => <svg className="t-icon" data-icon="b" width={14} height={14} viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M7 4.8a1.4 1.4 0 0 1 2.1-1.2l11 6.9a1.6 1.6 0 0 1 0 2.8l-11 6.9A1.4 1.4 0 0 1 7 19.2z" /></svg>

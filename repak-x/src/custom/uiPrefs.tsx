@@ -3,6 +3,7 @@
 // the element when it is absent. UI scale uses the webview zoom, like Ctrl + in a browser.
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
+import { currentMonitor } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/core'
 import { ChevronDown, Download, EyeOff, PanelTop, Tags, Trash2, TriangleAlert, Volume2, ZoomIn } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
@@ -103,6 +104,12 @@ const apply = () => {
   getCurrentWebview().setZoom(getScale() / 100 * BASE_ZOOM).catch(e => console.warn('[uiPrefs] zoom failed', e))
 }
 apply()
+/** The scale a screen suits by its height after Windows scaling: 1080p 90%, 1440p 100%, 4K 110% (ultrawides by height). */
+export const scaleFor = (height: number) => height <= 1200 ? 90 : height <= 1700 ? 100 : 110
+// First launch only (no scale saved, onboarding never finished): start at the scale the screen suits
+if (savedItem(SCALE_KEY) === null && !localStorage.getItem('repakxtra.onboarded2')) {
+  currentMonitor().then(m => { if (m && savedItem(SCALE_KEY) === null) update(SCALE_KEY, String(scaleFor(m.size.height / m.scaleFactor))) }).catch(() => undefined)
+}
 // Ctrl + / Ctrl - step through the scales, Ctrl 0 resets to 100%
 window.addEventListener('keydown', e => {
   if (!e.ctrlKey || e.altKey) return
@@ -427,4 +434,5 @@ if (import.meta.env.DEV) {
   console.assert(resolveMotion('junk', true) === false, 'an unknown saved value counts as System')
   console.assert(resolveLite(null, 4) && resolveLite(null, 16, 4) && !resolveLite(null, 8, 8) && !resolveLite(null, 16), 'unset Lighter graphics follows the PC')
   console.assert(resolveLite('0', 2, 2) === false && resolveLite('1', 32, 8) === true, 'a saved 1 or 0 overrides the PC')
+  console.assert([864, 1080, 1440, 2160].map(scaleFor).join() === '90,90,100,110', 'scaleFor: 1080p 90, 1440p 100, 4K 110')
 }
