@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo, useSyncExternalStore } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, useSyncExternalStore, lazy, Suspense } from 'react'
 import type { ComponentProps } from 'react'
 import type { ChangeEvent } from 'react'
 import type { UnlistenFn } from '@tauri-apps/api/event'
@@ -64,7 +64,7 @@ import { focusRow, relink, useLibraryFocus } from './custom/libraryFocus' // rep
 import FilterPanel, { filterScope } from './custom/FilterPanel'
 import LoadoutHotkeys, { AddToLoadoutField, LoadoutMenuItems } from './custom/Loadouts'
 import LoadoutsScreen, { ViewTabs } from './custom/LoadoutsScreen'
-import KoEditor from './custom/ko/KoEditor' // repakxtra: the KO Editor view
+import KoEditor from './custom/ko/KoView' // repakxtra: the KO Editor view, its code loaded when it first opens
 import ViewModeMenu from './custom/ViewModeMenu' // repakxtra: view buttons folded into one when narrow
 import { loadoutable, modKey, nameKey, renameModKey, setView, syncLoadoutKeys } from './custom/loadoutStore' // repakxtra
 import { setModsRoot } from './custom/loadoutIdentity' // repakxtra
@@ -141,7 +141,7 @@ import TitleBar from './components/TitleBar'
 
 import InstallModPanel from './custom/InstallPanel' // repakxtra: the install dialog redesigned around saving a loadout
 import EncryptMods, { openEncrypt } from './custom/EncryptMods' // repakxtra
-import SettingsPanel from './components/SettingsPanel'
+const SettingsPanel = lazy(() => import('./components/SettingsPanel')) // repakxtra: loaded when Settings first opens
 import CreditsPanel from './components/CreditsPanel'
 import ToolsPanel from './components/ToolsPanel'
 import SharingPanel from './components/SharingPanel'
@@ -3690,7 +3690,7 @@ function App() {
       <CrashSuspects deps={{ alert, isBlocked: undoBlocked, reload: loadMods }} mods={mods} details={modDetails} heroes={characterData} />{/* repakxtra */}
 
       {panels.settings && (
-        <SettingsPanel
+        <Suspense fallback={null}><SettingsPanel
           settings={{ hideSuffix, autoOpenDetails, showHeroIcons, showHeroBg, showModType, showExperimental, enableDrp, parallelProcessing, autoCheckUpdates, holdToDelete, showSubfolderMods, bypassGameRunningLock, launcherType, enableAnimations }}
           onSave={handleSaveSettings}
           onClose={() => setPanel('settings', false)}
@@ -3709,7 +3709,7 @@ function App() {
           isCheckingUpdates={isCheckingUpdates}
           onReplayTour={handleReplayTour}
           onOpenShortcuts={() => setPanel('shortcuts', true)}
-        />
+        /></Suspense>
       )}
 
       {panels.credits && (

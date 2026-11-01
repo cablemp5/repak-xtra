@@ -1,7 +1,7 @@
 //! repakxtra: mods that will not work in the installed game version (custom/brokenMods.ts shows them).
 //! Two checks, both from files alone:
 //! - broken: every game asset the mod replaces is gone from the game (an update renamed or removed it), so the mod
-//!   changes nothing. The game's own asset list is read once per game build and kept in memory.
+//!   changes nothing. The game's own asset list is read once per game build, saved, and kept in memory.
 //! - vfx: a VFX mod made before a game update that rewrote game files it replaces (on or off). Its effects can look wrong
 //!   or crash the game until it is rebuilt on the new files (custom/vfx/, the VFX Updater).
 //!   A material mod (a skin's material instances, xtra_vfx::updatable) gets it too, when the update rewrote one of those.
@@ -170,56 +170,183 @@ pub(crate) fn match_key(file: &str) -> String {
 }
 
 /// Asset key -> when the newest game container holding it was written (seconds): an update's patch container holds
-/// only what the update changed.
-pub(crate) type GameAssets = HashMap<String, u64>;
+/// only what the update changed. Keyed by a 64-bit fingerprint of the key, not its text: the game's 570,000 keys took
+/// about 150 MB as text and take about 18 MB as numbers. Two keys share a fingerprint about once in 100 million lists
+/// this size, and that would at worst change one mod's badge.
+#[derive(Default)]
+pub(crate) struct GameAssets(HashMap<u64, u64>);
+
+impl GameAssets {
+    pub(crate) fn get(&self, key: &str) -> Option<&u64> {
+        self.0.get(&fingerprint(key))
+    }
+    pub(crate) fn contains_key(&self, key: &str) -> bool {
+        self.0.contains_key(&fingerprint(key))
+    }
+    pub(crate) fn insert(&mut self, key: impl AsRef<str>, value: u64) {
+        self.0.insert(fingerprint(key.as_ref()), value);
+    }
+    /// Keeps the larger of the value stored for `key` and `value`.
+    fn raise(&mut self, key: &str, value: u64) {
+        let v = self.0.entry(fingerprint(key)).or_insert(0);
+        *v = (*v).max(value);
+    }
+    pub(crate) fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
+impl<const N: usize> From<[(String, u64); N]> for GameAssets {
+    fn from(pairs: [(String, u64); N]) -> Self {
+        let mut g = GameAssets::default();
+        for (k, v) in pairs {
+            g.insert(k, v);
+        }
+        g
+    }
+}
+
+/// FNV-1a: the same number for the same key in every build and on every PC, so the saved list stays readable.
+fn fingerprint(key: &str) -> u64 {
+    key.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3))
+}
+
 static GAME_ASSETS: Mutex<Option<(String, Arc<GameAssets>)>> = Mutex::new(None);
 
-/// Every package the installed game has, as asset keys: read from every container once per game build (about 6 s for
-/// 570,000 packages) and kept in memory. Not saved: the list is close to 50 MB as text. None when nothing could be read.
+/// Every package the installed game has, as asset keys: read from every container once per game build (about 7 s and
+/// a few GB of memory while UAssetTool lists 570,000 packages), then saved (saved_assets) so a launch without a game
+/// update loads it in a moment instead. Kept in memory once read. None when nothing could be read.
 pub(crate) fn game_assets(paks: &Path) -> Option<Arc<GameAssets>> {
     let containers = game_containers(paks);
     if containers.is_empty() {
         return None;
     }
     let key = build_key(&containers);
-    if let Some((k, set)) = GAME_ASSETS.lock().unwrap().as_ref() {
-        if *k == key {
-            return Some(set.clone());
-        }
+    let cached = || GAME_ASSETS.lock().unwrap().as_ref().filter(|(k, _)| *k == key).map(|(_, set)| set.clone());
+    if let Some(set) = cached() {
+        return Some(set);
     }
-    let mut set = GameAssets::new();
-    let mut builds = AssetBuilds::default();
-    for (utoc, _, at) in &containers {
-        let cl = container_cl(utoc).unwrap_or(0); // a base chunk: older than every patch
-        match crate::utoc_utils::try_read_utoc(utoc) {
-            Ok(entries) => {
-                for f in entries.iter().map(|e| &e.file_path).filter(|f| is_package(f)) {
-                    let newest = set.entry(match_key(f)).or_insert(0);
-                    *newest = (*newest).max(*at);
-                    let build = builds.by_package.entry(match_key(f)).or_insert(0);
-                    *build = (*build).max(cl);
+    // one reader at a time: the checks that start together at launch wait for the first instead of each reading it all
+    static READING: Mutex<()> = Mutex::new(());
+    let _one = READING.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(set) = cached() {
+        return Some(set);
+    }
+    let t = std::time::Instant::now();
+    let (set, builds) = match load_saved(&saved_assets(), &key) {
+        Some(saved) => {
+            log::info!("[broken] game asset list loaded: {} packages in {:?}", saved.0.len(), t.elapsed());
+            saved
+        }
+        None => {
+            let (set, builds, complete) = read_containers(&containers);
+            if set.0.is_empty() {
+                return None; // the tool failed on every container: no verdicts rather than every mod "broken"
+            }
+            // a container that could not be read is tried again next launch, not saved as missing
+            if complete {
+                if let Err(e) = save(&saved_assets(), &key, &set, &builds) {
+                    log::warn!("[broken] could not save the game asset list: {e}");
                 }
             }
-            Err(e) => {
-                log::warn!("[broken] could not read {}: {e}", utoc.display());
-                builds.unread = builds.unread.max(cl);
-            }
+            log::info!("[broken] game asset list read: {} packages in {:?}", set.0.len(), t.elapsed());
+            (set, builds)
         }
-    }
-    if set.is_empty() {
-        return None; // the tool failed on every container: no verdicts rather than every mod "broken"
-    }
+    };
     let set = Arc::new(set);
     *GAME_BUILDS.lock().unwrap_or_else(|e| e.into_inner()) = Some((key.clone(), Arc::new(builds)));
     *GAME_ASSETS.lock().unwrap() = Some((key, set.clone()));
     Some(set)
 }
 
+/// The asset list from the containers themselves, and whether every one could be read.
+fn read_containers(containers: &[(PathBuf, u64, u64)]) -> (GameAssets, AssetBuilds, bool) {
+    let (mut set, mut builds, mut complete) = (GameAssets::default(), AssetBuilds::default(), true);
+    for (utoc, _, at) in containers {
+        let cl = container_cl(utoc).unwrap_or(0); // a base chunk: older than every patch
+        match crate::utoc_utils::try_read_utoc(utoc) {
+            Ok(entries) => {
+                for f in entries.iter().map(|e| &e.file_path).filter(|f| is_package(f)) {
+                    let k = match_key(f);
+                    set.raise(&k, *at);
+                    builds.by_package.raise(&k, cl);
+                }
+            }
+            Err(e) => {
+                log::warn!("[broken] could not read {}: {e}", utoc.display());
+                builds.unread = builds.unread.max(cl);
+                complete = false;
+            }
+        }
+    }
+    (set, builds, complete)
+}
+
+/// Where the game's asset list is saved between launches (one game build's, about 14 MB).
+fn saved_assets() -> PathBuf {
+    crate::app_dir().join("repakxtra-game-assets.bin")
+}
+
+const SAVED_MAGIC: &[u8; 8] = b"RXGAMES1";
+
+/// The saved list, when it was saved for exactly these containers (`key`, build_key). Layout, little-endian u64s after
+/// the magic: key length, key bytes, unread, count, then per package its fingerprint, GameAssets and AssetBuilds value.
+fn load_saved(file: &Path, key: &str) -> Option<(GameAssets, AssetBuilds)> {
+    let bytes = std::fs::read(file).ok()?;
+    let mut r = bytes.strip_prefix(SAVED_MAGIC.as_slice())?;
+    let mut word = || -> Option<u64> {
+        let (w, rest) = r.split_first_chunk::<8>()?;
+        r = rest;
+        Some(u64::from_le_bytes(*w))
+    };
+    let len = word()? as usize;
+    drop(word);
+    let saved_key = r.get(..len)?;
+    if saved_key != key.as_bytes() {
+        return None; // another game build's list
+    }
+    r = &r[len..];
+    let mut word = || -> Option<u64> {
+        let (w, rest) = r.split_first_chunk::<8>()?;
+        r = rest;
+        Some(u64::from_le_bytes(*w))
+    };
+    let unread = word()?;
+    let count = word()? as usize;
+    let mut set = GameAssets(HashMap::with_capacity(count));
+    let mut builds = AssetBuilds { by_package: GameAssets(HashMap::with_capacity(count)), unread };
+    for _ in 0..count {
+        let (fp, at, cl) = (word()?, word()?, word()?);
+        set.0.insert(fp, at);
+        builds.by_package.0.insert(fp, cl);
+    }
+    Some((set, builds))
+}
+
+fn save(file: &Path, key: &str, set: &GameAssets, builds: &AssetBuilds) -> std::io::Result<()> {
+    let mut out = Vec::with_capacity(32 + key.len() + set.0.len() * 24);
+    out.extend_from_slice(SAVED_MAGIC);
+    out.extend_from_slice(&(key.len() as u64).to_le_bytes());
+    out.extend_from_slice(key.as_bytes());
+    for w in [builds.unread, set.0.len() as u64] {
+        out.extend_from_slice(&w.to_le_bytes());
+    }
+    for (fp, at) in &set.0 {
+        for w in [*fp, *at, builds.by_package.0.get(fp).copied().unwrap_or(0)] {
+            out.extend_from_slice(&w.to_le_bytes());
+        }
+    }
+    // written beside it and swapped in, so a crash mid-write never leaves half a list that loads
+    let tmp = file.with_extension("bin.tmp");
+    std::fs::write(&tmp, &out)?;
+    std::fs::rename(&tmp, file)
+}
+
 /// Per package, the newest game build whose patch container holds it (0: only the base chunks), read with GameAssets.
 /// `unread`: the newest build among containers that could not be read (their packages are unknown).
 #[derive(Default)]
 pub(crate) struct AssetBuilds {
-    by_package: HashMap<String, u64>,
+    by_package: GameAssets,
     unread: u64,
 }
 static GAME_BUILDS: Mutex<Option<(String, Arc<AssetBuilds>)>> = Mutex::new(None);
@@ -277,7 +404,7 @@ fn asset_builds(paks: &Path) -> Option<Arc<AssetBuilds>> {
     GAME_BUILDS.lock().unwrap_or_else(|e| e.into_inner()).as_ref().filter(|(k, _)| *k == key).map(|(_, b)| b.clone())
 }
 
-fn changed_in(by_package: &HashMap<String, u64>, files: &[String], usmap_build: u64) -> Vec<String> {
+fn changed_in(by_package: &GameAssets, files: &[String], usmap_build: u64) -> Vec<String> {
     files.iter().filter(|f| is_package(f) && by_package.get(&match_key(f)).is_some_and(|cl| *cl > usmap_build)).cloned().collect()
 }
 
@@ -677,7 +804,7 @@ mod tests {
         assert_eq!(container_cl(Path::new("Patch_-Windows_1.1.3984769_P.utoc")), Some(3984769));
         assert_eq!(container_cl(Path::new("pakchunk0-Windows.utoc")), None);
         // by build, never by date: A is in today's patch, B last in the USMAP's own, C only in the base chunks
-        let builds: HashMap<String, u64> = [
+        let builds: GameAssets = [
             (match_key("Marvel/Content/Marvel/A.uasset"), 3984769),
             (match_key("Marvel/Content/Marvel/B.uasset"), 3962284),
             (match_key("Marvel/Content/Marvel/C.uasset"), 0),
@@ -689,6 +816,30 @@ mod tests {
         assert_eq!(changed_in(&builds, &files, 3939753).len(), 2, "an older USMAP: both newer patches count");
         assert!(decoded_by_vfx("Marvel/Content/X/MI_Glow.uasset") && decoded_by_vfx("x/NS_Hit.uasset"));
         assert!(!decoded_by_vfx("x/T_Glow_D.uasset") && !decoded_by_vfx("x/SK_Body.uasset") && !decoded_by_vfx("x/MI_Glow.uexp"));
+    }
+
+    #[test]
+    fn saved_asset_list_loads_back_only_for_the_same_game_build() {
+        let d = tempfile::tempdir().unwrap();
+        let file = d.path().join("assets.bin");
+        let (mut set, mut builds) = (GameAssets::default(), AssetBuilds { unread: 7, ..Default::default() });
+        for (i, f) in ["Marvel/Content/Marvel/A.uasset", "Marvel/Content/Marvel/B.uasset"].iter().enumerate() {
+            set.insert(match_key(f), 100 + i as u64);
+            builds.by_package.insert(match_key(f), 3962284 * i as u64);
+        }
+        save(&file, "pakchunk0:1:2", &set, &builds).unwrap();
+        let (got, got_builds) = load_saved(&file, "pakchunk0:1:2").expect("same build");
+        assert_eq!(got.len(), 2);
+        assert_eq!(got.get(&match_key("../../../Marvel/Content/Marvel/B.uasset")), Some(&101));
+        assert_eq!(got_builds.by_package.get(&match_key("Marvel/Content/Marvel/B.uasset")), Some(&3962284));
+        assert_eq!(got_builds.unread, 7);
+        assert!(!got.contains_key(&match_key("Marvel/Content/Marvel/C.uasset")));
+        assert!(load_saved(&file, "pakchunk0:1:3").is_none(), "another game build's list is not used");
+        let bytes = std::fs::read(&file).unwrap();
+        std::fs::write(&file, &bytes[..bytes.len() - 5]).unwrap();
+        assert!(load_saved(&file, "pakchunk0:1:2").is_none(), "a cut-off file is not used");
+        assert_ne!(fingerprint("marvel/a"), fingerprint("marvel/b"));
+        assert_eq!(fingerprint("a"), 0xaf63_dc4c_8601_ec8c, "FNV-1a's published value: the saved list reads the same in every build");
     }
 
     #[test]

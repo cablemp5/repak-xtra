@@ -11,9 +11,11 @@ fn file() -> PathBuf {
     dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-details-cache.json")
 }
 
-/// A new build or a character data update can change what details say, so either one starts the cache over. Taken once
-/// at launch: entries computed after a character data update while the app runs are saved under the launch's stamp, so
-/// the next launch (which sees the newer file) starts over instead of trusting them.
+/// A change to the code that works out details (REPAKXTRA_DETAILS_LOGIC, a fingerprint of it from build_xtra.rs) or a
+/// character data update can change what details say, so either one starts the cache over. Not the exe's date: that
+/// started it over on every app update, and between a dev and a stable copy sharing it. Taken once at launch: entries
+/// computed after a character data update while the app runs are saved under the launch's stamp, so the next launch
+/// (which sees the newer file) starts over instead of trusting them.
 fn stamp() -> String {
     static STAMP: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     STAMP.get_or_init(launch_stamp).clone()
@@ -24,7 +26,7 @@ fn launch_stamp() -> String {
         p.and_then(|p| std::fs::metadata(p).ok()).and_then(|m| m.modified().ok())
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs())
     };
-    format!("{}:{}", mtime(std::env::current_exe().ok()), mtime(Some(crate::character_data::character_data_path())))
+    format!("{}:{}", env!("REPAKXTRA_DETAILS_LOGIC"), mtime(Some(crate::character_data::character_data_path())))
 }
 
 #[derive(Serialize, serde::Deserialize)]

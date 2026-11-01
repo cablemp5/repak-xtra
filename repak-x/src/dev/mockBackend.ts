@@ -4,6 +4,7 @@
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
 import { emit } from '@tauri-apps/api/event'
 import { normalizeModBaseName } from '../utils/format'
+import { applyDataMode, dataMode, mountDataToggle } from './worstCase'
 
 // DEV guard keeps the snapshot out of release bundles
 const fixtures = import.meta.env.DEV ? import.meta.glob('./fixture.local.json', { eager: true, import: 'default' }) : {}
@@ -16,8 +17,9 @@ const data: any = Object.values(fixtures)[0] ?? {
 // takes the preview kit away too.
 const fresh = localStorage.getItem('mock.fresh') === '1'
 const held: any[] = fresh ? data.mods.splice(0) : []
+applyDataMode(data) // ?data=worst|one|empty|1000 (worstCase.ts)
 // localStorage 'mock.mods' = N: a library of N mods, the snapshot's repeated under numbered names (Library speed checks)
-const many = Number(localStorage.getItem('mock.mods') || 0)
+const many = dataMode === '1000' ? 1000 : Number(localStorage.getItem('mock.mods') || 0)
 if (many > 0 && data.mods.length) {
   const base = data.mods.slice()
   data.mods = Array.from({ length: many }, (_, i) => {
@@ -74,6 +76,7 @@ const builtins: any[] = ['skip-intro-movies'].map(id => ({ id, on: false, curren
 
 if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
   mockWindows('main')
+  mountDataToggle()
   mock.__mockRelease = localStorage.getItem('mock.release') === '1' // custom/AppFiles.tsx
   mockIPC((cmd, args: any) => {
     mock.__calls[cmd] = (mock.__calls[cmd] ?? 0) + 1

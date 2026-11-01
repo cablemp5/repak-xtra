@@ -119,7 +119,7 @@ export default function FilterPanel(p: Props) {
         )}
       </div>
 
-      {section('heroes', 'Heroes', p.selectedCharacters.size, <>
+      {(heroes.length > 0 || specials.length > 0) && section('heroes', 'Heroes', p.selectedCharacters.size, <>
       {visibleHeroes.map(h => {
         const ids = [h.name, ...h.skins]
         const pressed = ids.some(id => p.selectedCharacters.has(id))
@@ -157,7 +157,7 @@ export default function FilterPanel(p: Props) {
         () => p.setSelectedCharacters(toggled(p.selectedCharacters, [s])), <span className="fp-avatar fp-avatar-empty" />))}
       </>)}
 
-      {section('types', 'Types', p.selectedCategories.size, <>
+      {p.availableCategories.length > 0 && section('types', 'Types', p.selectedCategories.size, <>
       {p.availableCategories.filter(cat => cat !== GALACTA).map(cat =>
         row(cat, cat, typeCounts[cat], p.selectedCategories.has(cat),
           () => p.setSelectedCategories(toggled(p.selectedCategories, [cat])),

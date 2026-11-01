@@ -124,9 +124,11 @@ pub fn not_staging(e: &walkdir::DirEntry) -> bool {
 }
 
 /// The Library's walk: not_staging, but into the built-ins folder too. Built-ins another app put there list as ordinary
-/// mods. This app's own are its built-in rows instead (xtra_builtins::is_own).
+/// mods. This app's own are its built-in rows instead (xtra_builtins::is_own). Folders inside the built-ins folder hold
+/// that app's own files (backups of game files, not mods): left out, or every scan opened them and never cached them.
 pub fn library_walk(e: &walkdir::DirEntry) -> bool {
-    not_staging(e) || (e.file_type().is_dir() && e.file_name() == crate::xtra_builtins::FOLDER)
+    let builtin_subfolder = e.file_type().is_dir() && crate::xtra_builtins::in_folder(e.path());
+    !builtin_subfolder && (not_staging(e) || (e.file_type().is_dir() && e.file_name() == crate::xtra_builtins::FOLDER))
 }
 
 /// Removes staging folders a closed or crashed run left under `mods` (one level of subfolders deep), so the game
@@ -156,6 +158,21 @@ pub fn sweep_staging(mods: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn library_walk_enters_the_builtins_folder_but_not_the_folders_in_it() {
+        let d = tempfile::tempdir().unwrap();
+        let builtins = d.path().join(crate::xtra_builtins::FOLDER);
+        std::fs::create_dir_all(builtins.join("backups")).unwrap();
+        std::fs::create_dir_all(d.path().join(".repakxtra-staging-x")).unwrap();
+        for f in [d.path().join("Mod_P.pak"), builtins.join("other-app-thing_9999999_P.pak"), builtins.join("backups").join("a.bak_repak"), d.path().join(".repakxtra-staging-x").join("b.pak")] {
+            std::fs::write(f, b"x").unwrap();
+        }
+        let mut found: Vec<String> = walkdir::WalkDir::new(d.path()).into_iter().filter_entry(library_walk).flatten()
+            .filter(|e| e.file_type().is_file()).map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        found.sort();
+        assert_eq!(found, ["Mod_P.pak", "other-app-thing_9999999_P.pak"]);
+    }
 
     #[test]
     fn abandoned_encryption_stays_off_and_is_swept_without_touching_originals() {

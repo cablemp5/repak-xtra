@@ -1,5 +1,8 @@
 # repakxtra: the checks every pull request into main must pass before it can merge (typecheck, frontend build,
 # self-checks, Rust tests). Also runs on pushes to main so the branch's own state stays visible.
+# The frontend and Rust halves run side by side, and a pull request that only touches the frontend skips Rust
+# (.github/scripts/needs-rust.mjs decides, and checks its own rules on every run). The last job keeps the name branch
+# protection requires, and fails unless every half that had to run passed.
 name: Checks
 
 on:
@@ -17,14 +20,37 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  checks:
-    name: Typecheck, build and test
-    runs-on: windows-latest
-    timeout-minutes: 60
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      rust: ${{ steps.decide.outputs.rust }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      # main and manual runs always test everything; a pull request lists its files from the API (no history needed)
+      - name: Does it need the Rust tests
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -n "$PR" ]; then
+            gh api "repos/${{ github.repository }}/pulls/$PR/files" --paginate --jq '.[].filename' > changed.txt || : > changed.txt
+            # the API lists at most 3,000 files: a list that long may be cut short, so Rust runs
+            if [ "$(wc -l < changed.txt)" -ge 3000 ]; then : > changed.txt; fi
+          else
+            : > changed.txt
+          fi
+          echo "rust=$(node .github/scripts/needs-rust.mjs < changed.txt)" >> "$GITHUB_OUTPUT"
+
+  frontend:
+    name: Frontend
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
@@ -49,10 +75,26 @@ jobs:
         working-directory: repak-x
         run: npm run test:release-notes
 
-      # The Rust app embeds the built frontend, so it is built before the tests
       - name: Build frontend
         working-directory: repak-x
         run: npm run build
+
+  rust:
+    name: Rust
+    needs: changes
+    if: needs.changes.outputs.rust != 'false'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      SKIP_UASSET_TOOL_BUILD: '1'   # the .NET asset tool is only needed to package, not to test (so no submodule)
+      # rust-toolchain.toml asks for nightly, which rustup would download (about 90 s) and which changes daily,
+      # so the cached build never matched and every run rebuilt all crates. No crate needs nightly.
+      RUSTUP_TOOLCHAIN: stable
+      CARGO_INCREMENTAL: '0'        # incremental files only bloat the cache on a fresh runner
+      CARGO_PROFILE_DEV_DEBUG: '0'  # no debug info: the app crate's test build is about a quarter faster
+    steps:
+      # The tests build without the frontend (no custom-protocol feature: nothing embeds dist/)
+      - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
         id: toolchain
@@ -69,22 +111,13 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: checks-v2-${{ runner.os }}-standard-${{ steps.toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: checks-v2-${{ runner.os }}-standard-${{ steps.toolchain.outputs.cachekey }}-
+          key: checks-v3-${{ runner.os }}-standard-${{ steps.toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: checks-v3-${{ runner.os }}-standard-${{ steps.toolchain.outputs.cachekey }}-
 
       - name: Rust tests
-        env:
-          SKIP_UASSET_TOOL_BUILD: '1'   # the .NET asset tool is only needed to package, not to test
-          # rust-toolchain.toml asks for nightly, which rustup would download (about 90 s) and which changes daily,
-          # so the cached build never matched and every run rebuilt all crates. No crate needs nightly.
-          RUSTUP_TOOLCHAIN: stable
-          CARGO_INCREMENTAL: '0'   # incremental files only bloat the cache on a fresh runner
         run: cargo test --locked -p repak-x --bin REPAK-X
 
       - name: Native wrapper tests
-        env:
-          RUSTUP_TOOLCHAIN: stable
-          CARGO_INCREMENTAL: '0'
         run: cargo test --locked -p uasset_app --lib
 
       - name: Save Rust build cache
@@ -98,3 +131,26 @@ jobs:
             target/
           key: ${{ steps.rust-cache.outputs.cache-primary-key }}
 
+  checks:
+    name: Typecheck, build and test
+    needs: [changes, frontend, rust]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Rust may be skipped only when the classifier said "false" on its own; anything else needs it to have passed
+      - name: Every check that had to run passed
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          FRONTEND: ${{ needs.frontend.result }}
+          RUST: ${{ needs.rust.result }}
+          NEEDS_RUST: ${{ needs.changes.outputs.rust }}
+        run: |
+          echo "changes=$CHANGES frontend=$FRONTEND rust=$RUST needs_rust=$NEEDS_RUST"
+          [ "$CHANGES" = success ] || { echo "the change check failed"; exit 1; }
+          [ "$FRONTEND" = success ] || { echo "the frontend checks did not pass"; exit 1; }
+          if [ "$NEEDS_RUST" = false ]; then
+            [ "$RUST" = skipped ] || [ "$RUST" = success ] || { echo "the Rust tests did not pass"; exit 1; }
+          else
+            [ "$RUST" = success ] || { echo "the Rust tests were needed and did not pass"; exit 1; }
+          fi

@@ -344,6 +344,9 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 .center-header:has(.mod-state.is-folded) .header-title h2 { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .center-header:has(.mod-state.is-folded) > .header-actions { flex: none; }
 .center-header:has(.mod-state.is-folded) .header-title-name { flex-shrink: 0; }   /* the folder name stays whole, the filter part shortens */
+/* too tight for both: the All/On/Off button leads, the sidebar shows the open folder. Out of the flow but still laid out,
+   so ModStateFilter's fold check keeps measuring the title's full width (display: none measured 0 and flipped it every frame) */
+.center-header:has(.mod-state.is-folded) .header-title h2 { position: absolute; visibility: hidden; pointer-events: none; }
 .mod-state { position: relative; display: inline-flex; }
 .mod-state.is-folded .mod-state-filter { position: absolute; visibility: hidden; pointer-events: none; }   /* kept for its width and the 1/2/3 keys */
 /* Folding and unfolding cross over softly (a short fade and settle), not a jump */
@@ -739,32 +742,6 @@ html[data-motion="off"] .lo-screen { animation: none; }
 .lo-card-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .lo-card-title h3 { margin: 0; font-size: 16px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lo-card-meta { margin: 0; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-/* New loadout card (cable, 2026-10-21): the old dashed slot on the new card grid. Hover brightens the dashes and the
-   icon (white, never the accent) and lifts the icon a little */
-/* An open slot, not a loadout: no surface, a dashed outline drawn as an SVG (a CSS dashed border cannot set its dash
-   length): 9px dashes with round ends, 7px gaps, 1.5px thick (half the stroke falls outside the box) */
-.lo-card-new { display: flex !important; flex-direction: column; border: none !important; border-radius: 12px !important;
-  background: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='12' ry='12' stroke='rgba(255,255,255,0.16)' stroke-width='3' stroke-dasharray='9%2c 7' stroke-linecap='round'/%3e%3c/svg%3e") !important; transition: background 160ms ease; }
-.lo-card-new:hover, .lo-card-new:focus-within { background: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='12' ry='12' stroke='rgba(255,255,255,0.34)' stroke-width='3' stroke-dasharray='9%2c 7' stroke-linecap='round'/%3e%3c/svg%3e"), rgba(255, 255, 255, 0.02) !important; }   /* white, not the accent */
-.lo-card-new .lo-new { padding: 16px; }
-.lo-card-add {
-  width: 100%; height: auto !important; min-height: 0 !important; padding: 0 0 6% !important; display: flex !important; flex-direction: column; align-items: stretch;
-  justify-content: center;   /* the plus and words as one group, a touch above the middle (its optical center) */
-  border: none !important; border-radius: 0 !important; background: transparent !important; color: var(--text-secondary) !important; font-size: 13px !important;
-  cursor: pointer;
-}
-/* From the cards: the corners and the name's bold. From the old slot: dashed, no surface, everything centered */
-.lo-card-add-media { display: grid; place-items: center; width: 100%; margin-bottom: 16px; }
-.lo-card-add-body { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 0 16px; min-width: 0; }
-.lo-card-add-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%;
-  border: none; color: var(--text-secondary);   /* no outline or disc: the icon alone, it brightens and lifts on hover */
-  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform var(--acc-expand) var(--acc-ease); }
-.lo-card-new:hover .lo-card-add-icon, .lo-card-add:focus-visible .lo-card-add-icon { color: var(--text-primary); transform: translateY(-2px); }
-.lo-card-add-title { display: block; max-width: 100%; min-height: 24px; margin: 0; font-size: 18px; font-weight: 600; line-height: 24px; letter-spacing: -0.01em; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lo-card-add .lo-card-meta { display: block; max-width: 100%; margin-top: 8px !important; font-size: 14px; font-weight: 400; line-height: 20px;
-  white-space: normal; overflow: visible; text-overflow: clip; text-wrap: balance; }   /* wraps on narrow cards (a status line is one line, this is not) */
-.lo-card-add svg.lucide { width: 32px !important; height: 32px !important; stroke-width: 1.75; }   /* the copy-plus icon (a new card) alone, no circle */
-html[data-motion="off"] .lo-card-add-icon { transition: none; }
 /* Generate all previews: its choice menu hangs under the button */
 .lo-gen { position: relative; }
 .lo-gen-menu { left: 0; right: auto; min-width: 270px; z-index: 30; }
@@ -1202,7 +1179,8 @@ html[data-motion="off"] .lo-gen-bar i { transition: none; animation: none; }
 .lo-text-btn.is-primary { background: var(--accent-primary) !important; border-color: var(--accent-primary) !important; color: #fff !important; }
 /* hover like every other blue button (.btn-primary): the quiet button's dark hover outranked the blue (the KO Editor's Install) */
 .lo-text-btn.is-primary:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent-primary), white 15%) !important;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent-primary), white 15%), color-mix(in srgb, var(--accent-primary), white 35%)) !important; }
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent-primary), white 15%), color-mix(in srgb, var(--accent-primary), white 35%)), var(--accent-primary) !important; }
+/* the blue stays under the gradient: without it the base went transparent on hover and faded back in on leave (a dark flash) */
 
 /* Loadout page */
 .lp { display: flex; flex-direction: column; gap: 28px; max-width: 1180px; margin: 0 auto; }
@@ -1397,6 +1375,7 @@ html[data-motion="off"] :is(.wipe-line, .wipe-before, .lo-media.wipe-ease .lo-ca
   --page-slide-dur: 250ms; --page-slide-distance: 8px; --page-blur: 3px; --page-slide-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --dropdown-open-dur: 250ms; --dropdown-pre-scale: 0.97; --dropdown-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --toggle-dur: 350ms; --toggle-ease: cubic-bezier(0.34, 1.35, 0.64, 1);
+  --switch-dur: 160ms; --switch-ease: cubic-bezier(0.23, 1, 0.32, 1);
   --tabs-dur: 250ms; --tabs-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --icon-swap-dur: 250ms; --icon-swap-blur: 2px; --icon-swap-ease: ease-in-out;
 }
@@ -1411,8 +1390,8 @@ html[data-view="library"] .container > .main-panels { animation: t-page-from-rig
 /* transitions.dev: Menu dropdown (open) */
 @keyframes t-dropdown-open { from { opacity: 0; transform: scale(var(--dropdown-pre-scale)); } }
 .custom-dropdown-menu { transform-origin: top center; animation: t-dropdown-open var(--dropdown-open-dur) var(--dropdown-ease) backwards; }
-/* transitions.dev: Toggle (the thumb settles with a small overshoot) */
-.repakx-switch-thumb { transition: transform var(--toggle-dur) var(--toggle-ease), box-shadow var(--toggle-dur) var(--toggle-ease) !important; }
+/* Toggle: the thumb snaps across with a strong ease-out, no overshoot (it is hit hundreds of times a day, Space included) */
+.repakx-switch-thumb { transition: transform var(--switch-dur) var(--switch-ease), box-shadow var(--switch-dur) var(--switch-ease) !important; }
 /* transitions.dev: Tabs sliding (one pill moves between Home and Library) */
 .view-tabs { position: relative; display: inline-grid !important; grid-template-columns: 1fr 1fr 1fr; }
 .view-tabs::before { content: ''; position: absolute; top: 2px; bottom: 2px; left: 2px; width: calc((100% - 8px) / 3); border-radius: 6px;
@@ -1524,8 +1503,8 @@ html[data-motion="off"] .t-shimmer-all { animation: none !important; -webkit-mas
 :root {
   --stagger-dur: 500ms; --stagger-distance: 12px; --stagger-stagger: 40ms; --stagger-blur: 3px; --stagger-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --acc-expand: 250ms; --acc-collapse: 250ms; --acc-chevron: 250ms; --acc-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --reveal-dur: 400ms; --reveal-blur: 2px; --reveal-ease: ease-in-out;
-  --digit-dur: 500ms; --digit-distance: 8px; --digit-blur: 2px; --digit-ease: cubic-bezier(0.34, 1.45, 0.64, 1);
+  --reveal-dur: 200ms; --reveal-blur: 2px; --reveal-ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --digit-dur: 250ms; --digit-distance: 8px; --digit-blur: 2px; --digit-ease: cubic-bezier(0.34, 1.45, 0.64, 1);
   --text-swap-dur: 150ms; --text-swap-translate-y: 4px; --text-swap-blur: 2px; --text-swap-ease: ease-in-out;
   --icon-swap-start-scale: 0.25;
 }
@@ -1545,6 +1524,7 @@ html[data-motion="off"] .t-shimmer-all { animation: none !important; -webkit-mas
 /* transitions.dev: Number pop-in. A count that changes pops up into place */
 @keyframes t-num-pop { from { opacity: 0; transform: translateY(var(--digit-distance)); filter: blur(var(--digit-blur)); } }
 .t-num-pop { display: inline-block; animation: t-num-pop var(--digit-dur) var(--digit-ease) backwards; }
+.bulk-count .t-num-pop { animation: none; }   /* the selection count changes on every click and Ctrl+A: it updates in place */
 /* transitions.dev: Text states swap. On becomes Off by rising in */
 @keyframes t-text-in { from { opacity: 0; transform: translateY(var(--text-swap-translate-y)); filter: blur(var(--text-swap-blur)); } }
 .t-text-in { display: inline-block; animation: t-text-in var(--text-swap-dur) var(--text-swap-ease) backwards; }
@@ -1749,8 +1729,7 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
   font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text-secondary); text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8); }
 .lo-media.is-running .lo-skel-label { color: var(--text-primary); flex-direction: column; gap: 4px; padding: 0 12px; text-align: center; }
 /* What the render is doing: each new line fades up in place */
-.lo-skel-stage { font-size: 13px; font-weight: 600; line-height: 1.3; animation: lo-stage-in 0.35s ease-out both; }
-@keyframes lo-stage-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+.lo-skel-stage { font-size: 13px; font-weight: 600; line-height: 1.3; }   /* its steps swap in with SwapText (t-text-in) */
 html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .lo-skel::after, html[data-motion="off"] .lo-skel-label .run-spin { animation: none !important; }
 
 /* ---------- Setup panel (SetupPanel.tsx): the signature bypass and Project Galacta, one card each ---------- */
@@ -1849,7 +1828,6 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
   .lp-info { grid-column: 2; grid-row: 2; padding-top: 0; }
   .lp > .lp-section { grid-column: 2; min-width: 0; }
 }
-.lo-grid .lo-card.lo-card-new { min-height: 300px !important; }   /* .lo-card min-height: max-content comes later */
 
 /* First-launch setup (FirstRun.tsx): numbered steps that turn into checks, an action on the right of each */
 .fr-modal { width: min(720px, 94vw) !important; max-width: none !important; max-height: 90vh; display: flex; flex-direction: column; padding: 0 !important; }
@@ -2173,12 +2151,6 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
    for on (.lo-on-dot), right after its name */
 .on-dot { flex: none; align-self: center; display: inline-block; width: 8px; height: 8px; margin-left: 8px; border-radius: 50%; background: #3ecf6e; }
 .mod-row-main .on-dot { margin-left: 4px; }   /* + the row's 2px gap: 6px from the name, as in the VFX Updater */
-/* New loadout card: an unseen real card underneath sets its size; the plus and words fill it */
-.lo-grid .lo-card.lo-card-new { position: relative; display: block !important; min-height: 0 !important; }
-.lo-card-new .lo-card-ghost { visibility: hidden; display: flex; flex-direction: column; }
-.lo-card-new .lo-card-add { position: absolute; inset: 0; }
-/* Its name and plus take the counter zoom a card name and placeholder icon get (its status line is a .lo-card-meta already) */
-:is(.lo-screen .lo-grid, .lo-drag-ghost-inner) :is(.lo-card-add-title, .lo-card-add-icon) { zoom: max(1, calc(0.8 / var(--lo-card-zoom, 1))); }
 /* A preview's caption ("Mesh + Texture + Material · 1/4", "Older render") shows on hover, with the arrows */
 .lo-media-label { opacity: 0; transition: opacity 0.15s ease; }
 .lo-media:hover .lo-media-label, .lo-media:focus-within .lo-media-label { opacity: 1; }
@@ -2987,6 +2959,7 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .log-drawer-count, .folder-tree .node-label { padding-inline: 8px !important; }
 .log-drawer-btn, .settings-content .integrated-input { padding-inline: 12px !important; }
 .mod-list-grid .mod-main-row { gap: 12px !important; }
+.mod-list-grid:is(.view-list, .view-list-compact) .mod-main-row { min-width: min(45%, 240px); }   /* the name keeps room, the badges row yields and scrolls */
 .settings-nav-item, .mod-name-button, .mod-tags-row, .input-actions { gap: 8px !important; }
 
 /* Nested corners (unslop audit, 2026-10-30): an inner radius is the outer radius minus the gap between them, at least 4 */

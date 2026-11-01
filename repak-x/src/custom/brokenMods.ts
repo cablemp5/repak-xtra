@@ -59,7 +59,8 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     // it), so a library whose VFX Updater was never opened is checked as well. Last, the Blueprint mods: their classes
     // compared with the game's once each per game update (xtra_layout.rs). One the update changed gets May crash with
     // what changed, one that matches loses the date-only warning, so the badges follow each one checked
-    const chain = () => check()
+    // `first`: the quick check just started at launch, reused so the chain does not run the same check beside it
+    const chain = (first?: Promise<boolean>) => (first ?? check())
       .then(ok => { if (!ok) throw new Error('the first check failed') })
       .then(() => (live ? invoke('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
       .then(() => (live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: mods.map(m => m.path) }) : 0))
@@ -72,11 +73,11 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       .then(() => (live ? invoke<number>('xtra_mesh_scan', { modPaths: mods.map(m => m.path) }) : 0))
       .then(checked => (live && checked ? check() : undefined))
       .then(() => live, e => { console.warn('[brokenMods] background scan failed', e); return false })
-    const full = () => queued(chain)
-    runFull = chain
+    const full = (first?: Promise<boolean>) => queued(() => chain(first))
+    runFull = () => chain()
     // the quick check at once, never behind a background scan in flight (one can run for many minutes after a game
-    // update), so new mods get their badges in the Library and on loadouts right away
-    const t = setTimeout(() => { void check(); void full() }, 1500)
+    // update), so new mods get their badges in the Library and on loadouts right away. The chain starts from it
+    const t = setTimeout(() => { void full(check()) }, 1500)
     // the background scans stop for the game, an update or a check (xtra_vfx.rs background_may_run): back in the app,
     // they go on where they stopped, at most every 5 minutes (a scan with nothing left to do is quick)
     let lastResume = Date.now()

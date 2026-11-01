@@ -552,6 +552,9 @@ pub async fn xtra_layout_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
             break; // an update uses the same tool: the rest waits for the next scan
         }
         let path = PathBuf::from(&p);
+        if crate::xtra_builtins::in_folder(&path) {
+            continue; // built-ins: xtra_builtins judges them by the game build they were made for, never these checks
+        }
         let utoc = path.with_extension("utoc");
         // the file as it is before it is read: a mod replaced meanwhile is not given this one's result
         let Some((size, modified)) = crate::xtra_broken::file_stamp(&utoc) else { continue };

@@ -95,8 +95,11 @@ mod tests {
                 mods.extend(crate::xtra_crash::mod_files(e.path()));
             }
         }
-        let game = crate::xtra_broken::game_assets(&paks).expect("game assets");
-        let corpora: [(&str, Vec<String>); 2] = [("mods", mods), ("game", game.keys().cloned().collect())];
+        // the game's own package keys as text (game_assets keeps only fingerprints)
+        let game: Vec<String> = crate::xtra_broken::game_containers(&paks).iter()
+            .flat_map(|(utoc, _, _)| crate::utoc_utils::read_utoc(utoc))
+            .map(|e| crate::xtra_broken::match_key(&e.file_path)).collect();
+        let corpora: [(&str, Vec<String>); 2] = [("mods", mods), ("game", game)];
         for (corpus, paths) in &corpora {
             println!("\n===== corpus {corpus}: {} paths", paths.len());
             // roots that are followed by a 4 digit folder
