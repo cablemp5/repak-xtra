@@ -229,7 +229,7 @@ async fn check_in(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, wo
     let written = std::fs::metadata(&utoc).and_then(|m| m.modified()).ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs());
     let written = crate::xtra_stamp::made(&utoc, written);
     let older = written < crate::xtra_broken::game_updated(mods_dir);
-    let layout = crate::xtra_mi_layout::relayout(usmap, &work.join("mod"), &packages(&work.join("mod"), &lower), older, crate::xtra_mi_layout::Game::Json(&work.join("game_json")), &work.join("relayout"), &NoOpProgressSink).await;
+    let layout = crate::xtra_mi_layout::relayout(usmap, &work.join("mod"), &packages(&work.join("mod"), &lower), older, written, crate::xtra_mi_layout::Game::Json(&work.join("game_json")), &work.join("relayout"), &NoOpProgressSink).await;
     let layout_ok = layout.as_ref().is_ok_and(|r| r.complete);
     if let Ok(r) = &layout {
         // lowercase, as the shader data's names are
