@@ -19,6 +19,7 @@ import { CaptionIcon, CaptionStyleBar } from './captionStyle'
 import { loadoutHero, silhouetteOf } from './silhouettes'
 import { CardTools } from './CardTools'
 import { CarouselSlide } from './Carousel'
+import WipeCompare from './WipeCompare'
 import './support.css'
 import { captionBackgroundKey } from './loadoutStore'
 
@@ -221,6 +222,8 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
                   onLoad={e => { revealOnLoad(e); if (audible && live && hovering.current && e.currentTarget.src === live.url) playEmoteSound(audible, live.seconds) }} />}
               </CarouselSlide>}
       </button>
+      {/* before and after, once the kit has the hero's vanilla render (before the arrows, so they stay on top) */}
+      {page && cover === 'preview' && !working && src && slide?.key && !slide.keys && <WipeCompare key={slide.key} previewKey={slide.key} />}
       {slides.length > 1 && !working && ( /* no paging while a new preview renders */
         <>
           <button type="button" className="lo-media-arrow is-prev" title="Previous preview" aria-label="Previous preview" onClick={() => turn(-1)}>

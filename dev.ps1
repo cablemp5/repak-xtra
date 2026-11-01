@@ -5,6 +5,11 @@
 # "dev build" in the version line). It is the real app: mods, Setup and %APPDATA%\Repak-X are the stable copy's, and loadouts
 # and settings are shared both ways with it, the newest save winning (custom/devStorage.ts). The app runs one copy at a
 # time: close the stable repakxtra first. Before a PR, a real .\build.ps1 -Test is still the final check.
+#   .\dev.ps1 -Sandbox   the same app on a fresh PC, for trying first-launch setup: its settings, WebView storage, desktop
+#                and preview kit live in %LOCALAPPDATA%\repakxtra-sandbox (emptied at each start, -Keep keeps it), the game
+#                it finds is an empty fake one there, and Blender counts as missing until a simulated install. The
+#                bypass, Project Galacta and the preview kit install for real, into the sandbox. Your library is never touched.
+param([switch]$Sandbox, [switch]$Keep)
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 $env:VITE_REPAKXTRA_TEST = ''
@@ -38,6 +43,21 @@ $env:SKIP_UASSET_TOOL_BUILD = '1'
 # WebView2's debugging port, on this PC only, so tools can screenshot and click through the dev copy; the stable and test
 # copies never open it
 $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9223'
+if ($Sandbox) {
+    $box = Join-Path $env:LOCALAPPDATA 'repakxtra-sandbox'
+    if (-not $Keep) { Remove-Item $box -Recurse -Force -ErrorAction SilentlyContinue }
+    $game = "$box\Game\MarvelRivals\MarvelGame\Marvel"
+    New-Item -ItemType Directory -Force "$box\AppData\Roaming", "$box\AppData\Local", "$box\Desktop", "$game\Binaries\Win64", "$game\Content\Paks" | Out-Null
+    # the build tools stay on the real profile; the app (Windows' known folders follow these variables) gets the sandbox
+    if (-not $env:CARGO_HOME) { $env:CARGO_HOME = "$env:USERPROFILE\.cargo" }
+    if (-not $env:RUSTUP_HOME) { $env:RUSTUP_HOME = "$env:USERPROFILE\.rustup" }
+    $env:USERPROFILE = $box
+    $env:APPDATA = "$box\AppData\Roaming"
+    $env:LOCALAPPDATA = "$box\AppData\Local"
+    $env:REPAKXTRA_SANDBOX_GAME = "$game\Content\Paks" # utils.rs find_marvel_rivals, debug builds only
+    $env:REPAKXTRA_SANDBOX_BLENDER = '1'                # xtra_kit.rs, debug builds only
+    Write-Host "Sandbox: $box"
+}
 Set-Location repak-x
 # Its own port (5180), so it never collides with the browser preview (npm run dev, 5173)
 $tauriArgs = @('tauri', 'dev', '--config', 'tauri.dev.conf.json')

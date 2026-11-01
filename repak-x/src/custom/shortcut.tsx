@@ -33,9 +33,9 @@ export function useShortcut() {
 export function ShortcutButton({ s, className = 'lo-text-btn' }: { s: ReturnType<typeof useShortcut>; className?: string }) {
   return s.exists
     ? <span className="shortcut-done"><Check size={14} /> On the desktop</span>
-    : <button type="button" className={className} disabled={s.exists === null || s.busy} onClick={s.create}
+    : <button type="button" className={`${className}${s.busy ? ' is-working' : ''}`} disabled={s.exists === null || s.busy} onClick={s.create} aria-busy={s.busy}
         title="Puts a repakxtra shortcut on your desktop (an existing one is never replaced)">
-        {s.busy ? 'Creating…' : 'Create desktop shortcut'}
+        {s.busy ? <span className="t-shimmer">Creating</span> : 'Create desktop shortcut'}
       </button>
 }
 

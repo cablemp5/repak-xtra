@@ -1200,6 +1200,9 @@ html[data-motion="off"] .lo-gen-bar i { transition: none; animation: none; }
 .lo-no-match p { margin: 0; font-size: 14px; color: var(--text-secondary); }
 .lo-no-match .lo-first-actions { justify-content: center; }
 .lo-text-btn.is-primary { background: var(--accent-primary) !important; border-color: var(--accent-primary) !important; color: #fff !important; }
+/* hover like every other blue button (.btn-primary): the quiet button's dark hover outranked the blue (the KO Editor's Install) */
+.lo-text-btn.is-primary:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent-primary), white 15%) !important;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent-primary), white 15%), color-mix(in srgb, var(--accent-primary), white 35%)) !important; }
 
 /* Loadout page */
 .lp { display: flex; flex-direction: column; gap: 28px; max-width: 1180px; margin: 0 auto; }
@@ -1359,6 +1362,24 @@ html[data-motion="off"] .lo-gen-bar i { transition: none; animation: none; }
 }
 .lo-media-arrow.is-prev { left: 8px; }
 .lo-media-arrow.is-next { right: 8px; }
+/* Before and after on a loadout's page (WipeCompare.tsx), hover-scrub (option C, cable's pick 2026-11-01): the vanilla
+   render over the modded one, cut at a 1px line that follows the pointer. At rest the line is at the left edge, hidden, so
+   the cover shows the mod. No grip, no dot, no glow */
+.wipe { position: absolute; inset: 0; cursor: ew-resize; touch-action: none; user-select: none; overflow: hidden; border-radius: inherit; }
+.wipe-before { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none;
+  clip-path: inset(0 calc(100% - var(--wipe)) 0 0); }
+/* the modded render cut at the same line: both are transparent around the hero, so without this the mod showed through
+   on the vanilla side (--wipe and is-wiping set on the card by WipeCompare) */
+.lo-media.is-wiping .lo-card-image img { clip-path: inset(0 0 0 var(--wipe)); }
+.wipe.is-row { cursor: default; }   /* in a button's row the wipe is off: the ordinary pointer */
+.wipe-line { position: absolute; top: 0; bottom: 0; left: var(--wipe); width: 1px; margin-left: -0.5px; outline: none; background: rgba(255, 255, 255, 0.9);
+  transition: opacity 0.15s ease, background 0.15s ease; }
+.wipe:not(.is-open) .wipe-line { opacity: 0; }
+.app .wipe-line:focus-visible { outline: none !important; background: var(--accent-primary); }   /* focus shows as the blue line, no ring */
+/* leaving the picture: the line eases back to the edge (the scrub itself follows the pointer at once) */
+.lo-media.wipe-ease .wipe-line { transition: left 0.18s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.15s ease 0.1s; }
+.lo-media.wipe-ease :is(.wipe-before, .lo-card-image img) { transition: clip-path 0.18s cubic-bezier(0.22, 1, 0.36, 1); }
+html[data-motion="off"] :is(.wipe-line, .wipe-before, .lo-media.wipe-ease .lo-card-image img) { transition: none !important; }
 .lo-media:hover .lo-media-arrow, .lo-media-arrow:focus-visible { opacity: 1; }
 .lo-media-arrow:hover { background: rgba(10, 11, 14, 0.85) !important; }
 .lo-media-arrow svg.lucide { width: 16px !important; height: 16px !important; }
@@ -1479,6 +1500,12 @@ html[data-lite] .shine-border::after { animation: none !important; }
 }
 @keyframes t-shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0% 0; } }
 html[data-motion="off"] .t-shimmer { animation: none !important; background-position: 50% 0; }
+/* A button doing its job (the Nexus Mods and KO Editor Install buttons' look): quiet, its step's words shimmering inside
+   (no spinner), then a green moment once it finished */
+:is(.lo-text-btn, .btn-primary, .action-btn).is-working { background: transparent !important; border: 1px solid var(--panel-border) !important; color: var(--text-secondary) !important;
+  opacity: 1 !important; cursor: default; box-shadow: none !important; }
+:is(.lo-text-btn, .btn-primary, .action-btn).is-installed { display: inline-flex !important; align-items: center; gap: 6px; background: transparent !important;
+  border-color: transparent !important; color: #3ecf6e !important; opacity: 1 !important; cursor: default; box-shadow: none !important; }
 /* The same sweep over an icon and its text together (an SVG cannot take the text gradient): the content in the bright
    color under a moving mask, dimmer outside the band. Generate all previews while it runs. */
 .t-shimmer-all {
@@ -1876,7 +1903,10 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .su-track-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
 /* the VFX Updater's thin bar (.vf-bar): the fill's shimmer is in the shared loading-bar rule below */
 .su-bar { height: 4px; margin-top: 8px; border-radius: 999px; overflow: hidden; background: var(--bg-lighter); }
-.su-bar i { display: block; height: 100%; transition: width 0.4s var(--acc-ease, cubic-bezier(0.22, 1, 0.36, 1)); }
+.su-bar i { display: block; height: 100%; transition: width 0.4s var(--acc-ease, cubic-bezier(0.22, 1, 0.36, 1));
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.45) 50%, transparent 100%) 0 0 / 50% 100% no-repeat, var(--accent-primary);
+  animation: su-bar-shine 1.4s cubic-bezier(0.45, 0, 0.55, 1) infinite; }   /* a light running along the filled part (the KO Editor's load bar) */
+@keyframes su-bar-shine { from { background-position: -100% 0, 0 0; } to { background-position: 200% 0, 0 0; } }
 .su-track-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: var(--text-primary); }
 .su-track-amount { flex: none; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .su-track.is-done, .su-track.is-done .su-track-text { color: #3ecf6e; }
@@ -2867,7 +2897,6 @@ button.mod-type-badge { display: inline-flex; align-items: center; min-height: 0
 .progress-bar-fill,
 .download-progress .progress-fill,
 .repakx-progress-indicator,
-.su-bar i,
 .bi-bar i,
 .upd-bar i {
   background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-primary) 38%, color-mix(in srgb, var(--accent-primary), white 45%) 50%,

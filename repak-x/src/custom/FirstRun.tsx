@@ -1,20 +1,20 @@
 import { LOADER_NAME, LOADER_PAK, APP_NAME } from './edition'
 // repakxtra: the first-launch flow, one page at a time, shown once per user (repakxtra.onboarded2) and again from
 // Setup > Guided setup. PAGES is the one ordered list: what loadouts are (WelcomeIntro.tsx), "Got mods already?"
-// (always asked, the mods already installed named in it), then either the guided steps (game, bypass, loader) and the first mod, or a
-// background setup that installs only what is missing, then the first loadout, then Make it yours (previews, Discord,
-// the shortcut, sounds). Finish lands on Loadouts home. Mods dropped on the window hide the flow for the install,
+// (always asked, the mods already installed named in it), then either the guided steps (game, bypass, loader) or a
+// background setup that installs only what is missing, then Make it yours (previews, Discord, the shortcut, sounds), then
+// the first loadout: from the mods already there, or a mod installed right there as one. Finish lands on Loadouts home. Mods dropped on the window hide the flow for the install,
 // and it comes back after.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open as pick } from '@tauri-apps/plugin-dialog'
 import { motion } from 'framer-motion'
-import { ArrowRight, Check, ChevronDown, CircleCheck, CircleX, CopyPlus, Gamepad2, ExternalLink, FileCode, FolderOpen, LoaderCircle, Package, Plus, ShieldCheck, Upload, Volume2 } from 'lucide-react'
+import { ArrowRight, Bell, Check, ChevronDown, CircleAlert, CircleCheck, CircleX, Droplets, Gamepad2, ExternalLink, FileCode, FolderOpen, Keyboard, LoaderCircle, Lock, MousePointerClick, Music, Package, Plus, ShieldCheck, ToggleRight, Upload, VolumeX } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import Switch from '../components/ui/Switch'
 import { DoctorProblems } from './SetupPanel'
-import { BypassTrack, GalactaTrack, InstallTrack, KitTrack, useFinished } from './installTrack'
+import { BypassTrack, GalactaTrack, InstallTrack, KitTrack, type GalactaStep, galactaWords, useFinished, useGalactaStep } from './installTrack'
 import { isKitZip, usePreviewKit } from './previewKit'
 import { OFF_EXT } from './offFiles'
 import WelcomeIntro, { MiniCard } from './WelcomeIntro'
@@ -42,7 +42,7 @@ import './onboarding.css'
 type Alert = ReturnType<typeof useAlert>
 type Bypass = { state: 'installed' | 'disabled' | 'partial' | 'other' | 'missing' }
 type Galacta = { installed: string | null; disabled: boolean }
-type Pending = 'smart' | 'empty' | string | null // what Finish opens on Loadouts home, picked on the first loadout page (a string: that loadout's id)
+type Pending = 'smart' | string | null // what Finish opens on Loadouts home, picked on the first loadout page (a string: that loadout's id)
 type Auto = 'checking' | 'game-open' | 'no-game' | 'working' | 'failed' | 'done'
 
 const NEXUS = 'https://www.nexusmods.com/marvelrivals/mods'
@@ -55,7 +55,7 @@ const firstLaunch = () => !localStorage.getItem(ONBOARDED)
 /** Everything a page reads and does: the flow's state lives in FirstRun, so Back and Next keep it. */
 export type Flow = {
   alert: Alert; gamePath: string; hasMods: boolean; installedCount: number; smart: Proposal[]; shots: { l: Proposal; path: string }[]; freeCount: number; newMods: string[]; made?: { id: string; name: string } // the loadout the install saved them as
-  busy: string | null; finished: string | null; bypass: Bypass | null; bypassError: string | null; galacta: Galacta | null
+  busy: string | null; finished: string | null; bypass: Bypass | null; bypassError: string | null; galacta: Galacta | null; galactaStep: GalactaStep | null
   auto: Auto; setAuto: (a: Auto) => void
   checkStatus: () => void; run: (what: string, f: () => Promise<void>) => Promise<void>
   installBypass: () => void; installGalacta: () => void; setUpAll: () => Promise<void>; setUpMissing: () => Promise<string[] | null>
@@ -89,11 +89,21 @@ export function Step({ n, icon, done, title, optional, children, action }: {
 }
 
 /** A pick with a picture on top, like the welcome page's demos (Jakob: it reads like the loadout cards it leads to). */
-export function Choice({ stage, title, text, icon, onClick }: { stage: React.ReactNode; title: string; text: string; icon?: React.ReactNode; onClick: () => void }) {
+export function Choice({ stage, title, text, icon, onClick, disabled, hint }: { stage: React.ReactNode; title: string; text: string; icon?: React.ReactNode; onClick: () => void; disabled?: boolean; hint?: string }) {
   return (
-    <button type="button" className="ob-choice" onClick={onClick}>
+    <button type="button" className="ob-choice" onClick={onClick} disabled={disabled} title={hint}>
       <span className="wi-stage ob-stage" aria-hidden="true">{stage}</span>
       <span className="ob-choice-text"><b>{icon}{title}</b><span>{text}</span></span>
+    </button>
+  )
+}
+/** An install button: its step's words shimmer inside while it runs (no spinner, the Nexus Mods card's look), then a
+ *  green Installed for a moment once it finished (`done`). */
+function StepButton({ working, done, label, className = 'lo-text-btn', ...rest }: { working?: string | false | null; done?: boolean; label: string } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  if (done) return <span key="done" className={`${className} is-installed t-text-in`}><Check size={14} strokeWidth={2.75} aria-hidden="true" />Installed</span>
+  return (
+    <button type="button" {...rest} className={`${className}${working ? ' is-working' : ''}`} aria-busy={Boolean(working)} disabled={rest.disabled || Boolean(working)}>
+      {working ? <span key={working} className="t-text-in"><span className="t-shimmer">{working}</span></span> : label}
     </button>
   )
 }
@@ -133,7 +143,7 @@ const findGame = (f: Flow) => {
   return (
     <Step n={1} done={Boolean(f.gamePath)} title="Find the game"
       action={!f.gamePath && <>
-        <button type="button" className="btn-primary" disabled={Boolean(f.busy)} onClick={() => f.run('find', f.onAutoDetect)}>{f.busy === 'find' ? 'Looking…' : 'Find it'}</button>
+        <StepButton className="btn-primary" working={f.busy === 'find' && 'Looking'} label="Find it" disabled={Boolean(f.busy)} onClick={() => f.run('find', f.onAutoDetect)} />
         <button type="button" className="lo-text-btn" onClick={() => f.onBrowse()}>Browse…</button></>}>
       <p>{!f.gamePath ? 'Not found yet. Find it searches your Steam libraries.' : <>Found. Mods go to <code title={f.gamePath}>{where}</code></>}</p>
     </Step>
@@ -179,22 +189,22 @@ const setup: Page = {
             <Step n={2} done={bypassOn} title="Install the signature bypass"
               action={f.bypassError
                 ? <button type="button" className="lo-text-btn" onClick={f.checkStatus}>Retry</button>
-                : !bypassOn && <button type="button" className="lo-text-btn" disabled={noGame || !f.bypass || Boolean(f.busy)} onClick={f.installBypass}
-                    title={noGame ? 'Find the game first' : undefined}>
-                    {f.busy === 'bypass' ? 'Installing…' : f.bypass?.state === 'disabled' ? 'Turn on' : f.bypass?.state === 'partial' ? 'Repair' : 'Install'}</button>}>
+                : (!bypassOn || f.finished === 'bypass') && <StepButton done={bypassOn} working={f.busy === 'bypass' && 'Installing'} disabled={noGame || !f.bypass || Boolean(f.busy)}
+                    onClick={f.installBypass} title={noGame ? 'Find the game first' : undefined}
+                    label={f.bypass?.state === 'disabled' ? 'Turn on' : f.bypass?.state === 'partial' ? 'Repair' : 'Install'} />}>
               <p>{f.bypassError ? `Could not check it: ${f.bypassError}` : bypassText}</p>
-              <BypassTrack on={f.busy === 'bypass'} done={f.finished === 'bypass' ? 'Installed. Mods load from the next game launch.' : undefined} />
             </Step>
             <Step n={3} done={galactaOn} title={`Install ${LOADER_NAME}`}
-              action={!f.galacta?.installed && <button type="button" className="lo-text-btn" disabled={noGame || Boolean(f.busy)} onClick={f.installGalacta}
-                title={noGame ? 'Find the game first' : 'Downloads the newest release from GitHub'}>{f.busy === 'galacta' ? 'Installing…' : 'Install'}</button>}>
-              <p>{f.galacta?.installed && !galactaOn ? 'Installed but switched off. Turn it on in the Library.' : galactaOn ? 'Installed.' : 'Most skin mods need it. It also lets you switch mods in game.'}</p>
-              <GalactaTrack on={f.busy === 'galacta'} done={f.finished === 'galacta' ? `${LOADER_NAME} is in your mods folder` : undefined} />
+              action={(!f.galacta?.installed || f.finished === 'galacta') && <StepButton done={galactaOn} working={f.busy === 'galacta' && galactaWords(f.galactaStep)}
+                disabled={noGame || Boolean(f.busy)} onClick={f.installGalacta} label="Install"
+                title={noGame ? 'Find the game first' : 'Downloads the newest release from GitHub'} />}>
+              <p>{f.galacta?.installed && !galactaOn ? `Installed but switched off. Turn it on in Setup, on the ${LOADER_NAME} card.` : galactaOn ? 'Installed.' : 'Most skin mods need it. It also lets you switch mods in game.'}</p>
             </Step>
           </ol>
           {/* One click for the three steps, in order, each showing its own progress (cable, 2026-10-21: as frictionless as possible) */}
-          {!all && <button type="button" className="btn-primary ob-all" disabled={Boolean(f.busy) || (f.bypass === null && !f.bypassError)} onClick={f.setUpAll}
-            title={`Finds the game, installs the signature bypass and ${LOADER_NAME}, one after another`}>{f.busy ? 'Setting up…' : 'Set up all three'}</button>}
+          {!all && <StepButton className="btn-primary ob-all" disabled={Boolean(f.busy) || (f.bypass === null && !f.bypassError)} onClick={f.setUpAll} label="Set up all three"
+            working={f.busy === 'find' ? 'Finding the game' : f.busy === 'bypass' ? 'Installing the bypass' : f.busy === 'galacta' ? `Installing ${LOADER_NAME}` : null}
+            title={`Finds the game, installs the signature bypass and ${LOADER_NAME}, one after another`} />}
         </div>
         <Folder f={f} />
       </div>
@@ -233,9 +243,9 @@ function AutoSetup({ f }: { f: Flow }) {
     return () => { live = false }
   }, [f.gamePath, again])
   const other = f.bypass?.state === 'other' ? ' Your own bypass was left as it is.' : ''
-  // switched off in the Library on purpose, so it stays off: said, never called set up
-  const off = f.galacta?.installed && f.galacta.disabled ? ` ${LOADER_NAME} is switched off. Turn it on in the Library.` : ''
-  const status = state === 'checking' ? <InstallTrack text="Checking the game and what is installed" share={null} />
+  // switched off on purpose (Setup turns it on), so it stays off: said, never called set up
+  const off = f.galacta?.installed && f.galacta.disabled ? ` ${LOADER_NAME} is switched off. Turn it on in Setup, on its card.` : ''
+  const status = state === 'checking' ? <InstallTrack text="Checking the game" share={null} />
     : state === 'game-open' ? <>
         <p>Marvel Rivals is open. Close it first, setup changes files the game holds.</p>
         <button type="button" className="btn-primary" onClick={() => setAgain(a => a + 1)}>Check again</button></>
@@ -311,81 +321,76 @@ const SampleSmart = () => (
   </span>
 )
 
-const mods: Page = {
-  id: 'mods', title: 'Your first mod', step: 'First mod', when: b => b.guided || !b.hasMods,
-  body: f => (
-    <div className="ob-drop">
-      <span className="ob-drop-icon" aria-hidden="true"><Upload size={22} /></span>
-      <b>Drop mods anywhere on this window</b>
-      <span>This screen steps aside for the install and comes back after.</span>
-      <span className="ob-drop-actions">
-        <button type="button" className="btn-primary" disabled={!f.gamePath} onClick={f.addFiles} title={f.gamePath ? undefined : 'Find the game first'}><Upload size={14} aria-hidden="true" /> Choose files…</button>
-        <a className="su-link ob-out" href={NEXUS} onClick={e => { e.preventDefault(); openUrl(NEXUS) }}>Find mods on Nexus Mods <ExternalLink size={13} aria-hidden="true" /></a>
-      </span>
-      {f.newMods.length > 0 && <p className="ob-done"><Check size={16} strokeWidth={2.75} aria-hidden="true" /><span>{plural(f.newMods.length, 'mod')} installed. Next makes a loadout from them.</span></p>}
-    </div>
-  ),
-}
-
 const loadout: Page = {
   id: 'loadout', title: 'Your first loadout', step: 'Loadout', choice: true,
   sub: () => 'A set of mods that turn on and off together.',
   body: f => (
     <div className="ob-choices">
-      {f.made && (
-        <Choice onClick={() => f.finish(f.made!.id)} stage={<MiniCard name={f.made.name} src={silhouette} />}
-          title={`Continue with ${f.made.name}`} text="The install saved your new mods as this loadout. Opens it now." />
-      )}
-      {f.newMods.length > 0 && !f.made && (
-        <Choice onClick={() => f.finish(createFromMods(f.newMods).id)} stage={<MiniCard name="New loadout" src={silhouette} />}
-          title={`From the ${plural(f.newMods.length, 'mod')} you added`} text="Made now and opened, ready to switch on." />
-      )}
       {f.hasMods && (
         <Choice onClick={() => f.finish('smart')} stage={<Smart f={f} />}
-          title="Group my mods into loadouts" text={f.smart.length
+          title="Make loadouts from my mods" text={f.smart.length
             ? `Automatically sorts your ${plural(f.freeCount, 'mod')} into ${plural(f.smart.length, 'loadout')} by look, so one switch turns a whole skin on. You keep the ones you want.`
             : 'Automatically sorts your mods into loadouts by look, so one switch turns a whole skin on. You keep the ones you want.'} />
       )}
-      <Choice onClick={() => f.finish('empty')} title="Start one by hand" text="An empty loadout, named and filled on its page."
-        stage={<span className="wi-card ob-empty"><CopyPlus size={30} strokeWidth={1.25} /></span>} />
-      {!f.hasMods && f.newMods.length === 0 && <p className="fr-hint">No mods yet. Go back to add some, or add them later in the Library.</p>}
+      {f.made ? (
+        <Choice onClick={() => f.finish(f.made!.id)} stage={<MiniCard name={f.made.name} src={silhouette} />}
+          title={`Continue with ${f.made.name}`} text="The install saved your new mods as this loadout. Opens it now." />
+      ) : f.newMods.length > 0 ? (
+        <Choice onClick={() => f.finish(createFromMods(f.newMods).id)} stage={<MiniCard name="New loadout" src={silhouette} />}
+          title={`From the ${plural(f.newMods.length, 'mod')} you added`} text="Made now and opened, ready to switch on." />
+      ) : (
+        <Choice onClick={f.addFiles} disabled={!f.gamePath} hint={f.gamePath ? undefined : 'Find the game in Setup first'}
+          stage={<span className="ob-fan ob-ghosts"><i /><i><Upload size={22} /></i><i /></span>}
+          title="Install a new mod" text="Pick a mod file. It installs and becomes your first loadout, ready to switch on." />
+      )}
+      <p className="fr-hint">Mod files dropped anywhere on this window install too. Need one? <a className="su-link ob-out" href={NEXUS}
+        onClick={e => { e.preventDefault(); openUrl(NEXUS) }}>Find mods on Nexus Mods<ExternalLink size={13} aria-hidden="true" /></a></p>
     </div>
   ),
 }
 
-/** The sound pack: a segmented pick, and under it the four samples of the pack the pointer (or focus) last rested on,
- *  else the picked one. Trying never picks. .sound-pack keeps the global click cue quiet so each sample plays alone. */
+/** App sounds (option D, cable's pick 2026-11-01): the packs as a described list on the left, four keys on the right
+ *  that play the picked pack (Common Region: choose here, listen there). Off locks the keys. .sound-pack keeps the
+ *  global click cue quiet so each key plays alone. */
 function Sounds() {
   const choice = useSoundChoice()
-  const [rest, setRest] = useState<string | null>(null)
-  const shown = rest ?? choice
-  const name = (pack: string) => pack === 'off' ? 'Off' : pack === 'default' ? 'Bell' : pack[0].toUpperCase() + pack.slice(1)
+  const off = choice === 'off'
   return (
-    <div className="ob-sounds sound-pack" onMouseLeave={() => setRest(null)}>
-      <div className="ob-seg" role="radiogroup" aria-label="Sound pack">
-        {(['off', ...SOUND_PACKS] as const).map(pack => (
-          <button key={pack} type="button" role="radio" aria-checked={choice === pack} onMouseEnter={() => setRest(pack)} onFocus={() => setRest(pack)}
-            onClick={() => { setSoundChoice(pack); if (pack !== 'off') cue('select') }}>
-            {name(pack)}
-          </button>
-        ))}
+    <section className="ob-pref ob-sound-band sound-pack">
+      <div className="ob-sound-pick">
+        <h3>App sounds</h3>
+        <p>Small sounds on clicks, switches, and alerts.</p>
+        <div className="ob-sound-list" role="radiogroup" aria-label="Sound pack">
+          {(['off', ...SOUND_PACKS] as const).map(pack => { const [name, about, Icon] = PACK[pack]; return (
+            <button key={pack} type="button" role="radio" aria-checked={choice === pack}
+              onClick={() => { setSoundChoice(pack); if (pack !== 'off') cue('select') }}>
+              <span><Icon size={15} aria-hidden="true" />{name}</span><small>{about}</small>
+            </button>
+          ) })}
+        </div>
       </div>
-      <div className="ob-try">
-        {shown === 'off' ? <span className="ob-try-label">No sounds</span> : <>
-          <span className="ob-try-label"><b>Try {name(shown)}</b></span>
-          {TRY.map(([cueName, label]) => <button key={cueName} type="button" onClick={() => tryCue(cueName, shown as typeof SOUND_PACKS[number])}><Volume2 size={12} aria-hidden="true" />{label}</button>)}
-        </>}
+      <div className="ob-sound-keys">
+        <div>
+          {TRY.map(([cueName, label, Icon]) => (
+            <button key={cueName} type="button" className="ob-key" disabled={off} onClick={() => tryCue(cueName, choice as typeof SOUND_PACKS[number])}>
+              {off ? <Lock size={16} aria-hidden="true" /> : <Icon size={16} aria-hidden="true" />}<span>{label}</span>
+            </button>
+          ))}
+        </div>
+        <p>{off ? 'Sounds are off' : `Press a key to hear what ${PACK[choice][0]} sounds like`}</p>
       </div>
-    </div>
+    </section>
   )
 }
-const TRY: [SoundName, string][] = [['tap', 'Click'], ['toggle', 'Switch'], ['success', 'Done'], ['error', 'Oops']]
+const PACK: Record<string, [string, string, typeof Bell]> = { off: ['Off', 'Quiet', VolumeX], default: ['Bell', 'Soft chimes', Bell], mech: ['Mech', 'Keyboard clicks', Keyboard],
+  bubble: ['Bubble', 'Round pops', Droplets], press: ['Press', 'Instrumental hums', Music] }
+const TRY: [SoundName, string, typeof Bell][] = [['tap', 'Click', MousePointerClick], ['toggle', 'Switch', ToggleRight], ['success', 'Done', Check], ['error', 'Oops', CircleAlert]]
 /** One Make it yours setting: a picture of what it does, its words, and its control. */
 /** The app's icon, the Geist x (scripts/make-icon.py draws the real one the same way). */
 const AppMark = () => <b className="ob-mark">x</b>
-function Pref({ stage, title, children, action, wide }: { stage?: React.ReactNode; title: string; children: React.ReactNode; action?: React.ReactNode; wide?: boolean }) {
+function Pref({ stage, title, children, action }: { stage?: React.ReactNode; title: string; children: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <section className={`ob-pref${wide ? ' is-wide' : ''}`}>
+    <section className="ob-pref">
       {stage && <div className="wi-stage ob-stage" aria-hidden="true">{stage}</div>}
       <div className="ob-pref-text"><h3>{title}</h3>{children}</div>
       {action && <div className="ob-pref-action">{action}</div>}
@@ -396,16 +401,19 @@ function Pref({ stage, title, children, action, wide }: { stage?: React.ReactNod
 function Yours({ f }: { f: Flow }) {
   const kitReady = Boolean(f.kit.kit?.version && f.kit.kit?.blender)
   const size = f.kit.latest?.size ? `${Math.round(f.kit.latest.size / 1048576)} MB, plus Blender` : 'a download, plus Blender'
+  // winget's installer has started ("Starting package install..."): the admin prompt shows now, not while winget looks
+  // Blender up or downloads it
+  const blenderWaits = f.kit.progress?.stage === 'blender' && !f.kit.progress.total && /package install/i.test(f.kit.progress.text ?? '')
   return (
     <div className="ob-prefs">
       <Pref title="Pictures of your mods" stage={<MiniCard name="Catboy" src={catboy} className="wi-reveal ob-shot"><span className="wi-render"><span>Rendering</span></span></MiniCard>}
-        action={kitReady ? <span className="ob-ok"><Check size={14} strokeWidth={2.75} /> Ready</span>
-          : !f.kit.plan && <button type="button" className="btn-primary" disabled={Boolean(f.kit.busy) || (f.kit.latest === null && !f.kit.kit?.version)} onClick={() => f.kit.setUp()}
-            title={f.kit.latest === null ? 'No kit published yet: drop a kit zip on the window' : 'Downloads the preview kit and installs Blender if it is missing'}>
-            {f.kit.busy === 'setup' ? 'Setting up…' : 'Set up previews'}</button>}>
+        action={kitReady ? <span className="ob-ok"><Check size={14} strokeWidth={2.75} /> Previews are ready on this PC</span>
+          : !f.kit.plan && <StepButton className="btn-primary" working={f.kit.busy === 'setup' && 'Starting'} label="Set up previews" disabled={Boolean(f.kit.busy) || (f.kit.latest === null && !f.kit.kit?.version)} onClick={() => f.kit.setUp()}
+            title={f.kit.latest === null ? 'No kit published yet: drop a kit zip on the window' : 'Downloads the preview kit and installs Blender if it is missing'} />}>
         <p>Every mod and loadout as a picture of how it looks in game, rendered on your PC ({size}).</p>
-        {!kitReady && <p className="fr-admin"><ShieldCheck size={13} aria-hidden="true" /> Windows asks for admin rights once, for Blender.</p>}
-        <KitTrack plan={f.kit.plan} p={f.kit.progress} done={f.kit.finished ?? undefined} />
+        {!kitReady && !f.kit.kit?.blender && <p className={`fr-admin${blenderWaits ? ' is-waiting' : ''}`} title={blenderWaits ? 'It may wait in the taskbar' : 'Windows asks once, when Blender installs'}>
+          <ShieldCheck size={13} aria-hidden="true" />{blenderWaits ? 'Approve the Windows prompt.' : 'Blender needs admin rights once.'}</p>}
+        <KitTrack plan={f.kit.plan} p={f.kit.progress} />
         <DoctorProblems d={f.kit.doctor} />
       </Pref>
       <Pref title="Show it on Discord" stage={<span className="ob-presence"><AppMark /><span><small>Playing</small><b>{APP_NAME}</b><small className="ob-activity"><Gamepad2 size={12} aria-hidden="true" />Switching loadouts</small></span></span>}
@@ -416,10 +424,7 @@ function Yours({ f }: { f: Flow }) {
         action={f.shortcut.exists ? <span className="ob-ok"><Check size={14} strokeWidth={2.75} /> On your desktop</span> : <ShortcutButton s={f.shortcut} />}>
         <p>Start {APP_NAME} from your desktop.</p>
       </Pref>
-      <Pref wide title="App sounds">
-        <p>Small sounds on clicks, switches, and alerts. Try a pack, then pick it.</p>
-        <Sounds />
-      </Pref>
+      <Sounds />
     </div>
   )
 }
@@ -432,11 +437,10 @@ export const PAGES: Page[] = [
   ask,
   setup,
   auto,
-  mods,
   yours,
   loadout,
 ]
-/** The rail's steps by name, in order, the same five whatever the answers (a count that grew after a question read as
+/** The rail's steps by name, in order, the same four whatever the answers (a count that grew after a question read as
  *  the flow getting longer). A step a path skips shows as done once passed. */
 const RAIL = [...new Set(PAGES.flatMap(p => p.step ? [p.step] : []))]
 
@@ -464,6 +468,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
   const asked = useRef(0) // the newest status check: answers to an older one (another game folder) are dropped
   const [busy, setBusy] = useState<string | null>(null)
   const { finished, finish } = useFinished() // a step that just installed, said in it for a moment
+  const galactaStep = useGalactaStep(busy === 'galacta')
   const kit = usePreviewKit(alert)
   const shortcut = useShortcut()
   const detected = useRef(false)
@@ -513,7 +518,6 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
     if (!r.seen && installed.length <= r.count) return // the panel has not opened yet
     resume.current = null
     setOpen(true)
-    if (at === 'mods' && installed.length > r.count) setAt('yours') // installed: on to the next page
   }, [installing, installed.length])
   useEffect(() => { // a drop the install panel refused or could not read: hidden for it, so back now (App.tsx)
     const dropped = () => { if (resume.current && !resume.current.seen) { resume.current = null; setOpen(true) } }
@@ -591,13 +595,12 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
     close()
     setView('home')
     if (pending === 'smart') { sessionStorage.setItem('repakxtra.smartPending', '1'); window.dispatchEvent(new Event('repakxtra-smart-loadouts')) } // Loadouts home may mount after this event
-    else if (pending === 'empty') openLoadout(createFromMods([]).id, true)
     else if (pending) openLoadout(pending)
   }
   const answer = (yes: boolean) => { const p = yes ? 'yes' : 'no'; setPath(p); move(1, sequence(PAGES, { guided: !yes, hasMods })) }
 
   const f: Flow = {
-    alert, gamePath, hasMods, installedCount: installed.length, smart, shots, freeCount: free.length, newMods, made, auto, setAuto, busy, finished, bypass, bypassError, galacta, checkStatus, run, installBypass, installGalacta,
+    alert, gamePath, hasMods, installedCount: installed.length, smart, shots, freeCount: free.length, newMods, made, auto, setAuto, busy, finished, bypass, bypassError, galacta, galactaStep, checkStatus, run, installBypass, installGalacta,
     setUpAll, setUpMissing, onAutoDetect, onBrowse, addFiles, kit, shortcut, enableDrp, onSetDrp, finish: finishFlow, answer,
     next: () => move(1), back: () => move(-1), close,
   }
@@ -655,8 +658,8 @@ if (import.meta.env.DEV) {
     const got = smartShots(smart, mods, details).map(x => `${x.l.id}:${x.path}`).join()
     console.assert(got === `a:${mesh},c:${storm}`, 'smartShots: a mesh or texture mod, then another hero', got)
   }
-  const shared = (ids: string[]) => ids.filter(id => ['welcome', 'ask', 'setup', 'auto', 'mods', 'yours', 'loadout'].includes(id)).join() // another edition's pages left out
-  console.assert(shared(sequence(PAGES, { guided: true, hasMods: false })) === 'welcome,ask,setup,mods,yours,loadout', 'no mods, not yet: the guided path')
+  const shared = (ids: string[]) => ids.filter(id => ['welcome', 'ask', 'setup', 'auto', 'yours', 'loadout'].includes(id)).join() // another edition's pages left out
+  console.assert(shared(sequence(PAGES, { guided: true, hasMods: false })) === 'welcome,ask,setup,yours,loadout', 'no mods, not yet: the guided path')
   console.assert(shared(sequence(PAGES, { guided: false, hasMods: true })) === 'welcome,ask,auto,yours,loadout', 'mods installed: still asked, then the background setup')
-  console.assert(shared(sequence(PAGES, { guided: false, hasMods: false })) === 'welcome,ask,auto,mods,yours,loadout', 'yes but nothing installed: add mods first')
+  console.assert(shared(sequence(PAGES, { guided: false, hasMods: false })) === 'welcome,ask,auto,yours,loadout', 'yes but nothing installed: the mod comes on the loadout page')
 }
