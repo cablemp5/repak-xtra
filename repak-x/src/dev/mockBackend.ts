@@ -185,6 +185,8 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       // Desktop shortcut: localStorage 'mock.shortcut' = '1' once made (a fresh PC has none)
       case 'shortcut_status': return { exists: localStorage.getItem('mock.shortcut') === '1' }
       case 'shortcut_create': localStorage.setItem('mock.shortcut', '1'); return null
+      case 'preview_rim_get': return localStorage.getItem('mock.rim') === '1'
+      case 'preview_rim_set': localStorage.setItem('mock.rim', args?.on ? '1' : '0'); return null
       case 'plugin:window|is_maximized': return false   // polled every second: answered, so the console stays readable
       case 'get_ui_log_backlog': return []
       case 'preview_kit_install_blender': return (async () => {

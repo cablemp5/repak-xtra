@@ -32,14 +32,19 @@ function useFolded(tabs: React.RefObject<HTMLDivElement | null>) {
     const title = head.querySelector<HTMLElement>('.header-title h2')
     const actions = head.querySelector<HTMLElement>('.header-actions')
     let frame = 0
+    // The title reads narrower folded (73px) than unfolded (113px), more than the 24px of slack below: at some widths that
+    // flipped the tabs every frame. So its width is the widest it has measured for these words, the same in both states.
+    const seen = { text: '', width: 0 }
     const measure = () => {
       frame = 0
       const pad = parseFloat(getComputedStyle(head).paddingLeft) + parseFloat(getComputedStyle(head).paddingRight)
+      if (title && title.textContent !== seen.text) { seen.text = title.textContent ?? ''; seen.width = 0 }
+      seen.width = Math.max(seen.width, title?.scrollWidth ?? 0)
       // title (its full text, not squeezed) + 14px gap + tabs + 12px before the buttons
       // the view buttons opened by hover push the buttons wider for a moment: measure them as they rest (one view)
       const sw = actions?.querySelector<HTMLElement>('.view-switcher-slot .view-switcher')
       const opened = sw && sw.matches(':hover, :focus-within') ? sw.offsetWidth - (sw.querySelector<HTMLElement>('.active')?.offsetWidth ?? sw.offsetWidth) - 4 : 0
-      const room = head.clientWidth - pad - (title?.scrollWidth ?? 0) - 14 - ((actions?.offsetWidth ?? 0) - Math.max(0, opened)) - 12
+      const room = head.clientWidth - pad - seen.width - 14 - ((actions?.offsetWidth ?? 0) - Math.max(0, opened)) - 12
       const need = tabs.current?.scrollWidth ?? 0
       // 24px of slack before unfolding, so a panel sliding open or shut flips it once, not back and forth
       setFolded(was => (was ? room < need + 24 : room < need))

@@ -8733,6 +8733,8 @@ fn main() {
             xtra_offfiles::xtra_stage_off_files, // repakxtra: .pak.off files
             xtra_kit::preview_kit_install_blender, // repakxtra: Blender with winget
             xtra_previews::previews_doctor, // repakxtra: can this PC make previews
+            xtra_previews::preview_rim_get, // repakxtra: Settings > Previews rim light on or off
+            xtra_previews::preview_rim_set,
             xtra_previews::cancel_mod_previews,
             xtra_capture::capture_game_status, // repakxtra: capture preview in game
             xtra_capture::capture_game_now,

@@ -32,6 +32,7 @@ import AppFiles from '../custom/AppFiles' // repakxtra: Check app files and Repa
 import Support from '../custom/Support'
 import { invoke } from '@tauri-apps/api/core'
 import { ShortcutSetting } from '../custom/shortcut' // repakxtra
+import { PreviewRimSetting } from '../custom/PreviewRimSetting' // repakxtra
 import { APP_NAME } from '../custom/edition' // repakxtra
 import './SettingsPanel.css'
 import { useAlert } from './AlertHandler'
@@ -303,6 +304,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
 
 
                 <ShortcutSetting />{/* repakxtra: desktop shortcut */}
+                <PreviewRimSetting />{/* repakxtra: rim light on previews */}
 
                 <div className="setting-section">
                   <h3 className="setting-icon-label"><LuRefreshCw size={18} aria-hidden="true" />Updates</h3>
