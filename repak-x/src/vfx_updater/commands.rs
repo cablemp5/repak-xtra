@@ -423,7 +423,7 @@ fn extract_usmap_version_label(name: &str) -> Option<String> {
     }
 }
 
-pub(crate) async fn fetch_usmap_commit_date(client: &reqwest::Client, file_name: &str) -> Option<String> { // repakxtra: pub(crate), xtra_niagara dates older USMAPs
+async fn fetch_usmap_commit_date(client: &reqwest::Client, file_name: &str) -> Option<String> {
     let path = format!("usmap/{}", file_name);
     let mut url = reqwest::Url::parse(USMAP_COMMITS_API_BASE).ok()?;
     url.query_pairs_mut()

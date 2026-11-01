@@ -431,26 +431,33 @@ fn newest_per_build(mut all: Vec<(u64, String, Option<String>)>, here: impl Fn(&
     all
 }
 
-/// The day a depot USMAP was added, saved once per file (a file's date never changes).
-async fn usmap_day(name: &str, days: &mut HashMap<String, String>, lookups: &mut usize) -> Option<String> {
-    if let Some(d) = days.get(name) {
-        return Some(d.clone());
+/// GitHub lookups of USMAP dates one call may make (60 an hour without a token). Each date is saved for good, so only a
+/// first run on a much older mod needs many.
+const DATE_LOOKUPS: usize = 20;
+
+/// When the depot got a USMAP, as UTC "YYYY-MM-DDTHH:MM:SSZ" (its first commit), saved once per file.
+async fn usmap_time(name: &str, times: &mut HashMap<String, String>, lookups: &mut usize) -> Option<String> {
+    if let Some(t) = times.get(name) {
+        return Some(t.clone());
     }
-    // shortcut: at most OLDER_DEPTH GitHub lookups per call (60 an hour without a token), a mod older than that many
-    // builds gets the rest undated, as before, and the next run dates the next ones
-    if *lookups >= OLDER_DEPTH {
+    if *lookups >= DATE_LOOKUPS {
         return None;
     }
     *lookups += 1;
-    let day = crate::vfx_updater::commands::fetch_usmap_commit_date(&http(20).ok()?, name).await?;
-    days.insert(name.to_string(), day.clone());
-    Some(day)
+    let url = reqwest::Url::parse_with_params("https://api.github.com/repos/SpaceDepot/rivals-depot/commits", &[("path", format!("usmap/{name}")), ("per_page", "100".into())]).ok()?;
+    let json: Value = http(20).ok()?.get(url).header("Accept", "application/vnd.github+json").send().await.ok()?.error_for_status().ok()?.json().await.ok()?;
+    // newest first: the last commit listed added the file
+    let t = json.as_array()?.last()?.pointer("/commit/committer/date")?.as_str()?.to_string();
+    times.insert(name.to_string(), t.clone());
+    Some(t)
 }
 
 /// Older depot USMAPs than `build`, newest first, one per build. `made`: when the mod was written (Unix seconds). The
-/// ones the depot got after that day are left out: a mod is never cooked in a layout newer than itself, and a USMAP from
-/// after a layout change reads an old file just as today's does, so it would tell nothing (three game updates after
-/// 3984769, the three newest older USMAPs would all have been past it). Without a connection, the ones already here.
+/// ones the depot got after it are left out: a mod is never cooked in a layout newer than itself, and a USMAP from after
+/// a layout change reads an old file just as today's does, so it would tell nothing (three game updates after 3984769,
+/// the three newest older USMAPs would all have been past it). A USMAP whose time is not known (offline, out of lookups)
+/// is left out too, until one older than the mod is found: the run then says the layout could not be told, and is tried
+/// again, rather than settle on a USMAP that may be too new. Without `made`, every one, as before.
 pub(crate) async fn older_usmaps(build: u64, made: Option<u64>) -> Vec<OlderUsmap> {
     let dir = crate::vfx_updater::commands::managed_usmap_dir();
     let mut all: Vec<(u64, String, Option<String>)> = std::fs::read_dir(&dir)
@@ -466,23 +473,27 @@ pub(crate) async fn older_usmaps(build: u64, made: Option<u64>) -> Vec<OlderUsma
         all.extend(listing.into_iter().filter(|(b, ..)| *b < build).map(|(b, name, url)| (b, name, Some(url))));
     }
     let all = newest_per_build(all, |name| dir.join(name).is_file());
-    let made_day = made.and_then(|s| chrono::DateTime::from_timestamp(s as i64, 0)).map(|d| d.format("%Y-%m-%d").to_string());
-    let dates = dir.join("repakxtra-usmap-dates.json");
-    let mut days: HashMap<String, String> = std::fs::read_to_string(&dates).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
-    let (mut out, mut lookups) = (Vec::new(), 0);
+    // same format as GitHub's, so the strings compare as times
+    let made = made.and_then(|s| chrono::DateTime::from_timestamp(s as i64, 0)).map(|d| d.format("%Y-%m-%dT%H:%M:%SZ").to_string());
+    let store = dir.join("repakxtra-usmap-times.json");
+    let mut times: HashMap<String, String> = std::fs::read_to_string(&store).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+    let (mut out, mut lookups, mut before_mod) = (Vec::new(), 0, made.is_none());
     for (_, name, url) in all {
         if out.len() == OLDER_DEPTH {
             break;
         }
-        if let Some(made) = &made_day {
-            if usmap_day(&name, &mut days, &mut lookups).await.is_some_and(|d| d > *made) {
-                continue;
+        // shortcut: builds are added in order, so the ones older than the first USMAP from before the mod are taken
+        // undated. A depot file added out of order would need its own date checked
+        if !before_mod {
+            match usmap_time(&name, &mut times, &mut lookups).await {
+                Some(t) if made.as_ref().is_some_and(|m| t < *m) => before_mod = true,
+                _ => continue,
             }
         }
         out.push(OlderUsmap { path: dir.join(&name), url });
     }
     if lookups > 0 {
-        let _ = std::fs::write(&dates, serde_json::to_string(&days).unwrap_or_default());
+        let _ = std::fs::write(&store, serde_json::to_string(&times).unwrap_or_default());
     }
     out
 }

@@ -4014,6 +4014,17 @@ fn replace_mod_files(old: &Path, new: &Path) -> std::io::Result<()> {
     if is_case_only_rename(old, new) {
         return rename_mod_files(old, new);
     }
+    // repakxtra: an on or off copy of the mod at `new` shares its .utoc and .ucas, which replacing would take from it
+    let same = |a: &Path, b: &Path| a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase();
+    for ext in ["pak", "bak_repak", "pak_disabled", "pak.bak_repak"] {
+        let other = crate::xtra_bundle::companion(new, ext);
+        if other.exists() && !same(&other, new) && !same(&other, old) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!("{} is an on or off copy of the mod there, so nothing was replaced", other.display()),
+            ));
+        }
+    }
 
     let mut set_aside: Vec<(PathBuf, PathBuf)> = Vec::new();
     let mut result = Ok(());
@@ -4064,6 +4075,21 @@ mod rename_mod_files_tests {
         assert_eq!(std::fs::read_to_string(p("b.pak")).unwrap(), "a.pak");
         assert!(!p("a.pak").exists() && !p("b.utoc").exists() && !p("b.ucas").exists());
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn replace_never_takes_an_off_copys_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = |name: &str| dir.path().join(name);
+        for name in ["a.pak", "b.bak_repak", "b.utoc", "b.ucas"] {
+            std::fs::write(p(name), name).unwrap();
+        }
+
+        assert!(replace_mod_files(&p("a.pak"), &p("b.pak")).is_err());
+        for name in ["a.pak", "b.bak_repak", "b.utoc", "b.ucas"] {
+            assert_eq!(std::fs::read_to_string(p(name)).unwrap(), name, "{name} is untouched");
+        }
+        assert!(!p("b.pak").exists());
     }
 
     #[test]
