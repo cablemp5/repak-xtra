@@ -21,14 +21,22 @@ const step = (dir: -1 | 0 | 1) => { localStorage.setItem(KEY, String(stepZoom(ge
 
 export const useCardZoom = () => useSyncExternalStore(subscribe, get)
 
-/** Ctrl + wheel over `el` zooms the cards (and keeps the webview from zooming the whole app). */
+/** Ctrl + wheel over `el` zooms the cards (and keeps the webview from zooming the whole app). What is under the pointer
+ *  stays under it: the browser's own scroll anchoring is off for the step (it jumped the list hundreds of px). */
 export function useWheelZoom(el: HTMLElement | null) {
   useEffect(() => {
     if (!el) return
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return
       e.preventDefault()
+      const held = e.target instanceof Element && e.target !== el && el.contains(e.target) ? e.target : null
+      const before = held?.getBoundingClientRect().top
+      el.style.overflowAnchor = 'none'
       step(e.deltaY < 0 ? 1 : -1)
+      requestAnimationFrame(() => { // the grid has its new size by now
+        if (held?.isConnected && before !== undefined) el.scrollTop += held.getBoundingClientRect().top - before
+        el.style.overflowAnchor = ''
+      })
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
