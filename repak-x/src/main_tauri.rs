@@ -3979,8 +3979,10 @@ fn rename_mod_files(old: &Path, new: &Path) -> std::io::Result<()> {
     let mut pairs = vec![(old.to_path_buf(), new.to_path_buf())];
     for ext in ["utoc", "ucas"] {
         let old_side = crate::xtra_bundle::companion(old, ext); // repakxtra: keeps a .bak_repak name's earlier dots (Name.pak.bak_repak)
-        if old_side.exists() {
-            pairs.push((old_side, crate::xtra_bundle::companion(new, ext)));
+        let new_side = crate::xtra_bundle::companion(new, ext);
+        // repakxtra: Name.pak.bak_repak to Name.bak_repak keeps the same .utoc and .ucas, which stay where they are
+        if old_side.exists() && old_side != new_side {
+            pairs.push((old_side, new_side));
         }
     }
 
@@ -4028,12 +4030,14 @@ fn replace_mod_files(old: &Path, new: &Path) -> std::io::Result<()> {
 
     let mut set_aside: Vec<(PathBuf, PathBuf)> = Vec::new();
     let mut result = Ok(());
+    // repakxtra: never the mod's own .utoc and .ucas, which it can share with `new` (Name.pak.bak_repak, Name.bak_repak)
+    let own = ["utoc", "ucas"].map(|x| crate::xtra_bundle::companion(old, x));
     for path in [
         new.to_path_buf(),
         crate::xtra_bundle::companion(new, "utoc"),
         crate::xtra_bundle::companion(new, "ucas"),
     ] {
-        if !path.exists() {
+        if !path.exists() || own.iter().any(|o| same(o, &path)) {
             continue;
         }
         let mut backup = path.clone().into_os_string();
@@ -4090,6 +4094,25 @@ mod rename_mod_files_tests {
             assert_eq!(std::fs::read_to_string(p(name)).unwrap(), name, "{name} is untouched");
         }
         assert!(!p("b.pak").exists());
+    }
+
+    #[test]
+    fn an_old_style_off_name_keeps_its_shared_side_files() {
+        // A.pak.bak_repak and A.bak_repak share A.utoc and A.ucas: renaming between them moves only the main file
+        for replace in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let p = |name: &str| dir.path().join(name);
+            for name in ["A.pak.bak_repak", "A.utoc", "A.ucas"] {
+                std::fs::write(p(name), name).unwrap();
+            }
+            let r = if replace { replace_mod_files(&p("A.pak.bak_repak"), &p("A.bak_repak")) } else { rename_mod_files(&p("A.pak.bak_repak"), &p("A.bak_repak")) };
+            r.unwrap();
+            assert_eq!(std::fs::read_to_string(p("A.bak_repak")).unwrap(), "A.pak.bak_repak");
+            for name in ["A.utoc", "A.ucas"] {
+                assert_eq!(std::fs::read_to_string(p(name)).unwrap(), name, "{name} kept (replace: {replace})");
+            }
+            assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 3);
+        }
     }
 
     #[test]
