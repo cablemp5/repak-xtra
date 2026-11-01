@@ -24,6 +24,7 @@ const COPIED = ['boxSizing', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle'
 let field: Field | null = null
 let shown = false
 let last = ''
+let ink = '' // the field's own caret color, read when it is first shown
 let frame = 0
 
 function hide() {
@@ -38,7 +39,8 @@ function place() {
   if (!el || document.activeElement !== el || document.documentElement.dataset.motion === 'off' || el.readOnly || el.disabled ||
     el.selectionStart === null || el.selectionStart !== el.selectionEnd) return hide()
   const cs = getComputedStyle(el)
-  if (!shown) caret.style.background = cs.caretColor === 'auto' || cs.caretColor === 'transparent' ? cs.color : cs.caretColor // read before the class hides it
+  if (!shown) ink = cs.caretColor === 'auto' || cs.caretColor === 'transparent' ? cs.color : cs.caretColor // read before the class hides it
+  caret.style.background = cs.getPropertyValue('--smooth-caret').trim() || ink // a field can set its own (an empty one its placeholder's gray)
   const area = el instanceof HTMLTextAreaElement
   for (const k of COPIED) mirror.style[k] = cs[k]
   mirror.style.boxSizing = 'content-box'

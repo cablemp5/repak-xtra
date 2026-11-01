@@ -2658,6 +2658,9 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 /* Empty, the field is as wide as "Type a title" and starts at its left, so the caret sits at the start of the words */
 .lo-caption-edit:placeholder-shown { text-align: left; }
 [data-theme="light"] .lo-caption-edit::placeholder { color: rgba(0, 0, 0, 0.3); }
+/* before the first letter the caret is the placeholder's gray (smoothCaret.ts reads --smooth-caret) */
+.lo-caption-edit:placeholder-shown { --smooth-caret: rgba(255, 255, 255, 0.28); }
+[data-theme="light"] .lo-caption-edit:placeholder-shown { --smooth-caret: rgba(0, 0, 0, 0.3); }
 /* Icon and color: one flat row along the card's bottom, split from the words by a hairline */
 .cap-bar { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 6px; padding: 8px 12px 8px 8px; border-top: none !important;
   border-top: 1px solid rgba(255, 255, 255, 0.07); }
