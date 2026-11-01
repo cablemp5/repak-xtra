@@ -4,6 +4,7 @@
 import { type CSSProperties, type KeyboardEvent, type PointerEvent, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { cue } from '../sounds'
+import './colorPicker.css'
 
 const clamp = (n: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, n))
 
@@ -29,12 +30,17 @@ if (import.meta.env?.DEV) {
   console.assert(hsvToHex(...hexToHsv('ff0000')) === 'ff0000' && hsvToHex(...hexToHsv('5d7a80')) === '5d7a80' && hsvToHex(...hexToHsv('000000')) === '000000', 'color math round trip')
 }
 
+/** The suggested colors under the picker: white, then around the color wheel. */
+export const RAINBOW = ['ffffff', 'ff4fd8', 'a14cff', '3f7bff', '2ee6d6', '7be317', 'ffc23d', 'ff6a2b']
+
 const WIDTH = 248 // nine 18px dots with room for the picked one's ring between them
 const HEIGHT = 224
 
-/** The swatch, and its popover while open. `presets` are suggested colors (hex), the first one the game's own. */
-export default function ColorPicker({ value, onChange, label, presets, disabled }: {
-  value: string; onChange: (hex: string) => void; label: string; presets: string[]; disabled?: boolean
+/** The swatch, and its popover while open. `presets` are suggested colors (hex), the first one the game's own.
+ *  `gameFirst={false}`: no game color, the first preset is an ordinary one.
+ *  `keepFocus`: the popover takes no focus (a text field being typed in keeps it, its parent prevents mousedown). */
+export default function ColorPicker({ value, onChange, label, presets, disabled, keepFocus, className, gameFirst = true }: {
+  value: string; onChange: (hex: string) => void; label: string; presets: string[]; disabled?: boolean; keepFocus?: boolean; className?: string; gameFirst?: boolean
 }) {
   const [open, setOpenState] = useState(false)
   const [hsv, setHsv] = useState(() => hexToHsv(value))
@@ -64,8 +70,11 @@ export default function ColorPicker({ value, onChange, label, presets, disabled 
     document.addEventListener('pointerdown', away, true)
     window.addEventListener('resize', place)
     window.addEventListener('scroll', place, true)
-    square.current?.focus()
-    return () => { document.removeEventListener('pointerdown', away, true); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true) }
+    if (!keepFocus) square.current?.focus()
+    // focus stayed in the field being typed in: Escape closes only the picker, before the field's own Escape (revert) sees it
+    const esc = (e: globalThis.KeyboardEvent) => { if (keepFocus && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setOpen(false) } }
+    window.addEventListener('keydown', esc, true)
+    return () => { document.removeEventListener('pointerdown', away, true); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); window.removeEventListener('keydown', esc, true) }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = (next: [number, number, number]) => { setHsv(next); onChange(hsvToHex(...next)) }
@@ -86,7 +95,7 @@ export default function ColorPicker({ value, onChange, label, presets, disabled 
 
   return (
     <>
-      <button type="button" ref={button} className="kcp-swatch" aria-label={`${label}, ${shown}`} aria-haspopup="dialog" aria-expanded={open} disabled={disabled}
+      <button type="button" ref={button} className={`kcp-swatch${className ? ` ${className}` : ''}`} aria-label={`${label}, ${shown}`} aria-haspopup="dialog" aria-expanded={open} disabled={disabled}
         title="Pick a color" onClick={() => setOpen(!open)}>
         <span className="kcp-fill" style={{ background: `#${value}` }} />
       </button>
@@ -107,7 +116,7 @@ export default function ColorPicker({ value, onChange, label, presets, disabled 
           <div className="kcp-presets" role="radiogroup" aria-label="Suggested colors">
             {presets.map((c, i) => (
               <button key={c} type="button" role="radio" aria-checked={value === c} className="kcp-preset" style={{ background: `#${c}`, '--sw': `#${c}` } as CSSProperties}
-                title={i === 0 ? `The game's #${c.toUpperCase()}` : `#${c.toUpperCase()}`} aria-label={i === 0 ? 'The game\'s color' : `#${c.toUpperCase()}`}
+                title={gameFirst && i === 0 ? `The game's #${c.toUpperCase()}` : `#${c.toUpperCase()}`} aria-label={gameFirst && i === 0 ? 'The game\'s color' : `#${c.toUpperCase()}`}
                 onClick={() => { setHsv(hexToHsv(c)); onChange(c); cue('tap') }} />
             ))}
           </div>

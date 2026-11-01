@@ -16,9 +16,12 @@ setVolume(0.7)
  *  dropped, so none queue up and burst out together when it comes back. */
 const STACK_MS = 60
 let recent: { at: number; name: SoundName }[] = [] // the cues admitted in the last STACK_MS, each expiring on its own
+// Typing plays every key, but two keys landing a few ms apart (rolled keys) stacked into one loud pop: one per TYPE_MS
+const TYPE_MS = 35
+let lastType = -Infinity
 function admits(name: SoundName, now: number, hidden: boolean) {
   if (hidden) return false
-  if (name === 'type') return true // every key: fast typing is under the gap
+  if (name === 'type') { if (now - lastType < TYPE_MS) return false; lastType = now; return true }
   recent = recent.filter(c => now - c.at < STACK_MS)
   if (recent.length >= 2 || recent.some(c => c.name === name)) return false
   recent.push({ at: now, name })
@@ -141,7 +144,7 @@ if (import.meta.env.DEV) {
   recent = []
   console.assert(admits('tap', 1000, false) && admits('success', 1010, false) && !admits('error', 1020, false) && !admits('tap', 1030, true),
     'two different cues together, not a third, none while hidden')
-  console.assert(!admits('success', 1040, false) && admits('success', 1100, false) && admits('type', 1101, false), 'no repeat within the gap, typing always')
+  console.assert(!admits('success', 1040, false) && admits('success', 1100, false) && admits('type', 1101, false) && !admits('type', 1110, false) && admits('type', 1200, false), 'no repeat within the gap, typing one per TYPE_MS')
   recent = []
   console.assert(admits('tap', 0, false) && admits('open', 59, false) && admits('close', 60, false) && !admits('select', 61, false),
     'a sliding window: never three cues within the gap, even across its edge')

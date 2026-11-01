@@ -7,11 +7,13 @@
 .lo-caption-wrap { z-index: 2; }
 
 /* The words being typed sit where the card shows them: the same size (the card's container units) and the same middle, so
-   nothing jumps between typing and showing */
-.lo-caption-wrap { container-type: inline-size; padding: 52px 16px !important; gap: 0 !important; }
-.lo-caption-wrap svg.lo-cap-icon + .lo-caption-edit { margin-top: 4cqi; }   /* cqi here is the wrap's: the card's svg + span margin */
+   nothing jumps between typing and showing. 14px at the sides, the card's own, so 14.4cqi is the same size */
+.lo-caption-wrap { container-type: inline-size; padding: 52px 14px !important; gap: 0 !important; }
+/* the field's 4px top and bottom padding sits outside the words' box, so the icon and words stay where the card has them */
+.lo-caption-wrap .lo-caption-edit { margin: -4px 0; }
+.lo-caption-wrap svg.lo-cap-icon + .lo-caption-edit { margin-top: calc(4cqi - 4px); }   /* cqi here is the wrap's: the card's svg + span margin */
 .lo-caption-wrap svg.lo-cap-icon { width: clamp(24px, 22cqi, 72px) !important; height: clamp(24px, 22cqi, 72px) !important; }
-.lo-caption-wrap .lo-caption-edit { font-size: clamp(15px, 12cqi, 44px) !important; line-height: 1.08 !important; }
+.lo-caption-wrap .lo-caption-edit { font-size: clamp(18px, 14.4cqi, 52.8px) !important; line-height: 1.08 !important; }
 
 /* Encrypt window (EncryptWindow.tsx): a failed mod's reason, under its name like a VFX report's note */
 .vf-row .enc-error { margin: -8px 0 12px; padding-left: 28px; }

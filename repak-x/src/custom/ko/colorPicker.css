@@ -1,0 +1,26 @@
+/* repakxtra: the color picker (ColorPicker.tsx), shared by the KO Editor and a loadout's typed card */
+/* the app's buttons carry a 36px floor and their own padding: the swatch and dots set theirs outright */
+.kcp-swatch { flex: none; width: 24px; height: 24px !important; min-height: 0 !important; padding: 0 !important; border: 0 !important; border-radius: 6px !important; background: none !important; cursor: pointer;
+  transition: border-color var(--text-swap-dur) var(--text-swap-ease), transform 150ms var(--toggle-ease); }
+.kcp-swatch:hover:not(:disabled), .kcp-swatch[aria-expanded="true"] { transform: scale(1.08); }
+.kcp-swatch:active:not(:disabled) { transform: scale(0.94); }
+.kcp-swatch:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.kcp-fill { display: block; width: 100%; height: 100%; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16); }
+.kcp-pop { position: fixed; z-index: 3000; display: flex; flex-direction: column; gap: 12px; padding: 12px; box-sizing: border-box; background: var(--bg-dark); border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55); transform-origin: top left; animation: kcp-in var(--dropdown-open-dur, 200ms) var(--dropdown-ease, ease) both; }
+@keyframes kcp-in { from { opacity: 0; transform: translateY(-4px) scale(var(--dropdown-pre-scale, 0.97)); filter: blur(2px); } }
+.kcp-sv { position: relative; height: 128px; border-radius: 8px; cursor: crosshair; touch-action: none; box-shadow: 0 0 0 1px var(--panel-border);
+  background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, var(--hue)); }
+.kcp-hue { position: relative; height: 12px; margin: 0 2px; border-radius: 999px; cursor: pointer; touch-action: none; box-shadow: 0 0 0 1px var(--panel-border);
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+.kcp-sv:focus-visible, .kcp-hue:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+/* the handle carries the color it sits on, in a white ring, so it reads on any color */
+.kcp-dot { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55); pointer-events: none; }
+.kcp-presets { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; }
+.kcp-preset { width: 18px; height: 18px !important; min-height: 0 !important; padding: 0 !important; border: none !important; border-radius: 50% !important; flex: none; cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12); transition: transform var(--text-swap-dur) var(--text-swap-ease), box-shadow var(--text-swap-dur) var(--text-swap-ease); }
+.kcp-preset:hover { transform: scale(1.12); }
+/* the picked dot's ring reaches 3px out: the 8px between dots keeps it clear of its neighbors */
+.kcp-preset[aria-checked="true"] { box-shadow: 0 0 0 1.5px var(--bg-dark), 0 0 0 3px var(--sw); }
+.kcp-preset:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+html[data-motion="off"] .kcp-pop { animation: none !important; }

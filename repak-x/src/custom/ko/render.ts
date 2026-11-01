@@ -246,7 +246,7 @@ export function draw(ctx: CanvasRenderingContext2D, s: Scene, t: number, size: {
     if (shx || shy) ctx.transform(1, Math.tan((shy * Math.PI) / 180), Math.tan((shx * Math.PI) / 180), 1, 0, 0)
     ctx.scale(g('Scale', base.Scale?.X ?? 1), g('Scale#1', base.Scale?.Y ?? 1))
     ctx.translate(-px, -py)
-    const dim = focusSet && l.kind !== 'panel' && !focusSet.has(name) ? 0.05 : 1 // the rest nearly gone while a row is hovered
+    const dim = focusSet && l.kind !== 'panel' && !focusSet.has(name) ? 0 : 1 // the rest hidden while a row is hovered
     if (l.kind === 'image') drawImage(ctx, s, l, r, op * dim, st.params.get(name), swap[name], color)
     else if (l.kind === 'text') drawText(ctx, w, l, r, op * dim, KILL_WORDS[kill + 2], color)
     else for (const c of ordered(w, l)) visit(c, op)

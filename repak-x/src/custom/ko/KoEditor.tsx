@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { Check, Download, RotateCcw, Search } from 'lucide-react'
-import ColorPicker from './ColorPicker'
+import ColorPicker, { RAINBOW } from './ColorPicker'
 import { ROLE_ORDER, heroRole } from './heroRoles'
 import CustomDropdown from '../../components/CustomDropdown'
 import { type LoadoutProps, createFromMods } from '../Loadouts'
@@ -236,7 +236,6 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
   }
   // why Install is off, said under it (a tooltip alone hid it)
   const why = !scene ? null : blocked ? 'Close Marvel Rivals first' : !edited.length ? 'Change a color first' : !name.trim() ? 'Give it a name first' : null
-  const order = new Map(groupRoles(roles).flatMap(([, rs]) => rs).map((r, i) => [r.id, i]))
   const shownHeroes = (heroes ?? []).filter(h => h.name.toLowerCase().includes(query.trim().toLowerCase()))
   const phases = scene?.phases ?? []
   // a gap in the track where each phase starts, under the labels above it
@@ -275,7 +274,7 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
 
       <section className="ko-center" aria-label="Preview">
         <header className="ko-center-head">
-          <h2 className="ko-title"><span key={hero?.id ?? 'none'} className="t-text-in">{hero ? `${hero.name} KO Prompt Editor` : 'KO Prompt Editor'}</span></h2>
+          <h2 className="ko-title">{hero ? `${hero.name} KO Prompt Editor` : 'KO Prompt Editor'}</h2>
         </header>
         <div className="ko-stage">
           <canvas ref={canvas} className={scene ? 'is-ready' : ''} aria-label={hero ? `${hero.name}'s KO prompt` : 'KO prompt'} />
@@ -344,9 +343,9 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
             ...rs.map(r => {
               const game = hexOf(r.rgba), hex = colors.get(r.id) ?? game, changed = hex !== game
               return (
-                <li key={r.id} style={{ '--i': order.get(r.id) ?? 0 } as React.CSSProperties} className={`ko-role t-rise${changed ? ' is-changed' : ''}${focus?.length === 1 && focus[0] === r.id ? ' is-focus' : ''}`} onMouseEnter={() => setFocus([r.id])} onFocus={() => setFocus([r.id])}>
+                <li key={r.id} className={`ko-role${changed ? ' is-changed' : ''}${focus?.length === 1 && focus[0] === r.id ? ' is-focus' : ''}`} onMouseEnter={() => setFocus([r.id])} onFocus={() => setFocus([r.id])}>
                 <ColorPicker value={hex.slice(1).toLowerCase()} onChange={v => setColor(r, `#${v}`)} label={`${r.name} color`}
-                  presets={[game.slice(1).toLowerCase(), ...PRESETS.filter(p => p !== game.slice(1).toLowerCase())]} />
+                  presets={[game.slice(1).toLowerCase(), ...RAINBOW.filter(p => p !== game.slice(1).toLowerCase())]} />
                   <span className="ko-role-name" title={r.parts.length ? `Colors the ${list(r.parts.map(x => x.toLowerCase()))}` : undefined}>{r.name}</span>
                   <HexField value={hex} onCommit={v => { setColor(r, v); cue('select') }} label={`${r.name} hex`} />
                   <button type="button" className="ko-reset" disabled={!changed} onClick={() => { setColor(r, null); cue('toggle') }} title={`Back to the game's ${game}`} aria-label={`Reset ${r.name}`}>
@@ -390,7 +389,6 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
 }
 
 /** Suggested colors in the picker, after the game's own: white, then around the wheel. */
-const PRESETS = ['ffffff', 'ff4fd8', 'a14cff', '3f7bff', '2ee6d6', '7be317', 'ffc23d', 'ff6a2b']
 
 /** The color rows by the part of the prompt they color, in the order the eye reads it. */
 const PART_GROUPS = ['Banner', 'Text', 'Slashes', 'Bar', 'Other'] as const

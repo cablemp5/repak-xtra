@@ -1,8 +1,8 @@
 // repakxtra: a smooth caret in every text field, in every window (main.tsx). The field's own caret is hidden
 // (theme.css .has-smooth-caret) and one bar glides to where it would be, blinking while it rests. Animations off
 // (html[data-motion="off"]): nothing is drawn and the field keeps its own caret. A selection shows the field's own
-// highlight. Where the bar goes comes from a hidden copy of the field (same font, padding, and width) holding the text
-// before the caret.
+// highlight. Where the bar goes comes from a hidden copy of the field (same font, padding, width, and alignment) holding
+// its text with a marker at the caret.
 
 const caret = document.createElement('div')
 caret.className = 'smooth-caret'
@@ -19,11 +19,12 @@ type Field = HTMLInputElement | HTMLTextAreaElement
 const isField = (t: EventTarget | null): t is Field => t instanceof HTMLTextAreaElement ||
   (t instanceof HTMLInputElement && /^(text|search|url|password|tel|)$/.test(t.type))
 const COPIED = ['boxSizing', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'fontStretch', 'letterSpacing', 'wordSpacing', 'lineHeight',
-  'textTransform', 'textIndent', 'tabSize', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'direction'] as const
+  'textTransform', 'textIndent', 'textAlign', 'tabSize', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'direction'] as const
 
 let field: Field | null = null
 let shown = false
 let last = ''
+let ink = '' // the field's own caret color, read when it is first shown
 let frame = 0
 
 function hide() {
@@ -38,25 +39,40 @@ function place() {
   if (!el || document.activeElement !== el || document.documentElement.dataset.motion === 'off' || el.readOnly || el.disabled ||
     el.selectionStart === null || el.selectionStart !== el.selectionEnd) return hide()
   const cs = getComputedStyle(el)
-  if (!shown) caret.style.background = cs.caretColor === 'auto' || cs.caretColor === 'transparent' ? cs.color : cs.caretColor // read before the class hides it
+  if (!shown) ink = cs.caretColor === 'auto' || cs.caretColor === 'transparent' ? cs.color : cs.caretColor // read before the class hides it
+  caret.style.background = cs.getPropertyValue('--smooth-caret').trim() || ink // a field can set its own (an empty one its placeholder's gray)
   const area = el instanceof HTMLTextAreaElement
   for (const k of COPIED) mirror.style[k] = cs[k]
   mirror.style.boxSizing = 'content-box'
   mirror.style.width = `${el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)}px` // without the scrollbar
   mirror.style.whiteSpace = area ? 'pre-wrap' : 'pre'
-  mirror.style.overflowWrap = area ? 'break-word' : 'normal'
-  const before = el.value.slice(0, el.selectionStart)
-  mirror.textContent = el.type === 'password' ? String.fromCharCode(0x2022).repeat(before.length) : before
-  mirror.append(marker)
+  mirror.style.overflowWrap = area ? cs.overflowWrap : 'normal'
+  mirror.style.setProperty('text-wrap-style', cs.getPropertyValue('text-wrap-style'))
+  // the whole text, so a centered or balanced line sits where the field's does. Mid-text the caret is a collapsed range
+  // in that unbroken text (a marker there would add a line break the field does not have), at the end the marker
+  const text = el.type === 'password' ? String.fromCharCode(0x2022).repeat(el.value.length) : el.value
+  const start = el.selectionStart
+  mirror.textContent = text
+  let left: number, top: number, line: number
+  if (start < text.length) {
+    const range = document.createRange()
+    range.setStart(mirror.firstChild!, start)
+    const at = range.getClientRects()[0] ?? range.getBoundingClientRect()
+    const m = mirror.getBoundingClientRect()
+    left = at.left - m.left; top = at.top - m.top; line = at.height
+  } else {
+    mirror.append(marker)
+    left = marker.offsetLeft; top = marker.offsetTop; line = marker.offsetHeight
+  }
 
   const r = el.getBoundingClientRect()
   const size = parseFloat(cs.fontSize)
-  const line = marker.offsetHeight || size * 1.2
+  line ||= size * 1.2
   const height = Math.round(Math.min(line, size * 1.3))
-  const x = r.left + el.clientLeft + marker.offsetLeft - el.scrollLeft
+  const x = r.left + el.clientLeft + left - el.scrollLeft
   // an input centers its one line in its height, a textarea stacks lines from its top padding
-  const y = area ? r.top + el.clientTop + marker.offsetTop - el.scrollTop + (line - height) / 2 : r.top + (r.height - height) / 2
-  if (x < r.left || x > r.right || y < r.top - 1 || y + height > r.bottom + 1) return hide() // scrolled out of the field
+  const y = area ? r.top + el.clientTop + top - el.scrollTop + (line - height) / 2 : r.top + (r.height - height) / 2
+  if (x < r.left - 1 || x > r.right + 1 || y < r.top - 1 || y + height > r.bottom + 1) return hide() // scrolled out of the field
 
   el.classList.add('has-smooth-caret')
   const at = `translate(${Math.round(x)}px, ${Math.round(y)}px)`
