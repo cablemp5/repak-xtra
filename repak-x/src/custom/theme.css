@@ -134,6 +134,8 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
   transform: none !important;
 }
 .header-actions-right .btn-settings svg { color: var(--text-secondary); }
+/* Tools and Settings are icon only (their tooltips name them): square, the icon centered */
+.header-actions-right :is([data-tour="tools-btn"], [data-tour="settings-btn"]) { width: 32px; padding: 0 !important; justify-content: center; }
 .header-actions-right .btn-vfx::before, .header-actions-right .btn-vfx::after { display: none !important; }
 /* Launch is the one primary action: solid light button. Running/launched keep upstream colors. */
 .header-actions-right .btn-settings[data-launch="idle"] {

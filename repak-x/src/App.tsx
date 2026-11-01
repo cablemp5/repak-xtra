@@ -3989,16 +3989,18 @@ function App() {
             className="btn-settings"
             data-tour="tools-btn"
             title="Tools"
+            aria-label="Tools" // repakxtra: icon only, named by its tooltip
           >
-            <FaToolbox size={20} /> Tools
+            <FaToolbox size={20} />
           </button>
           <button
             onClick={() => setPanel('settings', true)}
             className="btn-settings"
             data-tour="settings-btn"
             title="Settings (Ctrl+,)"
+            aria-label="Settings" // repakxtra: icon only, named by its tooltip
           >
-            <IoIosSettings size={20} /> Settings
+            <IoIosSettings size={20} />
           </button>
         </div>
       </header>
