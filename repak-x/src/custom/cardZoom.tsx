@@ -33,10 +33,9 @@ export function useWheelZoom(el: HTMLElement | null) {
       const before = held?.getBoundingClientRect().top
       el.style.overflowAnchor = 'none'
       step(e.deltaY < 0 ? 1 : -1)
-      requestAnimationFrame(() => { // the grid has its new size by now
-        if (held?.isConnected && before !== undefined) el.scrollTop += held.getBoundingClientRect().top - before
-        el.style.overflowAnchor = ''
-      })
+      const hold = () => { if (held?.isConnected && before !== undefined) el.scrollTop += held.getBoundingClientRect().top - before }
+      // the grid has its new size by the next frame; crossing 80% (data-small) settles one frame later, so hold twice
+      requestAnimationFrame(() => { hold(); requestAnimationFrame(() => { hold(); el.style.overflowAnchor = '' }) })
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
