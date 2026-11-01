@@ -271,7 +271,8 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
               if (e.key === 'Escape') { e.currentTarget.value = caption; e.currentTarget.blur() }
             }} />
           <CaptionStyleBar icon={l.captionIcon} color={l.captionColor}
-            onIcon={captionIcon => patchLoadout(l.id, { captionIcon })} onColor={captionColor => patchLoadout(l.id, { captionColor })} />
+            // typing stays on: on an empty card the first icon would close the field and drop the unsaved words
+            onIcon={captionIcon => { setTyping(true); patchLoadout(l.id, { captionIcon }) }} onColor={captionColor => { setTyping(true); patchLoadout(l.id, { captionColor }) }} />
         </div>
       )}
       {/* A filled source keeps its way to redo it in the corner (the preview's also shows Stop while it renders) */}
