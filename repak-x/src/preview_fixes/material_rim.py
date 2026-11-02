@@ -137,6 +137,7 @@ def add_rim(m, tex, vectors, scalars, hair=False):
 
 
 FLOW_GLOW_MAX = 4.0   # the flow glow's strength cap, as the kit caps an Emissive glow (HDR game values bloom to white)
+FLOW_GLOW_DIM = 0.2   # the dimmest a line gets between the noise's bright stretches
 
 
 def add_flow_glow(m, tex, vectors, scalars):
@@ -153,6 +154,23 @@ def add_flow_glow(m, tex, vectors, scalars):
     t = N.new("ShaderNodeTexImage"); t.image = image(path, color=False)
     lines = N.new("ShaderNodeMix"); lines.data_type = "RGBA"; lines.blend_type = "MULTIPLY"; lines.inputs[0].default_value = 1
     L.new(t.outputs[0], lines.inputs[6]); lines.inputs[7].default_value = (c["R"] / peak, c["G"] / peak, c["B"] / peak, 1)
+    # The lines are not even in game: FX_FlowTex's noise (tiled by FlowTex_UVTile, sharpened by FlowNoisePower) runs along
+    # them, bright stretches and dim ones. One frame of it, kept above FLOW_GLOW_DIM so no line goes out
+    noise = game_png(tex.get("FX_FlowTex"))
+    if noise:
+        tile = vectors.get("FlowTex_UVTile") or {"R": 1.0, "G": 1.0}
+        uv = N.new("ShaderNodeTexCoord"); mp = N.new("ShaderNodeMapping")
+        mp.inputs["Scale"].default_value = (float(tile["R"]) or 1.0, float(tile["G"]) or 1.0, 1.0)
+        L.new(uv.outputs["UV"], mp.inputs["Vector"])
+        nt_ = N.new("ShaderNodeTexImage"); nt_.image = image(noise, color=False); L.new(mp.outputs[0], nt_.inputs[0])
+        sep = N.new("ShaderNodeSeparateColor"); L.new(nt_.outputs[0], sep.inputs[0])
+        pw = N.new("ShaderNodeMath"); pw.operation = "POWER"; L.new(sep.outputs[0], pw.inputs[0])
+        pw.inputs[1].default_value = max(0.5, float(scalars.get("FlowNoisePower", 1.0)) * 0.5)
+        rng = N.new("ShaderNodeMapRange"); L.new(pw.outputs[0], rng.inputs["Value"])
+        rng.inputs["From Max"].default_value = 0.5; rng.inputs["To Min"].default_value = FLOW_GLOW_DIM
+        vary = N.new("ShaderNodeMix"); vary.data_type = "RGBA"; vary.blend_type = "MULTIPLY"; vary.inputs[0].default_value = 1
+        L.new(lines.outputs[2], vary.inputs[6]); L.new(rng.outputs[0], vary.inputs[7])
+        lines = vary
     strength = min(FLOW_GLOW_MAX, max(1.0, float(scalars.get("FlowMaskIntensity", 1.0)) * float(scalars.get("FlowNoiseIntensity", 1.0)) * 0.5))
     em = bsdf.inputs["Emission Color"]
     if em.is_linked:   # an Emissive glow is there: add the lines at their own strength relative to it
