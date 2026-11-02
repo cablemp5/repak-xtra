@@ -302,6 +302,30 @@ fn generator_error(text: &str) -> bool {
     t.contains(": error") || t.contains("export failed") || t.starts_with("error") || t.contains("exception") || exit
 }
 
+/// Settings > General > Previews: whether new previews get the rim light (preview-rim.json, off until switched on). The
+/// generator reads it as REPAKXTRA_RIM. It is not part of the preview fingerprint: existing previews are never rendered
+/// again for it, the person regenerates the ones they want to see change.
+fn rim_setting() -> PathBuf {
+    crate::app_dir().join("preview-rim.json")
+}
+
+fn rim_on() -> bool {
+    std::fs::read_to_string(rim_setting()).ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .and_then(|v| v["on"].as_bool())
+        .unwrap_or(false)
+}
+
+#[tauri::command]
+pub fn preview_rim_get() -> bool {
+    rim_on()
+}
+
+#[tauri::command]
+pub fn preview_rim_set(on: bool) -> Result<(), String> {
+    std::fs::write(rim_setting(), serde_json::json!({ "on": on }).to_string()).map_err(|e| format!("Could not save the setting: {e}"))
+}
+
 /// The generator's command so far (the kit's python and script, run in its folder, with the kit's variables). The error
 /// says what to install.
 fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Result<Command, String> {
@@ -316,6 +340,11 @@ fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Result<Comman
     for (name, contents) in [
         ("runtime.py", include_str!("preview_fixes/runtime.py")),
         ("galactic_mane.py", include_str!("preview_fixes/galactic_mane.py")),
+        ("material_rim.py", include_str!("preview_fixes/material_rim.py")),
+        ("translucent_layers.py", include_str!("preview_fixes/translucent_layers.py")),
+        ("screen_rim.py", include_str!("preview_fixes/screen_rim.py")),
+        ("studio_lights.py", include_str!("preview_fixes/studio_lights.py")),
+        ("cosmic_tuning.py", include_str!("preview_fixes/cosmic_tuning.py")),
     ] {
         let path = runtime.join(name);
         if std::fs::read_to_string(&path).ok().as_deref() != Some(contents) {
@@ -334,6 +363,7 @@ fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Result<Comman
         cmd.env("REPAKXTRA_BLENDER", b);
     }
     // The game's key comes from the app (the same one it installs mods with), so the kit carries none
+    cmd.env("REPAKXTRA_RIM", if rim_on() { "1" } else { "0" });
     cmd.env("REPAKXTRA_AES", format!("0x{}", crate::install_mod::AES_KEY_HEX.trim_start_matches("0x")));
     #[cfg(windows)]
     {
