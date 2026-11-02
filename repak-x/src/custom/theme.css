@@ -1128,14 +1128,6 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .lo-screen { position: relative !important; inset: auto !important; z-index: auto !important; animation: none !important;
   flex: 1 1 auto; min-height: 0; background: transparent !important; }   /* no frame: the cards are the boxes (Law of Common Region) */
 .lo-screen-head { padding: 20px 24px 16px; }
-/* Generate all previews with several in the queue: a thin bar along the top edge (inside the corners) fills as the queue
-   goes, with the app's shimmer sweep (transitions.dev: Shimmer), like the VFX Updater's bars */
-.lo-gen-bar { position: absolute; top: 0; left: 0; right: 0; height: 2px; z-index: 2; overflow: hidden; pointer-events: none; border-radius: 0 0 2px 2px; }
-.lo-gen-bar i { display: block; height: 100%; transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
-  background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-primary) 38%, color-mix(in srgb, var(--accent-primary), white 45%) 50%,
-    var(--accent-primary) 62%, var(--accent-primary) 100%) 0 0 / 250% 100% no-repeat;
-  animation: t-shimmer var(--shimmer-dur, 2s) var(--shimmer-ease, linear) infinite; }
-html[data-motion="off"] .lo-gen-bar i { transition: none; animation: none; }
 .lo-body { padding: 20px 24px 28px; }
 
 /* Home | Library tabs in the header */
