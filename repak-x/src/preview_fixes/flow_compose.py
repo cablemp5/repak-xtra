@@ -25,6 +25,12 @@ def sheet_canvas(im):
     return canvas.resize(OUT, Image.LANCZOS)
 
 
+def flow_newer(out_dir, key):
+    """Whether <key>.webp is a flow animation of the current still: written after <key>.png."""
+    png, webp = out_dir / f"{key}.png", out_dir / f"{key}.webp"
+    return png.exists() and webp.exists() and webp.stat().st_mtime_ns >= png.stat().st_mtime_ns
+
+
 def flow_anim(prefix, out_png):
     """The animated preview from the renderer's flow frames: the render without its lines, each frame's lines added over
     it with the bloom of the other glows and those lines. Written as <key>.webp beside the still; a render without flow

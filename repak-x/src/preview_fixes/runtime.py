@@ -62,6 +62,17 @@ main_guard = '\nif __name__ == "__main__":'
 if source.count(main_guard) != 1:
     raise RuntimeError("This preview kit does not support the app's animated glow. Update it in Setup.")
 source = source.replace(main_guard, (runtime / "flow_compose.py").read_text(encoding="utf-8") + "\n" + main_guard, 1)
+# The animation lives beside its still: a character's cleanup (keep_only .png) keeps a .webp written after the .png (a flow
+# animation; an older animation mod's .webp is older and still goes), and a dropped form or an empty loadout takes its .webp too
+cleanup = [
+    ("        if x != ext:\n", "        if x != ext and not (ext == \".png\" and x == \".webp\" and flow_newer(out_dir, key)):\n"),
+    ('    for f in out_dir.glob(f"{key}@*.png"):\n', '    for f in [*out_dir.glob(f"{key}@*.png"), *out_dir.glob(f"{key}@*.webp")]:\n'),
+    ("            png.unlink(missing_ok=True)\n", "            png.unlink(missing_ok=True)\n            png.with_suffix(\".webp\").unlink(missing_ok=True)\n"),
+]
+if any(source.count(old) != 1 for old, _ in cleanup):
+    raise RuntimeError("This preview kit does not support the app's animated glow. Update it in Setup.")
+for old, new in cleanup:
+    source = source.replace(old, new, 1)
 # The "before" pictures (<key>.vanilla.png) are cached per look: the rim setting is part of that look, so a vanilla made under
 # the other setting is rendered again the next time a preview of that hero is generated. Mod previews keep their fingerprint,
 # so nothing else is rendered again by the setting.
@@ -86,6 +97,7 @@ for old, new in vfx_hooks:
     source = source.replace(old, new)
 # A different fingerprint regenerates cached renders as they are requested. The rim setting is not part of it: changing
 # the setting must not render every preview again
-source = re.sub(r"(?m)^VERSION = (\d+)", lambda m: "VERSION = " + str(int(m[1]) + 10000), source, count=1)
+# (10001: painted galaxy skins, flow lines and their animation: cached previews and before pictures render again once)
+source = re.sub(r"(?m)^VERSION = (\d+)", lambda m: "VERSION = " + str(int(m[1]) + 10001), source, count=1)
 globals()["__file__"] = str(original)
 exec(compile(source, str(original), "exec"), globals())
