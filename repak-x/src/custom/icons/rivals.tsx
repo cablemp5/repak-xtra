@@ -24,4 +24,4 @@ export const RoleIcon = ({ role, size = 16, className = '' }: { role: string; si
   role in ROLE_PATHS ? glyph(ROLE_PATHS[role as Role], size, `rv-role${className ? ` ${className}` : ''}`) : null
 /** Rare, epic or legendary, drawn in its rarity color (theme.css --rarity-*). */
 export const RarityIcon = ({ rarity, size = 14, className = '' }: { rarity: Rarity; size?: number | string; className?: string }) =>
-  glyph(RARITY_PATHS[rarity], size, `rv-rarity is-${rarity}${className ? ` ${className}` : ''}`)
+  glyph(RARITY_PATHS[rarity], size, `rv-rarity is-${rarity}${className ? ` ${className}` : ''}`, rarity[0].toUpperCase() + rarity.slice(1)) // read out before the skin's name

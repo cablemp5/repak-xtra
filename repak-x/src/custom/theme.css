@@ -3001,6 +3001,7 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 
 /* ---------- the game's own icons (custom/icons/rivals.tsx) ---------- */
 :root { --rarity-rare: #90caf9; --rarity-epic: #d097ff; --rarity-legendary: #f09405; }
+:root[data-theme="light"] { --rarity-rare: #1f6fb8; --rarity-epic: #8a3fd1; --rarity-legendary: #b85f00; }   /* 3:1 or better on the light panel */
 .rv-role { flex: none; }
 .rv-rarity { flex: none; }
 .rv-rarity.is-rare { color: var(--rarity-rare); }
