@@ -28,6 +28,7 @@ import { IoIosSettings } from "react-icons/io"
 import { REPAKXTRA_VERSION } from '../custom/version' // repakxtra
 import CableDiscord, { RepakXDiscord } from '../custom/CableDiscord' // repakxtra: both servers as quiet cards
 import CopySetupReport from '../custom/CopySetupReport' // repakxtra: setup report for help channels
+import BetaNote from '../custom/BetaNote' // repakxtra
 import AppFiles from '../custom/AppFiles' // repakxtra: Check app files and Repair
 import Support from '../custom/Support'
 import { invoke } from '@tauri-apps/api/core'
@@ -507,6 +508,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                     <p className="setting-subtext xs-note">{/* repakxtra: one gray note like the other sections */}
                       For help, bug reports or ideas, join a Discord server: cable's for repakxtra, or Repak X's for the app it is built on.
                     </p>
+                    <BetaNote />{/* repakxtra */}
                     <RepakXDiscord />
                     <CableDiscord />{/* repakxtra: cable's server */}
                     <Support onError={error => alert.warning('Could not open link', error)} />

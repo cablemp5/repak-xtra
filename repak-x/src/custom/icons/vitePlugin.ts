@@ -1,7 +1,7 @@
 // repakxtra: swaps react-icons / @mui/icons-material imports for Lucide at build time, so upstream
 // components keep their imports untouched. Each swapped module re-exports the original package, then
-// overrides the mapped names (local exports win over `export *`). With set.ts on 'phosphor', every lucide-react import
-// (the app's own and these swapped modules') goes to phosphor.tsx instead.
+// overrides the mapped names (local exports win over `export *`). Every lucide-react import (the app's own and these swapped
+// modules') goes to lucideRivals.tsx (Lucide plus the game's shield and warning icons), or to phosphor.tsx with set.ts on 'phosphor'.
 import type { Plugin } from 'vite'
 import { REACT_ICONS, MUI_ICONS } from './map'
 import { ICON_SET } from './set'
@@ -13,9 +13,9 @@ export default function lucideSwap(): Plugin {
     name: 'lucide-swap',
     enforce: 'pre',
     resolveId(id, importer) {
-      // phosphor.tsx's own lucide-react import reaches the real package (its fallback names and types)
-      if (id === 'lucide-react' && ICON_SET === 'phosphor' && !importer?.replace(/\\/g, '/').endsWith('/custom/icons/phosphor.tsx')) {
-        return this.resolve('/src/custom/icons/phosphor.tsx', importer, { skipSelf: true })
+      // the icon files' own lucide-react imports reach the real package (fallback names and types)
+      if (id === 'lucide-react' && !/\/custom\/icons\/(phosphor|lucideRivals)\.tsx$/.test(importer?.replace(/\\/g, '/') ?? '')) {
+        return this.resolve(`/src/custom/icons/${ICON_SET === 'phosphor' ? 'phosphor' : 'lucideRivals'}.tsx`, importer, { skipSelf: true })
       }
       if (importer?.startsWith(PREFIX)) return null // the swapped module itself reaches the real package
       const set = id.match(/^react-icons\/([a-z0-9]+)$/)?.[1]

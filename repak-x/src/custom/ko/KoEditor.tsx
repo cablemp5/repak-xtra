@@ -6,6 +6,7 @@ import { listen } from '@tauri-apps/api/event'
 import { Check, Download, RotateCcw, Search } from 'lucide-react'
 import ColorPicker, { RAINBOW } from './ColorPicker'
 import { ROLE_ORDER, heroRole } from './heroRoles'
+import { RoleIcon } from '../icons/rivals'
 import CustomDropdown from '../../components/CustomDropdown'
 import { type LoadoutProps, createFromMods } from '../Loadouts'
 import { modKey, patchLoadout, readLoadouts, useView, writeLoadouts } from '../loadoutStore'
@@ -257,7 +258,7 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
             const inGroup = shownHeroes.filter(h => heroRole(h.id) === group)
             return inGroup.length > 0 && (
               <div key={group} role="group" aria-label={group} className="ko-hero-group">
-                <div className="ko-group-head" aria-hidden>{group}</div>
+                <div className="ko-group-head" aria-hidden><RoleIcon role={group} size={17} />{group}</div>
                 {inGroup.map(h => (
                   <button key={h.id} type="button" role="option" aria-selected={h.id === heroId} className="ko-hero" onClick={() => { setHeroId(h.id); cue('select') }}
                     tabIndex={h.id === (shownHeroes.some(x => x.id === heroId) ? heroId : shownHeroes[0]?.id) ? 0 : -1}>

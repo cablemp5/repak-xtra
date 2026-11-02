@@ -134,6 +134,7 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
   transform: none !important;
 }
 .header-actions-right .btn-settings svg { color: var(--text-secondary); }
+.header-actions-right .btn-settings .gal-logo { color: var(--text-secondary); }   /* Galacta's white mark, gray like the header's other icons */
 /* Tools and Settings are icon only (their tooltips name them): square, the icon centered */
 .header-actions-right :is([data-tour="tools-btn"], [data-tour="settings-btn"]) { width: 32px; padding: 0 !important; justify-content: center; }
 .header-actions-right .btn-vfx::before, .header-actions-right .btn-vfx::after { display: none !important; }
@@ -238,7 +239,7 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 .fp-title, .sidebar-header h3 { font-size: 16px !important; font-weight: 600 !important; color: var(--text-primary) !important; }   /* the panel titles, above the 14px Heroes and Types headers and the 13px filters */
 /* Clear: a small quiet pill (the app's 36px button floor made it a tall grey block) */
 .fp-clear { display: inline-flex !important; align-items: center; gap: 4px; height: 24px !important; min-height: 0 !important; padding: 0 8px !important;
-  border: 1px solid var(--panel-border) !important; border-radius: 999px !important; background: transparent !important;
+  border: none !important; border-radius: 999px !important; background: transparent !important;
   color: var(--text-secondary) !important; font-size: 12px !important; font-weight: 500 !important; line-height: 1 !important; }
 .fp-clear:hover { color: var(--text-primary) !important; background: var(--quiet-hover) !important; }
 .fp-section-label { padding: 12px 8px 4px; font-size: 11px; font-weight: 500; color: var(--text-secondary); }
@@ -283,6 +284,7 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 .fp-logo.pg-logo { color: #ec5fe0; }
 [data-theme="light"] .fp-logo.pg-logo { color: #a3229a; }
 .fp-indent { width: 18px; }
+.fp-rarity-gap { width: 14px; flex: none; }
 .fp-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fp-count { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
 .fp-check { display: none; color: var(--accent-primary); flex: none; }
@@ -1268,7 +1270,7 @@ html[data-motion="off"] .lo-gen-bar i { transition: none; animation: none; }
 .lo-search .lo-icon { width: 24px; height: 24px !important; }
 .lp-types { display: flex; flex-wrap: wrap; gap: 4px; }
 .lp-types button { display: inline-flex !important; align-items: center; gap: 8px; height: 28px !important; min-height: 0 !important; padding: 0 12px !important;
-  border: 1px solid var(--panel-border) !important; border-radius: 999px !important; background: transparent !important;
+  border: none !important; border-radius: 999px !important; background: transparent !important;
   color: var(--text-secondary) !important; font-size: 12px !important; font-weight: 500 !important; }
 .lp-types button:hover { color: var(--text-primary) !important; }
 .lp-types button[aria-pressed="true"] { background: var(--bg-lighter) !important; color: var(--text-primary) !important; border-color: rgba(255, 255, 255, 0.2) !important; }
@@ -1970,7 +1972,7 @@ html[data-motion="off"] .t-matrix i { animation: none; opacity: 0.6; }
 .filter-panel .fp-skins > .t-acc-panel-inner .fp-row-wrap { margin: 0 28px 0 16px; padding: 1px 0 1px 8px; border-left: 1px solid var(--panel-border); }
 .filter-panel .fp-skins > .t-acc-panel-inner .fp-row-wrap:first-child { padding-top: 4px; }
 .filter-panel .fp-skins > .t-acc-panel-inner .fp-row-wrap:last-child { padding-bottom: 4px; }
-.filter-panel .fp-skins > .t-acc-panel-inner .fp-lead { display: none; }
+.filter-panel .fp-skins > .t-acc-panel-inner .fp-lead { width: 14px; }   /* a skin's lead is only its rarity mark */
 
 /* Install panel card: one type scale (13px text, 12px labels and hints), labels in sentence case like the rest */
 .install-mod-card .field-label { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 500; color: var(--text-secondary); }
@@ -2996,3 +2998,26 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
    SettingsPanel.css gave it the panel color, which is the track's own black in AMOLED */
 .segmented-control .segment-btn { transition: background-color 150ms ease, color 150ms ease !important; }
 .segmented-control .segment-btn.active { background: var(--bg-lighter) !important; border-color: transparent !important; box-shadow: none !important; color: var(--text-primary) !important; }
+
+/* ---------- the game's own icons (custom/icons/rivals.tsx) ---------- */
+:root { --rarity-rare: #90caf9; --rarity-epic: #d097ff; --rarity-legendary: #f09405; }
+/* The shield and the warning mark are flat artwork masked to the text color. The warning mark is amber unless a rule says otherwise (:where keeps it weakest). */
+.rv-ico { display: inline-block; flex: none; vertical-align: middle; background: currentColor; mask-repeat: no-repeat; mask-position: center; mask-size: contain; -webkit-mask-repeat: no-repeat; -webkit-mask-position: center; -webkit-mask-size: contain; }
+.rv-shield { -webkit-mask-image: url('./logos/rivals/shield.png'); mask-image: url('./logos/rivals/shield.png'); }
+.rv-warn { -webkit-mask-image: url('./logos/rivals/warn.png'); mask-image: url('./logos/rivals/warn.png'); }
+:where(.rv-warn) { color: #f5a524; }
+:where([data-theme="light"] .rv-warn) { color: #9a5b00; }
+.rv-role { flex: none; }
+.rv-rarity { flex: none; }
+.rv-rarity.is-rare { color: var(--rarity-rare); }
+.rv-rarity.is-epic { color: var(--rarity-epic); }
+.rv-rarity.is-legendary { color: var(--rarity-legendary); }
+.ko-hero-group .ko-group-head { display: flex; align-items: center; gap: 6px; }
+.setting-warn .rv-ico { justify-self: center; margin-top: 2px; }
+
+/* The beta notice (custom/BetaNote.tsx) */
+.beta-note { display: grid; grid-template-columns: 18px 1fr; column-gap: 8px; align-items: start; margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.beta-note .rv-ico { margin-top: 2px; }
+.beta-link { display: inline; padding: 0 !important; min-height: 0 !important; height: auto !important; border: none !important; background: none !important; font: inherit; color: var(--text-primary) !important; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.beta-link:hover { color: var(--accent-primary) !important; }
+.wi-beta { padding: 0 28px 20px; max-width: 76ch; }

@@ -10,8 +10,11 @@ import { loadoutable, modKey } from './loadoutStore'
 import { heroLabel } from './silhouettes'
 import { savedItem } from './storageCarryOver'
 import nexusLogo from './logos/nexus.png'
+import { RarityIcon } from './icons/rivals'
+import { skinRarity } from './skinRarity'
 
 type Details = { character_name?: string; category?: string }
+type Character = { name: string; id: string; skinid?: string; skin_name?: string }
 type Props = {
   availableCharacters: string[]
   availableCategories: string[]
@@ -20,7 +23,7 @@ type Props = {
   setSelectedCharacters: (next: Set<string>) => void
   setSelectedCategories: (next: Set<string>) => void
   modDetails: Record<string, Details>
-  characterData: { name: string; id: string }[]
+  characterData: Character[]
 }
 
 const COLLAPSED_HEROES = 6
@@ -92,6 +95,7 @@ export default function FilterPanel(p: Props) {
     return { heroes: list, typeCounts: types }
   }, [p.availableCharacters, p.modDetails])
 
+  const rarityOf = useMemo(() => new Map(p.characterData.map(c => [`${c.name} - ${c.skin_name}`, skinRarity(c.skinid)])), [p.characterData])
   const specials = p.availableCharacters.filter(c => SPECIAL[c])
   const visibleHeroes = showAllHeroes ? heroes : heroes.slice(0, COLLAPSED_HEROES)
   const active = p.selectedCharacters.size + p.selectedCategories.size
@@ -141,7 +145,8 @@ export default function FilterPanel(p: Props) {
                 <div className="t-acc-panel-inner">
                   {h.skins.map(s =>
                     row(s, s.split(' - ')[1], undefined, p.selectedCharacters.has(s),
-                      () => p.setSelectedCharacters(toggled(p.selectedCharacters, [s])), <span className="fp-indent" />))}
+                      () => p.setSelectedCharacters(toggled(p.selectedCharacters, [s])),
+                      rarityOf.get(s) ? <RarityIcon rarity={rarityOf.get(s)!} size={14} /> : <span className="fp-rarity-gap" />))}
                 </div>
               </div>
             )}
