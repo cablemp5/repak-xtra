@@ -1,0 +1,3 @@
+/* repakxtra: the kill text's face in the game, Refrigerator Deluxe Heavy (render.ts KO_FONT). Imported by render.ts, so the
+   Library's KO previews (koPreview.ts) have it too, not only the KO Editor (they drew in Geist before it was opened) */
+@font-face { font-family: 'Refrigerator KO'; src: url('../fonts/RefrigeratorDeluxe-Heavy.woff2') format('woff2'); font-weight: 400 900; font-display: block; }

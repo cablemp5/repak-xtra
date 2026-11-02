@@ -136,6 +136,108 @@ def add_rim(m, tex, vectors, scalars, hair=False):
     strength.default_value = 1.0
 
 
+FLOW_GLOW_MAX = 2.5   # the flow glow's strength cap, as the kit caps an Emissive glow (HDR game values bloom to white)
+FLOW_GLOW_DIM = 0.12   # the dimmest a line gets between the noise's bright stretches: faint, never cut off (0 left holes)
+FLOW = []   # each flow-lined material's switches for the animated preview (flow_frames): its noise mapping, a gate on the
+            # lines, a keep on its other glow, and how far the noise travels in one loop
+FLOW_CORE = (0.28, 0.75)  # mask values from dark to full glow: below the first nothing glows (the falloff around a line)
+FLOW_NOISE_TOP = 0.5      # noise at or above this lights a line fully: softer than the master's, so stretches fade in and out
+
+
+def add_flow_glow(m, tex, vectors, scalars):
+    """The body master's flowing light lines (FX_UseFlowNoise: Black Panther MCU's suit lines, recolored by mods through
+    FX_FlowNoiseColor), which the kit never drew: FX_FlowMask in that color, added to any glow already there. In game the
+    lines crawl with FX_FlowTex: the still is one frame, flow_frames renders the loop."""
+    path = game_png(tex.get("FX_FlowMask"))
+    c = vectors.get("FX_FlowNoiseColor")
+    if not path or not c or float(scalars.get("FlowNoiseSwitch", 0)) < 0.5 or max(c["R"], c["G"], c["B"]) <= 0.01:
+        return
+    nt = m.node_tree; N, L = nt.nodes, nt.links
+    bsdf = next(n for n in N if n.type == "BSDF_PRINCIPLED")
+    peak = max(c["R"], c["G"], c["B"])
+    t = N.new("ShaderNodeTexImage"); t.image = image(path, color=False)
+    # Only the lines' cores: the mask's soft falloff around them, glowing faintly, tinted the black suit teal between them
+    core = N.new("ShaderNodeMapRange"); core.inputs["From Min"].default_value, core.inputs["From Max"].default_value = FLOW_CORE
+    # Measured on the mask's brightest channel and keeping its own color: a colored mask (rainbow line mods paint every
+    # line its hue, FX_FlowNoiseColor white) read on red alone lost its green and blue lines and came out white
+    msep = N.new("ShaderNodeSeparateColor"); L.new(t.outputs[0], msep.inputs[0])
+    top = N.new("ShaderNodeMath"); top.operation = "MAXIMUM"; L.new(msep.outputs[0], top.inputs[0]); L.new(msep.outputs[1], top.inputs[1])
+    top2 = N.new("ShaderNodeMath"); top2.operation = "MAXIMUM"; L.new(top.outputs[0], top2.inputs[0]); L.new(msep.outputs[2], top2.inputs[1])
+    L.new(top2.outputs[0], core.inputs["Value"])
+    hue = N.new("ShaderNodeMath"); hue.operation = "DIVIDE"; L.new(core.outputs[0], hue.inputs[0]); L.new(top2.outputs[0], hue.inputs[1])
+    safe = N.new("ShaderNodeMath"); safe.operation = "MINIMUM"; L.new(hue.outputs[0], safe.inputs[0]); safe.inputs[1].default_value = 1e4   # a black texel divides by 0
+    tinted = N.new("ShaderNodeMix"); tinted.data_type = "RGBA"; tinted.blend_type = "MULTIPLY"; tinted.inputs[0].default_value = 1
+    L.new(t.outputs[0], tinted.inputs[6]); L.new(safe.outputs[0], tinted.inputs[7])   # the mask's color at the core's strength
+    lines = N.new("ShaderNodeMix"); lines.data_type = "RGBA"; lines.blend_type = "MULTIPLY"; lines.inputs[0].default_value = 1
+    L.new(tinted.outputs[2], lines.inputs[6]); lines.inputs[7].default_value = (c["R"] / peak, c["G"] / peak, c["B"] / peak, 1)
+    # The lines are not even in game: FX_FlowTex's noise (tiled by FlowTex_UVTile, sharpened by FlowNoisePower) runs along
+    # them, bright stretches and dim ones. One frame of it, kept above FLOW_GLOW_DIM so no line goes out
+    noise = game_png(tex.get("FX_FlowTex"))
+    if noise:
+        tile = vectors.get("FlowTex_UVTile") or {"R": 1.0, "G": 1.0}
+        uv = N.new("ShaderNodeTexCoord")
+        img = image(noise, color=False)
+
+        def sample():
+            mp_ = N.new("ShaderNodeMapping")
+            mp_.inputs["Scale"].default_value = (float(tile["R"]) or 1.0, float(tile["G"]) or 1.0, 1.0)
+            L.new(uv.outputs["UV"], mp_.inputs["Vector"])
+            tx = N.new("ShaderNodeTexImage"); tx.image = img; L.new(mp_.outputs[0], tx.inputs[0])
+            return mp_, tx
+        # Two samples of the noise cross-faded (flow_anim.py moves both and the fade): the loop can crawl a short way and
+        # still end where it began, where one sample had to travel a whole tile (too fast)
+        mp, tx1 = sample()
+        mp2, tx2 = sample()
+        blend = N.new("ShaderNodeValue"); blend.outputs[0].default_value = 0.0
+        both = N.new("ShaderNodeMix"); both.data_type = "RGBA"; L.new(blend.outputs[0], both.inputs[0])
+        L.new(tx1.outputs[0], both.inputs[6]); L.new(tx2.outputs[0], both.inputs[7])
+        sep = N.new("ShaderNodeSeparateColor"); L.new(both.outputs[2], sep.inputs[0])
+        pw = N.new("ShaderNodeMath"); pw.operation = "POWER"; L.new(sep.outputs[0], pw.inputs[0])
+        pw.inputs[1].default_value = max(1.0, float(scalars.get("FlowNoisePower", 1.0)) * 0.6)   # softer than the master's: no hard cutoffs
+        rng = N.new("ShaderNodeMapRange"); L.new(pw.outputs[0], rng.inputs["Value"])
+        rng.inputs["From Max"].default_value = FLOW_NOISE_TOP; rng.inputs["To Min"].default_value = FLOW_GLOW_DIM
+        vary = N.new("ShaderNodeMix"); vary.data_type = "RGBA"; vary.blend_type = "MULTIPLY"; vary.inputs[0].default_value = 1
+        L.new(lines.outputs[2], vary.inputs[6]); L.new(rng.outputs[0], vary.inputs[7])
+        lines = vary
+    else:
+        mp = None
+    gate = N.new("ShaderNodeValue"); gate.outputs[0].default_value = 1.0   # 0: no lines (the animated preview's base)
+    gated = N.new("ShaderNodeMix"); gated.data_type = "RGBA"; gated.blend_type = "MULTIPLY"; gated.inputs[0].default_value = 1
+    L.new(lines.outputs[2], gated.inputs[6]); L.new(gate.outputs[0], gated.inputs[7])
+    lines = gated
+    keep = N.new("ShaderNodeValue"); keep.outputs[0].default_value = 1.0   # 0: the lines alone (the animated preview's frames)
+    strength = min(FLOW_GLOW_MAX, max(1.0, float(scalars.get("FlowMaskIntensity", 1.0)) * float(scalars.get("FlowNoiseIntensity", 1.0)) * 0.4))
+    em = bsdf.inputs["Emission Color"]
+    if em.is_linked:   # an Emissive glow is there: add the lines at their own strength relative to it
+        kept = N.new("ShaderNodeMix"); kept.data_type = "RGBA"; kept.blend_type = "MULTIPLY"; kept.inputs[0].default_value = 1
+        L.new(em.links[0].from_socket, kept.inputs[6]); L.new(keep.outputs[0], kept.inputs[7])
+        old = kept.outputs[2]
+        k = strength / max(bsdf.inputs["Emission Strength"].default_value, 1e-6)
+        scaled = N.new("ShaderNodeMix"); scaled.data_type = "RGBA"; scaled.blend_type = "MULTIPLY"; scaled.inputs[0].default_value = 1
+        L.new(lines.outputs[2], scaled.inputs[6]); scaled.inputs[7].default_value = (k, k, k, 1)
+        add = N.new("ShaderNodeMix"); add.data_type = "RGBA"; add.blend_type = "ADD"; add.inputs[0].default_value = 1
+        L.new(old, add.inputs[6]); L.new(scaled.outputs[2], add.inputs[7]); L.new(add.outputs[2], em)
+    else:
+        L.new(lines.outputs[2], em)
+        bsdf.inputs["Emission Strength"].default_value = strength
+    if mp is not None:
+        tile = vectors.get("FlowTex_UVTile") or {}
+        FLOW.append({"material": m.name, "mapping": mp.name, "mapping2": mp2.name, "blend": blend.name, "gate": gate.name, "keep": keep.name,
+                     "travel": flow_travel(float(tile.get("B", 0.0)), float(tile.get("A", 0.0)))})
+
+
+FLOW_TRAVEL = 0.12   # how far the noise crawls in one loop, in tiles (the cross-fade keeps it seamless)
+
+
+def flow_travel(u, v):
+    """How far the noise moves in one loop, in the direction of the master's pan speeds (FlowTex_UVTile B and A). No
+    pan: down the body."""
+    big = (u * u + v * v) ** 0.5
+    if big < 1e-6:
+        return (0.0, FLOW_TRAVEL)
+    return (u / big * FLOW_TRAVEL, v / big * FLOW_TRAVEL)
+
+
 def fix_material(kind, name, info, chain):
     """One slot's material: the kit's builder for it, from the chain with its master defaults, and the master's rim."""
     special = {"galaxy": galaxy_material, "torch": torch_body_material}.get(kind)
@@ -153,6 +255,7 @@ def fix_material(kind, name, info, chain):
     vectors = {**(chain or {}).get("vectors", {}), **par.get("Colors", {})}
     scalars = {**(chain or {}).get("scalars", {}), **par.get("Scalars", {})}
     tex = {**(chain or {}).get("textures", {}), **info.get("Textures", {})}
+    add_flow_glow(m, tex, vectors, scalars)
     # Not on eyes (their own recipe), fur shells or flat gems: the rim there is another effect
     if not RIM_SKIP.search(name) and "IrisBaseColor" not in tex and "IrisUVRadius" not in scalars and "Pattern_Map" not in tex:
         add_rim(m, tex, vectors, scalars, hair=bool(re.search(r"(?i)hair", name)))

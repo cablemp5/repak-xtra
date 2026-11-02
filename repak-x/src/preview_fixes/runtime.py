@@ -19,9 +19,9 @@ hooks = [   # (the kit's line, with the fix added): the slot's material, which t
     ("# Emission only: every surface black and matte", "drop_added_glow()\n# Emission only: every surface black and matte"),
     # Jelly galaxy skins: the lobby's navy, stars and lines only on a flat-colored one (jelly(), cosmic_tuning.py), the
     # kit's own values on a painted one (King of the Cosmos keeps its green, blue and purple)
-    ('L.new(mix(base_col, (0.0, 0.0, 0.0), 0.25), bsdf.inputs["Base Color"])', 'L.new(mix(jelly_skin(mix, base_col, chain), (0.0, 0.0, 0.0), JELLY_BASE_DIM) if jelly(chain) else mix(base_col, (0.0, 0.0, 0.0), 0.25), bsdf.inputs["Base Color"])'),
-    ('L.new(mix(mix(base_col, space, JELLY_SKY), stars, 1.0, "ADD"), bsdf.inputs["Emission Color"])', 'note_lines(chain)\n        L.new(jelly_emission(mix, base_col, space, stars, chain) if jelly(chain) else mix(mix(base_col, space, JELLY_SKY), stars, 1.0, "ADD"), bsdf.inputs["Emission Color"])'),
-    ('        bsdf.inputs["Emission Strength"].default_value = JELLY_GLOW\n', '        bsdf.inputs["Emission Strength"].default_value = JELLY_GLOW if jelly(chain) else 0.55\n'),
+    ('L.new(mix(base_col, (0.0, 0.0, 0.0), 0.25), bsdf.inputs["Base Color"])', 'L.new(mix(jelly_skin(mix, base_col, chain), (0.0, 0.0, 0.0), JELLY_BASE_DIM) if jelly(chain) else mix(painted_skin(mix, base_col, chain), (0.0, 0.0, 0.0), 0.25), bsdf.inputs["Base Color"])'),
+    ('L.new(mix(mix(base_col, space, JELLY_SKY), stars, 1.0, "ADD"), bsdf.inputs["Emission Color"])', 'note_lines(chain)\n        L.new(jelly_emission(mix, base_col, space, stars, chain) if jelly(chain) else painted_emission(mix, base_col, space, stars, chain) if painted(chain) else mix(mix(base_col, space, JELLY_SKY), stars, 1.0, "ADD"), bsdf.inputs["Emission Color"])'),
+    ('        bsdf.inputs["Emission Strength"].default_value = JELLY_GLOW\n', '        bsdf.inputs["Emission Strength"].default_value = JELLY_GLOW if jelly(chain) else painted_look(chain)[1] if painted(chain) else 0.55\n'),
     ('        bsdf.inputs["Roughness"].default_value = 0.22\n', '        bsdf.inputs["Roughness"].default_value = JELLY_ROUGH if jelly(chain) else 0.22\n'),
     ('        bsdf.inputs["Coat Weight"].default_value = 0.25\n', '        bsdf.inputs["Coat Weight"].default_value = JELLY_COAT if jelly(chain) else 0.25\n        bsdf.inputs["Specular Tint"].default_value = JELLY_SPEC_TINT if jelly(chain) else (1.0, 1.0, 1.0, 1.0)\n'),
     ('        bsdf.inputs["Specular IOR Level"].default_value = 0.3   # stronger', '        bsdf.inputs["Specular IOR Level"].default_value = (JELLY_SPEC if jelly(chain) else 0.3)   # stronger'),
@@ -31,8 +31,8 @@ hooks = [   # (the kit's line, with the fix added): the slot's material, which t
     ('        stars = mix(stars, tinted, 0.9, "ADD")', '        stars = mix(stars, tinted, 0.9 * sparkle_gain(chain), "ADD")'),
     ('rim = sun("rim", 7.0, (0.75, 0.92, 1.0), 2)', 'rim = sun("rim", RIM_SUN if RIM_ON else 7.0, RIM_SUN_COLOR if RIM_ON else (0.75, 0.92, 1.0), 2)\nif RIM_ON:\n    studio_lights()'),
     ('    rim.rotation_euler = aim(-d * 0.9 + rt * 0.75 + Vector((0, 0, 0.25)))\n', '    rim.rotation_euler = aim(-d * 0.9 + rt * 0.75 + Vector((0, 0, 0.25)))\n    place_studio(STUDIO, d, rt)\n'),
-    ('print("RESULT " + json.dumps({"ok": True, "renders"', 'interior_rim(renders)\nprint("RESULT " + json.dumps({"ok": True, "renders"'),
-    ('    renders[view["name"]] = sc.render.filepath\n', '    renders[view["name"]] = sc.render.filepath\n    constellations(sc.render.filepath)\n    screen_rim(sc.render.filepath)\n'),
+    ('print("RESULT " + json.dumps({"ok": True, "renders"', 'interior_rim(renders)\nflow_frames(job, glowing)\nprint("RESULT " + json.dumps({"ok": True, "renders"'),
+    ('    renders[view["name"]] = sc.render.filepath\n', '    renders[view["name"]] = sc.render.filepath\n    constellations(sc.render.filepath)\n    screen_rim(sc.render.filepath)\n    flow_still(sc.render.filepath)\n'),
 ]
 if any(old not in source for old, _ in hooks):
     raise RuntimeError("This preview kit needs an update before the material fixes can be applied.")
@@ -40,7 +40,7 @@ for old, new in hooks:
     source = source.replace(old, new, 1)
 fix = f"RIM_ON = {rim_on}\n" + "\n".join(
     (runtime / f).read_text(encoding="utf-8")
-    for f in ("galactic_mane.py", "material_rim.py", "translucent_layers.py", "screen_rim.py", "studio_lights.py", "cosmic_tuning.py"))
+    for f in ("galactic_mane.py", "material_rim.py", "translucent_layers.py", "screen_rim.py", "studio_lights.py", "cosmic_tuning.py", "flow_anim.py"))
 source = source.replace(marker, fix + '\nfix_lobby_mane(A, job)\nbpy.context.view_layer.update()\n\n' + marker, 1)
 source = source.replace(mesh_path, repr(str(kit / "meshes")), 1)
 patched = runtime / "render_preview.py"
@@ -52,6 +52,27 @@ render_path = 'KIT / "previews" / "render_preview.py"'
 if render_path not in source:
     raise RuntimeError("This preview kit does not support the app's renderer fixes. Update it in Setup.")
 source = source.replace(render_path, "Path(" + repr(str(patched)) + ")", 1)
+# Glowing flow lines also become an animated <key>.webp (flow_compose.py), from the frames flow_anim.py renders
+compose = '        alpha = ImageChops.lighter(alpha, glow.convert("L"))\n    rgb.putalpha(alpha)\n    sheet([rgb], out_png)\n    return True\n'
+if compose not in source:
+    raise RuntimeError("This preview kit does not support the app's animated glow. Update it in Setup.")
+source = source.replace(compose, compose.replace("    return True\n", "    flow_anim(str(prefix), out_png)\n    return True\n"), 1)
+# Before the main guard: appended after it, the run started before flow_anim was defined ("name 'flow_anim' is not defined")
+main_guard = '\nif __name__ == "__main__":'
+if source.count(main_guard) != 1:
+    raise RuntimeError("This preview kit does not support the app's animated glow. Update it in Setup.")
+source = source.replace(main_guard, (runtime / "flow_compose.py").read_text(encoding="utf-8") + "\n" + main_guard, 1)
+# The animation lives beside its still: a character's cleanup (keep_only .png) keeps a .webp written after the .png (a flow
+# animation; an older animation mod's .webp is older and still goes), and a dropped form or an empty loadout takes its .webp too
+cleanup = [
+    ("        if x != ext:\n", "        if x != ext and not (ext == \".png\" and x == \".webp\" and flow_newer(out_dir, key)):\n"),
+    ('    for f in out_dir.glob(f"{key}@*.png"):\n', '    for f in [*out_dir.glob(f"{key}@*.png"), *out_dir.glob(f"{key}@*.webp")]:\n'),
+    ("            png.unlink(missing_ok=True)\n", "            png.unlink(missing_ok=True)\n            png.with_suffix(\".webp\").unlink(missing_ok=True)\n"),
+]
+if any(source.count(old) != 1 for old, _ in cleanup):
+    raise RuntimeError("This preview kit does not support the app's animated glow. Update it in Setup.")
+for old, new in cleanup:
+    source = source.replace(old, new, 1)
 # The "before" pictures (<key>.vanilla.png) are cached per look: the rim setting is part of that look, so a vanilla made under
 # the other setting is rendered again the next time a preview of that hero is generated. Mod previews keep their fingerprint,
 # so nothing else is rendered again by the setting.
@@ -76,6 +97,7 @@ for old, new in vfx_hooks:
     source = source.replace(old, new)
 # A different fingerprint regenerates cached renders as they are requested. The rim setting is not part of it: changing
 # the setting must not render every preview again
-source = re.sub(r"(?m)^VERSION = (\d+)", lambda m: "VERSION = " + str(int(m[1]) + 10000), source, count=1)
+# (10001: painted galaxy skins, flow lines and their animation: cached previews and before pictures render again once)
+source = re.sub(r"(?m)^VERSION = (\d+)", lambda m: "VERSION = " + str(int(m[1]) + 10001), source, count=1)
 globals()["__file__"] = str(original)
 exec(compile(source, str(original), "exec"), globals())

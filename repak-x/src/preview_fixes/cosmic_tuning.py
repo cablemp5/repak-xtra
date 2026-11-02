@@ -27,6 +27,38 @@ def jelly(chain):
     return "jelly" in (chain.get("master") or "").lower() and flat(chain)
 
 
+# Painted jelly skins (White Fox's Cosmic Kumiho and King of the Cosmos, after their store shots): the painted colors show
+# light and soft, glowing, with the galaxy faint over them. The kit's (0.4 galaxy, glow 0.55) drew them dim and deep
+PAINTED_LOOK = (0.35, 0.85)   # share of galaxy over the painted skin, and its glow: swirls on King of the Cosmos's bright skin
+PAINTED_LOOK_FOX = (0.2, 1.8)   # White Fox's darker lilac glows harder, the galaxy fainter
+PAINTED_SOFT = 0.3   # color they lose: the store shots' colors are soft, the render's light and AgX deepened them
+PAINTED_WARM = (1.0, 0.68, 0.75)   # White Fox's lilac warmed: the render's light turned it periwinkle blue (King of the
+                                   # Cosmos's green and blue keep their hue)
+
+
+def painted(chain):
+    """A jelly galaxy skin with a painted (not flat) skin."""
+    return "jelly" in (chain.get("master") or "").lower() and not flat(chain)
+
+
+def painted_look(chain):
+    return PAINTED_LOOK_FOX if "/Characters/1060/" in chain["chain"][0] else PAINTED_LOOK
+
+
+def painted_skin(mix, base_col, chain):
+    """A painted jelly skin's color, softened (White Fox's also warmed); any other skin's as it is."""
+    if not painted(chain):
+        return base_col
+    if "/Characters/1060/" in chain["chain"][0]:
+        base_col = mix(base_col, PAINTED_WARM, 1.0, "MULTIPLY")
+    return mix(base_col, (0.5, 0.5, 0.5), PAINTED_SOFT, "SATURATION")
+
+
+def painted_emission(mix, base_col, space, stars, chain):
+    """A painted jelly skin's glow: its warmed painted color with a faint galaxy, plus the stars."""
+    return mix(mix(painted_skin(mix, base_col, chain), space, painted_look(chain)[0]), stars, 1.0, "ADD")
+
+
 def flat(chain):
     """Whether a jelly skin's painted skin is one flat color (cosmic Black Panther's CosmicFlat_D)."""
     path = game_png(chain["textures"].get("BaseColor") or chain["textures"].get("DiffuseTex"))

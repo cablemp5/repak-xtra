@@ -28,6 +28,7 @@ import { IoIosSettings } from "react-icons/io"
 import { REPAKXTRA_VERSION } from '../custom/version' // repakxtra
 import CableDiscord, { RepakXDiscord } from '../custom/CableDiscord' // repakxtra: both servers as quiet cards
 import CopySetupReport from '../custom/CopySetupReport' // repakxtra: setup report for help channels
+import BetaNote from '../custom/BetaNote' // repakxtra
 import AppFiles from '../custom/AppFiles' // repakxtra: Check app files and Repair
 import Support from '../custom/Support'
 import { invoke } from '@tauri-apps/api/core'
@@ -208,6 +209,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
           <div className="modal-body settings-content" key={activeCategory}>
             {activeCategory === 'general' && (
               <>
+                <div className="setting-section"><BetaNote /></div>{/* repakxtra */}
                 <div className="setting-section">
                   <h3 className="setting-icon-label"><LuFolderOpen size={18} aria-hidden="true" />Mods folder</h3>
                   <div className="setting-group">
