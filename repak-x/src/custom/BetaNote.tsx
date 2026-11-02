@@ -1,4 +1,4 @@
-// repakxtra: the beta notice, on the welcome screen's first page and in Settings > Help & Community (the server's card sits right below it).
+// repakxtra: the beta notice, on the welcome screen's first page and at the top of Settings > General.
 import { TriangleAlert } from 'lucide-react'
 import { APP_NAME } from './edition'
 

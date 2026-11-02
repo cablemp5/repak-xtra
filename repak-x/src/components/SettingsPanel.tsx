@@ -209,6 +209,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
           <div className="modal-body settings-content" key={activeCategory}>
             {activeCategory === 'general' && (
               <>
+                <div className="setting-section"><BetaNote /></div>{/* repakxtra */}
                 <div className="setting-section">
                   <h3 className="setting-icon-label"><LuFolderOpen size={18} aria-hidden="true" />Mods folder</h3>
                   <div className="setting-group">
@@ -508,7 +509,6 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                     <p className="setting-subtext xs-note">{/* repakxtra: one gray note like the other sections */}
                       For help, bug reports or ideas, join a Discord server: cable's for repakxtra, or Repak X's for the app it is built on.
                     </p>
-                    <BetaNote />{/* repakxtra */}
                     <RepakXDiscord />
                     <CableDiscord />{/* repakxtra: cable's server */}
                     <Support onError={error => alert.warning('Could not open link', error)} />
