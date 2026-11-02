@@ -7,6 +7,7 @@ import { ChevronDown, ChevronRight, ChevronUp, FolderPlus, ListChecks, Pencil, P
 import Switch from '../components/ui/Switch'
 import { type LoadoutProps, deleteWithUndo, runChanges } from './Loadouts'
 import LoadoutPage from './LoadoutPage'
+import { heroArt, topHero } from './heroArt'
 import NewStrip from './NewStrip'
 import SmartLoadouts from './SmartLoadouts' // repakxtra
 import BuiltinMods from './BuiltinMods'
@@ -44,20 +45,6 @@ function FoldButton({ name, folded, onFold }: { name: string; folded: boolean; o
   )
 }
 const NO_HERO = 'No Hero'
-
-/** The hero most of the given mods belong to, or undefined when none has a detected hero. */
-function topHero(keys: string[], byKey: Map<string, Mod>, details: LoadoutProps['modDetails']) {
-  const counts = new Map<string, number>()
-  for (const key of keys) {
-    const mod = byKey.get(displayName(key))
-    let hero = mod && details?.[mod.path]?.character_name
-    if (!hero) continue
-    if (hero.startsWith('Multiple Heroes')) hero = 'Multiple heroes'
-    hero = hero.split(' - ')[0] // the backend names skin-specific mods "Hero - Skin"; group by the hero
-    counts.set(hero, (counts.get(hero) ?? 0) + 1)
-  }
-  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0]
-}
 
 /** A loadout's hero from its on mods; VFX and texture-only mods often have none, so its scope decides then. */
 const heroOf = (l: Loadout, byKey: Map<string, Mod>, details: LoadoutProps['modDetails']) =>
@@ -146,8 +133,9 @@ const LoadoutCard = memo(function LoadoutCard({ p, l, groupBy, canGenerate, busy
   const present = [...keys].filter(k => byKey.has(k)).length
   const onNow = [...keys].filter(k => byKey.get(k)?.enabled).length
   const label = present === 0 ? 'No installed mods' : active ? `Turn ${l.name} off` : `Turn ${l.name} on`
+  const art = groupBy === 'hero' ? undefined : heroArt(topHero(l.on, byKey, p.modDetails) ?? topHero(l.scope, byKey, p.modDetails)) // under a hero's heading its logo is already there
   return (
-    <article data-loadout={l.id} className={`lo-card ${active ? 'is-on' : ''}${placeholder ? ' is-placeholder' : ''}`}
+    <article data-loadout={l.id} className={`lo-card ${active ? 'is-on' : ''}${placeholder ? ' is-placeholder' : ''}${art ? ' has-hero' : ''}`} style={art}
       onPointerDown={!renaming ? e => onPick(e, l.id) : undefined}
       onKeyDown={e => { if (e.key === 'F2' && !isTyping(e.target)) { e.preventDefault(); onStartRename(l) } }}
       onMouseEnter={() => { hovered.current = l.id }} onMouseLeave={() => { if (hovered.current === l.id) hovered.current = null }}>
@@ -647,13 +635,14 @@ function LoadoutsHome(p: LoadoutProps) {
           const isFolded = folded.has(foldId) && drag.dragId === null && !q // a drag or a search opens every group (the saved folding stays)
           return (
           // A collection lights up while a card from another one would land in it
-          <section className={`lo-group ${groupBy === 'group' && drag.dragId && spot && 'group' in spot && groupKey(spot.group) === groupKey(group) && groupKey(dragFrom ?? '') !== groupKey(group) ? 'is-drop' : ''}${isFolded ? ' is-folded' : ''}`}
-            key={groupKey(group)} data-group={group}>
+          <section className={`lo-group ${groupBy === 'group' && drag.dragId && spot && 'group' in spot && groupKey(spot.group) === groupKey(group) && groupKey(dragFrom ?? '') !== groupKey(group) ? 'is-drop' : ''}${isFolded ? ' is-folded' : ''}${groupBy === 'hero' && heroArt(group) ? ' has-hero' : ''}`}
+            key={groupKey(group)} data-group={group} style={groupBy === 'hero' ? heroArt(group) : undefined}>
+            <i className="ha-logo" aria-hidden="true" />
             {groupBy === 'group'
               ? <GroupHead p={p} name={group} count={list.length} at={savedGroups.findIndex(g => groupKey(g) === groupKey(group))} total={savedGroups.length} folded={isFolded} onFold={() => fold(foldId)}
                   editing={editingGroup !== null && groupKey(editingGroup) === groupKey(group)} setEditing={setEditingGroup} />
               : <div className="lo-group-head" data-flip={`head:${group}`}><FoldButton name={group} folded={isFolded} onFold={() => fold(foldId)} />
-                  <span className="lo-group-name" role="heading" aria-level={3} onClick={() => fold(foldId)} title={`Click to ${isFolded ? 'show' : 'collapse'}`}>{group}</span><span className="lo-group-count">{list.length}</span></div>}
+                  <span className="lo-group-name" role="heading" aria-level={3} onClick={() => fold(foldId)} title={`Click to ${isFolded ? 'show' : 'collapse'}`}>{group}</span><span className="lo-group-count">{list.length}</span><i className="ha-sign" aria-hidden="true" /></div>}
             {isFolded ? null : <>
             {list.length === 0 && <p className="lo-group-empty">Empty. Drag a loadout card here, or pick this collection on a loadout's page.</p>}
             <div className="lo-grid">

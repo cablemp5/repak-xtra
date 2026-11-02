@@ -258,7 +258,7 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
             const inGroup = shownHeroes.filter(h => heroRole(h.id) === group)
             return inGroup.length > 0 && (
               <div key={group} role="group" aria-label={group} className="ko-hero-group">
-                <div className="ko-group-head" aria-hidden><RoleIcon role={group} size={17} />{group}</div>
+                <div className="ko-group-head" aria-hidden><RoleIcon role={group} size={22} />{group}</div>
                 {inGroup.map(h => (
                   <button key={h.id} type="button" role="option" aria-selected={h.id === heroId} className="ko-hero" onClick={() => { setHeroId(h.id); cue('select') }}
                     tabIndex={h.id === (shownHeroes.some(x => x.id === heroId) ? heroId : shownHeroes[0]?.id) ? 0 : -1}>
