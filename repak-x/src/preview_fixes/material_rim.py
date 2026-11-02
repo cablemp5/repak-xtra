@@ -137,10 +137,11 @@ def add_rim(m, tex, vectors, scalars, hair=False):
 
 
 FLOW_GLOW_MAX = 2.5   # the flow glow's strength cap, as the kit caps an Emissive glow (HDR game values bloom to white)
-FLOW_GLOW_DIM = 0.0    # the dimmest a line gets between the noise's bright stretches: out, black suit, as in the lobby shot
+FLOW_GLOW_DIM = 0.12   # the dimmest a line gets between the noise's bright stretches: faint, never cut off (0 left holes)
 FLOW = []   # each flow-lined material's switches for the animated preview (flow_frames): its noise mapping, a gate on the
             # lines, a keep on its other glow, and how far the noise travels in one loop
-FLOW_CORE = (0.35, 0.7)   # mask values from dark to full glow: below the first nothing glows (the falloff around a line)
+FLOW_CORE = (0.28, 0.75)  # mask values from dark to full glow: below the first nothing glows (the falloff around a line)
+FLOW_NOISE_TOP = 0.5      # noise at or above this lights a line fully: softer than the master's, so stretches fade in and out
 
 
 def add_flow_glow(m, tex, vectors, scalars):
@@ -174,15 +175,27 @@ def add_flow_glow(m, tex, vectors, scalars):
     noise = game_png(tex.get("FX_FlowTex"))
     if noise:
         tile = vectors.get("FlowTex_UVTile") or {"R": 1.0, "G": 1.0}
-        uv = N.new("ShaderNodeTexCoord"); mp = N.new("ShaderNodeMapping")
-        mp.inputs["Scale"].default_value = (float(tile["R"]) or 1.0, float(tile["G"]) or 1.0, 1.0)
-        L.new(uv.outputs["UV"], mp.inputs["Vector"])
-        nt_ = N.new("ShaderNodeTexImage"); nt_.image = image(noise, color=False); L.new(mp.outputs[0], nt_.inputs[0])
-        sep = N.new("ShaderNodeSeparateColor"); L.new(nt_.outputs[0], sep.inputs[0])
+        uv = N.new("ShaderNodeTexCoord")
+        img = image(noise, color=False)
+
+        def sample():
+            mp_ = N.new("ShaderNodeMapping")
+            mp_.inputs["Scale"].default_value = (float(tile["R"]) or 1.0, float(tile["G"]) or 1.0, 1.0)
+            L.new(uv.outputs["UV"], mp_.inputs["Vector"])
+            tx = N.new("ShaderNodeTexImage"); tx.image = img; L.new(mp_.outputs[0], tx.inputs[0])
+            return mp_, tx
+        # Two samples of the noise cross-faded (flow_anim.py moves both and the fade): the loop can crawl a short way and
+        # still end where it began, where one sample had to travel a whole tile (too fast)
+        mp, tx1 = sample()
+        mp2, tx2 = sample()
+        blend = N.new("ShaderNodeValue"); blend.outputs[0].default_value = 0.0
+        both = N.new("ShaderNodeMix"); both.data_type = "RGBA"; L.new(blend.outputs[0], both.inputs[0])
+        L.new(tx1.outputs[0], both.inputs[6]); L.new(tx2.outputs[0], both.inputs[7])
+        sep = N.new("ShaderNodeSeparateColor"); L.new(both.outputs[2], sep.inputs[0])
         pw = N.new("ShaderNodeMath"); pw.operation = "POWER"; L.new(sep.outputs[0], pw.inputs[0])
-        pw.inputs[1].default_value = max(1.0, float(scalars.get("FlowNoisePower", 1.0)))   # the master's full sharpness: short bright stretches
+        pw.inputs[1].default_value = max(1.0, float(scalars.get("FlowNoisePower", 1.0)) * 0.6)   # softer than the master's: no hard cutoffs
         rng = N.new("ShaderNodeMapRange"); L.new(pw.outputs[0], rng.inputs["Value"])
-        rng.inputs["From Max"].default_value = 0.3; rng.inputs["To Min"].default_value = FLOW_GLOW_DIM
+        rng.inputs["From Max"].default_value = FLOW_NOISE_TOP; rng.inputs["To Min"].default_value = FLOW_GLOW_DIM
         vary = N.new("ShaderNodeMix"); vary.data_type = "RGBA"; vary.blend_type = "MULTIPLY"; vary.inputs[0].default_value = 1
         L.new(lines.outputs[2], vary.inputs[6]); L.new(rng.outputs[0], vary.inputs[7])
         lines = vary
@@ -209,17 +222,20 @@ def add_flow_glow(m, tex, vectors, scalars):
         bsdf.inputs["Emission Strength"].default_value = strength
     if mp is not None:
         tile = vectors.get("FlowTex_UVTile") or {}
-        FLOW.append({"material": m.name, "mapping": mp.name, "gate": gate.name, "keep": keep.name,
+        FLOW.append({"material": m.name, "mapping": mp.name, "mapping2": mp2.name, "blend": blend.name, "gate": gate.name, "keep": keep.name,
                      "travel": flow_travel(float(tile.get("B", 0.0)), float(tile.get("A", 0.0)))})
 
 
+FLOW_TRAVEL = 0.12   # how far the noise crawls in one loop, in tiles (the cross-fade keeps it seamless)
+
+
 def flow_travel(u, v):
-    """Whole tiles the noise moves in one loop (so the loop is seamless), in the direction of the master's pan speeds
-    (FlowTex_UVTile B and A): one tile along the faster axis, the other by its share rounded. No pan: down the body."""
-    big = max(abs(u), abs(v))
+    """How far the noise moves in one loop, in the direction of the master's pan speeds (FlowTex_UVTile B and A). No
+    pan: down the body."""
+    big = (u * u + v * v) ** 0.5
     if big < 1e-6:
-        return (0.0, 1.0)
-    return (float(round(u / big)), float(round(v / big)))
+        return (0.0, FLOW_TRAVEL)
+    return (u / big * FLOW_TRAVEL, v / big * FLOW_TRAVEL)
 
 
 def fix_material(kind, name, info, chain):

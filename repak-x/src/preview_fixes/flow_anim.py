@@ -1,6 +1,6 @@
 FLOW_FRAMES = 72   # frames in one loop of crawling lines, played at FLOW_FPS (flow_compose.py): one tile of noise in 4 s
 FLOW_SCALE = 63    # the frames' render size, percent of the still's: about the saved card size, so 72 passes stay quick
-FLOW_SAMPLES = 4   # EEVEE samples per frame: glow on black needs few (the still takes 16)
+FLOW_SAMPLES = 8   # EEVEE samples per frame: 4 shimmered on the thin lines from frame to frame (the still takes 16)
 
 
 def flow_nodes(f):
@@ -55,6 +55,7 @@ def flow_frames(job, glowing):
         nodes, _ = flow_nodes(f)
         if nodes is not None:
             starts[f["material"]] = tuple(nodes[f["mapping"]].inputs["Location"].default_value)
+            nodes[f["mapping2"]].inputs["Location"].default_value = starts[f["material"]]
     stage("glow")
     sc.render.resolution_percentage = FLOW_SCALE
     sc.eevee.taa_render_samples = FLOW_SAMPLES
@@ -64,7 +65,12 @@ def flow_frames(job, glowing):
             nodes, _ = flow_nodes(f)
             if nodes is None:
                 continue
+            # Sample one runs from the start, sample two runs into it from one loop's travel behind, and the fade passes
+            # from one to two: the last frame meets the first
             x0, y0, z0 = starts[f["material"]]
-            nodes[f["mapping"]].inputs["Location"].default_value = (x0 + f["travel"][0] * t, y0 + f["travel"][1] * t, z0)
+            (dx, dy) = f["travel"]
+            nodes[f["mapping"]].inputs["Location"].default_value = (x0 + dx * t, y0 + dy * t, z0)
+            nodes[f["mapping2"]].inputs["Location"].default_value = (x0 + dx * (t - 1), y0 + dy * (t - 1), z0)
+            nodes[f["blend"]].outputs[0].default_value = t
         sc.render.filepath = f"{prefix}_flow_{i:02d}.png"
         bpy.ops.render.render(write_still=True)
