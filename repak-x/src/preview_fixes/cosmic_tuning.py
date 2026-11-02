@@ -35,8 +35,9 @@ PAINTED_WARM = (1.0, 0.68, 0.75)   # the painted color warmed: the render's ligh
 
 
 def painted(chain):
-    """A jelly galaxy skin with a painted (not flat) skin."""
-    return "jelly" in (chain.get("master") or "").lower() and not flat(chain)
+    """White Fox's painted jelly galaxy skins. Only hers: King of the Cosmos (on Black Panther too) is painted jelly as
+    well, and keeps the kit's look, which matches its lobby shot."""
+    return "/Characters/1060/" in chain["chain"][0] and "jelly" in (chain.get("master") or "").lower() and not flat(chain)
 
 
 def painted_skin(mix, base_col, chain):
