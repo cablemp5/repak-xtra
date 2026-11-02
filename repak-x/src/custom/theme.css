@@ -3010,8 +3010,7 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .ko-hero-group .ko-group-head { display: flex; align-items: center; gap: 6px; }
 
 /* The beta notice (custom/BetaNote.tsx) */
-.beta-note { --beta: #f5a524; display: grid; grid-template-columns: 16px 1fr; column-gap: 12px; align-items: start; margin: 0; padding: 12px 16px; box-sizing: border-box;
+.beta-note { --beta: #f5a524; display: grid; grid-template-columns: 16px 1fr; column-gap: 12px; align-items: center; margin: 0; padding: 12px 16px; box-sizing: border-box;
   font-size: 13px; line-height: 1.5; color: var(--beta); border: 1px solid color-mix(in srgb, var(--beta), transparent 70%); border-radius: 10px; background: color-mix(in srgb, var(--beta), transparent 91%); }
 :root[data-theme="light"] .beta-note { --beta: #9a5b00; }
-.beta-note svg { margin-top: 2px; }
 .wi-beta { margin: 0 28px 20px; max-width: 76ch; }
