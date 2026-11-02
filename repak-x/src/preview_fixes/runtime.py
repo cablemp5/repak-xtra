@@ -31,8 +31,8 @@ hooks = [   # (the kit's line, with the fix added): the slot's material, which t
     ('        stars = mix(stars, tinted, 0.9, "ADD")', '        stars = mix(stars, tinted, 0.9 * sparkle_gain(chain), "ADD")'),
     ('rim = sun("rim", 7.0, (0.75, 0.92, 1.0), 2)', 'rim = sun("rim", RIM_SUN if RIM_ON else 7.0, RIM_SUN_COLOR if RIM_ON else (0.75, 0.92, 1.0), 2)\nif RIM_ON:\n    studio_lights()'),
     ('    rim.rotation_euler = aim(-d * 0.9 + rt * 0.75 + Vector((0, 0, 0.25)))\n', '    rim.rotation_euler = aim(-d * 0.9 + rt * 0.75 + Vector((0, 0, 0.25)))\n    place_studio(STUDIO, d, rt)\n'),
-    ('print("RESULT " + json.dumps({"ok": True, "renders"', 'interior_rim(renders)\nprint("RESULT " + json.dumps({"ok": True, "renders"'),
-    ('    renders[view["name"]] = sc.render.filepath\n', '    renders[view["name"]] = sc.render.filepath\n    constellations(sc.render.filepath)\n    screen_rim(sc.render.filepath)\n'),
+    ('print("RESULT " + json.dumps({"ok": True, "renders"', 'interior_rim(renders)\nflow_frames(job, glowing)\nprint("RESULT " + json.dumps({"ok": True, "renders"'),
+    ('    renders[view["name"]] = sc.render.filepath\n', '    renders[view["name"]] = sc.render.filepath\n    constellations(sc.render.filepath)\n    screen_rim(sc.render.filepath)\n    flow_still(sc.render.filepath)\n'),
 ]
 if any(old not in source for old, _ in hooks):
     raise RuntimeError("This preview kit needs an update before the material fixes can be applied.")
@@ -40,7 +40,7 @@ for old, new in hooks:
     source = source.replace(old, new, 1)
 fix = f"RIM_ON = {rim_on}\n" + "\n".join(
     (runtime / f).read_text(encoding="utf-8")
-    for f in ("galactic_mane.py", "material_rim.py", "translucent_layers.py", "screen_rim.py", "studio_lights.py", "cosmic_tuning.py"))
+    for f in ("galactic_mane.py", "material_rim.py", "translucent_layers.py", "screen_rim.py", "studio_lights.py", "cosmic_tuning.py", "flow_anim.py"))
 source = source.replace(marker, fix + '\nfix_lobby_mane(A, job)\nbpy.context.view_layer.update()\n\n' + marker, 1)
 source = source.replace(mesh_path, repr(str(kit / "meshes")), 1)
 patched = runtime / "render_preview.py"
@@ -52,6 +52,12 @@ render_path = 'KIT / "previews" / "render_preview.py"'
 if render_path not in source:
     raise RuntimeError("This preview kit does not support the app's renderer fixes. Update it in Setup.")
 source = source.replace(render_path, "Path(" + repr(str(patched)) + ")", 1)
+# Glowing flow lines also become an animated <key>.webp (flow_compose.py), from the frames flow_anim.py renders
+compose = '        alpha = ImageChops.lighter(alpha, glow.convert("L"))\n    rgb.putalpha(alpha)\n    sheet([rgb], out_png)\n    return True\n'
+if compose not in source:
+    raise RuntimeError("This preview kit does not support the app's animated glow. Update it in Setup.")
+source = source.replace(compose, compose.replace("    return True\n", "    flow_anim(str(prefix), out_png)\n    return True\n"), 1)
+source += (runtime / "flow_compose.py").read_text(encoding="utf-8")
 # The "before" pictures (<key>.vanilla.png) are cached per look: the rim setting is part of that look, so a vanilla made under
 # the other setting is rendered again the next time a preview of that hero is generated. Mod previews keep their fingerprint,
 # so nothing else is rendered again by the setting.

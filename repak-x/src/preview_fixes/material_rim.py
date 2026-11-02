@@ -138,13 +138,15 @@ def add_rim(m, tex, vectors, scalars, hair=False):
 
 FLOW_GLOW_MAX = 2.5   # the flow glow's strength cap, as the kit caps an Emissive glow (HDR game values bloom to white)
 FLOW_GLOW_DIM = 0.0    # the dimmest a line gets between the noise's bright stretches: out, black suit, as in the lobby shot
+FLOW = []   # each flow-lined material's switches for the animated preview (flow_frames): its noise mapping, a gate on the
+            # lines, a keep on its other glow, and how far the noise travels in one loop
 FLOW_CORE = (0.35, 0.7)   # mask values from dark to full glow: below the first nothing glows (the falloff around a line)
 
 
 def add_flow_glow(m, tex, vectors, scalars):
     """The body master's flowing light lines (FX_UseFlowNoise: Black Panther MCU's suit lines, recolored by mods through
     FX_FlowNoiseColor), which the kit never drew: FX_FlowMask in that color, added to any glow already there. In game the
-    lines crawl with FX_FlowTex; this is one steady frame."""
+    lines crawl with FX_FlowTex: the still is one frame, flow_frames renders the loop."""
     path = game_png(tex.get("FX_FlowMask"))
     c = vectors.get("FX_FlowNoiseColor")
     if not path or not c or float(scalars.get("FlowNoiseSwitch", 0)) < 0.5 or max(c["R"], c["G"], c["B"]) <= 0.01:
@@ -175,10 +177,19 @@ def add_flow_glow(m, tex, vectors, scalars):
         vary = N.new("ShaderNodeMix"); vary.data_type = "RGBA"; vary.blend_type = "MULTIPLY"; vary.inputs[0].default_value = 1
         L.new(lines.outputs[2], vary.inputs[6]); L.new(rng.outputs[0], vary.inputs[7])
         lines = vary
+    else:
+        mp = None
+    gate = N.new("ShaderNodeValue"); gate.outputs[0].default_value = 1.0   # 0: no lines (the animated preview's base)
+    gated = N.new("ShaderNodeMix"); gated.data_type = "RGBA"; gated.blend_type = "MULTIPLY"; gated.inputs[0].default_value = 1
+    L.new(lines.outputs[2], gated.inputs[6]); L.new(gate.outputs[0], gated.inputs[7])
+    lines = gated
+    keep = N.new("ShaderNodeValue"); keep.outputs[0].default_value = 1.0   # 0: the lines alone (the animated preview's frames)
     strength = min(FLOW_GLOW_MAX, max(1.0, float(scalars.get("FlowMaskIntensity", 1.0)) * float(scalars.get("FlowNoiseIntensity", 1.0)) * 0.4))
     em = bsdf.inputs["Emission Color"]
     if em.is_linked:   # an Emissive glow is there: add the lines at their own strength relative to it
-        old = em.links[0].from_socket
+        kept = N.new("ShaderNodeMix"); kept.data_type = "RGBA"; kept.blend_type = "MULTIPLY"; kept.inputs[0].default_value = 1
+        L.new(em.links[0].from_socket, kept.inputs[6]); L.new(keep.outputs[0], kept.inputs[7])
+        old = kept.outputs[2]
         k = strength / max(bsdf.inputs["Emission Strength"].default_value, 1e-6)
         scaled = N.new("ShaderNodeMix"); scaled.data_type = "RGBA"; scaled.blend_type = "MULTIPLY"; scaled.inputs[0].default_value = 1
         L.new(lines.outputs[2], scaled.inputs[6]); scaled.inputs[7].default_value = (k, k, k, 1)
@@ -187,6 +198,19 @@ def add_flow_glow(m, tex, vectors, scalars):
     else:
         L.new(lines.outputs[2], em)
         bsdf.inputs["Emission Strength"].default_value = strength
+    if mp is not None:
+        tile = vectors.get("FlowTex_UVTile") or {}
+        FLOW.append({"material": m.name, "mapping": mp.name, "gate": gate.name, "keep": keep.name,
+                     "travel": flow_travel(float(tile.get("B", 0.0)), float(tile.get("A", 0.0)))})
+
+
+def flow_travel(u, v):
+    """Whole tiles the noise moves in one loop (so the loop is seamless), in the direction of the master's pan speeds
+    (FlowTex_UVTile B and A): one tile along the faster axis, the other by its share rounded. No pan: down the body."""
+    big = max(abs(u), abs(v))
+    if big < 1e-6:
+        return (0.0, 1.0)
+    return (float(round(u / big)), float(round(v / big)))
 
 
 def fix_material(kind, name, info, chain):
