@@ -157,9 +157,18 @@ def add_flow_glow(m, tex, vectors, scalars):
     t = N.new("ShaderNodeTexImage"); t.image = image(path, color=False)
     # Only the lines' cores: the mask's soft falloff around them, glowing faintly, tinted the black suit teal between them
     core = N.new("ShaderNodeMapRange"); core.inputs["From Min"].default_value, core.inputs["From Max"].default_value = FLOW_CORE
-    msep = N.new("ShaderNodeSeparateColor"); L.new(t.outputs[0], msep.inputs[0]); L.new(msep.outputs[0], core.inputs["Value"])
+    # Measured on the mask's brightest channel and keeping its own color: a colored mask (rainbow line mods paint every
+    # line its hue, FX_FlowNoiseColor white) read on red alone lost its green and blue lines and came out white
+    msep = N.new("ShaderNodeSeparateColor"); L.new(t.outputs[0], msep.inputs[0])
+    top = N.new("ShaderNodeMath"); top.operation = "MAXIMUM"; L.new(msep.outputs[0], top.inputs[0]); L.new(msep.outputs[1], top.inputs[1])
+    top2 = N.new("ShaderNodeMath"); top2.operation = "MAXIMUM"; L.new(top.outputs[0], top2.inputs[0]); L.new(msep.outputs[2], top2.inputs[1])
+    L.new(top2.outputs[0], core.inputs["Value"])
+    hue = N.new("ShaderNodeMath"); hue.operation = "DIVIDE"; L.new(core.outputs[0], hue.inputs[0]); L.new(top2.outputs[0], hue.inputs[1])
+    safe = N.new("ShaderNodeMath"); safe.operation = "MINIMUM"; L.new(hue.outputs[0], safe.inputs[0]); safe.inputs[1].default_value = 1e4   # a black texel divides by 0
+    tinted = N.new("ShaderNodeMix"); tinted.data_type = "RGBA"; tinted.blend_type = "MULTIPLY"; tinted.inputs[0].default_value = 1
+    L.new(t.outputs[0], tinted.inputs[6]); L.new(safe.outputs[0], tinted.inputs[7])   # the mask's color at the core's strength
     lines = N.new("ShaderNodeMix"); lines.data_type = "RGBA"; lines.blend_type = "MULTIPLY"; lines.inputs[0].default_value = 1
-    L.new(core.outputs[0], lines.inputs[6]); lines.inputs[7].default_value = (c["R"] / peak, c["G"] / peak, c["B"] / peak, 1)
+    L.new(tinted.outputs[2], lines.inputs[6]); lines.inputs[7].default_value = (c["R"] / peak, c["G"] / peak, c["B"] / peak, 1)
     # The lines are not even in game: FX_FlowTex's noise (tiled by FlowTex_UVTile, sharpened by FlowNoisePower) runs along
     # them, bright stretches and dim ones. One frame of it, kept above FLOW_GLOW_DIM so no line goes out
     noise = game_png(tex.get("FX_FlowTex"))
