@@ -2382,7 +2382,7 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 [data-theme="light"] .settings-content .action-btn svg.xs-star { color: #ca8a04 !important; }
 /* A risky setting's warning, in the app's warning amber. No box: the icon sits in the checkbox's 20px column and the words
    start where the checkbox's own words do (28px in), so the setting reads as one block */
-.setting-warn { display: grid; grid-template-columns: 20px 1fr; column-gap: 8px; align-items: start; margin: 8px 0 0; font-size: 13px; line-height: 1.45; color: #f5a524; }
+.setting-warn { display: grid; grid-template-columns: 30px 1fr; column-gap: 8px; align-items: start; margin: 8px 0 0; font-size: 13px; line-height: 1.45; color: #f5a524; }
 .setting-warn svg { justify-self: center; margin-top: 2px; }
 [data-theme="light"] .setting-warn { color: #9a5b00; }
 .settings-content .xs-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -3013,11 +3013,10 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .rv-rarity.is-epic { color: var(--rarity-epic); }
 .rv-rarity.is-legendary { color: var(--rarity-legendary); }
 .ko-hero-group .ko-group-head { display: flex; align-items: center; gap: 6px; }
-.setting-warn .rv-ico { justify-self: center; margin-top: 2px; }
+.setting-warn .rv-ico { justify-self: center; }
 
 /* The beta notice (custom/BetaNote.tsx) */
-.beta-note { display: grid; grid-template-columns: 18px 1fr; column-gap: 8px; align-items: start; margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
-.beta-note .rv-ico { margin-top: 2px; }
+.beta-note { display: grid; grid-template-columns: 30px 1fr; column-gap: 8px; align-items: center; margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
 .beta-link { display: inline; padding: 0 !important; min-height: 0 !important; height: auto !important; border: none !important; background: none !important; font: inherit; color: var(--text-primary) !important; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .beta-link:hover { color: var(--accent-primary) !important; }
 .wi-beta { padding: 0 28px 20px; max-width: 76ch; }

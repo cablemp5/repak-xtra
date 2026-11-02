@@ -6,16 +6,23 @@ import { forwardRef } from 'react'
 import type { LucideIcon, LucideProps } from 'lucide-react'
 import type { Rarity } from '../skinRarity'
 
-const mask = (cls: string) =>
-  forwardRef<HTMLElement, LucideProps>(({ size = 24, className, style, color, strokeWidth: _w, absoluteStrokeWidth: _a, fill: _f, ...rest }, ref) => (
-    <i ref={ref} className={`rv-ico ${cls}${className ? ` ${className}` : ''}`} style={{ width: size, height: size, ...(color && color !== 'currentColor' ? { color } : null), ...style }}
-      aria-hidden="true" {...(rest as object)} />
-  )) as unknown as LucideIcon
+// Drawn at `scale` times the size a Lucide icon would be (the artwork reads small at 1x). The extra height is pulled back out
+// of the vertical margins, so a row keeps its height and only the width takes more room.
+const mask = (cls: string, scale: number) =>
+  forwardRef<HTMLElement, LucideProps>(({ size = 24, className, style, color, strokeWidth: _w, absoluteStrokeWidth: _a, fill: _f, ...rest }, ref) => {
+    const px = typeof size === 'number' ? size * scale : size
+    const pull = typeof size === 'number' ? -(size * (scale - 1)) / 2 : undefined
+    return (
+      <i ref={ref} className={`rv-ico ${cls}${className ? ` ${className}` : ''}`}
+        style={{ width: px, height: px, marginBlock: pull, ...(color && color !== 'currentColor' ? { color } : null), ...style }}
+        aria-hidden="true" {...(rest as object)} />
+    )
+  }) as unknown as LucideIcon
 
-export const Shield = mask('rv-shield')
+export const Shield = mask('rv-shield', 1.4)
 export const ShieldCheck = Shield
 export const ShieldOff = Shield
-export const TriangleAlert = mask('rv-warn')
+export const TriangleAlert = mask('rv-warn', 2)
 export const AlertTriangle = TriangleAlert
 
 // The game's role and rarity marks, 1024 square (the artwork's own paths), filled with the text color or the rarity color.
