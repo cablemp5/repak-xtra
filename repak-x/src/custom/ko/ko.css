@@ -1,7 +1,5 @@
 /* repakxtra: the KO Editor view (KoEditor.tsx). Heroes, the stage and the colors in flat columns like the Library's,
    split by hairlines. The stage is the only colored region: the prompt's own colors on a dark field. */
-/* the kill text's face in the game, Refrigerator Deluxe Heavy (render.ts KO_FONT) */
-@font-face { font-family: 'Refrigerator KO'; src: url('../fonts/RefrigeratorDeluxe-Heavy.woff2') format('woff2'); font-weight: 400 900; font-display: block; }
 .ko { flex: 1; min-height: 0; display: flex; margin-top: 24px; animation: t-page-from-right var(--page-slide-dur) var(--page-slide-ease) backwards; }
 .ko[hidden] { display: none; }
 html[data-view="ko"] .view-tabs::before { transform: translateX(calc(200% + 4px)); }

@@ -2,6 +2,7 @@
 // and scale box slots), render transforms, opacity, flipbook frames and color tints, as UMG would. Approximate where the
 // game uses its own materials (the text gradient, unmultiplied flipbooks): close enough to judge colors by, not a capture.
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import './koFont.css'
 import { type Animation, type KoWidget, type Layer, type Material, type Rgba, evaluate, linearOf, runtimeColor, siteKey } from './model'
 
 export type Rect = { x: number; y: number; w: number; h: number }
