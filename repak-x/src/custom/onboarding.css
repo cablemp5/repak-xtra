@@ -29,6 +29,8 @@
 .ob-yes { flex: none; color: #3ecf6e; }
 .ob-no { flex: none; color: #f2555a; }
 .fr-hint { grid-column: 1 / -1; margin: 0; font-size: 13px; color: var(--text-secondary); }
+/* two cards share the row (the hint spans every column, so auto-fit would keep an empty third one) */
+.ob-choices:has(> .ob-choice:nth-of-type(2)) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 /* one card alone (the first loadout page with no mods yet): centered, its hint under it centered too */
 .ob-choices:has(> .ob-choice:only-of-type) { display: flex; flex-direction: column; align-items: center; }
 .ob-choices:has(> .ob-choice:only-of-type) > .ob-choice { width: min(100%, 308px); }
