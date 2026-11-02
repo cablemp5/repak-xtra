@@ -3007,7 +3007,7 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .rv-rarity.is-rare { color: var(--rarity-rare); }
 .rv-rarity.is-epic { color: var(--rarity-epic); }
 .rv-rarity.is-legendary { color: var(--rarity-legendary); }
-.ko-hero-group .ko-group-head { display: flex; align-items: center; gap: 7px; font-size: 15px; }
+.ko-hero-group .ko-group-head { display: flex; align-items: center; gap: 6px; }
 
 /* The beta notice (custom/BetaNote.tsx) */
 .beta-note { display: grid; grid-template-columns: 16px 1fr; column-gap: 12px; align-items: start; margin: 0; font-size: 13px; line-height: 1.5; color: #f5a524; }
