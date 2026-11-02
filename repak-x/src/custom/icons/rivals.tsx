@@ -1,29 +1,5 @@
-// repakxtra: the game's own artwork in place of Lucide's shield and warning icons, plus the role and rarity marks.
-// Shield and Warn are flat masks (theme.css .rv-ico) that take the surrounding text color, so a caller recolors them
-// like any icon (the warning mark is amber by default). They take Lucide's props, so the names swap in at import time
-// (vitePlugin.ts points `lucide-react` at lucideRivals.tsx).
-import { forwardRef } from 'react'
-import type { LucideIcon, LucideProps } from 'lucide-react'
+// repakxtra: the game's role and rarity marks (KO Editor groups, Filters skins).
 import type { Rarity } from '../skinRarity'
-
-// Drawn at `scale` times the size a Lucide icon would be (the artwork reads small at 1x). The extra height is pulled back out
-// of the vertical margins, so a row keeps its height and only the width takes more room.
-const mask = (cls: string, scale: number) =>
-  forwardRef<HTMLElement, LucideProps>(({ size = 24, className, style, color, strokeWidth: _w, absoluteStrokeWidth: _a, fill: _f, ...rest }, ref) => {
-    const px = typeof size === 'number' ? size * scale : size
-    const pull = typeof size === 'number' ? -(size * (scale - 1)) / 2 : undefined
-    return (
-      <i ref={ref} className={`rv-ico ${cls}${className ? ` ${className}` : ''}`}
-        style={{ width: px, height: px, marginBlock: pull, ...(color && color !== 'currentColor' ? { color } : null), ...style }}
-        aria-hidden="true" {...(rest as object)} />
-    )
-  }) as unknown as LucideIcon
-
-export const Shield = mask('rv-shield', 1.68)
-export const ShieldCheck = Shield
-export const ShieldOff = Shield
-export const TriangleAlert = mask('rv-warn', 2)
-export const AlertTriangle = TriangleAlert
 
 // The game's role and rarity marks, 1024 square (the artwork's own paths), filled with the text color or the rarity color.
 const ROLE_PATHS = {
