@@ -57,7 +57,11 @@ compose = '        alpha = ImageChops.lighter(alpha, glow.convert("L"))\n    rgb
 if compose not in source:
     raise RuntimeError("This preview kit does not support the app's animated glow. Update it in Setup.")
 source = source.replace(compose, compose.replace("    return True\n", "    flow_anim(str(prefix), out_png)\n    return True\n"), 1)
-source += (runtime / "flow_compose.py").read_text(encoding="utf-8")
+# Before the main guard: appended after it, the run started before flow_anim was defined ("name 'flow_anim' is not defined")
+main_guard = '\nif __name__ == "__main__":'
+if source.count(main_guard) != 1:
+    raise RuntimeError("This preview kit does not support the app's animated glow. Update it in Setup.")
+source = source.replace(main_guard, (runtime / "flow_compose.py").read_text(encoding="utf-8") + "\n" + main_guard, 1)
 # The "before" pictures (<key>.vanilla.png) are cached per look: the rim setting is part of that look, so a vanilla made under
 # the other setting is rendered again the next time a preview of that hero is generated. Mod previews keep their fingerprint,
 # so nothing else is rendered again by the setting.
