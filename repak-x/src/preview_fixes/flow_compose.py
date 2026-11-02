@@ -4,11 +4,15 @@
 # renderer) also becomes an animated <key>.webp, which the app shows over the still <key>.png
 
 
-def bloom(e):
+FLOW_FPS = 18   # the animated glow's frame rate (flow_anim.py FLOW_FRAMES make one 4 s loop)
+FLOW_BLUR = 0.63   # the bloom's blurs scaled to the frames' render size (flow_anim.py FLOW_SCALE)
+
+
+def bloom(e, k=1.0):
     """The kit's bloom of an emission pass: only the brightest light, a tight and a wide blur."""
     e = e.point(lambda v: max(0, v - 110) * 2)
-    return ImageChops.add(ImageEnhance.Brightness(e.filter(ImageFilter.GaussianBlur(6))).enhance(0.9),
-                          ImageEnhance.Brightness(e.filter(ImageFilter.GaussianBlur(26))).enhance(0.8))
+    return ImageChops.add(ImageEnhance.Brightness(e.filter(ImageFilter.GaussianBlur(6 * k))).enhance(0.9),
+                          ImageEnhance.Brightness(e.filter(ImageFilter.GaussianBlur(26 * k))).enhance(0.8))
 
 
 def sheet_canvas(im):
@@ -31,18 +35,21 @@ def flow_anim(prefix, out_png):
     if not frames or not base_path.exists():
         out_webp.unlink(missing_ok=True)
         return False
-    base = Image.open(base_path).convert("RGBA")
+    size = Image.open(frames[0]).size   # the frames render smaller than the still: the base is brought to their size
+    base = Image.open(base_path).convert("RGBA").resize(size, Image.LANCZOS)
     rgb0 = ImageEnhance.Color(ImageEnhance.Brightness(base.convert("RGB")).enhance(1.08)).enhance(1.2)   # as render_form's still
     alpha0 = base.getchannel("A")
-    emit = Image.open(emit_path).convert("RGB") if emit_path.exists() else Image.new("RGB", base.size)
+    emit = Image.open(emit_path).convert("RGB").resize(size) if emit_path.exists() else Image.new("RGB", size)
     out = []
     for f in frames:
         lines = Image.open(f).convert("RGB")
-        glow = bloom(ImageChops.add(emit, lines))
+        glow = bloom(ImageChops.add(emit, lines), FLOW_BLUR)
         rgb = ImageChops.add(ImageChops.add(rgb0, lines), glow)
         rgb.putalpha(ImageChops.lighter(alpha0, glow.convert("L")))
         out.append(sheet_canvas(rgb))
-    save_webp(out, out_webp)
+    tmp = out_webp.with_suffix(".tmp.webp")   # as save_webp, at this loop's own frame rate
+    out[0].save(tmp, save_all=True, append_images=out[1:], duration=round(1000 / FLOW_FPS), loop=0, quality=80, method=2, kmax=1)
+    os.replace(tmp, out_webp)
     return True
 
 

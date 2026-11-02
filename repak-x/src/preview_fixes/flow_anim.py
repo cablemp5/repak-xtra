@@ -1,4 +1,6 @@
-FLOW_FRAMES = 24   # frames in one loop of crawling lines (mod_previews ANIM_FPS plays them): 1.6 s at 15 fps
+FLOW_FRAMES = 72   # frames in one loop of crawling lines, played at FLOW_FPS (flow_compose.py): one tile of noise in 4 s
+FLOW_SCALE = 63    # the frames' render size, percent of the still's: about the saved card size, so 72 passes stay quick
+FLOW_SAMPLES = 4   # EEVEE samples per frame: glow on black needs few (the still takes 16)
 
 
 def flow_nodes(f):
@@ -39,6 +41,7 @@ def flow_frames(job, glowing):
     view = job["views"][-1]["name"]   # the camera was left at the last view, the only one in practice
     prefix = f'{job["out_prefix"]}_{view}'
     flow_set(gate=0.0)
+    sc.render.resolution_percentage = FLOW_SCALE   # the frames' size, so the compose adds same-size images
     sc.render.filepath = prefix + "_emit_noflow.png"
     bpy.ops.render.render(write_still=True)
     flow_set(gate=1.0, keep=0.0)
@@ -53,6 +56,8 @@ def flow_frames(job, glowing):
         if nodes is not None:
             starts[f["material"]] = tuple(nodes[f["mapping"]].inputs["Location"].default_value)
     stage("glow")
+    sc.render.resolution_percentage = FLOW_SCALE
+    sc.eevee.taa_render_samples = FLOW_SAMPLES
     for i in range(FLOW_FRAMES):
         t = i / FLOW_FRAMES
         for f in FLOW:
