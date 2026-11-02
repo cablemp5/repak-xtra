@@ -136,6 +136,37 @@ def add_rim(m, tex, vectors, scalars, hair=False):
     strength.default_value = 1.0
 
 
+FLOW_GLOW_MAX = 4.0   # the flow glow's strength cap, as the kit caps an Emissive glow (HDR game values bloom to white)
+
+
+def add_flow_glow(m, tex, vectors, scalars):
+    """The body master's flowing light lines (FX_UseFlowNoise: Black Panther MCU's suit lines, recolored by mods through
+    FX_FlowNoiseColor), which the kit never drew: FX_FlowMask in that color, added to any glow already there. In game the
+    lines crawl with FX_FlowTex; this is one steady frame."""
+    path = game_png(tex.get("FX_FlowMask"))
+    c = vectors.get("FX_FlowNoiseColor")
+    if not path or not c or float(scalars.get("FlowNoiseSwitch", 0)) < 0.5 or max(c["R"], c["G"], c["B"]) <= 0.01:
+        return
+    nt = m.node_tree; N, L = nt.nodes, nt.links
+    bsdf = next(n for n in N if n.type == "BSDF_PRINCIPLED")
+    peak = max(c["R"], c["G"], c["B"])
+    t = N.new("ShaderNodeTexImage"); t.image = image(path, color=False)
+    lines = N.new("ShaderNodeMix"); lines.data_type = "RGBA"; lines.blend_type = "MULTIPLY"; lines.inputs[0].default_value = 1
+    L.new(t.outputs[0], lines.inputs[6]); lines.inputs[7].default_value = (c["R"] / peak, c["G"] / peak, c["B"] / peak, 1)
+    strength = min(FLOW_GLOW_MAX, max(1.0, float(scalars.get("FlowMaskIntensity", 1.0)) * float(scalars.get("FlowNoiseIntensity", 1.0)) * 0.5))
+    em = bsdf.inputs["Emission Color"]
+    if em.is_linked:   # an Emissive glow is there: add the lines at their own strength relative to it
+        old = em.links[0].from_socket
+        k = strength / max(bsdf.inputs["Emission Strength"].default_value, 1e-6)
+        scaled = N.new("ShaderNodeMix"); scaled.data_type = "RGBA"; scaled.blend_type = "MULTIPLY"; scaled.inputs[0].default_value = 1
+        L.new(lines.outputs[2], scaled.inputs[6]); scaled.inputs[7].default_value = (k, k, k, 1)
+        add = N.new("ShaderNodeMix"); add.data_type = "RGBA"; add.blend_type = "ADD"; add.inputs[0].default_value = 1
+        L.new(old, add.inputs[6]); L.new(scaled.outputs[2], add.inputs[7]); L.new(add.outputs[2], em)
+    else:
+        L.new(lines.outputs[2], em)
+        bsdf.inputs["Emission Strength"].default_value = strength
+
+
 def fix_material(kind, name, info, chain):
     """One slot's material: the kit's builder for it, from the chain with its master defaults, and the master's rim."""
     special = {"galaxy": galaxy_material, "torch": torch_body_material}.get(kind)
@@ -153,6 +184,7 @@ def fix_material(kind, name, info, chain):
     vectors = {**(chain or {}).get("vectors", {}), **par.get("Colors", {})}
     scalars = {**(chain or {}).get("scalars", {}), **par.get("Scalars", {})}
     tex = {**(chain or {}).get("textures", {}), **info.get("Textures", {})}
+    add_flow_glow(m, tex, vectors, scalars)
     # Not on eyes (their own recipe), fur shells or flat gems: the rim there is another effect
     if not RIM_SKIP.search(name) and "IrisBaseColor" not in tex and "IrisUVRadius" not in scalars and "Pattern_Map" not in tex:
         add_rim(m, tex, vectors, scalars, hair=bool(re.search(r"(?i)hair", name)))
