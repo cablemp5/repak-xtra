@@ -5,6 +5,7 @@ import { APP_NAME } from './edition'
 // (cable, 2026-10-21): a newcomer reads it at a glance. Animations off: each demo shows its finished state.
 import { ArrowRight } from 'lucide-react'
 import Wordmark from './Wordmark'
+import BetaNote from './BetaNote'
 import './welcome.css'
 import catboy from './covers/welcome/catboy.webp'
 import ultimate from './covers/welcome/ultimate.webp'
@@ -60,6 +61,8 @@ export default function WelcomeIntro({ onNext, onSkip }: { onNext: () => void; o
           <figcaption><b>Swap in a click</b><span>Flip between looks, or pin one to Ctrl+1.</span></figcaption>
         </figure>
       </div>
+
+      <BetaNote className="wi-beta" />
 
       <div className="modal-footer fr-foot">
         <span className="wi-time">Four short steps, about two minutes</span>

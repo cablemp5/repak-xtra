@@ -134,6 +134,7 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
   transform: none !important;
 }
 .header-actions-right .btn-settings svg { color: var(--text-secondary); }
+.header-actions-right .btn-settings .gal-logo { color: var(--text-secondary); }   /* Galacta's white mark, gray like the header's other icons */
 /* Tools and Settings are icon only (their tooltips name them): square, the icon centered */
 .header-actions-right :is([data-tour="tools-btn"], [data-tour="settings-btn"]) { width: 32px; padding: 0 !important; justify-content: center; }
 .header-actions-right .btn-vfx::before, .header-actions-right .btn-vfx::after { display: none !important; }
@@ -238,7 +239,7 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 .fp-title, .sidebar-header h3 { font-size: 16px !important; font-weight: 600 !important; color: var(--text-primary) !important; }   /* the panel titles, above the 14px Heroes and Types headers and the 13px filters */
 /* Clear: a small quiet pill (the app's 36px button floor made it a tall grey block) */
 .fp-clear { display: inline-flex !important; align-items: center; gap: 4px; height: 24px !important; min-height: 0 !important; padding: 0 8px !important;
-  border: 1px solid var(--panel-border) !important; border-radius: 999px !important; background: transparent !important;
+  border: none !important; border-radius: 999px !important; background: transparent !important;
   color: var(--text-secondary) !important; font-size: 12px !important; font-weight: 500 !important; line-height: 1 !important; }
 .fp-clear:hover { color: var(--text-primary) !important; background: var(--quiet-hover) !important; }
 .fp-section-label { padding: 12px 8px 4px; font-size: 11px; font-weight: 500; color: var(--text-secondary); }
@@ -277,12 +278,13 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 .fp-lead { display: inline-flex; width: 18px; justify-content: center; flex: none; }
 .fp-avatar { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; background: var(--bg-lighter); }
 .fp-avatar-empty { display: inline-block; }
-.fp-dot { width: 8px; height: 8px; border-radius: 50%; padding: 0 !important; border: none !important; background: var(--badge-dot, #8f8f8f) !important; }
+.fp-dot { width: 7px; height: 7px; border-radius: 50%; padding: 0 !important; border: none !important; background: var(--badge-dot, #8f8f8f) !important; }
 /* Nexus and Project Galacta in Types: their logos in place of the dot (Galacta's white mark tinted magenta, like its tag) */
 .fp-logo { width: 16px; height: 16px; flex: none; }
 .fp-logo.pg-logo { color: #ec5fe0; }
 [data-theme="light"] .fp-logo.pg-logo { color: #a3229a; }
 .fp-indent { width: 18px; }
+.fp-rarity-gap { width: 14px; flex: none; }
 .fp-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fp-count { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
 .fp-check { display: none; color: var(--accent-primary); flex: none; }
@@ -463,8 +465,8 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 }
 .category-badge::before, .additional-badge::before {
   content: "";
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--badge-dot, #8f8f8f);
 }
@@ -475,7 +477,7 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
   box-shadow: none !important; font-size: 11px !important; font-weight: 500 !important; padding: 1px 8px 1px 8px !important;
   display: inline-flex !important; align-items: center; gap: 8px;
 }
-.no-uassets-badge::before { content: ""; flex: none; width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid var(--text-secondary); }
+.no-uassets-badge::before { content: ""; flex: none; width: 6px; height: 6px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid var(--text-secondary); }
 
 .tag { background: transparent !important; border: 1px solid var(--panel-border) !important; color: var(--text-secondary) !important; font-size: 11px !important; }
 
@@ -1267,7 +1269,7 @@ html[data-motion="off"] .lo-gen-bar i { transition: none; animation: none; }
 .lo-search { width: 220px; padding-right: 4px; }
 .lo-search .lo-icon { width: 24px; height: 24px !important; }
 .lp-types { display: flex; flex-wrap: wrap; gap: 4px; }
-.lp-types button { display: inline-flex !important; align-items: center; gap: 8px; height: 28px !important; min-height: 0 !important; padding: 0 12px !important;
+.lp-types button { display: inline-flex !important; align-items: center; gap: 8px; height: 28px !important; min-height: 0 !important; padding: 0 11px !important;
   border: 1px solid var(--panel-border) !important; border-radius: 999px !important; background: transparent !important;
   color: var(--text-secondary) !important; font-size: 12px !important; font-weight: 500 !important; }
 .lp-types button:hover { color: var(--text-primary) !important; }
@@ -1282,7 +1284,7 @@ html[data-motion="off"] .lo-gen-bar i { transition: none; animation: none; }
 .row-add-to .custom-dropdown-trigger { width: auto !important; padding: 0 12px !important; gap: 8px; background: transparent !important;
   border-color: var(--panel-border) !important; }
 .row-add-to .custom-dropdown-trigger:hover { background: var(--quiet-hover) !important; }
-.lp-types button .lo-mod-dot { background: var(--badge-dot, #8f8f8f) !important; border: none; }
+.lp-types button .lo-mod-dot { width: 7px !important; height: 7px !important; background: var(--badge-dot, #8f8f8f) !important; border: none; }
 .lp-actions .lo-text-btn .bulk-num { color: var(--text-secondary); }
 
 /* ---------- credits in the app's language: left-aligned wordmark, quiet headings, people as rows of one list,
@@ -1970,7 +1972,7 @@ html[data-motion="off"] .t-matrix i { animation: none; opacity: 0.6; }
 .filter-panel .fp-skins > .t-acc-panel-inner .fp-row-wrap { margin: 0 28px 0 16px; padding: 1px 0 1px 8px; border-left: 1px solid var(--panel-border); }
 .filter-panel .fp-skins > .t-acc-panel-inner .fp-row-wrap:first-child { padding-top: 4px; }
 .filter-panel .fp-skins > .t-acc-panel-inner .fp-row-wrap:last-child { padding-bottom: 4px; }
-.filter-panel .fp-skins > .t-acc-panel-inner .fp-lead { display: none; }
+.filter-panel .fp-skins > .t-acc-panel-inner .fp-lead { width: 14px; }   /* a skin's lead is only its rarity mark */
 
 /* Install panel card: one type scale (13px text, 12px labels and hints), labels in sentence case like the rest */
 .install-mod-card .field-label { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 500; color: var(--text-secondary); }
@@ -2996,3 +2998,42 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
    SettingsPanel.css gave it the panel color, which is the track's own black in AMOLED */
 .segmented-control .segment-btn { transition: background-color 150ms ease, color 150ms ease !important; }
 .segmented-control .segment-btn.active { background: var(--bg-lighter) !important; border-color: transparent !important; box-shadow: none !important; color: var(--text-primary) !important; }
+
+/* ---------- the game's own icons (custom/icons/rivals.tsx) ---------- */
+:root { --rarity-rare: #90caf9; --rarity-epic: #d097ff; --rarity-legendary: #f09405; }
+:root[data-theme="light"] { --rarity-rare: #1f6fb8; --rarity-epic: #8a3fd1; --rarity-legendary: #b85f00; }   /* 3:1 or better on the light panel */
+.rv-role { flex: none; }
+.rv-rarity { flex: none; }
+.rv-rarity.is-rare { color: var(--rarity-rare); }
+.rv-rarity.is-epic { color: var(--rarity-epic); }
+.rv-rarity.is-legendary { color: var(--rarity-legendary); }
+.ko-hero-group .ko-group-head { display: flex; align-items: center; gap: 10px; padding: 14px 8px 8px; font-size: 17px; font-weight: 700; letter-spacing: 0.01em; color: var(--text-primary); }
+.ko-hero-group + .ko-hero-group { margin-top: 18px; padding-top: 6px; border-top: 1px solid var(--panel-border); }
+.ko-heroes .ko-col-head .ko-h { font-size: 22px; font-weight: 700; }
+
+/* The beta notice (custom/BetaNote.tsx) */
+.beta-note { display: grid; grid-template-columns: 30px 1fr; column-gap: 14px; align-items: center; margin: 0; font-size: 13px; line-height: 1.5; color: #f5a524; }
+:root[data-theme="light"] .beta-note { color: #9a5b00; }
+.wi-beta { padding: 0 28px 20px; max-width: 76ch; }
+
+/* ---------- a hero's logo and signature, faint behind the Loadouts screen (custom/heroArt.ts sets --hero-logo, --hero-sign) ---------- */
+.has-hero { position: relative; isolation: isolate; }
+.ha-sign { display: none; }
+.has-hero .ha-sign { display: block; flex: none; background: var(--text-primary); opacity: 0.5; -webkit-mask: var(--hero-sign) center / contain no-repeat; mask: var(--hero-sign) center / contain no-repeat; }
+/* Hero sections and a loadout's page: the logo large at the right, fading out toward the left (and down on a page) */
+.ha-logo { display: none; }
+.has-hero > .ha-logo { display: block; position: absolute; z-index: -1; pointer-events: none; background: var(--text-primary); -webkit-mask: var(--hero-logo) center / contain no-repeat; mask: var(--hero-logo) center / contain no-repeat; }
+/* A hero's section: its heading is a band tinted with the accent, the logo large at its right end */
+.lo-group.has-hero > .ha-logo { right: 28px; top: -20px; width: 104px; height: 104px; opacity: 0.14; }
+.lo-group.has-hero > .lo-group-head { min-height: 64px; padding: 0 16px; border-radius: 12px; background: linear-gradient(90deg, color-mix(in srgb, var(--accent-primary), transparent 90%), transparent 75%); }
+.lp.has-hero > .ha-logo { right: -20px; top: -20px; width: 460px; height: 460px; opacity: 0.06;
+  -webkit-mask: var(--hero-logo) center / contain no-repeat, linear-gradient(to bottom left, #000 30%, transparent 85%); -webkit-mask-composite: source-in;
+  mask: var(--hero-logo) center / contain no-repeat, linear-gradient(to bottom left, #000 30%, transparent 85%); mask-composite: intersect; }
+.lo-group-head .ha-sign { width: 130px; height: 36px; margin-left: 12px; }
+/* Cards (Collection view): the hero's logo in the corner of the text, under the words */
+.lo-card.has-hero .lo-card-body { position: relative; }
+.lo-card.has-hero .lo-card-body::after { content: ""; position: absolute; z-index: -1; right: 10px; bottom: 6px; width: 46px; height: 46px; pointer-events: none; background: var(--text-primary); opacity: 0.1;
+  -webkit-mask: var(--hero-logo) center / contain no-repeat; mask: var(--hero-logo) center / contain no-repeat; }
+/* A loadout's page: the signature above the logo */
+.lp .lp-sign { position: absolute; top: 4px; right: 4px; width: 190px; height: 52px; opacity: 0.32; pointer-events: none; }
+@media (max-width: 760px) { .lp.has-hero > .ha-logo { width: 300px; height: 300px; } .lp .lp-sign { width: 130px; height: 36px; } }

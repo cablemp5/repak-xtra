@@ -11,6 +11,7 @@ import { CardMedia, ModRow, OnDot, typeClass } from './loadoutBits'
 import { deleteMedia } from './loadoutMedia'
 import CustomDropdown from '../components/CustomDropdown'
 import { HeroFilter, heroOfName } from './heroFilter'
+import { heroArt, topHero } from './heroArt'
 import {
   type Loadout, type Mod, OTHER, OTHER_LABEL, loadoutable, addGroup, captureKey, addModToLoadout, displayName, duplicateLoadout, groupKey, setLoadoutGroup,
   useGroups, hotkeyOf, hotkeySlots, isActive, modKey, openLoadout, patchLoadout, pinHotkey, readLoadouts, removeModFromLoadout,
@@ -166,6 +167,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
   const heroes = [...new Set(others.map(heroOf).filter(Boolean))].sort()
   const needle = q.trim().toLowerCase()
   const matches = others.filter(k => (!needle || memberName(k).toLowerCase().includes(needle)) && (!type || categoryOf(k) === type) && (!hero || heroOf(k) === hero))
+  const art = heroArt(topHero(l.on, byKey, p.modDetails) ?? topHero(l.scope, byKey, p.modDetails)) // its hero's logo and signature, faint behind the page
   const active = isActive(l, p.mods)
   const onNow = mine.filter(k => byKey.get(k)?.enabled).length
   const present = mine.length - missing.length - unsure.length
@@ -260,7 +262,8 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
   }
 
   return (
-    <div className="lp">
+    <div className={`lp${art ? ' has-hero' : ''}`} style={art}>
+      {art && <><i className="ha-logo" aria-hidden="true" /><i className="ha-sign lp-sign" aria-hidden="true" /></>}
       <button type="button" className="lo-text-btn lp-back" onClick={onBack} title="Back to all loadouts (Esc)">
         <ArrowLeft size={14} /> Loadouts
       </button>
