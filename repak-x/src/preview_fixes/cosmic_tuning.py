@@ -27,6 +27,28 @@ def jelly(chain):
     return "jelly" in (chain.get("master") or "").lower() and flat(chain)
 
 
+# Painted jelly skins (White Fox's Cosmic Kumiho, after its store shot): the painted lilac and violet shows nearly as it
+# is, light, with the galaxy faint over it. The kit's (0.4 galaxy, glow 0.55) drew it a dim periwinkle blue
+PAINTED_SKY, PAINTED_GLOW = 0.2, 1.8
+PAINTED_SOFT = 0.3   # color it loses: the store shot's lilac is soft, the render's light and AgX made it a deep violet
+PAINTED_WARM = (1.0, 0.68, 0.75)   # the painted color warmed: the render's light turned the lilac periwinkle blue
+
+
+def painted(chain):
+    """A jelly galaxy skin with a painted (not flat) skin."""
+    return "jelly" in (chain.get("master") or "").lower() and not flat(chain)
+
+
+def painted_skin(mix, base_col, chain):
+    """A painted jelly skin's color, warmed (any other skin's as it is)."""
+    return mix(mix(base_col, PAINTED_WARM, 1.0, "MULTIPLY"), (0.5, 0.5, 0.5), PAINTED_SOFT, "SATURATION") if painted(chain) else base_col
+
+
+def painted_emission(mix, base_col, space, stars, chain):
+    """A painted jelly skin's glow: its warmed painted color with a faint galaxy, plus the stars."""
+    return mix(mix(painted_skin(mix, base_col, chain), space, PAINTED_SKY), stars, 1.0, "ADD")
+
+
 def flat(chain):
     """Whether a jelly skin's painted skin is one flat color (cosmic Black Panther's CosmicFlat_D)."""
     path = game_png(chain["textures"].get("BaseColor") or chain["textures"].get("DiffuseTex"))
