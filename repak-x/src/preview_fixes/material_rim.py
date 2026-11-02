@@ -137,7 +137,8 @@ def add_rim(m, tex, vectors, scalars, hair=False):
 
 
 FLOW_GLOW_MAX = 2.5   # the flow glow's strength cap, as the kit caps an Emissive glow (HDR game values bloom to white)
-FLOW_GLOW_DIM = 0.05   # the dimmest a line gets between the noise's bright stretches: nearly out, as in the lobby shot
+FLOW_GLOW_DIM = 0.0    # the dimmest a line gets between the noise's bright stretches: out, black suit, as in the lobby shot
+FLOW_CORE = (0.35, 0.7)   # mask values from dark to full glow: below the first nothing glows (the falloff around a line)
 
 
 def add_flow_glow(m, tex, vectors, scalars):
@@ -152,8 +153,11 @@ def add_flow_glow(m, tex, vectors, scalars):
     bsdf = next(n for n in N if n.type == "BSDF_PRINCIPLED")
     peak = max(c["R"], c["G"], c["B"])
     t = N.new("ShaderNodeTexImage"); t.image = image(path, color=False)
+    # Only the lines' cores: the mask's soft falloff around them, glowing faintly, tinted the black suit teal between them
+    core = N.new("ShaderNodeMapRange"); core.inputs["From Min"].default_value, core.inputs["From Max"].default_value = FLOW_CORE
+    msep = N.new("ShaderNodeSeparateColor"); L.new(t.outputs[0], msep.inputs[0]); L.new(msep.outputs[0], core.inputs["Value"])
     lines = N.new("ShaderNodeMix"); lines.data_type = "RGBA"; lines.blend_type = "MULTIPLY"; lines.inputs[0].default_value = 1
-    L.new(t.outputs[0], lines.inputs[6]); lines.inputs[7].default_value = (c["R"] / peak, c["G"] / peak, c["B"] / peak, 1)
+    L.new(core.outputs[0], lines.inputs[6]); lines.inputs[7].default_value = (c["R"] / peak, c["G"] / peak, c["B"] / peak, 1)
     # The lines are not even in game: FX_FlowTex's noise (tiled by FlowTex_UVTile, sharpened by FlowNoisePower) runs along
     # them, bright stretches and dim ones. One frame of it, kept above FLOW_GLOW_DIM so no line goes out
     noise = game_png(tex.get("FX_FlowTex"))
