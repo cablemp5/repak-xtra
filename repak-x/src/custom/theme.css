@@ -3016,7 +3016,6 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .setting-warn .rv-ico { justify-self: center; }
 
 /* The beta notice (custom/BetaNote.tsx) */
-.beta-note { display: grid; grid-template-columns: 30px 1fr; column-gap: 8px; align-items: center; margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
-.beta-link { display: inline; padding: 0 !important; min-height: 0 !important; height: auto !important; border: none !important; background: none !important; font: inherit; color: var(--text-primary) !important; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
-.beta-link:hover { color: var(--accent-primary) !important; }
+.beta-note { display: grid; grid-template-columns: 30px 1fr; column-gap: 14px; align-items: center; margin: 0; font-size: 13px; line-height: 1.5; color: #f5a524; }
+:root[data-theme="light"] .beta-note { color: #9a5b00; }
 .wi-beta { padding: 0 28px 20px; max-width: 76ch; }

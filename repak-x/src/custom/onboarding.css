@@ -161,7 +161,7 @@
 .ob-pref-action .lo-text-btn:not(.is-working) { border-color: rgba(255, 255, 255, 0.14) !important; }
 .ob-ok { display: inline-flex; align-items: center; gap: 6px; height: 32px; font-size: 13px; font-weight: 600; color: #3ecf6e; }
 .ob-pref-text .fr-admin { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* one line */   /* the system prompt, said before it shows */
-.fr-admin svg { flex: none; color: #f5a524; }   /* the app's warning amber: a heads-up, on the icon only */
+.fr-admin svg, .fr-admin .rv-ico { flex: none; color: #f5a524; }   /* the app's warning amber: a heads-up, on the icon only */
 .ob-pref-text .fr-admin.is-waiting { color: #f5a524; }   /* Windows is asking now: the whole line */
 .ob-pref .su-track { margin: 4px 0 0; }
 .ob-pref:not(:has(.ob-pref-action)) .ob-pref-text { padding-bottom: 18px; }   /* room under the progress bar while the button is away */

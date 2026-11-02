@@ -19,7 +19,7 @@ const mask = (cls: string, scale: number) =>
     )
   }) as unknown as LucideIcon
 
-export const Shield = mask('rv-shield', 1.4)
+export const Shield = mask('rv-shield', 1.68)
 export const ShieldCheck = Shield
 export const ShieldOff = Shield
 export const TriangleAlert = mask('rv-warn', 2)
