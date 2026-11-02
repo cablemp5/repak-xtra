@@ -136,8 +136,8 @@ def add_rim(m, tex, vectors, scalars, hair=False):
     strength.default_value = 1.0
 
 
-FLOW_GLOW_MAX = 4.0   # the flow glow's strength cap, as the kit caps an Emissive glow (HDR game values bloom to white)
-FLOW_GLOW_DIM = 0.2   # the dimmest a line gets between the noise's bright stretches
+FLOW_GLOW_MAX = 2.5   # the flow glow's strength cap, as the kit caps an Emissive glow (HDR game values bloom to white)
+FLOW_GLOW_DIM = 0.05   # the dimmest a line gets between the noise's bright stretches: nearly out, as in the lobby shot
 
 
 def add_flow_glow(m, tex, vectors, scalars):
@@ -165,13 +165,13 @@ def add_flow_glow(m, tex, vectors, scalars):
         nt_ = N.new("ShaderNodeTexImage"); nt_.image = image(noise, color=False); L.new(mp.outputs[0], nt_.inputs[0])
         sep = N.new("ShaderNodeSeparateColor"); L.new(nt_.outputs[0], sep.inputs[0])
         pw = N.new("ShaderNodeMath"); pw.operation = "POWER"; L.new(sep.outputs[0], pw.inputs[0])
-        pw.inputs[1].default_value = max(0.5, float(scalars.get("FlowNoisePower", 1.0)) * 0.5)
+        pw.inputs[1].default_value = max(1.0, float(scalars.get("FlowNoisePower", 1.0)))   # the master's full sharpness: short bright stretches
         rng = N.new("ShaderNodeMapRange"); L.new(pw.outputs[0], rng.inputs["Value"])
-        rng.inputs["From Max"].default_value = 0.5; rng.inputs["To Min"].default_value = FLOW_GLOW_DIM
+        rng.inputs["From Max"].default_value = 0.3; rng.inputs["To Min"].default_value = FLOW_GLOW_DIM
         vary = N.new("ShaderNodeMix"); vary.data_type = "RGBA"; vary.blend_type = "MULTIPLY"; vary.inputs[0].default_value = 1
         L.new(lines.outputs[2], vary.inputs[6]); L.new(rng.outputs[0], vary.inputs[7])
         lines = vary
-    strength = min(FLOW_GLOW_MAX, max(1.0, float(scalars.get("FlowMaskIntensity", 1.0)) * float(scalars.get("FlowNoiseIntensity", 1.0)) * 0.5))
+    strength = min(FLOW_GLOW_MAX, max(1.0, float(scalars.get("FlowMaskIntensity", 1.0)) * float(scalars.get("FlowNoiseIntensity", 1.0)) * 0.4))
     em = bsdf.inputs["Emission Color"]
     if em.is_linked:   # an Emissive glow is there: add the lines at their own strength relative to it
         old = em.links[0].from_socket
