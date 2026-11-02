@@ -14,9 +14,9 @@ const RARITY_PATHS: Record<Rarity, string> = {
 }
 
 export type Role = keyof typeof ROLE_PATHS
-const glyph = (d: string, size: number | string, cls: string, title?: string) => (
-  <svg viewBox="0 0 1024 1024" width={size} height={size} className={cls} aria-hidden={title ? undefined : 'true'} role={title ? 'img' : undefined}>
-    {title && <title>{title}</title>}<path d={d} fill="currentColor" />
+const glyph = (d: string, size: number | string, cls: string) => (
+  <svg viewBox="0 0 1024 1024" width={size} height={size} className={cls} aria-hidden="true">
+    <path d={d} fill="currentColor" />
   </svg>
 )
 /** Vanguard, Duelist or Strategist, drawn in the text color. */
@@ -24,4 +24,4 @@ export const RoleIcon = ({ role, size = 16, className = '' }: { role: string; si
   role in ROLE_PATHS ? glyph(ROLE_PATHS[role as Role], size, `rv-role${className ? ` ${className}` : ''}`) : null
 /** Rare, epic or legendary, drawn in its rarity color (theme.css --rarity-*). */
 export const RarityIcon = ({ rarity, size = 14, className = '' }: { rarity: Rarity; size?: number | string; className?: string }) =>
-  glyph(RARITY_PATHS[rarity], size, `rv-rarity is-${rarity}${className ? ` ${className}` : ''}`, rarity[0].toUpperCase() + rarity.slice(1)) // read out before the skin's name
+  glyph(RARITY_PATHS[rarity], size, `rv-rarity is-${rarity}${className ? ` ${className}` : ''}`)
