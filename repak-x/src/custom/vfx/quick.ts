@@ -13,7 +13,7 @@ import { modKey, nameKey, renameModKey } from '../loadoutStore'
 import { renameSource } from '../nexusSource'
 import { readFilter } from './filter'
 import { openVfxWindow, sendReport, utocOf } from './handoff'
-import { STEPS, fixVfxMod, type VfxReport } from './pipeline'
+import { STEPS, fixVfxMod, repairOutcome, type VfxReport } from './pipeline'
 import { claimRun, newRunToken, readNaming, readOriginals, readSafeOff, releaseRun, runLock } from './prefs'
 
 type Alert = ReturnType<typeof useAlert>
@@ -104,7 +104,7 @@ function resultToast(r: VfxReport, name: string, alert: Alert) {
     const warned = r.warnings.length, left = r.counts.left
     const where = left ? 'The original is off and kept for a full update later.' : r.placed.trashed ? 'The original is in Recently deleted.' : r.placed.turnedOff ? 'The original is off.' : ''
     alert.showAlert({
-      color: warned || left ? 'warning' : 'success', duration: warned || left ? 0 : 6000, title: `${left ? 'Partially updated' : 'Updated'} ${name}`, action: show,
+      color: warned || left ? 'warning' : 'success', duration: warned || left ? 0 : 6000, title: `${repairOutcome(r)}: ${name}`, action: show,
       description: [
         r.counts.updated ? `Rebuilt ${plural(r.counts.updated, 'asset')}.` : '',
         left ? `Left out ${plural(left, 'Niagara file')} made for an older game build, so those effects show their usual colors.` : '',

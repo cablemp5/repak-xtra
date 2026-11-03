@@ -21,7 +21,7 @@ import { canonKey } from '../loadoutIdentity'
 import { modKey, useLoadouts } from '../loadoutStore'
 import { FIXED_EVENT, onHandoff, openLoadoutInMain, onReport, takeHandoff, takeReport, utocOf, type Fixed } from './handoff'
 import { KEEP_NAME, ORIGINALS, SAFE_OFF, claimRun, newRunToken, onRunChange, readNaming, readOriginals, readSafeOff, releaseRun, runLock, type Naming, type Originals, type RunLock } from './prefs'
-import { STEPS, fixVfxMod, type AssetKind, type VfxReport } from './pipeline'
+import { STEPS, fixVfxMod, repairOutcome, type AssetKind, type VfxReport } from './pipeline'
 import { checkVfxMod, checkWords } from './quick'
 import { rescanVerdicts, verdictsChanged } from '../brokenMods'
 import { HeroFilter, heroOfName } from '../heroFilter'
@@ -95,12 +95,12 @@ const STATUS: Record<Status, string> = { waiting: 'Queued', running: 'Updating',
 const KIND_ORDER: AssetKind[] = ['failed', 'left', 'unreadable', 'added', 'updated', 'same', 'passed']
 const KIND_LABEL: Record<AssetKind, string> = { updated: 'Rebuilt', same: 'Match the game', added: 'The mod\'s own', passed: 'Kept as they were', left: 'Left out', unreadable: 'Could not be read', failed: 'Not updated' }
 /** An update that left out Niagara files made for an older game build: it works, without those effects' colors */
-const isPartial = (r?: VfxReport) => r?.status === 'fixed' && r.counts.left > 0
-const statusText = (r: VfxReport) => (isPartial(r) ? 'Partially updated'
-  : r.turnedOff && r.status !== 'fixed' ? `${r.status === 'failed' ? 'Failed' : r.counts.relaid ? 'Not updated' : 'May crash'}, turned off` : STATUS[r.status])
-const leftText = (r: VfxReport) => `Left out ${plural(r.counts.left, 'Niagara file')} made for an older game build, so the game uses its own and ${r.counts.left === 1 ? 'that effect shows' : 'those effects show'} their usual colors.`
-/** Niagara files the update could not carry with today's USMAP: the game's own effect, for good (still a full update). */
-const ownText = (r: VfxReport) => (r.counts.ownGame ? `${plural(r.counts.ownGame, 'Niagara file')} could not be carried, so ${r.counts.ownGame === 1 ? 'that effect shows' : 'those effects show'} the game's own colors.` : '')
+const isPartial = (r?: VfxReport) => r?.status === 'fixed' && (r.counts.left + r.counts.ownGame + r.counts.unreadable > 0 || r.assets.some(a => a.kind === 'failed'))
+const statusText = (r: VfxReport) => (isPartial(r) ? 'Partially repaired'
+  : r.turnedOff && r.status !== 'fixed' ? `${r.status === 'failed' ? 'Failed' : r.counts.relaid ? 'Not updated' : 'May crash'}, turned off` : r.status === 'fixed' || r.status === 'failed' ? repairOutcome(r) : STATUS[r.status])
+const leftText = (r: VfxReport) => `Left out ${plural(r.counts.left, 'effect file')} made for an older game build, so the game uses its own and ${r.counts.left === 1 ? 'that effect shows' : 'those effects show'} their usual colors.`
+/** Niagara files the update could not carry with today's USMAP: the game's own effect, for good (a partial repair). */
+const ownText = (r: VfxReport) => (r.counts.ownGame ? `${plural(r.counts.ownGame, 'asset')} could not be carried, so ${r.counts.ownGame === 1 ? 'that effect shows' : 'those effects show'} the game's own colors.` : '')
 /** A run's length, read at a glance: 42 s, 1 min 24 s */
 const took = (ms: number) => {
   const sec = Math.max(1, Math.round(ms / 1000)), min = Math.floor(sec / 60), rest = sec % 60
@@ -124,7 +124,7 @@ function placedText(r: VfxReport) {
 function reportText(r: VfxReport) {
   const lines = [`${r.name}: ${statusText(r)}${r.error ? `. ${r.error}` : ''}`]
   if (r.status === 'fixed') lines.push(`  ${placedText(r)}`)
-  if (isPartial(r)) lines.push(`  ${leftText(r)}`)
+  if (r.counts.left) lines.push(`  ${leftText(r)}`)
   if (r.counts.ownGame) lines.push(`  ${ownText(r)}`)
   lines.push(`  ${r.counts.updated} rebuilt with ${r.counts.changes} edits, ${r.counts.same} match the game, ${r.counts.added} the mod's own, ${r.counts.passed} kept, ${r.counts.left} left out, ${r.counts.unreadable} unreadable, ${took(r.ms)}`)
   r.warnings.forEach(w => lines.push(`  ! ${w}`))
@@ -133,14 +133,14 @@ function reportText(r: VfxReport) {
 }
 
 function Report({ r, onRetry, onUsmap, busy }: { r: VfxReport; onRetry: () => void; onUsmap: () => void; busy: boolean }) {
-  const [assets, setAssets] = useState(false)
+  const [assets, setAssets] = useState(true)
   const [allWarnings, setAllWarnings] = useState(false)
   const groups = KIND_ORDER.map(k => [k, r.assets.filter(a => a.kind === k)] as const).filter(([, list]) => list.length)
   const warnings = allWarnings ? r.warnings : r.warnings.slice(0, 4)
   return (
     <div className="vf-report">
       {r.status === 'fixed'
-        ? <p className="vf-note">{r.counts.updated ? `Rebuilt ${r.counts.updated.toLocaleString()} of ${plural(r.assets.length, 'asset')} with ${plural(r.counts.changes, 'edit')}. ` : ''}{isPartial(r) ? `${leftText(r)} ` : ''}{ownText(r) ? `${ownText(r)} ` : ''}{placedText(r)}</p>
+        ? <p className="vf-note">{r.counts.updated ? `Rebuilt ${r.counts.updated.toLocaleString()} of ${plural(r.assets.length, 'asset')} with ${plural(r.counts.changes, 'edit')}. ` : ''}{r.counts.left ? `${leftText(r)} ` : ''}{ownText(r) ? `${ownText(r)} ` : ''}{placedText(r)}</p>
         // a cancelled run's pill already says so: no "Cancelled." under it. An error that sends the user to the USMAP
         // links to it (Advanced opens on it)
         : r.error && r.status !== 'cancelled' && <p className="vf-note">{r.error}{/USMAP in Advanced/.test(r.error) && <>{' '}<button type="button" className="su-link" onClick={onUsmap}>Open the USMAP setting</button></>}</p>}
@@ -308,6 +308,8 @@ function ColorNames() {
 export function VfxUpdaterPanel() {
   const [mods, setMods] = useState<Mod[] | null>(null)
   const [needs, setNeeds] = useState<Map<string, string>>(new Map()) // a mod's main file (norm) -> why it needs an update
+  const [repairPolicy, setRepairPolicy] = useState<'strict' | 'bestEffort'>('strict')
+  const [review, setReview] = useState<{ report: VfxReport; resolve: (accepted: boolean) => void } | null>(null)
   const [stale, setStale] = useState<Map<string, number>>(new Map()) // a mod's .utoc (norm) -> its Niagara files an update will leave out
   // a mod's .utoc (norm) -> files it rebuilds that a patch newer than the USMAP changed: it waits for that patch's USMAP
   const [waits, setWaits] = useState<Map<string, number>>(new Map())
@@ -594,6 +596,7 @@ export function VfxUpdaterPanel() {
       modStart.current = performance.now()
       addLog(`Updating ${mod.name}`)
       const r = await fixVfxMod({
+        policy: repairPolicy, review: report => new Promise(resolve => { patch(key, { sub: 'Review candidate before replacing the mod' }); setReview({ report, resolve }) }),
         modPath: mod.utoc, usmapPath: usmap, gamePaksPath: paks, turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash', keepName, filter,
         safeOff: safeOff && needs.has(norm(mod.path)), // only a flagged mod: an unflagged one that fails stays as it was
         log: addLog, cancelled: () => cancel.current,
@@ -782,6 +785,17 @@ export function VfxUpdaterPanel() {
   return (
     <div className="vf-panel">
       <div className="vf-body">
+        {review && <div className="vf-report" role="dialog" aria-label="Review repair candidate">
+          <h3>Review candidate before replacing the mod</h3>
+          <p>The candidate is separate. The original stays unchanged until you choose Use candidate.</p>
+          <Report r={review.report} busy={true} onRetry={() => {}} onUsmap={() => {}} />
+          <button type="button" className="row-action" onClick={() => { review.resolve(true); setReview(null) }}>Use candidate</button>
+          <button type="button" className="row-action" autoFocus onClick={() => { review.resolve(false); setReview(null) }}>Keep original</button>
+        </div>}
+        <Seg label="Repair policy" value={repairPolicy} disabled={busy}
+          note={repairPolicy === 'strict' ? 'Strict refuses incomplete output and warnings.' : 'Best effort builds a separate candidate. Review every asset before replacing the original.'}
+          options={[['strict', 'Strict'], ['bestEffort', 'Best effort']]}
+          onChange={v => setRepairPolicy(v)} />
         <div className="lp-filters vf-filters">
           {/* shown while the folder is read too, so the bar does not appear under the pointer when the list lands, and kept
               while a search or hero filter is on, so it can always be cleared */}
