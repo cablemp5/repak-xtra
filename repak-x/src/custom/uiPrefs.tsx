@@ -118,6 +118,7 @@ window.addEventListener('keydown', e => {
   if (step === null) return
   e.preventDefault()
   const next = step === 0 ? 100 : SCALES[Math.max(0, Math.min(SCALES.length - 1, (i < 0 ? SCALES.indexOf(100) : i) + step))]
+  if (next !== getScale()) cue('select')
   update(SCALE_KEY, String(next))
 })
 // Other windows (Asset Explorer, VFX Updater) pick up changes made in Settings

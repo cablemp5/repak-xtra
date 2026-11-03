@@ -56,6 +56,7 @@ import InstallButton from './custom/InstallButton' // repakxtra
 import { Num } from './custom/motion' // repakxtra
 import ModStateFilter, { matchesState, type ModState } from './custom/ModStateFilter'
 import './custom/keyboardClickables'
+import { cue } from './custom/sounds' // repakxtra: direct keyboard actions share the click cues
 import { dialogOpen } from './custom/hotkeys' // repakxtra: extra shortcuts
 import { modalOpen, topModal } from './custom/dialogFocus' // repakxtra: one "a dialog is open" contract for every shortcut
 import './custom/fpsMeter' // repakxtra: F3 frame rate counter
@@ -3127,22 +3128,26 @@ function App() {
       // Ctrl+R - Full React reinit
       else if (ctrl && key === 'r' && !shift) {
         e.preventDefault()
+        cue('tap') // repakxtra
         window.location.reload()
       }
       // Ctrl+F - Focus search
       else if (ctrl && key === 'f') {
         e.preventDefault()
+        if (searchInputRef.current) cue('select') // repakxtra
         searchInputRef.current?.focus()
       }
       // Ctrl+Shift+R - Refresh mods only
       else if (ctrl && shift && key === 'r') {
         e.preventDefault()
+        cue('tap') // repakxtra
         alert.info('Mods Refreshed', 'Refreshed mods list.')
         void loadMods().then(rescanVerdicts) // repakxtra: and every update check
       }
       // Ctrl+, - Settings
       else if (ctrl && key === ',') {
         e.preventDefault()
+        if (!panels.settings) cue('open') // repakxtra
         setPanel('settings', true)
       }
       // Escape - Close panels or deselect
@@ -3156,11 +3161,13 @@ function App() {
         else if (modalOpen()) return // repakxtra: another dialog takes its own Esc, the Library behind it keeps its selection
         else if (selectedMod) setSelectedMod(null)
         else if (selectedMods.size > 0) setSelectedMods(new Set()) // repakxtra: Esc clears the selection, as F1 says
+        if (panels.shortcuts || panels.settings || panels.tools || panels.install || panels.clash || selectedMod || selectedMods.size) cue('close') // repakxtra
       }
       else if (key !== 'f1' && (e.defaultPrevented || dialogOpen())) return // repakxtra: Home or a dialog is showing: the Library's selection keys below stay quiet
       // Ctrl+E - Toggle mod enabled/disabled
       else if (ctrl && key === 'e' && selectedMod) {
         e.preventDefault()
+        if (!(gameRunning && !bypassGameRunningLock)) cue('toggle', { direction: selectedMod.enabled ? 'back' : 'forward' }) // repakxtra
         handleToggleMod(selectedMod.path)
       }
       // F2 - Rename mod
@@ -3173,12 +3180,14 @@ function App() {
           )
           return
         }
+        cue('tap', { emphasis: 'subtle' }) // repakxtra
         setRenamingModPath(selectedMod.path)
       }
       // Enter - Open mod details
       else if (key === 'enter' && selectedMod && !isRightPanelOpen) {
         e.preventDefault()
         setLeftPanelWidth(lastPanelWidth > 60 ? lastPanelWidth : 70)
+        cue('open') // repakxtra
         setIsRightPanelOpen(true)
       }
       // Arrow navigation
@@ -3222,19 +3231,23 @@ function App() {
 
         // repakxtra: focus moves with the viewed mod, so Enter and Space act on the row on show (custom/libraryFocus.ts)
         const next = filteredMods[newIndex] ?? filteredMods[0]
-        if (next.path !== selectedMod?.path) setSelectedMod(next)
+        if (next.path !== selectedMod?.path) { cue('select'); setSelectedMod(next) } // repakxtra
         focusRow(next.path)
       }
       // Delete - delete the checked mods, or the viewed one (undoable, repakxtra)
       else if (key === 'delete' && (selectedMods.size > 0 || selectedMod)) {
         e.preventDefault()
         if (gameRunning && !bypassGameRunningLock) alert.warning('Game Running', 'Cannot delete mods while game is running.')
-        else if (selectedMods.size > 0) handleBulkDelete()
-        else if (selectedMod) handleDeleteMod(selectedMod.path)
+        else { // repakxtra: the deletion key has the same cue as its button
+          cue('close', { emphasis: 'strong' })
+          if (selectedMods.size > 0) handleBulkDelete()
+          else if (selectedMod) handleDeleteMod(selectedMod.path)
+        }
       }
       // F1 - Show shortcuts help
       else if (key === 'f1') {
         e.preventDefault()
+        if (!panels.shortcuts) cue('open') // repakxtra
         setPanel('shortcuts', true)
       }
     }

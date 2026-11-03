@@ -3,6 +3,7 @@
 // Steps with the − / + control in the Loadouts header, a plain mouse wheel over that control, or Ctrl + mouse wheel over the cards.
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { Minus, Plus } from 'lucide-react'
+import { cue } from './sounds'
 import { savedItem } from './storageCarryOver'
 
 const KEY = 'repakxtra.cardZoom'
@@ -32,7 +33,9 @@ export function useWheelZoom(el: HTMLElement | null) {
       const held = e.target instanceof Element && e.target !== el && el.contains(e.target) ? e.target : null
       const before = held?.getBoundingClientRect().top
       el.style.overflowAnchor = 'none'
-      step(e.deltaY < 0 ? 1 : -1)
+      const dir = e.deltaY < 0 ? 1 : -1
+      if (stepZoom(get(), dir) !== get()) cue('select')
+      step(dir)
       const hold = () => { if (held?.isConnected && before !== undefined) el.scrollTop += held.getBoundingClientRect().top - before }
       // the grid has its new size by the next frame; crossing 80% (data-small) settles one frame later, so hold twice
       requestAnimationFrame(() => { hold(); requestAnimationFrame(() => { hold(); el.style.overflowAnchor = '' }) })
@@ -56,6 +59,7 @@ export function CardZoomControl() {
       sum += e.deltaMode === 0 ? e.deltaY : e.deltaY * 100 // lines and pages count as whole notches
       const n = Math.trunc(sum / 100) // whole notches; the rest waits for the next event
       sum -= n * 100
+      if (n && stepZoom(get(), n < 0 ? 1 : -1) !== get()) cue('select')
       for (let i = 0; i < Math.abs(n); i++) step(n < 0 ? 1 : -1)
     }
     el.addEventListener('wheel', onWheel, { passive: false })

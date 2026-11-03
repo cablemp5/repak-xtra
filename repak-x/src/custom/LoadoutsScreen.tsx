@@ -24,6 +24,7 @@ import {
   inGroup, isActive, modKey, moveGroup, moveLoadout, movedBeside, nextLoadoutName, openLoadout, patchLoadout, placeLoadout, placed, readLoadouts, renameGroup,
   setView, snapshotLoadout, sweepMediaOnce, useGroups, useLoadouts, useOpenLoadout, useView, writeLoadouts, modsByKey,
 } from './loadoutStore'
+import { cue } from './sounds'
 import { savedItem } from './storageCarryOver'
 import { useUpstreamWatch } from './upstream'
 import { useUiPref } from './uiPrefs'
@@ -295,7 +296,7 @@ function LoadoutsHome(p: LoadoutProps) {
   const newRef = useRef<HTMLButtonElement>(null)
   const closedId = useRef<string | null>(null)
   const shownPage = useRef(open?.id ?? null)
-  const closePage = () => { closedId.current = openRef.current; setOpenId(null) }
+  const closePage = () => { cue('navigate', { direction: 'back' }); closedId.current = openRef.current; setOpenId(null) }
   useEffect(() => {
     const was = shownPage.current
     shownPage.current = open?.id ?? null
@@ -332,7 +333,7 @@ function LoadoutsHome(p: LoadoutProps) {
     onModContextMenu: (e, m, rename) => live.current.onModContextMenu?.(e, m, rename) }), [p.mods, p.modDetails, p.alert, p.blocked, p.scopeMods, p.scopeLabel])
   const pickCard = useStableCallback((e: React.PointerEvent<HTMLElement>, id: string) => { if (!filtered) drag.onPointerDown(e, id) }) // no reordering a filtered view
   const toggleCard = useStableCallback((l: Loadout, on: boolean) => toggle(l, on))
-  const startRename = useStableCallback((l: Loadout) => { setDraft(l.name); setRenaming(l.id) })
+  const startRename = useStableCallback((l: Loadout) => { cue('tap', { emphasis: 'subtle' }); setDraft(l.name); setRenaming(l.id) })
   const commitCard = useStableCallback((l: Loadout) => commitRename(l))
   const cancelRename = useStableCallback(() => setRenaming(null))
 

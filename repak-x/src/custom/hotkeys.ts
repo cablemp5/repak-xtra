@@ -2,6 +2,7 @@
 // Upstream keys are handled in App.tsx; L in loadoutStore.ts, Ctrl+1-9 in Loadouts.tsx,
 // zoom in uiPrefs.tsx. The ones below drive existing buttons, so they follow
 // the same rules (game-running locks, confirmations) as clicking.
+import { cue } from './sounds'
 import { togglePref, toggleTags } from './uiPrefs'
 import { modalOpen } from './dialogFocus'
 
@@ -117,14 +118,18 @@ window.addEventListener('keydown', e => {
   // element, and arrow keys leave focus on the page, so focus the selected row's name first
   if (key === 'contextmenu' || (key === 'f10' && e.shiftKey)) {
     const row = document.querySelector('.mod-card.viewing')
-    if (row && !row.contains(document.activeElement)) row.querySelector<HTMLElement>('.mod-name-button')?.focus()
+    if (row) {
+      if (!row.contains(document.activeElement)) row.querySelector<HTMLElement>('.mod-name-button')?.focus()
+      cue('open')
+    }
     return
   }
 
   switch (key) {
     case '/':
       e.preventDefault()
-      document.querySelector<HTMLInputElement>('.main-search-input')?.focus()
+      const search = document.querySelector<HTMLInputElement>('.main-search-input')
+      if (search) { search.focus(); cue('select') }
       break
     case '1': case '2': case '3':
       click(`.mod-state-filter button:nth-child(${key})`)
@@ -169,6 +174,7 @@ window.addEventListener('keydown', e => {
     case 't':
       e.preventDefault()
       toggleTags()
+      cue('toggle')
       break
   }
 })
