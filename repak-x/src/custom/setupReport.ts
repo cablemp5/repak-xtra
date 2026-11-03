@@ -172,7 +172,7 @@ export async function gatherReport(): Promise<string> {
   }).sort((a, b) => a.name.localeCompare(b.name))
   const count = (kind: Verdict['kind']) => (verdicts ?? []).filter(v => v.kind === kind).length // only the mods that are on were asked about
   // a crash suspect may crash too, unless it already counts as broken
-  const mayCrash = onPaths.filter(p => verdictOf.get(key(p))?.kind === 'risky' || ((suspect.has(key(p)) || dumpSuspect.has(key(p))) && verdictOf.get(key(p))?.kind !== 'broken')).length
+  const mayCrash = onPaths.filter(p => ['risky', 'unknown'].includes(verdictOf.get(key(p))?.kind ?? '') || ((suspect.has(key(p)) || dumpSuspect.has(key(p))) && verdictOf.get(key(p))?.kind !== 'broken')).length
   const flags = !verdicts ? 'not checked' : [
     `${count('vfx')} need a VFX update`, `${mayCrash} may crash`, `${count('broken')} broken`, `${hasNiagara.size} with Niagara`,
   ].join(', ')
