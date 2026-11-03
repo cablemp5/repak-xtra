@@ -10,6 +10,7 @@ export type Shortcut = { keys: string[]; action: string }
 /** The header buttons Settings > Header buttons shows or hides, each on Shift + a letter, in every view. Shift+C stays
  *  the conflict warnings, and a Shift key never also fires its plain letter. */
 const HEADER = [
+  { key: 'k', pref: 'ko-tab', name: 'KO Editor tab' },
   { key: 'm', pref: 'vfx-updater', name: 'Mod Updater' },
   { key: 'e', pref: 'encrypt', name: 'Encrypt' },
   { key: 'g', pref: 'galacta', name: 'Galacta Converter' },

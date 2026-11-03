@@ -15,6 +15,7 @@ import { savedItem } from './storageCarryOver'
 // `on`: shown until switched off (the rest start hidden). Stored as '1' or '0' once changed.
 // `group`: the Settings section it is drawn in (Header buttons, On each mod), or its own place elsewhere.
 const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod' | 'warn' }[] = [
+  { key: 'ko-tab', label: 'KO Editor tab (Shift+K)', on: true, group: 'header' },
   { key: 'vfx-updater', label: 'Mod Updater (Shift+M)', on: true, group: 'header' },
   { key: 'encrypt', label: 'Encrypt (Shift+E)', group: 'header' }, // hidden by default: Settings > Header buttons shows it
   { key: 'galacta', label: 'Galacta Converter (Shift+G)', group: 'header' }, // hidden by default, also in Tools
