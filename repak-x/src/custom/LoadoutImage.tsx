@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import Checkbox from '../components/ui/Checkbox'
 import { save } from '@tauri-apps/plugin-dialog'
 import { writeFile } from '@tauri-apps/plugin-fs'
 import { ImageDown } from 'lucide-react'
@@ -97,7 +99,7 @@ function Editor({ p, l, picture, close }: { p: LoadoutProps; l: Loadout; picture
         {error && <p role="alert">{error}</p>}
         <p>Select components and add creator credits where you know them. Long lists expand the image to keep every credit readable.</p>
         {keys.map(k => <div className="li-component" key={k}>
-          <label><input type="checkbox" checked={selected.has(k)} onChange={() => setSelected(s => { const next = new Set(s); if (next.has(k)) next.delete(k); else next.add(k); return next })} />{memberName(k)}</label>
+          <Checkbox size="sm" aria-label={`Include ${memberName(k)}`} checked={selected.has(k)} onChange={() => setSelected(s => { const next = new Set(s); if (next.has(k)) next.delete(k); else next.add(k); return next })}>{memberName(k)}</Checkbox>
           <input value={credits[k] || ''} aria-label={`Creator credit for ${memberName(k)}`} placeholder="Creator credit (optional)" onChange={e => setCredits(c => ({ ...c, [k]: e.target.value }))} />
         </div>)}
       </div>
@@ -126,7 +128,7 @@ export default function LoadoutImage({ p, l }: { p: LoadoutProps; l: Loadout }) 
     } catch (e) { p.alert.info('Choose a loadout picture', String(e)) }
   }
   return <><button type="button" className="lo-text-btn" onClick={e => open(e.currentTarget)}><ImageDown size={15} /> Share image</button>
-    {picture && <Editor p={p} l={l} picture={picture} close={() => setPicture(null)} />}</>
+    {picture && createPortal(<Editor p={p} l={l} picture={picture} close={() => setPicture(null)} />, document.body)}</>
 }
 
 if (import.meta.env.DEV) {

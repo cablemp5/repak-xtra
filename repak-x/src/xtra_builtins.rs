@@ -114,7 +114,7 @@ struct Saved {
 fn recipe(id: &str) -> u32 {
     match id {
         // Rebuild older copies with the warning widget hidden as well as shortened.
-        SKIP_INTRO => 2,
+        SKIP_INTRO => 3,
         _ => 0,
     }
 }
