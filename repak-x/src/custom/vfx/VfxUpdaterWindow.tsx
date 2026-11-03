@@ -651,7 +651,7 @@ export function VfxUpdaterPanel() {
     if (on) setTimeout(() => document.querySelector('.vf-adv')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 60)
   }
 
-  const stop = () => { cancel.current = true; setCancelling(true); addLog('Cancelling after the current step…', 'warning') }
+  const stop = () => { review?.resolve(false); setReview(null); cancel.current = true; setCancelling(true); addLog('Cancelling after the current step…', 'warning') }
 
   // Check: the ticked mods' materials against this game version and the earlier ones (xtra_vfx_check.rs). Their Needs an
   // update follows, here and in the Library

@@ -355,8 +355,9 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       const utoc = await invoke<string>('vfx_pack_to_iostore', { usmapPath: o.usmapPath, inputDir: dirs.finalUassets, outputBase: base, allowedAssets: manifest })
       report.output = utoc
       if (o.policy === 'bestEffort' && !o.outputDir) {
-        if (!o.review || !await o.review({ ...report, status: 'fixed' })) { report.error = 'Candidate not installed. The original was not changed.'; return }
+        const accepted = o.review ? await o.review({ ...report, status: 'fixed' }) : false
         check()
+        if (!accepted) { report.error = 'Candidate not installed. The original was not changed.'; return }
         const reviewedBuild = await invoke<{ updated: number }>('xtra_game_build')
         if (!buildAt || reviewedBuild.updated !== buildAt) throw new Error('Game build changed during review. Run the repair again.')
       }
@@ -505,8 +506,8 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
         } else if (changed.length) {
           await invoke('vfx_write_json_file', { path: `${dirs.editedJson}/${jsonRel}`, content: JSON.stringify(json) })
           report.counts.changes += changed.length
-          asset(p, 'updated', `Rebuilt on the game's file with ${plural(changed.length, 'edit')}: ${changed.slice(0, 6).join(', ')}${changed.length > 6 ? `, and ${changed.length - 6} more` : ''}.`)
-        } else asset(p, 'same', 'Matches the game: left out, so the game\'s own is used.')
+          asset(p, 'updated', `Rebuilt on the game's file with ${plural(changed.length, 'edit')}: ${changed.slice(0, 6).join(', ')}${changed.length > 6 ? `, and ${changed.length - 6} more` : ''}. Other creator edits are not proven preserved.`)
+        } else asset(p, 'same', 'Supported parameters match the game. Original asset omitted, so vanilla is used. Other creator edits are not proven preserved.')
       }
       o.onProgress?.(++done, editable.length, `Carried ${done} of ${editable.length}`)
     })
