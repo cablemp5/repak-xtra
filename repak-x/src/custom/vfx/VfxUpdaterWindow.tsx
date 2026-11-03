@@ -25,6 +25,7 @@ import { STEPS, fixVfxMod, repairOutcome, type AssetKind, type VfxReport } from 
 import { checkVfxMod, checkWords } from './quick'
 import { verdictsChanged } from '../brokenMods'
 import { HeroFilter, heroOfName } from '../heroFilter'
+import ScanButton from './ScanButton'
 import './vfx.css'
 
 type Status = 'waiting' | 'running' | 'fixed' | 'nothing' | 'failed' | 'cancelled'
@@ -835,13 +836,6 @@ export function VfxUpdaterPanel() {
           <button type="button" className="lo-text-btn is-primary vf-add" disabled={busy || mods === null} onClick={() => void addUtoc()}
             title="Update a mod this list does not show: choose its .utoc file"><FilePlus size={14} aria-hidden="true" /> Add .utoc</button>
         </div>
-        <div className="vf-recheck">
-          <button type="button" className="lo-text-btn" disabled={busy || Boolean(checkRun) || Boolean(lock) || !recheckCount}
-            onClick={() => void checkTicked(true)} title="Recheck every flagged mod's materials, including mods hidden by filters. Does not repair or replace files.">
-            <RefreshCw size={14} aria-hidden="true" className={checkRun ? 'vf-spin' : undefined} /> Recheck flagged mods{recheckCount > 0 ? ` (${recheckCount})` : ''}
-          </button>
-          <span>Checks materials without changing mod files. Mesh and Blueprint-only warnings need their own checks.</span>
-        </div>
         {loadError && (
           <p className="vf-warn" role="alert">
             <AlertTriangle size={14} aria-hidden="true" />
@@ -1002,8 +996,8 @@ export function VfxUpdaterPanel() {
           {reports.length > 0 && !busy && <button type="button" className="lo-text-btn" onClick={() => copy('report')}><Copy size={14} /> {copied === 'report' ? 'Copied' : 'Copy report'}</button>}
           {/* Cancel beside the button, never in its place: a double-click on Update must not cancel the run */}
           {(busy || checkRun) && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={stop} title="Esc">{cancelling ? 'Cancelling…' : 'Cancel'}</button>}
-          {!busy && <button type="button" className="lo-text-btn" disabled={Boolean(checkRun) || Boolean(lock) || !picked.size} onClick={() => void checkTicked()}
-            title="Whether the ticked mods' materials were built for this game version, whatever their dates say">{checkRun ? 'Scanning…' : 'Scan'}</button>}
+          {!busy && <ScanButton scanning={Boolean(checkRun)} disabled={Boolean(checkRun) || Boolean(lock)}
+            selected={picked.size} flagged={recheckCount} onScan={flagged => void checkTicked(flagged)} />}
           <button type="button" className="btn-primary" disabled={busy || Boolean(checkRun) || Boolean(lock) || !todo} title={busy ? undefined : 'Ctrl+Enter'}
             ref={el => { if (el && !busy) updateWidth.current = el.offsetWidth }} style={busy ? { minWidth: updateWidth.current } : undefined} onClick={() => run()}>
             <RefreshCw size={14} aria-hidden="true" className={busy ? 'vf-spin' : undefined} />{busy ? 'Updating…' : todo ? <>Update <Num id="vf-todo" value={todo} /> {todo === 1 ? 'mod' : 'mods'}</> : 'Update'}
