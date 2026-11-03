@@ -136,12 +136,16 @@ def add_rim(m, tex, vectors, scalars, hair=False):
     strength.default_value = 1.0
 
 
-FLOW_GLOW_MAX = 2.5   # the flow glow's strength cap, as the kit caps an Emissive glow (HDR game values bloom to white)
-FLOW_GLOW_DIM = 0.12   # the dimmest a line gets between the noise's bright stretches: faint, never cut off (0 left holes)
+FLOW_GLOW_MAX = 4.0   # the flow glow's strength cap (HDR game values bloom to white): the pulses' peaks run hot (2.5 read dull)
+FLOW_GLOW_DIM = 0.0    # a line between the noise's bright stretches: black, as the suit is in game (any floor read as a
+                       # dark tint of the line color at the 4.0 cap). No hard cuts: FLOW_NOISE_LOW fades it out smoothly
 FLOW = []   # each flow-lined material's switches for the animated preview (flow_frames): its noise mapping, a gate on the
             # lines, a keep on its other glow, and how far the noise travels in one loop
 FLOW_CORE = (0.28, 0.75)  # mask values from dark to full glow: below the first nothing glows (the falloff around a line)
-FLOW_NOISE_TOP = 0.5      # noise at or above this lights a line fully: softer than the master's, so stretches fade in and out
+FLOW_NOISE_TOP = 0.85     # noise at or above this lights a line fully: only the noise's peaks, so bright stretches travel
+                          # along dimmer lines (0.5 left most of every line at full glow in every frame: the loop looked still)
+FLOW_NOISE_LOW = 0.15     # noise at or below this leaves a line black; between the two a smoothstep fade, so a pulse
+                          # tapers into the dark instead of breaking off (the master's sharper power cut lines on rainbow mods)
 
 
 def add_flow_glow(m, tex, vectors, scalars):
@@ -193,24 +197,38 @@ def add_flow_glow(m, tex, vectors, scalars):
         L.new(tx1.outputs[0], both.inputs[6]); L.new(tx2.outputs[0], both.inputs[7])
         sep = N.new("ShaderNodeSeparateColor"); L.new(both.outputs[2], sep.inputs[0])
         pw = N.new("ShaderNodeMath"); pw.operation = "POWER"; L.new(sep.outputs[0], pw.inputs[0])
-        pw.inputs[1].default_value = max(1.0, float(scalars.get("FlowNoisePower", 1.0)) * 0.6)   # softer than the master's: no hard cutoffs
-        rng = N.new("ShaderNodeMapRange"); L.new(pw.outputs[0], rng.inputs["Value"])
-        rng.inputs["From Max"].default_value = FLOW_NOISE_TOP; rng.inputs["To Min"].default_value = FLOW_GLOW_DIM
+        pw.inputs[1].default_value = max(1.0, float(scalars.get("FlowNoisePower", 1.0)) * 0.6)   # softer than the master's: the fade does the shaping
+        rng = N.new("ShaderNodeMapRange"); rng.interpolation_type = "SMOOTHSTEP"; L.new(pw.outputs[0], rng.inputs["Value"])
+        rng.inputs["From Min"].default_value = FLOW_NOISE_LOW; rng.inputs["From Max"].default_value = FLOW_NOISE_TOP
+        rng.inputs["To Min"].default_value = FLOW_GLOW_DIM
         vary = N.new("ShaderNodeMix"); vary.data_type = "RGBA"; vary.blend_type = "MULTIPLY"; vary.inputs[0].default_value = 1
         L.new(lines.outputs[2], vary.inputs[6]); L.new(rng.outputs[0], vary.inputs[7])
         lines = vary
+        pulse = rng.outputs[0]
     else:
-        mp = None
+        mp = pulse = None
     gate = N.new("ShaderNodeValue"); gate.outputs[0].default_value = 1.0   # 0: no lines (the animated preview's base)
     gated = N.new("ShaderNodeMix"); gated.data_type = "RGBA"; gated.blend_type = "MULTIPLY"; gated.inputs[0].default_value = 1
     L.new(lines.outputs[2], gated.inputs[6]); L.new(gate.outputs[0], gated.inputs[7])
     lines = gated
     keep = N.new("ShaderNodeValue"); keep.outputs[0].default_value = 1.0   # 0: the lines alone (the animated preview's frames)
-    strength = min(FLOW_GLOW_MAX, max(1.0, float(scalars.get("FlowMaskIntensity", 1.0)) * float(scalars.get("FlowNoiseIntensity", 1.0)) * 0.4))
+    strength = min(FLOW_GLOW_MAX, max(1.0, float(scalars.get("FlowMaskIntensity", 1.0)) * float(scalars.get("FlowNoiseIntensity", 1.0)) * 0.6))
     em = bsdf.inputs["Emission Color"]
     if em.is_linked:   # an Emissive glow is there: add the lines at their own strength relative to it
         kept = N.new("ShaderNodeMix"); kept.data_type = "RGBA"; kept.blend_type = "MULTIPLY"; kept.inputs[0].default_value = 1
-        L.new(em.links[0].from_socket, kept.inputs[6]); L.new(keep.outputs[0], kept.inputs[7])
+        L.new(em.links[0].from_socket, kept.inputs[6])
+        if pulse is None:
+            L.new(keep.outputs[0], kept.inputs[7])
+        else:
+            # The mod's own glow on the lines pulses with the noise too, as in game: a steady glow there kept every dim
+            # stretch teal. Off the lines (eyes, gems) it stays steady. keep*(1-core) + core*pulse*gate: the base (gate 0)
+            # has only the steady part, the frames (keep 0) only the pulsing part, the still both
+            off = N.new("ShaderNodeMath"); off.operation = "SUBTRACT"; off.inputs[0].default_value = 1.0; L.new(core.outputs[0], off.inputs[1])
+            steady = N.new("ShaderNodeMath"); steady.operation = "MULTIPLY"; L.new(keep.outputs[0], steady.inputs[0]); L.new(off.outputs[0], steady.inputs[1])
+            lit = N.new("ShaderNodeMath"); lit.operation = "MULTIPLY"; L.new(core.outputs[0], lit.inputs[0]); L.new(pulse, lit.inputs[1])
+            on = N.new("ShaderNodeMath"); on.operation = "MULTIPLY"; L.new(lit.outputs[0], on.inputs[0]); L.new(gate.outputs[0], on.inputs[1])
+            both_ = N.new("ShaderNodeMath"); both_.operation = "ADD"; L.new(steady.outputs[0], both_.inputs[0]); L.new(on.outputs[0], both_.inputs[1])
+            L.new(both_.outputs[0], kept.inputs[7])
         old = kept.outputs[2]
         k = strength / max(bsdf.inputs["Emission Strength"].default_value, 1e-6)
         scaled = N.new("ShaderNodeMix"); scaled.data_type = "RGBA"; scaled.blend_type = "MULTIPLY"; scaled.inputs[0].default_value = 1
@@ -226,7 +244,7 @@ def add_flow_glow(m, tex, vectors, scalars):
                      "travel": flow_travel(float(tile.get("B", 0.0)), float(tile.get("A", 0.0)))})
 
 
-FLOW_TRAVEL = 0.12   # how far the noise crawls in one loop, in tiles (the cross-fade keeps it seamless)
+FLOW_TRAVEL = 0.2   # how far the noise crawls in one loop, in tiles (the cross-fade keeps it seamless; 0.12 barely moved)
 
 
 def flow_travel(u, v):
