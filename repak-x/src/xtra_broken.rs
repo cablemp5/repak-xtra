@@ -738,6 +738,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
             .iter()
             .filter_map(|p| {
                 let path = PathBuf::from(p);
+                if crate::xtra_setup::is_managed_loader(&path) { return None; }
                 // repakxtra: another app's built-in is judged by the game build its app last built it for
                 if crate::xtra_builtins::in_folder(&path) {
                     return crate::xtra_builtins::outdated_elsewhere(&path, &paks)

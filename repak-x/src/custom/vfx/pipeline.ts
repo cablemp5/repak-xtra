@@ -164,7 +164,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
 
     // an earlier update starts again from the original beside it (_BROKEN, _ORIGINAL, or the one an _UPDATED copy was
     // named after): it can lack what it left out, or carry what an older updater got wrong
-    const src = await invoke<string>('xtra_vfx_source', { modPath: o.modPath }).catch(() => o.modPath)
+    const src = await invoke<string>('xtra_vfx_source', { modPath: o.modPath })
     if (src !== o.modPath) log(`Starting from its original, ${stem(src)}.`)
     // the USMAP may be older than the game: fine unless the patch rewrote files this update decodes
     const wait = await invoke<UsmapWait | null>('xtra_vfx_usmap_wait', { modPath: src, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath })

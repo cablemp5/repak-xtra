@@ -43,6 +43,7 @@ fn key(mod_path: &Path) -> Option<String> {
 }
 
 fn remember_in(store: &Path, mod_path: &Path, reason: &str, game: u64) {
+    if crate::xtra_setup::is_managed_loader(mod_path) { return; }
     let Some(k) = key(mod_path) else { return };
     let mut all = load(store);
     all.insert(k, Off { reason: reason.to_string(), game, allowed: false });
@@ -50,6 +51,7 @@ fn remember_in(store: &Path, mod_path: &Path, reason: &str, game: u64) {
 }
 
 fn blocked_in(store: &Path, mod_path: &Path, game: u64) -> Option<String> {
+    if crate::xtra_setup::is_managed_loader(mod_path) { return None; }
     let k = key(mod_path)?;
     load(store).get(&k).filter(|o| !o.allowed && o.game == game).map(|o| o.reason.clone())
 }
@@ -89,6 +91,22 @@ pub fn xtra_safe_off_allow(mod_path: String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn managed_loader_ignores_stale_blocks_and_cannot_be_blocked_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = dir.path().join("off.json");
+        let ordinary = dir.path().join("OrdinaryMod.bak_repak");
+        std::fs::write(ordinary.with_extension("utoc"), b"toc").unwrap();
+        remember_in(&store, &ordinary, "Old date warning", 200);
+        assert!(blocked_in(&store, &ordinary, 200).is_some());
+        let loader = dir.path().join(format!("{}.bak_repak", crate::xtra_setup::GALACTA_STEM));
+        std::fs::rename(ordinary.with_extension("utoc"), loader.with_extension("utoc")).unwrap();
+        assert_eq!(blocked_in(&store, &loader, 200), None, "an old block must not prevent enabling the loader");
+        let saved = std::fs::read(&store).unwrap();
+        remember_in(&store, &loader, "New date warning", 200);
+        assert_eq!(std::fs::read(&store).unwrap(), saved, "no new loader block is written");
+    }
 
     #[test]
     fn a_blocked_mod_stays_blocked_through_a_rename_until_it_or_the_game_changes() {

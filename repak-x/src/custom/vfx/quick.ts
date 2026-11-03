@@ -148,10 +148,10 @@ export function checkWords(c: VfxCheck, name: string): { title: string; text: st
   if (c.verdict === 'outdated' && layout) return { color: 'warning', title: `${name} needs a VFX update`, text: `${some(layout)} stored in an older game build's layout, which can crash the game. The update rewrites ${layout === 1 ? 'it' : 'them'}.` }
   if (c.verdict === 'outdated') return { color: 'warning', title: `${name} needs a VFX update`, text: `${some(c.outdated.length)} still built for an earlier game version.` }
   if (c.verdict === 'current') return { color: 'success', title: `${name} is up to date`, text: `${all === 1 ? 'Its material is' : `All ${all} of its materials are`} built for this game version.` }
-  if (c.verdict === 'unknown' && !c.unknown.length) return { color: 'default', title: `Not known if ${name} needs an update`, text: 'Its files could not be listed by type, so materials not named MI_ may be missing. It is checked again later.' }
+  if (c.verdict === 'unknown' && !c.unknown.length) return { color: 'warning', title: `${name} may crash`, text: 'Compatibility could not be verified because its files could not be listed by type. Some materials may not have been checked. This is a precaution, not a confirmed fault.' }
   if (c.verdict === 'unknown') {
     const one = c.unknown.length === 1
-    return { color: 'default', title: `Not known if ${name} needs an update`, text: `${one ? 'Its material' : `${c.unknown.length} of its materials`} ${WHY[c.why ?? 'elsewhere'][one ? 0 : 1]}. Compatibility remains unknown. This does not confirm that a repair is needed.` }
+    return { color: 'warning', title: `${name} may crash`, text: `${one ? 'Its material' : `${c.unknown.length} of its materials`} ${WHY[c.why ?? 'elsewhere'][one ? 0 : 1]}. Compatibility could not be verified. This is a precaution, not a confirmed fault or a required repair.` }
   }
   return { color: 'default', title: `${name} has nothing to check`, text: 'It has no material instances of the game\'s.' }
 }
@@ -175,6 +175,8 @@ export async function checkVfxModInPlace(mod: { path: string; utoc_path?: string
 
 if (import.meta.env.DEV) {
   const said = (unknown: string[], why: VfxCheck['why']) => checkWords({ verdict: 'unknown', outdated: [], current: [], unknown, why }, 'A').text
-  console.assert(said(['e'], 'empty') === 'Its material carries no shader data of its own to compare. Compatibility remains unknown. This does not confirm that a repair is needed.', 'one, no shader data')
+  const uncertain = checkWords({ verdict: 'unknown', outdated: [], current: [], unknown: ['custom'], why: 'elsewhere' }, 'A')
+  console.assert(uncertain.title === 'A may crash' && uncertain.color === 'warning' && uncertain.text.includes('not a confirmed fault'), 'unverified compatibility is a precaution, not a required repair')
+  console.assert(said(['e'], 'empty') === 'Its material carries no shader data of its own to compare. Compatibility could not be verified. This is a precaution, not a confirmed fault or a required repair.', 'one, no shader data')
   console.assert(said(['a', 'b'], 'elsewhere').startsWith('2 of its materials match no game version (the modder built them)'), 'several, built by the modder')
 }

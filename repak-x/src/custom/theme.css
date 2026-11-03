@@ -3010,4 +3010,4 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .beta-mark { display: block; width: 25px; height: 16px; background: var(--beta); mask: center / contain no-repeat; -webkit-mask: center / contain no-repeat; }
 .wi-beta { margin: 0 28px 20px; max-width: 76ch; }
 
-.mod-type-badge.broken-badge.is-unknown { color: var(--text-secondary) !important; background: transparent !important; }
+.mod-type-badge.broken-badge.is-unknown { background: transparent !important; }

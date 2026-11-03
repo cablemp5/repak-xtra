@@ -686,6 +686,7 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
 
 #[tauri::command]
 pub async fn xtra_vfx_place(source: String, staged_base: String, turn_off_original: bool, keep_name: Option<bool>, trash_original: Option<bool>, partial: Option<bool>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Placed, String> {
+    repairable(Path::new(&source))?;
     // repakxtra: file moves on a blocking thread, never on the async workers every other command shares
     let state = state.inner().clone();
     crate::xtra_builtins::fixed_place(Path::new(&source))?; // its own app rebuilds it for the new game build
@@ -717,6 +718,7 @@ pub async fn xtra_vfx_place(source: String, staged_base: String, turn_off_origin
 /// the mod or the game changes, or the user turns it on anyway.
 #[tauri::command]
 pub async fn xtra_vfx_turn_off(window: Window, mod_path: String, reason: Option<String>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Option<String>, String> {
+    repairable(Path::new(&mod_path))?;
     let pak = Path::new(&mod_path).with_extension("pak");
     if let Some(why) = reason.as_deref() {
         let mods_dir = state.lock().unwrap().game_path.clone();
@@ -795,6 +797,7 @@ pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>
                     let _ = window.emit("vfx_mods_progress", serde_json::json!({ "done": i + 1, "total": total }));
                 }
                 let utoc = m.utoc_path.clone()?;
+                if crate::xtra_setup::is_managed_loader(&m.path) { return None; }
                 let stem = m.path.file_stem()?.to_string_lossy().to_string();
                 let siblings = by_dir.get(m.path.parent()?)?;
                 // an original whose update sits beside it: <name>_BROKEN, or <name> next to <name>_UPDATED from before
@@ -1005,9 +1008,29 @@ fn source_of(mod_path: &Path) -> PathBuf {
     original_of(mod_path).unwrap_or_else(|| mod_path.to_path_buf())
 }
 
+fn repairable(path: &Path) -> Result<(), String> {
+    if crate::xtra_setup::is_managed_loader(path) {
+        return Err("This project loader is managed in Setup. The Mod Updater cannot change or turn it off.".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn project_loader_is_refused_before_repair() {
+    for ext in ["pak", "bak_repak", "utoc"] {
+        let path = format!("{}.{ext}", crate::xtra_setup::GALACTA_STEM);
+        assert!(repairable(Path::new(&path)).is_err());
+        assert!(xtra_vfx_source(path).is_err());
+    }
+    assert!(repairable(Path::new("OrdinaryMod.utoc")).is_ok());
+}
+
 #[tauri::command(async)]
-pub fn xtra_vfx_source(mod_path: String) -> String {
-    source_of(Path::new(&mod_path)).to_string_lossy().to_string()
+pub fn xtra_vfx_source(mod_path: String) -> Result<String, String> {
+    repairable(Path::new(&mod_path))?;
+    let source = source_of(Path::new(&mod_path));
+    repairable(&source)?;
+    Ok(source.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -1386,7 +1409,7 @@ mod tests {
             "xtra_vfx_dirs" => json!(make_dirs(&s(a, "gamePaks"), &s(a, "runId"), &s(a, "usmapPath"))?),
             "xtra_vfx_stale" => json!(stale(&s(a, "modPath"), &s(a, "gamePaks"), &list(a, "files"))?),
             "xtra_vfx_detect" =>json!(detect(&s(a, "usmapPath"), &list(a, "paths"), p).await?),
-            "xtra_vfx_source" => json!(xtra_vfx_source(s(a, "modPath"))),
+            "xtra_vfx_source" => json!(xtra_vfx_source(s(a, "modPath"))?),
             "xtra_skin_table_hero" => json!(crate::xtra_builtins::table_hero(&s(a, "modPath"), Path::new(&s(a, "gamePaks"))).await?),
             "xtra_vfx_old_layout" => json!(crate::xtra_niagara::xtra_vfx_old_layout(s(a, "modPath"), s(a, "gamePaks"), s(a, "usmapPath"), list(a, "files"), a.get("modExtract").and_then(Value::as_str).map(String::from)).await?),
             "xtra_vfx_relayout" => json!(crate::xtra_mi_layout::run(&s(a, "modPath"), &s(a, "gamePaks"), &s(a, "usmapPath"), &s(a, "modExtract"), &list(a, "files"), &s(a, "stageDir"), p).await?),
