@@ -301,7 +301,6 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
                   onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setNewGroup(null) }} />}
           </div>
           <div className="lp-actions">
-            <LoadoutImage key={l.id} p={p} l={l} />
             <label className="lp-switch">
               <Switch size="sm" color="primary" checked={active} isDisabled={present === 0} disabled={busy || present === 0}
                 onChange={(on: boolean) => onToggle(on)} title={switchTitle} aria-label={switchTitle} />
@@ -312,6 +311,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
               </span>
             </label>
             {/* The rest are occasional: one menu instead of a wrapping row of equal buttons */}
+            <LoadoutImage key={l.id} p={p} l={l} />
             <MoreMenu items={[
               { label: 'Duplicate', onClick: () => openLoadout(duplicateLoadout(l).id, true) },
               { label: exporting ? 'Exporting…' : 'Export as zip', onClick: exportZip, disabled: exporting },
