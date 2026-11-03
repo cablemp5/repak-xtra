@@ -188,6 +188,7 @@ async fn check_in(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, wo
         .collect();
     let none = || VfxCheck { verdict: "none", outdated: vec![], current: vec![], unknown: vec![], old_layout: vec![], why: None };
     if names.is_empty() {
+        if !all_known { crate::xtra_broken::record_uncertain(mods_dir, &utoc, "The asset list could not be fully read. Compatibility could not be verified. This is a precaution, not a confirmed fault.".into())?; }
         return Ok(if all_known { none() } else { VfxCheck { verdict: "unknown", why: Some("classes"), ..none() } });
     }
     let mine = read(paks, Some(&utoc), &names, usmap, &work.join("mod"), &work.join("mod_json")).await?;
@@ -280,6 +281,14 @@ async fn check_in(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, wo
     if out.verdict == "outdated" || (out.verdict == "current" && !niagara) {
         crate::xtra_broken::record_check(mods_dir, &utoc, out.verdict == "outdated", !out.old_layout.is_empty())?;
     }
+    if out.verdict == "unknown" {
+        let reason = if layout_ok && all_known {
+            "The material layout was read, but custom shader data matches no known game version. An update is not confirmed. Other asset types may need separate checks."
+        } else {
+            "The material check could not fully establish the layout or asset list. Compatibility could not be verified. This is a precaution, not a confirmed fault or a required repair."
+        };
+        crate::xtra_broken::record_uncertain(mods_dir, &utoc, reason.into())?;
+    }
     Ok(out)
 }
 
@@ -310,7 +319,7 @@ fn scan_store() -> PathBuf {
 }
 
 /// Mods the background check has looked at: their .utoc (checked_key) -> (size, time written, game's last update then).
-type Scanned = HashMap<String, (u64, u64, u64)>;
+type Scanned = HashMap<String, (u64, u64, u64, String)>;
 
 fn load_scanned(store: &Path) -> Scanned {
     std::fs::read_to_string(store).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
@@ -319,7 +328,7 @@ fn load_scanned(store: &Path) -> Scanned {
 /// Whether the mod at `utoc` still needs a look: never checked as this file, or checked before the game's last update.
 fn needs_scan(done: &Scanned, utoc: &Path, game: u64) -> bool {
     match crate::xtra_broken::file_stamp(utoc) {
-        Some((size, at)) => done.get(&crate::xtra_broken::checked_key(utoc)) != Some(&(size, at, game)),
+        Some((size, at)) => done.get(&crate::xtra_broken::checked_key(utoc)) != Some(&(size, at, game, crate::xtra_vfx::parser_id().to_string())),
         None => false,
     }
 }
@@ -359,8 +368,7 @@ pub async fn xtra_vfx_check_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mu
         let mics = tauri::async_runtime::spawn_blocking(move || details.map(|d| crate::xtra_broken::material_instances(&pk, &u, &d.files))).await.ok().flatten();
         if mics.as_ref().is_some_and(|(m, all)| !m.is_empty() || !all) {
             match check(&path, &usmap, &state, false).await {
-                Ok(c) if c.verdict == "outdated" => found += 1,
-                Ok(c) if matches!(c.why, Some("layout" | "classes")) => continue, // not settled: looked at again next scan
+                Ok(c) if matches!(c.why, Some("layout" | "classes")) => { found += 1; continue; } // refresh its verdict, but retry next scan
                 Ok(_) => {}
                 Err(e) => {
                     log::warn!("[vfx check] {p}: {e}"); // tried again by the next scan
@@ -369,7 +377,8 @@ pub async fn xtra_vfx_check_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mu
             }
         }
         if let Some((size, at)) = crate::xtra_broken::file_stamp(&utoc) {
-            done.insert(crate::xtra_broken::checked_key(&utoc), (size, at, game));
+            found += 1;
+            done.insert(crate::xtra_broken::checked_key(&utoc), (size, at, game, crate::xtra_vfx::parser_id().to_string()));
             let _ = std::fs::write(&store, serde_json::to_string(&done).unwrap_or_default()); // each mod: a closed app keeps its progress
         }
     }
@@ -392,9 +401,11 @@ mod tests {
         let (size, at) = crate::xtra_broken::file_stamp(&utoc).unwrap();
         let mut done = Scanned::new();
         assert!(needs_scan(&done, &utoc, 200), "never looked at");
-        done.insert(crate::xtra_broken::checked_key(&utoc), (size, at, 200));
+        done.insert(crate::xtra_broken::checked_key(&utoc), (size, at, 200, crate::xtra_vfx::parser_id().to_string()));
         assert!(!needs_scan(&done, &utoc, 200), "looked at, same file, same game");
         assert!(needs_scan(&done, &utoc, 300), "the game updated since");
+        done.get_mut(&crate::xtra_broken::checked_key(&utoc)).unwrap().3 = "old-parser".into();
+        assert!(needs_scan(&done, &utoc, 200), "the parser changed without a game update");
         std::fs::write(&utoc, b"toc v2").unwrap();
         assert!(needs_scan(&done, &utoc, 200), "the mod changed");
         assert!(!needs_scan(&done, &dir.path().join("gone.utoc"), 200), "no file, nothing to look at");

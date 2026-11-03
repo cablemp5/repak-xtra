@@ -3009,3 +3009,5 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 /* the mark beside the warning: its picture as a mask, in the note's red */
 .beta-mark { display: block; width: 25px; height: 16px; background: var(--beta); mask: center / contain no-repeat; -webkit-mask: center / contain no-repeat; }
 .wi-beta { margin: 0 28px 20px; max-width: 76ch; }
+
+.mod-type-badge.broken-badge.is-unknown { background: transparent !important; }

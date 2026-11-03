@@ -37,7 +37,7 @@
         "default-src": "'self'",
         "script-src": "'self'",
         "style-src": "'self' 'unsafe-inline'",
-        "img-src": "'self' data: blob: https://*.githubusercontent.com https://github.com https://i.imgur.com https://cdn.discordapp.com",
+        "img-src": "'self' data: blob: https://*.githubusercontent.com https://github.com https://i.imgur.com https://cdn.discordapp.com https://*.nexusmods.com",
         "media-src": "'self' data: blob:",
         "font-src": "'self' data:",
         "connect-src": "'self' ipc: http://ipc.localhost data: blob: https://api.github.com https://discord.com",

@@ -27,7 +27,7 @@ globalThis.dispatchEvent ??= () => true
 
 
 const root = new URL('..', import.meta.url).pathname.replace(/^\/(\w:)/, '$1')
-const server = await createServer({ root, mode: 'production', logLevel: 'error', server: { middlewareMode: true, hmr: false }, appType: 'custom', optimizeDeps: { noDiscovery: true, include: [] } })
+const server = await createServer({ root, cacheDir: 'node_modules/.vite-checks/check-loadout-warnings', mode: 'production', logLevel: 'error', server: { middlewareMode: true, hmr: false }, appType: 'custom', optimizeDeps: { noDiscovery: true, include: [] } })
 try {
   const { runChanges } = await server.ssrLoadModule('/src/custom/Loadouts.tsx')
   const { writeLoadouts, modKey } = await server.ssrLoadModule('/src/custom/loadoutStore.ts')

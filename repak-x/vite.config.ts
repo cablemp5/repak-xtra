@@ -4,6 +4,7 @@ import packageJson from './package.json'
 import lucideSwap from './src/custom/icons/vitePlugin' // repakxtra: Lucide icons
 
 export default defineConfig({
+  cacheDir: 'node_modules/.vite-app', // repakxtra: checks use separate caches while the dev app is running
   define: {
     '__APP_VERSION__': JSON.stringify(packageJson.version),
   },

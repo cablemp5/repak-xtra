@@ -7,7 +7,7 @@ import { emit, listen } from '@tauri-apps/api/event'
 
 /** usmapWait (Needs VFX update only): files it rebuilds that a patch newer than the saved USMAP changed. While it is not
  *  0 the update waits for that patch's USMAP (xtra_broken.rs changed_since_usmap). */
-export type Verdict = { path: string; kind: 'broken' | 'vfx' | 'risky'; reason: string; usmapWait?: number }
+export type Verdict = { path: string; kind: 'broken' | 'vfx' | 'risky' | 'unknown'; reason: string; usmapWait?: number }
 /** A verdict's badge text. */
 export const verdictLabel = (kind: Verdict['kind']) => (kind === 'broken' ? 'Broken' : kind === 'vfx' ? 'Needs update' : 'May crash')
 
@@ -65,7 +65,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       .then(() => (live ? invoke('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
       .then(() => (live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: mods.map(m => m.path) }) : 0))
       .then(found => (live && found ? check() : undefined))
-      .then(() => (live ? invoke<number>('xtra_vfx_check_scan', { modPaths: mods.filter(m => verdicts.get(norm(m.path))?.kind !== 'vfx').map(m => m.path) }) : 0))
+      .then(() => (live ? invoke<number>('xtra_vfx_check_scan', { modPaths: mods.map(m => m.path) }) : 0))
       .then(found => (live && found ? check() : undefined))
       .then(() => (live ? invoke<number>('xtra_layout_scan', { modPaths: mods.map(m => m.path) }) : 0))
       .then(checked => (live && checked ? check() : undefined))
@@ -96,6 +96,7 @@ export const useBrokenVersion = () => useSyncExternalStore(subscribe, () => vers
 export const verdictOf = (path: string) => verdicts.get(norm(path))
 
 if (import.meta.env.DEV) {
+  console.assert(verdictLabel('unknown') === 'May crash', 'inconclusive checks use a clear warning label')
   console.assert(norm('C:/Games/~mods/A_9999999_P.pak') === norm('c:\\games\\~MODS\\a_9999999_p.pak'), 'broken paths match across slashes and case')
   console.assert(norm('C:/Games/~mods/A_9999999_P.pak') === norm('C:/Games/~mods/A_9999999_P.bak_repak'), 'a mod keeps its verdict on and off')
 }

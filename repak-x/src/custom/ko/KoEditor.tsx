@@ -177,7 +177,7 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
     if (!shown) return
     const key = (e: KeyboardEvent) => {
       if (e.key !== ' ' || (e.target as HTMLElement)?.closest('input, textarea, button, [contenteditable]')) return
-      e.preventDefault(); setPlaying(v => !v)
+      e.preventDefault(); document.querySelector<HTMLButtonElement>('.ko-play')?.click()
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)

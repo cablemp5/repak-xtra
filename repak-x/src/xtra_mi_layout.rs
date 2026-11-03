@@ -22,6 +22,7 @@ use crate::xtra_niagara::{older_usmaps, read_json, stage, to_json, usmap_build};
 pub struct Relaid {
     /// Rewritten in today's layout (package paths without extension, as given)
     pub(crate) files: Vec<String>,
+    pub(crate) surgical: Vec<String>,
     /// In no layout a USMAP here reads, so kept as they were
     unread: Vec<String>,
     /// In an older layout but not rewritten safely (staging, writing or the read-back failed): the update stops on them
@@ -73,6 +74,53 @@ fn bare(v: &mut Value) {
         Value::Array(a) => a.iter_mut().for_each(bare),
         _ => {}
     }
+}
+
+
+/// Only the known two-property insertion at index 40, with no fragment split or size change.
+fn header_bytes(v: &Value) -> Option<Vec<u8>> {
+    match v {
+        Value::Object(m) if m.get("StructType").and_then(Value::as_str) == Some(MOVED[0]) => {
+            let fragments = m.get("OriginalStructHeader")?.get("Fragments")?.as_array()?;
+            let mut out = Vec::new();
+            for f in fragments {
+                let skip = u16::try_from(f.get("SkipNum")?.as_u64()?).ok()?;
+                let count = u16::try_from(f.get("ValueNum")?.as_u64()?).ok()?;
+                if skip > 127 || count > 127 { return None }
+                let packed = skip | (count << 9) | if f.get("bHasAnyZeroes")?.as_bool()? { 128 } else { 0 }
+                    | if f.get("bIsLast")?.as_bool()? { 256 } else { 0 };
+                out.extend_from_slice(&packed.to_le_bytes());
+            }
+            (!out.is_empty()).then_some(out)
+        }
+        Value::Object(m) => m.values().find_map(header_bytes),
+        Value::Array(a) => a.iter().find_map(header_bytes),
+        _ => None,
+    }
+}
+
+fn patch_header(original: &[u8], old: &[u8], new: &[u8]) -> Option<Vec<u8>> {
+    if old.len() != new.len() || old.is_empty() || old.len() % 2 != 0 { return None }
+    let mut index = 0usize;
+    let mut changed = false;
+    for (a, b) in old.chunks_exact(2).zip(new.chunks_exact(2)) {
+        let a = u16::from_le_bytes([a[0], a[1]]);
+        let b = u16::from_le_bytes([b[0], b[1]]);
+        let start = index + usize::from(a & 127);
+        let count = usize::from(a >> 9);
+        if a != b {
+            if changed || start < 40 || b != a.checked_add(2)? || a & 127 > 125 { return None }
+            changed = true;
+        } else if start + count > 40 { return None }
+        index = start + count;
+    }
+    if !changed { return None }
+    let mut matches = original.windows(old.len()).enumerate().filter(|(_, bytes)| *bytes == old);
+    let offset = matches.next()?.0;
+    if matches.next().is_some() { return None }
+    let mut patched = original.to_vec();
+    patched[offset..offset + new.len()].copy_from_slice(new);
+    Some(patched)
 }
 
 /// The JSON with every name's base in its NameMap: the tool reads "/Game/.../M_StandardBasic_1026" as the name
@@ -164,6 +212,7 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
     let fixed_json = work.join("fixed_json");
     let _ = std::fs::remove_dir_all(&fixed_json);
     let mut read_any = false;
+    let mut headers = std::collections::HashMap::new();
     for candidate in older_usmaps(build, (made > 0).then_some(made)).await {
         if pending.is_empty() {
             break;
@@ -184,6 +233,12 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
             }
             if today.as_ref().is_some_and(|t| !old_reading_right(t, &j, game.get(r), older)) {
                 return false; // both read whole and today's reading is the right one
+            }
+            // Ambiguous files that both layouts read are left to the reconstruction fallback.
+            if today.is_none() && overrides(&j).is_some() {
+                if let Ok(raw) = read_json(&json.join(format!("{r}.json"))) {
+                    if let Some(h) = header_bytes(&raw) { headers.insert(r.clone(), h); }
+                }
             }
             let to = fixed_json.join(format!("{r}.json"));
             let moved = std::fs::create_dir_all(to.parent().unwrap_or(&fixed_json)).and_then(|_| std::fs::write(&to, to_tool_json(&mut j.clone())));
@@ -214,6 +269,37 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
     std::fs::create_dir_all(&fixed).map_err(|e| e.to_string())?;
     std::fs::write(fixed.join("uasset_list.txt"), written.join("\n")).map_err(|e| e.to_string())?;
     to_json(usmap, &fixed, &check, progress).await?;
+    let mut surgical_backups = std::collections::HashMap::new();
+    for r in &out.files {
+        let original_header = std::fs::read(mod_extract.join(format!("{r}.uasset")));
+        let rebuilt_header = std::fs::read(fixed.join(format!("{r}.uasset")));
+        if !matches!((&original_header, &rebuilt_header), (Ok(a), Ok(b)) if a == b) { continue }
+        let Some(old) = headers.get(r) else { continue };
+        let Some(new) = read_json(&check.join(format!("{r}.json"))).ok().and_then(|j| header_bytes(&j)) else { continue };
+        let Ok(bytes) = std::fs::read(mod_extract.join(format!("{r}.uexp"))) else { continue };
+        let Some(patched) = patch_header(&bytes, old, &new) else { continue };
+        let target = fixed.join(format!("{r}.uexp"));
+        let Ok(backup) = std::fs::read(&target) else { continue };
+        if std::fs::write(&target, patched).is_ok() {
+            surgical_backups.insert(r.clone(), backup);
+            out.surgical.push(r.clone());
+        }
+    }
+    if !out.surgical.is_empty() { to_json(usmap, &fixed, &check, progress).await?; }
+    let mut restored = false;
+    out.surgical.retain(|r| {
+        let same = match (decode(&check, r), decode(&fixed_json, r)) {
+            (Some(a), Some(b)) => decoded(&a).is_some() && decoded(&a) == decoded(&b),
+            _ => false,
+        };
+        if !same {
+            if let Some(backup) = surgical_backups.get(r) {
+                restored |= std::fs::write(fixed.join(format!("{r}.uexp")), backup).is_ok();
+            }
+        }
+        same
+    });
+    if restored { to_json(usmap, &fixed, &check, progress).await?; }
     let mut kept = Vec::new();
     for r in std::mem::take(&mut out.files) {
         let same = match (decode(&check, &r), decode(&fixed_json, &r)) {
@@ -227,6 +313,7 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
             });
         if copied { kept.push(r) } else { out.failed.push(r) }
     }
+    out.surgical.retain(|r| kept.contains(r));
     out.files = kept;
     Ok(out)
 }
@@ -316,6 +403,17 @@ pub(crate) async fn game_copies(game_paks: &str, usmap: &str, rels: &[String], w
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn surgical_header_rejects_ambiguity_and_preserves_payload() {
+        let old = (40u16 | 512 | 256).to_le_bytes();
+        let new = (42u16 | 512 | 256).to_le_bytes();
+        let bytes = [99, old[0], old[1], 17, 18];
+        assert_eq!(patch_header(&bytes, &old, &new), Some(vec![99, new[0], new[1], 17, 18]));
+        assert!(patch_header(&[old[0], old[1], old[0], old[1]], &old, &new).is_none());
+        assert!(patch_header(&bytes, &old, &old).is_none());
+        assert!(patch_header(&bytes, &old, &[43, new[1]]).is_none());
+    }
 
     #[test]
     fn a_raw_export_is_not_decoded() {

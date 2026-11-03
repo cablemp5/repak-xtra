@@ -24,6 +24,7 @@ import {
   inGroup, isActive, modKey, moveGroup, moveLoadout, movedBeside, nextLoadoutName, openLoadout, patchLoadout, placeLoadout, placed, readLoadouts, renameGroup,
   setView, snapshotLoadout, sweepMediaOnce, useGroups, useLoadouts, useOpenLoadout, useView, writeLoadouts, modsByKey,
 } from './loadoutStore'
+import { cue } from './sounds'
 import { savedItem } from './storageCarryOver'
 import { useUpstreamWatch } from './upstream'
 import { useUiPref } from './uiPrefs'
@@ -119,13 +120,14 @@ function GroupHead({ p, name, count, at, total, editing, setEditing, folded, onF
  *  (search, filters, folder, checked and viewed mods, scroll): its Show all button is the deliberate reset (App.tsx). */
 export function ViewTabs() {
   const view = useView()
-  useEffect(() => { if (view === 'nexus') setView('library') }, [view]) // a view another edition saved
+  const ko = useUiPref('ko-tab')
+  useEffect(() => { if (view === 'nexus' || (!ko && view === 'ko')) setView('library') }, [ko, view]) // a view another edition saved
   return (
-    <div className="view-tabs" role="tablist" aria-label="View" data-tour="view-tabs">
+    <div className={`view-tabs${ko ? '' : ' is-two'}`} role="tablist" aria-label="View" data-tour="view-tabs">
       <button type="button" role="tab" aria-selected={view === 'home'} onClick={() => { openLoadout(null); setView('home') }} title="Loadouts and new mods (L)">Loadouts</button>
       <button type="button" role="tab" aria-selected={view === 'library'} onClick={() => setView('library')}
         title="Every mod, with filters and folders (L)">Library</button>
-      <button type="button" role="tab" aria-selected={view === 'ko'} onClick={() => setView('ko')} title="Recolor a hero's KO prompt">KO Editor</button>
+      {ko && <button type="button" role="tab" aria-selected={view === 'ko'} onClick={() => setView('ko')} title="Recolor a hero's KO prompt">KO Editor</button>}
     </div>
   )
 }
@@ -295,7 +297,7 @@ function LoadoutsHome(p: LoadoutProps) {
   const newRef = useRef<HTMLButtonElement>(null)
   const closedId = useRef<string | null>(null)
   const shownPage = useRef(open?.id ?? null)
-  const closePage = () => { closedId.current = openRef.current; setOpenId(null) }
+  const closePage = () => { cue('navigate', { direction: 'back' }); closedId.current = openRef.current; setOpenId(null) }
   useEffect(() => {
     const was = shownPage.current
     shownPage.current = open?.id ?? null
@@ -332,7 +334,7 @@ function LoadoutsHome(p: LoadoutProps) {
     onModContextMenu: (e, m, rename) => live.current.onModContextMenu?.(e, m, rename) }), [p.mods, p.modDetails, p.alert, p.blocked, p.scopeMods, p.scopeLabel])
   const pickCard = useStableCallback((e: React.PointerEvent<HTMLElement>, id: string) => { if (!filtered) drag.onPointerDown(e, id) }) // no reordering a filtered view
   const toggleCard = useStableCallback((l: Loadout, on: boolean) => toggle(l, on))
-  const startRename = useStableCallback((l: Loadout) => { setDraft(l.name); setRenaming(l.id) })
+  const startRename = useStableCallback((l: Loadout) => { cue('tap', { emphasis: 'subtle' }); setDraft(l.name); setRenaming(l.id) })
   const commitCard = useStableCallback((l: Loadout) => commitRename(l))
   const cancelRename = useStableCallback(() => setRenaming(null))
 

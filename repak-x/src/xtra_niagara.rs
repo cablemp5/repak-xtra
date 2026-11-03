@@ -559,12 +559,13 @@ fn layout_store() -> PathBuf {
     dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-vfx-layout.json")
 }
 
-/// The cache key of a mod file under a USMAP: its path, size and time written.
-fn layout_key(mod_path: &Path, usmap: &str) -> Option<String> {
+/// The mod file, game build, mappings, and parser must all match before reusing a layout verdict.
+fn layout_key(mod_path: &Path, usmap: &str, game_paks: &Path) -> Option<String> {
     let m = std::fs::metadata(mod_path).ok()?;
     let at = m.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
-    let u = Path::new(usmap).file_name()?.to_string_lossy().to_string();
-    Some(format!("{}|{}|{at}|{u}", mod_path.to_string_lossy().to_lowercase().replace('\\', "/"), m.len()))
+    let u = crate::xtra_vfx::usmap_hash(usmap);
+    let game = crate::xtra_vfx::build_hash(game_paks);
+    Some(format!("{}|{}|{at}|{u}|{game}", mod_path.to_string_lossy().to_lowercase().replace('\\', "/"), m.len()))
 }
 
 fn load_layouts() -> HashMap<String, bool> {
@@ -579,7 +580,8 @@ fn save_layouts(cache: &HashMap<String, bool>) {
 /// USMAP (xtra_broken).
 pub(crate) fn known_old_layout(mod_path: &Path) -> bool {
     let Some(usmap) = crate::vfx_updater::commands::saved_usmap_path() else { return false };
-    layout_key(&mod_path.with_extension("utoc"), &usmap).is_some_and(|k| load_layouts().get(&k) == Some(&true))
+    let Some(paks) = mod_path.ancestors().find(|p| p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("Paks"))) else { return false };
+    layout_key(&mod_path.with_extension("utoc"), &usmap, paks).is_some_and(|k| load_layouts().get(&k) == Some(&true))
 }
 
 /// Whether any of `rels` (up to three of the mod's Niagara systems, package paths without extension) is in an older
@@ -697,7 +699,7 @@ pub async fn xtra_vfx_layout_scan(mod_paths: Vec<String>, state: tauri::State<'_
             continue; // built-ins: xtra_builtins judges them by the game build they were made for, never these checks
         }
         let utoc = path.with_extension("utoc");
-        let Some(key) = layout_key(&utoc, &usmap) else { continue };
+        let Some(key) = layout_key(&utoc, &usmap, &paks) else { continue };
         if cache.contains_key(&key) {
             continue;
         }
@@ -743,7 +745,7 @@ pub async fn xtra_vfx_old_layout(mod_path: String, game_paks: String, usmap_path
     if probes.is_empty() {
         return Ok(Vec::new());
     }
-    let key = layout_key(&utoc, &usmap_path);
+    let key = layout_key(&utoc, &usmap_path, paks);
     let mut cache = load_layouts();
     let old = match key.as_ref().and_then(|k| cache.get(k)) {
         Some(v) => *v,
@@ -1013,6 +1015,20 @@ mod tests {
     }
 
     #[test]
+    fn stale_parser_json_is_not_reused_as_a_layout_difference() {
+        let old = json!({ "Exports": [export(0, 4, vec![json!({ "$type": "NiagaraVariable", "Name": "Parameter" })])] });
+        let mut current = old.clone();
+        current["Exports"][0]["Data"][0]["TypeDef"] = json!({ "Name": "Float" });
+        current["Exports"][0]["Data"][0]["VariableName"] = json!("Scale");
+        current["Exports"][0]["Data"][0]["VarData"] = json!([0, 0, 128, 63]);
+        assert!(shape_differs(&current, &old, &[0; 4], &[0; 4]), "mixed parser JSON reproduces the false warning");
+        assert!(!shape_differs(&current, &current, &[0; 4], &[0; 4]), "same parser JSON clears it");
+        let mut outdated = current.clone();
+        outdated["Exports"][0]["$type"] = json!("UAssetAPI.ExportTypes.RawExport, UAssetAPI");
+        assert!(shape_differs(&outdated, &current, &[1; 4], &[0; 4]), "a genuinely undecodable old export still warns");
+    }
+
+    #[test]
     fn a_layout_difference_is_found_past_a_value_difference() {
         // export 1 differs only in a lone value (a carry stops there), export 2 decodes only on the game's side
         let g = json!({ "Exports": [
@@ -1034,6 +1050,53 @@ mod tests {
             { "ObjectName": "Emitter2", "OuterIndex": 1 }, { "ObjectName": "Curve_0", "OuterIndex": 4 } ] });
         assert_eq!(export_paths(&j), ["NS_A", "NS_A/Emitter1", "NS_A/Emitter1/Curve_0", "NS_A/Emitter2", "NS_A/Emitter2/Curve_0"]);
         assert_eq!(usmap_build("C:/u/5.3.2-3962284+++depot_marvel+S10.5_release-Marvel.usmap"), Some(3962284));
+    }
+
+    /// Read-only comparison against diagnostic extracts, plus the installed mod's production check.
+    /// NIAGARA_LAYOUT_CHECK has game/ and shipped/ extracts. Outputs stay in the system temp folder.
+    #[test]
+    #[ignore]
+    fn niagara_layout_real() {
+        let base = PathBuf::from(std::env::var("NIAGARA_LAYOUT_CHECK").expect("NIAGARA_LAYOUT_CHECK"));
+        let game = std::env::var("NIAGARA_GAME_PAKS").expect("NIAGARA_GAME_PAKS");
+        let usmap = std::env::var("NIAGARA_USMAP").expect("NIAGARA_USMAP");
+        let utoc = PathBuf::from(std::env::var("NIAGARA_MOD_UTOC").expect("NIAGARA_MOD_UTOC"));
+        let work = std::env::temp_dir().join(format!("niagara-layout-proof-{}", std::process::id()));
+        std::fs::create_dir_all(&work).unwrap();
+        crate::xtra_vfx::tune_dotnet_gc();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let progress = &crate::vfx_updater::progress::NoOpProgressSink;
+            to_json(&usmap, &base.join("shipped"), &work.join("mod_json"), progress).await.unwrap();
+            to_json(&usmap, &base.join("game"), &work.join("game_json"), progress).await.unwrap();
+            let mut walk = vec![work.join("game_json")];
+            let mut rels = Vec::new();
+            while let Some(dir) = walk.pop() {
+                for e in std::fs::read_dir(dir).unwrap().flatten() {
+                    let p = e.path();
+                    if p.is_dir() { walk.push(p); continue; }
+                    if p.extension().is_none_or(|x| x != "json") { continue; }
+                    let rel = p.strip_prefix(work.join("game_json")).unwrap().with_extension("");
+                    let (mb, _) = read_package(&base.join("shipped").join(&rel).with_extension("uasset")).unwrap();
+                    let (gb, _) = read_package(&base.join("game").join(&rel).with_extension("uasset")).unwrap();
+                    let m = read_json(&work.join("mod_json").join(&rel).with_extension("json")).unwrap();
+                    let g = read_json(&p).unwrap();
+                    assert!(!shape_differs(&m, &g, &mb, &gb), "{}", rel.display());
+                    rels.push(rel.to_string_lossy().replace('\\', "/"));
+                }
+            }
+            assert!(!rels.is_empty());
+            rels.sort();
+            let vanilla = crate::xtra_vfx::vanilla_dir(&game, &usmap);
+            let old = old_layout_of(&game, &usmap, &utoc, &rels, None, &work.join("installed"), &vanilla).await.unwrap();
+            assert!(!old, "the installed mod still warns");
+            let key = layout_key(&utoc, &usmap, Path::new(&game)).unwrap();
+            let mut cache = load_layouts();
+            cache.insert(key, old);
+            save_layouts(&cache);
+            assert!(!known_old_layout(&utoc));
+            println!("Compared {} fresh same-parser packages. Installed mod older-layout verdict: {old}. Cache: {}", rels.len(), vanilla.display());
+        });
     }
 
     /// Real data: carries a mod's Niagara files onto the installed game's and compares with a reference port.

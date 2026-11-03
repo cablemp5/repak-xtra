@@ -5,6 +5,7 @@ import { blockedReason } from './safeOff'
 import { useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { deleteMedia, sweepOrphanMedia } from './loadoutMedia'
+import { cue } from './sounds'
 import { savedItem } from './storageCarryOver'
 import { isTyping } from './hotkeys'
 import { modalOpen } from './dialogFocus'
@@ -565,6 +566,7 @@ window.addEventListener('keydown', e => {
   if (!document.querySelector('.view-tabs')) return
   if (modalOpen()) return // Settings or another dialog is open
   e.preventDefault()
+  cue('select')
   setView(view === 'home' ? 'library' : 'home')
 })
 

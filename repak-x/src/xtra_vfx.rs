@@ -177,14 +177,40 @@ fn valid_run_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
 }
 
-/// The USMAP file's identity (path, size, time written): the game's JSON decoded with one USMAP is no use with another.
+/// The actual decoder binaries and the comparison schema, pinned for this process like the loaded native library.
+pub(crate) fn parser_id() -> &'static str {
+    static ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    ID.get_or_init(|| {
+        use sha2::{Digest, Sha256};
+        let fingerprint = || -> Result<String, String> {
+            let dll = uasset_toolkit::native_library_path().map_err(|e| e.to_string())?;
+            let mut h = Sha256::new();
+            h.update(env!("REPAKXTRA_DECODE_LOGIC"));
+            for path in std::iter::once(PathBuf::from(dll)).chain(crate::xtra_uat_cli::cli()) {
+                h.update(std::fs::read(path).map_err(|e| e.to_string())?);
+            }
+            Ok(format!("{:x}", h.finalize()))
+        };
+        fingerprint().unwrap_or_else(|_| {
+            // An unreadable parser must never reuse another launch's decoded data or verdicts.
+            format!("unavailable-{}-{:?}", std::process::id(), std::time::SystemTime::now())
+        })
+    })
+}
+
+/// Decoded data depends on both the mappings and parser, even when the game has not updated.
 pub(crate) fn usmap_hash(usmap: &str) -> String {
+    decode_key(usmap, parser_id())
+}
+
+fn decode_key(usmap: &str, parser: &str) -> String {
     let meta = std::fs::metadata(usmap).ok();
     let mut h = std::collections::hash_map::DefaultHasher::new();
+    parser.hash(&mut h);
     usmap.to_lowercase().hash(&mut h);
     meta.as_ref().map(|m| m.len()).hash(&mut h);
     meta.and_then(|m| m.modified().ok()).hash(&mut h);
-    format!("{:08x}", h.finish() as u32)
+    format!("{:016x}", h.finish())
 }
 
 /// The game's own assets for this game build and USMAP, shared by every run (and the Niagara layout check).
@@ -660,6 +686,7 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
 
 #[tauri::command]
 pub async fn xtra_vfx_place(source: String, staged_base: String, turn_off_original: bool, keep_name: Option<bool>, trash_original: Option<bool>, partial: Option<bool>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Placed, String> {
+    repairable(Path::new(&source))?;
     // repakxtra: file moves on a blocking thread, never on the async workers every other command shares
     let state = state.inner().clone();
     crate::xtra_builtins::fixed_place(Path::new(&source))?; // its own app rebuilds it for the new game build
@@ -691,6 +718,7 @@ pub async fn xtra_vfx_place(source: String, staged_base: String, turn_off_origin
 /// the mod or the game changes, or the user turns it on anyway.
 #[tauri::command]
 pub async fn xtra_vfx_turn_off(window: Window, mod_path: String, reason: Option<String>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Option<String>, String> {
+    repairable(Path::new(&mod_path))?;
     let pak = Path::new(&mod_path).with_extension("pak");
     if let Some(why) = reason.as_deref() {
         let mods_dir = state.lock().unwrap().game_path.clone();
@@ -769,6 +797,7 @@ pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>
                     let _ = window.emit("vfx_mods_progress", serde_json::json!({ "done": i + 1, "total": total }));
                 }
                 let utoc = m.utoc_path.clone()?;
+                if crate::xtra_setup::is_managed_loader(&m.path) { return None; }
                 let stem = m.path.file_stem()?.to_string_lossy().to_string();
                 let siblings = by_dir.get(m.path.parent()?)?;
                 // an original whose update sits beside it: <name>_BROKEN, or <name> next to <name>_UPDATED from before
@@ -979,9 +1008,29 @@ fn source_of(mod_path: &Path) -> PathBuf {
     original_of(mod_path).unwrap_or_else(|| mod_path.to_path_buf())
 }
 
+fn repairable(path: &Path) -> Result<(), String> {
+    if crate::xtra_setup::is_managed_loader(path) {
+        return Err("This project loader is managed in Setup. The Mod Updater cannot change or turn it off.".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn project_loader_is_refused_before_repair() {
+    for ext in ["pak", "bak_repak", "utoc"] {
+        let path = format!("{}.{ext}", crate::xtra_setup::GALACTA_STEM);
+        assert!(repairable(Path::new(&path)).is_err());
+        assert!(xtra_vfx_source(path).is_err());
+    }
+    assert!(repairable(Path::new("OrdinaryMod.utoc")).is_ok());
+}
+
 #[tauri::command(async)]
-pub fn xtra_vfx_source(mod_path: String) -> String {
-    source_of(Path::new(&mod_path)).to_string_lossy().to_string()
+pub fn xtra_vfx_source(mod_path: String) -> Result<String, String> {
+    repairable(Path::new(&mod_path))?;
+    let source = source_of(Path::new(&mod_path));
+    repairable(&source)?;
+    Ok(source.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -1311,6 +1360,18 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
+    #[test]
+    fn parser_changes_invalidate_decoded_vanilla_and_dependent_verdicts() {
+        let usmap = "same-game-and-mappings.usmap";
+        let stale = decode_key(usmap, "old-parser");
+        let current = decode_key(usmap, "new-parser");
+        assert_ne!(stale, current);
+        assert_eq!(current, decode_key(usmap, "new-parser"));
+        let cache = HashMap::from([(format!("mod|123|456|{stale}|game"), true)]);
+        assert!(!cache.contains_key(&format!("mod|123|456|{current}|game")));
+        assert_ne!(base_dir().join(format!("vanilla-game-{stale}")), base_dir().join(format!("vanilla-game-{current}")));
+    }
+
     fn s(v: &Value, k: &str) -> String {
         v.get(k).and_then(Value::as_str).unwrap_or_default().to_string()
     }
@@ -1348,7 +1409,7 @@ mod tests {
             "xtra_vfx_dirs" => json!(make_dirs(&s(a, "gamePaks"), &s(a, "runId"), &s(a, "usmapPath"))?),
             "xtra_vfx_stale" => json!(stale(&s(a, "modPath"), &s(a, "gamePaks"), &list(a, "files"))?),
             "xtra_vfx_detect" =>json!(detect(&s(a, "usmapPath"), &list(a, "paths"), p).await?),
-            "xtra_vfx_source" => json!(xtra_vfx_source(s(a, "modPath"))),
+            "xtra_vfx_source" => json!(xtra_vfx_source(s(a, "modPath"))?),
             "xtra_skin_table_hero" => json!(crate::xtra_builtins::table_hero(&s(a, "modPath"), Path::new(&s(a, "gamePaks"))).await?),
             "xtra_vfx_old_layout" => json!(crate::xtra_niagara::xtra_vfx_old_layout(s(a, "modPath"), s(a, "gamePaks"), s(a, "usmapPath"), list(a, "files"), a.get("modExtract").and_then(Value::as_str).map(String::from)).await?),
             "xtra_vfx_relayout" => json!(crate::xtra_mi_layout::run(&s(a, "modPath"), &s(a, "gamePaks"), &s(a, "usmapPath"), &s(a, "modExtract"), &list(a, "files"), &s(a, "stageDir"), p).await?),

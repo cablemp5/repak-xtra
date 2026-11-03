@@ -18,7 +18,16 @@ const LOADER_BYTES: &[u8] = include_bytes!("../resources/utoc-bypass/dsound.dll"
 const BYPASS_BYTES: &[u8] = include_bytes!("../resources/utoc-bypass/MarvelRivalsUTOCSignatureBypass.asi");
 const LICENSE_TEXT: &str = include_str!("../resources/utoc-bypass/Ultimate ASI Loader License.txt");
 const GALACTA_API: &str = "https://api.github.com/repos/0xSaturno/ProjectGalacta/releases/latest";
-const GALACTA_STEM: &str = "!ProjectGalacta_9999999_P";
+pub(crate) const GALACTA_STEM: &str = "!ProjectGalacta_9999999_P";
+
+/// Setup owns this edition's project loader. Mod repairs must not rewrite or disable it.
+pub(crate) fn is_managed_loader(path: &Path) -> bool {
+    let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else { return false };
+    let stem = stem.trim_start_matches('!').to_ascii_lowercase();
+    let stem = stem.strip_suffix("_p").unwrap_or(&stem);
+    let stem = stem.rsplit_once('_').filter(|(_, n)| !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit())).map_or(stem, |(base, _)| base);
+    stem.eq_ignore_ascii_case(GALACTA_STEM.trim_start_matches('!').split('_').next().unwrap())
+}
 
 fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
@@ -402,6 +411,18 @@ pub async fn setup_galacta_install(app: AppHandle, folder: Option<String>, state
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn only_this_editions_project_loader_is_managed() {
+        let stem = super::GALACTA_STEM;
+        let short = stem.trim_start_matches('!').split('_').next().unwrap();
+        for name in [format!("{stem}.pak"), format!("{stem}.bak_repak"), format!("{stem}.utoc"), format!("{short}.pak"), format!("!{short}_123_P.utoc").to_lowercase()] {
+            assert!(super::is_managed_loader(std::path::Path::new(&name)), "{name}");
+        }
+        for name in [format!("{short}_skin.pak"), format!("{short}_9999999_P_UPDATED.utoc"), "OrdinaryMod.pak".into()] {
+            assert!(!super::is_managed_loader(std::path::Path::new(&name)), "{name}");
+        }
+    }
+
     use super::*;
 
     #[test]

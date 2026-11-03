@@ -1,5 +1,6 @@
 // repakxtra: loadout pieces the Library uses (state lives in loadoutStore.ts): the selection bar's Add to loadout, the
 // right-click Add to loadout items, switching with its guards (runChanges), and Ctrl+N for a loadout pinned to N.
+import { cue } from './sounds'
 import { showKeptOff } from './safeOff'
 import { useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
@@ -206,8 +207,10 @@ export default function LoadoutHotkeys(p: LoadoutProps) {
   const apply = async (l: Loadout) => {
     busy.current = true
     try {
-      if (isActive(l, p.mods)) await runChanges(p, l, changesToTurnOff(l, p.mods), 'off')
-      else await runChanges(p, l, changesToTurnOn(l, p.mods), 'on')
+      const active = isActive(l, p.mods)
+      const changes = active ? changesToTurnOff(l, p.mods) : changesToTurnOn(l, p.mods)
+      if (!p.blocked && !switching && changes.length) cue('toggle', { direction: active ? 'back' : 'forward' })
+      await runChanges(p, l, changes, active ? 'off' : 'on')
     } finally { busy.current = false }
   }
   const latest = useRef({ loadouts, apply })

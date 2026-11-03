@@ -1,3 +1,4 @@
+import { cue } from './sounds'
 // repakxtra: F3 shows a frame rate counter in the corner: frames in the last second and the slowest frame in it (a long
 // frame is a hitch you feel even at 60 fps). Plain DOM on its own animation frame loop, so it never re-renders React.
 const KEY = 'repakxtra.fps'
@@ -29,6 +30,7 @@ function stop() { cancelAnimationFrame(raf); el?.remove(); el = null }
 window.addEventListener('keydown', e => {
   if (e.key !== 'F3' || e.ctrlKey || e.altKey || e.shiftKey) return
   e.preventDefault()
+  cue('toggle', { direction: el ? 'back' : 'forward' })
   if (el) { stop(); localStorage.removeItem(KEY) } else { start(); localStorage.setItem(KEY, '1') }
 })
 if (localStorage.getItem(KEY) === '1') start()
