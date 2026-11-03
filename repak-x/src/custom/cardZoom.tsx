@@ -1,7 +1,7 @@
 // repakxtra: zoom for the loadout cards on Home, apart from the app-wide UI scale (uiPrefs.tsx). Applied as CSS zoom on
 // the card grids (theme.css .lo-screen .lo-grid), so more or fewer cards fit a row; group headers and the header stay put.
-// Steps with the − / + control in the Loadouts header, or Ctrl + mouse wheel over the cards.
-import { useEffect, useSyncExternalStore } from 'react'
+// Steps with the − / + control in the Loadouts header, a plain mouse wheel over that control, or Ctrl + mouse wheel over the cards.
+import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { Minus, Plus } from 'lucide-react'
 import { savedItem } from './storageCarryOver'
 
@@ -42,13 +42,29 @@ export function useWheelZoom(el: HTMLElement | null) {
   }, [el])
 }
 
-/** − 100% + in the Loadouts header; the percentage resets to 100%. */
+/** − 100% + in the Loadouts header; the percentage resets to 100%. The wheel over it steps too, up for bigger (a
+ *  notch is 100 units, a trackpad's small deltas add up to one step instead of racing through them all). */
 export function CardZoomControl() {
   const z = useCardZoom()
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    let sum = 0
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      sum += e.deltaMode === 0 ? e.deltaY : e.deltaY * 100 // lines and pages count as whole notches
+      const n = Math.trunc(sum / 100) // whole notches; the rest waits for the next event
+      sum -= n * 100
+      for (let i = 0; i < Math.abs(n); i++) step(n < 0 ? 1 : -1)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
   return (
-    <div className="lo-zoom" role="group" aria-label="Card size">
+    <div className="lo-zoom" role="group" aria-label="Card size" ref={box}>
       <button type="button" className="lo-icon" onClick={() => step(-1)} disabled={z === STEPS[0]} title="Smaller cards (Ctrl + scroll down)" aria-label="Smaller cards"><Minus size={14} /></button>
-      <button type="button" className="lo-zoom-value" onClick={() => step(0)} title="Card size (click for 100%)" aria-label={`Card size ${Math.round(z * 100)}%, click to reset`}>{Math.round(z * 100)}%</button>
+      <button type="button" className="lo-zoom-value" onClick={() => step(0)} title="Card size (click for 100%, or scroll here)" aria-label={`Card size ${Math.round(z * 100)}%, click to reset`}>{Math.round(z * 100)}%</button>
       <button type="button" className="lo-icon" onClick={() => step(1)} disabled={z === STEPS[STEPS.length - 1]} title="Bigger cards (Ctrl + scroll up)" aria-label="Bigger cards"><Plus size={14} /></button>
     </div>
   )
