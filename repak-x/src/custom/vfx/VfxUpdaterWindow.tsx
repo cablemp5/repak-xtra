@@ -23,7 +23,7 @@ import { FIXED_EVENT, onHandoff, openLoadoutInMain, onReport, takeHandoff, takeR
 import { KEEP_NAME, ORIGINALS, SAFE_OFF, claimRun, newRunToken, onRunChange, readNaming, readOriginals, readSafeOff, releaseRun, runLock, type Naming, type Originals, type RunLock } from './prefs'
 import { STEPS, fixVfxMod, repairOutcome, type AssetKind, type VfxReport } from './pipeline'
 import { checkVfxMod, checkWords } from './quick'
-import { rescanVerdicts, verdictsChanged } from '../brokenMods'
+import { verdictsChanged } from '../brokenMods'
 import { HeroFilter, heroOfName } from '../heroFilter'
 import './vfx.css'
 
@@ -337,6 +337,7 @@ export function VfxUpdaterPanel() {
   const keepName = naming === 'broken'
   const [advanced, setAdvanced] = useState(() => localStorage.getItem(ADVANCED) === '1')
   const [busy, setBusy] = useState(false)
+  const checkingBatch = useRef(false)
   const [checkRun, setCheckRun] = useState<{ at: number; of: number; name: string } | null>(null) // Check: the ticked mods, one by one
   const [cancelling, setCancelling] = useState(false)
   const [logs, setLogs] = useState<Log[]>([])
@@ -556,6 +557,7 @@ export function VfxUpdaterPanel() {
   const lock = busy ? null : elsewhere ? `Updating ${elsewhere.name ?? 'a mod'} elsewhere. Update waits for it.` : checking ? 'Checking for a newer USMAP…' : !usmap ? 'Choose a USMAP file in Advanced first' : usmapOk === false ? 'The USMAP file is missing' : !paks ? 'Set the game folder in Setup first' : null
 
   const run = useCallback(async (keys?: string[]) => {
+    if (checkingBatch.current) return
     const byKey = new Map((modsRef.current ?? []).map(m => [norm(m.utoc), m]))
     const rank = new Map(orderRef.current.map((k, i) => [k, i]))
     const asked = (keys ?? [...picked].filter(k => !isDone(runsRef.current[k]?.status))).filter(k => byKey.has(k))
@@ -642,8 +644,8 @@ export function VfxUpdaterPanel() {
   // the Library's notice updates exactly the mods it sent, as soon as the list and the USMAP are ready (after a run in
   // progress)
   useEffect(() => {
-    if (autoRun.current && mods && !lock && !busy) { const keys = autoRun.current; autoRun.current = null; void run(keys) }
-  }, [mods, lock, busy, run])
+    if (autoRun.current && mods && !lock && !busy && !checkRun && !checkingBatch.current) { const keys = autoRun.current; autoRun.current = null; void run(keys) }
+  }, [mods, lock, busy, checkRun, run])
 
   const showAdvanced = (on: boolean) => {
     setAdvanced(on)
@@ -655,28 +657,49 @@ export function VfxUpdaterPanel() {
 
   // Check: the ticked mods' materials against this game version and the earlier ones (xtra_vfx_check.rs). Their Needs an
   // update follows, here and in the Library
-  const checkTicked = async () => {
-    const byKey = new Map((modsRef.current ?? []).map(m => [norm(m.utoc), m]))
-    const list = [...picked].map(k => byKey.get(k)).filter((m): m is Mod => Boolean(m))
-    const n = { outdated: 0, current: 0, unknown: 0, none: 0, failed: 0 }
-    cancel.current = false
-    let done = 0
-    for (const [i, m] of list.entries()) {
-      if (cancel.current) break // Cancel: after the mod being checked
-      setCheckRun({ at: i + 1, of: list.length, name: m.name })
-      try {
-        const c = await checkVfxMod(m.path)
-        n[c.verdict]++
-        const w = checkWords(c, m.name)
-        addLog(`${w.title}. ${w.text}`, c.verdict === 'outdated' ? 'warning' : c.verdict === 'current' ? 'success' : 'info')
-      } catch (e) { n.failed++; addLog(`${m.name} was not checked: ${e}`, 'warning') }
-      done++
+  const checkTicked = async (flagged = false) => {
+    if (checkingBatch.current || busy || lock) return
+    const list = (modsRef.current ?? []).filter(m => !m.risky && (flagged ? needs.has(norm(m.path)) : picked.has(norm(m.utoc))))
+    if (!list.length) return
+    checkingBatch.current = true
+    const token = newRunToken()
+    try {
+      if (!(await claimRun(token, 'Rechecking mods'))) { addLog('Another update or check is running. Try again when it is done.', 'warning'); return }
+      myToken.current = token
+      setEnded(null)
+      const n = { outdated: 0, current: 0, unknown: 0, none: 0, failed: 0 }
+      cancel.current = false
+      let done = 0
+      cue('select')
+      for (const [i, m] of list.entries()) {
+        if (cancel.current) break // Cancel: after the mod being checked
+        setCheckRun({ at: i + 1, of: list.length, name: m.name })
+        try {
+          const c = await checkVfxMod(m.path)
+          const w = checkWords(c, m.name)
+          addLog(`${w.title}. ${w.text}`, c.verdict === 'outdated' ? 'warning' : c.verdict === 'current' ? 'success' : 'info')
+          const verdicts = await invoke<Verdict[]>('xtra_broken_mods', { modPaths: [m.path] })
+          setNeeds(previous => {
+            const next = new Map(previous)
+            next.delete(norm(m.path))
+            for (const v of verdicts) if (v.kind === 'vfx' || v.kind === 'risky') next.set(norm(v.path), v.reason)
+            return next
+          })
+          await verdictsChanged()
+          n[c.verdict]++
+        } catch (e) { n.failed++; addLog(`${m.name} could not finish its check: ${e}`, 'warning') }
+        done++
+      }
+      const parts = [n.outdated && `${n.outdated} need${n.outdated === 1 ? 's' : ''} an update`, n.current && `${n.current} up to date`, (n.unknown + n.none) && `${n.unknown + n.none} not known`, n.failed && `${n.failed} could not finish`].filter(Boolean)
+      setEnded({ text: `${cancel.current ? 'Stopped. ' : ''}Checked ${done === list.length ? plural(done, 'mod') : `${done} of ${plural(list.length, 'mod')}`}${parts.length ? `: ${parts.join(', ')}` : ''}. No mod files changed. The Log has each result.`, retry: [], edits: pickEditsRef.current })
+      cue(n.failed || n.unknown ? 'warning' : 'success')
+    } finally {
+      await releaseRun(token)
+      myToken.current = null
+      checkingBatch.current = false
+      setCheckRun(null); setCancelling(false)
+      setReload(r => r + 1)
     }
-    setCheckRun(null); setCancelling(false)
-    const parts = [n.outdated && `${n.outdated} need${n.outdated === 1 ? 's' : ''} an update`, n.current && `${n.current} up to date`, (n.unknown + n.none) && `${n.unknown + n.none} not known`, n.failed && `${n.failed} not checked`].filter(Boolean)
-    setEnded({ text: `Checked ${done === list.length ? plural(done, 'mod') : `${done} of ${plural(list.length, 'mod')}`}${parts.length ? `: ${parts.join(', ')}` : ''}. The Log has each one.`, retry: [], edits: pickEditsRef.current })
-    await rescanVerdicts() // the Library reads the flags again and runs its background checks on every mod
-    setReload(r => r + 1)
   }
 
   // Ctrl+Enter updates the ticked mods, Esc cancels a run (a text field keeps its own Esc)
@@ -719,6 +742,7 @@ export function VfxUpdaterPanel() {
     const keys = ms.map(m => norm(m.utoc))
     return { id, title, mods: ms, count, keys, all: keys.length > 0 && keys.every(k => picked.has(k)), none: !keys.some(k => picked.has(k)) }
   }
+  const recheckCount = list.filter(m => !m.risky && needsOf(m)).length
   const needing = shown.filter(first)
   const done = shown.filter(updatedNow)
   const chosen = shown.filter(isAdded)
@@ -773,7 +797,7 @@ export function VfxUpdaterPanel() {
       : lock ?? (todo ? '' : reports.length ? `${updated === reports.length ? plural(updated, 'mod') : `${updated} of ${plural(reports.length, 'mod')}`} updated${partly ? ` (${partly === updated ? (updated === 1 ? 'partially' : 'all partially') : `${partly} partially`})` : ''}${lastTook ? ` in ${took(lastTook)}` : ''}` : 'Tick the mods to update')
 
   // the last batch's result, until the ticks change
-  const summary = !busy && !lock && ended && ended.edits === pickEdits ? ended : null
+  const summary = !busy && !checkRun && !lock && ended && ended.edits === pickEdits ? ended : null
   keys.current = { go: () => { if (!busy && !checkRun && !lock && todo) void run() }, stop: () => { if ((busy || checkRun) && !cancelling) stop() } }
   const openUsmap = () => showAdvanced(true)
 
@@ -810,6 +834,13 @@ export function VfxUpdaterPanel() {
           </>}
           <button type="button" className="lo-text-btn is-primary vf-add" disabled={busy || mods === null} onClick={() => void addUtoc()}
             title="Update a mod this list does not show: choose its .utoc file"><FilePlus size={14} aria-hidden="true" /> Add .utoc</button>
+        </div>
+        <div className="vf-recheck">
+          <button type="button" className="lo-text-btn" disabled={busy || Boolean(checkRun) || Boolean(lock) || !recheckCount}
+            onClick={() => void checkTicked(true)} title="Recheck every flagged mod's materials, including mods hidden by filters. Does not repair or replace files.">
+            <RefreshCw size={14} aria-hidden="true" className={checkRun ? 'vf-spin' : undefined} /> Recheck flagged mods{recheckCount > 0 ? ` (${recheckCount})` : ''}
+          </button>
+          <span>Checks materials without changing mod files. Mesh and Blueprint-only warnings need their own checks.</span>
         </div>
         {loadError && (
           <p className="vf-warn" role="alert">
@@ -966,12 +997,12 @@ export function VfxUpdaterPanel() {
                 <button type="button" className="su-link" onClick={() => showAdvanced(true)}>Change</button></>}
         </p>
         {/* read out: the run's progress and its result, not every tick's estimate */}
-        <span className="xtra-sr-only" aria-live="polite">{summary ? summary.text : busy || cancelling ? state : ''}</span>
+        <span className="xtra-sr-only" aria-live="polite">{summary ? summary.text : busy || checkRun || cancelling ? state : ''}</span>
         <div className="vf-foot-actions">
           {reports.length > 0 && !busy && <button type="button" className="lo-text-btn" onClick={() => copy('report')}><Copy size={14} /> {copied === 'report' ? 'Copied' : 'Copy report'}</button>}
           {/* Cancel beside the button, never in its place: a double-click on Update must not cancel the run */}
           {(busy || checkRun) && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={stop} title="Esc">{cancelling ? 'Cancelling…' : 'Cancel'}</button>}
-          {!busy && <button type="button" className="lo-text-btn" disabled={Boolean(checkRun) || !picked.size} onClick={() => void checkTicked()}
+          {!busy && <button type="button" className="lo-text-btn" disabled={Boolean(checkRun) || Boolean(lock) || !picked.size} onClick={() => void checkTicked()}
             title="Whether the ticked mods' materials were built for this game version, whatever their dates say">{checkRun ? 'Scanning…' : 'Scan'}</button>}
           <button type="button" className="btn-primary" disabled={busy || Boolean(checkRun) || Boolean(lock) || !todo} title={busy ? undefined : 'Ctrl+Enter'}
             ref={el => { if (el && !busy) updateWidth.current = el.offsetWidth }} style={busy ? { minWidth: updateWidth.current } : undefined} onClick={() => run()}>
