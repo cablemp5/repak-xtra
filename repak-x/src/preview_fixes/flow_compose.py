@@ -6,13 +6,14 @@
 
 FLOW_FPS = 18   # the animated glow's frame rate (flow_anim.py FLOW_FRAMES make one 4 s loop)
 FLOW_BLUR = 0.63   # the bloom's blurs scaled to the frames' render size (flow_anim.py FLOW_SCALE)
+FLOW_BLACK = 14    # the base's black point: the suit's darkest values (about 14 to 20) go to black
 
 
 def bloom(e, k=1.0):
-    """The kit's bloom of an emission pass: only the brightest light, a tight and a wide blur."""
-    e = e.point(lambda v: max(0, v - 110) * 2)
-    return ImageChops.add(ImageEnhance.Brightness(e.filter(ImageFilter.GaussianBlur(6 * k))).enhance(0.9),
-                          ImageEnhance.Brightness(e.filter(ImageFilter.GaussianBlur(26 * k))).enhance(0.8))
+    """A bloom of an emission pass, a tight and a wide blur: stronger than the kit's still, so the crawling lines glow."""
+    e = e.point(lambda v: max(0, v - 80) * 2.5)   # the animation's glow: from mid-bright lines up (110 and x2 barely showed)
+    return ImageChops.add(ImageEnhance.Brightness(e.filter(ImageFilter.GaussianBlur(6 * k))).enhance(1.2),
+                          ImageEnhance.Brightness(e.filter(ImageFilter.GaussianBlur(16 * k))).enhance(0.9))   # 26 hazed the black suit
 
 
 def sheet_canvas(im):
@@ -43,7 +44,8 @@ def flow_anim(prefix, out_png):
         return False
     size = Image.open(frames[0]).size   # the frames render smaller than the still: the base is brought to their size
     base = Image.open(base_path).convert("RGBA").resize(size, Image.LANCZOS)
-    rgb0 = ImageEnhance.Color(ImageEnhance.Brightness(base.convert("RGB")).enhance(1.08)).enhance(1.2)   # as render_form's still
+    # the still's brightness, a black point and no extra saturation: the suit between the lines stays black, not tinted
+    rgb0 = ImageEnhance.Brightness(base.convert("RGB")).enhance(1.08).point(lambda v: max(0, v - FLOW_BLACK) * 255 // (255 - FLOW_BLACK))
     alpha0 = base.getchannel("A")
     emit = Image.open(emit_path).convert("RGB").resize(size) if emit_path.exists() else Image.new("RGB", size)
     out = []
