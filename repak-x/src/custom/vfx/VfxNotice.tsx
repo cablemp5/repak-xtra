@@ -1,7 +1,7 @@
 // repakxtra: after a game update, a strip above Home and the Library while VFX mods were made for the game files it
 // changed (xtra_broken.rs "vfx" verdicts, the Needs VFX update badge). Update VFX mods hands them all to the VFX Updater, which
-// fixes them at once and moves the originals to Recently deleted. Not now hides it until the next game update (the VFX Updater still offers
-// them all as one Add). It also listens for each
+// fixes them at once and moves the originals to Recently deleted. Not now hides the mods already shown, until the game
+// changes or a waiting repair becomes available. A newly flagged mod brings the strip back. It also listens for each
 // fix the VFX window makes and swaps the original for the fix in every loadout, so a loadout turns on the fixed mod.
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
@@ -14,10 +14,19 @@ import { useUiPref } from '../uiPrefs'
 import { FIXED_EVENT, OPEN_LOADOUT_EVENT, fixInVfxWindow, utocOf, type Fixed } from './handoff'
 import './vfx.css'
 
-type Mod = { path: string; utoc_path?: string | null }
-// the game update (seconds) Not now was pressed for, and whether some mods were waiting for its USMAP then: the strip
-// stays away until the next game update, or once more when that USMAP is out and the waiting ones can be updated
+type Mod = { path: string; utoc_path?: string | null; modified_date?: number; file_size?: number }
+// The game build and mod versions already shown. Old build-only dismissals resurface once because they list no mods.
 const DISMISSED = 'repakxtra.vfxNotice'
+
+const noticeModKey = (m: Mod, waiting: boolean) => JSON.stringify([modKey(m.path), m.modified_date ?? 0, m.file_size ?? 0, waiting])
+/** Removing or fixing a dismissed mod stays quiet. New mods, file versions, or repair readiness show the notice. */
+export function noticeDismissed(saved: string | null, updated: number, keys: string[]): boolean {
+  if (!saved) return false
+  try {
+    const value: unknown = JSON.parse(saved)
+    return Array.isArray(value) && value[0] === updated && keys.every(k => value.includes(k))
+  } catch { return false }
+}
 
 /** The yellow dot on the header's VFX Updater button while any mod needs a VFX update (hidden with the problem badges). */
 export function VfxDot({ mods }: { mods: Mod[] }) {
@@ -75,8 +84,9 @@ export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () =>
   // the ones whose files the patch itself changed wait for its USMAP (xtra_broken.rs usmap_wait): Update sends the rest
   const ready = stale.filter(m => !verdictOf(m.path)?.usmapWait)
   const waiting = n - ready.length
-  const seen = `${updated}${waiting ? ':waiting' : ''}`
-  if (!shown || !n || !updated || dismissed === seen) return null
+  const keys = stale.map(m => noticeModKey(m, Boolean(verdictOf(m.path)?.usmapWait)))
+  const seen = JSON.stringify([updated, ...keys])
+  if (!shown || !n || !updated || noticeDismissed(dismissed, updated, keys)) return null
   const when = new Date(updated * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
   return (
     <div className="vfx-notice" role="status">
@@ -84,7 +94,7 @@ export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () =>
       {/* the risk first as a headline, the counts below it (Von Restorff, progressive disclosure) */}
       <p><strong className="vfx-notice-head">{noticeHead(n, when)}</strong>{noticeDetail(n, ready.length, waiting)}</p>
       <button type="button" className="lo-text-btn" onClick={() => { localStorage.setItem(DISMISSED, seen); setDismissed(seen) }}
-        title={waiting ? 'Hide this until the next game update, or until the new USMAP is out' : 'Hide this until the next game update'}>Not now</button>
+        title="Hide these warnings until another mod needs an update, the game changes, or a waiting repair becomes available">Not now</button>
       {ready.length > 0 && <button type="button" className="btn-primary" onClick={() => fixInVfxWindow(ready.map(m => m.utoc_path || utocOf(m.path)), true)}>
         <RefreshCw size={14} aria-hidden="true" />{waiting ? `Update ${ready.length === 1 ? '1 mod' : `${ready.length} mods`}` : 'Update mods'}</button>}
     </div>
@@ -92,6 +102,17 @@ export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () =>
 }
 
 if (import.meta.env.DEV) {
+  const a = { path: 'C:/Game/~mods/A_9999999_P.pak', modified_date: 10, file_size: 20 }
+  const key = noticeModKey(a, false)
+  const saved = JSON.stringify([100, key, 'another-mod'])
+  console.assert(noticeDismissed(saved, 100, [key]), 'fixing or removing another dismissed mod stays quiet')
+  console.assert(!noticeDismissed(saved, 100, [key, 'new-mod']), 'newly flagged mods show a banner on the same build')
+  console.assert(!noticeDismissed(saved, 200, [key]), 'a new game build shows the banner again')
+  console.assert(!noticeDismissed('100', 100, [key]) && !noticeDismissed('100:waiting', 100, [key]), 'old dismissals do not hide newly installed mods')
+  console.assert(!noticeDismissed(JSON.stringify([100, noticeModKey(a, true)]), 100, [key]), 'a waiting repair becoming ready shows the banner')
+  console.assert(!noticeDismissed(saved, 100, [noticeModKey({ ...a, modified_date: 11 }, false)]), 'a newly installed version at the same path shows the banner')
+  console.assert(noticeDismissed(saved, 100, [noticeModKey({ ...a, path: a.path.replace('.pak', '.bak_repak') }, false)]), 'toggling a mod does not reset dismissal')
+  console.assert(!noticeDismissed('{bad', 100, [key]), 'invalid saved data cannot hide a warning')
   console.assert(noticeHead(101, 'Oct 29') === '101 mods may crash the game or not load correctly after the Oct 29 update', 'headline', noticeHead(101, 'Oct 29'))
   console.assert(noticeHead(1, 'Oct 29').startsWith('1 mod may crash'), 'one mod')
   console.assert(noticeDetail(101, 1, 100) === "1 can be updated now. 100 wait for the game's new USMAP before they can be updated.", 'some wait', noticeDetail(101, 1, 100))
