@@ -670,6 +670,7 @@ export function VfxUpdaterPanel() {
       setEnded(null)
       const n = { outdated: 0, current: 0, unknown: 0, none: 0, failed: 0 }
       cancel.current = false
+      setCancelling(false)
       let done = 0
       cue('select')
       for (const [i, m] of list.entries()) {
@@ -792,7 +793,7 @@ export function VfxUpdaterPanel() {
     const xs = [...picked].filter(k => !isDone(runs[k]?.status) && !waits.has(k)).map(k => expected(times, byUtoc.get(k)?.niagara))
     return xs.some(x => x === undefined) ? undefined : xs.reduce<number>((a, b) => a + (b ?? 0), 0)
   })() : undefined
-  const state = checkRun ? `Checking ${checkRun.at} of ${checkRun.of}: ${checkRun.name}…`
+  const state = checkRun ? `${cancelling ? 'Stopping after' : 'Checking'} ${checkRun.at} of ${checkRun.of}: ${checkRun.name}`
     : cancelling ? 'Cancelling. The current step finishes first.'
     : busy ? `Updating ${runningAt + 1} of ${batch.length}${runningMod ? `: ${runningMod.name}` : '…'}${left !== undefined ? `. ${timeLeft(left).replace(/^./, c => c.toUpperCase())} left` : ''}` // its row shows the step
       : lock ?? (todo ? '' : reports.length ? `${updated === reports.length ? plural(updated, 'mod') : `${updated} of ${plural(reports.length, 'mod')}`} updated${partly ? ` (${partly === updated ? (updated === 1 ? 'partially' : 'all partially') : `${partly} partially`})` : ''}${lastTook ? ` in ${took(lastTook)}` : ''}` : 'Tick the mods to update')
@@ -982,7 +983,7 @@ export function VfxUpdaterPanel() {
         <p className="vf-state">
           {summary
             ? <>{summary.text}{summary.retry.length > 0 && <>{' '}<button type="button" className="su-link" onClick={() => void run(summary.retry)}>Try {plural(summary.retry.length, 'mod')} again</button></>}</>
-            : state ? state
+            : state ? <span className={checkRun ? 't-shimmer' : undefined}>{state}</span>
             : <>{/* its own line: the warning and its link stay together, apart from the estimate */}
                 {hiddenTicked > 0 && <span className="vf-hidden-line"><b className="vf-hidden-n">{hiddenTicked} ticked {hiddenTicked === 1 ? 'mod is' : 'mods are'} hidden by the filter.</b>{' '}
                   <button type="button" className="su-link" onClick={() => { setQ(''); setHero('') }}>Show {hiddenTicked === 1 ? 'it' : 'them'}</button></span>}

@@ -25,7 +25,7 @@ export default function ScanButton({ scanning, disabled, selected, flagged, onSc
   return (
     <div className="install-btn vf-scan" ref={wrap} onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget)) setOpen(false) }}>
       <button type="button" className="install-btn-main" disabled={disabled || !selected} onClick={() => onScan(false)}
-        title="Check the selected mods' materials without changing files">{scanning ? 'Scanning...' : 'Scan'}</button>
+        title="Check the selected mods' materials without changing files">{scanning ? <span className="t-shimmer">Scanning</span> : 'Scan'}</button>
       <button type="button" className="install-btn-more" ref={trigger} disabled={disabled}
         aria-haspopup="menu" aria-expanded={open} aria-label="More scan options" title="More scan options"
         onClick={() => { setOpen(v => !v); cue(open ? 'close' : 'open') }}

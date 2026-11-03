@@ -262,5 +262,5 @@ html[data-motion="off"] .vfx-notice { animation: none; }
 .vf-scan.install-btn:hover { background: var(--quiet-hover); }
 .vf-scan.install-btn > button { color: var(--text-primary) !important; }
 .vf-scan.install-btn svg { color: var(--text-secondary) !important; }
-.vf-scan .install-btn-more { box-shadow: -1px 0 0 var(--panel-border); }
+.vf-scan .install-btn-more { box-shadow: none !important; }
 .vf-scan-menu.sigeon-menu { top: auto; bottom: calc(100% + 6px); right: 0; width: 270px; transform-origin: bottom right; }
