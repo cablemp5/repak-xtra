@@ -617,7 +617,6 @@ export function VfxUpdaterPanel() {
       if (isPartial(r)) partial++
       if (r.status === 'failed') { broke.push(key); retry.push(key) }
       if (r.status === 'cancelled') { stopped.push(key); retry.push(key) }
-      if (r.status !== 'fixed' || todo.length === 1) setOpen(o => new Set(o).add(key)) // problems open, a batch's updates stay folded
       // the main window reloads and moves loadouts from the original to the update (a no-op when the update kept the name)
       if (r.placed) await emitTo('main', FIXED_EVENT, { from: r.placed.source, to: r.placed.fixed, swap: true, original: r.placed.original } satisfies Fixed).catch(() => {})
       // an update named _UPDATED is a new file and its original leaves the list: its result moves with it
