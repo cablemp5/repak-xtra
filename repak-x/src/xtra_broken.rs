@@ -585,11 +585,32 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
     }
 }
 
+/// An inconclusive material comparison replaces date guesses, never evidence from another asset check.
+fn judge_checked(path: &str, mut facts: Facts<'_>, updated: u64, game: &GameAssets, unknown: Option<&str>) -> Option<Verdict> {
+    let Some(reason) = unknown else { return judge(path, &facts, updated, game) };
+    if facts.old_layout { return judge(path, &facts, updated, game); }
+    facts.vfx = false;
+    facts.materials = false;
+    facts.old_materials = false;
+    judge(path, &facts, updated, game).or_else(|| Some(Verdict {
+        path: path.into(), kind: "unknown", reason: reason.into(), stale_niagara: 0, usmap_wait: 0, off_only: false,
+    }))
+}
+
+pub(crate) fn record_uncertain(mods_dir: &Path, utoc: &Path, reason: String) -> Result<(), String> {
+    let store = checked_store();
+    let game = game_updated(mods_dir);
+    if checked_record(&load_checked(&store), utoc, game).is_some_and(|c| c.outdated && c.unknown.is_none()) { return Ok(()); }
+    remember_checked(&store, utoc, game, false, false, Some(reason))
+}
+
 /// A mod an update found nothing to rebuild in (its report said Nothing to update), or one Check for VFX update looked at
 /// (xtra_vfx_check.rs): its .utoc's size and time then, and the game's last update then. Until one of them changes it is
 /// not flagged, or, when the check found it `outdated`, flagged whatever its date.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 struct Checked {
+    #[serde(default)]
+    unknown: Option<String>,
     #[serde(default)]
     parser: String,
     size: u64,
@@ -635,14 +656,16 @@ fn checked_record<'a>(store: &'a HashMap<String, Checked>, utoc: &Path, game_upd
 
 /// A "nothing to update" for `utoc` as it is now, from an update that rewrites older material layouts.
 fn layout_cleared(store: &HashMap<String, Checked>, utoc: &Path, game_updated: u64) -> bool {
-    store.get(&checked_key(utoc)).is_some_and(|c| file_stamp(utoc) == Some((c.size, c.modified)) && game_updated <= c.game && c.parser == crate::xtra_vfx::parser_id() && !c.outdated && c.material_layout)
+    store.get(&checked_key(utoc)).is_some_and(|c| file_stamp(utoc) == Some((c.size, c.modified)) && game_updated <= c.game && c.parser == crate::xtra_vfx::parser_id() && !c.outdated && c.unknown.is_none() && c.material_layout)
 }
 
-fn remember_checked(store: &Path, utoc: &Path, game_updated: u64, outdated: bool, old_layout: bool) -> Result<(), String> {
+fn remember_checked(store: &Path, utoc: &Path, game_updated: u64, outdated: bool, old_layout: bool, unknown: Option<String>) -> Result<(), String> {
     let (size, modified) = file_stamp(utoc).ok_or_else(|| format!("{} is not there", utoc.display()))?;
     let mut all = load_checked(store);
     // both writers read the material layout first (pipeline.ts relayout, xtra_vfx_check.rs): a "nothing" from them holds for it
-    all.insert(checked_key(utoc), Checked { parser: crate::xtra_vfx::parser_id().to_string(), size, modified, game: game_updated, outdated, material_layout: true, old_layout });
+    // Older apps do not understand unknown: retain their warning rather than granting a false clearance.
+    let outdated = outdated || unknown.is_some();
+    all.insert(checked_key(utoc), Checked { unknown, parser: crate::xtra_vfx::parser_id().to_string(), size, modified, game: game_updated, outdated, material_layout: true, old_layout });
     let tmp = store.with_extension("json.tmp");
     std::fs::write(&tmp, serde_json::to_string(&all).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
     std::fs::rename(&tmp, store).map_err(|e| e.to_string())
@@ -656,7 +679,7 @@ pub(crate) fn game_updated(mods_dir: &Path) -> u64 {
 /// What a check found about the mod at `utoc` (xtra_vfx_check.rs), kept until the mod or the game changes. `old_layout`:
 /// it is outdated for material instances in an older property layout.
 pub(crate) fn record_check(mods_dir: &Path, utoc: &Path, outdated: bool, old_layout: bool) -> Result<(), String> {
-    remember_checked(&checked_store(), utoc, game_updated(mods_dir), outdated, old_layout)
+    remember_checked(&checked_store(), utoc, game_updated(mods_dir), outdated, old_layout, None)
 }
 
 /// An update of `mod_path` said Nothing to update: Needs VFX update stops flagging it until the mod or the game changes.
@@ -732,7 +755,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                 }
                 // a check found it built for an older game version: flagged whatever its date says
                 let record = checked_record(&checked, &path.with_extension("utoc"), game_updated);
-                let found = record.map(|c| c.outdated);
+                let found = record.filter(|c| c.unknown.is_none()).map(|c| c.outdated);
                 if found == Some(true) && !has_fix(&path) {
                     return Some(Verdict {
                         path: p.clone(),
@@ -777,7 +800,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                     old_materials: layout_patched.is_some_and(|at| installed > 0 && installed < at) && !has_fix(&path)
                         && !layout_cleared(&checked, &path.with_extension("utoc"), game_updated),
                 };
-                judge(p, &facts, game_updated, &game)
+                judge_checked(p, facts, game_updated, &game, record.and_then(|c| c.unknown.as_deref()))
             })
             .collect::<Vec<Verdict>>();
         // A mod that needs an update can be updated with the saved USMAP when no patch newer than it rewrote the files
@@ -960,16 +983,36 @@ mod tests {
     }
 
     #[test]
+    fn inconclusive_materials_replace_date_guesses_but_keep_confirmed_risks() {
+        let files = v(&[LIVE]);
+        let unknown = || Facts { vfx: true, ..facts(&files, 50) };
+        assert_eq!(judge_checked("m.pak", unknown(), 200, &game(), Some("Custom shader data")).unwrap().kind, "unknown");
+        assert_eq!(judge_checked("m.pak", unknown(), 200, &game(), None).unwrap().kind, "vfx");
+        assert_eq!(judge_checked("m.pak", Facts { old_layout: true, ..unknown() }, 200, &game(), Some("Custom shader data")).unwrap().kind, "vfx");
+        assert_eq!(judge_checked("m.pak", Facts { mesh: Some("Bone mismatch".into()), ..unknown() }, 200, &game(), Some("Custom shader data")).unwrap().kind, "risky");
+        assert_eq!(judge_checked("m.pak", Facts { has_blueprint: true, layout: Some(Some("Class changed".into())), ..unknown() }, 200, &game(), Some("Custom shader data")).unwrap().kind, "risky");
+        let dir = tempfile::tempdir().unwrap();
+        let utoc = dir.path().join("mod.utoc");
+        let store = dir.path().join("checked.json");
+        std::fs::write(&utoc, b"toc").unwrap();
+        remember_checked(&store, &utoc, 200, false, false, Some("Unknown".into())).unwrap();
+        let saved = load_checked(&store);
+        assert_eq!(checked_record(&saved, &utoc, 200).unwrap().unknown.as_deref(), Some("Unknown"));
+        assert!(!layout_cleared(&saved, &utoc, 200));
+        assert!(checked_record(&saved, &utoc, 300).is_none());
+    }
+
+    #[test]
     fn nothing_to_update_holds_until_the_mod_or_the_game_changes() {
         let dir = tempfile::tempdir().unwrap();
         let (store, utoc) = (dir.path().join("checked.json"), dir.path().join("Swap_9999999_P.utoc"));
         std::fs::write(&utoc, b"toc").unwrap();
-        remember_checked(&store, &utoc, 200, false, false).unwrap();
+        remember_checked(&store, &utoc, 200, false, false, None).unwrap();
         let all = load_checked(&store);
         assert_eq!(checked_now(&all, &utoc, 200), Some(false), "the same file, the same game");
         assert_eq!(checked_now(&all, Path::new(&utoc.to_string_lossy().to_uppercase()), 200), Some(false), "any spelling of the path");
         assert_eq!(checked_now(&all, &utoc, 300), None, "the game updated since");
-        remember_checked(&store, &utoc, 200, true, true).unwrap();
+        remember_checked(&store, &utoc, 200, true, true, None).unwrap();
         assert_eq!(checked_now(&load_checked(&store), &utoc, 200), Some(true), "a check found it outdated");
         std::fs::write(&utoc, b"toc v2").unwrap();
         assert_eq!(checked_now(&all, &utoc, 200), None, "the mod changed");

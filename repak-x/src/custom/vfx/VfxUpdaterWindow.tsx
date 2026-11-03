@@ -364,6 +364,7 @@ export function VfxUpdaterPanel() {
   const [held, setHeld] = useState<RunLock | null>(null) // who holds the run lock (prefs.ts), this window or another
   const myToken = useRef<string | null>(null) // this window's run, while it holds the lock
   const busyRef = useRef(false)
+  const [uncertain, setUncertain] = useState(new Map<string, string>())
   const [checkError, setCheckError] = useState(false) // which mods need an update could not be checked
   const [scan, setScan] = useState<{ done: number; total: number } | null>(null) // the first read, mod by mod
   const [, bump] = useState(0)
@@ -446,6 +447,7 @@ export function VfxUpdaterPanel() {
         setWaits(new Map(verdicts.filter(v => v.kind === 'vfx' && v.usmapWait && utocs.has(norm(v.path))).map(v => [utocs.get(norm(v.path))!, v.usmapWait!])))
         setMods(list)
         setScanProblems(problems)
+        setUncertain(new Map(verdicts.filter(v => v.kind === 'unknown').map(v => [norm(v.path), v.reason])))
         setNeeds(n)
         const present = new Set(list.map(m => norm(m.utoc)))
         setPicked(p => { const kept = [...p].filter(k => present.has(k)); return kept.length === p.size ? p : new Set(kept) }) // an update elsewhere can rename or remove one
@@ -660,7 +662,7 @@ export function VfxUpdaterPanel() {
   // update follows, here and in the Library
   const checkTicked = async (flagged = false) => {
     if (checkingBatch.current || busy || lock) return
-    const list = (modsRef.current ?? []).filter(m => !m.risky && (flagged ? needs.has(norm(m.path)) : picked.has(norm(m.utoc))))
+    const list = (modsRef.current ?? []).filter(m => !m.risky && (flagged ? needs.has(norm(m.path)) || uncertain.has(norm(m.path)) : picked.has(norm(m.utoc))))
     if (!list.length) return
     checkingBatch.current = true
     const token = newRunToken()
@@ -687,6 +689,13 @@ export function VfxUpdaterPanel() {
             for (const v of verdicts) if (v.kind === 'vfx' || v.kind === 'risky') next.set(norm(v.path), v.reason)
             return next
           })
+          setUncertain(previous => {
+            const next = new Map(previous)
+            next.delete(norm(m.path))
+            for (const v of verdicts) if (v.kind === 'unknown') next.set(norm(v.path), v.reason)
+            return next
+          })
+          if (!verdicts.some(v => v.kind === 'vfx' || v.kind === 'risky')) pick([norm(m.utoc)], false)
           await verdictsChanged()
           n[c.verdict]++
         } catch (e) { n.failed++; addLog(`${m.name} could not finish its check: ${e}`, 'warning') }
@@ -744,16 +753,18 @@ export function VfxUpdaterPanel() {
     const keys = ms.map(m => norm(m.utoc))
     return { id, title, mods: ms, count, keys, all: keys.length > 0 && keys.every(k => picked.has(k)), none: !keys.some(k => picked.has(k)) }
   }
-  const recheckCount = list.filter(m => !m.risky && needsOf(m)).length
+  const recheckCount = list.filter(m => !m.risky && (needsOf(m) || uncertain.has(norm(m.path)))).length
   const needing = shown.filter(first)
   const done = shown.filter(updatedNow)
   const chosen = shown.filter(isAdded)
-  const others = shown.filter(m => !first(m) && !updatedNow(m) && !isAdded(m))
+  const unknown = shown.filter(m => !first(m) && !isAdded(m) && uncertain.has(norm(m.path)))
+  const others = shown.filter(m => !uncertain.has(norm(m.path)) && !first(m) && !updatedNow(m) && !isAdded(m))
   groupOf.current = new Map(shown.map(m => [norm(m.utoc), updatedNow(m) ? 'updated' : isAdded(m) ? 'added' : first(m) ? 'needs' : m.ui ? 'ui' : m.materials ? 'materials' : 'rest']))
   const groups = [
     group('added', 'Chosen files', chosen),
     group('needs', 'Needs an update', needing, needing.filter(m => needsOf(m) && !isDone(runs[norm(m.utoc)]?.status)).length),
     // the ones that need nothing, by kind
+    group('unknown', 'Unknown: review required', unknown),
     group('rest', 'VFX mods', others.filter(m => !m.materials)),
     // UI mods listed for their UI materials (a game update rewrote nearly all of them in 3984769)
     group('ui', 'UI mods', others.filter(m => m.ui)),
@@ -878,7 +889,7 @@ export function VfxUpdaterPanel() {
                   {g.mods.map(m => {
                     const key = norm(m.utoc)
                     return (
-                      <Row key={key} rowKey={key} mod={m} loadouts={inLoadouts(m)} run={runs[key]} needs={needsOf(m)} partial={behind ? stale.get(key) : undefined} waits={waits.get(key)} picked={picked.has(key)} open={open.has(key)} busy={busy}
+                      <Row key={key} rowKey={key} mod={m} loadouts={inLoadouts(m)} run={runs[key]} needs={needsOf(m) ?? uncertain.get(norm(m.path))} partial={behind ? stale.get(key) : undefined} waits={waits.get(key)} picked={picked.has(key)} open={open.has(key)} busy={busy}
                         onPick={v => userPick([key], v)} onUsmap={openUsmap}
                         onToggle={() => setOpen(o => { const n = new Set(o); n.has(key) ? n.delete(key) : n.add(key); return n })}
                         onRetry={() => void run([key])} />

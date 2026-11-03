@@ -151,7 +151,7 @@ export function checkWords(c: VfxCheck, name: string): { title: string; text: st
   if (c.verdict === 'unknown' && !c.unknown.length) return { color: 'default', title: `Not known if ${name} needs an update`, text: 'Its files could not be listed by type, so materials not named MI_ may be missing. It is checked again later.' }
   if (c.verdict === 'unknown') {
     const one = c.unknown.length === 1
-    return { color: 'default', title: `Not known if ${name} needs an update`, text: `${one ? 'Its material' : `${c.unknown.length} of its materials`} ${WHY[c.why ?? 'elsewhere'][one ? 0 : 1]}, so its date decides as before.` }
+    return { color: 'default', title: `Not known if ${name} needs an update`, text: `${one ? 'Its material' : `${c.unknown.length} of its materials`} ${WHY[c.why ?? 'elsewhere'][one ? 0 : 1]}. Compatibility remains unknown. This does not confirm that a repair is needed.` }
   }
   return { color: 'default', title: `${name} has nothing to check`, text: 'It has no material instances of the game\'s.' }
 }
@@ -175,6 +175,6 @@ export async function checkVfxModInPlace(mod: { path: string; utoc_path?: string
 
 if (import.meta.env.DEV) {
   const said = (unknown: string[], why: VfxCheck['why']) => checkWords({ verdict: 'unknown', outdated: [], current: [], unknown, why }, 'A').text
-  console.assert(said(['e'], 'empty') === 'Its material carries no shader data of its own to compare, so its date decides as before.', 'one, no shader data')
+  console.assert(said(['e'], 'empty') === 'Its material carries no shader data of its own to compare. Compatibility remains unknown. This does not confirm that a repair is needed.', 'one, no shader data')
   console.assert(said(['a', 'b'], 'elsewhere').startsWith('2 of its materials match no game version (the modder built them)'), 'several, built by the modder')
 }

@@ -188,6 +188,7 @@ async fn check_in(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, wo
         .collect();
     let none = || VfxCheck { verdict: "none", outdated: vec![], current: vec![], unknown: vec![], old_layout: vec![], why: None };
     if names.is_empty() {
+        if !all_known { crate::xtra_broken::record_uncertain(mods_dir, &utoc, "The asset list could not be fully read. Compatibility remains unknown.".into())?; }
         return Ok(if all_known { none() } else { VfxCheck { verdict: "unknown", why: Some("classes"), ..none() } });
     }
     let mine = read(paks, Some(&utoc), &names, usmap, &work.join("mod"), &work.join("mod_json")).await?;
@@ -280,6 +281,14 @@ async fn check_in(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, wo
     if out.verdict == "outdated" || (out.verdict == "current" && !niagara) {
         crate::xtra_broken::record_check(mods_dir, &utoc, out.verdict == "outdated", !out.old_layout.is_empty())?;
     }
+    if out.verdict == "unknown" {
+        let reason = if layout_ok && all_known {
+            "The material layout was read, but custom shader data matches no known game version. An update is not confirmed. Other asset types may need separate checks."
+        } else {
+            "The material check could not fully establish the layout or asset list. Compatibility is unknown, not a confirmed need for repair."
+        };
+        crate::xtra_broken::record_uncertain(mods_dir, &utoc, reason.into())?;
+    }
     Ok(out)
 }
 
@@ -359,7 +368,6 @@ pub async fn xtra_vfx_check_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mu
         let mics = tauri::async_runtime::spawn_blocking(move || details.map(|d| crate::xtra_broken::material_instances(&pk, &u, &d.files))).await.ok().flatten();
         if mics.as_ref().is_some_and(|(m, all)| !m.is_empty() || !all) {
             match check(&path, &usmap, &state, false).await {
-                Ok(c) if c.verdict == "outdated" => found += 1,
                 Ok(c) if matches!(c.why, Some("layout" | "classes")) => continue, // not settled: looked at again next scan
                 Ok(_) => {}
                 Err(e) => {
@@ -369,6 +377,7 @@ pub async fn xtra_vfx_check_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mu
             }
         }
         if let Some((size, at)) = crate::xtra_broken::file_stamp(&utoc) {
+            found += 1;
             done.insert(crate::xtra_broken::checked_key(&utoc), (size, at, game, crate::xtra_vfx::parser_id().to_string()));
             let _ = std::fs::write(&store, serde_json::to_string(&done).unwrap_or_default()); // each mod: a closed app keeps its progress
         }
