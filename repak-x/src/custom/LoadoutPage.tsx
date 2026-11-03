@@ -22,6 +22,7 @@ import { plural } from './modName'
 import { SwapText } from './motion'
 import { GeneratePreviewsButton, previewSetKey } from './previews'
 import { CaptureButton, captureTarget } from './CapturePreview'
+import LoadoutImage from './LoadoutImage'
 
 const PAGE = 60
 
@@ -300,6 +301,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
                   onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setNewGroup(null) }} />}
           </div>
           <div className="lp-actions">
+            <LoadoutImage key={l.id} p={p} l={l} />
             <label className="lp-switch">
               <Switch size="sm" color="primary" checked={active} isDisabled={present === 0} disabled={busy || present === 0}
                 onChange={(on: boolean) => onToggle(on)} title={switchTitle} aria-label={switchTitle} />

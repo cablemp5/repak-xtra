@@ -1,0 +1,7 @@
+.li-dialog { width: min(900px, 94vw); max-height: 90vh; }
+.li-body { overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+.li-preview { width: 100%; height: auto; max-height: 48vh; object-fit: contain; background: #101217; border-radius: 8px; }
+.li-component { display: grid; grid-template-columns: minmax(0, 1fr) minmax(140px, 1fr); gap: 16px; align-items: center; }
+.li-component label { display: flex; gap: 10px; overflow-wrap: anywhere; align-items: center; }
+.li-component input:not([type=checkbox]) { min-width: 0; width: 100%; }
+.li-body p { color: var(--text-secondary); font-size: 13px; }
