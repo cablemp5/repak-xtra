@@ -177,14 +177,40 @@ fn valid_run_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
 }
 
-/// The USMAP file's identity (path, size, time written): the game's JSON decoded with one USMAP is no use with another.
+/// The actual decoder binaries and the comparison schema, pinned for this process like the loaded native library.
+pub(crate) fn parser_id() -> &'static str {
+    static ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    ID.get_or_init(|| {
+        use sha2::{Digest, Sha256};
+        let fingerprint = || -> Result<String, String> {
+            let dll = uasset_toolkit::native_library_path().map_err(|e| e.to_string())?;
+            let mut h = Sha256::new();
+            h.update(env!("REPAKXTRA_DECODE_LOGIC"));
+            for path in std::iter::once(PathBuf::from(dll)).chain(crate::xtra_uat_cli::cli()) {
+                h.update(std::fs::read(path).map_err(|e| e.to_string())?);
+            }
+            Ok(format!("{:x}", h.finalize()))
+        };
+        fingerprint().unwrap_or_else(|_| {
+            // An unreadable parser must never reuse another launch's decoded data or verdicts.
+            format!("unavailable-{}-{:?}", std::process::id(), std::time::SystemTime::now())
+        })
+    })
+}
+
+/// Decoded data depends on both the mappings and parser, even when the game has not updated.
 pub(crate) fn usmap_hash(usmap: &str) -> String {
+    decode_key(usmap, parser_id())
+}
+
+fn decode_key(usmap: &str, parser: &str) -> String {
     let meta = std::fs::metadata(usmap).ok();
     let mut h = std::collections::hash_map::DefaultHasher::new();
+    parser.hash(&mut h);
     usmap.to_lowercase().hash(&mut h);
     meta.as_ref().map(|m| m.len()).hash(&mut h);
     meta.and_then(|m| m.modified().ok()).hash(&mut h);
-    format!("{:08x}", h.finish() as u32)
+    format!("{:016x}", h.finish())
 }
 
 /// The game's own assets for this game build and USMAP, shared by every run (and the Niagara layout check).
@@ -1309,6 +1335,18 @@ mod tests {
         assert!(placed.replaced && placed.source.ends_with("A_PARTIAL_9999999_P.pak"), "loadouts move from the partial update");
         assert_eq!(std::fs::read_dir(root.join("trash")).unwrap().count(), 1, "the partial update is in Recently deleted");
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn parser_changes_invalidate_decoded_vanilla_and_dependent_verdicts() {
+        let usmap = "same-game-and-mappings.usmap";
+        let stale = decode_key(usmap, "old-parser");
+        let current = decode_key(usmap, "new-parser");
+        assert_ne!(stale, current);
+        assert_eq!(current, decode_key(usmap, "new-parser"));
+        let cache = HashMap::from([(format!("mod|123|456|{stale}|game"), true)]);
+        assert!(!cache.contains_key(&format!("mod|123|456|{current}|game")));
+        assert_ne!(base_dir().join(format!("vanilla-game-{stale}")), base_dir().join(format!("vanilla-game-{current}")));
     }
 
     fn s(v: &Value, k: &str) -> String {

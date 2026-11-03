@@ -9,6 +9,8 @@ use std::path::Path;
 /// a fix there can change the file lists either one saved.
 pub fn cache_stamps() {
     let native = native_reader_text();
+    let decode = [whole("src/vfx_updater/uasset_tool.rs"), whole("src/xtra_niagara.rs"), whole("src/xtra_layout.rs")];
+    println!("cargo:rustc-env=REPAKXTRA_DECODE_LOGIC={:016x}", fnv(&(decode.concat() + &native)));
     let details = [
         part("src/main_tauri.rs", "struct ModDetails {"),
         part("src/main_tauri.rs", "fn compute_mod_details("),

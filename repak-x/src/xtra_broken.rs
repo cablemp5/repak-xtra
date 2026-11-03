@@ -588,8 +588,10 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
 /// A mod an update found nothing to rebuild in (its report said Nothing to update), or one Check for VFX update looked at
 /// (xtra_vfx_check.rs): its .utoc's size and time then, and the game's last update then. Until one of them changes it is
 /// not flagged, or, when the check found it `outdated`, flagged whatever its date.
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 struct Checked {
+    #[serde(default)]
+    parser: String,
     size: u64,
     modified: u64,
     game: u64,
@@ -627,20 +629,20 @@ fn checked_now(store: &HashMap<String, Checked>, utoc: &Path, game_updated: u64)
     checked_record(store, utoc, game_updated).map(|c| c.outdated)
 }
 
-fn checked_record(store: &HashMap<String, Checked>, utoc: &Path, game_updated: u64) -> Option<Checked> {
-    store.get(&checked_key(utoc)).filter(|c| file_stamp(utoc) == Some((c.size, c.modified)) && game_updated <= c.game).copied()
+fn checked_record<'a>(store: &'a HashMap<String, Checked>, utoc: &Path, game_updated: u64) -> Option<&'a Checked> {
+    store.get(&checked_key(utoc)).filter(|c| file_stamp(utoc) == Some((c.size, c.modified)) && game_updated <= c.game && c.parser == crate::xtra_vfx::parser_id())
 }
 
 /// A "nothing to update" for `utoc` as it is now, from an update that rewrites older material layouts.
 fn layout_cleared(store: &HashMap<String, Checked>, utoc: &Path, game_updated: u64) -> bool {
-    store.get(&checked_key(utoc)).is_some_and(|c| file_stamp(utoc) == Some((c.size, c.modified)) && game_updated <= c.game && !c.outdated && c.material_layout)
+    store.get(&checked_key(utoc)).is_some_and(|c| file_stamp(utoc) == Some((c.size, c.modified)) && game_updated <= c.game && c.parser == crate::xtra_vfx::parser_id() && !c.outdated && c.material_layout)
 }
 
 fn remember_checked(store: &Path, utoc: &Path, game_updated: u64, outdated: bool, old_layout: bool) -> Result<(), String> {
     let (size, modified) = file_stamp(utoc).ok_or_else(|| format!("{} is not there", utoc.display()))?;
     let mut all = load_checked(store);
     // both writers read the material layout first (pipeline.ts relayout, xtra_vfx_check.rs): a "nothing" from them holds for it
-    all.insert(checked_key(utoc), Checked { size, modified, game: game_updated, outdated, material_layout: true, old_layout });
+    all.insert(checked_key(utoc), Checked { parser: crate::xtra_vfx::parser_id().to_string(), size, modified, game: game_updated, outdated, material_layout: true, old_layout });
     let tmp = store.with_extension("json.tmp");
     std::fs::write(&tmp, serde_json::to_string(&all).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
     std::fs::rename(&tmp, store).map_err(|e| e.to_string())

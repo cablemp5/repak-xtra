@@ -20,6 +20,8 @@ pub(crate) struct Done {
     size: u64,
     modified: u64,
     game: u64,
+    #[serde(default)]
+    parser: String,
     /// the May crash reason, None when every mesh fits its skeleton
     reason: Option<String>,
 }
@@ -36,12 +38,12 @@ pub(crate) fn load_done() -> HashMap<String, Done> {
 /// its skeleton, None when it fits or was not checked.
 pub(crate) fn found_now(all: &HashMap<String, Done>, utoc: &Path, game_updated: u64) -> Option<String> {
     all.get(&crate::xtra_broken::checked_key(utoc))
-        .filter(|d| crate::xtra_broken::file_stamp(utoc) == Some((d.size, d.modified)) && game_updated <= d.game)
+        .filter(|d| crate::xtra_broken::file_stamp(utoc) == Some((d.size, d.modified)) && game_updated <= d.game && d.parser == crate::xtra_vfx::parser_id())
         .and_then(|d| d.reason.clone())
 }
 
 fn checked(all: &HashMap<String, Done>, utoc: &Path, game_updated: u64) -> bool {
-    all.get(&crate::xtra_broken::checked_key(utoc)).is_some_and(|d| crate::xtra_broken::file_stamp(utoc) == Some((d.size, d.modified)) && game_updated <= d.game)
+    all.get(&crate::xtra_broken::checked_key(utoc)).is_some_and(|d| crate::xtra_broken::file_stamp(utoc) == Some((d.size, d.modified)) && game_updated <= d.game && d.parser == crate::xtra_vfx::parser_id())
 }
 
 /// The bone count UAssetTool's skeletal_mesh_info prints for a mesh (`Bone Count: 302`).
@@ -148,7 +150,7 @@ pub async fn xtra_mesh_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mutex<A
         }
         match check_mod(&paks, &usmap, &utoc, &meshes, &work).await {
             Ok(reason) => {
-                all.insert(crate::xtra_broken::checked_key(&utoc), Done { size, modified, game, reason });
+                all.insert(crate::xtra_broken::checked_key(&utoc), Done { size, modified, game, parser: crate::xtra_vfx::parser_id().to_string(), reason });
                 let _ = std::fs::write(store(), serde_json::to_string(&all).unwrap_or_default());
                 n += 1;
             }

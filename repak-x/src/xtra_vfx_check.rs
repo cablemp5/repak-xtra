@@ -310,7 +310,7 @@ fn scan_store() -> PathBuf {
 }
 
 /// Mods the background check has looked at: their .utoc (checked_key) -> (size, time written, game's last update then).
-type Scanned = HashMap<String, (u64, u64, u64)>;
+type Scanned = HashMap<String, (u64, u64, u64, String)>;
 
 fn load_scanned(store: &Path) -> Scanned {
     std::fs::read_to_string(store).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
@@ -319,7 +319,7 @@ fn load_scanned(store: &Path) -> Scanned {
 /// Whether the mod at `utoc` still needs a look: never checked as this file, or checked before the game's last update.
 fn needs_scan(done: &Scanned, utoc: &Path, game: u64) -> bool {
     match crate::xtra_broken::file_stamp(utoc) {
-        Some((size, at)) => done.get(&crate::xtra_broken::checked_key(utoc)) != Some(&(size, at, game)),
+        Some((size, at)) => done.get(&crate::xtra_broken::checked_key(utoc)) != Some(&(size, at, game, crate::xtra_vfx::parser_id().to_string())),
         None => false,
     }
 }
@@ -369,7 +369,7 @@ pub async fn xtra_vfx_check_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mu
             }
         }
         if let Some((size, at)) = crate::xtra_broken::file_stamp(&utoc) {
-            done.insert(crate::xtra_broken::checked_key(&utoc), (size, at, game));
+            done.insert(crate::xtra_broken::checked_key(&utoc), (size, at, game, crate::xtra_vfx::parser_id().to_string()));
             let _ = std::fs::write(&store, serde_json::to_string(&done).unwrap_or_default()); // each mod: a closed app keeps its progress
         }
     }
@@ -392,9 +392,11 @@ mod tests {
         let (size, at) = crate::xtra_broken::file_stamp(&utoc).unwrap();
         let mut done = Scanned::new();
         assert!(needs_scan(&done, &utoc, 200), "never looked at");
-        done.insert(crate::xtra_broken::checked_key(&utoc), (size, at, 200));
+        done.insert(crate::xtra_broken::checked_key(&utoc), (size, at, 200, crate::xtra_vfx::parser_id().to_string()));
         assert!(!needs_scan(&done, &utoc, 200), "looked at, same file, same game");
         assert!(needs_scan(&done, &utoc, 300), "the game updated since");
+        done.get_mut(&crate::xtra_broken::checked_key(&utoc)).unwrap().3 = "old-parser".into();
+        assert!(needs_scan(&done, &utoc, 200), "the parser changed without a game update");
         std::fs::write(&utoc, b"toc v2").unwrap();
         assert!(needs_scan(&done, &utoc, 200), "the mod changed");
         assert!(!needs_scan(&done, &dir.path().join("gone.utoc"), 200), "no file, nothing to look at");

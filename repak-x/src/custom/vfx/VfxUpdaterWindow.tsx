@@ -792,10 +792,6 @@ export function VfxUpdaterPanel() {
           <button type="button" className="row-action" onClick={() => { review.resolve(true); setReview(null) }}>Use candidate</button>
           <button type="button" className="row-action" autoFocus onClick={() => { review.resolve(false); setReview(null) }}>Keep original</button>
         </div>}
-        <Seg label="Repair policy" value={repairPolicy} disabled={busy}
-          note={repairPolicy === 'strict' ? 'Strict refuses incomplete output and warnings.' : 'Best effort builds a separate candidate. Review every asset before replacing the original.'}
-          options={[['strict', 'Strict'], ['bestEffort', 'Best effort']]}
-          onChange={v => setRepairPolicy(v)} />
         <div className="lp-filters vf-filters">
           {/* shown while the folder is read too, so the bar does not appear under the pointer when the list lands, and kept
               while a search or hero filter is on, so it can always be cleared */}
@@ -885,6 +881,13 @@ export function VfxUpdaterPanel() {
           <div className="t-acc-panel" data-open={advanced}>
             <div className="t-acc-panel-inner" {...folded(!advanced)}>
               <div className="vf-adv-body">
+                <Section icon={<Check size={15} aria-hidden="true" />} title="Repair policy" about="Which checks must pass before an update can replace the original.">
+                  <Seg label="Repair policy" value={repairPolicy} disabled={busy}
+                    note={repairPolicy === 'strict' ? 'Strict refuses incomplete output and warnings.' : 'Best effort builds a separate candidate. Review every asset before replacing the original.'}
+                    options={[['strict', 'Strict'], ['bestEffort', 'Best effort']]}
+                    onChange={v => setRepairPolicy(v)} />
+                </Section>
+
                 <Section icon={<Tag size={15} aria-hidden="true" />} title="Names" about="Which copy keeps the mod's name after an update.">
                   <Seg label="Names" value={naming} disabled={busy} note={NAMING_NOTE[naming]}
                     options={[['broken', 'The update keeps it'], ['updated', 'The original keeps it']]}
