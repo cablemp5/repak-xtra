@@ -268,6 +268,45 @@ pub async fn xtra_ko_is_mod(mod_path: String) -> bool {
     mod_assets(&mod_path).await.is_some_and(|(_, assets)| is_ko_only(&assets))
 }
 
+fn portrait_hero(assets: &[String]) -> Option<String> {
+    if !is_ko_only(assets) { return None; }
+    let widget = norm(assets.iter().find(|a| is_ko_widget(a))?);
+    let id = widget.split('/').rev().nth(1)?;
+    let name = widget.rsplit('/').next()?;
+    (id.len() == 4 && id.bytes().all(|c| c.is_ascii_digit()) && name.starts_with(&format!("wbp_battle_kill_{id}_"))).then(|| id.to_string())
+}
+
+#[derive(Serialize)]
+pub struct KoPortrait {
+    hero: String,
+    logo: String,
+}
+
+/// The game's hero logo for a KO-only mod, cached beside the editor's textures.
+#[tauri::command]
+pub async fn xtra_ko_portrait(mod_path: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Option<KoPortrait>, String> {
+    let Some((_, assets)) = mod_assets(&mod_path).await else { return Ok(None) };
+    let Some(hero) = portrait_hero(&assets) else { return Ok(None) };
+    let usmap = crate::vfx_updater::commands::saved_usmap_path().ok_or("No USMAP is available to read the hero logo.")?;
+    let _one = ONE.lock().await;
+    let paks = paks(&state)?;
+    let base = build_dir(&paks, &usmap).join("logos").join(&hero);
+    let rel = format!("Marvel/Content/Marvel/UI/Textures/HeroLogo/HeroLogo_Little/img_herologo_{hero}_logo");
+    let png = base.join("png").join(format!("{rel}.png"));
+    if !png.exists() {
+        let ex = base.join("extract");
+        extract(&paks, &ex, vec![rel.clone()], false).await?;
+        let texture = ex.join(format!("{rel}.uasset"));
+        uat(VfxUatRequest {
+            action: "batch_extract_texture_png", file_paths: Some(vec![texture.to_string_lossy().to_string()]),
+            usmap_path: Some(&usmap), output_path: Some(base.join("png").to_string_lossy().to_string()),
+            base_path: Some(ex.to_string_lossy().to_string()), ..Default::default()
+        }, "Reading the hero logo").await?;
+    }
+    if !png.exists() { return Err(format!("The game has no readable logo for hero {hero}.")); }
+    Ok(Some(KoPortrait { hero, logo: png.to_string_lossy().replace('\\', "/") }))
+}
+
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct KoMod {
@@ -341,71 +380,23 @@ pub fn xtra_ko_save_preview(app: tauri::AppHandle, request: tauri::ipc::Request<
     Ok(())
 }
 
-/// A safe mod name: letters, digits, spaces, dashes and underscores, spaces as underscores.
-fn mod_stem(name: &str) -> Option<String> {
-    let s: String = name.trim().chars().filter(|c| c.is_ascii_alphanumeric() || matches!(c, ' ' | '-' | '_')).collect();
-    let s = s.split_whitespace().collect::<Vec<_>>().join("_");
-    (!s.is_empty() && s.len() <= 80).then(|| format!("{s}_9999999_P"))
-}
-
-#[derive(Serialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct KoInstalled {
-    /// The installed .pak, the file the Library lists the mod by (a loadout keys it by that name)
-    path: String,
-    replaced: bool,
-}
-
-/// Puts the packed prompt (`staged_base`.utoc/.ucas/.pak) into the mods folder as <name>_9999999_P. One with that name
-/// already there is replaced only when `replace` says so (the same prompt, made again).
-#[tauri::command]
-pub async fn xtra_ko_install(staged_base: String, name: String, replace: bool, state: State<'_, Arc<Mutex<AppState>>>) -> Result<KoInstalled, String> {
-    let stem = mod_stem(&name).ok_or("Give it a name of letters and numbers.")?;
-    let state = state.inner().clone();
-    crate::blocking(move || {
-        let _mutation = crate::xtra_mutation::edit()?;
-        crate::xtra_identity::upstream_guard()?;
-        let (mods, bypass) = { let s = state.lock().unwrap(); (s.game_path.clone(), s.bypass_game_running_lock) };
-        if !bypass && crate::is_game_process_running() {
-            return Err("Marvel Rivals is running. Close it, then install again.".into());
-        }
-        if !mods.is_dir() {
-            return Err("The mods folder is missing. Set the game folder in Setup first.".into());
-        }
-        let exts = ["utoc", "ucas", "pak"];
-        let taken = exts.iter().chain(["bak_repak"].iter()).any(|x| mods.join(format!("{stem}.{x}")).exists());
-        if taken && !replace {
-            return Err(format!("EXISTS:{stem}"));
-        }
-        // all or nothing: every file is copied beside its place first, so a failed copy leaves the installed mod as it was
-        for x in exts {
-            if !Path::new(&format!("{staged_base}.{x}")).exists() {
-                return Err(format!("The packed mod has no .{x} file, so nothing was installed."));
-            }
-        }
-        let tmp = |x: &str| mods.join(format!("{stem}.{x}.ko-new"));
-        for x in exts {
-            if let Err(e) = std::fs::copy(format!("{staged_base}.{x}"), tmp(x)) {
-                exts.iter().for_each(|x| { let _ = std::fs::remove_file(tmp(x)); });
-                return Err(format!("Could not copy the mod into the mods folder: {e}"));
-            }
-        }
-        for x in exts {
-            std::fs::rename(tmp(x), mods.join(format!("{stem}.{x}"))).map_err(|e| format!("Could not put the mod in place: {e}"))?;
-        }
-        let _ = std::fs::remove_file(mods.join(format!("{stem}.bak_repak"))); // an older copy that was off: the new one is on
-        Ok(KoInstalled { path: mods.join(format!("{stem}.pak")).to_string_lossy().to_string(), replaced: taken })
-    }).await
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn names_and_versions() {
-        assert_eq!(mod_stem("Lime Panther KO!").as_deref(), Some("Lime_Panther_KO_9999999_P"));
-        assert_eq!(mod_stem("  "), None);
+    fn portrait_matches_the_ko_hero_only() {
+        let widget = "Marvel/Content/Marvel/UI/Blueprints/Battle/Custom/1026/WBP_Battle_Kill_1026_V3.uasset".to_string();
+        assert_eq!(portrait_hero(&[widget.clone()]).as_deref(), Some("1026"));
+        assert_eq!(portrait_hero(&[widget.to_uppercase().replace('/', "\\")]).as_deref(), Some("1026"));
+        assert_eq!(portrait_hero(&[widget.replace("Custom/1026", "Custom/1022")]), None);
+        assert_eq!(portrait_hero(&[widget.clone(), widget.replace("1026", "1022")]), None);
+        assert_eq!(portrait_hero(&[widget, "Marvel/Content/Marvel/Characters/1026/Meshes/SK_1026.uasset".into()]), None);
+        assert_eq!(portrait_hero(&[]), None);
+    }
+
+    #[test]
+    fn widget_paths_and_versions() {
         assert_eq!(version("a/WBP_Battle_Kill_1026_V3"), 3);
         assert_eq!(game_path("Marvel/Content/Marvel/UI/X"), "/Game/Marvel/UI/X");
         assert!(is_ko_widget("Marvel/Content/Marvel/UI/Blueprints/Battle/Custom/1064/WBP_Battle_Kill_1064_V3.uasset"));

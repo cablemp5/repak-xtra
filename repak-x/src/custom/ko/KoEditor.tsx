@@ -1,26 +1,26 @@
 // repakxtra: the KO Editor view (the header's third tab). Pick a hero, watch its KO prompt play from the game's own files,
-// change its colors, install it as a mod (and a loadout with this frame as its picture). Layout: heroes, stage, colors.
+// change its colors, and open the normal installer. Layout: heroes, stage, colors.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
-import { Check, Download, RotateCcw, Search } from 'lucide-react'
-import ColorPicker, { RAINBOW } from './ColorPicker'
+import { Download, Lock, RotateCcw, Search } from 'lucide-react'
+import ColorPicker, { RAINBOW, hexToHsv, hsvToHex } from './ColorPicker'
 import { ROLE_ORDER, heroRole } from './heroRoles'
 import { RoleIcon } from '../icons/rivals'
 import CustomDropdown from '../../components/CustomDropdown'
-import { type LoadoutProps, createFromMods } from '../Loadouts'
-import { modKey, patchLoadout, readLoadouts, useView, writeLoadouts } from '../loadoutStore'
-import { putMedia } from '../loadoutMedia'
+import { type LoadoutProps } from '../Loadouts'
+import { readLoadouts, useView, writeLoadouts } from '../loadoutStore'
 import { useHeroPortrait } from '../heroFilter'
 import { cue } from '../sounds'
-import { type Material, type Role, hexOf, readMaterial, readWidget, shiftHue } from './model'
-import { type Images, type Scene, KO_BEAT, KO_FONT, draw, drawClear, duration, frameFor, makeScene } from './render'
-import { type KoStep, NameTaken, installKo } from './export'
+import { type Role, hexOf, shiftHue } from './model'
+import { draw, duration, frameFor } from './render'
+import { type KoStep, buildKo } from './export'
 import { type Hero, type Loaded, type Progress, forgetHero, loadHero, usmapPath } from './load'
-import { recordClip } from './record'
+import sceneBackground from './scene-background.png'
+import { randomizeColors } from './randomize'
+import RandomizeButton from './RandomizeButton'
 import './ko.css'
 
-type Saved = Record<string, { colors?: Record<string, string>; name?: string; hue?: number; loadout?: string }> // loadout: the one this editor made
+type Saved = Record<string, { colors?: Record<string, string>; name?: string; hue?: number }>
 const STORE = 'repakxtra.koEditor'
 const readSaved = (): Saved => { try { return JSON.parse(localStorage.getItem(STORE) || '{}') } catch { return {} } }
 const SPEEDS = [0.1, 0.25, 0.5, 1]
@@ -36,7 +36,9 @@ const stepText = (p: Progress, hero: string) => p.step === 1 ? `Finding ${hero}'
   : p.step === 2 ? 'Reading its layers and animations' : p.step === 3 ? 'Turning its textures into pictures'
     : p.total ? `Loading textures, ${p.done ?? 0} of ${p.total}` : 'Loading textures'
 
-export default function KoEditor(p: Pick<LoadoutProps, 'reload' | 'alert' | 'blocked'>) {
+export type KoEditorProps = Pick<LoadoutProps, 'alert' | 'blocked'> & { onInstall: (path: string) => Promise<void> }
+
+export default function KoEditor(p: KoEditorProps) {
   const shown = useView() === 'ko'
   const [seen, setSeen] = useState(shown)
   if (shown && !seen) setSeen(true)
@@ -44,7 +46,7 @@ export default function KoEditor(p: Pick<LoadoutProps, 'reload' | 'alert' | 'blo
   return <div className="ko" hidden={!shown}><Editor {...p} shown={shown} /></div>
 }
 
-function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' | 'alert' | 'blocked'> & { shown: boolean }) {
+function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: boolean }) {
   const portrait = useHeroPortrait()
   const [usmap, setUsmap] = useState<string | null>(null)
   const [heroes, setHeroes] = useState<Hero[] | null>(null)
@@ -65,12 +67,17 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
   const [focus, setFocus] = useState<string[] | null>(null)
   const [playing, setPlaying] = useState(true)
   const [speed, setSpeed] = useState(0.5)
-  const kills = 4 // QUAD: the prompt everyone knows, the same picture on every loadout card
+  const kills = 4
   const [time, setTime] = useState(0)
-  const [makeLoadout, setMakeLoadout] = useState(true)
+  const [sceneBg, setSceneBg] = useState(() => localStorage.getItem(`${STORE}.background`) === 'scene')
+  const [backdrop, setBackdrop] = useState<HTMLImageElement | null>(null)
+  useEffect(() => {
+    const img = new Image()
+    img.onload = () => setBackdrop(img)
+    img.src = sceneBackground
+    return () => { img.onload = null }
+  }, [])
   const [step, setStep] = useState<KoStep | null>(null)
-  const [taken, setTaken] = useState<string | null>(null)
-  const [installed, setInstalled] = useState(false) // a moment of Installed on the button after a good install
 
   const hero = heroes?.find(h => h.id === heroId) ?? null
   const entry = (hero && saved[hero.id]) || {}
@@ -83,8 +90,11 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
     return hex !== game ? [[r.id, hex] as const] : []
   })), [roles, entry.colors, hue])
   const edited = roles.filter(r => colors.has(r.id))
-  // the slider's track: the main color turned all the way around, with no shift in the middle
-  const main = roles[0] ? entry.colors?.[roles[0].id] ?? hexOf(roles[0].rgba) : '#346BF1'
+  // Keep the track readable after edits: only its hue follows the main color.
+  const defaultMain = roles[0] ? hexOf(roles[0].rgba) : '#346BF1'
+  const [mainHue] = hexToHsv((roles[0] ? entry.colors?.[roles[0].id] ?? defaultMain : defaultMain).slice(1))
+  const [, mainSaturation, mainValue] = hexToHsv(defaultMain.slice(1))
+  const main = '#' + hsvToHex(mainHue, mainSaturation, mainValue)
   const hueTrack = `linear-gradient(90deg, ${[-180, -120, -60, 0, 60, 120, 180].map(d => shiftHue(main, d)).join(', ')})`
   const save = (patch: Saved[string]) => {
     if (!hero) return
@@ -128,21 +138,22 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
   const paint = () => {
     const c = canvas.current
     if (!c || !scene) return
+    const rect = c.getBoundingClientRect(), dpr = devicePixelRatio || 1
+    if (!rect.width || !rect.height) return
+    // The canvas can be replaced during hot reload without a resize notification.
+    const width = Math.round(rect.width * dpr), height = Math.round(rect.height * dpr)
+    if (c.width !== width || c.height !== height) { c.width = width; c.height = height }
     const ctx = c.getContext('2d')!
     const size = { w: c.width, h: c.height }
     // close on the ring and the kill text, as it reads in the game: the banner's far tail runs off the left
-    draw(ctx, scene, timeRef.current, size, { kills, colors, focus: focus ?? undefined, checker: true, frame: frameFor(scene.core, size, 2.4) })
+    draw(ctx, scene, timeRef.current, size, { kills, colors, focus: focus ?? undefined, checker: !sceneBg || !backdrop, backdrop: sceneBg ? backdrop ?? undefined : undefined, frame: frameFor(scene.core, size, 2.4) })
   }
   const paintRef = useRef(paint)
   paintRef.current = paint
   useEffect(() => {
     const c = canvas.current
     if (!c) return
-    const fit = () => {
-      const r = c.getBoundingClientRect(), d = devicePixelRatio || 1, w = Math.max(1, Math.round(r.width * d)), h = Math.max(1, Math.round(r.height * d))
-      if (c.width !== w || c.height !== h) { c.width = w; c.height = h }
-      paintRef.current()
-    }
+    const fit = () => paintRef.current()
     const ro = new ResizeObserver(fit); ro.observe(c); fit()
     return () => ro.disconnect()
   }, [])
@@ -161,7 +172,7 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [scene, playing, speed, shown, kills, colors, focus]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [scene, playing, speed, shown, kills, colors, focus, sceneBg, backdrop]) // eslint-disable-line react-hooks/exhaustive-deps
   const seek = (t: number) => { timeRef.current = t; setTime(t); glide(t); paint() }
   /** The slider and its filled part, set on the element itself: through React state it moved in steps. */
   const range = useRef<HTMLInputElement>(null)
@@ -191,9 +202,8 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
     save({ colors: next })
   }
 
-  const install = async (replace = false) => {
+  const install = async () => {
     if (!loaded || !hero || !usmap || step) return
-    setTaken(null)
     try {
       // a game update while the app was open: the prompt is read again before anything is built from it
       setStep('Writing the colors')
@@ -204,25 +214,10 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
         alert.warning('The game updated', 'Its KO prompt was read again with your colors on it. Check them, then install again.')
         return
       }
-      const done = await installKo({ usmapPath: usmap, widgetJson: loaded.widgetJson, widgetRel: hero.widget, roles, colors, name, replace, step: setStep })
-      await reload()
-      if (makeLoadout) {
-        // made again: the loadout this editor made for it gets the new picture. Any other loadout holding the mod keeps its own
-        const mine = readLoadouts().find(x => x.id === entry.loadout && x.on.includes(modKey(done.path)))
-        const l = mine ?? createFromMods([done.path], name)
-        if (!mine) save({ loadout: l.id })
-        // the card plays the prompt: a short video of it, or a still frame where recording is not possible
-        setStep("Recording the card's animation")
-        const video = await recordClip(loaded.scene, { w: 680, h: 960 }, kills, colors).catch(() => null) // .lo-card-image is 1358 by 1920
-        const blob = video ?? await snapshot(loaded.scene, kills, colors)
-        if (blob) { await putMedia(l.id, blob); patchLoadout(l.id, { mediaType: video ? 'video' : 'image', mediaRev: Date.now(), mediaBeat: video ? KO_BEAT : undefined, cover: 'image' }) }
-      }
-      cue('success'); setInstalled(true); setTimeout(() => setInstalled(false), 2400)
-      alert.success(done.replaced ? 'KO prompt updated' : 'KO prompt installed',
-        `${name} is ${done.replaced ? 'replaced' : 'on'} in the Library${makeLoadout ? ', with its own loadout' : ''}.`)
+      const path = await buildKo({ usmapPath: usmap, widgetJson: loaded.widgetJson, widgetRel: hero.widget, roles, colors, name, step: setStep })
+      await onInstall(path)
     } catch (e) {
-      if (e instanceof NameTaken) { setTaken(e.message); cue('warning') }
-      else { cue('error'); alert.warning('Not installed', e instanceof Error ? e.message : String(e)) }
+      cue('error'); alert.warning('Could not prepare the KO prompt', e instanceof Error ? e.message : String(e))
     } finally { setStep(null) }
   }
 
@@ -235,8 +230,7 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
     e.preventDefault()
     all[Math.max(0, Math.min(all.length - 1, to))].focus()
   }
-  // why Install is off, said under it (a tooltip alone hid it)
-  const why = !scene ? null : blocked ? 'Close Marvel Rivals first' : !edited.length ? 'Change a color first' : !name.trim() ? 'Give it a name first' : null
+  const why = !scene ? 'Load a KO prompt first' : blocked ? 'Close Marvel Rivals first' : !edited.length ? 'Change a color first' : !name.trim() ? 'Give it a name first' : null
   const shownHeroes = (heroes ?? []).filter(h => h.name.toLowerCase().includes(query.trim().toLowerCase()))
   const phases = scene?.phases ?? []
   // a gap in the track where each phase starts, under the labels above it
@@ -278,6 +272,13 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
           <h2 className="ko-title">{hero ? `${hero.name} KO Prompt Editor` : 'KO Prompt Editor'}</h2>
         </header>
         <div className="ko-stage">
+        <div className="ko-preview-options">
+          <div className="ob-seg" role="radiogroup" aria-label="Preview background">
+            <button type="button" role="radio" aria-checked={!sceneBg} onClick={() => { setSceneBg(false); localStorage.setItem(`${STORE}.background`, 'grid'); cue('toggle') }}>Grid</button>
+            <button type="button" role="radio" aria-checked={sceneBg} onClick={() => { setSceneBg(true); localStorage.setItem(`${STORE}.background`, 'scene'); cue('toggle') }}>Scene</button>
+          </div>
+        </div>
+
           <canvas ref={canvas} className={scene ? 'is-ready' : ''} aria-label={hero ? `${hero.name}'s KO prompt` : 'KO prompt'} />
           {!scene && (
             <div className="ko-stage-msg" role="status">
@@ -336,6 +337,11 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
             <RotateCcw size={14} />
           </button>
         </div>
+        <div className="ko-random">
+          <RandomizeButton disabled={!roles.length} onRandomize={options => {
+            save({ colors: randomizeColors(roles, colors, options), hue: 0 }); cue('select')
+          }} />
+        </div>
         <ul key={heroId ?? 'none'} className="ko-roles" onMouseLeave={() => setFocus(null)}>
           {groupRoles(roles).flatMap(([group, rs]) => [
             <li key={`g:${group}`} className={`ko-group-head${focus?.length === rs.length && rs.every(r => focus.includes(r.id)) ? ' is-focus' : ''}`} tabIndex={0}
@@ -361,28 +367,12 @@ function Editor({ reload, alert, blocked, shown }: Pick<LoadoutProps, 'reload' |
         <div className="ko-out">
           <label className="ko-label" htmlFor="ko-name">Name</label>
           <input id="ko-name" className="ko-input" value={name} maxLength={60} onChange={e => save({ name: e.target.value })} disabled={!hero} />
-          <div className="ob-seg ko-make" role="radiogroup" aria-label="What to make">
-            <button type="button" role="radio" aria-checked={!makeLoadout} onClick={() => { if (makeLoadout) cue('toggle'); setMakeLoadout(false) }}>Mod only</button>
-            <button type="button" role="radio" aria-checked={makeLoadout} onClick={() => { if (!makeLoadout) cue('toggle'); setMakeLoadout(true) }}>Mod and loadout</button>
-          </div>
-          {taken ? (
-            <div className="ko-taken" role="alert">
-              <span>A mod named {name.trim()} is already installed. Replace it?</span>
-              <div><button type="button" className="lo-text-btn" onClick={() => setTaken(null)}>Cancel</button>
-                <button type="button" className="lo-text-btn is-primary" onClick={() => install(true)}>Replace</button></div>
-            </div>
-          ) : (
-            // the Nexus Mods card's states: Install, then the step's words shimmering in a quiet button (no spinner), then green Installed
-            <button type="button" className={`lo-text-btn ko-install${step ? ' is-working' : installed ? ' is-installed' : ' is-primary'}`}
-              onClick={() => { if (!step && !installed) install() }} aria-busy={Boolean(step)}
-              disabled={!step && !installed && (!scene || !edited.length || !name.trim() || blocked)}
-              title={step ? undefined : why ?? "Built from your game's current files"}>
-              {step ? <span key={step} className="t-text-in"><span className="t-shimmer">{step}</span></span>
-                : installed ? <span key="done" className="t-text-in ko-btn-in"><Check size={16} aria-hidden />Installed</span>
-                  : <span key="idle" className="ko-btn-in"><Download size={16} aria-hidden />Install</span>}
-            </button>
-          )}
-          {!taken && !step && !installed && why && <p className="ko-why">{why}</p>}
+          <button type="button" className={`lo-text-btn ko-install${step ? ' is-working' : why ? ' is-locked' : ' is-primary'}`}
+            onClick={() => { if (!step) void install() }} aria-busy={Boolean(step)} aria-disabled={!step && Boolean(why)} disabled={Boolean(step) || Boolean(why)}
+            title={why ?? 'Choose installation options in the install window'}>
+            {step ? <span key={step} className="t-text-in"><span className="t-shimmer">{step}</span></span>
+              : <span className="ko-btn-in">{why ? <Lock size={16} aria-hidden /> : <Download size={16} aria-hidden />}{why ?? 'Install'}</span>}
+          </button>
         </div>
       </aside>
     </div>
@@ -415,15 +405,6 @@ function HexField({ value, onCommit, label }: { value: string; onCommit: (hex: s
   }
   return <input className="ko-hex" value={draft} aria-label={label} spellCheck={false} maxLength={7}
     onChange={e => setDraft(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setDraft(value) }} />
-}
-
-/** The loadout card's picture: the icon and kill text at full show (early in the loop), in the card's portrait shape. */
-async function snapshot(scene: Scene, kills: number, colors: Map<string, string>): Promise<Blob | null> {
-  const c = document.createElement('canvas'); c.width = 679; c.height = 960 // .lo-card-image is 1358 by 1920
-  const loop = scene.phases.find(p => p.loop) ?? scene.phases[0]
-  const size = { w: c.width, h: c.height }
-  drawClear(c.getContext('2d')!, scene, (loop?.start ?? 0) + 0.25, size, { kills, colors, frame: frameFor(scene.core, size) })
-  return new Promise(res => c.toBlob(b => res(b), 'image/png'))
 }
 
 /* Play and pause as solid glyphs, as media players draw them (option A, cable 2026-11-01): Lucide's are hollow outlines

@@ -142,14 +142,7 @@ html[data-view="ko"] .view-tabs::before { transform: translateX(calc(200% + 4px)
 .ko-input:focus { outline: none; border-color: color-mix(in srgb, var(--text-primary), transparent 50%); }
 /* while it works: quiet, the step's words shimmering, never the dimmed disabled look. Done: green words and a check, no box */
 .lo-text-btn.ko-install.is-working { background: transparent !important; border-color: var(--panel-border) !important; color: var(--text-secondary) !important; opacity: 1 !important; cursor: default; }
-.lo-text-btn.ko-install.is-installed { background: transparent !important; border-color: transparent !important; color: #3ecf6e !important; opacity: 1 !important; cursor: default; }
 .lo-text-btn.ko-install { display: inline-flex !important; align-items: center; justify-content: center; gap: 8px; height: 36px !important; font-weight: 600 !important; }   /* the Library's Install height */
-/* what Install makes: the mod alone, or the mod and a loadout with this frame as its picture */
-.ko-make { display: flex !important; }
-.ko-make { padding: 2px !important; }
-.ko-make button { flex: 1; justify-content: center; height: 26px !important; min-height: 0 !important; padding-top: 0 !important; padding-bottom: 0 !important; font-size: 12px; }   /* a setting for the Install under it: smaller than the button */
-.ko-taken { display: flex; flex-direction: column; gap: 12px; padding: 12px; border: 1px solid var(--panel-border); border-radius: 8px; background: var(--field-bg); font-size: 13px; }
-.ko-taken div { display: flex; justify-content: flex-end; gap: 8px; }
 
 html[data-motion="off"] .ko, html[data-motion="off"] .ko-shimmer, html[data-motion="off"] .ko-load-step, html[data-motion="off"] .ko-load-bar span, html[data-motion="off"] .ko-track-wait, html[data-motion="off"] .ko-hero.is-ghost, html[data-motion="off"] .ko-role.is-ghost { animation: none; }
 
@@ -165,6 +158,31 @@ html[data-motion="off"] .ko-stage canvas, html[data-motion="off"] .ko-play { ani
 .ko-colors .fp-clear:hover { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
 /* play and speed sit level with the track and its labels as one block, not the track alone */
 .ko-transport > .ko-play, .ko-transport > .ko-speed { translate: 0 8px; }
-/* why Install is off (a game running, nothing changed yet, no name), under the button in quiet text */
-.ko-why { margin: -2px 0 0; font-size: 12.5px; color: var(--text-secondary); text-align: center; }
 .app .ko-roles .ko-group-head:focus-visible { outline: none !important; color: var(--text-primary); }   /* focus shows like hover: the group lit, the stage showing only it */
+
+.ko-preview-options { display: flex; }
+.ko-preview-options .ob-seg button { height: 26px; min-height: 0; padding: 0 12px; font-size: 12px; }
+.ko-random { display: flex; flex-direction: column; gap: 10px; padding: 8px 0 12px 8px; border-bottom: 1px solid var(--panel-border); margin-bottom: 8px; }
+.ko-random-control { position: relative; display: flex; width: 100%; }
+.ko-random-control > .lo-text-btn { color: #fff !important; }
+.ko-random-control > .lo-text-btn svg { color: inherit; opacity: 1; }
+.ko-random-control > .ko-random-main { flex: 1; justify-content: center; border-radius: var(--quiet-radius) 0 0 var(--quiet-radius) !important; border-right: 0 !important; }
+.ko-random-control > .ko-random-more { width: 32px; padding: 0 !important; justify-content: center; border-radius: 0 var(--quiet-radius) var(--quiet-radius) 0 !important; }
+.ko-random-more[aria-expanded="true"] { background: var(--quiet-hover) !important; }
+.ko-random-more[aria-expanded="true"] .lo-new-chev { transform: rotate(180deg); }
+.ko-random-card { width: 100%; box-sizing: border-box; }
+.ko-random-card .sigeon-item { cursor: pointer; }
+.ko-random-card .sigeon-item[aria-checked="true"] { background: transparent !important; }
+.ko-random-card .sigeon-item:hover { background: var(--quiet-hover) !important; }
+.ko-random-card .sigeon-item[aria-checked="true"] svg { color: var(--text-primary); }
+.ko-random-option { display: inline-flex; align-items: center; gap: 8px; }
+.ko-random-option svg { flex: none; }
+.ko-random-separator { margin: 4px 8px; border-top: 1px solid var(--panel-border); }
+html[data-motion="off"] .ko-random-more .lo-new-chev { transition: none; }
+
+.ko-out, .ko-random, .ko-preview-options { flex-shrink: 0; }
+.ko-out .ko-input, .ko-out .ko-install { flex-shrink: 0; }
+
+
+.ko-stage .ko-preview-options { position: absolute; z-index: 1; top: 12px; left: 12px; margin: 0; }
+.ko-stage .ko-preview-options .ob-seg { background: var(--bg-dark); border: 1px solid var(--panel-border); }

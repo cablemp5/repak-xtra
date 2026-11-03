@@ -600,7 +600,6 @@ fn judge_checked(path: &str, mut facts: Facts<'_>, updated: u64, game: &GameAsse
 pub(crate) fn record_uncertain(mods_dir: &Path, utoc: &Path, reason: String) -> Result<(), String> {
     let store = checked_store();
     let game = game_updated(mods_dir);
-    if checked_record(&load_checked(&store), utoc, game).is_some_and(|c| c.outdated && c.unknown.is_none()) { return Ok(()); }
     remember_checked(&store, utoc, game, false, false, Some(reason))
 }
 
@@ -662,6 +661,8 @@ fn layout_cleared(store: &HashMap<String, Checked>, utoc: &Path, game_updated: u
 fn remember_checked(store: &Path, utoc: &Path, game_updated: u64, outdated: bool, old_layout: bool, unknown: Option<String>) -> Result<(), String> {
     let (size, modified) = file_stamp(utoc).ok_or_else(|| format!("{} is not there", utoc.display()))?;
     let mut all = load_checked(store);
+    // An inconclusive scan cannot replace a verified repair or a confirmed fault in the same file and game.
+    if unknown.is_some() && checked_record(&all, utoc, game_updated).is_some_and(|c| c.unknown.is_none()) { return Ok(()); }
     // both writers read the material layout first (pipeline.ts relayout, xtra_vfx_check.rs): a "nothing" from them holds for it
     // Older apps do not understand unknown: retain their warning rather than granting a false clearance.
     let outdated = outdated || unknown.is_some();
@@ -1009,12 +1010,18 @@ mod tests {
         let (store, utoc) = (dir.path().join("checked.json"), dir.path().join("Swap_9999999_P.utoc"));
         std::fs::write(&utoc, b"toc").unwrap();
         remember_checked(&store, &utoc, 200, false, false, None).unwrap();
+        remember_checked(&store, &utoc, 200, false, false, Some("Custom shader data".into())).unwrap();
         let all = load_checked(&store);
+        assert!(layout_cleared(&all, &utoc, 200), "an inconclusive scan must retain a successful repair's clearance");
         assert_eq!(checked_now(&all, &utoc, 200), Some(false), "the same file, the same game");
         assert_eq!(checked_now(&all, Path::new(&utoc.to_string_lossy().to_uppercase()), 200), Some(false), "any spelling of the path");
         assert_eq!(checked_now(&all, &utoc, 300), None, "the game updated since");
         remember_checked(&store, &utoc, 200, true, true, None).unwrap();
+        remember_checked(&store, &utoc, 200, false, false, Some("Unknown".into())).unwrap();
         assert_eq!(checked_now(&load_checked(&store), &utoc, 200), Some(true), "a check found it outdated");
+        assert!(checked_record(&load_checked(&store), &utoc, 200).unwrap().unknown.is_none(), "uncertainty cannot replace a confirmed fault");
+        remember_checked(&store, &utoc, 300, false, false, Some("New game".into())).unwrap();
+        assert_eq!(checked_record(&load_checked(&store), &utoc, 300).unwrap().unknown.as_deref(), Some("New game"), "a new game invalidates the previous evidence");
         std::fs::write(&utoc, b"toc v2").unwrap();
         assert_eq!(checked_now(&all, &utoc, 200), None, "the mod changed");
     }
