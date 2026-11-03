@@ -263,6 +263,8 @@ html[data-motion="off"] .vfx-notice { animation: none; }
 .vf-scan.install-btn > button { color: var(--text-primary) !important; }
 .vf-scan.install-btn svg { color: var(--text-secondary) !important; }
 .vf-scan .install-btn-more { box-shadow: none !important; }
+.vf-scan .install-btn-more svg { transition: transform 0.15s ease; }
+.vf-scan .install-btn-more[aria-expanded="true"] svg { transform: rotate(180deg); }
 .vf-scan-menu.sigeon-menu { top: auto; bottom: calc(100% + 6px); right: 0; width: 270px; transform-origin: bottom right; }
 
 .vf-scan .install-btn-main { padding: 0 4px 0 12px !important; }
