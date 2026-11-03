@@ -3,7 +3,7 @@ import { createServer } from 'vite'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const server = await createServer({ root, logLevel: 'error', server: { middlewareMode: true, hmr: false }, appType: 'custom' })
+const server = await createServer({ root, cacheDir: 'node_modules/.vite-checks/check-release-notes', logLevel: 'error', server: { middlewareMode: true, hmr: false }, appType: 'custom' })
 try {
   const { installedReleaseNotes } = await server.ssrLoadModule('/src/custom/releaseNotes.ts')
   const releases = [

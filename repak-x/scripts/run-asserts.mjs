@@ -58,7 +58,7 @@ console.assert = (ok, ...msg) => {
   console.error(`FAIL ${file}: ${text}`)
 }
 
-const server = await createServer({ root, logLevel: 'error', server: { middlewareMode: true, hmr: false }, appType: 'custom', optimizeDeps: { noDiscovery: true, include: [] } })
+const server = await createServer({ root, cacheDir: 'node_modules/.vite-checks/run-asserts', logLevel: 'error', server: { middlewareMode: true, hmr: false }, appType: 'custom', optimizeDeps: { noDiscovery: true, include: [] } })
 let broken = 0
 for (const f of files.filter(f => f.includes(filter))) {
   const current = relative(root, f).replaceAll('\\', '/')
