@@ -10,7 +10,7 @@ import { APP_NAME } from '../edition'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, emitTo, listen } from '@tauri-apps/api/event'
-import { AlertTriangle, Archive, Check, ChevronDown, ChevronRight, Copy, FilePlus, Map as MapIcon, Palette, RefreshCw, RotateCcw, ScrollText, Search, Tag, X } from 'lucide-react'
+import { AlertTriangle, Archive, Check, ChevronDown, ChevronRight, Copy, FilePlus, Map as MapIcon, Palette, RefreshCw, RotateCcw, ScrollText, Search, Square, Tag, X } from 'lucide-react'
 import TitleBar from '../../components/TitleBar'
 import { useGlobalTooltips } from '../../hooks/useGlobalTooltips'
 import Checkbox from '../../components/ui/Checkbox'
@@ -654,7 +654,7 @@ export function VfxUpdaterPanel() {
     if (on) setTimeout(() => document.querySelector('.vf-adv')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 60)
   }
 
-  const stop = () => { review?.resolve(false); setReview(null); cancel.current = true; setCancelling(true); addLog('Cancelling after the current step…', 'warning') }
+  const stop = (source: 'Cancel button' | 'Escape') => { review?.resolve(false); setReview(null); cancel.current = true; setCancelling(true); addLog(`Cancellation requested by ${source}. Stopping after the current step.`, 'warning') }
 
   // Check: the ticked mods' materials against this game version and the earlier ones (xtra_vfx_check.rs). Their Needs an
   // update follows, here and in the Library
@@ -704,7 +704,7 @@ export function VfxUpdaterPanel() {
     }
   }
 
-  // Ctrl+Enter updates the ticked mods, Esc cancels a run (a text field keeps its own Esc)
+  // Ctrl+Enter updates the ticked mods. Escape stops repairs only. Scans require the Cancel button.
   const keys = useRef({ go: () => {}, stop: () => {} })
   const updateWidth = useRef(0) // Update's width when pressed: while it runs it keeps it, so Cancel never moves under the pointer
   useEffect(() => {
@@ -800,7 +800,7 @@ export function VfxUpdaterPanel() {
 
   // the last batch's result, until the ticks change
   const summary = !busy && !checkRun && !lock && ended && ended.edits === pickEdits ? ended : null
-  keys.current = { go: () => { if (!busy && !checkRun && !lock && todo) void run() }, stop: () => { if ((busy || checkRun) && !cancelling) stop() } }
+  keys.current = { go: () => { if (!busy && !checkRun && !lock && todo) void run() }, stop: () => { if (busy && !checkRun && !cancelling) stop('Escape') } }
   const openUsmap = () => showAdvanced(true)
 
   // what Update will do to the files, beside the button, so a choice made once in Advanced is never a surprise
@@ -996,7 +996,7 @@ export function VfxUpdaterPanel() {
         <div className="vf-foot-actions">
           {reports.length > 0 && !busy && <button type="button" className="lo-text-btn" onClick={() => copy('report')}><Copy size={14} /> {copied === 'report' ? 'Copied' : 'Copy report'}</button>}
           {/* Cancel beside the button, never in its place: a double-click on Update must not cancel the run */}
-          {(busy || checkRun) && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={stop} title="Esc">{cancelling ? 'Cancelling…' : 'Cancel'}</button>}
+          {(busy || checkRun) && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={() => stop('Cancel button')} title={checkRun ? 'Stop after the current mod finishes' : 'Esc'}><Square size={14} fill="currentColor" aria-hidden="true" /> {cancelling ? 'Cancelling…' : 'Cancel'}</button>}
           {!busy && <ScanButton scanning={Boolean(checkRun)} disabled={Boolean(checkRun) || Boolean(lock)}
             selected={picked.size} flagged={recheckCount} onScan={flagged => void checkTicked(flagged)} />}
           <button type="button" className="btn-primary" disabled={busy || Boolean(checkRun) || Boolean(lock) || !todo} title={busy ? undefined : 'Ctrl+Enter'}
