@@ -197,6 +197,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     check()
     re?.files.forEach(f => relaid.add(assetKey(f)))
     re?.surgical?.forEach(f => surgical.add(assetKey(f)))
+    re?.files.filter(f => !surgical.has(assetKey(f))).forEach(f => warn(`${stem(f)}: layout reconstructed through decoded exports. All creator edits are not proven preserved.`))
     report.counts.relaid = re?.files.length ?? 0
     // not checked, or in the old layout and not rewritten: passed on as they are they can crash the game, so the mod stays
     // as it was before any step can pack it
@@ -365,7 +366,9 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       else {
         // turned off earlier because it could crash: the safe update goes in on, as the mod was before
         const kept = await invoke<string | null>('xtra_safe_off_kept', { modPath: src }).catch(() => null)
-        report.placed = await invoke<Placed>('xtra_vfx_place', { source: src, stagedBase: base, turnOffOriginal: o.turnOffOriginal ?? true, keepName: o.keepName ?? true, trashOriginal: o.trashOriginal ?? false, partial: missing > 0 || report.warnings.length > 0 })
+        const retainOriginal = missing > 0 || report.warnings.length > 0
+        // The partial marker queues a Niagara retry. Other reviewed losses keep their original without that marker.
+        report.placed = await invoke<Placed>('xtra_vfx_place', { source: src, stagedBase: base, turnOffOriginal: retainOriginal || (o.turnOffOriginal ?? true), keepName: o.keepName ?? true, trashOriginal: !retainOriginal && (o.trashOriginal ?? false), partial: report.counts.left > 0 })
         if (kept && /\.bak_repak$/i.test(report.placed.fixed) && await invoke('toggle_mod', { modPath: report.placed.fixed }).then(() => true, () => false)) {
           report.placed.fixed = report.placed.fixed.replace(/\.bak_repak$/i, '.pak')
           log('It was off because it could crash the game: the update is on.')

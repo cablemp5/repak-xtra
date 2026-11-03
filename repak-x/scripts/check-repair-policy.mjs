@@ -59,12 +59,14 @@ const material = (glow, twoSided) => ({
   ] }],
 })
 
-async function repair(policy, accept = false, sameParameters = false) {
+async function repair(policy, accept = false, sameParameters = false, scenario = {}) {
+  const mod = material(sameParameters ? 1 : 2, true)
+  if (scenario.relayout) mod.Imports.push({ ObjectName: '/Game/CustomParent', ClassName: 'Package', OuterIndex: 0 })
   const calls = [], files = new Map([
-    [dirs.modJson + '/' + rel + '.json', JSON.stringify(material(sameParameters ? 1 : 2, true))],
+    [dirs.modJson + '/' + rel + '.json', JSON.stringify(mod)],
     [dirs.vanillaJson + '/' + rel + '.json', JSON.stringify(material(1, false))],
   ])
-  let candidate
+  let candidate, placement
   async function invoke(cmd, a = {}) {
     calls.push(cmd)
     switch (cmd) {
@@ -72,10 +74,12 @@ async function repair(policy, accept = false, sameParameters = false) {
       case 'xtra_vfx_usmap_wait': return null
       case 'xtra_game_build': return { updated: 100 }
       case 'xtra_vfx_dirs': return dirs
-      case 'vfx_extract_mod_assets': return [dirs.modExtract + '/' + rel + '.uasset']
+      case 'vfx_extract_mod_assets': return [dirs.modExtract + '/' + rel + '.uasset', ...(scenario.niagara ? [dirs.modExtract + '/NS_Fixture.uasset'] : [])]
       case 'xtra_vfx_pak_half': return []
       case 'xtra_vfx_classes': return { [rel.toLowerCase()]: 'MaterialInstanceConstant' }
-      case 'xtra_vfx_relayout': return { files: [], surgical: [], failed: [], unread: [], untold: [], complete: true }
+      case 'xtra_vfx_relayout': return { files: scenario.relayout ? [rel] : [], surgical: scenario.relayout === 'surgical' ? [rel] : [], failed: [], unread: [], untold: [], complete: true }
+      case 'xtra_vfx_stale': return ['NS_Fixture.uasset']
+      case 'xtra_vfx_niagara': return { ready: true, files: [{ file: 'NS_Fixture.uasset', error: 'Fixture omission', retry: scenario.niagara === 'retry' }] }
       case 'xtra_vfx_detect': return { [dirs.modExtract + '/' + rel + '.uasset']: { kind: 'material_instance', class: 'MaterialInstanceConstant' } }
       case 'vfx_copy_uasset_files': return []
       case 'vfx_write_json_file': files.set(a.path, a.content); return
@@ -86,7 +90,7 @@ async function repair(policy, accept = false, sameParameters = false) {
       case 'xtra_vfx_verify': return []
       case 'vfx_pack_to_iostore': return '/fixture/fixed.utoc'
       case 'xtra_safe_off_kept': return null
-      case 'xtra_vfx_place': return { fixed: 'Fixture.pak', source: 'Fixture.pak', original: 'Fixture.bak_repak' }
+      case 'xtra_vfx_place': placement = a; return { fixed: 'Fixture.pak', source: 'Fixture.pak', original: 'Fixture.bak_repak' }
       case 'xtra_vfx_stamp': return
       default: throw Error('Unexpected fixture command ' + cmd)
     }
@@ -105,9 +109,10 @@ async function repair(policy, accept = false, sameParameters = false) {
   }
   const { fixVfxMod } = load(path.join(root, 'src/custom/vfx/pipeline.ts'))
   const report = await fixVfxMod({ modPath: 'Fixture.utoc', usmapPath: 'fixture.usmap', gamePaksPath: 'fixture', policy, safeOff: false,
+    trashOriginal: true, turnOffOriginal: false,
     review: async r => { calls.push('review'); candidate = r; assert.ok(!calls.includes('xtra_vfx_place')); return accept },
   })
-  return { report, calls, candidate }
+  return { report, calls, candidate, placement }
 }
 
 for (const same of [false, true]) {
@@ -124,4 +129,25 @@ assert.ok(!declined.calls.includes('xtra_vfx_place'), 'declining leaves the orig
 const accepted = await repair('bestEffort', true)
 assert.equal(accepted.report.status, 'fixed')
 assert.ok(accepted.calls.indexOf('review') < accepted.calls.indexOf('xtra_vfx_place'))
+assert.equal(accepted.placement.partial, false, 'reviewed materials must not request the Niagara retry marker')
+assert.equal(accepted.placement.trashOriginal, false, 'reviewed reconstruction retains the original despite the trash preference')
+assert.equal(accepted.placement.turnOffOriginal, true, 'retained original must not override the accepted candidate')
+const relaidStrict = await repair('strict', false, false, { relayout: 'reconstructed' })
+assert.equal(relaidStrict.report.status, 'failed')
+assert.ok(relaidStrict.report.warnings.some(w => /creator edits/.test(w)))
+assert.ok(!relaidStrict.calls.includes('xtra_vfx_place'), 'different-parent passthrough cannot bypass strict preservation checks')
+for (const accept of [false, true]) {
+  const relaid = await repair('bestEffort', accept, false, { relayout: 'reconstructed' })
+  assert.ok(relaid.candidate.warnings.some(w => /creator edits/.test(w)), 'review includes non-surgical relayout warning')
+  assert.equal(relaid.calls.includes('xtra_vfx_place'), accept)
+}
+const surgical = await repair('strict', false, false, { relayout: 'surgical' })
+assert.equal(surgical.report.status, 'fixed', 'proven surgical repair remains installable in strict mode')
+assert.equal(surgical.report.warnings.length, 0)
+for (const niagara of ['retry', 'permanent']) {
+  const result = await repair('bestEffort', true, false, { niagara })
+  assert.equal(result.report.status, 'fixed')
+  assert.equal(result.placement.partial, niagara === 'retry', 'only retryable Niagara omissions request the retry marker')
+  assert.equal(result.placement.trashOriginal, false, 'omitted content retains its original')
+}
 console.log('PASS repair policy: fresh selection, inconclusive right-click safety, strict preservation gate, and reviewed candidates')
