@@ -641,7 +641,7 @@ export function VfxUpdaterPanel() {
     setEnded({ text: `${parts.join(', ')}${parts.length > 1 ? ',' : ''} in ${took(performance.now() - startedAt)}.`, retry, edits: pickEditsRef.current })
     cue(failed ? 'warning' : 'success', { emphasis: fixed > 1 ? undefined : 'subtle' }) // a problem is a warning, never an error sound
     setBusy(false); setCancelling(false)
-  }, [picked, usmap, paks, originals, keepName, safeOff, needs, addLog])
+  }, [picked, usmap, paks, originals, keepName, safeOff, needs, repairPolicy, addLog])
 
   // the Library's notice updates exactly the mods it sent, as soon as the list and the USMAP are ready (after a run in
   // progress)

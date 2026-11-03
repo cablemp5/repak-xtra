@@ -70,5 +70,6 @@ for (const f of files.filter(f => f.includes(filter))) {
   }
 }
 await server.close()
+if (!filter) await import('./check-repair-policy.mjs')
 console.log(`${passed} self-checks passed, ${failed} failed, ${skipped} skipped, ${broken} files could not load (${files.length} files)`)
 process.exit(failed || broken ? 1 : 0)

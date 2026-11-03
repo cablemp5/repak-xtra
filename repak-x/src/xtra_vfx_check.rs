@@ -368,7 +368,7 @@ pub async fn xtra_vfx_check_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mu
         let mics = tauri::async_runtime::spawn_blocking(move || details.map(|d| crate::xtra_broken::material_instances(&pk, &u, &d.files))).await.ok().flatten();
         if mics.as_ref().is_some_and(|(m, all)| !m.is_empty() || !all) {
             match check(&path, &usmap, &state, false).await {
-                Ok(c) if matches!(c.why, Some("layout" | "classes")) => continue, // not settled: looked at again next scan
+                Ok(c) if matches!(c.why, Some("layout" | "classes")) => { found += 1; continue; } // refresh its verdict, but retry next scan
                 Ok(_) => {}
                 Err(e) => {
                     log::warn!("[vfx check] {p}: {e}"); // tried again by the next scan

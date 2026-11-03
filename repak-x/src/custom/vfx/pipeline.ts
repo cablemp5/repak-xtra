@@ -504,10 +504,14 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
           // its edits had nowhere to go: the game's file is not known to match the mod's
           own.push(p); asset(p, 'failed', `Its edits could not be carried (${notes.slice(0, 2).join(', ')}${notes.length > 2 ? ', and more' : ''}): the mod's copy is kept, unfixed.`)
         } else if (changed.length) {
+          warn(`${stem(p)}: rebuilt on vanilla using supported parameters. Other creator edits are not proven preserved.`)
           await invoke('vfx_write_json_file', { path: `${dirs.editedJson}/${jsonRel}`, content: JSON.stringify(json) })
           report.counts.changes += changed.length
           asset(p, 'updated', `Rebuilt on the game's file with ${plural(changed.length, 'edit')}: ${changed.slice(0, 6).join(', ')}${changed.length > 6 ? `, and ${changed.length - 6} more` : ''}. Other creator edits are not proven preserved.`)
-        } else asset(p, 'same', 'Supported parameters match the game. Original asset omitted, so vanilla is used. Other creator edits are not proven preserved.')
+        } else {
+          warn(`${stem(p)}: supported parameters match, but replacing the original with vanilla may lose other creator edits.`)
+          asset(p, 'same', 'Supported parameters match the game. Original asset omitted, so vanilla is used. Other creator edits are not proven preserved.')
+        }
       }
       o.onProgress?.(++done, editable.length, `Carried ${done} of ${editable.length}`)
     })
@@ -517,9 +521,9 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
 
     // an incomplete rebuild is not placed: one failed or unread asset may be the one that broke, so the mod stays as it was
     const failedN = report.assets.filter(a => a.kind === 'failed').length
-    if ((failedN || report.counts.unreadable) && o.policy !== 'bestEffort') {
-      const why = [failedN && plural(failedN, 'material or blueprint', 'materials and blueprints') + ' could not be rebuilt', report.counts.unreadable && plural(report.counts.unreadable, 'asset') + ' could not be read'].filter(Boolean).join(', and ')
-      report.error = `Not updated: ${why}. The mod was not changed. Check the USMAP in Advanced, then try again.`
+    if ((failedN || report.counts.unreadable || report.warnings.length) && o.policy !== 'bestEffort') {
+      const why = [failedN && plural(failedN, 'material or blueprint', 'materials and blueprints') + ' could not be rebuilt', report.counts.unreadable && plural(report.counts.unreadable, 'asset') + ' could not be read', report.warnings.length && plural(report.warnings.length, 'warning') + ` require${report.warnings.length === 1 ? 's' : ''} review`].filter(Boolean).join(', and ')
+      report.error = `Not updated: ${why}. The mod was not changed. ${report.warnings.length ? 'Review the asset report or select Best effort.' : 'Check the USMAP in Advanced, then try again.'}`
       log(report.error, 'warning')
       return report // failed: Try again stays
     }
@@ -545,6 +549,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     }
     if (!report.counts.updated && !report.counts.added && !niagaraDone && !relaidKept && !((report.counts.left || report.counts.ownGame) && keep.length)) {
       if (report.counts.left || report.counts.ownGame) { report.error = allStale(); return report }
+      if (report.warnings.length) { report.error = 'Not updated: preserving all creator edits could not be verified. Review the asset report. The original was not changed.'; return report }
       // every material and blueprint was read and matches the game (anything else stopped above): it works as it is
       if (report.counts.same || swapped) {
         report.status = 'nothing'

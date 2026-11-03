@@ -75,7 +75,7 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
     const r = await fixVfxMod({
       modPath: mod.utoc_path || utocOf(mod.path), usmapPath: usmap, gamePaksPath: paks, filter: readFilter(),
       keepName: naming === 'broken', turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash',
-      safeOff: readSafeOff() && Boolean(verdictOf(mod.path)), // flagged: off when it could not be made safe
+      safeOff: readSafeOff() && ['broken', 'vfx', 'risky'].includes(verdictOf(mod.path)?.kind ?? ''),
       onStep: s => { if (id !== null) alert.updateToast(id, { description: `Step ${s.step} of ${STEPS.length}: ${s.title}`, progressValue: ((s.step - 0.5) / STEPS.length) * 100 }) },
     })
     if (r.status === 'fixed' && r.placed) {
