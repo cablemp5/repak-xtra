@@ -23,7 +23,7 @@ import { FIXED_EVENT, onHandoff, openLoadoutInMain, onReport, takeHandoff, takeR
 import { KEEP_NAME, ORIGINALS, SAFE_OFF, claimRun, newRunToken, onRunChange, readNaming, readOriginals, readSafeOff, releaseRun, runLock, type Naming, type Originals, type RunLock } from './prefs'
 import { STEPS, fixVfxMod, repairOutcome, type AssetKind, type VfxReport } from './pipeline'
 import { checkVfxMod, checkWords } from './quick'
-import { verdictsChanged } from '../brokenMods'
+import { verdictLabel, verdictsChanged } from '../brokenMods'
 import { HeroFilter, heroOfName } from '../heroFilter'
 import ScanButton from './ScanButton'
 import './vfx.css'
@@ -700,7 +700,7 @@ export function VfxUpdaterPanel() {
         } catch (e) { n.failed++; addLog(`${m.name} could not finish its check: ${e}`, 'warning') }
         done++
       }
-      const parts = [n.outdated && `${n.outdated} need${n.outdated === 1 ? 's' : ''} an update`, n.current && `${n.current} up to date`, n.unknown && `${n.unknown} may crash (compatibility not verified)`, n.none && `${n.none} have no materials to check`, n.failed && `${n.failed} could not finish`].filter(Boolean)
+      const parts = [n.outdated && `${n.outdated} need${n.outdated === 1 ? 's' : ''} an update`, n.current && `${n.current} up to date`, n.unknown && `${verdictLabel('unknown').toLowerCase()} for ${plural(n.unknown, 'mod')}`, n.none && `${n.none} have no materials to check`, n.failed && `${n.failed} could not finish`].filter(Boolean)
       setEnded({ text: `${cancel.current ? 'Stopped. ' : ''}Checked ${done === list.length ? plural(done, 'mod') : `${done} of ${plural(list.length, 'mod')}`}${parts.length ? `: ${parts.join(', ')}` : ''}. No mod files changed. The Log has each result.`, retry: [], edits: pickEditsRef.current })
       cue(n.failed || n.unknown ? 'warning' : 'success')
     } finally {
@@ -763,7 +763,7 @@ export function VfxUpdaterPanel() {
     group('added', 'Chosen files', chosen),
     group('needs', 'Needs an update', needing, needing.filter(m => needsOf(m) && !isDone(runs[norm(m.utoc)]?.status)).length),
     // the ones that need nothing, by kind
-    group('unknown', 'May crash: compatibility not verified', unknown),
+    group('unknown', verdictLabel('unknown'), unknown),
     group('rest', 'VFX mods', others.filter(m => !m.materials)),
     // UI mods listed for their UI materials (a game update rewrote nearly all of them in 3984769)
     group('ui', 'UI mods', others.filter(m => m.ui)),

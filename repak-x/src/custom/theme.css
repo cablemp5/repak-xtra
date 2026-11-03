@@ -2600,7 +2600,7 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
   font-size: 11.5px; font-weight: 600; color: var(--text-secondary); background: rgba(255, 255, 255, 0.04); border: 1px solid var(--panel-border); }
 .cap-status i { width: 6px; height: 6px; border-radius: 50%; background: #e3b341; }
 .cap-status.is-on i { background: #3ecf6e; }
-.lo-media-cta .lo-text-btn[aria-disabled="true"] { opacity: 0.55; border-style: dashed !important; background: transparent !important; }
+.lo-media-cta .lo-text-btn[aria-disabled="true"], .lo-text-btn.is-locked { opacity: 0.55; border-style: dashed !important; background: transparent !important; }
 .lo-card-image.is-still { cursor: default; }
 
 /* Loadout page: the picture over its Cover switch, one column. The switch is what the card shows everywhere: four

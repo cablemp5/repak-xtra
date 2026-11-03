@@ -17,6 +17,7 @@ import { commitInstallLoadout, setInstallDraft, startingLoadouts } from './insta
 import { OTHER, OTHER_LABEL, addGroup, byRecent, useGroups, useLoadouts } from './loadoutStore'
 import { useMediaUrl } from './loadoutMedia'
 import { silhouetteOf } from './silhouettes'
+import { useKoPortraits } from './ko/portraits'
 import { installsPlain } from './uiPrefs'
 import { PreviewsUnavailable, usePreviewsAvailable } from './previews'
 import { useDialogFocus } from './dialogFocus'
@@ -217,6 +218,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
   })
 
   const parsed = mods.map(m => parseModType(m.mod_type))
+  const koPortraits = useKoPortraits(mods)
   const picked = mods.map((_, i) => i).filter(i => settings[i]?.enabled !== false)
   const count = picked.length
   const preview = previewPick ?? (count === 0 || picked.some(i => mods[i].contains_uassets !== false))
@@ -233,9 +235,11 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
     })
     return () => { live = false }
   }, [mods]) // eslint-disable-line react-hooks/exhaustive-deps
-  const heroOf = (i: number) => parsed[i].character?.split(' - ')[0] ?? tableHero[mods[i].path] ?? undefined
+  const heroOf = (i: number) => heroes.find(h => h.id === koPortraits[mods[i].path]?.hero)?.name ?? parsed[i].character?.split(' - ')[0] ?? tableHero[mods[i].path] ?? undefined
   // The cover's hero: the one the picked mods share, else the first picked mod's (a mod of no hero: no shape)
-  const coverShape = silhouetteOf(picked.map(heroOf).find(h => h && !h.startsWith('Multiple')), heroes)
+  const coverIndex = picked.find(i => { const hero = heroOf(i); return hero && !hero.startsWith('Multiple') })
+  const coverLogo = coverIndex === undefined ? undefined : koPortraits[mods[coverIndex].path]?.logo
+  const coverShape = coverLogo ?? silhouetteOf(coverIndex === undefined ? undefined : heroOf(coverIndex), heroes)
   // every picked mod from one zip: the loadout takes the zip's name
   const zip = archiveLoadoutName(picked.map(i => mods[i].path))
   const suggestion = zip || suggestName(picked.map(i => ({ name: settings[i]?.customName || plainName(mods[i].mod_name), character: parsed[i].character })))
@@ -301,7 +305,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
               {existing && (existing.mediaRev || existing.image)
                 ? <Cover id={existing.id} rev={existing.mediaRev} image={existing.image} />
                 : <>
-                    {willPreview && coverShape && <span className="ip-cover-shape" style={{ maskImage: `url(${coverShape})`, WebkitMaskImage: `url(${coverShape})` }} />}
+                    {willPreview && coverShape && <span className={`ip-cover-shape${coverLogo ? ' is-ko-logo' : ''}`} style={{ maskImage: `url(${coverShape})`, WebkitMaskImage: `url(${coverShape})` }} />}
                     {willPreview
                       // the hero's shape with a quiet note in its middle: its icon over two short lines
                       ? <span className="ip-cover-after"><WandSparkles size={14} aria-hidden="true" /><span>Renders</span><span>after install</span></span>
@@ -372,7 +376,8 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
               {mods.map((mod, i) => {
                 const s = settings[i] ?? initialSetting(mod, currentFolderId)
                 const { character, category, additional } = parsed[i]
-                const portrait = resolveHeroImage(character, heroes, undefined, FALLBACK_HERO_ID) // no hero: the Library's own placeholder
+                const portraitHero = character ?? heroOf(i)
+                const portrait = resolveHeroImage(portraitHero, heroes, undefined, FALLBACK_HERO_ID) // no hero: the Library's own placeholder
                 const off = s.enabled === false
                 const isOpen = open.has(mod.path) && !off
                 const shown = s.customName || plainName(mod.mod_name)
@@ -383,7 +388,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
                     <div className="ip-row-main">
                       <button type="button" className="ip-row-open" aria-expanded={isOpen} disabled={off} onClick={() => toggleOpen(mod.path)}
                         title={isOpen ? 'Hide its details' : 'File name, folder, and install options'}>
-                        {portrait ? <img className="ip-row-hero" src={portrait} alt="" title={character ?? undefined} /> : <span className="ip-row-hero" />}
+                        {portrait ? <img className="ip-row-hero" src={portrait} alt="" title={portraitHero ?? undefined} /> : <span className="ip-row-hero" />}
                         <span className="ip-row-name">{shown}</span>
                       </button>
                       {mods.length > 1 && (off

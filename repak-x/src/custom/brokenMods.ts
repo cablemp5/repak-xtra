@@ -9,7 +9,7 @@ import { emit, listen } from '@tauri-apps/api/event'
  *  0 the update waits for that patch's USMAP (xtra_broken.rs changed_since_usmap). */
 export type Verdict = { path: string; kind: 'broken' | 'vfx' | 'risky' | 'unknown'; reason: string; usmapWait?: number }
 /** A verdict's badge text. */
-export const verdictLabel = (kind: Verdict['kind']) => (kind === 'broken' ? 'Broken' : kind === 'vfx' ? 'Needs update' : 'May crash')
+export const verdictLabel = (kind: Verdict['kind']) => (kind === 'broken' ? 'Broken' : kind === 'vfx' ? 'Needs update' : kind === 'unknown' ? "Couldn't verify compatibility" : 'May crash')
 
 /** One spelling per mod: slashes and case may differ between the mod list and the backend, and turning a mod on or off
  *  renames .bak_repak to .pak (or back), so the badge stays put through a switch instead of waiting for the next check. */
@@ -96,7 +96,8 @@ export const useBrokenVersion = () => useSyncExternalStore(subscribe, () => vers
 export const verdictOf = (path: string) => verdicts.get(norm(path))
 
 if (import.meta.env.DEV) {
-  console.assert(verdictLabel('unknown') === 'May crash', 'inconclusive checks use a clear warning label')
+  console.assert(verdictLabel('unknown') === "Couldn't verify compatibility", 'inconclusive checks do not claim a confirmed crash risk')
+  console.assert(verdictLabel('risky') === 'May crash', 'confirmed risks keep their warning')
   console.assert(norm('C:/Games/~mods/A_9999999_P.pak') === norm('c:\\games\\~MODS\\a_9999999_p.pak'), 'broken paths match across slashes and case')
   console.assert(norm('C:/Games/~mods/A_9999999_P.pak') === norm('C:/Games/~mods/A_9999999_P.bak_repak'), 'a mod keeps its verdict on and off')
 }

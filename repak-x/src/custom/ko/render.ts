@@ -153,7 +153,7 @@ export function frameFor(core: Rect, size: { w: number; h: number }, margin = 1.
   return { x, y: core.y + core.h / 2 - h / 2, w, h }
 }
 
-export type DrawOptions = { kills: number; colors: Map<string, string>; focus?: string[]; background?: boolean; frame?: Rect; checker?: boolean; ground?: string }
+export type DrawOptions = { kills: number; colors: Map<string, string>; focus?: string[]; background?: boolean; frame?: Rect; checker?: boolean; ground?: string; backdrop?: HTMLImageElement }
 const srgb = (c: number) => Math.round(255 * Math.min(1, Math.max(0, c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055)))
 
 const grounds: Partial<Record<'black' | 'white', CanvasRenderingContext2D>> = {}
@@ -210,6 +210,13 @@ export function draw(ctx: CanvasRenderingContext2D, s: Scene, t: number, size: {
   ctx.clearRect(0, 0, size.w, size.h)
   // the backdrop is painted, not left transparent: additive layers need something under them (and a saved frame keeps it)
   if (o.ground) { ctx.fillStyle = o.ground; ctx.fillRect(0, 0, size.w, size.h) } // one flat color (drawClear)
+  else if (o.backdrop) {
+    const image = o.backdrop
+    // Crop the supplied screenshot to its game view, excluding the surrounding editor chrome.
+    const sx = 105, sy = 65, sw = 789, sh = 409
+    const scale = Math.max(size.w / sw, size.h / sh)
+    ctx.drawImage(image, sx, sy, sw, sh, (size.w - sw * scale) / 2, (size.h - sh * scale) / 2, sw * scale, sh * scale)
+  }
   else if (o.background !== false) {
     // the editor's grid sits on one flat color (cable, 2026-11-01: no glow behind it); other uses keep the soft light
     const g = o.checker ? '#0b0b0b' : ctx.createRadialGradient(size.w * 0.38, size.h * 0.4, 0, size.w * 0.38, size.h * 0.4, Math.max(size.w, size.h) * 0.75)

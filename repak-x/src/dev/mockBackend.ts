@@ -433,6 +433,7 @@ function mockVfx(cmd: string, args: any): unknown {
     case 'xtra_layout_scan': return 0
     case 'xtra_vfx_source': return String(args.modPath)
     case 'xtra_skin_table_hero': return null
+    case 'xtra_ko_portrait': return null
     // the mock's USMAP is older than its game: Niagara files stay left out, as in a real run before a matching USMAP
     case 'xtra_vfx_niagara': return { ready: false, why: 'The USMAP is older than the game', files: [] }
     case 'vfx_save_settings': return null

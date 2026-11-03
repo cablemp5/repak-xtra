@@ -27,6 +27,10 @@ export type VfxStatus = 'fixed' | 'nothing' | 'failed' | 'cancelled'
 export const incompleteAssets = (r: Pick<VfxReport, 'counts' | 'assets'>) =>
   r.counts.left + r.counts.ownGame + r.counts.unreadable + r.assets.filter(a => a.kind === 'failed').length
 
+/** Only a complete installed repair can clear the old compatibility verdict. */
+export const repairedPath = (r: VfxReport): string | null =>
+  r.status === 'fixed' && r.placed && !incompleteAssets(r) && !r.warnings.length ? r.placed.fixed : null
+
 export const repairOutcome = (r: VfxReport) => {
   if (r.status !== 'fixed') return 'Unsupported or ambiguous'
   if (incompleteAssets(r)) return 'Partially repaired'
@@ -580,6 +584,11 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     // here, where the early returns pass too: Needs VFX update stops flagging it until the mod or the game changes (xtra_broken.rs)
     // not when its materials were rewritten: the original stays installed in the old layout and still needs turning off
     if (report.status === 'nothing' && !report.counts.relaid && o.policy !== 'bestEffort') await invoke('xtra_vfx_no_update', { modPath: o.modPath }).catch(e => log(`Could not note that it needs nothing: ${e}`, 'warning'))
+    const repaired = repairedPath(report)
+    if (repaired) await invoke('xtra_vfx_no_update', { modPath: repaired }).catch(e => {
+      const message = `The mod was repaired, but its compatibility status could not be saved: ${e}. Recheck it in the Mod Updater.`
+      report.warnings.push(message); log(message, 'warning')
+    })
     // not made safe: off, so it cannot crash the game. Its flag stays, and a later update starts from the off copy
     const unsafe = (report.status === 'failed' && o.safeOff) || (report.status === 'nothing' && report.counts.relaid > 0 && o.safeOff !== false)
     if (unsafe && !o.outputDir && o.policy !== 'bestEffort') {
@@ -593,6 +602,10 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
 
 if (import.meta.env.DEV) {
   const sample: VfxReport = { mod: '', name: '', status: 'fixed', assets: [], warnings: [], counts: { updated: 0, same: 0, added: 0, passed: 1, left: 0, ownGame: 0, unreadable: 0, changes: 0, relaid: 1 }, ms: 0, steps: [] }
+  const placed = { fixed: 'updated.pak', source: 'old.pak', original: 'old.bak_repak', turnedOff: true, replaced: true }
+  console.assert(repairedPath({ ...sample, placed }) === 'updated.pak', 'clear only the installed repaired copy, never its original')
+  console.assert(repairedPath(sample) === null && repairedPath({ ...sample, placed, status: 'failed' }) === null, 'uninstalled and failed repairs never clear warnings')
+  console.assert(repairedPath({ ...sample, placed, counts: { ...sample.counts, left: 1 } }) === null && repairedPath({ ...sample, placed, warnings: ['unverified'] }) === null, 'partial and unverified repairs retain warnings')
   console.assert(repairOutcome(sample) === 'Repaired', 'preserved structural repair')
   console.assert(repairOutcome({ ...sample, counts: { ...sample.counts, ownGame: 1 } }) === 'Partially repaired', 'permanent omission is partial')
   console.assert(repairOutcome({ ...sample, warnings: ['lost parameter'] }) === 'Repaired with changes: review required', 'loss needs review')

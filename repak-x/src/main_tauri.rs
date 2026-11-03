@@ -8690,7 +8690,8 @@ fn main() {
             xtra_vfx_check::xtra_vfx_check_scan, // repakxtra: the same check in the background, for the date's blind spot
             xtra_layout::xtra_layout_scan, // repakxtra: Blueprint mods compared with the game's classes, in the background
             xtra_mesh::xtra_mesh_scan, // repakxtra: mesh mods against the game's rebuilt skeletons, in the background
-            xtra_ko::xtra_ko_heroes, xtra_ko::xtra_ko_load, xtra_ko::xtra_ko_file, xtra_ko::xtra_ko_stage, xtra_ko::xtra_ko_install, xtra_ko::xtra_ko_mod, xtra_ko::xtra_ko_is_mod, xtra_ko::xtra_ko_save_preview, // repakxtra: KO Editor
+            xtra_ko::xtra_ko_heroes, xtra_ko::xtra_ko_load, xtra_ko::xtra_ko_file, xtra_ko::xtra_ko_stage, xtra_ko::xtra_ko_mod, xtra_ko::xtra_ko_is_mod, xtra_ko::xtra_ko_save_preview, // repakxtra: KO Editor
+            xtra_ko::xtra_ko_portrait, // repakxtra: hero logos in the installer
             xtra_vfx::xtra_vfx_dirs, // repakxtra: VFX Updater
             xtra_vfx::xtra_vfx_detect,
             xtra_vfx::xtra_vfx_place,

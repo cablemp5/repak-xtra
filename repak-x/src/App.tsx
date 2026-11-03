@@ -4013,7 +4013,12 @@ function App() {
           alert={alert}
           onModContextMenu={(e, m, rename) => { handleContextMenu(e, m as ModRecord); setContextMenu(c => c && { ...c, fromLoadout: true, rename }) }} /* repakxtra: a loadout page's rows open the Library's menu, for that row */
         />
-        <KoEditor reload={loadMods} alert={alert} blocked={gameRunning && !bypassGameRunningLock} />{/* repakxtra: KO Editor view */}
+        <KoEditor alert={alert} blocked={gameRunning && !bypassGameRunningLock} onInstall={async path => {
+          const parsed = await invoke<DroppedModParse[]>('parse_dropped_files', { paths: [path] })
+          if (!parsed.length) throw new Error('The generated KO prompt could not be opened for installation.')
+          setModsToInstall(parsed)
+          setPanel('install', true)
+        }} />{/* repakxtra: KO Editor view */}
         {/* repakxtra: Ctrl+1..9 switches pinned loadouts on every view (custom/Loadouts.tsx) */}
         <LoadoutHotkeys mods={mods} scopeMods={folderMods} scopeLabel="all mods" blocked={gameRunning && !bypassGameRunningLock}
           isBlocked={undoBlocked} reload={loadMods} alert={alert} modDetails={modDetails} />

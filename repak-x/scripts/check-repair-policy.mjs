@@ -92,6 +92,7 @@ async function repair(policy, accept = false, sameParameters = false, scenario =
       case 'xtra_safe_off_kept': return null
       case 'xtra_vfx_place': placement = a; return { fixed: 'Fixture.pak', source: 'Fixture.pak', original: 'Fixture.bak_repak' }
       case 'xtra_vfx_stamp': return
+      case 'xtra_vfx_no_update': assert.equal(a.modPath, 'Fixture.pak', 'clear the placed output'); return
       default: throw Error('Unexpected fixture command ' + cmd)
     }
   }
@@ -144,9 +145,11 @@ for (const accept of [false, true]) {
 const surgical = await repair('strict', false, false, { relayout: 'surgical' })
 assert.equal(surgical.report.status, 'fixed', 'proven surgical repair remains installable in strict mode')
 assert.equal(surgical.report.warnings.length, 0)
+assert.ok(surgical.calls.indexOf('xtra_vfx_no_update') > surgical.calls.indexOf('xtra_vfx_place'), 'complete repair clears only after installation')
 for (const niagara of ['retry', 'permanent']) {
   const result = await repair('bestEffort', true, false, { niagara })
   assert.equal(result.report.status, 'fixed')
+  assert.ok(!result.calls.includes('xtra_vfx_no_update'), 'partial repair never claims complete clearance')
   assert.equal(result.placement.partial, niagara === 'retry', 'only retryable Niagara omissions request the retry marker')
   assert.equal(result.placement.trashOriginal, false, 'omitted content retains its original')
 }
