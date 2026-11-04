@@ -9,7 +9,7 @@ import { RoleIcon } from '../icons/rivals'
 import CustomDropdown from '../../components/CustomDropdown'
 import { type LoadoutProps } from '../Loadouts'
 import { readLoadouts, useView, writeLoadouts } from '../loadoutStore'
-import { useHeroPortrait } from '../heroFilter'
+import { useKoHeroPortraits } from './portraits'
 import { cue } from '../sounds'
 import { type Role, hexOf, shiftHue } from './model'
 import { draw, duration, frameFor } from './render'
@@ -48,9 +48,9 @@ export default function KoEditor(p: KoEditorProps) {
 }
 
 function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: boolean }) {
-  const portrait = useHeroPortrait()
   const [usmap, setUsmap] = useState<string | null>(null)
   const [heroes, setHeroes] = useState<Hero[] | null>(null)
+  const portrait = useKoHeroPortraits(heroes)
   const [listError, setListError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [heroId, setHeroId] = useState<string | null>(() => localStorage.getItem(`${STORE}.hero`))
@@ -259,7 +259,7 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
                 {inGroup.map(h => (
                   <button key={h.id} type="button" role="option" aria-selected={h.id === heroId} className="ko-hero" onClick={() => { setHeroId(h.id); cue('select') }}
                     tabIndex={h.id === (shownHeroes.some(x => x.id === heroId) ? heroId : shownHeroes[0]?.id) ? 0 : -1}>
-                    <img src={portrait(h.name)} alt="" />
+                    <img src={portrait(h.id)} alt="" />
                     <span>{h.name}</span>
                     {(Object.keys(saved[h.id]?.colors ?? {}).length > 0 || Boolean(saved[h.id]?.hue)) && <span className="ko-dot" title="Has your colors" />}
                   </button>

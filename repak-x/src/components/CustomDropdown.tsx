@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './CustomDropdown.css';
+import DropdownGlide from '../custom/DropdownGlide'; // repakxtra: glide the highlight without changing the selector
 
 type DropdownOption = string | { value: string; label: string; showDelete?: boolean; image?: string; glyph?: React.ReactNode }; // repakxtra: image (a small round picture) or glyph (an icon) before the label
 
@@ -130,6 +131,7 @@ const CustomDropdown = ({
 
             {isOpen && !disabled && (
                 <div className="custom-dropdown-menu" role="listbox" ref={menuRef}>
+                    <DropdownGlide />
                     {/* Optional "Clear" or "All" option if placeholder suggests it */}
                     {/* For now, we assume parent handles specific "All" options by passing them in options array if needed, 
                         BUT for consistency with previous Tag behavior, if value is present, we might want a way to clear it?

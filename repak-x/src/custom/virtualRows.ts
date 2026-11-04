@@ -46,7 +46,7 @@ export function scrollToShow(i: number, m: Metrics, scrollTop: number): number |
  *  first and last mounted card. Null while hidden (Home is showing) or with too few rows to tell. */
 function measure(el: HTMLElement): Metrics | null {
   if (!el.clientHeight) return null
-  const cards = el.querySelectorAll<HTMLElement>(':scope > .mod-card')
+  const cards = el.querySelectorAll<HTMLElement>(':scope > .mod-card, :scope > .mod-swipe')
   if (cards.length < 2) return null
   const cs = getComputedStyle(el)
   const cols = cs.display === 'grid' ? Math.max(1, cs.gridTemplateColumns.split(' ').filter(Boolean).length) : 1

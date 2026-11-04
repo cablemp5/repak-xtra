@@ -1,0 +1,9 @@
+.mod-swipe { position: relative; flex-shrink: 0; min-width: 0; overflow: hidden; border-radius: 10px; background: var(--bg-dark); touch-action: pan-y; }
+.view-list-compact .mod-swipe { border-radius: 6px; }
+.mod-swipe-surface { position: relative; z-index: 1; background: var(--bg-dark); }
+.mod-swipe .mod-card { margin: 0; }
+.mod-swipe-delete { position: absolute; inset: 0 0 0 auto; width: 80px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border: 0; border-radius: inherit; background: #b3261e; color: white; font: inherit; font-size: 11px; cursor: pointer; }
+.mod-swipe:not([data-dragging]):not([data-open]) .mod-swipe-delete { visibility: hidden; }
+.mod-swipe[data-ready] .mod-swipe-delete { width: 100%; }
+.mod-swipe[data-dragging], .mod-swipe[data-dragging] * { cursor: grabbing; user-select: none; }
+.mod-swipe-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }

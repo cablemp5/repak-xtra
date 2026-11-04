@@ -27,6 +27,7 @@ import { useTypeHint } from '../custom/typeHints' // repakxtra
 import { holdKeys } from '../custom/holdKeys' // repakxtra
 import { heroLabel } from '../custom/silhouettes' // repakxtra
 import { useRowWindow } from '../custom/virtualRows' // repakxtra: long lists mount only the rows near the viewport
+import SwipeDelete from '../custom/SwipeDelete' // repakxtra: list rows swipe left to delete
 import './ModDetailsPanel.css'
 
 type CharacterDataEntry = {
@@ -317,7 +318,7 @@ const ModItem = memo(function ModItem({
         ? detectHeroesWithData(modDetails.files, characterData)
         : []
 
-    return (
+    const card = (
         <div
             className={`mod-card ${isChecked ? 'selected' : ''} ${isViewing ? 'viewing' : ''} ${heroImage && showHeroBg ? 'has-hero-bg' : ''} ${mod.enabled === false ? 'mod-disabled' : ''} ${isLeaving ? 'mod-leaving' : ''}`}
             // Lets the app scroll a specific mod into view without threading a
@@ -560,6 +561,9 @@ const ModItem = memo(function ModItem({
             </div>
         </div>
     )
+    // repakxtra: preserve the existing deletion guard, exit animation, and Undo.
+    return isCardView || builtin ? card : <SwipeDelete label={cleanName} disabled={Boolean(gameRunning || isRenaming || isLeaving)} deleting={isLeaving} animated={animationsEnabled}
+        onDelete={() => { if (gameRunning) onDeleteBlocked?.(); else requestDelete(false) }}>{card}</SwipeDelete>
 })
 
 /**

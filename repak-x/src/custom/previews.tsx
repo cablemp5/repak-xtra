@@ -248,18 +248,29 @@ export function BeatVideo({ src, beat }: { src: string; beat: number }) {
     const v = ref.current
     if (!v) return
     let t: number | undefined
+    let visible = false
+    const active = () => visible && !document.hidden
     const next = () => {
       clearTimeout(t)
-      t = window.setTimeout(() => { v.currentTime = 0; v.play().catch(() => undefined) }, beat * 1000 - (Date.now() % (beat * 1000)))
+      if (active()) t = window.setTimeout(() => { v.currentTime = 0; v.play().catch(() => undefined) }, beat * 1000 - (Date.now() % (beat * 1000)))
     }
     // a card that appears mid-beat joins at the clock's point instead of waiting for the next one
     const join = () => {
+      clearTimeout(t)
+      if (!active()) { v.pause(); return }
+      if (v.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return
       const at = (Date.now() % (beat * 1000)) / 1000
       if (at < v.duration - 0.1) { v.currentTime = at; v.play().catch(() => undefined) } else next()
     }
+    const observer = new IntersectionObserver(entries => {
+      const nextVisible = entries.some(e => e.isIntersecting)
+      if (nextVisible !== visible) { visible = nextVisible; join() }
+    })
+    observer.observe(v)
     v.addEventListener('ended', next)
-    v.addEventListener('loadedmetadata', join, { once: true })
-    return () => { clearTimeout(t); v.removeEventListener('ended', next); v.removeEventListener('loadedmetadata', join) }
+    v.addEventListener('loadeddata', join)
+    document.addEventListener('visibilitychange', join)
+    return () => { clearTimeout(t); observer.disconnect(); v.pause(); v.removeEventListener('ended', next); v.removeEventListener('loadeddata', join); document.removeEventListener('visibilitychange', join) }
   }, [src, beat])
   return <video ref={ref} src={src} muted playsInline preload="auto" />
 }
