@@ -5,7 +5,6 @@ use crate::utils::{collect_files, get_current_pak_characteristics};
 use crate::utoc_utils::read_utoc;
 use log::{debug, error};
 use std::path::PathBuf;
-use tempfile::tempdir;
 use walkdir::WalkDir;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -138,7 +137,7 @@ fn find_mods_from_archive(path: &str) -> Vec<InstallableMod> {
         // Only process .pak files
         if file_path.is_file() && file_path.extension().and_then(|s| s.to_str()) == Some("pak") {
             found_pak_files = true;
-            let mod_base_name = file_path.file_stem().unwrap().to_str().unwrap().to_string();
+            let mod_base_name = file_path.file_stem().unwrap_or_default().to_string_lossy().to_string(); // repakxtra
             write_install_debug(&format!(
                 "  Found PAK: {} (base_name={})",
                 file_path.display(),
@@ -508,25 +507,25 @@ fn map_to_mods_internal(paths: &[PathBuf]) -> Vec<InstallableMod> {
 
             if is_archive {
                 modtype = "Archive".to_string();
-                // IMPORTANT: Keep the TempDir alive so the directory isn't deleted
-                // before find_mods_from_archive reads the PAK files inside it.
-                // We leak the TempDir intentionally so the temp directory persists
-                // until the installation completes (OS cleans up on process exit).
-                let temp_dir_obj = tempdir().unwrap();
-                let tempdir = temp_dir_obj.path().to_str().unwrap().to_string();
-                // Leak the TempDir to prevent cleanup - the extracted PAK files
-                // must remain accessible during the entire installation flow
-                std::mem::forget(temp_dir_obj);
-
-                if extension == "zip" {
-                    extract_zip(path.to_str().unwrap(), &tempdir)
-                        .expect("Unable to extract zip archive")
-                } else if extension == "rar" {
-                    extract_rar(path.to_str().unwrap(), &tempdir)
-                        .expect("Unable to extract rar archive")
-                } else if extension == "7z" {
-                    extract_7z(path.to_str().unwrap(), &tempdir)
-                        .expect("Unable to extract 7z archive")
+                // repakxtra: unpacked into temp/repak-x/archives/<pid>-*, which stays through the install and goes at
+                // the next start (xtra_vfx::sweep_work_dirs). A bad archive is skipped with a message, not a crash.
+                let tempdir = match crate::xtra_vfx::run_work_dir("archives") {
+                    Ok(d) => d.to_string_lossy().to_string(),
+                    Err(e) => {
+                        crate::ui_log::error("Install", format!("Could not make a folder to unpack {}: {e}", path.display()));
+                        return None;
+                    }
+                };
+                let src = path.to_string_lossy();
+                let unpacked = match extension.to_str().unwrap_or_default() {
+                    "zip" => extract_zip(&src, &tempdir).map_err(|e| e.to_string()),
+                    "rar" => extract_rar(&src, &tempdir).map_err(|e| e.to_string()),
+                    _ => extract_7z(&src, &tempdir).map_err(|e| e.to_string()),
+                };
+                if let Err(e) = unpacked {
+                    crate::ui_log::error("Install", format!("Could not unpack {} ({e}). It may be damaged or password protected.", path.display()));
+                    let _ = std::fs::remove_dir_all(&tempdir);
+                    return None;
                 }
 
                 // Now find pak files / iostore mods and turn them into installable mods
@@ -540,7 +539,7 @@ fn map_to_mods_internal(paths: &[PathBuf]) -> Vec<InstallableMod> {
             let should_repak = !is_dir && !is_iostore && !is_audio_or_movies;
 
             Some(InstallableMod {
-                mod_name: path.file_stem().unwrap().to_str().unwrap().to_string(),
+                mod_name: path.file_stem().unwrap_or_default().to_string_lossy().to_string(), // repakxtra: no panic on odd names
                 mod_type: modtype,
                 repak: should_repak,
                 is_dir,

@@ -17,6 +17,7 @@ import { loadoutable, modKey, useLoadouts } from './loadoutStore'
 import { plural } from './modName'
 import { Num } from './motion'
 import { openLoadoutInMain } from './vfx/handoff'
+import { KEY } from './EncryptMods'
 import './vfx/vfx.css'
 import './support.css'
 
@@ -25,28 +26,12 @@ type Listed = { path: string; customName?: string | null; enabled: boolean; hero
 type Run = { status: 'waiting' | 'running' | 'done' | 'failed'; error?: string }
 type Result = { Ok: { path: string; backup: string } } | { Err: string }
 
-const KEY = 'repakxtra-encrypt:queue' // not a repakxtra.* key: devStorage would copy it to the shared file
 const SORT = 'repakxtra.encrypt.sort'
 const FOLDED = 'repakxtra.encrypt.folded'
 const norm = (p: string) => p.replace(/\//g, '\\').toLowerCase()
 const fileName = (p: string) => p.replace(/\\/g, '/').split('/').pop() ?? p
 const bare = (p: string) => fileName(p).replace(/\.[^.]+$/, '').replace(/\.pak$/i, '').replace(/(_\d+)?_P$/i, '')
 const chosen = (path: string): Mod => ({ path, name: bare(path), enabled: !/\.(bak_repak|pak_disabled)$/i.test(path), hero: '', modified: Date.now(), encrypted: false }) // read as not encrypted until the list reads it
-
-/** Opens the Encrypt window, or brings it forward. */
-async function openWindow() {
-  const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
-  const existing = await WebviewWindow.getByLabel('encrypt')
-  if (existing) { await existing.unminimize().catch(() => {}); await existing.setFocus(); return }
-  const w = new WebviewWindow('encrypt', { url: '/encrypt', title: 'Encrypt', width: 760, height: 820, minWidth: 600, minHeight: 560, center: true, resizable: true, decorations: false })
-  w.once('tauri://error', e => console.error('[Encrypt] Failed to create window:', e))
-}
-
-/** Opens the Encrypt window with these mods ticked (none: just opens it). */
-export async function openEncrypt(paths: string[] = []) {
-  if (paths.length) localStorage.setItem(KEY, JSON.stringify({ paths, at: Date.now() }))
-  await openWindow()
-}
 
 function takeHandoff(): string[] {
   const raw = localStorage.getItem(KEY)

@@ -11,19 +11,27 @@ pub async fn merge_mods_for_hybrid(
     window: Window,
 ) -> Result<Vec<crate::InstallableModInfo>, String> {
     let _ = window.emit("install_log", "[Merge] Starting hybrid merge process...");
-    
-    // Create a temp directory inside the app's temp folder
-    let temp_base = crate::app_dir().join("temp");
-    let _ = std::fs::create_dir_all(&temp_base);
-    let temp_dir = tempfile::Builder::new()
-        .prefix("hybrid_merge_")
-        .tempdir_in(&temp_base)
-        .map_err(|e| format!("Failed to create temp directory: {}", e))?;
-        
-    let temp_path = temp_dir.path().to_path_buf();
-    // We must persist the temp dir since we'll return its path for installation later
-    let persisted_temp_path = temp_dir.into_path();
-    
+    let w = window.clone();
+    // repakxtra: copying and unpacking run off the async runtime
+    let persisted_temp_path = crate::blocking(move || stage(path1, path2, &w)).await?;
+
+    let _ = window.emit("install_log", "[Merge] Merge complete, parsing new folder...");
+
+    // Parse the merged directory
+    let parse_result = crate::parse_dropped_files(
+        vec![persisted_temp_path.to_string_lossy().to_string()],
+        state,
+        window
+    ).await?;
+
+    Ok(parse_result)
+}
+
+/// Both inputs merged into one new folder, returned for parse_dropped_files.
+fn stage(path1: String, path2: String, window: &Window) -> Result<PathBuf, String> {
+    // repakxtra: temp/repak-x/hybrid/<pid>-*, removed after the install and at the next start if it never ran
+    let persisted_temp_path = crate::xtra_vfx::run_work_dir("hybrid").map_err(|e| format!("Failed to create temp directory: {}", e))?;
+
     let paths = vec![PathBuf::from(path1), PathBuf::from(path2)];
     
     for p in paths {
@@ -64,16 +72,7 @@ pub async fn merge_mods_for_hybrid(
         }
     }
     
-    let _ = window.emit("install_log", "[Merge] Merge complete, parsing new folder...");
-    
-    // Parse the merged directory
-    let parse_result = crate::parse_dropped_files(
-        vec![persisted_temp_path.to_string_lossy().to_string()],
-        state,
-        window
-    ).await?;
-    
-    Ok(parse_result)
+    Ok(persisted_temp_path)
 }
 
 fn copy_dir_recursively(src: &std::path::Path, dst: &std::path::Path) -> Result<(), String> {

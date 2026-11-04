@@ -41,10 +41,19 @@ pub(crate) fn sweep_work_dirs() {
     sweep_in(&std::env::temp_dir().join("repak-x"));
 }
 
+/// A new folder temp/repak-x/<kind>/<pid>-<random> that stays after this call (the caller removes it when done, and
+/// sweep_work_dirs removes it after this run ends). For unpacked archives and hybrid merges, which live past one command.
+pub(crate) fn run_work_dir(kind: &str) -> Result<PathBuf, String> {
+    let root = std::env::temp_dir().join("repak-x").join(kind);
+    std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+    let dir = tempfile::Builder::new().prefix(&format!("{}-", std::process::id())).tempdir_in(&root).map_err(|e| e.to_string())?;
+    Ok(dir.into_path())
+}
+
 fn sweep_in(root: &Path) {
     use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System};
     let mut left: Vec<(PathBuf, u32)> = Vec::new();
-    for kind in ["xcheck", "xclass", "xmesh", "pakhalf"] {
+    for kind in ["xcheck", "xclass", "xmesh", "pakhalf", "archives", "hybrid"] {
         for e in std::fs::read_dir(root.join(kind)).into_iter().flatten().flatten() {
             // "<pid>" or "<pid>-<n>"
             let n = e.file_name().to_string_lossy().to_string();
@@ -1050,13 +1059,14 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let me = std::process::id();
         let dead = 4_000_000_001u32; // above any Windows process id
-        for d in [format!("xcheck/{me}"), format!("xcheck/{dead}"), format!("pakhalf/{dead}-3"), format!("xmesh/{me}"), "xcheck/notapid".to_string()] {
+        for d in [format!("xcheck/{me}"), format!("xcheck/{dead}"), format!("pakhalf/{dead}-3"), format!("xmesh/{me}"), "xcheck/notapid".to_string(), format!("archives/{dead}-a1"), format!("hybrid/{me}-b2")] {
             std::fs::create_dir_all(root.path().join(d).join("game")).unwrap();
         }
         sweep_in(root.path());
         assert!(root.path().join(format!("xcheck/{me}")).exists() && root.path().join(format!("xmesh/{me}")).exists(), "this run's stay");
         assert!(!root.path().join(format!("xcheck/{dead}")).exists() && !root.path().join(format!("pakhalf/{dead}-3")).exists(), "a closed run's go");
         assert!(root.path().join("xcheck/notapid").exists(), "what is not a run's is left alone");
+        assert!(!root.path().join(format!("archives/{dead}-a1")).exists() && root.path().join(format!("hybrid/{me}-b2")).exists(), "unpacked archives and merges too");
     }
 
     #[test]
