@@ -409,7 +409,7 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 .mod-list-grid:has(> .mod-list-spacer) { overflow-anchor: none; }
 /* one height whatever the filter: the card view's 120px base made a short list (On, a search) stretch its rows while a
    long one squeezed them to their 40px minimum, so rows are that size always (not shrunk, not grown) */
-.mod-list-grid.view-list > .mod-card { flex: none !important; height: 40px !important; max-height: 40px !important; contain-intrinsic-size: auto 40px !important; }
+.mod-list-grid.view-list .mod-card { flex: none !important; height: 40px !important; max-height: 40px !important; contain-intrinsic-size: auto 40px !important; }
 .mod-list-grid.view-list .mod-card {
   min-height: 40px !important;
   padding: 4px 12px !important;
@@ -1694,7 +1694,7 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
 /* Toasts: the status icon centered against the text; Clear all as a labeled pill on the toasts' own surface */
 .toast-icon { align-self: center; }
 /* +N and Clear all sit below the stack (AlertHandler reserves the stack's visible height), never over a toast */
-.toast-footer-overlay { position: static; align-self: stretch; justify-content: flex-end; margin-top: 8px; gap: 8px; }
+.toast-footer-overlay { position: absolute; bottom: 1rem; right: 1rem; left: 1rem; justify-content: flex-end; margin-top: 0; gap: 8px; }
 .toast-clear-all, [data-theme="light"] .toast-clear-all {
   width: auto !important; max-width: none !important; height: 28px !important; min-height: 0 !important; max-height: none !important;
   padding: 0 12px 0 12px !important; display: inline-flex !important; align-items: center; gap: 8px; border-radius: 999px !important;
@@ -3008,6 +3008,6 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 :root[data-theme="light"] .beta-note { --beta: #b3261e; }
 /* the mark beside the warning: its picture as a mask, in the note's red */
 .beta-mark { display: block; width: 25px; height: 16px; background: var(--beta); mask: center / contain no-repeat; -webkit-mask: center / contain no-repeat; }
-.wi-beta { margin: 0 28px 20px; max-width: 76ch; }
+.wi-beta { margin: 0 28px 20px; }
 
 .mod-type-badge.broken-badge.is-unknown { background: transparent !important; }

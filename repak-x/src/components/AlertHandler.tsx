@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo, memo } from 'react';
 import type { ReactNode } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue } from 'framer-motion';
 import { Check, X } from 'lucide-react'; // repakxtra: a plain check for success, X for Clear all
 import './ui/Alert.css';
 import { alertSound } from '../custom/sounds' // repakxtra
 import { quietToast } from '../custom/uiPrefs' // repakxtra
 import { ToastAnnouncer, clockElapsed, holdClock, survivor, type ToastClock } from '../custom/toastA11y' // repakxtra
 import { focusInto, topModal } from '../custom/dialogFocus' // repakxtra
+import { useToastExit } from '../custom/toastExit' // repakxtra: retain the faded frame until removal
 
 // Toast Icons
 type ToastColor = 'success' | 'danger' | 'warning' | 'info' | 'default' | 'crash' | 'primary' | 'secondary';
@@ -379,21 +380,21 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
                 style={{
                     position: 'relative',
                     width: '100%',
-                    height: extent, // repakxtra: was minHeight 70px
+                    height: extent + (toasts.length > 1 ? 36 : 0), // repakxtra: 28px footer plus its 8px gap
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: isBottom ? 'flex-end' : 'flex-start',
                 }}
             >
-                <AnimatePresence mode="popLayout">
+                <AnimatePresence>
                     {recentToasts.map((toast, index) => (
                         <ToastItem
                             key={toast.id}
                             toast={toast}
                             onDismiss={onDismiss}
                             index={index}
-                            total={recentToasts.length}
+                            footerLift={isBottom && toasts.length > 1 ? 36 : 0}
                             isHovered={isHovered}
                             placement={placement}
                             spread={spread[index]}
@@ -425,8 +426,9 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
 }
 
 // Individual Toast Item with card stacking effect - memoized to prevent unnecessary re-renders
-const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHovered, placement, spread = index * 100, onHeight }: any) {
+const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift, isHovered, placement, spread = index * 100, onHeight }: any) {
     const itemRef = useRef<HTMLDivElement>(null);
+    const isPresent = useToastExit(itemRef); // repakxtra
     useEffect(() => { // repakxtra: report this toast's height so the hovered stack spaces by it
         const el = itemRef.current;
         if (!el || !onHeight) return;
@@ -434,7 +436,7 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
         ro.observe(el);
         return () => ro.disconnect();
     }, [toast.id, onHeight]);
-    const [progress, setProgress] = useState(100);
+    const progress = useMotionValue(1); // repakxtra: the countdown updates its bar without rerendering the toast
     const [isPaused, setIsPaused] = useState(false);
     const [hasFocus, setHasFocus] = useState(false); // repakxtra: focus in the toast holds its timer, like the pointer
     const held = isPaused || hasFocus;
@@ -452,7 +454,7 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
 
         const interval = setInterval(() => {
             const remaining = Math.max(0, 100 - (clockElapsed(clock.current, Date.now()) / duration) * 100);
-            setProgress(remaining);
+            progress.set(remaining / 100);
 
             if (remaining <= 0) {
                 clearInterval(interval);
@@ -464,7 +466,7 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
             clearInterval(interval);
             clock.current = holdClock(clock.current, true, Date.now());
         };
-    }, [id, duration, held, onDismiss, shouldAutoDismiss]);
+    }, [id, duration, held, onDismiss, shouldAutoDismiss, progress]);
 
     // Get the appropriate icon
     const getIcon = () => {
@@ -490,7 +492,7 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
     const opacityReduction = isHovered ? 0 : 0.2; // Full opacity when hovered
 
     // Calculate transforms for stacking effect
-    const yOffset = (isBottom ? -1 : 1) * (isHovered ? spread : index * stackOffset);
+    const yOffset = (isBottom ? -1 : 1) * (isHovered ? spread : index * stackOffset) - footerLift;
     const scale = 1 - (index * scaleReduction);
     const opacity = index === 0 ? 1 : Math.max(0.6, 1 - (index * opacityReduction));
     const zIndex = 100 - index;
@@ -498,32 +500,22 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
     return (
         <motion.div
             ref={itemRef}
-            layout
-            // repakxtra: transitions.dev Banner stacking. A new banner rises in from a blur and pushes the others back
-            // (three deep, each smaller and dimmer); a dismissed one blurs out where it is
+            // repakxtra: transitions.dev Banner stacking, using only transform and opacity to avoid layout work during library updates
             initial={{
                 opacity: 0,
-                y: isBottom ? 24 : -24,
-                scale: 0.96,
-                filter: 'blur(4px)'
+                transform: `translateY(${(isBottom ? 24 : -24) - footerLift}px) scale(0.96)`
             }}
             animate={{
                 opacity: opacity,
-                y: yOffset,
-                scale: scale,
-                filter: index === 0 || isHovered ? 'blur(0px)' : `blur(${index * 0.5}px)`
-            }}
-            exit={{
-                opacity: 0,
-                scale: 0.96,
-                filter: 'blur(4px)'
+                transform: `translateY(${yOffset}px) scale(${scale})`
             }}
             transition={{
-                duration: 0.4,
+                duration: 0.22,
                 ease: [0.22, 1, 0.36, 1]
             }}
             className={`toast-item ${color} ${variant}${isLoading || typeof progressValue === 'number' ? ' is-working' : ''}`} /* repakxtra: shimmer while it works */
             style={{
+                pointerEvents: isPresent ? 'auto' : 'none',
                 position: 'absolute',
                 bottom: isBottom ? 0 : 'auto',
                 top: !isBottom ? 0 : 'auto',
@@ -554,6 +546,7 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
                     {action.label && action.onClick ? (
                         <button
                             className="toast-action-btn"
+                            disabled={!isPresent}
                             onClick={(e) => {
                                 e.stopPropagation();
                                 action.onClick(e);
@@ -575,6 +568,7 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
 
             <button
                 className="toast-close"
+                disabled={!isPresent}
                 onClick={() => onDismiss(id)}
                 aria-label="Close"
             >
@@ -587,9 +581,9 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
             {/* Progress bar - either auto-dismiss or manual progress */}
             {((shouldAutoDismiss && duration > 0) || typeof progressValue === 'number') && (
                 <div className="toast-progress-track">
-                    <div
+                    <motion.div
                         className="toast-progress-bar"
-                        style={{ transform: `scaleX(${(typeof progressValue === 'number' ? progressValue : progress) / 100})` }}
+                        style={{ scaleX: typeof progressValue === 'number' ? progressValue / 100 : progress }}
                     />
                 </div>
             )}

@@ -287,11 +287,28 @@ pub struct KoPortrait {
 pub async fn xtra_ko_portrait(mod_path: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Option<KoPortrait>, String> {
     let Some((_, assets)) = mod_assets(&mod_path).await else { return Ok(None) };
     let Some(hero) = portrait_hero(&assets) else { return Ok(None) };
+    hero_portrait(hero, &state).await.map(Some)
+}
+
+/// Missing community portraits come from the installed game, using the same cache as KO mod logos.
+#[tauri::command]
+pub async fn xtra_ko_hero_portrait(hero: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<KoPortrait, String> {
+    hero_portrait(hero, &state).await
+}
+
+fn hero_logo_asset(hero: &str) -> Result<String, String> {
+    if hero.len() != 4 || !hero.bytes().all(|c| c.is_ascii_digit()) {
+        return Err("Invalid hero id".into());
+    }
+    Ok(format!("Marvel/Content/Marvel/UI/Textures/HeroLogo/HeroLogo_Little/img_herologo_{hero}_logo"))
+}
+
+async fn hero_portrait(hero: String, state: &State<'_, Arc<Mutex<AppState>>>) -> Result<KoPortrait, String> {
+    let rel = hero_logo_asset(&hero)?;
     let usmap = crate::vfx_updater::commands::saved_usmap_path().ok_or("No USMAP is available to read the hero logo.")?;
     let _one = ONE.lock().await;
-    let paks = paks(&state)?;
+    let paks = paks(state)?;
     let base = build_dir(&paks, &usmap).join("logos").join(&hero);
-    let rel = format!("Marvel/Content/Marvel/UI/Textures/HeroLogo/HeroLogo_Little/img_herologo_{hero}_logo");
     let png = base.join("png").join(format!("{rel}.png"));
     if !png.exists() {
         let ex = base.join("extract");
@@ -304,7 +321,7 @@ pub async fn xtra_ko_portrait(mod_path: String, state: State<'_, Arc<Mutex<AppSt
         }, "Reading the hero logo").await?;
     }
     if !png.exists() { return Err(format!("The game has no readable logo for hero {hero}.")); }
-    Ok(Some(KoPortrait { hero, logo: png.to_string_lossy().replace('\\', "/") }))
+    Ok(KoPortrait { hero, logo: png.to_string_lossy().replace('\\', "/") })
 }
 
 #[derive(Serialize, Debug)]
@@ -383,6 +400,14 @@ pub fn xtra_ko_save_preview(app: tauri::AppHandle, request: tauri::ipc::Request<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hero_logos_only_accept_game_ids() {
+        assert!(hero_logo_asset("1069").unwrap().ends_with("img_herologo_1069_logo"));
+        for id in ["", "../x", "1069/", "abcd", "1069001"] {
+            assert!(hero_logo_asset(id).is_err(), "{id}");
+        }
+    }
 
     #[test]
     fn portrait_matches_the_ko_hero_only() {

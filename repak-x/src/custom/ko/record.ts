@@ -16,28 +16,35 @@ export async function recordClip(scene: Scene, size: { w: number; h: number }, k
   const ctx = c.getContext('2d')!
   const frame = frameFor(scene.core, size), length = duration(scene) + 0.5
   const paint = (t: number) => drawClear(ctx, scene, t, size, { kills, colors, frame })
-  const stream = c.captureStream(30)
+  const stream = c.captureStream(60)
+  let raf = 0, timer = 0
   try {
     paint(0)
     const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 4_000_000 })
     const parts: Blob[] = []
     rec.ondataavailable = e => { if (e.data.size) parts.push(e.data) }
-    const stopped = new Promise<void>(res => { rec.onstop = () => res() })
-    rec.start()
-    // a timer, not animation frames: those stop while the window is hidden or minimized, and the recording would never end
-    await new Promise<void>(res => {
+    await new Promise<void>((resolve, reject) => {
+      rec.onstop = () => resolve()
+      rec.onerror = () => reject(new Error('The KO preview could not be recorded.'))
+      rec.start()
       const start = performance.now()
-      const id = setInterval(() => {
+      // Paint on the display clock. A background timer still finishes a minimized window's recording.
+      const tick = () => {
+        cancelAnimationFrame(raf); clearTimeout(timer)
+        if (rec.state !== 'recording') return
         const t = (performance.now() - start) / 1000
-        paint(Math.min(t, length))
-        if (t >= length) { clearInterval(id); res() }
-      }, 1000 / 30)
+        try { paint(Math.min(t, length)) } catch (e) { rec.stop(); reject(e); return }
+        if (t >= length) { rec.stop(); return }
+        raf = requestAnimationFrame(tick)
+        timer = window.setTimeout(tick, 100)
+      }
+      raf = requestAnimationFrame(tick)
+      timer = window.setTimeout(tick, 100)
     })
-    rec.stop()
-    await stopped
     const blob = new Blob(parts, { type: 'video/webm' })
     return blob.size > 1000 ? blob : null
   } finally {
+    cancelAnimationFrame(raf); clearTimeout(timer)
     stream.getTracks().forEach(t => t.stop())
     c.remove()
   }
