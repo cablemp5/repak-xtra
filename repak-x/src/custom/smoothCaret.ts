@@ -66,12 +66,15 @@ function place() {
   }
 
   const r = el.getBoundingClientRect()
-  const size = parseFloat(cs.fontSize)
+  // CSS zoom on a parent (the Home card size): the mirror and the field's own lengths are unzoomed, its rect is not
+  const k = el.currentCSSZoom ?? 1
+  left *= k; top *= k; line *= k
+  const size = parseFloat(cs.fontSize) * k
   line ||= size * 1.2
   const height = Math.round(Math.min(line, size * 1.3))
-  const x = r.left + el.clientLeft + left - el.scrollLeft
+  const x = r.left + (el.clientLeft - el.scrollLeft) * k + left
   // an input centers its one line in its height, a textarea stacks lines from its top padding
-  const y = area ? r.top + el.clientTop + top - el.scrollTop + (line - height) / 2 : r.top + (r.height - height) / 2
+  const y = area ? r.top + (el.clientTop - el.scrollTop) * k + top + (line - height) / 2 : r.top + (r.height - height) / 2
   if (x < r.left - 1 || x > r.right + 1 || y < r.top - 1 || y + height > r.bottom + 1) return hide() // scrolled out of the field
 
   el.classList.add('has-smooth-caret')
