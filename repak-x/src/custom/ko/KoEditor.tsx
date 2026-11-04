@@ -19,6 +19,7 @@ import sceneBackground from './scene-background.png'
 import { randomizeColors } from './randomize'
 import RandomizeButton from './RandomizeButton'
 import './ko.css'
+import { useSkeletonFill } from '../useSkeletonFill'
 
 type Saved = Record<string, { colors?: Record<string, string>; name?: string; hue?: number }>
 const STORE = 'repakxtra.koEditor'
@@ -83,6 +84,8 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
   const entry = (hero && saved[hero.id]) || {}
   const name = entry.name ?? (hero ? `${hero.name} KO Prompt` : '')
   const roles = useMemo(() => (loaded?.hero.id === heroId ? loaded.scene.w.roles : []), [loaded, heroId])
+  const heroSkeleton = useSkeletonFill<HTMLDivElement>(!heroes && !listError)
+  const roleSkeleton = useSkeletonFill<HTMLUListElement>(!roles.length, heroId)
   const hue = entry.hue ?? 0
   // what each role shows and installs: its pick (or the game's color), turned by the hue shift. Only the ones that differ
   const colors = useMemo(() => new Map(roles.flatMap(r => {
@@ -244,8 +247,8 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
           <Search size={16} aria-hidden />
           <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search heroes" aria-label="Search heroes" />
         </label>
-        <div className="ko-hero-list" role="listbox" aria-label="Hero" onKeyDown={moveInList}>
-          {!heroes && !listError && Array.from({ length: 10 }, (_, i) => <div key={i} className="ko-hero is-ghost" />)}
+        <div ref={heroSkeleton.ref} className="ko-hero-list" role="listbox" aria-label="Hero" aria-busy={!heroes && !listError} onKeyDown={moveInList}>
+          {!heroes && !listError && Array.from({ length: heroSkeleton.count }, (_, i) => <div key={i} className="ko-hero is-ghost" aria-hidden="true" />)}
           {listError && <p className="ko-note ko-pad">{listError}</p>}
           {heroes && !shownHeroes.length && <p className="ko-note ko-pad">No hero matches “{query.trim()}”.</p>}
           {ROLE_ORDER.map(group => {
@@ -342,7 +345,7 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
             save({ colors: randomizeColors(roles, colors, options), hue: 0 }); cue('select')
           }} />
         </div>
-        <ul key={heroId ?? 'none'} className="ko-roles" onMouseLeave={() => setFocus(null)}>
+        <ul key={heroId ?? 'none'} ref={roleSkeleton.ref} className="ko-roles" aria-busy={!roles.length} onMouseLeave={() => setFocus(null)}>
           {groupRoles(roles).flatMap(([group, rs]) => [
             <li key={`g:${group}`} className={`ko-group-head${focus?.length === rs.length && rs.every(r => focus.includes(r.id)) ? ' is-focus' : ''}`} tabIndex={0}
               onMouseEnter={() => setFocus(rs.map(r => r.id))} onFocus={() => setFocus(rs.map(r => r.id))} onBlur={() => setFocus(null)}
@@ -362,7 +365,7 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
               )
             }),
           ])}
-          {!roles.length && Array.from({ length: 8 }, (_, i) => <li key={i} className="ko-role is-ghost" />)}
+          {!roles.length && Array.from({ length: roleSkeleton.count }, (_, i) => <li key={i} className="ko-role is-ghost" aria-hidden="true" />)}
         </ul>
         <div className="ko-out">
           <label className="ko-label" htmlFor="ko-name">Name</label>
