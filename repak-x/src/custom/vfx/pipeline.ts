@@ -177,6 +177,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     if (src !== o.modPath) log(`Starting from its original, ${stem(src)}.`)
     // the USMAP may be older than the game: fine unless the patch rewrote files this update decodes
     const wait = await invoke<UsmapWait | null>('xtra_vfx_usmap_wait', { modPath: src, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath })
+    // not a policy refusal: the flagged mod cannot be made safe yet, so it still follows Safety and can turn off
     if (wait?.changed) { report.error = `Not updated yet. ${usmapWaitText(wait)}`; return report }
     // the game as it is now: an update that lands mid-run makes this one stale, so placing checks it again
     const buildAt = await invoke<{ updated: number }>('xtra_game_build').then(b => b.updated)
