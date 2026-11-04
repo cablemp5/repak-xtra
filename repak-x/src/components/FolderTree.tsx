@@ -111,8 +111,9 @@ const FolderNode = ({ node, selectedFolderId, onSelect, onDelete, getCount, hasF
         setIsOpen(!isOpen);
     };
 
-    const handleSelect = () => {
+    const handleSelect = (e: React.MouseEvent) => {
         // e.stopPropagation(); // Allow click to bubble to close context menu
+        if ((e.target as Element).closest('.node-toggle-icon')) return; // repakxtra: the chevron only expands, it keeps the selection
         if (!node.isVirtual && node.id) {
             onSelect(node.id);
         } else {
@@ -242,7 +243,7 @@ const FolderTree = ({ folders, selectedFolderId, onSelect, onDelete, getCount, h
                 <div className="folder-tree-node">
                     <div
                         className={`node-content ${selectedFolderId === rootFolder.id ? 'selected' : ''}`}
-                        onClick={() => onSelect(rootFolder.id)}
+                        onClick={(e) => { if (!(e.target as Element).closest('.node-toggle-icon')) onSelect(rootFolder.id) /* repakxtra: the chevron only expands */ }}
                         onContextMenu={(e) => {
                             if (!onContextMenu) return;
                             e.preventDefault();

@@ -79,7 +79,6 @@ function GroupHead({ p, name, count, at, total, editing, setEditing, folded, onF
   folded: boolean; onFold: () => void
 }) {
   const [draft, setDraft] = useState(name)
-  const foldTimer = useRef<ReturnType<typeof setTimeout>>()
   const real = groupKey(name) !== groupKey(OTHER)
   const done = (save: boolean) => { if (save) renameGroup(name, draft); setEditing(null) }
   const remove = () => {
@@ -96,10 +95,9 @@ function GroupHead({ p, name, count, at, total, editing, setEditing, folded, onF
             onFocus={e => e.target.select()} onChange={e => setDraft(e.target.value)} onBlur={() => done(true)}
             onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') done(true); if (e.key === 'Escape') { setDraft(name); done(false) } }} />
         : <span className="lo-group-name" role="heading" aria-level={3}
-            // a click folds it like the arrow, a double-click renames: the fold waits a moment so a double-click is only the rename
-            onClick={() => { clearTimeout(foldTimer.current); if (!real) onFold(); else foldTimer.current = setTimeout(onFold, 220) }}
-            onDoubleClick={() => { clearTimeout(foldTimer.current); if (real) { setDraft(name); setEditing(name) } }}
-            title={real ? `${name} (click to ${folded ? 'show' : 'collapse'}, double-click to rename)` : `Loadouts in no collection (click to ${folded ? 'show' : 'collapse'})`}>{real ? name : OTHER_LABEL}</span>}
+            // a click folds it at once like the arrow, the pencil beside it renames
+            onClick={onFold}
+            title={real ? `${name} (click to ${folded ? 'show' : 'collapse'})` : `Loadouts in no collection (click to ${folded ? 'show' : 'collapse'})`}>{real ? name : OTHER_LABEL}</span>}
       {real && !editing && (
         <button type="button" className="lo-icon lo-group-pen" aria-label={`Rename ${name}`} title="Rename collection" onClick={() => { setDraft(name); setEditing(name) }}><Pencil size={13} /></button>
       )}
