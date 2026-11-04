@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo, memo } from 'react';
 import type { ReactNode } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue } from 'framer-motion';
 import { Check, X } from 'lucide-react'; // repakxtra: a plain check for success, X for Clear all
 import './ui/Alert.css';
 import { alertSound } from '../custom/sounds' // repakxtra
@@ -434,7 +434,7 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
         ro.observe(el);
         return () => ro.disconnect();
     }, [toast.id, onHeight]);
-    const [progress, setProgress] = useState(100);
+    const progress = useMotionValue(1); // repakxtra: the countdown updates its bar without rerendering the toast
     const [isPaused, setIsPaused] = useState(false);
     const [hasFocus, setHasFocus] = useState(false); // repakxtra: focus in the toast holds its timer, like the pointer
     const held = isPaused || hasFocus;
@@ -452,7 +452,7 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
 
         const interval = setInterval(() => {
             const remaining = Math.max(0, 100 - (clockElapsed(clock.current, Date.now()) / duration) * 100);
-            setProgress(remaining);
+            progress.set(remaining / 100);
 
             if (remaining <= 0) {
                 clearInterval(interval);
@@ -464,7 +464,7 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
             clearInterval(interval);
             clock.current = holdClock(clock.current, true, Date.now());
         };
-    }, [id, duration, held, onDismiss, shouldAutoDismiss]);
+    }, [id, duration, held, onDismiss, shouldAutoDismiss, progress]);
 
     // Get the appropriate icon
     const getIcon = () => {
@@ -498,28 +498,21 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
     return (
         <motion.div
             ref={itemRef}
-            layout
-            // repakxtra: transitions.dev Banner stacking. A new banner rises in from a blur and pushes the others back
-            // (three deep, each smaller and dimmer); a dismissed one blurs out where it is
+            // repakxtra: transitions.dev Banner stacking, using only transform and opacity to avoid layout work during library updates
             initial={{
                 opacity: 0,
-                y: isBottom ? 24 : -24,
-                scale: 0.96,
-                filter: 'blur(4px)'
+                transform: `translateY(${isBottom ? 24 : -24}px) scale(0.96)`
             }}
             animate={{
                 opacity: opacity,
-                y: yOffset,
-                scale: scale,
-                filter: index === 0 || isHovered ? 'blur(0px)' : `blur(${index * 0.5}px)`
+                transform: `translateY(${yOffset}px) scale(${scale})`
             }}
             exit={{
                 opacity: 0,
-                scale: 0.96,
-                filter: 'blur(4px)'
+                transform: `translateY(${yOffset}px) scale(0.96)`
             }}
             transition={{
-                duration: 0.4,
+                duration: 0.22,
                 ease: [0.22, 1, 0.36, 1]
             }}
             className={`toast-item ${color} ${variant}${isLoading || typeof progressValue === 'number' ? ' is-working' : ''}`} /* repakxtra: shimmer while it works */
@@ -587,9 +580,9 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
             {/* Progress bar - either auto-dismiss or manual progress */}
             {((shouldAutoDismiss && duration > 0) || typeof progressValue === 'number') && (
                 <div className="toast-progress-track">
-                    <div
+                    <motion.div
                         className="toast-progress-bar"
-                        style={{ transform: `scaleX(${(typeof progressValue === 'number' ? progressValue : progress) / 100})` }}
+                        style={{ scaleX: typeof progressValue === 'number' ? progressValue / 100 : progress }}
                     />
                 </div>
             )}
