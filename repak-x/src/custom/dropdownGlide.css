@@ -1,0 +1,28 @@
+/* GlideSelect motion, with each menu's existing dimensions, colors, and corner radius. */
+[data-glide-static] { position: relative; }
+[data-glide-menu] { isolation: isolate; }
+[data-glide-menu]::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: -1;
+  pointer-events: none;
+  width: var(--dg-w, 0px);
+  height: var(--dg-h, 0px);
+  transform: translate(var(--dg-x, 0px), var(--dg-y, 0px));
+  border-radius: var(--dg-radius, 6px);
+  background: var(--dg-color, var(--quiet-hover));
+  opacity: 0;
+  transition: transform 220ms cubic-bezier(0.23, 1, 0.32, 1), width 220ms cubic-bezier(0.23, 1, 0.32, 1), height 220ms cubic-bezier(0.23, 1, 0.32, 1), opacity 150ms ease;
+}
+[data-glide-live]::before { opacity: 1; }
+/* The pinned footer still masks the options scrolling beneath it. Its tint passes over that opaque surface. */
+[data-glide-footer]::before { z-index: 2; }
+:root body [data-glide-live] [data-glide-row],
+:root body [data-glide-live] [data-glide-row]:is(:hover, :focus-visible, [aria-selected], [aria-checked], .danger, .is-danger) {
+  background: transparent !important;
+}
+:root body [data-glide-menu] .custom-dropdown-item.add-new[data-glide-row] { background: var(--bg-dark) !important; }
+[data-glide-instant]::before, html[data-motion="off"] [data-glide-menu]::before { transition: none; }
+@media (prefers-reduced-motion: reduce) { [data-glide-menu]::before { transition: none; } }

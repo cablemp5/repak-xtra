@@ -15,6 +15,7 @@ import './custom/theme.css' // repakxtra: theme for every window, last so it win
 import './custom/uiPrefs' // repakxtra: UI scale and optional controls in every window
 import './custom/smoothCaret' // repakxtra: the gliding caret in every text field
 import './custom/segSlide' // repakxtra: the sliding pill on every segmented bar
+import './custom/dropdownGlide' // repakxtra: moving highlights in every dropdown and menu
 
 // Disable default browser context menu
 document.addEventListener('contextmenu', (e) => {
