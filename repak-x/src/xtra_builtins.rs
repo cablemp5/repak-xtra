@@ -26,7 +26,7 @@ const SKIN: &str = "Marvel/Content/Marvel/Data/DataTable/MarvelHeroSkinTable";
 const LOGO: &str = "Marvel/Content/Marvel/Data/DataTable/UI/Login/MarvelLogoVideoTable";
 const LOGO_FLAGS: [&str; 4] = ["bUsedInCn", "bUsedInHkMoTw", "bUsedInJpKr", "bUsedInEnRegion"];
 /// The photosensitivity warning before the login screen: it moves on once its progress bar (Anim_ProgressBar, 4.75 s)
-/// has filled. Skip startup logos shortens that animation to a tick.
+/// has filled. Skip startup logos hides its root and shortens that animation to a tick.
 const WARN: &str = "Marvel/Content/Marvel/UI/Blueprints/Login/WBP_Login_Panel_Warn";
 pub const SKIP_INTRO: &str = "skip-intro-movies";
 const IDS: [&str; 1] = [SKIP_INTRO];
@@ -113,8 +113,8 @@ struct Saved {
 /// after the update (and the others do not).
 fn recipe(id: &str) -> u32 {
     match id {
-        // the photosensitivity warning joined the startup logos: older builds rebuild with it
-        SKIP_INTRO => 1,
+        // Rebuild older copies with the warning widget hidden as well as shortened.
+        SKIP_INTRO => 3,
         _ => 0,
     }
 }
@@ -386,6 +386,51 @@ fn shorten_warning(doc: &Value, raw: &mut [u8], header: usize) -> Result<usize, 
     Ok(changed)
 }
 
+/// Hide the whole widget tree while keeping its animation and completion callbacks alive.
+/// Preserve every other export as bytes, including Blueprint bytecode and compiled animation data.
+fn hide_warning(doc: &mut Value, raw: &[u8], header: usize) -> Result<(), String> {
+    use base64::Engine;
+    let exports = doc["Exports"].as_array_mut().ok_or("the warning has no exports")?;
+    let root = exports.iter().find(|e| e["ObjectName"] == "WidgetTree")
+        .and_then(|e| e["Data"].as_array())
+        .and_then(|p| p.iter().find(|p| p["Name"] == "RootWidget"))
+        .and_then(|p| p["Value"].as_u64()).and_then(|n| n.checked_sub(1))
+        .ok_or("the warning has no local root widget")? as usize;
+    if root >= exports.len() { return Err("the warning root widget is out of range".into()); }
+    for (i, export) in exports.iter_mut().enumerate() {
+        if i == root {
+            // shortcut: this widget's shipped schema uses Slots=2 and RenderOpacity=28.
+            // Re-read the rebuilt asset below, and refuse new layouts until this recipe is updated.
+            if export["OriginalUnversionedHeader"]["Fragments"] != serde_json::json!([{
+                "$type": "UAssetAPI.Unversioned.FFragment, UAssetAPI", "SkipNum": 2,
+                "ValueNum": 1, "bIsLast": true, "FirstNum": 2, "bHasAnyZeroes": false, "LastNum": 2
+            }]) || export["Data"].as_array().is_none_or(|d| d.len() != 1 || d[0]["Name"] != "Slots") {
+                return Err("the warning root layout changed".into());
+            }
+            let data = export["Data"].as_array_mut().ok_or("the warning root is not editable")?;
+            data.retain(|p| p["Name"] != "RenderOpacity");
+            data.push(serde_json::json!({
+                "$type": "UAssetAPI.PropertyTypes.Objects.FloatPropertyData, UAssetAPI",
+                "Name": "RenderOpacity", "ArrayIndex": 0, "IsZero": false,
+                "PropertyTagFlags": "None", "PropertyTagExtensions": "NoExtension", "Value": 0.0
+            }));
+            export["OriginalUnversionedHeader"]["Fragments"][0]["bIsLast"] = Value::Bool(false);
+            export["OriginalUnversionedHeader"]["Fragments"].as_array_mut().unwrap().push(serde_json::json!({
+                "$type": "UAssetAPI.Unversioned.FFragment, UAssetAPI", "SkipNum": 25,
+                "ValueNum": 1, "bIsLast": true, "FirstNum": 28, "bHasAnyZeroes": false, "LastNum": 28
+            }));
+        } else {
+            let at = export["SerialOffset"].as_u64().and_then(|n| (n as usize).checked_sub(header)).ok_or("invalid warning export offset")?;
+            let len = export["SerialSize"].as_u64().ok_or("invalid warning export size")? as usize;
+            let bytes = raw.get(at..at.checked_add(len).ok_or("warning export overflow")?).ok_or("warning export outside file")?;
+            export["$type"] = Value::String("UAssetAPI.ExportTypes.RawExport, UAssetAPI".into());
+            export["Data"] = Value::String(base64::engine::general_purpose::STANDARD.encode(bytes));
+            export["Extras"] = Value::String(String::new());
+        }
+    }
+    Ok(())
+}
+
 /// Exactly `flipped` bytes changed, each 01 -> 00, size kept.
 fn check_flags(a: &[u8], b: &[u8], flipped: usize) -> Result<(), String> {
     if a.len() != b.len() {
@@ -488,25 +533,40 @@ async fn make(tool: &Path, id: &str, paks: &Path, work: &Path, out_base: &Path) 
         if flipped == 0 {
             return Err("No startup logo video was on: the game changed how they are listed".to_string());
         }
-        // and the photosensitivity warning, edited in place (not through JSON): only its frame numbers change
+        // Shorten the animation in place, then rebuild only the root widget to hide its contents.
         let warned = match read_json(&json.join(format!("{WARN}.json"))) {
-            Ok(doc) => {
+            Ok(mut doc) => {
                 let mut raw = std::fs::read(legacy.join(format!("{WARN}.uexp"))).map_err(|e| format!("{WARN}.uexp: {e}"))?;
                 let header = std::fs::metadata(legacy.join(format!("{WARN}.uasset"))).map_err(|e| e.to_string())?.len() as usize;
                 let changed = shorten_warning(&doc, &mut raw, header).map_err(|e| format!("The warning screen could not be skipped: {e}"))?;
-                let dst = staged.join(WARN);
-                std::fs::create_dir_all(dst.parent().unwrap()).map_err(|e| e.to_string())?;
-                std::fs::copy(legacy.join(format!("{WARN}.uasset")), dst.with_extension("uasset")).map_err(|e| format!("{WARN}.uasset: {e}"))?;
-                std::fs::write(dst.with_extension("uexp"), raw).map_err(|e| e.to_string())?;
+                hide_warning(&mut doc, &raw, header)?;
+                write_json(&edited.join(format!("{WARN}.json")), &doc)?;
                 changed > 0
             }
-            Err(_) => false, // a game without this screen: the logos still go
+            Err(e) => return Err(format!("The warning screen could not be read: {e}")),
         };
         summary = format!("{flipped} startup logo videos turned off{}", if warned { ", and the photosensitivity warning skipped" } else { "" });
         write_json(&edited.join(format!("{LOGO}.json")), &logo)?;
     }
 
     convert_json_to_uassets(&tool, &usmap, &s(&edited), &s(&rt), &sink).await?;
+    let checked = work.join("checked");
+    convert_uassets_to_json(&tool, &usmap, &s(&rt), &s(&checked), &sink).await?;
+    let rebuilt = read_json(&checked.join(format!("{WARN}.json")))?;
+    let original = read_json(&json.join(format!("{WARN}.json")))?;
+    let root = original["Exports"].as_array().into_iter().flatten().find(|e| e["ObjectName"] == "WidgetTree")
+        .and_then(|e| e["Data"].as_array()).and_then(|d| d.iter().find(|p| p["Name"] == "RootWidget"))
+        .and_then(|p| p["Value"].as_u64()).ok_or("missing warning root")? as usize - 1;
+    let data = rebuilt["Exports"][root]["Data"].as_array().ok_or("the hidden warning root did not decode")?;
+    if !data.iter().any(|p| p["Name"] == "RenderOpacity" && p["Value"].as_f64().or_else(|| p["Value"].as_str()?.parse::<f64>().ok()) == Some(0.0))
+        || data.iter().find(|p| p["Name"] == "Slots") != original["Exports"][root]["Data"].as_array().and_then(|d| d.iter().find(|p| p["Name"] == "Slots")) {
+        return Err("the hidden warning did not rebuild correctly".into());
+    }
+    for ext in ["uasset", "uexp"] {
+        let dst = staged.join(format!("{WARN}.{ext}"));
+        std::fs::create_dir_all(dst.parent().unwrap()).map_err(|e| e.to_string())?;
+        std::fs::copy(rt.join(format!("{WARN}.{ext}")), dst).map_err(|e| format!("warning {ext}: {e}"))?;
+    }
     // the game's own header (names, imports, sizes unchanged) with the rebuilt export data, checked byte by byte
     for rel in tables {
         let dst = staged.join(rel);
@@ -1035,6 +1095,24 @@ mod tests {
         assert_eq!(raw, [&7i32.to_le_bytes()[..], &1i32.to_le_bytes(), &2i32.to_le_bytes(), &1i32.to_le_bytes(), &1i32.to_le_bytes()].concat());
         let mut extra = [&285000i32.to_le_bytes()[..], &285000i32.to_le_bytes(), &285000i32.to_le_bytes(), &285001i32.to_le_bytes(), &0i32.to_le_bytes()].concat();
         assert!(shorten_warning(&doc, &mut extra, 100).is_err(), "a value outside the compiled copy the decoded file does not show stops the build");
+    }
+
+    #[test]
+    fn warning_is_invisible_without_removing_its_tree_or_callbacks() {
+        let mut doc = json!({ "Exports": [
+            { "ObjectName": "Root", "Data": [{ "Name": "Slots", "Value": [1, 2] }],
+              "OriginalUnversionedHeader": { "Fragments": [{ "$type": "UAssetAPI.Unversioned.FFragment, UAssetAPI", "SkipNum": 2, "ValueNum": 1, "bIsLast": true, "FirstNum": 2, "bHasAnyZeroes": false, "LastNum": 2 }] } },
+            { "ObjectName": "WidgetTree", "SerialOffset": 100, "SerialSize": 3,
+              "Data": [{ "Name": "RootWidget", "Value": 1 }] },
+            { "ObjectName": "Callback", "SerialOffset": 103, "SerialSize": 2 }
+        ] });
+        hide_warning(&mut doc, &[1, 2, 3, 4, 5], 100).unwrap();
+        assert_eq!(doc["Exports"][0]["Data"][0]["Value"], json!([1, 2]));
+        assert_eq!(doc["Exports"][0]["Data"][1]["Value"], 0.0);
+        assert_eq!(doc["Exports"][1]["Data"], "AQID");
+        assert_eq!(doc["Exports"][2]["Data"], "BAU=");
+        let mut invalid = json!({ "Exports": [{ "ObjectName": "WidgetTree", "Data": [{ "Name": "RootWidget", "Value": 99 }] }] });
+        assert!(hide_warning(&mut invalid, &[], 100).is_err());
     }
 
     #[test]

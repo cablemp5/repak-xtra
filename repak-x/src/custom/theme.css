@@ -1712,9 +1712,9 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
 .lo-media.is-running .lo-card-placeholder, .lo-media.is-queued .lo-card-placeholder { visibility: hidden; }
 .lo-skel { position: absolute; inset: 0; z-index: 1; pointer-events: none; display: flex; align-items: center; justify-content: center;
   overflow: hidden; background: rgba(6, 7, 9, 0.55); animation: t-skel-pulse var(--pulse-dur) ease-in-out infinite; }
-@keyframes t-skel-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.85; } }
+@keyframes t-skel-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 /* Running: a light band sweeps across, so it reads as working; queued only pulses */
-.lo-media.is-running .lo-skel { animation: none; }
+.lo-media.is-running .lo-skel { animation-duration: 1.6s; }
 /* The sweep is its own band, as wide as the card, moving from fully off the left edge to fully off the right one. Its
    gradient runs straight across (90deg), so both edges of the band are fully clear and only the soft middle shows. */
 .lo-media.is-running .lo-skel::after { content: ''; position: absolute; inset: 0;

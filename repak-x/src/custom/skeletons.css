@@ -1,0 +1,17 @@
+/* transitions.dev: Skeleton loader. One quiet pulse for placeholder shapes. */
+@keyframes skeleton-pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+.ko-hero.is-ghost::before, .ko-hero.is-ghost::after,
+.ko-role.is-ghost::before, .ko-role.is-ghost::after {
+  background: color-mix(in srgb, var(--text-primary) 12%, var(--panel-bg));
+  animation: skeleton-pulse 1.6s ease-in-out infinite;
+}
+.ko-hero.is-ghost, .ko-role.is-ghost { background: none; animation: none; margin: 0; pointer-events: none; }
+.ko-hero.is-ghost { height: 32px; }
+.ko-hero.is-ghost::before, .ko-role.is-ghost::before { content: ''; flex: none; width: 20px; height: 20px; border-radius: 50%; }
+.ko-role.is-ghost::before { width: 28px; height: 28px; border-radius: 6px; }
+.ko-hero.is-ghost::after, .ko-role.is-ghost::after { content: ''; width: 60%; height: 12px; border-radius: 4px; }
+.ko-hero.is-ghost:nth-child(3n)::after, .ko-role.is-ghost:nth-child(3n)::after { width: 45%; }
+html[data-motion="off"] .is-skeleton *, html[data-motion="off"] .is-ghost::before, html[data-motion="off"] .is-ghost::after { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .is-skeleton *, .is-ghost::before, .is-ghost::after, .lo-skel, .lo-skel::after { animation: none !important; }
+}

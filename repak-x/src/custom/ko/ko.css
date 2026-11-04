@@ -26,17 +26,13 @@ html[data-view="ko"] .view-tabs::before { transform: translateX(calc(200% + 4px)
 .ko-search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--text-primary); font: inherit; font-size: 14px; }
 .ko-search input::placeholder { color: var(--text-secondary); }
 .ko-hero-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.12) transparent; }
-.ko-hero { display: flex; align-items: center; gap: 8px; height: 32px; flex: none; padding: 0 8px; border: 0; border-radius: 6px; background: transparent;
+.ko-hero { display: flex; align-items: center; gap: 8px; height: 32px; min-height: 32px; flex: none; padding: 0 8px; border: 0; border-radius: 6px; background: transparent;
   color: var(--text-secondary); font: inherit; font-size: 13px; text-align: left; cursor: pointer; transition: background-color 150ms ease, color 150ms ease; }
 .ko-hero:hover { background: var(--quiet-hover); color: var(--text-primary); }
 .ko-hero[aria-selected="true"] { background: var(--quiet-active); color: var(--text-primary); font-weight: 600; }
 .ko-hero img { width: 20px; height: 20px; flex: none; border-radius: 50%; object-fit: cover; background: var(--bg-light); }
 .ko-hero span:not(.ko-dot) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ko-dot { width: 6px; height: 6px; flex: none; margin-right: 2px; border-radius: 50%; background: var(--accent-primary); }
-.ko-hero.is-ghost, .ko-role.is-ghost { pointer-events: none; background: linear-gradient(90deg, rgba(255,255,255,0.03), rgba(255,255,255,0.06), rgba(255,255,255,0.03)) 0 0 / 200% 100%;
-  animation: ko-shimmer 1.4s linear infinite; }
-.ko-hero.is-ghost { height: 28px; margin: 2px 0; }
-@keyframes ko-shimmer { to { background-position: -200% 0; } }
 
 /* center: a header like the Library's list header, then the stage and its transport */
 .ko-center { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
@@ -120,7 +116,7 @@ html[data-view="ko"] .view-tabs::before { transform: translateX(calc(200% + 4px)
 
 .ko-roles { flex: 1; min-height: 0; overflow-y: auto; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 1px; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.12) transparent; }
 .ko-role { display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 1px 4px 1px 8px; border-radius: 6px; transition: background-color 150ms ease; }
-.ko-role.is-ghost { height: 32px; min-height: 0; margin: 4px 0; }
+.ko-role.is-ghost { flex: none; min-height: 34px; }
 .ko-role:not(.is-ghost):hover, .ko-role:focus-within, .ko-role.is-focus { background: var(--quiet-hover); }
 .ko-role-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ko-role-name em { font-style: normal; color: var(--text-secondary); font-weight: 400; }
