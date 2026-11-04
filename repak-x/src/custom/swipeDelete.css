@@ -2,7 +2,7 @@
 .view-list .mod-swipe, .view-list-compact .mod-swipe { border-radius: 6px; }
 .mod-swipe-surface { position: relative; z-index: 1; background: var(--bg-dark); }
 .mod-swipe .mod-card { margin: 0; }
-.mod-swipe-delete { position: absolute; top: 0; bottom: 0; left: 100%; width: 100%; display: flex; align-items: center; padding: 0; border: 0; border-radius: inherit; background: color-mix(in srgb, #f2555a 10%, var(--bg-dark)); color: #f2555a; font: inherit; font-size: 12px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: none; }
+.mod-swipe-delete { position: absolute; top: 0; bottom: 0; left: 100%; width: 100%; display: flex; align-items: center; padding: 0; border: 0; border-radius: inherit; background: var(--bg-dark); color: #f2555a; font: inherit; font-size: 12px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: none; }
 .mod-swipe-glyph { display: flex; flex: none; width: 100%; align-items: center; justify-content: center; gap: 6px; padding: 0 8px; }
 .mod-swipe-delete svg { flex: none; width: 16px; height: 16px; }
 .app .mod-swipe:focus-visible, .app .mod-swipe-delete:focus-visible { outline: none !important; box-shadow: none !important; }
