@@ -22,7 +22,7 @@ import { plural } from './modName'
 import { SwapText } from './motion'
 import { GeneratePreviewsButton, previewSetKey } from './previews'
 import { CaptureButton, captureTarget } from './CapturePreview'
-import LoadoutImage from './LoadoutImage'
+import useLoadoutImage from './LoadoutImage'
 
 const PAGE = 60
 
@@ -141,6 +141,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
   const [limit, setLimit] = useState(PAGE)
   const [sort, setSort] = useState<'name' | 'newest'>('newest')
   const [exporting, setExporting] = useState(false)
+  const loadoutImage = useLoadoutImage(p, l)
   const searchRef = useRef<HTMLInputElement>(null)
   const freshId = useRef<string | null>(null) // just made: Enter on its name goes on to Search mods to add
   useEffect(() => { setName(l.name) }, [l.id, l.name])
@@ -311,8 +312,9 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
               </span>
             </label>
             {/* The rest are occasional: one menu instead of a wrapping row of equal buttons */}
-            <LoadoutImage key={l.id} p={p} l={l} />
+            {loadoutImage.dialog}
             <MoreMenu items={[
+              { label: 'Share loadout card', onClick: loadoutImage.open },
               { label: 'Duplicate', onClick: () => openLoadout(duplicateLoadout(l).id, true) },
               { label: exporting ? 'Exporting…' : 'Export as zip', onClick: exportZip, disabled: exporting },
               ...(missing.length ? [{ label: `Remove ${plural(missing.length, 'missing mod')}`, onClick: dropMissing }] : []),

@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom'
 import Checkbox from '../components/ui/Checkbox'
 import { save } from '@tauri-apps/plugin-dialog'
 import { writeFile } from '@tauri-apps/plugin-fs'
-import { Forward } from 'lucide-react'
 import type { LoadoutProps } from './Loadouts'
 import { type Loadout, displayName, memberName } from './loadoutStore'
 import { loadoutHero } from './silhouettes'
@@ -22,9 +21,14 @@ export function coverSize(w: number, h: number, width: number, height: number) {
 export function imageLines(text: string, fits: (s: string) => boolean): string[] {
   const lines: string[] = []
   let line = ''
-  for (const char of text.replace(/\s+/g, ' ').trim()) {
-    if (line && !fits(line + char)) { lines.push(line.trim()); line = '' }
-    line += char
+  for (const word of text.trim().split(/\s+/)) {
+    const next = line ? `${line} ${word}` : word
+    if (fits(next)) { line = next; continue }
+    if (line) { lines.push(line); line = '' }
+    for (const char of word) {
+      if (line && !fits(line + char)) { lines.push(line); line = '' }
+      line += char
+    }
   }
   if (line.trim()) lines.push(line.trim())
   return lines
@@ -49,47 +53,53 @@ function Editor({ p, l, picture, close }: { p: LoadoutProps; l: Loadout; picture
     setReady(false)
     const portrait = new Image()
     if (portraitUrl) portrait.src = portraitUrl
-    void Promise.all([document.fonts.load('800 48px Geist'), portraitUrl ? portrait.decode().then(() => portrait).catch(() => null) : null]).then(([, icon]) => {
+    void Promise.all([document.fonts.load('800 56px Geist'), document.fonts.load('500 28px Geist'), document.fonts.load('400 24px Geist'), portraitUrl ? portrait.decode().then(() => portrait).catch(() => null) : null]).then(([, , , icon]) => {
       if (!live || !canvas.current) return
       try {
         const c = canvas.current, ctx = c.getContext('2d')
         if (!ctx) throw new Error('Image drawing is unavailable.')
         const width = layout === 'wide' ? 1600 : 1200
-        const panel = layout === 'wide' ? 960 : 700, left = panel + 48, textWidth = width - left - 48
-        ctx.font = '500 23px Geist, sans-serif'
+        const wide = layout === 'wide'
+        const panel = wide ? 880 : width, left = wide ? panel + 64 : 64
+        const textWidth = width - left - 64
+        const titleY = wide ? 64 : 736
+        ctx.font = '500 28px Geist, sans-serif'
         const rows = keys.filter(k => selected.has(k)).map(k => ({
           name: imageLines(memberName(k), s => ctx.measureText(s).width <= textWidth),
-          credit: imageLines(credits[k]?.trim() ? `by ${credits[k].trim()}` : '', s => ctx.measureText(s).width <= textWidth),
+          credit: credits[k]?.trim() || '',
         }))
-        ctx.font = '800 46px Geist, sans-serif'
+        ctx.font = '800 56px Geist, sans-serif'
         const title = imageLines(l.name, s => ctx.measureText(s).width <= textWidth)
-        ctx.font = '500 22px Geist, sans-serif'
-        const heroes = imageLines(hero, s => ctx.measureText(s).width <= textWidth - (icon ? 64 : 0))
-        const titleY = 48 + Math.max(48, heroes.length * 28) + 40
-        const start = titleY + title.length * 54 + 44
+        ctx.font = '400 24px Geist, sans-serif'
+        const heroes = imageLines(hero, s => ctx.measureText(s).width <= textWidth - (icon ? 56 : 0))
+        const components = rows.map(row => ({ ...row, credit: imageLines(row.credit ? `by ${row.credit}` : '', s => ctx.measureText(s).width <= textWidth) }))
+        const heroY = titleY + title.length * 64 + 20
+        const start = heroY + Math.max(40, heroes.length * 32) + 56
         c.width = width
-        c.height = Math.max(layout === 'wide' ? 900 : 1200, start + rows.reduce((n, r) => n + (r.name.length + r.credit.length) * 30 + 26, 0) + 120)
+        c.height = Math.max(wide ? 900 : 1200, start + components.reduce((n, r) => n + r.name.length * 36 + r.credit.length * 30 + (r.credit.length ? 8 : 0) + 28, 0) + 112)
         ctx.fillStyle = '#111214'; ctx.fillRect(0, 0, c.width, c.height)
-        const crop = coverSize(picture.width, picture.height, panel, c.height)
-        ctx.save(); ctx.beginPath(); ctx.rect(0, 0, panel, c.height); ctx.clip()
+        const imageHeight = wide ? c.height : 672
+        const crop = coverSize(picture.width, picture.height, panel, imageHeight)
+        ctx.save(); ctx.beginPath(); ctx.rect(0, 0, panel, imageHeight); ctx.clip()
         ctx.drawImage(picture, crop.x, crop.y, crop.width, crop.height)
         ctx.restore()
-        ctx.textBaseline = 'top'; ctx.fillStyle = '#a4a5a8'; ctx.font = '500 22px Geist, sans-serif'
+        ctx.textBaseline = 'top'; ctx.fillStyle = '#f5f5f5'; ctx.font = '800 56px Geist, sans-serif'
+        let y = titleY
+        for (const line of title) { ctx.fillText(line, left, y); y += 64 }
+        ctx.fillStyle = '#a4a5a8'; ctx.font = '400 24px Geist, sans-serif'
         if (icon) {
-          ctx.save(); ctx.beginPath(); ctx.arc(left + 24, 72, 24, 0, Math.PI * 2); ctx.clip()
-          ctx.drawImage(icon, left, 48, 48, 48); ctx.restore()
+          ctx.drawImage(icon, left, heroY, 40, 40)
         }
-        let y = 58
-        for (const line of heroes) { ctx.fillText(line, left + (icon ? 64 : 0), y); y += 28 }
-        ctx.fillStyle = '#f5f5f5'; ctx.font = '800 46px Geist, sans-serif'; y = titleY
-        for (const line of title) { ctx.fillText(line, left, y); y += 54 }
-        y += 44
-        for (const row of rows) {
-          ctx.font = '500 23px Geist, sans-serif'; ctx.fillStyle = '#e6e6e7'
-          for (const line of row.name) { ctx.fillText(line, left, y); y += 30 }
-          ctx.font = '400 20px Geist, sans-serif'; ctx.fillStyle = '#929397'
+        y = heroY + 4
+        for (const line of heroes) { ctx.fillText(line, left + (icon ? 56 : 0), y); y += 32 }
+        y = start
+        for (const row of components) {
+          ctx.font = '500 28px Geist, sans-serif'; ctx.fillStyle = '#e6e6e7'
+          for (const line of row.name) { ctx.fillText(line, left, y); y += 36 }
+          if (row.credit.length) y += 8
+          ctx.font = '400 24px Geist, sans-serif'; ctx.fillStyle = '#929397'
           for (const line of row.credit) { ctx.fillText(line, left, y); y += 30 }
-          y += 26
+          y += 28
         }
         const logoScale = 190 / W
         ctx.save(); ctx.translate(left - LEFT * logoScale, c.height - 48 - H * logoScale + TOP * logoScale); ctx.scale(logoScale, -logoScale)
@@ -114,9 +124,9 @@ function Editor({ p, l, picture, close }: { p: LoadoutProps; l: Loadout; picture
     finally { setBusy(false) }
   }
   return <div className="modal-overlay" onClick={() => !busy && close()}>
-    <div className="modal-content li-dialog" role="dialog" aria-modal="true" aria-label="Share loadout image" tabIndex={-1} ref={focus.ref}
+    <div className="modal-content li-dialog" role="dialog" aria-modal="true" aria-label="Share loadout card" tabIndex={-1} ref={focus.ref}
       onClick={e => e.stopPropagation()} onKeyDown={e => { focus.onKeyDown(e); if (e.key === 'Escape') { e.stopPropagation(); if (!busy) close() } }}>
-      <div className="modal-header"><h2>Share loadout image</h2><button className="modal-close" aria-label="Close" disabled={busy} onClick={close}>×</button></div>
+      <div className="modal-header"><h2>Share loadout card</h2><button className="modal-close" aria-label="Close" disabled={busy} onClick={close}>×</button></div>
       <div className="li-body">
         <div className="mod-state-filter" role="group" aria-label="Image layout">
           <button aria-pressed={layout === 'wide'} onClick={() => setLayout('wide')}>Wide</button>
@@ -135,11 +145,11 @@ function Editor({ p, l, picture, close }: { p: LoadoutProps; l: Loadout; picture
   </div>
 }
 
-export default function LoadoutImage({ p, l }: { p: LoadoutProps; l: Loadout }) {
+export default function useLoadoutImage(p: LoadoutProps, l: Loadout) {
   const [picture, setPicture] = useState<HTMLCanvasElement | null>(null)
-  const open = (button: HTMLButtonElement) => {
+  const open = () => {
     try {
-      const media = [...(button.closest('.lp')?.querySelectorAll('.lp-media .lo-card-image img, .lp-media .lo-card-image video') ?? [])]
+      const media = [...document.querySelectorAll('.lp .lp-media .lo-card-image img, .lp .lp-media .lo-card-image video')]
         .filter((el): el is HTMLImageElement | HTMLVideoElement => (el instanceof HTMLImageElement && el.complete && el.naturalWidth > 0) || (el instanceof HTMLVideoElement && el.readyState >= 2))
       if (!media.length) throw new Error('Choose a preview, capture, or image first. Wait for it to finish loading.')
       const sizes = media.map(el => ({ w: el instanceof HTMLImageElement ? el.naturalWidth : el.videoWidth, h: el instanceof HTMLImageElement ? el.naturalHeight : el.videoHeight }))
@@ -157,13 +167,14 @@ export default function LoadoutImage({ p, l }: { p: LoadoutProps; l: Loadout }) 
       setPicture(c)
     } catch (e) { p.alert.info('Choose a loadout picture', String(e)) }
   }
-  return <><button type="button" className="lo-text-btn lo-icon li-share" title="Share loadout image" aria-label="Share loadout image" onClick={e => open(e.currentTarget)}><Forward size={16} aria-hidden="true" /></button>
-    {picture && createPortal(<Editor p={p} l={l} picture={picture} close={() => setPicture(null)} />, document.body)}</>
+  return { open, dialog: picture && createPortal(<Editor p={p} l={l} picture={picture} close={() => setPicture(null)} />, document.body) }
 }
 
 if (import.meta.env.DEV) {
   console.assert(JSON.stringify(imageLines('abcdef', s => s.length <= 3)) === '["abc","def"]', 'Long names wrap without losing text')
   console.assert(imageLines('  ', () => true).length === 0, 'Empty credits produce no lines')
+  console.assert(JSON.stringify(imageLines('Midnight Panther', s => s.length <= 12)) === '["Midnight","Panther"]', 'Names wrap at word boundaries')
   const filled = coverSize(1600, 900, 700, 1200)
   console.assert(filled.height === 1200 && filled.width >= 700 && filled.x < 0 && filled.y === 0, 'Wide images fill portrait panels without padding')
 }
+
