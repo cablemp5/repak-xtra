@@ -28,6 +28,7 @@ import { holdKeys } from '../custom/holdKeys' // repakxtra
 import { heroLabel } from '../custom/silhouettes' // repakxtra
 import { useRowWindow } from '../custom/virtualRows' // repakxtra: long lists mount only the rows near the viewport
 import SwipeDelete from '../custom/SwipeDelete' // repakxtra: list rows swipe left to delete
+import { useListReflow } from '../custom/listReflow' // repakxtra: slide remaining rows into a deleted row's space
 import './ModDetailsPanel.css'
 
 type CharacterDataEntry = {
@@ -67,7 +68,7 @@ type ModItemProps = {
     onSelect: (mod: ModRecord) => void
     handleToggleMod: (path: string) => void
     handleSetPriority: (path: string, priority: number) => void
-    handleDeleteMod: (path: string, permanent?: boolean) => void
+    handleDeleteMod: (path: string, permanent?: boolean) => Promise<boolean>
     handleRemoveTag: (path: string, tag: string) => void
     hideSuffix: boolean
     onContextMenu: (e: React.MouseEvent, mod: ModRecord) => void
@@ -98,7 +99,7 @@ type ModsListProps = {
     onSelect: (mod: ModRecord) => void
     onToggleSelection: (mod: ModRecord, event: React.MouseEvent) => void
     onToggleMod: (path: string) => void
-    onDeleteMod: (path: string, permanent?: boolean) => void
+    onDeleteMod: (path: string, permanent?: boolean) => Promise<boolean>
     onRemoveTag: (path: string, tag: string) => void
     onSetPriority: (path: string, priority: number) => void
     onContextMenu: (e: React.MouseEvent, mod: ModRecord) => void
@@ -562,8 +563,8 @@ const ModItem = memo(function ModItem({
         </div>
     )
     // repakxtra: preserve the existing deletion guard, exit animation, and Undo.
-    return isCardView || builtin ? card : <SwipeDelete label={cleanName} disabled={Boolean(gameRunning || isRenaming || isLeaving)} deleting={isLeaving} animated={animationsEnabled}
-        onDelete={() => { if (gameRunning) onDeleteBlocked?.(); else requestDelete(false) }}>{card}</SwipeDelete>
+    return isCardView || builtin ? card : <SwipeDelete label={cleanName} disabled={Boolean(gameRunning || isRenaming || isLeaving)} animated={animationsEnabled}
+        onDelete={() => handleDeleteMod(mod.path, false)}>{card}</SwipeDelete>
 })
 
 /**
@@ -617,6 +618,7 @@ export default function ModsList({
     const [editing, setEditing] = useState<string | null>(null)
     const indexOf = (path?: string | null) => (path ? mods.findIndex(m => m.path === path) : -1)
     const win = useRowWindow(wrapRef, mods.length, viewMode, indexOf(selectedMod?.path), selectedMod?.path ?? '', [indexOf(renamingModPath), indexOf(document.activeElement?.tagName === 'INPUT' ? editing : null)])
+    useListReflow(wrapRef, mods.length, viewMode, enableAnimations) // repakxtra
 
     return (
         <div className="mods-list-wrapper" ref={wrapRef}

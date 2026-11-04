@@ -2207,7 +2207,7 @@ function App() {
         'Game Running',
         'Cannot delete mods while game is running.'
       )
-      return
+      return false
     }
     // No confirmation prompt needed here, the hold-to-delete button handles the intent
 
@@ -2216,17 +2216,20 @@ function App() {
       // rewriting .bak_repak to .pak deleted the enabled copy when both exist.
       const trashId = crypto.randomUUID() // repakxtra
       await invoke('delete_mod', { path: modPath, trashId })
+      // repakxtra: close the row's gap when deletion succeeds, without waiting for the library rescan.
+      setMods(current => current.filter(mod => mod.path !== modPath))
+      setSelectedMods(current => { const next = new Set(current); next.delete(modPath); return next })
       setStatus('Mod deleted')
       offerUndoDelete(alert, [{ id: trashId, path: modPath }], loadMods, undoBlocked) // repakxtra
 
       // Clear selection if the deleted mod was selected
-      if (selectedMod && selectedMod.path === modPath) {
-        setSelectedMod(null)
-      }
+      setSelectedMod(current => current?.path === modPath ? null : current)
 
-      await loadMods()
+      void loadMods()
+      return true
     } catch (error) {
       setStatus('Error deleting mod: ' + error)
+      return false
     }
   }
 
