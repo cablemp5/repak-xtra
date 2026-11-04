@@ -11,6 +11,7 @@ import { type LoadoutProps } from '../Loadouts'
 import { readLoadouts, useView, writeLoadouts } from '../loadoutStore'
 import { useKoHeroPortraits } from './portraits'
 import { cue } from '../sounds'
+import { modalOpen } from '../dialogFocus'
 import { type Role, hexOf, shiftHue } from './model'
 import { draw, duration, frameFor } from './render'
 import { type KoStep, buildKo, koStem } from './export'
@@ -193,7 +194,7 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
   useEffect(() => {
     if (!shown) return
     const key = (e: KeyboardEvent) => {
-      if (e.key !== ' ' || (e.target as HTMLElement)?.closest('input, textarea, button, [contenteditable]')) return
+      if (e.key !== ' ' || modalOpen() || (e.target as HTMLElement)?.closest('input, textarea, button, [contenteditable]')) return // a dialog on top keeps its Space
       e.preventDefault(); document.querySelector<HTMLButtonElement>('.ko-play')?.click()
     }
     window.addEventListener('keydown', key)
