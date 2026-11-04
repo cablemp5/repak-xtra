@@ -14,6 +14,7 @@ import { type Loadout, coverFills, displayName, memberName, modKey, nameKey, pat
 import { revealOnLoad } from './motion'
 import { EGG_MS, stepEgg, stepText } from './previewStages'
 import { plural } from './modName'
+import { isIdle } from './idlePause'
 import { koPreview } from './ko/koPreview'
 import { KO_BEAT } from './ko/render'
 
@@ -249,7 +250,7 @@ export function BeatVideo({ src, beat }: { src: string; beat: number }) {
     if (!v) return
     let t: number | undefined
     let visible = false
-    const active = () => visible && !document.hidden
+    const active = () => visible && !isIdle() // idlePause.ts: also paused while another window has focus
     const next = () => {
       clearTimeout(t)
       if (active()) t = window.setTimeout(() => { v.currentTime = 0; v.play().catch(() => undefined) }, beat * 1000 - (Date.now() % (beat * 1000)))
@@ -270,7 +271,9 @@ export function BeatVideo({ src, beat }: { src: string; beat: number }) {
     v.addEventListener('ended', next)
     v.addEventListener('loadeddata', join)
     document.addEventListener('visibilitychange', join)
-    return () => { clearTimeout(t); observer.disconnect(); v.pause(); v.removeEventListener('ended', next); v.removeEventListener('loadeddata', join); document.removeEventListener('visibilitychange', join) }
+    window.addEventListener('blur', join)
+    window.addEventListener('focus', join)
+    return () => { clearTimeout(t); observer.disconnect(); v.pause(); v.removeEventListener('ended', next); v.removeEventListener('loadeddata', join); document.removeEventListener('visibilitychange', join); window.removeEventListener('blur', join); window.removeEventListener('focus', join) }
   }, [src, beat])
   return <video ref={ref} src={src} muted playsInline preload="auto" />
 }

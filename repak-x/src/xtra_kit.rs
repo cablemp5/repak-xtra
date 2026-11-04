@@ -3,13 +3,20 @@
 //! comes from a GitHub release (tag preview-kit-v<N>, a repakxtra-preview-kit*.zip asset) or a zip picked by hand (its
 //! source.json says which), and needs Blender (installed from Setup with winget, found in Program Files, or picked once).
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter};
 
-const RELEASES: &str = "https://api.github.com/repos/cablemp5/repak-xtra/releases?per_page=100"; // GitHub lists 30 by default: app releases would push the kit off the page
+/// The newest kit as one small static file on the repo's main branch (preview-kit.json), served by GitHub's CDN instead of
+/// the release-list API, whose 60 requests an hour are shared by everyone behind the same public IP. The file changes
+/// only after the kit release and its zip are live, so it never names a download that is not there yet.
+const MANIFEST: &str = "https://raw.githubusercontent.com/cablemp5/repak-xtra/main/preview-kit.json";
+/// The kit releases, for a download by hand when a check fails
+pub const KIT_RELEASES: &str = "https://github.com/cablemp5/repak-xtra/releases?q=preview-kit&expanded=true";
+/// A check younger than this is reused (Check for updates still asks, unless GitHub said to wait)
+const FRESH_SECS: i64 = 6 * 3600;
 
 pub fn kit_dir() -> PathBuf {
     crate::app_dir().join("preview-kit")
@@ -183,43 +190,124 @@ pub fn preview_kit_status() -> KitStatus {
     }
 }
 
-#[derive(Serialize)]
+/// preview-kit.json, as the frontend shows it (notes: the release's changelog lines).
+#[derive(Clone, Serialize, Deserialize)]
 pub struct KitRelease {
     version: String,
+    #[serde(default)]
     published: String,
+    #[serde(default)]
     notes: String,
+    #[serde(default)]
     url: String,
     asset: String,
+    #[serde(default)]
     size: u64,
 }
 
-/// tag preview-kit-v3 -> "3"
-fn release_version(tag: &str) -> Option<String> {
-    tag.strip_prefix("preview-kit-v").filter(|v| !v.is_empty()).map(str::to_string)
+/// The manifest, when it names a kit version and a zip on this repo's releases (the zip's .sha256 beside it is checked
+/// after the download).
+fn parse_manifest(text: &str) -> Result<KitRelease, String> {
+    let r: KitRelease = serde_json::from_str(text).map_err(|e| format!("GitHub's preview kit list could not be read ({e})"))?;
+    let zip = r.asset.strip_prefix("https://github.com/cablemp5/repak-xtra/releases/download/").unwrap_or("");
+    if r.version.trim().is_empty() || !zip.contains("/repakxtra-preview-kit") || !zip.ends_with(".zip") {
+        return Err("GitHub's preview kit list names no kit zip".into());
+    }
+    Ok(r)
 }
 
-/// The newest published preview kit release (drafts and other releases skipped).
-fn pick_release(list: &serde_json::Value) -> Option<KitRelease> {
-    list.as_array()?.iter().filter(|r| !r["draft"].as_bool().unwrap_or(false)).find_map(|r| {
-        let version = release_version(r["tag_name"].as_str()?)?;
-        let asset = r["assets"].as_array()?.iter().find(|a| a["name"].as_str().is_some_and(|n| n.starts_with("repakxtra-preview-kit") && n.ends_with(".zip")))?;
-        Some(KitRelease {
-            version,
-            published: r["published_at"].as_str().unwrap_or("").into(),
-            notes: r["body"].as_str().unwrap_or("").into(),
-            url: r["html_url"].as_str().unwrap_or("").into(),
-            asset: asset["browser_download_url"].as_str()?.into(),
-            size: asset["size"].as_u64().unwrap_or(0),
-        })
-    })
+/// The last check, kept in the app folder so every Setup card and app start reuses it.
+#[derive(Default, Serialize, Deserialize)]
+struct Checked {
+    /// unix seconds
+    at: i64,
+    etag: Option<String>,
+    release: Option<KitRelease>,
+    /// unix seconds GitHub asked to wait until (Retry-After, or a rate limit's reset)
+    #[serde(default)]
+    wait_until: i64,
 }
 
+fn checked_file() -> PathBuf {
+    crate::app_dir().join("preview-kit-latest.json")
+}
+
+/// When GitHub said to try again: Retry-After (seconds or a date), else a used-up rate limit's reset time, else a
+/// minute for any other 403 or 429 (GitHub's advice for limits it does not time). At most a day.
+fn wait_until(status: u16, headers: &reqwest::header::HeaderMap, now: i64) -> Option<i64> {
+    let h = |n: &str| headers.get(n).and_then(|v| v.to_str().ok()).map(str::trim);
+    let at = h("retry-after")
+        .and_then(|v| v.parse::<i64>().ok().map(|s| now + s).or_else(|| chrono::DateTime::parse_from_rfc2822(v).ok().map(|d| d.timestamp())))
+        .or_else(|| (h("x-ratelimit-remaining") == Some("0")).then(|| h("x-ratelimit-reset").and_then(|v| v.parse().ok())).flatten())
+        .or_else(|| matches!(status, 403 | 429).then_some(now + 60))?;
+    Some(at.clamp(now, now + 86_400))
+}
+
+fn local_time(unix: i64) -> String {
+    chrono::DateTime::from_timestamp(unix, 0).map(|d| d.with_timezone(&chrono::Local).format("%H:%M").to_string()).unwrap_or_default()
+}
+
+const BY_HAND: &str = "The installed kit still works. To update now, download the kit zip from GitHub's releases page and drop it on this window.";
+
+/// The newest kit. A check from the last 6 hours is reused unless `force` (Check for updates). A failed check never
+/// touches the installed kit: without `force` it falls back to the last good answer, and while GitHub has asked to wait
+/// nothing is sent at all.
 #[tauri::command]
-pub async fn preview_kit_latest() -> Result<Option<KitRelease>, String> {
-    let list: serde_json::Value = reqwest::Client::new().get(RELEASES).header("User-Agent", "repakxtra").send().await
-        .and_then(|r| r.error_for_status()).map_err(|e| format!("Could not reach GitHub: {e}"))?
-        .json().await.map_err(|e| e.to_string())?;
-    Ok(pick_release(&list))
+pub async fn preview_kit_latest(force: Option<bool>) -> Result<Option<KitRelease>, String> {
+    let force = force.unwrap_or(false);
+    let mut last: Checked = fs::read_to_string(checked_file()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+    let now = chrono::Utc::now().timestamp();
+    let save = |c: &Checked| { let _ = fs::create_dir_all(crate::app_dir()).and_then(|_| fs::write(checked_file(), serde_json::to_string(c).unwrap_or_default())); };
+    // A failed check: the last good answer, except when asked to check now (the error says why)
+    let stale = |e: String, last: &Checked| if force || last.release.is_none() { Err(e) } else { Ok(last.release.clone()) };
+    if last.wait_until > now {
+        return stale(format!("GitHub asked repakxtra to wait before checking again. Try after {}. {BY_HAND}", local_time(last.wait_until)), &last);
+    }
+    if !force && last.release.is_some() && (0..FRESH_SECS).contains(&(now - last.at)) {
+        return Ok(last.release);
+    }
+    let mut req = reqwest::Client::new().get(MANIFEST).header("User-Agent", "repakxtra");
+    if let (Some(etag), Some(_)) = (&last.etag, &last.release) {
+        req = req.header("If-None-Match", etag.as_str());
+    }
+    let res = match req.timeout(std::time::Duration::from_secs(20)).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            crate::ui_log::warn("Preview kit", format!("Update check failed: {e}"));
+            return stale(format!("Could not reach GitHub ({e}). {BY_HAND}"), &last);
+        }
+    };
+    let status = res.status().as_u16();
+    if status == 304 {
+        last.at = now;
+        save(&last);
+        return Ok(last.release);
+    }
+    if status == 404 {
+        return Ok(None); // no kit published yet
+    }
+    let headers = res.headers().clone();
+    let etag = headers.get("etag").and_then(|v| v.to_str().ok()).map(str::to_string);
+    let body = res.text().await.unwrap_or_default();
+    if (200..300).contains(&status) {
+        let release = parse_manifest(&body).inspect_err(|e| crate::ui_log::warn("Preview kit", e))?;
+        let checked = Checked { at: now, etag, release: Some(release), wait_until: 0 };
+        save(&checked);
+        return Ok(checked.release);
+    }
+    // What identifies the cause: the status, GitHub's own message, the limit left and its request id (for GitHub support)
+    let h = |n: &str| headers.get(n).and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+    let message: String = body.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(200).collect();
+    crate::ui_log::warn("Preview kit", format!("Update check got HTTP {status}: {message} (rate limit left: {}, request id: {})",
+        Some(h("x-ratelimit-remaining")).filter(|s| !s.is_empty()).unwrap_or_else(|| "not given".into()), Some(h("x-github-request-id")).filter(|s| !s.is_empty()).unwrap_or_else(|| "none".into())));
+    let wait = wait_until(status, &headers, now);
+    if let Some(at) = wait {
+        last.wait_until = at;
+        save(&last);
+    }
+    let why = match status { 403 | 429 => "GitHub is limiting requests from this network", 500.. => "GitHub is having trouble", _ => "GitHub refused the check" };
+    stale(format!("{why} (HTTP {status}{}).{} {BY_HAND}", if message.is_empty() { String::new() } else { format!(": {message}") },
+        wait.map(|at| format!(" Try again after {}.", local_time(at))).unwrap_or_default()), &last)
 }
 
 /// Kit size limits, about 8x the v9 kit (117 MB zip, 1,408 files, 263 MB unpacked, largest file 69 MB). The sizes a
@@ -327,7 +415,7 @@ pub async fn preview_kit_install(app: AppHandle, file: Option<String>) -> Result
     let zip = match file {
         Some(f) => PathBuf::from(f),
         None => {
-            let release = preview_kit_latest().await?.ok_or("No preview kit has been published yet.")?;
+            let release = preview_kit_latest(None).await?.ok_or("No preview kit has been published yet.")?;
             let mut got = download(&app, &release.asset, &downloaded).await;
             if got.is_ok() {
                 got = crate::xtra_update::verify_checksum(&reqwest::Client::new(), &release.asset, &downloaded).await;
@@ -594,15 +682,25 @@ mod tests {
     }
 
     #[test]
-    fn picks_the_newest_kit_release() {
-        let list = serde_json::json!([
-            { "tag_name": "v2.1.0", "assets": [] },
-            { "tag_name": "preview-kit-v3", "draft": true, "assets": [{ "name": "repakxtra-preview-kit-v3.zip", "browser_download_url": "u3" }] },
-            { "tag_name": "preview-kit-v2", "body": "notes", "assets": [{ "name": "other.zip", "browser_download_url": "x" },
-                { "name": "repakxtra-preview-kit-v2.zip", "browser_download_url": "u2", "size": 5 }] },
-        ]);
-        let r = pick_release(&list).unwrap();
-        assert_eq!((r.version.as_str(), r.asset.as_str(), r.size), ("2", "u2", 5));
-        assert!(pick_release(&serde_json::json!([])).is_none());
+    fn reads_the_kit_manifest_and_githubs_wait_times() {
+        let zip = "https://github.com/cablemp5/repak-xtra/releases/download/preview-kit-v13/repakxtra-preview-kit-v13.zip";
+        let r = parse_manifest(&serde_json::json!({ "version": "13", "asset": zip, "size": 5, "notes": "- x" }).to_string()).unwrap();
+        assert_eq!((r.version.as_str(), r.size, r.published.as_str()), ("13", 5, ""));
+        assert!(parse_manifest(&serde_json::json!({ "version": "13", "asset": "https://example.com/repakxtra-preview-kit-v13.zip" }).to_string()).is_err(), "only this repo's releases");
+        assert!(parse_manifest(&serde_json::json!({ "version": " ", "asset": zip }).to_string()).is_err() && parse_manifest("<html>").is_err());
+        // the committed manifest itself must parse
+        assert!(parse_manifest(include_str!("../../preview-kit.json")).is_ok());
+        let headers = |pairs: &[(&'static str, &str)]| {
+            let mut h = reqwest::header::HeaderMap::new();
+            for (k, v) in pairs { h.insert(*k, v.parse().unwrap()); }
+            h
+        };
+        let now = 1_000_000;
+        assert_eq!(wait_until(429, &headers(&[("retry-after", "120")]), now), Some(now + 120));
+        assert_eq!(wait_until(503, &headers(&[("retry-after", "Thu, 01 Jan 1970 00:00:10 GMT")]), 0), Some(10), "a date");
+        assert_eq!(wait_until(403, &headers(&[("x-ratelimit-remaining", "0"), ("x-ratelimit-reset", "1000600")]), now), Some(now + 600));
+        assert_eq!(wait_until(403, &headers(&[]), now), Some(now + 60), "an untimed limit waits a minute");
+        assert_eq!(wait_until(403, &headers(&[("retry-after", "9999999")]), now), Some(now + 86_400), "at most a day");
+        assert_eq!(wait_until(500, &headers(&[]), now), None);
     }
 }

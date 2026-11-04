@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { refreshPreviewsAvailable } from './previews'
 import type { useAlert } from '../components/AlertHandler'
 import { useFinished } from './installTrack'
@@ -35,6 +36,9 @@ export const progressShare = (p: KitProgress | null) => (p?.stage !== 'unpack' &
 const changed = () => window.dispatchEvent(new Event('preview-kit-changed'))
 const BLENDER_START: KitProgress = { stage: 'blender', done: 0, total: 0, text: 'Asking winget for Blender (Windows may ask for permission)' }
 const CHECKING: KitProgress = { stage: 'check', done: 0, total: 0 }
+/** A failed kit check's way out: the kit releases page, for the zip by hand (xtra_kit.rs KIT_RELEASES) */
+const KIT_RELEASES = 'https://github.com/cablemp5/repak-xtra/releases?q=preview-kit&expanded=true'
+const BY_HAND = { duration: 15000, action: { label: 'Download manually', onClick: () => { openUrl(KIT_RELEASES).catch(() => undefined) } } }
 
 export function usePreviewKit(alert: Alert) {
   const [kit, setKit] = useState<KitStatus | null>(null)
@@ -53,11 +57,13 @@ export function usePreviewKit(alert: Alert) {
     window.addEventListener('preview-kit-changed', changed)
     return () => { off.then(f => f()).catch(() => undefined); window.removeEventListener('preview-kit-changed', changed) }
   }, [])
-  const run = async <T,>(what: string, f: () => Promise<T>): Promise<T | undefined> => {
+  /** A step, its failure as a warning (`warn`: steps that ask GitHub offer the manual download). */
+  const run = async <T,>(what: string, f: () => Promise<T>, warn?: typeof BY_HAND): Promise<T | undefined> => {
     setBusy(what)
-    try { return await f() } catch (e) { alert.warning('Preview kit', String(e)); return undefined } finally { setBusy(null); setProgress(null); setPlan(null) }
+    try { return await f() } catch (e) { alert.warning('Preview kit', String(e), warn); return undefined } finally { setBusy(null); setProgress(null); setPlan(null) }
   }
-  const fetchLatest = () => invoke<KitRelease | null>('preview_kit_latest').then(r => { setLatest(r); return r })
+  /** The newest kit (xtra_kit.rs reuses a recent check unless `force`). A failed check keeps the last answer shown. */
+  const fetchLatest = (force = false) => invoke<KitRelease | null>('preview_kit_latest', { force }).then(r => { setLatest(r); return r })
   const installKit = async (file?: string) => {
     const v = await invoke<string>('preview_kit_install', { file: file ?? null })
     await status()
@@ -73,7 +79,7 @@ export function usePreviewKit(alert: Alert) {
     kit, latest, busy, progress, doctor, checked, plan, finished,
     update: Boolean(latest && kit?.version && isNewerKit(latest.version, kit.version)),
     /** Asks GitHub for the newest kit; the card's kit line then says what it found (an update is one click: Update to vN). */
-    check: () => run('check', async () => { setChecked(false); const r = await fetchLatest(); setChecked(true); return r }),
+    check: () => run('check', async () => { setChecked(false); const r = await fetchLatest(true); setChecked(true); return r }, BY_HAND),
     /** The newest kit, quietly (offline: nothing to say). */
     peek: () => fetchLatest().catch(() => null),
     checkPc: () => runDoctorAfter(Promise.resolve(), 'doctor'),
@@ -85,7 +91,7 @@ export function usePreviewKit(alert: Alert) {
       await checkAfter()
       finish(was ? `Updated to kit v${v}` : `Preview kit v${v} installed`)
       return v
-    }),
+    }, file ? undefined : BY_HAND),
     installBlender: () => run('blender', async () => {
       setPlan(['Blender', 'Check'])
       setProgress(BLENDER_START)
@@ -114,7 +120,8 @@ export function usePreviewKit(alert: Alert) {
      *  check's answer, or undefined when a step failed (its warning names why). */
     setUp: () => run('setup', async () => {
       const now = kit ?? await status()
-      const release = latest === undefined ? await fetchLatest() : latest
+      // A failed check with a kit installed sets up with that kit, and says how to update it by hand
+      const release = latest === undefined ? await fetchLatest().catch(e => { if (!now.version) throw e; alert.warning('Preview kit', String(e), BY_HAND); return null }) : latest
       if (!now.version && !release) throw new Error('No preview kit has been published yet. If someone sent you the kit zip, drop it on this window.')
       const needKit = Boolean(release && (!now.version || isNewerKit(release.version, now.version)))
       setPlan([...(needKit ? ['Download', 'Unpack'] : []), ...(now.blender ? [] : ['Blender']), 'Check'])
@@ -123,7 +130,7 @@ export function usePreviewKit(alert: Alert) {
       const d = await checkAfter()
       if (d.ok) { alert.success('Mod previews', 'Ready. Generate previews from a loadout.'); finish('Previews are ready on this PC') }
       return d
-    }),
+    }, BY_HAND),
   }
 }
 

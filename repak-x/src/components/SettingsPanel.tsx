@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AnimatedThemeToggler } from './ui/AnimatedThemeToggler'
 import Checkbox from './ui/Checkbox'
 import { UiScaleSection, MotionSection, InstallingSection, HeaderButtonsSection, ModPrefs, WarningPrefs, NewStripPref, BuiltinsPref, resetUiPrefs } from '../custom/uiPrefs' // repakxtra
@@ -6,6 +6,7 @@ import RecentlyDeleted from '../custom/RecentlyDeleted' // repakxtra: Settings >
 import CrashReports from '../custom/CrashReports' // repakxtra: Settings > Crash reports
 import { TriangleAlert } from 'lucide-react' // repakxtra: setting warnings
 import { useDialogFocus } from '../custom/dialogFocus' // repakxtra
+import { SettingsSearch, useSettingsFilter } from '../custom/settingsSearch' // repakxtra: Settings search
 import TailInput from './ui/TailInput'
 import { LuFolderInput, LuFolderOpen, LuLibrary, LuLifeBuoy, LuRefreshCw, LuRocket, LuRotateCcw, LuSlidersHorizontal, LuTags, LuUsers } from "react-icons/lu"
 import { RiSparkling2Fill } from "react-icons/ri"
@@ -102,6 +103,11 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
   const alert = useAlert();
   const [activeCategory, setActiveCategory] = useState<CategoryId>('general');
   const focus = useDialogFocus(); // repakxtra
+  const [query, setQuery] = useState(''); // repakxtra: Settings search, every page at once while it has text
+  const searching = Boolean(query.trim());
+  const contentRef = useRef<HTMLDivElement>(null);
+  useSettingsFilter(contentRef, query);
+  const shows = (id: CategoryId) => searching ? id !== 'trash' && id !== 'crashes' : activeCategory === id;
   const [hideSuffix, setHideSuffix] = useState(settings.hideSuffix || false);
   const [autoOpenDetails, setAutoOpenDetails] = useState(settings.autoOpenDetails || false);
   const [showHeroIcons, setShowHeroIcons] = useState(settings.showHeroIcons || false);
@@ -192,13 +198,14 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
 
         <div className="settings-layout">
           <nav className="settings-sidebar" aria-label="Settings categories">
+            <SettingsSearch value={query} onChange={setQuery} />{/* repakxtra */}
             {CATEGORIES.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 type="button"
-                className={`settings-nav-item ${activeCategory === id ? 'active' : ''}`}
-                onClick={() => setActiveCategory(id)}
-                aria-current={activeCategory === id ? 'page' : undefined}
+                className={`settings-nav-item ${activeCategory === id && !searching ? 'active' : ''}`}
+                onClick={() => { setActiveCategory(id); setQuery('') }}
+                aria-current={activeCategory === id && !searching ? 'page' : undefined}
               >
                 <Icon size={16} className="settings-nav-icon" />
                 <span>{label}</span>
@@ -206,8 +213,9 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
             ))}
           </nav>
 
-          <div className="modal-body settings-content" key={activeCategory}>
-            {activeCategory === 'general' && (
+          <div className="modal-body settings-content" key={searching ? 'search' : activeCategory} ref={contentRef}>
+            {searching && <p className="settings-search-empty" hidden>No settings match “{query.trim()}”.</p>}
+            {shows('general') && (
               <>
                 <div className="setting-section"><BetaNote /></div>{/* repakxtra */}
                 <div className="setting-section">
@@ -346,7 +354,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
               </>
             )}
 
-            {activeCategory === 'interface' && (
+            {shows('interface') && (
               <>
                 <UiScaleSection />
                 <MotionSection extra={
@@ -366,7 +374,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
             )}
 
             {/* repakxtra: Library, split from Interface so neither page holds 26 switches */}
-            {activeCategory === 'library' && (
+            {shows('library') && (
               <>
                 <InstallingSection />
                 <div className="setting-section">{/* repakxtra: every badge and tag on a mod, in one place */}
@@ -463,14 +471,14 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                     </div>
                   </div>
                 </div>
-                {resetSection}
+                {!searching && resetSection}{/* repakxtra: Interface's Reset is the same one */}
               </>
             )}
 
-            {activeCategory === 'trash' && <RecentlyDeleted />}{/* repakxtra */}
-            {activeCategory === 'crashes' && <CrashReports />}{/* repakxtra */}
+            {shows('trash') && <RecentlyDeleted />}{/* repakxtra */}
+            {shows('crashes') && <CrashReports />}{/* repakxtra */}
 
-            {activeCategory === 'help' && (
+            {shows('help') && (
               <>
                 <div className="setting-section">
                   <h3 className="setting-icon-label"><LuLifeBuoy size={18} aria-hidden="true" />Help</h3>

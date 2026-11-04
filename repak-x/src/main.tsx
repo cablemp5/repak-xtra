@@ -16,6 +16,7 @@ import './custom/uiPrefs' // repakxtra: UI scale and optional controls in every 
 import './custom/smoothCaret' // repakxtra: the gliding caret in every text field
 import './custom/segSlide' // repakxtra: the sliding pill on every segmented bar
 import './custom/dropdownGlide' // repakxtra: moving highlights in every dropdown and menu
+import './custom/idlePause' // repakxtra: looping videos and animations pause while the window is in the background
 
 // Disable default browser context menu
 document.addEventListener('contextmenu', (e) => {
