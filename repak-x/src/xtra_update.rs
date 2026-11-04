@@ -83,26 +83,25 @@ pub fn check_update_zip(path: &std::path::Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Releases since v0.5.0 publish `<zip>.sha256` ("<hex>  <name>") beside the zip. When it exists, the download must match
-/// it. A release without one (404) still applies, and the log says it was not checked. The checksum comes from the same
-/// release as the zip: it catches a corrupted or swapped download, not a release someone else published.
+/// Releases since v0.5.0 (and preview kits) publish `<zip>.sha256` ("<hex>  <name>") beside the zip, and the download must
+/// match it. A release without one (404) is refused. The checksum comes from the same release as the zip: it catches a
+/// corrupted or swapped download, not a release someone else published.
 pub async fn verify_checksum(client: &reqwest::Client, asset_url: &str, path: &std::path::Path) -> Result<(), String> {
     let res = client.get(format!("{asset_url}.sha256")).header("User-Agent", "repakxtra").send().await
-        .map_err(|e| format!("Could not download the update's checksum: {e}"))?;
+        .map_err(|e| format!("Could not download the checksum: {e}"))?;
     if res.status() == reqwest::StatusCode::NOT_FOUND {
-        crate::ui_log::warn("Update", "This release publishes no checksum, so the download was not checked");
-        return Ok(());
+        return Err("This release publishes no checksum, so the download was not used. Nothing was changed.".into());
     }
     if !res.status().is_success() {
-        return Err(format!("Could not download the update's checksum: GitHub returned {}", res.status()));
+        return Err(format!("Could not download the checksum: GitHub returned {}", res.status()));
     }
-    let text = res.text().await.map_err(|e| format!("Could not read the update's checksum: {e}"))?;
-    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+    let text = res.text().await.map_err(|e| format!("Could not read the checksum: {e}"))?;
+    let name = asset_url.rsplit('/').next().unwrap_or_default(); // the published name (a kit is saved under another)
     let expected = parse_sha256(&text, name)?;
     let path = path.to_path_buf();
     let actual = tokio::task::spawn_blocking(move || sha256_file(&path)).await.map_err(|e| e.to_string())??;
     if expected != actual {
-        return Err("The downloaded update does not match its published checksum. Nothing was changed. Try again.".into());
+        return Err("The download does not match its published checksum. Nothing was changed. Try again.".into());
     }
     crate::ui_log::info("Update", "Download matches the release's checksum");
     Ok(())

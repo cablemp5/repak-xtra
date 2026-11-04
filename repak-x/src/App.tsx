@@ -142,6 +142,7 @@ import TitleBar from './components/TitleBar'
 
 import InstallModPanel from './custom/InstallPanel' // repakxtra: the install dialog redesigned around saving a loadout
 import EncryptMods, { openEncrypt } from './custom/EncryptMods' // repakxtra
+import { folderCounts } from './custom/folderCounts' // repakxtra
 import GalactaMods from './custom/GalactaMods' // repakxtra
 const SettingsPanel = lazy(() => import('./components/SettingsPanel')) // repakxtra: loaded when Settings first opens
 import CreditsPanel from './components/CreditsPanel'
@@ -3301,15 +3302,8 @@ function App() {
       ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
   }, [isPanelSettled])
 
-  // Group mods by folder
-  const modsByFolder = useMemo(() => {
-    const byFolder: Record<string, ModRecord[]> = {}
-    byFolder['_root'] = filteredMods.filter(m => !m.folder_id)
-    folders.forEach(folder => {
-      byFolder[folder.id] = filteredMods.filter(m => m.folder_id === folder.id)
-    })
-    return byFolder
-  }, [filteredMods, folders])
+  // repakxtra: the sidebar's folder counts in one pass (custom/folderCounts.ts), in place of an unused per-folder grouping
+  const countsByFolder = useMemo(() => folderCounts(baseFilteredMods, showSubfolderMods), [baseFilteredMods, showSubfolderMods])
 
   const toggleFolder = (folderId: string) => {
     const newExpanded = new Set(expandedFolders)
@@ -4153,19 +4147,7 @@ function App() {
                   onSelect={setSelectedFolderId}
                   onDelete={handleDeleteFolder}
                   onContextMenu={handleFolderContextMenu}
-                  getCount={(id: string) => {
-                    if (id === 'all') return baseFilteredMods.length;
-                    if (showSubfolderMods) {
-                      return baseFilteredMods.filter(m =>
-                        m.folder_id === id ||
-                        (m.folder_id && m.folder_id.startsWith(id + '/'))
-                      ).length;
-                    } else {
-                      return baseFilteredMods.filter(m =>
-                        m.folder_id === id
-                      ).length;
-                    }
-                  }}
+                  getCount={(id: string) => id === 'all' ? baseFilteredMods.length : countsByFolder.get(id) ?? 0 /* repakxtra */}
                   hasFilters={selectedCharacters.size > 0 || selectedCategories.size > 0}
                 />
               </div>

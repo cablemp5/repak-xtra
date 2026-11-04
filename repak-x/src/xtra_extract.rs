@@ -45,7 +45,7 @@ fn check(entries: impl IntoIterator<Item = String>, archive: &str, out: Option<&
 
 /// A folder (or the file) that already exists under `out` on the way to `entry` must not be a link (junction or
 /// symlink), which could point anywhere.
-fn through_link(out: &Path, entry: &str) -> Result<(), String> {
+pub(crate) fn through_link(out: &Path, entry: &str) -> Result<(), String> {
     let mut at = out.to_path_buf();
     for seg in entry.replace('\\', "/").trim_start_matches('/').split('/') {
         at.push(seg);

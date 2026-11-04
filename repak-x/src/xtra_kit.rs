@@ -328,7 +328,10 @@ pub async fn preview_kit_install(app: AppHandle, file: Option<String>) -> Result
         Some(f) => PathBuf::from(f),
         None => {
             let release = preview_kit_latest().await?.ok_or("No preview kit has been published yet.")?;
-            let got = download(&app, &release.asset, &downloaded).await;
+            let mut got = download(&app, &release.asset, &downloaded).await;
+            if got.is_ok() {
+                got = crate::xtra_update::verify_checksum(&reqwest::Client::new(), &release.asset, &downloaded).await;
+            }
             if let Err(e) = got {
                 let _ = fs::remove_file(&downloaded);
                 return Err(e);

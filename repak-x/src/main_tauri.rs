@@ -8,6 +8,7 @@ mod xtra_classify; // repakxtra: extra mod types, Project Galacta check
 mod xtra_made; // repakxtra: installed mods keep when they were made (the Needs VFX update check)
 mod xtra_vfx_check; // repakxtra: Check for VFX update (built for this game version or an older one)
 mod xtra_edition;
+mod xtra_launch; // repakxtra: one pending launch_record restore at a time
 mod xtra_setup; // repakxtra: Setup panel (signature bypass, Project Galacta)
 mod xtra_project;
 mod xtra_kit; // repakxtra: preview kit (previews on other PCs)
@@ -2052,6 +2053,10 @@ struct ArchiveModEntry {
 /// WITHOUT installing anything, so the user can pick and rename before committing.
 #[tauri::command]
 async fn inspect_archive_mods(path: String, window: Window) -> Result<Vec<ArchiveModEntry>, String> {
+    blocking(move || inspect_archive_mods_now(path, window)).await // repakxtra: unpacking runs off the async runtime
+}
+
+fn inspect_archive_mods_now(path: String, window: Window) -> Result<Vec<ArchiveModEntry>, String> {
     use crate::install_mod::install_mod_logic::archives::{extract_7z, extract_rar, extract_zip};
     use walkdir::WalkDir;
 
@@ -3302,10 +3307,10 @@ async fn install_mods(
 
         // --- CLEANUP TEMP HYBRID FOLDERS ---
         // Only our own merge folders: a user's folder with the same prefix must survive
-        let merge_temp_base = app_dir().join("temp");
+        let merge_temp_base = std::env::temp_dir().join("repak-x").join("hybrid"); // repakxtra: xtra_vfx::run_work_dir
         for path in unique_paths {
             if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
-                if file_name.starts_with("hybrid_merge_") && path.starts_with(&merge_temp_base) {
+                if !file_name.is_empty() && path.parent() == Some(merge_temp_base.as_path()) {
                     if let Err(e) = std::fs::remove_dir_all(&path) {
                         let _ = window_for_logs.emit(
                             "install_log",
@@ -5424,6 +5429,7 @@ async fn launch_game(app: tauri::AppHandle, state: State<'_, Arc<Mutex<AppState>
     let launch_record_path = game_root.join("launch_record");
 
     // Backup original value
+    let _launch_record = xtra_launch::file_lock(); // repakxtra
     let original_value = match std::fs::read_to_string(&launch_record_path) {
         Ok(content) => {
             info!("Backed up launch_record value: {}", content.trim());
@@ -5434,6 +5440,7 @@ async fn launch_game(app: tauri::AppHandle, state: State<'_, Arc<Mutex<AppState>
             None
         }
     };
+    let launch_id = xtra_launch::begin(original_value); // repakxtra: a second launch or a toggle takes over the restore
 
     // DELETE the launch_record file
     if launch_record_path.exists() {
@@ -5566,7 +5573,8 @@ async fn launch_game(app: tauri::AppHandle, state: State<'_, Arc<Mutex<AppState>
                 }
 
                 // DELETE and RECREATE with original value
-                if let Some(original) = original_value {
+                let _launch_record = xtra_launch::file_lock(); // repakxtra
+                if let Some(original) = xtra_launch::finish(launch_id) { // repakxtra
                     if launch_record_path_clone.exists() {
                         if let Err(e) = std::fs::remove_file(&launch_record_path_clone) {
                             warn!("Failed to delete launch_record for restoration: {}", e);
@@ -5604,6 +5612,8 @@ async fn launch_game(app: tauri::AppHandle, state: State<'_, Arc<Mutex<AppState>
 /// Returns true if skip launcher is now enabled (0), false if disabled (6)
 #[tauri::command]
 async fn skip_launcher_patch(state: State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
+    let _launch_record = xtra_launch::file_lock(); // repakxtra
+    xtra_launch::cancel(); // repakxtra: a launch's pending restore must not undo this toggle
     // Get game path (this is the ~mods folder inside Paks)
     let mods_path = {
         let state = state.lock().unwrap();
@@ -5815,7 +5825,10 @@ async fn recompress_mods(
     if !game_path.exists() {
         return Err("Game path does not exist".to_string());
     }
+    blocking(move || recompress_mods_now(game_path, window)).await // repakxtra: off the async runtime (holds _mutation)
+}
 
+fn recompress_mods_now(game_path: PathBuf, window: Window) -> Result<RecompressResult, String> {
     ui_log::info("Recompress", "Scanning mods for non-Oodle compression...");
 
     let mut result = RecompressResult {
@@ -8069,8 +8082,6 @@ async fn check_single_mod_conflicts(
     mod_path: String,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<Vec<SingleModConflict>, String> {
-    use std::collections::HashSet;
-
     let target_path = PathBuf::from(&mod_path);
 
     if !target_path.exists() {
@@ -8085,7 +8096,11 @@ async fn check_single_mod_conflicts(
     if !game_path.exists() {
         return Err("Game path does not exist".to_string());
     }
+    blocking(move || single_mod_conflicts(target_path, game_path)).await // repakxtra: off the async runtime
+}
 
+fn single_mod_conflicts(target_path: PathBuf, game_path: PathBuf) -> Result<Vec<SingleModConflict>, String> {
+    use std::collections::{HashMap, HashSet};
     info!("Checking conflicts for mod: {}", target_path.display());
 
     // Helper to calculate priority from filename
@@ -8112,13 +8127,19 @@ async fn check_single_mod_conflicts(
     }
 
     // Helper to get files from a PAK or IoStore
-    fn get_pak_files(path: &Path) -> Result<Vec<String>, String> {
+    // repakxtra: keyed by xtra_conflicts::asset_key (a PAK's "Marvel/Content/X" and a .utoc's "/Game/X" are one asset),
+    // read through the conflict check's cache
+    fn get_pak_files(path: &Path) -> Result<HashMap<String, String>, String> {
         let mut utoc_path = path.to_path_buf();
         utoc_path.set_extension("utoc");
-
+        let utoc = utoc_path.exists().then_some(utoc_path.as_path());
+        let files = crate::xtra_conflicts::files_cached(path, utoc, || read_pak_files(path, &utoc_path))?;
+        Ok(files.iter().map(|f| (crate::xtra_conflicts::asset_key(f), f.clone())).collect())
+    }
+    fn read_pak_files(path: &Path, utoc_path: &Path) -> Result<Vec<String>, String> {
         if utoc_path.exists() {
             use crate::utoc_utils::read_utoc;
-            Ok(read_utoc(&utoc_path)
+            Ok(read_utoc(utoc_path)
                 .iter()
                 .map(|entry| entry.file_path.clone())
                 .collect())
@@ -8133,7 +8154,7 @@ async fn check_single_mod_conflicts(
 
     // Get target mod info
     let target_priority = calculate_priority(&target_path);
-    let target_files: HashSet<String> = get_pak_files(&target_path)?.into_iter().collect();
+    let target_files = get_pak_files(&target_path)?;
 
     info!(
         "Target mod has {} files at priority {}",
@@ -8163,8 +8184,8 @@ async fn check_single_mod_conflicts(
         }
 
         // Get this mod's files
-        let other_files: HashSet<String> = match get_pak_files(path) {
-            Ok(files) => files.into_iter().collect(),
+        let other_files = match get_pak_files(path) {
+            Ok(files) => files,
             Err(e) => {
                 warn!("Failed to read mod {:?}: {}", path, e);
                 continue;
@@ -8172,11 +8193,14 @@ async fn check_single_mod_conflicts(
         };
 
         // Find overlapping files, excluding metadata files like 'patched_files'
-        let overlapping: Vec<String> = target_files
-            .intersection(&other_files)
+        let mut overlapping: Vec<String> = target_files
+            .iter()
+            .filter(|(key, _)| other_files.contains_key(*key))
+            .map(|(_, f)| f)
             .filter(|f| !f.ends_with("patched_files") && !f.contains("/patched_files"))
             .cloned()
             .collect();
+        overlapping.sort();
 
         if overlapping.is_empty() {
             continue;
