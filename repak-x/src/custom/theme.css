@@ -1694,7 +1694,7 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
 /* Toasts: the status icon centered against the text; Clear all as a labeled pill on the toasts' own surface */
 .toast-icon { align-self: center; }
 /* +N and Clear all sit below the stack (AlertHandler reserves the stack's visible height), never over a toast */
-.toast-footer-overlay { position: static; align-self: stretch; justify-content: flex-end; margin-top: 8px; gap: 8px; }
+.toast-footer-overlay { position: absolute; bottom: 1rem; right: 1rem; left: 1rem; justify-content: flex-end; margin-top: 0; gap: 8px; }
 .toast-clear-all, [data-theme="light"] .toast-clear-all {
   width: auto !important; max-width: none !important; height: 28px !important; min-height: 0 !important; max-height: none !important;
   padding: 0 12px 0 12px !important; display: inline-flex !important; align-items: center; gap: 8px; border-radius: 999px !important;

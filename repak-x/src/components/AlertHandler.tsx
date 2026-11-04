@@ -7,6 +7,7 @@ import { alertSound } from '../custom/sounds' // repakxtra
 import { quietToast } from '../custom/uiPrefs' // repakxtra
 import { ToastAnnouncer, clockElapsed, holdClock, survivor, type ToastClock } from '../custom/toastA11y' // repakxtra
 import { focusInto, topModal } from '../custom/dialogFocus' // repakxtra
+import { useToastExit } from '../custom/toastExit' // repakxtra: retain the faded frame until removal
 
 // Toast Icons
 type ToastColor = 'success' | 'danger' | 'warning' | 'info' | 'default' | 'crash' | 'primary' | 'secondary';
@@ -379,21 +380,21 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
                 style={{
                     position: 'relative',
                     width: '100%',
-                    height: extent, // repakxtra: was minHeight 70px
+                    height: extent + (toasts.length > 1 ? 36 : 0), // repakxtra: 28px footer plus its 8px gap
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: isBottom ? 'flex-end' : 'flex-start',
                 }}
             >
-                <AnimatePresence mode="popLayout">
+                <AnimatePresence>
                     {recentToasts.map((toast, index) => (
                         <ToastItem
                             key={toast.id}
                             toast={toast}
                             onDismiss={onDismiss}
                             index={index}
-                            total={recentToasts.length}
+                            footerLift={isBottom && toasts.length > 1 ? 36 : 0}
                             isHovered={isHovered}
                             placement={placement}
                             spread={spread[index]}
@@ -425,8 +426,9 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
 }
 
 // Individual Toast Item with card stacking effect - memoized to prevent unnecessary re-renders
-const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHovered, placement, spread = index * 100, onHeight }: any) {
+const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift, isHovered, placement, spread = index * 100, onHeight }: any) {
     const itemRef = useRef<HTMLDivElement>(null);
+    const isPresent = useToastExit(itemRef); // repakxtra
     useEffect(() => { // repakxtra: report this toast's height so the hovered stack spaces by it
         const el = itemRef.current;
         if (!el || !onHeight) return;
@@ -490,7 +492,7 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
     const opacityReduction = isHovered ? 0 : 0.2; // Full opacity when hovered
 
     // Calculate transforms for stacking effect
-    const yOffset = (isBottom ? -1 : 1) * (isHovered ? spread : index * stackOffset);
+    const yOffset = (isBottom ? -1 : 1) * (isHovered ? spread : index * stackOffset) - footerLift;
     const scale = 1 - (index * scaleReduction);
     const opacity = index === 0 ? 1 : Math.max(0.6, 1 - (index * opacityReduction));
     const zIndex = 100 - index;
@@ -501,15 +503,11 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
             // repakxtra: transitions.dev Banner stacking, using only transform and opacity to avoid layout work during library updates
             initial={{
                 opacity: 0,
-                transform: `translateY(${isBottom ? 24 : -24}px) scale(0.96)`
+                transform: `translateY(${(isBottom ? 24 : -24) - footerLift}px) scale(0.96)`
             }}
             animate={{
                 opacity: opacity,
                 transform: `translateY(${yOffset}px) scale(${scale})`
-            }}
-            exit={{
-                opacity: 0,
-                transform: `translateY(${yOffset}px) scale(0.96)`
             }}
             transition={{
                 duration: 0.22,
@@ -517,6 +515,7 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
             }}
             className={`toast-item ${color} ${variant}${isLoading || typeof progressValue === 'number' ? ' is-working' : ''}`} /* repakxtra: shimmer while it works */
             style={{
+                pointerEvents: isPresent ? 'auto' : 'none',
                 position: 'absolute',
                 bottom: isBottom ? 0 : 'auto',
                 top: !isBottom ? 0 : 'auto',
@@ -547,6 +546,7 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
                     {action.label && action.onClick ? (
                         <button
                             className="toast-action-btn"
+                            disabled={!isPresent}
                             onClick={(e) => {
                                 e.stopPropagation();
                                 action.onClick(e);
@@ -568,6 +568,7 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, total, isHo
 
             <button
                 className="toast-close"
+                disabled={!isPresent}
                 onClick={() => onDismiss(id)}
                 aria-label="Close"
             >
