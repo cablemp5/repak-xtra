@@ -1031,6 +1031,9 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 .lo-card-title { min-height: 24px; }
 .lo-card-title h3 { line-height: 22px; }
 .lo-card-title .repakx-switch-control { height: 24px !important; min-height: 0 !important; }
+/* renaming swaps the name for a field in the same 24px row: the card, its row, and the rows below never change height */
+.lo-card-title { height: 24px; }
+.lo-card-title .lo-rename { height: 24px; }
 .lo-card-meta { margin-top: 4px !important; line-height: 16px; }
 .lo-card-actions { margin-top: auto !important; padding-top: 12px; }
 .lo-card-body { flex: 1; } /* a row's cards share one height; the actions sit on their bottom edge */
@@ -1714,7 +1717,7 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
   overflow: hidden; background: rgba(6, 7, 9, 0.55); animation: t-skel-pulse var(--pulse-dur) ease-in-out infinite; }
 @keyframes t-skel-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 /* Running: a light band sweeps across, so it reads as working; queued only pulses */
-.lo-media.is-running .lo-skel { animation-duration: 1.6s; }
+.lo-media.is-running .lo-skel { animation: none; }
 /* The sweep is its own band, as wide as the card, moving from fully off the left edge to fully off the right one. Its
    gradient runs straight across (90deg), so both edges of the band are fully clear and only the soft middle shows. */
 .lo-media.is-running .lo-skel::after { content: ''; position: absolute; inset: 0;
@@ -3008,6 +3011,7 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 :root[data-theme="light"] .beta-note { --beta: #b3261e; }
 /* the mark beside the warning: its picture as a mask, in the note's red */
 .beta-mark { display: block; width: 25px; height: 16px; background: var(--beta); mask: center / contain no-repeat; -webkit-mask: center / contain no-repeat; }
+.beta-note a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .wi-beta { margin: 0 28px 20px; }
 
 .mod-type-badge.broken-badge.is-unknown { background: transparent !important; }

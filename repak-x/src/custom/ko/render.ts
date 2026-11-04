@@ -212,10 +212,9 @@ export function draw(ctx: CanvasRenderingContext2D, s: Scene, t: number, size: {
   if (o.ground) { ctx.fillStyle = o.ground; ctx.fillRect(0, 0, size.w, size.h) } // one flat color (drawClear)
   else if (o.backdrop) {
     const image = o.backdrop
-    // Crop the supplied screenshot to its game view, excluding the surrounding editor chrome.
-    const sx = 105, sy = 65, sw = 789, sh = 409
+    const sw = image.naturalWidth, sh = image.naturalHeight
     const scale = Math.max(size.w / sw, size.h / sh)
-    ctx.drawImage(image, sx, sy, sw, sh, (size.w - sw * scale) / 2, (size.h - sh * scale) / 2, sw * scale, sh * scale)
+    ctx.drawImage(image, (size.w - sw * scale) / 2, (size.h - sh * scale) / 2, sw * scale, sh * scale)
   }
   else if (o.background !== false) {
     // the editor's grid sits on one flat color (cable, 2026-11-01: no glow behind it); other uses keep the soft light

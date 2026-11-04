@@ -10,7 +10,7 @@ export default function ScanButton({ scanning, disabled, selected, flagged, onSc
   const wrap = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
   const item = useRef<HTMLButtonElement>(null)
-  useEffect(() => { if (disabled) setOpen(false) }, [disabled])
+  useEffect(() => { if (disabled || !flagged) setOpen(false) }, [disabled, flagged])
   useEffect(() => {
     if (!open) return
     item.current?.focus()
@@ -26,10 +26,10 @@ export default function ScanButton({ scanning, disabled, selected, flagged, onSc
     <div className="install-btn vf-scan" ref={wrap} onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget)) setOpen(false) }}>
       <button type="button" className="install-btn-main" disabled={disabled || !selected} onClick={() => onScan(false)}
         title="Check the selected mods' materials without changing files">{scanning ? <span className="t-shimmer">Scanning</span> : 'Scan'}</button>
-      <button type="button" className="install-btn-more" ref={trigger} disabled={disabled}
+      <button type="button" className="install-btn-more" ref={trigger} disabled={disabled || !flagged}
         aria-haspopup="menu" aria-expanded={open} aria-label="More scan options" title="More scan options"
         onClick={() => { setOpen(v => !v); cue(open ? 'close' : 'open') }}
-        onKeyDown={e => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setOpen(true); cue('open') } }}>
+        onKeyDown={e => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (!open) { setOpen(true); cue('open') } } }}>
         <ChevronDown size={14} aria-hidden="true" />
       </button>
       {open && <div className="sigeon-menu install-btn-menu vf-scan-menu" role="menu" aria-label="Scan options">

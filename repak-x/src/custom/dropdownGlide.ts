@@ -70,6 +70,18 @@ function follow(event: Event) {
   } else place(menu, row)
 }
 
+// Leaving a menu hands the highlight back to its selected row, or hides it, instead of leaving it on the last hovered one.
+function leave(event: PointerEvent) {
+  const to = event.relatedTarget instanceof Node ? event.relatedTarget : null
+  let menu = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-glide-menu]') : null
+  for (; menu && !menu.contains(to); menu = menu.parentElement?.closest<HTMLElement>('[data-glide-menu]') ?? null) {
+    const selected = [...menu.querySelectorAll<HTMLElement>(ROWS)]
+      .find(row => row.parentElement?.closest(MENUS) === menu && row.matches(SELECTED) && !row.matches(DISABLED))
+    if (selected) place(menu, selected)
+    else { menu.removeAttribute('data-glide-live'); menus.set(menu, null) }
+  }
+}
+
 function forget(menu: HTMLElement) {
   sized.unobserve(menu)
   menus.delete(menu)
@@ -90,14 +102,18 @@ function scroll(event: Event) {
 
 const changed = new MutationObserver(records => {
   const dirty = new Set<HTMLElement>()
+  // With no menu mounted (the usual case while the Library scrolls) only a newly added menu matters
+  const open = menus.size > 0
   for (const record of records) {
-    if (record.target instanceof Element) {
+    if (open && record.target instanceof Element) {
       const menu = record.target.closest<HTMLElement>(MENUS)
       if (menu) dirty.add(menu)
     }
-    record.addedNodes.forEach(node => within(node).forEach(menu => dirty.add(menu)))
+    record.addedNodes.forEach(node => {
+      if (node instanceof HTMLElement && (node.matches(MENUS) || node.querySelector(MENUS))) within(node).forEach(menu => dirty.add(menu))
+    })
   }
-  for (const menu of menus.keys()) if (!menu.isConnected) forget(menu)
+  if (open) for (const menu of menus.keys()) if (!menu.isConnected) forget(menu)
   for (const menu of dirty) if (menu.isConnected) refresh(menu)
 })
 changed.observe(document.documentElement, {
@@ -106,6 +122,7 @@ changed.observe(document.documentElement, {
 })
 document.addEventListener('pointerover', follow)
 document.addEventListener('focusin', follow)
+document.addEventListener('pointerout', leave)
 document.addEventListener('scroll', scroll, true)
 document.querySelectorAll<HTMLElement>(MENUS).forEach(refresh)
 
@@ -114,6 +131,7 @@ if (import.meta.hot) import.meta.hot.dispose(() => {
   sized.disconnect()
   document.removeEventListener('pointerover', follow)
   document.removeEventListener('focusin', follow)
+  document.removeEventListener('pointerout', leave)
   document.removeEventListener('scroll', scroll, true)
   for (const menu of menus.keys()) forget(menu)
 })

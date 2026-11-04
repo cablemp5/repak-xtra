@@ -15,6 +15,10 @@ export type Originals = 'off' | 'trash' | 'keep'
 export const SAFE_OFF = 'repakxtra.vfx.safeOff' // '0': a flagged mod that could not be made safe stays on
 /** Whether a flagged mod an update could not make safe is turned off (the default), rather than left on to crash. */
 export const readSafeOff = () => localStorage.getItem(SAFE_OFF) !== '0'
+export const REPAIR_POLICY = 'repakxtra.vfx.repairPolicy'
+export type RepairPolicy = 'strict' | 'bestEffort'
+/** Best effort with a review of each candidate (the default), or Strict, which installs only what it can prove whole. */
+export const readRepairPolicy = (): RepairPolicy => (localStorage.getItem(REPAIR_POLICY) === 'strict' ? 'strict' : 'bestEffort')
 export const readNaming = (): Naming => (localStorage.getItem(KEEP_NAME) === '0' ? 'updated' : 'broken')
 export function readOriginals(): Originals {
   const v = localStorage.getItem(ORIGINALS)
@@ -24,6 +28,8 @@ export function readOriginals(): Originals {
   return old === '1' ? 'off' : old === '0' ? 'keep' : 'trash' // untouched: the original goes to Recently deleted, out of the way and one click back
 }
 
+/** The run lock's name while the Mod Updater rechecks mods: not a mod, so messages that name the holder say so */
+export const CHECK_RUN = 'Rechecking mods'
 export type RunLock = { token: string; window: string; name?: string | null }
 /** A fresh token for one run. */
 export const newRunToken = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`

@@ -19,8 +19,9 @@
 [data-glide-live]::before { opacity: 1; }
 /* The pinned footer still masks the options scrolling beneath it. Its tint passes over that opaque surface. */
 [data-glide-footer]::before { z-index: 2; }
-:root body [data-glide-live] [data-glide-row],
-:root body [data-glide-live] [data-glide-row]:is(:hover, :focus-visible, [aria-selected], [aria-checked], .danger, .is-danger) {
+/* a selected or checked row keeps its own fill, so it still reads as picked while the highlight is on another row */
+:root body [data-glide-live] [data-glide-row]:not([aria-selected="true"], [aria-checked="true"], .selected),
+:root body [data-glide-live] [data-glide-row]:not([aria-selected="true"], [aria-checked="true"], .selected):is(:hover, :focus-visible, .danger, .is-danger) {
   background: transparent !important;
 }
 :root body [data-glide-menu] .custom-dropdown-item.add-new[data-glide-row] { background: var(--bg-dark) !important; }

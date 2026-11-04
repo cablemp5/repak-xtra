@@ -14,13 +14,13 @@ import { HeroFilter, heroOfName } from './heroFilter'
 import {
   type Loadout, type Mod, OTHER, OTHER_LABEL, loadoutable, addGroup, captureKey, addModToLoadout, displayName, duplicateLoadout, groupKey, setLoadoutGroup,
   useGroups, hotkeyOf, hotkeySlots, isActive, modKey, openLoadout, patchLoadout, pinHotkey, readLoadouts, removeModFromLoadout,
-  renameModKey, repakXOpen, takeFresh, useLoadouts, memberName, nameKey, pickMember, modsByKey,
+  renameModKey, repakXOpen, takeFresh, useLoadouts, memberName, nameKey, pickMember, modsByKey, coverFills, pickCover,
 } from './loadoutStore'
 import { candidatesFor, keysByName, memberFolder } from './loadoutIdentity'
 import { renameSource } from './nexusSource'
 import { plural } from './modName'
 import { SwapText } from './motion'
-import { GeneratePreviewsButton, previewSetKey } from './previews'
+import { GeneratePreviewsButton, previewMade, previewSetKey } from './previews'
 import { CaptureButton, captureTarget } from './CapturePreview'
 import { useExportPreview } from './exportPreview'
 
@@ -313,7 +313,8 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
             </label>
             {/* The rest are occasional: one menu instead of a wrapping row of equal buttons */}
             <MoreMenu items={[
-              { label: previewExport.busy ? 'Exporting preview...' : 'Export preview as PNG', onClick: previewExport.exportPng, disabled: previewExport.busy },
+              ...((l.cover ?? pickCover(l, coverFills(l, previewMade(l)))) === 'text' ? [] : [
+                { label: previewExport.busy ? 'Exporting preview…' : 'Export preview as PNG', onClick: previewExport.exportPng, disabled: previewExport.busy }]),
               { label: 'Duplicate', onClick: () => openLoadout(duplicateLoadout(l).id, true) },
               { label: exporting ? 'Exporting…' : 'Export as zip', onClick: exportZip, disabled: exporting },
               ...(missing.length ? [{ label: `Remove ${plural(missing.length, 'missing mod')}`, onClick: dropMissing }] : []),

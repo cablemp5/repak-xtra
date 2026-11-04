@@ -39,7 +39,7 @@ for (const kind of [undefined, 'unknown', 'broken', 'vfx', 'risky']) {
   let options
   const scope = {
     reserved: false, nameOf: () => 'Fixture', newRunToken: () => 'fixture', findUsmap: async () => 'fixture.usmap',
-    claimRun: async () => true, setUpdating() {}, readOriginals: () => 'off', readNaming: () => 'broken', readSafeOff: () => true,
+    claimRun: async () => true, setUpdating() {}, readOriginals: () => 'off', readNaming: () => 'broken', readSafeOff: () => true, readRepairPolicy: () => 'bestEffort', incompleteAssets: () => 0,
     readFilter: () => ({}), verdictOf: () => kind ? { kind } : undefined, utocOf: p => p + '.utoc', STEPS: ['Read'],
     fixVfxMod: async o => { options = o; return { status: 'failed' } }, resultToast() {}, releaseRun: async () => {},
     invoke: async () => 'C:/Fixture/Paks/~mods',
@@ -127,6 +127,7 @@ const declined = await repair('bestEffort')
 assert.ok(declined.calls.includes('vfx_pack_to_iostore') && declined.calls.includes('review'))
 assert.ok(declined.candidate.warnings.some(w => /creator edits/.test(w)))
 assert.ok(!declined.calls.includes('xtra_vfx_place'), 'declining leaves the original unchanged')
+assert.equal(declined.report.status, 'declined', 'a declined candidate is not a failure')
 const accepted = await repair('bestEffort', true)
 assert.equal(accepted.report.status, 'fixed')
 assert.ok(accepted.calls.indexOf('review') < accepted.calls.indexOf('xtra_vfx_place'))

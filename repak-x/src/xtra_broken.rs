@@ -597,10 +597,11 @@ fn judge_checked(path: &str, mut facts: Facts<'_>, updated: u64, game: &GameAsse
     }))
 }
 
-pub(crate) fn record_uncertain(mods_dir: &Path, utoc: &Path, reason: String) -> Result<(), String> {
-    let store = checked_store();
-    let game = game_updated(mods_dir);
-    remember_checked(&store, utoc, game, false, false, Some(reason))
+/// Only a note for the flag: a store that cannot be written never fails the check that found it.
+pub(crate) fn record_uncertain(mods_dir: &Path, utoc: &Path, reason: String) {
+    if let Err(e) = remember_checked(&checked_store(), utoc, game_updated(mods_dir), false, false, Some(reason)) {
+        log::warn!("[vfx check] {}: {e}", utoc.display());
+    }
 }
 
 /// A mod an update found nothing to rebuild in (its report said Nothing to update), or one Check for VFX update looked at
@@ -649,16 +650,21 @@ fn checked_now(store: &HashMap<String, Checked>, utoc: &Path, game_updated: u64)
     checked_record(store, utoc, game_updated).map(|c| c.outdated)
 }
 
+/// A clearance (Nothing to update, or a check found it current) outlives a parser change: the background check never
+/// restores one for a mod with Niagara files, and it looks again at the rest anyway. Findings hold for their parser only.
 fn checked_record<'a>(store: &'a HashMap<String, Checked>, utoc: &Path, game_updated: u64) -> Option<&'a Checked> {
-    store.get(&checked_key(utoc)).filter(|c| file_stamp(utoc) == Some((c.size, c.modified)) && game_updated <= c.game && c.parser == crate::xtra_vfx::parser_id())
+    store.get(&checked_key(utoc)).filter(|c| file_stamp(utoc) == Some((c.size, c.modified)) && game_updated <= c.game && (c.parser == crate::xtra_vfx::parser_id() || (!c.outdated && c.unknown.is_none())))
 }
 
 /// A "nothing to update" for `utoc` as it is now, from an update that rewrites older material layouts.
 fn layout_cleared(store: &HashMap<String, Checked>, utoc: &Path, game_updated: u64) -> bool {
-    store.get(&checked_key(utoc)).is_some_and(|c| file_stamp(utoc) == Some((c.size, c.modified)) && game_updated <= c.game && c.parser == crate::xtra_vfx::parser_id() && !c.outdated && c.unknown.is_none() && c.material_layout)
+    checked_record(store, utoc, game_updated).is_some_and(|c| !c.outdated && c.unknown.is_none() && c.material_layout)
 }
 
 fn remember_checked(store: &Path, utoc: &Path, game_updated: u64, outdated: bool, old_layout: bool, unknown: Option<String>) -> Result<(), String> {
+    // the user's Nothing to update and the background check can write at once: one read-modify-write at a time
+    static WRITING: Mutex<()> = Mutex::new(());
+    let _one = WRITING.lock().unwrap_or_else(|e| e.into_inner());
     let (size, modified) = file_stamp(utoc).ok_or_else(|| format!("{} is not there", utoc.display()))?;
     let mut all = load_checked(store);
     // An inconclusive scan cannot replace a verified repair or a confirmed fault in the same file and game.
@@ -706,6 +712,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
         let checked = load_checked(&checked_store());
         let (layouts, usmap_id) = (crate::xtra_layout::load_done(), crate::xtra_layout::usmap_id());
         let meshes = crate::xtra_mesh::load_done();
+        let niagara_layouts = crate::xtra_niagara::known_layouts(&paks);
         // an update beside it: <name>_UPDATED next to the original, or the original renamed <name>_BROKEN next to the update
         // each folder's stems, so an _UPDATED name that takes the priority (two originals that would clash) is found
         let mut by_dir: HashMap<PathBuf, HashSet<String>> = HashMap::new();
@@ -797,7 +804,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                     fixed: has_fix(&path) || found == Some(false),
                     has_blueprint: details.has_blueprint,
                     installed,
-                    old_layout: details.category == "VFX" && crate::xtra_niagara::known_old_layout(&path),
+                    old_layout: details.category == "VFX" && crate::xtra_niagara::known_old_layout(&path, &niagara_layouts),
                     layout: crate::xtra_layout::found_now(&layouts, &path.with_extension("utoc"), game_updated, &usmap_id),
                     old_materials: layout_patched.is_some_and(|at| installed > 0 && installed < at) && !has_fix(&path)
                         && !layout_cleared(&checked, &path.with_extension("utoc"), game_updated),
@@ -1016,6 +1023,11 @@ mod tests {
         assert_eq!(checked_now(&all, &utoc, 200), Some(false), "the same file, the same game");
         assert_eq!(checked_now(&all, Path::new(&utoc.to_string_lossy().to_uppercase()), 200), Some(false), "any spelling of the path");
         assert_eq!(checked_now(&all, &utoc, 300), None, "the game updated since");
+        let mut other = all.clone();
+        other.values_mut().for_each(|c| c.parser = String::new());
+        assert!(layout_cleared(&other, &utoc, 200), "a clearance outlives a parser change, a legacy one too");
+        other.values_mut().for_each(|c| c.outdated = true);
+        assert_eq!(checked_now(&other, &utoc, 200), None, "a finding holds for its parser only");
         remember_checked(&store, &utoc, 200, true, true, None).unwrap();
         remember_checked(&store, &utoc, 200, false, false, Some("Unknown".into())).unwrap();
         assert_eq!(checked_now(&load_checked(&store), &utoc, 200), Some(true), "a check found it outdated");
@@ -1144,6 +1156,7 @@ mod tests {
         let state = Arc::new(Mutex::new(crate::AppState { game_path: paks.join("~mods"), ..Default::default() }));
         let work = std::env::temp_dir().join("repak-x").join("xclass-test");
         let vanilla = crate::xtra_vfx::vanilla_dir(&paks.to_string_lossy(), &usmap);
+        let niagara_layouts = crate::xtra_niagara::known_layouts(&paks);
         let mut mods: Vec<PathBuf> = std::fs::read_dir(paks.join("~mods")).unwrap().flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "pak" || x == "bak_repak")).collect();
         mods.sort();
         let (all, mut n, mut total) = (std::time::Instant::now(), 0, std::time::Duration::ZERO);
@@ -1165,7 +1178,7 @@ mod tests {
                 fixed: false,
                 has_blueprint: true,
                 installed,
-                old_layout: vfx && crate::xtra_niagara::known_old_layout(&p),
+                old_layout: vfx && crate::xtra_niagara::known_old_layout(&p, &niagara_layouts),
                 layout,
                 old_materials: false,
             };

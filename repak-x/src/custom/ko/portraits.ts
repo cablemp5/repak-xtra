@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { getHeroImageById, useHeroImages } from '../../utils/heroImages'
 
@@ -8,22 +8,23 @@ type Portrait = { hero: string; logo: string }
 export function useKoHeroPortraits(heroes: readonly { id: string }[] | null) {
   const version = useHeroImages()
   const [logos, setLogos] = useState<Record<string, string>>({})
+  // the logos asked for stay across icon set loads (no flash), and go with the component
+  const asked = useRef(new Set<string>())
+  const urls = useRef<string[]>([])
+  const live = useRef(true)
+  useEffect(() => { live.current = true; return () => { live.current = false; urls.current.forEach(url => URL.revokeObjectURL(url)); urls.current = []; asked.current.clear() } }, [])
   useEffect(() => {
-    let live = true
-    const urls: string[] = []
-    setLogos({})
     for (const hero of heroes ?? []) {
-      if (getHeroImageById(hero.id)) continue
+      if (getHeroImageById(hero.id) || asked.current.has(hero.id)) continue
+      asked.current.add(hero.id)
       void invoke<Portrait>('xtra_ko_hero_portrait', { hero: hero.id }).then(async portrait => {
-        if (!live) return
         const bytes = await invoke<ArrayBuffer>('xtra_ko_file', { path: portrait.logo })
-        if (!live) return
+        if (!live.current) return
         const url = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }))
-        urls.push(url)
+        urls.current.push(url)
         setLogos(previous => ({ ...previous, [hero.id]: url }))
-      }).catch(e => console.warn('[KO hero portrait]', e))
+      }).catch(e => { asked.current.delete(hero.id); console.warn('[KO hero portrait]', e) })
     }
-    return () => { live = false; urls.forEach(url => URL.revokeObjectURL(url)) }
   }, [heroes, version])
   return (id: string) => getHeroImageById(id) ?? logos[id]
 }

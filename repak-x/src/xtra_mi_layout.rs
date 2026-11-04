@@ -111,7 +111,8 @@ fn patch_header(original: &[u8], old: &[u8], new: &[u8]) -> Option<Vec<u8>> {
         if a != b {
             if changed || start < 40 || b != a.checked_add(2)? || a & 127 > 125 { return None }
             changed = true;
-        } else if start + count > 40 { return None }
+        // fragments after the shifted one sit past the insert, and their relative skips are unchanged
+        } else if !changed && start + count > 40 { return None }
         index = start + count;
     }
     if !changed { return None }
@@ -285,24 +286,24 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
             out.surgical.push(r.clone());
         }
     }
-    if !out.surgical.is_empty() { to_json(usmap, &fixed, &check, progress).await?; }
-    let mut restored = false;
+    // read into its own folder: a restored file is again the one `check` read, so a failed read loses only the patches
+    let check2 = work.join("check2_json");
+    let read2 = out.surgical.is_empty() || to_json(usmap, &fixed, &check2, progress).await.is_ok();
+    let mut unrestored = HashSet::new();
     out.surgical.retain(|r| {
-        let same = match (decode(&check, r), decode(&fixed_json, r)) {
+        let same = read2 && match (decode(&check2, r), decode(&fixed_json, r)) {
             (Some(a), Some(b)) => decoded(&a).is_some() && decoded(&a) == decoded(&b),
             _ => false,
         };
-        if !same {
-            if let Some(backup) = surgical_backups.get(r) {
-                restored |= std::fs::write(fixed.join(format!("{r}.uexp")), backup).is_ok();
-            }
+        if !same && surgical_backups.get(r).is_none_or(|b| std::fs::write(fixed.join(format!("{r}.uexp")), b).is_err()) {
+            unrestored.insert(r.clone());
         }
         same
     });
-    if restored { to_json(usmap, &fixed, &check, progress).await?; }
     let mut kept = Vec::new();
     for r in std::mem::take(&mut out.files) {
-        let same = match (decode(&check, &r), decode(&fixed_json, &r)) {
+        let read = if out.surgical.contains(&r) { &check2 } else { &check };
+        let same = !unrestored.contains(&r) && match (decode(read, &r), decode(&fixed_json, &r)) {
             (Some(a), Some(b)) => decoded(&a).is_some() && decoded(&a) == decoded(&b),
             _ => false,
         };
@@ -413,6 +414,14 @@ mod tests {
         assert!(patch_header(&[old[0], old[1], old[0], old[1]], &old, &new).is_none());
         assert!(patch_header(&bytes, &old, &old).is_none());
         assert!(patch_header(&bytes, &old, &[43, new[1]]).is_none());
+        // a fragment after the shifted one stays as it is
+        let (first, second) = ((40u16 | 512).to_le_bytes(), (3u16 | 512 | 256).to_le_bytes());
+        let old2 = [first[0], first[1], second[0], second[1]];
+        let new2 = [first[0] + 2, first[1], second[0], second[1]];
+        assert_eq!(patch_header(&[7, old2[0], old2[1], old2[2], old2[3], 9], &old2, &new2), Some(vec![7, new2[0], new2[1], new2[2], new2[3], 9]));
+        // but one before it may not reach past the insert
+        let (a, b) = ((30u16 | 12 << 9).to_le_bytes(), (40u16 | 512 | 256).to_le_bytes());
+        assert!(patch_header(&[a[0], a[1], b[0], b[1]], &[a[0], a[1], b[0], b[1]], &[a[0], a[1], b[0] + 2, b[1]]).is_none());
     }
 
     #[test]

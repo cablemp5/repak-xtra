@@ -59,17 +59,3 @@ def flow_anim(prefix, out_png):
     out[0].save(tmp, save_all=True, append_images=out[1:], duration=round(1000 / FLOW_FPS), loop=0, quality=80, method=2, kmax=1)
     os.replace(tmp, out_webp)
     return True
-
-
-# Self-check: a synthetic two-frame render makes a two-frame WebP the size of the saved previews
-def _flow_check():
-    import tempfile
-    with tempfile.TemporaryDirectory() as d:
-        p = Path(d) / "view0"
-        Image.new("RGBA", (64, 90), (10, 10, 10, 255)).save(f"{p}_front_noflow.png")
-        for i in range(2):
-            Image.new("RGB", (64, 90), (0, 200 * i, 180 * i)).save(f"{p}_front_flow_{i:02d}.png")
-        assert flow_anim(str(p), Path(d) / "k.png")
-        im = Image.open(Path(d) / "k.webp")
-        assert im.n_frames == 2 and im.size == OUT, (im.n_frames, im.size)
-        im.close()

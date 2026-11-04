@@ -218,7 +218,9 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
   })
 
   const parsed = mods.map(m => parseModType(m.mod_type))
-  const koPortraits = useKoPortraits(mods)
+  // only a mod that may be a KO prompt (a UI mod, or KO in its name) asks for its hero's logo: each ask reads the mod's files
+  const koMods = useMemo(() => mods.filter((m, i) => [parsed[i].category, ...parsed[i].additional].includes('UI') || /(^|[^a-z0-9])ko([^a-z0-9]|$)/i.test(plainName(m.mod_name ?? m.path.split(/[\\/]/).pop()))), [mods]) // eslint-disable-line react-hooks/exhaustive-deps
+  const koPortraits = useKoPortraits(koMods)
   const picked = mods.map((_, i) => i).filter(i => settings[i]?.enabled !== false)
   const count = picked.length
   const preview = previewPick ?? (count === 0 || picked.some(i => mods[i].contains_uassets !== false))

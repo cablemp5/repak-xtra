@@ -5,11 +5,12 @@ use std::path::Path;
 /// and not on every new build (an app update then no longer re-reads every mod or the game's asset list):
 /// - REPAKXTRA_DETAILS_LOGIC (xtra_details_cache.rs): what works out a mod's details.
 /// - REPAKXTRA_ASSETS_LOGIC (xtra_broken.rs, the saved game asset list): what reads and keys the game's packages.
-/// Both include the native reader UAssetTool (the Rust wrapper, this repo's patches and the submodule's commit), since
-/// a fix there can change the file lists either one saved.
+/// - REPAKXTRA_DECODE_LOGIC (xtra_vfx.rs parser_id): what decodes and compares a mod's files for the VFX checks.
+/// All include the native reader UAssetTool (the Rust wrapper, this repo's patches and the submodule's commit), since
+/// a fix there can change the file lists any one saved.
 pub fn cache_stamps() {
     let native = native_reader_text();
-    let decode = [whole("src/vfx_updater/uasset_tool.rs"), whole("src/xtra_niagara.rs"), whole("src/xtra_layout.rs")];
+    let decode = [no_tests("src/vfx_updater/uasset_tool.rs"), no_tests("src/xtra_niagara.rs"), no_tests("src/xtra_layout.rs")];
     println!("cargo:rustc-env=REPAKXTRA_DECODE_LOGIC={:016x}", fnv(&(decode.concat() + &native)));
     let details = [
         part("src/main_tauri.rs", "struct ModDetails {"),
@@ -34,6 +35,15 @@ pub fn cache_stamps() {
 fn whole(file: &str) -> String {
     println!("cargo:rerun-if-changed={file}");
     std::fs::read_to_string(file).unwrap_or_else(|e| panic!("{file}: {e}"))
+}
+
+/// A file up to its tests module (the last item in each), so a test edit leaves the stamp alone.
+fn no_tests(file: &str) -> String {
+    let mut text = whole(file);
+    if let Some(at) = text.find("#[cfg(test)]\nmod tests").or_else(|| text.find("#[cfg(test)]\r\nmod tests")) {
+        text.truncate(at);
+    }
+    text
 }
 
 /// One item of a file: from `start` to the first line that is only a closing brace. The whole file when `start` is not
