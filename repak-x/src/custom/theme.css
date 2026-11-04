@@ -3012,7 +3012,7 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 /* red on purpose (cable, 2026-11-02): the one warning that is not meant to blend in */
 :root[data-theme="light"] .beta-note { --beta: #b3261e; }
 /* the mark beside the warning: its picture as a mask, in the note's red */
-.beta-mark { display: block; width: 33px; height: 29px; background: var(--beta); mask: center / contain no-repeat; -webkit-mask: center / contain no-repeat; }
+.beta-mark { display: block; width: 33px; height: 33px; background: var(--beta); mask: center / contain no-repeat; -webkit-mask: center / contain no-repeat; }
 .beta-note a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .wi-beta { margin: 0 28px 20px; }
 
