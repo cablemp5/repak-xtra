@@ -28,7 +28,7 @@ import { holdKeys } from '../custom/holdKeys' // repakxtra
 import { heroLabel } from '../custom/silhouettes' // repakxtra
 import { useRowWindow } from '../custom/virtualRows' // repakxtra: long lists mount only the rows near the viewport
 import SwipeDelete from '../custom/SwipeDelete' // repakxtra: list rows swipe left to delete
-import { useListReflow } from '../custom/listReflow' // repakxtra: slide remaining rows into a deleted row's space
+import { useListReflow } from '../custom/listReflow' // repakxtra: slide rows into place after deletion or restoration
 import './ModDetailsPanel.css'
 
 type CharacterDataEntry = {
@@ -618,7 +618,7 @@ export default function ModsList({
     const [editing, setEditing] = useState<string | null>(null)
     const indexOf = (path?: string | null) => (path ? mods.findIndex(m => m.path === path) : -1)
     const win = useRowWindow(wrapRef, mods.length, viewMode, indexOf(selectedMod?.path), selectedMod?.path ?? '', [indexOf(renamingModPath), indexOf(document.activeElement?.tagName === 'INPUT' ? editing : null)])
-    useListReflow(wrapRef, mods.length, viewMode, enableAnimations) // repakxtra
+    useListReflow(wrapRef, mods.map(mod => mod.path), viewMode, enableAnimations) // repakxtra
 
     return (
         <div className="mods-list-wrapper" ref={wrapRef}
