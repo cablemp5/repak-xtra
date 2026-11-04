@@ -1031,6 +1031,9 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 .lo-card-title { min-height: 24px; }
 .lo-card-title h3 { line-height: 22px; }
 .lo-card-title .repakx-switch-control { height: 24px !important; min-height: 0 !important; }
+/* renaming swaps the name for a field in the same 24px row: the card, its row, and the rows below never change height */
+.lo-card-title { height: 24px; }
+.lo-card-title .lo-rename { height: 24px; }
 .lo-card-meta { margin-top: 4px !important; line-height: 16px; }
 .lo-card-actions { margin-top: auto !important; padding-top: 12px; }
 .lo-card-body { flex: 1; } /* a row's cards share one height; the actions sit on their bottom edge */
