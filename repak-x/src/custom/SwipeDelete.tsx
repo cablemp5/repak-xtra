@@ -4,8 +4,20 @@ import { cue } from './sounds'
 import './swipeDelete.css'
 
 const ACTION = 80
-export const swipeCommits = (distance: number, width: number) => width > 0 && distance >= Math.max(width * 0.6, ACTION * 1.5)
-type Grip = { id: number; startX: number; startY: number; from: number; width: number; scale: number; dragging: boolean; ready: boolean }
+type Sample = { at: number; distance: number }
+export const swipeVelocity = (samples: Sample[], releasedAt: number) => {
+  const last = samples[samples.length - 1]
+  if (!last || releasedAt - last.at > 80) return 0
+  const first = samples.find(sample => sample.at >= releasedAt - 100) ?? samples[0]
+  return Math.max(-3, Math.min(3, (last.distance - first.distance) / Math.max(8, releasedAt - first.at)))
+}
+export const swipeCommits = (distance: number, width: number, velocity = 0) => {
+  const threshold = Math.max(width * 0.6, ACTION * 1.5)
+  return width >= threshold && (distance >= threshold || (
+    distance >= Math.max(ACTION, width * 0.2) && velocity >= 0.6 && distance + velocity * 180 >= threshold
+  ))
+}
+type Grip = { id: number; startX: number; startY: number; from: number; width: number; scale: number; dragging: boolean; ready: boolean; samples: Sample[] }
 
 /** A deliberate full swipe uses the Library's recoverable delete. Controls inside the row keep their clicks. */
 export default function SwipeDelete({ children, disabled, animated, onDelete, label }: {
@@ -39,7 +51,7 @@ export default function SwipeDelete({ children, disabled, animated, onDelete, la
     drawerAnimations.current.forEach(run => run.cancel())
     moveTo(current)
   }
-  const settle = async (target: number) => {
+  const settle = async (target: number, velocity = 0) => {
     stop()
     const from = x.current
     moveTo(target)
@@ -47,7 +59,9 @@ export default function SwipeDelete({ children, disabled, animated, onDelete, la
     const frames = [
       { transform: `translate3d(${from}px, 0, 0)` }, { transform: `translate3d(${target}px, 0, 0)` },
     ]
-    const timing = { duration: 180, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' }
+    const timing = velocity >= 0.6
+      ? { duration: Math.max(100, Math.min(220, Math.abs(target - from) * 2 / velocity)), easing: 'cubic-bezier(0.2, 0.4, 0.4, 1)' }
+      : { duration: 180, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' }
     const run = surface.current.animate(frames, timing)
     drawerAnimations.current = []
     if (drawer.current) drawerAnimations.current.push(drawer.current.animate(frames, timing))
@@ -67,7 +81,7 @@ export default function SwipeDelete({ children, disabled, animated, onDelete, la
   }
   useEffect(() => { if (disabled) cancel() }, [disabled])
   useEffect(() => () => { animation.current?.cancel(); drawerAnimations.current.forEach(run => run.cancel()); unwatch.current?.() }, [])
-  const remove = async () => {
+  const remove = async (velocity = 0) => {
     if (disabled || pending.current) return
     pending.current = true
     root.current?.setAttribute('data-committing', '')
@@ -75,7 +89,7 @@ export default function SwipeDelete({ children, disabled, animated, onDelete, la
     setReady(false); setOpen(false)
     cue('close')
     try {
-      if (!await settle(-(root.current?.clientWidth ?? 0)) || !root.current) return
+      if (!await settle(-(root.current?.clientWidth ?? 0), velocity) || !root.current) return
       if (!await onDelete()) void settle(0)
     } catch { void settle(0) }
     finally {
@@ -92,7 +106,8 @@ export default function SwipeDelete({ children, disabled, animated, onDelete, la
     const width = root.current?.clientWidth ?? 0
     if (!width) return
     grip.current = { id: e.pointerId, startX: e.clientX, startY: e.clientY, from: x.current, width,
-      scale: (root.current?.getBoundingClientRect().width ?? width) / width, dragging: false, ready: false }
+      scale: (root.current?.getBoundingClientRect().width ?? width) / width, dragging: false, ready: false,
+      samples: [{ at: e.timeStamp, distance: -x.current }] }
     const onMove = (event: globalThis.PointerEvent) => live.current.move(event)
     const onUp = (event: globalThis.PointerEvent) => live.current.up(event)
     window.addEventListener('pointermove', onMove)
@@ -120,6 +135,10 @@ export default function SwipeDelete({ children, disabled, animated, onDelete, la
     e.preventDefault()
     const next = Math.max(-g.width, Math.min(0, g.from + dx / g.scale))
     moveTo(next)
+    const last = g.samples[g.samples.length - 1], prior = g.samples[g.samples.length - 2]
+    if (prior && (last.distance - prior.distance) * (-next - last.distance) < 0) g.samples = [last]
+    g.samples.push({ at: e.timeStamp, distance: -next })
+    while (g.samples.length > 2 && g.samples[1].at < e.timeStamp - 100) g.samples.shift()
     const nextReady = swipeCommits(-next, g.width)
     if (g.ready !== nextReady) { g.ready = nextReady; setReady(nextReady) }
   }
@@ -130,7 +149,8 @@ export default function SwipeDelete({ children, disabled, animated, onDelete, la
     unwatch.current?.(); unwatch.current = null
     root.current?.removeAttribute('data-dragging')
     if (!g.dragging) return
-    if (!disabled && swipeCommits(-x.current, g.width)) { void remove(); return }
+    const velocity = swipeVelocity(g.samples, e.timeStamp)
+    if (!disabled && swipeCommits(-x.current, g.width, velocity)) { void remove(velocity); return }
     const reveal = -x.current > ACTION / 2
     setOpen(reveal); setReady(false); void settle(reveal ? -ACTION : 0)
   }
@@ -141,7 +161,7 @@ export default function SwipeDelete({ children, disabled, animated, onDelete, la
     onClickCapture={e => { if (suppressClick.current && e.detail !== 0) { e.preventDefault(); e.stopPropagation() } }}
     onDragStart={e => e.preventDefault()}>
     <button ref={drawer} type="button" className="mod-swipe-delete" tabIndex={open ? 0 : -1} disabled={disabled}
-      aria-hidden={!open} aria-label={`Delete ${label}`} onClick={remove}>
+      aria-hidden={!open} aria-label={`Delete ${label}`} onClick={() => void remove()}>
       <span ref={glyph} className="mod-swipe-glyph"><Trash2 size={18} aria-hidden="true" /><span>{ready ? 'Release to delete' : 'Delete'}</span></span>
     </button>
     <div ref={surface} className="mod-swipe-surface">{children}</div>
@@ -152,4 +172,9 @@ export default function SwipeDelete({ children, disabled, animated, onDelete, la
 if (import.meta.env.DEV) {
   console.assert(!swipeCommits(79, 400) && !swipeCommits(239, 400) && swipeCommits(240, 400), 'swipe: partial reveals do not delete, a deliberate full swipe does')
   console.assert(!swipeCommits(0, 0) && !swipeCommits(-300, 400) && !swipeCommits(100, 100), 'swipe: hidden, rightward, and too narrow rows never commit')
+  console.assert(swipeCommits(250, 1000, 2) && !swipeCommits(250, 1000, 0.2), 'swipe: a quick throw carries to delete, the same slow drag only reveals')
+  console.assert(!swipeCommits(30, 400, 3) && !swipeCommits(200, 400, -2), 'swipe: a tiny flick or a rightward release below the threshold does not delete')
+  const samples = [{ at: 0, distance: 0 }, { at: 50, distance: 100 }, { at: 90, distance: 200 }]
+  console.assert(swipeVelocity(samples, 100) === 2 && swipeVelocity(samples, 200) === 0, 'swipe: release uses recent speed, pausing loses momentum')
+  console.assert(swipeVelocity([{ at: 0, distance: 200 }, { at: 50, distance: 100 }], 50) === -2, 'swipe: reversing direction reverses momentum')
 }

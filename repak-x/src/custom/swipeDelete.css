@@ -2,14 +2,12 @@
 .view-list .mod-swipe, .view-list-compact .mod-swipe { border-radius: 6px; }
 .mod-swipe-surface { position: relative; z-index: 1; background: var(--bg-dark); }
 .mod-swipe .mod-card { margin: 0; }
-.mod-swipe-delete { position: absolute; top: 0; bottom: 0; left: 100%; width: 100%; display: flex; align-items: center; padding: 0; border: 1px solid var(--panel-border); border-radius: inherit; background: var(--bg-dark); color: #f2555a; font: inherit; font-size: 12px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: background-color 120ms ease; }
+.mod-swipe-delete { position: absolute; top: 0; bottom: 0; left: 100%; width: 100%; display: flex; align-items: center; padding: 0; border: 0; border-radius: inherit; background: color-mix(in srgb, #f2555a 10%, var(--bg-dark)); color: #f2555a; font: inherit; font-size: 12px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: none; }
 .mod-swipe-glyph { display: flex; flex: none; width: 100%; align-items: center; justify-content: center; gap: 6px; padding: 0 8px; }
 .mod-swipe-delete svg { flex: none; width: 16px; height: 16px; }
-.mod-swipe-delete:hover, .mod-swipe-delete:focus-visible, .mod-swipe[data-ready] .mod-swipe-delete { background: color-mix(in srgb, #f2555a 10%, var(--bg-dark)); }
-.mod-swipe-delete:focus-visible { outline-offset: -3px !important; }
+.app .mod-swipe:focus-visible, .app .mod-swipe-delete:focus-visible { outline: none !important; box-shadow: none !important; }
+.mod-swipe-delete:focus-visible .mod-swipe-glyph { text-decoration: underline; text-underline-offset: 3px; }
 .mod-swipe[data-committing] { pointer-events: none; }
 .mod-swipe:is([data-dragging], [data-committing]) .mod-swipe-surface { will-change: transform; }
 .mod-swipe[data-dragging], .mod-swipe[data-dragging] * { cursor: grabbing; user-select: none; }
 .mod-swipe-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-html[data-motion="off"] .mod-swipe-delete { transition: none; }
-@media (prefers-reduced-motion: reduce) { .mod-swipe-delete { transition: none; } }
