@@ -290,7 +290,14 @@ pub async fn preview_kit_latest(force: Option<bool>) -> Result<Option<KitRelease
     let etag = headers.get("etag").and_then(|v| v.to_str().ok()).map(str::to_string);
     let body = res.text().await.unwrap_or_default();
     if (200..300).contains(&status) {
-        let release = parse_manifest(&body).inspect_err(|e| crate::ui_log::warn("Preview kit", e))?;
+        // a 200 that is not the manifest (a network's sign-in page, a cut-off download) fails like any other check
+        let release = match parse_manifest(&body) {
+            Ok(r) => r,
+            Err(e) => {
+                crate::ui_log::warn("Preview kit", &e);
+                return stale(format!("{e}. {BY_HAND}"), &last);
+            }
+        };
         let checked = Checked { at: now, etag, release: Some(release), wait_until: 0 };
         save(&checked);
         return Ok(checked.release);

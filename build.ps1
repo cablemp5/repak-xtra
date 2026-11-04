@@ -71,7 +71,10 @@ Use-UatPatches {
     # reflection (Export.ConvertToChildExport), and packing (create_mod_iostore) then failed on every asset
     Run { dotnet publish UAssetToolRivals/src/UAssetTool/UAssetTool.csproj -c Release -r win-x64 -p:PublishAot=true -p:TrimMode=partial -p:PublishSingleFile=false -p:IlcOptimizationPreference=Speed -p:DebugType=none -p:DebugSymbols=false -o target/uassettool-cli }
 }
+Write-UatSource
 }
+# A release must say what its tools were built from (xtra_vfx.rs tools_id), or every user's mods are checked again
+if ($Release -and -not (Test-Path target\uassettool\UAssetTool.source)) { throw 'target\uassettool has no UAssetTool.source: build once without -SkipTools.' }
 Push-Location repak-x
 Run { npm install }
 # Test copies mark themselves green. Release branding is blue.
@@ -89,6 +92,7 @@ New-Item -ItemType Directory -Force "$out\data" | Out-Null
 # name). An older build's REPAK-X.exe goes, so a shortcut still pointing at it fails instead of opening a stale copy.
 $exeName = 'repakxtra.exe'
 Copy-Item target\x86_64-pc-windows-msvc\release\REPAK-X.exe "$out\$exeName" -Force
+Remove-Item "$out\UAssetTool.source" -ErrorAction SilentlyContinue # never an older build's stamp beside these tools
 Copy-Item target\uassettool\* $out -Recurse -Force
 Remove-Item "$out\*.pdb", "$out\UAssetTool.exe", "$out\REPAK-X.exe" -ErrorAction SilentlyContinue
 Copy-Item target\uassettool-cli\UAssetTool.exe "$out\uassettool-cli.exe" -Force
@@ -108,7 +112,7 @@ if ($Release) {
     # the app folder. By full path: from Git Bash, PATH finds GNU tar first, which ignores -a and writes a tar named .zip
     $zip = "dist\repak-xtra-$editionName-v$ver-windows.zip"
     Remove-Item $zip -ErrorAction SilentlyContinue
-    Run { & "$env:SystemRoot\System32\tar.exe" -a -cf $zip -C $out $exeName UAssetTool.dll uassettool-cli.exe data edition.json }
+    Run { & "$env:SystemRoot\System32\tar.exe" -a -cf $zip -C $out $exeName UAssetTool.dll UAssetTool.source uassettool-cli.exe data edition.json }
     # Unpacked the way the in-app updater does (Windows PowerShell's Expand-Archive): the zip must give back the same app
     $check = Join-Path $env:TEMP "repakxtra-release-check-$PID"
     Remove-Item $check -Recurse -Force -ErrorAction SilentlyContinue

@@ -4,6 +4,7 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, listen } from '@tauri-apps/api/event'
+import { SCAN_DONE } from './scanProgress'
 
 /** usmapWait (Needs VFX update only): files it rebuilds that a patch newer than the saved USMAP changed. While it is not
  *  0 the update waits for that patch's USMAP (xtra_broken.rs changed_since_usmap). */
@@ -73,6 +74,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       .then(() => (live ? invoke<number>('xtra_mesh_scan', { modPaths: mods.map(m => m.path) }) : 0))
       .then(checked => (live && checked ? check() : undefined))
       .then(() => live, e => { console.warn('[brokenMods] background scan failed', e); return false })
+      .finally(() => window.dispatchEvent(new Event(SCAN_DONE))) // scanProgress.ts closes its progress line
     const full = (first?: Promise<boolean>) => queued(() => chain(first))
     runFull = () => chain()
     // the quick check at once, never behind a background scan in flight (one can run for many minutes after a game

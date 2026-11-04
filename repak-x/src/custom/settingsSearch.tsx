@@ -23,6 +23,7 @@ export function useSettingsFilter(root: RefObject<HTMLElement | null>, query: st
         const whole = matches(title, query)
         rows.forEach(r => { r.hidden = !whole && !matches(r.textContent ?? '', query) })
         section.hidden = !whole && (rows.length ? rows.every(r => r.hidden) : !matches(section.textContent ?? '', query))
+        section.toggleAttribute('data-first-shown', !section.hidden && shown === 0) // no separator above the first one left
         if (!section.hidden) shown++
       })
       const empty = el.querySelector<HTMLElement>('.settings-search-empty')

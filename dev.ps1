@@ -23,7 +23,8 @@ $uat = 'target\uassettool\UAssetTool.dll'
 $cli = 'target\uassettool-cli\UAssetTool.exe'
 # either one missing (a publish that failed halfway), or older than a patch (a new or changed fix)
 $stale = { param($f) -not (Test-Path $f) -or (Get-ChildItem uassettool-patches\*.patch | Where-Object LastWriteTime -gt (Get-Item $f).LastWriteTime) }
-if ((& $stale $uat) -or (& $stale $cli)) {
+# or built before the source stamp the app keys its mod checks on (UAssetTool.source, uassettool-patches\apply.ps1)
+if ((& $stale $uat) -or (& $stale $cli) -or -not (Test-Path target\uassettool-cli\UAssetTool.source)) {
     . .\uassettool-patches\apply.ps1 # with repakxtra's fixes, as build.ps1 builds it
     Use-UatPatches {
         Remove-Item UAssetToolRivals\src\UAssetTool\obj, UAssetToolRivals\src\UAssetTool\bin -Recurse -Force -ErrorAction SilentlyContinue
@@ -34,6 +35,7 @@ if ((& $stale $uat) -or (& $stale $cli)) {
         dotnet publish UAssetToolRivals/src/UAssetTool/UAssetTool.csproj -c Release -r win-x64 -p:PublishAot=true -p:TrimMode=partial -p:PublishSingleFile=false -p:IlcOptimizationPreference=Speed -p:DebugType=none -p:DebugSymbols=false -o target/uassettool-cli
         if ($LASTEXITCODE -ne 0) { throw 'The UAssetTool command line did not build.' }
     }
+    Write-UatSource
 }
 # repak-x\build.rs copies these only when it reruns, which an incremental dev build skips: put them beside the debug exe
 New-Item -ItemType Directory -Force target\debug\data | Out-Null

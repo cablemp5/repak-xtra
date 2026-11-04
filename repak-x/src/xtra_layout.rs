@@ -531,7 +531,7 @@ static SCAN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// checked (their verdicts may have changed). Only with the saved USMAP for this game build (another reads the game's
 /// classes wrong). Stops while a VFX update runs (the next scan goes on from there), skipped while another scan runs.
 #[tauri::command]
-pub async fn xtra_layout_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<usize, String> {
+pub async fn xtra_layout_scan(app: tauri::AppHandle, mod_paths: Vec<String>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<usize, String> {
     let Ok(_one) = SCAN.try_lock() else { return Ok(0) };
     let state = state.inner().clone();
     let mods_dir = state.lock().unwrap().game_path.clone();
@@ -547,7 +547,8 @@ pub async fn xtra_layout_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
     let store = store();
     let mut all = load(&store);
     let mut checked = 0;
-    for p in mod_paths {
+    let total = mod_paths.len();
+    for (i, p) in mod_paths.into_iter().enumerate() {
         if !crate::xtra_vfx::background_may_run() {
             break; // an update uses the same tool: the rest waits for the next scan
         }
@@ -561,6 +562,7 @@ pub async fn xtra_layout_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
         if current(&all, &utoc, game, &usmap_id).is_some() {
             continue;
         }
+        crate::xtra_broken::scan_progress(&app, "blueprints", i, total, &path);
         let st = state.clone();
         let Some(details) = tauri::async_runtime::spawn_blocking(move || crate::compute_mod_details(&path, &st).ok()).await.ok().flatten() else { continue };
         // not kept: a file list that failed to read looks like no Blueprint, and would stay cleared once it reads

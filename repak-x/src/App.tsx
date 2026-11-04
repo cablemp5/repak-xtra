@@ -72,6 +72,7 @@ import { setModsRoot } from './custom/loadoutIdentity' // repakxtra
 import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
 import { rescanVerdicts, useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
+import { useScanProgress } from './custom/scanProgress' // repakxtra
 import { useGameUpdateWatch } from './custom/gameUpdate' // repakxtra
 import { useUsmapWatch } from './custom/usmapWatch' // repakxtra
 import { fixInVfxWindow } from './custom/vfx/handoff' // repakxtra: the Mod Updater window
@@ -572,6 +573,7 @@ function App() {
 
 
   const alert = useAlert();
+  useScanProgress(alert) // repakxtra: the background mod checks' progress line
   useGameUpdateWatch(alert, isModsLoading, mods.length, () => { showAll(); setModState('broken') }) // repakxtra: game update notice
   useUsmapWatch() // repakxtra: checks and built-ins again once this game build's USMAP is out
 

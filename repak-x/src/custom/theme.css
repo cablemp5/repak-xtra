@@ -3007,12 +3007,12 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .ko-hero-group .ko-group-head { display: flex; align-items: center; gap: 6px; }
 
 /* The beta notice (custom/BetaNote.tsx) */
-.beta-note { --beta: #f04b4b; display: grid; grid-template-columns: 25px 1fr; column-gap: 12px; align-items: center; margin: 0; padding: 12px 16px; box-sizing: border-box;
+.beta-note { --beta: #f04b4b; display: grid; grid-template-columns: 33px 1fr; column-gap: 12px; align-items: center; margin: 0; padding: 12px 16px; box-sizing: border-box;
   font-size: 13px; line-height: 1.5; color: var(--beta); border: 1px solid color-mix(in srgb, var(--beta), transparent 70%); border-radius: 10px; background: color-mix(in srgb, var(--beta), transparent 91%); }
 /* red on purpose (cable, 2026-11-02): the one warning that is not meant to blend in */
 :root[data-theme="light"] .beta-note { --beta: #b3261e; }
 /* the mark beside the warning: its picture as a mask, in the note's red */
-.beta-mark { display: block; width: 25px; height: 16px; background: var(--beta); mask: center / contain no-repeat; -webkit-mask: center / contain no-repeat; }
+.beta-mark { display: block; width: 33px; height: 29px; background: var(--beta); mask: center / contain no-repeat; -webkit-mask: center / contain no-repeat; }
 .beta-note a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .wi-beta { margin: 0 28px 20px; }
 
@@ -3025,4 +3025,5 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
   background: transparent; border: none; border-radius: 4px; color: var(--text-secondary); cursor: pointer; }
 .settings-search-clear:hover { background: var(--quiet-hover); color: var(--text-primary); }
 .settings-content [hidden] { display: none !important; }
+.settings-content .setting-section[data-first-shown] { border-top: none; padding-top: 0; margin-top: 0; }
 .settings-search-empty { margin: 0; color: var(--text-secondary); font-size: 0.9rem; }

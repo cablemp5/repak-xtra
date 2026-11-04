@@ -690,7 +690,7 @@ static SCANNING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// Checks the VFX mods among `mod_paths` not checked yet (under the saved USMAP, when it matches the game) and returns
 /// how many were found in an older layout. Skipped while the VFX Updater runs or another scan does.
 #[tauri::command]
-pub async fn xtra_vfx_layout_scan(mod_paths: Vec<String>, state: tauri::State<'_, std::sync::Arc<std::sync::Mutex<crate::AppState>>>) -> Result<usize, String> {
+pub async fn xtra_vfx_layout_scan(app: tauri::AppHandle, mod_paths: Vec<String>, state: tauri::State<'_, std::sync::Arc<std::sync::Mutex<crate::AppState>>>) -> Result<usize, String> {
     let Ok(_one) = SCANNING.try_lock() else { return Ok(0) };
     if !crate::xtra_vfx::background_may_run() {
         return Ok(0);
@@ -705,7 +705,8 @@ pub async fn xtra_vfx_layout_scan(mod_paths: Vec<String>, state: tauri::State<'_
     let mut cache = load_layouts();
     let build = layout_build(&usmap, &paks);
     let mut found = 0;
-    for p in mod_paths {
+    let total = mod_paths.len();
+    for (i, p) in mod_paths.into_iter().enumerate() {
         let path = PathBuf::from(&p);
         if crate::xtra_builtins::in_folder(&path) {
             continue; // built-ins: xtra_builtins judges them by the game build they were made for, never these checks
@@ -715,6 +716,7 @@ pub async fn xtra_vfx_layout_scan(mod_paths: Vec<String>, state: tauri::State<'_
         if cache.contains_key(&key) {
             continue;
         }
+        crate::xtra_broken::scan_progress(&app, "effects", i, total, &path);
         let st = state.clone();
         let details = tauri::async_runtime::spawn_blocking(move || crate::compute_mod_details(&path, &st).ok()).await.ok().flatten();
         let Some(d) = details.filter(|d| d.category == "VFX") else { continue };

@@ -14,7 +14,7 @@ import { type Loadout, coverFills, displayName, memberName, modKey, nameKey, pat
 import { revealOnLoad } from './motion'
 import { EGG_MS, stepEgg, stepText } from './previewStages'
 import { plural } from './modName'
-import { isIdle } from './idlePause'
+import { animatedUrls, isIdle } from './idlePause'
 import { koPreview } from './ko/koPreview'
 import { KO_BEAT } from './ko/render'
 
@@ -60,7 +60,7 @@ const thumbLoads = new Map<string, { rev: number; p: Promise<string | null | und
 /** Forget a key's cached image and covers (its revision changed, or it has none now). */
 const dropCached = (key: string) => {
   const u = urls.get(key)
-  if (u) { URL.revokeObjectURL(u.url); videoUrls.delete(u.url) }
+  if (u) { URL.revokeObjectURL(u.url); videoUrls.delete(u.url); animatedUrls.delete(u.url) }
   const t = thumbs.get(key)
   if (t && t.url !== u?.url) URL.revokeObjectURL(t.url)
   thumbs.delete(key)
@@ -291,6 +291,7 @@ function loadUrl(key: string, rev: number): Promise<string | null | undefined> {
     urlLoads.delete(key)
     const type = imageType(bytes), url = URL.createObjectURL(new Blob([bytes], { type }))
     if (type === 'video/webm') videoUrls.add(url)
+    if (type === 'image/webp') animatedUrls.add(url) // idlePause.ts shows it still while the window is in the background
     urls.set(key, { rev, url })
     return url
   }, () => {
