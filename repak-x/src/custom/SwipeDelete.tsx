@@ -13,8 +13,11 @@ export default function SwipeDelete({ children, disabled, animated, onDelete, la
 }) {
   const root = useRef<HTMLDivElement>(null)
   const surface = useRef<HTMLDivElement>(null)
+  const drawer = useRef<HTMLButtonElement>(null)
+  const glyph = useRef<HTMLSpanElement>(null)
   const x = useRef(0)
   const animation = useRef<Animation | null>(null)
+  const drawerAnimations = useRef<Animation[]>([])
   const pending = useRef(false)
   const grip = useRef<Grip | null>(null)
   const suppressClick = useRef(false)
@@ -22,14 +25,18 @@ export default function SwipeDelete({ children, disabled, animated, onDelete, la
   const live = useRef({ move: (_e: globalThis.PointerEvent) => {}, up: (_e: globalThis.PointerEvent) => {} })
   const [open, setOpen] = useState(false)
   const [ready, setReady] = useState(false)
+  const glyphTransform = (offset: number) => `translate3d(calc(-50% - ${offset / 2}px), 0, 0)`
   const moveTo = (next: number) => {
     x.current = next
     if (surface.current) surface.current.style.transform = `translate3d(${next}px, 0, 0)`
+    if (drawer.current) drawer.current.style.transform = `translate3d(${next}px, 0, 0)`
+    if (glyph.current) glyph.current.style.transform = glyphTransform(next)
   }
   const stop = () => {
     if (!animation.current || !surface.current) return
     const current = new DOMMatrixReadOnly(getComputedStyle(surface.current).transform).m41
     animation.current.cancel(); animation.current = null
+    drawerAnimations.current.forEach(run => run.cancel())
     moveTo(current)
   }
   const settle = async (target: number) => {
@@ -37,9 +44,16 @@ export default function SwipeDelete({ children, disabled, animated, onDelete, la
     const from = x.current
     moveTo(target)
     if (!surface.current || !animated || document.documentElement.dataset.motion === 'off') return true
-    const run = surface.current.animate([
+    const frames = [
       { transform: `translate3d(${from}px, 0, 0)` }, { transform: `translate3d(${target}px, 0, 0)` },
-    ], { duration: 180, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' })
+    ]
+    const timing = { duration: 180, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' }
+    const run = surface.current.animate(frames, timing)
+    drawerAnimations.current = []
+    if (drawer.current) drawerAnimations.current.push(drawer.current.animate(frames, timing))
+    if (glyph.current) drawerAnimations.current.push(glyph.current.animate([
+      { transform: glyphTransform(from) }, { transform: glyphTransform(target) },
+    ], timing))
     animation.current = run
     try { await run.finished; return true } catch { return false }
     finally { if (animation.current === run) animation.current = null }
@@ -52,7 +66,7 @@ export default function SwipeDelete({ children, disabled, animated, onDelete, la
     setReady(false); setOpen(false); void settle(0)
   }
   useEffect(() => { if (disabled) cancel() }, [disabled])
-  useEffect(() => () => { animation.current?.cancel(); unwatch.current?.() }, [])
+  useEffect(() => () => { animation.current?.cancel(); drawerAnimations.current.forEach(run => run.cancel()); unwatch.current?.() }, [])
   const remove = async () => {
     if (disabled || pending.current) return
     pending.current = true
@@ -126,9 +140,9 @@ export default function SwipeDelete({ children, disabled, animated, onDelete, la
     onKeyDownCapture={e => { if (e.key === 'Escape' && (open || grip.current)) { e.stopPropagation(); cancel() } }}
     onClickCapture={e => { if (suppressClick.current && e.detail !== 0) { e.preventDefault(); e.stopPropagation() } }}
     onDragStart={e => e.preventDefault()}>
-    <button type="button" className="mod-swipe-delete" tabIndex={open ? 0 : -1} disabled={disabled}
+    <button ref={drawer} type="button" className="mod-swipe-delete" tabIndex={open ? 0 : -1} disabled={disabled}
       aria-hidden={!open} aria-label={`Delete ${label}`} onClick={remove}>
-      <Trash2 size={18} aria-hidden="true" /><span>{ready ? 'Release to delete' : 'Delete'}</span>
+      <span ref={glyph} className="mod-swipe-glyph"><Trash2 size={18} aria-hidden="true" /><span>{ready ? 'Release to delete' : 'Delete'}</span></span>
     </button>
     <div ref={surface} className="mod-swipe-surface">{children}</div>
     <span className="mod-swipe-status" role="status">{ready ? `Release to delete ${label}` : ''}</span>
