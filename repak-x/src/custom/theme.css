@@ -30,6 +30,8 @@
   --quiet-active: rgba(255, 255, 255, 0.07);
   --quiet-radius: 8px;
   --focus-ring: color-mix(in srgb, var(--accent-primary), white 25%);
+  /* A focused text field's border: a step lighter than at rest, never a loud white line (cable, 2026-11-04) */
+  --field-focus: color-mix(in srgb, var(--text-primary), transparent 80%);
   /* T3 Code primary (oklch 0.571 0.21 264). !important beats the accent the app sets inline from
      Settings, so no red anywhere; the accent picker no longer applies in dark mode. */
   --accent-primary: #346bf1 !important;
@@ -164,7 +166,7 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
   box-shadow: none !important;
   min-height: 40px;
 }
-.search-wrapper:focus-within { border-color: color-mix(in srgb, var(--text-primary), transparent 50%) !important; box-shadow: none !important; }
+.search-wrapper:focus-within { border-color: var(--field-focus) !important; box-shadow: none !important; }
 .main-search-input { background: transparent !important; border: none !important; font-size: 14px; caret-color: var(--text-primary); }   /* white, not the accent blue, as every other field */
 .custom-dropdown-trigger { font-size: 13px !important; font-weight: 500 !important; }
 .custom-dropdown-trigger:hover { background: var(--bg-dark) !important; }
@@ -861,7 +863,7 @@ html[data-motion="off"] .lo-screen { animation: none; }
   height: 36px !important; font-size: 13px !important; padding: 0 12px !important;
   background: var(--input-bg) !important; border: 1px solid var(--input-border) !important; border-radius: var(--quiet-radius) !important;
 }
-.vfx-input-group input:focus { border-color: color-mix(in srgb, var(--text-primary), transparent 50%) !important; box-shadow: none !important; }
+.vfx-input-group input:focus { border-color: var(--field-focus) !important; box-shadow: none !important; }
 .vfx-input-group button, .btn-secondary, .vfx-cancel-btn {
   height: 36px !important; padding: 0 16px !important; font-size: 13px !important; font-weight: 500 !important;
   background: transparent !important; border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important;
@@ -2056,7 +2058,7 @@ html[data-motion="off"] .lo-row .fp-lead.is-busy .lo-on-dot { animation: none; }
    (cable asked: a dot on Check conflicts, a badge on each clashing mod that is on) ---------- */
 .app .main-search-input:focus-visible { outline: none !important; }
 .main-action-bar .search-wrapper { background: var(--field-bg) !important; border-color: var(--panel-border) !important; }
-.main-action-bar .search-wrapper:focus-within { border-color: color-mix(in srgb, var(--text-primary), transparent 50%) !important; }
+.main-action-bar .search-wrapper:focus-within { border-color: var(--field-focus) !important; }
 .main-action-bar .search-wrapper > svg { width: 16px !important; height: 16px !important; color: var(--text-secondary) !important; opacity: 0.8; }
 .main-search-input { font-size: 14px !important; }
 .main-search-input::placeholder { color: var(--text-secondary) !important; opacity: 0.8; }
@@ -2091,7 +2093,7 @@ html[data-motion="off"] .lo-row .fp-lead.is-busy .lo-on-dot { animation: none; }
 .install-mod-card__pill { background: transparent !important; border: 1px solid var(--panel-border) !important; color: var(--text-secondary) !important; font-weight: 500 !important; }
 .install-mod-card .mod-name-input { background: var(--field-bg) !important; border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important;
   height: 32px; padding: 0 12px !important; max-width: 260px; outline: none !important; box-shadow: none !important; }
-.install-mod-card .mod-name-input:focus { border-color: color-mix(in srgb, var(--text-primary), transparent 50%) !important; }
+.install-mod-card .mod-name-input:focus { border-color: var(--field-focus) !important; }
 .install-mod-card__tags { border-top: 1px solid var(--panel-border) !important; padding-top: 12px !important; }
 .install-mod-card__footer { border-top: 1px solid var(--panel-border) !important; padding-top: 12px !important; gap: 8px !important;
   align-items: stretch !important; justify-content: stretch !important; }
@@ -2511,17 +2513,17 @@ html[data-motion] .hold-delete.holding::after { transition-duration: 2s !importa
 /* ---------- Text fields never get the blue focus ring (cable, 2026-10-17). The app-wide ring (.app :focus-visible) is for
    buttons, links and switches; every text field, now and added later, shows focus as a lighter hairline instead, in every
    window. Matched by element type, so a new field needs no class of its own. Boxes that hold a field (a search or rename
-   box) do the same while the field inside has focus. The hairline is bright enough (about 4:1 against the resting
-   border) to find the focused field at a glance (cable, 2026-10-21). ---------- */
+   box) do the same while the field inside has focus. The hairline (--field-focus) is a quiet step lighter than the resting
+   border, not a white outline (cable, 2026-11-04). ---------- */
 :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="button"], [type="submit"], [type="reset"], [type="color"], [type="file"], [type="image"]), textarea, select, [contenteditable="true"]):is(:focus, :focus-visible) {
   outline: none !important;
   box-shadow: none !important;
-  border-color: color-mix(in srgb, var(--text-primary), transparent 50%) !important;
+  border-color: var(--field-focus) !important;
 }
 :is(.rename-input-wrapper, .combined-input-group, .search-wrapper, .tail-input, .lp-search):focus-within {
   outline: none !important;
   box-shadow: none !important;
-  border-color: color-mix(in srgb, var(--text-primary), transparent 50%) !important;
+  border-color: var(--field-focus) !important;
 }
 /* A loadout page's More menu: Delete in red, like the Library's right-click Delete (cable, 2026-10-17) */
 .lp-more-menu .sigeon-item.is-danger { color: #f2555a !important; }
@@ -3005,13 +3007,23 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .ko-hero-group .ko-group-head { display: flex; align-items: center; gap: 6px; }
 
 /* The beta notice (custom/BetaNote.tsx) */
-.beta-note { --beta: #f04b4b; display: grid; grid-template-columns: 25px 1fr; column-gap: 12px; align-items: center; margin: 0; padding: 12px 16px; box-sizing: border-box;
+.beta-note { --beta: #f04b4b; display: grid; grid-template-columns: 33px 1fr; column-gap: 12px; align-items: center; margin: 0; padding: 12px 16px; box-sizing: border-box;
   font-size: 13px; line-height: 1.5; color: var(--beta); border: 1px solid color-mix(in srgb, var(--beta), transparent 70%); border-radius: 10px; background: color-mix(in srgb, var(--beta), transparent 91%); }
 /* red on purpose (cable, 2026-11-02): the one warning that is not meant to blend in */
 :root[data-theme="light"] .beta-note { --beta: #b3261e; }
 /* the mark beside the warning: its picture as a mask, in the note's red */
-.beta-mark { display: block; width: 25px; height: 16px; background: var(--beta); mask: center / contain no-repeat; -webkit-mask: center / contain no-repeat; }
+.beta-mark { display: block; width: 33px; height: 33px; background: var(--beta); mask: center / contain no-repeat; -webkit-mask: center / contain no-repeat; }
 .beta-note a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .wi-beta { margin: 0 28px 20px; }
 
 .mod-type-badge.broken-badge.is-unknown { background: transparent !important; }
+/* Settings search (custom/settingsSearch.tsx): the quiet search field atop the page list (Hick: one field instead of
+   six pages to scan). Rows it filters out carry [hidden], which beats each row's own display */
+.settings-search { width: 100%; height: 32px; flex: none; margin-bottom: 8px; padding: 0 8px 0 10px; }
+.settings-search input::-webkit-search-cancel-button { display: none; }
+.settings-search-clear { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0;
+  background: transparent; border: none; border-radius: 4px; color: var(--text-secondary); cursor: pointer; }
+.settings-search-clear:hover { background: var(--quiet-hover); color: var(--text-primary); }
+.settings-content [hidden] { display: none !important; }
+.settings-content .setting-section[data-first-shown] { border-top: none; padding-top: 0; margin-top: 0; }
+.settings-search-empty { margin: 0; color: var(--text-secondary); font-size: 0.9rem; }

@@ -186,18 +186,36 @@ fn valid_run_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
 }
 
-/// The actual decoder binaries and the comparison schema, pinned for this process like the loaded native library.
+/// The file build.ps1 and dev.ps1 write beside the UAssetTool builds: the source they were built from.
+pub(crate) const TOOL_SOURCE: &str = "UAssetTool.source";
+
+/// What the decoder tools are: the source they were built from (TOOL_SOURCE beside the first that has one), else their
+/// bytes. repakxtra: by source, because two builds of the same source differ byte for byte (.NET publish is not
+/// reproducible), so each rebuild, and each of the stable, test and dev copies, made the background checks read every
+/// mod again (216 mods, about an hour of CPU at each switch, 2026-11-04). A real change to the tools changes the source.
+fn tools_id(tools: &[PathBuf]) -> Result<String, String> {
+    if let Some(stamp) = tools.iter().find_map(|t| std::fs::read_to_string(t.with_file_name(TOOL_SOURCE)).ok()).filter(|s| !s.trim().is_empty()) {
+        return Ok(format!("source {}", stamp.trim()));
+    }
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    for path in tools {
+        h.update(std::fs::read(path).map_err(|e| e.to_string())?);
+    }
+    Ok(format!("bytes {:x}", h.finalize()))
+}
+
+/// The decoder tools (tools_id) and the comparison schema, pinned for this process like the loaded native library.
 pub(crate) fn parser_id() -> &'static str {
     static ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     ID.get_or_init(|| {
         use sha2::{Digest, Sha256};
         let fingerprint = || -> Result<String, String> {
             let dll = uasset_toolkit::native_library_path().map_err(|e| e.to_string())?;
+            let tools: Vec<PathBuf> = std::iter::once(PathBuf::from(dll)).chain(crate::xtra_uat_cli::cli()).collect();
             let mut h = Sha256::new();
             h.update(env!("REPAKXTRA_DECODE_LOGIC"));
-            for path in std::iter::once(PathBuf::from(dll)).chain(crate::xtra_uat_cli::cli()) {
-                h.update(std::fs::read(path).map_err(|e| e.to_string())?);
-            }
+            h.update(tools_id(&tools)?);
             Ok(format!("{:x}", h.finalize()))
         };
         fingerprint().unwrap_or_else(|_| {
@@ -1050,6 +1068,27 @@ pub async fn xtra_vfx_stale(mod_path: String, game_paks: String, files: Vec<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tools_built_from_the_same_source_share_an_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let (one, two) = (dir.path().join("a"), dir.path().join("b"));
+        for (d, bytes) in [(&one, b"build 1"), (&two, b"build 2")] {
+            std::fs::create_dir_all(d).unwrap();
+            std::fs::write(d.join("UAssetTool.dll"), bytes).unwrap();
+        }
+        let id = |d: &PathBuf| tools_id(&[d.join("UAssetTool.dll")]).unwrap();
+        assert_ne!(id(&one), id(&two), "no stamp: the bytes decide");
+        for d in [&one, &two] { std::fs::write(d.join(TOOL_SOURCE), "abc123\n").unwrap(); }
+        assert_eq!(id(&one), id(&two), "the same source: one id, whatever the bytes");
+        std::fs::write(two.join(TOOL_SOURCE), "def456").unwrap();
+        assert_ne!(id(&one), id(&two), "a new source: a new id");
+        assert!(tools_id(&[dir.path().join("missing.dll")]).is_err(), "no stamp and no file: unreadable");
+        // the workspace's own build (dev.ps1 or build.ps1 wrote its stamp): found where the app looks for it
+        if let Some(cli) = crate::xtra_uat_cli::cli().filter(|c| c.with_file_name(TOOL_SOURCE).is_file()) {
+            assert!(tools_id(&[cli]).unwrap().starts_with("source "), "the built tools are known by their source");
+        }
+    }
     use crate::vfx_updater::{commands as c, file_ops, logging, pipeline, progress::NoOpProgressSink};
     use serde_json::{json, Value};
     use std::io::{BufRead, Write};

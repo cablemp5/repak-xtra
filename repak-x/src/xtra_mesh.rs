@@ -112,7 +112,7 @@ static SCAN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// Checks the mesh mods among `mod_paths` whose skeleton the game rebuilt since they were made, once per file and game
 /// update, and returns how many it checked. Steps aside like every background scan (xtra_vfx.rs background_may_run).
 #[tauri::command]
-pub async fn xtra_mesh_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<usize, String> {
+pub async fn xtra_mesh_scan(app: tauri::AppHandle, mod_paths: Vec<String>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<usize, String> {
     let Ok(_one) = SCAN.try_lock() else { return Ok(0) };
     let state = state.inner().clone();
     let mods_dir = state.lock().unwrap().game_path.clone();
@@ -122,7 +122,8 @@ pub async fn xtra_mesh_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mutex<A
     let work = std::env::temp_dir().join("repak-x").join("xmesh").join(std::process::id().to_string());
     let mut all = load_done();
     let mut n = 0;
-    for p in mod_paths {
+    let total = mod_paths.len();
+    for (i, p) in mod_paths.into_iter().enumerate() {
         if !crate::xtra_vfx::background_may_run() {
             break;
         }
@@ -135,6 +136,7 @@ pub async fn xtra_mesh_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mutex<A
             continue;
         }
         let Some((size, modified)) = crate::xtra_broken::file_stamp(&utoc) else { continue };
+        crate::xtra_broken::scan_progress(&app, "meshes", i, total, &path);
         let (st, pc, pk) = (state.clone(), path.clone(), paks.clone());
         let meshes = tauri::async_runtime::spawn_blocking(move || {
             let d = crate::compute_mod_details(&pc, &st).ok()?;

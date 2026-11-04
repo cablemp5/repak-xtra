@@ -14,6 +14,7 @@ import { type Loadout, coverFills, displayName, memberName, modKey, nameKey, pat
 import { revealOnLoad } from './motion'
 import { EGG_MS, stepEgg, stepText } from './previewStages'
 import { plural } from './modName'
+import { animatedUrls, isIdle } from './idlePause'
 import { koPreview } from './ko/koPreview'
 import { KO_BEAT } from './ko/render'
 
@@ -59,7 +60,7 @@ const thumbLoads = new Map<string, { rev: number; p: Promise<string | null | und
 /** Forget a key's cached image and covers (its revision changed, or it has none now). */
 const dropCached = (key: string) => {
   const u = urls.get(key)
-  if (u) { URL.revokeObjectURL(u.url); videoUrls.delete(u.url) }
+  if (u) { URL.revokeObjectURL(u.url); videoUrls.delete(u.url); animatedUrls.delete(u.url) }
   const t = thumbs.get(key)
   if (t && t.url !== u?.url) URL.revokeObjectURL(t.url)
   thumbs.delete(key)
@@ -249,7 +250,7 @@ export function BeatVideo({ src, beat }: { src: string; beat: number }) {
     if (!v) return
     let t: number | undefined
     let visible = false
-    const active = () => visible && !document.hidden
+    const active = () => visible && !isIdle() // idlePause.ts: also paused while another window has focus
     const next = () => {
       clearTimeout(t)
       if (active()) t = window.setTimeout(() => { v.currentTime = 0; v.play().catch(() => undefined) }, beat * 1000 - (Date.now() % (beat * 1000)))
@@ -270,7 +271,9 @@ export function BeatVideo({ src, beat }: { src: string; beat: number }) {
     v.addEventListener('ended', next)
     v.addEventListener('loadeddata', join)
     document.addEventListener('visibilitychange', join)
-    return () => { clearTimeout(t); observer.disconnect(); v.pause(); v.removeEventListener('ended', next); v.removeEventListener('loadeddata', join); document.removeEventListener('visibilitychange', join) }
+    window.addEventListener('blur', join)
+    window.addEventListener('focus', join)
+    return () => { clearTimeout(t); observer.disconnect(); v.pause(); v.removeEventListener('ended', next); v.removeEventListener('loadeddata', join); document.removeEventListener('visibilitychange', join); window.removeEventListener('blur', join); window.removeEventListener('focus', join) }
   }, [src, beat])
   return <video ref={ref} src={src} muted playsInline preload="auto" />
 }
@@ -288,6 +291,7 @@ function loadUrl(key: string, rev: number): Promise<string | null | undefined> {
     urlLoads.delete(key)
     const type = imageType(bytes), url = URL.createObjectURL(new Blob([bytes], { type }))
     if (type === 'video/webm') videoUrls.add(url)
+    if (type === 'image/webp') animatedUrls.add(url) // idlePause.ts shows it still while the window is in the background
     urls.set(key, { rev, url })
     return url
   }, () => {

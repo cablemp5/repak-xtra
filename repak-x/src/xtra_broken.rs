@@ -679,6 +679,13 @@ fn remember_checked(store: &Path, utoc: &Path, game_updated: u64, outdated: bool
 }
 
 /// When the game was last updated (its newest container's time), for the mods folder `mods_dir`. 0 when not known.
+/// The background checks' progress line (custom/brokenMods.ts): which check, the mod it is on and its place in the
+/// list. Sent only for a mod about to be read, never for one already checked.
+pub(crate) fn scan_progress(app: &tauri::AppHandle, step: &'static str, at: usize, total: usize, mod_path: &Path) {
+    use tauri::Emitter;
+    let _ = app.emit("mod-scan-progress", serde_json::json!({ "step": step, "at": at + 1, "total": total, "path": mod_path.to_string_lossy() }));
+}
+
 pub(crate) fn game_updated(mods_dir: &Path) -> u64 {
     paks_dir(mods_dir).map_or(0, |p| game_containers(&p).iter().map(|c| c.2).max().unwrap_or(0))
 }

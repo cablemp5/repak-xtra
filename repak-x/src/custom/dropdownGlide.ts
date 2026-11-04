@@ -7,6 +7,13 @@ const SELECTED = '[aria-selected="true"], [aria-checked="true"], .selected'
 const DISABLED = ':disabled, [aria-disabled="true"], .disabled, .is-disabled'
 const menus = new Map<HTMLElement, HTMLElement | null>()
 
+/** A row in a sticky footer (the install card's "+ New loadout"): its opaque backing would hide a highlight drawn
+ *  under the rows, so the highlight goes over it, as for the add-new footer. */
+function pinned(menu: HTMLElement, row: HTMLElement) {
+  for (let e: HTMLElement | null = row; e && e !== menu; e = e.parentElement) if (getComputedStyle(e).position === 'sticky') return true
+  return false
+}
+
 function place(menu: HTMLElement, row: HTMLElement) {
   if (row.matches(DISABLED) || !row.isConnected || !row.getClientRects().length) return
   const box = menu.getBoundingClientRect(), rect = row.getBoundingClientRect()
@@ -19,7 +26,7 @@ function place(menu: HTMLElement, row: HTMLElement) {
   menu.style.setProperty('--dg-w', `${rect.width / scale}px`)
   menu.style.setProperty('--dg-h', `${rect.height / scale}px`)
   menu.style.setProperty('--dg-radius', getComputedStyle(row).borderRadius)
-  menu.toggleAttribute('data-glide-footer', row.classList.contains('add-new'))
+  menu.toggleAttribute('data-glide-footer', row.classList.contains('add-new') || pinned(menu, row))
   menu.style.setProperty('--dg-color', row.matches('.danger, .is-danger') ? 'rgba(242, 85, 90, 0.1)'
     : menu.matches('.ae-export-menu') ? 'color-mix(in srgb, var(--accent-primary), transparent 88%)'
     : menu.matches('.ae-mod-menu-list') ? 'var(--bg-light)'

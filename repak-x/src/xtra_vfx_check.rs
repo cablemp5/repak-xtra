@@ -339,7 +339,7 @@ static SCAN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// instances, each once per file and game update (outdated ones get their flag), and returns how many it looked at. Stops
 /// while an update runs (the next scan goes on from there), skipped while another runs or the USMAP is not the game's.
 #[tauri::command]
-pub async fn xtra_vfx_check_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<usize, String> {
+pub async fn xtra_vfx_check_scan(app: tauri::AppHandle, mod_paths: Vec<String>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<usize, String> {
     let Ok(_one) = SCAN.try_lock() else { return Ok(0) };
     let state = state.inner().clone();
     let mods_dir = state.lock().unwrap().game_path.clone();
@@ -349,7 +349,8 @@ pub async fn xtra_vfx_check_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mu
     let store = scan_store();
     let mut done = load_scanned(&store);
     let mut found = 0;
-    for p in mod_paths {
+    let total = mod_paths.len();
+    for (i, p) in mod_paths.into_iter().enumerate() {
         // an update runs, or the game: the next scan goes on from here
         if !crate::xtra_vfx::background_may_run() {
             break;
@@ -362,13 +363,15 @@ pub async fn xtra_vfx_check_scan(mod_paths: Vec<String>, state: State<'_, Arc<Mu
         if !needs_scan(&done, &utoc, game) {
             continue;
         }
+        crate::xtra_broken::scan_progress(&app, "materials", i, total, &path);
         let (st, pc) = (state.clone(), path.clone());
         let details = tauri::async_runtime::spawn_blocking(move || crate::compute_mod_details(&pc, &st).ok()).await.ok().flatten();
         let (pk, u) = (paks.clone(), utoc.clone());
         let mics = tauri::async_runtime::spawn_blocking(move || details.map(|d| crate::xtra_broken::material_instances(&pk, &u, &d.files))).await.ok().flatten();
         if mics.as_ref().is_some_and(|(m, all)| !m.is_empty() || !all) {
             match check(&path, &usmap, &state, false).await {
-                Ok(c) if matches!(c.why, Some("layout" | "classes")) => { found += 1; continue; } // refresh its verdict, but retry next scan
+                // "layout" or "classes" (not told) is kept like any answer: the same file, game and parser give the same
+                // one, so asking again each launch only burned a minute of CPU per mod. A change to any of them asks again
                 Ok(_) => {}
                 Err(e) => {
                     log::warn!("[vfx check] {p}: {e}"); // tried again by the next scan
