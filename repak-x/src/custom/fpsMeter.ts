@@ -1,6 +1,6 @@
-import { cue } from './sounds'
 // repakxtra: F3 shows a frame rate counter in the corner: frames in the last second and the slowest frame in it (a long
 // frame is a hitch you feel even at 60 fps). Plain DOM on its own animation frame loop, so it never re-renders React.
+import { cue } from './sounds'
 const KEY = 'repakxtra.fps'
 let el: HTMLDivElement | null = null
 let raf = 0

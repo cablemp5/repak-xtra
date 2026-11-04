@@ -160,7 +160,7 @@ html[data-motion="off"] .ko-stage canvas, html[data-motion="off"] .ko-play { ani
 .ko-preview-options .ob-seg button { height: 26px; min-height: 0; padding: 0 12px; font-size: 12px; }
 .ko-random { display: flex; flex-direction: column; gap: 10px; padding: 8px 0 12px 8px; border-bottom: 1px solid var(--panel-border); margin-bottom: 8px; }
 .ko-random-control { position: relative; display: flex; width: 100%; }
-.ko-random-control > .lo-text-btn { color: #fff !important; }
+.ko-random-control > .lo-text-btn { color: var(--text-primary) !important; }
 .ko-random-control > .lo-text-btn svg { color: inherit; opacity: 1; }
 .ko-random-control > .ko-random-main { flex: 1; justify-content: center; border-radius: var(--quiet-radius) 0 0 var(--quiet-radius) !important; border-right: 0 !important; }
 .ko-random-control > .ko-random-more { width: 32px; padding: 0 !important; justify-content: center; border-radius: 0 var(--quiet-radius) var(--quiet-radius) 0 !important; }

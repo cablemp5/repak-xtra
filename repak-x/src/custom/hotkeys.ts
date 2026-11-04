@@ -127,11 +127,12 @@ window.addEventListener('keydown', e => {
   }
 
   switch (key) {
-    case '/':
+    case '/': {
       e.preventDefault()
       const search = document.querySelector<HTMLInputElement>('.main-search-input')
       if (search) { search.focus(); cue('select') }
       break
+    }
     case '1': case '2': case '3':
       click(`.mod-state-filter button:nth-child(${key})`)
       break

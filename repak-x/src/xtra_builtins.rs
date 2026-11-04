@@ -527,6 +527,7 @@ async fn make(tool: &Path, id: &str, paks: &Path, work: &Path, out_base: &Path) 
     convert_uassets_to_json(&tool, &usmap, &s(&legacy), &s(&json), &sink).await?;
 
     let (summary, flipped);
+    let has_warn = json.join(format!("{WARN}.json")).is_file(); // a game without this screen: the logos still go
     {
         let mut logo = read_json(&json.join(format!("{LOGO}.json")))?;
         flipped = edit_logo_table(&mut logo)?;
@@ -534,7 +535,7 @@ async fn make(tool: &Path, id: &str, paks: &Path, work: &Path, out_base: &Path) 
             return Err("No startup logo video was on: the game changed how they are listed".to_string());
         }
         // Shorten the animation in place, then rebuild only the root widget to hide its contents.
-        let warned = match read_json(&json.join(format!("{WARN}.json"))) {
+        let warned = has_warn && match read_json(&json.join(format!("{WARN}.json"))) {
             Ok(mut doc) => {
                 let mut raw = std::fs::read(legacy.join(format!("{WARN}.uexp"))).map_err(|e| format!("{WARN}.uexp: {e}"))?;
                 let header = std::fs::metadata(legacy.join(format!("{WARN}.uasset"))).map_err(|e| e.to_string())?.len() as usize;
@@ -552,20 +553,22 @@ async fn make(tool: &Path, id: &str, paks: &Path, work: &Path, out_base: &Path) 
     convert_json_to_uassets(&tool, &usmap, &s(&edited), &s(&rt), &sink).await?;
     let checked = work.join("checked");
     convert_uassets_to_json(&tool, &usmap, &s(&rt), &s(&checked), &sink).await?;
-    let rebuilt = read_json(&checked.join(format!("{WARN}.json")))?;
-    let original = read_json(&json.join(format!("{WARN}.json")))?;
-    let root = original["Exports"].as_array().into_iter().flatten().find(|e| e["ObjectName"] == "WidgetTree")
-        .and_then(|e| e["Data"].as_array()).and_then(|d| d.iter().find(|p| p["Name"] == "RootWidget"))
-        .and_then(|p| p["Value"].as_u64()).ok_or("missing warning root")? as usize - 1;
-    let data = rebuilt["Exports"][root]["Data"].as_array().ok_or("the hidden warning root did not decode")?;
-    if !data.iter().any(|p| p["Name"] == "RenderOpacity" && p["Value"].as_f64().or_else(|| p["Value"].as_str()?.parse::<f64>().ok()) == Some(0.0))
-        || data.iter().find(|p| p["Name"] == "Slots") != original["Exports"][root]["Data"].as_array().and_then(|d| d.iter().find(|p| p["Name"] == "Slots")) {
-        return Err("the hidden warning did not rebuild correctly".into());
-    }
-    for ext in ["uasset", "uexp"] {
-        let dst = staged.join(format!("{WARN}.{ext}"));
-        std::fs::create_dir_all(dst.parent().unwrap()).map_err(|e| e.to_string())?;
-        std::fs::copy(rt.join(format!("{WARN}.{ext}")), dst).map_err(|e| format!("warning {ext}: {e}"))?;
+    if has_warn {
+        let rebuilt = read_json(&checked.join(format!("{WARN}.json")))?;
+        let original = read_json(&json.join(format!("{WARN}.json")))?;
+        let root = original["Exports"].as_array().into_iter().flatten().find(|e| e["ObjectName"] == "WidgetTree")
+            .and_then(|e| e["Data"].as_array()).and_then(|d| d.iter().find(|p| p["Name"] == "RootWidget"))
+            .and_then(|p| p["Value"].as_u64()).and_then(|n| n.checked_sub(1)).ok_or("missing warning root")? as usize;
+        let data = rebuilt["Exports"][root]["Data"].as_array().ok_or("the hidden warning root did not decode")?;
+        if !data.iter().any(|p| p["Name"] == "RenderOpacity" && p["Value"].as_f64().or_else(|| p["Value"].as_str()?.parse::<f64>().ok()) == Some(0.0))
+            || data.iter().find(|p| p["Name"] == "Slots") != original["Exports"][root]["Data"].as_array().and_then(|d| d.iter().find(|p| p["Name"] == "Slots")) {
+            return Err("the hidden warning did not rebuild correctly".into());
+        }
+        for ext in ["uasset", "uexp"] {
+            let dst = staged.join(format!("{WARN}.{ext}"));
+            std::fs::create_dir_all(dst.parent().unwrap()).map_err(|e| e.to_string())?;
+            std::fs::copy(rt.join(format!("{WARN}.{ext}")), dst).map_err(|e| format!("warning {ext}: {e}"))?;
+        }
     }
     // the game's own header (names, imports, sizes unchanged) with the rebuilt export data, checked byte by byte
     for rel in tables {

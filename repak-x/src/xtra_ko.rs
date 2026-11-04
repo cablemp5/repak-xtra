@@ -26,10 +26,12 @@ pub(crate) fn paks(state: &State<'_, Arc<Mutex<AppState>>>) -> Result<PathBuf, S
 }
 
 /// This game build's and USMAP's folder. Folders of other builds go: they would hand out old or wrongly read files.
-fn build_dir(paks: &Path, usmap: &str) -> PathBuf {
-    let dir = root().join(format!("{}-{}", crate::xtra_vfx::build_hash(paks), crate::xtra_vfx::usmap_hash(usmap)));
+/// `kind` keeps the hero logos (read with the saved USMAP) apart from the editor's (the USMAP the editor passes), so
+/// two different USMAPs never purge each other's folder.
+fn build_dir(paks: &Path, usmap: &str, kind: &str) -> PathBuf {
+    let dir = root().join(format!("{kind}{}-{}", crate::xtra_vfx::build_hash(paks), crate::xtra_vfx::usmap_hash(usmap)));
     if let Ok(entries) = std::fs::read_dir(root()) {
-        for e in entries.flatten().filter(|e| e.path() != dir) {
+        for e in entries.flatten().filter(|e| e.path() != dir && e.file_name().to_string_lossy().starts_with("logos-") == kind.starts_with("logos-")) {
             let _ = std::fs::remove_dir_all(e.path());
         }
     }
@@ -112,7 +114,7 @@ fn version(widget: &str) -> u32 {
 #[tauri::command]
 pub async fn xtra_ko_heroes(usmap_path: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<KoHero>, String> {
     let paks = paks(&state)?;
-    let dir = build_dir(&paks, &usmap_path).join("widgets");
+    let dir = build_dir(&paks, &usmap_path, "").join("widgets");
     let done = dir.join(".done");
     if !done.exists() {
         let _ = std::fs::remove_dir_all(&dir);
@@ -170,7 +172,7 @@ pub async fn xtra_ko_load(window: Window, usmap_path: String, widget: String, st
     }
     let paks = paks(&state)?;
     let stem = widget.rsplit('/').next().unwrap_or("widget").to_string();
-    let base = build_dir(&paks, &usmap_path).join("hero").join(&stem);
+    let base = build_dir(&paks, &usmap_path, "").join("hero").join(&stem);
     let (ex, json, png) = (base.join("extract"), base.join("json"), base.join("png"));
     let done = base.join(".done");
     if !done.exists() {
@@ -308,7 +310,7 @@ async fn hero_portrait(hero: String, state: &State<'_, Arc<Mutex<AppState>>>) ->
     let usmap = crate::vfx_updater::commands::saved_usmap_path().ok_or("No USMAP is available to read the hero logo.")?;
     let _one = ONE.lock().await;
     let paks = paks(state)?;
-    let base = build_dir(&paks, &usmap).join("logos").join(&hero);
+    let base = build_dir(&paks, &usmap, "logos-").join(&hero);
     let png = base.join("png").join(format!("{rel}.png"));
     if !png.exists() {
         let ex = base.join("extract");
@@ -347,7 +349,7 @@ pub async fn xtra_ko_mod(usmap_path: String, mod_path: String, state: State<'_, 
     }
     let paks = paks(&state)?;
     // inside this build's folder: xtra_ko_file reads only from there, and an older build's copy goes with it
-    let base = build_dir(&paks, &usmap_path).join("mod");
+    let base = build_dir(&paks, &usmap_path, "").join("mod");
     let _ = std::fs::remove_dir_all(&base);
     let (ex, json, png) = (base.join("extract"), base.join("json"), base.join("png"));
     std::fs::create_dir_all(&ex).map_err(|e| e.to_string())?;

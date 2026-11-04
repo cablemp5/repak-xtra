@@ -8,6 +8,9 @@ export type KoStep = 'Writing the colors' | 'Rebuilding the widget' | 'Checking 
 export type KoBuild = { usmapPath: string; widgetJson: string; widgetRel: string; roles: Role[]; colors: Map<string, string>; name: string; step: (s: KoStep) => void }
 export const readAsset = async (path: string): Promise<Asset> => JSON.parse((await invoke<string>('vfx_read_json_file', { path })).replace(/^﻿/, ''))
 
+/** The mod's file name from its name: letters, numbers, spaces as underscores. */
+export const koStem = (name: string) => name.trim().replace(/[^A-Za-z0-9 _-]/g, '').split(/\s+/).join('_') || 'KO_prompt'
+
 export async function buildKo(o: KoBuild): Promise<string> {
   o.step('Writing the colors')
   const stage = await invoke<string>('xtra_ko_stage')
@@ -30,7 +33,7 @@ export async function buildKo(o: KoBuild): Promise<string> {
   if (unread.length) throw new Error('The rebuilt widget does not read back with the game\'s USMAP, so it was not installed.')
 
   o.step('Packing the mod')
-  const stem = o.name.trim().replace(/[^A-Za-z0-9 _-]/g, '').split(/\s+/).join('_') || 'KO_prompt'
+  const stem = koStem(o.name)
   const utoc = await invoke<string>('vfx_pack_to_iostore', { usmapPath: o.usmapPath, inputDir: `${stage}/out`, outputBase: `${stage}/pack/${stem}`, allowedAssets: [`${o.widgetRel}.uasset`] })
 
   return utoc.replace(/\.utoc$/i, '.pak')

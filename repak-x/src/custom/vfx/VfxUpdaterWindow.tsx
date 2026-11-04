@@ -20,15 +20,16 @@ import { DEFAULT_FILTER, parseWords, readFilter, resetFilter, writeFilter, type 
 import { canonKey } from '../loadoutIdentity'
 import { modKey, useLoadouts } from '../loadoutStore'
 import { FIXED_EVENT, onHandoff, openLoadoutInMain, onReport, takeHandoff, takeReport, utocOf, type Fixed } from './handoff'
-import { KEEP_NAME, ORIGINALS, SAFE_OFF, claimRun, newRunToken, onRunChange, readNaming, readOriginals, readSafeOff, releaseRun, runLock, type Naming, type Originals, type RunLock } from './prefs'
+import { CHECK_RUN, KEEP_NAME, ORIGINALS, REPAIR_POLICY, SAFE_OFF, claimRun, newRunToken, onRunChange, readNaming, readOriginals, readRepairPolicy, readSafeOff, releaseRun, runLock, type Naming, type Originals, type RunLock } from './prefs'
 import { STEPS, fixVfxMod, repairOutcome, type AssetKind, type VfxReport } from './pipeline'
 import { checkVfxMod, checkWords } from './quick'
 import { verdictLabel, verdictsChanged } from '../brokenMods'
 import { HeroFilter, heroOfName } from '../heroFilter'
 import ScanButton from './ScanButton'
+import { useDialogFocus } from '../dialogFocus'
 import './vfx.css'
 
-type Status = 'waiting' | 'running' | 'fixed' | 'nothing' | 'failed' | 'cancelled'
+type Status = 'waiting' | 'running' | 'fixed' | 'nothing' | 'failed' | 'cancelled' | 'declined'
 type Run = { status: Status; step?: number; sub?: string; report?: VfxReport }
 type Mod = { path: string; utoc: string; enabled: boolean; name: string; hero?: string | null; modified?: number; niagara?: boolean; materials?: boolean; ui?: boolean
   /** A May crash mod the updater cannot rebuild (not a VFX or material mod), with why: Update turns it off */
@@ -92,7 +93,7 @@ const isDone = (s?: Status) => s === 'fixed' || s === 'nothing'
 
 /** A mod not marked as needing an update, on hover: what ticking it does */
 const NO_NEED = "Not marked as needing an update. Updating it rebuilds it on the game's current files anyway."
-const STATUS: Record<Status, string> = { waiting: 'Queued', running: 'Updating', fixed: 'Updated', nothing: 'Nothing to update', failed: 'Failed', cancelled: 'Cancelled' }
+const STATUS: Record<Status, string> = { waiting: 'Queued', running: 'Updating', fixed: 'Updated', nothing: 'Nothing to update', failed: 'Failed', cancelled: 'Cancelled', declined: 'Original kept' }
 const KIND_ORDER: AssetKind[] = ['failed', 'left', 'unreadable', 'added', 'updated', 'same', 'passed']
 const KIND_LABEL: Record<AssetKind, string> = { updated: 'Rebuilt', same: 'Match the game', added: 'The mod\'s own', passed: 'Kept as they were', left: 'Left out', unreadable: 'Could not be read', failed: 'Not updated' }
 /** An update that left out Niagara files made for an older game build: it works, without those effects' colors */
@@ -133,15 +134,16 @@ function reportText(r: VfxReport) {
   return lines.join('\n')
 }
 
-function Report({ r, onRetry, onUsmap, busy }: { r: VfxReport; onRetry: () => void; onUsmap: () => void; busy: boolean }) {
-  const [assets, setAssets] = useState(true)
+/** `candidate`: a Best effort build waiting for review, not placed yet: its assets show, and there is no placement to tell. */
+function Report({ r, onRetry, onUsmap, busy, candidate = false }: { r: VfxReport; onRetry: () => void; onUsmap: () => void; busy: boolean; candidate?: boolean }) {
+  const [assets, setAssets] = useState(candidate)
   const [allWarnings, setAllWarnings] = useState(false)
   const groups = KIND_ORDER.map(k => [k, r.assets.filter(a => a.kind === k)] as const).filter(([, list]) => list.length)
   const warnings = allWarnings ? r.warnings : r.warnings.slice(0, 4)
   return (
     <div className="vf-report">
       {r.status === 'fixed'
-        ? <p className="vf-note">{r.counts.updated ? `Rebuilt ${r.counts.updated.toLocaleString()} of ${plural(r.assets.length, 'asset')} with ${plural(r.counts.changes, 'edit')}. ` : ''}{r.counts.left ? `${leftText(r)} ` : ''}{ownText(r) ? `${ownText(r)} ` : ''}{placedText(r)}</p>
+        ? <p className="vf-note">{r.counts.updated ? `Rebuilt ${r.counts.updated.toLocaleString()} of ${plural(r.assets.length, 'asset')} with ${plural(r.counts.changes, 'edit')}. ` : ''}{r.counts.left ? `${leftText(r)} ` : ''}{ownText(r) ? `${ownText(r)} ` : ''}{candidate ? '' : placedText(r)}</p>
         // a cancelled run's pill already says so: no "Cancelled." under it. An error that sends the user to the USMAP
         // links to it (Advanced opens on it)
         : r.error && r.status !== 'cancelled' && <p className="vf-note">{r.error}{/USMAP in Advanced/.test(r.error) && <>{' '}<button type="button" className="su-link" onClick={onUsmap}>Open the USMAP setting</button></>}</p>}
@@ -309,7 +311,7 @@ function ColorNames() {
 export function VfxUpdaterPanel() {
   const [mods, setMods] = useState<Mod[] | null>(null)
   const [needs, setNeeds] = useState<Map<string, string>>(new Map()) // a mod's main file (norm) -> why it needs an update
-  const [repairPolicy, setRepairPolicy] = useState<'strict' | 'bestEffort'>('strict')
+  const [repairPolicy, setRepairPolicy] = useState(readRepairPolicy)
   const [review, setReview] = useState<{ report: VfxReport; resolve: (accepted: boolean) => void } | null>(null)
   const [stale, setStale] = useState<Map<string, number>>(new Map()) // a mod's .utoc (norm) -> its Niagara files an update will leave out
   // a mod's .utoc (norm) -> files it rebuilds that a patch newer than the USMAP changed: it waits for that patch's USMAP
@@ -557,7 +559,7 @@ export function VfxUpdaterPanel() {
   }
 
   const elsewhere = busy || !held || held.token === myToken.current ? null : held
-  const lock = busy ? null : elsewhere ? `Updating ${elsewhere.name ?? 'a mod'} elsewhere. Update waits for it.` : checking ? 'Checking for a newer USMAP…' : !usmap ? 'Choose a USMAP file in Advanced first' : usmapOk === false ? 'The USMAP file is missing' : !paks ? 'Set the game folder in Setup first' : null
+  const lock = busy ? null : elsewhere ? `${elsewhere.name === CHECK_RUN ? 'Rechecking mods' : `Updating ${elsewhere.name ?? 'a mod'}`} elsewhere. Update waits for it.` : checking ? 'Checking for a newer USMAP…' : !usmap ? 'Choose a USMAP file in Advanced first' : usmapOk === false ? 'The USMAP file is missing' : !paks ? 'Set the game folder in Setup first' : null
 
   const run = useCallback(async (keys?: string[]) => {
     if (checkingBatch.current) return
@@ -581,7 +583,7 @@ export function VfxUpdaterPanel() {
     todo.forEach(k => patch(k, { status: 'waiting', step: undefined, sub: undefined, report: undefined }))
     const filter = readFilter()
     let fixed = 0, failed = 0, partial = 0, cleared = 0, turnedOff = 0 // cleared: Nothing to update, so no longer flagged
-    const retry: string[] = [], stopped: string[] = [], broke: string[] = []
+    const retry: string[] = [], stopped: string[] = [], broke: string[] = [], kept: string[] = []
     for (const key of todo) {
       if (cancel.current) { patch(key, { status: 'cancelled' }); stopped.push(key); retry.push(key); continue }
       const mod = byKey.get(key)!
@@ -609,6 +611,7 @@ export function VfxUpdaterPanel() {
         onProgress: (_, __, message) => patch(key, { sub: message }),
       })
       patch(key, { status: r.status, report: r, sub: undefined })
+      if (r.status !== 'fixed' || todo.length === 1) setOpen(o => new Set(o).add(key)) // problems open, a batch's updates stay folded
       if (r.status !== 'cancelled' && r.ms > 0) rememberTime(r.assets.some(a => /^(NS|NE)_/i.test(a.name)), r.ms)
       if (r.status === 'fixed') { fixed++; pick([key], false) }
       if (r.status === 'nothing') cleared++
@@ -617,6 +620,7 @@ export function VfxUpdaterPanel() {
       if (isPartial(r)) partial++
       if (r.status === 'failed') { broke.push(key); retry.push(key) }
       if (r.status === 'cancelled') { stopped.push(key); retry.push(key) }
+      if (r.status === 'declined') { kept.push(key); pick([key], false) } // the user's choice, not a failure: tick it again to retry
       // the main window reloads and moves loadouts from the original to the update (a no-op when the update kept the name)
       if (r.placed) await emitTo('main', FIXED_EVENT, { from: r.placed.source, to: r.placed.fixed, swap: true, original: r.placed.original } satisfies Fixed).catch(() => {})
       // an update named _UPDATED is a new file and its original leaves the list: its result moves with it
@@ -637,6 +641,7 @@ export function VfxUpdaterPanel() {
     const parts = [
       `${fixed === todo.length ? plural(fixed, 'mod') : `${fixed} of ${plural(todo.length, 'mod')}`} updated${partial ? ` (${partial === fixed ? (fixed === 1 ? 'partially' : 'all partially') : `${partial} partially`})` : ''}`,
       broke.length ? `${broke.length} failed` : '', turnedOff ? `${turnedOff} turned off so ${turnedOff === 1 ? 'it' : 'they'} cannot crash the game` : '', stopped.length ? `${stopped.length} cancelled` : '',
+      kept.length ? `${kept.length} kept as ${kept.length === 1 ? 'it was' : 'they were'}` : '',
     ].filter(Boolean)
     setEnded({ text: `${parts.join(', ')}${parts.length > 1 ? ',' : ''} in ${took(performance.now() - startedAt)}.`, retry, edits: pickEditsRef.current })
     cue(failed ? 'warning' : 'success', { emphasis: fixed > 1 ? undefined : 'subtle' }) // a problem is a warning, never an error sound
@@ -655,6 +660,9 @@ export function VfxUpdaterPanel() {
     if (on) setTimeout(() => document.querySelector('.vf-adv')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 60)
   }
 
+  // Escape in the review keeps the original and goes on with the batch: only Cancel stops it
+  const decline = () => { review?.resolve(false); setReview(null) }
+  const reviewFocus = useDialogFocus(Boolean(review))
   const stop = (source: 'Cancel button' | 'Escape') => { review?.resolve(false); setReview(null); cancel.current = true; setCancelling(true); addLog(`Cancellation requested by ${source}. Stopping after the current step.`, 'warning') }
 
   // Check: the ticked mods' materials against this game version and the earlier ones (xtra_vfx_check.rs). Their Needs an
@@ -666,7 +674,7 @@ export function VfxUpdaterPanel() {
     checkingBatch.current = true
     const token = newRunToken()
     try {
-      if (!(await claimRun(token, 'Rechecking mods'))) { addLog('Another update or check is running. Try again when it is done.', 'warning'); return }
+      if (!(await claimRun(token, CHECK_RUN))) { addLog('Another update or check is running. Try again when it is done.', 'warning'); return }
       myToken.current = token
       setEnded(null)
       const n = { outdated: 0, current: 0, unknown: 0, none: 0, failed: 0 }
@@ -756,9 +764,9 @@ export function VfxUpdaterPanel() {
   const needing = shown.filter(first)
   const done = shown.filter(updatedNow)
   const chosen = shown.filter(isAdded)
-  const unknown = shown.filter(m => !first(m) && !isAdded(m) && uncertain.has(norm(m.path)))
+  const unknown = shown.filter(m => !first(m) && !isAdded(m) && !updatedNow(m) && uncertain.has(norm(m.path)))
   const others = shown.filter(m => !uncertain.has(norm(m.path)) && !first(m) && !updatedNow(m) && !isAdded(m))
-  groupOf.current = new Map(shown.map(m => [norm(m.utoc), updatedNow(m) ? 'updated' : isAdded(m) ? 'added' : first(m) ? 'needs' : m.ui ? 'ui' : m.materials ? 'materials' : 'rest']))
+  groupOf.current = new Map(shown.map(m => [norm(m.utoc), updatedNow(m) ? 'updated' : isAdded(m) ? 'added' : first(m) ? 'needs' : uncertain.has(norm(m.path)) ? 'unknown' : m.ui ? 'ui' : m.materials ? 'materials' : 'rest']))
   const groups = [
     group('added', 'Chosen files', chosen),
     group('needs', 'Needs an update', needing, needing.filter(m => needsOf(m) && !isDone(runs[norm(m.utoc)]?.status)).length),
@@ -810,7 +818,7 @@ export function VfxUpdaterPanel() {
 
   // the last batch's result, until the ticks change
   const summary = !busy && !checkRun && !lock && ended && ended.edits === pickEdits ? ended : null
-  keys.current = { go: () => { if (!busy && !checkRun && !lock && todo) void run() }, stop: () => { if (busy && !checkRun && !cancelling) stop('Escape') } }
+  keys.current = { go: () => { if (!busy && !checkRun && !lock && todo) void run() }, stop: () => { if (review) decline(); else if (busy && !checkRun && !cancelling) stop('Escape') } }
   const openUsmap = () => showAdvanced(true)
 
   // what Update will do to the files, beside the button, so a choice made once in Advanced is never a surprise
@@ -821,12 +829,12 @@ export function VfxUpdaterPanel() {
   return (
     <div className="vf-panel">
       <div className="vf-body">
-        {review && <div className="vf-report" role="dialog" aria-label="Review repair candidate">
+        {review && <div className="vf-report" role="dialog" aria-modal="true" aria-label="Review repair candidate" tabIndex={-1} ref={reviewFocus.ref} onKeyDown={reviewFocus.onKeyDown}>
           <h3>Review candidate before replacing the mod</h3>
           <p>The candidate is separate. The original stays unchanged until you choose Use candidate.</p>
-          <Report r={review.report} busy={true} onRetry={() => {}} onUsmap={() => {}} />
+          <Report r={review.report} busy={true} onRetry={() => {}} onUsmap={() => {}} candidate />
           <button type="button" className="row-action" onClick={() => { review.resolve(true); setReview(null) }}>Use candidate</button>
-          <button type="button" className="row-action" autoFocus onClick={() => { review.resolve(false); setReview(null) }}>Keep original</button>
+          <button type="button" className="row-action" autoFocus onClick={decline}>Keep original</button>
         </div>}
         <div className="lp-filters vf-filters">
           {/* shown while the folder is read too, so the bar does not appear under the pointer when the list lands, and kept
@@ -921,7 +929,7 @@ export function VfxUpdaterPanel() {
                   <Seg label="Repair policy" value={repairPolicy} disabled={busy}
                     note={repairPolicy === 'strict' ? 'Strict refuses incomplete output and warnings.' : 'Best effort builds a separate candidate. Review every asset before replacing the original.'}
                     options={[['strict', 'Strict'], ['bestEffort', 'Best effort']]}
-                    onChange={v => setRepairPolicy(v)} />
+                    onChange={v => { setRepairPolicy(v); localStorage.setItem(REPAIR_POLICY, v) }} />
                 </Section>
 
                 <Section icon={<Tag size={15} aria-hidden="true" />} title="Names" about="Which copy keeps the mod's name after an update.">

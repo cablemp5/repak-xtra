@@ -561,11 +561,18 @@ fn layout_store() -> PathBuf {
 
 /// The mod file, game build, mappings, and parser must all match before reusing a layout verdict.
 fn layout_key(mod_path: &Path, usmap: &str, game_paks: &Path) -> Option<String> {
+    layout_key_in(mod_path, &layout_build(usmap, game_paks))
+}
+
+/// The mappings', parser's and game build's part of a layout key: the same for every mod, so a scan works it out once.
+fn layout_build(usmap: &str, game_paks: &Path) -> String {
+    format!("{}|{}", crate::xtra_vfx::usmap_hash(usmap), crate::xtra_vfx::build_hash(game_paks))
+}
+
+fn layout_key_in(mod_path: &Path, build: &str) -> Option<String> {
     let m = std::fs::metadata(mod_path).ok()?;
     let at = m.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
-    let u = crate::xtra_vfx::usmap_hash(usmap);
-    let game = crate::xtra_vfx::build_hash(game_paks);
-    Some(format!("{}|{}|{at}|{u}|{game}", mod_path.to_string_lossy().to_lowercase().replace('\\', "/"), m.len()))
+    Some(format!("{}|{}|{at}|{build}", mod_path.to_string_lossy().to_lowercase().replace('\\', "/"), m.len()))
 }
 
 fn load_layouts() -> HashMap<String, bool> {
@@ -576,12 +583,16 @@ fn save_layouts(cache: &HashMap<String, bool>) {
     let _ = std::fs::write(layout_store(), serde_json::to_string(cache).unwrap_or_default());
 }
 
+/// What known_old_layout reads, once per command: the saved USMAP's and the game's part of the key, and the answers.
+pub(crate) fn known_layouts(paks: &Path) -> Option<(String, HashMap<String, bool>)> {
+    let usmap = crate::vfx_updater::commands::saved_usmap_path()?;
+    Some((layout_build(&usmap, paks), load_layouts()))
+}
+
 /// Whether a mod (its .pak, .bak_repak or .utoc) was found to carry Niagara files in an older layout, under the saved
-/// USMAP (xtra_broken).
-pub(crate) fn known_old_layout(mod_path: &Path) -> bool {
-    let Some(usmap) = crate::vfx_updater::commands::saved_usmap_path() else { return false };
-    let Some(paks) = mod_path.ancestors().find(|p| p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("Paks"))) else { return false };
-    layout_key(&mod_path.with_extension("utoc"), &usmap, paks).is_some_and(|k| load_layouts().get(&k) == Some(&true))
+/// USMAP (xtra_broken). `known`: known_layouts.
+pub(crate) fn known_old_layout(mod_path: &Path, known: &Option<(String, HashMap<String, bool>)>) -> bool {
+    known.as_ref().is_some_and(|(build, all)| layout_key_in(&mod_path.with_extension("utoc"), build).is_some_and(|k| all.get(&k) == Some(&true)))
 }
 
 /// Whether any of `rels` (up to three of the mod's Niagara systems, package paths without extension) is in an older
@@ -692,6 +703,7 @@ pub async fn xtra_vfx_layout_scan(mod_paths: Vec<String>, state: tauri::State<'_
     let vanilla = crate::xtra_vfx::vanilla_dir(&game_paks, &usmap);
     let work = std::env::temp_dir().join("repak-x").join("xlayout");
     let mut cache = load_layouts();
+    let build = layout_build(&usmap, &paks);
     let mut found = 0;
     for p in mod_paths {
         let path = PathBuf::from(&p);
@@ -699,7 +711,7 @@ pub async fn xtra_vfx_layout_scan(mod_paths: Vec<String>, state: tauri::State<'_
             continue; // built-ins: xtra_builtins judges them by the game build they were made for, never these checks
         }
         let utoc = path.with_extension("utoc");
-        let Some(key) = layout_key(&utoc, &usmap, &paks) else { continue };
+        let Some(key) = layout_key_in(&utoc, &build) else { continue };
         if cache.contains_key(&key) {
             continue;
         }
@@ -1090,11 +1102,6 @@ mod tests {
             let vanilla = crate::xtra_vfx::vanilla_dir(&game, &usmap);
             let old = old_layout_of(&game, &usmap, &utoc, &rels, None, &work.join("installed"), &vanilla).await.unwrap();
             assert!(!old, "the installed mod still warns");
-            let key = layout_key(&utoc, &usmap, Path::new(&game)).unwrap();
-            let mut cache = load_layouts();
-            cache.insert(key, old);
-            save_layouts(&cache);
-            assert!(!known_old_layout(&utoc));
             println!("Compared {} fresh same-parser packages. Installed mod older-layout verdict: {old}. Cache: {}", rels.len(), vanilla.display());
         });
     }

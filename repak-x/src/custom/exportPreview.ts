@@ -36,7 +36,7 @@ export function useExportPreview(name: string, alert: LoadoutProps['alert']) {
       const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error('Could not encode the preview.')), 'image/png'))
       const path = await save({ defaultPath: `${name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_') || 'loadout'}-preview.png`, filters: [{ name: 'PNG image', extensions: ['png'] }] })
       if (path) { await writeFile(path, new Uint8Array(await blob.arrayBuffer())); alert.success('Preview saved', path) }
-    } catch (e) { alert.warning('Preview not saved', String(e)) }
+    } catch (e) { alert.warning('Preview not saved', e instanceof Error ? e.message : String(e)) }
     finally { setBusy(false) }
   }
   return { busy, exportPng }

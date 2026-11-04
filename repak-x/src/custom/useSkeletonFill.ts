@@ -19,7 +19,8 @@ export function useSkeletonFill<T extends HTMLElement>(active: boolean, resetKey
       const rect = list.getBoundingClientRect()
       const style = getComputedStyle(list)
       const columns = style.display === 'grid' ? style.gridTemplateColumns.split(' ').length : 1
-      const bottom = viewport?.getBoundingClientRect().bottom ?? window.innerHeight
+      // capped at the window: a viewport without a fixed height grows with the skeletons and would feed back forever
+      const bottom = Math.min(viewport?.getBoundingClientRect().bottom ?? Infinity, window.innerHeight)
       const row = item.getBoundingClientRect().height
       if (row > 0) setCount(skeletonCount(Math.max(0, bottom - rect.top), row, parseFloat(style.rowGap) || 0, columns))
     }
@@ -27,8 +28,7 @@ export function useSkeletonFill<T extends HTMLElement>(active: boolean, resetKey
     observer.observe(list)
     if (viewport && viewport !== list) observer.observe(viewport)
     measure()
-    window.addEventListener('resize', measure)
-    return () => { observer.disconnect(); window.removeEventListener('resize', measure) }
+    return () => observer.disconnect()
   }, [active, resetKey])
   return { ref, count }
 }

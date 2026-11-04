@@ -13,9 +13,9 @@ import { useKoHeroPortraits } from './portraits'
 import { cue } from '../sounds'
 import { type Role, hexOf, shiftHue } from './model'
 import { draw, duration, frameFor } from './render'
-import { type KoStep, buildKo } from './export'
+import { type KoStep, buildKo, koStem } from './export'
 import { type Hero, type Loaded, type Progress, forgetHero, loadHero, usmapPath } from './load'
-import sceneBackground from './scene-background.png'
+import sceneBackground from './scene-background.jpg'
 import { randomizeColors } from './randomize'
 import RandomizeButton from './RandomizeButton'
 import './ko.css'
@@ -79,6 +79,7 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
     return () => { img.onload = null }
   }, [])
   const [step, setStep] = useState<KoStep | null>(null)
+  const [taken, setTaken] = useState<string | null>(null) // the name a mod already installed has: Install asks before replacing it
 
   const hero = heroes?.find(h => h.id === heroId) ?? null
   const entry = (hero && saved[hero.id]) || {}
@@ -128,7 +129,7 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
     setLoadError(null); setFocus(null); setTime(0)
     setLoading({ hero, since: Date.now() }); setProgress(null)
     let read = false // a first read of this hero (the bar showed): a ready cue when it lands
-    loadHero(hero, usmap, p => { if (on) { setProgress(p); read = true } }).then(l => { if (on) { setLoaded(l); setPlaying(true); if (read) cue('ready') } }, e => { if (on) { setLoadError(String(e)); cue('error') } })
+    loadHero(hero, usmap, p => { if (on) { setProgress(p); read = true } }).then(l => { if (on) { setLoaded(l); setPlaying(true); if (read) cue('ready') } }, e => { if (on) { setLoadError(String(e)); cue('warning') } })
       .finally(() => { if (on) setLoading(null) })
     return () => { on = false }
   }, [hero, usmap, loaded]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -141,11 +142,6 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
   const paint = () => {
     const c = canvas.current
     if (!c || !scene) return
-    const rect = c.getBoundingClientRect(), dpr = devicePixelRatio || 1
-    if (!rect.width || !rect.height) return
-    // The canvas can be replaced during hot reload without a resize notification.
-    const width = Math.round(rect.width * dpr), height = Math.round(rect.height * dpr)
-    if (c.width !== width || c.height !== height) { c.width = width; c.height = height }
     const ctx = c.getContext('2d')!
     const size = { w: c.width, h: c.height }
     // close on the ring and the kill text, as it reads in the game: the banner's far tail runs off the left
@@ -156,7 +152,14 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
   useEffect(() => {
     const c = canvas.current
     if (!c) return
-    const fit = () => paintRef.current()
+    // sized here, not per frame: reading the layout every frame costs a reflow
+    const fit = () => {
+      const rect = c.getBoundingClientRect(), dpr = devicePixelRatio || 1
+      if (!rect.width || !rect.height) return
+      const width = Math.round(rect.width * dpr), height = Math.round(rect.height * dpr)
+      if (c.width !== width || c.height !== height) { c.width = width; c.height = height }
+      paintRef.current()
+    }
     const ro = new ResizeObserver(fit); ro.observe(c); fit()
     return () => ro.disconnect()
   }, [])
@@ -205,9 +208,14 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
     save({ colors: next })
   }
 
-  const install = async () => {
+  const install = async (replace = false) => {
     if (!loaded || !hero || !usmap || step) return
+    setTaken(null)
     try {
+      // the install replaces a mod of the same file name without asking, so this asks first
+      const stem = koStem(name).toLowerCase()
+      const installed = replace ? [] : await invoke<{ path: string }[]>('get_pak_files').catch(() => [])
+      if (installed.some(m => (m.path.split(/[\\/]/).pop() ?? '').replace(/\..*$/, '').replace(/(_\d+)?_P$/i, '').toLowerCase() === stem)) { setTaken(name); cue('warning'); return }
       // a game update while the app was open: the prompt is read again before anything is built from it
       setStep('Writing the colors')
       const now = await usmapPath()
@@ -220,7 +228,7 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
       const path = await buildKo({ usmapPath: usmap, widgetJson: loaded.widgetJson, widgetRel: hero.widget, roles, colors, name, step: setStep })
       await onInstall(path)
     } catch (e) {
-      cue('error'); alert.warning('Could not prepare the KO prompt', e instanceof Error ? e.message : String(e))
+      cue('warning'); alert.warning('Could not prepare the KO prompt', e instanceof Error ? e.message : String(e))
     } finally { setStep(null) }
   }
 
@@ -372,10 +380,18 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
           <input id="ko-name" className="ko-input" value={name} maxLength={60} onChange={e => save({ name: e.target.value })} disabled={!hero} />
           <button type="button" className={`lo-text-btn ko-install${step ? ' is-working' : why ? ' is-locked' : ' is-primary'}`}
             onClick={() => { if (!step) void install() }} aria-busy={Boolean(step)} aria-disabled={!step && Boolean(why)} disabled={Boolean(step) || Boolean(why)}
-            title={why ?? 'Choose installation options in the install window'}>
+            title={why ?? 'Choose installation options in the install window'} aria-describedby={why && !step ? 'ko-install-why' : undefined}>
             {step ? <span key={step} className="t-text-in"><span className="t-shimmer">{step}</span></span>
-              : <span className="ko-btn-in">{why ? <Lock size={16} aria-hidden /> : <Download size={16} aria-hidden />}{why ?? 'Install'}</span>}
+              : <span className="ko-btn-in">{why ? <Lock size={16} aria-hidden /> : <Download size={16} aria-hidden />}Install</span>}
           </button>
+          {why && !step && <p id="ko-install-why" className="ko-note">{why}.</p>}
+          {taken === name && !step && !why && (
+            <div className="ko-taken" role="alert">
+              <span>A mod named {name.trim()} is already installed. Replace it?</span>
+              <div><button type="button" className="lo-text-btn" onClick={() => { setTaken(null); cue('close') }}>Cancel</button>
+                <button type="button" className="lo-text-btn is-primary" onClick={() => void install(true)}>Replace</button></div>
+            </div>
+          )}
         </div>
       </aside>
     </div>

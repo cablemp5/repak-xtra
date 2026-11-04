@@ -564,7 +564,7 @@ const ModItem = memo(function ModItem({
     )
     // repakxtra: preserve the existing deletion guard, exit animation, and Undo.
     return isCardView || builtin ? card : <SwipeDelete label={cleanName} disabled={Boolean(gameRunning || isRenaming || isLeaving)} animated={animationsEnabled}
-        onDelete={() => handleDeleteMod(mod.path, false)}>{card}</SwipeDelete>
+        hold={holdToDelete} onDelete={() => handleDeleteMod(mod.path, false)}>{card}</SwipeDelete>
 })
 
 /**
