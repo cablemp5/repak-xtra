@@ -92,6 +92,7 @@ type ModItemProps = {
 
 type ModsListProps = {
     emptyState?: React.ReactNode // repakxtra: says why the list is empty and how to get mods back
+    reflowKey?: string // repakxtra
     mods: ModRecord[]
     viewMode: ViewMode
     selectedMod: ModRecord | null
@@ -598,6 +599,7 @@ export default function ModsList({
     onRenameBlocked,
     onDeleteBlocked,
     holdToDelete,
+    reflowKey, // repakxtra: search, filter, and folder, so hiding rows never plays the delete motion
     enableAnimations = true,
     emptyState
 }: ModsListProps) {
@@ -618,7 +620,7 @@ export default function ModsList({
     const [editing, setEditing] = useState<string | null>(null)
     const indexOf = (path?: string | null) => (path ? mods.findIndex(m => m.path === path) : -1)
     const win = useRowWindow(wrapRef, mods.length, viewMode, indexOf(selectedMod?.path), selectedMod?.path ?? '', [indexOf(renamingModPath), indexOf(document.activeElement?.tagName === 'INPUT' ? editing : null)])
-    useListReflow(wrapRef, mods.map(mod => mod.path), viewMode, enableAnimations) // repakxtra
+    useListReflow(wrapRef, mods.map(mod => mod.path), viewMode, enableAnimations, reflowKey) // repakxtra
 
     return (
         <div className="mods-list-wrapper" ref={wrapRef}

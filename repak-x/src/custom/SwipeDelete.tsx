@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { Trash2 } from 'lucide-react'
 import { cue } from './sounds'
+import { holdKeys } from './holdKeys'
 import './swipeDelete.css'
 
 const ACTION = 80
@@ -49,6 +50,11 @@ export default function SwipeDelete({ children, disabled, animated, onDelete, la
   const live = useRef({ move: (_e: globalThis.PointerEvent) => {}, up: (_e: globalThis.PointerEvent) => {} })
   const [open, setOpen] = useState(false)
   const [ready, setReady] = useState(false)
+  const [holding, setHolding] = useState(false)
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Hold to delete: the drawer's Delete needs the same 2 s hold as the Library's other Delete buttons
+  const holdStart = (e: { preventDefault: () => void }) => { e.preventDefault(); setHolding(true); holdTimer.current = setTimeout(() => { setHolding(false); void remove() }, 2000) }
+  const holdEnd = () => { setHolding(false); if (holdTimer.current) clearTimeout(holdTimer.current); holdTimer.current = null }
   const glyphTransform = (offset: number) => `translate3d(calc(-50% - ${offset / 2}px), 0, 0)`
   const moveTo = (next: number) => {
     x.current = next
@@ -86,6 +92,7 @@ export default function SwipeDelete({ children, disabled, animated, onDelete, la
     finally { if (animation.current === run) animation.current = null }
   }
   const cancel = () => {
+    holdEnd()
     if (pending.current) return
     grip.current = null
     unwatch.current?.(); unwatch.current = null
@@ -100,7 +107,7 @@ export default function SwipeDelete({ children, disabled, animated, onDelete, la
     document.addEventListener('pointerdown', outside, true)
     return () => document.removeEventListener('pointerdown', outside, true)
   }, [open])
-  useEffect(() => () => { animation.current?.cancel(); drawerAnimations.current.forEach(run => run.cancel()); unwatch.current?.() }, [])
+  useEffect(() => () => { animation.current?.cancel(); drawerAnimations.current.forEach(run => run.cancel()); unwatch.current?.(); holdEnd() }, [])
   const remove = async (velocity = 0) => {
     if (disabled || pending.current) return
     pending.current = true
@@ -183,8 +190,9 @@ export default function SwipeDelete({ children, disabled, animated, onDelete, la
     onClickCapture={e => { if (suppressClick.current && e.detail !== 0) { e.preventDefault(); e.stopPropagation() } }}
     onDragStart={e => e.preventDefault()}>
     <button ref={drawer} type="button" className="mod-swipe-delete" tabIndex={open ? 0 : -1} disabled={disabled}
-      aria-hidden={!open} aria-label={`Delete ${label}`} onClick={() => void remove()}>
-      <span ref={glyph} className="mod-swipe-glyph"><Trash2 size={18} aria-hidden="true" /><span>{ready ? 'Release to delete' : 'Delete'}</span></span>
+      aria-hidden={!open} aria-label={`Delete ${label}`} onClick={() => { if (!hold) void remove() }}
+      {...(hold ? { onPointerDown: holdStart, onPointerUp: holdEnd, onPointerLeave: holdEnd, onPointerCancel: holdEnd, ...holdKeys(true, holdStart, holdEnd) } : {})}>
+      <span ref={glyph} className="mod-swipe-glyph"><Trash2 size={18} aria-hidden="true" /><span>{ready ? 'Release to delete' : holding ? 'Hold to delete…' : hold ? 'Hold 2s' : 'Delete'}</span></span>
     </button>
     <div ref={surface} className="mod-swipe-surface">{children}</div>
   </div>

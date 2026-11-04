@@ -1,7 +1,9 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react'
 
 /** Open or close row gaps with transforms, without animating heights that the virtual list measures. */
-export function useListReflow(wrap: RefObject<HTMLElement | null>, paths: string[], mode: string, animated: boolean) {
+export function useListReflow(wrap: RefObject<HTMLElement | null>, paths: string[], viewMode: string, animated: boolean, context = '') {
+  // a new search, filter, or folder hides rows without deleting them: it starts a fresh history instead of animating
+  const mode = `${viewMode}|${context}`
   const previous = useRef({ paths, mode, tops: new Map<string, number>() })
   const running = useRef(new Set<Animation>())
   useLayoutEffect(() => {
@@ -12,7 +14,7 @@ export function useListReflow(wrap: RefObject<HTMLElement | null>, paths: string
       running.current.clear()
     }
     // Nothing can animate here or on the next change from here: skip the row reads
-    if (!motion || !list || (mode !== 'list' && mode !== 'list-compact')) {
+    if (!motion || !list || (viewMode !== 'list' && viewMode !== 'list-compact')) {
       previous.current = { paths, mode, tops: new Map() }
       return
     }

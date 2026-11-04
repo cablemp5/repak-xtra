@@ -4409,6 +4409,7 @@ function App() {
                 gameRunning={gameRunning && !bypassGameRunningLock}
                 holdToDelete={holdToDelete}
                 enableAnimations={enableAnimations}
+                reflowKey={[searchQuery, modState, filterTag, selectedFolderId, [...selectedCharacters].join(), [...selectedCategories].join()].join('|')} // repakxtra
                 emptyState={/* repakxtra: name the reason the list is empty and offer the way back */
                   searchQuery ? (
                     <div className="empty-state">

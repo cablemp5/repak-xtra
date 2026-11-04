@@ -597,7 +597,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     report.ms = now - t0
     // here, where the early returns pass too: Needs VFX update stops flagging it until the mod or the game changes (xtra_broken.rs)
     // not when its materials were rewritten: the original stays installed in the old layout and still needs turning off
-    if (report.status === 'nothing' && !report.counts.relaid && o.policy !== 'bestEffort') await invoke('xtra_vfx_no_update', { modPath: o.modPath }).catch(e => log(`Could not note that it needs nothing: ${e}`, 'warning'))
+    if (report.status === 'nothing' && !report.counts.relaid) await invoke('xtra_vfx_no_update', { modPath: o.modPath }).catch(e => log(`Could not note that it needs nothing: ${e}`, 'warning'))
     const repaired = repairedPath(report)
     if (repaired) await invoke('xtra_vfx_no_update', { modPath: repaired }).catch(e => {
       const message = `The mod was repaired, but its compatibility status could not be saved: ${e}. Recheck it in the Mod Updater.`
