@@ -570,7 +570,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     }
     if (!report.counts.updated && !report.counts.added && !niagaraDone && !relaidKept && !((report.counts.left || report.counts.ownGame) && keep.length)) {
       if (report.counts.left || report.counts.ownGame) { report.error = allStale(); return report }
-      if (report.warnings.length) { report.error = 'Not updated: preserving all creator edits could not be verified. Review the asset report. The original was not changed.'; return report }
+      if (report.warnings.length) { report.error = 'Not updated: preserving all creator edits could not be verified. Review the asset report. The original was not changed.'; keepOn = true; return report }
       // every material and blueprint was read and matches the game (anything else stopped above): it works as it is
       if (report.counts.same || swapped) {
         report.status = 'nothing'
