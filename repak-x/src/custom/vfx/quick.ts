@@ -127,7 +127,7 @@ function resultToast(r: VfxReport, name: string, alert: Alert, path: string) {
 }
 
 /** What Check for VFX update found (xtra_vfx_check.rs): the mod's material instances by the game version they were built for. */
-export type VfxCheck = { verdict: 'outdated' | 'current' | 'unknown' | 'none'; outdated: string[]; current: string[]; unknown: string[]; oldLayout?: string[]; why?: 'empty' | 'unreadable' | 'elsewhere' | 'layout' | 'classes' | null }
+export type VfxCheck = { verdict: 'outdated' | 'current' | 'custom' | 'unknown' | 'none'; outdated: string[]; current: string[]; unknown: string[]; oldLayout?: string[]; why?: 'empty' | 'unreadable' | 'elsewhere' | 'layout' | 'classes' | null }
 
 /** Why a check could not tell, for one material and for several, in words that never guess past what it saw. */
 const WHY = {
@@ -153,6 +153,7 @@ export function checkWords(c: VfxCheck, name: string): { title: string; text: st
   if (c.verdict === 'outdated' && layout) return { color: 'warning', title: `${name} needs a VFX update`, text: `${some(layout)} stored in an older game build's layout, which can crash the game. The update rewrites ${layout === 1 ? 'it' : 'them'}.` }
   if (c.verdict === 'outdated') return { color: 'warning', title: `${name} needs a VFX update`, text: `${some(c.outdated.length)} still built for an earlier game version.` }
   if (c.verdict === 'current') return { color: 'success', title: `${name} is up to date`, text: `${all === 1 ? 'Its material is' : `All ${all} of its materials are`} built for this game version.` }
+  if (c.verdict === 'custom') return { color: 'default', title: `${name} uses its own materials`, text: `${some(c.unknown.length)} built by the modder, so ${c.unknown.length === 1 ? 'it matches' : 'they match'} no game version. ${all - c.unknown.length ? 'The rest are built for this game version, and every' : 'Every'} layout reads correctly. Nothing here needs an update.` }
   if (c.verdict === 'unknown' && !c.unknown.length) return { color: 'warning', title: `${verdictLabel('unknown')}: ${name}`, text: 'Its files could not be listed by type. Some materials may not have been checked. This is a precaution, not a confirmed fault.' }
   if (c.verdict === 'unknown') {
     const one = c.unknown.length === 1
@@ -185,4 +186,6 @@ if (import.meta.env.DEV) {
   console.assert(checkWords({ verdict: 'unknown', outdated: [], current: [], unknown: [], why: 'classes' }, 'A').title === 'Safety unknown: A', 'unreadable asset lists use the same inconclusive wording')
   console.assert(said(['e'], 'empty') === 'Its material carries no shader data of its own to compare. This is a precaution, not a confirmed fault or a required repair.', 'one, no shader data')
   console.assert(said(['a', 'b'], 'elsewhere').startsWith('2 of its materials match no game version (the modder built them)'), 'several, built by the modder')
+  const own = checkWords({ verdict: 'custom', outdated: [], current: ['a'], unknown: ['b', 'c'], why: 'elsewhere' }, 'A')
+  console.assert(own.title === 'A uses its own materials' && own.color === 'default' && own.text.startsWith('2 of its 3 materials are built by the modder'), 'the modder\'s own materials are no warning', own.text)
 }

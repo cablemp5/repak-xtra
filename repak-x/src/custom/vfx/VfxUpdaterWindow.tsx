@@ -722,7 +722,7 @@ export function VfxUpdaterPanel() {
       if (!(await claimRun(token, CHECK_RUN))) { addLog('Another update or check is running. Try again when it is done.', 'warning'); return }
       myToken.current = token
       setEnded(null)
-      const n = { outdated: 0, current: 0, unknown: 0, none: 0, failed: 0 }
+      const n = { outdated: 0, current: 0, custom: 0, unknown: 0, none: 0, failed: 0 }
       cancel.current = false
       setCancelling(false)
       let done = 0
@@ -753,7 +753,7 @@ export function VfxUpdaterPanel() {
         } catch (e) { n.failed++; addLog(`${m.name} could not finish its check: ${e}`, 'warning') }
         done++
       }
-      const parts = [n.outdated && `${n.outdated} need${n.outdated === 1 ? 's' : ''} an update`, n.current && `${n.current} up to date`, n.unknown && `${verdictLabel('unknown').toLowerCase()} for ${plural(n.unknown, 'mod')}`, n.none && `${n.none} have no materials to check`, n.failed && `${n.failed} could not finish`].filter(Boolean)
+      const parts = [n.outdated && `${n.outdated} need${n.outdated === 1 ? 's' : ''} an update`, n.current && `${n.current} up to date`, n.custom && `${n.custom} ${n.custom === 1 ? 'uses its' : 'use their'} own materials`, n.unknown && `${verdictLabel('unknown').toLowerCase()} for ${plural(n.unknown, 'mod')}`, n.none && `${n.none} have no materials to check`, n.failed && `${n.failed} could not finish`].filter(Boolean)
       setEnded({ text: `${cancel.current ? 'Stopped. ' : ''}Checked ${done === list.length ? plural(done, 'mod') : `${done} of ${plural(list.length, 'mod')}`}${parts.length ? `: ${parts.join(', ')}` : ''}. No mod files changed. The Log has each result.`, retry: [], edits: pickEditsRef.current })
       cue(n.failed || n.unknown ? 'warning' : 'success')
     } finally {

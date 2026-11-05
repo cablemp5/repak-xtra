@@ -682,6 +682,30 @@ fn judge_checked(path: &str, mut facts: Facts<'_>, updated: u64, game: &GameAsse
     }))
 }
 
+/// The checks' "not known" for `utoc` goes (every decoder's): a later check settled it without a badge.
+pub(crate) fn forget_uncertain(utoc: &Path) {
+    let _one = CHECKED_WRITING.lock().unwrap_or_else(|e| e.into_inner());
+    let (store, key) = (checked_store(), checked_key(utoc));
+    let mut all = load_checked(&store);
+    let before = all.len();
+    all.retain(|k, c| c.unknown.is_none() || !k.strip_prefix(key.as_str()).is_some_and(|rest| rest.is_empty() || rest.starts_with('|')));
+    if all.len() != before {
+        if let Err(e) = save_checked(&store, &all) {
+            log::warn!("[vfx check] {}: {e}", utoc.display());
+        }
+    }
+}
+
+/// Mods (checked_key) whose "not known" came from the check before 0.59, which counted shader-less materials and the
+/// modder's own as not known: the background scan looks at them once more.
+pub(crate) fn legacy_uncertain() -> HashSet<String> {
+    load_checked(&checked_store())
+        .iter()
+        .filter(|(_, c)| c.unknown.as_deref().is_some_and(|u| u.starts_with("The material layout was read, but custom shader data matches no known game version")))
+        .map(|(k, _)| k.split('|').next().unwrap_or(k).to_string())
+        .collect()
+}
+
 /// Only a note for the flag: a store that cannot be written never fails the check that found it.
 pub(crate) fn record_uncertain(mods_dir: &Path, utoc: &Path, reason: String) {
     if let Err(e) = remember_checked(&checked_store(), utoc, game_updated(mods_dir), false, false, Some(reason)) {
