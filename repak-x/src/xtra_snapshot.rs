@@ -40,6 +40,35 @@ fn files(dir: &Path) -> Vec<(PathBuf, u64)> {
         .collect()
 }
 
+/// Like `files`, but any folder or file that cannot be read is an error: a snapshot never leaves one out quietly.
+fn try_files(dir: &Path) -> Result<Vec<(PathBuf, u64)>, String> {
+    let mut out = Vec::new();
+    for e in WalkDir::new(dir) {
+        let e = e.map_err(|e| e.to_string())?;
+        if e.file_type().is_file() {
+            let len = e.metadata().map_err(|e| e.to_string())?.len();
+            out.push((e.path().strip_prefix(dir).map_err(|e| e.to_string())?.to_path_buf(), len));
+        }
+    }
+    Ok(out)
+}
+
+/// `setup_files` for a snapshot: a loader or plugins folder that is not there is fine, one that cannot be read is not.
+fn try_setup_files(win64: &Path) -> Result<Vec<(PathBuf, u64)>, String> {
+    let mut out = Vec::new();
+    for name in ["dsound.dll", "dsound.dll.disabled"] {
+        match fs::metadata(win64.join(name)) {
+            Ok(m) => out.push((PathBuf::from(name), m.len())),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(format!("{name}: {e}")),
+        }
+    }
+    if win64.join("plugins").exists() {
+        out.extend(try_files(&win64.join("plugins"))?.into_iter().map(|(p, n)| (Path::new("plugins").join(p), n)));
+    }
+    Ok(out)
+}
+
 /// The Setup files beside the game exe: the loader (on or off) and every plugin, as paths relative to Win64.
 fn setup_files(win64: &Path) -> Vec<(PathBuf, u64)> {
     let mut out: Vec<_> = ["dsound.dll", "dsound.dll.disabled"].iter().map(PathBuf::from)
@@ -74,11 +103,9 @@ fn copy_all(list: &[(PathBuf, u64)], from: &Path, to: &Path) -> std::io::Result<
 }
 
 fn create_at(root: &Path, id: &str, mods: &Path, win64: &Path) -> Result<Snapshot, String> {
-    // a folder that cannot be read would leave a partial copy that looks whole: refuse instead
-    if let Some(e) = WalkDir::new(mods).into_iter().find_map(Result::err) {
-        return Err(format!("Could not read the mods folder, so no snapshot was made: {e}"));
-    }
-    let (m, s) = (files(mods), setup_files(win64));
+    // a folder that cannot be read would leave a partial copy that looks whole: refuse before copying or pruning
+    let unread = |e: String| format!("Could not read every file, so no snapshot was made: {e}");
+    let (m, s) = (try_files(mods).map_err(unread)?, try_setup_files(win64).map_err(unread)?);
     if m.is_empty() && s.is_empty() {
         return Err("The mods folder is empty: there is nothing to snapshot.".into());
     }
