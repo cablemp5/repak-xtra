@@ -34,6 +34,8 @@ const percent = (p: Progress, now: number) => {
   const f = p.total ? (p.done ?? 0) / p.total : Math.min(0.95, 1 - Math.exp(-(now - p.at) / 1000 / k))
   return a + (b - a) * f
 }
+/** A wait with no count of its own (the editor starting, a hero's first step): the bar creeps toward 90% of `to`. */
+const creep = (since: number, now: number, to: number, k = 3) => 2 + (to - 2) * Math.min(0.9, 1 - Math.exp(-(now - since) / 1000 / k))
 const stepText = (p: Progress, hero: string) => p.step === 1 ? `Finding ${hero}'s KO prompt in your game files`
   : p.step === 2 ? 'Reading its layers and animations' : p.step === 3 ? 'Turning its textures into pictures'
     : p.total ? `Loading textures, ${p.done ?? 0} of ${p.total}` : 'Loading textures'
@@ -58,12 +60,15 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [loading, setLoading] = useState<{ hero: Hero; since: number } | null>(null)
   const [progress, setProgress] = useState<Progress | null>(null)
+  // the editor starting: the game's property layout, then the heroes in the game files (no counts: the bar creeps)
+  const [init, setInit] = useState<{ step: string; at: number } | null>(() => ({ step: "Getting the game's property layout", at: Date.now() }))
+  const first = useRef(true) // the first hero after starting: its bar goes on from where starting left it
   const [, setNow] = useState(0)
   useEffect(() => { // the bar creeps on while a step with no count of its own runs
-    if (!loading) return
+    if (!loading && !init) return
     const t = setInterval(() => setNow(Date.now()), 120)
     return () => clearInterval(t)
-  }, [loading])
+  }, [loading, init])
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saved, setSaved] = useState<Saved>(readSaved)
   const [focus, setFocus] = useState<string[] | null>(null)
@@ -83,6 +88,10 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
   const [taken, setTaken] = useState<string | null>(null) // the name a mod already installed has: Install asks before replacing it
 
   const hero = heroes?.find(h => h.id === heroId) ?? null
+  // one bar from the editor starting to the first hero's prompt: starting fills the first 30%, the hero the rest
+  const lead = init ? 0 : first.current ? 30 : 0
+  const own = progress ? percent(progress, Date.now()) : loading ? creep(loading.since, Date.now(), SPAN[1][1]) : 2
+  const bar = init ? creep(init.at, Date.now(), 30, 2) : lead + (100 - lead) * own / 100
   const entry = (hero && saved[hero.id]) || {}
   const name = entry.name ?? (hero ? `${hero.name} KO Prompt` : '')
   const roles = useMemo(() => (loaded?.hero.id === heroId ? loaded.scene.w.roles : []), [loaded, heroId])
@@ -117,9 +126,10 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
   // the heroes the installed game has, read once the page is first shown
   useEffect(() => {
     let on = true
-    usmapPath().then(u => { if (!on) return null; setUsmap(u); return invoke<Hero[]>('xtra_ko_heroes', { usmapPath: u }) })
+    usmapPath().then(u => { if (!on) return null; setUsmap(u); setInit(i => ({ step: 'Finding the heroes in your game files', at: i?.at ?? Date.now() })); return invoke<Hero[]>('xtra_ko_heroes', { usmapPath: u }) })
       .then(list => { if (on && list) { setHeroes(list); setHeroId(id => (id && list.some(h => h.id === id) ? id : list[0]?.id ?? null)) } })
       .catch(e => on && setListError(String(e)))
+      .finally(() => on && setInit(null))
     return () => { on = false }
   }, [])
 
@@ -131,7 +141,7 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
     setLoading({ hero, since: Date.now() }); setProgress(null)
     let read = false // a first read of this hero (the bar showed): a ready cue when it lands
     loadHero(hero, usmap, p => { if (on) { setProgress(p); read = true } }).then(l => { if (on) { setLoaded(l); setPlaying(true); if (read) cue('ready') } }, e => { if (on) { setLoadError(String(e)); cue('warning') } })
-      .finally(() => { if (on) setLoading(null) })
+      .finally(() => { if (on) { setLoading(null); first.current = false } })
     return () => { on = false }
   }, [hero, usmap, loaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -297,12 +307,12 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
               {loadError ? <><strong>Could not open this KO prompt</strong><span>{loadError}</span></>
                 : loading || (!listError && !scene) ? (
                   <div className="ko-load">
-                    <strong>Opening {loading?.hero.name ?? 'the game'}'s KO prompt</strong>
-                    <div className="ko-load-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress ? percent(progress, Date.now()) : 2)}>
-                      <span style={{ width: `${progress ? percent(progress, Date.now()) : 2}%` }} />
+                    <strong>{loading ? `Opening ${loading.hero.name}'s KO prompt` : 'Initializing the KO prompt editor'}</strong>
+                    <div className="ko-load-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(bar)}>
+                      <span style={{ width: `${bar}%` }} />
                     </div>
-                    <span key={progress ? `${progress.step}` : 'wait'} className="ko-load-step">
-                      <span className="ko-shimmer">{progress ? stepText(progress, loading?.hero.name ?? 'the hero') : 'Starting'}</span>
+                    <span key={progress ? `${progress.step}` : init?.step ?? 'wait'} className="ko-load-step">
+                      <span className="ko-shimmer">{progress ? stepText(progress, loading?.hero.name ?? 'the hero') : loading ? `Finding ${loading.hero.name}'s KO prompt in your game files` : init?.step ?? 'Starting'}</span>
                     </span>
                   </div>
                 )
