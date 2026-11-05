@@ -10,7 +10,7 @@ import { APP_NAME } from '../edition'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, emitTo, listen } from '@tauri-apps/api/event'
-import { AlertTriangle, Archive, Check, ChevronDown, ChevronRight, Copy, Eye, Info, FilePlus, Map as MapIcon, Palette, RefreshCw, RotateCcw, ScrollText, Search, Square, Tag, X } from 'lucide-react'
+import { AlertTriangle, Archive, Check, ChevronDown, ChevronRight, Copy, Eye, Info, PackageCheck, Undo2, FilePlus, Map as MapIcon, Palette, RefreshCw, RotateCcw, ScrollText, Search, Square, Tag, X } from 'lucide-react'
 import TitleBar from '../../components/TitleBar'
 import { useGlobalTooltips } from '../../hooks/useGlobalTooltips'
 import Checkbox from '../../components/ui/Checkbox'
@@ -136,13 +136,17 @@ function reportText(r: VfxReport) {
 
 /** `candidate`: a Best effort build waiting for review, not placed yet: its assets show, and there is no placement to tell. */
 function Report({ r, onRetry, onUsmap, busy, candidate = false }: { r: VfxReport; onRetry: () => void; onUsmap: () => void; busy: boolean; candidate?: boolean }) {
-  const [assets, setAssets] = useState(candidate)
+  const [assets, setAssets] = useState(false)
   const [allWarnings, setAllWarnings] = useState(false)
   const groups = KIND_ORDER.map(k => [k, r.assets.filter(a => a.kind === k)] as const).filter(([, list]) => list.length)
   const warnings = allWarnings ? r.warnings : r.warnings.slice(0, 4)
+  const warningList = r.warnings.length > 0 && <ul className="vf-warnings" aria-label="Warnings">
+    {warnings.map((w, i) => <li key={i}>{w}</li>)}
+    {r.warnings.length > 4 && <li className="vf-more"><button type="button" className="su-link" onClick={() => setAllWarnings(v => !v)}>{allWarnings ? 'Show fewer' : `Show all ${r.warnings.length}`}</button></li>}
+  </ul>
   return (
     <div className="vf-report">
-      {r.status === 'fixed'
+      {candidate ? null : r.status === 'fixed'
         ? <p className="vf-note">{r.counts.updated ? `Rebuilt ${r.counts.updated.toLocaleString()} of ${plural(r.assets.length, 'asset')} with ${plural(r.counts.changes, 'edit')}. ` : ''}{r.counts.left ? `${leftText(r)} ` : ''}{ownText(r) ? `${ownText(r)} ` : ''}{candidate ? '' : placedText(r)}</p>
         // a cancelled run's pill already says so: no "Cancelled." under it. An error that sends the user to the USMAP
         // links to it (Advanced opens on it)
@@ -150,10 +154,7 @@ function Report({ r, onRetry, onUsmap, busy, candidate = false }: { r: VfxReport
       {(r.status === 'failed' || r.status === 'cancelled') && (
         <button type="button" className="row-action" disabled={busy} onClick={onRetry}><RotateCcw size={13} aria-hidden="true" /> Try again</button>
       )}
-      {r.warnings.length > 0 && <ul className="vf-warnings" aria-label="Warnings">
-        {warnings.map((w, i) => <li key={i}>{w}</li>)}
-        {r.warnings.length > 4 && <li className="vf-more"><button type="button" className="su-link" onClick={() => setAllWarnings(v => !v)}>{allWarnings ? 'Show fewer' : `Show all ${r.warnings.length}`}</button></li>}
-      </ul>}
+      {!candidate && warningList}
       {groups.length > 0 && <>
         <div className="vf-stats">
           <button type="button" className="vf-assets-toggle" aria-expanded={assets} onClick={() => setAssets(v => !v)}>
@@ -162,6 +163,7 @@ function Report({ r, onRetry, onUsmap, busy, candidate = false }: { r: VfxReport
         </div>
         <div className="t-acc-panel" data-open={assets}>
           <div className="t-acc-panel-inner" {...folded(!assets)}>
+            {assets && candidate && warningList}
             {assets && <div className="vf-assets">{groups.map(([k, list]) => (
               <div key={k} className="vf-group">
                 <h4>{KIND_LABEL[k]} <span>{list.length.toLocaleString()}</span></h4>
@@ -315,18 +317,17 @@ function ColorNames() {
 
 /** The oldest Best effort candidate waiting for an answer, pinned over the list: what it is, what each button does, its
  *  report, then the two answers on one line. Further candidates wait behind it (the batch keeps running meanwhile). */
-function ReviewCard({ name, report, more, onAnswer }: { name: string; report: VfxReport; more: number; onAnswer: (ok: boolean) => void }) {
+export function ReviewCard({ name, report, more, onAnswer }: { name: string; report: VfxReport; more: number; onAnswer: (ok: boolean) => void }) {
   const ref = useRef<HTMLElement>(null)
   useEffect(() => { ref.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }) }, [])
   return (
     <section className="vf-review" ref={ref} role="region" aria-label={`Review ${name}`} aria-live="polite">
       <h3><Eye size={15} aria-hidden="true" />Your review: {name}{more > 0 && <span className="vf-review-more">{more} more after this</span>}</h3>
-      <p>Best effort rebuilt this mod, but could not confirm every edit carried over. Nothing is installed yet, and the batch keeps going while you decide.</p>
-      <p><b>Use candidate</b> installs the rebuilt copy in place of the mod. <b>Keep original</b> leaves the mod as it is.</p>
+      <p>This mod was rebuilt, but some of its edits could not be confirmed. Use the candidate to install the rebuilt copy, or keep the original as it is.</p>
       <Report r={report} busy={true} onRetry={() => {}} onUsmap={() => {}} candidate />
       <div className="vf-review-actions">
-        <button type="button" className="btn-primary" onClick={() => onAnswer(true)}><Check size={14} aria-hidden="true" />Use candidate</button>
-        <button type="button" className="lo-text-btn" onClick={() => onAnswer(false)} title="Esc">Keep original</button>
+        <button type="button" className="lo-text-btn is-primary" onClick={() => onAnswer(true)}><PackageCheck size={14} aria-hidden="true" />Use candidate</button>
+        <button type="button" className="lo-text-btn" onClick={() => onAnswer(false)} title="Esc"><Undo2 size={14} aria-hidden="true" />Keep original</button>
       </div>
     </section>
   )
