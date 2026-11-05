@@ -145,7 +145,8 @@ const LoadoutCard = memo(function LoadoutCard({ p, l, groupBy, canGenerate, busy
   const keys = new Set(l.on.map(displayName))
   const present = [...keys].filter(k => byKey.has(k)).length
   const onNow = [...keys].filter(k => byKey.get(k)?.enabled).length
-  const label = present === 0 ? 'No installed mods' : active ? `Turn ${l.name} off` : `Turn ${l.name} on`
+  const partial = !active && onNow > 0 // partly on: a click turns it off, the way a half-checked box clears
+  const label = present === 0 ? 'No installed mods' : active || partial ? `Turn ${l.name} off` : `Turn ${l.name} on`
   return (
     <article data-loadout={l.id} className={`lo-card ${active ? 'is-on' : ''}${placeholder ? ' is-placeholder' : ''}`}
       onPointerDown={!renaming ? e => onPick(e, l.id) : undefined}
@@ -168,7 +169,7 @@ const LoadoutCard = memo(function LoadoutCard({ p, l, groupBy, canGenerate, busy
             </span>
           )}
           <Switch size="sm" color="primary" checked={active} isDisabled={present === 0} disabled={anyBusy || present === 0}
-            title={label} aria-label={label} onChange={(checked: boolean) => onToggle(l, checked)} />
+            title={label} aria-label={label} onChange={(checked: boolean) => onToggle(l, checked && !partial)} />
         </div>
         <p className="lo-card-meta">
           {busy ? 'Switching mods…' : p.mods.length === 0 ? 'Loading mods…' : <>

@@ -385,15 +385,29 @@ fn http(secs: u64) -> Result<reqwest::Client, String> {
     reqwest::Client::builder().timeout(std::time::Duration::from_secs(secs)).user_agent("RepakX-VFX-Updater").build().map_err(|e| e.to_string())
 }
 
-/// Every depot USMAP: (build, file name, download URL).
+/// Every depot USMAP: (build, file name, download URL). Asked of GitHub at most once every 10 minutes: the material
+/// check asks for each mod it relayouts, which was a request per mod (and a 20 s wait each while offline). A failed
+/// listing counts as empty for those 10 minutes, as a failure already did.
 async fn depot_usmaps() -> Result<Vec<(u64, String, String)>, String> {
-    let json: Value = http(20)?.get(DEPOT).header("Accept", "application/vnd.github+json").send().await.map_err(|e| e.to_string())?
-        .error_for_status().map_err(|e| e.to_string())?.json().await.map_err(|e| e.to_string())?;
-    Ok(json.as_array().into_iter().flatten().filter_map(|e| {
-        let name = e.get("name")?.as_str()?;
-        let url = e.get("download_url")?.as_str()?;
-        Some((usmap_build(name).filter(|_| name.ends_with(".usmap"))?, name.to_string(), url.to_string()))
-    }).collect())
+    type Listing = Vec<(u64, String, String)>;
+    static LISTED: std::sync::Mutex<Option<(std::time::Instant, Listing)>> = std::sync::Mutex::new(None);
+    if let Some((at, l)) = LISTED.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+        if at.elapsed() < std::time::Duration::from_secs(600) {
+            return Ok(l.clone());
+        }
+    }
+    let fetched = async {
+        let json: Value = http(20)?.get(DEPOT).header("Accept", "application/vnd.github+json").send().await.map_err(|e| e.to_string())?
+            .error_for_status().map_err(|e| e.to_string())?.json().await.map_err(|e| e.to_string())?;
+        Ok::<Listing, String>(json.as_array().into_iter().flatten().filter_map(|e| {
+            let name = e.get("name")?.as_str()?;
+            let url = e.get("download_url")?.as_str()?;
+            Some((usmap_build(name).filter(|_| name.ends_with(".usmap"))?, name.to_string(), url.to_string()))
+        }).collect())
+    }
+    .await;
+    *LISTED.lock().unwrap_or_else(|e| e.into_inner()) = Some((std::time::Instant::now(), fetched.clone().unwrap_or_default()));
+    fetched
 }
 
 async fn download_usmap(url: &str, to: &Path) -> Result<(), String> {
@@ -511,9 +525,20 @@ pub(crate) fn tail_filter(rel: &str) -> String {
 /// The game's copies of `rels`, extracted and decoded with `usmap` into the cache under `vanilla` (kept for the next
 /// mod): (packages, JSON) folders. xtra_layout.rs reads the game's Blueprints through it too.
 pub(crate) async fn game_copies(game_paks: &str, usmap: &str, rels: &[String], work: &Path, vanilla: &Path, progress: &dyn VfxProgressSink) -> Result<(PathBuf, PathBuf), String> {
+    // one writer at a time: the Mod Updater, the Niagara, Blueprint, material and mesh checks all fill this cache
+    static FILLING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    let _one = FILLING.lock().await;
     let (gx, gj) = (vanilla.join("niagara_extract"), vanilla.join("niagara_json"));
-    // cached only when both the JSON and the package are there
-    let missing: Vec<String> = rels.iter().filter(|r| !gj.join(format!("{r}.json")).exists() || !gx.join(format!("{r}.uasset")).exists()).cloned().collect();
+    // cached only when both the JSON and the package are there. A package the game's asset list (when already read, and
+    // complete) does not have is never asked for: a mod's own material instances were extracted for nothing by every
+    // mod check
+    let listed = crate::xtra_broken::game_assets_if(Path::new(game_paks), || false).filter(|_| crate::xtra_broken::asset_list_complete(Path::new(game_paks)));
+    let missing: Vec<String> = rels
+        .iter()
+        .filter(|r| listed.as_ref().is_none_or(|g| g.contains_key(&crate::xtra_broken::match_key(&format!("{r}.uasset")))))
+        .filter(|r| !gj.join(format!("{r}.json")).exists() || !gx.join(format!("{r}.uasset")).exists())
+        .cloned()
+        .collect();
     if !missing.is_empty() {
         let fresh = work.join("game_extract");
         let _ = std::fs::remove_dir_all(&fresh);
@@ -691,10 +716,10 @@ static SCANNING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// how many were found in an older layout. Skipped while the VFX Updater runs or another scan does.
 #[tauri::command]
 pub async fn xtra_vfx_layout_scan(app: tauri::AppHandle, mod_paths: Vec<String>, state: tauri::State<'_, std::sync::Arc<std::sync::Mutex<crate::AppState>>>) -> Result<usize, String> {
-    let Ok(_one) = SCANNING.try_lock() else { return Ok(0) };
-    if !crate::xtra_vfx::background_may_run() {
+    let Ok(_one) = SCANNING.try_lock() else {
+        crate::xtra_vfx::note_stopped();
         return Ok(0);
-    }
+    };
     let state = state.inner().clone();
     let mods_dir = state.lock().unwrap().game_path.clone();
     let Some(paks) = mods_dir.ancestors().find(|p| p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("Paks"))).map(Path::to_path_buf) else { return Ok(0) };
@@ -705,8 +730,9 @@ pub async fn xtra_vfx_layout_scan(app: tauri::AppHandle, mod_paths: Vec<String>,
     let mut cache = load_layouts();
     let build = layout_build(&usmap, &paks);
     let mut found = 0;
-    let total = mod_paths.len();
-    for (i, p) in mod_paths.into_iter().enumerate() {
+    // First the mods with work left (cheap: file dates and cached details), so the progress counts those and not the list
+    let mut todo = Vec::new();
+    for p in mod_paths {
         let path = PathBuf::from(&p);
         if crate::xtra_builtins::in_folder(&path) {
             continue; // built-ins: xtra_builtins judges them by the game build they were made for, never these checks
@@ -716,15 +742,24 @@ pub async fn xtra_vfx_layout_scan(app: tauri::AppHandle, mod_paths: Vec<String>,
         if cache.contains_key(&key) {
             continue;
         }
-        crate::xtra_broken::scan_progress(&app, "effects", i, total, &path);
-        let st = state.clone();
-        let details = tauri::async_runtime::spawn_blocking(move || crate::compute_mod_details(&path, &st).ok()).await.ok().flatten();
+        let (st, pc) = (state.clone(), path.clone());
+        let details = tauri::async_runtime::spawn_blocking(move || crate::compute_mod_details(&pc, &st).ok()).await.ok().flatten();
         let Some(d) = details.filter(|d| d.category == "VFX") else { continue };
         let probes: Vec<String> = probe_files(&paks, &d.files).iter().map(|f| package_rel(f)).collect();
         if probes.is_empty() {
             cache.insert(key, false);
             continue;
         }
+        todo.push((path, utoc, key, probes));
+    }
+    save_layouts(&cache);
+    let total = todo.len();
+    for (i, (path, utoc, key, probes)) in todo.into_iter().enumerate() {
+        // asked only before the tool runs: a mod with nothing to read never counts as work left
+        if !crate::xtra_vfx::background_may_run() {
+            break; // an update uses the same tool: the rest waits for the next scan
+        }
+        crate::xtra_broken::scan_progress(&app, "effects", i, total, &path);
         match old_layout_of(&game_paks, &usmap, &utoc, &probes, None, &work, &vanilla).await {
             Ok(old) => {
                 found += usize::from(old);
@@ -733,9 +768,6 @@ pub async fn xtra_vfx_layout_scan(app: tauri::AppHandle, mod_paths: Vec<String>,
             Err(e) => log::warn!("[vfx layout] {}: {e}", utoc.display()),
         }
         save_layouts(&cache);
-        if !crate::xtra_vfx::background_may_run() {
-            break; // an update started: it uses the same tool, the rest waits for the next scan
-        }
     }
     let _ = std::fs::remove_dir_all(&work);
     Ok(found)

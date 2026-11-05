@@ -57,7 +57,9 @@ export function useGameUpdateWatch(alert: Alert, loading: boolean, count: number
             // the library can change under a scan (a reload), so a scan that did not finish is run again, twice at most
             let done = false
             for (let i = 0; i < 3 && !done; i++) done = (await fullScan()) ?? true
-            if (!done) return // the checks failed: no notice with a wrong count, tried again on a later focus
+            // the checks failed or stopped with mods left (the game runs): no notice with an early count, and not marked
+            // seen, so a later focus tries again
+            if (!done) return
           }
           const flagged = flaggedCount()
           const { alert, showFlagged } = live.current

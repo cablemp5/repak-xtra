@@ -15,3 +15,10 @@ html[data-motion="off"] .is-skeleton *, html[data-motion="off"] .is-ghost::befor
 @media (prefers-reduced-motion: reduce) {
   .is-skeleton *, .is-ghost::before, .is-ghost::after, .lo-skel, .lo-skel::after { animation: none !important; }
 }
+/* The Mod Updater's and the Encrypter's list while the mods folder is read (ModRowsSkeleton.tsx): a checkbox and a name
+   per row, pulsing out of step so the list breathes rather than blinks */
+.sk-row { pointer-events: none; }
+.sk-row .sk-box, .sk-row .sk-line { background: color-mix(in srgb, var(--text-primary) 12%, var(--panel-bg)); animation: skeleton-pulse 1.6s ease-in-out infinite; }
+.sk-row .sk-box { flex: none; width: 16px; height: 16px; border-radius: 4px; }
+.sk-row .sk-line { height: 12px; border-radius: 4px; }
+.sk-row:nth-child(2n) :is(.sk-box, .sk-line) { animation-delay: 0.2s; }

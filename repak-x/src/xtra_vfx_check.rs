@@ -84,26 +84,22 @@ fn packages(dir: &Path, names: &HashSet<String>) -> Vec<String> {
         .collect()
 }
 
-/// The shader data of each material instance among `names` whose JSON is under `dir`, by its path there (lowercase, no
-/// extension).
-fn shader_data(dir: &Path, names: &HashSet<String>) -> HashMap<String, String> {
-    walkdir::WalkDir::new(dir)
-        .into_iter()
-        .flatten()
-        .filter(|e| wanted(e, names, "json"))
-        .filter_map(|e| {
-            let text = std::fs::read_to_string(e.path()).ok()?;
+/// The shader data of each of `rels` (package paths) whose JSON is under `dir`, by its path (lowercase, no extension).
+fn shader_of(dir: &Path, rels: &[String]) -> HashMap<String, String> {
+    rels.iter()
+        .filter_map(|r| {
+            let text = std::fs::read_to_string(dir.join(format!("{r}.json"))).ok()?;
             let json: serde_json::Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).ok()?;
             let extras: String = json["Exports"].as_array()?.iter().filter_map(|x| x["Extras"].as_str()).collect();
-            let key = e.path().strip_prefix(dir).ok()?.with_extension("").to_string_lossy().replace('\\', "/").to_lowercase();
-            Some((key, extras))
+            Some((r.replace('\\', "/").to_lowercase(), extras))
         })
         .collect()
 }
 
 /// Extracts the packages named in `names` (bare names) from `paks` (a Paks folder: every container in it), or from the
-/// mod at `mod_utoc`, into `out`, then writes their JSON to `json`.
-async fn read(paks: &Path, mod_utoc: Option<&Path>, names: &[String], usmap: &str, out: &Path, json: &Path) -> Result<HashMap<String, String>, String> {
+/// mod at `mod_utoc`, into `out`: their paths there. The tool's command line runs it as a process of its own when it
+/// ships (xtra_uat_cli.rs), so the background scan extracts the next mod while this one decodes.
+async fn extract(paks: &Path, mod_utoc: Option<&Path>, names: &[String], out: &Path) -> Result<Vec<String>, String> {
     let _ = std::fs::remove_dir_all(out);
     let req = VfxUatRequest {
         action: "extract_iostore_legacy",
@@ -118,15 +114,24 @@ async fn read(paks: &Path, mod_utoc: Option<&Path>, names: &[String], usmap: &st
     if !r.success {
         return Err(r.message);
     }
-    let lower: HashSet<String> = names.iter().map(|n| n.to_lowercase()).collect();
-    let rels = packages(out, &lower);
+    Ok(packages(out, &names.iter().map(|n| n.to_lowercase()).collect()))
+}
+
+/// The packages `rels` extracted under `out`, decoded into `json`: their shader data.
+async fn decode(out: &Path, rels: &[String], usmap: &str, json: &Path) -> Result<HashMap<String, String>, String> {
     if rels.is_empty() {
         return Ok(HashMap::new());
     }
     std::fs::write(out.join("uasset_list.txt"), rels.join("\n")).map_err(|e| e.to_string())?;
     let _ = std::fs::remove_dir_all(json);
     crate::vfx_updater::pipeline::step_convert_mod_to_json(&PathBuf::new(), usmap, &out.to_string_lossy(), &json.to_string_lossy(), &NoOpProgressSink).await?;
-    Ok(shader_data(json, &lower))
+    Ok(shader_of(json, rels))
+}
+
+/// extract, then decode into `json`.
+async fn read(paks: &Path, mod_utoc: Option<&Path>, names: &[String], usmap: &str, out: &Path, json: &Path) -> Result<HashMap<String, String>, String> {
+    let rels = extract(paks, mod_utoc, names, out).await?;
+    decode(out, &rels, usmap, json).await
 }
 
 /// A folder holding only the game's global container (its script objects) and `container`, linked, not copied: under
@@ -173,6 +178,24 @@ async fn check(mod_path: &Path, usmap: &str, state: &Arc<Mutex<AppState>>, deep:
     r
 }
 
+/// Bare names of material instances (match keys), for the extract's filter.
+fn names_of(mics: &[String]) -> Vec<String> {
+    mics.iter().map(|k| k.rsplit('/').next().unwrap_or(k).to_string()).collect::<HashSet<_>>().into_iter().collect()
+}
+
+fn none() -> VfxCheck {
+    VfxCheck { verdict: "none", outdated: vec![], current: vec![], unknown: vec![], old_layout: vec![], why: None }
+}
+
+/// A mod with no material instance found: none, or not known when its file list with classes could not be read.
+fn no_materials(mods_dir: &Path, utoc: &Path, all_known: bool) -> VfxCheck {
+    if all_known {
+        return none();
+    }
+    crate::xtra_broken::record_uncertain(mods_dir, utoc, "The asset list could not be fully read. Compatibility could not be verified. This is a precaution, not a confirmed fault.".into());
+    VfxCheck { verdict: "unknown", why: Some("classes"), ..none() }
+}
+
 async fn check_in(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, work: &Path, bases: &[PathBuf], state: &Arc<Mutex<AppState>>, deep: bool) -> Result<VfxCheck, String> {
     let details = crate::compute_mod_details(&mod_path.to_path_buf(), state)?;
     let utoc = mod_path.with_extension("utoc");
@@ -180,19 +203,24 @@ async fn check_in(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, wo
     // listing runs a process and may read the game's asset list first: off the async workers
     let (p, u, f) = (paks.to_path_buf(), utoc.clone(), details.files.clone());
     let (mics, all_known) = tauri::async_runtime::spawn_blocking(move || crate::xtra_broken::material_instances(&p, &u, &f)).await.map_err(|e| e.to_string())?;
-    let names: Vec<String> = mics
-        .iter()
-        .map(|k| k.rsplit('/').next().unwrap_or(k).to_string())
-        .collect::<HashSet<_>>()
-        .into_iter()
-        .collect();
-    let none = || VfxCheck { verdict: "none", outdated: vec![], current: vec![], unknown: vec![], old_layout: vec![], why: None };
+    let names = names_of(&mics);
     if names.is_empty() {
-        if !all_known { crate::xtra_broken::record_uncertain(mods_dir, &utoc, "The asset list could not be fully read. Compatibility could not be verified. This is a precaution, not a confirmed fault.".into()); }
-        return Ok(if all_known { none() } else { VfxCheck { verdict: "unknown", why: Some("classes"), ..none() } });
+        return Ok(no_materials(mods_dir, &utoc, all_known));
     }
-    let mine = read(paks, Some(&utoc), &names, usmap, &work.join("mod"), &work.join("mod_json")).await?;
-    let mut versions = vec![read(paks, None, &names, usmap, &work.join("game"), &work.join("game_json")).await?];
+    let rels = extract(paks, Some(&utoc), &names, &work.join("mod")).await?;
+    finish(mod_path, usmap, mods_dir, paks, work, bases, &details.files, all_known, &rels, deep).await
+}
+
+/// The rest of a check once the mod's material instances (`rels`) are extracted under `work`/mod.
+#[allow(clippy::too_many_arguments)]
+async fn finish(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, work: &Path, bases: &[PathBuf], files: &[String], all_known: bool, rels: &[String], deep: bool) -> Result<VfxCheck, String> {
+    let utoc = mod_path.with_extension("utoc");
+    let mine = decode(&work.join("mod"), rels, usmap, &work.join("mod_json")).await?;
+    // the game's current copies of the same packages: extracted and decoded once per game build and USMAP, kept for
+    // every mod that replaces them (xtra_niagara game_copies)
+    let vanilla = crate::xtra_vfx::vanilla_dir(&paks.to_string_lossy(), usmap);
+    let (_, game_json) = crate::xtra_niagara::game_copies(&paks.to_string_lossy(), usmap, rels, work, &vanilla, &NoOpProgressSink).await?;
+    let mut versions = vec![shader_of(&game_json, rels)];
     let mut unreadable = false;
     // the older copies: each game container alone, newest first, until every one of the mod's is placed (or none is left)
     let mut containers: Vec<_> = crate::xtra_broken::game_containers(paks).into_iter().filter(|c| !c.0.file_stem().is_some_and(|s| s.eq_ignore_ascii_case("global"))).collect();
@@ -226,11 +254,11 @@ async fn check_in(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, wo
         }
     }
     // the layout, read as the VFX Updater reads it before an update (the date only settles a file both layouts read whole)
-    let lower: HashSet<String> = names.iter().map(|n| n.to_lowercase()).collect();
     let written = std::fs::metadata(&utoc).and_then(|m| m.modified()).ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs());
     let written = crate::xtra_stamp::made(&utoc, written);
     let older = written < crate::xtra_broken::game_updated(mods_dir);
-    let layout = crate::xtra_mi_layout::relayout(usmap, &work.join("mod"), &packages(&work.join("mod"), &lower), older, written, crate::xtra_mi_layout::Game::Json(&work.join("game_json")), &work.join("relayout"), &NoOpProgressSink).await;
+    // today's decode is the one just made (mod_json): the relayout reads it rather than decoding the same files again
+    let layout = crate::xtra_mi_layout::relayout(usmap, &work.join("mod"), rels, older, written, crate::xtra_mi_layout::Game::Json(&game_json), Some(&work.join("mod_json")), &work.join("relayout"), &NoOpProgressSink).await;
     let layout_ok = layout.as_ref().is_ok_and(|r| r.complete);
     if let Ok(r) = &layout {
         // lowercase, as the shader data's names are
@@ -273,7 +301,7 @@ async fn check_in(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, wo
     }
     // the Needs VFX update flag follows it: outdated flags it whatever its date, current clears it (only for a mod without
     // Niagara files, which this does not look at)
-    let niagara = details.files.iter().any(|f| {
+    let niagara = files.iter().any(|f| {
         let n = f.replace('\\', "/").rsplit('/').next().unwrap_or_default().to_ascii_lowercase();
         (n.starts_with("ns_") || n.starts_with("ne_")) && n.ends_with(".uasset")
     });
@@ -326,35 +354,70 @@ fn load_scanned(store: &Path) -> Scanned {
 }
 
 /// Whether the mod at `utoc` still needs a look: never checked as this file, or checked before the game's last update.
+/// Kept per decoder (xtra_broken decoder_key), so the stable, test and dev copies keep each other's answers.
 fn needs_scan(done: &Scanned, utoc: &Path, game: u64) -> bool {
+    let parser = crate::xtra_vfx::parser_id();
     match crate::xtra_broken::file_stamp(utoc) {
-        Some((size, at)) => done.get(&crate::xtra_broken::checked_key(utoc)) != Some(&(size, at, game, crate::xtra_vfx::parser_id().to_string())),
+        Some((size, at)) => crate::xtra_broken::record_of(done, utoc, parser) != Some(&(size, at, game, parser.to_string())),
         None => false,
     }
 }
 
+/// The game update this decoder last looked at the mod at `utoc` in, as the file it is now (an earlier one than now).
+fn earlier(done: &Scanned, utoc: &Path) -> Option<u64> {
+    let (key, stamp, parser) = (crate::xtra_broken::checked_key(utoc), crate::xtra_broken::file_stamp(utoc)?, crate::xtra_vfx::parser_id());
+    done.iter()
+        .filter(|(k, _)| k.strip_prefix(key.as_str()).is_some_and(|rest| rest.is_empty() || rest.starts_with('|')))
+        .filter(|(_, v)| (v.0, v.1) == stamp && v.3 == parser)
+        .map(|(_, v)| v.2)
+        .max()
+}
+
 static SCAN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// A mod the scan reads with the tools: its material instances by bare name, and its file list.
+struct Job {
+    p: String,
+    path: PathBuf,
+    utoc: PathBuf,
+    /// its .utoc's size and time when listed: a file replaced before its turn is left to the next scan, never given the
+    /// answer of the extract made from the old one
+    stamp: Option<(u64, u64)>,
+    files: Vec<String>,
+    names: Vec<String>,
+    all_known: bool,
+}
 
 /// Checks the mods among `mod_paths` (the Library passes those the date check calls current) that have material
 /// instances, each once per file and game update (outdated ones get their flag), and returns how many it looked at. Stops
 /// while an update runs (the next scan goes on from there), skipped while another runs or the USMAP is not the game's.
 #[tauri::command]
 pub async fn xtra_vfx_check_scan(app: tauri::AppHandle, mod_paths: Vec<String>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<usize, String> {
-    let Ok(_one) = SCAN.try_lock() else { return Ok(0) };
+    let Ok(_one) = SCAN.try_lock() else {
+        crate::xtra_vfx::note_stopped();
+        return Ok(0);
+    };
     let state = state.inner().clone();
     let mods_dir = state.lock().unwrap().game_path.clone();
     let Some(paks) = mods_dir.ancestors().find(|p| p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("Paks"))).map(Path::to_path_buf) else { return Ok(0) };
     let Some(usmap) = crate::vfx_updater::commands::saved_usmap_path().filter(|u| Path::new(u).is_file() && crate::xtra_niagara::usmap_matches(u, &paks)) else { return Ok(0) };
     let game = crate::xtra_broken::game_updated(&mods_dir);
+    let parser = crate::xtra_vfx::parser_id();
     let store = scan_store();
     let mut done = load_scanned(&store);
     let mut found = 0;
-    let total = mod_paths.len();
-    for (i, p) in mod_paths.into_iter().enumerate() {
-        // an update runs, or the game: the next scan goes on from here
-        if !crate::xtra_vfx::background_may_run() {
-            break;
+    // "layout" or "classes" (not told) is kept like any answer: the same file, game and parser give the same one, so
+    // asking again each launch only burned a minute of CPU per mod. A change to any of them asks again
+    let remember = |done: &mut Scanned, utoc: &Path| {
+        if let Some((size, at)) = crate::xtra_broken::file_stamp(utoc) {
+            done.insert(crate::xtra_broken::decoder_key(utoc, parser), (size, at, game, parser.to_string()));
+            let _ = std::fs::write(&store, serde_json::to_string(&*done).unwrap_or_default()); // each mod: a closed app keeps its progress
         }
+    };
+    // First the mods with work left (cheap: file dates, cached details, the game's asset list), so the progress counts
+    // those and not the list
+    let mut todo = Vec::new();
+    for p in mod_paths {
         let path = PathBuf::from(&p);
         if crate::xtra_builtins::in_folder(&path) {
             continue; // built-ins: xtra_builtins judges them by the game build they were made for, never these checks
@@ -363,28 +426,86 @@ pub async fn xtra_vfx_check_scan(app: tauri::AppHandle, mod_paths: Vec<String>, 
         if !needs_scan(&done, &utoc, game) {
             continue;
         }
-        crate::xtra_broken::scan_progress(&app, "materials", i, total, &path);
-        let (st, pc) = (state.clone(), path.clone());
-        let details = tauri::async_runtime::spawn_blocking(move || crate::compute_mod_details(&pc, &st).ok()).await.ok().flatten();
-        let (pk, u) = (paks.clone(), utoc.clone());
-        let mics = tauri::async_runtime::spawn_blocking(move || details.map(|d| crate::xtra_broken::material_instances(&pk, &u, &d.files))).await.ok().flatten();
-        if mics.as_ref().is_some_and(|(m, all)| !m.is_empty() || !all) {
-            match check(&path, &usmap, &state, false).await {
-                // "layout" or "classes" (not told) is kept like any answer: the same file, game and parser give the same
-                // one, so asking again each launch only burned a minute of CPU per mod. A change to any of them asks again
-                Ok(_) => {}
-                Err(e) => {
-                    log::warn!("[vfx check] {p}: {e}"); // tried again by the next scan
-                    continue;
-                }
-            }
-        }
-        if let Some((size, at)) = crate::xtra_broken::file_stamp(&utoc) {
+        let (st, pc, pk, u, before) = (state.clone(), path.clone(), paks.clone(), utoc.clone(), earlier(&done, &utoc));
+        let read = tauri::async_runtime::spawn_blocking(move || {
+            let d = crate::compute_mod_details(&pc, &st).ok()?;
+            // looked at in an earlier game update that rewrote none of its packages: the same files give the same answer
+            let kept = before.filter(|g| crate::xtra_broken::untouched_since(&pk, &d.files, *g));
+            let (mics, all) = if kept.is_some() { (Vec::new(), true) } else { crate::xtra_broken::material_instances(&pk, &u, &d.files) };
+            Some((d.files, mics, all, kept))
+        })
+        .await
+        .ok()
+        .flatten();
+        let Some((files, mics, all_known, kept)) = read else {
+            remember(&mut done, &utoc); // no details to read: as before, nothing to check in it
             found += 1;
-            done.insert(crate::xtra_broken::checked_key(&utoc), (size, at, game, crate::xtra_vfx::parser_id().to_string()));
-            let _ = std::fs::write(&store, serde_json::to_string(&done).unwrap_or_default()); // each mod: a closed app keeps its progress
+            continue;
+        };
+        if let Some(from) = kept {
+            crate::xtra_broken::carry_checked(&utoc, from, game); // its verdict too
+            remember(&mut done, &utoc);
+            found += 1; // the Library reads the verdicts again
+            continue;
+        }
+        let names = names_of(&mics);
+        if names.is_empty() {
+            no_materials(&mods_dir, &utoc, all_known); // no tool to run
+            remember(&mut done, &utoc);
+            found += 1;
+            continue;
+        }
+        let stamp = crate::xtra_broken::file_stamp(&utoc);
+        todo.push(Job { p, path, utoc, stamp, files, names, all_known });
+    }
+    // Two lanes: the next mod's extract (the tool's command line, a process of its own) runs while this one decodes (the
+    // tool's library, one call at a time). Each lane has its own folder. Where no command line ships, both run in the
+    // library one after the other, as before
+    let work = std::env::temp_dir().join("repak-x").join("xscan").join(std::process::id().to_string());
+    let lane = |i: usize| work.join(format!("lane{}", i % 2));
+    let start = |j: &Job, dir: PathBuf| {
+        let (pk, u, names) = (paks.clone(), j.utoc.clone(), j.names.clone());
+        tauri::async_runtime::spawn(async move { extract(&pk, Some(&u), &names, &dir.join("mod")).await })
+    };
+    let total = todo.len();
+    let mut next = todo.first().map(|j| start(j, lane(0)));
+    for (i, j) in todo.iter().enumerate() {
+        let this = next.take();
+        // an update runs, or the game: the next scan goes on from here
+        if !crate::xtra_vfx::background_may_run() {
+            if let Some(h) = this {
+                let _ = h.await; // its process ends before the folder goes
+            }
+            break;
+        }
+        crate::xtra_broken::scan_progress(&app, "materials", i, total, &j.path);
+        next = todo.get(i + 1).map(|n| start(n, lane(i + 1)));
+        let rels = match this {
+            Some(h) => h.await.unwrap_or_else(|e| Err(e.to_string())),
+            None => extract(&paks, Some(&j.utoc), &j.names, &lane(i).join("mod")).await,
+        };
+        let r = match rels {
+            Ok(rels) => {
+                let _one = CHECKING.lock().await; // a Check for update the user started waits for this mod
+                if crate::xtra_broken::file_stamp(&j.utoc) != j.stamp {
+                    continue; // replaced since its extract (also while waiting for the lock): its own scan follows
+                }
+                finish(&j.path, &usmap, &mods_dir, &paks, &lane(i), &[], &j.files, j.all_known, &rels, false).await
+            }
+            Err(e) => Err(e),
+        };
+        match r {
+            Ok(_) => {
+                remember(&mut done, &j.utoc);
+                found += 1;
+            }
+            Err(e) => log::warn!("[vfx check] {}: {e}", j.p), // tried again by the next scan
         }
     }
+    if let Some(h) = next {
+        let _ = h.await;
+    }
+    let _ = std::fs::remove_dir_all(&work);
     Ok(found)
 }
 

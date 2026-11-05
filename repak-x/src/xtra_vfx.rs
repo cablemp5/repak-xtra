@@ -156,8 +156,43 @@ pub fn xtra_vfx_release(window: Window, token: String) {
 /// Check for update the user started runs, or the game runs (its frame rate matters more). Every background scan asks
 /// before each mod, so any of those stops them within one mod, and the next scan goes on where they stopped (each keeps
 /// its progress per mod).
+/// Each scan asks only for a mod it has work for, so a no means work is left: noted for xtra_scan_stopped.
 pub(crate) fn background_may_run() -> bool {
-    xtra_vfx_lock().is_none() && !crate::xtra_vfx_check::user_checking() && !crate::is_game_process_running()
+    let ok = xtra_vfx_lock().is_none() && !crate::xtra_vfx_check::user_checking() && !game_running();
+    if !ok {
+        note_stopped();
+    }
+    ok
+}
+
+/// is_game_process_running lists every process, so a scan of 200 mods asking once a mod listed them 200 times. The
+/// answer is reused for 2 s.
+pub(crate) fn game_running() -> bool {
+    static LAST: Mutex<Option<(std::time::Instant, bool)>> = Mutex::new(None);
+    let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((at, running)) = *last {
+        if at.elapsed() < std::time::Duration::from_secs(2) {
+            return running;
+        }
+    }
+    let running = crate::is_game_process_running();
+    *last = Some((std::time::Instant::now(), running));
+    running
+}
+
+/// Set when a background scan stopped with mods left to read (the game, an update or a check took over, or another scan
+/// held its lock). brokenMods.ts then treats the run as unfinished: no game update toast yet, and the next focus resumes.
+static STOPPED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub(crate) fn note_stopped() {
+    STOPPED.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether a scan stopped early since the last call (and clears it). brokenMods.ts calls it at the start and the end of
+/// each run of the checks.
+#[tauri::command]
+pub fn xtra_scan_stopped() -> bool {
+    STOPPED.swap(false, std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Who holds the run lock, if anyone.
@@ -971,8 +1006,15 @@ fn game_build(paks: &Path) -> GameBuild {
         })
         .filter(|cl| *cl > 100_000)
         .max();
+    if let Some(c) = cl {
+        LAST_GAME_CL.store(c, std::sync::atomic::Ordering::Relaxed);
+    }
     GameBuild { updated: containers.iter().map(|c| c.2).max().unwrap_or(0), cl }
 }
+
+/// The installed game's build as last read (0 before any read): the USMAP check (vfx_check_usmap_update) has no game
+/// folder of its own and asks GitHub more often while the saved USMAP is older than this.
+pub(crate) static LAST_GAME_CL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// The installed game's build (its newest patch changelist), when the container names carry one.
 pub(crate) fn game_cl(paks: &Path) -> Option<u64> {

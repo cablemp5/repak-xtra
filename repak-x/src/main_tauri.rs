@@ -3746,6 +3746,7 @@ async fn update_mod(
     info!("Expected new mod path: {:?}", new_mod_path);
 
     // If the old mod was disabled, disable the new one too
+    let mut new_mod_path = new_mod_path; // repakxtra: the path returned is the file as it ends up (.bak_repak when off)
     if was_disabled && new_mod_path.exists() {
         let disabled_path = PathBuf::from(format!(
             "{}.bak_repak",
@@ -3755,6 +3756,7 @@ async fn update_mod(
             warn!("Failed to disable new mod to match old state: {}", e);
         } else {
             info!("Disabled new mod to match old mod's state");
+            new_mod_path = disabled_path; // repakxtra
         }
     }
 
@@ -8737,6 +8739,7 @@ fn main() {
             xtra_vfx::xtra_vfx_claim,
             xtra_vfx::xtra_vfx_release,
             xtra_vfx::xtra_vfx_lock,
+            xtra_vfx::xtra_scan_stopped,
             xtra_encrypt::xtra_encrypt_mods,
             xtra_encrypt::xtra_encrypt_list,
             xtra_galacta::xtra_galacta_list, // repakxtra

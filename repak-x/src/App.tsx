@@ -73,6 +73,7 @@ import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
 import { rescanVerdicts, useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
 import { useScanProgress } from './custom/scanProgress' // repakxtra
+import ScanStatus from './custom/ScanStatus' // repakxtra
 import { useGameUpdateWatch } from './custom/gameUpdate' // repakxtra
 import { useUsmapWatch } from './custom/usmapWatch' // repakxtra
 import { fixInVfxWindow } from './custom/vfx/handoff' // repakxtra: the Mod Updater window
@@ -3889,6 +3890,7 @@ function App() {
         </div>
         <ViewTabs />{/* repakxtra: Home | Library */}
         <div className="header-actions-right">
+          <ScanStatus />{/* repakxtra: the mod checks' progress, also once their toast is gone */}
           <button
             className="btn-settings"
             data-tour="launch-btn"
