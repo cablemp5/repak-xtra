@@ -7,12 +7,13 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
 import { useBrokenVersion, verdictOf } from './brokenMods'
 import { useUiPref } from './uiPrefs'
+import { riskOf, useRisks } from './safetyScan'
 
-export type ModState = 'all' | 'enabled' | 'disabled' | 'broken' | 'encrypted'
+export type ModState = 'all' | 'enabled' | 'disabled' | 'broken' | 'risk' | 'encrypted'
 
 /** `encrypted`: whether a mod is encrypted (its details' is_encrypted), for the Encrypted tab. */
 export const matchesState = (state: ModState, encrypted?: (path: string) => boolean) => (mod: { path: string; enabled?: boolean }) =>
-  state === 'all' || (state === 'broken' ? Boolean(verdictOf(mod.path)) : state === 'encrypted' ? Boolean(encrypted?.(mod.path)) : (state === 'enabled') === Boolean(mod.enabled))
+  state === 'all' || (state === 'broken' ? Boolean(verdictOf(mod.path)) : state === 'risk' ? Boolean(riskOf(mod.path)) : state === 'encrypted' ? Boolean(encrypted?.(mod.path)) : (state === 'enabled') === Boolean(mod.enabled))
 
 type Props = {
   value: ModState
@@ -65,14 +66,17 @@ export default function ModStateFilter({ value, onChange, mods, encrypted }: Pro
   const enabled = mods.filter(m => m.enabled).length
   const shown = useUiPref('broken') // Settings can hide the Problems tab and badges
   const broken = shown ? mods.filter(m => verdictOf(m.path)).length : 0
+  useRisks()
+  const risky = mods.filter(m => riskOf(m.path)).length
   const locked = useUiPref('encrypted') && encrypted ? mods.filter(m => encrypted(m.path)).length : 0 // Settings hides the lock and this tab
   // the last broken (or encrypted) mod fixed or removed: back to every mod rather than an empty list
-  useEffect(() => { if ((value === 'broken' && broken === 0) || (value === 'encrypted' && locked === 0)) onChange('all') }, [value, broken, locked]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if ((value === 'broken' && broken === 0) || (value === 'risk' && risky === 0) || (value === 'encrypted' && locked === 0)) onChange('all') }, [value, broken, risky, locked]) // eslint-disable-line react-hooks/exhaustive-deps
   const options: [ModState, string, number][] = [
     ['all', 'All', mods.length],
     ['enabled', 'On', enabled],
     ['disabled', 'Off', mods.length - enabled],
     ...(broken ? [['broken', 'Problems', broken] as [ModState, string, number]] : []),
+    ...(risky ? [['risk', 'Ban risk', risky] as [ModState, string, number]] : []),
     ...(locked ? [['encrypted', 'Encrypted', locked] as [ModState, string, number]] : []),
   ]
   const tabs = useRef<HTMLDivElement>(null)

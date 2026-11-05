@@ -120,6 +120,8 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       // Setup panel: fake bypass files and a fake Galacta release (no game folder, no network)
       case 'setup_bypass_status': return setupBypass()
       case 'snapshot_list': return mockSnapshots
+      case 'xtra_safety_plugins': return [{ name: 'dsound.dll', place: '', kind: 'bundled' }, { name: 'MarvelRivalsUTOCSignatureBypass.asi', place: 'plugins', kind: 'bundled' }]
+      case 'xtra_safety_mods': return [] // the mock's file lists are guessed: no risk badges
       case 'snapshot_estimate': return [data.mods.length * 3, data.mods.length * 3 * 4e7]
       case 'snapshot_create': return wait(1).then(() => { const s = { id: String(Math.floor(Date.now() / 1000)), created: Math.floor(Date.now() / 1000), files: data.mods.length * 3, bytes: data.mods.length * 3 * 4e7 }; mockSnapshots = [s, ...mockSnapshots].slice(0, 3); return s })
       case 'snapshot_restore': return wait(0.6).then(() => ({ mods: 0, setup: 0 }))

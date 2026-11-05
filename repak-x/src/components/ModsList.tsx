@@ -12,6 +12,7 @@ import { formatFileSize } from '../utils/format'
 import { useIsConflicting } from '../custom/conflicts' // repakxtra
 import { useVerdict } from '../custom/brokenMods' // repakxtra
 import { VerdictBadge } from '../custom/VerdictBadge' // repakxtra
+import { RiskBadge, useRisk } from '../custom/safetyScan' // repakxtra
 import { isBuiltin } from '../custom/builtinRows' // repakxtra
 import { BuiltinIcon, revealBuiltin, useBuiltins } from '../custom/BuiltinMods' // repakxtra
 import { NexusTag } from '../custom/nexusSource' // repakxtra
@@ -165,6 +166,7 @@ const ModItem = memo(function ModItem({
     useHeroImages()
     const conflicting = useIsConflicting(mod.path) && mod.enabled !== false // repakxtra: red Conflict badge, mods that are on (custom/conflicts.ts)
     const verdict = useVerdict(mod.path) // repakxtra: Broken or May crash badge (custom/brokenMods.ts)
+    const risk = useRisk(mod.path) // repakxtra: Ban risk badge
     const vfxUpdating = useVfxUpdating(mod.path) // repakxtra: a right-click VFX update is working on it (custom/vfx/quick.ts)
     const builtin = isBuiltin(mod.path) // repakxtra: a built-in mod's row (custom/builtinRows.ts): no file actions
     const builtinBusy = useBuiltins().busy.has(mod.builtin) // repakxtra: it is building, its name shimmers
@@ -504,6 +506,7 @@ const ModItem = memo(function ModItem({
                     {/* repakxtra: on, and clashing with another enabled mod (same priority, same files), right of the file size */}
                     {conflicting && <span className="mod-type-badge conflict-badge" title="Conflicts with another enabled mod: Check Conflicts shows which">Conflict</span>}
                     {verdict && <VerdictBadge path={mod.path} verdict={verdict} />}
+                    {risk && <RiskBadge risk={risk} />}
                     {builtin && (
                         <button type="button" className="mod-type-badge builtin-badge" title="Made by repakxtra from your game files. Open it on Home to change it"
                             onClick={(e) => { e.stopPropagation(); revealBuiltin(mod.builtin) }}>Built-in</button>

@@ -232,7 +232,7 @@ fn file_stem(path: &str) -> String {
 }
 
 /// DLL names a mod loader or overlay takes over by sitting beside the game exe (the signature bypass is dsound.dll).
-const PROXY_DLLS: &[&str] = &[
+pub(crate) const PROXY_DLLS: &[&str] = &[
     "dsound", "dinput8", "winmm", "version", "d3d9", "d3d11", "d3d12", "dxgi", "xinput1_3", "xinput1_4", "xinput9_1_0",
     "winhttp", "wininet", "dwmapi", "msimg32", "opengl32", "bcrypt", "iphlpapi",
 ];
