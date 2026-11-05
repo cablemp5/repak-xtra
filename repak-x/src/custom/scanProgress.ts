@@ -5,6 +5,7 @@
 // missed toast still leaves the progress in view, and a run stopped with mods left says so until it picks up again.
 import { useEffect, useSyncExternalStore } from 'react'
 import { listen } from '@tauri-apps/api/event'
+import { invoke } from '@tauri-apps/api/core'
 import type { useAlert } from '../components/AlertHandler'
 
 type Progress = { step: 'effects' | 'materials' | 'blueprints' | 'meshes'; at: number; total: number; path: string }
@@ -18,9 +19,10 @@ export const modLabel = (path: string) => (path.split(/[\\/]/).pop() ?? path).re
 export const progressLine = (p: Progress) => `${STEP[p.step] ?? 'Mods'} · ${modLabel(p.path)} (${p.at} of ${p.total})`
 const SHOW_AFTER_MS = 1500
 
-/** `shown`: the run has read mods for a moment (its toast is up, or was). `paused`: the last run stopped with mods left. */
-export type ScanRun = { running: boolean; shown: boolean; paused: boolean; last: Progress | null; read: number }
-let run: ScanRun = { running: false, shown: false, paused: false, last: null, read: 0 }
+/** `shown`: the run has read mods for a moment (its toast is up, or was). `paused`: the last run stopped with mods left.
+ *  `held`: the header's Pause or Cancel stopped them (xtra_vfx.rs HELD): they stay stopped until Resume or Refresh list. */
+export type ScanRun = { running: boolean; shown: boolean; paused: boolean; last: Progress | null; read: number; held: 'paused' | 'cancelled' | null }
+let run: ScanRun = { running: false, shown: false, paused: false, last: null, read: 0, held: null }
 const listeners = new Set<() => void>()
 const set = (next: Partial<ScanRun>) => { run = { ...run, ...next }; listeners.forEach(l => l()) }
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
@@ -30,13 +32,22 @@ export const useScanRun = () => useSyncExternalStore(subscribe, () => run)
 export const scanStarted = () => set({ running: true, last: null, read: 0 })
 /** brokenMods.ts: the run ended. `finished`: false when it stopped with mods left to read, or failed. */
 export const scanEnded = (finished: boolean) => {
-  set({ running: false, paused: !finished })
+  set({ running: false, paused: !finished && run.held !== 'cancelled' })
   window.dispatchEvent(new Event(SCAN_DONE))
 }
 
-let reopen: (() => void) | null = null
-/** The header's status: the progress toast again, after it was closed. */
-export const showScanToast = () => reopen?.()
+/** The header's Pause or Cancel: the checks stop at the next mod. Cancel also hides the header's status once they do. */
+export const holdScan = (kind: 'paused' | 'cancelled') => {
+  set({ held: kind, ...(kind === 'cancelled' && !run.running ? { paused: false } : {}) })
+  return invoke('xtra_scan_hold', { on: true }).catch(() => undefined)
+}
+/** Resume, Refresh list or a Scan: the checks may run again (the caller starts them). */
+export const releaseScan = () => {
+  if (run.held) set({ held: null })
+  return invoke('xtra_scan_hold', { on: false }).catch(() => undefined)
+}
+/** The person stopped the checks: a focus does not start them again. */
+export const scanHeld = () => run.held !== null
 
 export function useScanProgress(alert: ReturnType<typeof useAlert>) {
   useEffect(() => {
@@ -50,12 +61,6 @@ export function useScanProgress(alert: ReturnType<typeof useAlert>) {
       else alert.updateToast(id, { description })
       if (!run.shown) set({ shown: true })
     }
-    reopen = () => {
-      if (!run.running || !run.last) return
-      if (id !== null) alert.dismissAlert(id)
-      id = null
-      show()
-    }
     const off = listen<Progress>('mod-scan-progress', e => {
       // a mod being read means a run is on, whatever the start and end calls said
       set({ last: e.payload, read: run.read + 1, running: true, paused: false })
@@ -67,7 +72,11 @@ export function useScanProgress(alert: ReturnType<typeof useAlert>) {
       timer = undefined
       const n = run.read
       if (id !== null) {
-        alert.updateToast(id, run.paused
+        alert.updateToast(id, run.held === 'cancelled'
+          ? { color: 'default', title: 'Mod checks cancelled', description: 'Mods not read yet can crash the game without a warning. Refresh list (Ctrl+Shift+R) or the next app start checks them.', isLoading: false, duration: 8000 }
+          : run.held === 'paused'
+          ? { color: 'default', title: 'Mod checks paused', description: 'Resume them from Checks paused at the top, or with Refresh list (Ctrl+Shift+R).', isLoading: false, duration: 6000 }
+          : run.paused
           ? { color: 'default', title: 'Mod checks paused', description: 'Mods are left to read. The checks pick up where they stopped next time you come back with the game closed.', isLoading: false, duration: 6000 }
           : { color: 'success', title: 'Mods checked', description: `${n} ${n === 1 ? 'mod' : 'mods'} read for compatibility.`, isLoading: false, duration: 4000 })
       }
@@ -75,7 +84,7 @@ export function useScanProgress(alert: ReturnType<typeof useAlert>) {
       set({ shown: false, last: null, read: 0 })
     }
     window.addEventListener(SCAN_DONE, done)
-    return () => { reopen = null; clearTimeout(timer); off.then(f => f()).catch(() => undefined); window.removeEventListener(SCAN_DONE, done) }
+    return () => { clearTimeout(timer); off.then(f => f()).catch(() => undefined); window.removeEventListener(SCAN_DONE, done) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 }
 

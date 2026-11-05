@@ -8729,6 +8729,7 @@ fn main() {
             xtra_vfx::xtra_vfx_classes, // repakxtra
             xtra_vfx::xtra_vfx_pak_half, // repakxtra
             xtra_stamp::xtra_vfx_stamp, // repakxtra
+            xtra_stamp::xtra_made_mods, // repakxtra: the Updated tag
             xtra_mi_layout::xtra_vfx_verify, // repakxtra
             xtra_vfx::xtra_game_build,
             xtra_vfx::xtra_vfx_mods,
@@ -8740,6 +8741,7 @@ fn main() {
             xtra_vfx::xtra_vfx_release,
             xtra_vfx::xtra_vfx_lock,
             xtra_vfx::xtra_scan_stopped,
+            xtra_vfx::xtra_scan_hold, // repakxtra: the header's Pause and Cancel for the mod checks
             xtra_encrypt::xtra_encrypt_mods,
             xtra_encrypt::xtra_encrypt_list,
             xtra_galacta::xtra_galacta_list, // repakxtra

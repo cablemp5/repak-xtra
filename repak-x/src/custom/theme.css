@@ -1651,6 +1651,9 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
   border-color: transparent !important; background: transparent !important; padding-left: 4px !important; color: var(--text-primary) !important; }
 .run-stop-btn { display: inline-flex !important; align-items: center; gap: 8px; }
 .stop-glyph { width: 8px; height: 8px; border-radius: 2px; background: currentColor; flex: none; }
+/* Pause and Resume beside Stop (ScanStatus.tsx): the same 8px solid glyphs, so the three read as one set */
+.pause-glyph { width: 8px; height: 8px; flex: none; border-radius: 1px; background: linear-gradient(90deg, currentColor 0 3px, transparent 3px 5px, currentColor 5px 8px); }
+.play-glyph { width: 8px; height: 8px; flex: none; background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%); }
 /* A Generate button on a PC without the preview kit: grayed out, with a small blue "Set up" that says where to go */
 .is-unavailable { color: var(--text-secondary) !important; opacity: 0.85; }
 .is-unavailable svg.lucide { opacity: 0.6; }
@@ -3027,6 +3030,11 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
   animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; }
 .scan-status:hover { background: var(--quiet-hover); color: var(--text-primary); }
 .scan-status-in { display: inline-flex; align-items: center; gap: 6px; }
+/* the checks' menu (ScanStatus.tsx): the previews menu's look, with what stopping risks under the buttons */
+.scan-menu { left: auto; right: 0; width: 320px; }
+.scan-menu-warn { display: flex; gap: 8px; margin: 4px 0 0; padding: 10px 12px 6px; border-top: 1px solid var(--panel-border); font-size: 12px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.scan-menu-warn svg { flex: none; margin-top: 2px; color: #f5d342; }
+[data-theme="light"] .scan-menu-warn svg { color: #9a7d00; }
 .scan-status-spin { animation: scan-status-spin 1s linear infinite; }
 @keyframes scan-status-spin { to { transform: rotate(360deg); } }
 

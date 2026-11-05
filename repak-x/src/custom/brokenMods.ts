@@ -4,19 +4,31 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, listen } from '@tauri-apps/api/event'
-import { scanEnded, scanStarted } from './scanProgress'
+import { releaseScan, scanEnded, scanHeld, scanStarted } from './scanProgress'
 
 /** usmapWait (Needs VFX update only): files it rebuilds that a patch newer than the saved USMAP changed. While it is not
  *  0 the update waits for that patch's USMAP (xtra_broken.rs changed_since_usmap). */
-export type Verdict = { path: string; kind: 'broken' | 'vfx' | 'risky' | 'unknown'; reason: string; usmapWait?: number }
+export type Verdict = { path: string; kind: 'broken' | 'vfx' | 'risky' | 'unknown'; reason: string; usmapWait?: number; offOnly?: boolean }
 /** A verdict's badge text. */
-export const verdictLabel = (kind: Verdict['kind']) => (kind === 'broken' ? 'Broken' : kind === 'vfx' ? 'Needs update' : kind === 'unknown' ? "Couldn't verify compatibility" : 'May crash')
+export const verdictLabel = (kind: Verdict['kind']) => (kind === 'broken' ? 'Broken' : kind === 'vfx' ? 'Needs update' : kind === 'unknown' ? 'Safety unknown' : 'May crash')
+
+/** Mods the Mod Updater never offers: built-ins (another app's too, in .repakxtra-builtin) and project loaders
+ *  (!Project<Name>_9999999_P, or a bare Project<Name>), which the app that made them keeps current.
+ *  shortcut: by file name, a mod named exactly like Projectiles.pak is skipped too (Add .utoc still takes it). */
+export const skipsUpdater = (path: string) =>
+  /[\\/]\.repakxtra-builtin[\\/]/i.test(path) || /^(!project[a-z]+(-repacked)?(_\d+)?(_p)?|project[a-z]+(-repacked)?)$/i.test(path.split(/[\\/]/).pop()!.replace(/\.[^.]+$/, ''))
+/** What the Library's notice and the Mod Updater's Needs an update both count: a mod that needs an update, or one that
+ *  may crash and is on (Update turns it off), never one it skips. */
+export const needsUpdater = (path: string, v?: { kind: string }, on = !/\.bak_repak$/i.test(path)) =>
+  Boolean(v) && !skipsUpdater(path) && (v!.kind === 'vfx' || (v!.kind === 'risky' && on))
 
 /** One spelling per mod: slashes and case may differ between the mod list and the backend, and turning a mod on or off
  *  renames .bak_repak to .pak (or back), so the badge stays put through a switch instead of waiting for the next check. */
 const norm = (path: string) => path.replace(/\//g, '\\').toLowerCase().replace(/\.(pak|bak_repak)$/, '')
 
 let verdicts = new Map<string, Verdict>()
+/** Mods the Mod Updater made for the installed game (xtra_stamp.rs): their Updated or Partly updated tag. */
+let made = new Map<string, { partial: boolean; current: boolean }>()
 let version = 0
 const listeners = new Set<() => void>()
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
@@ -54,10 +66,12 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
   useEffect(() => {
     if (!key) return
     let live = true
+    // the mods that are on first: their answers matter before a play session, the off ones can wait
+    const paths = mods.map(m => m.path).sort((a, b) => Number(/\.bak_repak$/i.test(a)) - Number(/\.bak_repak$/i.test(b)))
     const check = () => {
       const turn = ++checkSeq
-      return invoke<Verdict[]>('xtra_broken_mods', { modPaths: mods.map(m => m.path) })
-        .then(r => { if (live && turn === checkSeq) { verdicts = new Map(r.map(v => [norm(v.path), v])); version++; listeners.forEach(l => l()) } return true })
+      return Promise.all([invoke<Verdict[]>('xtra_broken_mods', { modPaths: paths }), invoke<{ path: string; partial: boolean; current: boolean }[]>('xtra_made_mods', { modPaths: paths }).catch(() => [])])
+        .then(([r, m]) => { if (live && turn === checkSeq) { verdicts = new Map(r.map(v => [norm(v.path), v])); made = new Map(m.map(x => [norm(x.path), x])); version++; listeners.forEach(l => l()) } return true })
         // the badges so far stay (the game runs and its file list is not read yet, or the call failed)
         .catch(e => { console.warn('[brokenMods] check failed', e); return false })
     }
@@ -75,14 +89,14 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       .then(() => first ?? check())
       .then(ok => { if (!ok) throw new Error('the first check failed') })
       .then(() => (live ? invoke('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
-      .then(() => (live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: mods.map(m => m.path) }) : 0))
+      .then(() => (live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: paths }) : 0))
       .then(found => (live && found ? check() : undefined))
-      .then(() => (live ? invoke<number>('xtra_vfx_check_scan', { modPaths: mods.map(m => m.path) }) : 0))
+      .then(() => (live ? invoke<number>('xtra_vfx_check_scan', { modPaths: paths }) : 0))
       .then(found => (live && found ? check() : undefined))
-      .then(() => (live ? invoke<number>('xtra_layout_scan', { modPaths: mods.map(m => m.path) }) : 0))
+      .then(() => (live ? invoke<number>('xtra_layout_scan', { modPaths: paths }) : 0))
       .then(checked => (live && checked ? check() : undefined))
       // and mesh mods whose skeleton the game rebuilt: more bones than it has gets May crash (xtra_mesh.rs)
-      .then(() => (live ? invoke<number>('xtra_mesh_scan', { modPaths: mods.map(m => m.path) }) : 0))
+      .then(() => (live ? invoke<number>('xtra_mesh_scan', { modPaths: paths }) : 0))
       .then(checked => (live && checked ? check() : undefined))
       .then(() => (live ? invoke<boolean>('xtra_scan_stopped').catch(() => false) : true))
       .then(stopped => live && !stopped, e => { console.warn('[brokenMods] background scan failed', e); return false })
@@ -101,10 +115,11 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     // only a run that stopped with mods left goes on when the window is back (the game, an update or a check took
     // over: xtra_vfx.rs background_may_run). Nothing changed, nothing runs. A game update is gameUpdate.ts's to start
     let lastResume = 0
-    const resume = () => { if (unfinished && Date.now() - lastResume > 30_000) { lastResume = Date.now(); void full() } }
+    const resume = () => { if (unfinished && !scanHeld() && Date.now() - lastResume > 30_000) { lastResume = Date.now(); void full() } }
     window.addEventListener('focus', resume)
     const again = listen(VERDICTS_CHANGED, () => { void check() })
-    const rescan = listen(VERDICTS_RESCAN, () => { void full() })
+    // a Refresh list or Resume: checks the header paused or cancelled run again
+    const rescan = listen(VERDICTS_RESCAN, () => { void releaseScan().then(() => full()) })
     return () => { live = false; window.removeEventListener('focus', resume); if (runFull === full) runFull = null; clearTimeout(t); void again.then(f => f()); void rescan.then(f => f()) }
   }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
 }
@@ -114,10 +129,15 @@ export const useVerdict = (path: string) => useSyncExternalStore(subscribe, () =
 /** Re-renders when the verdicts change. */
 export const useBrokenVersion = () => useSyncExternalStore(subscribe, () => version)
 export const verdictOf = (path: string) => verdicts.get(norm(path))
+/** Made by the Mod Updater, whether it left files out, and whether for the installed game. */
+export const useMade = (path: string) => useSyncExternalStore(subscribe, () => made.get(norm(path)))
 
 if (import.meta.env.DEV) {
-  console.assert(verdictLabel('unknown') === "Couldn't verify compatibility", 'inconclusive checks do not claim a confirmed crash risk')
+  console.assert(verdictLabel('unknown') === 'Safety unknown', 'inconclusive checks do not claim a confirmed crash risk')
   console.assert(verdictLabel('risky') === 'May crash', 'confirmed risks keep their warning')
   console.assert(norm('C:/Games/~mods/A_9999999_P.pak') === norm('c:\\games\\~MODS\\a_9999999_p.pak'), 'broken paths match across slashes and case')
   console.assert(norm('C:/Games/~mods/A_9999999_P.pak') === norm('C:/Games/~mods/A_9999999_P.bak_repak'), 'a mod keeps its verdict on and off')
+  console.assert(skipsUpdater('C:/G/~mods/!ProjectFoo_9999999_P.pak') && skipsUpdater('C:/G/~mods/ProjectFoo.bak_repak') && skipsUpdater('C:/G/~mods/.repakxtra-builtin/repakxtra-a_9999999_P.pak')
+    && !skipsUpdater('C:/G/~mods/Project Hail Mary Skin_9999999_P.pak') && !skipsUpdater('C:/G/~mods/A_9999999_P.pak'), 'loaders and built-ins only')
+  console.assert(needsUpdater('a.pak', { kind: 'risky' }) && !needsUpdater('a.bak_repak', { kind: 'risky' }) && needsUpdater('a.bak_repak', { kind: 'vfx' }) && !needsUpdater('a.pak', { kind: 'broken' }), 'needs the updater')
 }

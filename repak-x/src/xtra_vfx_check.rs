@@ -22,8 +22,10 @@ use crate::AppState;
 #[derive(Serialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct VfxCheck {
-    /// "outdated" (one or more built for an older game version), "current" (all built for this one), "unknown" (none
-    /// outdated, some cooked elsewhere), "none" (no material instance of the game's)
+    /// "outdated" (one or more built for an older game version), "current" (all built for this one), "custom" (none
+    /// outdated, some built by the modder: they match no game version, their layout read whole, no badge), "unknown" (the
+    /// check could not finish: a layout, the file list or the game's older files not read), "none" (no material instance
+    /// of the game's, or only ones with no shader data of their own)
     verdict: &'static str,
     outdated: Vec<String>,
     current: Vec<String>,
@@ -155,8 +157,8 @@ fn alone(container: &Path, bases: &[PathBuf], name: &str) -> Option<PathBuf> {
 /// One check at a time: they share the command line's cached game and their work folders.
 static CHECKING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-/// `deep`: also walk the game's older containers for the build the shader data matches (the slow part). The background
-/// scan does not: it looks for what crashes, the layout, and leaves looks to Check for update and the Mod Updater's Scan.
+/// `deep`: also walk the game's older containers for the build the shader data matches (the slow part, only for
+/// materials that match no current copy). The background scan does too, so "custom" is never said without the search.
 async fn check(mod_path: &Path, usmap: &str, state: &Arc<Mutex<AppState>>, deep: bool) -> Result<VfxCheck, String> {
     let _one = CHECKING.lock().await;
     let mods_dir = state.lock().unwrap().game_path.clone();
@@ -250,7 +252,9 @@ async fn finish(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, work
         match b {
             Built::Current => out.current.push(name),
             Built::Older => out.outdated.push(name),
-            Built::Unknown | Built::Empty => out.unknown.push(name),
+            Built::Unknown => out.unknown.push(name),
+            // no shader data of its own: the same in every version, so no evidence either way (its layout is still read)
+            Built::Empty => {}
         }
     }
     // the layout, read as the VFX Updater reads it before an update (the date only settles a file both layouts read whole)
@@ -274,27 +278,22 @@ async fn finish(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, work
         }
         out.old_layout = old;
     }
-    let found = verdicts(&mine, &versions);
-    out.why = (!out.unknown.is_empty()).then(|| {
-        if !found.values().any(|b| *b == Built::Unknown) {
-            "empty"
-        } else if unreadable {
-            "unreadable"
-        } else {
-            "elsewhere"
-        }
-    });
+    out.why = (!out.unknown.is_empty()).then_some(if unreadable { "unreadable" } else { "elsewhere" });
+    let complete = layout_ok && all_known;
     out.verdict = if !out.outdated.is_empty() {
         "outdated"
     } else if !out.unknown.is_empty() {
-        "unknown"
+        // built by the modder: every older build was searched and the layout read whole. That proves only where they
+        // were not built, never a fault, so no badge (the Mod Updater's Check says it)
+        if complete && !unreadable && deep { "custom" } else { "unknown" }
     } else if !out.current.is_empty() {
         "current"
     } else {
         "none"
     };
-    // up to date only when every material was found and its layout told: else not known, and the next scan looks again
-    if out.verdict == "current" && (!layout_ok || !all_known) {
+    // up to date (or only shader-less ones) only when every material was found and its layout told: else not known, and
+    // the next scan looks again
+    if matches!(out.verdict, "current" | "none") && !complete {
         out.verdict = "unknown";
         out.unknown.append(&mut out.current);
         out.why = Some(if all_known { "layout" } else { "classes" });
@@ -306,16 +305,22 @@ async fn finish(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, work
         (n.starts_with("ns_") || n.starts_with("ne_")) && n.ends_with(".uasset")
     });
     // current only when the layout was read too: a "nothing" also stops the date's layout flag (xtra_broken.rs)
-    if out.verdict == "outdated" || (out.verdict == "current" && !niagara) {
+    // custom too: its layout read whole and nothing was built for an older game, so the date rule must not flag its
+    // materials again (a clearance covers materials only, never meshes or animations: xtra_broken Facts.cleared)
+    if out.verdict == "outdated" || (matches!(out.verdict, "current" | "custom") && !niagara) {
         crate::xtra_broken::record_check(mods_dir, &utoc, out.verdict == "outdated", !out.old_layout.is_empty())?;
     }
     if out.verdict == "unknown" {
-        let reason = if layout_ok && all_known {
-            "The material layout was read, but custom shader data matches no known game version. An update is not confirmed. Other asset types may need separate checks."
-        } else {
+        let reason = if !complete {
             "The material check could not fully establish the layout or asset list. Compatibility could not be verified. This is a precaution, not a confirmed fault or a required repair."
+        } else {
+            "The game's older files could not be read to compare its materials with. Compatibility could not be verified. This is a precaution, not a confirmed fault or a required repair."
         };
         crate::xtra_broken::record_uncertain(mods_dir, &utoc, reason.into());
+    } else if out.verdict != "outdated" && !(matches!(out.verdict, "current" | "custom") && !niagara) {
+        // custom, none, or current with Niagara files (which this check never clears): an earlier "not known" goes, so
+        // the date check and the Niagara checks judge it again, as for a mod never checked
+        crate::xtra_broken::forget_uncertain(&utoc);
     }
     Ok(out)
 }
@@ -400,11 +405,14 @@ pub async fn xtra_vfx_check_scan(app: tauri::AppHandle, mod_paths: Vec<String>, 
     let state = state.inner().clone();
     let mods_dir = state.lock().unwrap().game_path.clone();
     let Some(paks) = mods_dir.ancestors().find(|p| p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("Paks"))).map(Path::to_path_buf) else { return Ok(0) };
-    let Some(usmap) = crate::vfx_updater::commands::saved_usmap_path().filter(|u| Path::new(u).is_file() && crate::xtra_niagara::usmap_matches(u, &paks)) else { return Ok(0) };
+    // the USMAP is needed only to read mods: answers for mods the update did not touch carry over without it (a game update
+    // with its USMAP not out yet would otherwise expire every finding until it is)
+    let usmap = crate::vfx_updater::commands::saved_usmap_path().filter(|u| Path::new(u).is_file() && crate::xtra_niagara::usmap_matches(u, &paks));
     let game = crate::xtra_broken::game_updated(&mods_dir);
     let parser = crate::xtra_vfx::parser_id();
     let store = scan_store();
     let mut done = load_scanned(&store);
+    let legacy = crate::xtra_broken::legacy_uncertain();
     let mut found = 0;
     // "layout" or "classes" (not told) is kept like any answer: the same file, game and parser give the same one, so
     // asking again each launch only burned a minute of CPU per mod. A change to any of them asks again
@@ -423,10 +431,12 @@ pub async fn xtra_vfx_check_scan(app: tauri::AppHandle, mod_paths: Vec<String>, 
             continue; // built-ins: xtra_builtins judges them by the game build they were made for, never these checks
         }
         let utoc = path.with_extension("utoc");
-        if !needs_scan(&done, &utoc, game) {
+        // an answer the 0.59 check reads differently (shader-less materials, the modder's own): looked at once more
+        let again = legacy.contains(&crate::xtra_broken::checked_key(&utoc));
+        if !needs_scan(&done, &utoc, game) && !again {
             continue;
         }
-        let (st, pc, pk, u, before) = (state.clone(), path.clone(), paks.clone(), utoc.clone(), earlier(&done, &utoc));
+        let (st, pc, pk, u, before) = (state.clone(), path.clone(), paks.clone(), utoc.clone(), earlier(&done, &utoc).filter(|_| !again));
         let read = tauri::async_runtime::spawn_blocking(move || {
             let d = crate::compute_mod_details(&pc, &st).ok()?;
             // looked at in an earlier game update that rewrote none of its packages: the same files give the same answer
@@ -438,9 +448,7 @@ pub async fn xtra_vfx_check_scan(app: tauri::AppHandle, mod_paths: Vec<String>, 
         .ok()
         .flatten();
         let Some((files, mics, all_known, kept)) = read else {
-            remember(&mut done, &utoc); // no details to read: as before, nothing to check in it
-            found += 1;
-            continue;
+            continue; // its details could not be read this time: looked at again by the next scan
         };
         if let Some(from) = kept {
             crate::xtra_broken::carry_checked(&utoc, from, game); // its verdict too
@@ -458,11 +466,15 @@ pub async fn xtra_vfx_check_scan(app: tauri::AppHandle, mod_paths: Vec<String>, 
         let stamp = crate::xtra_broken::file_stamp(&utoc);
         todo.push(Job { p, path, utoc, stamp, files, names, all_known });
     }
+    let Some(usmap) = usmap else { return Ok(found) }; // the rest is read once the USMAP matches the game
     // Two lanes: the next mod's extract (the tool's command line, a process of its own) runs while this one decodes (the
     // tool's library, one call at a time). Each lane has its own folder. Where no command line ships, both run in the
     // library one after the other, as before
     let work = std::env::temp_dir().join("repak-x").join("xscan").join(std::process::id().to_string());
     let lane = |i: usize| work.join(format!("lane{}", i % 2));
+    // where the game's older containers are linked for a mod whose materials match no current copy (as check() does)
+    let beside = paks.parent().map(|c| c.join(".repakxtra-check"));
+    let bases: Vec<PathBuf> = [Some(work.join("older")), beside.clone()].into_iter().flatten().collect();
     let start = |j: &Job, dir: PathBuf| {
         let (pk, u, names) = (paks.clone(), j.utoc.clone(), j.names.clone());
         tauri::async_runtime::spawn(async move { extract(&pk, Some(&u), &names, &dir.join("mod")).await })
@@ -490,7 +502,8 @@ pub async fn xtra_vfx_check_scan(app: tauri::AppHandle, mod_paths: Vec<String>, 
                 if crate::xtra_broken::file_stamp(&j.utoc) != j.stamp {
                     continue; // replaced since its extract (also while waiting for the lock): its own scan follows
                 }
-                finish(&j.path, &usmap, &mods_dir, &paks, &lane(i), &[], &j.files, j.all_known, &rels, false).await
+                // deep: older builds are read only for materials that match no current copy, so most mods cost nothing more
+                finish(&j.path, &usmap, &mods_dir, &paks, &lane(i), &bases, &j.files, j.all_known, &rels, true).await
             }
             Err(e) => Err(e),
         };
@@ -506,6 +519,9 @@ pub async fn xtra_vfx_check_scan(app: tauri::AppHandle, mod_paths: Vec<String>, 
         let _ = h.await;
     }
     let _ = std::fs::remove_dir_all(&work);
+    if let Some(b) = beside {
+        let _ = std::fs::remove_dir_all(b);
+    }
     Ok(found)
 }
 

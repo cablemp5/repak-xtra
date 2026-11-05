@@ -617,7 +617,14 @@ pub(crate) fn known_layouts(paks: &Path) -> Option<(String, HashMap<String, bool
 /// Whether a mod (its .pak, .bak_repak or .utoc) was found to carry Niagara files in an older layout, under the saved
 /// USMAP (xtra_broken). `known`: known_layouts.
 pub(crate) fn known_old_layout(mod_path: &Path, known: &Option<(String, HashMap<String, bool>)>) -> bool {
-    known.as_ref().is_some_and(|(build, all)| layout_key_in(&mod_path.with_extension("utoc"), build).is_some_and(|k| all.get(&k) == Some(&true)))
+    // game layouts only move forward: this file found in an older layout under any earlier build or USMAP still is one
+    // (its key's build part changes with every game update, and no scan runs while the USMAP is behind the game)
+    known.as_ref().is_some_and(|(build, all)| {
+        layout_key_in(&mod_path.with_extension("utoc"), build).is_some_and(|k| {
+            let file = &k[..k.len() - build.len()]; // "path|size|time|"
+            all.get(&k) == Some(&true) || all.iter().any(|(key, old)| *old && key.starts_with(file))
+        })
+    })
 }
 
 /// Whether any of `rels` (up to three of the mod's Niagara systems, package paths without extension) is in an older
@@ -974,6 +981,23 @@ pub async fn xtra_vfx_niagara(window: Window, game_paks: String, usmap_path: Str
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn an_old_layout_found_under_an_earlier_build_still_holds() {
+        let dir = tempfile::tempdir().unwrap();
+        let m = dir.path().join("A_9999999_P.utoc");
+        std::fs::write(&m, b"toc").unwrap();
+        let old = layout_key_in(&m, "usmap1|build1").unwrap();
+        let known = |answers: Vec<(String, bool)>| Some(("usmap1|build2".to_string(), answers.into_iter().collect()));
+        assert!(known_old_layout(&m, &known(vec![(old.clone(), true)])), "the game updated: still the old layout");
+        assert!(!known_old_layout(&m, &known(vec![(old, false)])), "current then says nothing about the new build");
+        let other = dir.path().join("B_9999999_P.utoc");
+        std::fs::write(&other, b"toc").unwrap();
+        assert!(!known_old_layout(&m, &known(vec![(layout_key_in(&other, "usmap1|build1").unwrap(), true)])), "another mod's answer never counts");
+        let was = layout_key_in(&m, "usmap1|build1").unwrap();
+        std::fs::write(&m, b"toc, another version").unwrap();
+        assert!(!known_old_layout(&m, &known(vec![(was, true)])), "a new version of the file is looked at again");
+    }
 
     #[test]
     fn older_usmaps_go_newest_first_one_per_build_the_local_copy_kept() {

@@ -176,8 +176,32 @@ button.vf-assets-toggle:hover { color: var(--text-primary) !important; }
   border: 1px solid color-mix(in srgb, #f5d342, transparent 70%); background: color-mix(in srgb, #f5d342, transparent 94%); }
 .vf-behind p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 .vf-behind b { font-weight: 600; color: #f5d342; }
-.vf-moved { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
-.vf-moved p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+/* what the newest build moved: background facts, so a quiet grey card folded to one line, never the amber of the USMAP
+   mismatch above it (Von Restorff: only the card that changes what you can do stands out) */
+.vf-moved { margin-top: 12px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--panel-border); background: color-mix(in srgb, var(--text-secondary), transparent 95%); }
+.vf-moved summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; font-size: 12px; color: var(--text-secondary); }
+.vf-moved summary::-webkit-details-marker { display: none; }
+.vf-moved summary svg { flex: none; }
+.vf-moved-more { margin-left: auto; color: var(--text-primary); }
+.vf-moved[open] .vf-moved-more { opacity: 0.6; }
+.vf-moved p { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.vf-behind-head { display: flex; align-items: center; gap: 8px; }
+.vf-behind-head svg { flex: none; color: #f5d342; }
+[data-theme="light"] .vf-behind-head svg { color: #9a7d00; }
+/* a Best effort candidate waiting for an answer: blue, the app's action color, pinned over the list (ReviewCard) */
+.vf-review { margin: 0 0 16px; padding: 14px 16px; border-radius: 10px; display: flex; flex-direction: column; gap: 8px;
+  border: 1px solid color-mix(in srgb, #346bf1, transparent 45%); background: color-mix(in srgb, #346bf1, transparent 90%); }
+.vf-review h3 { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.vf-review h3 svg { flex: none; color: #346bf1; }
+.vf-review-more { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.vf-review > p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.vf-review > p b { font-weight: 600; color: var(--text-primary); }
+.vf-review > .vf-report { padding-bottom: 0; }
+.vf-review-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.vf-review-actions > .lo-text-btn { min-width: 148px; justify-content: center; } /* the two answers one size, whatever their words */
+.vf-review .vf-review-actions { align-self: stretch; margin-top: 4px; } /* the report lays out to its content: this row spans the card */
+.vf-review-actions > .vf-assets-toggle { margin-left: auto; } /* Show assets at the line's end */
+.vf-status.is-review { color: #346bf1; font-weight: 600; }
 .su-part-mark.is-behind { color: #f5d342; }
 .su-part-mark.is-behind::before { display: none; } /* the warning icon takes the empty circle's place */
 [data-theme="light"] .vf-behind b, [data-theme="light"] .su-part-mark.is-behind { color: #665400; }
@@ -238,6 +262,12 @@ html[data-motion="off"] .vfx-notice { animation: none; }
 
 /* a mod with Niagara effects (particle systems) */
 .vf-niagara:focus-visible, .vf-partial:focus-visible, .vf-needs:focus-visible { outline-offset: 1px !important; }
+/* made by this updater for the installed game (Row): a quiet green outline, Partly updated amber */
+.vf-made { flex: none; height: 24px; display: inline-flex; align-items: center; padding: 0 8px; border-radius: 6px; font-size: 11px; font-weight: 600;
+  color: #3ecf6e; border: 1px solid color-mix(in srgb, #3ecf6e, transparent 60%); cursor: help; white-space: nowrap; }
+.vf-made.is-partial { color: #f5d342; border-color: color-mix(in srgb, #f5d342, transparent 55%); }
+[data-theme="light"] .vf-made { color: #1d7a3f; }
+[data-theme="light"] .vf-made.is-partial { color: #665400; }
 .vf-niagara { flex: none; height: 24px; display: inline-flex; align-items: center; padding: 0 8px; border-radius: 6px; font-size: 11px; font-weight: 600;
   color: #b9a4ff; border: 1px solid color-mix(in srgb, #9b7bff, transparent 55%); cursor: help; white-space: nowrap; }
 [data-theme="light"] .vf-niagara { color: #5b3fc4; }
