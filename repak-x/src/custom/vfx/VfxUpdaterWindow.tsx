@@ -134,8 +134,9 @@ function reportText(r: VfxReport) {
   return lines.join('\n')
 }
 
-/** `candidate`: a Best effort build waiting for review, not placed yet: its assets show, and there is no placement to tell. */
-function Report({ r, onRetry, onUsmap, busy, candidate = false }: { r: VfxReport; onRetry: () => void; onUsmap: () => void; busy: boolean; candidate?: boolean }) {
+/** `candidate`: a Best effort build waiting for review, not placed yet: no placement to tell, its counts and warnings
+ *  folded with its assets. `actions`: the review's answers, on one line with Show assets. */
+function Report({ r, onRetry, onUsmap, busy, candidate = false, actions }: { r: VfxReport; onRetry: () => void; onUsmap: () => void; busy: boolean; candidate?: boolean; actions?: React.ReactNode }) {
   const [assets, setAssets] = useState(false)
   const [allWarnings, setAllWarnings] = useState(false)
   const groups = KIND_ORDER.map(k => [k, r.assets.filter(a => a.kind === k)] as const).filter(([, list]) => list.length)
@@ -156,7 +157,8 @@ function Report({ r, onRetry, onUsmap, busy, candidate = false }: { r: VfxReport
       )}
       {!candidate && warningList}
       {groups.length > 0 && <>
-        <div className="vf-stats">
+        <div className={actions ? 'vf-review-actions' : 'vf-stats'}>
+          {actions}
           <button type="button" className="vf-assets-toggle" aria-expanded={assets} onClick={() => setAssets(v => !v)}>
             {assets ? 'Hide' : 'Show'} {plural(r.assets.length, 'asset')} <ChevronRight size={12} className="vf-assets-caret" aria-hidden="true" />
           </button>
@@ -323,12 +325,11 @@ export function ReviewCard({ name, report, more, onAnswer }: { name: string; rep
   return (
     <section className="vf-review" ref={ref} role="region" aria-label={`Review ${name}`} aria-live="polite">
       <h3><Eye size={15} aria-hidden="true" />Your review: {name}{more > 0 && <span className="vf-review-more">{more} more after this</span>}</h3>
-      <p>This mod was rebuilt, but some of its edits could not be confirmed. Use the candidate to install the rebuilt copy, or keep the original as it is.</p>
-      <Report r={report} busy={true} onRetry={() => {}} onUsmap={() => {}} candidate />
-      <div className="vf-review-actions">
+      <p>The Mod Updater rebuilt this mod for the current game version, but it couldn't confirm that every color and effect carried over. Your mod hasn't been changed yet. Use candidate swaps in the rebuilt copy, and Keep original leaves it as it was.</p>
+      <Report r={report} busy={true} onRetry={() => {}} onUsmap={() => {}} candidate actions={<>
         <button type="button" className="lo-text-btn is-primary" onClick={() => onAnswer(true)}><PackageCheck size={14} aria-hidden="true" />Use candidate</button>
         <button type="button" className="lo-text-btn" onClick={() => onAnswer(false)} title="Esc"><Undo2 size={14} aria-hidden="true" />Keep original</button>
-      </div>
+      </>} />
     </section>
   )
 }

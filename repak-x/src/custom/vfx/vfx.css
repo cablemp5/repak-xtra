@@ -198,7 +198,9 @@ button.vf-assets-toggle:hover { color: var(--text-primary) !important; }
 .vf-review > p b { font-weight: 600; color: var(--text-primary); }
 .vf-review > .vf-report { padding-bottom: 0; }
 .vf-review-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.vf-review-actions > button { min-width: 148px; justify-content: center; } /* the two answers one size, whatever their words */
+.vf-review-actions > .lo-text-btn { min-width: 148px; justify-content: center; } /* the two answers one size, whatever their words */
+.vf-review .vf-review-actions { align-self: stretch; margin-top: 4px; } /* the report lays out to its content: this row spans the card */
+.vf-review-actions > .vf-assets-toggle { margin-left: auto; } /* Show assets at the line's end */
 .vf-status.is-review { color: #346bf1; font-weight: 600; }
 .su-part-mark.is-behind { color: #f5d342; }
 .su-part-mark.is-behind::before { display: none; } /* the warning icon takes the empty circle's place */
