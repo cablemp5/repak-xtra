@@ -73,7 +73,6 @@
 .sl-name { width: 100%; min-width: 0; margin: 0 -8px; padding: 1px 8px; font: 600 20px/1.25 var(--font-primary); letter-spacing: -0.02em; color: var(--text-primary);
   background: transparent; border: 1px solid transparent; border-radius: 8px; outline: none; transition: border-color 150ms ease, background-color 150ms ease; }
 .sl-name:hover { border-color: var(--panel-border); }
-.sl-name:focus { border-color: rgba(255, 255, 255, 0.16); background: var(--field-bg); }
 .sl-why { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 13px; line-height: 22px; color: var(--text-secondary); }
 /* the picked loadout's tools, close under its name (they act on it) */
 .sl-tools { display: flex; flex-wrap: wrap; gap: var(--sl-gap-sm); margin-top: calc(var(--sl-gap-md) - var(--sl-gap)); }
@@ -119,7 +118,6 @@
 .sl-menu-search { display: block; width: calc(100% - 8px); height: 32px; margin: 0 4px 4px; padding: 0 12px !important; border: 1px solid var(--panel-border) !important;
   border-radius: var(--quiet-radius) !important; background: var(--field-bg) !important; font: 500 13px var(--font-primary) !important; color: var(--text-primary) !important;
   outline: none !important; box-shadow: none !important; }
-.sl-menu-search:focus { border-color: rgba(255, 255, 255, 0.2) !important; }
 .sl-menu-search::placeholder { color: var(--text-secondary); opacity: 1; }
 .sl-menu .sigeon-item.is-pinned { color: var(--text-secondary) !important; }
 .sl-menu .sigeon-item.is-pinned + .sigeon-item:not(.is-pinned) { margin-top: 4px; box-shadow: 0 -1px 0 var(--panel-border); border-top-left-radius: 0 !important; border-top-right-radius: 0 !important; }

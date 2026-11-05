@@ -98,8 +98,8 @@ const syncPreviewList = () => invoke<string[]>('list_mod_previews').then(keys =>
   notify()
 }).catch(() => undefined)
 syncPreviewList()
-/** A character's other forms (Magik's Darkchylde, Hulk's other two): <key>@2, <key>@3 beside <key>. */
-export const formKeys = (key: string) => [2, 3, 4].map(n => `${key}@${n}`).filter(k => revs.has(k))
+/** A character's other forms (Magik's Darkchylde, Hulk's other two), or an animation mod's other emotes: <key>@2, <key>@3 beside <key>. */
+export const formKeys = (key: string) => [2, 3, 4, 5, 6, 7, 8].map(n => `${key}@${n}`).filter(k => revs.has(k))
 // No generator on this PC (a friend's copy without the preview kit): Generate buttons stay hidden, existing previews still show
 let available = false
 /** Asks the backend again (after the preview kit was installed or removed in Setup). */

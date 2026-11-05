@@ -22,7 +22,6 @@ html[data-view="ko"] .view-tabs::before { transform: translateX(calc(200% + 4px)
 /* heroes */
 .ko-search { display: flex; align-items: center; gap: 8px; height: 36px; margin: 0 0 8px; padding: 0 8px 0 10px; box-sizing: border-box; border: 1px solid var(--panel-border);
   border-radius: 8px; background: var(--field-bg); color: var(--text-secondary); transition: border-color 150ms ease; }
-.ko-search:focus-within { border-color: color-mix(in srgb, var(--text-primary), transparent 50%); }
 .ko-search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--text-primary); font: inherit; font-size: 14px; }
 .ko-search input::placeholder { color: var(--text-secondary); }
 .ko-hero-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.12) transparent; }
@@ -123,7 +122,6 @@ html[data-view="ko"] .view-tabs::before { transform: translateX(calc(200% + 4px)
 .ko-hex { width: 72px; height: 28px; padding: 0 6px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--text-secondary);
   font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; font-variant-numeric: tabular-nums; transition: border-color 150ms ease, color 150ms ease; }
 .ko-hex:hover { border-color: var(--panel-border); }
-.ko-hex:focus { outline: none; border-color: var(--panel-border); background: var(--field-bg); color: var(--text-primary); }
 .ko-role.is-changed .ko-hex { color: var(--text-primary); }
 .ko-reset { display: grid; place-items: center; width: 28px; height: 28px; flex: none; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); cursor: pointer;
   transition: opacity 150ms ease, background-color 150ms ease, color 150ms ease; }
@@ -135,7 +133,6 @@ html[data-view="ko"] .view-tabs::before { transform: translateX(calc(200% + 4px)
 .ko-out { padding-bottom: 8px; }
 .ko-input { height: 36px; padding: 0 12px; box-sizing: border-box; border: 1px solid var(--panel-border); border-radius: 8px; background: var(--field-bg); color: var(--text-primary);
   font: inherit; font-size: 14px; transition: border-color 150ms ease; }
-.ko-input:focus { outline: none; border-color: color-mix(in srgb, var(--text-primary), transparent 50%); }
 /* while it works: quiet, the step's words shimmering, never the dimmed disabled look. Done: green words and a check, no box */
 .lo-text-btn.ko-install.is-working { background: transparent !important; border-color: var(--panel-border) !important; color: var(--text-secondary) !important; opacity: 1 !important; cursor: default; }
 .lo-text-btn.ko-install { display: inline-flex !important; align-items: center; justify-content: center; gap: 8px; height: 36px !important; font-weight: 600 !important; }   /* the Library's Install height */

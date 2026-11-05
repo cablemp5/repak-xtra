@@ -298,7 +298,10 @@ pub(crate) fn game_assets_if(paks: &Path, may_read: impl Fn() -> bool) -> Option
     let t = std::time::Instant::now();
     // the saved list is for these containers and this version of the code that reads them (build_xtra.rs)
     let saved_key = format!("{key}|{}", env!("REPAKXTRA_ASSETS_LOGIC"));
-    let (set, builds) = match load_saved(&saved_assets(), &saved_key) {
+    // two slots: app copies whose reading code differs (a newer build beside an older one, another edition) each keep
+    // theirs, instead of evicting each other's and paying the full read on every launch after the other ran
+    let (file, prev) = (saved_assets(), saved_assets().with_extension("prev.bin"));
+    let (set, builds) = match load_saved(&file, &saved_key).or_else(|| load_saved(&prev, &saved_key)) {
         Some(saved) => {
             log::info!("[broken] game asset list loaded: {} packages in {:?}", saved.0.len(), t.elapsed());
             saved
@@ -311,7 +314,7 @@ pub(crate) fn game_assets_if(paks: &Path, may_read: impl Fn() -> bool) -> Option
             }
             // a container that could not be read is tried again next launch, not saved as missing
             if complete {
-                if let Err(e) = save(&saved_assets(), &saved_key, &set, &builds) {
+                if let Err(e) = save(&file, &saved_key, &set, &builds) {
                     log::warn!("[broken] could not save the game asset list: {e}");
                 }
             }
@@ -406,6 +409,8 @@ fn save(file: &Path, key: &str, set: &GameAssets, builds: &AssetBuilds) -> std::
     // written beside it and swapped in, so a crash mid-write never leaves half a list that loads
     let tmp = file.with_extension("bin.tmp");
     std::fs::write(&tmp, &out)?;
+    // only once the new list is safely written: the list it replaces moves to the second slot (the older of two goes)
+    let _ = std::fs::rename(file, file.with_extension("prev.bin"));
     std::fs::rename(&tmp, file)
 }
 

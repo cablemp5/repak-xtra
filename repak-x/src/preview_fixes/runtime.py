@@ -19,19 +19,24 @@ hooks = [   # (the kit's line, with the fix added): the slot's material, which t
     ("# Emission only: every surface black and matte", "drop_added_glow()\n# Emission only: every surface black and matte"),
     # Jelly galaxy skins: the lobby's navy, stars and lines only on a flat-colored one (jelly(), cosmic_tuning.py), the
     # kit's own values on a painted one (King of the Cosmos keeps its green, blue and purple)
+    # A galaxy with black colors (Celestial Soldier's hair) is stars over the painted color, not black space
+    ('surface = mix(base_col if base_col is not None else (0.05, 0.06, 0.1), (0.004, 0.005, 0.01), mask if mask is not None else 1.0)', 'surface = mix(base_col if base_col is not None else (0.05, 0.06, 0.1), (0.004, 0.005, 0.01), mask if mask is not None else 1.0)\n        surface = base_col if base_col is not None and dark_space(chain) else surface'),
     ('L.new(mix(base_col, (0.0, 0.0, 0.0), 0.25), bsdf.inputs["Base Color"])', 'L.new(mix(jelly_skin(mix, base_col, chain), (0.0, 0.0, 0.0), JELLY_BASE_DIM) if jelly(chain) else mix(painted_skin(mix, base_col, chain), (0.0, 0.0, 0.0), 0.25), bsdf.inputs["Base Color"])'),
     ('L.new(mix(mix(base_col, space, JELLY_SKY), stars, 1.0, "ADD"), bsdf.inputs["Emission Color"])', 'note_lines(chain)\n        L.new(jelly_emission(mix, base_col, space, stars, chain) if jelly(chain) else painted_emission(mix, base_col, space, stars, chain) if painted(chain) else mix(mix(base_col, space, JELLY_SKY), stars, 1.0, "ADD"), bsdf.inputs["Emission Color"])'),
     ('        bsdf.inputs["Emission Strength"].default_value = JELLY_GLOW\n', '        bsdf.inputs["Emission Strength"].default_value = JELLY_GLOW if jelly(chain) else painted_look(chain)[1] if painted(chain) else 0.55\n'),
-    ('        bsdf.inputs["Roughness"].default_value = 0.22\n', '        bsdf.inputs["Roughness"].default_value = JELLY_ROUGH if jelly(chain) else 0.22\n'),
+    ('        bsdf.inputs["Roughness"].default_value = 0.22\n', '        bsdf.inputs["Roughness"].default_value = jelly_rough(chain)\n'),
     ('        bsdf.inputs["Coat Weight"].default_value = 0.25\n', '        bsdf.inputs["Coat Weight"].default_value = JELLY_COAT if jelly(chain) else 0.25\n        bsdf.inputs["Specular Tint"].default_value = JELLY_SPEC_TINT if jelly(chain) else (1.0, 1.0, 1.0, 1.0)\n'),
-    ('        bsdf.inputs["Specular IOR Level"].default_value = 0.3   # stronger', '        bsdf.inputs["Specular IOR Level"].default_value = (JELLY_SPEC if jelly(chain) else 0.3)   # stronger'),
+    ('        bsdf.inputs["Specular IOR Level"].default_value = 0.3   # stronger', '        bsdf.inputs["Specular IOR Level"].default_value = jelly_spec(chain)   # stronger'),
     ('(("StarTex3", "StarTex3_Color", 2.0), ("StarTex4", "StarTex4_Color", 3.0))', '(("StarTex3", "StarTex3_Color", 2.0 * star_scale(chain)), ("StarTex4", "StarTex4_Color", 3.0 * star_scale(chain)))'),
-    ('(("StarTex1", max(1.0, 0.35 * float(S.get("StarTex1_Density", 6.0)))), ("StarTex2", 1.3))', '(("StarTex1", max(1.0, 0.35 * float(S.get("StarTex1_Density", 6.0))) * sparkle_scale(chain)), ("StarTex2", 1.3))'),
+    ('(("StarTex1", max(1.0, 0.35 * float(S.get("StarTex1_Density", 6.0)))), ("StarTex2", 1.3))', '(("StarTex1", sparkle_tiles(chain, "StarTex1", max(1.0, 0.35 * float(S.get("StarTex1_Density", 6.0))) * sparkle_scale(chain))), ("StarTex2", sparkle_tiles(chain, "StarTex2", 1.3)))'),
+    ('        tinted = mix(sparkle, vec(chain, key + "_Color", (0.6, 0.8, 1.0)), 1.0, "MULTIPLY")', '        tinted = mix(sparse_cells(N, L, win, mix, sparkle, key, tile, chain), vec(chain, key + "_Color", (0.6, 0.8, 1.0)), 1.0, "MULTIPLY")'),
     ('            stars = mix(stars, layer, 0.45, "ADD")', '            stars = mix(stars, dust_color(mix, layer, chain), 0.45 * dust_gain(chain), "ADD")'),
     ('        stars = mix(stars, tinted, 0.9, "ADD")', '        stars = mix(stars, tinted, 0.9 * sparkle_gain(chain), "ADD")'),
     ('rim = sun("rim", 7.0, (0.75, 0.92, 1.0), 2)', 'rim = sun("rim", RIM_SUN if RIM_ON else 7.0, RIM_SUN_COLOR if RIM_ON else (0.75, 0.92, 1.0), 2)\nif RIM_ON:\n    studio_lights()'),
     ('    rim.rotation_euler = aim(-d * 0.9 + rt * 0.75 + Vector((0, 0, 0.25)))\n', '    rim.rotation_euler = aim(-d * 0.9 + rt * 0.75 + Vector((0, 0, 0.25)))\n    place_studio(STUDIO, d, rt)\n'),
     ('print("RESULT " + json.dumps({"ok": True, "renders"', 'interior_rim(renders)\nflow_frames(job, glowing)\nprint("RESULT " + json.dumps({"ok": True, "renders"'),
+    # the idle the action really came from (borrowed_pose.py): a later clip that fails to load leaves the loop's `path` on it
+    ('        A.animation_data.action = act\n', '        A.animation_data.action = act\n        posed_from = path\n'),
     ('    renders[view["name"]] = sc.render.filepath\n', '    renders[view["name"]] = sc.render.filepath\n    constellations(sc.render.filepath)\n    screen_rim(sc.render.filepath)\n    flow_still(sc.render.filepath)\n'),
 ]
 if any(old not in source for old, _ in hooks):
@@ -40,8 +45,17 @@ for old, new in hooks:
     source = source.replace(old, new, 1)
 fix = f"RIM_ON = {rim_on}\n" + "\n".join(
     (runtime / f).read_text(encoding="utf-8")
-    for f in ("galactic_mane.py", "material_rim.py", "translucent_layers.py", "screen_rim.py", "studio_lights.py", "cosmic_tuning.py", "flow_anim.py"))
-source = source.replace(marker, fix + '\nfix_lobby_mane(A, job)\nbpy.context.view_layer.update()\n\n' + marker, 1)
+    for f in ("galactic_mane.py", "material_rim.py", "translucent_layers.py", "screen_rim.py", "studio_lights.py", "cosmic_tuning.py", "flow_anim.py", "borrowed_pose.py"))
+# A skin on another skin's mesh (skin_blueprint.py): its blueprint's material in each slot, by name (an empty entry keeps
+# the mesh's). M_Hide, the game's invisible material, hides its slot: drawn, it was a plain gray shape
+slots = ('_names = job.get("slot_materials") or []\n'
+         'for _i, _s in enumerate(M.material_slots):\n'
+         '    _n = _names[_i] if _i < len(_names) and _names[_i] else (_s.material.name if _s.material else None)\n'
+         '    if _n == "M_Hide":\n'
+         '        _s.material = None\n'
+         '    elif _i < len(_names) and _names[_i]:\n'
+         '        _s.material = bpy.data.materials.get(_n) or bpy.data.materials.new(_n)\n')
+source = source.replace(marker, fix + '\nfix_lobby_mane(A, job)\nborrowed_pose(A, job, globals().get("posed_from"), posed)\n' + slots + 'bpy.context.view_layer.update()\n\n' + marker, 1)
 source = source.replace(mesh_path, repr(str(kit / "meshes")), 1)
 patched = runtime / "render_preview.py"
 if not patched.exists() or patched.read_text(encoding="utf-8") != source:
@@ -67,6 +81,23 @@ if source.count(sound_list) != 1:
     raise RuntimeError("This preview kit does not support the app's sound reader. Update it in Setup.")
 source = source.replace(sound_list, "    pak = sound_pak(work, cfg, pak)\n" + sound_list, 1)
 source = source.replace(main_guard, (runtime / "sound_pak.py").read_text(encoding="utf-8") + "\n" + main_guard, 1)
+# One animated preview per emote (emote_split.py): the run keeps and reports each emote's <key>@n.webp
+emote_hooks = [
+    ("            seqs = [] if target else anim_sequences(pkgs)", "            target, seqs = emote_first(target, pkgs)"),
+    ("drop_extras(out_dir, key, 0)   # a character mod's other forms", "drop_extras(out_dir, key, anim_forms(kind))   # a character mod's other forms"),
+    ('    for f in sorted(out_dir.glob(f"{key}@*.png")):\n', '    for f in sorted({f.stem: f for f in [*out_dir.glob(f"{key}@*.png"), *out_dir.glob(f"{key}@*.webp")]}.values()):\n'),
+    ('                kind = "anim"\n', '                kind = "anim"\n                ui_slide(work, pkgs, out_dir, key)\n'),
+]
+if any(source.count(old) != 1 for old, _ in emote_hooks):
+    raise RuntimeError("This preview kit does not support one preview per emote. Update it in Setup.")
+for old, new in emote_hooks:
+    source = source.replace(old, new, 1)
+source = source.replace(main_guard, (runtime / "emote_split.py").read_text(encoding="utf-8") + "\n" + main_guard, 1)
+job_slots = '"whole": not SKIN_MESH.match(target)}'
+if source.count(job_slots) != 1:
+    raise RuntimeError("This preview kit does not support skins on another skin's mesh. Update it in Setup.")
+source = source.replace(job_slots, '"whole": not SKIN_MESH.match(target), "slot_materials": SLOTS.get(model.stem)}', 1)
+source = source.replace(main_guard, (runtime / "skin_blueprint.py").read_text(encoding="utf-8") + "\n" + main_guard, 1)
 # The animation lives beside its still: a character's cleanup (keep_only .png) keeps a .webp written after the .png (a flow
 # animation; an older animation mod's .webp is older and still goes), and a dropped form or an empty loadout takes its .webp too
 cleanup = [
@@ -86,22 +117,27 @@ if source.count(vanilla_dir) != 2:
     raise RuntimeError("This preview kit does not support the app's before pictures. Update it in Setup.")
 source = source.replace(vanilla_dir, 'f"v{VERSION}' + ("r" if rim_on else "") + '-{game_stamp(cfg)}"')
 # VFX palette cards use smaller labels and matching spacing. ANIM 9 retries cached empty results now that stripped
-# sound PAKs can be read. Existing successful previews keep their own REDO thresholds.
+# sound PAKs can be read. ANIM 10 renders animation previews again, one per emote and the
+# mod's UI after them (emote_split.py). ANIM 11 retries "nothing to show" once (skin_blueprint.py). Existing successful previews keep their own REDO thresholds.
 vfx_hooks = [
     ("label, gap, top = 140, 40, 100", "label, gap, top = 92, 40, 100"),
     ("(MARGIN + 4, y + bh + 24)", "(MARGIN + 4, y + bh + 16)"),
     ("(w - MARGIN - 4, y + bh + 24)", "(w - MARGIN - 4, y + bh + 16)"),
     ("font(84", "font(55"),
-    ("\nANIM = 7 ", "\nANIM = 9 "),
-    ('REDO = {"sound": 4, "anim": 6}', 'REDO = {"sound": 4, "anim": 6, "vfx": 8}'),
+    ("\nANIM = 7 ", "\nANIM = 11 "),
+    ('REDO = {"sound": 4, "anim": 6}', 'REDO = {"sound": 4, "anim": 10, "vfx": 8}'),
 ]
+# A mod packed with another project's mount point (WhiteFox_Bows/Content/Marvel/...) lists its packages under that
+# folder: the kit read only Marvel/Content/ and saw none (nothing to show). Its files still sit at /Game/Marvel/...
+vfx_hooks.append(('PACKAGE = re.compile(r"Marvel/Content/((?:(?!Marvel/Content/)\\S)+?)\\.uasset")', 'PACKAGE = re.compile(r"(?:Marvel|[^/\\s]+(?=/Content/Marvel/))/Content/((?:(?![^/\\s]+/Content/)\\S)+?)\\.uasset")'))
 if any(old not in source for old, _ in vfx_hooks):
     raise RuntimeError("This preview kit does not support the app's VFX card size. Update it in Setup.")
 for old, new in vfx_hooks:
     source = source.replace(old, new)
 # A different fingerprint regenerates cached renders as they are requested. The rim setting is not part of it: changing
 # the setting must not render every preview again
-# (10001: painted galaxy skins, flow lines and their animation: cached previews and before pictures render again once)
-source = re.sub(r"(?m)^VERSION = (\d+)", lambda m: "VERSION = " + str(int(m[1]) + 10001), source, count=1)
+# (10001: painted galaxy skins, flow lines and their animation. 10002: blueprint skins, galaxy masks and sprites, borrowed
+# idles, no shell outline: cached previews and before pictures render again once)
+source = re.sub(r"(?m)^VERSION = (\d+)", lambda m: "VERSION = " + str(int(m[1]) + 10002), source, count=1)
 globals()["__file__"] = str(original)
 exec(compile(source, str(original), "exec"), globals())

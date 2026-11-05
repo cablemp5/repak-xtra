@@ -26,11 +26,11 @@ import { captionBackgroundKey } from './loadoutStore'
 /** The home screen's badge color class for a mod type (theme.css *-badge sets --badge-dot). */
 export const typeClass = (category?: string | null) => `${(category || 'unknown').toLowerCase().replace(/\s+/g, '-')}-badge`
 
-const TYPE_ORDER = ['Mesh', 'Texture', 'Material', 'Animation', 'VFX', 'UI', 'Text', 'Audio']   // Audio: the generator's list of changed sounds
+const TYPE_ORDER = ['Animation', 'Mesh', 'Texture', 'Material', 'VFX', 'UI', 'Text', 'Audio']   // Audio: the generator's list of changed sounds
 const SHARED = ['Material', 'VFX'] // types whose previews go on one slide together
 const rank = (c?: string | null) => { const i = TYPE_ORDER.indexOf(c ?? ''); return i < 0 ? TYPE_ORDER.length : i }
 
-/** A loadout's generated previews: its combined character render first, then its other mods' in type order, its
+/** A loadout's generated previews: its animations first, then its combined character render, then its other mods' in type order, its
  *  Material previews together on one slide and its VFX swatches on another. The combined render hides only the mods it
  *  shows that the loadout still holds. It reads "Older render" when it was made for other installed mods than the
  *  loadout has now (or before that was recorded). */
@@ -59,12 +59,13 @@ function usePreviewSlides(p: LoadoutProps, l: Loadout) {
     const installed = new Set(mine.filter(k => byName.get(k) && !isKoPreview(k))) // KO prompts never go to the kit's render
     const older = info !== undefined && !(info.members && info.members.length === installed.size && info.members.every(k => installed.has(k)))
     const kinds = [...new Set(covered.map(categoryOf).filter((c): c is string => Boolean(c)))].sort((a, b) => rank(a) - rank(b))
-    slides.unshift({ key: set, label: older ? 'Older render' : kinds.join(' + ') || 'Character', older }) // e.g. "Mesh + Texture + Material"
+    const after = slides.findIndex(s => categoryOf(s.key) !== 'Animation')
+    slides.splice(after < 0 ? slides.length : after, 0, { key: set, label: older ? 'Older render' : kinds.join(' + ') || 'Character', older }) // e.g. "Mesh + Texture + Material"
   }
-  // A hero with forms (Magik and Darkchylde, Hulk's three): each other form's image follows its first; a shared slide
+  // A hero with forms (Magik and Darkchylde, Hulk's three), or a mod with several emotes: each other image follows its first; a shared slide
   // (several Material mods) gets one more shared slide with their other forms
   const all = slides.flatMap((s): Slide[] => {
-    if (!s.keys) return [s, ...formKeys(s.key).map((k, i) => ({ key: k, label: `${s.label} · form ${i + 2}`, older: s.older }))]
+    if (!s.keys) return [s, ...formKeys(s.key).map((k, i) => ({ key: k, label: `${s.label} · ${s.label === 'Animation' ? 'emote' : 'form'} ${i + 2}`, older: s.older }))]
     const more = s.keys.flatMap(formKeys)
     return more.length ? [s, { key: more[0], keys: more, label: `${s.label} · other forms` }] : [s]
   })
