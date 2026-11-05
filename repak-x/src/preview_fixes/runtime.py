@@ -137,7 +137,8 @@ for old, new in vfx_hooks:
 # A different fingerprint regenerates cached renders as they are requested. The rim setting is not part of it: changing
 # the setting must not render every preview again
 # (10001: painted galaxy skins, flow lines and their animation. 10002: blueprint skins, galaxy masks and sprites, borrowed
-# idles, no shell outline: cached previews and before pictures render again once)
-source = re.sub(r"(?m)^VERSION = (\d+)", lambda m: "VERSION = " + str(int(m[1]) + 10002), source, count=1)
+# idles, no shell outline: cached previews and before pictures render again once. 10003: mesh swaps fitted to another
+# body keep their own proportions in the lobby pose, borrowed_pose.py)
+source = re.sub(r"(?m)^VERSION = (\d+)", lambda m: "VERSION = " + str(int(m[1]) + 10003), source, count=1)
 globals()["__file__"] = str(original)
 exec(compile(source, str(original), "exec"), globals())
