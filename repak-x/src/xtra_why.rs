@@ -17,10 +17,20 @@ pub struct Finding {
     level: &'static str,
     title: String,
     detail: String,
+    /// the one-click fix the dialog offers: "turn_on" (the Library's switch) or "setup" (opens Setup)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    action: Option<&'static str>,
 }
 
 fn f(level: &'static str, title: impl Into<String>, detail: impl Into<String>) -> Finding {
-    Finding { level, title: title.into(), detail: detail.into() }
+    Finding { level, title: title.into(), detail: detail.into(), action: None }
+}
+
+impl Finding {
+    fn act(mut self, action: &'static str) -> Self {
+        self.action = Some(action);
+        self
+    }
 }
 
 /// Load order rank: the nines run (more nines load later and win). None for a "!" name, whose order the app does not know.
@@ -38,7 +48,7 @@ fn own_checks(path: &Path, mods_dir: &Path) -> Vec<Finding> {
     let mut out = Vec::new();
     let pak = path.with_extension("pak");
     if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("bak_repak")) {
-        out.push(f("problem", "It is switched off", "Turn it on in the Library. The game loads it from the next launch."));
+        out.push(f("problem", "It is switched off", "The game loads it from the next launch once it is on.").act("turn_on"));
     }
     let (utoc, ucas) = (pak.with_extension("utoc").is_file(), pak.with_extension("ucas").is_file());
     if utoc != ucas {
@@ -111,14 +121,14 @@ pub async fn xtra_why_mod(mod_path: String, state: State<'_, Arc<Mutex<crate::Ap
         if let Some(win64) = crate::xtra_setup::win64_dir(&mods_dir) {
             match crate::xtra_setup::bypass_state(&win64).as_str() {
                 "installed" | "other" => {}
-                "disabled" => out.push(f("problem", "The signature bypass is off", "No mod loads without it. Turn it on in Setup.")),
-                _ => out.push(f("problem", "The signature bypass is not installed", "No mod loads without it. Install it in Setup.")),
+                "disabled" => out.push(f("problem", "The signature bypass is off", "No mod loads without it. Turn it on in Setup.").act("setup")),
+                _ => out.push(f("problem", "The signature bypass is not installed", "No mod loads without it. Install it in Setup.").act("setup")),
             }
         }
         let details = crate::compute_mod_details(&path, &state).ok();
         if let Some(d) = &details {
             if d.mod_type.contains("Project Galacta") && !crate::xtra_setup::is_managed_loader(&path) && !crate::xtra_setup::galacta_on(&mods_dir) {
-                out.push(f("problem", "It needs Project Galacta", "This is a Galacta version of a mod. Install Project Galacta or turn it on in Setup."));
+                out.push(f("problem", "It needs Project Galacta", "This is a Galacta version of a mod. Install Project Galacta or turn it on in Setup.").act("setup"));
             }
             if d.category == "Unknown" {
                 let top: Vec<String> = d.files.iter().filter_map(|x| {

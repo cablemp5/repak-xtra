@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
 import { useBrokenVersion, verdictOf } from './brokenMods'
 import { useUiPref } from './uiPrefs'
-import { riskOf, useRisks } from './safetyScan'
+import { RISK_TAB_TITLE, riskOf, useRisks } from './safetyScan'
 
 export type ModState = 'all' | 'enabled' | 'disabled' | 'broken' | 'risk' | 'encrypted'
 
@@ -99,7 +99,7 @@ export default function ModStateFilter({ value, onChange, mods, encrypted }: Pro
       <div className="mod-state-filter" role="group" aria-label="Show mods" ref={tabs} aria-hidden={folded || undefined}>
         {options.map(([state, label, count]) => (
           <button key={state} type="button" aria-pressed={value === state} onClick={() => onChange(state)} tabIndex={folded ? -1 : undefined}
-            className={state === 'broken' ? 'is-broken' : undefined} title={state === 'broken' ? BROKEN_TITLE : undefined}>
+            className={(state === 'broken' ? 'is-broken' : state === 'risk' ? 'is-risk' : undefined)} title={(state === 'broken' ? BROKEN_TITLE : state === 'risk' ? RISK_TAB_TITLE : undefined)}>
             {label}
             <span className="mod-state-count">{count.toLocaleString()}</span>
           </button>
@@ -107,7 +107,7 @@ export default function ModStateFilter({ value, onChange, mods, encrypted }: Pro
       </div>
       {folded && (
         <>
-          <button type="button" className={`btn-ghost mod-state-btn${value === 'broken' ? ' is-broken' : ''}`} aria-haspopup="menu" aria-expanded={open}
+          <button type="button" className={`btn-ghost mod-state-btn${value === 'broken' ? ' is-broken' : value === 'risk' ? ' is-risk' : ''}`} aria-haspopup="menu" aria-expanded={open}
             onClick={() => setOpen(v => !v)} title={`Show: ${label}`}>
             {label}<span className="mod-state-count">{count.toLocaleString()}</span><ChevronDown size={13} aria-hidden="true" />
           </button>
@@ -115,8 +115,8 @@ export default function ModStateFilter({ value, onChange, mods, encrypted }: Pro
             <div className="sigeon-menu mod-state-menu" role="menu" aria-label="Show mods">
               {options.map(([state, label, count]) => (
                 <button key={state} type="button" role="menuitemradio" aria-checked={value === state}
-                  className={`sigeon-item${state === 'broken' ? ' is-broken' : ''}`} onClick={() => { onChange(state); setOpen(false) }}
-                  title={state === 'broken' ? BROKEN_TITLE : undefined}>
+                  className={`sigeon-item${state === 'broken' ? ' is-broken' : state === 'risk' ? ' is-risk' : ''}`} onClick={() => { onChange(state); setOpen(false) }}
+                  title={(state === 'broken' ? BROKEN_TITLE : state === 'risk' ? RISK_TAB_TITLE : undefined)}>
                   {label}<span className="mod-state-count">{count.toLocaleString()}</span>{value === state && <Check size={14} aria-hidden="true" />}
                 </button>
               ))}

@@ -234,7 +234,8 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   const { finished, finish } = useFinished() // an install that just finished, said in its card for a moment
 
   // Opened from a grayed-out Generate button: straight to the Mod previews card (its top, so it can still grow as it loads)
-  useEffect(() => { if (focus === 'previews') document.querySelector('.su-previews')?.scrollIntoView({ block: 'start' }) }, [focus])
+  // repakxtra: and a startup toast's card (Snapshots, Ban risk)
+  useEffect(() => { const card = focus && ({ previews: '.su-previews', snapshots: '.su-snapshots', safety: '.su-safety-card' } as Record<string, string>)[focus]; if (card) document.querySelector(card)?.scrollIntoView({ block: 'start' }) }, [focus])
   useEffect(() => {
     invoke<Bypass>('setup_bypass_status').then(setBypass).catch(e => alert.warning('Setup', String(e)))
     invoke<Galacta>('setup_galacta_status', { online: false }).then(g => setGalacta(withLastCheck(g))).catch(() => {})
@@ -489,8 +490,8 @@ export default function SetupButton({ alert }: { alert: Alert }) {
   }, [])
   useEffect(() => {
     invoke<Bypass>('setup_bypass_status').then(b => b.state !== 'installed' && setAttention(true)).catch(() => {})
-    checkSnapshotLoss(alert, () => setOpen(true)) // repakxtra: files gone since the newest snapshot
-    checkBannedPlugins(alert, () => setOpen(true)) // repakxtra: a plugin the anti-cheat notice names
+    checkSnapshotLoss(alert, () => { setFocus('snapshots'); setOpen(true) }) // repakxtra: files gone since the newest snapshot
+    checkBannedPlugins(alert, () => { setFocus('safety'); setOpen(true) }) // repakxtra: a plugin the anti-cheat notice names
     if (!autoCheck() || startupChecked) return
     startupChecked = true   // once per app start, even when React mounts this twice
     invoke<Galacta>('setup_galacta_status', { online: true }).then(g => {

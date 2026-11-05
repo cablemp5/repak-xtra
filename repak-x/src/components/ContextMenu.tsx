@@ -358,7 +358,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
       </div>
       {onUpdateVfx && <div className="context-menu-item" onClick={() => { onUpdateVfx(); onClose(); }}>Update mod</div>}{/* repakxtra */}
       {onCheckVfx && <div className="context-menu-item" onClick={() => { onCheckVfx(); onClose(); }}>Check for update</div>}{/* repakxtra */}
-      {selectionCount <= 1 && <div className="context-menu-item" onClick={() => { openWhy(mod.path); onClose(); }}>Why isn't it working?</div>}{/* repakxtra */}
+      {selectionCount <= 1 && <div className="context-menu-item" onClick={() => { openWhy(mod.path, mod.custom_name); onClose(); }}>Why isn't it working?</div>}{/* repakxtra */}
       <div className="context-menu-separator" />
       <div className="context-menu-item submenu-trigger" onMouseEnter={handleSubmenuEnter}>
         {selectionCount > 1 ? `Move ${selectionCount} mods to` : 'Move to'}

@@ -3704,7 +3704,7 @@ function App() {
       )}
 
       <CrashSuspects deps={{ alert, isBlocked: undoBlocked, reload: loadMods }} mods={mods} details={modDetails} heroes={characterData} />{/* repakxtra */}
-      <WhyNotWorking />{/* repakxtra: Why isn't this mod working? */}
+      <WhyNotWorking alert={alert} />{/* repakxtra: Why isn't this mod working? */}
 
       {panels.settings && (
         <Suspense fallback={null}><SettingsPanel

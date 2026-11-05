@@ -137,11 +137,17 @@ pub async fn xtra_safety_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
             if crate::xtra_setup::is_managed_loader(&path) {
                 return None;
             }
+            // a built-in says so: the player did not install it by hand, so the reason says where it came from and what to do
+            let made_here = |reason: String| if crate::xtra_builtins::is_own(&path) {
+                format!("{reason} repakxtra made it as a built-in, and the notice still counts it. Turn it off before you play online.")
+            } else if crate::xtra_builtins::in_folder(&path) {
+                format!("{reason} Another app made it as a built-in, and the notice still counts it. Turn it off before you play online.")
+            } else { reason };
             if let Some(reason) = by_name(&path) {
-                return Some(Risk { path: p, level: "ban", reason });
+                return Some(Risk { path: p, level: "ban", reason: made_here(reason) });
             }
             let details = crate::compute_mod_details(&path, &state).ok()?;
-            judge(&details.files).map(|(level, reason)| Risk { path: p, level, reason })
+            judge(&details.files).map(|(level, reason)| Risk { path: p.clone(), level, reason: made_here(reason) })
         }).collect()
     }).await.map_err(|e| e.to_string())
 }

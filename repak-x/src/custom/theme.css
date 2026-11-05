@@ -3138,36 +3138,63 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .promise-transition-loader__message { font-size: 13px !important; font-weight: 500 !important; letter-spacing: 0 !important; color: var(--text-primary) !important; text-shadow: none !important; }
 @media (prefers-reduced-motion: reduce) { .promise-transition-loader__card::before { animation-duration: 2s; } }
 
-/* repakxtra: Ban risk badges (custom/safetyScan.tsx). Orange for Ban risk, quiet for Check rules: red only for the plugins
-   the anti-cheat notice names (cable's choice) */
-.mod-type-badge.risk-badge { cursor: help; font-size: 11px !important; font-weight: 600 !important; background: transparent !important; }
+/* repakxtra: Ban risk badges (custom/safetyScan.tsx), buttons that open Why isn't it working?. Orange for Ban risk, quiet
+   for Check rules: red only for the plugins the anti-cheat notice names (cable's choice) */
+.mod-type-badge.risk-badge { cursor: pointer; font-size: 11px !important; font-weight: 600 !important; background: transparent !important; font-family: inherit; }
+.mod-type-badge.risk-badge:hover { filter: brightness(1.25); }
+.mod-type-badge.risk-badge:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .mod-type-badge.risk-badge.is-ban { color: #f59a42 !important; border: 1px solid color-mix(in srgb, #f59a42, transparent 55%) !important; }
 .mod-type-badge.risk-badge.is-check { color: var(--text-secondary) !important; border: 1px solid color-mix(in srgb, var(--text-secondary), transparent 60%) !important; }
-[data-theme="light"] .mod-type-badge.risk-badge.is-ban { color: #9a5200 !important; }
-.su-chip.is-danger { color: #f05252; border-color: color-mix(in srgb, #f05252, transparent 55%); }
+[data-theme="light"] .mod-type-badge.risk-badge.is-ban, [data-theme="light"] .mod-state-filter button.is-risk { color: #9a5200 !important; }
+/* its tab fills like Problems does when picked, in the badge's orange */
+.mod-state-filter button.is-risk, .mod-state-filter button.is-risk .mod-state-count, .mod-state-btn.is-risk, .mod-state-menu .sigeon-item.is-risk { color: #f59a42; }
+.su-chip.is-danger { color: #f05252; box-shadow: inset 0 0 0 1px color-mix(in srgb, #f05252, transparent 55%); }
+.su-chip.is-warn { color: #f5d342; }
 .su-risk-icon { flex: none; color: var(--text-secondary); }
 .su-part.is-banned .su-risk-icon, .su-part.is-banned b { color: #f05252; }
-.su-part.is-unknown .su-risk-icon { color: #f59a42; }
+.su-part.is-unknown .su-risk-icon { color: #f5d342; }
+.su-part.is-bundled .su-risk-icon { color: #3ecf8e; }
+/* a Remove or Delete that asks in its own row: the question drops under the row, full width */
+.su-part:has(.su-row-confirm) { flex-wrap: wrap; }
+.su-row-confirm { flex-basis: 100%; }
+/* the one that does it reads stronger than Cancel, without red (Von Restorff) */
+.su-confirm .su-confirm-yes, .settings-content .xs-storage-confirm .xs-storage-delete { font-weight: 600 !important; color: var(--text-primary) !important; background: color-mix(in srgb, var(--text-primary), transparent 86%) !important; }
+/* the section's lead lines up with its list, not indented like a checkbox note */
+.settings-content .xs-storage > .setting-group > p.setting-subtext { margin-left: 0 !important; padding-left: 0 !important; }
 
-/* repakxtra: Why isn't this mod working? (custom/WhyNotWorking.tsx) */
-.why-modal { max-width: 520px; width: calc(100vw - 32px); }
+/* repakxtra: Why isn't this mod working? (custom/WhyNotWorking.tsx). The title and the mod's name stack on the left, the
+   close button keeps the corner (Jakob's Law) */
+.why-modal { max-width: 560px; width: calc(100vw - 32px); }
+.why-modal .why-head { display: flex; align-items: flex-start; gap: 12px; }
+.why-head-text { flex: 1; min-width: 0; }
+.why-head-text h2 { margin: 0; }
+.why-name { margin: 4px 0 0; font-size: 13px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .why-btn { margin-top: 10px; display: inline-flex; align-items: center; gap: 6px; }
+.why-checking { display: flex; align-items: center; gap: 8px; }
 .why-summary { margin: 0 0 12px; color: var(--text-primary); font-size: 14px; }
-.why-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.why-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .why-item { display: flex; gap: 10px; align-items: flex-start; }
 .why-item > svg { flex: none; margin-top: 2px; color: var(--text-secondary); }
 .why-item.is-problem > svg { color: #f5d342; }
 .why-item.is-ok > svg { color: #3ecf8e; }
-.why-item div { display: flex; flex-direction: column; gap: 2px; }
+.why-item div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .why-item b { font-size: 13px; color: var(--text-primary); }
 .why-item span { font-size: 13px; color: var(--text-secondary); }
+.why-item .why-act { flex: none; height: 28px; padding: 0 12px; font-size: 13px; }
 
-/* repakxtra: Settings > Storage (custom/StorageCleanup.tsx). Yellow warnings, no red (only where cable asked) */
-.xs-storage-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-.xs-storage-name { color: var(--text-primary); font-size: 13px; }
+/* repakxtra: Settings > General > Storage (custom/StorageCleanup.tsx), its own section. Yellow warnings, no red */
+.xs-storage-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.settings-content .xs-storage-list label.repakx-checkbox { align-items: flex-start; min-height: 0; }
+.settings-content .xs-storage-list .repakx-checkbox-control { margin-top: 2px; }
+.settings-content .xs-storage-list .repakx-checkbox-label > span.xs-storage-name { display: block; color: var(--text-primary) !important; }
 .xs-storage-size { color: var(--text-secondary); margin-left: 6px; font-variant-numeric: tabular-nums; }
-.xs-storage-list .setting-subtext { display: block; }
-.xs-storage-warn { color: #f5d342 !important; }
-[data-theme="light"] .xs-storage-warn { color: #7f6900 !important; }
+/* the note under each name: gray, and yellow where deleting loses something for good (the base rule paints every span white) */
+.settings-content .xs-storage-list .repakx-checkbox-label > span.xs-storage-note { display: block; font-size: 12.5px !important; color: var(--text-secondary) !important; }
+.settings-content .xs-storage-list .repakx-checkbox-label > span.xs-storage-note.is-warn { color: #f5d342 !important; }
+[data-theme="light"] .settings-content .xs-storage-list .repakx-checkbox-label > span.xs-storage-note.is-warn { color: #7f6900 !important; }
+.xs-storage-actions { margin-top: 12px; }
+.xs-storage-fail { color: #f5d342 !important; }
+/* the question: its heading yellow, the list in plain text so the heading stands out */
 .xs-storage-confirm { margin-top: 12px; align-items: flex-start; }
-.xs-storage-confirm ul { margin: 6px 0 10px; padding-left: 18px; }
+.xs-storage-confirm ul { margin: 6px 0 10px; padding-left: 18px; color: var(--text-secondary); }
+.xs-storage-confirm ul b { color: var(--text-primary); font-weight: 500; }

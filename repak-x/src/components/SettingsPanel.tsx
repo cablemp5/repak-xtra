@@ -350,9 +350,9 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                       <span>Check for updates when {APP_NAME} starts</span>
                     </Checkbox>
                     <AppFiles alert={alert} />{/* repakxtra */}
-                    <StorageCleanup alert={alert} />{/* repakxtra */}
                   </div>
                 </div>
+                <StorageCleanup alert={alert} />{/* repakxtra: its own section, not under Updates */}
               </>
             )}
 

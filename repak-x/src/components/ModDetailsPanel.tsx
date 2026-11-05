@@ -324,7 +324,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
                 </div>
               )}
               <NexusSourceLine path={mod.path} />{/* repakxtra: Nexus source */}
-              <WhyButton path={mod.path} />{/* repakxtra */}
+              <WhyButton path={mod.path} name={cleanName} />{/* repakxtra */}
             </div>
 
             {mod.custom_tags && mod.custom_tags.length > 0 && (

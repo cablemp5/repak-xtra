@@ -506,7 +506,7 @@ const ModItem = memo(function ModItem({
                     {/* repakxtra: on, and clashing with another enabled mod (same priority, same files), right of the file size */}
                     {conflicting && <span className="mod-type-badge conflict-badge" title="Conflicts with another enabled mod: Check Conflicts shows which">Conflict</span>}
                     {verdict && <VerdictBadge path={mod.path} verdict={verdict} />}
-                    {risk && <RiskBadge risk={risk} />}
+                    {risk && <RiskBadge path={mod.path} risk={risk} name={mod.custom_name} />}
                     {builtin && (
                         <button type="button" className="mod-type-badge builtin-badge" title="Made by repakxtra from your game files. Open it on Home to change it"
                             onClick={(e) => { e.stopPropagation(); revealBuiltin(mod.builtin) }}>Built-in</button>
