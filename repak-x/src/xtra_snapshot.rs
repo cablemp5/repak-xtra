@@ -63,8 +63,10 @@ fn try_setup_files(win64: &Path) -> Result<Vec<(PathBuf, u64)>, String> {
             Err(e) => return Err(format!("{name}: {e}")),
         }
     }
-    if win64.join("plugins").exists() {
-        out.extend(try_files(&win64.join("plugins"))?.into_iter().map(|(p, n)| (Path::new("plugins").join(p), n)));
+    match fs::metadata(win64.join("plugins")) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(format!("plugins: {e}")),
+        Ok(_) => out.extend(try_files(&win64.join("plugins"))?.into_iter().map(|(p, n)| (Path::new("plugins").join(p), n))),
     }
     Ok(out)
 }
