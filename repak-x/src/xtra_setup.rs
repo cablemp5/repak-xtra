@@ -107,6 +107,16 @@ fn bypass_status(win64: &Path) -> BypassStatus {
     }
 }
 
+/// The bypass state alone ("installed", "disabled", ...), for Why isn't this mod working? (xtra_why.rs).
+pub(crate) fn bypass_state(win64: &Path) -> String {
+    bypass_status(win64).state
+}
+
+/// Whether Project Galacta is in the mods folder and on (xtra_why.rs).
+pub(crate) fn galacta_on(mods: &Path) -> bool {
+    find_enabled_loader(mods, GALACTA_STEM).is_some()
+}
+
 /// Whether the file is byte for byte the bundled loader or bypass (the setup report leaves those out of a crash's
 /// third-party modules: the Signature bypass line already names them).
 pub(crate) fn is_bundled_bypass(path: &Path) -> bool {

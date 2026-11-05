@@ -73,6 +73,7 @@ import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
 import { rescanVerdicts, useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
 import { useRisks, useSafetyWatch } from './custom/safetyScan' // repakxtra
+import { WhyNotWorking } from './custom/WhyNotWorking' // repakxtra
 import { useScanProgress } from './custom/scanProgress' // repakxtra
 import ScanStatus from './custom/ScanStatus' // repakxtra
 import { useGameUpdateWatch } from './custom/gameUpdate' // repakxtra
@@ -3703,6 +3704,7 @@ function App() {
       )}
 
       <CrashSuspects deps={{ alert, isBlocked: undoBlocked, reload: loadMods }} mods={mods} details={modDetails} heroes={characterData} />{/* repakxtra */}
+      <WhyNotWorking />{/* repakxtra: Why isn't this mod working? */}
 
       {panels.settings && (
         <Suspense fallback={null}><SettingsPanel

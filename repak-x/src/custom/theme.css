@@ -3148,3 +3148,16 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .su-risk-icon { flex: none; color: var(--text-secondary); }
 .su-part.is-banned .su-risk-icon, .su-part.is-banned b { color: #f05252; }
 .su-part.is-unknown .su-risk-icon { color: #f59a42; }
+
+/* repakxtra: Why isn't this mod working? (custom/WhyNotWorking.tsx) */
+.why-modal { max-width: 520px; width: calc(100vw - 32px); }
+.why-btn { margin-top: 10px; display: inline-flex; align-items: center; gap: 6px; }
+.why-summary { margin: 0 0 12px; color: var(--text-primary); font-size: 14px; }
+.why-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.why-item { display: flex; gap: 10px; align-items: flex-start; }
+.why-item > svg { flex: none; margin-top: 2px; color: var(--text-secondary); }
+.why-item.is-problem > svg { color: #f5d342; }
+.why-item.is-ok > svg { color: #3ecf8e; }
+.why-item div { display: flex; flex-direction: column; gap: 2px; }
+.why-item b { font-size: 13px; color: var(--text-primary); }
+.why-item span { font-size: 13px; color: var(--text-secondary); }

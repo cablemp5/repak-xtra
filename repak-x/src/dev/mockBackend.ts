@@ -120,6 +120,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       // Setup panel: fake bypass files and a fake Galacta release (no game folder, no network)
       case 'setup_bypass_status': return setupBypass()
       case 'snapshot_list': return mockSnapshots
+      case 'xtra_why_mod': return wait(0.3).then(() => /\.bak_repak$/i.test(args?.modPath ?? '') ? [{ level: 'problem', title: 'It is switched off', detail: 'Turn it on in the Library. The game loads it from the next launch.' }] : [])
       case 'xtra_safety_plugins': return [{ name: 'dsound.dll', place: '', kind: 'bundled' }, { name: 'MarvelRivalsUTOCSignatureBypass.asi', place: 'plugins', kind: 'bundled' }]
       case 'xtra_safety_mods': return [] // the mock's file lists are guessed: no risk badges
       case 'snapshot_estimate': return [data.mods.length * 3, data.mods.length * 3 * 4e7]
