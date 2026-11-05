@@ -94,6 +94,7 @@ pub async fn xtra_safety_plugins(state: State<'_, Arc<Mutex<crate::AppState>>>) 
 /// can be put back by hand.
 #[tauri::command]
 pub async fn xtra_safety_remove_plugin(name: String, place: String, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<Vec<Plugin>, String> {
+    let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?;
     if crate::is_game_process_running() {
         return Err("Marvel Rivals is running. Close it first.".into());

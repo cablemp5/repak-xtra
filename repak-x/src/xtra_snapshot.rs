@@ -150,8 +150,13 @@ fn restore_at(snap: &Path, mods: &Path, win64: &Path) -> Result<Restored, String
         let mut n = 0;
         for rel in list.iter().filter(|r| !to.join(r).exists()) {
             let dest = to.join(rel);
-            fs::create_dir_all(dest.parent().unwrap_or(to)).and_then(|_| fs::copy(from.join(rel), &dest))
-                .map_err(|e| format!("Could not put back {}: {e}", rel.display()))?;
+            // a temporary name first: a copy cut short (a full disk) never counts as put back on the next restore
+            let tmp = dest.with_file_name(format!("{}.repakxtra-restoring", dest.file_name().unwrap_or_default().to_string_lossy()));
+            let done = fs::create_dir_all(dest.parent().unwrap_or(to)).and_then(|_| fs::copy(from.join(rel), &tmp)).and_then(|_| fs::rename(&tmp, &dest));
+            if let Err(e) = done {
+                let _ = fs::remove_file(&tmp);
+                return Err(format!("Could not put back {}: {e}", rel.display()));
+            }
             n += 1;
         }
         Ok(n)
@@ -194,7 +199,7 @@ pub async fn snapshot_estimate(state: State<'_, Arc<Mutex<crate::AppState>>>) ->
 
 #[tauri::command]
 pub async fn snapshot_create(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<Snapshot, String> {
-    let _mutation = crate::xtra_mutation::edit()?; // no mod changes halfway through the copy
+    let _alone = crate::xtra_mutation::alone("a snapshot")?; // no mod change mixes file versions into the copy
     let (mods, win64) = dirs_of(&state)?;
     let id = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_secs().to_string();
     blocking(move || create_at(&root(), &id, &mods, &win64)).await
@@ -213,7 +218,7 @@ pub async fn snapshot_missing(state: State<'_, Arc<Mutex<crate::AppState>>>) -> 
 
 #[tauri::command]
 pub async fn snapshot_restore(id: String, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<Restored, String> {
-    let _mutation = crate::xtra_mutation::edit()?;
+    let _alone = crate::xtra_mutation::alone("a restore")?;
     crate::xtra_identity::upstream_guard()?;
     if crate::is_game_process_running() {
         return Err("Marvel Rivals is running. Close it first.".into());
@@ -225,6 +230,7 @@ pub async fn snapshot_restore(id: String, state: State<'_, Arc<Mutex<crate::AppS
 
 #[tauri::command]
 pub async fn snapshot_delete(id: String) -> Result<(), String> {
+    let _mutation = crate::xtra_mutation::edit()?; // never the snapshot a restore is reading
     let dir = snap_dir(&id)?;
     blocking(move || fs::remove_dir_all(&dir).map_err(|e| format!("Could not delete the snapshot: {e}"))).await
 }

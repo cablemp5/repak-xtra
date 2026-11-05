@@ -60,7 +60,7 @@ pub async fn xtra_storage_sections() -> Result<Vec<Section>, String> {
 #[tauri::command]
 pub async fn xtra_storage_clear(ids: Vec<String>) -> Result<u64, String> {
     // alone: no mod change, encryption, or snapshot may use the trash or a snapshot while it goes
-    let _alone = crate::xtra_mutation::encrypt().map_err(|_| "A mod change is still running. Try again when it is done.".to_string())?;
+    let _alone = crate::xtra_mutation::alone("the cleanup")?;
     tauri::async_runtime::spawn_blocking(move || clear_at(&crate::app_dir(), &ids)).await.map_err(|e| e.to_string())?
 }
 
