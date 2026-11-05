@@ -10,7 +10,7 @@ import { releaseScan, scanEnded, scanHeld, scanStarted } from './scanProgress'
  *  0 the update waits for that patch's USMAP (xtra_broken.rs changed_since_usmap). */
 export type Verdict = { path: string; kind: 'broken' | 'vfx' | 'risky' | 'unknown'; reason: string; usmapWait?: number }
 /** A verdict's badge text. */
-export const verdictLabel = (kind: Verdict['kind']) => (kind === 'broken' ? 'Broken' : kind === 'vfx' ? 'Needs update' : kind === 'unknown' ? "Couldn't verify compatibility" : 'May crash')
+export const verdictLabel = (kind: Verdict['kind']) => (kind === 'broken' ? 'Broken' : kind === 'vfx' ? 'Needs update' : kind === 'unknown' ? 'Safety unknown' : 'May crash')
 
 /** Mods the Mod Updater never offers: built-ins (another app's too, in .repakxtra-builtin) and project loaders
  *  (!Project<Name>_9999999_P, or a bare Project<Name>), which the app that made them keeps current.
@@ -133,7 +133,7 @@ export const verdictOf = (path: string) => verdicts.get(norm(path))
 export const useMade = (path: string) => useSyncExternalStore(subscribe, () => made.get(norm(path)))
 
 if (import.meta.env.DEV) {
-  console.assert(verdictLabel('unknown') === "Couldn't verify compatibility", 'inconclusive checks do not claim a confirmed crash risk')
+  console.assert(verdictLabel('unknown') === 'Safety unknown', 'inconclusive checks do not claim a confirmed crash risk')
   console.assert(verdictLabel('risky') === 'May crash', 'confirmed risks keep their warning')
   console.assert(norm('C:/Games/~mods/A_9999999_P.pak') === norm('c:\\games\\~MODS\\a_9999999_p.pak'), 'broken paths match across slashes and case')
   console.assert(norm('C:/Games/~mods/A_9999999_P.pak') === norm('C:/Games/~mods/A_9999999_P.bak_repak'), 'a mod keeps its verdict on and off')

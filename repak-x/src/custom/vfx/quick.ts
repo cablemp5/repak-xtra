@@ -181,8 +181,8 @@ export async function checkVfxModInPlace(mod: { path: string; utoc_path?: string
 if (import.meta.env.DEV) {
   const said = (unknown: string[], why: VfxCheck['why']) => checkWords({ verdict: 'unknown', outdated: [], current: [], unknown, why }, 'A').text
   const uncertain = checkWords({ verdict: 'unknown', outdated: [], current: [], unknown: ['custom'], why: 'elsewhere' }, 'A')
-  console.assert(uncertain.title === "Couldn't verify compatibility: A" && uncertain.color === 'warning' && uncertain.text.includes('not a confirmed fault'), 'unverified compatibility is a precaution, not a required repair')
-  console.assert(checkWords({ verdict: 'unknown', outdated: [], current: [], unknown: [], why: 'classes' }, 'A').title === "Couldn't verify compatibility: A", 'unreadable asset lists use the same inconclusive wording')
+  console.assert(uncertain.title === 'Safety unknown: A' && uncertain.color === 'warning' && uncertain.text.includes('not a confirmed fault'), 'unverified compatibility is a precaution, not a required repair')
+  console.assert(checkWords({ verdict: 'unknown', outdated: [], current: [], unknown: [], why: 'classes' }, 'A').title === 'Safety unknown: A', 'unreadable asset lists use the same inconclusive wording')
   console.assert(said(['e'], 'empty') === 'Its material carries no shader data of its own to compare. This is a precaution, not a confirmed fault or a required repair.', 'one, no shader data')
   console.assert(said(['a', 'b'], 'elsewhere').startsWith('2 of its materials match no game version (the modder built them)'), 'several, built by the modder')
 }

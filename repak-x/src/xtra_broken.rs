@@ -968,7 +968,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                 judge_checked(p, facts, game_updated, &game, record.and_then(|c| c.unknown.as_deref()))
             })
             .collect::<Vec<Verdict>>();
-        // an update the Mod Updater made for this game is never flagged Needs update or Couldn't verify again (the Mod
+        // an update the Mod Updater made for this game is never flagged Needs update or Safety unknown again (the Mod
         // Updater's list says Updated), unless the new USMAP can finish a partial one or its files are in an older layout,
         // which can crash the game
         verdicts.retain(|v| {
