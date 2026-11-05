@@ -10,21 +10,24 @@ type Mod = { path: string; enabled?: boolean }
 export type KeepDeps = { alert: ReturnType<typeof useAlert>; isBlocked: () => boolean; reload: () => Promise<unknown> }
 
 /** A mod's path without its on/off extension: the same mod before and after a switch. */
-const stem = (p: string) => p.replace(/\.(pak|bak_repak|pak_disabled)$/i, '').toLowerCase()
+export const stem = (p: string) => p.replace(/\.(pak|bak_repak|pak_disabled)$/i, '').toLowerCase()
 const name = nameKey
 export const GAME_RUNNING = ['Game Running', 'Cannot toggle mods while game is running.'] as const
 
 /** Switches every mod in `mods`; if any is refused, switches the done ones back and returns the refusal. */
-async function flipAll(mods: Mod[]) {
+export async function flipAll(mods: Mod[]) {
   const failed = await flipMods(mods)
   if (!failed.length) return null
   // The switched ones have a new extension now: found again by stem in a fresh list
   const done = new Map(mods.filter(m => !failed.includes(m)).map(m => [stem(m.path), m.enabled !== false]))
+  const why = failed.reason ?? `Could not switch ${failed.map(m => name(m.path)).join(', ')}. Close anything using those files, then try again.`
   if (done.size) {
-    const now = await invoke<Mod[]>('get_pak_files').catch(() => [] as Mod[])
-    await flipMods(now.filter(m => done.has(stem(m.path)) && (m.enabled !== false) !== done.get(stem(m.path))))
+    const now = await invoke<Mod[]>('get_pak_files').catch(() => null)
+    // the switch back can fail too: then "nothing changed" would be false, so name what stayed switched
+    const stuck = now ? (await flipMods(now.filter(m => done.has(stem(m.path)) && (m.enabled !== false) !== done.get(stem(m.path))))).map(m => name(m.path)) : [...done.keys()].map(name)
+    if (stuck.length) return `${why} These stayed switched: ${stuck.join(', ')}.`
   }
-  return failed.reason ?? `Could not switch ${failed.map(m => name(m.path)).join(', ')}. Close anything using those files, then try again.`
+  return why
 }
 
 /** Turns these mods off (all or none) and shows `title` with an Undo that turns them on again. False when nothing
