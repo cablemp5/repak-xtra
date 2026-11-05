@@ -12,6 +12,8 @@ import { type KeepDeps, turnOffWithUndo } from './keepOne'
 import { nameKey } from './loadoutStore'
 import { ModName, plural } from './modName'
 import { type Tier, type Tiered, grouped, ordered, prechecked, reasonFor } from './crashTiers'
+import BisectPanel from './BisectPanel'
+import { OPEN_BISECT } from './crashBisect'
 
 type Mod = { path: string; enabled?: boolean }
 type Details = { character_id?: string | null; character_name?: string | null; files?: string[] }
@@ -98,7 +100,8 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
     window.addEventListener('keydown', esc, true)
     return () => window.removeEventListener('keydown', esc, true)
   }, [crash])
-  if (!crash) return null
+  const bisect = <BisectPanel deps={deps} mods={mods} />
+  if (!crash) return bisect
   const close = () => setCrash(null)
   const turnOff = async () => {
     const chosen = (suspects ?? []).filter(s => picked.has(s.mod.path)).map(s => s.mod)
@@ -108,7 +111,7 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
     if (done) close()
   }
   const p = crash.payload
-  return (
+  return (<>{bisect}
     <div className="modal-overlay" onClick={close}>
       <motion.div className="modal-content cs-modal" role="dialog" aria-modal="true" aria-label="Crash suspects" onClick={e => e.stopPropagation()}
         ref={ref} tabIndex={-1} onKeyDown={onKeyDown}
@@ -163,6 +166,9 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
           {/* the reassurance at the risky click: it can be undone, and the button says how many */}
           {Boolean(suspects?.length) && <span className="cs-undo">You can undo this from the notice that follows.</span>}
           <button type="button" className="lo-text-btn" onClick={close}>{suspects?.length ? 'Cancel' : 'Close'}</button>
+          {suspects?.length === 0 && (
+            <button type="button" className="btn-primary" onClick={() => { close(); window.dispatchEvent(new Event(OPEN_BISECT)) }}>Find the crashing mod</button>
+          )}
           {Boolean(suspects?.length) && (
             <button type="button" className="btn-primary" disabled={busy || picked.size === 0} onClick={turnOff}>
               {busy ? 'Turning off…' : picked.size ? `Turn off ${plural(picked.size, 'mod')}` : 'Turn off'}
@@ -171,7 +177,7 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
         </div>
       </motion.div>
     </div>
-  )
+  </>)
 }
 
 if (import.meta.env.DEV) {

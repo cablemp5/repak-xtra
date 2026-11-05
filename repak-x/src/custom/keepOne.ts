@@ -10,12 +10,12 @@ type Mod = { path: string; enabled?: boolean }
 export type KeepDeps = { alert: ReturnType<typeof useAlert>; isBlocked: () => boolean; reload: () => Promise<unknown> }
 
 /** A mod's path without its on/off extension: the same mod before and after a switch. */
-const stem = (p: string) => p.replace(/\.(pak|bak_repak|pak_disabled)$/i, '').toLowerCase()
+export const stem = (p: string) => p.replace(/\.(pak|bak_repak|pak_disabled)$/i, '').toLowerCase()
 const name = nameKey
 export const GAME_RUNNING = ['Game Running', 'Cannot toggle mods while game is running.'] as const
 
 /** Switches every mod in `mods`; if any is refused, switches the done ones back and returns the refusal. */
-async function flipAll(mods: Mod[]) {
+export async function flipAll(mods: Mod[]) {
   const failed = await flipMods(mods)
   if (!failed.length) return null
   // The switched ones have a new extension now: found again by stem in a fresh list
