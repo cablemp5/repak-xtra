@@ -30,8 +30,6 @@
   --quiet-active: rgba(255, 255, 255, 0.07);
   --quiet-radius: 8px;
   --focus-ring: color-mix(in srgb, var(--accent-primary), white 25%);
-  /* A focused text field's border: a step lighter than at rest, never a loud white line (cable, 2026-11-04) */
-  --field-focus: color-mix(in srgb, var(--text-primary), transparent 80%);
   /* T3 Code primary (oklch 0.571 0.21 264). !important beats the accent the app sets inline from
      Settings, so no red anywhere; the accent picker no longer applies in dark mode. */
   --accent-primary: #346bf1 !important;
@@ -166,7 +164,6 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
   box-shadow: none !important;
   min-height: 40px;
 }
-.search-wrapper:focus-within { border-color: var(--field-focus) !important; box-shadow: none !important; }
 .main-search-input { background: transparent !important; border: none !important; font-size: 14px; caret-color: var(--text-primary); }   /* white, not the accent blue, as every other field */
 .custom-dropdown-trigger { font-size: 13px !important; font-weight: 500 !important; }
 .custom-dropdown-trigger:hover { background: var(--bg-dark) !important; }
@@ -863,7 +860,6 @@ html[data-motion="off"] .lo-screen { animation: none; }
   height: 36px !important; font-size: 13px !important; padding: 0 12px !important;
   background: var(--input-bg) !important; border: 1px solid var(--input-border) !important; border-radius: var(--quiet-radius) !important;
 }
-.vfx-input-group input:focus { border-color: var(--field-focus) !important; box-shadow: none !important; }
 .vfx-input-group button, .btn-secondary, .vfx-cancel-btn {
   height: 36px !important; padding: 0 16px !important; font-size: 13px !important; font-weight: 500 !important;
   background: transparent !important; border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important;
@@ -1004,7 +1000,6 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
   font: 12px var(--font-primary); color: var(--text-primary);
   background: var(--bg-dark); border: 1px solid var(--panel-border); border-radius: 6px; outline: none;
 }
-.lo-mod-add input:focus { border-color: var(--accent-primary); }
 
 /* ---------- generated mod previews (custom/previews.tsx) ---------- */
 .mod-preview-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
@@ -1199,11 +1194,9 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .lp-name { font: 600 24px/1.2 var(--font-primary); letter-spacing: -0.02em; color: var(--text-primary); background: transparent; border: 1px solid transparent;
   border-radius: 8px; padding: 2px 8px; margin: 0 -8px; outline: none; width: 100%; }
 .lp-name:hover { border-color: var(--panel-border); }
-.lp-name:focus { border-color: rgba(255, 255, 255, 0.16); background: var(--field-bg); outline: none !important; box-shadow: none !important; }
 .lp-group { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
 .lp-group input { height: 32px; padding: 0 12px; width: 240px; font: 13px var(--font-primary); color: var(--text-primary);
   background: var(--field-bg); border: 1px solid var(--panel-border); border-radius: var(--quiet-radius); outline: none; }
-.lp-group input:focus { border-color: rgba(255, 255, 255, 0.16); }
 .lp-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
 .lp-switch { display: inline-flex; align-items: center; gap: 8px; margin-right: 8px; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .lp-switch-state { display: inline-flex; align-items: center; gap: 8px; }
@@ -1217,7 +1210,6 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .lp-search { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; width: 280px;
   background: var(--field-bg); border: 1px solid var(--panel-border); border-radius: var(--quiet-radius); color: var(--text-secondary);
   transition: border-color 0.15s ease; }
-.lp-search:focus-within { border-color: rgba(255, 255, 255, 0.16); }
 .lp-search input { flex: 1; min-width: 0; height: 100%; padding: 0 !important; background: transparent !important; border: none !important;
   outline: none !important; box-shadow: none !important; color: var(--text-primary); font: 13px var(--font-primary); }
 .lp-search svg.lucide { width: 16px !important; height: 16px !important; }
@@ -1556,7 +1548,6 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
 .install-loadout { display: flex; align-items: center; gap: 16px; margin-right: auto; min-width: 0; flex-wrap: wrap; }
 .install-loadout-name { height: 32px; width: 200px; padding: 0 12px; border-radius: 8px; font-size: 13px;
   background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--panel-border); outline: none; }
-.install-loadout-name:focus-visible { border-color: var(--accent-primary); }
 /* Per mod: Add to loadout (in place of tags) */
 .install-loadout-menu button.dropdown-item { width: 100%; background: none; border: 0; font: inherit; }
 .install-loadout-menu button.dropdown-item:hover, .install-loadout-menu button.dropdown-item:focus-visible { background: var(--accent-primary); color: #fff; outline: none; }
@@ -1924,7 +1915,6 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .mod-rename-input { height: 28px; padding: 0 8px !important; font-weight: 500 !important; font-size: inherit !important;
   background: var(--field-bg) !important; border: 1px solid rgba(255, 255, 255, 0.16) !important; border-radius: 6px !important;
   box-shadow: none !important; outline: none; transition: border-color 120ms ease; }
-.mod-rename-input:focus, .lo-rename:focus { border-color: color-mix(in srgb, var(--accent-primary), transparent 35%) !important; box-shadow: none !important; outline: none !important; }
 .mod-rename-input::selection, .lo-rename::selection { background: color-mix(in srgb, var(--accent-primary), transparent 55%); color: var(--text-primary); }
 
 /* Loadout count: a dot, green when all its installed mods are on, yellow when some are, red when none is */
@@ -2051,14 +2041,13 @@ html[data-motion="off"] .lo-row .fp-lead.is-busy .lo-on-dot { animation: none; }
 .su-trust p { margin: 0; padding: 4px 0 0 20px; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }   /* under the words, past the shield */
 
 /* Details panel: a hero with forms shows each form's preview side by side */
-.mod-preview-frame.has-forms { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; width: 100%; aspect-ratio: auto; }
+.mod-preview-frame.has-forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(30%, 1fr)); gap: 8px; width: 100%; aspect-ratio: auto; }
 .mod-preview-frame.has-forms img { width: 100%; min-width: 0; }
 
 /* ---------- Library: a quiet search (no blue box inside the field), file sizes only when asked for, conflicts in red
    (cable asked: a dot on Check conflicts, a badge on each clashing mod that is on) ---------- */
 .app .main-search-input:focus-visible { outline: none !important; }
 .main-action-bar .search-wrapper { background: var(--field-bg) !important; border-color: var(--panel-border) !important; }
-.main-action-bar .search-wrapper:focus-within { border-color: var(--field-focus) !important; }
 .main-action-bar .search-wrapper > svg { width: 16px !important; height: 16px !important; color: var(--text-secondary) !important; opacity: 0.8; }
 .main-search-input { font-size: 14px !important; }
 .main-search-input::placeholder { color: var(--text-secondary) !important; opacity: 0.8; }
@@ -2093,7 +2082,6 @@ html[data-motion="off"] .lo-row .fp-lead.is-busy .lo-on-dot { animation: none; }
 .install-mod-card__pill { background: transparent !important; border: 1px solid var(--panel-border) !important; color: var(--text-secondary) !important; font-weight: 500 !important; }
 .install-mod-card .mod-name-input { background: var(--field-bg) !important; border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important;
   height: 32px; padding: 0 12px !important; max-width: 260px; outline: none !important; box-shadow: none !important; }
-.install-mod-card .mod-name-input:focus { border-color: var(--field-focus) !important; }
 .install-mod-card__tags { border-top: 1px solid var(--panel-border) !important; padding-top: 12px !important; }
 .install-mod-card__footer { border-top: 1px solid var(--panel-border) !important; padding-top: 12px !important; gap: 8px !important;
   align-items: stretch !important; justify-content: stretch !important; }
@@ -2513,20 +2501,19 @@ html[data-motion] .hold-delete.holding::after { transition-duration: 2s !importa
 .btn-ghost.danger.bulk-delete:hover { background: rgba(242, 85, 90, 0.1) !important; }
 .btn-ghost.danger.bulk-delete .danger-bg { background: rgba(242, 85, 90, 0.24) !important; }
 
-/* ---------- Text fields never get the blue focus ring (cable, 2026-10-17). The app-wide ring (.app :focus-visible) is for
-   buttons, links and switches; every text field, now and added later, shows focus as a lighter hairline instead, in every
-   window. Matched by element type, so a new field needs no class of its own. Boxes that hold a field (a search or rename
-   box) do the same while the field inside has focus. The hairline (--field-focus) is a quiet step lighter than the resting
-   border, not a white outline (cable, 2026-11-04). ---------- */
-:is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="button"], [type="submit"], [type="reset"], [type="color"], [type="file"], [type="image"]), textarea, select, [contenteditable="true"]):is(:focus, :focus-visible) {
+/* ---------- A focused text field looks exactly as it does at rest: the cursor is the only sign (cable, 2026-11-05; the
+   blue ring went 2026-10-17, the lighter hairline 2026-11-04). The app-wide ring (.app :focus-visible) is for buttons,
+   links and switches. Matched by element type in every window, so a new field needs no class of its own; boxes that hold
+   a field (a search or rename box) do the same while the field inside has focus. Any focus color a stylesheet still sets
+   (upstream's blue borders) is held off by a transition that never arrives: the field keeps its resting border, fill and
+   text color while focused. A field focused the moment it appears has no resting look to keep, so its border is the
+   app's usual field border. ---------- */
+:is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="button"], [type="submit"], [type="reset"], [type="color"], [type="file"], [type="image"]), textarea, select, [contenteditable="true"]):is(:focus, :focus-visible),
+:is(.rename-input-wrapper, .combined-input-group, .search-wrapper, .tail-input, .lp-search, .ip-name-wrap, .ko-search):focus-within {
   outline: none !important;
   box-shadow: none !important;
-  border-color: var(--field-focus) !important;
-}
-:is(.rename-input-wrapper, .combined-input-group, .search-wrapper, .tail-input, .lp-search):focus-within {
-  outline: none !important;
-  box-shadow: none !important;
-  border-color: var(--field-focus) !important;
+  border-color: var(--panel-border) !important;
+  transition: border-color 1000000s step-end, background-color 1000000s step-end, color 1000000s step-end !important;
 }
 /* A loadout page's More menu: Delete in red, like the Library's right-click Delete (cable, 2026-10-17) */
 .lp-more-menu .sigeon-item.is-danger { color: #f2555a !important; }

@@ -52,7 +52,10 @@ def screen_rim(path):
     """Lay a directional rim along the figure's silhouette in the saved render: the graphic edge the lobby shows, which the
     scene's rim light and the materials' own rims only suggest. Pixels are read as stored (Non-Color, straight alpha), so
     nothing else in the picture changes."""
-    if job.get("whole") or not RIM_ON:
+    if job.get("whole"):
+        return
+    if not RIM_ON:
+        shell_rim(path)
         return
     img = bpy.data.images.load(path)
     img.colorspace_settings.name = "Non-Color"; img.alpha_mode = "CHANNEL_PACKED"
@@ -66,6 +69,33 @@ def screen_rim(path):
     rgb[:] = 1.0 - (1.0 - rgb) * (1.0 - color * band[..., None].astype(np.float32))
     fill = close_gaps(rgb, rim_band(alpha, max(2, round(16 * scale)), edge=0.78) > 0.5, max(2, round(2 * scale)))
     rgb[fill] = 1.0 - (1.0 - rgb[fill]) * (1.0 - color)
+    img.pixels.foreach_set(px.ravel())
+    img.file_format = "PNG"; img.filepath_raw = path
+    img.save()
+    bpy.data.images.remove(img)
+
+
+SHELL_RIM_WIDTH = 0.02   # the skin's own rim shell around the figure, as a share of the render's width (Panther X's white edge in game)
+
+
+def shell_rim(path):
+    """A jelly skin that asks for a white rim (SHELL_RIM, cosmic_tuning.py) gets it whatever the rim setting: a solid band
+    of that color just outside the silhouette, the rim shell the game draws around the hero."""
+    if not SHELL_RIM:
+        return
+    img = bpy.data.images.load(path)
+    img.colorspace_settings.name = "Non-Color"; img.alpha_mode = "CHANNEL_PACKED"
+    w, h = img.size
+    px = np.empty(w * h * 4, np.float32); img.pixels.foreach_get(px); px = px.reshape(h, w, 4)
+    alpha = px[..., 3].astype(np.float64)
+    r = max(2, round(w * SHELL_RIM_WIDTH / 2))
+    grown = box_blur(box_blur(alpha, r), r)   # twice: a rounded grow, not a square one
+    band = (np.clip((grown - 0.02) / 0.04, 0.0, 1.0) * (1.0 - alpha)).astype(np.float32)[..., None]
+    color = np.array(SHELL_RIM[0], np.float32) ** (1 / 2.2)   # sRGB, like the picture
+    a0 = px[..., 3:4]
+    out_a = band + a0 * (1.0 - band)
+    px[..., :3] = (color * band + px[..., :3] * a0 * (1.0 - band)) / np.maximum(out_a, 1e-6)
+    px[..., 3:4] = out_a
     img.pixels.foreach_set(px.ravel())
     img.file_format = "PNG"; img.filepath_raw = path
     img.save()

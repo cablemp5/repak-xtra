@@ -22,11 +22,12 @@ hooks = [   # (the kit's line, with the fix added): the slot's material, which t
     ('L.new(mix(base_col, (0.0, 0.0, 0.0), 0.25), bsdf.inputs["Base Color"])', 'L.new(mix(jelly_skin(mix, base_col, chain), (0.0, 0.0, 0.0), JELLY_BASE_DIM) if jelly(chain) else mix(painted_skin(mix, base_col, chain), (0.0, 0.0, 0.0), 0.25), bsdf.inputs["Base Color"])'),
     ('L.new(mix(mix(base_col, space, JELLY_SKY), stars, 1.0, "ADD"), bsdf.inputs["Emission Color"])', 'note_lines(chain)\n        L.new(jelly_emission(mix, base_col, space, stars, chain) if jelly(chain) else painted_emission(mix, base_col, space, stars, chain) if painted(chain) else mix(mix(base_col, space, JELLY_SKY), stars, 1.0, "ADD"), bsdf.inputs["Emission Color"])'),
     ('        bsdf.inputs["Emission Strength"].default_value = JELLY_GLOW\n', '        bsdf.inputs["Emission Strength"].default_value = JELLY_GLOW if jelly(chain) else painted_look(chain)[1] if painted(chain) else 0.55\n'),
-    ('        bsdf.inputs["Roughness"].default_value = 0.22\n', '        bsdf.inputs["Roughness"].default_value = JELLY_ROUGH if jelly(chain) else 0.22\n'),
+    ('        bsdf.inputs["Roughness"].default_value = 0.22\n', '        bsdf.inputs["Roughness"].default_value = jelly_rough(chain)\n'),
     ('        bsdf.inputs["Coat Weight"].default_value = 0.25\n', '        bsdf.inputs["Coat Weight"].default_value = JELLY_COAT if jelly(chain) else 0.25\n        bsdf.inputs["Specular Tint"].default_value = JELLY_SPEC_TINT if jelly(chain) else (1.0, 1.0, 1.0, 1.0)\n'),
-    ('        bsdf.inputs["Specular IOR Level"].default_value = 0.3   # stronger', '        bsdf.inputs["Specular IOR Level"].default_value = (JELLY_SPEC if jelly(chain) else 0.3)   # stronger'),
+    ('        bsdf.inputs["Specular IOR Level"].default_value = 0.3   # stronger', '        bsdf.inputs["Specular IOR Level"].default_value = jelly_spec(chain)   # stronger'),
     ('(("StarTex3", "StarTex3_Color", 2.0), ("StarTex4", "StarTex4_Color", 3.0))', '(("StarTex3", "StarTex3_Color", 2.0 * star_scale(chain)), ("StarTex4", "StarTex4_Color", 3.0 * star_scale(chain)))'),
-    ('(("StarTex1", max(1.0, 0.35 * float(S.get("StarTex1_Density", 6.0)))), ("StarTex2", 1.3))', '(("StarTex1", max(1.0, 0.35 * float(S.get("StarTex1_Density", 6.0))) * sparkle_scale(chain)), ("StarTex2", 1.3))'),
+    ('(("StarTex1", max(1.0, 0.35 * float(S.get("StarTex1_Density", 6.0)))), ("StarTex2", 1.3))', '(("StarTex1", sparkle_tiles(chain, "StarTex1", max(1.0, 0.35 * float(S.get("StarTex1_Density", 6.0))) * sparkle_scale(chain))), ("StarTex2", sparkle_tiles(chain, "StarTex2", 1.3)))'),
+    ('        tinted = mix(sparkle, vec(chain, key + "_Color", (0.6, 0.8, 1.0)), 1.0, "MULTIPLY")', '        tinted = mix(sparse_cells(N, L, win, mix, sparkle, key, tile, chain), vec(chain, key + "_Color", (0.6, 0.8, 1.0)), 1.0, "MULTIPLY")'),
     ('            stars = mix(stars, layer, 0.45, "ADD")', '            stars = mix(stars, dust_color(mix, layer, chain), 0.45 * dust_gain(chain), "ADD")'),
     ('        stars = mix(stars, tinted, 0.9, "ADD")', '        stars = mix(stars, tinted, 0.9 * sparkle_gain(chain), "ADD")'),
     ('rim = sun("rim", 7.0, (0.75, 0.92, 1.0), 2)', 'rim = sun("rim", RIM_SUN if RIM_ON else 7.0, RIM_SUN_COLOR if RIM_ON else (0.75, 0.92, 1.0), 2)\nif RIM_ON:\n    studio_lights()'),
@@ -67,6 +68,17 @@ if source.count(sound_list) != 1:
     raise RuntimeError("This preview kit does not support the app's sound reader. Update it in Setup.")
 source = source.replace(sound_list, "    pak = sound_pak(work, cfg, pak)\n" + sound_list, 1)
 source = source.replace(main_guard, (runtime / "sound_pak.py").read_text(encoding="utf-8") + "\n" + main_guard, 1)
+# One animated preview per emote (emote_split.py): the run keeps and reports each emote's <key>@n.webp
+emote_hooks = [
+    ("            seqs = [] if target else anim_sequences(pkgs)", "            target, seqs = emote_first(target, pkgs)"),
+    ("drop_extras(out_dir, key, 0)   # a character mod's other forms", "drop_extras(out_dir, key, anim_forms(kind))   # a character mod's other forms"),
+    ('    for f in sorted(out_dir.glob(f"{key}@*.png")):\n', '    for f in sorted({f.stem: f for f in [*out_dir.glob(f"{key}@*.png"), *out_dir.glob(f"{key}@*.webp")]}.values()):\n'),
+]
+if any(source.count(old) != 1 for old, _ in emote_hooks):
+    raise RuntimeError("This preview kit does not support one preview per emote. Update it in Setup.")
+for old, new in emote_hooks:
+    source = source.replace(old, new, 1)
+source = source.replace(main_guard, (runtime / "emote_split.py").read_text(encoding="utf-8") + "\n" + main_guard, 1)
 # The animation lives beside its still: a character's cleanup (keep_only .png) keeps a .webp written after the .png (a flow
 # animation; an older animation mod's .webp is older and still goes), and a dropped form or an empty loadout takes its .webp too
 cleanup = [

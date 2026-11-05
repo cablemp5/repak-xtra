@@ -137,7 +137,12 @@ pub fn get_preview_emotes() -> serde_json::Value {
             .filter_map(|(k, v)| v.get(field).filter(|e| e.as_array().is_some_and(|a| !a.is_empty())).map(|e| (k.clone(), e.clone())))
             .collect()
     };
-    serde_json::json!({ "anim": pick("emotes"), "audio": pick("emote_sounds") })
+    // A mod with several emotes: each other emote's preview (<key>@2 and on) with its own emotes
+    let mut anim = pick("emotes");
+    for forms in index.as_object().into_iter().flatten().filter_map(|(_, v)| v.get("form_emotes")?.as_object()) {
+        anim.extend(forms.iter().filter(|(_, e)| e.as_array().is_some_and(|a| !a.is_empty())).map(|(k, e)| (k.clone(), e.clone())));
+    }
+    serde_json::json!({ "anim": anim, "audio": pick("emote_sounds") })
 }
 
 /// "1026-205": four digits, a dash, three digits (an emote id never leaves the mod's audio folder).
@@ -348,6 +353,7 @@ fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Result<Comman
         ("flow_anim.py", include_str!("preview_fixes/flow_anim.py")),
         ("flow_compose.py", include_str!("preview_fixes/flow_compose.py")),
         ("sound_pak.py", include_str!("preview_fixes/sound_pak.py")),
+        ("emote_split.py", include_str!("preview_fixes/emote_split.py")),
     ] {
         let path = runtime.join(name);
         if std::fs::read_to_string(&path).ok().as_deref() != Some(contents) {

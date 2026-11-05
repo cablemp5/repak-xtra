@@ -63,7 +63,6 @@
   background: transparent; border: 1px solid transparent; border-radius: 8px; outline: none; }
 .ip-title-wrap .ip-title { flex: 0 1 auto; field-sizing: content; min-width: 4ch; max-width: 100%; }   /* as wide as the name: the pencil follows it */
 input.ip-title:hover { border-color: var(--panel-border); }
-input.ip-title:focus { border-color: rgba(255, 255, 255, 0.16); background: var(--field-bg); outline: none !important; box-shadow: none !important; }
 .ip-title.is-static { margin: 0; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ip-pen { flex: none; margin-left: 8px; width: 28px; height: 28px !important; color: var(--text-secondary) !important; }
 .ip-pen:hover { color: var(--text-primary) !important; }
@@ -127,7 +126,6 @@ input.ip-title:focus { border-color: rgba(255, 255, 255, 0.16); background: var(
 .ip-name-wrap { flex: 1 1 260px; min-width: 0; display: flex; align-items: center; height: 32px; border-radius: var(--quiet-radius); background: var(--field-bg);
   border: 1px solid var(--panel-border); transition: border-color 0.15s ease; cursor: text; }
 .ip-name-wrap:hover { border-color: rgba(255, 255, 255, 0.12); }
-.ip-name-wrap:focus-within { border-color: rgba(255, 255, 255, 0.2); }
 .ip-name { flex: 1; min-width: 0; height: 100%; padding: 0 0 0 12px !important; border: none !important; background: transparent !important;
   font: 500 13px var(--font-primary) !important; color: var(--text-primary) !important; outline: none !important; box-shadow: none !important; }
 .ip-name::placeholder { color: var(--text-secondary); opacity: 1; }
