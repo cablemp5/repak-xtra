@@ -1,25 +1,71 @@
 // repakxtra: the mod checks' progress in the header (scanProgress.ts), for a run that outlasts its toast or whose toast
-// was closed or missed. Shown only while a run reads mods, or after one stopped with mods left. Click: the progress
-// toast again while it runs, or the checks again now once paused.
+// was closed or missed. Shown only while a run reads mods, or after one stopped with mods left. Click: a menu like the
+// Loadouts screen's Generate previews one, with the check and mod it is on, Pause and Cancel (or Resume once paused), what
+// stopping risks, and how to run the checks again.
 // Laws of UX: the work in progress stays in view (Doherty Threshold), and the count shows how far along it is
 // (Goal-Gradient Effect). A paused run stays listed until it is done (Zeigarnik Effect).
-import { LoaderCircle, Pause } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { AlertTriangle, LoaderCircle, Pause, Play } from 'lucide-react'
 import { rescanVerdicts } from './brokenMods'
-import { progressLine, showScanToast, useScanRun } from './scanProgress'
+import { holdScan, progressLine, useScanRun } from './scanProgress'
 import { APP_NAME } from './edition'
 
 export default function ScanStatus() {
   const r = useScanRun()
-  if (!r.shown && !r.paused) return null
-  const title = r.running
-    ? `${r.last ? progressLine(r.last) : 'Getting ready'}. The checks pause while the game runs. Click to show the progress again.`
-    : `The mod checks stopped with mods left to read (the game ran, or a Mod Updater run or a check needed the tools). They pick up next time you come back to ${APP_NAME} with the game closed. Click to try now.`
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const shown = r.shown || r.paused || (r.running && r.held !== null)
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false) } }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', esc, true)
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc, true) }
+  }, [open])
+  useEffect(() => { if (!shown) setOpen(false) }, [shown])
+  if (!shown) return null
+  const stopping = r.running && r.held !== null // Pause or Cancel pressed: the mod being read finishes first
+  const status = stopping ? `${r.held === 'cancelled' ? 'Cancelling' : 'Pausing'} after the mod being read`
+    : r.running ? (r.last ? progressLine(r.last) : 'Getting ready')
+    : r.held === 'paused' ? 'Paused by you, with mods left to read'
+    : 'Stopped with mods left to read (the game ran, or the Mod Updater needed the tools)'
   return (
-    <button type="button" className="btn-ghost scan-status" onClick={() => (r.running ? showScanToast() : rescanVerdicts())} title={title}>
-      {/* running: the spinner and its words under one shimmer sweep (theme.css t-shimmer-all), how far it is in the tooltip */}
-      {r.running
-        ? <span className="scan-status-in t-shimmer-all"><LoaderCircle size={14} className="scan-status-spin" aria-hidden="true" />Checking mods</span>
-        : <span className="scan-status-in"><Pause size={14} aria-hidden="true" />Checks paused</span>}
-    </button>
+    <div className="lo-gen scan-gen" ref={ref}>
+      <button type="button" className="btn-ghost scan-status" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(v => !v)}
+        title={r.running ? 'Show the mod checks: pause or cancel them' : 'The mod checks are paused: resume or cancel them'}>
+        {/* running: the spinner and its words under one shimmer sweep (theme.css t-shimmer-all) */}
+        {r.running
+          ? <span className="scan-status-in t-shimmer-all"><LoaderCircle size={14} className="scan-status-spin" aria-hidden="true" />{stopping ? 'Stopping checks' : 'Checking mods'}</span>
+          : <span className="scan-status-in"><Pause size={14} aria-hidden="true" />Checks paused</span>}
+      </button>
+      {open && (
+        <div className="sigeon-menu lo-gen-menu scan-menu" role="menu">
+          <div className="lo-gen-status" role="status">
+            <b>{r.running ? 'Checking mods for this game version' : 'Mod checks paused'}</b>
+            <span>{status}</span>
+          </div>
+          {r.running
+            ? <>
+                <button type="button" role="menuitem" className="sigeon-item" disabled={stopping} onClick={() => { setOpen(false); void holdScan('paused') }}
+                  title="Stop after the mod being read. Resume picks up where it stopped">
+                  <span className="lo-gen-stop"><Pause size={14} aria-hidden="true" />Pause</span></button>
+                <button type="button" role="menuitem" className="sigeon-item run-stop-btn" disabled={stopping && r.held === 'cancelled'} onClick={() => { setOpen(false); void holdScan('cancelled') }}
+                  title="Stop after the mod being read, and hide this until the checks run again">
+                  <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />Cancel</span></button>
+              </>
+            : <>
+                <button type="button" role="menuitem" className="sigeon-item" onClick={() => { setOpen(false); void rescanVerdicts() }}
+                  title="Check the mods left to read now">
+                  <span className="lo-gen-stop"><Play size={14} aria-hidden="true" />Resume</span></button>
+                <button type="button" role="menuitem" className="sigeon-item run-stop-btn" onClick={() => { setOpen(false); void holdScan('cancelled') }}
+                  title="Leave the rest unchecked and hide this until the checks run again">
+                  <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />Cancel</span></button>
+              </>}
+          <p className="scan-menu-warn"><AlertTriangle size={14} aria-hidden="true" />
+            <span>Mods not checked yet get no Broken or May crash warning, and can crash the game. Refresh list (Ctrl+Shift+R) runs the checks again, and so does the next start of {APP_NAME}.</span></p>
+        </div>
+      )}
+    </div>
   )
 }

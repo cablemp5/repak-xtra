@@ -4,7 +4,7 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, listen } from '@tauri-apps/api/event'
-import { scanEnded, scanStarted } from './scanProgress'
+import { releaseScan, scanEnded, scanHeld, scanStarted } from './scanProgress'
 
 /** usmapWait (Needs VFX update only): files it rebuilds that a patch newer than the saved USMAP changed. While it is not
  *  0 the update waits for that patch's USMAP (xtra_broken.rs changed_since_usmap). */
@@ -115,10 +115,11 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     // only a run that stopped with mods left goes on when the window is back (the game, an update or a check took
     // over: xtra_vfx.rs background_may_run). Nothing changed, nothing runs. A game update is gameUpdate.ts's to start
     let lastResume = 0
-    const resume = () => { if (unfinished && Date.now() - lastResume > 30_000) { lastResume = Date.now(); void full() } }
+    const resume = () => { if (unfinished && !scanHeld() && Date.now() - lastResume > 30_000) { lastResume = Date.now(); void full() } }
     window.addEventListener('focus', resume)
     const again = listen(VERDICTS_CHANGED, () => { void check() })
-    const rescan = listen(VERDICTS_RESCAN, () => { void full() })
+    // a Refresh list or Resume: checks the header paused or cancelled run again
+    const rescan = listen(VERDICTS_RESCAN, () => { void releaseScan().then(() => full()) })
     return () => { live = false; window.removeEventListener('focus', resume); if (runFull === full) runFull = null; clearTimeout(t); void again.then(f => f()); void rescan.then(f => f()) }
   }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
 }

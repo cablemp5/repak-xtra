@@ -8741,6 +8741,7 @@ fn main() {
             xtra_vfx::xtra_vfx_release,
             xtra_vfx::xtra_vfx_lock,
             xtra_vfx::xtra_scan_stopped,
+            xtra_vfx::xtra_scan_hold, // repakxtra: the header's Pause and Cancel for the mod checks
             xtra_encrypt::xtra_encrypt_mods,
             xtra_encrypt::xtra_encrypt_list,
             xtra_galacta::xtra_galacta_list, // repakxtra

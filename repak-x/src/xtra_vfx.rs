@@ -158,7 +158,7 @@ pub fn xtra_vfx_release(window: Window, token: String) {
 /// its progress per mod).
 /// Each scan asks only for a mod it has work for, so a no means work is left: noted for xtra_scan_stopped.
 pub(crate) fn background_may_run() -> bool {
-    let ok = xtra_vfx_lock().is_none() && !crate::xtra_vfx_check::user_checking() && !game_running();
+    let ok = !HELD.load(std::sync::atomic::Ordering::Relaxed) && xtra_vfx_lock().is_none() && !crate::xtra_vfx_check::user_checking() && !game_running();
     if !ok {
         note_stopped();
     }
@@ -183,6 +183,15 @@ pub(crate) fn game_running() -> bool {
 /// Set when a background scan stopped with mods left to read (the game, an update or a check took over, or another scan
 /// held its lock). brokenMods.ts then treats the run as unfinished: no game update toast yet, and the next focus resumes.
 static STOPPED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// repakxtra: the header's Pause or Cancel (ScanStatus.tsx): the background checks stop at the next mod, and stay
+/// stopped until a Resume or a Refresh list clears it (or the app restarts).
+static HELD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[tauri::command]
+pub fn xtra_scan_hold(on: bool) {
+    HELD.store(on, std::sync::atomic::Ordering::Relaxed);
+}
 
 pub(crate) fn note_stopped() {
     STOPPED.store(true, std::sync::atomic::Ordering::Relaxed);
