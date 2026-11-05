@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
-import { useBrokenVersion, verdictOf } from '../brokenMods'
+import { needsUpdater, useBrokenVersion, verdictOf } from '../brokenMods'
 import { modKey, nameKey, openLoadout, renameModKey } from '../loadoutStore'
 import { renameSource } from '../nexusSource'
 import { useUiPref } from '../uiPrefs'
@@ -32,7 +32,7 @@ export function noticeDismissed(saved: string | null, updated: number, keys: str
 export function VfxDot({ mods }: { mods: Mod[] }) {
   useBrokenVersion()
   const shown = useUiPref('broken')
-  const n = mods.filter(m => verdictOf(m.path)?.kind === 'vfx').length
+  const n = mods.filter(m => needsUpdater(m.path, verdictOf(m.path))).length
   return shown && n ? <span className="vfx-dot" role="img" aria-label={`${n} VFX ${n === 1 ? 'mod needs' : 'mods need'} an update`} /> : null
 }
 
@@ -40,16 +40,18 @@ export function VfxDot({ mods }: { mods: Mod[] }) {
 export const noticeHead = (n: number, when: string) =>
   `${n === 1 ? '1 mod may' : `${n} mods may`} crash the game or not load correctly after the ${when} update`
 /** Its second line: what can be done now, and what waits for the game's new USMAP. */
-export const noticeDetail = (n: number, ready: number, waiting: number) => !waiting
+export const noticeDetail = (n: number, ready: number, waiting: number, off = 0) => (!waiting
   ? `${n === 1 ? 'It was' : 'They were'} made for game files this update changed. Update rebuilds ${n === 1 ? 'it' : 'them'} on the new ones.`
-  : `${ready ? `${ready} can be updated now. ` : ''}${waiting === n ? (n === 1 ? 'It waits' : 'They all wait') : `${waiting} wait`} for the game's new USMAP before ${waiting === 1 ? 'it' : 'they'} can be updated.`
+  : `${ready ? `${ready} can be updated now. ` : ''}${waiting === n ? (n === 1 ? 'It waits' : 'They all wait') : `${waiting} wait`} for the game's new USMAP before ${waiting === 1 ? 'it' : 'they'} can be updated.`)
+  + (off ? ` ${off === n ? (n === 1 ? 'It' : 'They') : off} cannot be rebuilt here, so Update turns ${off === 1 ? 'it' : 'them'} off.` : '')
 
 export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () => void }) {
   useBrokenVersion()
   const shown = useUiPref('broken') // Settings can hide problem badges, this goes with them
   const [updated, setUpdated] = useState(0)
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(DISMISSED))
-  const stale = mods.filter(m => verdictOf(m.path)?.kind === 'vfx')
+  // the same mods as the Mod Updater's Needs an update: one that may crash and is on counts too (Update turns it off)
+  const stale = mods.filter(m => needsUpdater(m.path, verdictOf(m.path)))
   const reloadRef = useRef(reload)
   reloadRef.current = reload
 
@@ -92,7 +94,7 @@ export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () =>
     <div className="vfx-notice" role="status">
       <AlertTriangle size={20} className="vfx-notice-icon" aria-hidden="true" />
       {/* the risk first as a headline, the counts below it (Von Restorff, progressive disclosure) */}
-      <p><strong className="vfx-notice-head">{noticeHead(n, when)}</strong>{noticeDetail(n, ready.length, waiting)}</p>
+      <p><strong className="vfx-notice-head">{noticeHead(n, when)}</strong>{noticeDetail(n, ready.length, waiting, stale.filter(m => verdictOf(m.path)?.kind === 'risky').length)}</p>
       <button type="button" className="lo-text-btn" onClick={() => { localStorage.setItem(DISMISSED, seen); setDismissed(seen) }}
         title="Hide these warnings until another mod needs an update, the game changes, or a waiting repair becomes available">Not now</button>
       {ready.length > 0 && <button type="button" className="btn-primary" onClick={() => fixInVfxWindow(ready.map(m => m.utoc_path || utocOf(m.path)), true)}>
@@ -118,4 +120,5 @@ if (import.meta.env.DEV) {
   console.assert(noticeDetail(101, 1, 100) === "1 can be updated now. 100 wait for the game's new USMAP before they can be updated.", 'some wait', noticeDetail(101, 1, 100))
   console.assert(noticeDetail(3, 0, 3) === "They all wait for the game's new USMAP before they can be updated.", 'all wait')
   console.assert(noticeDetail(2, 2, 0).startsWith('They were made for game files'), 'none wait')
+  console.assert(noticeDetail(3, 3, 0, 1).endsWith(' 1 cannot be rebuilt here, so Update turns it off.'), 'May crash ones turn off', noticeDetail(3, 3, 0, 1))
 }

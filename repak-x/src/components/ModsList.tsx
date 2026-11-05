@@ -10,7 +10,7 @@ import NumberInput from './ui/NumberInput'
 import { toTagArray } from '../utils/tags'
 import { formatFileSize } from '../utils/format'
 import { useIsConflicting } from '../custom/conflicts' // repakxtra
-import { useVerdict } from '../custom/brokenMods' // repakxtra
+import { useMade, useVerdict } from '../custom/brokenMods' // repakxtra
 import { VerdictBadge } from '../custom/VerdictBadge' // repakxtra
 import { isBuiltin } from '../custom/builtinRows' // repakxtra
 import { BuiltinIcon, revealBuiltin, useBuiltins } from '../custom/BuiltinMods' // repakxtra
@@ -165,6 +165,7 @@ const ModItem = memo(function ModItem({
     useHeroImages()
     const conflicting = useIsConflicting(mod.path) && mod.enabled !== false // repakxtra: red Conflict badge, mods that are on (custom/conflicts.ts)
     const verdict = useVerdict(mod.path) // repakxtra: Broken or May crash badge (custom/brokenMods.ts)
+    const made = useMade(mod.path) // repakxtra: Updated by the Mod Updater
     const vfxUpdating = useVfxUpdating(mod.path) // repakxtra: a right-click VFX update is working on it (custom/vfx/quick.ts)
     const builtin = isBuiltin(mod.path) // repakxtra: a built-in mod's row (custom/builtinRows.ts): no file actions
     const builtinBusy = useBuiltins().busy.has(mod.builtin) // repakxtra: it is building, its name shimmers
@@ -431,7 +432,7 @@ const ModItem = memo(function ModItem({
             </div>
 
             {/* Hero icon + Mod Type Badge + Tags row */}
-            {((heroImage && showHeroIcons && isCardView) || (showModType && category) || tags.length > 0 || conflicting || showSize || builtin || verdict || modDetails?.is_encrypted /* repakxtra */) ? (
+            {((heroImage && showHeroIcons && isCardView) || (showModType && category) || tags.length > 0 || conflicting || showSize || builtin || verdict || made || modDetails?.is_encrypted /* repakxtra */) ? (
                 <div className="mod-tags-row">
                     {heroImage && showHeroIcons && isCardView && (
                         isMultiHero && heroesList.length > 0 ? (
@@ -503,7 +504,7 @@ const ModItem = memo(function ModItem({
                     {!isCardView && sizeTag}
                     {/* repakxtra: on, and clashing with another enabled mod (same priority, same files), right of the file size */}
                     {conflicting && <span className="mod-type-badge conflict-badge" title="Conflicts with another enabled mod: Check Conflicts shows which">Conflict</span>}
-                    {verdict && <VerdictBadge path={mod.path} verdict={verdict} />}
+                    {(verdict || made) && <VerdictBadge path={mod.path} verdict={verdict} />}
                     {builtin && (
                         <button type="button" className="mod-type-badge builtin-badge" title="Made by repakxtra from your game files. Open it on Home to change it"
                             onClick={(e) => { e.stopPropagation(); revealBuiltin(mod.builtin) }}>Built-in</button>

@@ -78,6 +78,29 @@ pub fn xtra_vfx_stamp(mod_path: String, game_paks: String, usmap_path: String) -
     put(&store(), Path::new(&mod_path), s)
 }
 
+/// A mod the Mod Updater made for the installed game (its Updated tag), and whether it left files out (_PARTIAL).
+#[derive(Serialize)]
+pub struct Made {
+    path: String,
+    partial: bool,
+}
+
+/// brokenMods.ts: which of `mod_paths` the Mod Updater made for the installed game.
+#[tauri::command(async)]
+pub fn xtra_made_mods(mod_paths: Vec<String>, state: tauri::State<'_, std::sync::Arc<std::sync::Mutex<crate::AppState>>>) -> Vec<Made> {
+    let mods_dir = state.lock().unwrap().game_path.clone();
+    let now = crate::xtra_broken::game_updated(&mods_dir);
+    let all = load_all();
+    mod_paths
+        .into_iter()
+        .filter(|p| now > 0 && of_in(&all, Path::new(p)).is_some_and(|s| s.game_updated >= now))
+        .map(|p| {
+            let stem = Path::new(&p).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            Made { partial: crate::xtra_vfx::partial_stem(&stem).eq_ignore_ascii_case(&stem), path: p }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
