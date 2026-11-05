@@ -34,7 +34,7 @@ fn sha256(bytes: &[u8]) -> String {
 }
 
 /// ...\Content\Paks\~mods -> ...\Marvel\Binaries\Win64
-fn win64_dir(mods_dir: &Path) -> Option<PathBuf> {
+pub(crate) fn win64_dir(mods_dir: &Path) -> Option<PathBuf> {
     Some(mods_dir.parent()?.parent()?.parent()?.join("Binaries").join("Win64"))
 }
 

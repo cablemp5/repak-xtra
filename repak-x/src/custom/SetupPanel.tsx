@@ -17,6 +17,7 @@ import CopySetupReport from './CopySetupReport'
 import { noteGalactaCheck } from './setupReport'
 import { useDialogFocus } from './dialogFocus'
 import { offerUndoDelete } from './undoDelete'
+import { SnapshotCard, checkSnapshotLoss } from './SnapshotCard'
 
 type Alert = ReturnType<typeof useAlert>
 type FileCheck = { name: string; place: string; size: number; sha256: string; found: 'missing' | 'same' | 'other' }
@@ -442,6 +443,8 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
             )}
           </section>
 
+          <SnapshotCard alert={alert} />
+
           <PreviewKitCard alert={alert} />
         </div>
         {/* One switch for both startup checks (SetupButton: Project Galacta and the preview kit), so it lives under all the cards */}
@@ -483,6 +486,7 @@ export default function SetupButton({ alert }: { alert: Alert }) {
   }, [])
   useEffect(() => {
     invoke<Bypass>('setup_bypass_status').then(b => b.state !== 'installed' && setAttention(true)).catch(() => {})
+    checkSnapshotLoss(alert, () => setOpen(true)) // repakxtra: files gone since the newest snapshot
     if (!autoCheck() || startupChecked) return
     startupChecked = true   // once per app start, even when React mounts this twice
     invoke<Galacta>('setup_galacta_status', { online: true }).then(g => {
