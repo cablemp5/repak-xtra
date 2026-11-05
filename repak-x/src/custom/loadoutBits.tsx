@@ -389,7 +389,7 @@ export function ModRow({ p, k: key, mod, onToggle, onRename, unsure, children }:
               </button>
             )}
           </span>}
-      {mod && <VerdictBadge path={mod.path} verdict={verdict} />}
+      {verdict && <VerdictBadge path={mod!.path} verdict={verdict} />}
       <span className={`mod-type-badge category-badge ${typeClass(category)}`}>{category ?? 'Unknown'}</span>
       {onToggle && (mod
         ? <Switch size="sm" color="primary" checked={Boolean(mod.enabled)} title={mod.enabled ? `Turn ${k} off` : `Turn ${k} on`}

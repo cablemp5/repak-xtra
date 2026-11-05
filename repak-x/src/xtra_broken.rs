@@ -968,16 +968,20 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                 judge_checked(p, facts, game_updated, &game, record.and_then(|c| c.unknown.as_deref()))
             })
             .collect::<Vec<Verdict>>();
-        // an update the Mod Updater made for this game is never flagged Needs update again (its Updated tag says what it
-        // is), unless the new USMAP can finish a partial one or its files are in an older layout, which can crash the game
+        // an update the Mod Updater made for this game is never flagged Needs update or Couldn't verify again (the Mod
+        // Updater's list says Updated), unless the new USMAP can finish a partial one or its files are in an older layout,
+        // which can crash the game
         verdicts.retain(|v| {
             let p = Path::new(&v.path);
             let utoc = p.with_extension("utoc");
+            let made = crate::xtra_stamp::of_in(&stamps, p);
+            // an inconclusive check of a mod this updater rebuilt is noise, whichever game it was made for
+            if v.kind == "unknown" && made.is_some() { return false; }
             v.kind != "vfx"
                 || can_finish(p)
                 || crate::xtra_niagara::known_old_layout(p, &niagara_layouts)
                 || checked_record(&checked, &utoc, game_updated).is_some_and(|c| c.outdated && c.old_layout)
-                || !crate::xtra_stamp::of_in(&stamps, p).is_some_and(|s| s.game_updated >= game_updated)
+                || !made.is_some_and(|s| s.game_updated >= game_updated)
         });
         // A mod that needs an update can be updated with the saved USMAP when no patch newer than it rewrote the files
         // the update decodes. Otherwise it waits for the USMAP of the installed build, and its reason says which

@@ -177,8 +177,10 @@ function Report({ r, onRetry, onUsmap, busy, candidate = false }: { r: VfxReport
 
 /** A VFX mod: its tick, name, the loadouts holding it and its On badge, and once it ran its step, progress or result. Why it
  *  needs an update is its tooltip. */
-function Row({ mod, rowKey, loadouts, run, needs, partial, waits, picked, open, busy, onPick, onToggle, onRetry, onUsmap }: {
-  mod: Mod; rowKey: string; loadouts: { id: string; name: string }[]; run?: Run; needs?: string; partial?: number; waits?: number; picked: boolean; open: boolean; busy: boolean; onPick: (v: boolean) => void; onToggle: () => void; onRetry: () => void; onUsmap: () => void
+function Row({ mod, rowKey, loadouts, run, needs, partial, waits, made, picked, open, busy, onPick, onToggle, onRetry, onUsmap }: {
+  mod: Mod; rowKey: string; loadouts: { id: string; name: string }[]; run?: Run; needs?: string; partial?: number; waits?: number
+  /** made by this updater for the installed game: whether it left files out (true), or not (false) */
+  made?: boolean; picked: boolean; open: boolean; busy: boolean; onPick: (v: boolean) => void; onToggle: () => void; onRetry: () => void; onUsmap: () => void
 }) {
   const status = run?.status
   const running = status === 'running'
@@ -196,6 +198,9 @@ function Row({ mod, rowKey, loadouts, run, needs, partial, waits, picked, open, 
       {/* a May crash mod Update turns off says so */}
       {waits ? <span className="vf-needs is-waiting" tabIndex={0} title={needs}>Waiting</span>
         : needs && mod.risky && !run && <span className="vf-needs" tabIndex={0} title={`${needs} Update turns it off: nothing here can rebuild it.`}>May crash, turns off</span>}
+      {made !== undefined && !run && !needs && <span className={`vf-made${made ? ' is-partial' : ''}`} tabIndex={0} title={made
+        ? "Updated here for this game version, without the Niagara files only the game's new USMAP can rebuild. They show the game's usual colors until then."
+        : 'Updated here for this game version.'}>{made ? 'Partly updated' : 'Updated'}</span>}
       {mod.niagara && !partial && <span className="vf-niagara" tabIndex={0} title="Has Niagara effects (particle systems). When a game update changes them, the update rebuilds them on the new game files.">Niagara</span>}
       {partial && !run?.report ? (
         <span className="vf-partial" tabIndex={0} title={`${plural(partial, 'Niagara file')} ${partial === 1 ? 'was' : 'were'} made for an older game build. ${partial === 1 ? 'It' : 'They'} will be left out, so ${partial === 1 ? 'that effect shows' : 'those effects show'} the game's usual colors. The rest still updates, and the original is kept, off.`}>Partial</span>
@@ -330,6 +335,7 @@ function ReviewCard({ name, report, more, onAnswer }: { name: string; report: Vf
 export function VfxUpdaterPanel() {
   const [mods, setMods] = useState<Mod[] | null>(null)
   const [needs, setNeeds] = useState<Map<string, string>>(new Map()) // a mod's main file (norm) -> why it needs an update
+  const [made, setMade] = useState<Map<string, boolean>>(new Map()) // a mod's main file (norm) this updater made for this game -> partial
   const [repairPolicy, setRepairPolicy] = useState(readRepairPolicy)
   // Best effort candidates waiting for Use candidate or Keep original, oldest first: the batch goes on meanwhile
   const [reviews, setReviews] = useState<{ key: string; name: string; report: VfxReport; resolve: (accepted: boolean) => void }[]>([])
@@ -453,6 +459,7 @@ export function VfxUpdaterPanel() {
         const all = await invoke<PakFile[]>('get_pak_files').catch(() => [] as PakFile[])
         let verdicts: Verdict[] = [], failed = false
         try { verdicts = await invoke<Verdict[]>('xtra_broken_mods', { modPaths: [...new Set([...listed, ...all].map(m => m.path))] }) } catch (e) { failed = true; addLog(`Could not check which mods need an update: ${e}`, 'warning') }
+        const ours = await invoke<{ path: string; partial: boolean; current: boolean }[]>('xtra_made_mods', { modPaths: listed.map(m => m.path) }).catch(() => [])
         if (!live) return
         const inList = new Set(listed.map(m => norm(m.path)))
         const files = new Map(all.map(m => [norm(m.path), m]))
@@ -474,6 +481,7 @@ export function VfxUpdaterPanel() {
         setScanProblems(problems)
         setUncertain(new Map(verdicts.filter(v => v.kind === 'unknown').map(v => [norm(v.path), v.reason])))
         setNeeds(n)
+        setMade(new Map(ours.filter(x => x.current).map(x => [norm(x.path), x.partial])))
         const present = new Set(list.map(m => norm(m.utoc)))
         setPicked(p => { const kept = [...p].filter(k => present.has(k)); return kept.length === p.size ? p : new Set(kept) }) // an update elsewhere can rename or remove one
         setCheckError(failed)
@@ -928,7 +936,7 @@ export function VfxUpdaterPanel() {
                   {g.mods.map(m => {
                     const key = norm(m.utoc)
                     return (
-                      <Row key={key} rowKey={key} mod={m} loadouts={inLoadouts(m)} run={runs[key]} needs={needsOf(m) ?? uncertain.get(norm(m.path))} partial={behind ? stale.get(key) : undefined} waits={waits.get(key)} picked={picked.has(key)} open={open.has(key)} busy={busy}
+                      <Row key={key} rowKey={key} mod={m} loadouts={inLoadouts(m)} run={runs[key]} needs={needsOf(m) ?? uncertain.get(norm(m.path))} partial={behind ? stale.get(key) : undefined} waits={waits.get(key)} made={made.get(norm(m.path))} picked={picked.has(key)} open={open.has(key)} busy={busy}
                         onPick={v => userPick([key], v)} onUsmap={openUsmap}
                         onToggle={() => setOpen(o => { const n = new Set(o); n.has(key) ? n.delete(key) : n.add(key); return n })}
                         onRetry={() => void run([key])} />

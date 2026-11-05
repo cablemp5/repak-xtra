@@ -1651,6 +1651,9 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
   border-color: transparent !important; background: transparent !important; padding-left: 4px !important; color: var(--text-primary) !important; }
 .run-stop-btn { display: inline-flex !important; align-items: center; gap: 8px; }
 .stop-glyph { width: 8px; height: 8px; border-radius: 2px; background: currentColor; flex: none; }
+/* Pause and Resume beside Stop (ScanStatus.tsx): the same 8px solid glyphs, so the three read as one set */
+.pause-glyph { width: 8px; height: 8px; flex: none; border-radius: 1px; background: linear-gradient(90deg, currentColor 0 3px, transparent 3px 5px, currentColor 5px 8px); }
+.play-glyph { width: 8px; height: 8px; flex: none; background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%); }
 /* A Generate button on a PC without the preview kit: grayed out, with a small blue "Set up" that says where to go */
 .is-unavailable { color: var(--text-secondary) !important; opacity: 0.85; }
 .is-unavailable svg.lucide { opacity: 0.6; }
@@ -2701,11 +2704,6 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 [data-theme="light"] .mod-type-badge.broken-badge, [data-theme="light"] .mod-state-filter button.is-broken, [data-theme="light"] .mod-state-filter button.is-broken .mod-state-count { color: #7f6900 !important; }
 .mod-type-badge.broken-badge.is-broken { background: color-mix(in srgb, #f5d342, transparent 88%) !important; }
 .mod-type-badge.broken-badge.is-risky, .mod-type-badge.broken-badge.is-vfx { background: transparent !important; }
-/* made by the Mod Updater for this game (custom/VerdictBadge.tsx): a quiet green outline, Partly updated amber */
-.mod-type-badge.made-badge { color: #3ecf6e !important; border: 1px solid color-mix(in srgb, #3ecf6e, transparent 60%) !important; background: transparent !important; cursor: help; font-size: 11px !important; font-weight: 600 !important; }
-.mod-type-badge.made-badge.is-partial { color: #f5d342 !important; border-color: color-mix(in srgb, #f5d342, transparent 55%) !important; }
-[data-theme="light"] .mod-type-badge.made-badge { color: #1d7a3f !important; }
-[data-theme="light"] .mod-type-badge.made-badge.is-partial { color: #7f6900 !important; }
 /* Needs VFX update that waits for the game's new USMAP: grey, nothing to do yet (custom/VerdictBadge.tsx) */
 .mod-type-badge.broken-badge.is-waiting, [data-theme="light"] .mod-type-badge.broken-badge.is-waiting { color: var(--text-secondary) !important; border-color: color-mix(in srgb, var(--text-secondary), transparent 60%) !important; }
 /* the header's VFX Updater button: a yellow dot (the Needs VFX update tag's) while VFX mods need an update (custom/vfx/VfxNotice.tsx) */

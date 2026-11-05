@@ -5,7 +5,7 @@
 // Laws of UX: the work in progress stays in view (Doherty Threshold), and the count shows how far along it is
 // (Goal-Gradient Effect). A paused run stays listed until it is done (Zeigarnik Effect).
 import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, LoaderCircle, Pause, Play } from 'lucide-react'
+import { AlertTriangle, LoaderCircle } from 'lucide-react'
 import { rescanVerdicts } from './brokenMods'
 import { holdScan, progressLine, useScanRun } from './scanProgress'
 import { APP_NAME } from './edition'
@@ -37,7 +37,7 @@ export default function ScanStatus() {
         {/* running: the spinner and its words under one shimmer sweep (theme.css t-shimmer-all) */}
         {r.running
           ? <span className="scan-status-in t-shimmer-all"><LoaderCircle size={14} className="scan-status-spin" aria-hidden="true" />{stopping ? 'Stopping checks' : 'Checking mods'}</span>
-          : <span className="scan-status-in"><Pause size={14} aria-hidden="true" />Checks paused</span>}
+          : <span className="scan-status-in"><span className="pause-glyph" aria-hidden="true" />Checks paused</span>}
       </button>
       {open && (
         <div className="sigeon-menu lo-gen-menu scan-menu" role="menu">
@@ -49,7 +49,7 @@ export default function ScanStatus() {
             ? <>
                 <button type="button" role="menuitem" className="sigeon-item" disabled={stopping} onClick={() => { setOpen(false); void holdScan('paused') }}
                   title="Stop after the mod being read. Resume picks up where it stopped">
-                  <span className="lo-gen-stop"><Pause size={14} aria-hidden="true" />Pause</span></button>
+                  <span className="lo-gen-stop"><span className="pause-glyph" aria-hidden="true" />Pause</span></button>
                 <button type="button" role="menuitem" className="sigeon-item run-stop-btn" disabled={stopping && r.held === 'cancelled'} onClick={() => { setOpen(false); void holdScan('cancelled') }}
                   title="Stop after the mod being read, and hide this until the checks run again">
                   <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />Cancel</span></button>
@@ -57,7 +57,7 @@ export default function ScanStatus() {
             : <>
                 <button type="button" role="menuitem" className="sigeon-item" onClick={() => { setOpen(false); void rescanVerdicts() }}
                   title="Check the mods left to read now">
-                  <span className="lo-gen-stop"><Play size={14} aria-hidden="true" />Resume</span></button>
+                  <span className="lo-gen-stop"><span className="play-glyph" aria-hidden="true" />Resume</span></button>
                 <button type="button" role="menuitem" className="sigeon-item run-stop-btn" onClick={() => { setOpen(false); void holdScan('cancelled') }}
                   title="Leave the rest unchecked and hide this until the checks run again">
                   <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />Cancel</span></button>
