@@ -23,6 +23,11 @@ its parallel loop.
 
 Patches stack: each applies on top of the ones before it, in name order.
 
+`0012-read-stripped-pak-directories.patch` recovers a mod's missing filename directory by matching its V11 path hashes
+against the installed game's PAK filenames. It resolves mount points before hashing and refuses unresolved names instead
+of reporting an empty mod. Normal directory indexes and empty companion PAKs keep their existing behavior.
+Run `python scripts/check-stripped-pak.py --tool <built UAssetTool.exe>` for synthetic listing and extraction checks.
+
 `0010-encrypt-existing-iostore.patch` adds `encrypt_iostore` and `encrypt_pak` JSON actions. They write to separate staging
 paths, preserve container identity and chunk payloads, and reopen the encrypted output to verify every payload. Empty
 companion PAKs are valid. Signed, multipart and memory-mapped containers are refused. The app supplies the selected

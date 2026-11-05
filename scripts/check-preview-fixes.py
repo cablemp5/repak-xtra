@@ -94,4 +94,34 @@ if np is not None:   # the renderer has numpy in Blender, this machine's python 
     rim.RIM_OWN[:] = [(1.0, 0.4, 0.1)]; assert screen.rim_tint([(0.45, 0.8, 1.0)]) == (1.0, 0.4, 0.1); rim.RIM_OWN.clear()   # a fire body's own color wins
 for path in (root / "repak-x/src/preview_fixes").glob("*.py"):
     ast.parse(path.read_text(encoding="utf-8"))
+
+# Ordinary PAKs keep their original read path. A stripped one is staged only after its names are checked.
+import tempfile
+sound = load("sound_pak")
+sound.os = SimpleNamespace(environ={"REPAKXTRA_UAT": "asset-tool"})
+sound.REPAK = "repak"
+with tempfile.TemporaryDirectory() as temp:
+    work = Path(temp)
+    calls = []
+    def run(command, timeout):
+        calls.append(command)
+        return SimpleNamespace(stdout="Marvel/Content/WwiseAudio/test.bnk\n")
+    sound.run = run
+    assert sound.sound_pak(work, {"aes": "test-key"}, "original.pak") == "original.pak"
+    assert len(calls) == 1 and not list(work.iterdir())
+    def stripped(command, timeout):
+        calls.append(command)
+        return SimpleNamespace(stdout="Marvel/Content/WwiseAudio/test.bnk\n" if command[1] == "list_pak" else "")
+    sound.run = stripped
+    calls.clear()
+    assert sound.sound_pak(work, {"aes": "test-key"}, "original.pak") == work / "sound.pak"
+    assert [c[1] for c in calls] == ["list", "list_pak", "extract_pak", "pack"]
+    for unsafe in ("../outside.bnk", "C:/outside.bnk", "a/../../outside.bnk", "a\\..\\outside.bnk"):
+        sound.run = lambda command, timeout: SimpleNamespace(stdout=unsafe if command[1] == "list_pak" else "")
+        try:
+            sound.sound_pak(work, {"aes": "test-key"}, "original.pak")
+            raise AssertionError("unsafe path was accepted")
+        except RuntimeError as error:
+            assert "unsafe" in str(error)
+print("PASS: sound preview fallback preserves ordinary PAKs and refuses paths outside its staging folder")
 print("PASS: borrowed idle mane tracks removed; body pose, own skin animations and other heroes preserved")
