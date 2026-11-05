@@ -18,7 +18,7 @@ const SECTIONS: &[(&str, &[&str])] = &[
     ("plugins", &["removed-plugins"]),
     ("caches", &[
         "repakxtra-game-assets.bin", "repakxtra-game-assets.prev.bin", "repakxtra-details-cache.json", "repakxtra-mod-classes.json",
-        "builtin-cache", "repak_vfx.log", "repak_vfx.log.old", "install_debug.log", "extract_pak_debug.log",
+        "builtin-cache", // the logs here are Repak X's too (same names, same folder): never listed
     ]),
 ];
 
@@ -59,7 +59,8 @@ pub async fn xtra_storage_sections() -> Result<Vec<Section>, String> {
 
 #[tauri::command]
 pub async fn xtra_storage_clear(ids: Vec<String>) -> Result<u64, String> {
-    let _mutation = crate::xtra_mutation::edit()?; // not while a mod change or encryption writes these
+    // alone: no mod change, encryption, or snapshot may use the trash or a snapshot while it goes
+    let _alone = crate::xtra_mutation::encrypt().map_err(|_| "A mod change is still running. Try again when it is done.".to_string())?;
     tauri::async_runtime::spawn_blocking(move || clear_at(&crate::app_dir(), &ids)).await.map_err(|e| e.to_string())?
 }
 

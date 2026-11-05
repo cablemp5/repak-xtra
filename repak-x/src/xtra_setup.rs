@@ -33,9 +33,10 @@ fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-/// ...\Content\Paks\~mods -> ...\Marvel\Binaries\Win64
+/// ...\Content\Paks\~mods (or a folder below it) -> ...\Marvel\Binaries\Win64
 pub(crate) fn win64_dir(mods_dir: &Path) -> Option<PathBuf> {
-    Some(mods_dir.parent()?.parent()?.parent()?.join("Binaries").join("Win64"))
+    let paks = crate::xtra_broken::paks_dir(mods_dir).unwrap_or_else(|| mods_dir.parent().map_or_else(PathBuf::new, Path::to_path_buf));
+    Some(paks.parent()?.parent()?.join("Binaries").join("Win64"))
 }
 
 /// The mods folder for a folder picked by hand: the game's install folder (or any level down to Paks) becomes its

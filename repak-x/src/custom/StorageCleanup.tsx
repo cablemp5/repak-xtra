@@ -12,7 +12,7 @@ type Section = { id: string; bytes: number }
 
 /** Each section's name, and what is lost for good. `safe`: rebuilt on its own, no warning color. */
 const INFO: Record<string, { name: string; warn: string; safe?: boolean }> = {
-  caches: { name: 'Caches and logs', warn: 'Rebuilt on their own. The next mod check reads the game files again and takes longer.', safe: true },
+  caches: { name: 'Caches', warn: 'Rebuilt on their own. The next mod check reads the game files again and takes longer.', safe: true },
   previews: { name: 'Mod previews', warn: 'Every preview you made is gone. Making them again needs the preview kit and takes a while.' },
   kit: { name: 'Preview kit', warn: 'Previews cannot be made until you install the kit again in Setup.' },
   trash: { name: 'Recently deleted', warn: 'Deleted mods can no longer be restored.' },

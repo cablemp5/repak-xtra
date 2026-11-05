@@ -86,6 +86,8 @@ fn enabled_others(mods_dir: &Path, path: &Path) -> Vec<(PathBuf, HashSet<String>
     WalkDir::new(mods_dir).into_iter().filter_entry(crate::xtra_bundle::library_walk).filter_map(Result::ok)
         .map(|e| e.into_path())
         .filter(|p| p.extension().is_some_and(|e| e == "pak") && *p != me && !crate::xtra_builtins::is_own(p) && !crate::xtra_setup::is_managed_loader(p))
+        // a .utoc without its .ucas (or the reverse) is skipped by the game, so it wins over nothing
+        .filter(|p| p.with_extension("utoc").is_file() == p.with_extension("ucas").is_file())
         .filter_map(|p| Some((p.clone(), keys(&files_of(&p)?))))
         .collect()
 }
