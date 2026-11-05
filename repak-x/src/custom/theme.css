@@ -3161,3 +3161,13 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .why-item div { display: flex; flex-direction: column; gap: 2px; }
 .why-item b { font-size: 13px; color: var(--text-primary); }
 .why-item span { font-size: 13px; color: var(--text-secondary); }
+
+/* repakxtra: Settings > Storage (custom/StorageCleanup.tsx). Yellow warnings, no red (only where cable asked) */
+.xs-storage-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.xs-storage-name { color: var(--text-primary); font-size: 13px; }
+.xs-storage-size { color: var(--text-secondary); margin-left: 6px; font-variant-numeric: tabular-nums; }
+.xs-storage-list .setting-subtext { display: block; }
+.xs-storage-warn { color: #f5d342 !important; }
+[data-theme="light"] .xs-storage-warn { color: #7f6900 !important; }
+.xs-storage-confirm { margin-top: 12px; align-items: flex-start; }
+.xs-storage-confirm ul { margin: 6px 0 10px; padding-left: 18px; }
