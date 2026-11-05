@@ -305,7 +305,9 @@ async fn finish(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, work
         (n.starts_with("ns_") || n.starts_with("ne_")) && n.ends_with(".uasset")
     });
     // current only when the layout was read too: a "nothing" also stops the date's layout flag (xtra_broken.rs)
-    if out.verdict == "outdated" || (out.verdict == "current" && !niagara) {
+    // custom too: its layout read whole and nothing was built for an older game, so the date rule must not flag its
+    // materials again (a clearance covers materials only, never meshes or animations: xtra_broken Facts.cleared)
+    if out.verdict == "outdated" || (matches!(out.verdict, "current" | "custom") && !niagara) {
         crate::xtra_broken::record_check(mods_dir, &utoc, out.verdict == "outdated", !out.old_layout.is_empty())?;
     }
     if out.verdict == "unknown" {
@@ -315,7 +317,7 @@ async fn finish(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, work
             "The game's older files could not be read to compare its materials with. Compatibility could not be verified. This is a precaution, not a confirmed fault or a required repair."
         };
         crate::xtra_broken::record_uncertain(mods_dir, &utoc, reason.into());
-    } else if out.verdict != "outdated" && !(out.verdict == "current" && !niagara) {
+    } else if out.verdict != "outdated" && !(matches!(out.verdict, "current" | "custom") && !niagara) {
         // custom, none, or current with Niagara files (which this check never clears): an earlier "not known" goes, so
         // the date check and the Niagara checks judge it again, as for a mod never checked
         crate::xtra_broken::forget_uncertain(&utoc);
