@@ -4,6 +4,7 @@
 // to the next one still listed, else the empty state's button or the search. relink keeps checked and viewed mods
 // pointing at their files after an on/off switch or a change made from Home.
 import { useLayoutEffect, useRef } from 'react'
+import { quietFocus } from './keyboardClickables'
 
 /** A mod's identity across an on/off switch: the file is renamed, its stem stays (ModsList keys its cards the same way). */
 export const rowKey = (path: string) => path.replace(/\.(pak|bak_repak|pak_disabled)$/i, '')
@@ -30,6 +31,7 @@ export function relink(paths: Iterable<string>, current: string[]): string[] | n
 
 let focused: string | null = null // the row focus is in, or was in when it fell to the page (cleared once anything else takes it)
 let wanted: string | null = null // a row to focus as soon as it is in the page (a long list mounts it once scrolled to)
+let quiet = false // the wanted row is focus coming back after a list change (no ring), not an arrow key's
 if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
   document.addEventListener('focusin', e => {
     const card = e.target instanceof Element ? e.target.closest('.center-panel .mod-card') : null
@@ -43,6 +45,7 @@ const shown = (el: Element | null | undefined): el is HTMLElement => el instance
 /** Moves focus to this mod's row (its name button): now when it is in the page, else once it is rendered. */
 export function focusRow(path: string) {
   wanted = rowKey(path)
+  quiet = false
   focusPending()
 }
 
@@ -51,7 +54,7 @@ export function focusPending() {
   if (!wanted) return
   const card = [...document.querySelectorAll('.center-panel .mod-card')].find(c => rowKey(c.getAttribute('data-mod-path') ?? '') === wanted)
   const button = card?.querySelector('.mod-name-button')
-  if (shown(button)) { wanted = null; button.focus({ preventScroll: true }) }
+  if (shown(button)) { wanted = null; if (quiet) quietFocus(button); else button.focus({ preventScroll: true }) }
 }
 
 /** Runs after every Library render. `view` makes the row that takes focus the viewed one when the viewed mod left. */
@@ -77,17 +80,19 @@ export function useLibraryFocus<M extends { path: string }>(mods: M[], viewMode:
     if (was.mode === viewMode && was.keys.length === keys.length && was.keys.every((k, i) => k === keys[i])) return
     const to = survivor(was.keys, keys, focused)
     if (!to) {
-      [...document.querySelectorAll('.center-panel .empty-state button, .main-search-input')].find(shown)?.focus()
+      const next = [...document.querySelectorAll('.center-panel .empty-state button, .main-search-input')].find(shown)
+      if (next) quietFocus(next)
       return
     }
     if (to !== focused && (!viewed || rowKey(viewed) === focused)) view(mods[keys.indexOf(to)])
     const button = nameButton(to)
     // after a view switch a long list's first render still holds the last view's slice: its rows move away next render
     const stale = was.mode !== viewMode && grid.querySelector(':scope > .mod-list-spacer')
+    // quiet: focus coming back after a delete, filter or sort shows no ring until an arrow key or Tab
     if (shown(button) && !stale) {
-      button.focus({ preventScroll: true })
+      quietFocus(button)
       button.scrollIntoView({ block: 'nearest' })
-    } else wanted = to // not mounted (a long list, or a view switch started it at the top): focused once it is
+    } else { wanted = to; quiet = true } // not mounted (a long list, or a view switch started it at the top): focused once it is
   })
 }
 

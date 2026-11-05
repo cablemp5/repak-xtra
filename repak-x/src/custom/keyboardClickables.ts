@@ -13,6 +13,13 @@ document.addEventListener('pointerdown', e => {
   control.setAttribute('data-pointer-focus', '')
 }, true)
 document.addEventListener('focusout', e => { if (e.target === pointerFocus) clearPointerFocus() }, true)
+/** Focus the app moves on its own (a deleted row's place goes to the next): no ring until a navigation key, as after a click. */
+export function quietFocus(el: HTMLElement) {
+  el.focus({ preventScroll: true })
+  clearPointerFocus()
+  pointerFocus = el
+  el.setAttribute('data-pointer-focus', '')
+}
 document.addEventListener('keydown', e => {
   if (['Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter', ' ', 'Escape'].includes(e.key)) clearPointerFocus()
 }, true)
