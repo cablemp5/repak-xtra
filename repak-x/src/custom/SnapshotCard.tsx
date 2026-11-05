@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { useAlert } from '../components/AlertHandler'
-import { savedItem } from './storageCarryOver'
 
 type Alert = ReturnType<typeof useAlert>
 export type Snapshot = { id: string; created: number; files: number; bytes: number }
@@ -76,7 +75,6 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
   )
 }
 
-const SEEN = 'repakxtra.snapshot.lossSeen'
 /** At start: when much of the newest snapshot is gone (a verify, reinstall, or update), offer to open Setup and restore. */
 let lossChecked = false // once per app start, even when React mounts Setup's button twice
 export function checkSnapshotLoss(alert: Alert, openSetup: () => void) {
@@ -85,12 +83,10 @@ export function checkSnapshotLoss(alert: Alert, openSetup: () => void) {
   invoke<[Snapshot, number, number] | null>('snapshot_missing').then(r => {
     if (!r) return
     const [s, mods, setup] = r
-    const key = `${s.id}:${mods}:${setup}`
     // shortcut: half the snapshot gone stands in for "not a few deliberate deletes", tune it if people report noise
-    if ((mods * 2 < s.files && setup === 0) || savedItem(SEEN) === key) return
-    try { localStorage.setItem(SEEN, key) } catch { /* private window: it may ask again */ }
+    if (mods * 2 < s.files && setup === 0) return
     const what = [mods && plural(mods, 'mod file'), setup && plural(setup, 'bypass file')].filter(Boolean).join(' and ')
-    const id = alert.warning('Files missing since your snapshot', `${what} from your snapshot of ${when(s.created)} are gone. A game update or a Steam verify can do this.`, {
+    const id = alert.warning('Files missing since your snapshot', `${what} from your snapshot of ${when(s.created)} are gone. A game update or a Steam verify can do this. If you removed them yourself, make a new snapshot to stop this notice.`, {
       duration: 15000,
       action: { label: 'Restore…', onClick: () => { alert.dismissAlert(id); openSetup() } },
     })

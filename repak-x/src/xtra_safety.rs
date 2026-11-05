@@ -6,8 +6,9 @@
 //!   other ones "unknown", the bypass Setup installs "bundled" (it patches memory too, but the notice does not name it).
 //! - mods: asset paths that match what the notice describes. "ban" for paths that only exist to change those things,
 //!   "check" for ones a plain recolor also touches. Nothing is turned off: the badge says why and the player decides.
-//! shortcut: names stand in for content, so a mod that removes recoil through a renamed Blueprint or enlarges models
-//! through a mesh swap is missed. Read Blueprint properties if the notice ever names more.
+//! shortcut: names stand in for content, so a mod that removes recoil through a renamed Blueprint, removes hit or tracer
+//! effects (a name looks the same as a recolor's), or enlarges models through a mesh swap is missed. Compare a mod's
+//! VFX and mesh sizes with the game's if those ever need flagging.
 
 use serde::Serialize;
 use std::fs;
@@ -65,20 +66,16 @@ fn judge(files: &[String]) -> Option<(&'static str, String)> {
     let find = |test: &dyn Fn(&str) -> bool| keys.iter().find(|k| test(k)).map(|k| name(k));
     let has = |k: &str, words: &[&str]| words.iter().any(|w| name(k).contains(w));
     let audio = |k: &str| k.contains("wwiseaudio/");
-    let rules: [(&str, &str, &dyn Fn(&str) -> bool); 6] = [
+    let rules: [(&str, &str, &dyn Fn(&str) -> bool); 4] = [
         ("ban", "Changes camera shake or weapon recoil", &|k| ["camerashake", "camera_shake", "recoil"].iter().any(|w| k.contains(w))),
         ("ban", "Changes footstep or movement sounds, which can make enemies easier to hear", &|k| audio(k) && has(k, &["footstep", "foot_step", "foley"])),
         ("ban", "Changes maps or their models and textures, which can change what players see", &|k| {
             k.starts_with("marvel/environment/") || k.starts_with("marvel/maps/") || k.starts_with("marvel/levels/") || k.ends_with(".umap")
         }),
-        ("check", "Changes hit, tracer, or impact effects. A recolor is common, removing or hiding them is against the rules", &|k| {
-            k.starts_with("marvel/vfx/") && has(k, &["hit", "impact", "tracer", "trail", "bullet", "muzzle", "projectile"])
-        }),
         // a hero's own banks carry a 7-digit skin id (bnk_sfx_1026001): the rest are shared, where footsteps and cues live
         ("check", "Changes shared game sounds. Footsteps and other cues players listen for can be in them", &|k| {
             audio(k) && k.ends_with(".bnk") && !name(k).split(|c: char| !c.is_ascii_digit()).any(|d| d.len() == 7)
         }),
-        ("check", "Changes game data tables, which can hold sizes, stats, or rules", &|k| k.starts_with("marvel/data/")),
     ];
     rules.iter().find_map(|(level, why, test)| find(*test).map(|file| (*level, format!("{why} ({file})."))))
 }
@@ -148,8 +145,9 @@ mod tests {
         assert_eq!(j(&["Marvel/Content/Marvel/Environment/Tokyo/T_Wall.uasset"]), Some("ban"));
         assert_eq!(j(&["Marvel/Content/WwiseAudio/bnk_footstep_common.bnk"]), Some("ban"));
         assert_eq!(j(&["Marvel/Content/WwiseAudio/bnk_sfx_common.bnk"]), Some("check"));
-        assert_eq!(j(&["/Game/Marvel/VFX/Particles/Hero/1026/NS_1026_Hit.uasset"]), Some("check"));
-        assert_eq!(j(&["/Game/Marvel/VFX/Particles/Hero/1026/NS_1026_Hit.uasset", "/Game/Marvel/Camera/Recoil_Rifle.uasset"]), Some("ban"), "the strongest wins");
+        assert_eq!(j(&["/Game/Marvel/VFX/Particles/Hero/1026/NS_1026_Hit.uasset", "/Game/Marvel/VFX/Trail/NS_Bullet_Trail.uasset"]), None, "a VFX recolor is fine");
+        assert_eq!(j(&["/Game/Marvel/Data/Skin/DT_SkinTable.uasset"]), None, "cosmetic data is fine");
+        assert_eq!(j(&["Marvel/Content/WwiseAudio/bnk_sfx_common.bnk", "/Game/Marvel/Camera/Recoil_Rifle.uasset"]), Some("ban"), "the strongest wins");
     }
 
     #[test]

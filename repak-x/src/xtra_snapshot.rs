@@ -74,6 +74,10 @@ fn copy_all(list: &[(PathBuf, u64)], from: &Path, to: &Path) -> std::io::Result<
 }
 
 fn create_at(root: &Path, id: &str, mods: &Path, win64: &Path) -> Result<Snapshot, String> {
+    // a folder that cannot be read would leave a partial copy that looks whole: refuse instead
+    if let Some(e) = WalkDir::new(mods).into_iter().find_map(Result::err) {
+        return Err(format!("Could not read the mods folder, so no snapshot was made: {e}"));
+    }
     let (m, s) = (files(mods), setup_files(win64));
     if m.is_empty() && s.is_empty() {
         return Err("The mods folder is empty: there is nothing to snapshot.".into());
