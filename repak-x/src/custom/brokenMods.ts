@@ -28,7 +28,7 @@ const norm = (path: string) => path.replace(/\//g, '\\').toLowerCase().replace(/
 
 let verdicts = new Map<string, Verdict>()
 /** Mods the Mod Updater made for the installed game (xtra_stamp.rs): their Updated or Partly updated tag. */
-let made = new Map<string, { partial: boolean }>()
+let made = new Map<string, { partial: boolean; current: boolean }>()
 let version = 0
 const listeners = new Set<() => void>()
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
@@ -70,7 +70,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     const paths = mods.map(m => m.path).sort((a, b) => Number(/\.bak_repak$/i.test(a)) - Number(/\.bak_repak$/i.test(b)))
     const check = () => {
       const turn = ++checkSeq
-      return Promise.all([invoke<Verdict[]>('xtra_broken_mods', { modPaths: paths }), invoke<{ path: string; partial: boolean }[]>('xtra_made_mods', { modPaths: paths }).catch(() => [])])
+      return Promise.all([invoke<Verdict[]>('xtra_broken_mods', { modPaths: paths }), invoke<{ path: string; partial: boolean; current: boolean }[]>('xtra_made_mods', { modPaths: paths }).catch(() => [])])
         .then(([r, m]) => { if (live && turn === checkSeq) { verdicts = new Map(r.map(v => [norm(v.path), v])); made = new Map(m.map(x => [norm(x.path), x])); version++; listeners.forEach(l => l()) } return true })
         // the badges so far stay (the game runs and its file list is not read yet, or the call failed)
         .catch(e => { console.warn('[brokenMods] check failed', e); return false })
@@ -128,7 +128,7 @@ export const useVerdict = (path: string) => useSyncExternalStore(subscribe, () =
 /** Re-renders when the verdicts change. */
 export const useBrokenVersion = () => useSyncExternalStore(subscribe, () => version)
 export const verdictOf = (path: string) => verdicts.get(norm(path))
-/** Made by the Mod Updater for the installed game, and whether it left files out. */
+/** Made by the Mod Updater, whether it left files out, and whether for the installed game. */
 export const useMade = (path: string) => useSyncExternalStore(subscribe, () => made.get(norm(path)))
 
 if (import.meta.env.DEV) {

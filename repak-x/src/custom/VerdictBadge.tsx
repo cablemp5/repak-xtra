@@ -7,7 +7,7 @@ import { fixInVfxWindow } from './vfx/handoff'
 
 export function VerdictBadge({ path, verdict }: { path: string; verdict?: Verdict }) {
   const made = useMade(path)
-  if (!verdict) return made
+  if (!verdict) return made?.current
     ? <span className={`mod-type-badge made-badge${made.partial ? ' is-partial' : ''}`} title={made.partial
       ? 'Updated by the Mod Updater for this game, without the Niagara files only the game\'s new USMAP can rebuild. They show the game\'s usual colors until then.'
       : 'Updated by the Mod Updater for this game version.'}>{made.partial ? 'Partly updated' : 'Updated'}</span>

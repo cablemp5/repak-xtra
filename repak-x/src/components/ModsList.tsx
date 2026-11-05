@@ -432,7 +432,7 @@ const ModItem = memo(function ModItem({
             </div>
 
             {/* Hero icon + Mod Type Badge + Tags row */}
-            {((heroImage && showHeroIcons && isCardView) || (showModType && category) || tags.length > 0 || conflicting || showSize || builtin || verdict || made || modDetails?.is_encrypted /* repakxtra */) ? (
+            {((heroImage && showHeroIcons && isCardView) || (showModType && category) || tags.length > 0 || conflicting || showSize || builtin || verdict || made?.current || modDetails?.is_encrypted /* repakxtra */) ? (
                 <div className="mod-tags-row">
                     {heroImage && showHeroIcons && isCardView && (
                         isMultiHero && heroesList.length > 0 ? (
@@ -504,7 +504,7 @@ const ModItem = memo(function ModItem({
                     {!isCardView && sizeTag}
                     {/* repakxtra: on, and clashing with another enabled mod (same priority, same files), right of the file size */}
                     {conflicting && <span className="mod-type-badge conflict-badge" title="Conflicts with another enabled mod: Check Conflicts shows which">Conflict</span>}
-                    {(verdict || made) && <VerdictBadge path={mod.path} verdict={verdict} />}
+                    {(verdict || made?.current) && <VerdictBadge path={mod.path} verdict={verdict} />}
                     {builtin && (
                         <button type="button" className="mod-type-badge builtin-badge" title="Made by repakxtra from your game files. Open it on Home to change it"
                             onClick={(e) => { e.stopPropagation(); revealBuiltin(mod.builtin) }}>Built-in</button>
