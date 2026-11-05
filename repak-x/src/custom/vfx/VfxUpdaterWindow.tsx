@@ -28,6 +28,7 @@ import { HeroFilter, heroOfName } from '../heroFilter'
 import ScanButton from './ScanButton'
 import { useDialogFocus } from '../dialogFocus'
 import './vfx.css'
+import ModRowsSkeleton from '../ModRowsSkeleton'
 
 type Status = 'waiting' | 'running' | 'fixed' | 'nothing' | 'failed' | 'cancelled' | 'declined'
 type Run = { status: Status; step?: number; sub?: string; report?: VfxReport }
@@ -368,7 +369,6 @@ export function VfxUpdaterPanel() {
   const busyRef = useRef(false)
   const [uncertain, setUncertain] = useState(new Map<string, string>())
   const [checkError, setCheckError] = useState(false) // which mods need an update could not be checked
-  const [scan, setScan] = useState<{ done: number; total: number } | null>(null) // the first read, mod by mod
   const [, bump] = useState(0)
   const cancel = useRef(false)
   const seeded = useRef(false) // the mods that need an update are ticked once, when the list first arrives
@@ -460,13 +460,8 @@ export function VfxUpdaterPanel() {
         }
       })
       .catch(e => { if (live) { setLoadError(String(e)); setMods(m => m ?? []); addLog(`Could not read the mods folder: ${e}`, 'error') } })
-      .finally(() => { if (live) setScan(null) })
     return () => { live = false }
   }, [busy, reload, addLog])
-  useEffect(() => {
-    const un = listen<{ done: number; total: number }>('vfx_mods_progress', e => setScan(e.payload))
-    return () => { un.then(f => f()) }
-  }, [])
 
   // mods handed over by the main window: ticked (once the list is in), and updated at once from the Library's notice
   useEffect(() => {
@@ -886,7 +881,7 @@ export function VfxUpdaterPanel() {
           </p>
         )}
         {mods === null
-          ? <p className="lp-empty" aria-live="polite">Reading the mods folder{scan ? `: ${scan.done} of ${plural(scan.total, 'mod')}` : '…'}</p>
+          ? <ModRowsSkeleton />
           : shown.length === 0
             ? (loadError && !needle ? null : <p className="lp-empty">{needle || hero ? `No mods match${needle ? ` “${q.trim()}”` : ''}${hero ? ` for ${hero}` : ''}.` : 'No VFX mods in the mods folder. VFX mods and mods with material instances (MI_ files) appear here. Add .utoc takes any other mod.'}</p>)
             : <div className="vf-groups">{groups.map(g => g.mods.length > 0 && (

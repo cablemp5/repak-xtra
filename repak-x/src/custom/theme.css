@@ -138,7 +138,7 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 .header-actions-right .btn-settings svg { color: var(--text-secondary); }
 .header-actions-right .btn-settings .gal-logo { color: var(--text-secondary); }   /* Galacta's white mark, gray like the header's other icons */
 /* Tools and Settings are icon only (their tooltips name them): square, the icon centered */
-.header-actions-right :is([data-tour="tools-btn"], [data-tour="settings-btn"]) { width: 32px; padding: 0 !important; justify-content: center; }
+.header-actions-right :is([data-tour="tools-btn"], [data-tour="settings-btn"]) { width: 36px; padding: 0 !important; justify-content: center; }   /* 36: the buttons' min-height */
 .header-actions-right .btn-vfx::before, .header-actions-right .btn-vfx::after { display: none !important; }
 /* Launch is the one primary action: solid light button. Running/launched keep upstream colors. */
 .header-actions-right .btn-settings[data-launch="idle"] {
@@ -3027,3 +3027,12 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .settings-content [hidden] { display: none !important; }
 .settings-content .setting-section[data-first-shown] { border-top: none; padding-top: 0; margin-top: 0; }
 .settings-search-empty { margin: 0; color: var(--text-secondary); font-size: 0.9rem; }
+
+/* The mod checks' progress in the header (ScanStatus.tsx): a quiet pill that rises in (transitions.dev Stagger) while a
+   run reads mods, and keeps spinning while the window is in the background (idlePause.ts pauses decorative loops only) */
+.scan-status { height: 32px; padding: 0 10px; font-size: 12px; color: var(--text-secondary); white-space: nowrap; cursor: pointer;
+  animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; }
+.scan-status:hover { background: var(--quiet-hover); color: var(--text-primary); }
+.scan-status-in { display: inline-flex; align-items: center; gap: 6px; }
+.scan-status-spin { animation: scan-status-spin 1s linear infinite; }
+@keyframes scan-status-spin { to { transform: rotate(360deg); } }

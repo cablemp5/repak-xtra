@@ -37,13 +37,17 @@ pub(crate) fn load_done() -> HashMap<String, Done> {
 /// What the scan found for the mod at `utoc` as it is now, in this game: Some(reason) when a mesh has more bones than
 /// its skeleton, None when it fits or was not checked.
 pub(crate) fn found_now(all: &HashMap<String, Done>, utoc: &Path, game_updated: u64) -> Option<String> {
-    all.get(&crate::xtra_broken::checked_key(utoc))
-        .filter(|d| crate::xtra_broken::file_stamp(utoc) == Some((d.size, d.modified)) && game_updated <= d.game && d.parser == crate::xtra_vfx::parser_id())
-        .and_then(|d| d.reason.clone())
+    record(all, utoc).filter(|d| game_updated <= d.game).and_then(|d| d.reason.clone())
+}
+
+/// This decoder's record for the mod at `utoc` as the file it is now, whatever game it was for.
+fn record<'a>(all: &'a HashMap<String, Done>, utoc: &Path) -> Option<&'a Done> {
+    let parser = crate::xtra_vfx::parser_id();
+    crate::xtra_broken::record_of(all, utoc, parser).filter(|d| crate::xtra_broken::file_stamp(utoc) == Some((d.size, d.modified)) && d.parser == parser)
 }
 
 fn checked(all: &HashMap<String, Done>, utoc: &Path, game_updated: u64) -> bool {
-    all.get(&crate::xtra_broken::checked_key(utoc)).is_some_and(|d| crate::xtra_broken::file_stamp(utoc) == Some((d.size, d.modified)) && game_updated <= d.game && d.parser == crate::xtra_vfx::parser_id())
+    record(all, utoc).is_some_and(|d| game_updated <= d.game)
 }
 
 /// The bone count UAssetTool's skeletal_mesh_info prints for a mesh (`Bone Count: 302`).
@@ -57,29 +61,26 @@ fn skeleton_bones(j: &serde_json::Value) -> Option<usize> {
 }
 
 /// The meshes of the mod at `utoc` (`meshes`: package paths without extension) checked against the game's skeletons.
-async fn check_mod(paks: &Path, usmap: &str, utoc: &Path, meshes: &[String], work: &Path) -> Result<Option<String>, String> {
+async fn check_mod(paks: &Path, usmap: &str, utoc: &Path, meshes: &[String], work: &Path, vanilla: &Path) -> Result<Option<String>, String> {
     let cli = crate::xtra_uat_cli::cli().ok_or("UAssetTool's command line is not there")?;
-    let (mx, gx) = (work.join("mod"), work.join("game"));
+    let mx = work.join("mod");
     let _ = std::fs::remove_dir_all(work);
-    let extract = |out: &Path, with_mod: bool, rels: &[String]| crate::vfx_updater::uasset_tool::VfxUatRequest {
+    let req = crate::vfx_updater::uasset_tool::VfxUatRequest {
         action: "extract_iostore_legacy",
         game_paks: Some(paks.to_string_lossy().to_string()),
-        mod_path: with_mod.then(|| utoc.to_string_lossy().to_string()),
-        output_path: Some(out.to_string_lossy().to_string()),
-        filter_patterns: Some(rels.iter().map(|r| crate::xtra_niagara::tail_filter(r)).collect()),
+        mod_path: Some(utoc.to_string_lossy().to_string()),
+        output_path: Some(mx.to_string_lossy().to_string()),
+        filter_patterns: Some(meshes.iter().map(|r| crate::xtra_niagara::tail_filter(r)).collect()),
         with_deps: Some(false),
         ..Default::default()
     };
-    let skeletons: Vec<String> = meshes.iter().map(|m| format!("{m}_Skeleton")).collect();
-    for (out, with_mod, rels) in [(&mx, true, meshes), (&gx, false, &skeletons[..])] {
-        let r = crate::vfx_updater::uasset_tool::run_vfx_uat_request(Path::new(""), &extract(out, with_mod, rels)).await?;
-        if !r.success {
-            return Err(r.message);
-        }
+    let r = crate::vfx_updater::uasset_tool::run_vfx_uat_request(Path::new(""), &req).await?;
+    if !r.success {
+        return Err(r.message);
     }
-    let gj = work.join("game_json");
-    crate::xtra_niagara::stage(&gx, &work.join("game_in"), &skeletons, true)?;
-    crate::xtra_niagara::to_json(usmap, &work.join("game_in"), &gj, &crate::vfx_updater::progress::NoOpProgressSink).await?;
+    // the game's skeletons: decoded once per game build and USMAP, kept for every mod that uses them (xtra_niagara.rs)
+    let skeletons: Vec<String> = meshes.iter().map(|m| format!("{m}_Skeleton")).collect();
+    let (_, gj) = crate::xtra_niagara::game_copies(&paks.to_string_lossy(), usmap, &skeletons, work, vanilla, &crate::vfx_updater::progress::NoOpProgressSink).await?;
     let (mut over, mut compared) = (Vec::new(), 0);
     for (mesh, skel) in meshes.iter().zip(&skeletons) {
         let file = mx.join(format!("{mesh}.uasset"));
@@ -113,20 +114,24 @@ static SCAN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// update, and returns how many it checked. Steps aside like every background scan (xtra_vfx.rs background_may_run).
 #[tauri::command]
 pub async fn xtra_mesh_scan(app: tauri::AppHandle, mod_paths: Vec<String>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<usize, String> {
-    let Ok(_one) = SCAN.try_lock() else { return Ok(0) };
+    let Ok(_one) = SCAN.try_lock() else {
+        crate::xtra_vfx::note_stopped();
+        return Ok(0);
+    };
     let state = state.inner().clone();
     let mods_dir = state.lock().unwrap().game_path.clone();
     let Some(paks) = crate::xtra_broken::paks_dir(&mods_dir) else { return Ok(0) };
     let Some(usmap) = crate::vfx_updater::commands::saved_usmap_path().filter(|u| crate::xtra_niagara::usmap_matches(u, &paks)) else { return Ok(0) };
     let game = crate::xtra_broken::game_updated(&mods_dir);
     let work = std::env::temp_dir().join("repak-x").join("xmesh").join(std::process::id().to_string());
+    let vanilla = crate::xtra_vfx::vanilla_dir(&paks.to_string_lossy(), &usmap);
+    let parser = crate::xtra_vfx::parser_id();
     let mut all = load_done();
     let mut n = 0;
-    let total = mod_paths.len();
-    for (i, p) in mod_paths.into_iter().enumerate() {
-        if !crate::xtra_vfx::background_may_run() {
-            break;
-        }
+    // First the mods with work left (cheap: file dates, cached details, the game's asset list), so the progress counts
+    // those and not the list
+    let mut todo = Vec::new();
+    for p in mod_paths {
         let path = PathBuf::from(&p);
         if crate::xtra_builtins::in_folder(&path) {
             continue; // built-ins: xtra_builtins judges them by the game build they were made for, never these checks
@@ -136,23 +141,39 @@ pub async fn xtra_mesh_scan(app: tauri::AppHandle, mod_paths: Vec<String>, state
             continue;
         }
         let Some((size, modified)) = crate::xtra_broken::file_stamp(&utoc) else { continue };
-        crate::xtra_broken::scan_progress(&app, "meshes", i, total, &path);
+        let earlier = record(&all, &utoc).cloned();
         let (st, pc, pk) = (state.clone(), path.clone(), paks.clone());
-        let meshes = tauri::async_runtime::spawn_blocking(move || {
+        let (meshes, kept) = tauri::async_runtime::spawn_blocking(move || {
             let d = crate::compute_mod_details(&pc, &st).ok()?;
             let made = crate::xtra_stamp::made(&pc, modified);
-            Some(crate::xtra_broken::meshes_with_rebuilt_skeleton(&pk, &d.files, made))
+            // a record from an earlier game still holds when no skeleton of its meshes was rebuilt since
+            let kept = earlier.filter(|e| crate::xtra_broken::asset_list_complete(&pk) && crate::xtra_broken::meshes_with_rebuilt_skeleton(&pk, &d.files, e.game).is_empty());
+            Some((crate::xtra_broken::meshes_with_rebuilt_skeleton(&pk, &d.files, made), kept))
         })
         .await
         .ok()
         .flatten()
         .unwrap_or_default();
-        if meshes.is_empty() {
+        if let Some(e) = kept {
+            all.insert(crate::xtra_broken::decoder_key(&utoc, parser), Done { game, ..e });
+            n += 1; // the Library reads the verdicts again: a carried finding shows only then
             continue;
         }
-        match check_mod(&paks, &usmap, &utoc, &meshes, &work).await {
+        if !meshes.is_empty() {
+            todo.push((p, path, utoc, size, modified, meshes));
+        }
+    }
+    let _ = std::fs::write(store(), serde_json::to_string(&all).unwrap_or_default()); // the records carried to this game
+    let total = todo.len();
+    for (i, (p, path, utoc, size, modified, meshes)) in todo.into_iter().enumerate() {
+        // asked only before the tool runs: a mod with nothing to read never counts as work left
+        if !crate::xtra_vfx::background_may_run() {
+            break;
+        }
+        crate::xtra_broken::scan_progress(&app, "meshes", i, total, &path);
+        match check_mod(&paks, &usmap, &utoc, &meshes, &work, &vanilla).await {
             Ok(reason) => {
-                all.insert(crate::xtra_broken::checked_key(&utoc), Done { size, modified, game, parser: crate::xtra_vfx::parser_id().to_string(), reason });
+                all.insert(crate::xtra_broken::decoder_key(&utoc, parser), Done { size, modified, game, parser: parser.to_string(), reason });
                 let _ = std::fs::write(store(), serde_json::to_string(&all).unwrap_or_default());
                 n += 1;
             }
@@ -178,7 +199,8 @@ mod tests {
             let files: Vec<String> = crate::utoc_utils::try_read_utoc(&utoc).unwrap().into_iter().map(|e| e.file_path).collect();
             let meshes = crate::xtra_broken::meshes_with_rebuilt_skeleton(&paks, &files, 0);
             let t = std::time::Instant::now();
-            let r = check_mod(&paks, &usmap, &utoc, &meshes, &std::env::temp_dir().join("repakxtra-mesh-test")).await;
+            let vanilla = crate::xtra_vfx::vanilla_dir(&paks.to_string_lossy(), &usmap);
+            let r = check_mod(&paks, &usmap, &utoc, &meshes, &std::env::temp_dir().join("repakxtra-mesh-test"), &vanilla).await;
             println!("{name}: {meshes:?} -> {r:?} in {:?}", t.elapsed()); // Err when nothing was compared
         }
     }

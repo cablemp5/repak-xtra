@@ -171,7 +171,8 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
   const active = isActive(l, p.mods)
   const onNow = mine.filter(k => byKey.get(k)?.enabled).length
   const present = mine.length - missing.length - unsure.length
-  const switchTitle = present === 0 ? 'No installed mods' : active ? `Turn ${l.name}'s mods off` : `Turn ${l.name}'s mods on`
+  const partial = !active && onNow > 0 // partly on: a click turns it off, the way a half-checked box clears
+  const switchTitle = present === 0 ? 'No installed mods' : active || partial ? `Turn ${l.name}'s mods off` : `Turn ${l.name}'s mods on`
   const hasMedia = Boolean(l.mediaRev || l.image)
   const group = groups.find(g => groupKey(g) === groupKey(l.label))
 
@@ -304,7 +305,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
           <div className="lp-actions">
             <label className="lp-switch">
               <Switch size="sm" color="primary" checked={active} isDisabled={present === 0} disabled={busy || present === 0}
-                onChange={(on: boolean) => onToggle(on)} title={switchTitle} aria-label={switchTitle} />
+                onChange={(on: boolean) => onToggle(on && !partial)} title={switchTitle} aria-label={switchTitle} />
               {/* On, Off, or how far it is on, each with its dot (green, red, yellow) */}
               <span className="lp-switch-state">
                 <SwapText text={busy ? 'Switching…' : active ? 'On' : onNow ? `${onNow}/${present}` : 'Off'} />

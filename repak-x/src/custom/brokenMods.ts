@@ -4,7 +4,7 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, listen } from '@tauri-apps/api/event'
-import { SCAN_DONE } from './scanProgress'
+import { scanEnded, scanStarted } from './scanProgress'
 
 /** usmapWait (Needs VFX update only): files it rebuilds that a patch newer than the saved USMAP changed. While it is not
  *  0 the update waits for that patch's USMAP (xtra_broken.rs changed_since_usmap). */
@@ -35,9 +35,13 @@ export const rescanVerdicts = () => emit(VERDICTS_RESCAN).catch(() => {})
 let queue: Promise<unknown> = Promise.resolve()
 let runFull: (() => Promise<boolean>) | null = null
 const queued = (run: () => Promise<boolean>) => { const next = queue.then(run, run); queue = next; return next }
-/** Runs every check again once the scan in flight (if any) is done. True when it ran to its end, false when it failed or
- *  the library changed under it. Null when no library is watched yet (no mods loaded). gameUpdate.ts waits on it. */
-export const fullScan = (): Promise<boolean> | null => (runFull ? queued(runFull) : null)
+/** Runs every check again once the scan in flight (if any) is done. True when it ran to its end, false when it failed,
+ *  stopped with mods left (the game, an update or a check took over), or the library changed under it. Null when no
+ *  library is watched yet (no mods loaded). gameUpdate.ts waits on it. */
+export const fullScan = (): Promise<boolean> | null => (runFull ? runFull() : null)
+/** Each quick check's turn: a slower, older answer never replaces a newer one (one that waited on the game's asset list
+ *  could bring back a flag Nothing to update just cleared). */
+let checkSeq = 0
 /** How many mods carry a verdict now. */
 export const flaggedCount = () => verdicts.size
 /** Of those, how many need an update that waits for the USMAP of the installed game build. */
@@ -50,9 +54,13 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
   useEffect(() => {
     if (!key) return
     let live = true
-    const check = () => invoke<Verdict[]>('xtra_broken_mods', { modPaths: mods.map(m => m.path) })
-      .then(r => { if (live) { verdicts = new Map(r.map(v => [norm(v.path), v])); version++; listeners.forEach(l => l()) } return true })
-      .catch(e => { console.warn('[brokenMods] check failed', e); return false })
+    const check = () => {
+      const turn = ++checkSeq
+      return invoke<Verdict[]>('xtra_broken_mods', { modPaths: mods.map(m => m.path) })
+        .then(r => { if (live && turn === checkSeq) { verdicts = new Map(r.map(v => [norm(v.path), v])); version++; listeners.forEach(l => l()) } return true })
+        // the badges so far stay (the game runs and its file list is not read yet, or the call failed)
+        .catch(e => { console.warn('[brokenMods] check failed', e); return false })
+    }
     // then VFX mods newer than the update whose Niagara files may still be in the old layout: decoded once each in the
     // background (xtra_niagara.rs), and checked again when one is. Then the mods the date calls current: their materials
     // checked once each per game update (xtra_vfx_check.rs), so one made before the update, or installed before
@@ -61,7 +69,10 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     // compared with the game's once each per game update (xtra_layout.rs). One the update changed gets May crash with
     // what changed, one that matches loses the date-only warning, so the badges follow each one checked
     // `first`: the quick check just started at launch, reused so the chain does not run the same check beside it
-    const chain = (first?: Promise<boolean>) => (first ?? check())
+    // `finished` is false when a scan stopped with mods left (xtra_scan_stopped, read and cleared at both ends)
+    // a run the library outdated before it began checked nothing: not finished (gameUpdate.ts asks the new one instead)
+    const chain = (first?: Promise<boolean>): Promise<boolean> => !live ? Promise.resolve(false) : (scanStarted(), invoke('xtra_scan_stopped').catch(() => false))
+      .then(() => first ?? check())
       .then(ok => { if (!ok) throw new Error('the first check failed') })
       .then(() => (live ? invoke('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
       .then(() => (live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: mods.map(m => m.path) }) : 0))
@@ -73,21 +84,28 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       // and mesh mods whose skeleton the game rebuilt: more bones than it has gets May crash (xtra_mesh.rs)
       .then(() => (live ? invoke<number>('xtra_mesh_scan', { modPaths: mods.map(m => m.path) }) : 0))
       .then(checked => (live && checked ? check() : undefined))
-      .then(() => live, e => { console.warn('[brokenMods] background scan failed', e); return false })
-      .finally(() => window.dispatchEvent(new Event(SCAN_DONE))) // scanProgress.ts closes its progress line
-    const full = (first?: Promise<boolean>) => queued(() => chain(first))
-    runFull = () => chain()
-    // the quick check at once, never behind a background scan in flight (one can run for many minutes after a game
-    // update), so new mods get their badges in the Library and on loadouts right away. The chain starts from it
+      .then(() => (live ? invoke<boolean>('xtra_scan_stopped').catch(() => false) : true))
+      .then(stopped => live && !stopped, e => { console.warn('[brokenMods] background scan failed', e); return false })
+      // runs take turns (queued), so this one's end is never another's. One the library outdated is not "paused":
+      // the new list's own run follows
+      .then(finished => { unfinished = !finished; scanEnded(finished || !live); return finished })
+    let unfinished = false
+    // one run waiting its turn is enough: a focus, a Rescan and the game update notice asking meanwhile all get that one
+    let waiting: Promise<boolean> | null = null
+    const full = (first?: Promise<boolean>) => waiting ?? (waiting = queued(() => { waiting = null; return chain(first) }))
+    runFull = full
+    // the quick check at once (1.5 s after the list stops changing: an install renames and reloads it a few times),
+    // never behind a background scan in flight (one can run for many minutes after a game update), so new mods get
+    // their badges in the Library and on loadouts right away. The chain starts from it
     const t = setTimeout(() => { void full(check()) }, 1500)
-    // the background scans stop for the game, an update or a check (xtra_vfx.rs background_may_run): back in the app,
-    // they go on where they stopped, at most every 5 minutes (a scan with nothing left to do is quick)
-    let lastResume = Date.now()
-    const resume = () => { if (Date.now() - lastResume > 300_000) { lastResume = Date.now(); void full() } }
+    // only a run that stopped with mods left goes on when the window is back (the game, an update or a check took
+    // over: xtra_vfx.rs background_may_run). Nothing changed, nothing runs. A game update is gameUpdate.ts's to start
+    let lastResume = 0
+    const resume = () => { if (unfinished && Date.now() - lastResume > 30_000) { lastResume = Date.now(); void full() } }
     window.addEventListener('focus', resume)
     const again = listen(VERDICTS_CHANGED, () => { void check() })
     const rescan = listen(VERDICTS_RESCAN, () => { void full() })
-    return () => { live = false; window.removeEventListener('focus', resume); if (runFull === chain) runFull = null; clearTimeout(t); void again.then(f => f()); void rescan.then(f => f()) }
+    return () => { live = false; window.removeEventListener('focus', resume); if (runFull === full) runFull = null; clearTimeout(t); void again.then(f => f()); void rescan.then(f => f()) }
   }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 

@@ -50,6 +50,16 @@ pub(crate) fn of(mod_path: &Path) -> Option<Stamp> {
     get(&store(), mod_path)
 }
 
+/// Every stamp, for a caller that looks up many mods (xtra_broken_mods): the store read once, not twice a mod.
+pub(crate) fn load_all() -> HashMap<String, Stamp> {
+    load(&store())
+}
+
+/// `of`, from stamps load_all read.
+pub(crate) fn of_in(all: &HashMap<String, Stamp>, mod_path: &Path) -> Option<Stamp> {
+    all.get(&key(mod_path)?).copied()
+}
+
 /// When the mod at `mod_path` counts as made: its file's time, or the game update it was stamped for when that is later
 /// (an update copied or repacked since keeps its stamp, so it never looks older than the game it was made for).
 pub(crate) fn made(mod_path: &Path, written: u64) -> u64 {

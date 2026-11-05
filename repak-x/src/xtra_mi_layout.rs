@@ -179,12 +179,20 @@ fn decode(dir: &Path, rel: &str) -> Option<Value> {
 /// current copies, where the reading whose overrides match the game's tells the layout. Without one, or when neither
 /// matches, `older` decides (the mod was written before the game's last update: the old one). `made`: when the mod was
 /// written (Unix seconds, 0 when not known), so only USMAPs from before it are asked (xtra_niagara.rs older_usmaps).
-pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], older: bool, made: u64, game: Game<'_>, work: &Path, progress: &dyn VfxProgressSink) -> Result<Relaid, String> {
+/// `today`: `rels` already decoded with `usmap` under this folder (the material check's own decode), else decoded here.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], older: bool, made: u64, game: Game<'_>, today: Option<&Path>, work: &Path, progress: &dyn VfxProgressSink) -> Result<Relaid, String> {
     let mut out = Relaid::default();
     let Some(build) = usmap_build(usmap) else { return Ok(out) };
-    let (now, now_json) = (work.join("now"), work.join("now_json"));
-    stage(mod_extract, &now, rels, true)?;
-    to_json(usmap, &now, &now_json, progress).await?;
+    let now_json = match today {
+        Some(d) => d.to_path_buf(),
+        None => {
+            let (now, json) = (work.join("now"), work.join("now_json"));
+            stage(mod_extract, &now, rels, true)?;
+            to_json(usmap, &now, &json, progress).await?;
+            json
+        }
+    };
     let fetched = match game {
         Game::Fetch(paks) => {
             // only what the copies could settle: material instances today's USMAP reads whole
@@ -335,7 +343,7 @@ pub(crate) async fn run(mod_path: &str, game_paks: &str, usmap_path: &str, mod_e
     // newer than the update, its date cannot say a file both layouts read whole is old: the game's copies tell (an
     // extract of only those, no dependencies, so only then)
     let game = if written < updated { Game::None } else { Game::Fetch(game_paks) };
-    let r = relayout(usmap_path, Path::new(mod_extract), files, written < updated, written, game, &work, progress).await;
+    let r = relayout(usmap_path, Path::new(mod_extract), files, written < updated, written, game, None, &work, progress).await;
     let _ = std::fs::remove_dir_all(&work);
     r
 }
@@ -488,11 +496,11 @@ mod tests {
         // as a run asks it: only USMAPs from before the mod was written
         let made = std::fs::metadata(&utoc).unwrap().modified().unwrap().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
         let made = crate::xtra_stamp::made(Path::new(&utoc), made);
-        let r = relayout(&usmap, &x, std::slice::from_ref(&rel), true, made, Game::None, &work.join("w"), &NoOpProgressSink).await.unwrap();
+        let r = relayout(&usmap, &x, std::slice::from_ref(&rel), true, made, Game::None, None, &work.join("w"), &NoOpProgressSink).await.unwrap();
         assert_eq!(r.files, vec![rel.clone()], "rewritten: {r:?}");
         // again, as the update (written after the game update): in today's layout, nothing left to rewrite
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
-        let again = relayout(&usmap, &x, std::slice::from_ref(&rel), false, now, Game::None, &work.join("w2"), &NoOpProgressSink).await.unwrap();
+        let again = relayout(&usmap, &x, std::slice::from_ref(&rel), false, now, Game::None, None, &work.join("w2"), &NoOpProgressSink).await.unwrap();
         assert!(again.files.is_empty() && again.unread.is_empty() && again.failed.is_empty(), "{again:?}");
         let _ = std::fs::remove_dir_all(&work);
     }

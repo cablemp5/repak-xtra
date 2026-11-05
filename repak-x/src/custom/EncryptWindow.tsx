@@ -19,6 +19,7 @@ import { Num } from './motion'
 import { openLoadoutInMain } from './vfx/handoff'
 import { KEY } from './EncryptMods'
 import './vfx/vfx.css'
+import ModRowsSkeleton from './ModRowsSkeleton'
 import './support.css'
 
 type Mod = { path: string; name: string; enabled: boolean; hero: string; modified: number; encrypted: boolean }
@@ -70,7 +71,6 @@ function EncryptPanel() {
   const addedRef = useRef(added)
   addedRef.current = added
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [scan, setScan] = useState<{ done: number; total: number } | null>(null)
   const [reload, setReload] = useState(0)
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [runs, setRuns] = useState<Record<string, Run>>({})
@@ -115,7 +115,6 @@ function EncryptPanel() {
     if (busy) return
     let live = true
     setLoadError(null)
-    const progress = listen<{ done: number; total: number }>('encrypt_list_progress', e => { if (live) setScan(e.payload) })
     invoke<Listed[]>('xtra_encrypt_list')
       .then(list => {
         if (!live) return
@@ -132,7 +131,7 @@ function EncryptPanel() {
       })
       .catch(e => { if (live) { setLoadError(String(e)); setMods(m => m ?? []) } })
     invoke<boolean>('check_game_running').then(v => { if (live) setGameOpen(v) }).catch(() => {})
-    return () => { live = false; void progress.then(off => off()) }
+    return () => { live = false }
   }, [busy, reload])
 
   const all = [...(mods ?? []), ...added.filter(a => !(mods ?? []).some(m => norm(m.path) === norm(a.path)))]
@@ -222,7 +221,7 @@ function EncryptPanel() {
           </p>
         )}
         {mods === null
-          ? <p className="lp-empty" aria-live="polite">Reading the mods folder{scan ? `: ${scan.done} of ${plural(scan.total, 'mod')}` : '…'}</p>
+          ? <ModRowsSkeleton />
           : shown.length === 0
             ? <p className="lp-empty">{needle || hero ? `No mods match${needle ? ` “${q.trim()}”` : ''}${hero ? ` for ${hero}` : ''}.` : 'No mods in the mods folder. Add files takes a mod from anywhere.'}</p>
             : <div className="vf-groups">{groups.map(g => {

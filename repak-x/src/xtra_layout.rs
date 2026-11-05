@@ -484,6 +484,9 @@ pub(crate) struct Done {
     reason: Option<String>,
     #[serde(default)]
     partial: bool,
+    /// the decoder (xtra_vfx parser_id): with it a record carries over a game update that left the mod's classes alone
+    #[serde(default)]
+    parser: String,
 }
 
 fn store() -> PathBuf {
@@ -505,8 +508,21 @@ pub(crate) fn usmap_id() -> String {
 }
 
 fn current<'a>(all: &'a HashMap<String, Done>, utoc: &Path, game_updated: u64, usmap: &str) -> Option<&'a Done> {
-    all.get(&crate::xtra_broken::checked_key(utoc))
+    crate::xtra_broken::record_of(all, utoc, usmap)
         .filter(|d| crate::xtra_broken::file_stamp(utoc) == Some((d.size, d.modified)) && game_updated <= d.game && d.usmap == usmap)
+}
+
+/// This decoder's newest record for the mod at `utoc` as the file it is now, from an earlier game or USMAP: it carries
+/// over when the game rewrote none of the mod's packages since (xtra_broken untouched_since). A layout change rewrites
+/// every package using the class, so untouched classes read the same with the new USMAP.
+fn earlier(all: &HashMap<String, Done>, utoc: &Path) -> Option<Done> {
+    let (key, stamp, parser) = (crate::xtra_broken::checked_key(utoc), crate::xtra_broken::file_stamp(utoc), crate::xtra_vfx::parser_id());
+    all.iter()
+        .filter(|(k, _)| k.strip_prefix(key.as_str()).is_some_and(|rest| rest.is_empty() || rest.starts_with('|')))
+        .map(|(_, d)| d)
+        .filter(|d| stamp == Some((d.size, d.modified)) && d.parser == parser && !d.partial)
+        .max_by_key(|d| d.game)
+        .cloned()
 }
 
 /// What the check found about the mod at `utoc` as the file it is now, in this game, under this USMAP (`usmap_id`):
@@ -517,7 +533,11 @@ pub(crate) fn found_now(all: &HashMap<String, Done>, utoc: &Path, game_updated: 
 }
 
 fn remember(store: &Path, all: &mut HashMap<String, Done>, utoc: &Path, done: Done) {
-    all.insert(crate::xtra_broken::checked_key(utoc), done);
+    all.insert(crate::xtra_broken::decoder_key(utoc, &done.usmap), done);
+    save(store, all);
+}
+
+fn save(store: &Path, all: &HashMap<String, Done>) {
     let tmp = store.with_extension("json.tmp");
     // each mod: a closed app keeps its progress
     if std::fs::write(&tmp, serde_json::to_string(&*all).unwrap_or_default()).is_ok() {
@@ -532,7 +552,10 @@ static SCAN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// classes wrong). Stops while a VFX update runs (the next scan goes on from there), skipped while another scan runs.
 #[tauri::command]
 pub async fn xtra_layout_scan(app: tauri::AppHandle, mod_paths: Vec<String>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<usize, String> {
-    let Ok(_one) = SCAN.try_lock() else { return Ok(0) };
+    let Ok(_one) = SCAN.try_lock() else {
+        crate::xtra_vfx::note_stopped();
+        return Ok(0);
+    };
     let state = state.inner().clone();
     let mods_dir = state.lock().unwrap().game_path.clone();
     let Some(paks) = mods_dir.ancestors().find(|p| p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("Paks"))).map(Path::to_path_buf) else { return Ok(0) };
@@ -547,11 +570,10 @@ pub async fn xtra_layout_scan(app: tauri::AppHandle, mod_paths: Vec<String>, sta
     let store = store();
     let mut all = load(&store);
     let mut checked = 0;
-    let total = mod_paths.len();
-    for (i, p) in mod_paths.into_iter().enumerate() {
-        if !crate::xtra_vfx::background_may_run() {
-            break; // an update uses the same tool: the rest waits for the next scan
-        }
+    // First the mods with work left (cheap: file dates, cached details, the game's asset list), so the progress counts
+    // those and not the list
+    let mut todo = Vec::new();
+    for p in mod_paths {
         let path = PathBuf::from(&p);
         if crate::xtra_builtins::in_folder(&path) {
             continue; // built-ins: xtra_builtins judges them by the game build they were made for, never these checks
@@ -562,13 +584,29 @@ pub async fn xtra_layout_scan(app: tauri::AppHandle, mod_paths: Vec<String>, sta
         if current(&all, &utoc, game, &usmap_id).is_some() {
             continue;
         }
-        crate::xtra_broken::scan_progress(&app, "blueprints", i, total, &path);
-        let st = state.clone();
-        let Some(details) = tauri::async_runtime::spawn_blocking(move || crate::compute_mod_details(&path, &st).ok()).await.ok().flatten() else { continue };
+        let (st, pc) = (state.clone(), path.clone());
+        let Some(details) = tauri::async_runtime::spawn_blocking(move || crate::compute_mod_details(&pc, &st).ok()).await.ok().flatten() else { continue };
         // not kept: a file list that failed to read looks like no Blueprint, and would stay cleared once it reads
         if !details.has_blueprint {
             continue;
         }
+        let (pk, files, before) = (paks.clone(), details.files.clone(), earlier(&all, &utoc));
+        let kept = tauri::async_runtime::spawn_blocking(move || before.filter(|d| crate::xtra_broken::untouched_since(&pk, &files, d.game))).await.ok().flatten();
+        if let Some(d) = kept {
+            all.insert(crate::xtra_broken::decoder_key(&utoc, &usmap_id), Done { game, usmap: usmap_id.clone(), ..d });
+            checked += 1; // the Library reads the verdicts again: a carried finding shows only then
+            continue;
+        }
+        todo.push((p, path, utoc, size, modified, details));
+    }
+    save(&store, &all); // the records carried to this game
+    let total = todo.len();
+    for (i, (p, path, utoc, size, modified, details)) in todo.into_iter().enumerate() {
+        // asked only before the tool runs: a mod with nothing to read never counts as work left
+        if !crate::xtra_vfx::background_may_run() {
+            break; // an update uses the same tool: the rest waits for the next scan
+        }
+        crate::xtra_broken::scan_progress(&app, "blueprints", i, total, &path);
         let t = std::time::Instant::now();
         // seconds of file reads and JSON work between the tool runs: off the async workers
         let (pk, us, ut, wk, va) = (paks.clone(), usmap.clone(), utoc.clone(), work.clone(), vanilla.clone());
@@ -581,7 +619,7 @@ pub async fn xtra_layout_scan(app: tauri::AppHandle, mod_paths: Vec<String>, sta
                 log::info!("[layout] {p}: {:.1}s, {said}", t.elapsed().as_secs_f64());
                 if crate::xtra_broken::file_stamp(&utoc) == Some((size, modified)) {
                     checked += 1;
-                    remember(&store, &mut all, &utoc, Done { size, modified, game, usmap: usmap_id.clone(), partial: !o.complete, reason: o.reason });
+                    remember(&store, &mut all, &utoc, Done { size, modified, game, usmap: usmap_id.clone(), partial: !o.complete, reason: o.reason, parser: crate::xtra_vfx::parser_id().to_string() });
                 }
             }
             Err(e) => log::warn!("[layout] {p}: {e}"), // tried again by the next scan
@@ -773,13 +811,16 @@ mod tests {
         let (store, utoc) = (dir.path().join("layout.json"), dir.path().join("Bp_9999999_P.utoc"));
         std::fs::write(&utoc, b"toc").unwrap();
         let (size, modified) = crate::xtra_broken::file_stamp(&utoc).unwrap();
-        let done = |reason: Option<&str>, partial| Done { size, modified, game: 200, usmap: "u1".into(), reason: reason.map(Into::into), partial };
+        let done = |reason: Option<&str>, partial| Done { size, modified, game: 200, usmap: "u1".into(), reason: reason.map(Into::into), partial, parser: String::new() };
         let mut all = HashMap::new();
         assert_eq!(found_now(&all, &utoc, 200, "u1"), None, "never checked");
         remember(&store, &mut all, &utoc, done(Some("why"), false));
         assert_eq!(found_now(&load(&store), &utoc, 200, "u1"), Some(Some("why".into())));
         assert_eq!(found_now(&load(&store), &utoc, 300, "u1"), None, "the game updated since");
         assert_eq!(found_now(&load(&store), &utoc, 200, "u2"), None, "another USMAP since");
+        remember(&store, &mut all, &utoc, Done { usmap: "u2".into(), ..done(None, false) });
+        assert_eq!(found_now(&load(&store), &utoc, 200, "u2"), Some(None), "another decoder's own answer");
+        assert_eq!(found_now(&load(&store), &utoc, 200, "u1"), Some(Some("why".into())), "kept beside the first one, never over it");
         remember(&store, &mut all, &utoc, done(None, false));
         assert_eq!(found_now(&load(&store), &utoc, 200, "u1"), Some(None), "checked and clean");
         remember(&store, &mut all, &utoc, done(None, true));

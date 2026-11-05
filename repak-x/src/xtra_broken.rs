@@ -83,9 +83,14 @@ fn is_material_instance(key: &str) -> bool {
 /// per file. Also whether that is all of them: false when the listing was needed but could not be read (no command line,
 /// a failed listing, classes it could not name), so only the MI_ names are in, and the caller must not call it clean.
 pub(crate) fn material_instances(paks: &Path, utoc: &Path, files: &[String]) -> (Vec<String>, bool) {
+    material_instances_with(asset_builds(paks).as_deref(), paks, utoc, files)
+}
+
+/// material_instances with the game's builds read once by the caller (a check of every mod: two folder reads a mod less).
+fn material_instances_with(builds: Option<&AssetBuilds>, paks: &Path, utoc: &Path, files: &[String]) -> (Vec<String>, bool) {
     let keys: Vec<String> = files.iter().filter(|f| is_package(f)).map(|f| match_key(f)).collect();
     let mut out: Vec<String> = keys.iter().filter(|k| is_material_instance(k)).cloned().collect();
-    let rewritten = asset_builds(paks).is_some_and(|b| {
+    let rewritten = builds.is_some_and(|b| {
         // textures, meshes and Niagara files are never material instances
         let other = |k: &str| ["t_", "sk_", "sm_", "ns_", "ne_"].iter().any(|p| k.rsplit('/').next().unwrap_or(k).starts_with(p));
         keys.iter().any(|k| !is_material_instance(k) && !other(k) && b.by_package.get(k).is_some_and(|cl| *cl >= MATERIAL_LAYOUT_BUILD))
@@ -98,12 +103,18 @@ pub(crate) fn material_instances(paks: &Path, utoc: &Path, files: &[String]) -> 
     (out, complete)
 }
 
-/// The material instances in the container `utoc` by their class, kept per file (its size and time written).
+/// The material instances in the container `utoc` by their class, kept per file (its size and time written) and decoder,
+/// in memory and in repakxtra-mod-classes.json: each listing runs a process (about 0.3 s), and every launch asked again
+/// for every mod an update touched.
 fn listed_materials(paks: &Path, utoc: &Path) -> Option<Vec<String>> {
     static SEEN: Mutex<Option<HashMap<String, ((u64, u64), Vec<String>)>>> = Mutex::new(None);
-    let (key, stamp) = (checked_key(utoc), file_stamp(utoc));
-    if let Some((_, found)) = SEEN.lock().unwrap().as_ref().and_then(|m| m.get(&key)).filter(|(s, _)| Some(*s) == stamp) {
-        return Some(found.clone());
+    let file = crate::app_dir().join("repakxtra-mod-classes.json");
+    let (key, stamp) = (decoder_key(utoc, crate::xtra_vfx::parser_id()), file_stamp(utoc));
+    let known = |m: &mut Option<HashMap<String, ((u64, u64), Vec<String>)>>| {
+        m.get_or_insert_with(|| std::fs::read_to_string(&file).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()).get(&key).filter(|(s, _)| Some(*s) == stamp).map(|(_, f)| f.clone())
+    };
+    if let Some(found) = known(&mut SEEN.lock().unwrap_or_else(|e| e.into_inner())) {
+        return Some(found);
     }
     let listed = crate::xtra_uat_cli::classes(utoc, paks)?;
     // a class it could not name (no script objects): not known, and asked again next time
@@ -112,7 +123,11 @@ fn listed_materials(paks: &Path, utoc: &Path) -> Option<Vec<String>> {
     }
     let found: Vec<String> = listed.iter().filter(|(_, c)| c.starts_with("MaterialInstance")).map(|(p, _)| match_key(p)).collect();
     if let Some(s) = stamp {
-        SEEN.lock().unwrap().get_or_insert_with(HashMap::new).insert(key, (s, found.clone()));
+        let mut seen = SEEN.lock().unwrap_or_else(|e| e.into_inner());
+        let all = seen.get_or_insert_with(HashMap::new);
+        all.insert(key, (s, found.clone()));
+        // shortcut: written whole on each new listing (a few hundred mods, a few KB). Trim entries of removed mods if it ever grows large
+        let _ = std::fs::write(&file, serde_json::to_string(&*all).unwrap_or_default());
     }
     Some(found)
 }
@@ -129,9 +144,11 @@ fn is_game_container(file_name: &str) -> bool {
     n.ends_with(".utoc") && (n.starts_with("pakchunk") || n.starts_with("patch_") || n == "global.utoc")
 }
 
-/// The game's own containers (the game's .utoc files directly in Paks, never the mods below it or beside it).
+/// The game's own containers (the game's .utoc files directly in Paks, never the mods below it or beside it): path,
+/// .utoc size, and when it was written (settled: the time it was first seen with these sizes).
 pub(crate) fn game_containers(paks: &Path) -> Vec<(PathBuf, u64, u64)> {
-    let mut out: Vec<_> = std::fs::read_dir(paks)
+    #[allow(unused_mut)]
+    let mut found: Vec<_> = std::fs::read_dir(paks)
         .into_iter()
         .flatten()
         .flatten()
@@ -140,11 +157,51 @@ pub(crate) fn game_containers(paks: &Path) -> Vec<(PathBuf, u64, u64)> {
         .filter_map(|p| {
             let m = std::fs::metadata(&p).ok()?;
             let at = m.modified().ok()?.duration_since(UNIX_EPOCH).ok()?.as_secs();
-            Some((p, m.len(), at))
+            let ucas = std::fs::metadata(p.with_extension("ucas")).map_or(0, |m| m.len());
+            Some((p, m.len(), ucas, at))
         })
         .collect();
+    // tests build containers in temp folders: never in the app's own store
+    #[cfg(not(test))]
+    settle_saved(&mut found);
+    let mut out: Vec<_> = found.into_iter().map(|(p, len, _, at)| (p, len, at)).collect();
     out.sort();
     out
+}
+
+/// A Steam "verify files" or a copy can rewrite a container's time with nothing in it changed, and every check reads that
+/// time as a game update: the asset list read again, every mod checked again, current VFX mods flagged. So a container
+/// keeps the time it was first seen with while its .utoc and .ucas sizes stay the same. `known`: full path -> (utoc
+/// size, ucas size, time). True when `known` changed. Pure.
+/// shortcut: sizes stand in for content, so an update that rewrote a container to the exact same two sizes would be
+/// missed. Hash the .utoc (a few MB) if one ever does.
+fn settle(found: &mut [(PathBuf, u64, u64, u64)], known: &mut HashMap<String, (u64, u64, u64)>) -> bool {
+    let mut changed = false;
+    for (p, utoc, ucas, at) in found.iter_mut() {
+        let key = checked_key(p);
+        match known.get(&key) {
+            Some(&(u, c, first)) if u == *utoc && c == *ucas => *at = first,
+            _ => {
+                known.insert(key, (*utoc, *ucas, *at));
+                changed = true;
+            }
+        }
+    }
+    changed
+}
+
+#[cfg(not(test))]
+fn settle_saved(found: &mut [(PathBuf, u64, u64, u64)]) {
+    static KNOWN: Mutex<Option<HashMap<String, (u64, u64, u64)>>> = Mutex::new(None);
+    let file = crate::app_dir().join("repakxtra-game-containers.json");
+    let mut known = KNOWN.lock().unwrap_or_else(|e| e.into_inner());
+    let known = known.get_or_insert_with(|| std::fs::read_to_string(&file).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default());
+    if settle(found, known) {
+        let tmp = file.with_extension("json.tmp");
+        if let Err(e) = std::fs::write(&tmp, serde_json::to_string(&*known).unwrap_or_default()).and_then(|_| std::fs::rename(&tmp, &file)) {
+            log::warn!("[broken] could not save the container times: {e}");
+        }
+    }
 }
 
 /// Names, sizes and dates of the containers: changes whenever an update rewrites one.
@@ -217,6 +274,12 @@ static GAME_ASSETS: Mutex<Option<(String, Arc<GameAssets>)>> = Mutex::new(None);
 /// a few GB of memory while UAssetTool lists 570,000 packages), then saved (saved_assets) so a launch without a game
 /// update loads it in a moment instead. Kept in memory once read. None when nothing could be read.
 pub(crate) fn game_assets(paks: &Path) -> Option<Arc<GameAssets>> {
+    game_assets_if(paks, || true)
+}
+
+/// game_assets, but reading the containers themselves (not the saved list) only when `may_read` says so: the background
+/// checks pass "the game is not running", so its frame rate never pays for the 7 s and few GB.
+pub(crate) fn game_assets_if(paks: &Path, may_read: impl Fn() -> bool) -> Option<Arc<GameAssets>> {
     let containers = game_containers(paks);
     if containers.is_empty() {
         return None;
@@ -240,6 +303,7 @@ pub(crate) fn game_assets(paks: &Path) -> Option<Arc<GameAssets>> {
             log::info!("[broken] game asset list loaded: {} packages in {:?}", saved.0.len(), t.elapsed());
             saved
         }
+        None if !may_read() => return None,
         None => {
             let (set, builds, complete) = read_containers(&containers);
             if set.0.is_empty() {
@@ -281,6 +345,7 @@ fn read_containers(containers: &[(PathBuf, u64, u64)]) -> (GameAssets, AssetBuil
             }
         }
     }
+    builds.complete = complete;
     (set, builds, complete)
 }
 
@@ -316,7 +381,7 @@ fn load_saved(file: &Path, key: &str) -> Option<(GameAssets, AssetBuilds)> {
         return None;
     }
     let mut set = GameAssets(HashMap::with_capacity(count));
-    let mut builds = AssetBuilds { by_package: GameAssets(HashMap::with_capacity(count)), unread };
+    let mut builds = AssetBuilds { by_package: GameAssets(HashMap::with_capacity(count)), unread, complete: true };
     for _ in 0..count {
         let (fp, at, cl) = (take_word(&mut r)?, take_word(&mut r)?, take_word(&mut r)?);
         set.0.insert(fp, at);
@@ -350,6 +415,21 @@ fn save(file: &Path, key: &str, set: &GameAssets, builds: &AssetBuilds) -> std::
 pub(crate) struct AssetBuilds {
     by_package: GameAssets,
     unread: u64,
+    /// every container was read (a saved list always was: one with an unread container is never saved)
+    complete: bool,
+}
+
+/// Whether the game's asset list has every container in it: only then does "no package of it is newer" hold, and a check
+/// from an earlier game update may carry over (the background scans).
+pub(crate) fn asset_list_complete(paks: &Path) -> bool {
+    asset_builds(paks).is_some_and(|b| b.complete)
+}
+
+/// Whether no game copy of `files` (paths inside a mod) was rewritten after `since`, by a complete asset list. A check's
+/// answer from a game update at `since` then still holds: a class layout change rewrites every package using the class
+/// (changed_since_usmap), so an untouched package reads the same.
+pub(crate) fn untouched_since(paks: &Path, files: &[String], since: u64) -> bool {
+    asset_list_complete(paks) && game_assets(paks).is_some_and(|g| stale_in(&g, files, since).is_empty())
 }
 static GAME_BUILDS: Mutex<Option<(String, Arc<AssetBuilds>)>> = Mutex::new(None);
 
@@ -639,6 +719,19 @@ pub(crate) fn checked_key(utoc: &Path) -> String {
     utoc.to_string_lossy().replace('\\', "/").to_lowercase()
 }
 
+/// A record's key in a store kept per decoder (xtra_vfx parser_id, or a USMAP id that includes it). The stable, test and
+/// dev copies decode with their own tools: with one record per mod each switch replaced the other's answers and the next
+/// launch read every mod again (268 records across 6 decoders, 2026-11-04).
+pub(crate) fn decoder_key(utoc: &Path, decoder: &str) -> String {
+    format!("{}|{decoder}", checked_key(utoc))
+}
+
+/// A store's record for `utoc` under `decoder`, else the one written before records were kept per decoder (the caller
+/// still compares the decoder written inside it).
+pub(crate) fn record_of<'a, T>(all: &'a HashMap<String, T>, utoc: &Path, decoder: &str) -> Option<&'a T> {
+    all.get(&decoder_key(utoc, decoder)).or_else(|| all.get(&checked_key(utoc)))
+}
+
 pub(crate) fn file_stamp(utoc: &Path) -> Option<(u64, u64)> {
     let m = std::fs::metadata(utoc).ok()?;
     Some((m.len(), m.modified().ok()?.duration_since(UNIX_EPOCH).ok()?.as_secs()))
@@ -652,8 +745,17 @@ fn checked_now(store: &HashMap<String, Checked>, utoc: &Path, game_updated: u64)
 
 /// A clearance (Nothing to update, or a check found it current) outlives a parser change: the background check never
 /// restores one for a mod with Niagara files, and it looks again at the rest anyway. Findings hold for their parser only.
+/// Kept per decoder (decoder_key): this decoder's own record first, else a clearance any decoder wrote.
 fn checked_record<'a>(store: &'a HashMap<String, Checked>, utoc: &Path, game_updated: u64) -> Option<&'a Checked> {
-    store.get(&checked_key(utoc)).filter(|c| file_stamp(utoc) == Some((c.size, c.modified)) && game_updated <= c.game && (c.parser == crate::xtra_vfx::parser_id() || (!c.outdated && c.unknown.is_none())))
+    let (key, stamp, parser) = (checked_key(utoc), file_stamp(utoc), crate::xtra_vfx::parser_id());
+    let of_mod = || {
+        store
+            .iter()
+            .filter(|(k, _)| k.strip_prefix(key.as_str()).is_some_and(|rest| rest.is_empty() || rest.starts_with('|')))
+            .map(|(_, c)| c)
+            .filter(|c| stamp == Some((c.size, c.modified)) && game_updated <= c.game)
+    };
+    of_mod().find(|c| c.parser == parser).or_else(|| of_mod().find(|c| !c.outdated && c.unknown.is_none()))
 }
 
 /// A "nothing to update" for `utoc` as it is now, from an update that rewrites older material layouts.
@@ -661,10 +763,37 @@ fn layout_cleared(store: &HashMap<String, Checked>, utoc: &Path, game_updated: u
     checked_record(store, utoc, game_updated).is_some_and(|c| !c.outdated && c.unknown.is_none() && c.material_layout)
 }
 
+/// The user's Nothing to update and the background check can write the Checked store at once: one read-modify-write at a time.
+static CHECKED_WRITING: Mutex<()> = Mutex::new(());
+
+fn save_checked(store: &Path, all: &HashMap<String, Checked>) -> Result<(), String> {
+    let tmp = store.with_extension("json.tmp");
+    std::fs::write(&tmp, serde_json::to_string(all).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, store).map_err(|e| e.to_string())
+}
+
+/// What a check found about the mod at `utoc` in the game update at `from` (or later), carried to `to`: the scan found the
+/// game rewrote none of its packages since, so the same files give the same answer.
+pub(crate) fn carry_checked(utoc: &Path, from: u64, to: u64) {
+    let _one = CHECKED_WRITING.lock().unwrap_or_else(|e| e.into_inner());
+    let (store, key, stamp) = (checked_store(), checked_key(utoc), file_stamp(utoc));
+    let mut all = load_checked(&store);
+    let mut moved = false;
+    for (k, c) in all.iter_mut() {
+        if k.strip_prefix(key.as_str()).is_some_and(|rest| rest.is_empty() || rest.starts_with('|')) && stamp == Some((c.size, c.modified)) && c.game >= from && c.game < to {
+            c.game = to;
+            moved = true;
+        }
+    }
+    if moved {
+        if let Err(e) = save_checked(&store, &all) {
+            log::warn!("[vfx check] {}: {e}", utoc.display());
+        }
+    }
+}
+
 fn remember_checked(store: &Path, utoc: &Path, game_updated: u64, outdated: bool, old_layout: bool, unknown: Option<String>) -> Result<(), String> {
-    // the user's Nothing to update and the background check can write at once: one read-modify-write at a time
-    static WRITING: Mutex<()> = Mutex::new(());
-    let _one = WRITING.lock().unwrap_or_else(|e| e.into_inner());
+    let _one = CHECKED_WRITING.lock().unwrap_or_else(|e| e.into_inner());
     let (size, modified) = file_stamp(utoc).ok_or_else(|| format!("{} is not there", utoc.display()))?;
     let mut all = load_checked(store);
     // An inconclusive scan cannot replace a verified repair or a confirmed fault in the same file and game.
@@ -672,10 +801,14 @@ fn remember_checked(store: &Path, utoc: &Path, game_updated: u64, outdated: bool
     // both writers read the material layout first (pipeline.ts relayout, xtra_vfx_check.rs): a "nothing" from them holds for it
     // Older apps do not understand unknown: retain their warning rather than granting a false clearance.
     let outdated = outdated || unknown.is_some();
-    all.insert(checked_key(utoc), Checked { unknown, parser: crate::xtra_vfx::parser_id().to_string(), size, modified, game: game_updated, outdated, material_layout: true, old_layout });
-    let tmp = store.with_extension("json.tmp");
-    std::fs::write(&tmp, serde_json::to_string(&all).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, store).map_err(|e| e.to_string())
+    // a clearance holds for every decoder (as before records were kept per decoder): it replaces their findings too
+    if !outdated {
+        let key = checked_key(utoc);
+        all.retain(|k, _| !k.strip_prefix(key.as_str()).is_some_and(|rest| rest.is_empty() || rest.starts_with('|')));
+    }
+    let parser = crate::xtra_vfx::parser_id();
+    all.insert(decoder_key(utoc, parser), Checked { unknown, parser: parser.to_string(), size, modified, game: game_updated, outdated, material_layout: true, old_layout });
+    save_checked(store, &all)
 }
 
 /// When the game was last updated (its newest container's time), for the mods folder `mods_dir`. 0 when not known.
@@ -710,10 +843,21 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let mods_dir = state.lock().unwrap().game_path.clone();
-        let Some(paks) = paks_dir(&mods_dir) else { return Vec::new() };
-        let Some(game) = game_assets(&paks) else { return Vec::new() };
-        let game_updated = game_containers(&paks).iter().map(|c| c.2).max().unwrap_or(0);
-        let layout_patched = material_layout_patched(&game_containers(&paks));
+        let Some(paks) = paks_dir(&mods_dir) else { return Ok(Vec::new()) };
+        let Some(game) = game_assets_if(&paks, || !crate::xtra_vfx::game_running()) else {
+            // not read while the game runs: the badges so far stay (brokenMods.ts keeps them on an error), and the next
+            // focus without the game reads it
+            if crate::xtra_vfx::game_running() {
+                crate::xtra_vfx::note_stopped();
+                return Err("The game's file list is read once the game is closed.".to_string());
+            }
+            return Ok(Vec::new());
+        };
+        let containers = game_containers(&paks);
+        let game_updated = containers.iter().map(|c| c.2).max().unwrap_or(0);
+        let layout_patched = material_layout_patched(&containers);
+        let builds = asset_builds(&paks);
+        let stamps = crate::xtra_stamp::load_all();
         let base = |p: &Path| p.with_extension("").to_string_lossy().to_lowercase();
         let installed_mods: HashSet<String> = mod_paths.iter().map(|p| base(Path::new(p))).collect();
         let checked = load_checked(&checked_store());
@@ -790,15 +934,15 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                 let installed = std::fs::metadata(&path).and_then(|m| m.modified()).ok()?.duration_since(UNIX_EPOCH).ok()?.as_secs();
                 // an update repakxtra made: the game it was made for. One an earlier version made has no stamp: it counts as
                 // old as the original beside it, since it carries what that version could not rebuild
-                let installed = match crate::xtra_stamp::of(&path) {
-                    Some(_) => crate::xtra_stamp::made(&path, installed),
+                let installed = match crate::xtra_stamp::of_in(&stamps, &path) {
+                    Some(s) => installed.max(s.game_updated), // xtra_stamp::made, from the store read once
                     None => crate::xtra_vfx::original_of(&path.with_extension("utoc"))
                         .and_then(|o| std::fs::metadata(o).and_then(|m| m.modified()).ok())
                         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
                         .map_or(installed, |o| installed.min(o.as_secs())),
                 };
                 let vfx = details.category == "VFX";
-                let (mics, _) = material_instances(&paks, &path.with_extension("utoc"), &details.files);
+                let (mics, _) = material_instances_with(builds.as_deref(), &paks, &path.with_extension("utoc"), &details.files);
                 let facts = Facts {
                     files: &details.files,
                     galacta: details.mod_type.contains("Project Galacta"),
@@ -832,15 +976,41 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                 };
             }
         }
-        verdicts
+        Ok(verdicts)
     })
     .await
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_extracted_package_and_the_game_listing_share_a_key() {
+        // game_copies skips what the asset list lacks: an extract's path and the container's entry must key alike
+        for (extracted, listed) in [
+            ("Marvel/Content/Marvel/VFX/Materials/MI_Glow.uasset", "../../../Marvel/Content/Marvel/VFX/Materials/MI_Glow.uasset"),
+            ("Marvel/Plugins/MarvelGAS/Content/Marvel/VFX/NS_Hit.uasset", "../../../Marvel/Plugins/MarvelGAS/Content/Marvel/VFX/NS_Hit.uasset"),
+        ] {
+            assert_eq!(match_key(extracted), match_key(listed), "{extracted}");
+        }
+    }
+
+    #[test]
+    fn a_container_keeps_its_time_until_its_sizes_change() {
+        let mut known = HashMap::new();
+        let p = PathBuf::from("C:/Paks/pakchunk0-Windows.utoc");
+        let mut found = vec![(p.clone(), 10, 500, 100)];
+        assert!(settle(&mut found, &mut known), "first seen: stored");
+        assert_eq!(found[0].3, 100);
+        found[0].3 = 900; // a Steam verify wrote it again, the same bytes
+        assert!(!settle(&mut found, &mut known), "same sizes: nothing stored");
+        assert_eq!(found[0].3, 100, "keeps the first time, so no game update is seen");
+        let mut patched = vec![(p, 10, 600, 950)]; // an update grew its .ucas
+        assert!(settle(&mut patched, &mut known));
+        assert_eq!(patched[0].3, 950, "a real change keeps its new time");
+    }
 
     #[test]
     fn packages_cooked_for_the_usmap_build_read_right_with_it() {

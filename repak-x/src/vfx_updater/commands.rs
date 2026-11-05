@@ -499,6 +499,29 @@ fn is_in_managed_dir(path: &str) -> bool {
 pub async fn vfx_check_usmap_update(force: bool) -> Result<VfxUsmapUpdateResult, String> {
     let mut settings = read_vfx_settings_internal();
 
+    // repakxtra: an automatic check asks GitHub at most once an hour, every 5 minutes while the saved USMAP is older
+    // than the installed game (the new one is what updates wait for), and always when none is saved. Every caller
+    // shares it, and an offline PC waits out the timeout once per window, not on every mod check.
+    static LAST_ASKED: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+    if !force && settings.usmap_path.as_deref().is_some_and(|p| Path::new(p).exists()) {
+        let game = crate::xtra_vfx::LAST_GAME_CL.load(std::sync::atomic::Ordering::Relaxed);
+        let behind = settings.usmap_filename.as_deref().and_then(extract_usmap_build_number).is_some_and(|u| u < game);
+        let window = std::time::Duration::from_secs(if behind { 5 * 60 } else { 60 * 60 });
+        if LAST_ASKED.lock().unwrap_or_else(|e| e.into_inner()).is_some_and(|t| t.elapsed() < window) {
+            return Ok(VfxUsmapUpdateResult {
+                up_to_date: true,
+                local_path: settings.usmap_path.clone(),
+                filename: settings.usmap_filename.clone(),
+                version: settings.usmap_filename.as_deref().and_then(extract_usmap_version_label),
+                build_number: settings.usmap_filename.as_deref().and_then(extract_usmap_build_number),
+                commit_date: settings.usmap_commit_date.clone(),
+                message: "USMAP checked recently".to_string(),
+                ..Default::default()
+            });
+        }
+    }
+    *LAST_ASKED.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
+
     // Build HTTP client with a short timeout so the UI is never blocked.
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(20))

@@ -10,7 +10,13 @@ use std::path::Path;
 /// a fix there can change the file lists any one saved.
 pub fn cache_stamps() {
     let native = native_reader_text();
-    let decode = [no_tests("src/vfx_updater/uasset_tool.rs"), no_tests("src/xtra_niagara.rs"), no_tests("src/xtra_layout.rs")];
+    // without the background scans' loops: which mods they visit and in what order changes no decoded file or answer
+    // (a change there that changes what a saved record means bumps that store's file name instead)
+    let decode = [
+        no_tests("src/vfx_updater/uasset_tool.rs"),
+        without(&no_tests("src/xtra_niagara.rs"), "pub async fn xtra_vfx_layout_scan("),
+        without(&no_tests("src/xtra_layout.rs"), "pub async fn xtra_layout_scan("),
+    ];
     println!("cargo:rustc-env=REPAKXTRA_DECODE_LOGIC={:016x}", fnv(&(decode.concat() + &native)));
     let details = [
         part("src/main_tauri.rs", "struct ModDetails {"),
@@ -53,6 +59,15 @@ fn part(file: &str, start: &str) -> String {
     match text.find(start).and_then(|a| text[a..].find("\n}\n").or_else(|| text[a..].find("\n}\r\n")).map(|b| text[a..a + b].to_string())) {
         Some(p) => p,
         None => text,
+    }
+}
+
+/// `text` without one item: from `start` to the first line that is only a closing brace. The whole text when `start` is
+/// not found, so a rename can only make the stamp change more often, never miss a change.
+fn without(text: &str, start: &str) -> String {
+    match text.find(start).and_then(|a| text[a..].find("\n}\n").or_else(|| text[a..].find("\n}\r\n")).map(|b| (a, a + b))) {
+        Some((a, b)) => format!("{}{}", &text[..a], &text[b..]),
+        None => text.to_string(),
     }
 }
 
