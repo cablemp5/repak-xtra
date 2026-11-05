@@ -121,7 +121,9 @@ pub async fn xtra_mesh_scan(app: tauri::AppHandle, mod_paths: Vec<String>, state
     let state = state.inner().clone();
     let mods_dir = state.lock().unwrap().game_path.clone();
     let Some(paks) = crate::xtra_broken::paks_dir(&mods_dir) else { return Ok(0) };
-    let Some(usmap) = crate::vfx_updater::commands::saved_usmap_path().filter(|u| crate::xtra_niagara::usmap_matches(u, &paks)) else { return Ok(0) };
+    // only reading meshes needs the USMAP to match the game: earlier answers carry over without it
+    let Some(usmap) = crate::vfx_updater::commands::saved_usmap_path() else { return Ok(0) };
+    let reads = crate::xtra_niagara::usmap_matches(&usmap, &paks);
     let game = crate::xtra_broken::game_updated(&mods_dir);
     let work = std::env::temp_dir().join("repak-x").join("xmesh").join(std::process::id().to_string());
     let vanilla = crate::xtra_vfx::vanilla_dir(&paks.to_string_lossy(), &usmap);
@@ -145,7 +147,9 @@ pub async fn xtra_mesh_scan(app: tauri::AppHandle, mod_paths: Vec<String>, state
         let (st, pc, pk) = (state.clone(), path.clone(), paks.clone());
         let (meshes, kept) = tauri::async_runtime::spawn_blocking(move || {
             let d = crate::compute_mod_details(&pc, &st).ok()?;
-            let made = crate::xtra_stamp::made(&pc, modified);
+            // an update the Mod Updater made carries the original's meshes as they were: its stamp says nothing about them,
+            // so they are compared with every skeleton the game rebuilt
+            let made = if crate::xtra_stamp::of(&pc).is_some() { 0 } else { modified };
             // a record from an earlier game still holds when no skeleton of its meshes was rebuilt since
             let kept = earlier.filter(|e| crate::xtra_broken::asset_list_complete(&pk) && crate::xtra_broken::meshes_with_rebuilt_skeleton(&pk, &d.files, e.game).is_empty());
             Some((crate::xtra_broken::meshes_with_rebuilt_skeleton(&pk, &d.files, made), kept))
@@ -164,6 +168,9 @@ pub async fn xtra_mesh_scan(app: tauri::AppHandle, mod_paths: Vec<String>, state
         }
     }
     let _ = std::fs::write(store(), serde_json::to_string(&all).unwrap_or_default()); // the records carried to this game
+    if !reads {
+        return Ok(n); // the rest is read once the USMAP matches the game
+    }
     let total = todo.len();
     for (i, (p, path, utoc, size, modified, meshes)) in todo.into_iter().enumerate() {
         // asked only before the tool runs: a mod with nothing to read never counts as work left

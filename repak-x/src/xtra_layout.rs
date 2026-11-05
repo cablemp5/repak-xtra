@@ -559,9 +559,7 @@ pub async fn xtra_layout_scan(app: tauri::AppHandle, mod_paths: Vec<String>, sta
     let state = state.inner().clone();
     let mods_dir = state.lock().unwrap().game_path.clone();
     let Some(paks) = mods_dir.ancestors().find(|p| p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("Paks"))).map(Path::to_path_buf) else { return Ok(0) };
-    if !crate::xtra_niagara::saved_usmap_matches(&paks) {
-        return Ok(0);
-    }
+    // records are kept per saved USMAP, so answers carry over while it is behind the game: only reading mods waits for it
     let Some(usmap) = crate::vfx_updater::commands::saved_usmap_path() else { return Ok(0) };
     let usmap_id = crate::xtra_vfx::usmap_hash(&usmap);
     let game = crate::xtra_broken::game_updated(&mods_dir);
@@ -600,6 +598,9 @@ pub async fn xtra_layout_scan(app: tauri::AppHandle, mod_paths: Vec<String>, sta
         todo.push((p, path, utoc, size, modified, details));
     }
     save(&store, &all); // the records carried to this game
+    if !crate::xtra_niagara::saved_usmap_matches(&paks) {
+        return Ok(checked); // the rest is read once the USMAP matches the game
+    }
     let total = todo.len();
     for (i, (p, path, utoc, size, modified, details)) in todo.into_iter().enumerate() {
         // asked only before the tool runs: a mod with nothing to read never counts as work left

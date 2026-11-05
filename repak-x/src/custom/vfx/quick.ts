@@ -35,8 +35,9 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 /** Whether the VFX Updater can update a mod: VFX, or any mod with a material instance (MI_*.uasset) or a KO prompt
  *  (WBP_Battle_Kill_*.uasset), as xtra_vfx.rs `updatable` decides (a skin's glow or shine material sorts as Mesh or Texture).
  *  A Needs VFX update flag counts too: the backend finds material instances by class (a UI material named M_..._Inst). */
-export const canUpdateVfx = (d?: { category?: string; files?: string[] } | null, path?: string) =>
-  d?.category === 'VFX' || Boolean(d?.files?.some(f => /^(mi_|wbp_battle_kill_).*\.uasset$/i.test(fileName(f)))) || (path !== undefined && verdictOf(path)?.kind === 'vfx')
+// a mod that may crash for what no update rebuilds (a mesh with more bones than its skeleton) is never offered one
+export const canUpdateVfx = (d?: { category?: string; files?: string[] } | null, path?: string) => !(path !== undefined && verdictOf(path)?.offOnly) && (
+  d?.category === 'VFX' || Boolean(d?.files?.some(f => /^(mi_|wbp_battle_kill_).*\.uasset$/i.test(fileName(f)))) || (path !== undefined && verdictOf(path)?.kind === 'vfx'))
 
 if (import.meta.env.DEV) {
   console.assert(canUpdateVfx({ category: 'VFX' }) && canUpdateVfx({ category: 'Texture', files: ['Marvel\\Content\\X\\mi_Body_Glow.uasset'] }), 'VFX or a material instance')

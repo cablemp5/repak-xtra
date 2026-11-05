@@ -470,7 +470,8 @@ export function VfxUpdaterPanel() {
         })
         // a listed mod with a May crash nothing here fixes (a mesh with bones its skeleton lacks): turned off, not rebuilt
         const offOnly = new Map(verdicts.filter(v => v.offOnly).map(v => [norm(v.path), v.reason]))
-        const list = [...listed.map(m => (offOnly.has(norm(m.path)) && /\.pak$/i.test(m.path) ? { ...m, risky: offOnly.get(norm(m.path)) } : m)), ...risky]
+        // off too: rebuilt, it would come back on (it was turned off to stay safe) with the same mesh
+        const list = [...listed.map(m => (offOnly.has(norm(m.path)) ? { ...m, risky: offOnly.get(norm(m.path)) } : m)), ...risky]
         // a VFX or material mod that may crash and is on is rebuilt like one that needs an update (its blueprints on the
         // game's): the same mods the Library's notice counts
         const n = new Map(verdicts.filter(v => needsUpdater(v.path, v)).map(v => [norm(v.path), v.reason]))

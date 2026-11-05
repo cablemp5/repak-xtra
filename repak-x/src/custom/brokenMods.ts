@@ -8,7 +8,7 @@ import { releaseScan, scanEnded, scanHeld, scanStarted } from './scanProgress'
 
 /** usmapWait (Needs VFX update only): files it rebuilds that a patch newer than the saved USMAP changed. While it is not
  *  0 the update waits for that patch's USMAP (xtra_broken.rs changed_since_usmap). */
-export type Verdict = { path: string; kind: 'broken' | 'vfx' | 'risky' | 'unknown'; reason: string; usmapWait?: number }
+export type Verdict = { path: string; kind: 'broken' | 'vfx' | 'risky' | 'unknown'; reason: string; usmapWait?: number; offOnly?: boolean }
 /** A verdict's badge text. */
 export const verdictLabel = (kind: Verdict['kind']) => (kind === 'broken' ? 'Broken' : kind === 'vfx' ? 'Needs update' : kind === 'unknown' ? 'Safety unknown' : 'May crash')
 

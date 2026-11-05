@@ -541,6 +541,8 @@ struct Facts<'a> {
     materials: bool,
     /// its update sits beside it (<name>_UPDATED_9999999_P, or this is <name>_BROKEN beside <name>): the update is judged, not the original again
     fixed: bool,
+    /// a materials check or an update's Nothing to update cleared it: its materials only, never its meshes or animations
+    cleared: bool,
     has_blueprint: bool,
     /// when the mod was made (seconds): its file's modified time, which installs set to the source's (xtra_made.rs)
     installed: u64,
@@ -586,7 +588,7 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
     // A VFX mod carries cooked copies of the game's materials and blueprints: an update that rewrote them leaves it stale
     let stale: Vec<&String> = packages.iter().filter(|k| game.get(*k).is_some_and(|at| *at > m.installed)).collect();
     let changed = stale.len();
-    if m.vfx && !m.fixed && m.old_layout {
+    if m.vfx && !m.fixed && !m.cleared && m.old_layout {
         let niagara = packages.iter().filter(|k| is_niagara(k) && game.contains_key(*k)).count();
         return Some(Verdict {
             path: path.to_string(),
@@ -597,7 +599,7 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
         off_only: false,
         });
     }
-    if m.vfx && !m.fixed && m.installed > 0 && changed > 0 {
+    if m.vfx && !m.fixed && !m.cleared && m.installed > 0 && changed > 0 {
         return Some(Verdict {
             path: path.to_string(),
             kind: "vfx",
@@ -612,7 +614,7 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
     // A material mod: the updater rebuilds only its material instances and KO prompts, so a rewritten texture alone does not count
     let stale_mi = stale.iter().filter(|k| m.mics.contains(**k)).count();
     let stale_ko = stale.iter().filter(|k| crate::xtra_vfx::is_ko_prompt(k.rsplit('/').next().unwrap_or(k))).count();
-    if m.materials && !m.fixed && m.installed > 0 && stale_mi + stale_ko > 0 {
+    if m.materials && !m.fixed && !m.cleared && m.installed > 0 && stale_mi + stale_ko > 0 {
         let what = match (stale_mi, stale_ko) {
             (0, _) => "the KO prompt".to_string(),
             (_, 0) => format!("{stale_mi} of the {}material instances", if m.ui { "UI " } else { "" }),
@@ -673,7 +675,8 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
 /// An inconclusive material comparison replaces date guesses, never evidence from another asset check.
 fn judge_checked(path: &str, mut facts: Facts<'_>, updated: u64, game: &GameAssets, unknown: Option<&str>) -> Option<Verdict> {
     let Some(reason) = unknown else { return judge(path, &facts, updated, game) };
-    if facts.old_layout { return judge(path, &facts, updated, game); }
+    // a kept original (its update beside it) is not judged again: an old "not known" on it is no badge either
+    if facts.old_layout || facts.fixed { return judge(path, &facts, updated, game); }
     facts.vfx = false;
     facts.materials = false;
     facts.old_materials = false;
@@ -981,7 +984,8 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                     ui: details.category == "UI",
                     mesh: crate::xtra_mesh::found_now(&meshes, &path.with_extension("utoc"), game_updated),
                     // an update found nothing to rebuild in it (this file, this game): judged like one with its fix beside it
-                    fixed: has_fix(&path) || found == Some(false),
+                    fixed: has_fix(&path),
+                    cleared: found == Some(false),
                     has_blueprint: details.has_blueprint,
                     installed,
                     old_layout: details.category == "VFX" && crate::xtra_niagara::known_old_layout(&path, &niagara_layouts),
@@ -1131,7 +1135,7 @@ mod tests {
     fn facts(files: &[String], installed: u64) -> Facts<'_> {
         // the MI_ names, as material_instances finds them without listing classes
         let mics = files.iter().filter(|f| is_package(f)).map(|f| match_key(f)).filter(|k| is_material_instance(k)).collect();
-        Facts { files, galacta: false, vfx: false, materials: false, fixed: false, has_blueprint: false, installed, old_layout: false, layout: None, old_materials: false, mics, ui: false, mesh: None }
+        Facts { files, galacta: false, vfx: false, materials: false, fixed: false, cleared: false, has_blueprint: false, installed, old_layout: false, layout: None, old_materials: false, mics, ui: false, mesh: None }
     }
     const LIVE: &str = "Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uasset";
 
@@ -1295,6 +1299,8 @@ mod tests {
         let both = v(&[mesh, mi]);
         let found = judge("m.pak", &Facts { materials: true, mesh: Some("x".into()), ..facts(&both, 50) }, 200, &game).unwrap();
         assert_eq!((found.kind, found.off_only), ("risky", true), "stale materials too: still turned off, never rebuilt with the mesh kept");
+        let found = judge("m.pak", &Facts { materials: true, cleared: true, mesh: Some("x".into()), ..facts(&both, 50) }, 200, &game).unwrap();
+        assert_eq!((found.kind, found.off_only), ("risky", true), "a materials check that cleared it never hides its mesh");
     }
 
     #[test]
@@ -1397,6 +1403,7 @@ mod tests {
                 ui: d.category == "UI",
                 mesh: None,
                 fixed: false,
+                cleared: false,
                 has_blueprint: true,
                 installed,
                 old_layout: vfx && crate::xtra_niagara::known_old_layout(&p, &niagara_layouts),

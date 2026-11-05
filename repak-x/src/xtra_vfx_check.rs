@@ -403,7 +403,9 @@ pub async fn xtra_vfx_check_scan(app: tauri::AppHandle, mod_paths: Vec<String>, 
     let state = state.inner().clone();
     let mods_dir = state.lock().unwrap().game_path.clone();
     let Some(paks) = mods_dir.ancestors().find(|p| p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("Paks"))).map(Path::to_path_buf) else { return Ok(0) };
-    let Some(usmap) = crate::vfx_updater::commands::saved_usmap_path().filter(|u| Path::new(u).is_file() && crate::xtra_niagara::usmap_matches(u, &paks)) else { return Ok(0) };
+    // the USMAP is needed only to read mods: answers for mods the update did not touch carry over without it (a game update
+    // with its USMAP not out yet would otherwise expire every finding until it is)
+    let usmap = crate::vfx_updater::commands::saved_usmap_path().filter(|u| Path::new(u).is_file() && crate::xtra_niagara::usmap_matches(u, &paks));
     let game = crate::xtra_broken::game_updated(&mods_dir);
     let parser = crate::xtra_vfx::parser_id();
     let store = scan_store();
@@ -444,9 +446,7 @@ pub async fn xtra_vfx_check_scan(app: tauri::AppHandle, mod_paths: Vec<String>, 
         .ok()
         .flatten();
         let Some((files, mics, all_known, kept)) = read else {
-            remember(&mut done, &utoc); // no details to read: as before, nothing to check in it
-            found += 1;
-            continue;
+            continue; // its details could not be read this time: looked at again by the next scan
         };
         if let Some(from) = kept {
             crate::xtra_broken::carry_checked(&utoc, from, game); // its verdict too
@@ -464,6 +464,7 @@ pub async fn xtra_vfx_check_scan(app: tauri::AppHandle, mod_paths: Vec<String>, 
         let stamp = crate::xtra_broken::file_stamp(&utoc);
         todo.push(Job { p, path, utoc, stamp, files, names, all_known });
     }
+    let Some(usmap) = usmap else { return Ok(found) }; // the rest is read once the USMAP matches the game
     // Two lanes: the next mod's extract (the tool's command line, a process of its own) runs while this one decodes (the
     // tool's library, one call at a time). Each lane has its own folder. Where no command line ships, both run in the
     // library one after the other, as before
