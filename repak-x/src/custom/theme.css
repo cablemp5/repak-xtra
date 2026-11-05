@@ -2571,7 +2571,10 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
   .lo-head-tools { flex-wrap: wrap; }
 }
 @media (max-width: 960px) {
-  .header-actions-right .btn-settings:not(:first-child) { font-size: 0 !important; gap: 0 !important; }
+  /* Launch keeps its label (the one primary action), the rest become even 36px squares with the icon centered.
+     Keyed on Launch, not :first-child, since the scan status button can sit before it */
+  .header-actions-right .btn-settings:not([data-tour="launch-btn"]) { font-size: 0 !important; gap: 0 !important; width: 36px; padding: 0 !important; justify-content: center; }
+  .header-actions-right .btn-settings:not([data-tour="launch-btn"]) > svg { margin: 0 !important; }
 }
 /* Light theme (no Settings entry now; an older settings.json can still pick it): the same blue accent, never the
    upstream red the app sets inline */
@@ -3020,7 +3023,7 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 
 /* The mod checks' progress in the header (ScanStatus.tsx): a quiet pill that rises in (transitions.dev Stagger) while a
    run reads mods, and keeps spinning while the window is in the background (idlePause.ts pauses decorative loops only) */
-.scan-status { height: 32px; padding: 0 10px; font-size: 12px; color: var(--text-secondary); white-space: nowrap; cursor: pointer;
+.scan-status { height: 32px; padding: 0 10px; font-size: 13px; font-weight: 500; color: var(--text-secondary); white-space: nowrap; cursor: pointer;
   animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; }
 .scan-status:hover { background: var(--quiet-hover); color: var(--text-primary); }
 .scan-status-in { display: inline-flex; align-items: center; gap: 6px; }
@@ -3114,3 +3117,15 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .bs-hint > svg { flex: none; color: var(--text-secondary); }
 .bs-modal .cs-footer { flex-wrap: wrap; row-gap: 8px; }   /* Undo, Not sure, the saved count, and Stop never squeeze each other */
 .bs-modal .cs-footer > * { flex: none; white-space: nowrap; }
+
+/* The app's busy overlay (upstream PromiseTransitionLoader: "Checking conflicts..."): a quiet panel like the header's scan
+   status, a hairline border and a small spinner, no accent glow, gradient, logo tile or backdrop blur */
+.promise-transition-loader { background: color-mix(in srgb, var(--bg-darkest), transparent 60%) !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+.promise-transition-loader__card { min-width: 0 !important; padding: 10px 14px !important; gap: 10px !important; border-radius: 10px !important;
+  border: 1px solid var(--panel-border) !important; background: var(--bg-dark) !important; box-shadow: none !important; }
+.promise-transition-loader__logo-shell { display: none !important; }
+.promise-transition-loader__card::before { content: ""; width: 14px; height: 14px; flex-shrink: 0; border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--text-secondary), transparent 70%); border-top-color: var(--text-primary);
+  animation: scan-status-spin 0.8s linear infinite; }
+.promise-transition-loader__message { font-size: 13px !important; font-weight: 500 !important; letter-spacing: 0 !important; color: var(--text-primary) !important; text-shadow: none !important; }
+@media (prefers-reduced-motion: reduce) { .promise-transition-loader__card::before { animation-duration: 2s; } }

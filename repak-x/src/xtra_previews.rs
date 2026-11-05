@@ -354,6 +354,8 @@ fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Result<Comman
         ("flow_compose.py", include_str!("preview_fixes/flow_compose.py")),
         ("sound_pak.py", include_str!("preview_fixes/sound_pak.py")),
         ("emote_split.py", include_str!("preview_fixes/emote_split.py")),
+        ("skin_blueprint.py", include_str!("preview_fixes/skin_blueprint.py")),
+        ("borrowed_pose.py", include_str!("preview_fixes/borrowed_pose.py")),
     ] {
         let path = runtime.join(name);
         if std::fs::read_to_string(&path).ok().as_deref() != Some(contents) {

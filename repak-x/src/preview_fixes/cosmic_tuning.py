@@ -83,16 +83,6 @@ def jelly_rough(chain):
     return 1.0 if jelly(chain) and matte(chain) else JELLY_ROUGH if jelly(chain) else 0.22
 
 
-SHELL_RIM = []   # a jelly skin's own silhouette rim color (RimLightColor at full RimRange, Panther X's white), for screen_rim
-SHELL_RIM_MIN = 0.8   # every channel this bright: a white rim the skin asks for, not the master's tinted fresnel
-
-
-def note_shell_rim(chain):
-    c = vec(chain, "RimLightColor", (0.0, 0.0, 0.0))
-    if not SHELL_RIM and min(c) >= SHELL_RIM_MIN and float(chain["scalars"].get("RimRange", 0.0)) >= 1.0:
-        SHELL_RIM.append(tuple(x / max(c) for x in c))
-
-
 # Painted jelly skins (White Fox's Cosmic Kumiho and King of the Cosmos, after their store shots): the painted colors show
 # light and soft, glowing, with the galaxy faint over them. The kit's (0.4 galaxy, glow 0.55) drew them dim and deep
 PAINTED_LOOK = (0.35, 0.85)   # share of galaxy over the painted skin, and its glow: swirls on King of the Cosmos's bright skin
@@ -100,6 +90,11 @@ PAINTED_LOOK_FOX = (0.2, 1.8)   # White Fox's darker lilac glows harder, the gal
 PAINTED_SOFT = 0.3   # color they lose: the store shots' colors are soft, the render's light and AgX deepened them
 PAINTED_WARM = (1.0, 0.68, 0.75)   # White Fox's lilac warmed: the render's light turned it periwinkle blue (King of the
                                    # Cosmos's green and blue keep their hue)
+
+
+def dark_space(chain):
+    """A galaxy whose two colors are black: only its stars show, over the painted color."""
+    return max(vec(chain, "GalaxyColorTex_Color1", (0.0, 0.09, 0.18)) + vec(chain, "GalaxyColorTex_Color2", (0.0, 0.16, 0.28))) < 0.01
 
 
 def painted(chain):
@@ -121,8 +116,12 @@ def painted_skin(mix, base_col, chain):
 
 
 def painted_emission(mix, base_col, space, stars, chain):
-    """A painted jelly skin's glow: its warmed painted color with a faint galaxy, plus the stars."""
-    return mix(mix(painted_skin(mix, base_col, chain), space, painted_look(chain)[0]), stars, 1.0, "ADD")
+    """A painted jelly skin's glow: its warmed painted color with a faint galaxy, plus the stars. Galaxy and stars only
+    inside a GalaxyMask, as in game: over a whole body, the glow sprites turned Celestial Soldier's arms flat white."""
+    skin = painted_skin(mix, base_col, chain)
+    glow = mix(mix(skin, space, painted_look(chain)[0]), stars, 1.0, "ADD")
+    mask = galaxy_mask(base_col, chain)
+    return glow if mask is None else mix(skin, glow, mask)
 
 
 def flat(chain):
@@ -147,8 +146,9 @@ SPRITE = {}
 def sparse(chain, key):
     """A jelly skin's glow sprite layer with a density under 1 (Moon Knight's T_Glow_1_001, 0.05): a few sprites, each in its
     own cell, not one sprite stretched over the card (the kit's tiling read the low density as one repeat). Small star
-    sprites (cosmic Black Panther's) keep the kit's tiling."""
-    if not jelly(chain) or float(chain["scalars"].get(key + "_Density", 6.0)) >= 1.0:
+    sprites (cosmic Black Panther's) keep the kit's tiling. Every galaxy material: Celestial Soldier's two glow sprites,
+    one repeat each, washed its chest and hair flat white."""
+    if material_kind(chain) != "galaxy" or float(chain["scalars"].get(key + "_Density", 6.0)) >= 1.0:
         return False
     path = game_png(chain["textures"].get(key))
     if path is None:
@@ -210,7 +210,6 @@ JELLY_PAINT_GLOW = 0.6  # self-light of the painted skin outside a GalaxyMask: P
 def jelly_emission(mix, base_col, space, stars, chain):
     """The glow: the skin with its faint galaxy, dim, plus the stars at their own strength (JELLY_GLOW is 1, so these are
     the real strengths). Outside a GalaxyMask: no galaxy or stars, the painted skin glowing softly."""
-    note_shell_rim(chain)
     body = mix(mix(jelly_skin(mix, base_col, chain), space, JELLY_SKY), (0.0, 0.0, 0.0), 1.0 - JELLY_BODY_GLOW)
     lit = mix(stars, (0.0, 0.0, 0.0), 1.0 - min(1.0, JELLY_STAR_GLOW / 2))   # mixing caps at 1: added twice for up to 2
     glow = mix(body, mix(lit, lit, 1.0, "ADD"), 1.0, "ADD")
