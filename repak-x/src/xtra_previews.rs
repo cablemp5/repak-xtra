@@ -347,6 +347,7 @@ fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Result<Comman
         ("cosmic_tuning.py", include_str!("preview_fixes/cosmic_tuning.py")),
         ("flow_anim.py", include_str!("preview_fixes/flow_anim.py")),
         ("flow_compose.py", include_str!("preview_fixes/flow_compose.py")),
+        ("sound_pak.py", include_str!("preview_fixes/sound_pak.py")),
     ] {
         let path = runtime.join(name);
         if std::fs::read_to_string(&path).ok().as_deref() != Some(contents) {
@@ -358,6 +359,9 @@ fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Result<Comman
     // The kit's contract (tools\previews\build_kit.py): where the kit is, the game's Paks folder, a writable work folder
     // for exports, caches and the lock, and Blender
     cmd.env("REPAKXTRA_KIT", &root).env("REPAKXTRA_WORK", previews_dir().join("work"));
+    if let Some(tool) = crate::xtra_uat_cli::cli() {
+        cmd.env("REPAKXTRA_UAT", tool);
+    }
     if let Some(p) = &paks {
         cmd.env("REPAKXTRA_PAKS", p);
     }

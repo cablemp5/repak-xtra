@@ -62,6 +62,11 @@ main_guard = '\nif __name__ == "__main__":'
 if source.count(main_guard) != 1:
     raise RuntimeError("This preview kit does not support the app's animated glow. Update it in Setup.")
 source = source.replace(main_guard, (runtime / "flow_compose.py").read_text(encoding="utf-8") + "\n" + main_guard, 1)
+sound_list = '    files = [f.strip() for f in run([REPAK, "list", pak], 120).stdout.splitlines()]'
+if source.count(sound_list) != 1:
+    raise RuntimeError("This preview kit does not support the app's sound reader. Update it in Setup.")
+source = source.replace(sound_list, "    pak = sound_pak(work, cfg, pak)\n" + sound_list, 1)
+source = source.replace(main_guard, (runtime / "sound_pak.py").read_text(encoding="utf-8") + "\n" + main_guard, 1)
 # The animation lives beside its still: a character's cleanup (keep_only .png) keeps a .webp written after the .png (a flow
 # animation; an older animation mod's .webp is older and still goes), and a dropped form or an empty loadout takes its .webp too
 cleanup = [
@@ -80,15 +85,14 @@ vanilla_dir = 'f"v{VERSION}-{game_stamp(cfg)}"'
 if source.count(vanilla_dir) != 2:
     raise RuntimeError("This preview kit does not support the app's before pictures. Update it in Setup.")
 source = source.replace(vanilla_dir, 'f"v{VERSION}' + ("r" if rim_on else "") + '-{game_stamp(cfg)}"')
-# VFX palette cards: labels at two thirds of the kit's size (84 px read too large on the card), with their line spacing to
-# match. ANIM goes up one and REDO names "vfx", so cards made before render again when asked for (a cached "nothing to
-# show" is also looked at once more, which only reads the mod).
+# VFX palette cards use smaller labels and matching spacing. ANIM 9 retries cached empty results now that stripped
+# sound PAKs can be read. Existing successful previews keep their own REDO thresholds.
 vfx_hooks = [
     ("label, gap, top = 140, 40, 100", "label, gap, top = 92, 40, 100"),
     ("(MARGIN + 4, y + bh + 24)", "(MARGIN + 4, y + bh + 16)"),
     ("(w - MARGIN - 4, y + bh + 24)", "(w - MARGIN - 4, y + bh + 16)"),
     ("font(84", "font(55"),
-    ("\nANIM = 7 ", "\nANIM = 8 "),
+    ("\nANIM = 7 ", "\nANIM = 9 "),
     ('REDO = {"sound": 4, "anim": 6}', 'REDO = {"sound": 4, "anim": 6, "vfx": 8}'),
 ]
 if any(old not in source for old, _ in vfx_hooks):

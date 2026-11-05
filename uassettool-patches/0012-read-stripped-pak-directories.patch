@@ -1,0 +1,105 @@
+diff --git a/src/UAssetTool/IoStore/PakReader.cs b/src/UAssetTool/IoStore/PakReader.cs
+index 814bc3a..5077291 100644
+--- a/src/UAssetTool/IoStore/PakReader.cs
++++ b/src/UAssetTool/IoStore/PakReader.cs
+@@ -38,6 +38,7 @@ public class PakReader : IDisposable
+     // Index data
+     private readonly Dictionary<string, PakEntry> _entries = new();
+     private int _skippedInherited;
++    private readonly bool _recoverPaths;
+     
+     // Cache for encryption limits (path -> limit) to avoid re-hashing on repeat access
+     // ConcurrentDictionary so Get() is safe to call from Parallel.ForEach
+@@ -46,13 +47,14 @@ public class PakReader : IDisposable
+     // Compression methods from footer
+     private readonly string[] _compressionMethods = new string[5];
+ 
+-    public PakReader(string pakPath, string? aesKeyHex = null, bool useStandardAes = false)
++    public PakReader(string pakPath, string? aesKeyHex = null, bool useStandardAes = false, bool recoverPaths = true)
+     {
+         var fs = new FileStream(pakPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 1, useAsync: false);
+         _stream = fs;
+         _fileHandle = fs.SafeFileHandle;
+         _ownsStream = true;
+         _useStandardAes = useStandardAes;
++        _recoverPaths = recoverPaths;
+         string keyHex = aesKeyHex ?? DEFAULT_AES_KEY_HEX;
+         _aesKey = ParseAesKey(keyHex);
+         _standardAesKey = ParseAesKeyStandard(keyHex);
+@@ -271,6 +273,7 @@ public class PakReader : IDisposable
+         // Unused file count
+         uint unusedFileCount = indexReader.ReadUInt32();
+ 
++        var pathHashToOffset = new Dictionary<ulong, uint>();
+         // Read path hash index to get file paths (decrypt only if index is encrypted)
+         if (hasPathHashIndex != 0 && pathHashIndexSize > 0)
+         {
+@@ -284,7 +287,6 @@ public class PakReader : IDisposable
+             using var phiReader = new BinaryReader(phiStream);
+             
+             uint phiCount = phiReader.ReadUInt32();
+-            var pathHashToOffset = new Dictionary<ulong, uint>();
+             
+             for (uint i = 0; i < phiCount; i++)
+             {
+@@ -343,6 +345,9 @@ public class PakReader : IDisposable
+             }
+         }
+ 
++        if (recordCount > 0 && hasFullDirectoryIndex == 0 && _recoverPaths)
++            RecoverPaths(pathHashToOffset, encodedEntriesData);
++
+         Console.Error.WriteLine($"[PakReader] Loaded {_entries.Count} entries from PAK");
+         if (_skippedInherited > 0)
+             Console.Error.WriteLine($"[PakReader] {_skippedInherited} files inherited from base pak (no data in this patch pak)");
+@@ -357,6 +362,37 @@ public class PakReader : IDisposable
+         }
+     }
+ 
++    // A stripped directory keeps hashes of real game paths. Match those paths, never infer names from mod titles.
++    private void RecoverPaths(Dictionary<ulong, uint> hashes, byte[] encodedEntries)
++    {
++        if (_stream is not FileStream file)
++            throw new InvalidDataException("This PAK needs the game's filenames to read its stripped directory.");
++        var paks = new DirectoryInfo(Path.GetDirectoryName(file.Name)!);
++        while (paks != null && !paks.Name.Equals("Paks", StringComparison.OrdinalIgnoreCase))
++            paks = paks.Parent;
++        if (paks == null)
++            throw new InvalidDataException("This PAK has no filename directory. Read it from the game's Paks folder.");
++
++        var remaining = hashes.Where(h => (h.Value & 0x80000000u) == 0).ToDictionary(h => h.Key, h => h.Value);
++        foreach (string candidate in Directory.EnumerateFiles(paks.FullName, "*.pak").OrderBy(p => p, StringComparer.OrdinalIgnoreCase))
++        {
++            if (remaining.Count == 0) break;
++            if (Path.GetFullPath(candidate).Equals(Path.GetFullPath(file.Name), StringComparison.OrdinalIgnoreCase)) continue;
++            using var game = new PakReader(candidate, Convert.ToHexString(_standardAesKey), recoverPaths: false);
++            foreach (string name in game.Files)
++            {
++                string full = game.MountPoint.TrimEnd('/') + "/" + name.TrimStart('/');
++                if (!full.StartsWith(MountPoint, StringComparison.OrdinalIgnoreCase)) continue;
++                string relative = full[MountPoint.Length..];
++                ulong hash = PakWriter.Fnv64Path(relative, PathHashSeed);
++                if (!remaining.Remove(hash, out uint offset)) continue;
++                _entries[relative] = ParseEncodedEntry(encodedEntries, checked((int)offset));
++            }
++        }
++        if (remaining.Count > 0 || _entries.Count == 0)
++            throw new InvalidDataException("Some filenames in this PAK's stripped directory could not be matched to the installed game.");
++    }
++
+     /// <summary>
+     /// Parse encoded entry (from repak entry.rs read_encoded)
+     /// </summary>
+diff --git a/src/UAssetTool/IoStore/PakWriter.cs b/src/UAssetTool/IoStore/PakWriter.cs
+index e1d0955..8d5744a 100644
+--- a/src/UAssetTool/IoStore/PakWriter.cs
++++ b/src/UAssetTool/IoStore/PakWriter.cs
+@@ -520,7 +520,7 @@ public class PakWriter : IDisposable
+     /// FNV64 hash for path (from pak.rs fnv64_path lines 759-763)
+     /// CRITICAL: Uses UTF-16 LE encoding!
+     /// </summary>
+-    private static ulong Fnv64Path(string path, ulong offset)
++    internal static ulong Fnv64Path(string path, ulong offset)
+     {
+         string lower = path.ToLowerInvariant();
+         byte[] data = Encoding.Unicode.GetBytes(lower); // UTF-16 LE

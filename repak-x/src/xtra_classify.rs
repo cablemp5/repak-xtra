@@ -66,6 +66,15 @@ mod tests {
     }
 
     #[test]
+    fn recovered_sound_bank_gets_the_audio_tag() {
+        let details = crate::utils::get_pak_characteristics_detailed(v(&[
+            "Marvel/Content/WwiseAudio/bnk_display_1036802.bnk",
+        ]));
+        assert_eq!(details.category, "Audio");
+        assert!(details.mod_type.contains("Audio"));
+    }
+
+    #[test]
     fn galacta_needs_mesh_and_config_in_the_galacta_folder() {
         let entry = v(&[
             "../../../Marvel/Content/Marvel/ProjectGalacta/Meshes/1026/1026001/BuckySwap/DA_BuckySwap.uasset",
