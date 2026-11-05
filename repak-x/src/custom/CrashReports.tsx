@@ -3,11 +3,12 @@
 // crash reports opens the folder the game writes them to, one UECC folder per crash.
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { FileWarning, FolderOpen } from 'lucide-react'
+import { FileWarning, FolderOpen, ListChecks } from 'lucide-react'
 import { useAlert } from '../components/AlertHandler'
 import { nameKey } from './loadoutStore'
 import { ModName } from './modName'
 import { type RecentCrash, recentCrashes, reportSource } from './setupReport'
+import { OPEN_BISECT } from './crashBisect'
 
 const when = (secs: number) => new Date(secs * 1000).toLocaleString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' })
 
@@ -27,7 +28,11 @@ export default function CrashReports() {
     <div className="setting-section">
       <div className="crs-head">
         <h3 className="setting-icon-label"><FileWarning size={18} aria-hidden="true" />Crash reports</h3>
-        <button type="button" className="lo-text-btn" onClick={openFolder}><FolderOpen size={14} aria-hidden="true" /> Open crash reports</button>
+        <span className="crs-actions">
+          {/* any time, not only after a crash toast: the game may have crashed while repakxtra was closed */}
+          <button type="button" className="lo-text-btn" onClick={() => window.dispatchEvent(new Event(OPEN_BISECT))}><ListChecks size={14} aria-hidden="true" /> Find the crashing mod</button>
+          <button type="button" className="lo-text-btn" onClick={openFolder}><FolderOpen size={14} aria-hidden="true" /> Open crash reports</button>
+        </span>
       </div>
       <p className="setting-subtext">Marvel Rivals' crash folder holds each crash as its own UECC folder. Zip the newest one when sharing a crash with support.</p>
       <div className="setting-group">

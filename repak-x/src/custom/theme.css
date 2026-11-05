@@ -2411,10 +2411,13 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 
 /* ---------- Crash suspects (custom/CrashSuspects.tsx): the crash toast's two buttons, and the suspects list ---------- */
 .cs-toast-actions { display: inline-flex; gap: 8px; }
-/* The two buttons sit under the text, not beside it: beside, they left the asset path a narrow column that wrapped to five lines */
-.toast-item:has(.cs-toast-actions) { flex-wrap: wrap; align-items: flex-start !important; }
-.toast-item:has(.cs-toast-actions) .toast-content { flex-basis: calc(100% - 32px); }   /* 32px = icon 20 + gap 12 */
-.toast-item:has(.cs-toast-actions) .toast-end-content { max-width: none; margin-left: 32px; }
+/* The two buttons sit on the right of the text (cable 2026-11-04). The toast gets wider for them, and a long asset path
+   breaks anywhere and stops at three lines instead of squeezing into a narrow column */
+.toast-container:has(.cs-toast-actions) { width: 560px; max-width: calc(100vw - 32px); }
+.toast-item:has(.cs-toast-actions) { align-items: center !important; }
+.toast-item:has(.cs-toast-actions) .toast-content { flex: 1; min-width: 0; }
+.toast-item:has(.cs-toast-actions) .toast-description { overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.toast-item:has(.cs-toast-actions) .toast-end-content { max-width: none; flex: none; }
 .cs-modal { width: min(560px, 92vw) !important; max-width: none !important; max-height: 80vh; display: flex; flex-direction: column; padding: 0 !important; }
 .cs-modal .modal-header { padding: 16px 20px !important; border-bottom: 1px solid var(--panel-border); align-items: flex-start; }
 .cs-modal .modal-header h2 { margin: 0; font-size: 16px !important; font-weight: 600; }
@@ -3036,3 +3039,91 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .scan-status-in { display: inline-flex; align-items: center; gap: 6px; }
 .scan-status-spin { animation: scan-status-spin 1s linear infinite; }
 @keyframes scan-status-spin { to { transform: rotate(360deg); } }
+
+/* Find the crashing mod (custom/BisectPanel.tsx): the crash suspects dialog's shell, with steps, a round bar and a result */
+.bs-body { gap: 16px !important; }
+.bs-lead { margin: 0; font-size: 14px; line-height: 1.55; color: var(--text-primary); text-wrap: pretty; }
+.bs-progress { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; font-size: 13px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.bs-bar { display: flex; gap: 4px; }
+.bs-bar i { flex: 1; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); transition: background-color 250ms cubic-bezier(0.16, 1, 0.3, 1); }
+.bs-bar i.is-done { background: var(--accent-primary); }
+.bs-body .fr-steps { padding: 0 !important; overflow: visible; }   /* the guided setup's numbered steps, inside the dialog's own padding */
+.bs-body .fr-step { padding: 12px 0; }
+.bs-answers { display: inline-flex; gap: 8px; flex: none; }
+.bs-launch, .bs-back { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.bs-modal .bs-launch.btn-primary { padding: 0 14px !important; }
+.bs-modal .cs-footer .bs-back + :not(.bs-back, .bs-safe) { margin-left: auto; }   /* Undo and Not sure on the left, the way out on the right */
+.bs-link { align-self: flex-start; padding: 0; border: 0; background: none; font: inherit; font-size: 12px; color: var(--text-secondary);
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.bs-link:hover { color: var(--text-primary); }
+.bs-mod { padding: 12px 14px; border: 1px solid var(--panel-border); border-radius: 10px; }
+.bs-mod .cs-name { font-size: 14px; font-weight: 600; }
+.bs-bar i.is-now { background: color-mix(in srgb, var(--accent-primary), transparent 65%); }
+.bs-off > summary { cursor: pointer; width: fit-content; font-size: 12px; color: var(--text-secondary); }
+.bs-off > summary:hover { color: var(--text-primary); }
+.bs-off > .cs-list { margin-top: 8px; max-height: 180px; overflow-y: auto; }
+.bs-off .cs-list li { min-height: 36px; }
+.bs-culprits { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.bs-culprit { display: flex; align-items: center; gap: 10px; padding: 14px; border: 1px solid color-mix(in srgb, var(--accent-primary), transparent 55%);
+  border-radius: 10px; background: color-mix(in srgb, var(--accent-primary), transparent 90%); color: var(--accent-primary); }
+.bs-culprit .cs-name { font-size: 14px; font-weight: 600; }
+
+.bs-alert { display: flex; gap: 10px; margin: 16px 20px 0; padding: 12px 14px; border: 1px solid color-mix(in srgb, #f5a524, transparent 60%);
+  border-radius: 10px; background: color-mix(in srgb, #f5a524, transparent 92%); color: var(--text-primary); }
+.bs-alert > svg { flex: none; margin-top: 2px; color: #f5a524; }
+.bs-alert p { margin: 0; font-size: 13px; line-height: 1.5; }
+/* toasts about other things wait behind the test dialog instead of covering its buttons; its own problems show inside */
+body:has(.bs-modal) .toast-container { z-index: 1999; }
+.bs-resumed { color: var(--text-secondary); }
+/* the two answers: red for a crash and green for no crash (cable 2026-11-04), icon and a quiet tint, white words */
+.bs-ans { display: inline-flex; align-items: center; gap: 6px; }
+.bs-ans.is-crash svg { color: #f06a6a; }
+.bs-ans.is-fine svg { color: #3ecf6e; }
+.bs-ans.is-crash:not(:disabled) { border-color: rgba(240, 106, 106, 0.35) !important; background: rgba(240, 106, 106, 0.08) !important; }
+.bs-ans.is-fine:not(:disabled) { border-color: rgba(62, 207, 110, 0.35) !important; background: rgba(62, 207, 110, 0.08) !important; }
+.bs-ans.is-crash:hover:not(:disabled) { background: rgba(240, 106, 106, 0.16) !important; }
+.bs-ans.is-fine:hover:not(:disabled) { background: rgba(62, 207, 110, 0.16) !important; }
+.bs-found { margin: 0; padding: 12px 14px; border: 1px solid var(--panel-border); border-radius: 10px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.bs-found > :first-child { color: var(--text-primary); font-weight: 600; }
+.crs-actions { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.bs-overlay { z-index: 2100 !important; }   /* above Settings, where Crash reports opens it */
+.cs-note .bs-link { font-size: inherit; }
+
+/* Find the crashing mod: the saved-mods line, and motion (transitions.dev recipes:
+   Page side-by-side for each step, Texts reveal for lists, Number pop-in for the test number and done checks) */
+.bs-roles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.bs-role { padding: 12px 14px; border: 1px solid var(--panel-border); border-radius: 10px; }
+.bs-role.is-app { background: color-mix(in srgb, var(--accent-primary), transparent 93%); border-color: color-mix(in srgb, var(--accent-primary), transparent 70%); }
+.bs-role h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.bs-role.is-app h3 { color: var(--accent-primary); }
+.bs-role :is(ol, ul) { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.bs-role li > svg { flex: none; color: var(--text-secondary); }
+.bs-role.is-app li > svg { color: var(--accent-primary); }
+.bs-role li { display: flex; align-items: center; gap: 8px; font-size: 13px; line-height: 1.5; color: var(--text-primary);
+  animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; animation-delay: calc(var(--i, 0) * var(--stagger-stagger) + 80ms); }
+.bs-safe { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #3ecf6e; white-space: nowrap; }
+.bs-modal .cs-footer .bs-back + .bs-safe { margin-left: auto; }
+.bs-modal .cs-footer > .bs-safe:first-child { margin-left: auto; }
+.bs-stop { display: inline-flex; align-items: center; gap: 6px; }
+@keyframes bs-from-right { from { opacity: 0; transform: translateX(var(--page-slide-distance)); filter: blur(var(--page-blur)); } }
+@keyframes bs-from-left { from { opacity: 0; transform: translateX(calc(var(--page-slide-distance) * -1)); filter: blur(var(--page-blur)); } }
+.bs-in { animation: bs-from-right var(--page-slide-dur) var(--page-slide-ease) backwards; }
+.bs-in-back { animation: bs-from-left var(--page-slide-dur) var(--page-slide-ease) backwards; }
+.bs-steps .fr-step.is-done .fr-num svg { animation: t-num-pop var(--digit-dur) var(--digit-ease) backwards; }
+.bs-ans { transition: background-color 200ms var(--reveal-ease), border-color 200ms var(--reveal-ease), opacity 200ms var(--reveal-ease); }
+.bs-culprit { animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; animation-delay: calc(var(--i, 0) * var(--stagger-stagger) + 60ms); }
+.bs-alert, .bs-found { animation: t-rise-in 250ms var(--stagger-ease) backwards; }
+.bs-bar i.is-done { animation: bs-fill 300ms var(--page-slide-ease) backwards; }
+@keyframes bs-fill { from { transform: scaleX(0.2); transform-origin: left; } }
+/* the two numbers before a run: small label over a big number, two cards */
+.bs-facts { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 0; }   /* one card, full width */
+.bs-dt-note { opacity: 0.75; }
+.bs-facts > div { padding: 12px 14px; border: 1px solid var(--panel-border); border-radius: 10px; animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; }
+.bs-facts > div + div { animation-delay: var(--stagger-stagger); }
+.bs-facts dt { font-size: 12px; color: var(--text-secondary); }
+.bs-facts dd { margin: 2px 0 0; font-size: 24px; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--text-primary);
+  animation: t-num-pop var(--digit-dur) var(--digit-ease) 120ms backwards; }
+.bs-hint { display: inline-flex; align-items: center; gap: 6px; margin-right: auto; font-size: 12px; color: var(--text-secondary); }
+.bs-hint > svg { flex: none; color: var(--text-secondary); }
+.bs-modal .cs-footer { flex-wrap: wrap; row-gap: 8px; }   /* Undo, Not sure, the saved count, and Stop never squeeze each other */
+.bs-modal .cs-footer > * { flex: none; white-space: nowrap; }

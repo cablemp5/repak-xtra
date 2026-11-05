@@ -120,7 +120,7 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
           <div>
             <h2>Crash suspects</h2>
             {/* the plain words first, the error and the file for whoever wants them, with Copy (Tesler) */}
-            <p className="cs-lead">These mods that are on match the crash, closest first.</p>
+            <p className="cs-lead">{suspects?.length === 0 ? 'No mod that is on matches this crash.' : 'These mods that are on match the crash, closest first.'}</p>
             {(p.crash_type || p.asset_path) && (
               <details className="cs-file" onToggle={e => setShowFile(e.currentTarget.open)}>
                 <summary>Crash details</summary>
@@ -139,7 +139,7 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
           {suspects === null
             ? <p className="cs-empty">Looking through the mods that are on…</p>
             : suspects.length === 0
-              ? <p className="cs-empty">{failed ? 'The mods could not be checked just now. Turn mods off a few at a time to find it, or open this again.' : 'No mod matches this crash. Turn mods off a few at a time to find it.'}</p>
+              ? <p className="cs-empty">{failed ? 'The mods could not be checked just now. Open this again, or find the mod by testing the game.' : 'repakxtra can still find it by testing: it switches groups of mods off while you launch the game, and puts them all back at the end.'}</p>
               // one group per match strength, closest first: a heading instead of the same reason on every row (common
               // region, chunking), and a word when only hero matches came up (they are the weakest)
               : <>
@@ -160,6 +160,8 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
                       ))}</ul>
                     </section>
                   ))}
+                  {/* the matches are a guess from file names: the test finds the mod for sure */}
+                  <p className="cs-note">Not sure it is one of these? <button type="button" className="bs-link" onClick={() => { close(); window.dispatchEvent(new Event(OPEN_BISECT)) }}>Test my mods</button> finds it by playing.</p>
                 </>}
         </div>
         <div className="modal-footer cs-footer">
@@ -167,7 +169,7 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
           {Boolean(suspects?.length) && <span className="cs-undo">You can undo this from the notice that follows.</span>}
           <button type="button" className="lo-text-btn" onClick={close}>{suspects?.length ? 'Cancel' : 'Close'}</button>
           {suspects?.length === 0 && (
-            <button type="button" className="btn-primary" onClick={() => { close(); window.dispatchEvent(new Event(OPEN_BISECT)) }}>Find the crashing mod</button>
+            <button type="button" className="btn-primary" onClick={() => { close(); window.dispatchEvent(new Event(OPEN_BISECT)) }}>Test my mods</button>
           )}
           {Boolean(suspects?.length) && (
             <button type="button" className="btn-primary" disabled={busy || picked.size === 0} onClick={turnOff}>
