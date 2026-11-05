@@ -55,6 +55,18 @@ fn plugins_in(win64: &Path) -> Vec<Plugin> {
     out
 }
 
+/// A mod named for what the notice bans ("NoRecoil", "no-screen-shake", "No Impact"): its name says what it removes,
+/// whatever its files are called.
+fn by_name(path: &Path) -> Option<String> {
+    let stem: String = path.file_stem()?.to_string_lossy().to_lowercase().chars().filter(|c| c.is_ascii_alphanumeric()).collect();
+    const REMOVES: &[(&str, &str)] = &[
+        ("noscreenshake", "screen shake"), ("nocamerashake", "screen shake"), ("noshake", "screen shake"), ("norecoil", "weapon recoil"),
+        ("noimpact", "impact effects"), ("nobullet", "bullet effects"), ("notracer", "bullet tracers"),
+        ("nomuzzle", "muzzle flashes"), ("nofootstep", "footstep sounds"),
+    ];
+    REMOVES.iter().find(|(word, _)| stem.contains(word)).map(|(_, what)| format!("Its name says it removes {what}."))
+}
+
 /// What a mod's files say about it, the strongest finding first. `files` as the mod lists them, any mount root.
 fn judge(files: &[String]) -> Option<(&'static str, String)> {
     // "Marvel/Content/Marvel/X.uasset" (PAK) and "/Game/Marvel/X.uasset" (IoStore) both become "marvel/x.uasset"
@@ -121,8 +133,12 @@ pub async fn xtra_safety_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
     tauri::async_runtime::spawn_blocking(move || {
         mod_paths.into_iter().filter_map(|p| {
             let path = PathBuf::from(&p);
-            if crate::xtra_setup::is_managed_loader(&path) || crate::xtra_builtins::in_folder(&path) {
+            // built-ins too: No Screen Shake, No Bullet Holes, and No Impact are what the notice bans
+            if crate::xtra_setup::is_managed_loader(&path) {
                 return None;
+            }
+            if let Some(reason) = by_name(&path) {
+                return Some(Risk { path: p, level: "ban", reason });
             }
             let details = crate::compute_mod_details(&path, &state).ok()?;
             judge(&details.files).map(|(level, reason)| Risk { path: p, level, reason })
@@ -149,6 +165,14 @@ mod tests {
         assert_eq!(j(&["/Game/Marvel/VFX/Particles/Hero/1026/NS_1026_Hit.uasset", "/Game/Marvel/VFX/Trail/NS_Bullet_Trail.uasset"]), None, "a VFX recolor is fine");
         assert_eq!(j(&["/Game/Marvel/Data/Skin/DT_SkinTable.uasset"]), None, "cosmetic data is fine");
         assert_eq!(j(&["Marvel/Content/WwiseAudio/bnk_sfx_common.bnk", "/Game/Marvel/Camera/Recoil_Rifle.uasset"]), Some("ban"), "the strongest wins");
+    }
+
+    #[test]
+    fn names_that_say_what_they_remove() {
+        assert!(by_name(Path::new("repakxtra-no-screen-shake_9999999_P.pak")).is_some());
+        assert!(by_name(Path::new("NoRecoil_P.bak_repak")).is_some());
+        assert!(by_name(Path::new("No Impact_P.pak")).is_some());
+        assert!(by_name(Path::new("NorthStar_Skin_P.pak")).is_none());
     }
 
     #[test]
