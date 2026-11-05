@@ -278,7 +278,6 @@ async fn finish(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, work
         }
         out.old_layout = old;
     }
-    let found = verdicts(&mine, &versions);
     out.why = (!out.unknown.is_empty()).then_some(if unreadable { "unreadable" } else { "elsewhere" });
     let complete = layout_ok && all_known;
     out.verdict = if !out.outdated.is_empty() {
@@ -294,7 +293,7 @@ async fn finish(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, work
     };
     // up to date (or only shader-less ones) only when every material was found and its layout told: else not known, and
     // the next scan looks again
-    if matches!(out.verdict, "current" | "none") && !found.is_empty() && !complete {
+    if matches!(out.verdict, "current" | "none") && !complete {
         out.verdict = "unknown";
         out.unknown.append(&mut out.current);
         out.why = Some(if all_known { "layout" } else { "classes" });

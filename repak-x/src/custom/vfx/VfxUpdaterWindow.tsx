@@ -659,7 +659,8 @@ export function VfxUpdaterPanel() {
       const job = fixVfxMod({
         // a candidate joins the review card at the top (with a sound, and the taskbar flashes when the window is behind)
         // and the batch goes on: its update finishes once Use candidate or Keep original is pressed
-        policy: repairPolicy, review: report => new Promise(resolve => {
+        // after Cancel, a candidate that finishes packing keeps its original at once: no card waits for an answer
+        policy: repairPolicy, review: report => cancel.current ? Promise.resolve(false) : new Promise(resolve => {
           asked()
           patch(key, { status: 'review', sub: undefined })
           setReviews(q => [...q, { key, name: mod.name, report, resolve: ok => { if (ok) patch(key, { status: 'running', step: STEPS.length }); resolve(ok) } }])
