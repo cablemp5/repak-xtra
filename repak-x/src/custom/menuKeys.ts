@@ -18,7 +18,7 @@ function mark(menu: HTMLElement) {
   for (const el of menu.querySelectorAll<HTMLElement>(ITEM)) {
     el.setAttribute('role', 'menuitem')
     el.tabIndex = -1
-    if (el.classList.contains('submenu-trigger')) el.setAttribute('aria-haspopup', 'menu')
+    if (el.classList.contains('submenu-trigger')) { el.setAttribute('aria-haspopup', 'menu'); if (!el.hasAttribute('aria-expanded')) el.setAttribute('aria-expanded', 'false') }
     if (el.classList.contains('is-disabled')) el.setAttribute('aria-disabled', 'true')
   }
 }
@@ -48,13 +48,17 @@ export function useMenuKeys(ref: RefObject<HTMLElement | null>, onClose: () => v
     const level = current ? levelOf(current) ?? menu : menu
     const items = itemsIn(level)
     const at = current ? items.indexOf(current) : -1
+    // aria-expanded follows kb-open, so a screen reader hears whether a submenu is open
+    const shut = (it: HTMLElement) => { it.classList.remove('kb-open'); if (it.classList.contains('submenu-trigger')) it.setAttribute('aria-expanded', 'false') }
     const go = (i: number) => {
-      for (const it of items) it.classList.remove('kb-open')
+      items.forEach(shut)
       items[(i + items.length) % items.length]?.focus({ preventScroll: true })
     }
     const openSub = () => {
       if (!current?.classList.contains('submenu-trigger')) return false
-      for (const it of items) it.classList.toggle('kb-open', it === current)
+      items.forEach(shut)
+      current.classList.add('kb-open')
+      current.setAttribute('aria-expanded', 'true')
       place(current)
       const sub = current.querySelector<HTMLElement>(':scope > .submenu')
       if (sub) itemsIn(sub)[0]?.focus({ preventScroll: true })
@@ -69,7 +73,7 @@ export function useMenuKeys(ref: RefObject<HTMLElement | null>, onClose: () => v
     else if (e.key === 'ArrowLeft') {
       const trigger = level.closest<HTMLElement>('.submenu-trigger')
       if (!trigger) return
-      trigger.classList.remove('kb-open')
+      shut(trigger)
       trigger.focus({ preventScroll: true })
     } else if (e.key === 'Enter' || e.key === ' ') {
       if (!openSub()) current?.click()

@@ -117,7 +117,7 @@ game crashes. The VFX Updater rebuilds them on the new game files, many at once.
    tick them under **Other VFX mods** or **Material mods**, or click **Select all** on a group. Not sure about a mod?
    Tick it and click **Scan**: it checks whether its materials were made for this game version, whatever its date says.
 4. **Missing a mod?** Click **Add .utoc** and pick its `.utoc` file, or right-click it in the Library and click
-   **For modders > Send to VFX Updater**.
+   **More > Send to Mod Updater**.
 5. **Click Update** (or press `Ctrl+Enter`). The line at the bottom says about how long it will take, and each mod
    shows its progress as it goes. **Cancel** (or `Esc`) stops the run.
 6. **Check the result.** Finished mods move down to **Updated**. The updated copy keeps the mod's name, loadouts and

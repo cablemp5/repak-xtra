@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { IoLayersSharp } from "react-icons/io5"
 import { Trash2 } from 'lucide-react' // repakxtra
 import './ContextMenu.css'
 import { holdKeys } from '../custom/holdKeys' // repakxtra
@@ -349,7 +348,9 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
     <div ref={menuRef} className="context-menu" style={{ top: adjustedPos.y, left: adjustedPos.x }} onClick={(e) => e.stopPropagation()} onKeyDown={onMenuKeyDown}>
       <div className="context-menu-header">{mod.custom_name || mod.path.split(/[/\\]/).pop()}</div>
 
-      {/* repakxtra: everyday actions first (Turn on/off, Rename), Delete last and apart from Rename */}
+      {/* repakxtra: about seven rows in four groups (Hick's law, Miller's law, Chunking). The everyday actions open the
+          menu and Delete closes it, apart from the rest (Serial Position Effect). Everything else keeps its place under
+          one word, Troubleshoot or More (Tesler's law: the system carries the complexity, not the top level). */}
       <div className="context-menu-item" onClick={() => { onToggle(); onClose(); }}>
         {mod.enabled ? 'Turn off' : 'Turn on'}{/* repakxtra: On/Off, as on the switches */}
       </div>
@@ -357,9 +358,14 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
         Rename
       </div>
       {onUpdateVfx && <div className="context-menu-item" onClick={() => { onUpdateVfx(); onClose(); }}>Update mod</div>}{/* repakxtra */}
-      {onCheckVfx && <div className="context-menu-item" onClick={() => { onCheckVfx(); onClose(); }}>Check for update</div>}{/* repakxtra */}
-      {selectionCount <= 1 && <div className="context-menu-item" onClick={() => { openWhy(mod.path, mod.custom_name); onClose(); }}>Why isn't it working?</div>}{/* repakxtra */}
       <div className="context-menu-separator" />
+      {/* repakxtra: the three "put it somewhere" submenus side by side (Law of Proximity, Law of Similarity), loadouts first */}
+      {loadoutMenu && (
+        <div className="context-menu-item submenu-trigger" onMouseEnter={handleSubmenuEnter}>
+          {selectionCount > 1 ? `Add ${selectionCount} mods to loadout` : 'Add to loadout'}
+          <div className="submenu">{loadoutMenu(onClose)}</div>
+        </div>
+      )}
       <div className="context-menu-item submenu-trigger" onMouseEnter={handleSubmenuEnter}>
         {selectionCount > 1 ? `Move ${selectionCount} mods to` : 'Move to'}
         {/* Same order as the folder submenu above: root first, then New Folder,
@@ -382,13 +388,6 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
           </div>
         </div>
       </div>
-      {/* repakxtra: Add to loadout (custom/Loadouts.tsx LoadoutMenuItems) */}
-      {loadoutMenu && (
-        <div className="context-menu-item submenu-trigger" onMouseEnter={handleSubmenuEnter}>
-          {selectionCount > 1 ? `Add ${selectionCount} mods to loadout` : 'Add to loadout'}
-          <div className="submenu">{loadoutMenu(onClose)}</div>
-        </div>
-      )}
       <div className="context-menu-item submenu-trigger tag-submenu" onMouseEnter={handleSubmenuEnter}>{/* repakxtra: class, hidden with Hide tag features */}
         Assign tag
         <div className="submenu">
@@ -422,27 +421,48 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
         </div>
       </div>
       <div className="context-menu-separator" />
-      <div className="context-menu-item" onClick={() => { if (onCheckConflicts) onCheckConflicts(); onClose(); }}>
-        Check Conflicts <IoLayersSharp className="warning-icon-small" style={{ fill: 'var(--accent-primary)' }} />
-      </div>
-      <div className="context-menu-item" onClick={() => { if (onUpdateMod) onUpdateMod(); onClose(); }}>
-        Replace file
-      </div>
-      {onEncrypt && <div className="context-menu-item" onClick={() => { onEncrypt(); onClose(); }}>{selectionCount > 1 ? `Encrypt ${selectionCount} mods` : 'Encrypt'}</div>}{/* repakxtra */}
-      <div className="context-menu-item" onClick={async () => {
-        try {
-          await invoke('open_in_explorer', { path: mod.path });
-        } catch (e) {
-          console.error('Failed to open in explorer:', e);
-        }
-        onClose();
-      }}>
-        Open in Explorer
-      </div>
-      {/* repakxtra: the tools for mod makers in one submenu, so the everyday actions come first (Hick's law) */}
+      {/* repakxtra: "what is wrong with it" in one place (Law of Common Region), named by the question the player has */}
       <div className="context-menu-item submenu-trigger" onMouseEnter={handleSubmenuEnter}>
-        For modders
+        Troubleshoot
         <div className="submenu">
+          <div className="context-menu-item" onClick={() => { if (onCheckConflicts) onCheckConflicts(); onClose(); }}>
+            Check Conflicts
+          </div>
+          {selectionCount <= 1 && <div className="context-menu-item" onClick={() => { openWhy(mod.path, mod.custom_name); onClose(); }}>Why isn't it working?</div>}
+          {onCheckVfx && <div className="context-menu-item" onClick={() => { onCheckVfx(); onClose(); }}>Check for update</div>}
+        </div>
+      </div>
+      {/* repakxtra: the file actions under the word every other app uses (Jakob's law), the mod makers' tools as its last
+          group so players skip them as a block (Pareto principle), never a third level (no cascade to steer through) */}
+      <div className="context-menu-item submenu-trigger" onMouseEnter={handleSubmenuEnter}>
+        More
+        <div className="submenu">
+          <div className="context-menu-item" onClick={async () => {
+            try {
+              await invoke('open_in_explorer', { path: mod.path });
+            } catch (e) {
+              console.error('Failed to open in explorer:', e);
+            }
+            onClose();
+          }}>
+            Open in Explorer
+          </div>
+          <div className="context-menu-item" onClick={async () => {
+            try {
+              await invoke('copy_to_clipboard', { text: mod.path });
+            } catch (e) {
+              console.error('Failed to copy path:', e);
+            }
+            onClose();
+          }}>
+            Copy Path
+          </div>
+          <div className="context-menu-separator" />
+          <div className="context-menu-item" onClick={() => { if (onUpdateMod) onUpdateMod(); onClose(); }}>
+            Replace file
+          </div>
+          {onEncrypt && <div className="context-menu-item" onClick={() => { onEncrypt(); onClose(); }}>{selectionCount > 1 ? `Encrypt ${selectionCount} mods` : 'Encrypt'}</div>}
+          <div className="context-menu-separator" />
           <div className="context-menu-item" onClick={() => { if (onSendToVfxUpdater) onSendToVfxUpdater(mod); onClose(); }}>
             Send to Mod Updater
           </div>
@@ -456,16 +476,6 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
             onClose();
           }}>
             Extract Assets
-          </div>
-          <div className="context-menu-item" onClick={async () => {
-            try {
-              await invoke('copy_to_clipboard', { text: mod.path });
-            } catch (e) {
-              console.error('Failed to copy path:', e);
-            }
-            onClose();
-          }}>
-            Copy Path
           </div>
         </div>
       </div>

@@ -1793,10 +1793,7 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .su-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px !important; border-top: 1px solid var(--panel-border); }
 .su-options .repakx-checkbox, .su-options .repakx-checkbox-label { font-size: 13px !important; font-weight: 500; color: var(--text-secondary); }
 
-/* Library right-click menu: Check Conflicts icon neutral like the rest of the menu; loadouts already holding the mod */
-/* Check Conflicts: the outline layers icon at the row's end, like the submenu chevrons (it was a filled blob) */
-.context-menu .warning-icon-small:not(.ph) { fill: none !important; }   /* Phosphor icons are filled shapes */
-.context-menu .warning-icon-small { color: var(--text-secondary) !important; margin-left: auto; }
+/* Library right-click menu: loadouts already holding the mod */
 .context-menu-item.is-disabled { opacity: 0.5; cursor: default; }
 .context-menu-item .lo-menu-check { margin-left: auto; color: var(--text-secondary); }
 /* Setup and changelog: every button one height (the primary ones were 44px beside 32px ones); a closed "Is it safe?"
