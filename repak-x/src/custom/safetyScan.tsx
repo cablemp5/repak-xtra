@@ -89,7 +89,6 @@ export function SafetyCard({ alert }: { alert: Alert }) {
   const [failed, setFailed] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [asking, setAsking] = useState<Plugin | null>(null) // Remove asks first, in the plugin's row
-  const [open, setOpen] = useState<Set<string>>(new Set()) // the mods whose full reason is showing
   const [showList, setShowList] = useState(false) // the flagged mods' list, folded at first
   const all = useRisks(), state = useRiskState()
   const isOnPath = (p: string) => /\.pak$/i.test(p)
@@ -145,7 +144,7 @@ export function SafetyCard({ alert }: { alert: Alert }) {
           {listed.length > 0 && <span className="su-part-links">
             {/* the list starts folded: the summary and Turn off all are enough most of the time (Progressive Disclosure) */}
             <button type="button" className="su-risk-more" aria-expanded={showList} aria-controls="su-risk-list" onClick={() => setShowList(v => !v)}>
-              Show mods <ChevronRight size={12} className="su-caret" aria-hidden="true" />
+              Show mods <ChevronRight size={14} className="su-caret" aria-hidden="true" />
             </button>
             {on.length > 0 && <button type="button" className="su-link" disabled={Boolean(busy || asking)} onClick={() => void turnOff(on, 'mods')}
               title="Switches them off like the Library does. The toast's Undo turns them back on">
@@ -162,22 +161,15 @@ export function SafetyCard({ alert }: { alert: Alert }) {
               return (
                 <li key={r.path} className={`su-risk-mod${live ? ' is-on' : ' is-off'}`}>
                   <div className="su-risk-line">
-                    <i className="su-risk-dot" aria-hidden="true" />
-                    <span className="su-risk-name" title={name}>{name}</span>
-                    <span className="su-risk-why">{r.short}</span>
-                    {/* the few words first, the full reason one click away, like Is it safe? (Progressive Disclosure) */}
-                    <button type="button" className="su-risk-more" aria-expanded={open.has(r.path)} aria-label={`Details for ${name}`}
-                      onClick={() => setOpen(o => { const n = new Set(o); n.has(r.path) ? n.delete(r.path) : n.add(r.path); return n })}>
-                      Details <ChevronRight size={12} className="su-caret" aria-hidden="true" />
-                    </button>
+                    {/* a green dot after the name marks the mods that are on, like the Library's on state */}
+                    <span className="su-risk-name" title={name}>{name}{live && <i className="su-risk-on" role="img" aria-label="on" />}</span>
+                    {/* the few words, the full reason on hover */}
+                    <span className="su-risk-why" title={why}>{r.short}</span>
                     {live && <button type="button" className="su-link su-risk-off" disabled={Boolean(busy || asking)}
                       onClick={() => void turnOff([{ path: r.path, enabled: true }], r.path)} aria-label={`Turn off ${name}`}>
                       {busy === r.path ? 'Turning off…' : 'Turn off'}</button>}
-                    {/* the same space when off, so every Details lines up in one column */}
+                    {/* an empty cell when off, so the grid's rows stay in step */}
                     {!live && <span className="su-link su-risk-off" aria-hidden="true" style={{ visibility: 'hidden' }}>Turn off</span>}
-                  </div>
-                  <div className="t-acc-panel" data-open={open.has(r.path)} ref={el => el?.toggleAttribute('inert', !open.has(r.path))}>
-                    <div className="t-acc-panel-inner"><p className="su-risk-full">{why}</p></div>
                   </div>
                 </li>
               )
