@@ -47,7 +47,7 @@ pub(crate) fn sweep_work_dirs() {
 }
 
 /// Another repakxtra, Repak X, or dev copy is open: its updater run or game-file cache may be in use.
-fn another_copy_runs() -> bool {
+pub(crate) fn another_copy_runs() -> bool {
     use sysinfo::{ProcessRefreshKind, RefreshKind, System};
     let s = System::new_with_specifics(RefreshKind::new().with_processes(ProcessRefreshKind::new()));
     let me = sysinfo::Pid::from_u32(std::process::id());

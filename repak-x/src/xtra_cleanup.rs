@@ -33,10 +33,7 @@ fn start_paths(id: &str, local: &Path) -> Vec<PathBuf> {
         // caches only: Local Storage, IndexedDB, and cookies (settings, loadouts, sign-ins) stay
         "browser" => {
             let web = local.join("EBWebView");
-            let mut v: Vec<PathBuf> = ["Cache", "Code Cache", "GPUCache", "DawnWebGPUCache", "Service Worker/CacheStorage", "Service Worker/ScriptCache"]
-                .iter().map(|p| web.join("Default").join(p)).collect();
-            v.extend(["GrShaderCache", "ShaderCache", "GraphiteDawnCache"].iter().map(|p| web.join(p)));
-            v
+            WEB_CACHES.iter().map(|p| p.split('/').fold(web.clone(), |d, part| d.join(part))).collect()
         }
         _ => Vec::new(),
     }
@@ -64,30 +61,52 @@ fn marker() -> PathBuf {
 fn marked() -> Vec<PathBuf> {
     fs::read(marker()).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
 }
-/// Only folders under %TEMP%\repak-x or %LOCALAPPDATA% are ever cleared from the marker (it is a file anyone can edit).
+/// The browser cache folders cleared for "browser" (under EBWebView): never Local Storage, IndexedDB, or cookies.
+const WEB_CACHES: [&str; 9] = ["Default/Cache", "Default/Code Cache", "Default/GPUCache", "Default/DawnWebGPUCache",
+    "Default/Service Worker/CacheStorage", "Default/Service Worker/ScriptCache", "GrShaderCache", "ShaderCache", "GraphiteDawnCache"];
+const RETIRED: &str = ".repakxtra-old";
+
+/// The marker is a file anyone can edit: only the exact folders a section clears (or their renamed copies) are honored.
+/// That is %TEMP%\repak-x\xvfx, and the WEB_CACHES folders of a com.cablemp5.* app's EBWebView in %LOCALAPPDATA%.
 fn allowed(p: &Path) -> bool {
-    let under = |base: Option<PathBuf>| base.is_some_and(|b| p.starts_with(&b) && p != b);
-    !p.components().any(|c| matches!(c, std::path::Component::ParentDir))
-        && (under(Some(std::env::temp_dir().join("repak-x"))) || under(dirs::data_local_dir()))
+    let s = p.to_string_lossy();
+    let p = PathBuf::from(s.strip_suffix(RETIRED).unwrap_or(&s));
+    if p == std::env::temp_dir().join("repak-x").join("xvfx") {
+        return true;
+    }
+    let Some(rest) = dirs::data_local_dir().and_then(|l| p.strip_prefix(l).ok().map(Path::to_path_buf)) else { return false };
+    let mut parts = rest.components().map(|c| c.as_os_str().to_string_lossy().to_string());
+    let (Some(app), Some(web)) = (parts.next(), parts.next()) else { return false };
+    let tail: Vec<String> = parts.collect();
+    app.starts_with("com.cablemp5.") && !app.contains("..") && web == "EBWebView" && WEB_CACHES.contains(&tail.join("/").as_str())
 }
 
 /// In main(), before the window and any command: the marked folders are renamed out of use at once, then deleted in the
-/// background. The marker keeps the renamed names until they are gone, so a quit midway finishes at the next start.
+/// background. Never while another copy runs (it may hold the caches, the marker is shared): the marker waits for a
+/// start when this copy is alone. A folder that cannot be renamed now (in use) stays marked for the next start, and the
+/// renamed ones stay marked until they are gone, so a quit midway finishes later.
 pub(crate) fn on_start() {
     let list: Vec<PathBuf> = marked().into_iter().filter(|p| allowed(p)).collect();
     if list.is_empty() {
         let _ = fs::remove_file(marker());
         return;
     }
-    let gone: Vec<PathBuf> = list.into_iter().filter_map(|p| {
-        if p.extension().is_some_and(|e| e == "repakxtra-old") || !p.exists() { return Some(p) } // renamed already, or gone
-        let old = PathBuf::from(format!("{}.repakxtra-old", p.display()));
-        fs::rename(&p, &old).ok().map(|_| old)
-    }).collect();
-    let _ = fs::write(marker(), serde_json::to_vec(&gone).unwrap_or_default());
+    if crate::xtra_vfx::another_copy_runs() {
+        return;
+    }
+    let (mut renamed, mut kept) = (Vec::new(), Vec::new());
+    for p in list {
+        if !p.exists() { continue }
+        if p.to_string_lossy().ends_with(RETIRED) { renamed.push(p); continue }
+        let old = PathBuf::from(format!("{}{RETIRED}", p.display()));
+        if fs::rename(&p, &old).is_ok() { renamed.push(old) } else { kept.push(p) }
+    }
+    let save = |v: &[PathBuf]| { let _ = if v.is_empty() { fs::remove_file(marker()) } else { fs::write(marker(), serde_json::to_vec(v).unwrap_or_default()) }; };
+    save(&[renamed.clone(), kept.clone()].concat());
     std::thread::spawn(move || {
-        for p in &gone { let _ = if p.is_dir() { fs::remove_dir_all(p) } else { fs::remove_file(p) }; }
-        if gone.iter().all(|p| !p.exists()) { let _ = fs::remove_file(marker()); }
+        for p in &renamed { let _ = if p.is_dir() { fs::remove_dir_all(p) } else { fs::remove_file(p) }; }
+        let left: Vec<PathBuf> = renamed.into_iter().filter(|p| p.exists()).chain(kept).collect();
+        save(&left);
     });
 }
 
@@ -196,5 +215,11 @@ mod tests {
         clear_at(r, &["previews".into()]).unwrap();
         assert!(!r.join("previews/a.png").exists() && r.join("previews/work/cache/x.bin").exists(), "the work files stay");
         assert!(!allowed(Path::new("C:/Windows")) && !allowed(&std::env::temp_dir().join("repak-x").join("..").join("x")), "nothing outside the two roots");
+        let local = dirs::data_local_dir().unwrap();
+        let web = local.join("com.cablemp5.repakxtra").join("EBWebView");
+        assert!(allowed(&web.join("Default").join("Code Cache")) && allowed(&PathBuf::from(format!("{}{RETIRED}", web.join("GrShaderCache").display()))));
+        assert!(!allowed(&web.join("Default").join("Local Storage")) && !allowed(&web.join("Default")) && !allowed(&local.join("Google").join("EBWebView").join("GrShaderCache")),
+            "settings, a whole profile, and another app's caches are never cleared");
+        assert!(allowed(&std::env::temp_dir().join("repak-x").join("xvfx")) && !allowed(&std::env::temp_dir().join("repak-x").join("xscan")));
     }
 }

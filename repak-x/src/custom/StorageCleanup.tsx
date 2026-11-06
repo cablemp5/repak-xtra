@@ -15,7 +15,7 @@ type Section = { id: string; bytes: number; pending: boolean }
 
 /** Each section's name, and what deleting it does. */
 const INFO: Record<string, { name: string; warn: string }> = {
-  caches: { name: 'Caches', warn: 'Rebuilt on their own. The next mod check reads the game files again and takes longer.' },
+  caches: { name: 'Caches', warn: 'The next mod check reads the game files again and takes longer.' },
   'preview-work': { name: 'Preview work files', warn: 'The next preview run takes longer while it rebuilds its cache.' },
   vfx: { name: 'VFX game files', warn: 'The next mod check or VFX update decodes the game again and takes longer.' },
   browser: { name: 'Browser cache', warn: 'The window loads a little slower the first time. Nothing you saved is lost.' },
@@ -59,7 +59,7 @@ export default function StorageCleanup({ alert }: { alert: ReturnType<typeof use
       // the files in use are only marked, after the clear-now part went (a busy error leaves nothing marked)
       const freed = now.length ? await invoke<number>('xtra_storage_clear', { ids: now.map(s => s.id) }) : 0
       const marked = later.length ? await invoke<number>('xtra_storage_clear_at_start', { ids: later.map(s => s.id) }) : 0
-      const what = [now.length ? `${size(freed)} freed` : '', later.length ? `${size(marked)}${now.length ? ' more' : ''} frees ${AT_NEXT_START}` : ''].filter(Boolean).join(', and ')
+      const what = [now.length ? `${size(freed)} freed` : '', later.length ? `${size(marked)}${now.length ? ' more' : ''} clears ${AT_NEXT_START}` : ''].filter(Boolean).join(', and ')
       alert.success('Storage', `${what}.${now.some(s => s.id === 'previews' || s.id === 'kit') ? ` Restart ${APP_NAME} so previews are not shown from memory.` : ''}`)
       setPicked(new Set()); setAsking(false)
     } catch (e) { alert.warning('Could not free the space', String(e)) } finally { setBusy(false); void load() }
@@ -96,7 +96,7 @@ export default function StorageCleanup({ alert }: { alert: ReturnType<typeof use
           <div className="setting-warn xs-storage-confirm" role="alert">
             <TriangleAlert size={14} aria-hidden="true" />
             <div>
-              <b>Delete {size(total)} for good? This cannot be undone.</b>
+              <b>Delete {size(total)}{chosen.some(s => GROUPS[1].ids.includes(s.id)) ? ' for good? This cannot be undone.' : '?'}</b>
               {later.length > 0 && <> Frees {now.length > 0 ? `${size(sum(now))} now and ` : ''}{size(sum(later))} {AT_NEXT_START}.</>}
               <ul>{chosen.map(s => <li key={s.id}><b>{INFO[s.id].name}</b>. {INFO[s.id].warn}</li>)}</ul>
               <div className="xs-buttons">

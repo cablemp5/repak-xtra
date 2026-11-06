@@ -2533,7 +2533,7 @@ html[data-motion] .hold-delete.holding::after { transition-duration: 2s !importa
    (upstream's blue borders) is held off by a transition that never arrives: the field keeps its resting border, fill and
    text color while focused. A field focused the moment it appears has no resting look to keep, so its border is the
    app's usual field border. ---------- */
-:is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="button"], [type="submit"], [type="reset"], [type="color"], [type="file"], [type="image"]), textarea, select, [contenteditable="true"]):is(:focus, :focus-visible),
+:is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="button"], [type="submit"], [type="reset"], [type="color"], [type="file"], [type="image"], .lp-name), textarea, select, [contenteditable="true"]):is(:focus, :focus-visible), /* .lp-name: its box shows while renaming (it has no border at rest) */
 :is(.rename-input-wrapper, .combined-input-group, .search-wrapper, .tail-input, .lp-search, .ip-name-wrap, .ko-search):focus-within {
   outline: none !important;
   box-shadow: none !important;
@@ -3245,7 +3245,8 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
    (cable's choice, drawn like Reset to defaults) */
 .xs-storage-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
 /* two groups, each under a small gray title, more room between groups than within (Law of Proximity) */
-.xs-storage-group { display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+/* the Settings row-text rule (.setting-group > div > span) is !important: these titles outrank it */
+.settings-content .xs-storage-list > .xs-storage-group { display: block; font-size: 12px !important; font-weight: 600 !important; color: var(--text-secondary) !important; margin-bottom: -2px; }
 .xs-storage-group:not(:first-child) { margin-top: 8px; }
 .settings-content .xs-storage-list label.repakx-checkbox { align-items: flex-start; min-height: 0; }
 .settings-content .xs-storage-list .repakx-checkbox-control { margin-top: -1px; }   /* centered on the name line, measured */
