@@ -4,8 +4,8 @@
 //! enlarged enemy models. Two checks, from file names alone:
 //! - plugins: every .asi and proxy DLL beside the game exe. The two named files are "banned" (Remove moves them out),
 //!   other ones "unknown", the bypass Setup installs "bundled" (it patches memory too, but the notice does not name it).
-//! - mods: asset paths that match what the notice describes. "ban" for paths that only exist to change those things,
-//!   "check" for ones a plain recolor also touches. Nothing is turned off: the badge says why and the player decides.
+//! - mods: names and asset paths that only exist to change what the notice describes. Nothing is turned off by itself:
+//!   the badge says why, and Setup's Turn off all is the player's call.
 //! shortcut: names stand in for content, so a mod that removes recoil through a renamed Blueprint, removes hit or tracer
 //! effects (a name looks the same as a recolor's), or enlarges models through a mesh swap is missed. Compare a mod's
 //! VFX and mesh sizes with the game's if those ever need flagging.
@@ -31,8 +31,6 @@ pub struct Plugin {
 #[derive(Serialize, Debug, PartialEq)]
 pub struct Risk {
     path: String,
-    /// "ban" or "check"
-    level: &'static str,
     reason: String,
 }
 
@@ -67,8 +65,8 @@ fn by_name(path: &Path) -> Option<String> {
     REMOVES.iter().find(|(word, _)| stem.contains(word)).map(|(_, what)| format!("Its name says it removes {what}."))
 }
 
-/// What a mod's files say about it, the strongest finding first. `files` as the mod lists them, any mount root.
-fn judge(files: &[String]) -> Option<(&'static str, String)> {
+/// What a mod's files say about it, the first rule that matches. `files` as the mod lists them, any mount root.
+fn judge(files: &[String]) -> Option<String> {
     // "Marvel/Content/Marvel/X.uasset" (PAK) and "/Game/Marvel/X.uasset" (IoStore) both become "marvel/x.uasset"
     let keys: Vec<String> = files.iter().map(|f| {
         let k = f.replace('\\', "/").to_lowercase();
@@ -78,18 +76,15 @@ fn judge(files: &[String]) -> Option<(&'static str, String)> {
     let find = |test: &dyn Fn(&str) -> bool| keys.iter().find(|k| test(k)).map(|k| name(k));
     let has = |k: &str, words: &[&str]| words.iter().any(|w| name(k).contains(w));
     let audio = |k: &str| k.contains("wwiseaudio/");
-    let rules: [(&str, &str, &dyn Fn(&str) -> bool); 4] = [
-        ("ban", "Changes camera shake or weapon recoil", &|k| ["camerashake", "camera_shake", "recoil"].iter().any(|w| k.contains(w))),
-        ("ban", "Changes footstep or movement sounds, which can make enemies easier to hear", &|k| audio(k) && has(k, &["footstep", "foot_step", "foley"])),
-        ("ban", "Changes maps or their models and textures, which can change what players see", &|k| {
+    // shared sound banks are not flagged: most sound mods touch them, so the flag was noise (cable's choice)
+    let rules: [(&str, &dyn Fn(&str) -> bool); 3] = [
+        ("Changes camera shake or weapon recoil", &|k| ["camerashake", "camera_shake", "recoil"].iter().any(|w| k.contains(w))),
+        ("Changes footstep or movement sounds, which can make enemies easier to hear", &|k| audio(k) && has(k, &["footstep", "foot_step", "foley"])),
+        ("Changes maps or their models and textures, which can change what players see", &|k| {
             k.starts_with("marvel/environment/") || k.starts_with("marvel/maps/") || k.starts_with("marvel/levels/") || k.ends_with(".umap")
         }),
-        // a hero's own banks carry a 7-digit skin id (bnk_sfx_1026001): the rest are shared, where footsteps and cues live
-        ("check", "Changes shared game sounds. Footsteps and other cues players listen for can be in them", &|k| {
-            audio(k) && k.ends_with(".bnk") && !name(k).split(|c: char| !c.is_ascii_digit()).any(|d| d.len() == 7)
-        }),
     ];
-    rules.iter().find_map(|(level, why, test)| find(*test).map(|file| (*level, format!("{why} ({file})."))))
+    rules.iter().find_map(|(why, test)| find(*test).map(|file| format!("{why} ({file}).")))
 }
 
 fn mods_dir(state: &State<'_, Arc<Mutex<crate::AppState>>>) -> PathBuf {
@@ -144,10 +139,10 @@ pub async fn xtra_safety_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                 format!("{reason} Another app made it as a built-in, and the notice still counts it. Turn it off before you play online.")
             } else { reason };
             if let Some(reason) = by_name(&path) {
-                return Some(Risk { path: p, level: "ban", reason: made_here(reason) });
+                return Some(Risk { path: p, reason: made_here(reason) });
             }
             let details = crate::compute_mod_details(&path, &state).ok()?;
-            judge(&details.files).map(|(level, reason)| Risk { path: p.clone(), level, reason: made_here(reason) })
+            judge(&details.files).map(|reason| Risk { path: p.clone(), reason: made_here(reason) })
         }).collect()
     }).await.map_err(|e| e.to_string())
 }
@@ -156,21 +151,20 @@ pub async fn xtra_safety_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
 mod tests {
     use super::*;
 
-    fn j(files: &[&str]) -> Option<&'static str> {
-        judge(&files.iter().map(|s| s.to_string()).collect::<Vec<_>>()).map(|r| r.0)
+    fn j(files: &[&str]) -> bool {
+        judge(&files.iter().map(|s| s.to_string()).collect::<Vec<_>>()).is_some()
     }
 
     #[test]
     fn the_rules() {
-        assert_eq!(j(&["Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uasset"]), None, "a skin is fine");
-        assert_eq!(j(&["Marvel/Content/WwiseAudio/bnk_sfx_1026001.bnk"]), None, "a hero's own sound bank is fine");
-        assert_eq!(j(&["/Game/Marvel/Camera/CameraShake/CS_Fire.uasset"]), Some("ban"));
-        assert_eq!(j(&["Marvel/Content/Marvel/Environment/Tokyo/T_Wall.uasset"]), Some("ban"));
-        assert_eq!(j(&["Marvel/Content/WwiseAudio/bnk_footstep_common.bnk"]), Some("ban"));
-        assert_eq!(j(&["Marvel/Content/WwiseAudio/bnk_sfx_common.bnk"]), Some("check"));
-        assert_eq!(j(&["/Game/Marvel/VFX/Particles/Hero/1026/NS_1026_Hit.uasset", "/Game/Marvel/VFX/Trail/NS_Bullet_Trail.uasset"]), None, "a VFX recolor is fine");
-        assert_eq!(j(&["/Game/Marvel/Data/Skin/DT_SkinTable.uasset"]), None, "cosmetic data is fine");
-        assert_eq!(j(&["Marvel/Content/WwiseAudio/bnk_sfx_common.bnk", "/Game/Marvel/Camera/Recoil_Rifle.uasset"]), Some("ban"), "the strongest wins");
+        assert!(!j(&["Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uasset"]), "a skin is fine");
+        assert!(!j(&["Marvel/Content/WwiseAudio/bnk_sfx_1026001.bnk"]), "a hero's own sound bank is fine");
+        assert!(j(&["/Game/Marvel/Camera/CameraShake/CS_Fire.uasset"]));
+        assert!(j(&["Marvel/Content/Marvel/Environment/Tokyo/T_Wall.uasset"]));
+        assert!(j(&["Marvel/Content/WwiseAudio/bnk_footstep_common.bnk"]));
+        assert!(!j(&["Marvel/Content/WwiseAudio/bnk_sfx_common.bnk"]), "a shared sound bank is not flagged");
+        assert!(!j(&["/Game/Marvel/VFX/Particles/Hero/1026/NS_1026_Hit.uasset", "/Game/Marvel/VFX/Trail/NS_Bullet_Trail.uasset"]), "a VFX recolor is fine");
+        assert!(!j(&["/Game/Marvel/Data/Skin/DT_SkinTable.uasset"]), "cosmetic data is fine");
     }
 
     #[test]

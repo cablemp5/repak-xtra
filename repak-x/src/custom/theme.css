@@ -3138,13 +3138,12 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .promise-transition-loader__message { font-size: 13px !important; font-weight: 500 !important; letter-spacing: 0 !important; color: var(--text-primary) !important; text-shadow: none !important; }
 @media (prefers-reduced-motion: reduce) { .promise-transition-loader__card::before { animation-duration: 2s; } }
 
-/* repakxtra: Ban risk badges (custom/safetyScan.tsx), buttons that open Why isn't it working?. Orange for Ban risk, quiet
-   for Check rules: red only for the plugins the anti-cheat notice names (cable's choice) */
+/* repakxtra: Ban risk badges (custom/safetyScan.tsx), buttons that open Why isn't it working?. Orange: red only for the
+   plugins the anti-cheat notice names (cable's choice) */
 .mod-type-badge.risk-badge { cursor: pointer; font-size: 11px !important; font-weight: 600 !important; background: transparent !important; font-family: inherit; }
 .mod-type-badge.risk-badge:hover { filter: brightness(1.25); }
 .mod-type-badge.risk-badge:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .mod-type-badge.risk-badge.is-ban { color: #f59a42 !important; border: 1px solid color-mix(in srgb, #f59a42, transparent 55%) !important; }
-.mod-type-badge.risk-badge.is-check { color: var(--text-secondary) !important; border: 1px solid color-mix(in srgb, var(--text-secondary), transparent 60%) !important; }
 [data-theme="light"] .mod-type-badge.risk-badge.is-ban, [data-theme="light"] .mod-state-filter button.is-risk { color: #9a5200 !important; }
 /* its tab fills like Problems does when picked, in the badge's orange */
 .mod-state-filter button.is-risk, .mod-state-filter button.is-risk .mod-state-count, .mod-state-btn.is-risk, .mod-state-menu .sigeon-item.is-risk { color: #f59a42; }

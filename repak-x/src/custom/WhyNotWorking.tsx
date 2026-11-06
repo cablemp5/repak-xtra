@@ -53,7 +53,7 @@ export function WhyNotWorking({ alert }: { alert: ReturnType<typeof useAlert> })
       const v = verdictOf(path), risk = riskOf(path)
       const extra: Finding[] = [
         ...(v ? [{ level: v.kind === 'broken' || v.kind === 'risky' ? 'problem' : 'info', title: `Marked ${verdictLabel(v.kind)}`, detail: v.reason } as Finding] : []),
-        ...(risk ? [{ level: 'info', title: risk.level === 'ban' ? 'Marked Ban risk' : 'Marked Check rules', detail: risk.reason, action: isOff(path) ? undefined : 'turn_off' } as Finding] : []),
+        ...(risk ? [{ level: 'info', title: 'Marked Ban risk', detail: risk.reason, action: isOff(path) ? undefined : 'turn_off' } as Finding] : []),
       ]
       setFound([...r, ...extra].sort((a, b) => Number(a.level !== 'problem') - Number(b.level !== 'problem')))
     }).catch(e => live && setError(String(e)))
