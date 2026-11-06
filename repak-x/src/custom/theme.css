@@ -1652,7 +1652,10 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
 .run-stop-btn { display: inline-flex !important; align-items: center; gap: 8px; }
 .stop-glyph { width: 8px; height: 8px; border-radius: 2px; background: currentColor; flex: none; }
 /* Pause and Resume beside Stop (ScanStatus.tsx): the same 8px solid glyphs, so the three read as one set */
-.pause-glyph { width: 8px; height: 8px; flex: none; border-radius: 1px; background: linear-gradient(90deg, currentColor 0 3px, transparent 3px 5px, currentColor 5px 8px); }
+/* two borders, not a gradient: borders snap to whole device pixels, so both bars stay the same width at any display scale */
+.pause-glyph { box-sizing: border-box; width: 8px; height: 8px; flex: none; border: solid currentColor; border-width: 0 3px; border-radius: 1px; }
+/* the header's paused state: centered in the 14px spot the running spinner takes, so the words do not shift */
+.scan-status-in .pause-glyph { margin: 0 3px; }
 .play-glyph { width: 8px; height: 8px; flex: none; background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%); }
 /* A Generate button on a PC without the preview kit: grayed out, with a small blue "Set up" that says where to go */
 .is-unavailable { color: var(--text-secondary) !important; opacity: 0.85; }

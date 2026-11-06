@@ -1,7 +1,7 @@
 // repakxtra: the background mod checks' progress (brokenMods.ts runs them, each backend scan sends `mod-scan-progress`
 // for a mod it is about to read). After a game or app update they can read every mod for many minutes, so a loading
 // toast says which check, which mod and how far, and closes when the run ends. Short runs (one new mod) stay quiet: it
-// shows only once work has gone on for a moment. The same state feeds ScanStatus.tsx in the header, so a closed or
+// shows only once work has gone on for a moment, and a run for newly installed mods shows in the header only. The same state feeds ScanStatus.tsx in the header, so a closed or
 // missed toast still leaves the progress in view, and a run stopped with mods left says so until it picks up again.
 import { useEffect, useSyncExternalStore } from 'react'
 import { listen } from '@tauri-apps/api/event'
@@ -21,15 +21,15 @@ const SHOW_AFTER_MS = 1500
 
 /** `shown`: the run has read mods for a moment (its toast is up, or was). `paused`: the last run stopped with mods left.
  *  `held`: the header's Pause or Cancel stopped them (xtra_vfx.rs HELD): they stay stopped until Resume or Refresh list. */
-export type ScanRun = { running: boolean; shown: boolean; paused: boolean; last: Progress | null; read: number; held: 'paused' | 'cancelled' | null }
-let run: ScanRun = { running: false, shown: false, paused: false, last: null, read: 0, held: null }
+export type ScanRun = { running: boolean; shown: boolean; paused: boolean; last: Progress | null; read: number; held: 'paused' | 'cancelled' | null; quiet: boolean }
+let run: ScanRun = { running: false, shown: false, paused: false, last: null, read: 0, held: null, quiet: false }
 const listeners = new Set<() => void>()
 const set = (next: Partial<ScanRun>) => { run = { ...run, ...next }; listeners.forEach(l => l()) }
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
 export const useScanRun = () => useSyncExternalStore(subscribe, () => run)
 
-/** brokenMods.ts: a run of the checks starts. */
-export const scanStarted = () => set({ running: true, last: null, read: 0 })
+/** brokenMods.ts: a run of the checks starts. `quiet`: it is for newly installed mods, so only the header shows it. */
+export const scanStarted = (quiet = false) => set({ running: true, last: null, read: 0, quiet })
 /** brokenMods.ts: the run ended. `finished`: false when it stopped with mods left to read, or failed. */
 export const scanEnded = (finished: boolean) => {
   set({ running: false, paused: !finished && run.held !== 'cancelled' })
@@ -57,6 +57,7 @@ export function useScanProgress(alert: ReturnType<typeof useAlert>) {
       timer = undefined
       if (!run.last) return
       const description = `${progressLine(run.last)}. Pauses while the game runs.`
+      if (run.quiet && id === null) { if (!run.shown) set({ shown: true }); return }
       if (id === null) id = alert.showAlert({ color: 'default', title: 'Checking mods', description, isLoading: true, duration: 0 })
       else alert.updateToast(id, { description })
       if (!run.shown) set({ shown: true })
