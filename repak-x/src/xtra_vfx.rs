@@ -39,6 +39,40 @@ pub(crate) fn tune_dotnet_gc() {
 /// alive go; another copy's (the stable app beside the dev copy) stays while it runs.
 pub(crate) fn sweep_work_dirs() {
     sweep_in(&std::env::temp_dir().join("repak-x"));
+    if !another_copy_runs() {
+        prune_vfx_cache(&base_dir());
+    }
+}
+
+/// Another repakxtra, Repak X, or dev copy is open: its updater run or game-file cache may be in use.
+fn another_copy_runs() -> bool {
+    use sysinfo::{ProcessRefreshKind, RefreshKind, System};
+    let s = System::new_with_specifics(RefreshKind::new().with_processes(ProcessRefreshKind::new()));
+    let me = sysinfo::Pid::from_u32(std::process::id());
+    s.processes().iter().any(|(pid, p)| *pid != me && p.name().to_string_lossy().to_lowercase().starts_with("repak"))
+}
+
+/// The VFX updater's folders a closed app left: every finished run (the next run clears its own anyway), and the game's
+/// decoded files for earlier game builds or mappings (0.8 to 1.4 GB each, 3 of them here on 2026-11-06). The newest
+/// cache stays, so the next check or update does not decode the game again.
+fn prune_vfx_cache(base: &Path) {
+    let mut vanilla: Vec<(std::time::SystemTime, PathBuf)> = Vec::new();
+    for e in std::fs::read_dir(base).into_iter().flatten().flatten() {
+        let (p, name) = (e.path(), e.file_name().to_string_lossy().to_string());
+        if name.starts_with("run-") {
+            let _ = std::fs::remove_dir_all(&p);
+        } else if name.starts_with("vanilla-") {
+            // last written: anything directly in it (index.json, extract, json, niagara_json)
+            let t = std::fs::read_dir(&p).into_iter().flatten().flatten().filter_map(|c| c.metadata().ok())
+                .filter_map(|m| m.modified().ok()).max().unwrap_or(std::time::UNIX_EPOCH);
+            vanilla.push((t, p));
+        }
+    }
+    vanilla.sort();
+    vanilla.pop();
+    for (_, p) in vanilla {
+        let _ = std::fs::remove_dir_all(p);
+    }
 }
 
 /// A new folder temp/repak-x/<kind>/<pid>-<random> that stays after this call (the caller removes it when done, and
@@ -1120,6 +1154,20 @@ pub async fn xtra_vfx_stale(mod_path: String, game_paks: String, files: Vec<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_closed_apps_runs_and_older_game_caches_go_the_newest_stays() {
+        let dir = tempfile::tempdir().unwrap();
+        let day = std::time::Duration::from_secs(86_400);
+        for (name, age) in [("run-a", 0), ("vanilla-old", 9), ("vanilla-new", 1), ("vanilla-older", 30)] {
+            std::fs::create_dir_all(dir.path().join(name)).unwrap();
+            let f = std::fs::File::create(dir.path().join(name).join("index.json")).unwrap();
+            f.set_modified(std::time::SystemTime::now() - day * age).unwrap();
+        }
+        prune_vfx_cache(dir.path());
+        let left: Vec<_> = std::fs::read_dir(dir.path()).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
+        assert_eq!(left, ["vanilla-new"]);
+    }
 
     #[test]
     fn tools_built_from_the_same_source_share_an_id() {

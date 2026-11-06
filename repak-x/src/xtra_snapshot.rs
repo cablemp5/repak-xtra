@@ -95,11 +95,23 @@ fn setup_key(rel: &Path) -> String {
     rel.to_string_lossy().to_lowercase().trim_end_matches(".disabled").to_string()
 }
 
-fn copy_all(list: &[(PathBuf, u64)], from: &Path, to: &Path) -> std::io::Result<()> {
+/// `prev`: the same folder in the newest snapshot. A file it holds unchanged (same size and time, which fs::copy keeps)
+/// becomes a hard link to that copy instead of a second copy, so snapshots of a library that barely changed take the
+/// space of one. Snapshot files are only ever read (restore copies them out) or deleted, so a link is never written
+/// through. A link that cannot be made (another drive, FAT) is a plain copy.
+/// shortcut: list sizes still count a linked file in every snapshot, upgrade if Storage must show the real disk use.
+fn copy_all(list: &[(PathBuf, u64)], from: &Path, to: &Path, prev: Option<&Path>) -> std::io::Result<()> {
+    let same = |a: &Path, b: &Path| match (fs::metadata(a), fs::metadata(b)) {
+        (Ok(x), Ok(y)) => x.len() == y.len() && x.modified().ok().is_some_and(|t| y.modified().ok() == Some(t)),
+        _ => false,
+    };
     for (rel, _) in list {
         let dest = to.join(rel);
         fs::create_dir_all(dest.parent().unwrap_or(to))?;
-        fs::copy(from.join(rel), dest)?;
+        let old = prev.map(|p| p.join(rel));
+        if !old.as_deref().is_some_and(|old| same(&from.join(rel), old) && fs::hard_link(old, &dest).is_ok()) {
+            fs::copy(from.join(rel), dest)?;
+        }
     }
     Ok(())
 }
@@ -114,7 +126,9 @@ fn create_at(root: &Path, id: &str, mods: &Path, win64: &Path) -> Result<Snapsho
     // copied under a name the list skips, then renamed in: a copy cut short (a full disk, a crash) is never listed
     let staging = root.join(format!(".staging-{id}"));
     let _ = fs::remove_dir_all(&staging);
-    let made = copy_all(&m, mods, &staging.join("mods")).and_then(|_| copy_all(&s, win64, &staging.join("win64")));
+    let prev = list_at(root).first().map(|x| root.join(&x.id));
+    let made = copy_all(&m, mods, &staging.join("mods"), prev.as_ref().map(|p| p.join("mods")).as_deref())
+        .and_then(|_| copy_all(&s, win64, &staging.join("win64"), prev.as_ref().map(|p| p.join("win64")).as_deref()));
     if let Err(e) = made {
         let _ = fs::remove_dir_all(&staging);
         return Err(format!("Could not make the snapshot: {e}"));
@@ -308,6 +322,27 @@ mod tests {
         assert!(!win64.join("dsound.dll").exists(), "the loader stays off");
         assert_eq!(fs::read_to_string(mods.join("Edited_P.pak")).unwrap(), "new", "a changed file is never overwritten");
         assert_eq!(restore_at(&root.join("100"), &mods, &win64).unwrap(), Restored { mods: 0, setup: 0 }, "a second restore changes nothing");
+    }
+
+    #[test]
+    fn an_unchanged_file_is_linked_to_the_last_snapshot_a_changed_one_copied() {
+        let t = tempfile::tempdir().unwrap();
+        let (root, mods, win64) = (t.path().join("snaps"), t.path().join("mods"), t.path().join("win64"));
+        put(&mods.join("Same_P.pak"), "same");
+        put(&mods.join("Changed_P.pak"), "old");
+        create_at(&root, "1", &mods, &win64).unwrap();
+        fs::write(mods.join("Changed_P.pak"), "new!").unwrap();
+        create_at(&root, "2", &mods, &win64).unwrap();
+        assert_eq!(fs::read_to_string(root.join("2/mods/Changed_P.pak")).unwrap(), "new!");
+        assert_eq!(fs::read_to_string(root.join("1/mods/Changed_P.pak")).unwrap(), "old", "the old snapshot keeps its copy");
+        // one file on disk (a write through one name shows in the other), and deleting the first leaves the second's whole
+        fs::write(root.join("1/mods/Same_P.pak"), "link").unwrap();
+        assert_eq!(fs::read_to_string(root.join("2/mods/Same_P.pak")).unwrap(), "link");
+        fs::remove_dir_all(root.join("1")).unwrap();
+        assert_eq!(fs::read_to_string(root.join("2/mods/Same_P.pak")).unwrap(), "link");
+        fs::write(root.join("2/mods/Same_P.pak"), "x").unwrap();
+        create_at(&root, "3", &mods, &win64).unwrap();
+        assert_eq!(fs::read_to_string(root.join("3/mods/Same_P.pak")).unwrap(), "same", "a snapshot copy that no longer matches is not linked");
     }
 
     #[test]
