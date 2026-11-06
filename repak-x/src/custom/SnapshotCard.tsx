@@ -68,9 +68,10 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
             </span>
             {/* asks in its own row, naming it, like Setup's other removes (Law of Proximity) */}
             {asking === s.id && <div className="su-confirm su-row-confirm" role="alert">
-              <span>Delete the snapshot from {when(s.created)} ({size(s.bytes)})? Its copies are gone for good. Your mods stay as they are.</span>
+              {/* one line, the same row and buttons as the bypass's Remove (Jakob's Law: one confirm look in Setup) */}
+              <span>Delete the {when(s.created)} snapshot ({size(s.bytes)})? Your mods stay.</span>
               <button type="button" className="lo-text-btn" autoFocus onClick={() => setAsking(null)}>Cancel</button>
-              <button type="button" className="lo-text-btn su-confirm-yes is-danger" onClick={() => remove(s.id)}>Delete</button>
+              <button type="button" className="lo-text-btn" onClick={() => remove(s.id)}>Delete</button>
             </div>}
           </li>
         ))}

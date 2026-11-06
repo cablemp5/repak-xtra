@@ -3215,7 +3215,6 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .su-group-inner { display: flex; flex-direction: column; gap: 16px; }
 /* the one that does it reads stronger than Cancel, without red (Von Restorff) */
 /* a snapshot's Delete: red like Storage's (cable's choice) */
-.su-confirm .su-confirm-yes.is-danger, .su-confirm .su-confirm-yes.is-danger:hover { background: #f2555a !important; color: #fff !important; }
 .su-confirm .su-confirm-yes { font-weight: 600 !important; color: var(--text-primary) !important; background: color-mix(in srgb, var(--text-primary), transparent 86%) !important; }
 /* the section's lead lines up with its list, not indented like a checkbox note */
 .settings-content .xs-storage > .setting-group > p.setting-subtext { margin-left: 0 !important; padding-left: 0 !important; }
