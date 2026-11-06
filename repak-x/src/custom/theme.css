@@ -3200,7 +3200,10 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .settings-content .xs-storage-list .repakx-checkbox-label > span.xs-storage-note { display: block; font-size: 12.5px !important; color: var(--text-secondary) !important; }
 .xs-storage-actions { margin-top: 12px; }
 /* Settings paints every action-btn white: the red of Reset to defaults needs the section's weight */
-.settings-content .xs-storage .settings-reset-btn:not(.is-confirm) { color: #f2555a !important; border-color: color-mix(in srgb, #f2555a, transparent 60%) !important; }
+.settings-content .xs-storage .settings-reset-btn:not(.is-confirm), .settings-content .xs-storage .settings-reset-btn:not(.is-confirm) svg { color: #f2555a !important; }
+.settings-content .xs-storage .settings-reset-btn:not(.is-confirm) { border-color: color-mix(in srgb, #f2555a, transparent 60%) !important; }
+/* the Ban risk card's notice link sits on its sentence's line, the icon centered on the words (like Setup's other links) */
+.su-card-head p .ob-out { vertical-align: bottom; line-height: inherit; }
 .settings-content .xs-storage .settings-reset-btn:not(.is-confirm):hover:not(:disabled) { background: color-mix(in srgb, #f2555a, transparent 90%) !important; }
 .xs-storage-fail { color: #f5d342 !important; }
 /* the question: its heading yellow, the list in plain text so the heading stands out */

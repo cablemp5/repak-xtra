@@ -5,7 +5,7 @@
 // Undo). Nothing is turned off by itself: the player decides.
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { ShieldAlert, ShieldCheck } from 'lucide-react'
+import { ExternalLink, ShieldAlert, ShieldCheck } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import { openWhy } from './WhyNotWorking'
 import { GAME_RUNNING, turnOffWithUndo } from './keepOne'
@@ -15,6 +15,9 @@ export type Risk = { path: string; reason: string }
 type Plugin = { name: string; place: string; kind: 'banned' | 'unknown' | 'bundled' }
 
 export const NOTICE = 'Marvel Rivals says mods that remove recoil, screen shake, or hit effects, change footsteps, change maps so players see differently, or enlarge enemies can get an account banned.'
+/** NetEase's "Use of Mods and Violation Management" announcement (Oct 15, 2026). */
+const NOTICE_URL = 'https://www.marvelrivals.com/20261015/41525_1316797.html'
+const openUrl = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
 export const RISK_TAB_TITLE = 'Mods marked Ban risk: they match what Marvel Rivals bans. Click a badge for why and to turn it off'
 
 const norm = (path: string) => path.replace(/\//g, '\\').toLowerCase().replace(/\.(pak|bak_repak)$/, '')
@@ -112,7 +115,8 @@ export function SafetyCard({ alert }: { alert: Alert }) {
       <div className="su-card-head">
         <div>
           <h3>Ban risk</h3>
-          <p>{NOTICE} The notice also names two plugins that trip the anti-cheat.</p>
+          <p>{NOTICE} The notice also names two plugins that trip the anti-cheat. <a className="su-link ob-out" href={NOTICE_URL}
+            onClick={e => { e.preventDefault(); void openUrl(NOTICE_URL) }}>Read the notice<ExternalLink size={13} aria-hidden="true" /></a></p>
         </div>
         <span className={`su-chip ${banned ? 'is-danger' : flagged.length ? 'is-warn' : 'is-installed'}`}>{chip}</span>
       </div>
