@@ -228,7 +228,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   const [auto, setAuto] = useState(autoCheck())
   const [busy, setBusy] = useState<string | null>(null)
   const [confirmOff, setConfirmOff] = useState<'disable' | 'remove' | null>(null)
-  const [safety, setSafety] = useState(false)
+  const [safety, setSafety] = useState(focus === 'bypass') // Settings > Is it safe? opens Setup at this report
   const [advanced, setAdvanced] = useState(focus === 'snapshots' || focus === 'safety') // a startup toast opens it at its card
   const trap = useDialogFocus(true, onClose) // focus inside, Tab stays inside, Esc closes (an open changelog first), back to the opener
   const [notes, setNotes] = useState<string | null>(null)
@@ -237,7 +237,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
 
   // Opened from a grayed-out Generate button: straight to the Mod previews card (its top, so it can still grow as it loads)
   // repakxtra: and a startup toast's card (Snapshots, Ban risk)
-  useEffect(() => { const card = focus && ({ previews: '.su-previews', snapshots: '.su-snapshots', safety: '.su-safety-card' } as Record<string, string>)[focus]; if (card) document.querySelector(card)?.scrollIntoView({ block: 'start' }) }, [focus])
+  useEffect(() => { const card = focus && ({ previews: '.su-previews', snapshots: '.su-snapshots', safety: '.su-safety-card', bypass: '.su-bypass-card' } as Record<string, string>)[focus]; if (card) document.querySelector(card)?.scrollIntoView({ block: 'start' }) }, [focus])
   useEffect(() => {
     invoke<Bypass>('setup_bypass_status').then(setBypass).catch(e => alert.warning('Setup', String(e)))
     invoke<Galacta>('setup_galacta_status', { online: false }).then(g => setGalacta(withLastCheck(g))).catch(() => {})
@@ -313,7 +313,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
         </div>
 
         <div className="modal-body su-body">
-          <section className="su-card">
+          <section className="su-card su-bypass-card">
             <div className="su-card-head">
               <div>
                 <h3>Signature bypass</h3>

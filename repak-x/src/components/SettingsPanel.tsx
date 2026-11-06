@@ -33,6 +33,7 @@ import BetaNote from '../custom/BetaNote' // repakxtra
 import AppFiles from '../custom/AppFiles' // repakxtra: Check app files and Repair
 import StorageCleanup from '../custom/StorageCleanup' // repakxtra: Settings > Storage
 import Support from '../custom/Support'
+import IsItSafe from '../custom/TrustSection' // repakxtra: Settings > Is it safe?
 import { invoke } from '@tauri-apps/api/core'
 import { ShortcutSetting } from '../custom/shortcut' // repakxtra
 import { PreviewRimSetting } from '../custom/PreviewRimSetting' // repakxtra
@@ -512,6 +513,9 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                     </div>
                   </div>
                 </div>
+
+                {/* repakxtra: Is it safe? between Help and Community (Serial Position: the trust facts sit where help seekers already look) */}
+                <IsItSafe alert={alert} onOpenSetup={() => { onClose(); window.dispatchEvent(new CustomEvent('repakxtra-open-setup', { detail: 'bypass' })) }} />
 
                 <div className="setting-section">
                   <h3 className="setting-icon-label"><LuUsers size={18} aria-hidden="true" />Community</h3>

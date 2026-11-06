@@ -135,7 +135,8 @@ if ($Release) {
     if (-not $lines.Count) { throw "$changes has no '- ' lines." }
     $url = "https://github.com/cablemp5/repak-xtra/releases/download/$tagPrefix$ver"
     $notes = "dist\release-notes-$editionName-v$ver.md"
-    $body = @('## Downloads', '', '| File | |', '| :---: | :---: |', "| [$name]($url/$name) | [checksum]($url/$name.sha256) |", '',
+    $scan = 'https://www.virustotal.com/gui/file/'
+    $body = @('## Downloads', '', '| File | | |', '| :---: | :---: | :---: |', "| [$name]($url/$name) | [checksum]($url/$name.sha256) | [VirusTotal]($scan$hash) |", '',
         '## Changelog', '') + $lines
     [IO.File]::WriteAllText((Join-Path $PWD $notes), ($body -join "`n") + "`n")
     Write-Host "Notes: $notes" -ForegroundColor Green
@@ -143,6 +144,10 @@ if ($Release) {
     $releaseFlags = '--latest'
     $publish = "gh release create $tagPrefix$ver $zip $sum -R cablemp5/repak-xtra --target main $releaseFlags --title `"$appName $ver`" --notes-file $notes"
     Set-Clipboard -Value $publish
+    # Both scan links (the notes' and Settings > Is it safe?'s) resolve only once each file has been uploaded once
+    $exeHash = (Get-FileHash "$out\$exeName").Hash.ToLower()
+    Write-Host "Upload $zip at https://www.virustotal.com/gui/home/upload so the notes' scan link works: $scan$hash" -ForegroundColor Yellow
+    Write-Host "Upload $out\$exeName there too so Settings > Is it safe? finds it: $scan$exeHash" -ForegroundColor Yellow
     Write-Host 'The publish command is on the clipboard: paste it and press Enter:'
     Write-Host "  $publish"
 }

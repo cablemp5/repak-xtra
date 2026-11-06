@@ -285,6 +285,23 @@ repakxtra ships the bypass inside the app: **Setup** installs, repairs or turns 
 </details>
 
 <details>
+<summary><strong>Is it safe?</strong></summary>
+<br>
+
+repakxtra is a file manager for mods: it moves, renames and switches `.pak`, `.utoc` and `.ucas` files in the game's
+`~mods` folder, and **Setup** puts the signature bypass and its loader (`dsound.dll` and one `.asi`) in `Binaries\Win64`.
+It does not touch the game's own files, run inside the game, or read game memory itself (the bypass does that part,
+and **Setup > Is it safe?** reports on it). The full source is public here, and releases are built from it.
+It only talks to GitHub (updates, Project Galacta, the preview kit, game mappings), Discord (the server widget and
+the optional role claim), and Nexus Mods and imgur for mod images, and blender.org only when you install the preview kit's Blender. No accounts, ads, analytics or telemetry.
+The exe is not code-signed, so Windows SmartScreen may warn the first time (**More info > Run anyway**).
+**Settings > Help & Community > Is it safe?** repeats this and opens the VirusTotal page for the exe you are running.
+Each release lists its VirusTotal scan in the Downloads table. Mods break the game's terms, and repakxtra cannot make
+any mod safe from a ban: it marks the ones that trip the anti-cheat with a **Ban risk** badge.
+
+</details>
+
+<details>
 <summary><strong>What is Project Galacta, and do I need it?</strong></summary>
 <br>
 

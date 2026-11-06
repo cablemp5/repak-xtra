@@ -24,6 +24,7 @@ mod xtra_storage; // repakxtra: saved loadouts and settings shared with the dev 
 mod xtra_buildmark; // repakxtra: test and dev copies color their taskbar icon
 mod xtra_export; // repakxtra: export a loadout as a zip
 mod xtra_shortcut; // repakxtra: desktop shortcut
+mod xtra_trust; // repakxtra: Settings > Is it safe? (this exe's SHA-256)
 mod xtra_identity; // repakxtra: its own app identifier, beside Repak X
 mod xtra_crash; // repakxtra: crash facts for the setup report, crash suspects
 mod xtra_broken; // repakxtra: mods that will not work in the installed game version
@@ -8706,6 +8707,7 @@ fn main() {
             xtra_export::export_loadout_zip, // repakxtra: export a loadout as a zip
             xtra_shortcut::shortcut_status, // repakxtra: desktop shortcut
             xtra_shortcut::shortcut_create,
+            xtra_trust::xtra_self_sha256, // repakxtra: Settings > Is it safe?
             xtra_identity::xtra_upstream_running, // repakxtra: beside Repak X
             xtra_identity::xtra_protocol_reclaim,
             xtra_crash::xtra_newest_crash, // repakxtra: setup report
