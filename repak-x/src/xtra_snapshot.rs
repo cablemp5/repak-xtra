@@ -111,10 +111,22 @@ fn create_at(root: &Path, id: &str, mods: &Path, win64: &Path) -> Result<Snapsho
     if m.is_empty() && s.is_empty() {
         return Err("The mods folder is empty: there is nothing to snapshot.".into());
     }
-    let dir = root.join(id);
-    let made = copy_all(&m, mods, &dir.join("mods")).and_then(|_| copy_all(&s, win64, &dir.join("win64")));
+    // copied under a name the list skips, then renamed in: a copy cut short (a full disk, a crash) is never listed
+    let staging = root.join(format!(".staging-{id}"));
+    let _ = fs::remove_dir_all(&staging);
+    let made = copy_all(&m, mods, &staging.join("mods")).and_then(|_| copy_all(&s, win64, &staging.join("win64")));
     if let Err(e) = made {
-        let _ = fs::remove_dir_all(&dir); // a half copy (a full disk) is never offered as a snapshot
+        let _ = fs::remove_dir_all(&staging);
+        return Err(format!("Could not make the snapshot: {e}"));
+    }
+    // two made in the same second: the second takes the next free id, never the first one's folder
+    let mut n: u64 = id.parse().map_err(|_| "Unknown snapshot".to_string())?;
+    while root.join(n.to_string()).exists() {
+        n += 1;
+    }
+    let id = n.to_string();
+    if let Err(e) = fs::rename(&staging, root.join(&id)) {
+        let _ = fs::remove_dir_all(&staging);
         return Err(format!("Could not make the snapshot: {e}"));
     }
     let mut all = list_at(root);
@@ -135,21 +147,37 @@ fn list_at(root: &Path) -> Vec<Snapshot> {
     out
 }
 
-/// What the snapshot has that is gone now: (mod files, Setup files), as paths relative to its mods\ and win64\.
-fn missing_at(snap: &Path, mods: &Path, win64: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
-    let have: HashSet<_> = files(mods).iter().map(|f| mod_key(&f.0)).collect();
+/// What the snapshot has that is gone now, as (path in the snapshot, where it goes back), for mod files and Setup files.
+/// A mod file whose bundle is still there under another priority or folder goes back beside it, under its name, so a
+/// restored .utoc or .ucas always matches the .pak that stayed.
+fn missing_at(snap: &Path, mods: &Path, win64: &Path) -> (Vec<(PathBuf, PathBuf)>, Vec<(PathBuf, PathBuf)>) {
+    let now = files(mods);
+    let have: HashSet<_> = now.iter().map(|f| mod_key(&f.0)).collect();
+    let base = |key: &str| key.rsplit_once('.').map_or(key, |(b, _)| b).to_string();
+    // each bundle still there: its folder and file name without the extension ("Sub/Cool_99_P")
+    let bundles: std::collections::HashMap<String, PathBuf> = now.iter().filter_map(|f| {
+        let stem = f.0.file_stem()?;
+        Some((base(&mod_key(&f.0)), f.0.with_file_name(stem)))
+    }).collect();
     let have_setup: HashSet<_> = setup_files(win64).iter().map(|f| setup_key(&f.0)).collect();
-    let gone_mods = files(&snap.join("mods")).into_iter().map(|f| f.0).filter(|p| !have.contains(&mod_key(p))).collect();
-    let gone_setup = files(&snap.join("win64")).into_iter().map(|f| f.0).filter(|p| !have_setup.contains(&setup_key(p))).collect();
+    let gone_mods = files(&snap.join("mods")).into_iter().map(|f| f.0).filter(|p| !have.contains(&mod_key(p))).map(|p| {
+        let ext = p.extension().map(|e| e.to_string_lossy().to_string());
+        let to = match (bundles.get(&base(&mod_key(&p))), ext) {
+            (Some(stay), Some(ext)) => stay.with_extension(ext),
+            _ => p.clone(),
+        };
+        (p, to)
+    }).collect();
+    let gone_setup = files(&snap.join("win64")).into_iter().map(|f| f.0).filter(|p| !have_setup.contains(&setup_key(p))).map(|p| (p.clone(), p)).collect();
     (gone_mods, gone_setup)
 }
 
 fn restore_at(snap: &Path, mods: &Path, win64: &Path) -> Result<Restored, String> {
     let (gone_mods, gone_setup) = missing_at(snap, mods, win64);
-    let put = |list: &[PathBuf], from: &Path, to: &Path| -> Result<usize, String> {
+    let put = |list: &[(PathBuf, PathBuf)], from: &Path, to: &Path| -> Result<usize, String> {
         let mut n = 0;
-        for rel in list.iter().filter(|r| !to.join(r).exists()) {
-            let dest = to.join(rel);
+        for (rel, back) in list.iter().filter(|(_, back)| !to.join(back).exists()) {
+            let dest = to.join(back);
             // a temporary name first: a copy cut short (a full disk) never counts as put back on the next restore
             let tmp = dest.with_file_name(format!("{}.repakxtra-restoring", dest.file_name().unwrap_or_default().to_string_lossy()));
             let done = fs::create_dir_all(dest.parent().unwrap_or(to)).and_then(|_| fs::copy(from.join(rel), &tmp)).and_then(|_| fs::rename(&tmp, &dest));
@@ -293,5 +321,35 @@ mod tests {
         }
         assert_eq!(list_at(&root).iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), ["4", "3", "2"]);
         assert!(snap_dir("..\\x").is_err() && snap_dir("").is_err());
+    }
+
+    #[test]
+    fn same_second_and_cut_short_copies() {
+        let t = tempfile::tempdir().unwrap();
+        let (root, mods, win64) = (t.path().join("snaps"), t.path().join("mods"), t.path().join("win64"));
+        put(&mods.join("A_P.pak"), "a");
+        let (a, b) = (create_at(&root, "50", &mods, &win64).unwrap(), create_at(&root, "50", &mods, &win64).unwrap());
+        assert_eq!((a.id.as_str(), b.id.as_str()), ("50", "51"), "the second in one second gets its own folder");
+        fs::create_dir_all(root.join(".staging-60/mods")).unwrap();
+        assert_eq!(list_at(&root).len(), 2, "a copy cut short is never listed");
+    }
+
+    #[test]
+    fn a_companion_goes_back_beside_its_pak() {
+        let t = tempfile::tempdir().unwrap();
+        let (root, mods, win64) = (t.path().join("snaps"), t.path().join("mods"), t.path().join("win64"));
+        for ext in ["pak", "utoc", "ucas"] {
+            put(&mods.join(format!("Cool_9_P.{ext}")), ext);
+        }
+        create_at(&root, "1", &mods, &win64).unwrap();
+        // the priority went up (all three renamed into a folder), then the .utoc went missing
+        fs::create_dir_all(mods.join("Sub")).unwrap();
+        for ext in ["pak", "ucas"] {
+            fs::rename(mods.join(format!("Cool_9_P.{ext}")), mods.join(format!("Sub/Cool_999_P.{ext}"))).unwrap();
+        }
+        fs::remove_file(mods.join("Cool_9_P.utoc")).unwrap();
+        assert_eq!(restore_at(&root.join("1"), &mods, &win64).unwrap(), Restored { mods: 1, setup: 0 });
+        assert_eq!(fs::read_to_string(mods.join("Sub/Cool_999_P.utoc")).unwrap(), "utoc", "under the surviving pak's name");
+        assert!(!mods.join("Cool_9_P.utoc").exists());
     }
 }

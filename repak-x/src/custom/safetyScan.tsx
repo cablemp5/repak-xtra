@@ -1,6 +1,6 @@
 // repakxtra: the ban risk check (backend: xtra_safety.rs). Marvel Rivals' anti-cheat notice names two .asi files
-// that trip the anti-cheat and mod kinds that give an edge. Mods get a Ban risk badge (Settings > Warnings or the card
-// can hide it), a button that opens Why isn't it working? with the reason and a Turn off. Setup's Ban risk card lists
+// that trip the anti-cheat and mod kinds that give an edge. Mods get a Ban risk badge (Settings > Warnings can hide
+// it), a button that opens Why isn't it working? with the reason and a Turn off. Setup's Ban risk card lists
 // every flagged mod with its reason and Turn off (one or all, with Undo), and the plugins beside the game exe with
 // Remove for the flagged ones. Nothing is turned off by itself: the player decides.
 import { useEffect, useState, useSyncExternalStore } from 'react'
@@ -8,7 +8,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { ChevronRight, ExternalLink, ShieldAlert } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import { openWhy } from './WhyNotWorking'
-import { GAME_RUNNING, turnOffWithUndo } from './keepOne'
+import { modsBlocked, turnOffWithUndo } from './keepOne'
 import { nameKey } from './loadoutIdentity'
 import { useUiPref } from './uiPrefs'
 
@@ -22,8 +22,9 @@ const NOTICE_URL = 'https://www.marvelrivals.com/20261015/41525_1316797.html'
 const openUrl = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
 
 const norm = (path: string) => path.replace(/\//g, '\\').toLowerCase().replace(/\.(pak|bak_repak)$/, '')
-/** `state`: null before the first check finishes, 'failed' when it could not run, else 'done'. */
-let store: { risks: Map<string, Risk>; state: null | 'done' | 'failed' } = { risks: new Map(), state: null }
+/** `state`: null before the first check finishes, 'failed' when it could not run, else 'done'. `unread`: mods it could
+ *  not read, never counted as clean. `tries`: Try again bumps it, so the check runs again on an unchanged library. */
+let store: { risks: Map<string, Risk>; unread: string[]; state: null | 'done' | 'failed'; tries: number } = { risks: new Map(), unread: [], state: null, tries: 0 }
 const listeners = new Set<() => void>()
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
 const set = (next: typeof store) => { store = next; listeners.forEach(l => l()) }
@@ -34,23 +35,29 @@ export const riskOf = (path: string) => store.risks.get(norm(path))
 export const useRisk = (path: string) => useSyncExternalStore(subscribe, () => store.risks.get(norm(path)))
 export const useRisks = () => useSyncExternalStore(subscribe, () => store.risks)
 const useRiskState = () => useSyncExternalStore(subscribe, () => store.state)
+const useUnread = () => useSyncExternalStore(subscribe, () => store.unread)
+/** Runs the mods check again now (Setup's Try again). */
+export const recheckRisks = () => set({ ...store, state: null, tries: store.tries + 1 })
 
 /** Checks again a moment after mods are added, removed, or replaced (names only, so it is quick once details are cached). */
 export function useSafetyWatch(mods: { path: string; custom_name?: string; modified_date?: number; file_size?: number }[]) {
   // the Library's names for Setup's list (a renamed mod reads as it does there)
   names = new Map(mods.filter(m => m.custom_name).map(m => [norm(m.path), m.custom_name!]))
-  const key = mods.map(m => `${norm(m.path)}|${m.modified_date ?? ''}|${m.file_size ?? ''}`).sort().join('\n')
+  // the whole path, .pak or .bak_repak: switching a mod on or off checks again, so the card's on and off stay true
+  const key = mods.map(m => `${m.path.toLowerCase()}|${m.modified_date ?? ''}|${m.file_size ?? ''}`).sort().join('\n')
+  const tries = useSyncExternalStore(subscribe, () => store.tries)
   useEffect(() => {
-    if (!key) return
+    // no mods: nothing to check, and the card says so instead of Checking forever
+    if (!key) { set({ ...store, risks: new Map(), unread: [], state: 'done' }); return }
     let live = true
     const t = setTimeout(() => {
-      invoke<Risk[]>('xtra_safety_mods', { modPaths: mods.map(m => m.path) })
-        .then(r => { if (live) set({ risks: new Map(r.map(x => [norm(x.path), x])), state: 'done' }) })
+      invoke<{ risks: Risk[]; unread: string[] }>('xtra_safety_mods', { modPaths: mods.map(m => m.path) })
+        .then(r => { if (live) set({ ...store, risks: new Map(r.risks.map(x => [norm(x.path), x])), unread: r.unread, state: 'done' }) })
         // the badges so far stay, and Setup says the check failed instead of reading clean
         .catch(e => { console.warn('[safety] mod check failed', e); if (live) set({ ...store, state: 'failed' }) })
     }, 1500)
     return () => { live = false; clearTimeout(t) }
-  }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [key, tries]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /** A button, so the keyboard reaches it and a screen reader says why: it opens Why isn't it working? for the mod. */
@@ -90,7 +97,7 @@ export function SafetyCard({ alert }: { alert: Alert }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [asking, setAsking] = useState<Plugin | null>(null) // Remove asks first, in the plugin's row
   const [showList, setShowList] = useState(false) // the flagged mods' list, folded at first
-  const all = useRisks(), state = useRiskState()
+  const all = useRisks(), state = useRiskState(), unread = useUnread()
   const isOnPath = (p: string) => /\.pak$/i.test(p)
   // switched-on mods first: they are the ones that matter in a match
   const listed = [...all.values()].sort((a, b) => Number(isOnPath(b.path)) - Number(isOnPath(a.path)) || shownName(a.path).localeCompare(shownName(b.path)))
@@ -98,9 +105,9 @@ export function SafetyCard({ alert }: { alert: Alert }) {
   const turnOff = async (mods: typeof on, what: string) => {
     setBusy(what)
     try {
-      if (await invoke<boolean>('check_game_running').catch(() => false)) { alert.warning(...GAME_RUNNING); return }
-      // the folder watcher reloads the Library and the next check re-keys the badges, so nothing to reload here
-      await turnOffWithUndo({ alert, isBlocked: () => false, reload: async () => {} }, mods, 'Ban risk mods off',
+      // the Library's own game guard (its bypass setting too), for the switch and the toast's Undo. The folder watcher
+      // reloads the Library and the next check re-keys the badges, so nothing to reload here
+      await turnOffWithUndo({ alert, isBlocked: modsBlocked, reload: async () => {} }, mods, 'Ban risk mods off',
         `Turned off ${mods.length === 1 ? shownName(mods[0].path) : `${mods.length} mods`}. The game loads the change from the next launch.`)
     } finally { setBusy(null) }
   }
@@ -116,11 +123,13 @@ export function SafetyCard({ alert }: { alert: Alert }) {
   const banned = flagged.some(p => p.kind === 'banned')
   // the chip sums up the whole card, mods too: "No flagged plugins" read as all clear while flagged mods were on
   const chip = failed ? 'Could not check' : !plugins ? 'Checking…' : banned ? 'Remove flagged files'
-    : on.length ? `${on.length} mod${on.length === 1 ? '' : 's'} on` : flagged.length ? 'Unknown plugins' : state === 'done' ? 'Nothing flagged' : 'Checking…'
+    : on.length ? `${on.length} mod${on.length === 1 ? '' : 's'} on` : flagged.length ? 'Unknown plugins'
+    : state === null ? 'Checking…' : state === 'failed' ? 'Could not check' : unread.length ? 'Not all checked'
+    : all.size ? 'Flagged mods off' : 'Nothing flagged'
+  const found = all.size === 0 ? 'None match what the notice describes.' : `${all.size} marked, ${on.length ? `${on.length} of them on` : 'all off'}.`
   const mods = state === null ? 'Checking your mods…'
-    : state === 'failed' && !all.size ? 'Could not be checked. Scan the Library to try again.'
-    : all.size === 0 ? 'None match what the notice describes.'
-    : `${all.size} marked, ${on.length ? `${on.length} of them on` : 'all off'}.`
+    : state === 'failed' ? `Could not be checked${all.size ? `. The last results: ${found}` : '.'}`
+    : `${found}${unread.length ? ` ${unread.length} could not be read, so ${unread.length === 1 ? 'it is' : 'they are'} not checked.` : ''}`
   return (
     <section className="su-card su-safety-card">
       <div className="su-card-head">
@@ -129,7 +138,7 @@ export function SafetyCard({ alert }: { alert: Alert }) {
           <p>{NOTICE} It also names two plugins that trip its anti-cheat. This check reads each mod's file name and the names of the files inside it, so it can miss a mod or flag a plain recolor. <a className="su-link ob-out" href={NOTICE_URL}
             onClick={e => { e.preventDefault(); void openUrl(NOTICE_URL) }}>Read the notice<ExternalLink size={13} aria-hidden="true" /></a></p>
         </div>
-        <span className={`su-chip ${banned ? 'is-danger' : on.length ? 'is-risk' : flagged.length ? 'is-warn' : state === 'done' ? 'is-installed' : ''}`}>{chip}</span>
+        <span className={`su-chip ${banned ? 'is-danger' : on.length ? 'is-risk' : flagged.length || state === 'failed' || unread.length ? 'is-warn' : state === 'done' && !all.size ? 'is-installed' : ''}`}>{chip}</span>
       </div>
       {failed && <p className="su-note">Could not read the game folder. {failed} <button type="button" className="su-link" onClick={() => void load()}>Try again</button></p>}
       {/* mods first, as a part row like the plugins below it: the finding a player acts on leads (Serial Position) */}
@@ -138,7 +147,7 @@ export function SafetyCard({ alert }: { alert: Alert }) {
           <ShieldAlert size={16} className="su-risk-icon" aria-hidden="true" />
           <div className="su-part-text">
             <b>Your mods</b>
-            <span>{mods}</span>
+            <span>{mods}{(state === 'failed' || unread.length > 0) && <> <button type="button" className="su-link" onClick={recheckRisks}>Try again</button></>}</span>
           </div>
           {/* on the row it acts on, like the plugins' Remove (Law of Proximity) */}
           {listed.length > 0 && <span className="su-part-links">

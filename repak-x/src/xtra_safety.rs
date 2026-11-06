@@ -28,6 +28,13 @@ pub struct Plugin {
     kind: &'static str,
 }
 
+/// The mods check: what it flagged, and the mods it could not read (never counted as clean).
+#[derive(Serialize, Debug)]
+pub struct Scan {
+    risks: Vec<Risk>,
+    unread: Vec<String>,
+}
+
 #[derive(Serialize, Debug, PartialEq)]
 pub struct Risk {
     path: String,
@@ -36,10 +43,17 @@ pub struct Risk {
     reason: String,
 }
 
-fn plugins_in(win64: &Path) -> Vec<Plugin> {
+/// A folder that is not there holds no plugins. One that cannot be read is an error, never an empty (clean) list.
+fn plugins_in(win64: &Path) -> Result<Vec<Plugin>, String> {
     let mut out = Vec::new();
     for sub in ["", "plugins", "scripts"] {
-        for e in fs::read_dir(win64.join(sub)).into_iter().flatten().flatten() {
+        let list = match fs::read_dir(win64.join(sub)) {
+            Ok(list) => list,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(format!("Could not read {}: {e}", win64.join(sub).display())),
+        };
+        for e in list {
+            let e = e.map_err(|e| format!("Could not read {}: {e}", win64.join(sub).display()))?;
             let name = e.file_name().to_string_lossy().to_string();
             let lower = name.to_ascii_lowercase();
             let proxy = sub.is_empty() && lower.strip_suffix(".dll").is_some_and(|s| crate::xtra_crash::PROXY_DLLS.contains(&s));
@@ -52,7 +66,7 @@ fn plugins_in(win64: &Path) -> Vec<Plugin> {
             out.push(Plugin { name, place: sub.to_string(), kind });
         }
     }
-    out
+    Ok(out)
 }
 
 /// A mod named for what the notice bans ("NoRecoil", "no-screen-shake", "No Impact"): its name says what it removes,
@@ -96,7 +110,7 @@ fn mods_dir(state: &State<'_, Arc<Mutex<crate::AppState>>>) -> PathBuf {
 #[tauri::command]
 pub async fn xtra_safety_plugins(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<Vec<Plugin>, String> {
     let Some(win64) = crate::xtra_setup::win64_dir(&mods_dir(&state)) else { return Ok(Vec::new()) };
-    tauri::async_runtime::spawn_blocking(move || plugins_in(&win64)).await.map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(move || plugins_in(&win64)).await.map_err(|e| e.to_string())?
 }
 
 /// Moves a plugin the scan lists (never the bundled bypass) to %APPDATA%\Repak-X\removed-plugins\<unix secs>, so it
@@ -110,7 +124,7 @@ pub async fn xtra_safety_remove_plugin(name: String, place: String, state: State
     }
     let win64 = crate::xtra_setup::win64_dir(&mods_dir(&state)).ok_or("Set the game mods path in Settings first")?;
     // only a file the scan lists right now: the name and place never reach outside Win64
-    if !plugins_in(&win64).iter().any(|p| p.name == name && p.place == place && p.kind != "bundled") {
+    if !plugins_in(&win64)?.iter().any(|p| p.name == name && p.place == place && p.kind != "bundled") {
         return Err(format!("{name} is not there any more."));
     }
     let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_secs();
@@ -121,14 +135,15 @@ pub async fn xtra_safety_remove_plugin(name: String, place: String, state: State
     if fs::rename(&from, to.join(&name)).is_err() {
         fs::copy(&from, to.join(&name)).and_then(|_| fs::remove_file(&from)).map_err(|e| format!("Could not remove {name}: {e}"))?;
     }
-    Ok(plugins_in(&win64))
+    plugins_in(&win64)
 }
 
 #[tauri::command]
-pub async fn xtra_safety_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<Vec<Risk>, String> {
+pub async fn xtra_safety_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<Scan, String> {
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        mod_paths.into_iter().filter_map(|p| {
+        let unread = std::cell::RefCell::new(Vec::new());
+        let risks = mod_paths.into_iter().filter_map(|p| {
             let path = PathBuf::from(&p);
             // built-ins too: No Screen Shake, No Bullet Holes, and No Impact are what the notice bans
             if crate::xtra_setup::is_managed_loader(&path) {
@@ -143,9 +158,13 @@ pub async fn xtra_safety_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
             if let Some((short, reason)) = by_name(&path) {
                 return Some(Risk { path: p, short, reason: made_here(reason) });
             }
-            let details = crate::compute_mod_details(&path, &state).ok()?;
+            let details = match crate::compute_mod_details(&path, &state) {
+                Ok(d) => d,
+                Err(_) => { unread.borrow_mut().push(p); return None }
+            };
             judge(&details.files).map(|(short, reason)| Risk { path: p.clone(), short, reason: made_here(reason) })
-        }).collect()
+        }).collect();
+        Scan { risks, unread: unread.into_inner() }
     }).await.map_err(|e| e.to_string())
 }
 
@@ -188,7 +207,8 @@ mod tests {
         fs::write(w.join("winmm.dll"), "x").unwrap();
         fs::write(w.join("Marvel-Win64-Shipping.exe"), "x").unwrap();
         fs::write(w.join("steam_api64.dll"), "x").unwrap();
-        let mut got: Vec<_> = plugins_in(w).into_iter().map(|p| (p.name, p.place, p.kind)).collect();
+        assert!(plugins_in(&w.join("no-such-folder")).unwrap().is_empty(), "no game folder: no plugins, not an error");
+        let mut got: Vec<_> = plugins_in(w).unwrap().into_iter().map(|p| (p.name, p.place, p.kind)).collect();
         got.sort();
         assert_eq!(got, [("Other.asi".into(), "plugins".into(), "unknown"), ("PyStubber.asi".into(), "plugins".into(), "banned"), ("winmm.dll".into(), "".into(), "unknown")]);
     }

@@ -9,6 +9,7 @@ import type { useAlert } from '../components/AlertHandler'
 import { verdictLabel, verdictOf } from './brokenMods'
 import { riskOf } from './safetyScan'
 import { blockedReason } from './safeOff'
+import { GAME_RUNNING, modsBlocked } from './keepOne'
 import { useDialogFocus } from './dialogFocus'
 
 type Action = 'turn_on' | 'turn_off' | 'setup'
@@ -69,6 +70,7 @@ export function WhyNotWorking({ alert }: { alert: ReturnType<typeof useAlert> })
   const name = target.name || fileName(path)
   const act = async (action: Action) => {
     if (action === 'setup') { close(); window.dispatchEvent(new Event('repakxtra-open-setup')); return }
+    if (modsBlocked()) { alert.warning(...GAME_RUNNING); return } // the Library's own guard: toggle_mod does not check
     setBusy(true)
     try {
       await invoke('toggle_mod', { modPath: path }) // the Library's own switch: the list updates from the folder watcher

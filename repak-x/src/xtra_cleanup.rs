@@ -61,6 +61,10 @@ pub async fn xtra_storage_sections() -> Result<Vec<Section>, String> {
 pub async fn xtra_storage_clear(ids: Vec<String>) -> Result<u64, String> {
     // alone: no mod change, encryption, or snapshot may use the trash or a snapshot while it goes
     let _alone = crate::xtra_mutation::alone("the cleanup")?;
+    // previews or the kit: never while previews render or the kit installs (they write there), held until the files are gone
+    let _kit = if ids.iter().any(|id| id == "previews" || id == "kit") {
+        Some(crate::xtra_previews::reserve("cleanup").map_err(crate::xtra_previews::busy_text)?)
+    } else { None };
     tauri::async_runtime::spawn_blocking(move || clear_at(&crate::app_dir(), &ids)).await.map_err(|e| e.to_string())?
 }
 

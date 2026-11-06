@@ -76,8 +76,9 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
         ))}
       </ul>}
       <div className="su-actions">
-        <button type="button" className="btn-primary su-main" disabled={locked} onClick={make}>{busy === 'make' ? 'Copying…' : 'Make a snapshot'}</button>
-        {estimate && <span className="su-meta">{plural(estimate[0], 'file')}, about {size(estimate[1])} each.{oldest ? ` Making one removes the oldest, from ${when(oldest.created)}.` : ' The newest 3 are kept.'}</span>}
+        {/* only once the list is read: its warning about the oldest one has to be right before a snapshot can drop it */}
+        <button type="button" className="btn-primary su-main" disabled={locked || !list || Boolean(failed)} onClick={make}>{busy === 'make' ? 'Copying…' : 'Make a snapshot'}</button>
+        {list && <span className="su-meta">{estimate ? `${plural(estimate[0], 'file')}, about ${size(estimate[1])} each. ` : ''}{oldest ? `Making one removes the oldest, from ${when(oldest.created)}.` : 'The newest 3 are kept.'}</span>}
       </div>
     </section>
   )

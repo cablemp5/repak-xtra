@@ -153,7 +153,7 @@ import CreditsPanel from './components/CreditsPanel'
 import ToolsPanel from './components/ToolsPanel'
 import Wordmark from './custom/Wordmark' // repakxtra: the logo
 import ConflictsPanel from './custom/ConflictsPanel' // repakxtra: in place of Repak X's ClashPanel (grouped, in words)
-import { keepThisOne } from './custom/keepOne' // repakxtra: Keep this one
+import { keepThisOne, setModsBlocked } from './custom/keepOne' // repakxtra: Keep this one
 import { NEXUS_TYPE, recordSourceAs, recordSources, renameSource, sourceOf, useNexusScan, useNexusSources } from './custom/nexusSource' // repakxtra: Nexus source
 import { stageOffFiles } from './custom/offFiles' // repakxtra: .pak.off files
 import CrashSuspects, { previousCrashes, withSuspects } from './custom/CrashSuspects' // repakxtra: crash suspects
@@ -511,6 +511,7 @@ function App() {
   const gameRunningRef = useRef(false)
   const bypassRef = useRef(false); bypassRef.current = bypassGameRunningLock // repakxtra: live game lock for Undo toasts
   const undoBlocked = () => gameRunningRef.current && !bypassRef.current // repakxtra
+  setModsBlocked(undoBlocked) // repakxtra: the same guard for Setup's Ban risk and Why isn't it working? (refs keep it live)
   const lastSelectedModIndex = useRef<number | null>(null) // For Shift+click range selection
   const filteredModsRef = useRef<ModRecord[]>([]) // Keep in sync with filteredMods for selection handler
   const loadModsSeq = useRef(0) // repakxtra: the newest loadMods call, so a slow older one cannot overwrite it
