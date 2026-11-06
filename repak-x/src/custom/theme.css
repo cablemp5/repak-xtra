@@ -3158,9 +3158,12 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .su-part.su-risk-summary { flex-wrap: wrap; row-gap: 0 !important; }   /* beats .su-part gap !important: the list brings its own top space, so a folded list adds none */
 /* the fold holds the list across the summary's full width */
 .su-risk-fold { flex: 0 0 100%; min-width: 0; }
-.su-risk-list { min-width: 0; margin: 0; padding: 6px 0 0; list-style: none; display: flex; flex-direction: column; }
-.su-risk-mod { min-width: 0; font-size: 12.5px; }
-.su-risk-line { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 28px; }
+/* one grid for every row, so names share a column and every reason starts at the same x (cable's choice). The li and
+   its line only group the cells, the full reason spans the whole row */
+.su-risk-list { min-width: 0; margin: 0; padding: 6px 0 0; list-style: none; display: grid; align-items: center; column-gap: 10px;
+  grid-template-columns: 6px fit-content(40%) minmax(0, 1fr) auto auto; font-size: 12.5px; }
+.su-risk-mod, .su-risk-line { display: contents; }
+.su-risk-list .t-acc-panel { grid-column: 1 / -1; }
 /* Details: the full reason under the row, opened like Is it safe? */
 .su-risk-more { flex: none; display: inline-flex; align-items: center; gap: 2px; padding: 0; border: 0; background: none; font: inherit; font-size: 12px;
   color: var(--text-secondary); cursor: pointer; }
@@ -3171,9 +3174,9 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .su-risk-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: #f59a42; }
 .su-risk-mod.is-off .su-risk-dot { background: none; box-shadow: inset 0 0 0 1.5px var(--text-secondary); }
 [data-theme="light"] .su-risk-dot { background: #9a5200; }
-.su-risk-name { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
+.su-risk-name { line-height: 28px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
 .su-risk-mod.is-off .su-risk-name { color: var(--text-secondary); }
-.su-risk-why { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+.su-risk-why { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
 .su-risk-off { flex: none; font-size: 12.5px !important; }
 .su-part.is-banned .su-risk-icon, .su-part.is-banned b { color: #f05252; }
 .su-part.is-unknown .su-risk-icon { color: #f5d342; }
