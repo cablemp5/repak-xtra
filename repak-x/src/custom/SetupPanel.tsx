@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { motion } from 'framer-motion'
-import { Check, ChevronRight, Copy, ExternalLink, ListChecks, ShieldCheck, TriangleAlert, Wrench } from 'lucide-react'
+import { Check, ChevronRight, Copy, ExternalLink, ListChecks, ShieldCheck, SlidersHorizontal, TriangleAlert, Wrench } from 'lucide-react'
 import { open as pickFile } from '@tauri-apps/plugin-dialog'
 import { type Doctor, isNewerKit, usePreviewKit } from './previewKit'
 import { BypassTrack, GalactaTrack, KitTrack, useFinished } from './installTrack'
@@ -228,6 +228,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   const [busy, setBusy] = useState<string | null>(null)
   const [confirmOff, setConfirmOff] = useState<'disable' | 'remove' | null>(null)
   const [safety, setSafety] = useState(false)
+  const [advanced, setAdvanced] = useState(focus === 'snapshots' || focus === 'safety') // a startup toast opens it at its card
   const trap = useDialogFocus() // focus inside, Tab stays inside, back to the opener on close
   const [notes, setNotes] = useState<string | null>(null)
   const [askGalacta, setAskGalacta] = useState(false) // Galacta's Remove asks first
@@ -447,10 +448,16 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
 
           <PreviewKitCard alert={alert} />
 
-          {/* repakxtra: optional tools under what every player needs (Serial Position: the essentials first) */}
-          <h3 className="su-group">Advanced</h3>
-          <SnapshotCard alert={alert} />
-          <SafetyCard alert={alert} />
+          {/* repakxtra: optional tools under what every player needs, folded away (Progressive Disclosure) */}
+          <button type="button" className="su-group" aria-expanded={advanced} onClick={() => setAdvanced(v => !v)}>
+            <SlidersHorizontal size={14} aria-hidden="true" /> Advanced <ChevronRight size={14} className="su-caret" aria-hidden="true" />
+          </button>
+          <div className="t-acc-panel" data-open={advanced} ref={el => el?.toggleAttribute('inert', !advanced)}>
+            <div className="t-acc-panel-inner su-group-inner">
+              <SnapshotCard alert={alert} />
+              <SafetyCard alert={alert} />
+            </div>
+          </div>
         </div>
         {/* One switch for both startup checks (SetupButton: Project Galacta and the preview kit), so it lives under all the cards */}
         <div className="su-modal-foot">

@@ -3156,8 +3156,14 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 /* a Remove or Delete that asks in its own row: the question drops under the row, full width */
 .su-part:has(.su-row-confirm) { flex-wrap: wrap; }
 .su-row-confirm { flex-basis: 100%; }
-/* Setup's Advanced group: a quiet label over Snapshots and Ban risk, extra space above it to split it from the essentials */
-.su-body > .su-group { margin: 12px 0 -4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
+/* Setup's Advanced group: a quiet fold over Snapshots and Ban risk, extra space above it to split it from the essentials */
+.su-body > .su-group { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; margin: 8px 0 0; padding: 2px 0; background: none; border: 0;
+  font: inherit; font-size: 14px; font-weight: 600; color: var(--text-secondary); cursor: pointer; }
+.su-body > .su-group:hover { color: var(--text-primary); }
+.su-body > .su-group .su-caret { transition: transform 150ms ease; }
+.su-body > .su-group[aria-expanded="true"] .su-caret { transform: rotate(90deg); }
+.su-body > .su-group[aria-expanded="false"] + .t-acc-panel { margin-top: -16px; } /* closed: no gap under the fold */
+.su-group-inner { display: flex; flex-direction: column; gap: 16px; }
 /* the one that does it reads stronger than Cancel, without red (Von Restorff) */
 .su-confirm .su-confirm-yes { font-weight: 600 !important; color: var(--text-primary) !important; background: color-mix(in srgb, var(--text-primary), transparent 86%) !important; }
 /* the section's lead lines up with its list, not indented like a checkbox note */
