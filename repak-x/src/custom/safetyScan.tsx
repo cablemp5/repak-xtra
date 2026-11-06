@@ -14,7 +14,7 @@ type Alert = ReturnType<typeof useAlert>
 export type Risk = { path: string; reason: string }
 type Plugin = { name: string; place: string; kind: 'banned' | 'unknown' | 'bundled' }
 
-export const NOTICE = 'Marvel Rivals says mods that remove recoil, screen shake, or hit effects, change footsteps, change maps so players see differently, or enlarge enemies can get an account banned.'
+export const NOTICE = 'Marvel Rivals can ban accounts for mods that remove recoil, screen shake, or hit effects, change footsteps, change maps so players see differently, or enlarge enemies.'
 /** NetEase's "Use of Mods and Violation Management" announcement (Oct 15, 2026). */
 const NOTICE_URL = 'https://www.marvelrivals.com/20261015/41525_1316797.html'
 const openUrl = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
@@ -105,23 +105,39 @@ export function SafetyCard({ alert }: { alert: Alert }) {
   const flagged = (plugins ?? []).filter(p => p.kind !== 'bundled')
   const bundled = (plugins ?? []).filter(p => p.kind === 'bundled')
   const banned = flagged.some(p => p.kind === 'banned')
-  const chip = failed ? 'Could not check' : !plugins ? 'Checking…' : banned ? 'Remove flagged files' : flagged.length ? 'Unknown plugins' : 'No flagged plugins'
+  // the chip sums up the whole card, mods too: "No flagged plugins" read as all clear while flagged mods were on
+  const chip = failed ? 'Could not check' : !plugins ? 'Checking…' : banned ? 'Remove flagged files'
+    : on.length ? `${on.length} mod${on.length === 1 ? '' : 's'} on` : flagged.length ? 'Unknown plugins' : state === 'done' ? 'Nothing flagged' : 'Checking…'
   const mods = state === null ? 'Checking your mods…'
-    : state === 'failed' && !all.size ? 'Your mods could not be checked. Scan the Library to try again.'
-    : all.size === 0 ? 'No installed mod matches what the notice describes.'
-    : `${all.size} mod${all.size === 1 ? '' : 's'} marked Ban risk, ${on.length} of them on. The Library's Ban risk tab lists them.`
+    : state === 'failed' && !all.size ? 'Could not be checked. Scan the Library to try again.'
+    : all.size === 0 ? 'None match what the notice describes.'
+    : `${all.size} marked, ${on.length ? `${on.length} of them on` : 'all off'}. The Library's Ban risk tab lists them.`
   return (
     <section className="su-card su-safety-card">
       <div className="su-card-head">
         <div>
           <h3>Ban risk</h3>
-          <p>{NOTICE} The notice also names two plugins that trip the anti-cheat. <a className="su-link ob-out" href={NOTICE_URL}
+          <p>{NOTICE} It also names two plugins that trip its anti-cheat. <a className="su-link ob-out" href={NOTICE_URL}
             onClick={e => { e.preventDefault(); void openUrl(NOTICE_URL) }}>Read the notice<ExternalLink size={13} aria-hidden="true" /></a></p>
         </div>
-        <span className={`su-chip ${banned ? 'is-danger' : flagged.length ? 'is-warn' : 'is-installed'}`}>{chip}</span>
+        <span className={`su-chip ${banned ? 'is-danger' : on.length || flagged.length ? 'is-warn' : state === 'done' ? 'is-installed' : ''}`}>{chip}</span>
       </div>
       {failed && <p className="su-note">Could not read the game folder. {failed} <button type="button" className="su-link" onClick={() => void load()}>Try again</button></p>}
-      {plugins && (flagged.length > 0 || bundled.length > 0) && <ul className="su-parts">
+      {/* mods first, as a part row like the plugins below it: the finding a player acts on leads (Serial Position) */}
+      <ul className="su-parts">
+        <li className={`su-part${on.length ? ' is-risk' : ''}`}>
+          <ShieldAlert size={16} className="su-risk-icon" aria-hidden="true" />
+          <div className="su-part-text">
+            <b>Your mods</b>
+            <span>{mods}</span>
+          </div>
+          {/* on the row it acts on, like the plugins' Remove (Law of Proximity) */}
+          {on.length > 0 && <span className="su-part-links">
+            <button type="button" className="su-link" disabled={Boolean(busy || asking)} onClick={() => void turnOffAll()}
+              title="Switches them off like the Library does. The toast's Undo turns them back on">
+              {busy === 'mods' ? 'Turning off…' : `Turn off all ${on.length}`}</button>
+          </span>}
+        </li>
         {flagged.map(p => (
           <li key={`${p.place}/${p.name}`} className={`su-part is-${p.kind}`}>
             <ShieldAlert size={16} className="su-risk-icon" aria-hidden="true" />
@@ -148,13 +164,8 @@ export function SafetyCard({ alert }: { alert: Alert }) {
             <span>{bundled.map(p => p.name).join(' and ')}. Mods need it to load. It patches the game in memory, and the notice does not name it.</span>
           </div>
         </li>}
-      </ul>}
-      <p className="su-note">{mods} This check reads file names, so it can miss a mod or flag a plain recolor.</p>
-      {on.length > 0 && <div className="su-actions">
-        <button type="button" className="btn-primary su-main" disabled={Boolean(busy || asking)} onClick={() => void turnOffAll()}
-          title="Switches them off like the Library does. The toast's Undo turns them back on">
-          {busy === 'mods' ? 'Turning off…' : `Turn off all ${on.length}`}</button>
-      </div>}
+      </ul>
+      <p className="su-note">This check reads file names, so it can miss a mod or flag a plain recolor.</p>
     </section>
   )
 }

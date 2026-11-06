@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { motion } from 'framer-motion'
-import { Check, ChevronRight, Copy, ExternalLink, ListChecks, ShieldCheck, SlidersHorizontal, TriangleAlert, Wrench } from 'lucide-react'
+import { Check, ChevronRight, Copy, ExternalLink, ListChecks, ShieldCheck, TriangleAlert, Wrench } from 'lucide-react'
 import { open as pickFile } from '@tauri-apps/plugin-dialog'
 import { type Doctor, isNewerKit, usePreviewKit } from './previewKit'
 import { BypassTrack, GalactaTrack, KitTrack, useFinished } from './installTrack'
@@ -450,7 +450,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
 
           {/* repakxtra: optional tools under what every player needs, folded away (Progressive Disclosure) */}
           <button type="button" className="su-group" aria-expanded={advanced} onClick={() => setAdvanced(v => !v)}>
-            <SlidersHorizontal size={14} aria-hidden="true" /> Advanced <ChevronRight size={14} className="su-caret" aria-hidden="true" />
+            Advanced <ChevronRight size={14} className="su-caret" aria-hidden="true" />
           </button>
           <div className="t-acc-panel" data-open={advanced} ref={el => el?.toggleAttribute('inert', !advanced)}>
             <div className="t-acc-panel-inner su-group-inner">

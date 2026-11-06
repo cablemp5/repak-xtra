@@ -2,6 +2,7 @@
 // a Steam Verify integrity of game files, a reinstall, or a game update. Restore puts back only what is gone.
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { History } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 
 type Alert = ReturnType<typeof useAlert>
@@ -45,16 +46,17 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
       <div className="su-card-head">
         <div>
           <h3>Snapshots</h3>
-          <p>A full copy of your mods and the bypass files. Restore puts back only what is missing, so later changes stay.</p>
+          {/* one lede: what it is, when to make one, what Restore does (was two stacked paragraphs) */}
+          <p>A full copy of your mods and the bypass files. Make one before you verify game files in Steam, reinstall, or move the game. Restore puts back only what went missing, so later changes stay.</p>
         </div>
         {/* optional, so None yet is the plain gray chip, not the blue one that means an install is needed */}
         <span className={`su-chip${list?.length ? ' is-installed' : ''}`}>{failed ? 'Unknown' : !list ? 'Checking…' : list.length ? `${list.length} saved` : 'None yet'}</span>
       </div>
-      <p className="su-note">Before you run Verify integrity of game files in Steam, reinstall, or move the game: make a snapshot here. If mods or the bypass are missing afterwards, come back and press Restore.</p>
       {failed && <p className="su-note">Could not read your snapshots. {failed} <button type="button" className="su-link" onClick={refresh}>Try again</button></p>}
       {list && list.length > 0 && <ul className="su-parts">
         {list.map(s => (
           <li key={s.id} className="su-part">
+            <History size={16} className="su-risk-icon" aria-hidden="true" />
             <div className="su-part-text">
               <b>{when(s.created)}</b>
               <span>{plural(s.files, 'file')} · {size(s.bytes)}</span>
