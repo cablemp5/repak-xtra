@@ -3173,9 +3173,9 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .su-risk-summary .su-part-links .su-risk-more { font-size: 13px; }
 .su-risk-on { display: inline-block; width: 6px; height: 6px; margin-left: 8px; border-radius: 50%; background: #3ecf8e; vertical-align: middle; }
 [data-theme="light"] .su-risk-on { background: #1f9d63; }
-.su-risk-name { line-height: 28px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
+.su-risk-name { line-height: 32px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
 .su-risk-mod.is-off .su-risk-name { color: var(--text-secondary); }
-.su-risk-why { min-width: 0; margin-left: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+.su-risk-why { min-width: 0; margin-left: 30px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
 .su-risk-off { flex: none; font-size: 12.5px !important; }
 .su-part.is-banned .su-risk-icon, .su-part.is-banned b { color: #f05252; }
 .su-part.is-unknown .su-risk-icon { color: #f5d342; }
