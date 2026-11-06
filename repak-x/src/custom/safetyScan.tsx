@@ -90,6 +90,7 @@ export function SafetyCard({ alert }: { alert: Alert }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [asking, setAsking] = useState<Plugin | null>(null) // Remove asks first, in the plugin's row
   const [open, setOpen] = useState<Set<string>>(new Set()) // the mods whose full reason is showing
+  const [showList, setShowList] = useState(false) // the flagged mods' list, folded at first
   const all = useRisks(), state = useRiskState()
   const isOnPath = (p: string) => /\.pak$/i.test(p)
   // switched-on mods first: they are the ones that matter in a match
@@ -141,14 +142,19 @@ export function SafetyCard({ alert }: { alert: Alert }) {
             <span>{mods}</span>
           </div>
           {/* on the row it acts on, like the plugins' Remove (Law of Proximity) */}
-          {on.length > 0 && <span className="su-part-links">
-            <button type="button" className="su-link" disabled={Boolean(busy || asking)} onClick={() => void turnOff(on, 'mods')}
+          {listed.length > 0 && <span className="su-part-links">
+            {/* the list starts folded: the summary and Turn off all are enough most of the time (Progressive Disclosure) */}
+            <button type="button" className="su-risk-more" aria-expanded={showList} aria-controls="su-risk-list" onClick={() => setShowList(v => !v)}>
+              Show mods <ChevronRight size={12} className="su-caret" aria-hidden="true" />
+            </button>
+            {on.length > 0 && <button type="button" className="su-link" disabled={Boolean(busy || asking)} onClick={() => void turnOff(on, 'mods')}
               title="Switches them off like the Library does. The toast's Undo turns them back on">
-              {busy === 'mods' ? 'Turning off…' : `Turn off all ${on.length}`}</button>
+              {busy === 'mods' ? 'Turning off…' : `Turn off all ${on.length}`}</button>}
           </span>}
           {/* the flagged mods nest under their summary, lighter and tighter than a part row, so they read as its items
               and not as more summaries (Common Region, Law of Proximity) */}
-          {listed.length > 0 && <ul className="su-risk-list" aria-label="Mods marked Ban risk">
+          {listed.length > 0 && <div id="su-risk-list" className="t-acc-panel su-risk-fold" data-open={showList} ref={el => el?.toggleAttribute('inert', !showList)}>
+          <div className="t-acc-panel-inner"><ul className="su-risk-list" aria-label="Mods marked Ban risk">
             {listed.map(r => {
               const name = shownName(r.path), live = isOnPath(r.path)
               // an off mod needs no "turn it off" advice
@@ -176,7 +182,7 @@ export function SafetyCard({ alert }: { alert: Alert }) {
                 </li>
               )
             })}
-          </ul>}
+          </ul></div></div>}
         </li>
         {flagged.map(p => (
           <li key={`${p.place}/${p.name}`} className={`su-part is-${p.kind}`}>
