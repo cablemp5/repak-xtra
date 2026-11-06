@@ -31,6 +31,8 @@ pub struct Plugin {
 #[derive(Serialize, Debug, PartialEq)]
 pub struct Risk {
     path: String,
+    /// a few words for the list ("Removes screen shake")
+    short: String,
     reason: String,
 }
 
@@ -55,18 +57,18 @@ fn plugins_in(win64: &Path) -> Vec<Plugin> {
 
 /// A mod named for what the notice bans ("NoRecoil", "no-screen-shake", "No Impact"): its name says what it removes,
 /// whatever its files are called.
-fn by_name(path: &Path) -> Option<String> {
+fn by_name(path: &Path) -> Option<(String, String)> {
     let stem: String = path.file_stem()?.to_string_lossy().to_lowercase().chars().filter(|c| c.is_ascii_alphanumeric()).collect();
     const REMOVES: &[(&str, &str)] = &[
         ("noscreenshake", "screen shake"), ("nocamerashake", "screen shake"), ("noshake", "screen shake"), ("norecoil", "weapon recoil"),
         ("noimpact", "impact effects"), ("nobullet", "bullet effects"), ("notracer", "bullet tracers"),
         ("nomuzzle", "muzzle flashes"), ("nofootstep", "footstep sounds"),
     ];
-    REMOVES.iter().find(|(word, _)| stem.contains(word)).map(|(_, what)| format!("Its name says it removes {what}."))
+    REMOVES.iter().find(|(word, _)| stem.contains(word)).map(|(_, what)| (format!("Removes {what}"), format!("Its name says it removes {what}.")))
 }
 
 /// What a mod's files say about it, the first rule that matches. `files` as the mod lists them, any mount root.
-fn judge(files: &[String]) -> Option<String> {
+fn judge(files: &[String]) -> Option<(String, String)> {
     // "Marvel/Content/Marvel/X.uasset" (PAK) and "/Game/Marvel/X.uasset" (IoStore) both become "marvel/x.uasset"
     let keys: Vec<String> = files.iter().map(|f| {
         let k = f.replace('\\', "/").to_lowercase();
@@ -77,14 +79,14 @@ fn judge(files: &[String]) -> Option<String> {
     let has = |k: &str, words: &[&str]| words.iter().any(|w| name(k).contains(w));
     let audio = |k: &str| k.contains("wwiseaudio/");
     // shared sound banks are not flagged: most sound mods touch them, so the flag was noise (cable's choice)
-    let rules: [(&str, &dyn Fn(&str) -> bool); 3] = [
-        ("Changes camera shake or weapon recoil", &|k| ["camerashake", "camera_shake", "recoil"].iter().any(|w| k.contains(w))),
-        ("Changes footstep or movement sounds, which can make enemies easier to hear", &|k| audio(k) && has(k, &["footstep", "foot_step", "foley"])),
-        ("Changes maps or their models and textures, which can change what players see", &|k| {
+    let rules: [(&str, &str, &dyn Fn(&str) -> bool); 3] = [
+        ("Changes camera shake or recoil", "Changes camera shake or weapon recoil", &|k| ["camerashake", "camera_shake", "recoil"].iter().any(|w| k.contains(w))),
+        ("Changes footstep sounds", "Changes footstep or movement sounds, which can make enemies easier to hear", &|k| audio(k) && has(k, &["footstep", "foot_step", "foley"])),
+        ("Changes maps", "Changes maps or their models and textures, which can change what players see", &|k| {
             k.starts_with("marvel/environment/") || k.starts_with("marvel/maps/") || k.starts_with("marvel/levels/") || k.ends_with(".umap")
         }),
     ];
-    rules.iter().find_map(|(why, test)| find(*test).map(|file| format!("{why} ({file}).")))
+    rules.iter().find_map(|(short, why, test)| find(*test).map(|file| (short.to_string(), format!("{why} ({file})."))))
 }
 
 fn mods_dir(state: &State<'_, Arc<Mutex<crate::AppState>>>) -> PathBuf {
@@ -138,11 +140,11 @@ pub async fn xtra_safety_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
             } else if crate::xtra_builtins::in_folder(&path) {
                 format!("{reason} Another app made it as a built-in, and the notice still counts it. Turn it off before you play online.")
             } else { reason };
-            if let Some(reason) = by_name(&path) {
-                return Some(Risk { path: p, reason: made_here(reason) });
+            if let Some((short, reason)) = by_name(&path) {
+                return Some(Risk { path: p, short, reason: made_here(reason) });
             }
             let details = crate::compute_mod_details(&path, &state).ok()?;
-            judge(&details.files).map(|reason| Risk { path: p.clone(), reason: made_here(reason) })
+            judge(&details.files).map(|(short, reason)| Risk { path: p.clone(), short, reason: made_here(reason) })
         }).collect()
     }).await.map_err(|e| e.to_string())
 }
@@ -170,6 +172,7 @@ mod tests {
     #[test]
     fn names_that_say_what_they_remove() {
         assert!(by_name(Path::new("repakxtra-no-screen-shake_9999999_P.pak")).is_some());
+        assert_eq!(by_name(Path::new("NoRecoil_P.pak")).unwrap().0, "Removes weapon recoil", "the few words the list shows");
         assert!(by_name(Path::new("NoRecoil_P.bak_repak")).is_some());
         assert!(by_name(Path::new("No Impact_P.pak")).is_some());
         assert!(by_name(Path::new("NorthStar_Skin_P.pak")).is_none());

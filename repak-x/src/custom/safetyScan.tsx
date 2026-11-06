@@ -5,7 +5,7 @@
 // Remove for the flagged ones. Nothing is turned off by itself: the player decides.
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { ExternalLink, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { ChevronRight, ExternalLink, ShieldAlert } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import Checkbox from '../components/ui/Checkbox'
 import { openWhy } from './WhyNotWorking'
@@ -14,7 +14,7 @@ import { nameKey } from './loadoutIdentity'
 import { setPref, useUiPref } from './uiPrefs'
 
 type Alert = ReturnType<typeof useAlert>
-export type Risk = { path: string; reason: string }
+export type Risk = { path: string; short: string; reason: string }
 type Plugin = { name: string; place: string; kind: 'banned' | 'unknown' | 'bundled' }
 
 export const NOTICE = 'Marvel Rivals can ban accounts for mods that remove recoil, screen shake, or hit effects, change footsteps, change maps so players see differently, or enlarge enemies.'
@@ -90,6 +90,7 @@ export function SafetyCard({ alert }: { alert: Alert }) {
   const [failed, setFailed] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [asking, setAsking] = useState<Plugin | null>(null) // Remove asks first, in the plugin's row
+  const [open, setOpen] = useState<Set<string>>(new Set()) // the mods whose full reason is showing
   const all = useRisks(), state = useRiskState()
   const badges = useUiPref('ban-risk')
   const isOnPath = (p: string) => /\.pak$/i.test(p)
@@ -114,7 +115,6 @@ export function SafetyCard({ alert }: { alert: Alert }) {
       .catch(e => alert.warning(`Could not remove ${p.name}`, String(e))).finally(() => setBusy(null))
   }
   const flagged = (plugins ?? []).filter(p => p.kind !== 'bundled')
-  const bundled = (plugins ?? []).filter(p => p.kind === 'bundled')
   const banned = flagged.some(p => p.kind === 'banned')
   // the chip sums up the whole card, mods too: "No flagged plugins" read as all clear while flagged mods were on
   const chip = failed ? 'Could not check' : !plugins ? 'Checking…' : banned ? 'Remove flagged files'
@@ -157,12 +157,24 @@ export function SafetyCard({ alert }: { alert: Alert }) {
               const why = live ? r.reason : `Off. ${r.reason.replace(/ Turn it off before you play online\.$/, '')}`
               return (
                 <li key={r.path} className={`su-risk-mod${live ? ' is-on' : ' is-off'}`}>
-                  <i className="su-risk-dot" aria-hidden="true" />
-                  <span className="su-risk-name" title={name}>{name}</span>
-                  <span className="su-risk-why" title={why}>{why}</span>
-                  {live && <button type="button" className="su-link su-risk-off" disabled={Boolean(busy || asking)}
-                    onClick={() => void turnOff([{ path: r.path, enabled: true }], r.path)} aria-label={`Turn off ${name}`}>
-                    {busy === r.path ? 'Turning off…' : 'Turn off'}</button>}
+                  <div className="su-risk-line">
+                    <i className="su-risk-dot" aria-hidden="true" />
+                    <span className="su-risk-name" title={name}>{name}</span>
+                    <span className="su-risk-why">{live ? '' : 'Off · '}{r.short}</span>
+                    {/* the few words first, the full reason one click away, like Is it safe? (Progressive Disclosure) */}
+                    <button type="button" className="su-risk-more" aria-expanded={open.has(r.path)} aria-label={`Details for ${name}`}
+                      onClick={() => setOpen(o => { const n = new Set(o); n.has(r.path) ? n.delete(r.path) : n.add(r.path); return n })}>
+                      Details <ChevronRight size={12} className="su-caret" aria-hidden="true" />
+                    </button>
+                    {live && <button type="button" className="su-link su-risk-off" disabled={Boolean(busy || asking)}
+                      onClick={() => void turnOff([{ path: r.path, enabled: true }], r.path)} aria-label={`Turn off ${name}`}>
+                      {busy === r.path ? 'Turning off…' : 'Turn off'}</button>}
+                    {/* the same space when off, so every Details lines up in one column */}
+                    {!live && <span className="su-link su-risk-off" aria-hidden="true" style={{ visibility: 'hidden' }}>Turn off</span>}
+                  </div>
+                  <div className="t-acc-panel" data-open={open.has(r.path)} ref={el => el?.toggleAttribute('inert', !open.has(r.path))}>
+                    <div className="t-acc-panel-inner"><p className="su-risk-full">{why}</p></div>
+                  </div>
                 </li>
               )
             })}
@@ -186,14 +198,6 @@ export function SafetyCard({ alert }: { alert: Alert }) {
             </div>}
           </li>
         ))}
-        {/* the bypass is one thing in two files: one calm row, not two alerts (group instead of repeating) */}
-        {bundled.length > 0 && <li className="su-part is-bundled">
-          <ShieldCheck size={16} className="su-risk-icon" aria-hidden="true" />
-          <div className="su-part-text">
-            <b>Signature bypass from Setup</b>
-            <span>{bundled.map(p => p.name).join(' and ')}. Mods need it to load. It patches the game in memory, and the notice does not name it.</span>
-          </div>
-        </li>}
       </ul>
       <p className="su-note">This check reads each mod's file name and the names of the files inside it, so it can miss a mod or flag a plain recolor.</p>
       {/* the same switch as Settings > Warnings */}
