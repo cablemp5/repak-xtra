@@ -22,6 +22,9 @@ export const sameEmote = (a: string, b: string) => {
   return ia === ib && (ha === hb || ha === '9999' || hb === '9999')
 }
 
+/** Whether `key`'s preview is an emote animation (a dance that also ships its music reads as Audio by its files). */
+export const isEmoteAnim = (key: string) => Boolean(emotes.anim[key]?.length)
+
 /** The sound to play over `slideKey`'s animation: the first of `keys` (the loadout's mods) with a sound for its emote. */
 export function emoteSoundFor(slideKey: string | undefined, keys: string[], e: Emotes = emotes): Sound | null {
   const shown = slideKey ? e.anim[slideKey] : undefined

@@ -205,6 +205,7 @@ pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: O
     };
     let paks = state.lock().unwrap().game_path.parent().map(|p| p.to_path_buf());
     let mut cmd = generator_command(paks, true)?;
+    STOPPED.store(false, std::sync::atomic::Ordering::SeqCst); // a Stop from before this run does not count
     // One generator run over every folder the mods sit in (a loadout's combined render needs all of them at once)
     cmd.arg("--out").arg(previews_dir());
     if force == Some(true) {
@@ -229,8 +230,17 @@ pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: O
     std::thread::spawn(move || {
         let hold = hold; // the run owns the kit until its generator exits
         let mut ok = false;
-        match cmd.spawn() {
-            Err(e) => {
+        // The game's newest mappings, fetched like the VFX updater's (at most hourly): the kit's own go stale with each game
+        // update and then misread changed tables, so a skin table mod showed nothing (preview_fixes/app_usmap.py)
+        let _ = tauri::async_runtime::block_on(crate::vfx_updater::commands::vfx_check_usmap_update(false));
+        if let Some(usmap) = app_usmap() {
+            cmd.env("REPAKXTRA_USMAP", usmap);
+        }
+        // A Stop while the check above waited: there is no process to kill yet, so it must not start
+        let started = if STOPPED.load(std::sync::atomic::Ordering::SeqCst) { Err(None) } else { cmd.spawn().map_err(Some) };
+        match started {
+            Err(None) => {}
+            Err(Some(e)) => {
                 // Python blocked or missing: the failure toast points at Logs, so the reason must be there
                 let text = format!("The preview generator did not start: {e}");
                 if let Some(f) = log.as_mut() {
@@ -332,6 +342,29 @@ pub fn preview_rim_set(on: bool) -> Result<(), String> {
     std::fs::write(rim_setting(), serde_json::json!({ "on": on }).to_string()).map_err(|e| format!("Could not save the setting: {e}"))
 }
 
+/// Set by Stop; a run that has not started its generator yet checks it before starting.
+static STOPPED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The newest USMAP the app has downloaded that is not newer than the installed game (the newest of all while the game's
+/// build is unknown). None leaves the kit's own, also when the game is older than every download (newer mappings would
+/// misread its structs).
+fn app_usmap() -> Option<PathBuf> {
+    use crate::vfx_updater::commands::{extract_usmap_build_number, managed_usmap_dir};
+    let game = crate::xtra_vfx::LAST_GAME_CL.load(std::sync::atomic::Ordering::Relaxed);
+    let all: Vec<(u64, PathBuf)> = std::fs::read_dir(managed_usmap_dir()).ok()?
+        .filter_map(|e| {
+            let p = e.ok()?.path();
+            let name = p.file_name()?.to_str()?;
+            if !name.ends_with(".usmap") {
+                return None;
+            }
+            Some((extract_usmap_build_number(name)?, p.clone()))
+        })
+        .collect();
+    let fits = |b: u64| game == 0 || b <= game;
+    all.iter().filter(|(b, _)| fits(*b)).max_by_key(|(b, _)| *b).map(|(_, p)| p.clone())
+}
+
 /// The generator's command so far (the kit's python and script, run in its folder, with the kit's variables). The error
 /// says what to install.
 fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Result<Command, String> {
@@ -357,6 +390,8 @@ fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Result<Comman
         ("emote_split.py", include_str!("preview_fixes/emote_split.py")),
         ("skin_blueprint.py", include_str!("preview_fixes/skin_blueprint.py")),
         ("borrowed_pose.py", include_str!("preview_fixes/borrowed_pose.py")),
+        ("app_usmap.py", include_str!("preview_fixes/app_usmap.py")),
+        ("speed.py", include_str!("preview_fixes/speed.py")),
     ] {
         let path = runtime.join(name);
         if std::fs::read_to_string(&path).ok().as_deref() != Some(contents) {
@@ -416,6 +451,7 @@ static RUNNING: std::sync::Mutex<Option<u32>> = std::sync::Mutex::new(None);
 /// checks it between mods) in case the kill fails.
 #[tauri::command]
 pub fn cancel_mod_previews() -> Result<(), String> {
+    STOPPED.store(true, std::sync::atomic::Ordering::SeqCst);
     std::fs::create_dir_all(previews_dir()).map_err(|e| e.to_string())?;
     std::fs::write(previews_dir().join("cancel"), b"").map_err(|e| e.to_string())?;
     if let Some(pid) = *RUNNING.lock().unwrap() {

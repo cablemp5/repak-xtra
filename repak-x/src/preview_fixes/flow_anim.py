@@ -38,6 +38,8 @@ def flow_frames(job, glowing):
     the lines, then the lines alone in FLOW_FRAMES steps of the noise's travel, one tile per loop so it repeats seamlessly."""
     if not FLOW or not glowing:   # the kit's glow pass did not run: the lights are still on
         return
+    if not job.get("flow", True):   # a "before" render: only its still is kept, its frames would be thrown away
+        return
     view = job["views"][-1]["name"]   # the camera was left at the last view, the only one in practice
     prefix = f'{job["out_prefix"]}_{view}'
     flow_set(gate=0.0)
