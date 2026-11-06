@@ -3155,11 +3155,10 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 [data-theme="light"] .su-part.is-risk .su-risk-icon { color: #9a5200; }
 /* the flagged mods under Your mods: a tight sub-list, its dots on the card's left edge (cable's choice), one line each,
    a dot for on or off instead of a shield per row, the full reason in the title */
-.su-risk-summary { flex-wrap: wrap; row-gap: 6px; }
-/* the fold holds the list across the summary's full width, and takes back the row gap while closed */
+.su-part.su-risk-summary { flex-wrap: wrap; row-gap: 0 !important; }   /* beats .su-part gap !important: the list brings its own top space, so a folded list adds none */
+/* the fold holds the list across the summary's full width */
 .su-risk-fold { flex: 0 0 100%; min-width: 0; }
-.su-risk-fold[data-open="false"] { margin-top: -6px; }
-.su-risk-list { min-width: 0; margin: 0 0 2px; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.su-risk-list { min-width: 0; margin: 0; padding: 6px 0 0; list-style: none; display: flex; flex-direction: column; }
 .su-risk-mod { min-width: 0; font-size: 12.5px; }
 .su-risk-line { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 28px; }
 /* Details: the full reason under the row, opened like Is it safe? */
