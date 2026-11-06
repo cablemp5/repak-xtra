@@ -605,17 +605,23 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
     };
     // repakxtra: what this build left out for a newer USMAP, saved below only if it goes in (a kept one keeps its own)
     let waited = if from.starts_with(&pending) { read_waited(&pending) } else { take_waited(id) };
+    // repakxtra: a snapshot, restore, cleanup, or encryption running keeps the new build waiting, like an open game
+    let gate = crate::xtra_mutation::edit();
     let _moving = INSTALL.lock().unwrap_or_else(|e| e.into_inner());
     // turned off while it built (the switch saves first, then waits for this build): nothing goes into the game
     if !load().get(id).is_some_and(|s| s.on) {
         clean(&work);
-        return park(dir, id);
+        return gate.and_then(|_gate| park(dir, id));
     }
     // the game or Repak X may have opened while it built: checked again before any file moves
     use tauri::Manager;
-    let blocked = app.try_state::<Arc<Mutex<AppState>>>().map_or(Ok(()), |st| game_guard(st.inner())).and_then(|_| crate::xtra_identity::upstream_guard()).err();
+    let blocked = gate.as_ref().err().cloned().or_else(|| app.try_state::<Arc<Mutex<AppState>>>().map_or(Ok(()), |st| game_guard(st.inner())).and_then(|_| crate::xtra_identity::upstream_guard()).err());
     let made = if game_build(paks) != build_at_start { Err("The game updated during the build. Check again to rebuild from the new game files".into()) } else { made };
     let result = match (made, &blocked) {
+        (Ok(summary), Some(_)) if gate.is_err() => Err(match keep(&from, &pending, id, &made_for, &summary, &waited) {
+            Ok(()) => "A snapshot, restore, storage cleanup, or encryption was running, so the new build waits. Try again when it is done".to_string(),
+            Err(e) => format!("A snapshot, restore, storage cleanup, or encryption was running, so the new build was not installed ({e}). Try again when it is done"),
+        }),
         (Ok(summary), Some(_)) => Err(match keep(&from, &pending, id, &made_for, &summary, &waited) {
             Ok(()) => "Marvel Rivals or Repak X opened while it built, so the new build waits. Close it, then try again to put it in".to_string(),
             Err(e) => format!("Marvel Rivals or Repak X opened while it built, so the new build was not installed ({e}). Close it, then try again"),
@@ -793,7 +799,7 @@ pub async fn xtra_builtins_set(app: tauri::AppHandle, id: String, on: Option<boo
     if !now_on {
         // after its own build in flight: it sees the saved Off and places nothing, then its files (if any) go
         wait_for_build(&id).await;
-        let parked = { let _moving = INSTALL.lock().unwrap_or_else(|e| e.into_inner()); park(&dir, &id) };
+        let parked = crate::xtra_mutation::edit().and_then(|_gate| { let _moving = INSTALL.lock().unwrap_or_else(|e| e.into_inner()); park(&dir, &id) });
         if let Err(e) = parked {
             // still in the game: say it is still on rather than off with its files in place
             update(|all| {
@@ -808,6 +814,7 @@ pub async fn xtra_builtins_set(app: tauri::AppHandle, id: String, on: Option<boo
         // back on with the same game build: the set-aside files go back in, no rebuild
         if fits(&id, &load()[&id], &build_now) {
             wait_for_build(&id).await;
+            let _gate = crate::xtra_mutation::edit()?; // repakxtra: never mid snapshot, restore, or cleanup
             let _moving = INSTALL.lock().unwrap_or_else(|e| e.into_inner());
             unpark(&dir, &id)?;
         }

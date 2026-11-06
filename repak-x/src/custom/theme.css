@@ -3137,3 +3137,105 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
   animation: scan-status-spin 0.8s linear infinite; }
 .promise-transition-loader__message { font-size: 13px !important; font-weight: 500 !important; letter-spacing: 0 !important; color: var(--text-primary) !important; text-shadow: none !important; }
 @media (prefers-reduced-motion: reduce) { .promise-transition-loader__card::before { animation-duration: 2s; } }
+
+/* repakxtra: Ban risk badges (custom/safetyScan.tsx), buttons that open Why isn't it working?. Orange: red only for the
+   plugins the anti-cheat notice names (cable's choice) */
+.mod-type-badge.risk-badge { cursor: pointer; font-size: 11px !important; font-weight: 600 !important; background: transparent !important; font-family: inherit; }
+.mod-type-badge.risk-badge:hover { filter: brightness(1.25); }
+.mod-type-badge.risk-badge:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.mod-type-badge.risk-badge.is-ban { color: #f59a42 !important; border: 1px solid color-mix(in srgb, #f59a42, transparent 55%) !important; }
+[data-theme="light"] .mod-type-badge.risk-badge.is-ban { color: #9a5200 !important; }
+.su-chip.is-danger { color: #f05252; box-shadow: inset 0 0 0 1px color-mix(in srgb, #f05252, transparent 55%); }
+.su-chip.is-warn { color: #f5d342; }
+[data-theme="light"] .su-chip.is-warn { color: #7f6900; }   /* the dark theme's yellow is unreadable on white */
+.su-chip.is-risk { color: #f59a42; }   /* flagged mods on: the shield's orange */
+[data-theme="light"] .su-chip.is-risk { color: #9a5200; }
+.su-risk-icon { flex: none; color: var(--text-secondary); }
+.su-part.is-risk .su-risk-icon { color: #f59a42; }   /* flagged mods on: the Library badge's orange */
+[data-theme="light"] .su-part.is-risk .su-risk-icon { color: #9a5200; }
+/* the flagged mods under Your mods: a tight sub-list on the card's left edge (cable's choice), one line each, a green dot
+   after the name of each mod that is on, the full reason in the title */
+.su-part.su-risk-summary { flex-wrap: wrap; row-gap: 0 !important; }   /* beats .su-part gap !important: the list brings its own top space, so a folded list adds none */
+/* the fold holds the list across the summary's full width */
+.su-risk-fold { flex: 0 0 100%; min-width: 0; }
+/* one grid for every row, so names share a column and every reason starts at the same x (cable's choice). The li and
+   its line only group the cells */
+.su-risk-list { min-width: 0; margin: 0; padding: 6px 0 0; list-style: none; display: grid; align-items: center; column-gap: 10px;
+  grid-template-columns: fit-content(40%) minmax(0, 1fr) auto; font-size: 12.5px; }
+.su-risk-mod, .su-risk-line { display: contents; }
+/* Show mods: a quiet toggle with a caret, like Is it safe? */
+.su-risk-more { flex: none; display: inline-flex; align-items: center; gap: 2px; padding: 0; border: 0; background: none; font: inherit; font-size: 12px;
+  color: var(--text-secondary); cursor: pointer; }
+.su-risk-more:hover { color: var(--text-primary); }
+.su-risk-more .su-caret { position: relative; top: 1px; transition: transform 150ms ease; }   /* optically centered on the lowercase words */
+.su-risk-more[aria-expanded="true"] .su-caret { transform: rotate(90deg); }
+/* Show mods matches Turn off all beside it */
+.su-risk-summary .su-part-links .su-risk-more { font-size: 13px; }
+.su-risk-on { display: inline-block; width: 6px; height: 6px; margin-left: 8px; border-radius: 50%; background: #3ecf8e; vertical-align: middle; }
+[data-theme="light"] .su-risk-on { background: #1f9d63; }
+.su-risk-name { line-height: 32px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
+.su-risk-mod.is-off .su-risk-name { color: var(--text-secondary); }
+.su-risk-why { min-width: 0; margin-left: 30px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+.su-risk-off { flex: none; font-size: 12.5px !important; }
+.su-part.is-banned .su-risk-icon, .su-part.is-banned b { color: #f05252; }
+.su-part.is-unknown .su-risk-icon { color: #f5d342; }
+.su-part.is-bundled .su-risk-icon { color: #3ecf8e; }
+/* a Remove or Delete that asks in its own row: the question drops under the row, full width */
+.su-part:has(.su-row-confirm) { flex-wrap: wrap; }
+.su-row-confirm { flex-basis: 100%; }
+/* Setup's Advanced group: a quiet fold over Snapshots and Ban risk, spaced like the cards (16px each side) */
+.su-body > .su-group { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; margin: 0; padding: 2px 0; background: none; border: 0;
+  font: inherit; font-size: 14px; font-weight: 600; color: var(--text-secondary); cursor: pointer; }
+.su-body > .su-group:hover { color: var(--text-primary); }
+.su-body > .su-group .su-caret { transition: transform 150ms ease; }
+.su-body > .su-group[aria-expanded="true"] .su-caret { transform: rotate(90deg); }
+.su-body > .su-group[aria-expanded="false"] + .t-acc-panel { margin-top: -16px; } /* closed: no gap under the fold */
+.su-group-inner { display: flex; flex-direction: column; gap: 16px; }
+/* the one that does it reads stronger than Cancel, without red (Von Restorff) */
+/* a snapshot's Delete: red like Storage's (cable's choice) */
+.su-confirm .su-confirm-yes.is-danger, .su-confirm .su-confirm-yes.is-danger:hover { background: #f2555a !important; color: #fff !important; }
+.su-confirm .su-confirm-yes { font-weight: 600 !important; color: var(--text-primary) !important; background: color-mix(in srgb, var(--text-primary), transparent 86%) !important; }
+/* the section's lead lines up with its list, not indented like a checkbox note */
+.settings-content .xs-storage > .setting-group > p.setting-subtext { margin-left: 0 !important; padding-left: 0 !important; }
+
+/* repakxtra: Why isn't this mod working? (custom/WhyNotWorking.tsx). The title and the mod's name stack on the left, the
+   close button keeps the corner (Jakob's Law) */
+.why-modal { max-width: 560px; width: calc(100vw - 32px); }
+.why-modal .why-head { display: flex; align-items: flex-start; gap: 12px; }
+.why-head-text { flex: 1; min-width: 0; }
+.why-head-text h2 { margin: 0; }
+.why-name { margin: 4px 0 0; font-size: 13px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.why-btn { margin-top: 10px; display: inline-flex; align-items: center; gap: 6px; }
+.why-checking { display: flex; align-items: center; gap: 8px; }
+.why-summary { margin: 0 0 12px; color: var(--text-primary); font-size: 14px; }
+.why-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.why-item { display: flex; gap: 10px; align-items: flex-start; }
+.why-item > svg { flex: none; margin-top: 2px; color: var(--text-secondary); }
+.why-item.is-problem > svg { color: #f5d342; }
+.why-item.is-ok > svg { color: #3ecf8e; }
+.why-item div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.why-item b { font-size: 13px; color: var(--text-primary); }
+.why-item span { font-size: 13px; color: var(--text-secondary); }
+.why-item .why-act { flex: none; height: 28px; padding: 0 12px; font-size: 13px; }
+
+/* repakxtra: Settings > General > Storage (custom/StorageCleanup.tsx), its own section. Gray notes, a red Delete
+   (cable's choice, drawn like Reset to defaults) */
+.xs-storage-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.settings-content .xs-storage-list label.repakx-checkbox { align-items: flex-start; min-height: 0; }
+.settings-content .xs-storage-list .repakx-checkbox-control { margin-top: -1px; }   /* centered on the name line, measured */
+.settings-content .xs-storage-list .repakx-checkbox-label > span.xs-storage-name { display: block; color: var(--text-primary) !important; }
+.xs-storage-size { color: var(--text-secondary); margin-left: 6px; font-variant-numeric: tabular-nums; }
+/* the note under each name, gray (the base rule paints every span white) */
+.settings-content .xs-storage-list .repakx-checkbox-label > span.xs-storage-note { display: block; font-size: 12.5px !important; color: var(--text-secondary) !important; }
+.xs-storage-actions { margin-top: 12px; }
+/* Settings paints every action-btn white: the red of Reset to defaults needs the section's weight */
+.settings-content .xs-storage .settings-reset-btn:not(.is-confirm), .settings-content .xs-storage .settings-reset-btn:not(.is-confirm) svg { color: #f2555a !important; }
+.settings-content .xs-storage .settings-reset-btn:not(.is-confirm) { border-color: color-mix(in srgb, #f2555a, transparent 60%) !important; }
+/* the Ban risk card's notice link sits on its sentence's line, the icon centered on the words (like Setup's other links) */
+.su-card-head p .ob-out { vertical-align: bottom; line-height: inherit; }
+.settings-content .xs-storage .settings-reset-btn:not(.is-confirm):hover:not(:disabled) { background: color-mix(in srgb, #f2555a, transparent 90%) !important; }
+.xs-storage-fail { color: #f5d342 !important; }
+/* the question: its heading yellow, the list in plain text so the heading stands out */
+.xs-storage-confirm { margin-top: 12px; align-items: flex-start; }
+.xs-storage-confirm ul { margin: 6px 0 10px; padding-left: 18px; color: var(--text-secondary); }
+.xs-storage-confirm ul b { color: var(--text-primary); font-weight: 500; }

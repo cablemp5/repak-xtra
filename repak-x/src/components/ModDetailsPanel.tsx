@@ -14,6 +14,7 @@ import { ModName } from '../custom/modName' // repakxtra
 import { NexusSourceLine } from '../custom/nexusSource' // repakxtra
 import { heroLabel } from '../custom/silhouettes' // repakxtra
 import { TypeHint, useTypeHint } from '../custom/typeHints' // repakxtra
+import { WhyButton } from '../custom/WhyNotWorking' // repakxtra
 
 type CharacterDataEntry = {
   name: string
@@ -323,6 +324,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
                 </div>
               )}
               <NexusSourceLine path={mod.path} />{/* repakxtra: Nexus source */}
+              <WhyButton path={mod.path} name={cleanName} />{/* repakxtra */}
             </div>
 
             {mod.custom_tags && mod.custom_tags.length > 0 && (

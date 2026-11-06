@@ -17,6 +17,8 @@ import CopySetupReport from './CopySetupReport'
 import { noteGalactaCheck } from './setupReport'
 import { useDialogFocus } from './dialogFocus'
 import { offerUndoDelete } from './undoDelete'
+import { SnapshotCard, checkSnapshotLoss } from './SnapshotCard'
+import { SafetyCard, checkBannedPlugins } from './safetyScan'
 
 type Alert = ReturnType<typeof useAlert>
 type FileCheck = { name: string; place: string; size: number; sha256: string; found: 'missing' | 'same' | 'other' }
@@ -226,13 +228,15 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   const [busy, setBusy] = useState<string | null>(null)
   const [confirmOff, setConfirmOff] = useState<'disable' | 'remove' | null>(null)
   const [safety, setSafety] = useState(false)
+  const [advanced, setAdvanced] = useState(focus === 'snapshots' || focus === 'safety') // a startup toast opens it at its card
   const trap = useDialogFocus() // focus inside, Tab stays inside, back to the opener on close
   const [notes, setNotes] = useState<string | null>(null)
   const [askGalacta, setAskGalacta] = useState(false) // Galacta's Remove asks first
   const { finished, finish } = useFinished() // an install that just finished, said in its card for a moment
 
   // Opened from a grayed-out Generate button: straight to the Mod previews card (its top, so it can still grow as it loads)
-  useEffect(() => { if (focus === 'previews') document.querySelector('.su-previews')?.scrollIntoView({ block: 'start' }) }, [focus])
+  // repakxtra: and a startup toast's card (Snapshots, Ban risk)
+  useEffect(() => { const card = focus && ({ previews: '.su-previews', snapshots: '.su-snapshots', safety: '.su-safety-card' } as Record<string, string>)[focus]; if (card) document.querySelector(card)?.scrollIntoView({ block: 'start' }) }, [focus])
   useEffect(() => {
     invoke<Bypass>('setup_bypass_status').then(setBypass).catch(e => alert.warning('Setup', String(e)))
     invoke<Galacta>('setup_galacta_status', { online: false }).then(g => setGalacta(withLastCheck(g))).catch(() => {})
@@ -443,6 +447,17 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
           </section>
 
           <PreviewKitCard alert={alert} />
+
+          {/* repakxtra: optional tools under what every player needs, folded away (Progressive Disclosure) */}
+          <button type="button" className="su-group" aria-expanded={advanced} onClick={() => setAdvanced(v => !v)}>
+            Advanced <ChevronRight size={14} className="su-caret" aria-hidden="true" />
+          </button>
+          <div className="t-acc-panel" data-open={advanced} ref={el => el?.toggleAttribute('inert', !advanced)}>
+            <div className="t-acc-panel-inner su-group-inner">
+              <SnapshotCard alert={alert} />
+              <SafetyCard alert={alert} />
+            </div>
+          </div>
         </div>
         {/* One switch for both startup checks (SetupButton: Project Galacta and the preview kit), so it lives under all the cards */}
         <div className="su-modal-foot">
@@ -483,6 +498,8 @@ export default function SetupButton({ alert }: { alert: Alert }) {
   }, [])
   useEffect(() => {
     invoke<Bypass>('setup_bypass_status').then(b => b.state !== 'installed' && setAttention(true)).catch(() => {})
+    checkSnapshotLoss(alert, () => { setFocus('snapshots'); setOpen(true) }) // repakxtra: files gone since the newest snapshot
+    checkBannedPlugins(alert, () => { setFocus('safety'); setOpen(true) }) // repakxtra: a plugin the anti-cheat notice names
     if (!autoCheck() || startupChecked) return
     startupChecked = true   // once per app start, even when React mounts this twice
     invoke<Galacta>('setup_galacta_status', { online: true }).then(g => {

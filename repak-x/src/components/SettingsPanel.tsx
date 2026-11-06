@@ -31,6 +31,7 @@ import CableDiscord, { RepakXDiscord } from '../custom/CableDiscord' // repakxtr
 import CopySetupReport from '../custom/CopySetupReport' // repakxtra: setup report for help channels
 import BetaNote from '../custom/BetaNote' // repakxtra
 import AppFiles from '../custom/AppFiles' // repakxtra: Check app files and Repair
+import StorageCleanup from '../custom/StorageCleanup' // repakxtra: Settings > Storage
 import Support from '../custom/Support'
 import { invoke } from '@tauri-apps/api/core'
 import { ShortcutSetting } from '../custom/shortcut' // repakxtra
@@ -351,6 +352,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                     <AppFiles alert={alert} />{/* repakxtra */}
                   </div>
                 </div>
+                <StorageCleanup alert={alert} />{/* repakxtra: its own section, not under Updates */}
               </>
             )}
 

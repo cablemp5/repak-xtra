@@ -39,6 +39,7 @@ pub fn busy_text(who: &str) -> String {
     match who {
         "previews" => "Previews are generating. Stop them or wait, then try again.",
         "kit" => "The preview kit is installing or being removed. Wait for it to finish.",
+        "cleanup" => "Settings > Storage is deleting previews or the preview kit. Try again when it is done.", // repakxtra
         _ => "This PC is being checked for previews. Try again in a moment.",
     }
     .into()

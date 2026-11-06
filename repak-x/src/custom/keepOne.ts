@@ -14,6 +14,12 @@ export const stem = (p: string) => p.replace(/\.(pak|bak_repak|pak_disabled)$/i,
 const name = nameKey
 export const GAME_RUNNING = ['Game Running', 'Cannot toggle mods while game is running.'] as const
 
+/** The Library's live game guard (the game runs and the bypass setting is off), for switches outside the Library: Setup's
+ *  Ban risk card and Why isn't it working?. App sets it once. */
+let blocked = () => false
+export const modsBlocked = () => blocked()
+export const setModsBlocked = (f: () => boolean) => { blocked = f }
+
 /** Switches every mod in `mods`; if any is refused, switches the done ones back and returns the refusal. */
 export async function flipAll(mods: Mod[]) {
   const failed = await flipMods(mods)

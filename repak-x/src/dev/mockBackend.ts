@@ -40,6 +40,7 @@ const baseName = (p: string) => (p.split(/[\\/]/).pop() || p).replace(/(_\d+_P)?
 // 'mock.unset' = '1': the library as it is, but neither installed yet (the README's have-mods demo)
 const unset = fresh || localStorage.getItem('mock.unset') === '1'
 let mockBypass = unset ? 'missing' : 'installed'   // a fresh PC has neither
+let mockSnapshots: any[] = [] // Setup > Snapshots
 let mockGalacta: any = { installed: unset ? null : 'C:/Game/~mods', disabled: false, up_to_date: false }
 const galactaRelease = { latest: 'v1.4.1', published: '2026-10-14T14:29:44Z', url: 'https://github.com/0xSaturno/ProjectGalacta/releases/tag/v1.4.1',
   notes: "## What's new:\n\n### Mod Loader:\n- Mods that add custom VFX to abilities are no longer blocked." }
@@ -118,6 +119,17 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         return null
       // Setup panel: fake bypass files and a fake Galacta release (no game folder, no network)
       case 'setup_bypass_status': return setupBypass()
+      case 'snapshot_list': return mockSnapshots
+      case 'xtra_storage_sections': return [['caches', 3.5e7], ['previews', 1.4e9], ['kit', 2.7e8], ['trash', 5.2e8], ['snapshots', 0], ['encryption', 4e7], ['plugins', 0]].map(([id, bytes]) => ({ id, bytes }))
+      case 'xtra_storage_clear': return wait(0.6).then(() => 1e9)
+      case 'xtra_why_mod': return wait(0.3).then(() => /\.bak_repak$/i.test(args?.modPath ?? '') ? [{ level: 'problem', title: 'It is switched off', detail: 'Turn it on in the Library. The game loads it from the next launch.' }] : [])
+      case 'xtra_safety_plugins': return [{ name: 'dsound.dll', place: '', kind: 'bundled' }, { name: 'MarvelRivalsUTOCSignatureBypass.asi', place: 'plugins', kind: 'bundled' }]
+      case 'xtra_safety_mods': return { risks: [], unread: [] } // the mock's file lists are guessed: no risk badges
+      case 'snapshot_estimate': return [data.mods.length * 3, data.mods.length * 3 * 4e7]
+      case 'snapshot_create': return wait(1).then(() => { const s = { id: String(Math.floor(Date.now() / 1000)), created: Math.floor(Date.now() / 1000), files: data.mods.length * 3, bytes: data.mods.length * 3 * 4e7 }; mockSnapshots = [s, ...mockSnapshots].slice(0, 3); return s })
+      case 'snapshot_restore': return wait(0.6).then(() => ({ mods: 0, setup: 0 }))
+      case 'snapshot_delete': mockSnapshots = mockSnapshots.filter((s: any) => s.id !== args?.id); return null
+      case 'snapshot_missing': return null
       case 'setup_bypass': return wait(0.6).then(() => {
         mockBypass = ({ install: 'installed', enable: 'installed', disable: 'disabled', remove: 'missing' } as any)[args?.action] ?? mockBypass
         return setupBypass()

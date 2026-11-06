@@ -72,6 +72,8 @@ import { setModsRoot } from './custom/loadoutIdentity' // repakxtra
 import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
 import { rescanVerdicts, useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
+import { useSafetyWatch } from './custom/safetyScan' // repakxtra
+import { WhyNotWorking } from './custom/WhyNotWorking' // repakxtra
 import { useScanProgress } from './custom/scanProgress' // repakxtra
 import ScanStatus from './custom/ScanStatus' // repakxtra
 import { useGameUpdateWatch } from './custom/gameUpdate' // repakxtra
@@ -151,7 +153,7 @@ import CreditsPanel from './components/CreditsPanel'
 import ToolsPanel from './components/ToolsPanel'
 import Wordmark from './custom/Wordmark' // repakxtra: the logo
 import ConflictsPanel from './custom/ConflictsPanel' // repakxtra: in place of Repak X's ClashPanel (grouped, in words)
-import { keepThisOne } from './custom/keepOne' // repakxtra: Keep this one
+import { keepThisOne, setModsBlocked } from './custom/keepOne' // repakxtra: Keep this one
 import { NEXUS_TYPE, recordSourceAs, recordSources, renameSource, sourceOf, useNexusScan, useNexusSources } from './custom/nexusSource' // repakxtra: Nexus source
 import { stageOffFiles } from './custom/offFiles' // repakxtra: .pak.off files
 import CrashSuspects, { previousCrashes, withSuspects } from './custom/CrashSuspects' // repakxtra: crash suspects
@@ -445,6 +447,7 @@ function App() {
   const [isLogDrawerOpen, setIsLogDrawerOpen] = useState(false)
   useConflictWatch(mods) // repakxtra
   useBrokenWatch(mods) // repakxtra
+  useSafetyWatch(mods) // repakxtra: Ban risk badges (custom/safetyScan.tsx)
   useNexusScan(mods) // repakxtra: Nexus sources for mods installed before they were recorded, once
   const brokenVersion = useBrokenVersion() // repakxtra: the Broken filter re-runs when the verdicts land
   const nexusSources = useNexusSources() // repakxtra: and the Nexus type filter when a source is recorded
@@ -508,6 +511,7 @@ function App() {
   const gameRunningRef = useRef(false)
   const bypassRef = useRef(false); bypassRef.current = bypassGameRunningLock // repakxtra: live game lock for Undo toasts
   const undoBlocked = () => gameRunningRef.current && !bypassRef.current // repakxtra
+  setModsBlocked(undoBlocked) // repakxtra: the same guard for Setup's Ban risk and Why isn't it working? (refs keep it live)
   const lastSelectedModIndex = useRef<number | null>(null) // For Shift+click range selection
   const filteredModsRef = useRef<ModRecord[]>([]) // Keep in sync with filteredMods for selection handler
   const loadModsSeq = useRef(0) // repakxtra: the newest loadMods call, so a slow older one cannot overwrite it
@@ -3700,6 +3704,7 @@ function App() {
       )}
 
       <CrashSuspects deps={{ alert, isBlocked: undoBlocked, reload: loadMods }} mods={mods} details={modDetails} heroes={characterData} />{/* repakxtra */}
+      <WhyNotWorking alert={alert} />{/* repakxtra: Why isn't this mod working? */}
 
       {panels.settings && (
         <Suspense fallback={null}><SettingsPanel

@@ -9,6 +9,10 @@ mod xtra_made; // repakxtra: installed mods keep when they were made (the Needs 
 mod xtra_vfx_check; // repakxtra: Check for VFX update (built for this game version or an older one)
 mod xtra_edition;
 mod xtra_launch; // repakxtra: one pending launch_record restore at a time
+mod xtra_snapshot; // repakxtra: mods folder snapshots (Setup > Snapshots)
+mod xtra_safety; // repakxtra: ban risk check (plugins and mods)
+mod xtra_why; // repakxtra: Why isn't this mod working? (custom/WhyNotWorking.tsx)
+mod xtra_cleanup; // repakxtra: Settings > Storage
 mod xtra_setup; // repakxtra: Setup panel (signature bypass, Project Galacta)
 mod xtra_project;
 mod xtra_kit; // repakxtra: preview kit (previews on other PCs)
@@ -8771,6 +8775,10 @@ fn main() {
             xtra_capture::capture_game_hotkey,
             xtra_capture::capture_game_cancel,
             xtra_setup::setup_bypass_status, // repakxtra: Setup panel
+            xtra_cleanup::xtra_storage_sections, xtra_cleanup::xtra_storage_clear, // repakxtra
+            xtra_why::xtra_why_mod, // repakxtra
+            xtra_safety::xtra_safety_plugins, xtra_safety::xtra_safety_remove_plugin, xtra_safety::xtra_safety_mods, // repakxtra
+            xtra_snapshot::snapshot_list, xtra_snapshot::snapshot_estimate, xtra_snapshot::snapshot_create, xtra_snapshot::snapshot_missing, xtra_snapshot::snapshot_restore, xtra_snapshot::snapshot_delete, // repakxtra
             xtra_setup::setup_bypass,
             xtra_setup::setup_galacta_status,
             xtra_setup::setup_galacta_install,

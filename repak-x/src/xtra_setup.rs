@@ -33,9 +33,10 @@ fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-/// ...\Content\Paks\~mods -> ...\Marvel\Binaries\Win64
-fn win64_dir(mods_dir: &Path) -> Option<PathBuf> {
-    Some(mods_dir.parent()?.parent()?.parent()?.join("Binaries").join("Win64"))
+/// ...\Content\Paks\~mods (or a folder below it) -> ...\Marvel\Binaries\Win64
+pub(crate) fn win64_dir(mods_dir: &Path) -> Option<PathBuf> {
+    let paks = crate::xtra_broken::paks_dir(mods_dir).unwrap_or_else(|| mods_dir.parent().map_or_else(PathBuf::new, Path::to_path_buf));
+    Some(paks.parent()?.parent()?.join("Binaries").join("Win64"))
 }
 
 /// The mods folder for a folder picked by hand: the game's install folder (or any level down to Paks) becomes its
@@ -105,6 +106,16 @@ fn bypass_status(win64: &Path) -> BypassStatus {
         files: vec![loader, asi],
         license: LICENSE_TEXT.into(),
     }
+}
+
+/// The bypass state alone ("installed", "disabled", ...), for Why isn't this mod working? (xtra_why.rs).
+pub(crate) fn bypass_state(win64: &Path) -> String {
+    bypass_status(win64).state
+}
+
+/// Whether Project Galacta is in the mods folder and on (xtra_why.rs).
+pub(crate) fn galacta_on(mods: &Path) -> bool {
+    find_enabled_loader(mods, GALACTA_STEM).is_some()
 }
 
 /// Whether the file is byte for byte the bundled loader or bypass (the setup report leaves those out of a crash's
