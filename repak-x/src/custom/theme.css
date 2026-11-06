@@ -1199,8 +1199,8 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .lp-name { font: 600 24px/1.2 var(--font-primary); letter-spacing: -0.02em; color: var(--text-primary); background: transparent; border: 1px solid transparent;
   border-radius: 8px; padding: 2px 8px; margin: 0 -8px; outline: none; width: 100%; }
 .lp-name:hover { border-color: var(--panel-border); }
-/* editing (the pencil focuses it while the pointer stays on the pencil): the box shows, neutral like the other fields */
-.lp-name:focus { border-color: color-mix(in srgb, var(--text-primary), transparent 55%); background: var(--field-bg); }
+/* editing (the pencil focuses it while the pointer stays on the pencil): the same quiet box as on hover */
+.lp-name:focus { border-color: var(--panel-border); } /* the quiet hover box, kept while renaming */
 .lp-group { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
 .lp-group input { height: 32px; padding: 0 12px; width: 240px; font: 13px var(--font-primary); color: var(--text-primary);
   background: var(--field-bg); border: 1px solid var(--panel-border); border-radius: var(--quiet-radius); outline: none; }
@@ -3261,7 +3261,7 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .su-card-head p .ob-out { vertical-align: bottom; line-height: inherit; }
 .settings-content .xs-storage .settings-reset-btn:not(.is-confirm):hover:not(:disabled) { background: color-mix(in srgb, #f2555a, transparent 90%) !important; }
 .xs-storage-fail { color: #f5d342 !important; }
-/* the question: its heading yellow, the list in plain text so the heading stands out */
-.xs-storage-confirm { margin-top: 12px; align-items: flex-start; }
-.xs-storage-confirm ul { margin: 6px 0 10px; padding-left: 18px; color: var(--text-secondary); }
-.xs-storage-confirm ul b { color: var(--text-primary); font-weight: 500; }
+/* the question: Setup's one-line confirm row, its text wraps before the buttons squeeze */
+.xs-storage-confirm { margin-top: 12px; }
+.xs-storage-confirm > span { flex: 1 1 auto; min-width: 0; line-height: 1.45; }
+.xs-storage-confirm .lo-text-btn { flex: none; }

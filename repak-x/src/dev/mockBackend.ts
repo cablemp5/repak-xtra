@@ -121,7 +121,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       // Setup panel: fake bypass files and a fake Galacta release (no game folder, no network)
       case 'setup_bypass_status': return setupBypass()
       case 'snapshot_list': return mockSnapshots
-      case 'xtra_storage_sections': return [['caches', 3.5e7], ['preview-work', 6.1e8], ['vfx', 1.9e9], ['browser', 1.2e8], ['previews', 1.4e9], ['kit', 2.7e8], ['trash', 5.2e8], ['snapshots', 0], ['encryption', 4e7], ['plugins', 0]].map(([id, bytes]) => ({ id, bytes, pending: clearAtStart.has(id as string) }))
+      case 'xtra_storage_sections': return [['caches', 3.5e7], ['preview-work', 6.1e8], ['vfx', 1.9e9], ['browser', 1.2e8], ['previews', 1.4e9], ['kit', 2.7e8], ['trash', 5.2e8], ['snapshots', 2.6e9], ['encryption', 4e7], ['plugins', 0]].map(([id, bytes]) => ({ id, bytes, pending: clearAtStart.has(id as string) }))
       case 'xtra_storage_clear': return wait(0.6).then(() => 1e9)
       case 'xtra_storage_clear_at_start': (args?.ids as string[]).forEach(id => clearAtStart.add(id)); return (args?.ids as string[]).includes('vfx') ? 1.9e9 : 1.2e8
       case 'xtra_why_mod': return wait(0.3).then(() => /\.bak_repak$/i.test(args?.modPath ?? '') ? [{ level: 'problem', title: 'It is switched off', detail: 'The game loads it from the next launch once it is on.', action: 'turn_on' }] : [])
@@ -130,6 +130,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'xtra_safety_mods': return { risks: [], unread: [] } // the mock's file lists are guessed: no risk badges
       case 'snapshot_estimate': return [data.mods.length * 3, data.mods.length * 3 * 4e7]
       case 'snapshot_create': return wait(1).then(() => { const s = { id: String(Math.floor(Date.now() / 1000)), created: Math.floor(Date.now() / 1000), files: data.mods.length * 3, bytes: data.mods.length * 3 * 4e7 }; mockSnapshots = [s, ...mockSnapshots].slice(0, 3); return s })
+      case 'snapshot_import': return wait(0.8).then(() => { const s = { id: String(Math.floor(Date.now() / 1000)), created: Math.floor(Date.now() / 1000), files: 9, bytes: 3.6e8 }; mockSnapshots = [s, ...mockSnapshots]; return s })
       case 'snapshot_restore': return wait(0.6).then(() => ({ mods: 0, setup: 0 }))
       case 'snapshot_delete': mockSnapshots = mockSnapshots.filter((s: any) => s.id !== args?.id); return null
       case 'snapshot_missing': return null

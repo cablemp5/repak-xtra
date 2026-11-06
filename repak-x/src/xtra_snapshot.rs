@@ -163,6 +163,48 @@ fn create_at(root: &Path, id: &str, mods: &Path, win64: &Path) -> Result<Snapsho
     all.into_iter().find(|x| x.id == id).ok_or_else(|| "The snapshot was not saved.".into())
 }
 
+/// The mod files an imported zip may bring: never a loader or plugin (a .dll or .asi from a file of unknown origin
+/// would run inside the game), only what goes in ~mods.
+fn importable(rel: &Path) -> bool {
+    rel.extension().and_then(|e| e.to_str()).is_some_and(|e| ["pak", "utoc", "ucas", "bak_repak"].contains(&e.to_ascii_lowercase().as_str()))
+}
+
+/// A snapshot from a .zip: either a snapshot's own layout (mods\ at the top, or inside one folder) or a zip of mod
+/// files. Unzipped under a name the list skips (entries that would leave it are skipped), only importable files kept
+/// under mods\, then renamed in as the newest snapshot. Nothing is pruned: making the next one does that as usual.
+fn import_at(root: &Path, id: &str, zip: &Path) -> Result<Snapshot, String> {
+    let staging = root.join(format!(".staging-import-{id}"));
+    let raw = staging.join("raw");
+    let _ = fs::remove_dir_all(&staging);
+    let out = (|| -> Result<Snapshot, String> {
+        fs::create_dir_all(&raw).map_err(|e| e.to_string())?;
+        crate::install_mod::install_mod_logic::archives::extract_zip(&zip.to_string_lossy(), &raw.to_string_lossy())
+            .map_err(|e| format!("Could not read the zip: {e}"))?;
+        // its mods: raw\mods, raw\<one folder>\mods, or everything in it
+        let one = fs::read_dir(&raw).map_err(|e| e.to_string())?.flatten().map(|e| e.path()).collect::<Vec<_>>();
+        let from = if raw.join("mods").is_dir() { raw.join("mods") }
+            else if one.len() == 1 && one[0].join("mods").is_dir() { one[0].join("mods") }
+            else { raw.clone() };
+        let keep: Vec<_> = files(&from).into_iter().filter(|(rel, _)| importable(rel)).collect();
+        if keep.is_empty() {
+            return Err("The zip has no mod files (.pak, .utoc, or .ucas), so nothing was imported.".into());
+        }
+        let snap = staging.join("snap");
+        for (rel, _) in &keep {
+            let dest = snap.join("mods").join(rel);
+            fs::create_dir_all(dest.parent().unwrap_or(&snap)).map_err(|e| e.to_string())?;
+            fs::rename(from.join(rel), &dest).map_err(|e| e.to_string())?;
+        }
+        let mut n: u64 = id.parse().map_err(|_| "Unknown snapshot".to_string())?;
+        while root.join(n.to_string()).exists() { n += 1; }
+        let id = n.to_string();
+        fs::rename(&snap, root.join(&id)).map_err(|e| format!("Could not import the snapshot: {e}"))?;
+        list_at(root).into_iter().find(|x| x.id == id).ok_or_else(|| "The snapshot was not saved.".into())
+    })();
+    let _ = fs::remove_dir_all(&staging);
+    out
+}
+
 fn list_at(root: &Path) -> Vec<Snapshot> {
     let mut out: Vec<_> = fs::read_dir(root).into_iter().flatten().flatten().filter_map(|e| {
         let id = e.file_name().to_string_lossy().to_string();
@@ -250,6 +292,18 @@ pub async fn snapshot_estimate(state: State<'_, Arc<Mutex<crate::AppState>>>) ->
         let all: Vec<_> = files(&mods).into_iter().chain(setup_files(&win64)).collect();
         Ok((all.len(), all.iter().map(|f| f.1).sum()))
     }).await
+}
+
+/// Setup > Snapshots > Import: a .zip the person picked becomes the newest snapshot (import_at).
+#[tauri::command]
+pub async fn snapshot_import(path: String) -> Result<Snapshot, String> {
+    let _alone = crate::xtra_mutation::alone("a snapshot")?;
+    let zip = PathBuf::from(path);
+    if !zip.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")) || !zip.is_file() {
+        return Err("Pick a .zip file.".into());
+    }
+    let id = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_secs().to_string();
+    blocking(move || { fs::create_dir_all(root()).map_err(|e| e.to_string())?; import_at(&root(), &id, &zip) }).await
 }
 
 #[tauri::command]
@@ -367,6 +421,37 @@ mod tests {
         create_at(&root, "5", &mods, &win64).unwrap();
         assert_eq!(fs::read_to_string(root.join("5/mods/Twin_P.pak")).unwrap(), "bbbb");
         assert_eq!(fs::read_to_string(root.join("4/mods/Twin_P.pak")).unwrap(), "aaaa");
+    }
+
+    #[test]
+    fn an_imported_zip_keeps_only_mod_files_and_restores_like_a_snapshot() {
+        use std::io::Write;
+        let t = tempfile::tempdir().unwrap();
+        let (root, mods, win64) = (t.path().join("snaps"), t.path().join("mods"), t.path().join("win64"));
+        fs::create_dir_all(&root).unwrap();
+        let zip_at = |name: &str, entries: &[(&str, &str)]| {
+            let path = t.path().join(name);
+            let mut z = zip::ZipWriter::new(fs::File::create(&path).unwrap());
+            for (n, body) in entries {
+                z.start_file(*n, zip::write::SimpleFileOptions::default()).unwrap();
+                z.write_all(body.as_bytes()).unwrap();
+            }
+            z.finish().unwrap();
+            path
+        };
+        // a snapshot's own layout inside one folder, with a loader and a readme that must not come in
+        let a = zip_at("a.zip", &[("1700/mods/Sub/Skin_P.pak", "skin"), ("1700/mods/Skin_P.utoc", "toc"), ("1700/win64/dsound.dll", "x"), ("1700/readme.txt", "hi")]);
+        let s = import_at(&root, "10", &a).unwrap();
+        assert_eq!(s.files, 2);
+        assert!(!root.join("10/win64").exists(), "no loader or plugin from a zip");
+        assert_eq!(restore_at(&root.join("10"), &mods, &win64).unwrap(), Restored { mods: 2, setup: 0 });
+        assert_eq!(fs::read_to_string(mods.join("Sub/Skin_P.pak")).unwrap(), "skin");
+        // a plain zip of mods, and one with nothing to import
+        let b = zip_at("b.zip", &[("Cool_P.pak", "c")]);
+        assert_eq!(import_at(&root, "10", &b).unwrap().id, "11", "the next free id");
+        let c = zip_at("c.zip", &[("notes.txt", "n")]);
+        assert!(import_at(&root, "12", &c).is_err());
+        assert!(fs::read_dir(&root).unwrap().flatten().all(|e| !e.file_name().to_string_lossy().starts_with(".staging")), "no staging left");
     }
 
     #[test]

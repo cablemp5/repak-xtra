@@ -2,6 +2,7 @@
 // a Steam Verify integrity of game files, a reinstall, or a game update. Restore puts back only what is gone.
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { open as pickFile } from '@tauri-apps/plugin-dialog'
 import { History } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 
@@ -33,6 +34,15 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
     const s = await invoke<Snapshot>('snapshot_create')
     alert.success('Snapshot saved', `${plural(s.files, 'file')}, ${size(s.bytes)}.${oldest ? ` The oldest one, from ${when(oldest.created)}, was removed.` : ''} You can verify game files in Steam now.`)
   })
+  // a .zip of a snapshot or of mod files becomes the newest snapshot (snapshot_import keeps only mod files)
+  const importZip = async () => {
+    const f = await pickFile({ title: 'A snapshot or mod files zip', filters: [{ name: 'Zip', extensions: ['zip'] }] }).catch(() => null)
+    if (typeof f !== 'string') return
+    await run('import', async () => {
+      const s = await invoke<Snapshot>('snapshot_import', { path: f })
+      alert.success('Snapshot imported', `${plural(s.files, 'mod file')}, ${size(s.bytes)}. Restore puts them back when they go missing.`)
+    })
+  }
   const restore = (id: string) => run(`restore:${id}`, async () => {
     const r = await invoke<{ mods: number; setup: number }>('snapshot_restore', { id })
     alert.success('Snapshot restored', r.mods + r.setup === 0 ? 'Nothing was missing.'
@@ -79,8 +89,10 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
       <div className="su-actions">
         {/* only once the list is read: its warning about the oldest one has to be right before a snapshot can drop it */}
         <button type="button" className="btn-primary su-main" disabled={locked || !list || Boolean(failed)} onClick={make}>{busy === 'make' ? 'Copying…' : 'Make a snapshot'}</button>
+        <button type="button" className="lo-text-btn" disabled={locked || !list} onClick={importZip}>{busy === 'import' ? 'Importing…' : 'Import a snapshot…'}</button>
         {list && <span className="su-meta">{estimate ? `${plural(estimate[0], 'file')}, about ${size(estimate[1])} each. ` : ''}{oldest ? `Making one removes the oldest, from ${when(oldest.created)}.` : 'The newest 3 are kept.'}</span>}
       </div>
+      <p className="su-note">Import takes a .zip of a snapshot or of mod files. Only the mod files come in, never the loader or plugins.</p>
     </section>
   )
 }

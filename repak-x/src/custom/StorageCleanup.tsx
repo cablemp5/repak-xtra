@@ -1,11 +1,10 @@
 // repakxtra: Settings > General > Storage (backend: xtra_cleanup.rs), its own section. Lists what repakxtra keeps on
 // this PC with each section's size and what deleting it costs. Nothing is picked at first. The button under the list
-// asks again in place, naming every picked section, before anything goes (Law of Proximity: the action sits with what
-// it acts on). Two sections (the VFX game files in %TEMP%, the window's browser caches) are in use while the app runs:
+// asks again in place, in one line, before anything goes (Law of Proximity: the action sits with what it acts on). Two sections (the VFX game files in %TEMP%, the window's browser caches) are in use while the app runs:
 // picking them marks them, and they clear at the next start. Settings, loadouts, and Repak X's own files are never listed.
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { HardDrive, TriangleAlert } from 'lucide-react'
+import { HardDrive } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import Checkbox from '../components/ui/Checkbox'
 import { APP_NAME } from './edition'
@@ -64,6 +63,12 @@ export default function StorageCleanup({ alert }: { alert: ReturnType<typeof use
       setPicked(new Set()); setAsking(false)
     } catch (e) { alert.warning('Could not free the space', String(e)) } finally { setBusy(false); void load() }
   }
+  // one or two picks are named, more are counted, then one consequence at most (Miller's Law) and the now/next-start split
+  const names = chosen.map(s => INFO[s.id].name)
+  const kept = chosen.filter(s => GROUPS[1].ids.includes(s.id))
+  const question = `Delete ${names.length <= 2 ? names.join(' and ') : `${names.length} sections`} (${size(total)})?`
+    + (kept.length === 1 ? ` ${INFO[kept[0].id].warn}` : kept.length > 1 ? ' This cannot be undone.' : '')
+    + (later.length ? (now.length ? ` ${size(sum(later))} of it clears ${AT_NEXT_START}.` : ` It clears ${AT_NEXT_START}.`) : '')
   const row = (s: Section) => s.pending ? (
     // marked already: a locked, ticked box with the reason in place of the warning, so its unchanged size is no surprise
     <Checkbox key={s.id} checked isDisabled>
@@ -93,17 +98,11 @@ export default function StorageCleanup({ alert }: { alert: ReturnType<typeof use
           })}
         </div>}
         {asking && chosen.length > 0 ? (
-          <div className="setting-warn xs-storage-confirm" role="alert">
-            <TriangleAlert size={14} aria-hidden="true" />
-            <div>
-              <b>Delete {size(total)}{chosen.some(s => GROUPS[1].ids.includes(s.id)) ? ' for good? This cannot be undone.' : '?'}</b>
-              {later.length > 0 && <> Frees {now.length > 0 ? `${size(sum(now))} now and ` : ''}{size(sum(later))} {AT_NEXT_START}.</>}
-              <ul>{chosen.map(s => <li key={s.id}><b>{INFO[s.id].name}</b>. {INFO[s.id].warn}</li>)}</ul>
-              <div className="xs-buttons">
-                <button ref={cancel} type="button" className="action-btn" disabled={busy} onClick={() => setAsking(false)}>Cancel</button>
-                <button type="button" className="action-btn settings-reset-btn is-confirm" disabled={busy} onClick={clear}>{busy ? 'Deleting…' : `Delete ${size(total)}`}</button>
-              </div>
-            </div>
+          // the same one-line question and plain buttons as Setup's removes (Jakob's Law: one confirm look in the app)
+          <div className="su-confirm xs-storage-confirm" role="alert">
+            <span>{question}</span>
+            <button ref={cancel} type="button" className="lo-text-btn" disabled={busy} onClick={() => setAsking(false)}>Cancel</button>
+            <button type="button" className="lo-text-btn su-confirm-yes" disabled={busy} onClick={clear}>{busy ? 'Deleting…' : 'Delete'}</button>
           </div>
         ) : shown.length > 0 && (
           <div className="xs-buttons xs-storage-actions">
