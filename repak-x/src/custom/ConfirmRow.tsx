@@ -1,5 +1,5 @@
 // repakxtra: the one in-place confirm (Setup's removes, Snapshots' Delete, Settings > Storage): one line of what happens,
-// then Cancel and the action as the same plain buttons everywhere (Jakob's Law: one confirm look in the app).
+// then a plain Cancel and the action in red (it removes or deletes something), the same everywhere (Jakob's Law).
 // Cancel takes the focus so Enter never deletes by accident, without the keyboard ring a mouse click never asked for.
 import { useEffect, useRef } from 'react'
 
@@ -11,7 +11,7 @@ export default function ConfirmRow({ text, yes, onYes, onNo, busy = false, class
     <div className={`su-confirm ${className}`.trim()} role="alert">
       <span>{text}</span>
       <button ref={cancel} type="button" className="lo-text-btn" disabled={busy} onClick={onNo}>Cancel</button>
-      <button type="button" className="lo-text-btn" disabled={busy} onClick={onYes}>{yes}</button>
+      <button type="button" className="lo-text-btn su-confirm-danger" disabled={busy} onClick={onYes}>{yes}</button>
     </div>
   )
 }

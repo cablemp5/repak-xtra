@@ -1780,6 +1780,9 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .su-confirm { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; font-size: 13px; color: var(--text-primary);
   background: color-mix(in srgb, var(--accent-primary), transparent 88%); border: 1px solid color-mix(in srgb, var(--accent-primary), transparent 65%); }
 .su-confirm span { margin-right: auto; }
+/* the confirm's action (ConfirmRow.tsx): red text, a red tint, a red outline, a little stronger on hover */
+.su-confirm .lo-text-btn.su-confirm-danger { color: #f2555a !important; background: color-mix(in srgb, #f2555a, transparent 88%) !important; border-color: color-mix(in srgb, #f2555a, transparent 55%) !important; }
+.su-confirm .lo-text-btn.su-confirm-danger:hover:not(:disabled) { background: color-mix(in srgb, #f2555a, transparent 80%) !important; border-color: color-mix(in srgb, #f2555a, transparent 35%) !important; }
 .su-safety { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; border-top: 1px solid var(--panel-border); }   /* a line between the buttons and the facts */
 .su-facts { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .su-facts li { font-size: 13px; line-height: 1.5; color: var(--text-secondary); padding-left: 16px; position: relative; }
