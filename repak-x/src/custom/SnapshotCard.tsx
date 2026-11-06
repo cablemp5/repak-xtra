@@ -30,10 +30,13 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
     setBusy(what)
     try { await f() } catch (e) { alert.warning('Snapshots', String(e)) } finally { setBusy(null); refresh() }
   }
-  const oldest = list && list.length >= 3 ? list[list.length - 1] : null // making one more drops it
+  // making one keeps the newest 3 in all: imports can leave more, so it can drop several (newest first in the list)
+  const drops = list && list.length >= 3 ? list.slice(2) : []
+  const dropText = drops.length === 1 ? `the oldest one, from ${when(drops[0].created)}`
+    : `the ${drops.length} oldest, from ${when(drops[drops.length - 1].created)} to ${when(drops[0].created)}`
   const make = () => run('make', async () => {
     const s = await invoke<Snapshot>('snapshot_create')
-    alert.success('Snapshot saved', `${plural(s.files, 'file')}, ${size(s.bytes)}.${oldest ? ` The oldest one, from ${when(oldest.created)}, was removed.` : ''} You can verify game files in Steam now.`)
+    alert.success('Snapshot saved', `${plural(s.files, 'file')}, ${size(s.bytes)}.${drops.length ? ` Removed ${dropText}.` : ''} You can verify game files in Steam now.`)
   })
   // a .zip of a snapshot or of mod files becomes the newest snapshot (snapshot_import keeps only mod files)
   const importZip = async () => {
@@ -99,7 +102,7 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
         {/* only once the list is read: its warning about the oldest one has to be right before a snapshot can drop it */}
         <button type="button" className="btn-primary su-main" disabled={locked || !list || Boolean(failed)} onClick={make}>{busy === 'make' ? 'Copying…' : 'Make a snapshot'}</button>
         <button type="button" className="lo-text-btn" disabled={locked || !list} onClick={importZip}>{busy === 'import' ? 'Importing…' : 'Import a snapshot…'}</button>
-        {list && <span className="su-meta">{estimate ? `${plural(estimate[0], 'file')}, about ${size(estimate[1])} each. ` : ''}{oldest ? `Making one removes the oldest, from ${when(oldest.created)}.` : 'The newest 3 are kept.'}</span>}
+        {list && <span className="su-meta">{estimate ? `${plural(estimate[0], 'file')}, about ${size(estimate[1])} each. ` : ''}{drops.length ? `Making one removes ${dropText}.` : 'The newest 3 are kept.'}</span>}
       </div>
       <p className="su-note">Import takes a .zip of a snapshot or of mod files. Only the mod files come in, never the loader or plugins.</p>
     </section>

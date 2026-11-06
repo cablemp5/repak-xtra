@@ -113,8 +113,8 @@ struct Saved {
 /// after the update (and the others do not).
 fn recipe(id: &str) -> u32 {
     match id {
-        // Rebuild older copies with the warning widget hidden as well as shortened.
-        SKIP_INTRO => 3,
+        // 3: the warning widget hidden as well as shortened. 4: its texts, images, and bar blacked out and collapsed too
+        SKIP_INTRO => 4,
         _ => 0,
     }
 }

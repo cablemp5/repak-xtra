@@ -289,13 +289,25 @@ pub(crate) fn sweep_stale_work() {
     clear_stale_work(&previews_dir().join("work"));
 }
 
+/// The generator's own lock (scratch\generator.lock, it locks its first byte, msvcrt), taken by us: Ok(None) when it was
+/// never made, Err when a generator holds it (this app's, another copy's, or a manual run) or it cannot be opened.
+/// Dropping the file releases it.
+fn lock_generator_in(scratch: &Path) -> Result<Option<std::fs::File>, ()> {
+    match std::fs::OpenOptions::new().read(true).write(true).open(scratch.join("generator.lock")) {
+        Ok(f) => f.try_lock().map(|_| Some(f)).map_err(|_| ()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None), // never made: nothing ran here
+        Err(_) => Err(()),
+    }
+}
+
+/// Settings > Storage: held while it deletes previews or their work files, so no generator anywhere runs on them.
+pub(crate) fn lock_generator() -> Result<Option<std::fs::File>, String> {
+    lock_generator_in(&previews_dir().join("work")).map_err(|_| "Previews are being made (here, in another copy of the app, or by hand). Try again when that is done.".into())
+}
+
 fn clear_stale_work(scratch: &Path) {
     // held until the folders are gone, so no generator starts on them meanwhile (ours starts after this returns)
-    let _held = match std::fs::OpenOptions::new().read(true).write(true).open(scratch.join("generator.lock")) {
-        Ok(f) => match f.try_lock() { Ok(()) => Some(f), Err(_) => return },
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None, // never made: nothing ran here
-        Err(_) => return,
-    };
+    let Ok(_held) = lock_generator_in(scratch) else { return };
     for e in std::fs::read_dir(scratch.join("work")).into_iter().flatten().flatten() {
         let _ = if e.path().is_dir() { std::fs::remove_dir_all(e.path()) } else { std::fs::remove_file(e.path()) };
     }

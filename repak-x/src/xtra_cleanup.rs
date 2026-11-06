@@ -186,6 +186,8 @@ pub async fn xtra_storage_clear(ids: Vec<String>) -> Result<u64, String> {
     let _kit = if ids.iter().any(|id| id == "previews" || id == "preview-work" || id == "kit") {
         Some(crate::xtra_previews::reserve("cleanup").map_err(crate::xtra_previews::busy_text)?)
     } else { None };
+    // and the generator's file lock: a run in another copy of the app or by hand writes there too
+    let _generator = if ids.iter().any(|id| id == "previews" || id == "preview-work") { crate::xtra_previews::lock_generator()? } else { None };
     tauri::async_runtime::spawn_blocking(move || clear_at(&crate::app_dir(), &ids)).await.map_err(|e| e.to_string())?
 }
 
