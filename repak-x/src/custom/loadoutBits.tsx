@@ -10,7 +10,7 @@ import { COVERS, type Cover, type Loadout, type Mod, captureKey, coverFills, dis
 import { ModName } from './modName'
 import { revealOnLoad, SwapText } from './motion'
 import { BeatVideo, formKeys, hasPreview, isDecoded, isKoPreview, isVideoPreview, noPreviewPossible, previewMade, previewSetKey, readyPreview, useCovers, usePreviewStage, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
-import { playEmoteSound, stopEmoteSound, useEmoteSound, webpSeconds } from './emoteSound'
+import { isEmoteAnim, playEmoteSound, stopEmoteSound, useEmoteSound, webpSeconds } from './emoteSound'
 import { useVerdict } from './brokenMods'
 import { VerdictBadge } from './VerdictBadge'
 import { useVfxUpdating } from './vfx/quick'
@@ -43,7 +43,8 @@ function usePreviewSlides(p: LoadoutProps, l: Loadout) {
   // Previews are cached by name (nameKey), not by member key: each member's preview is its mod's, by that mod's name
   const members = [...new Set(l.on.map(displayName))]
   const byName = new Map(members.map(k => { const m = byKey.get(k); return [m ? nameKey(m.path) : memberName(k), m] as const }))
-  const categoryOf = (k: string) => { const m = byName.get(k); return (m && p.modDetails?.[m.path]?.category) || undefined }
+  // A slide is typed by what its preview shows: an emote animation is Animation even when the mod's files read as Audio
+  const categoryOf = (k: string) => { const m = byName.get(k); return isEmoteAnim(k) ? 'Animation' : (m && p.modDetails?.[m.path]?.category) || undefined }
   const mine = [...byName.keys()]
   const covered = (info?.covers ?? []).filter(k => mine.includes(k))
   const keys = mine.filter(k => hasPreview(k) && !covered.includes(k))

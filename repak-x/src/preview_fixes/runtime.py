@@ -81,6 +81,57 @@ if source.count(sound_list) != 1:
     raise RuntimeError("This preview kit does not support the app's sound reader. Update it in Setup.")
 source = source.replace(sound_list, "    pak = sound_pak(work, cfg, pak)\n" + sound_list, 1)
 source = source.replace(main_guard, (runtime / "sound_pak.py").read_text(encoding="utf-8") + "\n" + main_guard, 1)
+# Generator fixes also made in the kit's source (tools\previews\mod_previews.py, kit 18 on): each one is skipped when
+# the kit already has it. 1: a mod's own skin mesh names the skin it renders (Magik PJ and Jacked Void Panther ship other
+# skins' textures, and the game's mesh of that skin rendered instead). 2: a skin table read under stale mappings is a
+# retried failure, not a cached "nothing to show". 3: a dance with its music bank in its PAK gets that emote's sound
+anim_sound = '''                try:   # a dance with its music bank in its .pak: its sound (a failure keeps the dance, without it)
+                    if len(EXTRA.get("emotes") or []) == 1 and not EXTRA.get("form_emotes") and pak.exists():
+                        render_sound(work, cfg, pak, work / "sound.png", emote=EXTRA["emotes"][0],
+                                     own=[p.rsplit("/", 1)[1] for p in pkgs if p.startswith("/Game/Marvel/Audio/")])
+                except Exception as e:
+                    print(f"# {key}: its emote sound failed: {e}", file=sys.stderr, flush=True)
+'''
+sound_copy = '''                if kind == "sound":   # its emote sounds replace the last ones (a failed render keeps those)
+                    shutil.rmtree(out_dir / f"{key}.audio", ignore_errors=True)
+                    if EXTRA.get("emote_sounds"):
+                        shutil.copytree(work / "emote_sounds", out_dir / f"{key}.audio")
+'''
+no_blender = '''                kind = "error: Blender not found" if not bl else "error: the character render failed"
+'''
+kit_fixes = [
+    ('    looks = [m.groups() for p in chars if SKIN_MESH.match(p)', '    looks = [m.groups() for p in (own or chars) if SKIN_MESH.match(p)'),
+    ('    edits = table_edits(s[0], u[0], s[1], u[1])\n',
+     '    edits = table_edits(s[0], u[0], s[1], u[1])\n    if len(edits) != 1 and not all(m for m, _ in rows.values()):\n'
+     '        raise RuntimeError("its skin table could not be read: the preview mappings are older than the game")\n'),
+    ("def render_sound(work, cfg, pak, out_png, most=5):", "def render_sound(work, cfg, pak, out_png, most=5, emote=None, own=()):"),
+    ("    names = {bnk.fnv1(n): n for n in wwise_names(work, cfg, banks)}", "    names = {bnk.fnv1(n): n for n in [*wwise_names(work, cfg, banks), *own]}"),
+    ("                if (emote := emote_of_event(names[oid])) and (var or lay):\n", "                if (e := emote_of_event(names[oid]) or (emote if names[oid] in own else None)) and (var or lay):\n"),
+    ("                    picks.setdefault(emote, []).append((rank, lay + var[:1], blob))", "                    picks.setdefault(e, []).append((rank, lay + var[:1], blob))"),
+    ('                kind = "anim"\n', '                kind = "anim"\n' + anim_sound),
+    (sound_copy, ""),
+    # The game's own banks in a config of their own: the exporter kept running for config.json has the mod mounted
+    ('''        (work / "config.json").write_text(json.dumps(cfg), encoding="utf-8")   # no extra_paks: the vanilla files
+        export(work, steps, name="wwise", out=WWISE)''', '''        (work / "game.json").write_text(json.dumps(cfg), encoding="utf-8")
+        export(work, steps, name="wwise", out=WWISE, config="game.json")'''),
+    (no_blender, no_blender + '''            if kind in ("sound", "anim"):   # its emote sounds replace the last ones (a failed render keeps those)
+                shutil.rmtree(out_dir / f"{key}.audio", ignore_errors=True)
+                if EXTRA.get("emote_sounds"):
+                    shutil.copytree(work / "emote_sounds", out_dir / f"{key}.audio")
+'''),
+]
+# A kit whose dance sound step is not best-effort yet (an early kit 18 build): wrapped on its own
+bare_sound = """                if len(EXTRA.get("emotes") or []) == 1 and pak.exists():   # a dance with its music bank in its .pak: its sound
+                    render_sound(work, cfg, pak, work / "sound.png", emote=EXTRA["emotes"][0],
+                                 own=[p.rsplit("/", 1)[1] for p in pkgs if p.startswith("/Game/Marvel/Audio/")])
+"""
+if bare_sound in source:
+    source = source.replace(bare_sound, anim_sound, 1)
+if "out_png, most=5, emote=None, own=()):" not in source:   # kit 18 and newer ship all three
+    if any(source.count(old) != 1 for old, _ in kit_fixes):
+        raise RuntimeError("This preview kit does not support the app's preview fixes. Update it in Setup.")
+    for old, new in kit_fixes:
+        source = source.replace(old, new, 1)
 # One animated preview per emote (emote_split.py): the run keeps and reports each emote's <key>@n.webp
 emote_hooks = [
     ("            seqs = [] if target else anim_sequences(pkgs)", "            target, seqs = emote_first(target, pkgs)"),
@@ -96,8 +147,19 @@ source = source.replace(main_guard, (runtime / "emote_split.py").read_text(encod
 job_slots = '"whole": not SKIN_MESH.match(target)}'
 if source.count(job_slots) != 1:
     raise RuntimeError("This preview kit does not support skins on another skin's mesh. Update it in Setup.")
-source = source.replace(job_slots, '"whole": not SKIN_MESH.match(target), "slot_materials": SLOTS.get(model.stem)}', 1)
+source = source.replace(job_slots, '"whole": not SKIN_MESH.match(target), "slot_materials": SLOTS.get(model.stem), "flow": not QUIET}', 1)
 source = source.replace(main_guard, (runtime / "skin_blueprint.py").read_text(encoding="utf-8") + "\n" + main_guard, 1)
+source = source.replace(main_guard, (runtime / "app_usmap.py").read_text(encoding="utf-8") + "\n" + main_guard, 1)
+# Speed (speed.py): one game-only exporter per run, a VFX card's game colors cached per game version, a numpy outline
+vfx_vanilla = '''    cfg = json.loads((work / "config.json").read_text(encoding="utf-8"))
+    cfg.pop("extra_paks", None)
+    (work / "vanilla.json").write_text(json.dumps(cfg), encoding="utf-8")
+    export(work, [{"op": "export", "mode": "json", "paths": mis}], name="vfx_vanilla", out=work / "vfx_vanilla", config="vanilla.json")
+    bands = palette(changed_colors(mi_vectors(work / "vfx_raw"), mi_vectors(work / "vfx_vanilla")))'''
+if source.count(vfx_vanilla) != 1:
+    raise RuntimeError("This preview kit does not support the app's faster previews. Update it in Setup.")
+source = source.replace(vfx_vanilla, '    bands = palette(changed_colors(mi_vectors(work / "vfx_raw"), vanilla_vectors(work, mis)))', 1)
+source = source.replace(main_guard, (runtime / "speed.py").read_text(encoding="utf-8") + "\n" + main_guard, 1)
 # The animation lives beside its still: a character's cleanup (keep_only .png) keeps a .webp written after the .png (a flow
 # animation; an older animation mod's .webp is older and still goes), and a dropped form or an empty loadout takes its .webp too
 cleanup = [
@@ -118,13 +180,14 @@ if source.count(vanilla_dir) != 2:
 source = source.replace(vanilla_dir, 'f"v{VERSION}' + ("r" if rim_on else "") + '-{game_stamp(cfg)}"')
 # VFX palette cards use smaller labels and matching spacing. ANIM 9 retries cached empty results now that stripped
 # sound PAKs can be read. ANIM 10 renders animation previews again, one per emote and the
-# mod's UI after them (emote_split.py). ANIM 11 retries "nothing to show" once (skin_blueprint.py). Existing successful previews keep their own REDO thresholds.
+# mod's UI after them (emote_split.py). ANIM 11 retries "nothing to show" once (skin_blueprint.py). ANIM 12 retries it once
+# more with the app's newer mappings (app_usmap.py: skin table mods read under stale mappings). Existing successful previews keep their own REDO thresholds.
 vfx_hooks = [
     ("label, gap, top = 140, 40, 100", "label, gap, top = 92, 40, 100"),
     ("(MARGIN + 4, y + bh + 24)", "(MARGIN + 4, y + bh + 16)"),
     ("(w - MARGIN - 4, y + bh + 24)", "(w - MARGIN - 4, y + bh + 16)"),
     ("font(84", "font(55"),
-    ("\nANIM = 7 ", "\nANIM = 11 "),
+    ("\nANIM = 7 ", "\nANIM = 12 "),
     ('REDO = {"sound": 4, "anim": 6}', 'REDO = {"sound": 4, "anim": 10, "vfx": 8}'),
 ]
 # A mod packed with another project's mount point (WhiteFox_Bows/Content/Marvel/...) lists its packages under that
