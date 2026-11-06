@@ -55,6 +55,12 @@ fn part_paths(root: &Path, part: &str) -> Vec<PathBuf> {
     vec![root.join(part)]
 }
 
+/// Every read-change-write of the marker holds this, so a section marked while the start's delete runs is never lost.
+static MARKER: std::sync::Mutex<()> = std::sync::Mutex::new(());
+fn save(v: &[PathBuf]) {
+    let _ = if v.is_empty() { fs::remove_file(marker()) } else { fs::write(marker(), serde_json::to_vec(v).unwrap_or_default()) };
+}
+
 fn marker() -> PathBuf {
     crate::app_dir().join("repakxtra-clear-at-start.json")
 }
@@ -101,11 +107,12 @@ pub(crate) fn on_start() {
         let old = PathBuf::from(format!("{}{RETIRED}", p.display()));
         if fs::rename(&p, &old).is_ok() { renamed.push(old) } else { kept.push(p) }
     }
-    let save = |v: &[PathBuf]| { let _ = if v.is_empty() { fs::remove_file(marker()) } else { fs::write(marker(), serde_json::to_vec(v).unwrap_or_default()) }; };
-    save(&[renamed.clone(), kept.clone()].concat());
+    save(&[renamed.clone(), kept].concat()); // before any command runs: nothing else writes it yet
     std::thread::spawn(move || {
         for p in &renamed { let _ = if p.is_dir() { fs::remove_dir_all(p) } else { fs::remove_file(p) }; }
-        let left: Vec<PathBuf> = renamed.into_iter().filter(|p| p.exists()).chain(kept).collect();
+        // only what was deleted leaves the marker as it is now (a section marked meanwhile stays)
+        let _held = MARKER.lock().unwrap_or_else(|e| e.into_inner());
+        let left: Vec<PathBuf> = marked().into_iter().filter(|p| !renamed.contains(p) || p.exists()).collect();
         save(&left);
     });
 }
@@ -159,6 +166,7 @@ pub async fn xtra_storage_clear_at_start(app: tauri::AppHandle, ids: Vec<String>
     if let Some(bad) = ids.iter().find(|id| !AT_START.contains(&id.as_str())) { return Err(format!("Unknown section {bad}")) }
     let local = local_dir(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
+        let _held = MARKER.lock().unwrap_or_else(|e| e.into_inner());
         let mut all = marked();
         let mut bytes = 0;
         for p in ids.iter().flat_map(|id| start_paths(id, &local)).filter(|p| allowed(p)) {
