@@ -136,7 +136,7 @@ export function SafetyCard({ alert }: { alert: Alert }) {
       {failed && <p className="su-note">Could not read the game folder. {failed} <button type="button" className="su-link" onClick={() => void load()}>Try again</button></p>}
       {/* mods first, as a part row like the plugins below it: the finding a player acts on leads (Serial Position) */}
       <ul className="su-parts">
-        <li className={`su-part${on.length ? ' is-risk' : ''}`}>
+        <li className={`su-part su-risk-summary${on.length ? ' is-risk' : ''}`}>
           <ShieldAlert size={16} className="su-risk-icon" aria-hidden="true" />
           <div className="su-part-text">
             <b>Your mods</b>
@@ -148,26 +148,26 @@ export function SafetyCard({ alert }: { alert: Alert }) {
               title="Switches them off like the Library does. The toast's Undo turns them back on">
               {busy === 'mods' ? 'Turning off…' : `Turn off all ${on.length}`}</button>
           </span>}
+          {/* the flagged mods nest under their summary, lighter and tighter than a part row, so they read as its items
+              and not as more summaries (Common Region, Law of Proximity) */}
+          {listed.length > 0 && <ul className="su-risk-list" aria-label="Mods marked Ban risk">
+            {listed.map(r => {
+              const name = shownName(r.path), live = isOnPath(r.path)
+              // an off mod needs no "turn it off" advice
+              const why = live ? r.reason : `Off. ${r.reason.replace(/ Turn it off before you play online\.$/, '')}`
+              return (
+                <li key={r.path} className={`su-risk-mod${live ? ' is-on' : ' is-off'}`}>
+                  <i className="su-risk-dot" aria-hidden="true" />
+                  <span className="su-risk-name" title={name}>{name}</span>
+                  <span className="su-risk-why" title={why}>{why}</span>
+                  {live && <button type="button" className="su-link su-risk-off" disabled={Boolean(busy || asking)}
+                    onClick={() => void turnOff([{ path: r.path, enabled: true }], r.path)} aria-label={`Turn off ${name}`}>
+                    {busy === r.path ? 'Turning off…' : 'Turn off'}</button>}
+                </li>
+              )
+            })}
+          </ul>}
         </li>
-        {/* each flagged mod under the summary, with why: the list the Library tab used to hold */}
-        {listed.map(r => {
-          const name = shownName(r.path), live = isOnPath(r.path)
-          // an off mod needs no "turn it off" advice
-          const why = live ? r.reason : `Off. ${r.reason.replace(/ Turn it off before you play online\.$/, '')}`
-          return (
-            <li key={r.path} className={`su-part su-risk-mod${live ? ' is-risk' : ' is-off'}`}>
-              <ShieldAlert size={16} className="su-risk-icon" aria-hidden="true" />
-              <div className="su-part-text">
-                <b title={name}>{name}</b>
-                <span>{why}</span>
-              </div>
-              {live && <span className="su-part-links">
-                <button type="button" className="su-link" disabled={Boolean(busy || asking)} onClick={() => void turnOff([{ path: r.path, enabled: true }], r.path)}>
-                  {busy === r.path ? 'Turning off…' : 'Turn off'}</button>
-              </span>}
-            </li>
-          )
-        })}
         {flagged.map(p => (
           <li key={`${p.place}/${p.name}`} className={`su-part is-${p.kind}`}>
             <ShieldAlert size={16} className="su-risk-icon" aria-hidden="true" />
