@@ -1651,11 +1651,17 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
   border-color: transparent !important; background: transparent !important; padding-left: 4px !important; color: var(--text-primary) !important; }
 .run-stop-btn { display: inline-flex !important; align-items: center; gap: 8px; }
 .stop-glyph { width: 8px; height: 8px; border-radius: 2px; background: currentColor; flex: none; }
-/* Pause and Resume beside Stop (ScanStatus.tsx): the same 8px solid glyphs, so the three read as one set */
-/* two borders, not a gradient: borders snap to whole device pixels, so both bars stay the same width at any display scale */
-.pause-glyph { box-sizing: border-box; width: 8px; height: 8px; flex: none; border: solid currentColor; border-width: 0 3px; border-radius: 1px; }
+/* Pause and Resume beside Stop (ScanStatus.tsx): solid glyphs one height (10px), so the three read as one set.
+   Pause: two square 4px bars 8px apart. Each bar starts on a whole device pixel at 100, 125, 150, 175, and 200% scale
+   (8 times any of those is whole), so both bars always round to the same width with crisp edges */
+.pause-glyph { position: relative; width: 12px; height: 10px; flex: none; }
+.pause-glyph::before, .pause-glyph::after { content: ''; position: absolute; top: 0; bottom: 0; width: 4px; background: currentColor; }
+.pause-glyph::before { left: 0; }
+.pause-glyph::after { left: 8px; }
 /* the header's paused state: centered in the 14px spot the running spinner takes, so the words do not shift */
-.scan-status-in .pause-glyph { margin: 0 3px; }
+.scan-status-in .pause-glyph { margin: 0 1px; }
+/* the mod checks' menu (and the Generate menu sharing its rows): Stop and Play at the pause's height */
+.lo-gen-stop :is(.stop-glyph, .play-glyph) { width: 10px; height: 10px; }
 .play-glyph { width: 8px; height: 8px; flex: none; background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%); }
 /* A Generate button on a PC without the preview kit: grayed out, with a small blue "Set up" that says where to go */
 .is-unavailable { color: var(--text-secondary) !important; opacity: 0.85; }
@@ -1798,7 +1804,7 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .context-menu-item .lo-menu-check { margin-left: auto; color: var(--text-secondary); }
 /* Setup and changelog: every button one height (the primary ones were 44px beside 32px ones); a closed "Is it safe?"
    adds no gap under the buttons */
-.su-modal .btn-primary, .su-changelog .btn-primary {
+.su-modal .btn-primary, .su-changelog .btn-primary, .why-modal .btn-primary {
   height: 32px !important; min-height: 0 !important; padding: 0 16px !important; font-size: 13px !important; border-radius: var(--quiet-radius) !important;
   display: inline-flex !important; align-items: center; justify-content: center; }
 .su-card > .t-acc-panel[data-open="false"] { margin-top: -12px; }
@@ -2376,6 +2382,13 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 .settings-content .xs-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .settings-content .xs-label { font-size: 13px; font-weight: 400; color: var(--text-primary); }
 .settings-content .xs-text .setting-subtext { padding: 0 !important; margin: 0 !important; }
+/* Is it safe? > Scan this copy: the exe's hash as a small copy chip beside the label, so the row keeps the two-line
+   shape of the rows around it (Law of Similarity) */
+.settings-content .xs-label-row { display: flex; align-items: center; gap: 8px; min-height: 20px; }
+.settings-content .xs-hash { height: 20px; min-height: 0 !important; gap: 6px; padding: 0 7px; border-radius: 5px; background: var(--bg-lighter); color: var(--text-secondary); }
+.settings-content .xs-hash:hover { color: var(--text-primary); }
+.settings-content .xs-hash code { font: 11.5px var(--font-mono); color: var(--text-primary); }
+.settings-content .xs-label-row .su-meta { font-size: 12px; }
 .settings-content .xs-note { margin: -4px 0 4px !important; padding: 0 !important; }
 /* Settings > Updates > App files: below the auto-check box, its buttons side by side and never squeezed (Proximity) */
 .settings-content .xs-app-files { margin-top: 8px; }
@@ -3207,6 +3220,7 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .why-name { margin: 4px 0 0; font-size: 13px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .why-btn { margin-top: 10px; display: inline-flex; align-items: center; gap: 6px; }
 .why-checking { display: flex; align-items: center; gap: 8px; }
+.why-modal .modal-body { gap: 0; }   /* .modal-body's 2rem section gap sat between the summary and its list */
 .why-summary { margin: 0 0 12px; color: var(--text-primary); font-size: 14px; }
 .why-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .why-item { display: flex; gap: 10px; align-items: flex-start; }
@@ -3216,7 +3230,7 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .why-item div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .why-item b { font-size: 13px; color: var(--text-primary); }
 .why-item span { font-size: 13px; color: var(--text-secondary); }
-.why-item .why-act { flex: none; height: 28px; padding: 0 12px; font-size: 13px; }
+.why-item .why-act { flex: none; width: auto !important; }   /* Setup's blue button size (the rule above), one look per button kind */
 
 /* repakxtra: Settings > General > Storage (custom/StorageCleanup.tsx), its own section. Gray notes, a red Delete
    (cable's choice, drawn like Reset to defaults) */

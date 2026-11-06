@@ -53,12 +53,14 @@ export function useScanProgress(alert: ReturnType<typeof useAlert>) {
   useEffect(() => {
     let id: number | null = null
     let timer: number | undefined
+    // closed by the person: the checks stay in the header (ScanStatus.tsx) only, for the rest of this app run
+    let dismissed = false
     const show = () => {
       timer = undefined
       if (!run.last) return
       const description = `${progressLine(run.last)}. Pauses while the game runs.`
-      if (run.quiet && id === null) { if (!run.shown) set({ shown: true }); return }
-      if (id === null) id = alert.showAlert({ color: 'default', title: 'Checking mods', description, isLoading: true, duration: 0 })
+      if ((run.quiet || dismissed) && id === null) { if (!run.shown) set({ shown: true }); return }
+      if (id === null) id = alert.showAlert({ color: 'default', title: 'Checking mods', description, isLoading: true, duration: 0, onDismiss: () => { dismissed = true; id = null } })
       else alert.updateToast(id, { description })
       if (!run.shown) set({ shown: true })
     }
@@ -73,13 +75,14 @@ export function useScanProgress(alert: ReturnType<typeof useAlert>) {
       timer = undefined
       const n = run.read
       if (id !== null) {
-        alert.updateToast(id, run.held === 'cancelled'
+        // the end message is its own: closing it does not hide the next run's toast
+        alert.updateToast(id, { onDismiss: undefined, ...(run.held === 'cancelled'
           ? { color: 'default', title: 'Mod checks cancelled', description: 'Mods not read yet can crash the game without a warning. Refresh list (Ctrl+Shift+R) or the next app start checks them.', isLoading: false, duration: 8000 }
           : run.held === 'paused'
           ? { color: 'default', title: 'Mod checks paused', description: 'Resume them from Checks paused at the top, or with Refresh list (Ctrl+Shift+R).', isLoading: false, duration: 6000 }
           : run.paused
           ? { color: 'default', title: 'Mod checks paused', description: 'Mods are left to read. The checks pick up where they stopped next time you come back with the game closed.', isLoading: false, duration: 6000 }
-          : { color: 'success', title: 'Mods checked', description: `${n} ${n === 1 ? 'mod' : 'mods'} read for compatibility.`, isLoading: false, duration: 4000 })
+          : { color: 'success', title: 'Mods checked', description: `${n} ${n === 1 ? 'mod' : 'mods'} read for compatibility.`, isLoading: false, duration: 4000 }) })
       }
       id = null
       set({ shown: false, last: null, read: 0 })

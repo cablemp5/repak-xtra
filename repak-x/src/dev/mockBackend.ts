@@ -122,7 +122,8 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'snapshot_list': return mockSnapshots
       case 'xtra_storage_sections': return [['caches', 3.5e7], ['previews', 1.4e9], ['kit', 2.7e8], ['trash', 5.2e8], ['snapshots', 0], ['encryption', 4e7], ['plugins', 0]].map(([id, bytes]) => ({ id, bytes }))
       case 'xtra_storage_clear': return wait(0.6).then(() => 1e9)
-      case 'xtra_why_mod': return wait(0.3).then(() => /\.bak_repak$/i.test(args?.modPath ?? '') ? [{ level: 'problem', title: 'It is switched off', detail: 'Turn it on in the Library. The game loads it from the next launch.' }] : [])
+      case 'xtra_why_mod': return wait(0.3).then(() => /\.bak_repak$/i.test(args?.modPath ?? '') ? [{ level: 'problem', title: 'It is switched off', detail: 'The game loads it from the next launch once it is on.', action: 'turn_on' }] : [])
+      case 'xtra_self_sha256': return wait(0.2).then(() => '1ed6e63a2417' + 'f'.repeat(52))
       case 'xtra_safety_plugins': return [{ name: 'dsound.dll', place: '', kind: 'bundled' }, { name: 'MarvelRivalsUTOCSignatureBypass.asi', place: 'plugins', kind: 'bundled' }]
       case 'xtra_safety_mods': return { risks: [], unread: [] } // the mock's file lists are guessed: no risk badges
       case 'snapshot_estimate': return [data.mods.length * 3, data.mods.length * 3 * 4e7]

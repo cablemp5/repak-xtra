@@ -1,4 +1,4 @@
-// repakxtra: Settings > Help & Community > Is it safe?: what repakxtra does, what it talks to, and how to check this
+// repakxtra: Settings > Help & Community > Is repakxtra safe?: what repakxtra does, what it talks to, and how to check this
 // copy (the running exe's SHA-256 on VirusTotal, backend: xtra_trust.rs). The same facts as README's FAQ entry.
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
@@ -6,7 +6,7 @@ import { Copy, ExternalLink, ShieldCheck } from 'lucide-react'
 import { LuShieldCheck } from 'react-icons/lu'
 import type { useAlert } from '../components/AlertHandler'
 import { REPAKXTRA_VERSION } from './version'
-import { RELEASE_PREFIX } from './edition'
+import { APP_NAME, RELEASE_PREFIX } from './edition'
 
 const REPO = 'https://github.com/cablemp5/repak-xtra'
 // read once per app run: the exe is tens of MB and every Settings search mounts this page
@@ -18,7 +18,7 @@ export default function IsItSafe({ alert, onOpenSetup }: { alert: ReturnType<typ
   useEffect(() => { (hashOnce ??= invoke<string>('xtra_self_sha256')).then(setHash).catch(() => setHash(false)) }, [])
   return (
     <div className="setting-section">
-      <h3 className="setting-icon-label"><LuShieldCheck size={18} aria-hidden="true" />Is it safe?</h3>
+      <h3 className="setting-icon-label"><LuShieldCheck size={18} aria-hidden="true" />Is {APP_NAME} safe?</h3>
       <div className="setting-group">
         {/* One plain lead, then the facts as a list (Chunking): each opens with its claim in bold, so the list scans in a glance */}
         <p className="setting-subtext xs-note">repakxtra is a file manager for mods. Here is what it does, what it talks to, and how to check this copy yourself.</p>
@@ -35,14 +35,13 @@ export default function IsItSafe({ alert, onOpenSetup }: { alert: ReturnType<typ
         {/* The two checks as rows like Help's (Law of Similarity): label, gray note, one button each */}
         <div className="xs-row">
           <div className="xs-text">
-            <span className="xs-label">Scan this copy</span>
-            <span className="setting-subtext su-meta">
+            <span className="xs-label xs-label-row">Scan this copy
               {hash
-                ? <button type="button" className="su-hash" title="Copy the SHA-256" onClick={() => { navigator.clipboard.writeText(hash); alert.success('Copied', 'SHA-256 of this repakxtra.exe') }}>
+                ? <button type="button" className="su-hash xs-hash" title="Copy the SHA-256" onClick={() => { navigator.clipboard.writeText(hash); alert.success('Copied', `SHA-256 of this ${APP_NAME}.exe`) }}>
                     <code>{hash.slice(0, 12)}…</code><Copy size={12} aria-hidden="true" /></button>
-                : hash === false ? 'SHA-256 unavailable.' : 'Reading SHA-256…'}
-              {' '}If VirusTotal has no report for this exact file yet, its page lets you upload it.
+                : <span className="su-meta">{hash === false ? 'SHA-256 unavailable' : 'Reading SHA-256…'}</span>}
             </span>
+            <span className="setting-subtext">If VirusTotal has no report for this exact file yet, its page lets you upload it.</span>
           </div>
           <button type="button" className="action-btn" disabled={!hash} title="Open this exe's VirusTotal page" onClick={() => open(`https://www.virustotal.com/gui/file/${hash}`)}>
             <ShieldCheck size={16} aria-hidden="true" /> Open VirusTotal

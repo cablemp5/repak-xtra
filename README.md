@@ -285,7 +285,7 @@ repakxtra ships the bypass inside the app: **Setup** installs, repairs or turns 
 </details>
 
 <details>
-<summary><strong>Is it safe?</strong></summary>
+<summary><strong>Is repakxtra safe?</strong></summary>
 <br>
 
 repakxtra is a file manager for mods: it moves, renames and switches `.pak`, `.utoc` and `.ucas` files in the game's
@@ -297,7 +297,7 @@ Nexus Mods and imgur for mod images, and blender.org only when you install the p
 role claim signs in with Discord in your browser and passes through a small Cloudflare Worker that only grants the role.
 No repakxtra account, ads, analytics or telemetry.
 The exe is not code-signed, so Windows SmartScreen may warn the first time (**More info > Run anyway**).
-**Settings > Help & Community > Is it safe?** repeats this and opens the VirusTotal page for the exe you are running.
+**Settings > Help & Community > Is repakxtra safe?** repeats this and opens the VirusTotal page for the exe you are running.
 Each release lists its VirusTotal scan in the Downloads table. Mods break the game's terms, and repakxtra cannot make
 any mod safe from a ban: it marks the ones that trip the anti-cheat with a **Ban risk** badge.
 

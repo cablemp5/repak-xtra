@@ -378,7 +378,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
           <div className="context-menu-item" onClick={() => { onCreateFolder({ moveMods: true }); onClose(); }}>
             + New folder
           </div>
-          <div className="context-menu-separator" />
+          {folders.some(f => !f.is_root) && <div className="context-menu-separator" />}{/* repakxtra: no line under an empty list */}
           <div className="scrollable-menu-list" style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }}>
             {folders.filter(f => !f.is_root).map(f => (
               <div key={f.id} className="context-menu-item" onClick={() => { onMoveTo(f.id); onClose(); }}>
@@ -425,10 +425,11 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
       <div className="context-menu-item submenu-trigger" onMouseEnter={handleSubmenuEnter}>
         Troubleshoot
         <div className="submenu">
+          {/* repakxtra: the player's question first (Serial Position Effect), then the two Check items as a pair (Law of Similarity) */}
+          {selectionCount <= 1 && <div className="context-menu-item" onClick={() => { openWhy(mod.path, mod.custom_name); onClose(); }}>Why isn't it working?</div>}
           <div className="context-menu-item" onClick={() => { if (onCheckConflicts) onCheckConflicts(); onClose(); }}>
             Check Conflicts
           </div>
-          {selectionCount <= 1 && <div className="context-menu-item" onClick={() => { openWhy(mod.path, mod.custom_name); onClose(); }}>Why isn't it working?</div>}
           {onCheckVfx && <div className="context-menu-item" onClick={() => { onCheckVfx(); onClose(); }}>Check for update</div>}
         </div>
       </div>

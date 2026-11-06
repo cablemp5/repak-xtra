@@ -1,9 +1,11 @@
 import characters from '../data/character_data.json'
 import { canonKey, memberKey } from './loadoutIdentity'
-const skinNames = new Map(characters.map(c => [c.skinid, `${c.name} - ${c.skin_name}`.toLowerCase()]))
+const shownNames = new Map(characters.map(c => [c.skinid, `${c.name} - ${c.skin_name}`]))
+const skinNames = new Map([...shownNames].map(([id, name]) => [id, name.toLowerCase()]))
 const skinIds = new Map<string, string | null>()
 for (const [id, name] of skinNames) skinIds.set(name, skinIds.has(name) && skinIds.get(name) !== id ? null : id)
-export const skinLabel = (id: string) => skinNames.get(id) ?? id.replace(/^name:/, '')
+/** "Black Panther - Default", as the game names it (a name-only skin gets each word capitalized) */
+export const skinLabel = (id: string) => shownNames.get(id) ?? id.replace(/^name:/, '').replace(/(^|[\s-])(\p{L})/gu, (_, sep: string, ch: string) => sep + ch.toUpperCase())
 
 export type SkinDetails = { character_name?: string | null; skin_name?: string | null; files?: string[]; files_partial?: boolean; category?: string | null; additional_categories?: string[]; mod_type?: string }
 
@@ -17,13 +19,15 @@ export function skinLook(d: SkinDetails) {
 /** Compare every exact skin directory, including material/VFX mods and multi-skin bundles. Filenames never identify a skin. */
 export function skinLooks(d: SkinDetails) {
   const skins = new Set<string>()
+  let motionOnly = false // files in a skin's folder, but only its animations or sounds: they never change its look
   for (const file of d.files ?? []) {
-    const match = file.replaceAll('\\', '/').match(/(?:^|\/)(?:characters|hero_st|hero)\/(\d{4})\/(\d{7})\//i)
+    const match = file.replaceAll('\\', '/').match(/(?:^|\/)(?:characters|hero_st|hero)\/(\d{4})\/(\d{7})\/(?:([^/]+)\/)?/i)
     if (!match || !match[2].startsWith(match[1])) continue
+    if (match[3] && /^(animations?|anims?|cues)$/i.test(match[3])) { motionOnly = true; continue }
     skins.add(match[2])
   }
   const label = skinLook(d)
-  if (!skins.size && label) {
+  if (!skins.size && !motionOnly && label) {
     const id = skinIds.get(label)
     if (id) skins.add(id)
     else if (id === undefined) skins.add(`name:${label}`)
@@ -52,6 +56,9 @@ if (import.meta.env.DEV) {
   console.assert(!skinLooks({ character_name: 'Black Panther', files: ['Marvel/Characters/1026/Shared/T_1026300.uasset'] }).size, 'shared paths and filenames never invent a skin')
   console.assert(skinLooks({ files: [...mesh.files, ...other.files] }).size === 2, 'a bundle keeps all targeted skins')
   console.assert(skinLook({ character_name: 'Black Panther' }) === null, 'bare hero names are not Default')
+  const dance = { character_name: 'Black Panther - Default', files: ['Marvel/Content/Marvel/Characters/1026/1026001/Animations/Emote/A_dance.uasset'] }
+  console.assert(!overlap(dance, other), 'an animation mod never clashes with a look mod of the same skin')
+  console.assert(skinLabel('name:black panther - default') === 'Black Panther - Default', 'name-only skins read capitalized')
   const a = { path: 'C:/Game/~mods/A.bak_repak', enabled: true }, b = { path: 'C:/Game/~mods/B.pak', enabled: true }
   const details = { [a.path]: mesh, [b.path]: material }
   const first = { on: [memberKey(a.path)] }, second = { on: [memberKey(b.path)] }

@@ -151,7 +151,12 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
 
     // Dismiss a toast by ID
     const dismissAlert = useCallback((id: number) => {
-        setToasts(prev => prev.filter(toast => toast.id !== id));
+        setToasts(prev => {
+            // repakxtra: a toast's own `onDismiss` hears the person closed it (custom/scanProgress.ts stops showing it)
+            const t = prev.find(toast => toast.id === id);
+            if (typeof t?.onDismiss === 'function') queueMicrotask(t.onDismiss as () => void);
+            return prev.filter(toast => toast.id !== id);
+        });
     }, []);
 
     // Dismiss all toasts

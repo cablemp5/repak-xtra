@@ -514,9 +514,6 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                   </div>
                 </div>
 
-                {/* repakxtra: Is it safe? between Help and Community (Serial Position: the trust facts sit where help seekers already look) */}
-                <IsItSafe alert={alert} onOpenSetup={() => { onClose(); window.dispatchEvent(new CustomEvent('repakxtra-open-setup', { detail: 'bypass' })) }} />
-
                 <div className="setting-section">
                   <h3 className="setting-icon-label"><LuUsers size={18} aria-hidden="true" />Community</h3>
                   <div className="setting-group">
@@ -528,6 +525,9 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                     <Support onError={error => alert.warning('Could not open link', error)} />
                   </div>
                 </div>
+
+                {/* repakxtra: Is repakxtra safe? last, after Help and Community (Serial Position: the trust facts close the page, read once) */}
+                <IsItSafe alert={alert} onOpenSetup={() => { onClose(); window.dispatchEvent(new CustomEvent('repakxtra-open-setup', { detail: 'bypass' })) }} />
               </>
             )}
           </div>

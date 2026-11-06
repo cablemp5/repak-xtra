@@ -95,7 +95,7 @@ export function WhyNotWorking({ alert }: { alert: ReturnType<typeof useAlert> })
                   <li key={f.title} className={`why-item is-${f.level}`}>
                     {f.level === 'problem' ? <CircleAlert size={16} aria-hidden="true" /> : <Info size={16} aria-hidden="true" />}
                     <div><b>{f.title}</b><span>{f.detail}</span></div>
-                    {f.action && <button type="button" className="action-btn why-act" disabled={busy} onClick={() => act(f.action!)}>{ACTION_LABEL[f.action]}</button>}
+                    {f.action && <button type="button" className="btn-primary why-act" disabled={busy} onClick={() => act(f.action!)}>{ACTION_LABEL[f.action]}</button>}
                   </li>
                 ))}
                 {!problems && <li className="why-item is-ok"><CircleCheck size={16} aria-hidden="true" />
