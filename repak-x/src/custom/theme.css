@@ -924,10 +924,15 @@ html[data-motion="off"] .lo-screen { animation: none; }
   padding: 20px 24px !important; max-height: 70vh !important; align-items: start;
 }
 @media (max-width: 760px) { .shortcuts-list { grid-template-columns: 1fr; } }
+/* sentence case, never all caps: weight and color carry the hierarchy */
 .shortcut-group h3 {
-  margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  margin: 0 0 8px; font-size: 13px; font-weight: 600;
   color: var(--text-secondary);
 }
+/* the inherited headings and field labels written in all caps (App, Settings, mod details, Install, credits, Asset
+   Explorer, the old VFX window): sentence case like every other heading here. Hex codes, pills, and buttons keep theirs */
+:is(.setting-section h3, .detail-section h3, .field-label, .info-label, .credits-section-title, .credits-subsection-title,
+  .ae-detail-header h3, .ae-detail-section h4, .vfx-header h1, .vfx-setting-row label) { text-transform: none !important; letter-spacing: normal !important; }
 .shortcut-row {
   padding: 4px 2px !important; background: transparent !important; border-radius: 0 !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04); gap: 12px;
@@ -1194,6 +1199,8 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .lp-name { font: 600 24px/1.2 var(--font-primary); letter-spacing: -0.02em; color: var(--text-primary); background: transparent; border: 1px solid transparent;
   border-radius: 8px; padding: 2px 8px; margin: 0 -8px; outline: none; width: 100%; }
 .lp-name:hover { border-color: var(--panel-border); }
+/* editing (the pencil focuses it while the pointer stays on the pencil): the same quiet box as on hover */
+.lp-name:focus { border-color: var(--panel-border); } /* the quiet hover box, kept while renaming */
 .lp-group { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
 .lp-group input { height: 32px; padding: 0 12px; width: 240px; font: 13px var(--font-primary); color: var(--text-primary);
   background: var(--field-bg); border: 1px solid var(--panel-border); border-radius: var(--quiet-radius); outline: none; }
@@ -1651,8 +1658,18 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
   border-color: transparent !important; background: transparent !important; padding-left: 4px !important; color: var(--text-primary) !important; }
 .run-stop-btn { display: inline-flex !important; align-items: center; gap: 8px; }
 .stop-glyph { width: 8px; height: 8px; border-radius: 2px; background: currentColor; flex: none; }
-/* Pause and Resume beside Stop (ScanStatus.tsx): the same 8px solid glyphs, so the three read as one set */
-.pause-glyph { width: 8px; height: 8px; flex: none; border-radius: 1px; background: linear-gradient(90deg, currentColor 0 3px, transparent 3px 5px, currentColor 5px 8px); }
+/* Pause and Resume beside Stop (ScanStatus.tsx): solid glyphs one height (10px), so the three read as one set.
+   Pause: two square 4px bars 8px apart. Each bar starts on a whole device pixel at 100, 125, 150, 175, and 200% scale
+   (8 times any of those is whole), so both bars always round to the same width with crisp edges */
+.pause-glyph { position: relative; width: 12px; height: 10px; flex: none; }
+.pause-glyph::before, .pause-glyph::after { content: ''; position: absolute; top: 0; bottom: 0; width: 4px; background: currentColor; }
+.pause-glyph::before { left: 0; }
+.pause-glyph::after { left: 8px; }
+/* the header's paused state: centered in the 14px spot the running spinner takes, so the words do not shift */
+.scan-status-in .pause-glyph { margin: 0 1px; }
+/* the mod checks' menu (and the Generate menu sharing its rows): Stop and Play at the pause's height */
+.lo-gen-stop :is(.stop-glyph, .play-glyph) { width: 10px; height: 10px; margin: 0 1px; } /* the pause's 12px slot: the three labels share one left edge */
+.lo-gen-stop .stop-glyph { border-radius: 0; } /* square like the pause bars: one corner language in this menu */
 .play-glyph { width: 8px; height: 8px; flex: none; background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%); }
 /* A Generate button on a PC without the preview kit: grayed out, with a small blue "Set up" that says where to go */
 .is-unavailable { color: var(--text-secondary) !important; opacity: 0.85; }
@@ -1763,6 +1780,9 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .su-confirm { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; font-size: 13px; color: var(--text-primary);
   background: color-mix(in srgb, var(--accent-primary), transparent 88%); border: 1px solid color-mix(in srgb, var(--accent-primary), transparent 65%); }
 .su-confirm span { margin-right: auto; }
+/* the confirm's action (ConfirmRow.tsx): red text, a red tint, a red outline, a little stronger on hover */
+.su-confirm .lo-text-btn.su-confirm-danger { color: #f2555a !important; background: color-mix(in srgb, #f2555a, transparent 88%) !important; border-color: color-mix(in srgb, #f2555a, transparent 55%) !important; }
+.su-confirm .lo-text-btn.su-confirm-danger:hover:not(:disabled) { background: color-mix(in srgb, #f2555a, transparent 80%) !important; border-color: color-mix(in srgb, #f2555a, transparent 35%) !important; }
 .su-safety { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; border-top: 1px solid var(--panel-border); }   /* a line between the buttons and the facts */
 .su-facts { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .su-facts li { font-size: 13px; line-height: 1.5; color: var(--text-secondary); padding-left: 16px; position: relative; }
@@ -1790,15 +1810,12 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .su-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px !important; border-top: 1px solid var(--panel-border); }
 .su-options .repakx-checkbox, .su-options .repakx-checkbox-label { font-size: 13px !important; font-weight: 500; color: var(--text-secondary); }
 
-/* Library right-click menu: Check Conflicts icon neutral like the rest of the menu; loadouts already holding the mod */
-/* Check Conflicts: the outline layers icon at the row's end, like the submenu chevrons (it was a filled blob) */
-.context-menu .warning-icon-small:not(.ph) { fill: none !important; }   /* Phosphor icons are filled shapes */
-.context-menu .warning-icon-small { color: var(--text-secondary) !important; margin-left: auto; }
+/* Library right-click menu: loadouts already holding the mod */
 .context-menu-item.is-disabled { opacity: 0.5; cursor: default; }
 .context-menu-item .lo-menu-check { margin-left: auto; color: var(--text-secondary); }
 /* Setup and changelog: every button one height (the primary ones were 44px beside 32px ones); a closed "Is it safe?"
    adds no gap under the buttons */
-.su-modal .btn-primary, .su-changelog .btn-primary {
+.su-modal .btn-primary, .su-changelog .btn-primary, .why-modal .btn-primary {
   height: 32px !important; min-height: 0 !important; padding: 0 16px !important; font-size: 13px !important; border-radius: var(--quiet-radius) !important;
   display: inline-flex !important; align-items: center; justify-content: center; }
 .su-card > .t-acc-panel[data-open="false"] { margin-top: -12px; }
@@ -2376,6 +2393,14 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 .settings-content .xs-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .settings-content .xs-label { font-size: 13px; font-weight: 400; color: var(--text-primary); }
 .settings-content .xs-text .setting-subtext { padding: 0 !important; margin: 0 !important; }
+/* Is it safe? > Scan this copy: the exe's hash as a small copy chip beside the label, so the row keeps the two-line
+   shape of the rows around it (Law of Similarity) */
+.settings-content .xs-label-row { display: flex; align-items: center; gap: 8px; min-height: 20px; }
+.settings-content .xs-hash { height: 20px; min-height: 0 !important; gap: 6px; padding: 0 7px; border-radius: 5px; background: var(--bg-lighter); color: var(--text-secondary); }
+.settings-content .xs-hash:hover { color: var(--text-primary); }
+.settings-content .xs-hash code { font: 11.5px var(--font-mono); color: var(--text-primary); }
+.settings-content .xs-hash svg { width: 12px !important; height: 12px !important; } /* Settings sizes every icon 16px: the chip's copy icon stays at its text's weight */
+.settings-content .xs-label-row .su-meta { font-size: 12px; }
 .settings-content .xs-note { margin: -4px 0 4px !important; padding: 0 !important; }
 /* Settings > Updates > App files: below the auto-check box, its buttons side by side and never squeezed (Proximity) */
 .settings-content .xs-app-files { margin-top: 8px; }
@@ -2511,7 +2536,7 @@ html[data-motion] .hold-delete.holding::after { transition-duration: 2s !importa
    (upstream's blue borders) is held off by a transition that never arrives: the field keeps its resting border, fill and
    text color while focused. A field focused the moment it appears has no resting look to keep, so its border is the
    app's usual field border. ---------- */
-:is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="button"], [type="submit"], [type="reset"], [type="color"], [type="file"], [type="image"]), textarea, select, [contenteditable="true"]):is(:focus, :focus-visible),
+:is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="button"], [type="submit"], [type="reset"], [type="color"], [type="file"], [type="image"], .lp-name), textarea, select, [contenteditable="true"]):is(:focus, :focus-visible), /* .lp-name: its box shows while renaming (it has no border at rest) */
 :is(.rename-input-wrapper, .combined-input-group, .search-wrapper, .tail-input, .lp-search, .ip-name-wrap, .ko-search):focus-within {
   outline: none !important;
   box-shadow: none !important;
@@ -3193,7 +3218,6 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .su-group-inner { display: flex; flex-direction: column; gap: 16px; }
 /* the one that does it reads stronger than Cancel, without red (Von Restorff) */
 /* a snapshot's Delete: red like Storage's (cable's choice) */
-.su-confirm .su-confirm-yes.is-danger, .su-confirm .su-confirm-yes.is-danger:hover { background: #f2555a !important; color: #fff !important; }
 .su-confirm .su-confirm-yes { font-weight: 600 !important; color: var(--text-primary) !important; background: color-mix(in srgb, var(--text-primary), transparent 86%) !important; }
 /* the section's lead lines up with its list, not indented like a checkbox note */
 .settings-content .xs-storage > .setting-group > p.setting-subtext { margin-left: 0 !important; padding-left: 0 !important; }
@@ -3207,6 +3231,7 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .why-name { margin: 4px 0 0; font-size: 13px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .why-btn { margin-top: 10px; display: inline-flex; align-items: center; gap: 6px; }
 .why-checking { display: flex; align-items: center; gap: 8px; }
+.why-modal .modal-body { gap: 0; }   /* .modal-body's 2rem section gap sat between the summary and its list */
 .why-summary { margin: 0 0 12px; color: var(--text-primary); font-size: 14px; }
 .why-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .why-item { display: flex; gap: 10px; align-items: flex-start; }
@@ -3216,11 +3241,15 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .why-item div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .why-item b { font-size: 13px; color: var(--text-primary); }
 .why-item span { font-size: 13px; color: var(--text-secondary); }
-.why-item .why-act { flex: none; height: 28px; padding: 0 12px; font-size: 13px; }
+.why-item .why-act { flex: none; width: auto !important; align-self: center; }   /* Setup's blue button size (the rule above), one look per button kind */
 
 /* repakxtra: Settings > General > Storage (custom/StorageCleanup.tsx), its own section. Gray notes, a red Delete
    (cable's choice, drawn like Reset to defaults) */
 .xs-storage-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+/* two groups, each under a small gray title, more room between groups than within (Law of Proximity) */
+/* the Settings row-text rule (.setting-group > div > span) is !important: these titles outrank it */
+.settings-content .xs-storage-list > .xs-storage-group { display: block; font-size: 12px !important; font-weight: 600 !important; color: var(--text-secondary) !important; margin-bottom: -2px; }
+.xs-storage-group:not(:first-child) { margin-top: 8px; }
 .settings-content .xs-storage-list label.repakx-checkbox { align-items: flex-start; min-height: 0; }
 .settings-content .xs-storage-list .repakx-checkbox-control { margin-top: -1px; }   /* centered on the name line, measured */
 .settings-content .xs-storage-list .repakx-checkbox-label > span.xs-storage-name { display: block; color: var(--text-primary) !important; }
@@ -3235,7 +3264,7 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .su-card-head p .ob-out { vertical-align: bottom; line-height: inherit; }
 .settings-content .xs-storage .settings-reset-btn:not(.is-confirm):hover:not(:disabled) { background: color-mix(in srgb, #f2555a, transparent 90%) !important; }
 .xs-storage-fail { color: #f5d342 !important; }
-/* the question: its heading yellow, the list in plain text so the heading stands out */
-.xs-storage-confirm { margin-top: 12px; align-items: flex-start; }
-.xs-storage-confirm ul { margin: 6px 0 10px; padding-left: 18px; color: var(--text-secondary); }
-.xs-storage-confirm ul b { color: var(--text-primary); font-weight: 500; }
+/* the question: Setup's one-line confirm row, its text wraps before the buttons squeeze */
+.xs-storage-confirm { margin-top: 12px; }
+.xs-storage-confirm > span { flex: 1 1 auto; min-width: 0; line-height: 1.45; }
+.xs-storage-confirm .lo-text-btn { flex: none; }

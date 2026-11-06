@@ -132,8 +132,8 @@ button.vf-assets-toggle { flex: none; display: inline-flex !important; align-ite
 button.vf-assets-toggle:hover { color: var(--text-primary) !important; }
 .vf-assets-caret { transition: transform var(--acc-chevron) var(--acc-ease); }
 .vf-assets-toggle[aria-expanded="true"] .vf-assets-caret { transform: rotate(90deg); }
-.vf-report > .t-acc-panel { align-self: stretch; }
-.vf-assets { margin-top: 4px; padding: 8px 12px; border-radius: 8px; background: var(--bg-dark); }
+.vf-report > .t-acc-panel { align-self: stretch; margin-top: -12px; } /* closed, it takes no gap: the space above the list lives inside it */
+.vf-assets { margin-top: 16px; padding: 8px 12px; border-radius: 8px; background: var(--bg-dark); }
 .vf-group h4 { margin: 8px 0 4px; font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .vf-group:first-child h4 { margin-top: 0; }
 .vf-group h4 span { margin-left: 4px; color: var(--text-secondary); font-weight: 500; }

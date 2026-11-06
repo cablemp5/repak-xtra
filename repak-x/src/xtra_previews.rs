@@ -5,7 +5,7 @@
 //! loadout's Generate previews).
 
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
@@ -236,6 +236,7 @@ pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: O
         if let Some(usmap) = app_usmap() {
             cmd.env("REPAKXTRA_USMAP", usmap);
         }
+        clear_stale_work(&previews_dir().join("work"));
         // A Stop while the check above waited: there is no process to kill yet, so it must not start
         let started = if STOPPED.load(std::sync::atomic::Ordering::SeqCst) { Err(None) } else { cmd.spawn().map_err(Some) };
         match started {
@@ -278,6 +279,38 @@ pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: O
         let _ = app.emit("mod-previews-done", ok);
     });
     Ok(true)
+}
+
+/// The per-mod work folders (scratch\work\<key>) a generator that was stopped or crashed left, about 50 MB a mod and
+/// 1.1 GB here on 2026-11-06. Only while no generator holds scratch\generator.lock (it locks its first byte, msvcrt),
+/// so a manual run's folders stay. scratch\cache (repacked mods, game renders) stays: it makes the next run fast.
+/// At start too: a run that stopped early leaves its folders until the next Generate otherwise.
+pub(crate) fn sweep_stale_work() {
+    clear_stale_work(&previews_dir().join("work"));
+}
+
+/// The generator's own lock (scratch\generator.lock, it locks its first byte, msvcrt), taken by us: Ok(None) when it was
+/// never made, Err when a generator holds it (this app's, another copy's, or a manual run) or it cannot be opened.
+/// Dropping the file releases it.
+fn lock_generator_in(scratch: &Path) -> Result<Option<std::fs::File>, ()> {
+    match std::fs::OpenOptions::new().read(true).write(true).open(scratch.join("generator.lock")) {
+        Ok(f) => f.try_lock().map(|_| Some(f)).map_err(|_| ()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None), // never made: nothing ran here
+        Err(_) => Err(()),
+    }
+}
+
+/// Settings > Storage: held while it deletes previews or their work files, so no generator anywhere runs on them.
+pub(crate) fn lock_generator() -> Result<Option<std::fs::File>, String> {
+    lock_generator_in(&previews_dir().join("work")).map_err(|_| "Previews are being made (here, in another copy of the app, or by hand). Try again when that is done.".into())
+}
+
+fn clear_stale_work(scratch: &Path) {
+    // held until the folders are gone, so no generator starts on them meanwhile (ours starts after this returns)
+    let Ok(_held) = lock_generator_in(scratch) else { return };
+    for e in std::fs::read_dir(scratch.join("work")).into_iter().flatten().flatten() {
+        let _ = if e.path().is_dir() { std::fs::remove_dir_all(e.path()) } else { std::fs::remove_file(e.path()) };
+    }
 }
 
 /// Copies the generator's stderr to generator.log and the app's Logs: lines that report a failure (an error, a Python
@@ -481,6 +514,21 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn stale_work_goes_only_while_no_generator_holds_the_lock() {
+        let d = tempfile::tempdir().unwrap();
+        let (work, cache) = (d.path().join("work").join("mod-a"), d.path().join("cache").join("repacked"));
+        std::fs::create_dir_all(&work).unwrap();
+        std::fs::create_dir_all(&cache).unwrap();
+        let held = std::fs::File::create(d.path().join("generator.lock")).unwrap();
+        held.lock().unwrap();
+        clear_stale_work(d.path());
+        assert!(work.exists(), "a running generator's folder stays");
+        drop(held);
+        clear_stale_work(d.path());
+        assert!(!work.exists() && cache.exists(), "a stale one goes, the cache stays");
+    }
 
     #[test]
     fn keys_stay_inside_the_folder() {

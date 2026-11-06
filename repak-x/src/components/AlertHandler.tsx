@@ -128,6 +128,8 @@ const DEFAULT_CONFIG = {
 // Alert Provider Component
 export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }: AlertProviderProps) {
     const [toasts, setToasts] = useState<Toast[]>([]);
+    const toastsNow = useRef(toasts); // repakxtra: read by dismissals, so their onDismiss runs once, outside a state update
+    toastsNow.current = toasts;
 
     // Add a new toast
     const showAlert = useCallback((alertConfig: AlertOptions) => {
@@ -151,12 +153,17 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
 
     // Dismiss a toast by ID
     const dismissAlert = useCallback((id: number) => {
+        // repakxtra: a toast's own `onDismiss` hears it was closed (custom/scanProgress.ts stops showing it)
+        const t = toastsNow.current.find(toast => toast.id === id);
         setToasts(prev => prev.filter(toast => toast.id !== id));
+        if (typeof t?.onDismiss === 'function') (t.onDismiss as () => void)();
     }, []);
 
     // Dismiss all toasts
     const dismissAllAlerts = useCallback(() => {
+        const all = toastsNow.current; // repakxtra: Clear all tells each toast too
         setToasts([]);
+        for (const t of all) if (typeof t.onDismiss === 'function') (t.onDismiss as () => void)();
     }, []);
 
     // Update an existing toast

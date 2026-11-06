@@ -5,21 +5,27 @@
 const BARS = '.mod-state-filter, .ob-seg, .segmented-control'
 const PICKED = ':scope > [aria-pressed="true"], :scope > [aria-checked="true"], :scope > .active'
 
-function place(bar: HTMLElement) {
-  bar.classList.add('has-seg-pill') // first: the bar holds the pill (position: relative) before offsets are read
-  const b = bar.querySelector<HTMLElement>(PICKED)
-  const w = b?.offsetWidth ?? 0
-  const was = parseFloat(bar.style.getPropertyValue('--seg-w')) || 0
-  // the first place (or a bar shown again) lands without gliding in from nowhere
-  if (!was || !w) bar.classList.remove('seg-ready')
-  bar.style.setProperty('--seg-x', `${b?.offsetLeft ?? 0}px`)
-  bar.style.setProperty('--seg-y', `${b?.offsetTop ?? 0}px`)
-  bar.style.setProperty('--seg-w', `${w}px`)
-  bar.style.setProperty('--seg-h', `${b?.offsetHeight ?? 0}px`)
-  if (w && !bar.classList.contains('seg-ready')) requestAnimationFrame(() => requestAnimationFrame(() => bar.classList.add('seg-ready')))
+// repakxtra: several bars at once (a screen mounting) read all offsets first, then write, so they share one layout
+// instead of forcing one per bar.
+function place(...bars: HTMLElement[]) {
+  bars.forEach(bar => bar.classList.add('has-seg-pill')) // first: the bar holds the pill (position: relative) before offsets are read
+  const read = bars.map(bar => {
+    const b = bar.querySelector<HTMLElement>(PICKED)
+    return { bar, x: b?.offsetLeft ?? 0, y: b?.offsetTop ?? 0, w: b?.offsetWidth ?? 0, h: b?.offsetHeight ?? 0 }
+  })
+  for (const { bar, x, y, w, h } of read) {
+    const was = parseFloat(bar.style.getPropertyValue('--seg-w')) || 0
+    // the first place (or a bar shown again) lands without gliding in from nowhere
+    if (!was || !w) bar.classList.remove('seg-ready')
+    bar.style.setProperty('--seg-x', `${x}px`)
+    bar.style.setProperty('--seg-y', `${y}px`)
+    bar.style.setProperty('--seg-w', `${w}px`)
+    bar.style.setProperty('--seg-h', `${h}px`)
+    if (w && !bar.classList.contains('seg-ready')) requestAnimationFrame(() => requestAnimationFrame(() => bar.classList.add('seg-ready')))
+  }
 }
 
-const sized = new ResizeObserver(entries => { for (const e of entries) place(e.target as HTMLElement) })
+const sized = new ResizeObserver(entries => place(...entries.map(e => e.target as HTMLElement)))
 const barsIn = (n: Node) => n instanceof HTMLElement ? [...(n.matches(BARS) ? [n] : []), ...n.querySelectorAll<HTMLElement>(BARS)] : []
 
 new MutationObserver(list => {
@@ -34,8 +40,10 @@ new MutationObserver(list => {
     m.addedNodes.forEach(n => barsIn(n).forEach(bar => { sized.observe(bar); dirty.add(bar) }))
     m.removedNodes.forEach(n => barsIn(n).forEach(bar => sized.unobserve(bar)))
   }
-  dirty.forEach(place)
+  if (dirty.size) place(...dirty)
 }).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['aria-pressed', 'aria-checked', 'class'] })
-document.querySelectorAll<HTMLElement>(BARS).forEach(bar => { sized.observe(bar); place(bar) })
+const first = [...document.querySelectorAll<HTMLElement>(BARS)]
+first.forEach(bar => sized.observe(bar))
+if (first.length) place(...first)
 
 export {} // a module: its names stay its own

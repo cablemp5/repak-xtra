@@ -117,7 +117,7 @@ game crashes. The VFX Updater rebuilds them on the new game files, many at once.
    tick them under **Other VFX mods** or **Material mods**, or click **Select all** on a group. Not sure about a mod?
    Tick it and click **Scan**: it checks whether its materials were made for this game version, whatever its date says.
 4. **Missing a mod?** Click **Add .utoc** and pick its `.utoc` file, or right-click it in the Library and click
-   **For modders > Send to VFX Updater**.
+   **More > Send to Mod Updater**.
 5. **Click Update** (or press `Ctrl+Enter`). The line at the bottom says about how long it will take, and each mod
    shows its progress as it goes. **Cancel** (or `Esc`) stops the run.
 6. **Check the result.** Finished mods move down to **Updated**. The updated copy keeps the mod's name, loadouts and
@@ -281,6 +281,25 @@ Bugs in repakxtra belong here, not with the Repak X team.
 Marvel Rivals only loads files it has signed, so a mod that replaces game files is ignored without the bypass.
 repakxtra ships the bypass inside the app: **Setup** installs, repairs or turns it off, and its
 **Is it safe?** report shows what gets installed. Close the game before changing anything in Setup.
+
+</details>
+
+<details>
+<summary><strong>Is repakxtra safe?</strong></summary>
+<br>
+
+repakxtra is a file manager for mods: it moves, renames and switches `.pak`, `.utoc` and `.ucas` files in the game's
+`~mods` folder, and **Setup** puts the signature bypass and its loader (`dsound.dll` and one `.asi`) in `Binaries\Win64`.
+It does not touch the game's own files, run inside the game, or read game memory itself (the bypass does that part,
+and **Setup > Is it safe?** reports on it). The full source is public here, and releases are built from it.
+It only talks to GitHub (updates, Project Galacta, the preview kit, game mappings), Discord (the server widget), and
+Nexus Mods and imgur for mod images, and blender.org only when you install the preview kit's Blender. The optional Discord
+role claim signs in with Discord in your browser and passes through a small Cloudflare Worker that only grants the role.
+No repakxtra account, ads, analytics or telemetry.
+The exe is not code-signed, so Windows SmartScreen may warn the first time (**More info > Run anyway**).
+**Settings > Help & Community > Is repakxtra safe?** repeats this and opens the VirusTotal page for the exe you are running.
+Each release lists its VirusTotal scan in the Downloads table. Mods break the game's terms, and repakxtra cannot make
+any mod safe from a ban: it marks the ones that trip the anti-cheat with a **Ban risk** badge.
 
 </details>
 

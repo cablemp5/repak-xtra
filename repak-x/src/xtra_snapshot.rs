@@ -95,11 +95,36 @@ fn setup_key(rel: &Path) -> String {
     rel.to_string_lossy().to_lowercase().trim_end_matches(".disabled").to_string()
 }
 
-fn copy_all(list: &[(PathBuf, u64)], from: &Path, to: &Path) -> std::io::Result<()> {
+fn same_bytes(a: &Path, b: &Path) -> bool {
+    use std::io::Read;
+    let (Ok(mut x), Ok(mut y)) = (fs::File::open(a), fs::File::open(b)) else { return false };
+    let (mut p, mut q) = (vec![0u8; 1 << 20], vec![0u8; 1 << 20]);
+    loop {
+        let n = match x.read(&mut p) { Ok(n) => n, Err(_) => return false };
+        if n == 0 { return y.read(&mut q).is_ok_and(|m| m == 0); }
+        if y.read_exact(&mut q[..n]).is_err() || p[..n] != q[..n] { return false; }
+    }
+}
+
+/// `prev`: the same folder in the newest snapshot. A file it holds unchanged (same bytes, checked after size and time)
+/// becomes a hard link to that copy instead of a second copy, so snapshots of a library that barely changed take the
+/// space of one. Snapshot files are only ever read (restore copies them out) or deleted, so a link is never written
+/// through. A link that cannot be made (another drive, FAT) is a plain copy.
+/// shortcut: list sizes still count a linked file in every snapshot, upgrade if Storage must show the real disk use.
+fn copy_all(list: &[(PathBuf, u64)], from: &Path, to: &Path, prev: Option<&Path>) -> std::io::Result<()> {
+    // size and time only rule a file out quickly: installs keep a download's time, so a replaced mod of the same size
+    // can carry the old one's time. A link needs the same bytes
+    let same = |a: &Path, b: &Path| match (fs::metadata(a), fs::metadata(b)) {
+        (Ok(x), Ok(y)) => x.len() == y.len() && x.modified().ok().is_some_and(|t| y.modified().ok() == Some(t)) && same_bytes(a, b),
+        _ => false,
+    };
     for (rel, _) in list {
         let dest = to.join(rel);
         fs::create_dir_all(dest.parent().unwrap_or(to))?;
-        fs::copy(from.join(rel), dest)?;
+        let old = prev.map(|p| p.join(rel));
+        if !old.as_deref().is_some_and(|old| same(&from.join(rel), old) && fs::hard_link(old, &dest).is_ok()) {
+            fs::copy(from.join(rel), dest)?;
+        }
     }
     Ok(())
 }
@@ -114,7 +139,9 @@ fn create_at(root: &Path, id: &str, mods: &Path, win64: &Path) -> Result<Snapsho
     // copied under a name the list skips, then renamed in: a copy cut short (a full disk, a crash) is never listed
     let staging = root.join(format!(".staging-{id}"));
     let _ = fs::remove_dir_all(&staging);
-    let made = copy_all(&m, mods, &staging.join("mods")).and_then(|_| copy_all(&s, win64, &staging.join("win64")));
+    let prev = list_at(root).first().map(|x| root.join(&x.id));
+    let made = copy_all(&m, mods, &staging.join("mods"), prev.as_ref().map(|p| p.join("mods")).as_deref())
+        .and_then(|_| copy_all(&s, win64, &staging.join("win64"), prev.as_ref().map(|p| p.join("win64")).as_deref()));
     if let Err(e) = made {
         let _ = fs::remove_dir_all(&staging);
         return Err(format!("Could not make the snapshot: {e}"));
@@ -134,6 +161,73 @@ fn create_at(root: &Path, id: &str, mods: &Path, win64: &Path) -> Result<Snapsho
         let _ = fs::remove_dir_all(root.join(&old.id));
     }
     all.into_iter().find(|x| x.id == id).ok_or_else(|| "The snapshot was not saved.".into())
+}
+
+/// The mod files an imported zip may bring: never a loader or plugin (a .dll or .asi from a file of unknown origin
+/// would run inside the game), only what goes in ~mods.
+fn importable(rel: &Path) -> bool {
+    rel.extension().and_then(|e| e.to_str()).is_some_and(|e| ["pak", "utoc", "ucas", "bak_repak"].contains(&e.to_ascii_lowercase().as_str()))
+}
+
+/// A snapshot from a .zip: either a snapshot's own layout (mods\ at the top, or inside one folder) or a zip of mod
+/// files. Unzipped under a name the list skips (entries that would leave it are skipped), only importable files kept
+/// under mods\, then renamed in as the newest snapshot. Nothing is pruned: making the next one does that as usual.
+fn import_at(root: &Path, id: &str, zip: &Path) -> Result<Snapshot, String> {
+    let staging = root.join(format!(".staging-import-{id}"));
+    let raw = staging.join("raw");
+    let _ = fs::remove_dir_all(&staging);
+    let out = (|| -> Result<Snapshot, String> {
+        fs::create_dir_all(&raw).map_err(|e| e.to_string())?;
+        crate::install_mod::install_mod_logic::archives::extract_zip(&zip.to_string_lossy(), &raw.to_string_lossy())
+            .map_err(|e| format!("Could not read the zip: {e}"))?;
+        // its mods: raw\mods, raw\<one folder>\mods, or everything in it
+        let one = fs::read_dir(&raw).map_err(|e| e.to_string())?.flatten().map(|e| e.path()).collect::<Vec<_>>();
+        let from = if raw.join("mods").is_dir() { raw.join("mods") }
+            else if one.len() == 1 && one[0].join("mods").is_dir() { one[0].join("mods") }
+            else { raw.clone() };
+        let keep: Vec<_> = files(&from).into_iter().filter(|(rel, _)| importable(rel)).collect();
+        if keep.is_empty() {
+            return Err("The zip has no mod files (.pak, .utoc, or .ucas), so nothing was imported.".into());
+        }
+        let snap = staging.join("snap");
+        for (rel, _) in &keep {
+            let dest = snap.join("mods").join(rel);
+            fs::create_dir_all(dest.parent().unwrap_or(&snap)).map_err(|e| e.to_string())?;
+            fs::rename(from.join(rel), &dest).map_err(|e| e.to_string())?;
+        }
+        let mut n: u64 = id.parse().map_err(|_| "Unknown snapshot".to_string())?;
+        while root.join(n.to_string()).exists() { n += 1; }
+        let id = n.to_string();
+        fs::rename(&snap, root.join(&id)).map_err(|e| format!("Could not import the snapshot: {e}"))?;
+        list_at(root).into_iter().find(|x| x.id == id).ok_or_else(|| "The snapshot was not saved.".into())
+    })();
+    let _ = fs::remove_dir_all(&staging);
+    out
+}
+
+/// A snapshot's mod files as a .zip at `to`, laid out as import_at reads it (mods\...). Stored, not compressed: paks
+/// barely shrink and stay fast to write. Written under a temporary name, then renamed, so a cut-short zip never looks done.
+/// The loader and plugins stay out: import never takes them either.
+fn export_at(snap: &Path, to: &Path) -> Result<u64, String> {
+    use std::io::Write;
+    let list = files(&snap.join("mods"));
+    if list.is_empty() { return Err("This snapshot has no mod files to export.".into()) }
+    let tmp = to.with_extension("zip.repakxtra-part");
+    let write = || -> Result<(), String> {
+        let mut z = zip::ZipWriter::new(std::io::BufWriter::new(fs::File::create(&tmp).map_err(|e| e.to_string())?));
+        let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored).large_file(true);
+        for (rel, _) in &list {
+            let name = format!("mods/{}", rel.to_string_lossy().replace('\\', "/"));
+            z.start_file(name, opts).map_err(|e| e.to_string())?;
+            let mut f = fs::File::open(snap.join("mods").join(rel)).map_err(|e| e.to_string())?;
+            std::io::copy(&mut f, &mut z).map_err(|e| e.to_string())?;
+        }
+        z.finish().map_err(|e| e.to_string())?.flush().map_err(|e| e.to_string())
+    };
+    if let Err(e) = write() { let _ = fs::remove_file(&tmp); return Err(format!("Could not export the snapshot: {e}")) }
+    // rename replaces an existing file in one step (MoveFileEx on Windows): the old one stays if it fails
+    fs::rename(&tmp, to).map_err(|e| { let _ = fs::remove_file(&tmp); format!("Could not export the snapshot: {e}") })?;
+    Ok(list.len() as u64)
 }
 
 fn list_at(root: &Path) -> Vec<Snapshot> {
@@ -225,6 +319,28 @@ pub async fn snapshot_estimate(state: State<'_, Arc<Mutex<crate::AppState>>>) ->
     }).await
 }
 
+/// Setup > Snapshots > Export: snapshot `id`'s mod files as a .zip where the person chose (export_at). Returns the file count.
+#[tauri::command]
+pub async fn snapshot_export(id: String, path: String) -> Result<u64, String> {
+    let _alone = crate::xtra_mutation::alone("a snapshot export")?; // no Delete, cleanup, or pruning takes its source meanwhile
+    let snap = snap_dir(&id)?;
+    let to = PathBuf::from(path);
+    if !to.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")) { return Err("Save it as a .zip file.".into()) }
+    blocking(move || export_at(&snap, &to)).await
+}
+
+/// Setup > Snapshots > Import: a .zip the person picked becomes the newest snapshot (import_at).
+#[tauri::command]
+pub async fn snapshot_import(path: String) -> Result<Snapshot, String> {
+    let _alone = crate::xtra_mutation::alone("a snapshot")?;
+    let zip = PathBuf::from(path);
+    if !zip.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")) || !zip.is_file() {
+        return Err("Pick a .zip file.".into());
+    }
+    let id = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_secs().to_string();
+    blocking(move || { fs::create_dir_all(root()).map_err(|e| e.to_string())?; import_at(&root(), &id, &zip) }).await
+}
+
 #[tauri::command]
 pub async fn snapshot_create(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<Snapshot, String> {
     let _alone = crate::xtra_mutation::alone("a snapshot")?; // no mod change mixes file versions into the copy
@@ -308,6 +424,78 @@ mod tests {
         assert!(!win64.join("dsound.dll").exists(), "the loader stays off");
         assert_eq!(fs::read_to_string(mods.join("Edited_P.pak")).unwrap(), "new", "a changed file is never overwritten");
         assert_eq!(restore_at(&root.join("100"), &mods, &win64).unwrap(), Restored { mods: 0, setup: 0 }, "a second restore changes nothing");
+    }
+
+    #[test]
+    fn an_unchanged_file_is_linked_to_the_last_snapshot_a_changed_one_copied() {
+        let t = tempfile::tempdir().unwrap();
+        let (root, mods, win64) = (t.path().join("snaps"), t.path().join("mods"), t.path().join("win64"));
+        put(&mods.join("Same_P.pak"), "same");
+        put(&mods.join("Changed_P.pak"), "old");
+        create_at(&root, "1", &mods, &win64).unwrap();
+        fs::write(mods.join("Changed_P.pak"), "new!").unwrap();
+        create_at(&root, "2", &mods, &win64).unwrap();
+        assert_eq!(fs::read_to_string(root.join("2/mods/Changed_P.pak")).unwrap(), "new!");
+        assert_eq!(fs::read_to_string(root.join("1/mods/Changed_P.pak")).unwrap(), "old", "the old snapshot keeps its copy");
+        // one file on disk (a write through one name shows in the other), and deleting the first leaves the second's whole
+        fs::write(root.join("1/mods/Same_P.pak"), "link").unwrap();
+        assert_eq!(fs::read_to_string(root.join("2/mods/Same_P.pak")).unwrap(), "link");
+        fs::remove_dir_all(root.join("1")).unwrap();
+        assert_eq!(fs::read_to_string(root.join("2/mods/Same_P.pak")).unwrap(), "link");
+        fs::write(root.join("2/mods/Same_P.pak"), "x").unwrap();
+        create_at(&root, "3", &mods, &win64).unwrap();
+        assert_eq!(fs::read_to_string(root.join("3/mods/Same_P.pak")).unwrap(), "same", "a snapshot copy that no longer matches is not linked");
+        // a replaced mod with the same size and the old one's time (an install keeps a download's time): copied
+        let t0 = std::time::SystemTime::now() - std::time::Duration::from_secs(86_400);
+        let stamp = |p: &Path| fs::File::options().write(true).open(p).unwrap().set_modified(t0).unwrap();
+        fs::write(mods.join("Twin_P.pak"), "aaaa").unwrap();
+        stamp(&mods.join("Twin_P.pak"));
+        create_at(&root, "4", &mods, &win64).unwrap();
+        fs::write(mods.join("Twin_P.pak"), "bbbb").unwrap();
+        stamp(&mods.join("Twin_P.pak"));
+        create_at(&root, "5", &mods, &win64).unwrap();
+        assert_eq!(fs::read_to_string(root.join("5/mods/Twin_P.pak")).unwrap(), "bbbb");
+        assert_eq!(fs::read_to_string(root.join("4/mods/Twin_P.pak")).unwrap(), "aaaa");
+    }
+
+    #[test]
+    fn an_imported_zip_keeps_only_mod_files_and_restores_like_a_snapshot() {
+        use std::io::Write;
+        let t = tempfile::tempdir().unwrap();
+        let (root, mods, win64) = (t.path().join("snaps"), t.path().join("mods"), t.path().join("win64"));
+        fs::create_dir_all(&root).unwrap();
+        let zip_at = |name: &str, entries: &[(&str, &str)]| {
+            let path = t.path().join(name);
+            let mut z = zip::ZipWriter::new(fs::File::create(&path).unwrap());
+            for (n, body) in entries {
+                z.start_file(*n, zip::write::SimpleFileOptions::default()).unwrap();
+                z.write_all(body.as_bytes()).unwrap();
+            }
+            z.finish().unwrap();
+            path
+        };
+        // a snapshot's own layout inside one folder, with a loader and a readme that must not come in
+        let a = zip_at("a.zip", &[("1700/mods/Sub/Skin_P.pak", "skin"), ("1700/mods/Skin_P.utoc", "toc"), ("1700/win64/dsound.dll", "x"), ("1700/readme.txt", "hi")]);
+        let s = import_at(&root, "10", &a).unwrap();
+        assert_eq!(s.files, 2);
+        assert!(!root.join("10/win64").exists(), "no loader or plugin from a zip");
+        assert_eq!(restore_at(&root.join("10"), &mods, &win64).unwrap(), Restored { mods: 2, setup: 0 });
+        assert_eq!(fs::read_to_string(mods.join("Sub/Skin_P.pak")).unwrap(), "skin");
+        // a plain zip of mods, and one with nothing to import
+        let b = zip_at("b.zip", &[("Cool_P.pak", "c")]);
+        assert_eq!(import_at(&root, "10", &b).unwrap().id, "11", "the next free id");
+        let c = zip_at("c.zip", &[("notes.txt", "n")]);
+        assert!(import_at(&root, "12", &c).is_err());
+        assert!(fs::read_dir(&root).unwrap().flatten().all(|e| !e.file_name().to_string_lossy().starts_with(".staging")), "no staging left");
+        // an export imports back as the same mod files
+        let out = t.path().join("out.zip");
+        assert_eq!(export_at(&root.join("10"), &out).unwrap(), 2);
+        let back = import_at(&root, "20", &out).unwrap();
+        assert_eq!(back.files, 2);
+        assert_eq!(fs::read_to_string(root.join(&back.id).join("mods/Sub/Skin_P.pak")).unwrap(), "skin");
+        assert!(!t.path().join("out.zip.repakxtra-part").exists());
+        assert_eq!(export_at(&root.join("10"), &out).unwrap(), 2, "an export over an existing file replaces it");
+        assert_eq!(import_at(&root, "30", &out).unwrap().files, 2);
     }
 
     #[test]

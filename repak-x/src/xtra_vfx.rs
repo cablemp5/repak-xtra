@@ -39,6 +39,55 @@ pub(crate) fn tune_dotnet_gc() {
 /// alive go; another copy's (the stable app beside the dev copy) stays while it runs.
 pub(crate) fn sweep_work_dirs() {
     sweep_in(&std::env::temp_dir().join("repak-x"));
+    for e in std::fs::read_dir(base_dir()).into_iter().flatten().flatten() {
+        if e.file_name().to_string_lossy().starts_with(RETIRED) {
+            let _ = std::fs::remove_dir_all(e.path());
+        }
+    }
+}
+
+/// Another repakxtra, Repak X, or dev copy is open: its updater run or game-file cache may be in use.
+pub(crate) fn another_copy_runs() -> bool {
+    use sysinfo::{ProcessRefreshKind, RefreshKind, System};
+    let s = System::new_with_specifics(RefreshKind::new().with_processes(ProcessRefreshKind::new()));
+    let me = sysinfo::Pid::from_u32(std::process::id());
+    s.processes().iter().any(|(pid, p)| *pid != me && p.name().to_string_lossy().to_lowercase().starts_with("repak"))
+}
+
+/// Folders renamed to this prefix are no one's: sweep_work_dirs deletes them in the background.
+const RETIRED: &str = "retired-";
+
+/// In main(), before any command can run: the VFX updater's folders a closed app left are renamed out of use at once
+/// (a rename is instant, deleting GBs is not), so no check can pick one up while it is being deleted. Every finished
+/// run goes (the next run clears its own anyway), and the game's decoded files for earlier game builds or mappings (0.8
+/// to 1.4 GB each, 3 of them here on 2026-11-06). The newest cache stays, so the next check does not decode the game again.
+pub(crate) fn retire_stale_vfx() {
+    if !another_copy_runs() {
+        retire_in(&base_dir());
+    }
+}
+
+fn retire_in(base: &Path) {
+    let mut vanilla: Vec<(std::time::SystemTime, PathBuf)> = Vec::new();
+    let mut doomed = Vec::new();
+    for e in std::fs::read_dir(base).into_iter().flatten().flatten() {
+        let (p, name) = (e.path(), e.file_name().to_string_lossy().to_string());
+        if name.starts_with("run-") {
+            doomed.push(p);
+        } else if name.starts_with("vanilla-") {
+            // last written: anything directly in it (index.json, extract, json, niagara_json)
+            let t = std::fs::read_dir(&p).into_iter().flatten().flatten().filter_map(|c| c.metadata().ok())
+                .filter_map(|m| m.modified().ok()).max().unwrap_or(std::time::UNIX_EPOCH);
+            vanilla.push((t, p));
+        }
+    }
+    vanilla.sort();
+    vanilla.pop();
+    doomed.extend(vanilla.into_iter().map(|(_, p)| p));
+    for p in doomed {
+        let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let _ = std::fs::rename(&p, base.join(format!("{RETIRED}{name}"))); // a folder in use (open file) stays as it is
+    }
 }
 
 /// A new folder temp/repak-x/<kind>/<pid>-<random> that stays after this call (the caller removes it when done, and
@@ -1120,6 +1169,21 @@ pub async fn xtra_vfx_stale(mod_path: String, game_paks: String, files: Vec<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_closed_apps_runs_and_older_game_caches_are_retired_the_newest_stays() {
+        let dir = tempfile::tempdir().unwrap();
+        let day = std::time::Duration::from_secs(86_400);
+        for (name, age) in [("run-a", 0), ("vanilla-old", 9), ("vanilla-new", 1), ("vanilla-older", 30)] {
+            std::fs::create_dir_all(dir.path().join(name)).unwrap();
+            let f = std::fs::File::create(dir.path().join(name).join("index.json")).unwrap();
+            f.set_modified(std::time::SystemTime::now() - day * age).unwrap();
+        }
+        retire_in(dir.path());
+        let mut left: Vec<_> = std::fs::read_dir(dir.path()).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
+        left.sort();
+        assert_eq!(left, ["retired-run-a", "retired-vanilla-old", "retired-vanilla-older", "vanilla-new"]);
+    }
 
     #[test]
     fn tools_built_from_the_same_source_share_an_id() {

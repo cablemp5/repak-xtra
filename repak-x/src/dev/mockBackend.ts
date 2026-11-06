@@ -48,6 +48,7 @@ const setupBypass = () => ({ state: mockBypass, license: 'MIT License\n\nCopyrig
   files: [{ name: 'dsound.dll', place: 'Binaries\\Win64', size: 415232, sha256: 'bb8767f918c52a2ad055d2de9baffd2478598643b9894f09abd20d1f1ffd170c', found: mockBypass === 'installed' ? 'same' : 'missing' },
     { name: 'MarvelRivalsUTOCSignatureBypass.asi', place: 'Binaries\\Win64\\plugins', size: 44032, sha256: '2f8b183149f30c94319a5f6636491ff39aa22afbbf3f5cbc5fb8f7ecc287a62d', found: mockBypass === 'missing' ? 'missing' : 'same' }] })
 const trash = new Map<string, any>() // trash id -> the deleted mod record
+const clearAtStart = new Set<string>(['browser']) // Settings > Storage sections marked to clear at the next start
 // Browser checks flip window.__mockGameRunning live (polled every 5 s); localStorage 'mock.bypass' = 'false' turns the
 // fixture's game-lock bypass off at the next load
 const mock = window as any
@@ -120,13 +121,16 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       // Setup panel: fake bypass files and a fake Galacta release (no game folder, no network)
       case 'setup_bypass_status': return setupBypass()
       case 'snapshot_list': return mockSnapshots
-      case 'xtra_storage_sections': return [['caches', 3.5e7], ['previews', 1.4e9], ['kit', 2.7e8], ['trash', 5.2e8], ['snapshots', 0], ['encryption', 4e7], ['plugins', 0]].map(([id, bytes]) => ({ id, bytes }))
+      case 'xtra_storage_sections': return [['caches', 3.5e7], ['preview-work', 6.1e8], ['vfx', 1.9e9], ['browser', 1.2e8], ['previews', 1.4e9], ['kit', 2.7e8], ['trash', 5.2e8], ['snapshots', 2.6e9], ['encryption', 4e7], ['plugins', 0]].map(([id, bytes]) => ({ id, bytes, pending: clearAtStart.has(id as string) }))
       case 'xtra_storage_clear': return wait(0.6).then(() => 1e9)
-      case 'xtra_why_mod': return wait(0.3).then(() => /\.bak_repak$/i.test(args?.modPath ?? '') ? [{ level: 'problem', title: 'It is switched off', detail: 'Turn it on in the Library. The game loads it from the next launch.' }] : [])
+      case 'xtra_storage_clear_at_start': (args?.ids as string[]).forEach(id => clearAtStart.add(id)); return (args?.ids as string[]).includes('vfx') ? 1.9e9 : 1.2e8
+      case 'xtra_why_mod': return wait(0.3).then(() => /\.bak_repak$/i.test(args?.modPath ?? '') ? [{ level: 'problem', title: 'It is switched off', detail: 'The game loads it from the next launch once it is on.', action: 'turn_on' }] : [])
+      case 'xtra_self_sha256': return wait(0.2).then(() => '1ed6e63a2417' + 'f'.repeat(52))
       case 'xtra_safety_plugins': return [{ name: 'dsound.dll', place: '', kind: 'bundled' }, { name: 'MarvelRivalsUTOCSignatureBypass.asi', place: 'plugins', kind: 'bundled' }]
       case 'xtra_safety_mods': return { risks: [], unread: [] } // the mock's file lists are guessed: no risk badges
       case 'snapshot_estimate': return [data.mods.length * 3, data.mods.length * 3 * 4e7]
       case 'snapshot_create': return wait(1).then(() => { const s = { id: String(Math.floor(Date.now() / 1000)), created: Math.floor(Date.now() / 1000), files: data.mods.length * 3, bytes: data.mods.length * 3 * 4e7 }; mockSnapshots = [s, ...mockSnapshots].slice(0, 3); return s })
+      case 'snapshot_import': return wait(0.8).then(() => { const s = { id: String(Math.floor(Date.now() / 1000)), created: Math.floor(Date.now() / 1000), files: 9, bytes: 3.6e8 }; mockSnapshots = [s, ...mockSnapshots]; return s })
       case 'snapshot_restore': return wait(0.6).then(() => ({ mods: 0, setup: 0 }))
       case 'snapshot_delete': mockSnapshots = mockSnapshots.filter((s: any) => s.id !== args?.id); return null
       case 'snapshot_missing': return null

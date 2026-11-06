@@ -35,7 +35,7 @@ export const repairedPath = (r: VfxReport): string | null =>
 export const repairOutcome = (r: VfxReport) => {
   if (r.status !== 'fixed') return 'Unsupported or ambiguous'
   if (incompleteAssets(r)) return 'Partially repaired'
-  if (r.counts.updated || r.warnings.length || r.counts.same || r.counts.added) return 'Repaired with changes: review required'
+  if (r.counts.updated || r.warnings.length || r.counts.same || r.counts.added) return 'Repaired after review'
   return 'Repaired'
 }
 
@@ -623,7 +623,7 @@ if (import.meta.env.DEV) {
   console.assert(repairedPath({ ...sample, placed, counts: { ...sample.counts, left: 1 } }) === null && repairedPath({ ...sample, placed, warnings: ['unverified'] }) === null, 'partial and unverified repairs retain warnings')
   console.assert(repairOutcome(sample) === 'Repaired', 'preserved structural repair')
   console.assert(repairOutcome({ ...sample, counts: { ...sample.counts, ownGame: 1 } }) === 'Partially repaired', 'permanent omission is partial')
-  console.assert(repairOutcome({ ...sample, warnings: ['lost parameter'] }) === 'Repaired with changes: review required', 'loss needs review')
+  console.assert(repairOutcome({ ...sample, warnings: ['lost parameter'] }) === 'Repaired after review', 'loss needs review')
   console.assert(repairOutcome({ ...sample, status: 'failed' }) === 'Unsupported or ambiguous', 'failed is never repaired')
   console.assert(assetKey('A/MI_Body.uasset') !== assetKey('B/MI_Body.uasset'), 'same basename keeps distinct repair identities')
   console.assert(fixedName('C:/m/BlueColoredVFX_9999999_P.utoc') === 'BlueColoredVFX_UPDATED_9999999_P', 'fixed name drops the priority')

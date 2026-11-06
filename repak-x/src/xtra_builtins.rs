@@ -113,8 +113,8 @@ struct Saved {
 /// after the update (and the others do not).
 fn recipe(id: &str) -> u32 {
     match id {
-        // Rebuild older copies with the warning widget hidden as well as shortened.
-        SKIP_INTRO => 3,
+        // 3: the warning widget hidden as well as shortened. 4: its texts, images, and bar blacked out and collapsed too
+        SKIP_INTRO => 4,
         _ => 0,
     }
 }
@@ -386,10 +386,113 @@ fn shorten_warning(doc: &Value, raw: &mut [u8], header: usize) -> Result<usize, 
     Ok(changed)
 }
 
-/// Hide the whole widget tree while keeping its animation and completion callbacks alive.
-/// Preserve every other export as bytes, including Blueprint bytecode and compiled animation data.
-fn hide_warning(doc: &mut Value, raw: &[u8], header: usize) -> Result<(), String> {
+/// The widget classes the warning draws with: each one's text, images, and bar.
+const WARN_LEAVES: [&str; 4] = ["MarvelImage", "MarvelTextBlock", "MarvelRichTextBlock", "ProgressBar"];
+/// UWidget's Visibility sits this many fields after its Slot in every class (read off MarvelTextBlock, which stores both).
+const VISIBILITY_AFTER_SLOT: usize = 21;
+
+/// The property indices an unversioned export stores, in Data's order. None when a zero mask (not handled) is used.
+fn stored_indices(e: &Value) -> Option<Vec<usize>> {
+    let (mut out, mut pos) = (Vec::new(), 0usize);
+    for f in e["OriginalUnversionedHeader"]["Fragments"].as_array()? {
+        if f["bHasAnyZeroes"] != false { return None; }
+        pos += f["SkipNum"].as_u64()? as usize;
+        let n = f["ValueNum"].as_u64()? as usize;
+        out.extend(pos..pos + n);
+        pos += n;
+    }
+    Some(out)
+}
+
+/// Fragments for a sorted list of stored indices (runs of values, the gap before each at most 127).
+fn fragments_for(indices: &[usize]) -> Result<Value, String> {
+    let (mut frags, mut prev_end, mut i) = (Vec::new(), 0usize, 0usize);
+    while i < indices.len() {
+        let start = indices[i];
+        let mut end = start;
+        while i + 1 < indices.len() && indices[i + 1] == end + 1 { i += 1; end += 1; }
+        let skip = start - prev_end;
+        if skip > 127 || end - start + 1 > 127 { return Err("the warning layout has a gap too wide to rebuild".into()); }
+        frags.push(serde_json::json!({ "$type": "UAssetAPI.Unversioned.FFragment, UAssetAPI", "SkipNum": skip, "ValueNum": end - start + 1,
+            "bIsLast": false, "FirstNum": start, "bHasAnyZeroes": false, "LastNum": end }));
+        prev_end = end + 1;
+        i += 1;
+    }
+    frags.last_mut().ok_or("the warning widget has no fields")?["bIsLast"] = Value::Bool(true);
+    Ok(Value::Array(frags))
+}
+
+/// Puts `prop` at field `at` of an unversioned export: replaces the one stored there, or inserts it in order.
+fn put_field(e: &mut Value, at: usize, prop: Value) -> Result<(), String> {
+    let mut idx = stored_indices(e).ok_or("the warning widget layout is not one this build can edit")?;
+    let data = e["Data"].as_array_mut().ok_or("the warning widget is not editable")?;
+    if idx.len() != data.len() { return Err("the warning widget fields do not match its layout".into()); }
+    match idx.binary_search(&at) {
+        Ok(k) => data[k] = prop,
+        Err(k) => { idx.insert(k, at); data.insert(k, prop); }
+    }
+    e["OriginalUnversionedHeader"]["Fragments"] = fragments_for(&idx)?;
+    Ok(())
+}
+
+/// Every color in a value black, its alpha kept.
+fn black(v: &mut Value) {
+    match v {
+        Value::Object(m) => {
+            if m.get("$type").and_then(Value::as_str).is_some_and(|t| t.contains("FLinearColor")) {
+                for c in ["R", "G", "B"] { m.insert(c.into(), serde_json::json!(0.0)); }
+            }
+            m.values_mut().for_each(black);
+        }
+        Value::Array(a) => a.iter_mut().for_each(black),
+        _ => {}
+    }
+}
+
+/// The fallback if the game ever shows the warning anyway: every text, image, and bar is black and collapsed, except
+/// the black backdrop (an image already pure black), so the screen stays black. Returns the edited exports' indices.
+fn blacken_warning(doc: &mut Value) -> Result<Vec<usize>, String> {
+    let imports = doc["Imports"].as_array().cloned().unwrap_or_default();
+    let class = |e: &Value| e["ClassIndex"].as_i64().filter(|&c| c < 0).and_then(|c| imports.get((-c - 1) as usize)).and_then(|i| i["ObjectName"].as_str()).unwrap_or("").to_string();
+    let exports = doc["Exports"].as_array_mut().ok_or("the warning has no exports")?;
+    let field = |e: &Value, name: &str| -> Option<(usize, Value)> {
+        let idx = stored_indices(e)?;
+        e["Data"].as_array()?.iter().position(|p| p["Name"] == name).map(|k| (idx[k], e["Data"][k].clone()))
+    };
+    // a stored Collapsed Visibility to copy, and each class's ColorAndOpacity field (from a widget that stores one)
+    let collapsed = exports.iter().filter_map(|e| field(e, "Visibility")).map(|(_, p)| p).find(|p| p["Value"] == "Collapsed")
+        .ok_or("the warning has no collapsed widget to copy")?;
+    let color_of = |cls: &str, exports: &[Value]| exports.iter().filter(|e| class(e) == cls).find_map(|e| field(e, "ColorAndOpacity"));
+    // UAssetAPI writes a zero as 0.0 or "+0"
+    let zero = |v: &Value| v.as_f64().or_else(|| v.as_str()?.parse::<f64>().ok()) == Some(0.0);
+    let backdrop = |e: &Value| class(e) == "MarvelImage" && field(e, "ColorAndOpacity").is_some_and(|(_, p)| {
+        let c = &p["Value"][0]["Value"];
+        c["$type"].as_str().is_some_and(|t| t.contains("FLinearColor")) && ["R", "G", "B"].iter().all(|k| zero(&c[*k]))
+    });
+    let mut edited = Vec::new();
+    for i in 0..exports.len() {
+        let cls = class(&exports[i]);
+        if !WARN_LEAVES.contains(&cls.as_str()) || backdrop(&exports[i]) { continue; }
+        let (slot, _) = field(&exports[i], "Slot").ok_or("a warning widget has no slot")?;
+        if let Some((at, mut p)) = color_of(&cls, exports) {
+            if field(&exports[i], "ColorAndOpacity").is_none() {
+                black(&mut p);
+                put_field(&mut exports[i], at, p)?;
+            }
+        }
+        black(&mut exports[i]["Data"]);
+        put_field(&mut exports[i], slot + VISIBILITY_AFTER_SLOT, collapsed.clone())?;
+        edited.push(i);
+    }
+    if edited.is_empty() { return Err("the warning has no widgets to black out".into()); }
+    Ok(edited)
+}
+
+/// Hide the whole widget tree while keeping its animation and completion callbacks alive, and black out its widgets
+/// (blacken_warning). Preserve every other export as bytes, including Blueprint bytecode and compiled animation data.
+fn hide_warning(doc: &mut Value, raw: &[u8], header: usize) -> Result<Vec<usize>, String> {
     use base64::Engine;
+    let blackened = blacken_warning(doc)?;
     let exports = doc["Exports"].as_array_mut().ok_or("the warning has no exports")?;
     let root = exports.iter().find(|e| e["ObjectName"] == "WidgetTree")
         .and_then(|e| e["Data"].as_array())
@@ -419,7 +522,7 @@ fn hide_warning(doc: &mut Value, raw: &[u8], header: usize) -> Result<(), String
                 "$type": "UAssetAPI.Unversioned.FFragment, UAssetAPI", "SkipNum": 25,
                 "ValueNum": 1, "bIsLast": true, "FirstNum": 28, "bHasAnyZeroes": false, "LastNum": 28
             }));
-        } else {
+        } else if !blackened.contains(&i) {
             let at = export["SerialOffset"].as_u64().and_then(|n| (n as usize).checked_sub(header)).ok_or("invalid warning export offset")?;
             let len = export["SerialSize"].as_u64().ok_or("invalid warning export size")? as usize;
             let bytes = raw.get(at..at.checked_add(len).ok_or("warning export overflow")?).ok_or("warning export outside file")?;
@@ -428,7 +531,7 @@ fn hide_warning(doc: &mut Value, raw: &[u8], header: usize) -> Result<(), String
             export["Extras"] = Value::String(String::new());
         }
     }
-    Ok(())
+    Ok(blackened)
 }
 
 /// Exactly `flipped` bytes changed, each 01 -> 00, size kept.
@@ -527,6 +630,7 @@ async fn make(tool: &Path, id: &str, paks: &Path, work: &Path, out_base: &Path) 
     convert_uassets_to_json(&tool, &usmap, &s(&legacy), &s(&json), &sink).await?;
 
     let (summary, flipped);
+    let mut blackened = Vec::new(); // the warning's widgets blacken_warning edited, checked again once rebuilt
     let has_warn = json.join(format!("{WARN}.json")).is_file(); // a game without this screen: the logos still go
     {
         let mut logo = read_json(&json.join(format!("{LOGO}.json")))?;
@@ -540,7 +644,7 @@ async fn make(tool: &Path, id: &str, paks: &Path, work: &Path, out_base: &Path) 
                 let mut raw = std::fs::read(legacy.join(format!("{WARN}.uexp"))).map_err(|e| format!("{WARN}.uexp: {e}"))?;
                 let header = std::fs::metadata(legacy.join(format!("{WARN}.uasset"))).map_err(|e| e.to_string())?.len() as usize;
                 let changed = shorten_warning(&doc, &mut raw, header).map_err(|e| format!("The warning screen could not be skipped: {e}"))?;
-                hide_warning(&mut doc, &raw, header)?;
+                blackened = hide_warning(&mut doc, &raw, header)?;
                 write_json(&edited.join(format!("{WARN}.json")), &doc)?;
                 changed > 0
             }
@@ -563,6 +667,10 @@ async fn make(tool: &Path, id: &str, paks: &Path, work: &Path, out_base: &Path) 
         if !data.iter().any(|p| p["Name"] == "RenderOpacity" && p["Value"].as_f64().or_else(|| p["Value"].as_str()?.parse::<f64>().ok()) == Some(0.0))
             || data.iter().find(|p| p["Name"] == "Slots") != original["Exports"][root]["Data"].as_array().and_then(|d| d.iter().find(|p| p["Name"] == "Slots")) {
             return Err("the hidden warning did not rebuild correctly".into());
+        }
+        let collapsed = |i: usize| rebuilt["Exports"][i]["Data"].as_array().is_some_and(|d| d.iter().any(|p| p["Name"] == "Visibility" && p["Value"] == "Collapsed"));
+        if let Some(&i) = blackened.iter().find(|&&i| !collapsed(i)) {
+            return Err(format!("the warning's {} did not rebuild blacked out", original["Exports"][i]["ObjectName"].as_str().unwrap_or("widget")));
         }
         for ext in ["uasset", "uexp"] {
             let dst = staged.join(format!("{WARN}.{ext}"));
@@ -1109,18 +1217,36 @@ mod tests {
 
     #[test]
     fn warning_is_invisible_without_removing_its_tree_or_callbacks() {
-        let mut doc = json!({ "Exports": [
+        let frag = |skip: u64, n: u64, first: u64, last: bool| json!({ "$type": "UAssetAPI.Unversioned.FFragment, UAssetAPI", "SkipNum": skip, "ValueNum": n, "bIsLast": last, "FirstNum": first, "bHasAnyZeroes": false, "LastNum": first + n - 1 });
+        let color = |r: f64, a: f64| json!({ "Name": "ColorAndOpacity", "Value": [{ "Value": { "$type": "UAssetAPI.UnrealTypes.FLinearColor, UAssetAPI", "R": r, "G": r, "B": r, "A": a } }] });
+        let mut doc = json!({ "Imports": [{ "ObjectName": "MarvelTextBlock" }, { "ObjectName": "MarvelImage" }], "Exports": [
             { "ObjectName": "Root", "Data": [{ "Name": "Slots", "Value": [1, 2] }],
-              "OriginalUnversionedHeader": { "Fragments": [{ "$type": "UAssetAPI.Unversioned.FFragment, UAssetAPI", "SkipNum": 2, "ValueNum": 1, "bIsLast": true, "FirstNum": 2, "bHasAnyZeroes": false, "LastNum": 2 }] } },
+              "OriginalUnversionedHeader": { "Fragments": [frag(2, 1, 2, true)] } },
             { "ObjectName": "WidgetTree", "SerialOffset": 100, "SerialSize": 3,
               "Data": [{ "Name": "RootWidget", "Value": 1 }] },
-            { "ObjectName": "Callback", "SerialOffset": 103, "SerialSize": 2 }
+            { "ObjectName": "Callback", "SerialOffset": 103, "SerialSize": 2 },
+            // a text with a color and Collapsed, a white one with neither, and the black backdrop
+            { "ObjectName": "Shown", "ClassIndex": -1, "Data": [color(1.0, 1.0), { "Name": "Slot", "Value": 9 }, { "Name": "Visibility", "Value": "Collapsed" }],
+              "OriginalUnversionedHeader": { "Fragments": [frag(1, 1, 1, false), frag(1, 1, 3, false), frag(20, 1, 24, true)] } },
+            { "ObjectName": "White", "ClassIndex": -1, "Data": [{ "Name": "Slot", "Value": 9 }],
+              "OriginalUnversionedHeader": { "Fragments": [frag(3, 1, 3, true)] } },
+            { "ObjectName": "Backdrop", "ClassIndex": -2, "SerialOffset": 100, "SerialSize": 1, "Data": [color(0.0, 1.0), { "Name": "Slot", "Value": 9 }],
+              "OriginalUnversionedHeader": { "Fragments": [frag(5, 1, 5, false), frag(5, 1, 11, true)] } }
         ] });
         hide_warning(&mut doc, &[1, 2, 3, 4, 5], 100).unwrap();
         assert_eq!(doc["Exports"][0]["Data"][0]["Value"], json!([1, 2]));
         assert_eq!(doc["Exports"][0]["Data"][1]["Value"], 0.0);
         assert_eq!(doc["Exports"][1]["Data"], "AQID");
         assert_eq!(doc["Exports"][2]["Data"], "BAU=");
+        // the white text: black, collapsed, its fields in order (1, 3, 24)
+        let white = &doc["Exports"][4];
+        let names: Vec<_> = white["Data"].as_array().unwrap().iter().map(|p| p["Name"].as_str().unwrap()).collect();
+        assert_eq!(names, ["ColorAndOpacity", "Slot", "Visibility"]);
+        assert_eq!(white["Data"][0]["Value"][0]["Value"]["R"], 0.0);
+        assert_eq!(white["Data"][2]["Value"], "Collapsed");
+        assert_eq!(stored_indices(white).unwrap(), [1, 3, 24]);
+        assert_eq!(doc["Exports"][3]["Data"][0]["Value"][0]["Value"]["G"], 0.0, "a stored color goes black");
+        assert_eq!(doc["Exports"][5]["Data"], "AQ==", "the backdrop stays as it was");
         let mut invalid = json!({ "Exports": [{ "ObjectName": "WidgetTree", "Data": [{ "Name": "RootWidget", "Value": 99 }] }] });
         assert!(hide_warning(&mut invalid, &[], 100).is_err());
     }

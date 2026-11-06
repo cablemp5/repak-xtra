@@ -166,6 +166,11 @@ fn deleted_at(dir: &Path) -> Option<SystemTime> {
         .or_else(|| fs::metadata(dir).and_then(|m| m.modified()).ok())
 }
 
+/// At start: deletions past KEEP go even when nothing is deleted or Recently deleted is not opened for a while.
+pub(crate) fn purge_expired() {
+    purge_old(&trash_dir());
+}
+
 fn purge_old(root: &Path) {
     let Ok(entries) = fs::read_dir(root) else { return };
     for entry in entries.flatten() {
