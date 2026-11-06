@@ -39,8 +39,10 @@ pub(crate) fn tune_dotnet_gc() {
 /// alive go; another copy's (the stable app beside the dev copy) stays while it runs.
 pub(crate) fn sweep_work_dirs() {
     sweep_in(&std::env::temp_dir().join("repak-x"));
-    if !another_copy_runs() {
-        prune_vfx_cache(&base_dir());
+    for e in std::fs::read_dir(base_dir()).into_iter().flatten().flatten() {
+        if e.file_name().to_string_lossy().starts_with(RETIRED) {
+            let _ = std::fs::remove_dir_all(e.path());
+        }
     }
 }
 
@@ -52,21 +54,26 @@ fn another_copy_runs() -> bool {
     s.processes().iter().any(|(pid, p)| *pid != me && p.name().to_string_lossy().to_lowercase().starts_with("repak"))
 }
 
-/// The VFX updater's folders a closed app left: every finished run (the next run clears its own anyway), and the game's
-/// decoded files for earlier game builds or mappings (0.8 to 1.4 GB each, 3 of them here on 2026-11-06). The newest
-/// cache stays, so the next check or update does not decode the game again.
-/// Anything written in the last hour stays too: a check or run that started beside this sweep may be filling it.
-fn prune_vfx_cache(base: &Path) {
-    let recent = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok()
-        .and_then(|t| t.elapsed().ok()).is_none_or(|age| age < std::time::Duration::from_secs(3600));
+/// Folders renamed to this prefix are no one's: sweep_work_dirs deletes them in the background.
+const RETIRED: &str = "retired-";
+
+/// In main(), before any command can run: the VFX updater's folders a closed app left are renamed out of use at once
+/// (a rename is instant, deleting GBs is not), so no check can pick one up while it is being deleted. Every finished
+/// run goes (the next run clears its own anyway), and the game's decoded files for earlier game builds or mappings (0.8
+/// to 1.4 GB each, 3 of them here on 2026-11-06). The newest cache stays, so the next check does not decode the game again.
+pub(crate) fn retire_stale_vfx() {
+    if !another_copy_runs() {
+        retire_in(&base_dir());
+    }
+}
+
+fn retire_in(base: &Path) {
     let mut vanilla: Vec<(std::time::SystemTime, PathBuf)> = Vec::new();
+    let mut doomed = Vec::new();
     for e in std::fs::read_dir(base).into_iter().flatten().flatten() {
         let (p, name) = (e.path(), e.file_name().to_string_lossy().to_string());
-        if recent(&p) {
-            continue;
-        }
         if name.starts_with("run-") {
-            let _ = std::fs::remove_dir_all(&p);
+            doomed.push(p);
         } else if name.starts_with("vanilla-") {
             // last written: anything directly in it (index.json, extract, json, niagara_json)
             let t = std::fs::read_dir(&p).into_iter().flatten().flatten().filter_map(|c| c.metadata().ok())
@@ -76,8 +83,10 @@ fn prune_vfx_cache(base: &Path) {
     }
     vanilla.sort();
     vanilla.pop();
-    for (_, p) in vanilla {
-        let _ = std::fs::remove_dir_all(p);
+    doomed.extend(vanilla.into_iter().map(|(_, p)| p));
+    for p in doomed {
+        let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let _ = std::fs::rename(&p, base.join(format!("{RETIRED}{name}"))); // a folder in use (open file) stays as it is
     }
 }
 
@@ -1162,32 +1171,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_closed_apps_runs_and_older_game_caches_go_the_newest_stays() {
+    fn a_closed_apps_runs_and_older_game_caches_are_retired_the_newest_stays() {
         let dir = tempfile::tempdir().unwrap();
         let day = std::time::Duration::from_secs(86_400);
         for (name, age) in [("run-a", 0), ("vanilla-old", 9), ("vanilla-new", 1), ("vanilla-older", 30)] {
             std::fs::create_dir_all(dir.path().join(name)).unwrap();
             let f = std::fs::File::create(dir.path().join(name).join("index.json")).unwrap();
             f.set_modified(std::time::SystemTime::now() - day * age).unwrap();
-            if name != "run-a" { aged_dir(&dir.path().join(name), std::time::SystemTime::now() - day * (age + 1)); } // run-a: just written
         }
-        std::fs::create_dir_all(dir.path().join("run-b")).unwrap();
-        aged_dir(&dir.path().join("run-b"), std::time::SystemTime::now() - day);
-        prune_vfx_cache(dir.path());
+        retire_in(dir.path());
         let mut left: Vec<_> = std::fs::read_dir(dir.path()).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
         left.sort();
-        assert_eq!(left, ["run-a", "vanilla-new"], "an old run and older caches go, a just-written run stays");
-    }
-
-    /// A folder's own modified time (a directory opens on Windows only with backup semantics).
-    fn aged_dir(dir: &Path, t: std::time::SystemTime) {
-        let mut o = std::fs::OpenOptions::new();
-        o.write(true);
-        #[cfg(windows)]
-        std::os::windows::fs::OpenOptionsExt::custom_flags(&mut o, 0x0200_0000);
-        #[cfg(not(windows))]
-        o.read(true).write(false);
-        o.open(dir).unwrap().set_modified(t).unwrap();
+        assert_eq!(left, ["retired-run-a", "retired-vanilla-old", "retired-vanilla-older", "vanilla-new"]);
     }
 
     #[test]

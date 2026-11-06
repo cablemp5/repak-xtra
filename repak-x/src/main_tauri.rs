@@ -8447,7 +8447,8 @@ fn handle_deep_link_url(url: &str, app_handle: &tauri::AppHandle) {
 fn main() {
     xtra_vfx::tune_dotnet_gc(); // repakxtra: before UAssetTool loads, while no other thread runs
     xtra_identity::carry_over_webview_storage(); // repakxtra: before the window opens
-    std::thread::spawn(|| { xtra_vfx::sweep_work_dirs(); xtra_trash::purge_expired() }); // repakxtra: work folders an app closed mid-check left in %TEMP%, stale caches, expired trash
+    xtra_vfx::retire_stale_vfx(); // repakxtra: stale VFX caches renamed out of use before any command can pick one
+    std::thread::spawn(|| { xtra_vfx::sweep_work_dirs(); xtra_trash::purge_expired() }); // repakxtra: work folders an app closed mid-check left in %TEMP%, retired caches, expired trash
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
             // Cleanup old uassettool folder from previous versions
