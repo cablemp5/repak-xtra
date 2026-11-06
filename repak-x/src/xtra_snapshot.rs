@@ -225,7 +225,7 @@ fn export_at(snap: &Path, to: &Path) -> Result<u64, String> {
         z.finish().map_err(|e| e.to_string())?.flush().map_err(|e| e.to_string())
     };
     if let Err(e) = write() { let _ = fs::remove_file(&tmp); return Err(format!("Could not export the snapshot: {e}")) }
-    let _ = fs::remove_file(to);
+    // rename replaces an existing file in one step (MoveFileEx on Windows): the old one stays if it fails
     fs::rename(&tmp, to).map_err(|e| { let _ = fs::remove_file(&tmp); format!("Could not export the snapshot: {e}") })?;
     Ok(list.len() as u64)
 }
@@ -322,6 +322,7 @@ pub async fn snapshot_estimate(state: State<'_, Arc<Mutex<crate::AppState>>>) ->
 /// Setup > Snapshots > Export: snapshot `id`'s mod files as a .zip where the person chose (export_at). Returns the file count.
 #[tauri::command]
 pub async fn snapshot_export(id: String, path: String) -> Result<u64, String> {
+    let _alone = crate::xtra_mutation::alone("a snapshot export")?; // no Delete, cleanup, or pruning takes its source meanwhile
     let snap = snap_dir(&id)?;
     let to = PathBuf::from(path);
     if !to.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")) { return Err("Save it as a .zip file.".into()) }
@@ -493,6 +494,8 @@ mod tests {
         assert_eq!(back.files, 2);
         assert_eq!(fs::read_to_string(root.join(&back.id).join("mods/Sub/Skin_P.pak")).unwrap(), "skin");
         assert!(!t.path().join("out.zip.repakxtra-part").exists());
+        assert_eq!(export_at(&root.join("10"), &out).unwrap(), 2, "an export over an existing file replaces it");
+        assert_eq!(import_at(&root, "30", &out).unwrap().files, 2);
     }
 
     #[test]
