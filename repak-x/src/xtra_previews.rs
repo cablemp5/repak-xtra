@@ -285,14 +285,14 @@ pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: O
 /// 1.1 GB here on 2026-11-06. Only while no generator holds scratch\generator.lock (it locks its first byte, msvcrt),
 /// so a manual run's folders stay. scratch\cache (repacked mods, game renders) stays: it makes the next run fast.
 fn clear_stale_work(scratch: &Path) {
-    let free = match std::fs::OpenOptions::new().read(true).write(true).open(scratch.join("generator.lock")) {
-        Ok(f) => f.try_lock().is_ok(), // dropped at the end of this arm, which releases it
-        Err(_) => true,               // never made: nothing ran here
+    // held until the folders are gone, so no generator starts on them meanwhile (ours starts after this returns)
+    let _held = match std::fs::OpenOptions::new().read(true).write(true).open(scratch.join("generator.lock")) {
+        Ok(f) => match f.try_lock() { Ok(()) => Some(f), Err(_) => return },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None, // never made: nothing ran here
+        Err(_) => return,
     };
-    if free {
-        for e in std::fs::read_dir(scratch.join("work")).into_iter().flatten().flatten() {
-            let _ = if e.path().is_dir() { std::fs::remove_dir_all(e.path()) } else { std::fs::remove_file(e.path()) };
-        }
+    for e in std::fs::read_dir(scratch.join("work")).into_iter().flatten().flatten() {
+        let _ = if e.path().is_dir() { std::fs::remove_dir_all(e.path()) } else { std::fs::remove_file(e.path()) };
     }
 }
 
