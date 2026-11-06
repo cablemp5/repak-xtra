@@ -152,13 +152,13 @@ export function SafetyCard({ alert }: { alert: Alert }) {
             {listed.map(r => {
               const name = shownName(r.path), live = isOnPath(r.path)
               // an off mod needs no "turn it off" advice
-              const why = live ? r.reason : `Off. ${r.reason.replace(/ Turn it off before you play online\.$/, '')}`
+              const why = live ? r.reason : r.reason.replace(/ Turn it off before you play online\.$/, '')
               return (
                 <li key={r.path} className={`su-risk-mod${live ? ' is-on' : ' is-off'}`}>
                   <div className="su-risk-line">
                     <i className="su-risk-dot" aria-hidden="true" />
                     <span className="su-risk-name" title={name}>{name}</span>
-                    <span className="su-risk-why">{live ? '' : 'Off · '}{r.short}</span>
+                    <span className="su-risk-why">{r.short}</span>
                     {/* the few words first, the full reason one click away, like Is it safe? (Progressive Disclosure) */}
                     <button type="button" className="su-risk-more" aria-expanded={open.has(r.path)} aria-label={`Details for ${name}`}
                       onClick={() => setOpen(o => { const n = new Set(o); n.has(r.path) ? n.delete(r.path) : n.add(r.path); return n })}>
