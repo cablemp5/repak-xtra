@@ -1661,7 +1661,8 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
 /* the header's paused state: centered in the 14px spot the running spinner takes, so the words do not shift */
 .scan-status-in .pause-glyph { margin: 0 1px; }
 /* the mod checks' menu (and the Generate menu sharing its rows): Stop and Play at the pause's height */
-.lo-gen-stop :is(.stop-glyph, .play-glyph) { width: 10px; height: 10px; }
+.lo-gen-stop :is(.stop-glyph, .play-glyph) { width: 10px; height: 10px; margin: 0 1px; } /* the pause's 12px slot: the three labels share one left edge */
+.lo-gen-stop .stop-glyph { border-radius: 0; } /* square like the pause bars: one corner language in this menu */
 .play-glyph { width: 8px; height: 8px; flex: none; background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%); }
 /* A Generate button on a PC without the preview kit: grayed out, with a small blue "Set up" that says where to go */
 .is-unavailable { color: var(--text-secondary) !important; opacity: 0.85; }
@@ -2388,6 +2389,7 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 .settings-content .xs-hash { height: 20px; min-height: 0 !important; gap: 6px; padding: 0 7px; border-radius: 5px; background: var(--bg-lighter); color: var(--text-secondary); }
 .settings-content .xs-hash:hover { color: var(--text-primary); }
 .settings-content .xs-hash code { font: 11.5px var(--font-mono); color: var(--text-primary); }
+.settings-content .xs-hash svg { width: 12px !important; height: 12px !important; } /* Settings sizes every icon 16px: the chip's copy icon stays at its text's weight */
 .settings-content .xs-label-row .su-meta { font-size: 12px; }
 .settings-content .xs-note { margin: -4px 0 4px !important; padding: 0 !important; }
 /* Settings > Updates > App files: below the auto-check box, its buttons side by side and never squeezed (Proximity) */
@@ -3230,7 +3232,7 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .why-item div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .why-item b { font-size: 13px; color: var(--text-primary); }
 .why-item span { font-size: 13px; color: var(--text-secondary); }
-.why-item .why-act { flex: none; width: auto !important; }   /* Setup's blue button size (the rule above), one look per button kind */
+.why-item .why-act { flex: none; width: auto !important; align-self: center; }   /* Setup's blue button size (the rule above), one look per button kind */
 
 /* repakxtra: Settings > General > Storage (custom/StorageCleanup.tsx), its own section. Gray notes, a red Delete
    (cable's choice, drawn like Reset to defaults) */

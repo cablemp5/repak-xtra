@@ -37,10 +37,12 @@ fn facts(file: &str) -> Vec<String> {
         }
     }
     let slashed = file.replace('\\', "/");
-    // skinLooks: a skin folder inside its own hero's folder
-    if let Some(c) = re(&SKIN, r"(?i)(?:^|/)(?:characters|hero_st|hero)/(\d{4})/(\d{7})/").captures(&slashed) {
+    // skinLooks: a skin folder inside its own hero's folder. Its animations and sounds are their own fact (m:): they never
+    // change the look, so one of them must not stand in for the skin's look files in a partial list
+    if let Some(c) = re(&SKIN, r"(?i)(?:^|/)(?:characters|hero_st|hero)/(\d{4})/(\d{7})/(?:([^/]+)/)?").captures(&slashed) {
         if c[2].starts_with(&c[1]) {
-            keys.push(format!("s:{}", &c[2]));
+            let motion = c.get(3).is_some_and(|s| matches!(s.as_str().to_lowercase().as_str(), "animation" | "animations" | "anim" | "anims" | "cues"));
+            keys.push(format!("{}:{}", if motion { "m" } else { "s" }, &c[2]));
         }
     }
     // canUpdateVfx: a material instance or a KO prompt
@@ -96,5 +98,15 @@ mod tests {
         assert_eq!(facts("Marvel/Characters/1026/1011300/a.uexp"), v(&["p:1026"]));
         assert_eq!(facts("Marvel/UI/Battle/WBP_Battle_Kill_1026_V3.uasset"), v(&["v", "u"]), "no 7-digit id, so no hero");
         assert!(library_files(&v(&["a/T_Body.uexp", "a/b.bnk"])).is_empty(), "raw files that tell nothing are left out");
+    }
+
+    #[test]
+    fn a_skins_animations_never_stand_in_for_its_look() {
+        let files = v(&[
+            "Marvel/Content/Marvel/Characters/1026/1026001/Animations/A_dance.uasset",
+            "Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_panther.uasset",
+        ]);
+        assert_eq!(facts(&files[0]), v(&["p:1026", "m:1026001", "u"]));
+        assert_eq!(library_files(&files), files, "the mesh is kept: the skin's look is a fact of its own");
     }
 }

@@ -33,7 +33,7 @@ export default function IsItSafe({ alert, onOpenSetup }: { alert: ReturnType<typ
           </ul>
         </div>
         {/* The two checks as rows like Help's (Law of Similarity): label, gray note, one button each */}
-        <div className="xs-row">
+        <div className="xs-row xs-support-first">
           <div className="xs-text">
             <span className="xs-label xs-label-row">Scan this copy
               {hash
