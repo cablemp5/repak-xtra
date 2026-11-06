@@ -2,7 +2,8 @@
 // this PC with each section's size and what deleting it costs. Nothing is picked at first. The button under the list
 // asks again in place, in one line, before anything goes (Law of Proximity: the action sits with what it acts on). Two sections (the VFX game files in %TEMP%, the window's browser caches) are in use while the app runs:
 // picking them marks them, and they clear at the next start. Settings, loadouts, and Repak X's own files are never listed.
-import { Fragment, useEffect, useRef, useState } from 'react'
+import ConfirmRow from './ConfirmRow'
+import { Fragment, useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { HardDrive } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
@@ -41,11 +42,9 @@ export default function StorageCleanup({ alert }: { alert: ReturnType<typeof use
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [asking, setAsking] = useState(false)
   const [busy, setBusy] = useState(false)
-  const cancel = useRef<HTMLButtonElement>(null)
   // a failed read keeps the last list and says so, instead of looking empty
   const load = () => invoke<Section[]>('xtra_storage_sections').then(s => { setSections(s); setFailed(null) }).catch(e => setFailed(String(e)))
   useEffect(() => { void load() }, [])
-  useEffect(() => { if (asking) cancel.current?.focus() }, [asking]) // the question gets the focus, Cancel first
   const shown = (sections ?? []).filter(s => s.bytes > 0 && INFO[s.id])
   const chosen = shown.filter(s => picked.has(s.id))
   const sum = (l: Section[]) => l.reduce((n, s) => n + s.bytes, 0)
@@ -99,11 +98,7 @@ export default function StorageCleanup({ alert }: { alert: ReturnType<typeof use
         </div>}
         {asking && chosen.length > 0 ? (
           // the same one-line question and plain buttons as Setup's removes (Jakob's Law: one confirm look in the app)
-          <div className="su-confirm xs-storage-confirm" role="alert">
-            <span>{question}</span>
-            <button ref={cancel} type="button" className="lo-text-btn" disabled={busy} onClick={() => setAsking(false)}>Cancel</button>
-            <button type="button" className="lo-text-btn su-confirm-yes" disabled={busy} onClick={clear}>{busy ? 'Deleting…' : 'Delete'}</button>
-          </div>
+          <ConfirmRow className="xs-storage-confirm" text={question} yes={busy ? 'Deleting…' : 'Delete'} busy={busy} onYes={() => void clear()} onNo={() => setAsking(false)} />
         ) : shown.length > 0 && (
           <div className="xs-buttons xs-storage-actions">
             <button type="button" className="action-btn settings-reset-btn" disabled={!chosen.length || busy} onClick={() => setAsking(true)}

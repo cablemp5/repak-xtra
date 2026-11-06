@@ -2,7 +2,8 @@
 // a Steam Verify integrity of game files, a reinstall, or a game update. Restore puts back only what is gone.
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { open as pickFile } from '@tauri-apps/plugin-dialog'
+import { open as pickFile, save as pickSave } from '@tauri-apps/plugin-dialog'
+import ConfirmRow from './ConfirmRow'
 import { History } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 
@@ -43,6 +44,16 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
       alert.success('Snapshot imported', `${plural(s.files, 'mod file')}, ${size(s.bytes)}. Restore puts them back when they go missing.`)
     })
   }
+  // its mod files as a .zip to keep elsewhere or move to another PC (Import reads it back)
+  const exportZip = async (s: Snapshot) => {
+    const day = new Date(s.created * 1000).toISOString().slice(0, 10)
+    const to = await pickSave({ title: 'Export snapshot', defaultPath: `repakxtra-snapshot-${day}.zip`, filters: [{ name: 'Zip', extensions: ['zip'] }] }).catch(() => null)
+    if (!to) return
+    await run(`export:${s.id}`, async () => {
+      const n = await invoke<number>('snapshot_export', { id: s.id, path: to })
+      alert.success('Snapshot exported', `${plural(n, 'mod file')} saved. Import a snapshot reads it back.`)
+    })
+  }
   const restore = (id: string) => run(`restore:${id}`, async () => {
     const r = await invoke<{ mods: number; setup: number }>('snapshot_restore', { id })
     alert.success('Snapshot restored', r.mods + r.setup === 0 ? 'Nothing was missing.'
@@ -74,15 +85,13 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
             <span className="su-part-links">
               <button type="button" className="su-link" disabled={locked} onClick={() => restore(s.id)}
                 title="Puts back the files this snapshot has that are gone now. Never overwrites a file">{busy === `restore:${s.id}` ? 'Restoring…' : 'Restore'}</button>
+              <button type="button" className="su-link" disabled={locked} onClick={() => void exportZip(s)}
+                title="Saves its mod files as a .zip, to keep elsewhere or import on another PC">{busy === `export:${s.id}` ? 'Exporting…' : 'Export'}</button>
               <button type="button" className="su-link" disabled={locked} onClick={() => setAsking(s.id)}>{busy === `delete:${s.id}` ? 'Deleting…' : 'Delete'}</button>
             </span>
             {/* asks in its own row, naming it, like Setup's other removes (Law of Proximity) */}
-            {asking === s.id && <div className="su-confirm su-row-confirm" role="alert">
-              {/* one line, the same row and buttons as the bypass's Remove (Jakob's Law: one confirm look in Setup) */}
-              <span>Delete the {when(s.created)} snapshot ({size(s.bytes)})? Your mods stay.</span>
-              <button type="button" className="lo-text-btn" autoFocus onClick={() => setAsking(null)}>Cancel</button>
-              <button type="button" className="lo-text-btn" onClick={() => remove(s.id)}>Delete</button>
-            </div>}
+            {asking === s.id && <ConfirmRow className="su-row-confirm" text={`Delete the ${when(s.created)} snapshot (${size(s.bytes)})? Your mods stay.`}
+              yes="Delete" onYes={() => remove(s.id)} onNo={() => setAsking(null)} />}
           </li>
         ))}
       </ul>}

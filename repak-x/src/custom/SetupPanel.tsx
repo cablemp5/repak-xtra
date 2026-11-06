@@ -1,3 +1,4 @@
+import ConfirmRow from './ConfirmRow'
 import { LOADER_NAME, LOADER_PAK, APP_NAME } from './edition'
 // repakxtra: Setup, what the game needs to load mods (backend: xtra_setup.rs). The UTOC signature bypass ships inside
 // repakxtra; Project Galacta comes from its GitHub releases, with an update check and the release notes.
@@ -116,14 +117,6 @@ const PartMark = ({ ok }: { ok: boolean }) => (
   <span className={`su-part-mark${ok ? ' is-ok' : ''}`} role="img" aria-label={ok ? 'Installed' : 'Not installed'}>{ok && <Check size={14} strokeWidth={2.5} />}</span>
 )
 
-/** A Remove (or a Turn off with a side effect) asks here, in its card: what happens, then Cancel and the action itself. */
-const ConfirmRow = ({ text, yes, onYes, onNo }: { text: string; yes: string; onYes: () => void; onNo: () => void }) => (
-  <div className="su-confirm" role="alert">
-    <span>{text}</span>
-    <button type="button" className="lo-text-btn" onClick={onNo}>Cancel</button>
-    <button type="button" className="lo-text-btn" onClick={onYes}>{yes}</button>
-  </div>
-)
 
 /** The preview kit: what this PC needs to render mod previews (xtra_kit.rs, shared logic in previewKit.tsx). Its two
  *  parts, the kit and Blender, are one row each with their state and links; one main button sets up what is missing. */

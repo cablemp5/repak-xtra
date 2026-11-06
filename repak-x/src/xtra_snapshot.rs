@@ -205,6 +205,31 @@ fn import_at(root: &Path, id: &str, zip: &Path) -> Result<Snapshot, String> {
     out
 }
 
+/// A snapshot's mod files as a .zip at `to`, laid out as import_at reads it (mods\...). Stored, not compressed: paks
+/// barely shrink and stay fast to write. Written under a temporary name, then renamed, so a cut-short zip never looks done.
+/// The loader and plugins stay out: import never takes them either.
+fn export_at(snap: &Path, to: &Path) -> Result<u64, String> {
+    use std::io::Write;
+    let list = files(&snap.join("mods"));
+    if list.is_empty() { return Err("This snapshot has no mod files to export.".into()) }
+    let tmp = to.with_extension("zip.repakxtra-part");
+    let write = || -> Result<(), String> {
+        let mut z = zip::ZipWriter::new(std::io::BufWriter::new(fs::File::create(&tmp).map_err(|e| e.to_string())?));
+        let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored).large_file(true);
+        for (rel, _) in &list {
+            let name = format!("mods/{}", rel.to_string_lossy().replace('\\', "/"));
+            z.start_file(name, opts).map_err(|e| e.to_string())?;
+            let mut f = fs::File::open(snap.join("mods").join(rel)).map_err(|e| e.to_string())?;
+            std::io::copy(&mut f, &mut z).map_err(|e| e.to_string())?;
+        }
+        z.finish().map_err(|e| e.to_string())?.flush().map_err(|e| e.to_string())
+    };
+    if let Err(e) = write() { let _ = fs::remove_file(&tmp); return Err(format!("Could not export the snapshot: {e}")) }
+    let _ = fs::remove_file(to);
+    fs::rename(&tmp, to).map_err(|e| { let _ = fs::remove_file(&tmp); format!("Could not export the snapshot: {e}") })?;
+    Ok(list.len() as u64)
+}
+
 fn list_at(root: &Path) -> Vec<Snapshot> {
     let mut out: Vec<_> = fs::read_dir(root).into_iter().flatten().flatten().filter_map(|e| {
         let id = e.file_name().to_string_lossy().to_string();
@@ -292,6 +317,15 @@ pub async fn snapshot_estimate(state: State<'_, Arc<Mutex<crate::AppState>>>) ->
         let all: Vec<_> = files(&mods).into_iter().chain(setup_files(&win64)).collect();
         Ok((all.len(), all.iter().map(|f| f.1).sum()))
     }).await
+}
+
+/// Setup > Snapshots > Export: snapshot `id`'s mod files as a .zip where the person chose (export_at). Returns the file count.
+#[tauri::command]
+pub async fn snapshot_export(id: String, path: String) -> Result<u64, String> {
+    let snap = snap_dir(&id)?;
+    let to = PathBuf::from(path);
+    if !to.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")) { return Err("Save it as a .zip file.".into()) }
+    blocking(move || export_at(&snap, &to)).await
 }
 
 /// Setup > Snapshots > Import: a .zip the person picked becomes the newest snapshot (import_at).
@@ -452,6 +486,13 @@ mod tests {
         let c = zip_at("c.zip", &[("notes.txt", "n")]);
         assert!(import_at(&root, "12", &c).is_err());
         assert!(fs::read_dir(&root).unwrap().flatten().all(|e| !e.file_name().to_string_lossy().starts_with(".staging")), "no staging left");
+        // an export imports back as the same mod files
+        let out = t.path().join("out.zip");
+        assert_eq!(export_at(&root.join("10"), &out).unwrap(), 2);
+        let back = import_at(&root, "20", &out).unwrap();
+        assert_eq!(back.files, 2);
+        assert_eq!(fs::read_to_string(root.join(&back.id).join("mods/Sub/Skin_P.pak")).unwrap(), "skin");
+        assert!(!t.path().join("out.zip.repakxtra-part").exists());
     }
 
     #[test]
