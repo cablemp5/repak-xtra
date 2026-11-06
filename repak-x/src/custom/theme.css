@@ -3156,8 +3156,10 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 /* a Remove or Delete that asks in its own row: the question drops under the row, full width */
 .su-part:has(.su-row-confirm) { flex-wrap: wrap; }
 .su-row-confirm { flex-basis: 100%; }
+/* Setup's Advanced group: a quiet label over Snapshots and Ban risk, extra space above it to split it from the essentials */
+.su-body > .su-group { margin: 12px 0 -4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
 /* the one that does it reads stronger than Cancel, without red (Von Restorff) */
-.su-confirm .su-confirm-yes, .settings-content .xs-storage-confirm .xs-storage-delete { font-weight: 600 !important; color: var(--text-primary) !important; background: color-mix(in srgb, var(--text-primary), transparent 86%) !important; }
+.su-confirm .su-confirm-yes { font-weight: 600 !important; color: var(--text-primary) !important; background: color-mix(in srgb, var(--text-primary), transparent 86%) !important; }
 /* the section's lead lines up with its list, not indented like a checkbox note */
 .settings-content .xs-storage > .setting-group > p.setting-subtext { margin-left: 0 !important; padding-left: 0 !important; }
 
@@ -3181,17 +3183,19 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .why-item span { font-size: 13px; color: var(--text-secondary); }
 .why-item .why-act { flex: none; height: 28px; padding: 0 12px; font-size: 13px; }
 
-/* repakxtra: Settings > General > Storage (custom/StorageCleanup.tsx), its own section. Yellow warnings, no red */
+/* repakxtra: Settings > General > Storage (custom/StorageCleanup.tsx), its own section. Gray notes, a red Delete
+   (cable's choice, drawn like Reset to defaults) */
 .xs-storage-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
 .settings-content .xs-storage-list label.repakx-checkbox { align-items: flex-start; min-height: 0; }
 .settings-content .xs-storage-list .repakx-checkbox-control { margin-top: 2px; }
 .settings-content .xs-storage-list .repakx-checkbox-label > span.xs-storage-name { display: block; color: var(--text-primary) !important; }
 .xs-storage-size { color: var(--text-secondary); margin-left: 6px; font-variant-numeric: tabular-nums; }
-/* the note under each name: gray, and yellow where deleting loses something for good (the base rule paints every span white) */
+/* the note under each name, gray (the base rule paints every span white) */
 .settings-content .xs-storage-list .repakx-checkbox-label > span.xs-storage-note { display: block; font-size: 12.5px !important; color: var(--text-secondary) !important; }
-.settings-content .xs-storage-list .repakx-checkbox-label > span.xs-storage-note.is-warn { color: #f5d342 !important; }
-[data-theme="light"] .settings-content .xs-storage-list .repakx-checkbox-label > span.xs-storage-note.is-warn { color: #7f6900 !important; }
 .xs-storage-actions { margin-top: 12px; }
+/* Settings paints every action-btn white: the red of Reset to defaults needs the section's weight */
+.settings-content .xs-storage .settings-reset-btn:not(.is-confirm) { color: #f2555a !important; border-color: color-mix(in srgb, #f2555a, transparent 60%) !important; }
+.settings-content .xs-storage .settings-reset-btn:not(.is-confirm):hover:not(:disabled) { background: color-mix(in srgb, #f2555a, transparent 90%) !important; }
 .xs-storage-fail { color: #f5d342 !important; }
 /* the question: its heading yellow, the list in plain text so the heading stands out */
 .xs-storage-confirm { margin-top: 12px; align-items: flex-start; }

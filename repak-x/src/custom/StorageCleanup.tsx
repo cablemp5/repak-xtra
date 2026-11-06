@@ -11,9 +11,9 @@ import { size } from './SnapshotCard'
 
 type Section = { id: string; bytes: number }
 
-/** Each section's name, and what deleting it does. `safe`: rebuilt on its own, so its note stays gray. */
-const INFO: Record<string, { name: string; warn: string; safe?: boolean }> = {
-  caches: { name: 'Caches', warn: 'Rebuilt on their own. The next mod check reads the game files again and takes longer.', safe: true },
+/** Each section's name, and what deleting it does. */
+const INFO: Record<string, { name: string; warn: string }> = {
+  caches: { name: 'Caches', warn: 'Rebuilt on their own. The next mod check reads the game files again and takes longer.' },
   previews: { name: 'Mod previews', warn: 'Deletes every preview you made. Making them again needs the preview kit and takes a while.' },
   kit: { name: 'Preview kit', warn: 'Previews cannot be made until you install the kit again in Setup.' },
   trash: { name: 'Recently deleted', warn: 'Mods you deleted can no longer be restored.' },
@@ -59,7 +59,7 @@ export default function StorageCleanup({ alert }: { alert: ReturnType<typeof use
           {shown.map(s => (
             <Checkbox key={s.id} checked={picked.has(s.id)} disabled={busy || asking} onChange={(v: boolean) => toggle(s.id, v)}>
               <span className="xs-storage-name">{INFO[s.id].name} <span className="xs-storage-size">{size(s.bytes)}</span></span>
-              <span className={`xs-storage-note${INFO[s.id].safe ? '' : ' is-warn'}`}>{INFO[s.id].warn}</span>
+              <span className="xs-storage-note">{INFO[s.id].warn}</span>
             </Checkbox>
           ))}
         </div>}
@@ -71,15 +71,15 @@ export default function StorageCleanup({ alert }: { alert: ReturnType<typeof use
               <ul>{chosen.map(s => <li key={s.id}><b>{INFO[s.id].name}</b>. {INFO[s.id].warn}</li>)}</ul>
               <div className="xs-buttons">
                 <button ref={cancel} type="button" className="action-btn" disabled={busy} onClick={() => setAsking(false)}>Cancel</button>
-                <button type="button" className="action-btn xs-storage-delete" disabled={busy} onClick={clear}>{busy ? 'Deleting…' : `Delete ${size(total)}`}</button>
+                <button type="button" className="action-btn settings-reset-btn is-confirm" disabled={busy} onClick={clear}>{busy ? 'Deleting…' : `Delete ${size(total)}`}</button>
               </div>
             </div>
           </div>
         ) : shown.length > 0 && (
           <div className="xs-buttons xs-storage-actions">
-            <button type="button" className="action-btn" disabled={!chosen.length || busy} onClick={() => setAsking(true)}
+            <button type="button" className="action-btn settings-reset-btn" disabled={!chosen.length || busy} onClick={() => setAsking(true)}
               title={chosen.length ? 'Asks once more before anything is deleted' : 'Tick what to delete first'}>
-              <HardDrive size={14} /> {chosen.length ? `Delete ${size(total)}…` : 'Delete…'}
+              <HardDrive size={14} /> {chosen.length ? `Delete ${size(total)}` : 'Delete'}
             </button>
           </div>
         )}

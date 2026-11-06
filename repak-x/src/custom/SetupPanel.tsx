@@ -445,11 +445,12 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
             )}
           </section>
 
-          <SafetyCard alert={alert} />
-
-          <SnapshotCard alert={alert} />
-
           <PreviewKitCard alert={alert} />
+
+          {/* repakxtra: optional tools under what every player needs (Serial Position: the essentials first) */}
+          <h3 className="su-group">Advanced</h3>
+          <SnapshotCard alert={alert} />
+          <SafetyCard alert={alert} />
         </div>
         {/* One switch for both startup checks (SetupButton: Project Galacta and the preview kit), so it lives under all the cards */}
         <div className="su-modal-foot">
