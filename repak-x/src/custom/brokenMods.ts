@@ -108,7 +108,13 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     let unfinished = false
     // one run waiting its turn is enough: a focus, a Rescan and the game update notice asking meanwhile all get that one
     let waiting: Promise<boolean> | null = null
-    const full = (first?: Promise<boolean>, quiet = false) => waiting ?? (waiting = queued(() => { waiting = null; return chain(first, quiet) }))
+    // a Resume, Refresh list or game update joining a queued install run makes it show its toast after all
+    let waitingQuiet = false
+    const full = (first?: Promise<boolean>, quiet = false) => {
+      if (waiting) { if (!quiet) waitingQuiet = false; return waiting }
+      waitingQuiet = quiet
+      return (waiting = queued(() => { waiting = null; return chain(first, waitingQuiet) }))
+    }
     runFull = full
     // the quick check at once (1.5 s after the list stops changing: an install renames and reloads it a few times),
     // never behind a background scan in flight (one can run for many minutes after a game update), so new mods get
