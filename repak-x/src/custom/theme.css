@@ -3159,8 +3159,8 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 /* a Remove or Delete that asks in its own row: the question drops under the row, full width */
 .su-part:has(.su-row-confirm) { flex-wrap: wrap; }
 .su-row-confirm { flex-basis: 100%; }
-/* Setup's Advanced group: a quiet fold over Snapshots and Ban risk, extra space above it to split it from the essentials */
-.su-body > .su-group { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; margin: 8px 0 0; padding: 2px 0; background: none; border: 0;
+/* Setup's Advanced group: a quiet fold over Snapshots and Ban risk, spaced like the cards (16px each side) */
+.su-body > .su-group { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; margin: 0; padding: 2px 0; background: none; border: 0;
   font: inherit; font-size: 14px; font-weight: 600; color: var(--text-secondary); cursor: pointer; }
 .su-body > .su-group:hover { color: var(--text-primary); }
 .su-body > .su-group .su-caret { transition: transform 150ms ease; }
