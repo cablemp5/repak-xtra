@@ -3144,9 +3144,9 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .mod-type-badge.risk-badge:hover { filter: brightness(1.25); }
 .mod-type-badge.risk-badge:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .mod-type-badge.risk-badge.is-ban { color: #f59a42 !important; border: 1px solid color-mix(in srgb, #f59a42, transparent 55%) !important; }
-[data-theme="light"] .mod-type-badge.risk-badge.is-ban, [data-theme="light"] .mod-state-filter button.is-risk { color: #9a5200 !important; }
-/* its tab fills like Problems does when picked, in the badge's orange */
-.mod-state-filter button.is-risk, .mod-state-filter button.is-risk .mod-state-count, .mod-state-btn.is-risk, .mod-state-menu .sigeon-item.is-risk { color: #f59a42; }
+[data-theme="light"] .mod-type-badge.risk-badge.is-ban { color: #9a5200 !important; }
+/* the card's badge switch reads like Setup's footer switch, not a heading */
+.su-safety-card .repakx-checkbox-label span { font-size: 13px; color: var(--text-secondary); }
 .su-chip.is-danger { color: #f05252; box-shadow: inset 0 0 0 1px color-mix(in srgb, #f05252, transparent 55%); }
 .su-chip.is-warn { color: #f5d342; }
 [data-theme="light"] .su-chip.is-warn { color: #7f6900; }   /* the dark theme's yellow is unreadable on white */

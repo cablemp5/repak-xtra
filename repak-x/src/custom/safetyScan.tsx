@@ -1,14 +1,17 @@
 // repakxtra: the ban risk check (backend: xtra_safety.rs). Marvel Rivals' anti-cheat notice names two .asi files
-// that trip the anti-cheat and mod kinds that give an edge. Mods get a Ban risk badge, a button that opens Why isn't
-// it working? with the reason and a Turn off, and the Library gains a Ban risk tab while any are flagged. Setup lists
-// the plugins beside the game exe with Remove for the flagged ones, and turns off every flagged mod at once (with
-// Undo). Nothing is turned off by itself: the player decides.
+// that trip the anti-cheat and mod kinds that give an edge. Mods get a Ban risk badge (Settings > Warnings or the card
+// can hide it), a button that opens Why isn't it working? with the reason and a Turn off. Setup's Ban risk card lists
+// every flagged mod with its reason and Turn off (one or all, with Undo), and the plugins beside the game exe with
+// Remove for the flagged ones. Nothing is turned off by itself: the player decides.
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { ExternalLink, ShieldAlert, ShieldCheck } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
+import Checkbox from '../components/ui/Checkbox'
 import { openWhy } from './WhyNotWorking'
 import { GAME_RUNNING, turnOffWithUndo } from './keepOne'
+import { nameKey } from './loadoutIdentity'
+import { setPref, useUiPref } from './uiPrefs'
 
 type Alert = ReturnType<typeof useAlert>
 export type Risk = { path: string; reason: string }
@@ -18,7 +21,6 @@ export const NOTICE = 'Marvel Rivals can ban accounts for mods that remove recoi
 /** NetEase's "Use of Mods and Violation Management" announcement (Oct 15, 2026). */
 const NOTICE_URL = 'https://www.marvelrivals.com/20261015/41525_1316797.html'
 const openUrl = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
-export const RISK_TAB_TITLE = 'Mods marked Ban risk: they match what Marvel Rivals bans. Click a badge for why and to turn it off'
 
 const norm = (path: string) => path.replace(/\//g, '\\').toLowerCase().replace(/\.(pak|bak_repak)$/, '')
 /** `state`: null before the first check finishes, 'failed' when it could not run, else 'done'. */
@@ -27,13 +29,17 @@ const listeners = new Set<() => void>()
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
 const set = (next: typeof store) => { store = next; listeners.forEach(l => l()) }
 
+let names = new Map<string, string>()
+const shownName = (path: string) => names.get(norm(path)) ?? nameKey(path)
 export const riskOf = (path: string) => store.risks.get(norm(path))
 export const useRisk = (path: string) => useSyncExternalStore(subscribe, () => store.risks.get(norm(path)))
 export const useRisks = () => useSyncExternalStore(subscribe, () => store.risks)
 const useRiskState = () => useSyncExternalStore(subscribe, () => store.state)
 
 /** Checks again a moment after mods are added, removed, or replaced (names only, so it is quick once details are cached). */
-export function useSafetyWatch(mods: { path: string; modified_date?: number; file_size?: number }[]) {
+export function useSafetyWatch(mods: { path: string; custom_name?: string; modified_date?: number; file_size?: number }[]) {
+  // the Library's names for Setup's list (a renamed mod reads as it does there)
+  names = new Map(mods.filter(m => m.custom_name).map(m => [norm(m.path), m.custom_name!]))
   const key = mods.map(m => `${norm(m.path)}|${m.modified_date ?? ''}|${m.file_size ?? ''}`).sort().join('\n')
   useEffect(() => {
     if (!key) return
@@ -50,6 +56,7 @@ export function useSafetyWatch(mods: { path: string; modified_date?: number; fil
 
 /** A button, so the keyboard reaches it and a screen reader says why: it opens Why isn't it working? for the mod. */
 export function RiskBadge({ path, risk, name }: { path: string; risk: Risk; name?: string }) {
+  if (!useUiPref('ban-risk')) return null
   return (
     <button type="button" className="mod-type-badge risk-badge is-ban" title={`${risk.reason} Click for what to do.`}
       aria-label={`Ban risk: ${risk.reason}`} onClick={e => { e.stopPropagation(); openWhy(path, name) }}>Ban risk</button>
@@ -84,14 +91,18 @@ export function SafetyCard({ alert }: { alert: Alert }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [asking, setAsking] = useState<Plugin | null>(null) // Remove asks first, in the plugin's row
   const all = useRisks(), state = useRiskState()
-  const on = [...all.values()].filter(r => /\.pak$/i.test(r.path)).map(r => ({ path: r.path, enabled: true }))
-  const turnOffAll = async () => {
-    setBusy('mods')
+  const badges = useUiPref('ban-risk')
+  const isOnPath = (p: string) => /\.pak$/i.test(p)
+  // switched-on mods first: they are the ones that matter in a match
+  const listed = [...all.values()].sort((a, b) => Number(isOnPath(b.path)) - Number(isOnPath(a.path)) || shownName(a.path).localeCompare(shownName(b.path)))
+  const on = listed.filter(r => isOnPath(r.path)).map(r => ({ path: r.path, enabled: true }))
+  const turnOff = async (mods: typeof on, what: string) => {
+    setBusy(what)
     try {
       if (await invoke<boolean>('check_game_running').catch(() => false)) { alert.warning(...GAME_RUNNING); return }
       // the folder watcher reloads the Library and the next check re-keys the badges, so nothing to reload here
-      await turnOffWithUndo({ alert, isBlocked: () => false, reload: async () => {} }, on, 'Ban risk mods off',
-        `Turned off ${on.length} mod${on.length === 1 ? '' : 's'}. The game loads the change from the next launch.`)
+      await turnOffWithUndo({ alert, isBlocked: () => false, reload: async () => {} }, mods, 'Ban risk mods off',
+        `Turned off ${mods.length === 1 ? shownName(mods[0].path) : `${mods.length} mods`}. The game loads the change from the next launch.`)
     } finally { setBusy(null) }
   }
   const load = () => invoke<Plugin[]>('xtra_safety_plugins').then(p => { setPlugins(p); setFailed(null) }).catch(e => setFailed(String(e)))
@@ -111,7 +122,7 @@ export function SafetyCard({ alert }: { alert: Alert }) {
   const mods = state === null ? 'Checking your mods…'
     : state === 'failed' && !all.size ? 'Could not be checked. Scan the Library to try again.'
     : all.size === 0 ? 'None match what the notice describes.'
-    : `${all.size} marked, ${on.length ? `${on.length} of them on` : 'all off'}. The Library's Ban risk tab lists them.`
+    : `${all.size} marked, ${on.length ? `${on.length} of them on` : 'all off'}.`
   return (
     <section className="su-card su-safety-card">
       <div className="su-card-head">
@@ -133,11 +144,30 @@ export function SafetyCard({ alert }: { alert: Alert }) {
           </div>
           {/* on the row it acts on, like the plugins' Remove (Law of Proximity) */}
           {on.length > 0 && <span className="su-part-links">
-            <button type="button" className="su-link" disabled={Boolean(busy || asking)} onClick={() => void turnOffAll()}
+            <button type="button" className="su-link" disabled={Boolean(busy || asking)} onClick={() => void turnOff(on, 'mods')}
               title="Switches them off like the Library does. The toast's Undo turns them back on">
               {busy === 'mods' ? 'Turning off…' : `Turn off all ${on.length}`}</button>
           </span>}
         </li>
+        {/* each flagged mod under the summary, with why: the list the Library tab used to hold */}
+        {listed.map(r => {
+          const name = shownName(r.path), live = isOnPath(r.path)
+          // an off mod needs no "turn it off" advice
+          const why = live ? r.reason : `Off. ${r.reason.replace(/ Turn it off before you play online\.$/, '')}`
+          return (
+            <li key={r.path} className={`su-part su-risk-mod${live ? ' is-risk' : ' is-off'}`}>
+              <ShieldAlert size={16} className="su-risk-icon" aria-hidden="true" />
+              <div className="su-part-text">
+                <b title={name}>{name}</b>
+                <span>{why}</span>
+              </div>
+              {live && <span className="su-part-links">
+                <button type="button" className="su-link" disabled={Boolean(busy || asking)} onClick={() => void turnOff([{ path: r.path, enabled: true }], r.path)}>
+                  {busy === r.path ? 'Turning off…' : 'Turn off'}</button>
+              </span>}
+            </li>
+          )
+        })}
         {flagged.map(p => (
           <li key={`${p.place}/${p.name}`} className={`su-part is-${p.kind}`}>
             <ShieldAlert size={16} className="su-risk-icon" aria-hidden="true" />
@@ -165,7 +195,9 @@ export function SafetyCard({ alert }: { alert: Alert }) {
           </div>
         </li>}
       </ul>
-      <p className="su-note">This check reads file names, so it can miss a mod or flag a plain recolor.</p>
+      <p className="su-note">This check reads each mod's file name and the names of the files inside it, so it can miss a mod or flag a plain recolor.</p>
+      {/* the same switch as Settings > Warnings */}
+      <Checkbox checked={badges} onChange={(v: boolean) => setPref('ban-risk', v)}><span>Show the Ban risk badge on mods in the Library</span></Checkbox>
     </section>
   )
 }

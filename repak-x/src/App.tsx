@@ -72,7 +72,7 @@ import { setModsRoot } from './custom/loadoutIdentity' // repakxtra
 import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
 import { rescanVerdicts, useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
-import { useRisks, useSafetyWatch } from './custom/safetyScan' // repakxtra
+import { useSafetyWatch } from './custom/safetyScan' // repakxtra
 import { WhyNotWorking } from './custom/WhyNotWorking' // repakxtra
 import { useScanProgress } from './custom/scanProgress' // repakxtra
 import ScanStatus from './custom/ScanStatus' // repakxtra
@@ -450,7 +450,6 @@ function App() {
   useSafetyWatch(mods) // repakxtra: Ban risk badges (custom/safetyScan.tsx)
   useNexusScan(mods) // repakxtra: Nexus sources for mods installed before they were recorded, once
   const brokenVersion = useBrokenVersion() // repakxtra: the Broken filter re-runs when the verdicts land
-  const riskVersion = useRisks() // repakxtra: and the Ban risk filter when the risks land
   const nexusSources = useNexusSources() // repakxtra: and the Nexus type filter when a source is recorded
   const conflictCount = useConflictCount() // repakxtra
   reportSource.get = () => ({ mods, modDetails, launcherType, gamePath }) // repakxtra: setup report
@@ -3097,14 +3096,14 @@ function App() {
         return sortDirection === 'asc' ? aTime - bTime : bTime - aTime
       }
     })
-  }, [folderMods, modState, isEncrypted, sortBy, sortDirection, brokenVersion, riskVersion])
+  }, [folderMods, modState, isEncrypted, sortBy, sortDirection, brokenVersion])
 
   // repakxtra: the built-in mods head the list (custom/builtinRows.ts), unless a hero, type or tag filter or a folder
   // narrows it: a search matches their names, the On / Off switch their state
   const builtinRows = useBuiltinRows()
   const libraryMods = useMemo(() => selectedCharacters.size || selectedCategories.size || filterTag || selectedFolderId !== 'all' ? filteredMods
     : [...builtinRows.filter(r => (!searchQuery || r.custom_name.toLowerCase().includes(searchQuery.toLowerCase())) && matchesState(modState, isEncrypted)(r as ModRecord)), ...filteredMods],
-  [filteredMods, builtinRows, selectedCharacters, selectedCategories, filterTag, selectedFolderId, searchQuery, modState, isEncrypted, brokenVersion, riskVersion])
+  [filteredMods, builtinRows, selectedCharacters, selectedCategories, filterTag, selectedFolderId, searchQuery, modState, isEncrypted, brokenVersion])
 
   // Keep filteredModsRef in sync for Shift+click range selection (repakxtra: the rows shown, built-ins too)
   filteredModsRef.current = libraryMods

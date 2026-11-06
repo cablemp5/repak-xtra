@@ -27,6 +27,7 @@ const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod
   { key: 'loadout-tag', label: 'In loadout tag, the loadouts a mod is in (I)', group: 'mod' },
   { key: 'encrypted', label: 'Encrypted tag on encrypted mods, and the Encrypted tab (E)', on: true, group: 'mod' },
   { key: 'broken', label: 'Broken and May crash warnings, and the Problems tab (B)', on: true, group: 'warn' },
+  { key: 'ban-risk', label: 'Ban risk badge on mods that match what Marvel Rivals bans', on: true, group: 'warn' },
   { key: 'conflicts', label: 'Conflict warnings, the badge, and the count on Check Conflicts (Shift+C)', on: true, group: 'warn' },
   { key: 'quick-organize', label: 'Show Quick Organize when dropping files on the window' }, // shown under Installing mods
   { key: 'new-strip', label: 'New this week on the Loadouts screen' }, // off by default (NewStripPref)
