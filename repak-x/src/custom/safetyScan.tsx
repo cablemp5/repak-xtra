@@ -7,11 +7,10 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { ChevronRight, ExternalLink, ShieldAlert } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
-import Checkbox from '../components/ui/Checkbox'
 import { openWhy } from './WhyNotWorking'
 import { GAME_RUNNING, turnOffWithUndo } from './keepOne'
 import { nameKey } from './loadoutIdentity'
-import { setPref, useUiPref } from './uiPrefs'
+import { useUiPref } from './uiPrefs'
 
 type Alert = ReturnType<typeof useAlert>
 export type Risk = { path: string; short: string; reason: string }
@@ -92,7 +91,6 @@ export function SafetyCard({ alert }: { alert: Alert }) {
   const [asking, setAsking] = useState<Plugin | null>(null) // Remove asks first, in the plugin's row
   const [open, setOpen] = useState<Set<string>>(new Set()) // the mods whose full reason is showing
   const all = useRisks(), state = useRiskState()
-  const badges = useUiPref('ban-risk')
   const isOnPath = (p: string) => /\.pak$/i.test(p)
   // switched-on mods first: they are the ones that matter in a match
   const listed = [...all.values()].sort((a, b) => Number(isOnPath(b.path)) - Number(isOnPath(a.path)) || shownName(a.path).localeCompare(shownName(b.path)))
@@ -128,7 +126,7 @@ export function SafetyCard({ alert }: { alert: Alert }) {
       <div className="su-card-head">
         <div>
           <h3>Ban risk</h3>
-          <p>{NOTICE} It also names two plugins that trip its anti-cheat. <a className="su-link ob-out" href={NOTICE_URL}
+          <p>{NOTICE} It also names two plugins that trip its anti-cheat. This check reads each mod's file name and the names of the files inside it, so it can miss a mod or flag a plain recolor. <a className="su-link ob-out" href={NOTICE_URL}
             onClick={e => { e.preventDefault(); void openUrl(NOTICE_URL) }}>Read the notice<ExternalLink size={13} aria-hidden="true" /></a></p>
         </div>
         <span className={`su-chip ${banned ? 'is-danger' : on.length ? 'is-risk' : flagged.length ? 'is-warn' : state === 'done' ? 'is-installed' : ''}`}>{chip}</span>
@@ -199,9 +197,6 @@ export function SafetyCard({ alert }: { alert: Alert }) {
           </li>
         ))}
       </ul>
-      <p className="su-note">This check reads each mod's file name and the names of the files inside it, so it can miss a mod or flag a plain recolor.</p>
-      {/* the same switch as Settings > Warnings */}
-      <Checkbox checked={badges} onChange={(v: boolean) => setPref('ban-risk', v)}><span>Show the Ban risk badge on mods in the Library</span></Checkbox>
     </section>
   )
 }
