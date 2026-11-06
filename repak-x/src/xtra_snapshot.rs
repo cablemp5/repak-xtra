@@ -95,14 +95,27 @@ fn setup_key(rel: &Path) -> String {
     rel.to_string_lossy().to_lowercase().trim_end_matches(".disabled").to_string()
 }
 
-/// `prev`: the same folder in the newest snapshot. A file it holds unchanged (same size and time, which fs::copy keeps)
+fn same_bytes(a: &Path, b: &Path) -> bool {
+    use std::io::Read;
+    let (Ok(mut x), Ok(mut y)) = (fs::File::open(a), fs::File::open(b)) else { return false };
+    let (mut p, mut q) = (vec![0u8; 1 << 20], vec![0u8; 1 << 20]);
+    loop {
+        let n = match x.read(&mut p) { Ok(n) => n, Err(_) => return false };
+        if n == 0 { return y.read(&mut q).is_ok_and(|m| m == 0); }
+        if y.read_exact(&mut q[..n]).is_err() || p[..n] != q[..n] { return false; }
+    }
+}
+
+/// `prev`: the same folder in the newest snapshot. A file it holds unchanged (same bytes, checked after size and time)
 /// becomes a hard link to that copy instead of a second copy, so snapshots of a library that barely changed take the
 /// space of one. Snapshot files are only ever read (restore copies them out) or deleted, so a link is never written
 /// through. A link that cannot be made (another drive, FAT) is a plain copy.
 /// shortcut: list sizes still count a linked file in every snapshot, upgrade if Storage must show the real disk use.
 fn copy_all(list: &[(PathBuf, u64)], from: &Path, to: &Path, prev: Option<&Path>) -> std::io::Result<()> {
+    // size and time only rule a file out quickly: installs keep a download's time, so a replaced mod of the same size
+    // can carry the old one's time. A link needs the same bytes
     let same = |a: &Path, b: &Path| match (fs::metadata(a), fs::metadata(b)) {
-        (Ok(x), Ok(y)) => x.len() == y.len() && x.modified().ok().is_some_and(|t| y.modified().ok() == Some(t)),
+        (Ok(x), Ok(y)) => x.len() == y.len() && x.modified().ok().is_some_and(|t| y.modified().ok() == Some(t)) && same_bytes(a, b),
         _ => false,
     };
     for (rel, _) in list {
@@ -343,6 +356,17 @@ mod tests {
         fs::write(root.join("2/mods/Same_P.pak"), "x").unwrap();
         create_at(&root, "3", &mods, &win64).unwrap();
         assert_eq!(fs::read_to_string(root.join("3/mods/Same_P.pak")).unwrap(), "same", "a snapshot copy that no longer matches is not linked");
+        // a replaced mod with the same size and the old one's time (an install keeps a download's time): copied
+        let t0 = std::time::SystemTime::now() - std::time::Duration::from_secs(86_400);
+        let stamp = |p: &Path| fs::File::options().write(true).open(p).unwrap().set_modified(t0).unwrap();
+        fs::write(mods.join("Twin_P.pak"), "aaaa").unwrap();
+        stamp(&mods.join("Twin_P.pak"));
+        create_at(&root, "4", &mods, &win64).unwrap();
+        fs::write(mods.join("Twin_P.pak"), "bbbb").unwrap();
+        stamp(&mods.join("Twin_P.pak"));
+        create_at(&root, "5", &mods, &win64).unwrap();
+        assert_eq!(fs::read_to_string(root.join("5/mods/Twin_P.pak")).unwrap(), "bbbb");
+        assert_eq!(fs::read_to_string(root.join("4/mods/Twin_P.pak")).unwrap(), "aaaa");
     }
 
     #[test]
