@@ -218,7 +218,7 @@ function Row({ mod, rowKey, loadouts, run, needs, partial, waits, made, picked, 
       {run?.report
         ? <button type="button" className={`vf-pill is-${isPartial(run.report) ? 'partial' : status}`} aria-expanded={open} onClick={onToggle} title={open ? 'Hide the report' : 'Show the report'}>
             {run.report.status === 'failed' && <AlertTriangle size={12} className="vf-pill-icon" aria-hidden="true" />}
-            <span className="vf-pill-label">{statusText(run.report)}{run.report.status === 'fixed' ? ` · ${took(run.report.ms)}` : ''}</span>
+            <span className="vf-pill-label">{statusText(run.report)}{run.report.status === 'fixed' ? ` in ${took(run.report.ms)}` : ''}</span>
             <ChevronDown size={12} className="vf-caret" aria-hidden="true" />
           </button>
         : status && (running && step
