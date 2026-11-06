@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { useDialogFocus } from '../custom/dialogFocus'; // repakxtra: focus trap, Esc, focus back to the opener
 import { FiExternalLink, FiHeart } from 'react-icons/fi';
 import { SiDiscord } from 'react-icons/si';
 import { IoLogoGithub } from 'react-icons/io';
@@ -122,6 +123,7 @@ const SPECIAL_THANKS: Contributor[] = [
 ];
 
 export default function CreditsPanel({ onClose, version }: CreditsPanelProps) {
+    const focus = useDialogFocus(true, onClose); // repakxtra
     const handleLinkClick = (e: React.MouseEvent<HTMLElement>, link?: string) => {
         e.preventDefault();
         e.stopPropagation();
@@ -134,6 +136,7 @@ export default function CreditsPanel({ onClose, version }: CreditsPanelProps) {
         <div className="modal-overlay" onClick={onClose}>
             <motion.div
                 className="modal-content credits-modal"
+                ref={focus.ref} onKeyDown={focus.onKeyDown} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Credits" // repakxtra
                 onClick={(e) => e.stopPropagation()}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -141,7 +144,7 @@ export default function CreditsPanel({ onClose, version }: CreditsPanelProps) {
             >
                 <div className="modal-header">
                     <h2>Credits</h2>
-                    <button className="modal-close" onClick={onClose}>×</button>
+                    <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
                 </div>
 
                 <div className="modal-body">

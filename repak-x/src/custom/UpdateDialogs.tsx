@@ -3,10 +3,11 @@
 // Release notes render GitHub-style markdown: headings, "-" or "*" bullets, **bold**, `code` and links. GitHub's generated
 // notes lose their "by @user in <PR link>" tails and the "Full Changelog" line, which read as noise in the app. A release's
 // Downloads section (its file table, build.ps1 -Release) and its "Changelog" heading stay on GitHub: the dialog shows the changes.
-import { type ReactNode, useEffect } from 'react'
+import type { ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { Check, Download, ExternalLink } from 'lucide-react'
 import { REPAKXTRA_VERSION } from './version'
+import { useDialogFocus } from './dialogFocus'
 import './updates.css'
 
 const openUrl = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
@@ -62,15 +63,6 @@ export function ReleaseNotes({ text }: { text: string }) {
 }
 
 /** Esc closes the dialog, only while it is open: a closed one must not swallow Esc meant for text fields. */
-function useEscape(open: boolean, onClose: () => void) {
-  useEffect(() => {
-    if (!open) return
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }
-    window.addEventListener('keydown', esc, true)
-    return () => window.removeEventListener('keydown', esc, true)
-  })
-}
-
 type UpdateInfo = { latest?: string; url?: string; asset_url?: string; changelog?: string; [key: string]: unknown }
 
 /** A newer repakxtra release: its notes, then Download, then Install and restart (the backend's updater does the rest). */
@@ -84,14 +76,14 @@ export function UpdateModal({ isOpen, updateInfo, downloadProgress, downloadedPa
   onOpenReleasePage: (url: string) => void
   onClose: () => void
 }) {
-  useEscape(isOpen && Boolean(updateInfo), onClose)
+  const focus = useDialogFocus(isOpen && Boolean(updateInfo), onClose)
   if (!isOpen || !updateInfo) return null
   const downloading = downloadProgress?.status === 'downloading'
   const ready = downloadProgress?.status === 'ready' || Boolean(downloadedPath)
   const pct = Math.max(0, Math.round(downloadProgress?.percentage ?? 0))
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <motion.div className="modal-content upd-modal" role="dialog" aria-label="Update available" onClick={e => e.stopPropagation()}
+      <motion.div className="modal-content upd-modal" ref={focus.ref} onKeyDown={focus.onKeyDown} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Update available" onClick={e => e.stopPropagation()}
         initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.15 }}>
         <div className="modal-header">
           <div>
@@ -129,11 +121,11 @@ export function UpdateModal({ isOpen, updateInfo, downloadProgress, downloadedPa
 
 /** "What's new": the release notes of a version (after an update, or Settings > View changelog). */
 export function WhatsNewModal({ isOpen, version, changelog, onClose }: { isOpen: boolean; version: string; changelog: string; onClose: () => void }) {
-  useEscape(isOpen, onClose)
+  const focus = useDialogFocus(isOpen, onClose)
   if (!isOpen) return null
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <motion.div className="modal-content upd-modal" role="dialog" aria-label="What's new" onClick={e => e.stopPropagation()}
+      <motion.div className="modal-content upd-modal" ref={focus.ref} onKeyDown={focus.onKeyDown} tabIndex={-1} role="dialog" aria-modal="true" aria-label="What's new" onClick={e => e.stopPropagation()}
         initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.15 }}>
         <div className="modal-header">
           <div>

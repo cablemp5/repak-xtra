@@ -1,6 +1,8 @@
 // repakxtra: upstream renders some controls as clickable divs. Make them reachable with Tab and
 // activatable with Enter/Space without touching the upstream components.
-const SELECTOR = '.filter-section-header, .folder-tree .node-content'
+// Folder pickers in the install, extension, drop, and VFX dialogs: Enter picks the folder, Right and Left open and close it.
+const FOLDER_ROW = '.drop-folder-item, .ext-folder-item, .imp-folder-item'
+const SELECTOR = `.filter-section-header, .folder-tree .node-content, ${FOLDER_ROW}`
 
 // Chromium reveals the last mouse-clicked control's focus ring on any letter shortcut, even without moving focus.
 let pointerFocus: HTMLElement | null = null
@@ -47,5 +49,12 @@ document.addEventListener('keydown', e => {
     e.preventDefault()
     e.stopPropagation() // keep App's global Enter (open details) from also firing
     el.click()
+  }
+  if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && el?.matches?.(FOLDER_ROW)) {
+    const toggle = el.querySelector<HTMLElement>('.folder-toggle')
+    if (!toggle?.querySelector('svg')) return // no subfolders
+    const open = Boolean(el.nextElementSibling) // the children list renders right after the row while open
+    if (open === (e.key === 'ArrowLeft')) toggle.click()
+    e.preventDefault()
   }
 })

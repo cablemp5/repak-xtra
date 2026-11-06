@@ -37,7 +37,7 @@ export function WhyNotWorking({ alert }: { alert: ReturnType<typeof useAlert> })
   const [found, setFound] = useState<Finding[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const trap = useDialogFocus(Boolean(target)) // focus in on each opening, back to the opener on close
+  const trap = useDialogFocus(Boolean(target), () => close()) // focus in on each opening, Esc closes, back to the opener
   const path = target?.path ?? null
   const close = () => setTarget(null)
   useEffect(() => {
@@ -59,12 +59,6 @@ export function WhyNotWorking({ alert }: { alert: ReturnType<typeof useAlert> })
       setFound([...r, ...extra].sort((a, b) => Number(a.level !== 'problem') - Number(b.level !== 'problem')))
     }).catch(e => live && setError(String(e)))
     return () => { live = false }
-  }, [path])
-  useEffect(() => {
-    if (!path) return
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); close() } }
-    window.addEventListener('keydown', esc, true)
-    return () => window.removeEventListener('keydown', esc, true)
   }, [path])
   if (!target || !path) return null
   const name = target.name || fileName(path)

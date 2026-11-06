@@ -225,7 +225,7 @@ export default function ToolsPanel({ onClose, onOpenAssetExplorer, projectGalact
             const result = await invoke('recompress_mods') as any;
             setRecompressResult(result);
             if (result.recompressed > 0) {
-                setRecompressStatus(`Recompressed ${result.recompressed} mod(s)! (${result.already_oodle} already compressed)`);
+                setRecompressStatus(`Recompressed ${result.recompressed} ${result.recompressed === 1 ? 'mod' : 'mods'}! (${result.already_oodle} already compressed)` /* repakxtra */);
             } else if (result.already_oodle === result.total_scanned) {
                 setRecompressStatus('All mods already use Oodle compression');
             } else if (result.total_scanned === 0) {

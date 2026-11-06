@@ -64,9 +64,10 @@ function Notes({ text }: { text: string }) {
 function Changelog({ g, title, onClose, product = `${LOADER_NAME}` }: {
   g: Pick<Galacta, 'latest' | 'published' | 'notes' | 'url'>; title: string; onClose: () => void; product?: string
 }) {
+  const focus = useDialogFocus(true, onClose) // above Setup: its Esc closes only this
   return (
     <div className="modal-overlay su-changelog-overlay" onClick={e => { e.stopPropagation(); onClose() }}>
-      <motion.div className="modal-content su-changelog" role="dialog" aria-label={title} onClick={e => e.stopPropagation()}
+      <motion.div className="modal-content su-changelog" ref={focus.ref} onKeyDown={focus.onKeyDown} tabIndex={-1} role="dialog" aria-modal="true" aria-label={title} onClick={e => e.stopPropagation()}
         initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}>
         <div className="modal-header">
           <div><h2>{title}</h2><p className="su-sub">{product} {g.latest} · {date(g.published)}</p></div>
@@ -229,7 +230,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   const [confirmOff, setConfirmOff] = useState<'disable' | 'remove' | null>(null)
   const [safety, setSafety] = useState(false)
   const [advanced, setAdvanced] = useState(focus === 'snapshots' || focus === 'safety') // a startup toast opens it at its card
-  const trap = useDialogFocus() // focus inside, Tab stays inside, back to the opener on close
+  const trap = useDialogFocus(true, onClose) // focus inside, Tab stays inside, Esc closes (an open changelog first), back to the opener
   const [notes, setNotes] = useState<string | null>(null)
   const [askGalacta, setAskGalacta] = useState(false) // Galacta's Remove asks first
   const { finished, finish } = useFinished() // an install that just finished, said in its card for a moment
@@ -243,15 +244,6 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
     invoke<{ id: string; depth: number }[]>('get_folders')   // subfolders by their path below ~mods ("A/B")
       .then(fs => setFolders((fs ?? []).filter(f => f.depth > 0).map(f => f.id))).catch(() => {})
   }, [])
-  useEffect(() => {
-    const esc = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      e.stopPropagation()
-      if (notes) setNotes(null); else onClose()   // the changelog first, then the panel
-    }
-    window.addEventListener('keydown', esc, true)
-    return () => window.removeEventListener('keydown', esc, true)
-  })
 
   const run = async <T,>(what: string, f: () => Promise<T>) => {
     setBusy(what)

@@ -25,7 +25,7 @@ import jiraSnow from './covers/welcome/jira-snow.webp'
 import esuBlack from './covers/welcome/esu-black.webp'
 import silhouette from './covers/silhouettes/1011.webp'
 import { ShortcutButton, useShortcut } from './shortcut'
-import { ownsTop, useDialogFocus } from './dialogFocus'
+import { useDialogFocus } from './dialogFocus'
 import { createFromMods } from './Loadouts'
 import { type Mod, loadoutable, memberName, modKey, openLoadout, setView, useLoadouts } from './loadoutStore'
 import { isBuiltin } from './builtinRows'
@@ -474,7 +474,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
   const detected = useRef(false)
   const startMods = useRef<Set<string> | null>(null) // the mods there when the flow opened: the rest are "just added"
   const resume = useRef<{ count: number; seen: boolean } | null>(null) // hidden for an install: the mod count then, and whether the install panel opened
-  const focus = useDialogFocus(open) // focus inside, Tab stays inside, back to the opener on close
+  const focus = useDialogFocus(open, () => close()) // focus inside, Tab stays inside, Esc closes (a changelog above it first), back to the opener
 
   const installed = realMods(allMods)
   const hasMods = installed.length > 0
@@ -543,9 +543,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
       const paths = Array.isArray(e.payload) ? e.payload : e.payload?.paths ?? []
       if (!(paths.length === 1 && isKitZip(paths[0]))) hide()
     })
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.isComposing && ownsTop(focus.ref.current)) { e.stopPropagation(); close() } } // a changelog above it takes Esc first
-    window.addEventListener('keydown', esc, true)
-    return () => { asked.current++; off.then(f => f()).catch(() => undefined); window.removeEventListener('keydown', esc, true) }
+    return () => { asked.current++; off.then(f => f()).catch(() => undefined) }
   }, [open, gamePath])
   if (!open) return null
 

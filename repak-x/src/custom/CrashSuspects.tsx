@@ -76,7 +76,7 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
   const [busy, setBusy] = useState(false)
   const [showFile, setShowFile] = useState(false)
   // focus moves into the dialog, Tab stays in it, and it goes back to the toast's button on close
-  const { ref, onKeyDown } = useDialogFocus(Boolean(crash))
+  const { ref, onKeyDown } = useDialogFocus(Boolean(crash), () => setCrash(null))
   useEffect(() => {
     const open = (e: Event) => { setCrash((e as CustomEvent).detail); setSuspects(null); setFailed(false); setShowFile(false) }
     window.addEventListener(OPEN, open)
@@ -94,12 +94,6 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
     })
     return () => { live = false }
   }, [crash])   // once per opening: the list does not reshuffle while it is open
-  useEffect(() => {
-    if (!crash) return
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setCrash(null) } }
-    window.addEventListener('keydown', esc, true)
-    return () => window.removeEventListener('keydown', esc, true)
-  }, [crash])
   const bisect = <BisectPanel deps={deps} mods={mods} />
   if (!crash) return bisect
   const close = () => setCrash(null)

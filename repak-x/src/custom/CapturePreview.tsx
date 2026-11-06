@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { Camera, Lock, RotateCcw } from 'lucide-react'
 import { MatrixLoader } from './motion'
+import { useDialogFocus } from './dialogFocus'
 import { playShutter, primeShutter } from './sounds'
 import type { LoadoutProps } from './Loadouts'
 import { type Loadout, displayName, modKey, modsByKey } from './loadoutStore'
@@ -69,15 +70,7 @@ function CaptureDialog({ p, l, hero, onUse, onClose }: {
     return () => { run.current++; invoke('capture_game_cancel').catch(() => {}) }
   }, [])
   useEffect(() => () => { if (shot) URL.revokeObjectURL(shot.url) }, [shot])
-  useEffect(() => {
-    const esc = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      e.stopPropagation()
-      onClose()
-    }
-    window.addEventListener('keydown', esc, true)
-    return () => window.removeEventListener('keydown', esc, true)
-  })
+  const focus = useDialogFocus(true, onClose)
 
   const retake = () => { setShot(null); take('capture_game_hotkey') }
   /** Closes once the picture is saved; a failed save (onUse says why) keeps the shot here to try again. */
@@ -90,7 +83,7 @@ function CaptureDialog({ p, l, hero, onUse, onClose }: {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <motion.div className="modal-content cp-modal" role="dialog" aria-label="Capture preview in game" onClick={e => e.stopPropagation()}
+      <motion.div className="modal-content cp-modal" ref={focus.ref} onKeyDown={focus.onKeyDown} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Capture preview in game" onClick={e => e.stopPropagation()}
         initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.15 }}>
         <div className="modal-header">
           <div><h2>Capture preview in game</h2><p className="cp-sub">A picture of {who} for {l.name}.</p></div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useDialogFocus } from '../custom/dialogFocus' // repakxtra: focus trap, Esc, focus back to the opener
 import { FaExchangeAlt } from 'react-icons/fa'
 import { IoWarningOutline } from 'react-icons/io5'
 import Switch from './ui/Switch'
@@ -31,6 +32,7 @@ export default function UpdateModModal({ isOpen, onClose, onConfirm, oldMod, new
         }
     }, [isOpen, initialObfuscate])
 
+    const focus = useDialogFocus(isOpen && Boolean(oldMod), onClose) // repakxtra
     if (!isOpen || !oldMod) return null
 
     // Extract filenames for display
@@ -48,6 +50,7 @@ export default function UpdateModModal({ isOpen, onClose, onConfirm, oldMod, new
                 <div className="modal-overlay" onClick={onClose}>
                     <motion.div
                         className="modal-content update-mod-modal"
+                        ref={focus.ref} onKeyDown={focus.onKeyDown} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Update mod" // repakxtra
                         onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}

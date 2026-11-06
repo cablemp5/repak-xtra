@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
+import { useDialogFocus } from '../custom/dialogFocus' // repakxtra: focus trap, Esc, focus back to the opener
 import Switch from './ui/Switch'
 import Checkbox from './ui/Checkbox'
 import { InstallAsLoadout, InstallToLoadouts, commitInstallLoadout, startingLoadouts } from '../custom/installLoadout' // repakxtra
@@ -228,6 +229,7 @@ function parseModType(modType: string | undefined): { character: string | null; 
 export default function InstallModPanel({ mods, allTags, folders = [], currentFolderId, onCreateTag, onDeleteTag, onCreateFolder, onInstall, onCancel, onNewTag, onNewFolder, onMergeHybrid, characterData: heroes }: InstallModPanelProps) {
   // Repaint when the synced hero portraits finish loading.
   useHeroImages()
+  const focus = useDialogFocus() // repakxtra: App's Esc chain closes it
   const [openDropdown, setOpenDropdown] = useState<number | null>(null)
   const [dropdownPos, setDropdownPos] = useState({ x: 0, y: 0 })
   const [modSettings, setModSettings] = useState<Record<number, ModSetting>>(() => buildInitialSettings(mods, currentFolderId))
@@ -366,13 +368,14 @@ export default function InstallModPanel({ mods, allTags, folders = [], currentFo
     <div className="install-mod-overlay">
       <motion.div
         className="install-mod-panel"
+        ref={focus.ref} onKeyDown={focus.onKeyDown} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Install mods" // repakxtra
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.15 }}
       >
         <div className="install-header">
           <h2>Install mods</h2>{/* repakxtra: sentence case, like the other dialogs */}
-          <button className="close-btn" onClick={onCancel}>×</button>
+          <button className="close-btn" onClick={onCancel} aria-label="Close">×</button>
         </div>
 
         {/* Mod Cards */}

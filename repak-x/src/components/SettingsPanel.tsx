@@ -291,7 +291,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                         <span>Faster processing</span>
                       </Checkbox>
                       <p className="setting-subtext">
-                        Installs, conflict checks and previews use 75% of your CPU threads instead of 50%. Leave it off if the PC
+                        Installs, conflict checks, and previews use 75% of your CPU threads instead of 50%. Leave it off if the PC
                         slows down while the game runs.
                       </p>
                     </div>
@@ -517,7 +517,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                   <h3 className="setting-icon-label"><LuUsers size={18} aria-hidden="true" />Community</h3>
                   <div className="setting-group">
                     <p className="setting-subtext xs-note">{/* repakxtra: one gray note like the other sections */}
-                      For help, bug reports or ideas, join a Discord server: cable's for repakxtra, or Repak X's for the app it is built on.
+                      For help, bug reports, or ideas, join a Discord server: cable's for repakxtra, or Repak X's for the app it is built on.
                     </p>
                     <RepakXDiscord />
                     <CableDiscord />{/* repakxtra: cable's server */}

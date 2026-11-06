@@ -21,7 +21,7 @@ export default function InstallButton({ onAddFiles, onAddFolder }: { onAddFiles:
   const choose = async (directory: boolean) => {
     setOpen(false)
     const got = await pick(directory
-      ? { directory: true, multiple: true, title: 'Select Folder(s) to Install' }
+      ? { directory: true, multiple: true, title: 'Select folders to install' }
       : { multiple: true, title: 'Select Mods to Install', filters: [{ name: 'Mod Files', extensions: ['pak', 'zip', 'rar', '7z', OFF_EXT] }] }
     ).catch(() => null)
     const paths = Array.isArray(got) ? got : got ? [got] : []

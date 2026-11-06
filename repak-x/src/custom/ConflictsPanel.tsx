@@ -82,8 +82,8 @@ const KINDS: [RegExp, string][] = [
 ]
 export const kindOf = (file: string) => KINDS.find(([r]) => r.test(`/${file}`))?.[1] ?? 'files'
 
-/** "a", "a and b", "a, b and c" */
-const list = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`)
+/** "a", "a and b", "a, b, and c" */
+const list = (xs: string[]) => (xs.length < 3 ? xs.join(' and ') : `${xs.slice(0, -1).join(', ')}, and ${xs[xs.length - 1]}`)
 const possessive = (name: string) => (name.endsWith('s') ? `${name}'` : `${name}'s`)
 
 /** A group in words: "Both replace Black Panther's materials", "These 3 mods replace Magik's effects and sounds", "Both
@@ -179,7 +179,7 @@ export default function ConflictsPanel({ clashes, mods = [], characterData = [],
   onKeep?: (keep: string, others: Mod[]) => void; onClose: () => void
 }) {
   useHeroImages()
-  const { ref: dialog, onKeyDown: trap } = useDialogFocus() // focus inside, Tab stays inside, back to the opener on close
+  const { ref: dialog, onKeyDown: trap } = useDialogFocus(true, onClose) // focus inside, Tab stays inside, Esc closes, back to the opener on close
   // Every group seen since the screen opened stays, in its place: a priority change makes the app check again, and a
   // group it fixed is no longer in the new list, so it would vanish instead of saying Resolved (as Keep this one does)
   const seen = useRef<ConflictGroup[]>([])
@@ -193,11 +193,6 @@ export default function ConflictsPanel({ clashes, mods = [], characterData = [],
   }, [mods])
   const open = groups.filter(g => !resolved(g, find)).length // still conflicting, as mods are switched here
   const allDone = groups.length > 0 && open === 0
-  useEffect(() => {
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }
-    window.addEventListener('keydown', esc, true)
-    return () => window.removeEventListener('keydown', esc, true)
-  }, [onClose])
   return (
     <div className="modal-overlay" onClick={onClose}>
       <motion.div ref={dialog} className="modal-content cf-modal" role="dialog" aria-modal="true" aria-label="Conflicts" tabIndex={-1}

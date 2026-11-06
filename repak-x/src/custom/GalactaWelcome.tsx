@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { TriangleAlert, X } from 'lucide-react'
 import Checkbox from '../components/ui/Checkbox'
 import { GalactaLogo } from './GalactaMods'
+import { useDialogFocus } from './dialogFocus'
 import swapperShot from '../assets/tools/galacta-swapper.webp'
 
 const HIDE = 'repakxtra.galacta.welcomeHidden' // '1': Don't show this again
@@ -34,15 +35,11 @@ export default function GalactaWelcome({ onClose }: { onClose: () => void }) {
     localStorage.setItem(HIDE, hide ? '1' : '0')
     onClose()
   }
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
-    window.addEventListener('keydown', key)
-    return () => window.removeEventListener('keydown', key)
-  })
+  const focus = useDialogFocus(true, close)
 
   return (
     // tabIndex -1: the app's dialog focus (dialogFocus.ts) then rests focus on the card itself, never its close X
-    <div className="gal-welcome" role="dialog" aria-modal="true" aria-labelledby="gal-welcome-title" tabIndex={-1}>
+    <div className="gal-welcome" ref={focus.ref} onKeyDown={focus.onKeyDown} role="dialog" aria-modal="true" aria-labelledby="gal-welcome-title" tabIndex={-1}>
       <div className="gal-welcome-card">
         <header className="gal-welcome-head">
           <div>
