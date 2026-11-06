@@ -3220,7 +3220,7 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
    (cable's choice, drawn like Reset to defaults) */
 .xs-storage-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
 .settings-content .xs-storage-list label.repakx-checkbox { align-items: flex-start; min-height: 0; }
-.settings-content .xs-storage-list .repakx-checkbox-control { margin-top: 2px; }
+.settings-content .xs-storage-list .repakx-checkbox-control { margin-top: -1px; }   /* centered on the name line, measured */
 .settings-content .xs-storage-list .repakx-checkbox-label > span.xs-storage-name { display: block; color: var(--text-primary) !important; }
 .xs-storage-size { color: var(--text-secondary); margin-left: 6px; font-variant-numeric: tabular-nums; }
 /* the note under each name, gray (the base rule paints every span white) */
