@@ -1199,6 +1199,8 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .lp-name { font: 600 24px/1.2 var(--font-primary); letter-spacing: -0.02em; color: var(--text-primary); background: transparent; border: 1px solid transparent;
   border-radius: 8px; padding: 2px 8px; margin: 0 -8px; outline: none; width: 100%; }
 .lp-name:hover { border-color: var(--panel-border); }
+/* editing (the pencil focuses it while the pointer stays on the pencil): the box shows, neutral like the other fields */
+.lp-name:focus { border-color: color-mix(in srgb, var(--text-primary), transparent 55%); background: var(--field-bg); }
 .lp-group { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
 .lp-group input { height: 32px; padding: 0 12px; width: 240px; font: 13px var(--font-primary); color: var(--text-primary);
   background: var(--field-bg); border: 1px solid var(--panel-border); border-radius: var(--quiet-radius); outline: none; }
@@ -3242,6 +3244,9 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 /* repakxtra: Settings > General > Storage (custom/StorageCleanup.tsx), its own section. Gray notes, a red Delete
    (cable's choice, drawn like Reset to defaults) */
 .xs-storage-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+/* two groups, each under a small gray title, more room between groups than within (Law of Proximity) */
+.xs-storage-group { display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.xs-storage-group:not(:first-child) { margin-top: 8px; }
 .settings-content .xs-storage-list label.repakx-checkbox { align-items: flex-start; min-height: 0; }
 .settings-content .xs-storage-list .repakx-checkbox-control { margin-top: -1px; }   /* centered on the name line, measured */
 .settings-content .xs-storage-list .repakx-checkbox-label > span.xs-storage-name { display: block; color: var(--text-primary) !important; }

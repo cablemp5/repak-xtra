@@ -284,6 +284,11 @@ pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: O
 /// The per-mod work folders (scratch\work\<key>) a generator that was stopped or crashed left, about 50 MB a mod and
 /// 1.1 GB here on 2026-11-06. Only while no generator holds scratch\generator.lock (it locks its first byte, msvcrt),
 /// so a manual run's folders stay. scratch\cache (repacked mods, game renders) stays: it makes the next run fast.
+/// At start too: a run that stopped early leaves its folders until the next Generate otherwise.
+pub(crate) fn sweep_stale_work() {
+    clear_stale_work(&previews_dir().join("work"));
+}
+
 fn clear_stale_work(scratch: &Path) {
     // held until the folders are gone, so no generator starts on them meanwhile (ours starts after this returns)
     let _held = match std::fs::OpenOptions::new().read(true).write(true).open(scratch.join("generator.lock")) {

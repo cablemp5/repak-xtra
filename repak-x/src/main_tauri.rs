@@ -8447,8 +8447,9 @@ fn handle_deep_link_url(url: &str, app_handle: &tauri::AppHandle) {
 fn main() {
     xtra_vfx::tune_dotnet_gc(); // repakxtra: before UAssetTool loads, while no other thread runs
     xtra_identity::carry_over_webview_storage(); // repakxtra: before the window opens
+    xtra_cleanup::on_start(); // repakxtra: Settings > Storage sections marked to clear at the next start
     xtra_vfx::retire_stale_vfx(); // repakxtra: stale VFX caches renamed out of use before any command can pick one
-    std::thread::spawn(|| { xtra_vfx::sweep_work_dirs(); xtra_trash::purge_expired() }); // repakxtra: work folders an app closed mid-check left in %TEMP%, retired caches, expired trash
+    std::thread::spawn(|| { xtra_vfx::sweep_work_dirs(); xtra_trash::purge_expired(); xtra_previews::sweep_stale_work() }); // repakxtra: work folders an app closed mid-check left in %TEMP%, retired caches, expired trash
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
             // Cleanup old uassettool folder from previous versions
@@ -8778,7 +8779,7 @@ fn main() {
             xtra_capture::capture_game_hotkey,
             xtra_capture::capture_game_cancel,
             xtra_setup::setup_bypass_status, // repakxtra: Setup panel
-            xtra_cleanup::xtra_storage_sections, xtra_cleanup::xtra_storage_clear, // repakxtra
+            xtra_cleanup::xtra_storage_sections, xtra_cleanup::xtra_storage_clear, xtra_cleanup::xtra_storage_clear_at_start, // repakxtra
             xtra_why::xtra_why_mod, // repakxtra
             xtra_safety::xtra_safety_plugins, xtra_safety::xtra_safety_remove_plugin, xtra_safety::xtra_safety_mods, // repakxtra
             xtra_snapshot::snapshot_list, xtra_snapshot::snapshot_estimate, xtra_snapshot::snapshot_create, xtra_snapshot::snapshot_missing, xtra_snapshot::snapshot_restore, xtra_snapshot::snapshot_delete, // repakxtra
