@@ -64,7 +64,7 @@ export default function UpdateModModal({ isOpen, onClose, onConfirm, oldMod, new
                         <div className="modal-body">
                             <div className="update-info-grid">
                                 <div className="mod-info-box old">
-                                    <div className="info-label">CURRENT</div>
+                                    <div className="info-label">Current</div>
                                     <div className="info-name" title={oldMod.path}>{oldName}</div>
                                 </div>
 
@@ -78,7 +78,7 @@ export default function UpdateModModal({ isOpen, onClose, onConfirm, oldMod, new
                                 </div>
 
                                 <div className="mod-info-box new">
-                                    <div className="info-label">REPLACE WITH</div>
+                                    <div className="info-label">Replace with</div>
                                     <div className="info-name" title={newSourcePath ?? undefined}>{newName}</div>
                                 </div>
                             </div>

@@ -924,10 +924,15 @@ html[data-motion="off"] .lo-screen { animation: none; }
   padding: 20px 24px !important; max-height: 70vh !important; align-items: start;
 }
 @media (max-width: 760px) { .shortcuts-list { grid-template-columns: 1fr; } }
+/* sentence case, never all caps: weight and color carry the hierarchy */
 .shortcut-group h3 {
-  margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  margin: 0 0 8px; font-size: 13px; font-weight: 600;
   color: var(--text-secondary);
 }
+/* the inherited headings and field labels written in all caps (App, Settings, mod details, Install, credits, Asset
+   Explorer, the old VFX window): sentence case like every other heading here. Hex codes, pills, and buttons keep theirs */
+:is(.setting-section h3, .detail-section h3, .field-label, .info-label, .credits-section-title, .credits-subsection-title,
+  .ae-detail-header h3, .ae-detail-section h4, .vfx-header h1, .vfx-setting-row label) { text-transform: none !important; letter-spacing: normal !important; }
 .shortcut-row {
   padding: 4px 2px !important; background: transparent !important; border-radius: 0 !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04); gap: 12px;
