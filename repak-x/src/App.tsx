@@ -152,6 +152,7 @@ const SettingsPanel = lazy(() => import('./components/SettingsPanel')) // repakx
 import CreditsPanel from './components/CreditsPanel'
 import ToolsPanel from './components/ToolsPanel'
 import Wordmark from './custom/Wordmark' // repakxtra: the logo
+import { plural } from './custom/modName' // repakxtra: "1 mod", "3 mods"
 import ConflictsPanel from './custom/ConflictsPanel' // repakxtra: in place of Repak X's ClashPanel (grouped, in words)
 import { keepThisOne, setModsBlocked } from './custom/keepOne' // repakxtra: Keep this one
 import { NEXUS_TYPE, recordSourceAs, recordSources, renameSource, sourceOf, useNexusScan, useNexusSources } from './custom/nexusSource' // repakxtra: Nexus source
@@ -801,7 +802,7 @@ function App() {
             await invoke('quick_organize', { paths: pathsCopy, targetFolder: folderName })
             await loadMods()
             await loadFolders()
-            setStatus(`Installed ${pathCount} item(s) to ${folderName}!`)
+            setStatus(`Installed ${plural(pathCount, 'item')} to ${folderName}!`)
 
             // Show warning after success if game is running
             if (gameRunningRef.current) {
@@ -821,11 +822,11 @@ function App() {
         {
           loading: {
             title: 'Quick Installing',
-            description: `Copying ${pathCount} file${pathCount > 1 ? 's' : ''} to "${folderName}"...`
+            description: `Copying ${plural(pathCount, 'file')} to "${folderName}"...`
           },
           success: (result) => ({
             title: 'Installation Complete',
-            description: `Installed ${result.count} mod${result.count > 1 ? 's' : ''} to "${result.folder}"`
+            description: `Installed ${plural(result.count, 'mod')} to "${result.folder}"`
           }),
           error: (err) => ({
             title: 'Installation Failed',
@@ -1372,7 +1373,7 @@ function App() {
       const unlistenProgress = await listen('extraction_progress', (event: any) => {
         const p = event.payload
         if (p.status === 'extracting') {
-          setStatus(`Extracting assets — ${p.current_file}`)
+          setStatus(`Extracting assets: ${p.current_file}`)
         }
       })
 
@@ -1876,7 +1877,7 @@ function App() {
       try {
         const charData = await invoke('get_character_data') as any
         setCharacterData(charData)
-        uiLog.debug('CharDB', `Loaded ${charData?.length ?? 0} character skin(s)`)
+        uiLog.debug('CharDB', `Loaded ${plural(charData?.length ?? 0, 'character skin')}`)
       } catch (charErr) {
         uiLog.error('CharDB', `Could not load the character database: ${charErr}`)
       }
@@ -1920,7 +1921,7 @@ function App() {
       syncLoadoutKeys(modList) // repakxtra: loadout members follow moved mods and old saves migrate, before the list shows
       setMods(modList)
       requestAnimationFrame(hideSplash) // repakxtra: after the list paints
-      setStatus(`Loading ${modList.length} mod(s) details...`)
+      setStatus(`Loading details for ${plural(modList.length, 'mod')}...`)
 
       // Also check the base game's Paks folder for Project Galacta, in case it
       // was dropped there instead of into ~mods. Fire-and-forget: it shouldn't
@@ -2401,7 +2402,7 @@ function App() {
 
             await loadMods()
             await loadFolders()
-            setStatus(`Moved ${moveModPaths.length} mod(s) to "${finalFolderName}"`)
+            setStatus(`Moved ${plural(moveModPaths.length, 'mod')} to "${finalFolderName}"`)
 
             return {
               folder: finalFolderName,
@@ -2417,7 +2418,7 @@ function App() {
             await invoke('quick_organize', { paths: pathsCopy, targetFolder: folderName })
             await loadMods()
             await loadFolders()
-            setStatus(`Installed ${pathCount} item(s) to "${folderName}"!`)
+            setStatus(`Installed ${plural(pathCount, 'item')} to "${folderName}"!`)
 
             return { count: countModsInPaths(pathsCopy), folder: folderName, isInstall: true, isMove: false }
           } else {
@@ -2437,9 +2438,9 @@ function App() {
               ? 'Creating Folder & Moving'
               : 'Creating Folder',
           description: isQuickOrganize
-            ? `Creating "${folderName}" and copying ${pathCount} file${pathCount > 1 ? 's' : ''}...`
+            ? `Creating "${folderName}" and copying ${plural(pathCount, 'file')}...`
             : isMoveModsAfterCreate
-              ? `Creating "${folderName}" and moving ${moveModPaths.length} mod${moveModPaths.length > 1 ? 's' : ''}...`
+              ? `Creating "${folderName}" and moving ${plural(moveModPaths.length, 'mod')}...`
               : `Creating folder "${folderName}"...`
         },
         success: (result) => ({
@@ -2451,11 +2452,11 @@ function App() {
                 ? 'Mods Moved'
                 : 'Folder Created',
           description: result.isInstall
-            ? `Created folder and installed ${result.count} mod${result.count > 1 ? 's' : ''}`
+            ? `Created folder and installed ${plural(result.count, 'mod')}`
             : result.isMove
               ? `Created "${result.folder}" and moved "${result.movedFolderId}" into it`
               : result.isMoveMods
-                ? `Created "${result.folder}" and moved ${result.count} mod${result.count > 1 ? 's' : ''} into it`
+                ? `Created "${result.folder}" and moved ${plural(result.count, 'mod')} into it`
                 : `Successfully created "${result.folder}"`
         }),
         error: (err) => ({
@@ -2629,7 +2630,7 @@ function App() {
       for (const modPath of selectedFiles) {
         await invoke('assign_mod_to_folder', { modPath, folderId: effectiveFolderId })
       }
-      setStatus(`Moved ${selectedFiles.size} mod(s) to folder!`)
+      setStatus(`Moved ${plural(selectedFiles.size, 'mod')} to folder!`)
       setSelectedMods(new Set())
       await loadMods()
       await loadFolders()
@@ -2694,7 +2695,7 @@ function App() {
       for (const modPath of selectedFiles) {
         await invoke('add_custom_tag', { modPath, tag: newTagInput.trim() })
       }
-      setStatus(`Added tag "${newTagInput}" to ${selectedFiles.size} mod(s)`)
+      setStatus(`Added tag "${newTagInput}" to ${plural(selectedFiles.size, 'mod')}`)
       setNewTagInput('')
       await loadMods()
       await loadTags()
@@ -2711,7 +2712,7 @@ function App() {
       for (const modPath of selectedFiles) {
         await invoke('add_custom_tag', { modPath, tag })
       }
-      setStatus(`Assigned tag "${tag}" to ${selectedFiles.size} mod(s)`)
+      setStatus(`Assigned tag "${tag}" to ${plural(selectedFiles.size, 'mod')}`)
       await loadMods()
       await loadTags()
     } catch (error) {
@@ -2727,7 +2728,7 @@ function App() {
       for (const modPath of selectedFiles) {
         await invoke('remove_custom_tag', { modPath, tag })
       }
-      setStatus(`Removed tag "${tag}" from ${selectedFiles.size} mod(s)`)
+      setStatus(`Removed tag "${tag}" from ${plural(selectedFiles.size, 'mod')}`)
       await loadMods()
       await loadTags()
     } catch (error) {
@@ -3329,7 +3330,7 @@ function App() {
     // Deliberately not cleared: the startup diagnostics above are exactly the
     // context a failed install needs, and wiping them here meant a bug report
     // never contained them. The user can still clear the drawer by hand.
-    uiLog.info('Install', `Installing ${modsWithSettings.length} mod(s)...`)
+    uiLog.info('Install', `Installing ${plural(modsWithSettings.length, 'mod')}...`)
 
     // Update DRP status to Installing
     invoke('discord_set_installing').catch(console.warn)
@@ -3347,7 +3348,7 @@ function App() {
     let installToast = -1
     const unlistenToastProgress = listen('install_progress', (event: any) => {
       const pct = Math.max(0, Math.min(100, Math.round(Number(event.payload) || 0)))
-      if (installToast >= 0) alert.updateToast(installToast, { progressValue: pct, description: `${pct}% · ${modCount} mod${modCount > 1 ? 's' : ''}` })
+      if (installToast >= 0) alert.updateToast(installToast, { progressValue: pct, description: `${pct}% · ${plural(modCount, 'mod')}` })
     })
     installToast = alert.promise(
       (async () => {
@@ -3442,11 +3443,11 @@ function App() {
       {
         loading: {
           title: 'Installing Mods',
-          description: `Processing ${modCount} mod${modCount > 1 ? 's' : ''}...`
+          description: `Processing ${plural(modCount, 'mod')}...`
         },
         success: (result) => ({
           title: 'Installation Complete',
-          description: `Successfully installed ${result.count} mod${result.count > 1 ? 's' : ''}`,
+          description: `Successfully installed ${plural(result.count, 'mod')}`,
           progressValue: undefined, // repakxtra: back to the auto-dismiss bar
         }),
         error: (err) => ({
@@ -3837,7 +3838,7 @@ function App() {
         title="Delete Tag"
         description={
           deleteTagConfirm
-            ? `"${deleteTagConfirm.tag}" is applied to ${deleteTagConfirm.modCount} mod${deleteTagConfirm.modCount > 1 ? 's' : ''}. This will remove it from all mods.`
+            ? `"${deleteTagConfirm.tag}" is applied to ${plural(deleteTagConfirm.modCount, 'mod')}. This will remove it from all mods.`
             : ''
         }
         confirmText="Delete"

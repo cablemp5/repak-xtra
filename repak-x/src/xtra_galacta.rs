@@ -537,7 +537,7 @@ pub async fn xtra_galacta_make(window: tauri::Window, path: String, name: String
     if !crate::xtra_vfx::xtra_vfx_claim(window.clone(), token.clone(), Some("Making a Galacta version".into())) {
         return Err("Wait for the Mod Updater to finish first.".into());
     }
-    let work = std::env::temp_dir().join("repak-x").join("galacta").join(&token);
+    let work = std::env::temp_dir().join("repak-x").join("galacta").join(format!("{}-{token}", std::process::id())); // <pid>-: sweep_work_dirs clears it after a closed run
     let built = build(&utoc, &original, &name, &paks, &usmap_path, &work).await;
     crate::xtra_vfx::xtra_vfx_release(window.clone(), token);
     let placed = match built {

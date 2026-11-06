@@ -2,7 +2,7 @@
 // naming the mod, the two files in one panel (now, then the new one), one choice for the name with what it changes, the
 // obfuscation switch as the install dialog has it, then Cancel and Replace. Loadouts follow a new name (App.tsx
 // handleConfirmUpdate).
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { RefreshCw } from 'lucide-react'
 import Switch from '../components/ui/Switch'
@@ -59,12 +59,7 @@ export default function UpdateModDialog(props: Props) {
 function Dialog({ onClose, onConfirm, oldMod, newSourcePath, initialObfuscate }: Props & { oldMod: NonNullable<Props['oldMod']> }) {
   const [keepName, setKeepName] = useState(true)
   const [obfuscate, setObfuscate] = useState(initialObfuscate === true)
-  const focus = useDialogFocus()
-  useEffect(() => {
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }
-    window.addEventListener('keydown', esc, true)
-    return () => window.removeEventListener('keydown', esc, true)
-  }, [onClose])
+  const focus = useDialogFocus(true, onClose)
 
   const oldFile = fileOf(oldMod.path).replace(/\.bak_repak$/i, '.pak') // a mod that is off ends in .bak_repak on disk: shown as its .pak
   const newFile = newSourcePath ? fileOf(newSourcePath) : 'the new file'

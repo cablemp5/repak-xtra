@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import './ShortcutsHelpModal.css'
 import { SHORTCUT_GROUPS } from '../custom/hotkeys'
+import { useDialogFocus } from '../custom/dialogFocus' // repakxtra: focus trap, Esc, focus back to the opener
 
 type ShortcutsHelpModalProps = {
     isOpen: boolean
@@ -10,12 +11,14 @@ type ShortcutsHelpModalProps = {
 // repakxtra: one grouped list shared with the shortcut handlers (custom/hotkeys.ts)
 
 function ShortcutsHelpModal({ isOpen, onClose }: ShortcutsHelpModalProps) {
+    const focus = useDialogFocus(isOpen) // repakxtra: App's Esc chain closes it
     if (!isOpen) return null
 
     return (
         <div className="modal-overlay" onClick={onClose}>
             <motion.div
                 className="modal-content shortcuts-modal"
+                ref={focus.ref} onKeyDown={focus.onKeyDown} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" // repakxtra
                 onClick={(e) => e.stopPropagation()}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}

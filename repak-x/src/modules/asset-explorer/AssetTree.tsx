@@ -493,7 +493,7 @@ const FileRow = React.memo(function FileRow({
             onClick={() => onSelect(node)}
             onDoubleClick={(e) => { e.stopPropagation(); onReveal(mod.path) }}
             onContextMenu={(e) => onCopy(e, node.id, row.path)}
-            title={`${row.path}\n${mod.display_name}\n\nDouble click to show this mod in Repak X\nRight click to copy full path\nCtrl + right click: name only\nShift + right click: without extension\nShift + F10: more actions`}
+            title={`${row.path}\n${mod.display_name}\n\nDouble-click to show this mod in the Library\nRight-click to copy full path\nCtrl + right click: name only\nShift + right click: without extension\nShift + F10: more actions`}
         >
             <span className="ae-chevron" />
             <span className={`ae-kind-dot ae-kind-${row.kind}`} title={KIND_LABELS[row.kind]} />

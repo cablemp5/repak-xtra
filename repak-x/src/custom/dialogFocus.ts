@@ -95,8 +95,9 @@ if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined') 
   }).observe(document.body, { childList: true, subtree: true })
 }
 
-/** `active`: for a component that stays mounted and shows its dialog only sometimes (FirstRun). */
-export function useDialogFocus<T extends HTMLElement = HTMLDivElement>(active = true) {
+/** `active`: for a component that stays mounted and shows its dialog only sometimes (FirstRun).
+ *  `onEscape`: Esc closes it, for dialogs App's own Esc chain does not cover. */
+export function useDialogFocus<T extends HTMLElement = HTMLDivElement>(active = true, onEscape?: () => void) {
   const ref = useRef<T>(null)
   const opener = useRef<HTMLElement | null>(null)
   useEffect(() => {
@@ -123,6 +124,11 @@ export function useDialogFocus<T extends HTMLElement = HTMLDivElement>(active = 
   }, [active])
   const onKeyDown = (e: React.KeyboardEvent) => {
     const el = ref.current
+    if (e.key === 'Escape' && onEscape && !e.defaultPrevented && !e.nativeEvent.isComposing && el && ownsTop(el)) {
+      e.stopPropagation() // App's Esc chain behind it stays quiet
+      onEscape()
+      return
+    }
     if (e.key !== 'Tab' || e.defaultPrevented || !el || !ownsTop(el)) return // a dialog opened inside this one traps its own Tab
     const all = focusables(el)
     const to = tabTarget(all.indexOf(document.activeElement as HTMLElement), all.length, e.shiftKey)

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useDialogFocus } from '../custom/dialogFocus'; // repakxtra: focus trap, Esc, focus back to the opener
 import { invoke } from '@tauri-apps/api/core';
 import { VscFolder, VscFolderOpened, VscChevronRight, VscChevronDown, VscClose, VscNewFolder, VscPackage } from 'react-icons/vsc';
 import { MdExtension, MdCreateNewFolder, MdDriveFileMoveOutline } from 'react-icons/md';
@@ -191,6 +192,7 @@ const ExtensionModOverlay = ({
     const [isInstalling, setIsInstalling] = useState(false);
     const [isCreatingFolder, setIsCreatingFolder] = useState(false);
     const folderTreeRef = useRef<HTMLDivElement | null>(null);
+    const focus = useDialogFocus(isVisible, onCancel); // repakxtra
 
     // Contents of the incoming archive, resolved when the overlay opens
     const [entries, setEntries] = useState<ArchiveModEntry[]>([]);
@@ -387,6 +389,7 @@ const ExtensionModOverlay = ({
                 >
                     <motion.div
                         className="extension-panel"
+                        ref={focus.ref} onKeyDown={focus.onKeyDown} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Mod from the extension" // repakxtra
                         initial={{ y: 50, opacity: 0, scale: 0.95 }}
                         animate={{ y: 0, opacity: 1, scale: 1 }}
                         exit={{ y: 50, opacity: 0, scale: 0.95 }}
@@ -401,8 +404,8 @@ const ExtensionModOverlay = ({
                                 <h2>Mod from Repak X Extension</h2>
                                 <p className="file-name" title={filePath ?? undefined}>{fileName}</p>
                             </div>
-                            <button className="close-btn" onClick={onCancel}>
-                                <VscClose />
+                            <button className="close-btn" onClick={onCancel} aria-label="Close">
+                                <VscClose aria-hidden />
                             </button>
                         </div>
 

@@ -176,7 +176,7 @@ export default function LogDrawer({
     if (visibleLogs.length === 0) return
     try {
       await navigator.clipboard.writeText(visibleLogs.map(formatLogLine).join('\n'))
-      showFeedback('all', `${visibleLogs.length} line(s) copied`)
+      showFeedback('all', `${visibleLogs.length} ${visibleLogs.length === 1 ? 'line' : 'lines'} copied` /* repakxtra */)
     } catch (err) {
       console.error('Failed to copy all logs:', err)
     }

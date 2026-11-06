@@ -841,7 +841,7 @@ function AssetDetail({ node, index, conflicting, onClose, onRevealMod }: AssetDe
                             key={mod.path}
                             className={`ae-owner ${mod.path === index.mods[node.row.modIndex].path ? 'is-source' : ''}`}
                             onDoubleClick={() => onRevealMod(mod.path)}
-                            title={`${mod.path}\n\nDouble click to select in Repak X`}
+                            title={`${mod.path}\n\nDouble-click to select in the Library`}
                         >
                             <span className={`ae-mod-dot ${mod.enabled ? 'is-on' : 'is-off'}`} />
                             <span className="ae-owner-name">{mod.display_name}</span>

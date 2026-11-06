@@ -247,7 +247,7 @@ function End({ view, busy, close, undo, turnOff }: {
         <ul className="bs-culprits">{e.culprits.map((c, i) => <li key={c} className="bs-culprit" style={{ '--i': i } as React.CSSProperties}><Check size={16} aria-hidden="true" /><span className="cs-name"><ModName name={nameKey(c)} /></span></li>)}</ul>
         <p className="cs-note">{one ? 'The game played fine with only this mod off.' : `Each of these ${e.culprits.length} mods crashes the game, and it played fine with all of them off.`} Every mod is back as it was, {one ? 'this one' : 'these'} included, so turn {one ? 'it' : 'them'} off to play without the crash.</p>
       </>}
-      {e.kind === 'not-mods' && <p className="bs-lead">The game crashed with all {view.last.start.length} mods off, so the crash also happens without these mods. They are back on. Verify the game files in Steam, or update your graphics driver.</p>}
+      {e.kind === 'not-mods' && <p className="bs-lead">The game crashed with every mod off, so the crash also happens without these mods. They are back on. Verify the game files in Steam, or update your graphics driver.</p>}
       {e.kind === 'unsure' && <>
         <p className="bs-lead">The game kept crashing with <strong><ModName name={nameKey(e.culprit)} /></strong> off, and every other mod tested fine. The crash may not happen every time, or it needs several mods at once.</p>
         <p className="cs-note">Every mod is back as it was. Test again and repeat the same thing each launch, or turn off the mods you added most recently.</p>
