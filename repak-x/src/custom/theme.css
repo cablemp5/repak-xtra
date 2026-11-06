@@ -3150,6 +3150,8 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .su-chip.is-danger { color: #f05252; box-shadow: inset 0 0 0 1px color-mix(in srgb, #f05252, transparent 55%); }
 .su-chip.is-warn { color: #f5d342; }
 [data-theme="light"] .su-chip.is-warn { color: #7f6900; }   /* the dark theme's yellow is unreadable on white */
+.su-chip.is-risk { color: #f59a42; }   /* flagged mods on: the shield's orange */
+[data-theme="light"] .su-chip.is-risk { color: #9a5200; }
 .su-risk-icon { flex: none; color: var(--text-secondary); }
 .su-part.is-risk .su-risk-icon { color: #f59a42; }   /* flagged mods on: the Library badge's orange */
 [data-theme="light"] .su-part.is-risk .su-risk-icon { color: #9a5200; }

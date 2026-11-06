@@ -131,7 +131,7 @@ export function SafetyCard({ alert }: { alert: Alert }) {
           <p>{NOTICE} It also names two plugins that trip its anti-cheat. <a className="su-link ob-out" href={NOTICE_URL}
             onClick={e => { e.preventDefault(); void openUrl(NOTICE_URL) }}>Read the notice<ExternalLink size={13} aria-hidden="true" /></a></p>
         </div>
-        <span className={`su-chip ${banned ? 'is-danger' : on.length || flagged.length ? 'is-warn' : state === 'done' ? 'is-installed' : ''}`}>{chip}</span>
+        <span className={`su-chip ${banned ? 'is-danger' : on.length ? 'is-risk' : flagged.length ? 'is-warn' : state === 'done' ? 'is-installed' : ''}`}>{chip}</span>
       </div>
       {failed && <p className="su-note">Could not read the game folder. {failed} <button type="button" className="su-link" onClick={() => void load()}>Try again</button></p>}
       {/* mods first, as a part row like the plugins below it: the finding a player acts on leads (Serial Position) */}
