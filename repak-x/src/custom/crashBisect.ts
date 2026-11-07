@@ -93,7 +93,7 @@ export function drift(now: Mod[], b: Bisect): string | null {
   const have = new Set(now.map(m => stem(m.path)))
   const start = new Set(b.start.map(stem))
   const gone = b.start.filter(p => !have.has(stem(p))).length
-  const added = now.filter(m => m.enabled !== false && !start.has(stem(m.path))).length
+  const added = now.filter(m => m.enabled !== false && !isModLoader(m.path) && !start.has(stem(m.path))).length // a loader is never tested
   if (!gone && !added) return null
   return [gone && `${gone} of the tested mods ${gone === 1 ? 'is' : 'are'} gone`, added && `${added} other mod${added === 1 ? ' was' : 's were'} turned on`]
     .filter(Boolean).join(' and ') + '.'
@@ -224,6 +224,7 @@ async function restore(d: KeepDeps, b: Bisect) {
 if (import.meta.env.DEV) {
   const mods = Array.from({ length: 30 }, (_, i) => `m${i}.pak`)
   console.assert(halve(['a', 'b', 'c']).join('|') === 'a,b|c', 'odd counts keep the bigger half on')
+  console.assert(drift([{ path: 'C:/g/~mods/!ProjectGalacta_9999999_P.pak', enabled: true }, { path: 'C:/g/~mods/a.pak', enabled: true }], firstTest(['C:/g/~mods/a.pak'])) === null, 'an enabled loader is no drift')
   // a player who answers truthfully: the game crashes while `cause` is on
   const play = (cause: (on: (p: string) => boolean) => boolean, start = mods) => {
     let b = firstTest(start)
