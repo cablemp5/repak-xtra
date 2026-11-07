@@ -94,7 +94,7 @@ type ToastLike = { color?: string; title?: unknown; description?: unknown; actio
 let held: ((t: ToastLike) => void) | null = null
 /** The welcome flow (FirstRun.tsx) holds every toast while it is open: none show, each goes to `to` instead, which says a
  *  warning on its own page. null lets them show again. */
-export const holdToasts = (to: typeof held) => { held = to }
+export const holdToasts = (to: typeof held) => { held = to; document.documentElement.toggleAttribute('data-toasts-held', Boolean(to)) } // theme.css hides toasts already up
 export const quietToast = (t: ToastLike) => held ? (held(t), true) :
   minimalToasts() && (!t.color || t.color === 'success' || t.color === 'primary' || t.color === 'default') && !t.action && !t.isLoading && !t.keep
 

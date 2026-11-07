@@ -3274,3 +3274,4 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .crash-screen h2 { margin: 0; font-size: 18px; font-weight: 600; }
 .crash-screen p { margin: 0; color: var(--text-secondary); }
 .crash-screen pre { max-width: min(640px, 100%); margin: 4px 0; padding: 10px 12px; border-radius: 8px; background: var(--bg-light); color: var(--text-secondary); font: 12px 'Geist Mono', monospace; white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }
+html[data-toasts-held] .toast-container { display: none; }   /* the welcome flow is open: no toasts, also ones shown before it (uiPrefs.tsx holdToasts) */
