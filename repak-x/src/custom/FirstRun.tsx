@@ -5,7 +5,7 @@ import { LOADER_NAME, LOADER_PAK, APP_NAME } from './edition'
 // background setup that installs only what is missing, then Make it yours (previews, Discord, the shortcut, sounds), then
 // the first loadout: from the mods already there, or a mod installed right there as one. Finish lands on Loadouts home. Mods dropped on the window hide the flow for the install,
 // and it comes back after, except on the first loadout page, where a drop or a picked mod ends the flow. The tour plays
-// after the first install that follows it.
+// once Install is pressed on the first mod or loadout after it.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
@@ -48,7 +48,7 @@ type Auto = 'checking' | 'game-open' | 'no-game' | 'working' | 'failed' | 'done'
 
 const NEXUS = 'https://www.nexusmods.com/marvelrivals/mods'
 const ONBOARDED = 'repakxtra.onboarded2'
-const TOUR_AFTER = 'repakxtra.tourAfterInstall' // set when the flow closes: the next finished install plays the tour
+const TOUR_AFTER = 'repakxtra.tourAfterInstall' // set when the flow closes: the next Install pressed plays the tour
 /** Mods a person installed: not the loader pak or built-ins. */
 const realMods = (mods: Mod[]) => mods.filter(m => loadoutable(modKey(m.path)) && !isBuiltin(m.path))
 const openUrl = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
@@ -531,11 +531,11 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
     if (!localStorage.getItem('hasSeenOnboarding')) localStorage.setItem(TOUR_AFTER, '1')
     setOpen(false)
   }
-  /** The first install after the flow, once its files and loadout are in (App's repakxtra-installed): the tour. */
+  /** The first Install pressed after the flow (App's repakxtra-install-started): the tour, while the files go in. */
   useEffect(() => {
     const done = () => { if (localStorage.getItem(TOUR_AFTER)) { localStorage.removeItem(TOUR_AFTER); onTour() } }
-    window.addEventListener('repakxtra-installed', done)
-    return () => window.removeEventListener('repakxtra-installed', done)
+    window.addEventListener('repakxtra-install-started', done)
+    return () => window.removeEventListener('repakxtra-install-started', done)
   }, [])
   /** Out of the way for an install (App's drop handler shows its panel), back when the panel closes, installed or
    *  cancelled. Not marked seen: a restart while hidden shows the flow again. */

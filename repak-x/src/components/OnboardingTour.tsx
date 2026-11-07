@@ -106,6 +106,7 @@ function computeTooltipPosition(targetRect: DOMRect | null, placement: Placement
 function OnboardingTour({ isOpen, onClose }: OnboardingTourProps) {
     const [currentStep, setCurrentStep] = useState(0)
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null)
+    const [radius, setRadius] = useState(8) // repakxtra: the outline's corners follow the target's, plus the gap
     const [tooltipPos, setTooltipPos] = useState<TooltipPosition>({ top: 0, left: 0, actualPlacement: 'bottom', arrowOffset: 50 })
     const tooltipRef = useRef<HTMLDivElement | null>(null)
 
@@ -116,6 +117,9 @@ function OnboardingTour({ isOpen, onClose }: OnboardingTourProps) {
 
         const rect = getTargetRect(step.target)
         setTargetRect(rect)
+        const el = document.querySelector<HTMLElement>(step.target) // repakxtra
+        const r = el ? getComputedStyle(el).borderTopLeftRadius : ''
+        if (rect) setRadius((r.endsWith('%') ? Math.min(rect.width, rect.height) * parseFloat(r) / 100 : parseFloat(r) || 0) + PADDING)
 
         if (rect && tooltipRef.current) {
             const tw = tooltipRef.current.offsetWidth
@@ -199,6 +203,7 @@ function OnboardingTour({ isOpen, onClose }: OnboardingTourProps) {
                     <motion.div
                         key={`cutout-${currentStep}`}
                         className="onboarding-cutout"
+                        style={{ borderRadius: radius }} // repakxtra
                         initial={false}
                         animate={{
                             top: cutoutStyle.top,
