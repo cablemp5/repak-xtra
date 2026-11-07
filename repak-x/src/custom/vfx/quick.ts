@@ -14,7 +14,7 @@ import { renameSource } from '../nexusSource'
 import { readFilter } from './filter'
 import { fixInVfxWindow, openVfxWindow, sendReport, utocOf } from './handoff'
 import { STEPS, fixVfxMod, incompleteAssets, repairOutcome, type VfxReport } from './pipeline'
-import { CHECK_RUN, claimRun, newRunToken, readNaming, readOriginals, readAskReview, readRepairPolicy, readSafeOff, readSafety, releaseRun, runLock } from './prefs'
+import { claimRun, newRunToken, readNaming, readOriginals, readAskReview, readRepairPolicy, readSafeOff, readSafety, releaseRun, runLock } from './prefs'
 
 type Alert = ReturnType<typeof useAlert>
 let reserved = false // one right-click update at a time in this window, taken before anything is awaited
@@ -57,7 +57,7 @@ async function findUsmap(): Promise<string | null> {
 export async function updateVfxModInPlace(mod: { path: string; utoc_path?: string | null }, alert: Alert, reload: () => unknown) {
   const name = nameOf(mod.path)
   const open = { label: 'Open Mod Updater', onClick: () => { void openVfxWindow() } }
-  const busy = (what?: string | null) => alert.warning(`${name} was not updated`, `${what === CHECK_RUN ? 'The Mod Updater is rechecking mods' : `${what ?? 'Another mod'} is updating`}. Try again when it is done.`, { action: open })
+  const busy = (what?: string | null) => alert.warning(`${name} was not updated`, `${what ?? 'Another mod'} is updating. Try again when it is done.`, { action: open })
   if (reserved) { busy(); return }
   reserved = true // before the first await: a second click finds it taken
   const token = newRunToken()

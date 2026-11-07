@@ -20,7 +20,7 @@ import { DEFAULT_FILTER, parseWords, readFilter, resetFilter, writeFilter, type 
 import { canonKey } from '../loadoutIdentity'
 import { modKey, useLoadouts } from '../loadoutStore'
 import { FIXED_EVENT, onHandoff, openLoadoutInMain, onReport, takeHandoff, takeReport, utocOf, type Fixed } from './handoff'
-import { ASK_REVIEW, CHECK_RUN, KEEP_NAME, ORIGINALS, REPAIR_POLICY, SAFE_OFF, claimRun, newRunToken, onRunChange, readAskReview, readNaming, readOriginals, readRepairPolicy, readSafety, releaseRun, retireUnsafe, runLock, type Naming, type Originals, type RunLock, type Safety } from './prefs'
+import { ASK_REVIEW, KEEP_NAME, ORIGINALS, REPAIR_POLICY, SAFE_OFF, claimRun, newRunToken, onRunChange, readAskReview, readNaming, readOriginals, readRepairPolicy, readSafety, releaseRun, retireUnsafe, runLock, type Naming, type Originals, type RunLock, type Safety } from './prefs'
 import { STEPS, fixVfxMod, repairOutcome, type AssetKind, type VfxReport } from './pipeline'
 import { needsUpdater, rescanForced, skipsUpdater, verdictLabel, verdictsChanged } from '../brokenMods'
 import { SCAN_DONE, progressLine, type ScanStep } from '../scanProgress'
@@ -91,6 +91,16 @@ const isDone = (s?: Status) => s === 'fixed' || s === 'nothing'
 
 /** A mod not marked as needing an update, on hover: what ticking it does */
 const NO_NEED = "Not marked as needing an update. Updating it rebuilds it on the game's current files anyway."
+/** The Paks folder above the mods folder, as the backend finds it (xtra_broken.rs paks_dir), else its parent: the
+ *  extract tool's long-lived process serves only a folder named Paks (xtra_uat_cli.rs). Pure. */
+function paksOf(modsDir: string) {
+  const parts = modsDir.split(/(?=[\\/])/) // each piece keeps its leading slash
+  const at = parts.map(p => p.replace(/^[\\/]/, '').toLowerCase()).lastIndexOf('paks')
+  if (at >= 0) return parts.slice(0, at + 1).join('')
+  const cut = Math.max(modsDir.lastIndexOf('/'), modsDir.lastIndexOf('\\'))
+  return cut > 0 ? modsDir.slice(0, cut) : modsDir
+}
+
 const STATUS: Record<Status, string> = { waiting: 'Queued', running: 'Updating', review: 'Needs your review', fixed: 'Updated', nothing: 'Nothing to update', failed: 'Failed', cancelled: 'Cancelled', declined: 'Original kept' }
 const KIND_ORDER: AssetKind[] = ['failed', 'left', 'unreadable', 'added', 'updated', 'same', 'passed']
 const KIND_LABEL: Record<AssetKind, string> = { updated: 'Rebuilt', same: 'Match the game', added: 'The mod\'s own', passed: 'Kept as they were', left: 'Left out', unreadable: 'Could not be read', failed: 'Not updated' }
@@ -375,8 +385,9 @@ export function VfxUpdaterPanel() {
   // the Library's mod checks (brokenMods.ts, the header's Checking mods): Scan starts them, this follows their progress
   const [scan, setScan] = useState<string | null>(null)
   useEffect(() => {
-    const step = listen<ScanStep>('mod-scan-progress', e => setScan(progressLine(e.payload)))
-    const done = listen(SCAN_DONE, () => { setScan(null); setReload(r => r + 1) })
+    // only a run Scan started: the Library's own runs (after an update, at launch) leave this window as it is
+    const step = listen<ScanStep>('mod-scan-progress', e => setScan(s => (s === null ? s : progressLine(e.payload))))
+    const done = listen(SCAN_DONE, () => setScan(s => { if (s !== null) setReload(r => r + 1); return null }))
     return () => { void step.then(f => f()); void done.then(f => f()) }
   }, [])
   const [cancelling, setCancelling] = useState(false)
@@ -433,8 +444,7 @@ export function VfxUpdaterPanel() {
   useEffect(() => {
     invoke<string | null>('get_game_path').then(dir => {
       if (!dir) return
-      const cut = Math.max(dir.lastIndexOf('/'), dir.lastIndexOf('\\'))
-      setPaks(cut > 0 ? dir.slice(0, cut) : dir)
+      setPaks(paksOf(dir))
     }).catch(() => {})
     invoke<GameBuild>('xtra_game_build').then(setBuild).catch(() => {})
     invoke<{ usmapPath?: string | null }>('vfx_get_settings').then(s => { if (s?.usmapPath) setUsmap(s.usmapPath) }).catch(() => {})
@@ -598,7 +608,7 @@ export function VfxUpdaterPanel() {
   }
 
   const elsewhere = busy || !held || held.token === myToken.current ? null : held
-  const lock = busy ? null : elsewhere ? `${elsewhere.name === CHECK_RUN ? 'Rechecking mods' : `Updating ${elsewhere.name ?? 'a mod'}`} elsewhere. Update waits for it.` : checking ? 'Checking for a newer USMAP…' : !usmap ? 'Choose a USMAP file in Advanced first' : usmapOk === false ? 'The USMAP file is missing' : !paks ? 'Set the game folder in Setup first' : null
+  const lock = busy ? null : elsewhere ? `Updating ${elsewhere.name ?? 'a mod'} elsewhere. Update waits for it.` : checking ? 'Checking for a newer USMAP…' : !usmap ? 'Choose a USMAP file in Advanced first' : usmapOk === false ? 'The USMAP file is missing' : !paks ? 'Set the game folder in Setup first' : null
 
   const run = useCallback(async (keys?: string[]) => {
     const byKey = new Map((modsRef.current ?? []).map(m => [norm(m.utoc), m]))
@@ -726,13 +736,14 @@ export function VfxUpdaterPanel() {
   const approveAll = () => { approveRest.current = true; const all = reviewsRef.current; setReviews([]); reviewsRef.current = []; all.forEach(r => r.resolve(true)); cue('success') }
   const stop = (source: 'Cancel button' | 'Escape') => { reviewsRef.current.forEach(r => r.resolve(false)); setReviews([]); reviewsRef.current = []; cancel.current = true; setCancelling(true); addLog(`Cancellation requested by ${source}. Stopping after the current step.`, 'warning') }
 
-  // Scan: the ticked mods' check records go, then the header's run reads them fresh (with every mod not checked yet)
+  // Scan: the header's run drops the ticked mods' check records, reads them fresh first, then every mod not checked yet
   const scanTicked = async () => {
-    const paths = (modsRef.current ?? []).filter(m => picked.has(norm(m.utoc))).map(m => m.path)
-    if (!paths.length) return
+    // the Library checks its mods folder only: a file added from elsewhere (Add .utoc) is not one of them
+    const ticked = (modsRef.current ?? []).filter(m => picked.has(norm(m.utoc)))
+    const paths = ticked.filter(m => !addedKeys.has(norm(m.utoc))).map(m => m.path)
+    if (!paths.length) { if (ticked.length) addLog('The ticked files are not in the mods folder, so the mod checks do not cover them.', 'warning'); return }
     setScan('Getting ready')
     cue('select')
-    await invoke('xtra_scan_forget', { modPaths: paths }).catch(e => addLog(`Could not clear the earlier checks: ${e}`, 'warning'))
     addLog(`Checking ${plural(paths.length, 'mod')} again. Progress also shows in the main window's header.`)
     await rescanForced(paths)
   }
@@ -1055,6 +1066,8 @@ export default function VfxUpdaterWindow() {
 }
 
 if (import.meta.env.DEV) {
+  console.assert(paksOf('C:/G/Marvel/Content/Paks/~mods') === 'C:/G/Marvel/Content/Paks' && paksOf(String.raw`C:\G\Paks\~mods\sub`) === String.raw`C:\G\Paks`, 'the Paks ancestor', paksOf(String.raw`C:\G\Paks\~mods\sub`))
+  console.assert(paksOf('D:/Mods/~mods') === 'D:/Mods', 'no Paks folder: the parent')
   // the estimate: the benchmark until 3 runs, then the middle one (a slow outlier does not move it)
   console.assert(expected({ n: [409_000], p: [] }, true) === START.n && expected({ n: [], p: [] }, false) === START.p, 'under 3 runs: the benchmark')
   console.assert(expected({ n: [20_000, 409_000, 24_000], p: [] }, true) === 24_000, 'the middle run, not the average')

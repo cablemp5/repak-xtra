@@ -44,8 +44,10 @@ export const verdictsChanged = () => emit(VERDICTS_CHANGED).catch(() => {})
 export const VERDICTS_RESCAN = 'xtra-verdicts-rescan'
 export const rescanVerdicts = () => emit(VERDICTS_RESCAN, []).catch(() => {})
 export const rescanForced = (force: string[]) => emit(VERDICTS_RESCAN, force).catch(() => {})
-/** Mods a manual Scan asked for, checked even when the Mod Updater made them (until the next run starts). */
+/** Mods a manual Scan asked for: checked first, even when the Mod Updater made them, until a run finishes with them. */
 let forced = new Set<string>()
+/** Of those, the ones whose check records the next run drops first (in the run: a scan in flight would write them back). */
+let fresh = new Set<string>()
 
 /** Full scans run one at a time: the backend's background checks skip a call while one runs (they answer 0), so a scan
  *  started beside another would end early with half the answers. Each waits for the one before it. */
@@ -108,7 +110,11 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     const chain = (first?: Promise<boolean>): Promise<boolean> => !live ? Promise.resolve(false) : (scanStarted(), invoke('xtra_scan_stopped').catch(() => false))
       .then(() => first ?? check())
       .then(ok => { if (!ok) throw new Error('the first check failed') })
-      .then(() => { ticked = paths.filter(p => forced.has(norm(p))); scanPaths = paths.filter(p => forced.has(norm(p)) || !made.get(norm(p))?.current); forced = new Set() })
+      .then(() => {
+        ticked = paths.filter(p => forced.has(norm(p))); scanPaths = paths.filter(p => forced.has(norm(p)) || !made.get(norm(p))?.current)
+        const forget = paths.filter(p => fresh.has(norm(p))); forced = new Set(); fresh = new Set()
+        return live && forget.length ? invoke('xtra_scan_forget', { modPaths: forget }).catch(e => console.warn('[brokenMods] could not clear earlier checks', e)) : undefined
+      })
       .then(() => (live ? invoke('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
       // a manual Scan's mods first, through all four scans, so they never wait behind the mods not checked yet
       .then(() => (ticked.length ? scans(ticked, ticked) : undefined))
@@ -118,7 +124,8 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       .then(stopped => live && !stopped, e => { console.warn('[brokenMods] background scan failed', e); return false })
       // runs take turns (queued), so this one's end is never another's. One the library outdated is not "paused":
       // the new list's own run follows
-      .then(finished => { unfinished = !finished; scanEnded(finished || !live); return finished })
+      // a run that stopped first (the game, a held scan, an old USMAP) keeps a manual Scan's mods for the next one
+      .then(finished => { unfinished = !finished; if (!finished) ticked.forEach(p => forced.add(norm(p))); scanEnded(finished || !live); return finished })
     let unfinished = false
     // one run waiting its turn is enough: a focus, a Rescan and the game update notice asking meanwhile all get that one
     let waiting: Promise<boolean> | null = null
@@ -135,7 +142,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     window.addEventListener('focus', resume)
     const again = listen(VERDICTS_CHANGED, () => { void check() })
     // a Refresh list or Resume: checks the header paused or cancelled run again
-    const rescan = listen<string[] | null>(VERDICTS_RESCAN, e => { for (const p of e.payload ?? []) forced.add(norm(p)); void releaseScan().then(() => full()) })
+    const rescan = listen<string[] | null>(VERDICTS_RESCAN, e => { for (const p of e.payload ?? []) { forced.add(norm(p)); fresh.add(norm(p)) } void releaseScan().then(() => full()) })
     return () => { live = false; window.removeEventListener('focus', resume); if (runFull === full) runFull = null; clearTimeout(t); void again.then(f => f()); void rescan.then(f => f()) }
   }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
 }

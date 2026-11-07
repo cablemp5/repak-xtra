@@ -43,8 +43,6 @@ export function readOriginals(): Originals {
   return old === '1' ? 'off' : old === '0' ? 'keep' : 'trash' // untouched: the original goes to Recently deleted, out of the way and one click back
 }
 
-/** The run lock's name while the Mod Updater rechecks mods: not a mod, so messages that name the holder say so */
-export const CHECK_RUN = 'Rechecking mods'
 export type RunLock = { token: string; window: string; name?: string | null }
 /** A fresh token for one run. */
 export const newRunToken = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
