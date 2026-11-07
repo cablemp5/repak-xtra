@@ -27,7 +27,7 @@ const useCallback = (fn, deps) => {
   if (!cached || deps.some((d, i) => !Object.is(d, cached.deps[i]))) cached = { fn, deps }
   return cached.fn
 }
-const stable = Object.fromEntries(['picked', 'usmap', 'paks', 'originals', 'keepName', 'safeOff', 'needs', 'askReview', 'addLog'].map(k => [k, {}]))
+const stable = Object.fromEntries(['picked', 'usmap', 'paks', 'originals', 'keepName', 'safety', 'needs', 'askReview', 'addLog'].map(k => [k, {}]))
 const run = declaration('src/custom/vfx/VfxUpdaterWindow.tsx', 'run')
 const render = repairPolicy => vm.runInNewContext(compile(`globalThis.result = ${run}`), { ...stable, repairPolicy, useCallback })
 const strictRun = render('strict')
@@ -39,7 +39,7 @@ for (const kind of [undefined, 'unknown', 'broken', 'vfx', 'risky']) {
   let options
   const scope = {
     reserved: false, nameOf: () => 'Fixture', newRunToken: () => 'fixture', findUsmap: async () => 'fixture.usmap',
-    claimRun: async () => true, setUpdating() {}, readOriginals: () => 'off', readNaming: () => 'broken', readSafeOff: () => true, readRepairPolicy: () => 'bestEffort', readAskReview: () => false, incompleteAssets: () => 0,
+    claimRun: async () => true, setUpdating() {}, readOriginals: () => 'off', readNaming: () => 'broken', readSafeOff: () => true, readSafety: () => 'trash', readRepairPolicy: () => 'bestEffort', readAskReview: () => false, incompleteAssets: () => 0,
     readFilter: () => ({}), verdictOf: () => kind ? { kind } : undefined, utocOf: p => p + '.utoc', STEPS: ['Read'],
     fixVfxMod: async o => { options = o; return { status: 'failed' } }, resultToast() {}, releaseRun: async () => {},
     invoke: async () => 'C:/Fixture/Paks/~mods',
@@ -105,7 +105,7 @@ async function repair(policy, accept = false, sameParameters = false, scenario =
     const exports = {}
     modules.set(file, exports)
     vm.runInNewContext(compile(readFileSync(file, 'utf8').replaceAll('import.meta.env.DEV', 'false')), {
-      exports, module: { exports }, require: n => n === '@tauri-apps/api/core' ? { invoke } : load(path.resolve(path.dirname(file), n + '.ts')),
+      exports, module: { exports }, require: n => n === '@tauri-apps/api/core' ? { invoke } : n === '@tauri-apps/api/event' ? { listen: async () => () => {} } : load(path.resolve(path.dirname(file), n + '.ts')),
       structuredClone, performance, console,
     })
     return exports

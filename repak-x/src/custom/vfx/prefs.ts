@@ -12,9 +12,20 @@ export const ORIGINALS = 'repakxtra.vfx.originals' // what happens to an origina
 export type Naming = 'broken' | 'updated'
 export type Originals = 'off' | 'trash' | 'keep'
 
-export const SAFE_OFF = 'repakxtra.vfx.safeOff' // '0': a flagged mod that could not be made safe stays on
-/** Whether a flagged mod an update could not make safe is turned off (the default), rather than left on to crash. */
-export const readSafeOff = () => localStorage.getItem(SAFE_OFF) !== '0'
+export const SAFE_OFF = 'repakxtra.vfx.safeOff' // a flagged mod that could not be made safe: 'trash', '1' turned off, '0' stays on
+export type Safety = 'trash' | 'off' | 'on'
+/** What happens to a flagged mod an update could not make safe: Recently deleted (the default), off, or left on to crash. */
+export const readSafety = (): Safety => { const v = localStorage.getItem(SAFE_OFF); return v === '0' ? 'on' : v === '1' ? 'off' : 'trash' }
+/** Whether it is taken out of the game at all (off, or off and then to Recently deleted). */
+export const readSafeOff = () => readSafety() !== 'on'
+/** Turns the mod off (xtra_safe_off.rs keeps it off, with why), then with `trash` moves it to Recently deleted.
+ *  'trashed' or 'off', or false when it was already off and stays. Throws when it could not be turned off. */
+export async function retireUnsafe(modPath: string, reason: string, trash: boolean): Promise<'trashed' | 'off' | false> {
+  const off = await invoke<string | null>('xtra_vfx_turn_off', { modPath, reason })
+  if (!trash) return off ? 'off' : false
+  // still off if the delete fails: safe either way
+  return invoke('delete_mod', { path: off ?? modPath.replace(/\.(utoc|pak)$/i, '.bak_repak'), trashId: null }).then(() => 'trashed' as const, () => (off ? 'off' : false))
+}
 export const REPAIR_POLICY = 'repakxtra.vfx.repairPolicy'
 export type RepairPolicy = 'strict' | 'bestEffort'
 /** Best effort with a review of each candidate (the default), or Strict, which installs only what it can prove whole. */

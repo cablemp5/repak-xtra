@@ -264,6 +264,11 @@ fn is_ko_only(assets: &[String]) -> bool {
     assets.iter().filter(|a| is_ko_widget(a)).count() == 1 && assets.iter().all(|a| is_ko_widget(a) || is_ko_part(a))
 }
 
+/// `is_ko_only` from a mod's whole file list (.uexp and .ubulk too): xtra_broken.rs judges these as Needs update.
+pub(crate) fn ko_only_files(files: &[String]) -> bool {
+    is_ko_only(&files.iter().filter(|f| norm(f).ends_with(".uasset")).cloned().collect::<Vec<_>>())
+}
+
 /// Whether the mod is a KO prompt mod, from its file list alone (no USMAP needed to tell).
 #[tauri::command]
 pub async fn xtra_ko_is_mod(mod_path: String) -> bool {

@@ -17,6 +17,7 @@
 // Never throws: the report says what happened, asset by asset.
 import { invoke } from '@tauri-apps/api/core'
 import { DEFAULT_FILTER, type ColorFilter } from './filter'
+import { retireUnsafe } from './prefs'
 import { type ColorProp, type ModParam, applyColor, isMaterialInstance, packageImports, portParam, readColors, readModParams, uncarriedPackages } from './assets'
 
 export const STEPS = ['Reading the mod', 'Opening its materials', 'Finding its edits', "Reading the game's files", "Opening the game's files", 'Carrying the edits over', 'Rebuilding Niagara effects', 'Rebuilding the assets', 'Packing the update'] as const
@@ -57,6 +58,8 @@ export type VfxReport = {
   placed?: Placed
   /** Could not be made safe, so it was turned off (FixOptions.safeOff) */
   turnedOff?: boolean
+  /** And then moved to Recently deleted (FixOptions.trashUnsafe) */
+  trashed?: boolean
   /** Placed after Use candidate or Approve all (Ask me to review candidates on) */
   reviewed?: boolean
   assets: AssetResult[]
@@ -89,6 +92,8 @@ export type FixOptions = {
   /** The mod is flagged (Needs VFX update, May crash): when the run fails, it is turned off rather than left on to crash.
    *  A run that finds its materials only in the old layout turns it off unless this is false */
   safeOff?: boolean
+  /** With safeOff: the mod turned off then goes to Recently deleted (Safety: Move to Recently deleted, the default) */
+  trashUnsafe?: boolean
   filter?: ColorFilter
   log?: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void
   onStep?: (s: { step: number; title: string }) => void
@@ -631,9 +636,12 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     // updater has done what it can for this game build, and Update again or the Library's Turn on anyway still reach it
     const unsafe = (report.status === 'failed' && o.safeOff) || (report.status === 'nothing' && report.counts.relaid > 0 && o.safeOff !== false)
     if (unsafe && !keepOn && !o.outputDir) {
-      report.turnedOff = await invoke<string | null>('xtra_vfx_turn_off', { modPath: o.modPath, reason: report.error ?? 'An update could not make it safe.' }).then(Boolean)
-        .catch(e => { log(`Could not turn it off: ${e}`, 'warning'); return false })
-      if (report.turnedOff) {
+      const out = await retireUnsafe(o.modPath, report.error ?? 'An update could not make it safe.', Boolean(o.trashUnsafe))
+        .catch(e => { log(`Could not turn it off: ${e}`, 'warning'); return false as const })
+      report.turnedOff = Boolean(out)
+      report.trashed = out === 'trashed'
+      if (out === 'trashed') log(`Moved ${stem(o.modPath)} to Recently deleted, so it cannot crash the game. Restore it in Settings within 7 days.`, 'warning')
+      if (out === 'off') {
         log(`Turned ${stem(o.modPath)} off, so it cannot crash the game. Update it again later, or turn it back on in the Library.`, 'warning')
         await invoke('xtra_vfx_no_update', { modPath: o.modPath }).catch(e => log(`Could not clear its Needs update flag: ${e}`, 'warning'))
       }

@@ -661,11 +661,16 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
             if anims == 1 { "it" } else { "them" }
         ));
     }
+    // a KO prompt mod: the Mod Updater rebuilds its widget on the game's new copy, so Needs update, not May crash
+    let ko = m.materials && !m.fixed && !m.cleared && crate::xtra_ko::ko_only_files(m.files);
+    let needs = |reason: String| Some(Verdict { path: path.to_string(), kind: "vfx", reason, stale_niagara: 0, usmap_wait: 0, off_only: false });
     match &m.layout {
         _ if !m.has_blueprint => None,
+        Some(Some(reason)) if ko => needs(format!("{reason} The Mod Updater rebuilds the KO prompt on the new game files.")),
         // what the update changed decides, whatever the date: one made after it from old files is caught too
         Some(Some(reason)) => risky(reason.clone()),
         Some(None) => None,
+        None if ko && m.installed > 0 && m.installed < game_updated => needs("A KO prompt installed before the last game update. Updates often change the game's KO widget, and the game can crash on an old copy. The Mod Updater rebuilds it on the new game files.".into()),
         // not compared yet: the date stands in until the background check has looked
         None if m.installed > 0 && m.installed < game_updated => risky("A Blueprint mod installed before the last game update. Updates often change the game classes it carries, and the game can crash on it. Turn it off if the game crashes, and look for an updated version.".into()),
         None => None,
@@ -1282,6 +1287,13 @@ mod tests {
         game.insert(match_key("/Game/Marvel/UI/Blueprints/Battle/Custom/1026/WBP_Battle_Kill_1026_V3.uasset"), 100);
         let verdict = judge("m.pak", &Facts { materials: true, ..facts(&v(&[ko]), 50) }, 200, &game).unwrap();
         assert_eq!((verdict.kind, verdict.reason.contains("changed the KO prompt")), ("vfx", true), "a KO prompt the update rewrote");
+        // the class check or the date flags a KO prompt the game did not rewrite: Needs update, the updater rebuilds it
+        let ko_files = v(&[ko, &ko.replace(".uasset", ".uexp")]);
+        let kp = |layout| Facts { materials: true, has_blueprint: true, layout, ..facts(&ko_files, 150) };
+        assert_eq!(judge("m.pak", &kp(Some(Some("x".into()))), 200, &game).map(|v| v.kind), Some("vfx"), "a class change");
+        assert_eq!(judge("m.pak", &kp(None), 200, &game).map(|v| v.kind), Some("vfx"), "the date rule");
+        let other = v(&[ko, "Marvel/Content/Marvel/UI/Blueprints/WBP_Other.uasset"]);
+        assert_eq!(judge("m.pak", &Facts { materials: true, has_blueprint: true, ..facts(&other, 150) }, 200, &game).map(|v| v.kind), Some("risky"), "another Blueprint too");
     }
 
     #[test]

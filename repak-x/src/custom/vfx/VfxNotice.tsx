@@ -11,6 +11,7 @@ import { needsUpdater, useBrokenVersion, verdictOf } from '../brokenMods'
 import { modKey, nameKey, openLoadout, renameModKey } from '../loadoutStore'
 import { renameSource } from '../nexusSource'
 import { useUiPref } from '../uiPrefs'
+import { useScanRun } from '../scanProgress'
 import { FIXED_EVENT, OPEN_LOADOUT_EVENT, fixInVfxWindow, utocOf, type Fixed } from './handoff'
 import './vfx.css'
 
@@ -48,6 +49,8 @@ export const noticeDetail = (n: number, ready: number, waiting: number, off = 0)
 export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () => void }) {
   useBrokenVersion()
   const shown = useUiPref('broken') // Settings can hide problem badges, this goes with them
+  // a run of the checks can still clear or change a quick check's May crash (a new install's date rule): the strip waits for its end
+  const checking = useScanRun().running
   const [updated, setUpdated] = useState(0)
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(DISMISSED))
   // the same mods as the Mod Updater's Needs an update: one that may crash and is on counts too (Update turns it off)
@@ -88,7 +91,7 @@ export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () =>
   const waiting = n - ready.length
   const keys = stale.map(m => noticeModKey(m, Boolean(verdictOf(m.path)?.usmapWait)))
   const seen = JSON.stringify([updated, ...keys])
-  if (!shown || !n || !updated || noticeDismissed(dismissed, updated, keys)) return null
+  if (!shown || checking || !n || !updated || noticeDismissed(dismissed, updated, keys)) return null
   const when = new Date(updated * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
   return (
     <div className="vfx-notice" role="status">

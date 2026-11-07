@@ -20,7 +20,7 @@ import { DEFAULT_FILTER, parseWords, readFilter, resetFilter, writeFilter, type 
 import { canonKey } from '../loadoutIdentity'
 import { modKey, useLoadouts } from '../loadoutStore'
 import { FIXED_EVENT, onHandoff, openLoadoutInMain, onReport, takeHandoff, takeReport, utocOf, type Fixed } from './handoff'
-import { ASK_REVIEW, CHECK_RUN, KEEP_NAME, ORIGINALS, REPAIR_POLICY, SAFE_OFF, claimRun, newRunToken, onRunChange, readAskReview, readNaming, readOriginals, readRepairPolicy, readSafeOff, releaseRun, runLock, type Naming, type Originals, type RunLock } from './prefs'
+import { ASK_REVIEW, CHECK_RUN, KEEP_NAME, ORIGINALS, REPAIR_POLICY, SAFE_OFF, claimRun, newRunToken, onRunChange, readAskReview, readNaming, readOriginals, readRepairPolicy, readSafety, releaseRun, retireUnsafe, runLock, type Naming, type Originals, type RunLock, type Safety } from './prefs'
 import { STEPS, fixVfxMod, repairOutcome, type AssetKind, type VfxReport } from './pipeline'
 import { checkVfxMod, checkWords } from './quick'
 import { needsUpdater, skipsUpdater, verdictLabel, verdictsChanged } from '../brokenMods'
@@ -98,7 +98,7 @@ const KIND_LABEL: Record<AssetKind, string> = { updated: 'Rebuilt', same: 'Match
 /** An update that left out Niagara files made for an older game build: it works, without those effects' colors */
 const isPartial = (r?: VfxReport) => r?.status === 'fixed' && (r.counts.left + r.counts.ownGame + r.counts.unreadable > 0 || r.assets.some(a => a.kind === 'failed'))
 const statusText = (r: VfxReport) => (isPartial(r) ? 'Partially updated'
-  : r.turnedOff && r.status !== 'fixed' ? `${r.status === 'failed' ? 'Failed' : r.counts.relaid ? 'Not updated' : 'May crash'}, turned off` : r.status === 'fixed' || r.status === 'failed' ? repairOutcome(r) : STATUS[r.status])
+  : r.turnedOff && r.status !== 'fixed' ? `${r.status === 'failed' ? 'Failed' : r.counts.relaid ? 'Not updated' : 'May crash'}, ${r.trashed ? 'in Recently deleted' : 'turned off'}` : r.status === 'fixed' || r.status === 'failed' ? repairOutcome(r) : STATUS[r.status])
 const leftText = (r: VfxReport) => `Left out ${plural(r.counts.left, 'effect file')} made for an older game build, so the game uses its own and ${r.counts.left === 1 ? 'that effect shows' : 'those effects show'} their usual colors.`
 /** Niagara files the update could not carry with today's USMAP: the game's own effect, for good (a partial repair). */
 const ownText = (r: VfxReport) => (r.counts.ownGame ? `${plural(r.counts.ownGame, 'asset')} could not be carried, so ${r.counts.ownGame === 1 ? 'that effect shows' : 'those effects show'} the game's own colors.` : '')
@@ -366,7 +366,8 @@ export function VfxUpdaterPanel() {
   const [checking, setChecking] = useState(true)
   const [naming, setNaming] = useState<Naming>(readNaming)
   const [originals, setOriginals] = useState<Originals>(readOriginals)
-  const [safeOff, setSafeOff] = useState(readSafeOff)
+  const [safety, setSafety] = useState<Safety>(readSafety)
+  const safeOff = safety !== 'on'
   const [moved, setMoved] = useState<LayoutNews | null>(null)
   useEffect(() => { void invoke<LayoutNews>('xtra_layout_moves').then(setMoved, () => {}) }, [usmapInfo])
   const keepName = naming === 'broken'
@@ -650,13 +651,13 @@ export function VfxUpdaterPanel() {
       const mod = byKey.get(key)!
       void claimRun(token, mod.name) // the lock says which mod, for the other window's message
       if (mod.risky) {
-        // nothing here rebuilds it: off, so it cannot crash the game, and its May crash flag says why
-        const off = await invoke<string | null>('xtra_vfx_turn_off', { modPath: mod.path, reason: `May crash: ${mod.risky}` }).then(() => ({ ok: true, why: '' }), e => ({ ok: false, why: String(e) }))
-        const report: VfxReport = { mod: mod.utoc, name: mod.name, status: off.ok ? 'nothing' : 'failed', turnedOff: off.ok,
-          error: off.ok ? `May crash: ${mod.risky} Turned off, so it cannot crash the game.` : `Could not turn it off: ${off.why}`,
+        // nothing here rebuilds it: off (then to Recently deleted, as Safety says), so it cannot crash the game, and its May crash flag says why
+        const off = await retireUnsafe(mod.path, `May crash: ${mod.risky}`, safety === 'trash').then(out => ({ ok: true, trashed: out === 'trashed', why: '' }), e => ({ ok: false, trashed: false, why: String(e) }))
+        const report: VfxReport = { mod: mod.utoc, name: mod.name, status: off.ok ? 'nothing' : 'failed', turnedOff: off.ok, trashed: off.trashed,
+          error: off.ok ? `May crash: ${mod.risky} ${off.trashed ? 'Moved to Recently deleted' : 'Turned off'}, so it cannot crash the game.` : `Could not turn it off: ${off.why}`,
           assets: [], warnings: [], counts: { updated: 0, same: 0, added: 0, passed: 0, left: 0, ownGame: 0, unreadable: 0, changes: 0, relaid: 0 }, ms: 0, steps: [] }
         patch(key, { status: report.status, report })
-        addLog(off.ok ? `Turned ${mod.name} off: it may crash the game.` : `${mod.name}: ${report.error}`, 'warning')
+        addLog(off.ok ? `${off.trashed ? 'Moved' : 'Turned'} ${mod.name} ${off.trashed ? 'to Recently deleted' : 'off'}: it may crash the game.` : `${mod.name}: ${report.error}`, 'warning')
         if (off.ok) { turnedOff++; pick([key], false) } else { failed++; broke.push(key); retry.push(key) }
         continue
       }
@@ -680,6 +681,7 @@ export function VfxUpdaterPanel() {
         }),
         modPath: mod.utoc, usmapPath: usmap, gamePaksPath: paks, turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash', keepName, filter,
         safeOff: safeOff && needs.has(norm(mod.path)), // only a flagged mod: an unflagged one that fails stays as it was
+        trashUnsafe: safety === 'trash',
         log: addLog, cancelled: () => cancel.current,
         onStep: s => patch(key, { step: s.step, sub: undefined }),
         onProgress: (_, __, message) => patch(key, { sub: message }),
@@ -696,13 +698,13 @@ export function VfxUpdaterPanel() {
     setLastTook(performance.now() - startedAt)
     const parts = [
       `${fixed === todo.length ? plural(fixed, 'mod') : `${fixed} of ${plural(todo.length, 'mod')}`} updated${partial ? ` (${partial === fixed ? (fixed === 1 ? 'partially' : 'all partially') : `${partial} partially`})` : ''}`,
-      broke.length ? `${broke.length} failed` : '', turnedOff ? `${turnedOff} turned off so ${turnedOff === 1 ? 'it' : 'they'} cannot crash the game` : '', stopped.length ? `${stopped.length} cancelled` : '',
+      broke.length ? `${broke.length} failed` : '', turnedOff ? `${turnedOff} taken out of the game so ${turnedOff === 1 ? 'it' : 'they'} cannot crash it` : '', stopped.length ? `${stopped.length} cancelled` : '',
       kept.length ? `${kept.length} kept as ${kept.length === 1 ? 'it was' : 'they were'}` : '',
     ].filter(Boolean)
     setEnded({ text: `${parts.join(', ')}${parts.length > 1 ? ',' : ''} in ${took(performance.now() - startedAt)}.`, retry, edits: pickEditsRef.current })
     cue(failed ? 'warning' : 'success', { emphasis: fixed > 1 ? undefined : 'subtle' }) // a problem is a warning, never an error sound
     setBusy(false); setCancelling(false)
-  }, [picked, usmap, paks, originals, keepName, safeOff, needs, repairPolicy, askReview, addLog])
+  }, [picked, usmap, paks, originals, keepName, safety, needs, repairPolicy, askReview, addLog])
 
   // the Library's notice updates exactly the mods it sent, as soon as the list and the USMAP are ready (after a run in
   // progress)
@@ -1000,10 +1002,10 @@ export function VfxUpdaterPanel() {
                 </Section>
 
                 <Section icon={<AlertTriangle size={15} aria-hidden="true" />} title="Safety" about="What happens to a flagged mod an update could not make safe.">
-                  <Seg label="Safety" value={safeOff ? 'off' : 'on'} disabled={busy}
-                    note={safeOff ? 'It is turned off, so it cannot crash the game. Its flag stays, and you can update it again later.' : 'It stays on as it was, and can crash the game.'}
-                    options={[['off', 'Turn it off'], ['on', 'Leave it on']]}
-                    onChange={v => { setSafeOff(v === 'off'); localStorage.setItem(SAFE_OFF, v === 'off' ? '1' : '0') }} />
+                  <Seg label="Safety" value={safety} disabled={busy}
+                    note={{ trash: 'It is turned off and moved to Recently deleted, so it cannot crash the game. Restore it in Settings within 7 days.', off: 'It is turned off, so it cannot crash the game. Its flag stays, and you can update it again later.', on: 'It stays on as it was, and can crash the game.' }[safety]}
+                    options={[['trash', 'Move to Recently deleted'], ['off', 'Turn it off'], ['on', 'Leave it on']]}
+                    onChange={v => { setSafety(v); localStorage.setItem(SAFE_OFF, v === 'trash' ? 'trash' : v === 'off' ? '1' : '0') }} />
                 </Section>
 
                 <Section icon={<MapIcon size={15} aria-hidden="true" />} title="USMAP"
