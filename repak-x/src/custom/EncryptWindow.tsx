@@ -205,7 +205,7 @@ function EncryptPanel() {
             <input value={q} placeholder="Search mods" aria-label="Search mods" onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setQ('') }} />
             {q && <button type="button" className="lo-icon vf-search-clear" onClick={() => setQ('')} aria-label="Clear the search" title="Clear the search"><X size={14} /></button>}
           </label>
-          <HeroFilter heroes={heroes} value={hero} onChange={setHero} always={mods === null} />
+          <HeroFilter heroes={heroes} value={hero} onChange={setHero} always />
           <div className="mod-state-filter lp-sort" role="group" aria-label="Sort mods">
             <button type="button" aria-pressed={sort === 'newest'} onClick={() => { setSort('newest'); localStorage.setItem(SORT, 'newest') }}>Newest</button>
             <button type="button" aria-pressed={sort === 'name'} onClick={() => { setSort('name'); localStorage.setItem(SORT, 'name') }}>A to Z</button>
