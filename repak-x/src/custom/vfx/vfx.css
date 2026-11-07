@@ -227,9 +227,9 @@ button.vf-assets-toggle:hover { color: var(--text-primary) !important; }
 .vf-log .is-success { color: #46a758; }
 .vf-copy-log { margin-top: 12px; }
 
-.vf-foot { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 24px; border-top: 1px solid var(--panel-border); }
+.vf-foot { position: relative; display: flex; flex-wrap: nowrap; align-items: center; gap: 8px 16px; padding: 12px 24px; border-top: 1px solid var(--panel-border); }
 /* the note has its own row above the buttons and wraps there: never cut off, never squeezed beside them */
-.vf-state { flex: 1 1 280px; min-width: 0; margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.vf-state { flex: 1 1 0; min-width: 0; margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 .vf-foot-actions { flex: none; margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .vf-spin { animation: vf-spin 1.1s linear infinite; }
 @keyframes vf-spin { to { transform: rotate(360deg); } }
@@ -294,14 +294,3 @@ html[data-motion="off"] .vfx-notice { animation: none; }
 .vf-seg { width: fit-content !important; max-width: 100%; }
 .vf-seg button { flex: none !important; }
 
-.vf-scan.install-btn { height: 32px; background: transparent; border: 1px solid var(--panel-border); }
-.vf-scan.install-btn:hover { background: var(--quiet-hover); }
-.vf-scan.install-btn > button { color: var(--text-primary) !important; }
-.vf-scan.install-btn svg { color: var(--text-secondary) !important; }
-.vf-scan .install-btn-more { box-shadow: none !important; }
-.vf-scan .install-btn-more svg { transition: transform 0.15s ease; }
-.vf-scan .install-btn-more[aria-expanded="true"] svg { transform: rotate(180deg); }
-.vf-scan-menu.sigeon-menu { top: auto; bottom: calc(100% + 6px); right: 0; width: 270px; transform-origin: bottom right; }
-
-.vf-scan .install-btn-main { padding: 0 4px 0 12px !important; }
-.vf-scan .install-btn-more { width: 24px; }
