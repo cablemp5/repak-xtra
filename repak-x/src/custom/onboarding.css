@@ -47,6 +47,8 @@
 .ob-choice:hover .ob-fan .wi-card:nth-child(1) { transform: rotate(-12deg) translate(-8px, 4px); }
 .ob-choice:hover .ob-fan .wi-card:nth-child(3) { transform: rotate(12deg) translate(8px, 4px); }
 .ob-choice .ob-stage > .wi-card { width: 88px; }
+.ob-empty .wi-card-img { display: grid; place-items: center; color: var(--text-secondary); background: transparent;
+  border-bottom: 1px dashed color-mix(in srgb, var(--accent-primary), transparent 35%); }
 .ob-ghosts i { display: grid; place-items: center; width: 86px; aspect-ratio: 1358 / 1920; margin: 0 -12px; box-sizing: border-box; border-radius: 9px;
   border: 1px dashed color-mix(in srgb, var(--text-secondary), transparent 55%); background: var(--bg-dark); color: var(--accent-primary);
   transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.25s ease; }

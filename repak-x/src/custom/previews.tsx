@@ -110,6 +110,13 @@ let available = false
 export const refreshPreviewsAvailable = () => invoke<boolean>('previews_available').then(v => { available = v; notify() }).catch(() => undefined)
 refreshPreviewsAvailable()
 export const usePreviewsAvailable = () => useSyncExternalStore(subscribe, () => available)
+/** Runs `fn` once previews can be made: now, or the moment the kit and Blender are in (refreshPreviewsAvailable).
+ *  shortcut: kept in memory only, so a restart before the kit finishes drops it. Persist it if that gets reported */
+export const whenPreviewsAvailable = (fn: () => void) => {
+  const wait = () => { if (!available) return; listeners.delete(wait); fn() }
+  listeners.add(wait)
+  wait()
+}
 listen<string>('mod-preview-ready', e => {
   dropCached(e.payload)
   revs.set(e.payload, (revs.get(e.payload) ?? 0) + 1)

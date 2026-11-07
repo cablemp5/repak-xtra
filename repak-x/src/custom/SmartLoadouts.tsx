@@ -27,7 +27,7 @@ const ADVANCED = 'repakxtra.smartAdvanced' // '1': the page opens on Advanced (t
 /** An older copy a VFX update leaves beside its update: never a loadout member. */
 const LEFTOVER = /_(BROKEN|ORIGINAL)(_V\d+)?$/i
 /** A hero's collection: the one that exists, else a new one. */
-const collectionFor = (hero: string) => (hero ? listGroups().find(g => groupKey(g) === groupKey(hero)) ?? addGroup(hero) : OTHER)
+export const collectionFor = (hero: string) => (hero ? listGroups().find(g => groupKey(g) === groupKey(hero)) ?? addGroup(hero) : OTHER)
 /** A look key in words: "rainbow flow@Black Panther" -> Rainbow Flow, a mod's own -> its name. */
 const lookLabel = (key: string) => key.startsWith('mod:') ? memberName(key.slice(4))
   : key.slice(0, key.lastIndexOf('@')).split(' ').map(w => (w[0]?.toUpperCase() ?? '') + w.slice(1)).join(' ')
