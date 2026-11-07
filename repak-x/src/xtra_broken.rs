@@ -873,6 +873,29 @@ pub fn xtra_vfx_no_update(mod_path: String, state: State<'_, Arc<Mutex<AppState>
     record_check(&mods_dir, &Path::new(&mod_path).with_extension("utoc"), false, false)
 }
 
+/// Drops every record of `utocs` (checked_key, any decoder) from the JSON store at `store`. How many went.
+fn forget_in(store: &Path, utocs: &[String]) -> usize {
+    let Some(mut all) = std::fs::read_to_string(store).ok().and_then(|t| serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&t).ok()) else { return 0 };
+    let before = all.len();
+    all.retain(|k, _| !utocs.iter().any(|key| k.strip_prefix(key.as_str()).is_some_and(|rest| rest.is_empty() || rest.starts_with('|'))));
+    let gone = before - all.len();
+    if gone > 0 {
+        let _ = std::fs::write(store, serde_json::Value::Object(all).to_string());
+    }
+    gone
+}
+
+/// The Mod Updater's Scan: the background checks forget these mods, so the run it starts reads each one fresh. A
+/// clearance (Nothing to update) stays: the fresh check overwrites it only with what it finds.
+#[tauri::command(async)]
+pub fn xtra_scan_forget(mod_paths: Vec<String>) -> usize {
+    let utocs: Vec<String> = mod_paths.iter().map(|p| checked_key(&Path::new(p).with_extension("utoc"))).collect();
+    [crate::xtra_vfx_check::scan_store(), crate::xtra_layout::store(), crate::xtra_mesh::store(), crate::xtra_niagara::layout_store()]
+        .iter()
+        .map(|s| forget_in(s, &utocs))
+        .sum()
+}
+
 /// The mods (of `mod_paths`) that will not work, or may crash, in the installed game. Empty when the game's assets
 /// cannot be read (no game folder, a custom mods folder outside the game).
 #[tauri::command]
@@ -1038,6 +1061,15 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scan_forget_drops_only_that_mods_records() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = dir.path().join("s.json");
+        std::fs::write(&store, r#"{"c:/m/a_p.utoc|x":1,"c:/m/a_p.utoc":2,"c:/m/a_p.utoc|9|8|y":3,"c:/m/a_p2.utoc|x":4}"#).unwrap();
+        assert_eq!(forget_in(&store, &[checked_key(Path::new(r"C:\m\A_P.utoc"))]), 3);
+        assert_eq!(std::fs::read_to_string(&store).unwrap(), r#"{"c:/m/a_p2.utoc|x":4}"#, "a name that only starts the same stays");
+    }
 
     #[test]
     fn an_extracted_package_and_the_game_listing_share_a_key() {

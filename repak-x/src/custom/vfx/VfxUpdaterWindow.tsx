@@ -22,7 +22,7 @@ import { modKey, useLoadouts } from '../loadoutStore'
 import { FIXED_EVENT, onHandoff, openLoadoutInMain, onReport, takeHandoff, takeReport, utocOf, type Fixed } from './handoff'
 import { ASK_REVIEW, CHECK_RUN, KEEP_NAME, ORIGINALS, REPAIR_POLICY, SAFE_OFF, claimRun, newRunToken, onRunChange, readAskReview, readNaming, readOriginals, readRepairPolicy, readSafety, releaseRun, retireUnsafe, runLock, type Naming, type Originals, type RunLock, type Safety } from './prefs'
 import { STEPS, fixVfxMod, repairOutcome, type AssetKind, type VfxReport } from './pipeline'
-import { needsUpdater, rescanVerdicts, skipsUpdater, verdictLabel, verdictsChanged } from '../brokenMods'
+import { needsUpdater, rescanForced, skipsUpdater, verdictLabel, verdictsChanged } from '../brokenMods'
 import { SCAN_DONE, progressLine, type ScanStep } from '../scanProgress'
 import { HeroFilter, heroOfName } from '../heroFilter'
 import './vfx.css'
@@ -726,6 +726,17 @@ export function VfxUpdaterPanel() {
   const approveAll = () => { approveRest.current = true; const all = reviewsRef.current; setReviews([]); reviewsRef.current = []; all.forEach(r => r.resolve(true)); cue('success') }
   const stop = (source: 'Cancel button' | 'Escape') => { reviewsRef.current.forEach(r => r.resolve(false)); setReviews([]); reviewsRef.current = []; cancel.current = true; setCancelling(true); addLog(`Cancellation requested by ${source}. Stopping after the current step.`, 'warning') }
 
+  // Scan: the ticked mods' check records go, then the header's run reads them fresh (with every mod not checked yet)
+  const scanTicked = async () => {
+    const paths = (modsRef.current ?? []).filter(m => picked.has(norm(m.utoc))).map(m => m.path)
+    if (!paths.length) return
+    setScan('Getting ready')
+    cue('select')
+    await invoke('xtra_scan_forget', { modPaths: paths }).catch(e => addLog(`Could not clear the earlier checks: ${e}`, 'warning'))
+    addLog(`Checking ${plural(paths.length, 'mod')} again. Progress also shows in the main window's header.`)
+    await rescanForced(paths)
+  }
+
   // Ctrl+Enter updates the ticked mods. Escape stops repairs only. Scans require the Cancel button.
   const keys = useRef({ go: () => {}, stop: () => {} })
   const updateWidth = useRef(0) // Update's width when pressed: while it runs it keeps it, so Cancel never moves under the pointer
@@ -1020,8 +1031,8 @@ export function VfxUpdaterPanel() {
           {/* Cancel beside the button, never in its place: a double-click on Update must not cancel the run */}
           {busy && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={() => stop('Cancel button')} title="Esc"><X size={14} strokeWidth={2.5} aria-hidden="true" /> {cancelling ? 'Cancelling…' : 'Cancel'}</button>}
           {/* the same checks as the header's Checking mods (Pause and Cancel live there) */}
-          {!busy && <button type="button" className="lo-text-btn" disabled={Boolean(scan)} onClick={() => { setScan('Getting ready'); void rescanVerdicts() }}
-            title="Check every mod not checked yet for this game version, as Refresh list does. Progress shows in the main window's header too">
+          {!busy && <button type="button" className="lo-text-btn" disabled={Boolean(scan) || !picked.size} onClick={() => void scanTicked()}
+            title="Check the ticked mods again from scratch, without changing files. Progress shows in the main window's header too">
             {scan ? <span className="t-shimmer">Scanning</span> : 'Scan'}</button>}
           <button type="button" className="btn-primary" disabled={busy || Boolean(lock) || !todo} title={busy ? undefined : 'Ctrl+Enter'}
             ref={el => { if (el && !busy) updateWidth.current = el.offsetWidth }} style={busy ? { minWidth: updateWidth.current } : undefined} onClick={() => run()}>

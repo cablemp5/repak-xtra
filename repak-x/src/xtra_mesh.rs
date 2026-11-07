@@ -26,7 +26,7 @@ pub(crate) struct Done {
     reason: Option<String>,
 }
 
-fn store() -> PathBuf {
+pub(crate) fn store() -> PathBuf {
     dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-mesh-checked.json")
 }
 

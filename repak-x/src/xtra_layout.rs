@@ -489,7 +489,7 @@ pub(crate) struct Done {
     parser: String,
 }
 
-fn store() -> PathBuf {
+pub(crate) fn store() -> PathBuf {
     dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-layout-checked.json")
 }
 

@@ -39,9 +39,13 @@ const subscribe = (l: () => void) => { listeners.add(l); return () => { listener
 export const VERDICTS_CHANGED = 'xtra-verdicts-changed'
 export const verdictsChanged = () => emit(VERDICTS_CHANGED).catch(() => {})
 
-/** Scan (Refresh list, Ctrl+Shift+R) sends it: the Library runs every check again, the background ones too. */
+/** Scan (Refresh list, Ctrl+Shift+R) sends it: the Library runs every check again, the background ones too. `force`:
+ *  mods the Mod Updater's Scan wants read fresh (their records already dropped), its own updates included. */
 export const VERDICTS_RESCAN = 'xtra-verdicts-rescan'
-export const rescanVerdicts = () => emit(VERDICTS_RESCAN).catch(() => {})
+export const rescanVerdicts = () => emit(VERDICTS_RESCAN, []).catch(() => {})
+export const rescanForced = (force: string[]) => emit(VERDICTS_RESCAN, force).catch(() => {})
+/** Mods a manual Scan asked for, checked even when the Mod Updater made them (until the next run starts). */
+let forced = new Set<string>()
 
 /** Full scans run one at a time: the backend's background checks skip a call while one runs (they answer 0), so a scan
  *  started beside another would end early with half the answers. Each waits for the one before it. */
@@ -91,7 +95,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     const chain = (first?: Promise<boolean>): Promise<boolean> => !live ? Promise.resolve(false) : (scanStarted(), invoke('xtra_scan_stopped').catch(() => false))
       .then(() => first ?? check())
       .then(ok => { if (!ok) throw new Error('the first check failed') })
-      .then(() => { scanPaths = paths.filter(p => !made.get(norm(p))?.current) })
+      .then(() => { scanPaths = paths.filter(p => forced.has(norm(p)) || !made.get(norm(p))?.current); forced = new Set() })
       .then(() => (live ? invoke('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
       .then(() => (live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: scanPaths }) : 0))
       .then(found => (live && found ? check() : undefined))
@@ -124,7 +128,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     window.addEventListener('focus', resume)
     const again = listen(VERDICTS_CHANGED, () => { void check() })
     // a Refresh list or Resume: checks the header paused or cancelled run again
-    const rescan = listen(VERDICTS_RESCAN, () => { void releaseScan().then(() => full()) })
+    const rescan = listen<string[] | null>(VERDICTS_RESCAN, e => { for (const p of e.payload ?? []) forced.add(norm(p)); void releaseScan().then(() => full()) })
     return () => { live = false; window.removeEventListener('focus', resume); if (runFull === full) runFull = null; clearTimeout(t); void again.then(f => f()); void rescan.then(f => f()) }
   }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
 }

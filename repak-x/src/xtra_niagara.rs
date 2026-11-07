@@ -580,7 +580,7 @@ pub(crate) async fn game_copies(game_paks: &str, usmap: &str, rels: &[String], w
 // game's own copy decodes that the mod's does not (or another shape) means the old layout. Each answer is kept per mod
 // file and USMAP, so a mod is decoded once.
 
-fn layout_store() -> PathBuf {
+pub(crate) fn layout_store() -> PathBuf {
     dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-vfx-layout.json")
 }
 

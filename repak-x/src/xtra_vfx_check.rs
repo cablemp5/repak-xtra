@@ -347,7 +347,7 @@ pub async fn xtra_vfx_check(mod_path: String, usmap_path: String, state: State<'
 // current by date. After each game update the Library has these checked once each, in the background: one found built
 // for an older version gets its Needs VFX update flag, so the VFX Updater's one Update covers it too.
 
-fn scan_store() -> PathBuf {
+pub(crate) fn scan_store() -> PathBuf {
     dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-vfx-check-scan-v2.json") // v2: reads the layout too, so every mod is looked at again once
 }
 
