@@ -1173,8 +1173,8 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .new-strip .lo-group-head { display: flex; }
 
 /* First run */
-.lo-first-run { padding: 28px; margin-bottom: 28px; border: 1px dashed var(--panel-border); border-radius: 12px; width: fit-content; max-width: 100%; } /* as wide as its buttons on one line: they wrap only when the screen is too narrow */
-.lo-first-run h3 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
+.lo-first-run { padding: 28px; border: 1px dashed var(--panel-border); border-radius: 12px; width: fit-content; max-width: 100%; } /* as wide as its buttons on one line: they wrap only when the screen is too narrow */
+.lo-first-run h3 { margin: 0 0 8px; font-size: 16px; font-weight: 600; text-box: trim-start cap alphabetic; } /* no line leading over the title: 28px to the text on top as under the buttons, and the body's gap (not a margin too) below the card */
 .lo-first-run p { margin: 0 0 16px; color: var(--text-secondary); font-size: 13px; max-width: 584px; }
 .lo-first-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 /* Loadouts with nothing matching the search or On only: centered in the page, the way out under it */

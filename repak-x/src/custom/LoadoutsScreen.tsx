@@ -18,6 +18,7 @@ import { CardZoomControl, useCardZoom, useWheelZoom } from './cardZoom'
 import { type Spot, playFlip, snapshotCards, useCardDrag } from './cardDrag'
 import { prepareMedia, putMedia } from './loadoutMedia'
 import { plural } from './modName'
+import { type OnOff, OnOffFilter, readOnOff } from './ModStateFilter'
 import { PreviewsUnavailable, dismissPreviewSummary, generateAllLoadouts, loadoutHasPreview, stopPreviews, usePreviewFailureToast, usePreviewsAvailable, usePreviewBatch, usePreviewStage, usePreviewSummary, usePreviewVersion } from './previews'
 import {
   type Loadout, type Mod, OTHER, OTHER_LABEL, addGroup, captureKey, changesToTurnOff, changesToTurnOn, deleteGroup, displayName, groupKey,
@@ -31,7 +32,7 @@ import { useUiPref } from './uiPrefs'
 
 type GroupBy = 'group' | 'hero'
 const GROUP_BY_KEY = 'repakxtra.loadoutGroupBy'
-const ONLY_ON_KEY = 'repakxtra.loadoutsOnlyOn' // All or On (loadouts with any of their mods on)
+const ONLY_ON_KEY = 'repakxtra.loadoutsOnlyOn' // All, On (loadouts with any of their mods on), or Off
 const FOLDED_KEY = 'repakxtra.foldedGroups' // collections and hero groups shown as just their heading ("group:<key>", "hero:<name>")
 const readFolded = () => { try { return new Set<string>(JSON.parse(savedItem(FOLDED_KEY) || '[]')) } catch { return new Set<string>() } }
 
@@ -211,12 +212,15 @@ function LoadoutsHome(p: LoadoutProps) {
   const [query, setQuery] = useState('')
   const q = query.trim()
   // On: loadouts with at least one installed mod on, fully or partly on (the card's dot is not gray)
-  const [onlyOn, setOnlyOnState] = useState(() => savedItem(ONLY_ON_KEY) === '1')
-  const setOnlyOn = (v: boolean) => { localStorage.setItem(ONLY_ON_KEY, v ? '1' : '0'); setOnlyOnState(v) }
+  // Off: none of its mods on. Saved as '1' (On) by older builds
+  const [show, setShowState] = useState<OnOff>(() => { const v = savedItem(ONLY_ON_KEY); return v === '1' ? 'enabled' : readOnOff(v) })
+  const setShow = (v: OnOff) => { localStorage.setItem(ONLY_ON_KEY, v); setShowState(v) }
   const enabledKeys = useMemo(() => new Set(p.mods.filter(m => m.enabled).map(m => modKey(m.path))), [p.mods])
-  const filtered = Boolean(q) || onlyOn // a narrowed view: groups without a match hide, and cards are not dragged
-  const matching = useMemo(() => loadouts.filter(l => (!q || matchesLoadout(l, q)) && (!onlyOn || l.on.some(k => enabledKeys.has(displayName(k))))),
-    [loadouts, q, onlyOn, enabledKeys])
+  const isOn = (l: Loadout) => l.on.some(k => enabledKeys.has(displayName(k)))
+  const onCount = useMemo(() => loadouts.filter(isOn).length, [loadouts, enabledKeys]) // eslint-disable-line react-hooks/exhaustive-deps
+  const filtered = Boolean(q) || show !== 'all' // a narrowed view: groups without a match hide, and cards are not dragged
+  const matching = useMemo(() => loadouts.filter(l => (!q || matchesLoadout(l, q)) && (show === 'all' || isOn(l) === (show === 'enabled'))),
+    [loadouts, q, show, enabledKeys]) // eslint-disable-line react-hooks/exhaustive-deps
   const [said, setSaid] = useState('') // the result count for screen readers, once typing pauses
   useEffect(() => {
     const t = setTimeout(() => setSaid(!q ? '' : matching.length ? `${plural(matching.length, 'loadout')} found` : 'No loadouts found'), 700)
@@ -521,21 +525,16 @@ function LoadoutsHome(p: LoadoutProps) {
         <div className="lo-head-main">
           <div className="lo-title-row">
             <h2>Loadouts</h2>
-            {loadouts.length > 0 && (
-              <label className="lp-search lo-search">
+            {/* shown with no loadouts too, so every page has the same head (the Library's search and All / On / Off) */}
+            <label className="lp-search lo-search">
                 <Search size={14} aria-hidden="true" />
                 <input ref={searchRef} value={query} placeholder="Search loadouts" aria-label="Search loadouts by name or collection" onChange={e => search(e.target.value)}
                   onKeyDown={e => { e.stopPropagation(); if (e.key === 'Escape') search('') }} />
                 {query && <button type="button" className="lo-icon" aria-label="Clear search" title="Clear search" onClick={clearSearch}><X size={13} /></button>}
               </label>
-            )}
             {/* beside the search: both narrow which cards show */}
-            {loadouts.length > 0 && (
-              <div className="mod-state-filter lo-groupby lo-show" role="group" aria-label="Show loadouts">
-                <button type="button" aria-pressed={!onlyOn} onClick={() => setOnlyOn(false)} title="Every loadout">All</button>
-                <button type="button" aria-pressed={onlyOn} onClick={() => setOnlyOn(true)} title="Only loadouts with mods on, fully or partly">On</button>
-              </div>
-            )}
+            <OnOffFilter className="lo-groupby lo-show" label="Show loadouts" value={show} onChange={setShow} on={onCount} total={loadouts.length}
+              titles={['Every loadout', 'Only loadouts with mods on, fully or partly', 'Only loadouts with none of their mods on']} />
             <span className="xtra-sr-only" role="status">{said}</span>
           </div>
         </div>
@@ -629,10 +628,10 @@ function LoadoutsHome(p: LoadoutProps) {
         {/* nothing matches the search or On only: a quiet centered note, not the first-run box (cable, 2026-10-30) */}
         {filtered && loadouts.length > 0 && groups.length === 0 && (
           <div className="lo-no-match" role="status">
-            <p>{q ? `No ${onlyOn ? 'loadouts that are on' : 'loadouts'} match “${q}”` : 'No loadouts are on'}</p>
+            <p>{q ? `No ${show === 'enabled' ? 'loadouts that are on' : show === 'disabled' ? 'loadouts that are off' : 'loadouts'} match “${q}”` : show === 'enabled' ? 'No loadouts are on' : 'Every loadout is on'}</p>
             <div className="lo-first-actions">
               {q && <button type="button" className="lo-text-btn" onClick={clearSearch}>Clear search</button>}
-              {onlyOn && <button type="button" className="lo-text-btn" onClick={() => setOnlyOn(false)}>Show all loadouts</button>}
+              {show !== 'all' && <button type="button" className="lo-text-btn" onClick={() => setShow('all')}>Show all loadouts</button>}
             </div>
           </div>
         )}
