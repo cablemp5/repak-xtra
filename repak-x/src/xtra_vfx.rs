@@ -1141,11 +1141,27 @@ fn stale(mod_path: &str, game_paks: &str, files: &[String]) -> Result<Vec<String
 pub(crate) fn original_of(mod_path: &Path) -> Option<PathBuf> {
     let stem = mod_path.file_stem()?.to_string_lossy().to_string();
     let dir = mod_path.parent()?;
-    // the file as it is spelled on disk (stems_in is lowercase)
+    // the file as it is spelled on disk (stems_in is lowercase). The folder's .utoc files are listed once and kept while
+    // the folder's time stands (it moves when a file is added, removed or renamed): the Library asks for every mod
+    static LISTED: std::sync::Mutex<Option<HashMap<PathBuf, (Option<std::time::SystemTime>, HashMap<String, PathBuf>)>>> = std::sync::Mutex::new(None);
+    // by lowercase stem: a scan of every file name per mod, on every verdict call, was most of xtra_broken_mods' time
+    let listed = |f: &mut dyn FnMut(&HashMap<String, PathBuf>)| {
+        let at = std::fs::metadata(dir).and_then(|m| m.modified()).ok();
+        let mut all = LISTED.lock().unwrap_or_else(|e| e.into_inner());
+        let cached = all.get_or_insert_with(HashMap::new);
+        if at.is_none() || cached.get(dir).is_none_or(|(t, _)| *t != at) {
+            let found = std::fs::read_dir(dir).into_iter().flatten().flatten().map(|e| e.path())
+                .filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("utoc")))
+                .filter_map(|p| Some((p.file_stem()?.to_string_lossy().to_lowercase(), p)))
+                .collect();
+            cached.insert(dir.to_path_buf(), (at, found));
+        }
+        f(&cached[dir].1)
+    };
     let utoc = |s: &str| {
-        std::fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).find(|p| {
-            p.extension().is_some_and(|x| x.eq_ignore_ascii_case("utoc")) && p.file_stem().is_some_and(|f| f.to_string_lossy().eq_ignore_ascii_case(s))
-        })
+        let mut hit = None;
+        listed(&mut |all| hit = all.get(&s.to_lowercase()).cloned());
+        hit
     };
     if partial_stem(&stem).eq_ignore_ascii_case(&stem) {
         return utoc(&original_stem(&stem));
@@ -1157,9 +1173,20 @@ pub(crate) fn original_of(mod_path: &Path) -> Option<PathBuf> {
         }
     }
     if is_update(&stem) {
-        let siblings = stems_in(dir);
+        let mut siblings = HashSet::new();
+        listed(&mut |all| siblings = all.keys().cloned().collect());
         let me = stem.to_lowercase();
-        return siblings.iter().find(|t| **t != me && !is_update(t) && fixed_stem_among(t, &siblings).eq_ignore_ascii_case(&stem)).and_then(|t| utoc(t));
+        // fixed_stem_among walks every sibling: only originals whose plain update name clashes need it (it was n squared
+        // per update, most of xtra_broken_mods' time with 16 updates among 240 mods)
+        let mut plain: HashMap<String, usize> = HashMap::new();
+        for t in siblings.iter().filter(|t| !is_update(t)) {
+            *plain.entry(fixed_stem(t).to_lowercase()).or_default() += 1;
+        }
+        let named = |t: &String| {
+            let p = fixed_stem(t);
+            if plain.get(&p.to_lowercase()) == Some(&1) { p } else { fixed_stem_among(t, &siblings) }
+        };
+        return siblings.iter().find(|t| **t != me && !is_update(t) && named(t).eq_ignore_ascii_case(&stem)).and_then(|t| utoc(t));
     }
     None
 }
@@ -1276,7 +1303,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let touch = |s: &str| std::fs::write(dir.path().join(format!("{s}.utoc")), b"t").unwrap();
         let p = |s: &str| dir.path().join(format!("{s}.utoc"));
-        for s in ["A_9999999_P", "A_BROKEN_9999999_P", "B_100_P", "B_UPDATED_9999999_P", "C_PARTIAL_9999999_P", "C_ORIGINAL_9999999_P", "D_9999999_P"] {
+        for s in ["A_9999999_P", "A_BROKEN_9999999_P", "B_100_P", "B_UPDATED_9999999_P", "C_PARTIAL_9999999_P", "C_ORIGINAL_9999999_P", "D_9999999_P", "E_100_P", "E_200_P", "E_200_UPDATED_9999999_P"] {
             touch(s);
         }
         assert_eq!(original_of(&p("A_9999999_P")), Some(p("A_BROKEN_9999999_P")), "kept the name: its _BROKEN original");
@@ -1284,6 +1311,7 @@ mod tests {
         assert_eq!(original_of(&p("C_PARTIAL_9999999_P")), Some(p("C_ORIGINAL_9999999_P")));
         assert_eq!(original_of(&p("D_9999999_P")), None, "no original beside it: it starts from itself");
         assert_eq!(original_of(&p("A_BROKEN_9999999_P")), None, "the original itself");
+        assert_eq!(original_of(&p("E_200_UPDATED_9999999_P")), Some(p("E_200_P")), "two originals share a name: the priority tells them apart");
     }
 
     #[test]
