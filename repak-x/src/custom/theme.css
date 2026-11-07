@@ -1262,7 +1262,7 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 /* Generate previews stays one line: short of room it cuts its words with an ellipsis, it never wraps or pushes the row wider */
 .lo-screen-head .lo-head-tools { flex-wrap: nowrap !important; }
 .lo-screen-head .lo-head-tools > :not(.lo-new) { min-width: 0; }
-.lo-screen-head .lo-head-tools :is(.lo-gen button, > .is-unavailable) { max-width: 100%; overflow: hidden; }
+.lo-screen-head .lo-head-tools .lo-gen button, .lo-screen-head .lo-head-tools > .is-unavailable { max-width: 100%; overflow: hidden; }
 .lo-screen-head .lo-head-tools :is(.lo-gen-text, .lo-gen-label, .bulk-btn-label) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .lo-screen-head .lo-head-tools :is(svg, .setup-chip) { flex: none; }
 @media (max-width: 1100px) { /* the one row needs about 1100px with the search at its narrowest */
