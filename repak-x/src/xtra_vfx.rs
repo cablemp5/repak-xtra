@@ -339,6 +339,15 @@ pub(crate) fn vanilla_dir(game_paks: &str, usmap: &str) -> PathBuf {
     base_dir().join(format!("vanilla-{}-{}", build_hash(Path::new(game_paks)), usmap_hash(usmap)))
 }
 
+fn sweep_caches(base: &Path, vanilla: &Path) {
+    for e in std::fs::read_dir(base).into_iter().flatten().flatten() {
+        let p = e.path();
+        if p != vanilla && p.is_dir() && !e.file_name().to_string_lossy().starts_with("run-") {
+            let _ = std::fs::remove_dir_all(&p);
+        }
+    }
+}
+
 fn make_dirs(game_paks: &str, run_id: &str, usmap: &str) -> Result<VfxDirs, String> {
     if !valid_run_id(run_id) {
         return Err(format!("Invalid run id: {run_id}"));
@@ -346,16 +355,11 @@ fn make_dirs(game_paks: &str, run_id: &str, usmap: &str) -> Result<VfxDirs, Stri
     let base = base_dir();
     let run = base.join(format!("run-{run_id}"));
     let vanilla = vanilla_dir(game_paks, usmap);
-    // Earlier runs and other game builds or USMAPs go: one run at a time (the window waits out a cancelled one), and a
-    // cache from another build or USMAP would hand out old or wrongly decoded game files
-    if let Ok(entries) = std::fs::read_dir(&base) {
-        for e in entries.flatten() {
-            let p = e.path();
-            if p != run && p != vanilla && p.is_dir() {
-                let _ = std::fs::remove_dir_all(&p);
-            }
-        }
-    }
+    // Other game builds or USMAPs go: a cache from another build or USMAP would hand out old or wrongly decoded game
+    // files. Other runs stay: a batch goes on while a candidate waits for review, and its packed update is in its run
+    // folder (deleting them made only the batch's last mod repair, 2026-11-06). Each run removes its own (xtra_vfx_run_done),
+    // and retire_stale_vfx clears what a closed app left
+    sweep_caches(&base, &vanilla);
     let _ = crate::vfx_updater::file_ops::cleanup_vfx_temp_directories(); // the upstream updater's rvfx_* leftovers
     let _ = std::fs::remove_dir_all(&run);
     let s = |p: PathBuf| -> Result<String, String> {
@@ -372,6 +376,36 @@ fn make_dirs(game_paks: &str, run_id: &str, usmap: &str) -> Result<VfxDirs, Stri
         vanilla_json: s(vanilla.join("json"))?,
         vanilla_index: vanilla.join("index.json").to_string_lossy().replace('\\', "/"),
     })
+}
+
+/// The VFX Updater opened: the long-lived command line loads the game's containers now (an extract that matches
+/// nothing), so the first mod's Reading the mod does not wait about 7 s for them (2026-11-06, a 375-file mod: 25.5 s
+/// cold, 18.7 s warm). It stays loaded 90 s after its last request (xtra_uat_cli.rs).
+#[tauri::command]
+pub async fn xtra_vfx_warm(game_paks: String) {
+    let Ok(dir) = run_work_dir("xscan") else { return };
+    let req = crate::vfx_updater::uasset_tool::VfxUatRequest {
+        action: "extract_iostore_legacy",
+        game_paks: Some(game_paks),
+        output_path: Some(dir.to_string_lossy().to_string()),
+        filter_patterns: Some(vec!["repakxtra-warm-matches-nothing".to_string()]),
+        with_deps: Some(false),
+        ..Default::default()
+    };
+    let _ = crate::xtra_uat_cli::extract(&req).await;
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A finished run's folder (its update is placed or dropped by now).
+fn run_done(run_id: &str) {
+    if valid_run_id(run_id) {
+        let _ = std::fs::remove_dir_all(base_dir().join(format!("run-{run_id}")));
+    }
+}
+
+#[tauri::command(async)]
+pub fn xtra_vfx_run_done(run_id: String) {
+    run_done(&run_id)
 }
 
 #[tauri::command(async)]
@@ -1171,6 +1205,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_new_run_keeps_the_other_runs_a_review_waits_on() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in ["run-a/stage", "vanilla-old", "vanilla-now"] {
+            std::fs::create_dir_all(dir.path().join(name)).unwrap();
+        }
+        sweep_caches(dir.path(), &dir.path().join("vanilla-now"));
+        let mut left: Vec<_> = std::fs::read_dir(dir.path()).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
+        left.sort();
+        assert_eq!(left, ["run-a", "vanilla-now"]);
+    }
+
+    #[test]
     fn a_closed_apps_runs_and_older_game_caches_are_retired_the_newest_stays() {
         let dir = tempfile::tempdir().unwrap();
         let day = std::time::Duration::from_secs(86_400);
@@ -1573,6 +1619,8 @@ mod tests {
             }
             "vfx_check_usmap_update" => json!(c::vfx_check_usmap_update(a.get("force").and_then(Value::as_bool).unwrap_or(false)).await?),
             "xtra_vfx_dirs" => json!(make_dirs(&s(a, "gamePaks"), &s(a, "runId"), &s(a, "usmapPath"))?),
+            "xtra_vfx_run_done" => json!(run_done(&s(a, "runId"))),
+            "xtra_vfx_warm" => json!(xtra_vfx_warm(s(a, "gamePaks")).await),
             "xtra_vfx_stale" => json!(stale(&s(a, "modPath"), &s(a, "gamePaks"), &list(a, "files"))?),
             "xtra_vfx_detect" =>json!(detect(&s(a, "usmapPath"), &list(a, "paths"), p).await?),
             "xtra_vfx_source" => json!(xtra_vfx_source(s(a, "modPath"))?),

@@ -27,7 +27,7 @@ const useCallback = (fn, deps) => {
   if (!cached || deps.some((d, i) => !Object.is(d, cached.deps[i]))) cached = { fn, deps }
   return cached.fn
 }
-const stable = Object.fromEntries(['picked', 'usmap', 'paks', 'originals', 'keepName', 'safeOff', 'needs', 'addLog'].map(k => [k, {}]))
+const stable = Object.fromEntries(['picked', 'usmap', 'paks', 'originals', 'keepName', 'safeOff', 'needs', 'askReview', 'addLog'].map(k => [k, {}]))
 const run = declaration('src/custom/vfx/VfxUpdaterWindow.tsx', 'run')
 const render = repairPolicy => vm.runInNewContext(compile(`globalThis.result = ${run}`), { ...stable, repairPolicy, useCallback })
 const strictRun = render('strict')
@@ -39,7 +39,7 @@ for (const kind of [undefined, 'unknown', 'broken', 'vfx', 'risky']) {
   let options
   const scope = {
     reserved: false, nameOf: () => 'Fixture', newRunToken: () => 'fixture', findUsmap: async () => 'fixture.usmap',
-    claimRun: async () => true, setUpdating() {}, readOriginals: () => 'off', readNaming: () => 'broken', readSafeOff: () => true, readRepairPolicy: () => 'bestEffort', incompleteAssets: () => 0,
+    claimRun: async () => true, setUpdating() {}, readOriginals: () => 'off', readNaming: () => 'broken', readSafeOff: () => true, readRepairPolicy: () => 'bestEffort', readAskReview: () => false, incompleteAssets: () => 0,
     readFilter: () => ({}), verdictOf: () => kind ? { kind } : undefined, utocOf: p => p + '.utoc', STEPS: ['Read'],
     fixVfxMod: async o => { options = o; return { status: 'failed' } }, resultToast() {}, releaseRun: async () => {},
     invoke: async () => 'C:/Fixture/Paks/~mods',
@@ -74,13 +74,13 @@ async function repair(policy, accept = false, sameParameters = false, scenario =
       case 'xtra_vfx_usmap_wait': return null
       case 'xtra_game_build': return { updated: 100 }
       case 'xtra_vfx_dirs': return dirs
-      case 'vfx_extract_mod_assets': return [dirs.modExtract + '/' + rel + '.uasset', ...(scenario.niagara ? [dirs.modExtract + '/NS_Fixture.uasset'] : [])]
+      case 'vfx_extract_mod_assets': return [dirs.modExtract + '/' + rel + '.uasset', ...(scenario.niagara ? [dirs.modExtract + '/NS_Fixture.uasset'] : []), ...(scenario.unreadable ? [dirs.modExtract + '/' + rel + 'B.uasset'] : [])]
       case 'xtra_vfx_pak_half': return []
       case 'xtra_vfx_classes': return { [rel.toLowerCase()]: 'MaterialInstanceConstant' }
       case 'xtra_vfx_relayout': return { files: scenario.relayout ? [rel] : [], surgical: scenario.relayout === 'surgical' ? [rel] : [], failed: [], unread: [], untold: [], complete: true }
       case 'xtra_vfx_stale': return ['NS_Fixture.uasset']
       case 'xtra_vfx_niagara': return { ready: true, files: [{ file: 'NS_Fixture.uasset', error: 'Fixture omission', retry: scenario.niagara === 'retry' }] }
-      case 'xtra_vfx_detect': return { [dirs.modExtract + '/' + rel + '.uasset']: { kind: 'material_instance', class: 'MaterialInstanceConstant' } }
+      case 'xtra_vfx_detect': return { [dirs.modExtract + '/' + rel + '.uasset']: { kind: 'material_instance', class: 'MaterialInstanceConstant' }, ...(scenario.unreadable ? { [dirs.modExtract + '/' + rel + 'B.uasset']: { kind: 'other', class: null, error: 'Fixture unreadable' } } : {}) }
       case 'vfx_copy_uasset_files': return []
       case 'vfx_write_json_file': files.set(a.path, a.content); return
       case 'vfx_convert_uassets_to_json': return [a.outputDir + '/' + rel + '.json']
@@ -92,7 +92,9 @@ async function repair(policy, accept = false, sameParameters = false, scenario =
       case 'xtra_safe_off_kept': return null
       case 'xtra_vfx_place': placement = a; return { fixed: 'Fixture.pak', source: 'Fixture.pak', original: 'Fixture.bak_repak' }
       case 'xtra_vfx_stamp': return
-      case 'xtra_vfx_no_update': assert.equal(a.modPath, 'Fixture.pak', 'clear the placed output'); return
+      case 'xtra_vfx_no_update': assert.ok(['Fixture.pak', 'Fixture.bak_repak'].includes(a.modPath), 'clear the placed output and its original'); return
+      case 'xtra_vfx_run_done': return
+      case 'xtra_vfx_turn_off': calls.push('turn_off:' + a.modPath); return null
       default: throw Error('Unexpected fixture command ' + cmd)
     }
   }
@@ -109,7 +111,7 @@ async function repair(policy, accept = false, sameParameters = false, scenario =
     return exports
   }
   const { fixVfxMod } = load(path.join(root, 'src/custom/vfx/pipeline.ts'))
-  const report = await fixVfxMod({ modPath: 'Fixture.utoc', usmapPath: 'fixture.usmap', gamePaksPath: 'fixture', policy, safeOff: false,
+  const report = await fixVfxMod({ modPath: 'Fixture.utoc', usmapPath: 'fixture.usmap', gamePaksPath: 'fixture', policy, safeOff: Boolean(scenario.safeOff), autoAccept: scenario.autoAccept,
     trashOriginal: true, turnOffOriginal: false,
     review: async r => { calls.push('review'); candidate = r; assert.ok(!calls.includes('xtra_vfx_place')); return accept },
   })
@@ -150,8 +152,17 @@ assert.ok(surgical.calls.indexOf('xtra_vfx_no_update') > surgical.calls.indexOf(
 for (const niagara of ['retry', 'permanent']) {
   const result = await repair('bestEffort', true, false, { niagara })
   assert.equal(result.report.status, 'fixed')
-  assert.ok(!result.calls.includes('xtra_vfx_no_update'), 'partial repair never claims complete clearance')
+  assert.ok(result.calls.indexOf('xtra_vfx_no_update') > result.calls.indexOf('xtra_vfx_place'), 'an installed partial repair clears Needs update too')
   assert.equal(result.placement.partial, niagara === 'retry', 'only retryable Niagara omissions request the retry marker')
   assert.equal(result.placement.trashOriginal, false, 'omitted content retains its original')
 }
+// no review (the default): a clean candidate goes in without asking, one keeping an unread asset fails and turns off
+const auto = await repair('bestEffort', false, false, { autoAccept: true })
+assert.equal(auto.report.status, 'fixed')
+assert.ok(!auto.calls.includes('review') && auto.calls.includes('xtra_vfx_place'), 'automatic acceptance places without a review')
+assert.ok(auto.calls.includes('turn_off:Fixture.bak_repak'), 'the original is kept off before its flag clears')
+const autoUnsafe = await repair('bestEffort', false, false, { autoAccept: true, unreadable: true, safeOff: true })
+assert.equal(autoUnsafe.report.status, 'failed')
+assert.ok(!autoUnsafe.calls.includes('xtra_vfx_place') && !autoUnsafe.calls.includes('review'), 'an unread asset blocks automatic placement')
+assert.ok(autoUnsafe.calls.includes('turn_off:Fixture.utoc'), 'a flagged mod whose candidate was refused turns off')
 console.log('PASS repair policy: fresh selection, inconclusive right-click safety, strict preservation gate, and reviewed candidates')

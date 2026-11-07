@@ -16,6 +16,8 @@ import { EGG_MS, stepEgg, stepText } from './previewStages'
 import { plural } from './modName'
 import { animatedUrls, isIdle } from './idlePause'
 import { koPreview } from './ko/koPreview'
+import { verdictOf } from './brokenMods'
+import { fixInVfxWindow } from './vfx/handoff'
 import { KO_BEAT } from './ko/render'
 
 const NOTHING = 'Nothing to show for this mod: previews cover skins, meshes, textures, animations, UI icons, VFX colors, and sounds.'
@@ -36,7 +38,8 @@ const markNone = (key: string, on: boolean) => {
   try { localStorage.setItem(NONE_KEY, JSON.stringify([...none])) } catch { /* storage full or off: only this session knows */ }
 }
 /** A run that ended with failures, for the toast (usePreviewFailureToast): the full errors are in the Logs. */
-type Failure = { name: string; failed: number; setFailed: boolean }
+/** stale: the failed mods (all of them when the loadout render failed) that need an update, so the game update is the likely cause */
+type Failure = { name: string; failed: number; setFailed: boolean; stale: string[] }
 const failureListeners = new Set<(f: Failure) => void>()
 /** Opens Setup at its Mod previews card (SetupPanel.tsx listens). */
 export const openPreviewSetup = () => window.dispatchEvent(new CustomEvent('repakxtra-open-setup', { detail: 'previews' }))
@@ -84,6 +87,7 @@ let batchDone = 0  // jobs finished since the queue was last empty, for Home's "
 type SetResult = 'ok' | 'none' | 'failed' | undefined
 let run = { id: '', total: 0, made: 0, none: 0, failed: 0, stopping: false, summary: '', set: undefined as string | undefined, name: '', setResult: undefined as SetResult, busy: '',
   show: false, step: undefined as string | undefined, quiet: false }
+let runPaths = new Map<string, string>() // the run's mods by preview key, for the failure toast
 let version = 0
 const listeners = new Set<() => void>()
 const notify = () => { version++; listeners.forEach(l => l()) }
@@ -184,7 +188,10 @@ function finish(ok: boolean) {
   run = { ...run, stopping: false, summary }
   // Previews made for a loadout become what its card shows when asked for (not on Stop: the user ended it)
   if (run.set && !stopped && (run.setResult === 'ok' || run.made > 0)) showPreviewCover(run.set, run.show)
-  if (!run.quiet && !run.busy && (failed || run.setResult === 'failed')) failureListeners.forEach(f => f({ name: run.name, failed, setFailed: run.setResult === 'failed' }))
+  if (!run.quiet && !run.busy && (failed || run.setResult === 'failed')) {
+    const stale = [...runPaths].filter(([k]) => run.setResult === 'failed' || outcome.get(k) === FAILED).map(([, p]) => p).filter(p => verdictOf(p)?.kind === 'vfx')
+    failureListeners.forEach(f => f({ name: run.name, failed, setFailed: run.setResult === 'failed', stale }))
+  }
   play(run.busy ? 'warning' : stoppedEarly ? 'close' : run.made && !failed && run.setResult !== 'failed' ? 'ready' : run.made ? 'warning' : 'error')
   batchDone++
   notify()
@@ -409,6 +416,7 @@ const start = async (job: QueuedJob): Promise<string | null> => {
   active = true
   jobs.forEach(([, k]) => { pending.add(k); outcome.delete(k) })
   if (job.set) outcome.delete(job.set)
+  runPaths = new Map(job.paths.map(p => [nameKey(p), p]))
   run = { id: job.id, total: jobs.length, made: 0, none: 0, failed: 0, stopping: false, summary: '', set: job.set, name: job.name, setResult: undefined, busy: '',
     show: Boolean(job.show), step: undefined, quiet: Boolean(job.quiet) }
   notify()
@@ -524,6 +532,15 @@ const unqueue = (id: string) => {
 export function usePreviewFailureToast(alert: ReturnType<typeof useAlert>) {
   useEffect(() => {
     const show = (f: Failure) => {
+      if (f.stale.length) {
+        // a game update broke them, not the preview kit: the Mod Updater is the fix, not the log
+        const n = f.stale.length
+        const id = alert.warning('Previews need updated mods', `${plural(n, 'mod')} ${n === 1 ? 'needs' : 'need'} an update before previews can generate. Update ${n === 1 ? 'it' : 'them'} first.${f.failed > n ? ` ${plural(f.failed - n, 'other preview')} failed too, the full error is in Logs.` : ''}`, {
+          duration: 15000,
+          action: { label: 'Open Mod Updater', onClick: () => { alert.dismissAlert(id); void fixInVfxWindow(f.stale, false) } },
+        })
+        return
+      }
       const n = f.failed + (f.setFailed ? 1 : 0)
       const what = f.setFailed && !f.failed ? `The ${f.name} render failed.` : `${plural(n, 'preview')} for ${f.name} failed.`
       const id = alert.error('Preview failed', `${what} The full error is in Logs. If it keeps happening, export the log there and send it to cable on Discord.`, {

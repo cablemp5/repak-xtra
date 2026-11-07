@@ -14,7 +14,7 @@ import { renameSource } from '../nexusSource'
 import { readFilter } from './filter'
 import { fixInVfxWindow, openVfxWindow, sendReport, utocOf } from './handoff'
 import { STEPS, fixVfxMod, incompleteAssets, repairOutcome, type VfxReport } from './pipeline'
-import { CHECK_RUN, claimRun, newRunToken, readNaming, readOriginals, readRepairPolicy, readSafeOff, releaseRun, runLock } from './prefs'
+import { CHECK_RUN, claimRun, newRunToken, readNaming, readOriginals, readAskReview, readRepairPolicy, readSafeOff, releaseRun, runLock } from './prefs'
 
 type Alert = ReturnType<typeof useAlert>
 let reserved = false // one right-click update at a time in this window, taken before anything is awaited
@@ -75,8 +75,9 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
     const originals = readOriginals(), naming = readNaming()
     const r = await fixVfxMod({
       modPath: mod.utoc_path || utocOf(mod.path), usmapPath: usmap, gamePaksPath: paks, filter: readFilter(), policy: readRepairPolicy(),
-      // no review here: a candidate Strict would also pass goes in, any other is declined and sent to the Mod Updater's review
-      review: async c => !incompleteAssets(c) && !c.warnings.length,
+      // no review here: with Ask me to review candidates on, a candidate Strict would also pass goes in, any other is
+      // declined and sent to the Mod Updater's review. Off (the default), one without unchecked assets goes in
+      autoAccept: !readAskReview(), review: async c => !incompleteAssets(c) && !c.warnings.length,
       keepName: naming === 'broken', turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash',
       safeOff: readSafeOff() && ['broken', 'vfx', 'risky'].includes(verdictOf(mod.path)?.kind ?? ''),
       onStep: s => { if (id !== null) alert.updateToast(id, { description: `Step ${s.step} of ${STEPS.length}: ${s.title}`, progressValue: ((s.step - 0.5) / STEPS.length) * 100 }) },
@@ -88,7 +89,7 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
       await emit('mods_dir_changed').catch(() => {})
       await reload()
     }
-    if (r.status === 'nothing') await verdictsChanged() // its Needs VFX update flag goes (xtra_broken.rs)
+    if (r.status === 'nothing' || r.placed || r.turnedOff) await verdictsChanged() // its Needs VFX update flag goes (xtra_broken.rs)
     if (id !== null) alert.dismissAlert(id)
     id = null
     resultToast(r, name, alert, mod.path)

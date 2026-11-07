@@ -28,15 +28,21 @@ export type VfxStatus = 'fixed' | 'nothing' | 'failed' | 'cancelled' | 'declined
 export const incompleteAssets = (r: Pick<VfxReport, 'counts' | 'assets'>) =>
   r.counts.left + r.counts.ownGame + r.counts.unreadable + r.assets.filter(a => a.kind === 'failed').length
 
-/** Only a complete installed repair can clear the old compatibility verdict. */
-export const repairedPath = (r: VfxReport): string | null =>
-  r.status === 'fixed' && r.placed && !incompleteAssets(r) && !r.warnings.length ? r.placed.fixed : null
+/** The mods whose Needs update flag an installed update clears: the update, partial or reviewed ones too, since nothing
+ *  the updater could do is left for that game build, and its original when it is off (blocked from going on first, so
+ *  turning it on later still warns). An original left on keeps its flag: it can still crash the game. */
+export const repairedPaths = (r: VfxReport): string[] =>
+  r.status === 'fixed' && r.placed ? [r.placed.fixed, ...(!r.placed.trashed && /\.bak_repak$/i.test(r.placed.original) ? [r.placed.original] : [])] : []
+/** Assets a candidate keeps unchecked: the mod's own copy of a material or blueprint that could not be rebuilt or read.
+ *  Any of them may be the one that crashes the game, so no candidate with them goes in without a review. */
+export const uncheckedAssets = (r: Pick<VfxReport, 'counts' | 'assets'>) => r.counts.unreadable + r.assets.filter(a => a.kind === 'failed').length
 
 export const repairOutcome = (r: VfxReport) => {
   if (r.status !== 'fixed') return 'Unsupported or ambiguous'
-  if (incompleteAssets(r)) return 'Partially repaired'
-  if (r.counts.updated || r.warnings.length || r.counts.same || r.counts.added) return 'Repaired after review'
-  return 'Repaired'
+  if (incompleteAssets(r)) return 'Partially updated'
+  // only a candidate someone accepted (Use candidate or Approve all) was reviewed: with review off it is just Updated
+  if (r.reviewed && (r.counts.updated || r.warnings.length || r.counts.same || r.counts.added)) return 'Updated after review'
+  return 'Updated'
 }
 
 export type Placed = { fixed: string; source: string; original: string; turnedOff: boolean; replaced: boolean; trashed?: boolean; warning?: string | null }
@@ -51,6 +57,8 @@ export type VfxReport = {
   placed?: Placed
   /** Could not be made safe, so it was turned off (FixOptions.safeOff) */
   turnedOff?: boolean
+  /** Placed after Use candidate or Approve all (Ask me to review candidates on) */
+  reviewed?: boolean
   assets: AssetResult[]
   warnings: string[]
   /** left: Niagara files made for an older game build, left out until a USMAP for the game is out (a partial update).
@@ -69,6 +77,9 @@ export type FixOptions = {
   /** Pack into this folder and stop there (the benchmark). Without it the fix goes beside the original. */
   policy?: 'strict' | 'bestEffort'
   review?: (report: VfxReport) => Promise<boolean>
+  /** No review (Ask me to review candidates is off): a Best effort candidate goes in unless it keeps unchecked assets
+   *  (uncheckedAssets), and then the run fails, so a flagged mod is turned off rather than left on to crash */
+  autoAccept?: boolean
   outputDir?: string
   turnOffOriginal?: boolean
   /** The update takes the mod's name and the original becomes <name>_BROKEN (the default). Off: the update is <name>_UPDATED. */
@@ -164,6 +175,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
   const warn = (w: string) => { report.warnings.push(w); log(w, 'warning') }
   // a refusal by the repair policy or a game build change, not a broken mod: it stays as it was, never turned off
   let keepOn = false
+  let runId: string | undefined // its work folder, removed when the run ends (placed or dropped by then)
   const strict = o.policy !== 'bestEffort'
   const changePolicy = 'Review the asset report, or choose Best effort in Advanced > Repair policy.'
 
@@ -181,7 +193,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     if (wait?.changed) { report.error = `Not updated yet. ${usmapWaitText(wait)}`; return report }
     // the game as it is now: an update that lands mid-run makes this one stale, so placing checks it again
     const buildAt = await invoke<{ updated: number }>('xtra_game_build').then(b => b.updated)
-    const runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+    runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
     const dirs = await invoke<Dirs>('xtra_vfx_dirs', { gamePaks: o.gamePaksPath, runId, usmapPath: o.usmapPath }) // the game files' cache is per USMAP too
     const extracted = await invoke<string[]>('vfx_extract_mod_assets', { gamePaks: o.gamePaksPath, modPath: src, outputDir: dirs.modExtract })
     check()
@@ -373,7 +385,14 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       const utoc = await invoke<string>('vfx_pack_to_iostore', { usmapPath: o.usmapPath, inputDir: dirs.finalUassets, outputBase: base, allowedAssets: manifest })
       report.output = utoc
       if (o.policy === 'bestEffort' && !o.outputDir) {
-        const accepted = o.review ? await o.review({ ...report, status: 'fixed' }) : false
+        const unchecked = uncheckedAssets(report)
+        if (o.autoAccept && unchecked) {
+          report.error = `Not updated: ${plural(unchecked, 'material or blueprint', 'materials and blueprints')} could not be rebuilt or read, and the game can crash on ${unchecked === 1 ? 'it' : 'them'}. The mod was not changed. Turn on Ask me to review candidates in Advanced to look at it yourself.`
+          log(report.error, 'warning')
+          return // failed: safe-off applies
+        }
+        const accepted = o.autoAccept || (o.review ? await o.review({ ...report, status: 'fixed' }) : false)
+        report.reviewed = !o.autoAccept && accepted
         check()
         if (!accepted) { report.status = 'declined'; report.error = 'Original kept. The candidate was not installed.'; return }
         const reviewedBuild = await invoke<{ updated: number }>('xtra_game_build').then(b => b.updated)
@@ -596,20 +615,28 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     const now = performance.now()
     if (step) report.steps.push({ step, ms: now - stepAt })
     report.ms = now - t0
+    if (runId) await invoke('xtra_vfx_run_done', { runId }).catch(() => {})
     // here, where the early returns pass too: Needs VFX update stops flagging it until the mod or the game changes (xtra_broken.rs)
     // not when its materials were rewritten: the original stays installed in the old layout and still needs turning off
     if (report.status === 'nothing' && !report.counts.relaid) await invoke('xtra_vfx_no_update', { modPath: o.modPath }).catch(e => log(`Could not note that it needs nothing: ${e}`, 'warning'))
-    const repaired = repairedPath(report)
-    if (repaired) await invoke('xtra_vfx_no_update', { modPath: repaired }).catch(e => {
-      const message = `The mod was repaired, but its compatibility status could not be saved: ${e}. Recheck it in the Mod Updater.`
-      report.warnings.push(message); log(message, 'warning')
-    })
-    // not made safe: off, so it cannot crash the game. Its flag stays, and a later update starts from the off copy
+    for (const modPath of repairedPaths(report)) {
+      // the original: kept off by xtra_safe_off.rs first (Turn on anyway still works), so a later switch-on warns
+      if (modPath !== report.placed!.fixed && !await invoke('xtra_vfx_turn_off', { modPath, reason: 'Its update replaced it. It was made for an older game build and can crash the game.' }).then(() => true, () => false)) continue
+      await invoke('xtra_vfx_no_update', { modPath }).catch(e => {
+        const message = `The mod was updated, but its compatibility status could not be saved: ${e}. Recheck it in the Mod Updater.`
+        report.warnings.push(message); log(message, 'warning')
+      })
+    }
+    // not made safe: off, so it cannot crash the game (xtra_safe_off.rs keeps it off). Its Needs update flag goes: the
+    // updater has done what it can for this game build, and Update again or the Library's Turn on anyway still reach it
     const unsafe = (report.status === 'failed' && o.safeOff) || (report.status === 'nothing' && report.counts.relaid > 0 && o.safeOff !== false)
     if (unsafe && !keepOn && !o.outputDir) {
       report.turnedOff = await invoke<string | null>('xtra_vfx_turn_off', { modPath: o.modPath, reason: report.error ?? 'An update could not make it safe.' }).then(Boolean)
         .catch(e => { log(`Could not turn it off: ${e}`, 'warning'); return false })
-      if (report.turnedOff) log(`Turned ${stem(o.modPath)} off, so it cannot crash the game. Update it again later, or turn it back on in the Library.`, 'warning')
+      if (report.turnedOff) {
+        log(`Turned ${stem(o.modPath)} off, so it cannot crash the game. Update it again later, or turn it back on in the Library.`, 'warning')
+        await invoke('xtra_vfx_no_update', { modPath: o.modPath }).catch(e => log(`Could not clear its Needs update flag: ${e}`, 'warning'))
+      }
     }
   }
   return report
@@ -618,12 +645,15 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
 if (import.meta.env.DEV) {
   const sample: VfxReport = { mod: '', name: '', status: 'fixed', assets: [], warnings: [], counts: { updated: 0, same: 0, added: 0, passed: 1, left: 0, ownGame: 0, unreadable: 0, changes: 0, relaid: 1 }, ms: 0, steps: [] }
   const placed = { fixed: 'updated.pak', source: 'old.pak', original: 'old.bak_repak', turnedOff: true, replaced: true }
-  console.assert(repairedPath({ ...sample, placed }) === 'updated.pak', 'clear only the installed repaired copy, never its original')
-  console.assert(repairedPath(sample) === null && repairedPath({ ...sample, placed, status: 'failed' }) === null, 'uninstalled and failed repairs never clear warnings')
-  console.assert(repairedPath({ ...sample, placed, counts: { ...sample.counts, left: 1 } }) === null && repairedPath({ ...sample, placed, warnings: ['unverified'] }) === null, 'partial and unverified repairs retain warnings')
-  console.assert(repairOutcome(sample) === 'Repaired', 'preserved structural repair')
-  console.assert(repairOutcome({ ...sample, counts: { ...sample.counts, ownGame: 1 } }) === 'Partially repaired', 'permanent omission is partial')
-  console.assert(repairOutcome({ ...sample, warnings: ['lost parameter'] }) === 'Repaired after review', 'loss needs review')
+  console.assert(repairedPaths({ ...sample, placed }).join() === 'updated.pak,old.bak_repak', 'an installed update clears itself and its original')
+  console.assert(!repairedPaths(sample).length && !repairedPaths({ ...sample, placed, status: 'failed' }).length, 'uninstalled and failed repairs clear nothing here')
+  console.assert(repairedPaths({ ...sample, placed, warnings: ['unverified'] }).length === 2 && repairedPaths({ ...sample, placed: { ...placed, trashed: true } }).join() === 'updated.pak', 'reviewed repairs clear too, a trashed original is gone')
+  console.assert(repairedPaths({ ...sample, placed: { ...placed, original: 'old.pak' } }).join() === 'updated.pak', 'an original left on keeps its flag')
+  console.assert(uncheckedAssets({ ...sample, counts: { ...sample.counts, left: 2, ownGame: 1 } }) === 0 && uncheckedAssets({ ...sample, counts: { ...sample.counts, unreadable: 1 }, assets: [{ name: 'a', path: 'a', kind: 'failed', detail: '' }] }) === 2, 'left-out Niagara files are safe, unread and unfixed assets are not')
+  console.assert(repairOutcome(sample) === 'Updated', 'preserved structural repair')
+  console.assert(repairOutcome({ ...sample, counts: { ...sample.counts, ownGame: 1 } }) === 'Partially updated', 'permanent omission is partial')
+  console.assert(repairOutcome({ ...sample, warnings: ['lost parameter'], reviewed: true }) === 'Updated after review', 'an accepted candidate says it was reviewed')
+  console.assert(repairOutcome({ ...sample, warnings: ['lost parameter'] }) === 'Updated', 'with review off it is just Updated')
   console.assert(repairOutcome({ ...sample, status: 'failed' }) === 'Unsupported or ambiguous', 'failed is never repaired')
   console.assert(assetKey('A/MI_Body.uasset') !== assetKey('B/MI_Body.uasset'), 'same basename keeps distinct repair identities')
   console.assert(fixedName('C:/m/BlueColoredVFX_9999999_P.utoc') === 'BlueColoredVFX_UPDATED_9999999_P', 'fixed name drops the priority')

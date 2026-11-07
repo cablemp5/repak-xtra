@@ -19,6 +19,9 @@ export const REPAIR_POLICY = 'repakxtra.vfx.repairPolicy'
 export type RepairPolicy = 'strict' | 'bestEffort'
 /** Best effort with a review of each candidate (the default), or Strict, which installs only what it can prove whole. */
 export const readRepairPolicy = (): RepairPolicy => (localStorage.getItem(REPAIR_POLICY) === 'strict' ? 'strict' : 'bestEffort')
+export const ASK_REVIEW = 'repakxtra.vfx.askReview' // '1': a Best effort candidate waits for Use candidate or Keep original
+/** Whether a Best effort candidate waits for a review (off by default: the candidate is used, its report says what it could not prove). */
+export const readAskReview = () => localStorage.getItem(ASK_REVIEW) === '1'
 export const readNaming = (): Naming => (localStorage.getItem(KEEP_NAME) === '0' ? 'updated' : 'broken')
 export function readOriginals(): Originals {
   const v = localStorage.getItem(ORIGINALS)
