@@ -3,27 +3,27 @@ import { Lock } from 'lucide-react'
 // Here, not in EncryptWindow.tsx, so the main window never loads that window's code (main.tsx lazy-loads it)
 export const KEY = 'repakxtra-encrypt:queue' // not a repakxtra.* key: devStorage would copy it to the shared file
 
-/** Opens the Encrypt window, or brings it forward. */
+/** Opens the Encryptor window, or brings it forward. */
 async function openWindow() {
   const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
   const existing = await WebviewWindow.getByLabel('encrypt')
   if (existing) { await existing.unminimize().catch(() => {}); await existing.setFocus(); return }
-  const w = new WebviewWindow('encrypt', { url: '/encrypt', title: 'Encrypt', width: 760, height: 820, minWidth: 600, minHeight: 560, center: true, resizable: true, decorations: false })
+  const w = new WebviewWindow('encrypt', { url: '/encrypt', title: 'Encryptor', width: 760, height: 820, minWidth: 600, minHeight: 560, center: true, resizable: true, decorations: false })
   w.once('tauri://error', e => console.error('[Encrypt] Failed to create window:', e))
 }
 
-/** Opens the Encrypt window with these mods ticked (none: just opens it). */
+/** Opens the Encryptor window with these mods ticked (none: just opens it). */
 export async function openEncrypt(paths: string[] = []) {
   if (paths.length) localStorage.setItem(KEY, JSON.stringify({ paths, at: Date.now() }))
   await openWindow()
 }
 
-/** Header button: opens the Encrypt window (EncryptWindow.tsx). Hidden from Settings > Header buttons like the VFX Updater's. */
+/** Header button: opens the Encryptor window (EncryptWindow.tsx). Hidden from Settings > Header buttons like the VFX Updater's. */
 export default function EncryptMods() {
   return (
     <button type="button" className="btn-settings" data-tour="encrypt-btn" title="Encrypt mods so they are harder to unpack"
       onClick={() => void openEncrypt().catch(e => console.error('[Encrypt] Window error:', e))}>
-      <Lock size={16} aria-hidden="true" /> Encrypt
+      <Lock size={16} aria-hidden="true" /> Encryptor
     </button>
   )
 }

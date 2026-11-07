@@ -35,9 +35,9 @@ const norm = (p: string) => p.replace(/\//g, '\\').toLowerCase()
 function Group({ title, count, open, onFold, all, none, busy, onPick, done, children }: {
   title: string; count: number; open: boolean; onFold: () => void; all: boolean; none: boolean; busy: boolean; onPick: (on: boolean) => void; done?: boolean; children: React.ReactNode
 }) {
-  // done: the Converted group, green like the Mod Updater's Updated (vfx.css .vf-grp.is-done)
+  // done: the Converted group, magenta like the Galacta badge (vfx.css .vf-grp.is-galacta)
   return (
-    <section className={`vf-grp${done ? ' is-done' : ''}${open ? '' : ' is-folded'}`}>
+    <section className={`vf-grp${done ? ' is-galacta' : ''}${open ? '' : ' is-folded'}`}>
       <div className="vf-grp-head">
         <h2 className="vf-grp-title">
           <button type="button" className="vf-grp-fold" aria-expanded={open} onClick={onFold}>

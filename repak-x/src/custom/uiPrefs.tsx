@@ -17,7 +17,7 @@ import { savedItem } from './storageCarryOver'
 const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod' | 'warn' }[] = [
   { key: 'ko-tab', label: 'KO Editor tab (Shift+K)', on: true, group: 'header' },
   { key: 'vfx-updater', label: 'Mod Updater (Shift+M)', on: true, group: 'header' },
-  { key: 'encrypt', label: 'Encrypt (Shift+E)', group: 'header' }, // hidden by default: Settings > Header buttons shows it
+  { key: 'encrypt', label: 'Encryptor (Shift+E)', group: 'header' }, // hidden by default: Settings > Header buttons shows it
   { key: 'galacta', label: 'Galacta Converter (Shift+G)', group: 'header' }, // hidden by default, also in Tools
   { key: 'asset-explorer', label: 'Asset Explorer (Shift+A)', group: 'header' },
   { key: 'tools', label: 'Tools (Shift+T)', group: 'header' },
