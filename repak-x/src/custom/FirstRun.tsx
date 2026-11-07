@@ -4,7 +4,8 @@ import { LOADER_NAME, LOADER_PAK, APP_NAME } from './edition'
 // (always asked, the mods already installed named in it), then either the guided steps (game, bypass, loader) or a
 // background setup that installs only what is missing, then Make it yours (previews, Discord, the shortcut, sounds), then
 // the first loadout: from the mods already there, or a mod installed right there as one. Finish lands on Loadouts home. Mods dropped on the window hide the flow for the install,
-// and it comes back after.
+// and it comes back after, except on the first loadout page, where a drop or a picked mod ends the flow. The tour plays
+// after the first install that follows it.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
@@ -47,6 +48,7 @@ type Auto = 'checking' | 'game-open' | 'no-game' | 'working' | 'failed' | 'done'
 
 const NEXUS = 'https://www.nexusmods.com/marvelrivals/mods'
 const ONBOARDED = 'repakxtra.onboarded2'
+const TOUR_AFTER = 'repakxtra.tourAfterInstall' // the mod count when the flow closed: the tour plays once an install adds to it
 /** Mods a person installed: not the loader pak or built-ins. */
 const realMods = (mods: Mod[]) => mods.filter(m => loadoutable(modKey(m.path)) && !isBuiltin(m.path))
 const openUrl = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
@@ -444,8 +446,9 @@ export const PAGES: Page[] = [
  *  the flow getting longer). A step a path skips shows as done once passed. */
 const RAIL = [...new Set(PAGES.flatMap(p => p.step ? [p.step] : []))]
 
-export default function FirstRun({ alert, gamePath, mods: allMods, details, installing, enableDrp, onSetDrp, onAutoDetect, onBrowse, onAddFiles }: {
+export default function FirstRun({ alert, gamePath, mods: allMods, details, installing, enableDrp, onSetDrp, onAutoDetect, onBrowse, onAddFiles, onTour }: {
   alert: Alert
+  onTour: () => void // plays the tour (App's OnboardingTour)
   installing: boolean // App's install panel is open
   gamePath: string
   mods: Mod[]
@@ -478,6 +481,12 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
   const focus = useDialogFocus(open, () => close()) // focus inside, Tab stays inside, Esc closes (a changelog above it first), back to the opener
 
   const installed = realMods(allMods)
+  const installingNow = useRef(installing)
+  installingNow.current = installing // read after a drop, once the render that opens the install panel is in
+  const countNow = useRef(installed.length)
+  countNow.current = installed.length
+  const atNow = useRef(at)
+  atNow.current = at
   const hasMods = installed.length > 0
   const guided = (path ?? (hasMods ? 'yes' : 'no')) !== 'yes'
   const ids = sequence(PAGES, { guided, hasMods })
@@ -508,7 +517,18 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
     window.addEventListener('repakxtra-first-run', show)
     return () => window.removeEventListener('repakxtra-first-run', show)
   }, [hasMods])
-  const close = () => { localStorage.setItem(ONBOARDED, '1'); setOpen(false) }
+  const close = () => {
+    localStorage.setItem(ONBOARDED, '1')
+    if (!localStorage.getItem('hasSeenOnboarding')) localStorage.setItem(TOUR_AFTER, String(countNow.current)) // a drop's listener holds an older render
+    setOpen(false)
+  }
+  /** The first mod installed after the flow: the tour, once its install panel has closed. */
+  useEffect(() => {
+    const before = localStorage.getItem(TOUR_AFTER)
+    if (open || installing || before === null || installed.length <= Number(before)) return
+    localStorage.removeItem(TOUR_AFTER)
+    onTour()
+  }, [open, installing, installed.length])
   /** Out of the way for an install (App's drop handler shows its panel), back when the panel closes, installed or
    *  cancelled. Not marked seen: a restart while hidden shows the flow again. */
   const hide = () => { resume.current = { count: installed.length, seen: false }; setOpen(false) }
@@ -521,7 +541,8 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
     setOpen(true)
   }, [installing, installed.length])
   useEffect(() => { // a drop the install panel refused or could not read: hidden for it, so back now (App.tsx)
-    const dropped = () => { if (resume.current && !resume.current.seen) { resume.current = null; setOpen(true) } }
+    // after this turn: the drop handler opened the panel in a render that may not be in yet
+    const dropped = () => setTimeout(() => { if (resume.current && !resume.current.seen && !installingNow.current) { resume.current = null; setOpen(true) } })
     window.addEventListener('repakxtra-drop-done', dropped)
     return () => window.removeEventListener('repakxtra-drop-done', dropped)
   }, [])
@@ -548,7 +569,8 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
     // kit (App's drop handler), so the screen stays and the previews row updates
     const off = listen<{ paths?: string[] } | string[]>('tauri://drag-drop', e => {
       const paths = Array.isArray(e.payload) ? e.payload : e.payload?.paths ?? []
-      if (!(paths.length === 1 && isKitZip(paths[0]))) hide()
+      // on the first loadout page a drop ends the flow: the install card shows, the tour follows the install
+      if (!(paths.length === 1 && isKitZip(paths[0]))) atNow.current === 'loadout' ? finishFlow() : hide()
     })
     return () => { asked.current++; off.then(f => f()).catch(() => undefined) }
   }, [open, gamePath])
@@ -593,9 +615,8 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
     const got = await pick({ multiple: true, title: 'Mods to install', filters: [{ name: 'Mod files', extensions: ['pak', 'zip', 'rar', '7z', OFF_EXT] }] }).catch(() => null)
     const paths = Array.isArray(got) ? got : got ? [got] : []
     if (!paths.length) return
-    hide()
+    finishFlow() // the flow ends here: the install card shows, the tour follows the install
     await onAddFiles(paths)
-    if (resume.current && !resume.current.seen) { resume.current = null; setOpen(true) } // nothing to install: the panel never opened
   }
   /** Done: Loadouts home, plus what the first loadout page picked. */
   const finishFlow = (pending: Pending = null) => {
