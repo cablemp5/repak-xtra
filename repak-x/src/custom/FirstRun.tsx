@@ -48,7 +48,7 @@ type Auto = 'checking' | 'game-open' | 'no-game' | 'working' | 'failed' | 'done'
 
 const NEXUS = 'https://www.nexusmods.com/marvelrivals/mods'
 const ONBOARDED = 'repakxtra.onboarded2'
-const TOUR_AFTER = 'repakxtra.tourAfterInstall' // the mod count when the flow closed: the tour plays once an install adds to it
+const TOUR_AFTER = 'repakxtra.tourAfterInstall' // set when the flow closes: the next finished install plays the tour
 /** Mods a person installed: not the loader pak or built-ins. */
 const realMods = (mods: Mod[]) => mods.filter(m => loadoutable(modKey(m.path)) && !isBuiltin(m.path))
 const openUrl = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
@@ -483,8 +483,6 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
   const installed = realMods(allMods)
   const installingNow = useRef(installing)
   installingNow.current = installing // read after a drop, once the render that opens the install panel is in
-  const countNow = useRef(installed.length)
-  countNow.current = installed.length
   const atNow = useRef(at)
   atNow.current = at
   const hasMods = installed.length > 0
@@ -519,16 +517,15 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
   }, [hasMods])
   const close = () => {
     localStorage.setItem(ONBOARDED, '1')
-    if (!localStorage.getItem('hasSeenOnboarding')) localStorage.setItem(TOUR_AFTER, String(countNow.current)) // a drop's listener holds an older render
+    if (!localStorage.getItem('hasSeenOnboarding')) localStorage.setItem(TOUR_AFTER, '1')
     setOpen(false)
   }
-  /** The first mod installed after the flow: the tour, once its install panel has closed. */
+  /** The first install after the flow, once its files and loadout are in (App's repakxtra-installed): the tour. */
   useEffect(() => {
-    const before = localStorage.getItem(TOUR_AFTER)
-    if (open || installing || before === null || installed.length <= Number(before)) return
-    localStorage.removeItem(TOUR_AFTER)
-    onTour()
-  }, [open, installing, installed.length])
+    const done = () => { if (localStorage.getItem(TOUR_AFTER)) { localStorage.removeItem(TOUR_AFTER); onTour() } }
+    window.addEventListener('repakxtra-installed', done)
+    return () => window.removeEventListener('repakxtra-installed', done)
+  }, [])
   /** Out of the way for an install (App's drop handler shows its panel), back when the panel closes, installed or
    *  cancelled. Not marked seen: a restart while hidden shows the flow again. */
   const hide = () => { resume.current = { count: installed.length, seen: false }; setOpen(false) }
@@ -599,7 +596,9 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
         finish('bypass')
         did.push('the signature bypass')
       }
-      // online: an older copy already in ~mods is brought to the newest release too (offline, a missing one still installs)
+      // online: an older copy already in ~mods is brought to the newest release too (offline, a missing one still installs).
+      // Busy meanwhile: the check downloads the release (cached, so the install after it downloads nothing)
+      setBusy('galacta')
       const g = await invoke<Galacta>('setup_galacta_status', { online: true })
         .catch(() => invoke<Galacta>('setup_galacta_status', { online: false }))
       setGalacta(g)

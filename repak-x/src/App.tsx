@@ -3418,6 +3418,7 @@ function App() {
 
         await finishInstallLoadout(modsWithSettings, alert) // repakxtra: Save as a loadout
         await recordSources(modsWithSettings) // repakxtra: Nexus source from the archive name
+        window.dispatchEvent(new Event('repakxtra-installed')) // repakxtra: files and loadout are in, the first-run tour may start (FirstRun.tsx)
 
         // Reload in background so alert shows success immediately
         loadMods()
