@@ -60,6 +60,25 @@ function useFolded(tabs: React.RefObject<HTMLDivElement | null>) {
   return folded
 }
 
+export type OnOff = 'all' | 'enabled' | 'disabled'
+export const readOnOff = (v: string | null): OnOff => (v === 'enabled' || v === 'disabled' ? v : 'all')
+
+/** The Library's All / On / Off tabs with counts, for a page that lists things that are on or off (the Loadouts screen). */
+export function OnOffFilter({ value, onChange, on, total, label, titles, className = '' }: {
+  value: OnOff; onChange: (v: OnOff) => void; on: number; total: number; label: string; titles?: [string, string, string]; className?: string
+}) {
+  const tabs: [OnOff, string, number][] = [['all', 'All', total], ['enabled', 'On', on], ['disabled', 'Off', total - on]]
+  return (
+    <div className={`mod-state-filter ${className}`} role="group" aria-label={label}>
+      {tabs.map(([s, text, n], i) => (
+        <button key={s} type="button" aria-pressed={value === s} onClick={() => onChange(s)} title={titles?.[i]}>
+          {text}<span className="mod-state-count">{n.toLocaleString()}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function ModStateFilter({ value, onChange, mods, encrypted }: Props) {
   useBrokenVersion()
   const enabled = mods.filter(m => m.enabled).length
