@@ -79,7 +79,7 @@ pub fn xtra_vfx_stamp(mod_path: String, game_paks: String, usmap_path: String) -
 }
 
 /// A mod the Mod Updater made, whether it left files out (_PARTIAL), and whether it was for the installed game (its
-/// Updated tag) or an older one (flagged again, it reads Update again).
+/// Updated tag) or an older one (flagged again, it reads Needs update).
 #[derive(Serialize)]
 pub struct Made {
     path: String,
