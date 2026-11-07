@@ -1269,7 +1269,8 @@ async fn parse_dropped_files(
                         pak_files_in_archive.retain(|p| !crate::xtra_setup::is_managed_loader(p));
                         if paks_found > 0 && pak_files_in_archive.is_empty() { continue; }
 
-                        if pak_files_in_archive.len() > 1 {
+                        // repakxtra: with a loader left out, the rest lists by pak name as in a multi-pak archive (the install matches by it)
+                        if pak_files_in_archive.len() > 1 || pak_files_in_archive.len() < paks_found {
                             // Multiple PAK files found in archive - analyze each separately
                             // All entries use the ORIGINAL ARCHIVE path so install side can re-extract
                             let _ = window.emit(
@@ -2618,6 +2619,7 @@ fn quick_organize_impl(
 
             for entry in WalkDir::new(temp_path).into_iter().filter_map(|e| e.ok()) {
                 let entry_path = entry.path();
+                if crate::xtra_setup::is_managed_loader(entry_path) { continue; } // repakxtra: an archive's mod loader is Setup's
                 if let Some(entry_ext) = entry_path.extension().and_then(|s| s.to_str()) {
                     if entry_ext == "pak" {
                         let key = entry_key(entry_path, temp_path);
