@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { open as pickFile, save as pickSave } from '@tauri-apps/plugin-dialog'
 import ConfirmRow from './ConfirmRow'
-import { History } from 'lucide-react'
+import { Camera, History, Import } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 
 type Alert = ReturnType<typeof useAlert>
@@ -100,8 +100,8 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
       </ul>}
       <div className="su-actions">
         {/* only once the list is read: its warning about the oldest one has to be right before a snapshot can drop it */}
-        <button type="button" className="btn-primary su-main" disabled={locked || !list || Boolean(failed)} onClick={make}>{busy === 'make' ? 'Copying…' : 'Make a snapshot'}</button>
-        <button type="button" className="lo-text-btn" disabled={locked || !list} onClick={importZip}>{busy === 'import' ? 'Importing…' : 'Import a snapshot…'}</button>
+        <button type="button" className="btn-primary su-main" disabled={locked || !list || Boolean(failed)} onClick={make}><Camera size={14} aria-hidden="true" />{busy === 'make' ? 'Copying…' : 'Make a snapshot'}</button>
+        <button type="button" className="lo-text-btn" disabled={locked || !list} onClick={importZip}><Import size={14} aria-hidden="true" />{busy === 'import' ? 'Importing…' : 'Import a snapshot'}</button>
         {list && <span className="su-meta">{estimate ? `${plural(estimate[0], 'file')}, about ${size(estimate[1])} each. ` : ''}{drops.length ? `Making one removes ${dropText}.` : 'The newest 3 are kept.'}</span>}
       </div>
       <p className="su-note">Import takes a .zip of a snapshot or of mod files. Only the mod files come in, never the loader or plugins.</p>

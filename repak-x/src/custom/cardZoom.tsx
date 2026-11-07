@@ -3,6 +3,7 @@
 // Steps with the − / + control in the Loadouts header, a plain mouse wheel over that control, or Ctrl + mouse wheel over the cards.
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { Minus, Plus } from 'lucide-react'
+import { currentMonitor } from '@tauri-apps/api/window'
 import { cue } from './sounds'
 import { savedItem } from './storageCarryOver'
 
@@ -10,7 +11,11 @@ const KEY = 'repakxtra.cardZoom'
 const STEPS = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.15, 1.3, 1.5]
 const listeners = new Set<() => void>()
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
-const get = () => { const z = Number(savedItem(KEY)); return STEPS.includes(z) ? z : 1 }
+/** Until the user picks a size: by the screen's physical resolution (its short side), 1080p 90%, 1440p 100%, 4K 115%. */
+export const zoomForScreen = (short: number) => (short >= 2160 ? 1.15 : short >= 1440 ? 1 : 0.9)
+let unpicked = 1
+currentMonitor().then(m => { if (m) { unpicked = zoomForScreen(Math.min(m.size.width, m.size.height)); listeners.forEach(l => l()) } }).catch(() => {})
+const get = () => { const z = Number(savedItem(KEY)); return STEPS.includes(z) ? z : unpicked }
 
 /** The next step from `z` in direction `dir` (0 resets to 100%), held to the ends. */
 export const stepZoom = (z: number, dir: -1 | 0 | 1) => {
@@ -75,5 +80,6 @@ export function CardZoomControl() {
 }
 
 if (import.meta.env.DEV) {
+  console.assert(zoomForScreen(1080) === 0.9 && zoomForScreen(1440) === 1 && zoomForScreen(1600) === 1 && zoomForScreen(2160) === 1.15 && zoomForScreen(768) === 0.9, 'zoomForScreen')
   console.assert(stepZoom(1, 1) === 1.15 && stepZoom(0.5, -1) === 0.5 && stepZoom(1.5, 1) === 1.5 && stepZoom(1.3, 0) === 1 && stepZoom(0.75, 1) === 1.15, 'stepZoom')
 }
