@@ -7,6 +7,8 @@ import { normalizeModBaseName } from '../utils/format'
 import { applyDataMode, dataMode, mountDataToggle } from './worstCase'
 
 // DEV guard keeps the snapshot out of release bundles
+/** When the mock game last updated: one value per load (a new one each second read as a game update mid-run) */
+const MOCK_GAME_UPDATED = Math.floor(Date.now() / 1000) - 3600 * 5
 const fixtures = import.meta.env.DEV ? import.meta.glob('./fixture.local.json', { eager: true, import: 'default' }) : {}
 const data: any = Object.values(fixtures)[0] ?? {
   gamePath: '', settings: {}, tags: [], characterData: [], mods: [], folders: [], details: {},
@@ -339,7 +341,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         ...(/vfx/i.test(m.path) ? {} : { materials: true, ui: true }), path: m.path, utoc: m.utoc_path || m.path.replace(/\.(pak|bak_repak)$/i, '.utoc'), enabled: m.enabled, hero: m.character_name ?? null, modified: m.modified_date ?? 0,
         name: m.custom_name || m.path.split(/[\\/]/).pop().replace(/\.[^.]+$/, '').replace(/(_\d+)?_P$/i, '') })) }
       // the mock USMAP is 3939753: localStorage 'mock.usmapBehind' = '1' puts the game a build ahead of it, so updates wait
-      case 'xtra_game_build': return { updated: Math.floor(Date.now() / 1000) - 3600 * 5, cl: localStorage.getItem('mock.usmapBehind') === '1' ? 3962284 : 3939753 }
+      case 'xtra_game_build': return { updated: MOCK_GAME_UPDATED, cl: localStorage.getItem('mock.usmapBehind') === '1' ? 3962284 : 3939753 }
       // with mock.usmapBehind, mods whose name has 'wait' in it use files the patch changed
       case 'xtra_vfx_usmap_wait': return localStorage.getItem('mock.usmapBehind') === '1' && /wait/i.test(String(args?.modPath ?? '')) ? { usmap: 3939753, game: 3962284, changed: 3 } : null
       case 'xtra_usmap_waiting': return { waiting: localStorage.getItem('mock.usmapBehind') === '1', fetched: false }

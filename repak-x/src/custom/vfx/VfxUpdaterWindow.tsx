@@ -10,7 +10,7 @@ import { APP_NAME } from '../edition'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, emitTo, listen } from '@tauri-apps/api/event'
-import { AlertTriangle, Archive, Check, ChevronDown, ChevronRight, Copy, Eye, Info, PackageCheck, Undo2, FilePlus, Map as MapIcon, Palette, RefreshCw, RotateCcw, ScrollText, Search, Square, Tag, X } from 'lucide-react'
+import { AlertTriangle, Archive, Check, CheckCheck, ChevronDown, ChevronRight, Copy, Eye, Info, PackageCheck, Undo2, FilePlus, Map as MapIcon, Palette, RefreshCw, RotateCcw, ScrollText, Search, Square, Tag, X } from 'lucide-react'
 import TitleBar from '../../components/TitleBar'
 import { useGlobalTooltips } from '../../hooks/useGlobalTooltips'
 import Checkbox from '../../components/ui/Checkbox'
@@ -20,7 +20,7 @@ import { DEFAULT_FILTER, parseWords, readFilter, resetFilter, writeFilter, type 
 import { canonKey } from '../loadoutIdentity'
 import { modKey, useLoadouts } from '../loadoutStore'
 import { FIXED_EVENT, onHandoff, openLoadoutInMain, onReport, takeHandoff, takeReport, utocOf, type Fixed } from './handoff'
-import { CHECK_RUN, KEEP_NAME, ORIGINALS, REPAIR_POLICY, SAFE_OFF, claimRun, newRunToken, onRunChange, readNaming, readOriginals, readRepairPolicy, readSafeOff, releaseRun, runLock, type Naming, type Originals, type RunLock } from './prefs'
+import { ASK_REVIEW, CHECK_RUN, KEEP_NAME, ORIGINALS, REPAIR_POLICY, SAFE_OFF, claimRun, newRunToken, onRunChange, readAskReview, readNaming, readOriginals, readRepairPolicy, readSafeOff, releaseRun, runLock, type Naming, type Originals, type RunLock } from './prefs'
 import { STEPS, fixVfxMod, repairOutcome, type AssetKind, type VfxReport } from './pipeline'
 import { checkVfxMod, checkWords } from './quick'
 import { needsUpdater, skipsUpdater, verdictLabel, verdictsChanged } from '../brokenMods'
@@ -318,7 +318,7 @@ function ColorNames() {
 
 /** The oldest Best effort candidate waiting for an answer, pinned over the list: what it is, what each button does, its
  *  report, then the two answers on one line. Further candidates wait behind it (the batch keeps running meanwhile). */
-export function ReviewCard({ name, report, more, onAnswer }: { name: string; report: VfxReport; more: number; onAnswer: (ok: boolean) => void }) {
+export function ReviewCard({ name, report, more, onAnswer, onApproveAll }: { name: string; report: VfxReport; more: number; onAnswer: (ok: boolean) => void; onApproveAll: () => void }) {
   const ref = useRef<HTMLElement>(null)
   useEffect(() => { ref.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }) }, [])
   return (
@@ -328,6 +328,7 @@ export function ReviewCard({ name, report, more, onAnswer }: { name: string; rep
       <Report r={report} busy={true} onRetry={() => {}} onUsmap={() => {}} candidate actions={<>
         <button type="button" className="lo-text-btn is-primary" onClick={() => onAnswer(true)}><PackageCheck size={14} aria-hidden="true" />Use candidate</button>
         <button type="button" className="lo-text-btn" onClick={() => onAnswer(false)} title="Esc"><Undo2 size={14} aria-hidden="true" />Keep original</button>
+        <button type="button" className="lo-text-btn" onClick={onApproveAll} title="Use this candidate and every other one in this run"><CheckCheck size={14} aria-hidden="true" />Approve all</button>
       </>} />
     </section>
   )
@@ -338,6 +339,8 @@ export function VfxUpdaterPanel() {
   const [needs, setNeeds] = useState<Map<string, string>>(new Map()) // a mod's main file (norm) -> why it needs an update
   const [made, setMade] = useState<Map<string, boolean>>(new Map()) // a mod's main file (norm) this updater made for this game -> partial
   const [repairPolicy, setRepairPolicy] = useState(readRepairPolicy)
+  const [askReview, setAskReview] = useState(readAskReview)
+  const approveRest = useRef(false) // Approve all: the rest of this run's candidates are used without asking
   // Best effort candidates waiting for Use candidate or Keep original, oldest first: the batch goes on meanwhile
   const [reviews, setReviews] = useState<{ key: string; name: string; report: VfxReport; resolve: (accepted: boolean) => void }[]>([])
   const reviewsRef = useRef(reviews)
@@ -609,7 +612,7 @@ export function VfxUpdaterPanel() {
     if (todo.some(k => !groupOf.current.has(k))) setQ('')
     const unfold = new Set(['needs', ...todo.map(k => groupOf.current.get(k) ?? '')])
     setFoldedIds(f => (f.some(id => unfold.has(id)) ? f.filter(id => !unfold.has(id)) : f))
-    setBusy(true); setBatch(todo); setLastTook(null); setEnded(null); cancel.current = false
+    setBusy(true); setBatch(todo); setLastTook(null); setEnded(null); cancel.current = false; approveRest.current = false
     const startedAt = performance.now()
     todo.forEach(k => patch(k, { status: 'waiting', step: undefined, sub: undefined, report: undefined }))
     setOpen(o => { const n = new Set(o); todo.forEach(k => n.delete(k)); return n }) // a retried mod's new result starts folded too
@@ -666,7 +669,8 @@ export function VfxUpdaterPanel() {
         // a candidate joins the review card at the top (with a sound, and the taskbar flashes when the window is behind)
         // and the batch goes on: its update finishes once Use candidate or Keep original is pressed
         // after Cancel, a candidate that finishes packing keeps its original at once: no card waits for an answer
-        policy: repairPolicy, review: report => cancel.current ? Promise.resolve(false) : new Promise(resolve => {
+        // with Ask me to review candidates off (the default), or after Approve all, the candidate is used at once
+        policy: repairPolicy, review: report => cancel.current ? Promise.resolve(false) : !askReview || approveRest.current ? Promise.resolve(true) : new Promise(resolve => {
           asked()
           patch(key, { status: 'review', sub: undefined })
           setReviews(q => [...q, { key, name: mod.name, report, resolve: ok => { if (ok) patch(key, { status: 'running', step: STEPS.length }); resolve(ok) } }])
@@ -698,7 +702,7 @@ export function VfxUpdaterPanel() {
     setEnded({ text: `${parts.join(', ')}${parts.length > 1 ? ',' : ''} in ${took(performance.now() - startedAt)}.`, retry, edits: pickEditsRef.current })
     cue(failed ? 'warning' : 'success', { emphasis: fixed > 1 ? undefined : 'subtle' }) // a problem is a warning, never an error sound
     setBusy(false); setCancelling(false)
-  }, [picked, usmap, paks, originals, keepName, safeOff, needs, repairPolicy, addLog])
+  }, [picked, usmap, paks, originals, keepName, safeOff, needs, repairPolicy, askReview, addLog])
 
   // the Library's notice updates exactly the mods it sent, as soon as the list and the USMAP are ready (after a run in
   // progress)
@@ -714,6 +718,7 @@ export function VfxUpdaterPanel() {
   // the oldest candidate's answer: Escape keeps its original and the batch goes on. Cancel keeps every one's original
   const answer = (ok: boolean) => { const [first, ...rest] = reviewsRef.current; if (!first) return; setReviews(rest); reviewsRef.current = rest; first.resolve(ok); cue(ok ? 'success' : 'tap') }
   const decline = () => answer(false)
+  const approveAll = () => { approveRest.current = true; const all = reviewsRef.current; setReviews([]); reviewsRef.current = []; all.forEach(r => r.resolve(true)); cue('success') }
   const stop = (source: 'Cancel button' | 'Escape') => { reviewsRef.current.forEach(r => r.resolve(false)); setReviews([]); reviewsRef.current = []; cancel.current = true; setCancelling(true); addLog(`Cancellation requested by ${source}. Stopping after the current step.`, 'warning') }
 
   // Check: the ticked mods' materials against this game version and the earlier ones (xtra_vfx_check.rs). Their Needs an
@@ -881,7 +886,7 @@ export function VfxUpdaterPanel() {
   return (
     <div className="vf-panel">
       <div className="vf-body">
-        {reviews[0] && <ReviewCard key={reviews[0].key} name={reviews[0].name} report={reviews[0].report} more={reviews.length - 1} onAnswer={answer} />}
+        {reviews[0] && <ReviewCard key={reviews[0].key} name={reviews[0].name} report={reviews[0].report} more={reviews.length - 1} onAnswer={answer} onApproveAll={approveAll} />}
         <div className="lp-filters vf-filters">
           {/* always there, while the folder is read and while mods update too, so the bar never appears or goes under the pointer */}
           <label className="lp-search vf-search">
@@ -970,9 +975,16 @@ export function VfxUpdaterPanel() {
               <div className="vf-adv-body">
                 <Section icon={<Check size={15} aria-hidden="true" />} title="Repair policy" about="Which checks must pass before an update can replace the original.">
                   <Seg label="Repair policy" value={repairPolicy} disabled={busy}
-                    note={repairPolicy === 'strict' ? 'Strict refuses incomplete output and warnings.' : 'Best effort builds a separate candidate. Review every asset before replacing the original.'}
+                    note={repairPolicy === 'strict' ? 'Strict refuses incomplete output and warnings.' : askReview ? 'Best effort builds a candidate and asks you to review it before it replaces the original.' : "Best effort builds a candidate and uses it in place of the original. Its report lists what could not be proven."}
                     options={[['strict', 'Strict'], ['bestEffort', 'Best effort']]}
                     onChange={v => { setRepairPolicy(v); localStorage.setItem(REPAIR_POLICY, v) }} />
+                </Section>
+
+                <Section icon={<Eye size={15} aria-hidden="true" />} title="Ask me to review candidates" about="Whether a Best effort candidate waits for you before it replaces the original.">
+                  <Seg label="Ask me to review candidates" value={askReview ? 'on' : 'off'} disabled={busy || repairPolicy === 'strict'}
+                    note={repairPolicy === 'strict' ? 'Strict makes no candidates to review.' : askReview ? 'Each candidate waits at the top with Use candidate, Keep original, and Approve all.' : 'Off: candidates are used without asking.'}
+                    options={[['off', 'Off'], ['on', 'On']]}
+                    onChange={v => { setAskReview(v === 'on'); localStorage.setItem(ASK_REVIEW, v === 'on' ? '1' : '0') }} />
                 </Section>
 
                 <Section icon={<Tag size={15} aria-hidden="true" />} title="Names" about="Which copy keeps the mod's name after an update.">
