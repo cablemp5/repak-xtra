@@ -76,10 +76,9 @@ const ORIGINALS_NOTE: Record<Originals, string> = {
 }
 /** A rivals-depot USMAP's release, from its file name (5.3.2-3939753+++depot_marvel+S10.5_release-Marvel.usmap). */
 const usmapRelease = (name?: string | null) => name?.match(/\+([^+]+?)-Marvel\.usmap$/i)?.[1]?.replace(/_/g, ' ') ?? null
-const ADVANCED = 'repakxtra.vfx.advanced' // Advanced opens the way it was last left, as the install card's
-const FOLDED = 'repakxtra.vfx.folded' // the groups folded away, as a list of ids
+// every group and Advanced start folded each time the window opens: a run unfolds what it works on, and that is not kept
+const GROUP_IDS = ['added', 'needs', 'unknown', 'rest', 'ui', 'materials', 'updated']
 const SORT = 'repakxtra.vfx.sort2' // A to Z or Newest (the default since 0.17.1, so a new key), as a loadout's Add mods
-const SEARCH_FROM = 8 // a search field once the list is longer than a glance
 const fileName = (p: string) => p.replace(/\\/g, '/').split('/').pop() ?? p
 const plural = (n: number, word: string, many = `${word}s`) => `${n.toLocaleString()} ${n === 1 ? word : many}`
 /** A folded panel's content: out of reach of Tab and screen readers (the React 18 types this app uses lack inert). */
@@ -353,7 +352,7 @@ export function VfxUpdaterPanel() {
   const [q, setQ] = useState('')
   const [hero, setHero] = useState('') // '' = every hero (the same filter as a loadout's Add mods)
   const [sort, setSort] = useState<'name' | 'newest'>(() => (localStorage.getItem(SORT) === 'name' ? 'name' : 'newest'))
-  const [foldedIds, setFoldedIds] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(FOLDED) || '[]') } catch { return [] } })
+  const [foldedIds, setFoldedIds] = useState<string[]>(GROUP_IDS)
   const loadouts = useLoadouts()
   const [open, setOpen] = useState<Set<string>>(new Set())
   const [paks, setPaks] = useState<string | null>(null)
@@ -368,7 +367,7 @@ export function VfxUpdaterPanel() {
   const [moved, setMoved] = useState<LayoutNews | null>(null)
   useEffect(() => { void invoke<LayoutNews>('xtra_layout_moves').then(setMoved, () => {}) }, [usmapInfo])
   const keepName = naming === 'broken'
-  const [advanced, setAdvanced] = useState(() => localStorage.getItem(ADVANCED) === '1')
+  const [advanced, setAdvanced] = useState(false)
   const [busy, setBusy] = useState(false)
   const checkingBatch = useRef(false)
   const [checkRun, setCheckRun] = useState<{ at: number; of: number; name: string } | null>(null) // Check: the ticked mods, one by one
@@ -609,7 +608,7 @@ export function VfxUpdaterPanel() {
     // the run in view: a search that hides a mod clears, and Needs an update and the groups of the mods it runs unfold
     if (todo.some(k => !groupOf.current.has(k))) setQ('')
     const unfold = new Set(['needs', ...todo.map(k => groupOf.current.get(k) ?? '')])
-    setFoldedIds(f => { if (!f.some(id => unfold.has(id))) return f; const n = f.filter(id => !unfold.has(id)); localStorage.setItem(FOLDED, JSON.stringify(n)); return n })
+    setFoldedIds(f => (f.some(id => unfold.has(id)) ? f.filter(id => !unfold.has(id)) : f))
     setBusy(true); setBatch(todo); setLastTook(null); setEnded(null); cancel.current = false
     const startedAt = performance.now()
     todo.forEach(k => patch(k, { status: 'waiting', step: undefined, sub: undefined, report: undefined }))
@@ -620,7 +619,7 @@ export function VfxUpdaterPanel() {
     // what a finished update changes: its row, the counts and the main window
     const finish = async (key: string, r: VfxReport) => {
       patch(key, { status: r.status, report: r, sub: undefined })
-      if (r.status !== 'fixed' || todo.length === 1) setOpen(o => new Set(o).add(key)) // problems open, a batch's updates stay folded
+      // its report stays folded under its pill, a problem too: the pill says what happened, a click shows why
       if (r.status !== 'cancelled' && r.ms > 0) rememberTime(r.assets.some(a => /^(NS|NE)_/i.test(a.name)), r.ms)
       if (r.status === 'fixed') { fixed++; pick([key], false) }
       if (r.status === 'nothing') cleared++
@@ -686,7 +685,7 @@ export function VfxUpdaterPanel() {
     }
     await Promise.all(parked) // the batch ends once every review is answered
     if (fixed || turnedOff) await emit('mods_dir_changed').catch(() => {})
-    if (cleared) await verdictsChanged() // the Library reads the flags again
+    if (cleared || fixed || turnedOff) await verdictsChanged() // the Library reads the flags again
     await releaseRun(token)
     myToken.current = null
     setLastTook(performance.now() - startedAt)
@@ -708,7 +707,6 @@ export function VfxUpdaterPanel() {
 
   const showAdvanced = (on: boolean) => {
     setAdvanced(on)
-    localStorage.setItem(ADVANCED, on ? '1' : '0')
     if (on) setTimeout(() => document.querySelector('.vf-adv')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 60)
   }
 
@@ -832,7 +830,7 @@ export function VfxUpdaterPanel() {
     group('updated', 'Updated', done), // last: what is done goes below what is left to do
   ]
   const inLoadouts = (m: Mod) => { const k = canonKey(modKey(m.path)); return loadouts.filter(l => l.on.some(x => canonKey(x) === k)).map(l => ({ id: l.id, name: l.name })) }
-  const fold = (id: string) => setFoldedIds(f => { const n = f.includes(id) ? f.filter(x => x !== id) : [...f, id]; localStorage.setItem(FOLDED, JSON.stringify(n)); return n })
+  const fold = (id: string) => setFoldedIds(f => (f.includes(id) ? f.filter(x => x !== id) : [...f, id]))
   // a ticked mod that waits for the USMAP is skipped by Update, so it is not counted (its tick shows off)
   const todo = [...picked].filter(k => !isDone(runs[k]?.status) && !waits.has(k)).length
   const runningAt = batch.findIndex(k => runs[k]?.status === 'running')
@@ -884,21 +882,18 @@ export function VfxUpdaterPanel() {
       <div className="vf-body">
         {reviews[0] && <ReviewCard key={reviews[0].key} name={reviews[0].name} report={reviews[0].report} more={reviews.length - 1} onAnswer={answer} />}
         <div className="lp-filters vf-filters">
-          {/* shown while the folder is read too, so the bar does not appear under the pointer when the list lands, and kept
-              while a search or hero filter is on, so it can always be cleared */}
-          {(mods === null || list.length > SEARCH_FROM || Boolean(needle || hero)) && <>
-            <label className="lp-search vf-search">
-              <Search size={15} aria-hidden="true" />
-              <input value={q} placeholder="Search mods" aria-label="Search mods" onChange={e => setQ(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Escape') setQ('') }} />
-              {q && <button type="button" className="lo-icon vf-search-clear" onClick={() => setQ('')} aria-label="Clear the search" title="Clear the search"><X size={14} /></button>}
-            </label>
-            <HeroFilter heroes={heroes} value={hero} onChange={setHero} always={mods === null} />
-            <div className="mod-state-filter lp-sort" role="group" aria-label="Sort mods">
-              <button type="button" aria-pressed={sort === 'newest'} onClick={() => sortBy('newest')}>Newest</button>
-              <button type="button" aria-pressed={sort === 'name'} onClick={() => sortBy('name')}>A to Z</button>
-            </div>
-          </>}
+          {/* always there, while the folder is read and while mods update too, so the bar never appears or goes under the pointer */}
+          <label className="lp-search vf-search">
+            <Search size={15} aria-hidden="true" />
+            <input value={q} placeholder="Search mods" aria-label="Search mods" onChange={e => setQ(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Escape') setQ('') }} />
+            {q && <button type="button" className="lo-icon vf-search-clear" onClick={() => setQ('')} aria-label="Clear the search" title="Clear the search"><X size={14} /></button>}
+          </label>
+          <HeroFilter heroes={heroes} value={hero} onChange={setHero} always />
+          <div className="mod-state-filter lp-sort" role="group" aria-label="Sort mods">
+            <button type="button" aria-pressed={sort === 'newest'} onClick={() => sortBy('newest')}>Newest</button>
+            <button type="button" aria-pressed={sort === 'name'} onClick={() => sortBy('name')}>A to Z</button>
+          </div>
           <button type="button" className="lo-text-btn is-primary vf-add" disabled={busy || mods === null} onClick={() => void addUtoc()}
             title="Update a mod this list does not show: choose its .utoc file"><FilePlus size={14} aria-hidden="true" /> Add .utoc</button>
         </div>

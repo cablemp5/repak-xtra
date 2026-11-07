@@ -92,7 +92,8 @@ async function repair(policy, accept = false, sameParameters = false, scenario =
       case 'xtra_safe_off_kept': return null
       case 'xtra_vfx_place': placement = a; return { fixed: 'Fixture.pak', source: 'Fixture.pak', original: 'Fixture.bak_repak' }
       case 'xtra_vfx_stamp': return
-      case 'xtra_vfx_no_update': assert.equal(a.modPath, 'Fixture.pak', 'clear the placed output'); return
+      case 'xtra_vfx_no_update': assert.ok(['Fixture.pak', 'Fixture.bak_repak'].includes(a.modPath), 'clear the placed output and its original'); return
+      case 'xtra_vfx_run_done': return
       default: throw Error('Unexpected fixture command ' + cmd)
     }
   }
@@ -150,7 +151,7 @@ assert.ok(surgical.calls.indexOf('xtra_vfx_no_update') > surgical.calls.indexOf(
 for (const niagara of ['retry', 'permanent']) {
   const result = await repair('bestEffort', true, false, { niagara })
   assert.equal(result.report.status, 'fixed')
-  assert.ok(!result.calls.includes('xtra_vfx_no_update'), 'partial repair never claims complete clearance')
+  assert.ok(result.calls.indexOf('xtra_vfx_no_update') > result.calls.indexOf('xtra_vfx_place'), 'an installed partial repair clears Needs update too')
   assert.equal(result.placement.partial, niagara === 'retry', 'only retryable Niagara omissions request the retry marker')
   assert.equal(result.placement.trashOriginal, false, 'omitted content retains its original')
 }

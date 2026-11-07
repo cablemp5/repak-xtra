@@ -88,7 +88,7 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
       await emit('mods_dir_changed').catch(() => {})
       await reload()
     }
-    if (r.status === 'nothing') await verdictsChanged() // its Needs VFX update flag goes (xtra_broken.rs)
+    if (r.status === 'nothing' || r.placed || r.turnedOff) await verdictsChanged() // its Needs VFX update flag goes (xtra_broken.rs)
     if (id !== null) alert.dismissAlert(id)
     id = null
     resultToast(r, name, alert, mod.path)
