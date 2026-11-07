@@ -10,7 +10,7 @@ import { APP_NAME } from '../edition'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, emitTo, listen } from '@tauri-apps/api/event'
-import { AlertTriangle, Archive, Check, CheckCheck, ChevronDown, ChevronRight, Copy, Eye, Info, PackageCheck, Undo2, FilePlus, Map as MapIcon, Palette, RefreshCw, RotateCcw, ScrollText, Search, Square, Tag, X } from 'lucide-react'
+import { AlertTriangle, Archive, Check, CheckCheck, ChevronDown, ChevronRight, Copy, Eye, Info, PackageCheck, Undo2, FilePlus, Map as MapIcon, Palette, RefreshCw, RotateCcw, ScrollText, Search, Tag, X } from 'lucide-react'
 import TitleBar from '../../components/TitleBar'
 import { useGlobalTooltips } from '../../hooks/useGlobalTooltips'
 import Checkbox from '../../components/ui/Checkbox'
@@ -1070,7 +1070,7 @@ export function VfxUpdaterPanel() {
         <div className="vf-foot-actions">
           {reports.length > 0 && !busy && <button type="button" className="lo-text-btn" onClick={() => copy('report')}><Copy size={14} /> {copied === 'report' ? 'Copied' : 'Copy report'}</button>}
           {/* Cancel beside the button, never in its place: a double-click on Update must not cancel the run */}
-          {(busy || checkRun) && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={() => stop('Cancel button')} title={checkRun ? 'Stop after the current mod finishes' : 'Esc'}><Square size={14} fill="currentColor" aria-hidden="true" /> {cancelling ? 'Cancelling…' : 'Cancel'}</button>}
+          {(busy || checkRun) && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={() => stop('Cancel button')} title={checkRun ? 'Stop after the current mod finishes' : 'Esc'}><X size={14} strokeWidth={2.5} aria-hidden="true" /> {cancelling ? 'Cancelling…' : 'Cancel'}</button>}
           {!busy && <ScanButton scanning={Boolean(checkRun)} disabled={Boolean(checkRun) || Boolean(lock)}
             selected={picked.size} flagged={recheckCount} onScan={flagged => void checkTicked(flagged)} />}
           <button type="button" className="btn-primary" disabled={busy || Boolean(checkRun) || Boolean(lock) || !todo} title={busy ? undefined : 'Ctrl+Enter'}

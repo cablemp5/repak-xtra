@@ -579,7 +579,7 @@ function App() {
 
 
   const alert = useAlert();
-  useScanProgress(alert) // repakxtra: the background mod checks' progress line
+  useScanProgress() // repakxtra: the background mod checks' progress line
   useGameUpdateWatch(alert, isModsLoading, mods.length, () => { showAll(); setModState('broken') }) // repakxtra: game update notice
   useUsmapWatch() // repakxtra: checks and built-ins again once this game build's USMAP is out
 
@@ -3333,14 +3333,15 @@ function App() {
     // Use promise toast for loading state and result
     // The backend spawns threads and returns immediately, so we need to wait
     // for the install_complete event to know when installation is actually done
-    // repakxtra: the toast fills with the backend's percent, so the wait shows where it is, not only in the log bar
+    // repakxtra: the toast's bottom bar fills with the backend's percent (no percent text), and it closes when the files
+    // are in: tags, loadouts and previews run after it
     let installToast = -1
+    let ended = false // a late percent never lands on the finished toast
     const unlistenToastProgress = listen('install_progress', (event: any) => {
       const pct = Math.max(0, Math.min(100, Math.round(Number(event.payload) || 0)))
-      if (installToast >= 0) alert.updateToast(installToast, { progressValue: pct, description: `${pct}% · ${plural(modCount, 'mod')}` })
+      if (installToast >= 0 && !ended) alert.updateToast(installToast, { progressValue: pct })
     })
-    installToast = alert.promise(
-      (async () => {
+    const installed = (async () => {
         // Create a promise that resolves when install_complete event fires
         const installCompletePromise = new Promise<void>((resolve, reject) => {
           let unlistenComplete: UnlistenFn | null = null
@@ -3379,7 +3380,26 @@ function App() {
 
         // Wait for the actual installation to complete
         await installCompletePromise
-
+        return { count: modCount }
+      })().finally(() => { ended = true; unlistenToastProgress.then(u => u()) })
+    installToast = alert.promise(installed, {
+        loading: {
+          title: 'Installing mods',
+          description: plural(modCount, 'mod'),
+          progressValue: 0,
+        },
+        success: (result) => ({
+          title: 'Installation Complete',
+          description: `Successfully installed ${plural(result.count, 'mod')}`,
+          progressValue: undefined, // repakxtra: back to the auto-dismiss bar
+        }),
+        error: (err) => ({
+          title: 'Installation Failed',
+          description: String(err),
+          progressValue: undefined,
+        })
+      })
+    installed.then(async () => {
         // Mirror tag assignment flow used by the main list/context menu
         const typeTracker: Record<string, number> = {}
         for (const mod of modsWithSettings) {
@@ -3427,26 +3447,7 @@ function App() {
             { duration: 8000 }
           )
         }
-
-        return { count: modCount }
-      })().finally(() => { unlistenToastProgress.then(u => u()) }),
-      {
-        loading: {
-          title: 'Installing Mods',
-          description: `Processing ${plural(modCount, 'mod')}...`
-        },
-        success: (result) => ({
-          title: 'Installation Complete',
-          description: `Successfully installed ${plural(result.count, 'mod')}`,
-          progressValue: undefined, // repakxtra: back to the auto-dismiss bar
-        }),
-        error: (err) => ({
-          title: 'Installation Failed',
-          description: String(err),
-          progressValue: undefined,
-        })
-      }
-    )
+    }, () => undefined).catch(e => console.error('[install] after the install', e)) // the failure is the toast's
   }
 
   const saveAllSettings = async (overrides: Partial<AppSettings>) => {

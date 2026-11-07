@@ -1,11 +1,11 @@
-// repakxtra: the mod checks' progress in the header (scanProgress.ts), for a run that outlasts its toast or whose toast
-// was closed or missed. Shown only while a run reads mods, or after one stopped with mods left. Click: a menu like the
+// repakxtra: the mod checks' progress in the header (scanProgress.ts), their only sign (no toast). Shown only while a run
+// reads mods, or after one stopped with mods left. Click: a menu like the
 // Loadouts screen's Generate previews one, with the check and mod it is on, Pause and Cancel (or Resume once paused), what
 // stopping risks, and how to run the checks again.
 // Laws of UX: the work in progress stays in view (Doherty Threshold), and the count shows how far along it is
 // (Goal-Gradient Effect). A paused run stays listed until it is done (Zeigarnik Effect).
 import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, LoaderCircle } from 'lucide-react'
+import { AlertTriangle, LoaderCircle, X } from 'lucide-react'
 import { rescanVerdicts } from './brokenMods'
 import { holdScan, progressLine, useScanRun } from './scanProgress'
 import { APP_NAME } from './edition'
@@ -52,7 +52,7 @@ export default function ScanStatus() {
                   <span className="lo-gen-stop"><span className="pause-glyph" aria-hidden="true" />Pause</span></button>
                 <button type="button" role="menuitem" className="sigeon-item run-stop-btn" disabled={stopping && r.held === 'cancelled'} onClick={() => { setOpen(false); void holdScan('cancelled') }}
                   title="Stop after the mod being read, and hide this until the checks run again">
-                  <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />Cancel</span></button>
+                  <span className="lo-gen-stop"><X size={12} strokeWidth={2.5} aria-hidden="true" />Cancel</span></button>
               </>
             : <>
                 <button type="button" role="menuitem" className="sigeon-item" onClick={() => { setOpen(false); void rescanVerdicts() }}
@@ -60,7 +60,7 @@ export default function ScanStatus() {
                   <span className="lo-gen-stop"><span className="play-glyph" aria-hidden="true" />Resume</span></button>
                 <button type="button" role="menuitem" className="sigeon-item run-stop-btn" onClick={() => { setOpen(false); void holdScan('cancelled') }}
                   title="Leave the rest unchecked and hide this until the checks run again">
-                  <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />Cancel</span></button>
+                  <span className="lo-gen-stop"><X size={12} strokeWidth={2.5} aria-hidden="true" />Cancel</span></button>
               </>}
           <p className="scan-menu-warn"><AlertTriangle size={14} aria-hidden="true" />
             <span>Mods not checked yet get no Broken or May crash warning, and can crash the game. Refresh list (Ctrl+Shift+R) runs the checks again, and so does the next start of {APP_NAME}.</span></p>
