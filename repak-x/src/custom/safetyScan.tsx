@@ -5,7 +5,7 @@
 // Remove for the flagged ones. Nothing is turned off by itself: the player decides.
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { ChevronRight, ExternalLink, ShieldAlert } from 'lucide-react'
+import { ChevronRight, ExternalLink, ShieldAlert, ShieldCheck } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import { openWhy } from './WhyNotWorking'
 import { modsBlocked, turnOffWithUndo } from './keepOne'
@@ -143,8 +143,9 @@ export function SafetyCard({ alert }: { alert: Alert }) {
       {failed && <p className="su-note">Could not read the game folder. {failed} <button type="button" className="su-link" onClick={() => void load()}>Try again</button></p>}
       {/* mods first, as a part row like the plugins below it: the finding a player acts on leads (Serial Position) */}
       <ul className="su-parts">
-        <li className={`su-part su-risk-summary${on.length ? ' is-risk' : ''}`}>
-          <ShieldAlert size={16} className="su-risk-icon" aria-hidden="true" />
+        <li className={`su-part su-risk-summary${on.length ? ' is-risk' : state === 'done' && !all.size && !unread.length ? ' is-clean' : ''}`}>
+          {/* nothing flagged: a green shield with a check, like the bundled plugins' rows */}
+          {state === 'done' && !all.size && !unread.length ? <ShieldCheck size={16} className="su-risk-icon" aria-hidden="true" /> : <ShieldAlert size={16} className="su-risk-icon" aria-hidden="true" />}
           <div className="su-part-text">
             <b>Your mods</b>
             <span>{mods}{(state === 'failed' || unread.length > 0) && <> <button type="button" className="su-link" onClick={recheckRisks}>Try again</button></>}</span>

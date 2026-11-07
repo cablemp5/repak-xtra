@@ -102,7 +102,8 @@ export function Choice({ stage, title, text, icon, onClick, disabled, hint }: { 
 /** An install button: its step's words shimmer inside while it runs (no spinner, the Nexus Mods card's look), then a
  *  green Installed for a moment once it finished (`done`). */
 function StepButton({ working, done, label, className = 'lo-text-btn', ...rest }: { working?: string | false | null; done?: boolean; label: string } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  if (done) return <span key="done" className={`${className} is-installed t-text-in`}><Check size={14} strokeWidth={2.75} aria-hidden="true" />Installed</span>
+  // a status, not a button: the Make it yours page's green "ready" line
+  if (done) return <span key="done" className="ob-ok t-text-in"><Check size={14} strokeWidth={2.75} aria-hidden="true" />Installed</span>
   return (
     <button type="button" {...rest} className={`${className}${working ? ' is-working' : ''}`} aria-busy={Boolean(working)} disabled={rest.disabled || Boolean(working)}>
       {working ? <span key={working} className="t-text-in"><span className="t-shimmer">{working}</span></span> : label}
@@ -182,7 +183,7 @@ const setup: Page = {
       : f.bypass?.state === 'disabled' ? 'Installed but turned off. Mods that need it will not load.'
       : f.bypass?.state === 'other' ? 'A different loader or bypass is installed. Installing keeps it next to the new one as a .repakxtra-backup file.'
       : f.bypass?.state === 'partial' ? 'Part of it is missing. Repair puts the missing files back.'
-      : 'Lets the game load mods. Every mod needs it, and Setup shows why it is safe.'
+      : 'Lets the game load mods. Every mod needs it.'
     return (
       <div className="ob-split">
         <div className="ob-col">

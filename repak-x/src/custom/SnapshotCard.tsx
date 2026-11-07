@@ -104,7 +104,6 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
         <button type="button" className="lo-text-btn" disabled={locked || !list} onClick={importZip}><Import size={14} aria-hidden="true" />{busy === 'import' ? 'Importing…' : 'Import a snapshot'}</button>
         {list && <span className="su-meta">{estimate ? `${plural(estimate[0], 'file')}, about ${size(estimate[1])} each. ` : ''}{drops.length ? `Making one removes ${dropText}.` : 'The newest 3 are kept.'}</span>}
       </div>
-      <p className="su-note">Import takes a .zip of a snapshot or of mod files. Only the mod files come in, never the loader or plugins.</p>
     </section>
   )
 }

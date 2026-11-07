@@ -3211,7 +3211,7 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .su-risk-off { flex: none; font-size: 12.5px !important; }
 .su-part.is-banned .su-risk-icon, .su-part.is-banned b { color: #f05252; }
 .su-part.is-unknown .su-risk-icon { color: #f5d342; }
-.su-part.is-bundled .su-risk-icon { color: #3ecf8e; }
+.su-part:is(.is-bundled, .is-clean) .su-risk-icon { color: #3ecf8e; }
 /* a Remove or Delete that asks in its own row: the question drops under the row, full width */
 .su-part:has(.su-row-confirm) { flex-wrap: wrap; }
 .su-row-confirm { flex-basis: 100%; }

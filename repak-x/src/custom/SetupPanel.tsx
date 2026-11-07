@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { motion } from 'framer-motion'
-import { Check, ChevronRight, Copy, ExternalLink, ListChecks, ShieldCheck, TriangleAlert, Wrench } from 'lucide-react'
+import { Check, ChevronRight, ExternalLink, ListChecks, ShieldCheck, TriangleAlert, Wrench } from 'lucide-react'
 import { open as pickFile } from '@tauri-apps/plugin-dialog'
 import { type Doctor, isNewerKit, usePreviewKit } from './previewKit'
 import { BypassTrack, GalactaTrack, KitTrack, useFinished } from './installTrack'
@@ -34,9 +34,6 @@ const AUTO_KEY = 'repakxtra.setup.autoCheck'
 const autoCheck = () => savedItem(AUTO_KEY) !== '0'
 const FOLDER_KEY = 'repakxtra.setup.galactaFolder'
 const HERE = '__here'   // install where Galacta already is, or the mods folder itself
-const NEXUS = 'https://www.nexusmods.com/marvelrivals/mods/2940'
-const LOADER = 'https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases/tag/v7.7.0'
-const VIRUSTOTAL = 'https://www.virustotal.com/gui/file/251d2830ec8c1f3ed804ce4d8340705264642435cd3218308d18c7ee314db776'
 const GALACTA = 'https://github.com/0xSaturno/ProjectGalacta'
 const GALACTA_PAK = LOADER_PAK
 
@@ -87,7 +84,7 @@ function Changelog({ g, title, onClose, product = `${LOADER_NAME}` }: {
 const BLENDER = 'https://www.blender.org/download/'
 
 /** Why Blender is safe to install, where it comes from, and its real download page: closed to one line ("Is Blender safe?",
- *  like the bypass's "Is it safe?"), the full note opens under it. A click, not a hover, so it works from the keyboard and
+ *  a click away), the full note opens under it. A click, not a hover, so it works from the keyboard and
  *  stays put while it is read. */
 export function BlenderTrust() {
   const [shown, setShown] = useState(false)
@@ -221,7 +218,6 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   const [auto, setAuto] = useState(autoCheck())
   const [busy, setBusy] = useState<string | null>(null)
   const [confirmOff, setConfirmOff] = useState<'disable' | 'remove' | null>(null)
-  const [safety, setSafety] = useState(focus === 'bypass') // Settings > Is it safe? opens Setup at this report
   const [advanced, setAdvanced] = useState(focus === 'snapshots' || focus === 'safety') // a startup toast opens it at its card
   const trap = useDialogFocus(true, onClose) // focus inside, Tab stays inside, Esc closes (an open changelog first), back to the opener
   const [notes, setNotes] = useState<string | null>(null)
@@ -230,10 +226,15 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
 
   // Opened from a grayed-out Generate button: straight to the Mod previews card (its top, so it can still grow as it loads)
   // repakxtra: and a startup toast's card (Snapshots, Ban risk)
-  useEffect(() => { const card = focus && ({ previews: '.su-previews', snapshots: '.su-snapshots', safety: '.su-safety-card', bypass: '.su-bypass-card' } as Record<string, string>)[focus]; if (card) document.querySelector(card)?.scrollIntoView({ block: 'start' }) }, [focus])
+  useEffect(() => { const card = focus && ({ previews: '.su-previews', snapshots: '.su-snapshots', safety: '.su-safety-card' } as Record<string, string>)[focus]; if (card) document.querySelector(card)?.scrollIntoView({ block: 'start' }) }, [focus])
   useEffect(() => {
     invoke<Bypass>('setup_bypass_status').then(setBypass).catch(e => alert.warning('Setup', String(e)))
-    invoke<Galacta>('setup_galacta_status', { online: false }).then(g => setGalacta(withLastCheck(g))).catch(() => {})
+    // Its version, What's new and Up to date from the start: without a check this run, a quiet one now (offline: none)
+    invoke<Galacta>('setup_galacta_status', { online: false }).then(g => {
+      const known = withLastCheck(g)
+      setGalacta(known)
+      if (!known.latest) invoke<Galacta>('setup_galacta_status', { online: true }).then(o => setGalacta(remember(o))).catch(() => {})
+    }).catch(() => {})
     invoke<{ id: string; depth: number }[]>('get_folders')   // subfolders by their path below ~mods ("A/B")
       .then(fs => setFolders((fs ?? []).filter(f => f.depth > 0).map(f => f.id))).catch(() => {})
   }, [])
@@ -335,7 +336,6 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
             {/* its progress above the buttons, like Galacta's and the preview kit's */}
             <BypassTrack on={busy === 'install' || busy === 'enable'}
               done={finished === 'install' ? 'Installed. Mods load from the next game launch.' : finished === 'enable' ? 'On again. Mods load from the next game launch.' : undefined} />
-            {/* The main button on the left like every card's, Is it safe? after it */}
             <div className="su-actions">
               {!bypassOn && (
                 <button type="button" className="btn-primary su-main" disabled={!b || Boolean(busy)} onClick={() => act('install')}>
@@ -343,33 +343,6 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                 </button>
               )}
               {b?.state === 'disabled' && <button type="button" className="btn-primary su-main" disabled={Boolean(busy)} onClick={() => act('enable')}>Turn on</button>}
-              {/* drawn like the preview card's Is Blender safe? */}
-              <button type="button" className="su-trust-btn su-safety-btn" aria-expanded={safety} onClick={() => setSafety(v => !v)}>
-                <ShieldCheck size={13} aria-hidden="true" /> Is it safe? <ChevronRight size={13} className="su-caret" aria-hidden="true" />
-              </button>
-            </div>
-            <div className="t-acc-panel" data-open={safety} ref={el => el?.toggleAttribute('inert', !safety)}>
-              <div className="t-acc-panel-inner">
-                <div className="su-safety">
-                  <ul className="su-facts">
-                    <li><b>Scanned clean.</b> VirusTotal: 0 of 63 engines flagged the release archive (Oct 14, 2026). <a onClick={() => open(VIRUSTOTAL)}>See the report</a></li>
-                    <li><b>The loader is open source.</b> dsound.dll is ThirteenAG's Ultimate ASI Loader 7.7.0 (MIT), byte for byte the official release. <a onClick={() => open(LOADER)}>See it on GitHub</a></li>
-                    <li><b>The bypass only patches the game in memory.</b> MarvelRivalsUTOCSignatureBypass.asi uses Windows memory and thread functions only: no internet, file, registry, or program-launch calls. It is closed source and unsigned.</li>
-                    <li><b>Same files as the original.</b> Unchanged from the Nexus Mods release. <a onClick={() => open(NEXUS)}>Open the mod page</a></li>
-                  </ul>
-                  <table className="su-files">
-                    <thead><tr><th>File</th><th>Goes to</th><th>Size</th><th>SHA-256</th><th>On this PC</th></tr></thead>
-                    <tbody>{b?.files.map(f => (
-                      <tr key={f.name}>
-                        <td><code>{f.name}</code></td><td>{f.place}</td><td>{(f.size / 1024).toFixed(0)} KB</td>
-                        <td><button type="button" className="su-hash" title="Copy" onClick={() => { navigator.clipboard.writeText(f.sha256); alert.success('Copied', f.name) }}>
-                          <code>{f.sha256.slice(0, 12)}…</code><Copy size={12} /></button></td>
-                        <td>{f.found === 'same' ? 'Matches' : f.found === 'other' ? 'Different file' : 'Not there'}</td>
-                      </tr>
-                    ))}</tbody>
-                  </table>
-                </div>
-              </div>
             </div>
           </section>
 
