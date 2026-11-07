@@ -8,6 +8,12 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
+# Windows PowerShell started from a PowerShell 7 shell inherits 7's module folders and can load 7's
+# Microsoft.PowerShell.Utility, which 5.1 cannot use (Get-FileHash not recognized): keep 5.1's folders and modules only
+if ($PSVersionTable.PSEdition -eq 'Desktop') {
+    $env:PSModulePath = ($env:PSModulePath -split ';' | Where-Object { $_ -and ($_ -notmatch 'PowerShell' -or $_ -match 'WindowsPowerShell') }) -join ';'
+    Get-Module Microsoft.PowerShell.* | Where-Object { $_.Path -notlike "$PSHOME*" } | ForEach-Object { Remove-Module $_ -Force; Import-Module $_.Name }
+}
 # Installed copies check "standard" in the update ZIP's name and edition.json
 $editionName = 'standard'
 $appName = 'repakxtra'
