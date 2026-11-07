@@ -39,9 +39,10 @@ export const uncheckedAssets = (r: Pick<VfxReport, 'counts' | 'assets'>) => r.co
 
 export const repairOutcome = (r: VfxReport) => {
   if (r.status !== 'fixed') return 'Unsupported or ambiguous'
-  if (incompleteAssets(r)) return 'Partially repaired'
-  if (r.counts.updated || r.warnings.length || r.counts.same || r.counts.added) return 'Repaired after review'
-  return 'Repaired'
+  if (incompleteAssets(r)) return 'Partially updated'
+  // only a candidate someone accepted (Use candidate or Approve all) was reviewed: with review off it is just Updated
+  if (r.reviewed && (r.counts.updated || r.warnings.length || r.counts.same || r.counts.added)) return 'Updated after review'
+  return 'Updated'
 }
 
 export type Placed = { fixed: string; source: string; original: string; turnedOff: boolean; replaced: boolean; trashed?: boolean; warning?: string | null }
@@ -56,6 +57,8 @@ export type VfxReport = {
   placed?: Placed
   /** Could not be made safe, so it was turned off (FixOptions.safeOff) */
   turnedOff?: boolean
+  /** Placed after Use candidate or Approve all (Ask me to review candidates on) */
+  reviewed?: boolean
   assets: AssetResult[]
   warnings: string[]
   /** left: Niagara files made for an older game build, left out until a USMAP for the game is out (a partial update).
@@ -389,6 +392,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
           return // failed: safe-off applies
         }
         const accepted = o.autoAccept || (o.review ? await o.review({ ...report, status: 'fixed' }) : false)
+        report.reviewed = !o.autoAccept && accepted
         check()
         if (!accepted) { report.status = 'declined'; report.error = 'Original kept. The candidate was not installed.'; return }
         const reviewedBuild = await invoke<{ updated: number }>('xtra_game_build').then(b => b.updated)
@@ -619,7 +623,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       // the original: kept off by xtra_safe_off.rs first (Turn on anyway still works), so a later switch-on warns
       if (modPath !== report.placed!.fixed && !await invoke('xtra_vfx_turn_off', { modPath, reason: 'Its update replaced it. It was made for an older game build and can crash the game.' }).then(() => true, () => false)) continue
       await invoke('xtra_vfx_no_update', { modPath }).catch(e => {
-        const message = `The mod was repaired, but its compatibility status could not be saved: ${e}. Recheck it in the Mod Updater.`
+        const message = `The mod was updated, but its compatibility status could not be saved: ${e}. Recheck it in the Mod Updater.`
         report.warnings.push(message); log(message, 'warning')
       })
     }
@@ -646,9 +650,10 @@ if (import.meta.env.DEV) {
   console.assert(repairedPaths({ ...sample, placed, warnings: ['unverified'] }).length === 2 && repairedPaths({ ...sample, placed: { ...placed, trashed: true } }).join() === 'updated.pak', 'reviewed repairs clear too, a trashed original is gone')
   console.assert(repairedPaths({ ...sample, placed: { ...placed, original: 'old.pak' } }).join() === 'updated.pak', 'an original left on keeps its flag')
   console.assert(uncheckedAssets({ ...sample, counts: { ...sample.counts, left: 2, ownGame: 1 } }) === 0 && uncheckedAssets({ ...sample, counts: { ...sample.counts, unreadable: 1 }, assets: [{ name: 'a', path: 'a', kind: 'failed', detail: '' }] }) === 2, 'left-out Niagara files are safe, unread and unfixed assets are not')
-  console.assert(repairOutcome(sample) === 'Repaired', 'preserved structural repair')
-  console.assert(repairOutcome({ ...sample, counts: { ...sample.counts, ownGame: 1 } }) === 'Partially repaired', 'permanent omission is partial')
-  console.assert(repairOutcome({ ...sample, warnings: ['lost parameter'] }) === 'Repaired after review', 'loss needs review')
+  console.assert(repairOutcome(sample) === 'Updated', 'preserved structural repair')
+  console.assert(repairOutcome({ ...sample, counts: { ...sample.counts, ownGame: 1 } }) === 'Partially updated', 'permanent omission is partial')
+  console.assert(repairOutcome({ ...sample, warnings: ['lost parameter'], reviewed: true }) === 'Updated after review', 'an accepted candidate says it was reviewed')
+  console.assert(repairOutcome({ ...sample, warnings: ['lost parameter'] }) === 'Updated', 'with review off it is just Updated')
   console.assert(repairOutcome({ ...sample, status: 'failed' }) === 'Unsupported or ambiguous', 'failed is never repaired')
   console.assert(assetKey('A/MI_Body.uasset') !== assetKey('B/MI_Body.uasset'), 'same basename keeps distinct repair identities')
   console.assert(fixedName('C:/m/BlueColoredVFX_9999999_P.utoc') === 'BlueColoredVFX_UPDATED_9999999_P', 'fixed name drops the priority')

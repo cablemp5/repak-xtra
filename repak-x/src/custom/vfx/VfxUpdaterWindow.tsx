@@ -97,7 +97,7 @@ const KIND_ORDER: AssetKind[] = ['failed', 'left', 'unreadable', 'added', 'updat
 const KIND_LABEL: Record<AssetKind, string> = { updated: 'Rebuilt', same: 'Match the game', added: 'The mod\'s own', passed: 'Kept as they were', left: 'Left out', unreadable: 'Could not be read', failed: 'Not updated' }
 /** An update that left out Niagara files made for an older game build: it works, without those effects' colors */
 const isPartial = (r?: VfxReport) => r?.status === 'fixed' && (r.counts.left + r.counts.ownGame + r.counts.unreadable > 0 || r.assets.some(a => a.kind === 'failed'))
-const statusText = (r: VfxReport) => (isPartial(r) ? 'Partially repaired'
+const statusText = (r: VfxReport) => (isPartial(r) ? 'Partially updated'
   : r.turnedOff && r.status !== 'fixed' ? `${r.status === 'failed' ? 'Failed' : r.counts.relaid ? 'Not updated' : 'May crash'}, turned off` : r.status === 'fixed' || r.status === 'failed' ? repairOutcome(r) : STATUS[r.status])
 const leftText = (r: VfxReport) => `Left out ${plural(r.counts.left, 'effect file')} made for an older game build, so the game uses its own and ${r.counts.left === 1 ? 'that effect shows' : 'those effects show'} their usual colors.`
 /** Niagara files the update could not carry with today's USMAP: the game's own effect, for good (a partial repair). */
