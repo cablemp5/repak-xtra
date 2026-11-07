@@ -42,9 +42,16 @@ function place() {
   if (!shown) ink = cs.caretColor === 'auto' || cs.caretColor === 'transparent' ? cs.color : cs.caretColor // read before the class hides it
   caret.style.background = cs.getPropertyValue('--smooth-caret').trim() || ink // a field can set its own (an empty one its placeholder's gray)
   const area = el instanceof HTMLTextAreaElement
+  const r = el.getBoundingClientRect()
+  // CSS zoom on a parent (the Home card size): the mirror and the field's own lengths are unzoomed, its rect is not
+  const k = el.currentCSSZoom ?? 1
+  // an input's clientLeft and clientWidth are its inner text box's in WebView2 (padding included in clientLeft, left out of
+  // clientWidth): counting its padding again put the caret a padding's width to the right. A textarea's are the usual ones
+  const border = area ? el.clientLeft : parseFloat(cs.borderLeftWidth)
+  const box = area ? el.clientWidth : r.width / k - border - parseFloat(cs.borderRightWidth) // its padding box, without the scrollbar
   for (const k of COPIED) mirror.style[k] = cs[k]
   mirror.style.boxSizing = 'content-box'
-  mirror.style.width = `${el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)}px` // without the scrollbar
+  mirror.style.width = `${box - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)}px`
   mirror.style.whiteSpace = area ? 'pre-wrap' : 'pre'
   mirror.style.overflowWrap = area ? cs.overflowWrap : 'normal'
   mirror.style.setProperty('text-wrap-style', cs.getPropertyValue('text-wrap-style'))
@@ -65,14 +72,11 @@ function place() {
     left = marker.offsetLeft; top = marker.offsetTop; line = marker.offsetHeight
   }
 
-  const r = el.getBoundingClientRect()
-  // CSS zoom on a parent (the Home card size): the mirror and the field's own lengths are unzoomed, its rect is not
-  const k = el.currentCSSZoom ?? 1
   left *= k; top *= k; line *= k
   const size = parseFloat(cs.fontSize) * k
   line ||= size * 1.2
   const height = Math.round(Math.min(line, size * 1.3))
-  const x = r.left + (el.clientLeft - el.scrollLeft) * k + left
+  const x = r.left + (border - el.scrollLeft) * k + left
   // an input centers its one line in its height, a textarea stacks lines from its top padding
   const y = area ? r.top + (el.clientTop - el.scrollTop) * k + top + (line - height) / 2 : r.top + (r.height - height) / 2
   if (x < r.left - 1 || x > r.right + 1 || y < r.top - 1 || y + height > r.bottom + 1) return hide() // scrolled out of the field

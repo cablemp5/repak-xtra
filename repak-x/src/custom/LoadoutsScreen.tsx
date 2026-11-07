@@ -578,7 +578,7 @@ function LoadoutsHome(p: LoadoutProps) {
               onClick={() => (batch || withPreview > 0 ? setGenMenu(v => !v) : generate('all'))}>
               {batch
                 ? <span className="lo-gen-label t-shimmer-all"><WandSparkles size={14} />{batch.jobs > 1 ? `Previews ${batch.job} of ${batch.jobs}` : 'Generating preview'}</span>
-                : <><WandSparkles size={14} />Generate all previews</>}
+                : <><WandSparkles size={14} /><span className="lo-gen-text">Generate all previews</span></>}
             </button>
             {genMenu && batch && (
               <div className="sigeon-menu lo-gen-menu" role="menu">
