@@ -586,7 +586,7 @@ function LoadoutsHome(p: LoadoutProps) {
                 <div className="lo-gen-status" role="status"><b>{batch.name}</b><span>{stage || 'Starting…'}</span></div>
                 <button type="button" role="menuitem" className="sigeon-item run-stop-btn" disabled={batch.stopping} onClick={() => { setGenMenu(false); stopPreviews() }}
                   title={batch.left ? 'Stop now and clear the queue' : 'Stop now'}>
-                  <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />{batch.stopping ? 'Stopping…' : batch.left ? 'Stop all' : 'Stop'}</span>
+                  <span className="lo-gen-stop"><X size={12} strokeWidth={2.5} aria-hidden="true" />{batch.stopping ? 'Stopping…' : batch.left ? 'Stop all' : 'Stop'}</span>
                 </button>
               </div>
             )}

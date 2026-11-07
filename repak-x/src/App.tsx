@@ -118,7 +118,7 @@ import OnboardingTour from './components/OnboardingTour'
 
 // Utility functions
 import { toTagArray } from './utils/tags'
-import { detectHeroes, PROJECT_GALACTA_HERO_ID } from './utils/heroes'
+import { detectHeroes } from './utils/heroes'
 import { formatFileSize, normalizeModBaseName } from './utils/format'
 import { countModsInPaths, getAdditionalCategories } from './utils/mods'
 
@@ -506,7 +506,6 @@ function App() {
   const [promiseLoaderMessage, setPromiseLoaderMessage] = useState('Working...')
 
   const dropTargetFolderRef = useRef<string | null>(null)
-  const projectGalactaModRef = useRef<{ path: string; enabled?: boolean } | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const modsGridRef = useRef<HTMLDivElement | null>(null)
   const gameRunningRef = useRef(false)
@@ -579,7 +578,7 @@ function App() {
 
 
   const alert = useAlert();
-  useScanProgress(alert) // repakxtra: the background mod checks' progress line
+  useScanProgress() // repakxtra: the background mod checks' progress line
   useGameUpdateWatch(alert, isModsLoading, mods.length, () => { showAll(); setModState('broken') }) // repakxtra: game update notice
   useUsmapWatch() // repakxtra: checks and built-ins again once this game build's USMAP is out
 
@@ -656,83 +655,6 @@ function App() {
   // Global tooltips - replaces native browser tooltips with styled ones
   useGlobalTooltips();
 
-  // Shared by the drag-drop handler and the extension-install listener: if the
-  // dropped item is recognized as Project Galacta and Repak-X already knows
-  // where it's currently installed, replace it there directly instead of
-  // going through the normal folder-picking flow. Returns whether it handled
-  // the drop, so callers know to skip their own install path.
-  const tryInstallAsProjectGalactaUpdate = async (
-    paths: string[],
-    opts: { deleteArchiveOnSuccess?: boolean } = {}
-  ): Promise<boolean> => {
-    const existing = projectGalactaModRef.current
-    if (!existing || paths.length !== 1) return false
-
-    const entries = await invoke('inspect_archive_mods', { path: paths[0] }).catch(() => null) as any[] | null
-    // Only a built (IoStore) bundle is safe to auto-replace in place. A raw
-    // legacy pak straight from UE - not yet repacked - must go through the
-    // normal install panel like any other new mod, so it can be processed
-    // instead of overwriting the existing IoStore install with the wrong format.
-    const pgEntry = entries?.find(e =>
-      e.is_iostore && Array.isArray(e.hero_ids) && e.hero_ids.includes(PROJECT_GALACTA_HERO_ID)
-    )
-    if (!pgEntry) return false
-
-    // Forcing this exact stem is what makes the replacement land as the same
-    // file regardless of what name the new archive ships internally.
-    const newBaseName = (existing.path.split(/[\\/]/).pop() || '')
-      .replace(/\.(pak|bak_repak|pak_disabled)$/i, '')
-
-    setIsModsLoading(true)
-    setModLoadingProgress(-1)
-    invoke('discord_set_installing').catch(console.warn)
-
-    await alert.promise(
-      (async () => {
-        try {
-          await invoke('quick_organize_locked', {
-            paths,
-            existingModPath: existing.path,
-            newBaseName,
-            selections: [pgEntry.rel_path],
-            renames: { [pgEntry.rel_path]: newBaseName },
-            flatten: true
-          })
-
-          await loadMods()
-          await loadFolders()
-          setStatus('Project Galacta updated')
-
-          if (opts.deleteArchiveOnSuccess) {
-            await invoke('delete_source_archive', { path: paths[0] }).catch((cleanupErr) => {
-              console.warn('Failed to delete source archive:', cleanupErr)
-            })
-          }
-        } finally {
-          setIsModsLoading(false)
-          setModLoadingProgress(0)
-          invoke('discord_set_idle').catch(console.warn)
-        }
-      })(),
-      {
-        loading: {
-          title: 'Updating Project Galacta',
-          description: 'Installing to its current location...'
-        },
-        success: () => ({
-          title: 'Project Galacta Updated',
-          description: 'Replaced the existing install in place.'
-        }),
-        error: (err) => ({
-          title: 'Update Failed',
-          description: String(err)
-        })
-      }
-    )
-
-    return true
-  }
-
   // Unified file drop handler function
   const handleFileDrop = async (paths: string[]) => {
     if (!paths || paths.length === 0) return
@@ -740,14 +662,8 @@ function App() {
     console.log('Dropped items:', paths)
     if (await installDroppedKit(paths, alert)) return // repakxtra: a preview kit zip installs as the kit, not as a mod
 
-    // A recognized Project Galacta update always replaces the existing install
-    // in place, regardless of which folder (if any) it was dropped on, or how
-    // the drop would otherwise classify - checked first so it pre-empts every
-    // other branch below.
-    if (await tryInstallAsProjectGalactaUpdate(paths)) {
-      setDropTargetFolder(null)
-      return
-    }
+    // repakxtra: no Project Galacta update here. Setup installs and updates the loader, a dropped archive's copy is
+    // skipped and the rest installs (install_mod.rs)
 
     // Check if we should quick-organize to a folder (using ref for current value in closure)
     const targetFolder = dropTargetFolderRef.current
@@ -1577,12 +1493,7 @@ function App() {
       const filePath = event.payload
       console.log('Received mod from extension:', filePath)
 
-      // A recognized Project Galacta update skips the picker overlay entirely
-      // and replaces the existing install in place.
-      const handled = await tryInstallAsProjectGalactaUpdate([filePath], { deleteArchiveOnSuccess: true })
-      if (!handled) {
-        setExtensionModPath(filePath)
-      }
+      setExtensionModPath(filePath) // repakxtra: no Project Galacta update here, Setup owns the loader
     })
 
     // Listen for extension mod errors
@@ -3006,10 +2917,6 @@ function App() {
     return Array.isArray(files) && files.some((f: string) => f.toLowerCase().includes('wbp_galacta'))
   }) || externalGalactaMod, [mods, modDetails, externalGalactaMod])
 
-  // Kept live for the drag-drop handler and extension listener, both captured
-  // once at mount and otherwise stuck reading a stale value.
-  projectGalactaModRef.current = projectGalactaMod
-
   // Compute base filtered mods (excluding folder filter)
   const baseFilteredMods = useMemo(() => mods.filter(mod => {
     // Project Galacta is managed from its own Tools panel toggle, not the mods list
@@ -3344,14 +3251,15 @@ function App() {
     // Use promise toast for loading state and result
     // The backend spawns threads and returns immediately, so we need to wait
     // for the install_complete event to know when installation is actually done
-    // repakxtra: the toast fills with the backend's percent, so the wait shows where it is, not only in the log bar
+    // repakxtra: the toast's bottom bar fills with the backend's percent (no percent text), and it closes when the files
+    // are in: tags, loadouts and previews run after it
     let installToast = -1
+    let ended = false // a late percent never lands on the finished toast
     const unlistenToastProgress = listen('install_progress', (event: any) => {
       const pct = Math.max(0, Math.min(100, Math.round(Number(event.payload) || 0)))
-      if (installToast >= 0) alert.updateToast(installToast, { progressValue: pct, description: `${pct}% · ${plural(modCount, 'mod')}` })
+      if (installToast >= 0 && !ended) alert.updateToast(installToast, { progressValue: pct })
     })
-    installToast = alert.promise(
-      (async () => {
+    const installed = (async () => {
         // Create a promise that resolves when install_complete event fires
         const installCompletePromise = new Promise<void>((resolve, reject) => {
           let unlistenComplete: UnlistenFn | null = null
@@ -3390,7 +3298,26 @@ function App() {
 
         // Wait for the actual installation to complete
         await installCompletePromise
-
+        return { count: modCount }
+      })().finally(() => { ended = true; unlistenToastProgress.then(u => u()) })
+    installToast = alert.promise(installed, {
+        loading: {
+          title: 'Installing mods',
+          description: plural(modCount, 'mod'),
+          progressValue: 0,
+        },
+        success: (result) => ({
+          title: 'Installation Complete',
+          description: `Successfully installed ${plural(result.count, 'mod')}`,
+          progressValue: undefined, // repakxtra: back to the auto-dismiss bar
+        }),
+        error: (err) => ({
+          title: 'Installation Failed',
+          description: String(err),
+          progressValue: undefined,
+        })
+      })
+    installed.then(async () => {
         // Mirror tag assignment flow used by the main list/context menu
         const typeTracker: Record<string, number> = {}
         for (const mod of modsWithSettings) {
@@ -3438,26 +3365,7 @@ function App() {
             { duration: 8000 }
           )
         }
-
-        return { count: modCount }
-      })().finally(() => { unlistenToastProgress.then(u => u()) }),
-      {
-        loading: {
-          title: 'Installing Mods',
-          description: `Processing ${plural(modCount, 'mod')}...`
-        },
-        success: (result) => ({
-          title: 'Installation Complete',
-          description: `Successfully installed ${plural(result.count, 'mod')}`,
-          progressValue: undefined, // repakxtra: back to the auto-dismiss bar
-        }),
-        error: (err) => ({
-          title: 'Installation Failed',
-          description: String(err),
-          progressValue: undefined,
-        })
-      }
-    )
+    }, () => undefined).catch(e => console.error('[install] after the install', e)) // the failure is the toast's
   }
 
   const saveAllSettings = async (overrides: Partial<AppSettings>) => {

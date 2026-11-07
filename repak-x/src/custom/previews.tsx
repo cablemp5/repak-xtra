@@ -638,15 +638,15 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
   const id = jobId(job)
   if (running() && run.id === id) {
     // What it is doing (the dot loader and "2 of 9"), and Stop as its own button beside it
-    // On a loadout page's card (stopOnly) a chip like its others: the small stop square and one word
+    // On a loadout page's card (stopOnly) a chip like its others: the X and one word
     const stopBtn = stopOnly
       ? <button type="button" className={className} onClick={stop} disabled={run.stopping}
           title={queue.length ? `Stop generating previews, and clear the ${queue.length} queued` : 'Stop generating previews'}>
-          <span className="stop-glyph" aria-hidden="true" />{run.stopping ? 'Stopping…' : 'Stop'}
+          <X size={12} strokeWidth={2.5} aria-hidden="true" />{run.stopping ? 'Stopping…' : 'Stop'}
         </button>
       : <button type="button" className={`${className} run-stop-btn`} onClick={stop} disabled={run.stopping}
           title={queue.length ? `Stop now, and clear the ${queue.length} queued` : 'Stop now'}>
-          <span className="stop-glyph" aria-hidden="true" />Stop
+          <X size={12} strokeWidth={2.5} aria-hidden="true" />Stop
         </button>
     if (stopOnly) return stopBtn
     return (

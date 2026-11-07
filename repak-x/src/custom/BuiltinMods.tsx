@@ -135,7 +135,8 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
     return () => { clearTimeout(t); clearTimeout(u) }
   }, [revealed, b.id])
   const Icon = about.icon
-  const warn = !building && b.on && Boolean(b.error)
+  // a build not in the game yet warns too, like an error
+  const warn = building ? !b.active : b.on && Boolean(b.error) // building a first time: b.on is still false
   const text = status(b, building)
   return (
     <li ref={item} className={`bi-item${b.active || (b.current && b.on) ? ' is-on' : ''}`}>
@@ -148,7 +149,7 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
             {building ? <span className="t-shimmer"><SwapText text={text} /></span> : <SwapText text={text} />}
           </span>
         </div>
-        {warn && retryable(b.error) && (
+        {warn && !building && retryable(b.error) && (
           <button type="button" className="lo-text-btn" disabled={blocked} onClick={() => change(b.id, { on: true }, alert)}
             title={blocked ? BLOCKED : 'Build it again'}><RotateCcw size={13} /> Try again</button>
         )}

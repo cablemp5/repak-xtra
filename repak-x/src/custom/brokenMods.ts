@@ -4,6 +4,7 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, listen } from '@tauri-apps/api/event'
+import { isModLoader } from './loadoutStore'
 import { releaseScan, scanEnded, scanHeld, scanStarted } from './scanProgress'
 
 /** usmapWait (Needs VFX update only): files it rebuilds that a patch newer than the saved USMAP changed. While it is not
@@ -61,14 +62,13 @@ export const waitingCount = () => [...verdicts.values()].filter(v => v.usmapWait
 
 /** Re-checks a moment after mods are added, removed or replaced, at every launch and on every Scan (the first run after a
  *  game update reads the game's asset list, which takes a while: the badges appear when it is done). */
-let lastPaths: Set<string> | null = null
 export function useBrokenWatch(mods: { path: string; modified_date?: number; file_size?: number }[]) {
   const key = mods.map(m => `${norm(m.path)}|${m.modified_date ?? ''}|${m.file_size ?? ''}`).sort().join('\n')
   useEffect(() => {
     if (!key) return
     let live = true
-    // the mods that are on first: their answers matter before a play session, the off ones can wait
-    const paths = mods.map(m => m.path).sort((a, b) => Number(/\.bak_repak$/i.test(a)) - Number(/\.bak_repak$/i.test(b)))
+    // the mods that are on first: their answers matter before a play session, the off ones can wait. Never a mod loader
+    const paths = mods.map(m => m.path).filter(p => !isModLoader(p)).sort((a, b) => Number(/\.bak_repak$/i.test(a)) - Number(/\.bak_repak$/i.test(b)))
     const check = () => {
       const turn = ++checkSeq
       return Promise.all([invoke<Verdict[]>('xtra_broken_mods', { modPaths: paths }), invoke<{ path: string; partial: boolean; current: boolean }[]>('xtra_made_mods', { modPaths: paths }).catch(() => [])])
@@ -86,8 +86,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     // `first`: the quick check just started at launch, reused so the chain does not run the same check beside it
     // `finished` is false when a scan stopped with mods left (xtra_scan_stopped, read and cleared at both ends)
     // a run the library outdated before it began checked nothing: not finished (gameUpdate.ts asks the new one instead)
-    // `quiet`: a run for newly installed mods shows only in the header (ScanStatus.tsx), never the loading toast
-    const chain = (first?: Promise<boolean>, quiet = false): Promise<boolean> => !live ? Promise.resolve(false) : (scanStarted(quiet), invoke('xtra_scan_stopped').catch(() => false))
+    const chain = (first?: Promise<boolean>): Promise<boolean> => !live ? Promise.resolve(false) : (scanStarted(), invoke('xtra_scan_stopped').catch(() => false))
       .then(() => first ?? check())
       .then(ok => { if (!ok) throw new Error('the first check failed') })
       .then(() => (live ? invoke('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
@@ -108,23 +107,12 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     let unfinished = false
     // one run waiting its turn is enough: a focus, a Rescan and the game update notice asking meanwhile all get that one
     let waiting: Promise<boolean> | null = null
-    // a Resume, Refresh list or game update joining a queued install run makes it show its toast after all
-    let waitingQuiet = false
-    const full = (first?: Promise<boolean>, quiet = false) => {
-      if (waiting) { if (!quiet) waitingQuiet = false; return waiting }
-      waitingQuiet = quiet
-      return (waiting = queued(() => { waiting = null; return chain(first, waitingQuiet) }))
-    }
+    const full = (first?: Promise<boolean>) => waiting ?? (waiting = queued(() => { waiting = null; return chain(first) }))
     runFull = full
     // the quick check at once (1.5 s after the list stops changing: an install renames and reloads it a few times),
     // never behind a background scan in flight (one can run for many minutes after a game update), so new mods get
     // their badges in the Library and on loadouts right away. The chain starts from it
-    // a list with a mod the last run did not have is an install: that run stays quiet. The first run of a session is not
-    const t = setTimeout(() => {
-      const quiet = lastPaths !== null && paths.some(p => !lastPaths!.has(norm(p)))
-      lastPaths = new Set(paths.map(norm))
-      void full(check(), quiet)
-    }, 1500)
+    const t = setTimeout(() => { void full(check()) }, 1500)
     // only a run that stopped with mods left goes on when the window is back (the game, an update or a check took
     // over: xtra_vfx.rs background_may_run). Nothing changed, nothing runs. A game update is gameUpdate.ts's to start
     let lastResume = 0

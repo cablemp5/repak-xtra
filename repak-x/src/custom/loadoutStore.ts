@@ -9,6 +9,7 @@ import { cue } from './sounds'
 import { savedItem } from './storageCarryOver'
 import { isTyping } from './hotkeys'
 import { modalOpen } from './dialogFocus'
+import { MOD_LOADERS } from './edition'
 import { canonKey, isMemberKey, keysByName, memberKey, memberName, movesBetween, nameKey, resolveKeys } from './loadoutIdentity'
 export { memberName, nameKey } from './loadoutIdentity'
 
@@ -261,10 +262,12 @@ export const modsByKey = (mods: Mod[]) => {
   return m
 }
 
-/** Mods a loadout may hold: not the Project Galacta loader, which every mod made for it needs on (a loadout switching
- *  it off would break all the others), and which Setup manages. An optional _digits and an optional _P, each on its own.
- *  Other loaders (Project Sigeon) are ordinary mods here. */
-export const loadoutable = (key: string) => !/^!?projectgalacta(_\d+)?(_p)?$/i.test(memberName(key))
+const LOADER = new RegExp(String.raw`^!?(${MOD_LOADERS.join('|')})(_\d+)?(_p)?$`, 'i')
+/** Mods a loadout may hold: not a mod loader (edition.ts MOD_LOADERS), which every mod made for it needs on (a loadout
+ *  switching it off would break all the others), and which Setup manages. An optional _digits and an optional _P, each on its own. */
+export const loadoutable = (key: string) => !LOADER.test(memberName(key))
+/** The one loader check: the mod checker, Smart Loadouts and Find the crashing mod all skip these. */
+export const isModLoader = (path: string) => !loadoutable(modKey(path))
 
 /** Stored keys normalized, so loadouts saved before the suffix was dropped still match. */
 const keySet = (keys: string[]) => new Set(keys.map(normKey))
@@ -572,8 +575,8 @@ window.addEventListener('keydown', e => {
 
 if (import.meta.env.DEV) {
   console.assert(['C:/g/~mods/!ProjectGalacta_9999999_P.pak', 'C:/g/~mods/!ProjectGalacta_9999999_P.bak_repak'].every(x => !loadoutable(modKey(x)))
-    && loadoutable(modKey('C:/g/~mods/!ProjectSigeon_9999999_P.pak')) && loadoutable(modKey('C:/g/~mods/ProjectGalactaFan_9999999_P.pak')),
-    'loadoutable: not the Galacta loader, other mods and other loaders yes')
+    && loadoutable(modKey('C:/g/~mods/ProjectGalactaFan_9999999_P.pak')),
+    'loadoutable: not the Galacta loader, other mods yes')
   console.assert(['ProjectGalacta_P', 'ProjectGalacta_12', '!ProjectGalacta_3_P'].every(n => !loadoutable(modKey(`C:/g/~mods/${n}.pak`)))
     && loadoutable(modKey('C:/g/~mods/ProjectGalacta_Compat_P.pak')), 'loadoutable: the Galacta loader names only')
   {

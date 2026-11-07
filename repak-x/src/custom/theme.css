@@ -1651,13 +1651,12 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
 /* an icon in the portrait's place (All heroes): the same round size, quiet */
 .custom-dropdown-img.is-glyph { display: grid; place-items: center; background: var(--quiet-hover); color: var(--text-secondary); }
 .custom-dropdown-img.is-glyph svg { width: 12px; height: 12px; }
-/* Generating: what it is doing (dot loader, "2 of 9") as a quiet status, and Stop as its own button beside it with a
-   small rounded square, the same Stop as Home's batch line */
+/* Generating: what it is doing (dot loader, "2 of 9") as a quiet status, and Stop as its own button beside it with
+   an X, the same Stop as Home's batch line */
 .run-group { display: inline-flex; align-items: center; gap: 8px; flex: none; }
 .run-group .is-running { display: inline-flex !important; align-items: center; gap: 8px; cursor: default; pointer-events: none;
   border-color: transparent !important; background: transparent !important; padding-left: 4px !important; color: var(--text-primary) !important; }
 .run-stop-btn { display: inline-flex !important; align-items: center; gap: 8px; }
-.stop-glyph { width: 8px; height: 8px; border-radius: 2px; background: currentColor; flex: none; }
 /* Pause and Resume beside Stop (ScanStatus.tsx): solid glyphs one height (10px), so the three read as one set.
    Pause: two square 4px bars 8px apart. Each bar starts on a whole device pixel at 100, 125, 150, 175, and 200% scale
    (8 times any of those is whole), so both bars always round to the same width with crisp edges */
@@ -1668,8 +1667,8 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
 /* the header's paused state: centered in the 14px spot the running spinner takes, so the words do not shift */
 .scan-status-in .pause-glyph { margin: 0 1px; }
 /* the mod checks' menu (and the Generate menu sharing its rows): Stop and Play at the pause's height */
-.lo-gen-stop :is(.stop-glyph, .play-glyph) { width: 10px; height: 10px; margin: 0 1px; } /* the pause's 12px slot: the three labels share one left edge */
-.lo-gen-stop .stop-glyph { border-radius: 0; } /* square like the pause bars: one corner language in this menu */
+.lo-gen-stop .play-glyph { width: 10px; height: 10px; margin: 0 1px; } /* the pause's 12px slot: the three labels share one left edge */
+.lo-gen-stop > svg { flex: none; } /* Cancel's X fills the same 12px slot */
 .play-glyph { width: 8px; height: 8px; flex: none; background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%); }
 /* A Generate button on a PC without the preview kit: grayed out, with a small blue "Set up" that says where to go */
 .is-unavailable { color: var(--text-secondary) !important; opacity: 0.85; }
@@ -3075,7 +3074,7 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .bs-answers { display: inline-flex; gap: 8px; flex: none; }
 .bs-launch, .bs-back { display: inline-flex; align-items: center; gap: 6px; flex: none; }
 .bs-modal .bs-launch.btn-primary { padding: 0 14px !important; }
-.bs-modal .cs-footer .bs-back + :not(.bs-back, .bs-safe) { margin-left: auto; }   /* Undo and Not sure on the left, the way out on the right */
+.bs-modal .cs-footer .bs-back + :not(.bs-back) { margin-left: auto; }   /* Undo and Not sure on the left, the way out on the right */
 .bs-link { align-self: flex-start; padding: 0; border: 0; background: none; font: inherit; font-size: 12px; color: var(--text-secondary);
   text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .bs-link:hover { color: var(--text-primary); }
@@ -3112,7 +3111,7 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .bs-overlay { z-index: 2100 !important; }   /* above Settings, where Crash reports opens it */
 .cs-note .bs-link { font-size: inherit; }
 
-/* Find the crashing mod: the saved-mods line, and motion (transitions.dev recipes:
+/* Find the crashing mod: motion (transitions.dev recipes:
    Page side-by-side for each step, Texts reveal for lists, Number pop-in for the test number and done checks) */
 .bs-roles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .bs-role { padding: 12px 14px; border: 1px solid var(--panel-border); border-radius: 10px; }
@@ -3124,9 +3123,7 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .bs-role.is-app li > svg { color: var(--accent-primary); }
 .bs-role li { display: flex; align-items: center; gap: 8px; font-size: 13px; line-height: 1.5; color: var(--text-primary);
   animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; animation-delay: calc(var(--i, 0) * var(--stagger-stagger) + 80ms); }
-.bs-safe { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #3ecf6e; white-space: nowrap; }
-.bs-modal .cs-footer .bs-back + .bs-safe { margin-left: auto; }
-.bs-modal .cs-footer > .bs-safe:first-child { margin-left: auto; }
+.bs-modal .cs-footer > .bs-stop { margin-left: auto; }
 .bs-stop { display: inline-flex; align-items: center; gap: 6px; }
 @keyframes bs-from-right { from { opacity: 0; transform: translateX(var(--page-slide-distance)); filter: blur(var(--page-blur)); } }
 @keyframes bs-from-left { from { opacity: 0; transform: translateX(calc(var(--page-slide-distance) * -1)); filter: blur(var(--page-blur)); } }
@@ -3140,15 +3137,12 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 @keyframes bs-fill { from { transform: scaleX(0.2); transform-origin: left; } }
 /* the two numbers before a run: small label over a big number, two cards */
 .bs-facts { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 0; }   /* one card, full width */
-.bs-dt-note { opacity: 0.75; }
-.bs-facts > div { padding: 12px 14px; border: 1px solid var(--panel-border); border-radius: 10px; animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; }
-.bs-facts > div + div { animation-delay: var(--stagger-stagger); }
+.bs-facts > div { padding: 12px 14px; border: 1px solid var(--panel-border); border-radius: 10px; }
 .bs-facts dt { font-size: 12px; color: var(--text-secondary); }
-.bs-facts dd { margin: 2px 0 0; font-size: 24px; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--text-primary);
-  animation: t-num-pop var(--digit-dur) var(--digit-ease) 120ms backwards; }
+.bs-facts dd { margin: 2px 0 0; font-size: 24px; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--text-primary); }
 .bs-hint { display: inline-flex; align-items: center; gap: 6px; margin-right: auto; font-size: 12px; color: var(--text-secondary); }
 .bs-hint > svg { flex: none; color: var(--text-secondary); }
-.bs-modal .cs-footer { flex-wrap: wrap; row-gap: 8px; }   /* Undo, Not sure, the saved count, and Stop never squeeze each other */
+.bs-modal .cs-footer { flex-wrap: wrap; row-gap: 8px; }   /* Undo, Not sure, and Stop never squeeze each other */
 .bs-modal .cs-footer > * { flex: none; white-space: nowrap; }
 
 /* The app's busy overlay (upstream PromiseTransitionLoader: "Checking conflicts..."): a quiet panel like the header's scan
