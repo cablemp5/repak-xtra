@@ -36,12 +36,12 @@ import { generatePreviews, hasPreview, refreshPreviewsAvailable, usePreviewUrl, 
 import { nameKey } from './loadoutIdentity'
 import { plural } from './modName'
 import { SOUND_PACKS, type SoundName, cue, tryCue } from './sounds'
-import { setSoundChoice, useSoundChoice } from './uiPrefs'
+import { holdToasts, setSoundChoice, useSoundChoice } from './uiPrefs'
 import './onboarding.css'
 
 type Alert = ReturnType<typeof useAlert>
 type Bypass = { state: 'installed' | 'disabled' | 'partial' | 'other' | 'missing' }
-type Galacta = { installed: string | null; disabled: boolean }
+type Galacta = { installed: string | null; disabled: boolean; up_to_date?: boolean | null }
 type Pending = 'smart' | string | null // what Finish opens on Loadouts home, picked on the first loadout page (a string: that loadout's id)
 type Auto = 'checking' | 'game-open' | 'no-game' | 'working' | 'failed' | 'done'
 
@@ -251,7 +251,7 @@ function AutoSetup({ f }: { f: Flow }) {
         <button type="button" className="btn-primary" onClick={() => setAgain(a => a + 1)}>Check again</button></>
     : state === 'no-game' ? <ol className="fr-steps">{findGame(f)}</ol>
     : state === 'failed' ? <>
-        <p>Setup did not finish. The message above says why.</p>
+        <p>Setup did not finish. The message below says why.</p>
         <button type="button" className="btn-primary" onClick={() => setAgain(a => a + 1)}>Retry</button></>
     : state === 'working' ? <>
         <p>Installing only what is missing. Nothing else changes.</p>
@@ -463,6 +463,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
   const [bypassError, setBypassError] = useState<string | null>(null)
   const [galacta, setGalacta] = useState<Galacta | null>(null)
   const [auto, setAuto] = useState<Auto>('checking')
+  const [note, setNote] = useState<string | null>(null) // a warning, said on the page: no toasts while the flow is open
   const loadouts = useLoadouts()
   const title = useRef<HTMLHeadingElement>(null)
   const asked = useRef(0) // the newest status check: answers to an older one (another game folder) are dropped
@@ -525,6 +526,12 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
     return () => window.removeEventListener('repakxtra-drop-done', dropped)
   }, [])
   useEffect(() => { if (open && at !== 'welcome') title.current?.focus() }, [open, at]) // a screen reader hears the new page
+  useEffect(() => {
+    if (!open) return
+    holdToasts(t => { if (t.color === 'warning' || t.color === 'danger') setNote(String(t.description || t.title)) })
+    return () => holdToasts(null)
+  }, [open])
+  useEffect(() => setNote(null), [at])
   const checkStatus = () => {
     const id = ++asked.current
     const mine = () => asked.current === id
@@ -570,9 +577,11 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
         finish('bypass')
         did.push('the signature bypass')
       }
-      const g = await invoke<Galacta>('setup_galacta_status', { online: false })
+      // online: an older copy already in ~mods is brought to the newest release too (offline, a missing one still installs)
+      const g = await invoke<Galacta>('setup_galacta_status', { online: true })
+        .catch(() => invoke<Galacta>('setup_galacta_status', { online: false }))
       setGalacta(g)
-      if (!g.installed) { setBusy('galacta'); setGalacta(await invoke<Galacta>('setup_galacta_install', { folder: null })); finish('galacta'); did.push(LOADER_NAME) }
+      if (!g.installed || (!g.disabled && g.up_to_date === false)) { setBusy('galacta'); setGalacta(await invoke<Galacta>('setup_galacta_install', { folder: null })); finish('galacta'); did.push(LOADER_NAME) }
     } catch (e) { alert.warning('Setup', String(e)); return null } finally { setBusy(null) }
     return did
   }
@@ -624,7 +633,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
           {page.sub?.(f) && <p className="wi-lede">{page.sub(f)}</p>}
         </div>
         {/* transitions.dev: each page rises in; the key remounts it so Back and Next both play it */}
-        <div key={at} className="modal-body fr-body t-rise-in">{page.body(f)}</div>
+        <div key={at} className="modal-body fr-body t-rise-in">{page.body(f)}{note && <ul className="su-problems ob-note" role="alert"><li>{note}</li></ul>}</div>
         <div className="modal-footer fr-foot">
           <ol className="fr-rail" aria-label={`Step ${railAt + 1} of ${RAIL.length}`}>
             {RAIL.map((s, i) => <li key={s} className={i < railAt ? 'is-done' : i === railAt ? 'is-now' : ''} aria-current={i === railAt ? 'step' : undefined}>{i < railAt && <Check size={12} strokeWidth={3} aria-hidden="true" />}{s}</li>)}

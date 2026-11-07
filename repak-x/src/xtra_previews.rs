@@ -464,11 +464,24 @@ pub async fn previews_doctor(state: State<'_, Arc<Mutex<crate::AppState>>>) -> R
     let paks = state.lock().unwrap().game_path.parent().map(|p| p.to_path_buf());
     let mut cmd = generator_command(paks, false)?; // without Blender the check itself says it is missing
     cmd.arg("--doctor");
-    // The hold lives in the worker: it outlasts this future if the app stops waiting
-    let out = tauri::async_runtime::spawn_blocking(move || { let _hold = hold; cmd.output() }).await.map_err(|e| e.to_string())?
-        .map_err(|e| format!("The preview generator did not start: {e}"))?;
-    doctor_line(&String::from_utf8_lossy(&out.stdout))
-        .ok_or_else(|| format!("The preview check gave no answer (exit {}).", out.status.code().unwrap_or(-1)))
+    // The hold lives in the worker: it outlasts this future if the app stops waiting. A run with no DOCTOR line is tried
+    // once more: right after a fresh kit or Blender install the first run can exit early (a fresh PC showed exit 1 while
+    // the kit was fine), and its stderr goes to the Logs so a lasting failure is still explained there
+    tauri::async_runtime::spawn_blocking(move || {
+        let _hold = hold;
+        let mut last = String::new();
+        for _ in 0..2 {
+            let out = cmd.output().map_err(|e| format!("The preview generator did not start: {e}"))?;
+            if let Some(v) = doctor_line(&String::from_utf8_lossy(&out.stdout)) {
+                return Ok(v);
+            }
+            last = format!("The preview check gave no answer (exit {}).", out.status.code().unwrap_or(-1));
+            let err = String::from_utf8_lossy(&out.stderr);
+            let tail: Vec<&str> = err.lines().filter(|l| !l.trim().is_empty()).rev().take(3).collect(); // a traceback's last lines name the error
+            crate::ui_log::error("Previews", format!("{last} {}", tail.into_iter().rev().collect::<Vec<_>>().join(" | ")));
+        }
+        Err(last)
+    }).await.map_err(|e| e.to_string())?
 }
 
 /// The generator's `DOCTOR {json}` line.

@@ -1906,7 +1906,7 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
   animation: su-bar-shine 1.4s cubic-bezier(0.45, 0, 0.55, 1) infinite; }   /* a light running along the filled part (the KO Editor's load bar) */
 @keyframes su-bar-shine { from { background-position: -100% 0, 0 0; } to { background-position: 200% 0, 0 0; } }
 .su-track-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: var(--text-primary); }
-.su-track-amount { flex: none; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.su-track-amount { flex: none; margin-left: auto; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .su-track.is-done, .su-track.is-done .su-track-text { color: #3ecf6e; }
 .su-track.is-done svg { flex: none; color: #3ecf6e; }
 .su-problems { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }

@@ -90,7 +90,12 @@ export function newDefaultsOnce<T extends { autoOpenDetails?: boolean; holdToDel
 /** Fewer pop-ups (stored as minimal toasts): an everyday confirmation (success or info with nothing to click, not a progress toast) is skipped.
  *  Errors, warnings, crash reports, update offers and deletions (they carry Undo) still show. */
 /** keep: a confirmation that also says what to do next, shown even with Minimal toasts */
-export const quietToast = (t: { color?: string; action?: unknown; isLoading?: boolean; keep?: unknown }) =>
+type ToastLike = { color?: string; title?: unknown; description?: unknown; action?: unknown; isLoading?: boolean; keep?: unknown }
+let held: ((t: ToastLike) => void) | null = null
+/** The welcome flow (FirstRun.tsx) holds every toast while it is open: none show, each goes to `to` instead, which says a
+ *  warning on its own page. null lets them show again. */
+export const holdToasts = (to: typeof held) => { held = to }
+export const quietToast = (t: ToastLike) => held ? (held(t), true) :
   minimalToasts() && (!t.color || t.color === 'success' || t.color === 'primary' || t.color === 'default') && !t.action && !t.isLoading && !t.keep
 
 const apply = () => {

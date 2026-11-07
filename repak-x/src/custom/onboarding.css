@@ -242,3 +242,4 @@ html[data-motion="off"] .ob-key { transition: none; }
 html[data-motion="off"] :is(.ob-tree li, .ob-spin, .ob-pop) { animation: none !important; }
 
 .ob-choice .wi-card.ob-empty svg.lucide { width: 20px !important; height: 20px !important; }   /* past the app's button icon size */
+.ob-note { margin: 14px 0 0; }   /* a warning the flow held back from a toast (FirstRun.tsx) */
