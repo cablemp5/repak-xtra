@@ -92,21 +92,28 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     // a run the library outdated before it began checked nothing: not finished (gameUpdate.ts asks the new one instead)
     // never the Mod Updater's own updates for this game (xtra_stamp.rs): they were checked as they were made
     let scanPaths = paths
+    let ticked: string[] = []
+    // the four scans (vfx: the VFX and Blueprint ones, meshes: the mesh one), each followed by the badges when it found something.
+    // A scan skips a mod it already checked as this file in this game, so a list can be scanned twice cheaply
+    const scans = (vfx: string[], meshes: string[]) => Promise.resolve()
+      .then(() => (live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: vfx }) : 0))
+      .then(found => (live && found ? check() : undefined))
+      .then(() => (live ? invoke<number>('xtra_vfx_check_scan', { modPaths: vfx }) : 0))
+      .then(found => (live && found ? check() : undefined))
+      .then(() => (live ? invoke<number>('xtra_layout_scan', { modPaths: vfx }) : 0))
+      .then(checked => (live && checked ? check() : undefined))
+      // and mesh mods whose skeleton the game rebuilt: more bones than it has gets May crash (xtra_mesh.rs)
+      .then(() => (live ? invoke<number>('xtra_mesh_scan', { modPaths: meshes }) : 0))
+      .then(checked => (live && checked ? check() : undefined))
     const chain = (first?: Promise<boolean>): Promise<boolean> => !live ? Promise.resolve(false) : (scanStarted(), invoke('xtra_scan_stopped').catch(() => false))
       .then(() => first ?? check())
       .then(ok => { if (!ok) throw new Error('the first check failed') })
-      .then(() => { scanPaths = paths.filter(p => forced.has(norm(p)) || !made.get(norm(p))?.current); forced = new Set() })
+      .then(() => { ticked = paths.filter(p => forced.has(norm(p))); scanPaths = paths.filter(p => forced.has(norm(p)) || !made.get(norm(p))?.current); forced = new Set() })
       .then(() => (live ? invoke('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
-      .then(() => (live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: scanPaths }) : 0))
-      .then(found => (live && found ? check() : undefined))
-      .then(() => (live ? invoke<number>('xtra_vfx_check_scan', { modPaths: scanPaths }) : 0))
-      .then(found => (live && found ? check() : undefined))
-      .then(() => (live ? invoke<number>('xtra_layout_scan', { modPaths: scanPaths }) : 0))
-      .then(checked => (live && checked ? check() : undefined))
-      // and mesh mods whose skeleton the game rebuilt: more bones than it has gets May crash (xtra_mesh.rs)
-      // every mod: an update carries the original's meshes as they were, and nothing in the Mod Updater checks them
-      .then(() => (live ? invoke<number>('xtra_mesh_scan', { modPaths: paths }) : 0))
-      .then(checked => (live && checked ? check() : undefined))
+      // a manual Scan's mods first, through all four scans, so they never wait behind the mods not checked yet
+      .then(() => (ticked.length ? scans(ticked, ticked) : undefined))
+      // every mod for meshes: an update carries the original's meshes as they were, and nothing in the Mod Updater checks them
+      .then(() => scans(scanPaths, paths))
       .then(() => (live ? invoke<boolean>('xtra_scan_stopped').catch(() => false) : true))
       .then(stopped => live && !stopped, e => { console.warn('[brokenMods] background scan failed', e); return false })
       // runs take turns (queued), so this one's end is never another's. One the library outdated is not "paused":
