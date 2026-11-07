@@ -6,3 +6,5 @@ if (typeof document !== 'undefined') document.title = APP_NAME
 export const RELEASE_PREFIX = 'v'
 export const LOADER_NAME = 'Project Galacta'
 export const LOADER_PAK = '!ProjectGalacta_9999999_P.pak'
+/** Mod loaders by pak name, lowercase (xtra_setup.rs LOADER_STEMS lists the same names). */
+export const MOD_LOADERS = ['projectgalacta']

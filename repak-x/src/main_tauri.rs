@@ -1264,6 +1264,10 @@ async fn parse_dropped_files(
                                 }
                             }
                         }
+                        // repakxtra: a mod loader in the archive is Setup's, never a row. An archive of only loaders lists nothing
+                        let paks_found = pak_files_in_archive.len();
+                        pak_files_in_archive.retain(|p| !crate::xtra_setup::is_managed_loader(p));
+                        if paks_found > 0 && pak_files_in_archive.is_empty() { continue; }
 
                         if pak_files_in_archive.len() > 1 {
                             // Multiple PAK files found in archive - analyze each separately

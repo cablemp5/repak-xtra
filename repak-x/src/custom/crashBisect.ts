@@ -9,7 +9,7 @@
 // file changes and kept until the mods are back, so an app restart (or a crash of repakxtra itself) resumes it. The end and Stop put every mod back.
 import { invoke } from '@tauri-apps/api/core'
 import { type KeepDeps, flipAll, stem } from './keepOne'
-import { nameKey } from './loadoutStore'
+import { isModLoader, nameKey } from './loadoutStore'
 
 type Mod = { path: string; enabled?: boolean }
 export type Phase = 'baseline' | 'halve' | 'confirm'
@@ -181,9 +181,12 @@ export const resumeBisect = serial(async (d: KeepDeps, b: Bisect): Promise<{ ref
   return { refused: refused ?? undefined, changed: true }
 })
 
+/** The mods a search tests: the ones on now, never a mod loader (every mod made for it needs it on). */
+export const suspects = (mods: Mod[]) => mods.filter(m => m.enabled && !isModLoader(m.path))
+
 /** Starts from the mods that are on now: the first test turns them all off. */
 export const startBisect = serial(async (d: KeepDeps, mods: Mod[]) => {
-  const on = mods.filter(m => m.enabled).map(m => m.path)
+  const on = suspects(mods).map(m => m.path)
   if (!on.length) { d.alert.warning('No mods are on', 'Turn on the mods you played with when it crashed, then try again.'); return null }
   if (await gameOpen(d)) return null
   return goTo(d, null, firstTest(on))

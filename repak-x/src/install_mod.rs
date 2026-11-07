@@ -138,6 +138,8 @@ fn find_mods_from_archive(path: &str) -> Vec<InstallableMod> {
         if file_path.is_file() && file_path.extension().and_then(|s| s.to_str()) == Some("pak") {
             found_pak_files = true;
             let mod_base_name = file_path.file_stem().unwrap_or_default().to_string_lossy().to_string(); // repakxtra
+            // repakxtra: a mod loader in the archive is Setup's, the rest installs
+            if crate::xtra_setup::is_managed_loader(file_path) { continue; }
             write_install_debug(&format!(
                 "  Found PAK: {} (base_name={})",
                 file_path.display(),

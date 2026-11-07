@@ -20,13 +20,16 @@ const LICENSE_TEXT: &str = include_str!("../resources/utoc-bypass/Ultimate ASI L
 const GALACTA_API: &str = "https://api.github.com/repos/0xSaturno/ProjectGalacta/releases/latest";
 pub(crate) const GALACTA_STEM: &str = "!ProjectGalacta_9999999_P";
 
-/// Setup owns this edition's project loader. Mod repairs must not rewrite or disable it.
+/// Mod loaders by pak name (with an optional !, _digits and _P). custom/edition.ts MOD_LOADERS lists the same names.
+pub(crate) const LOADER_STEMS: &[&str] = &["projectgalacta"];
+
+/// A mod loader: Setup or the app that made it keeps it, so no install, check, repair or switch treats it as a mod.
 pub(crate) fn is_managed_loader(path: &Path) -> bool {
     let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else { return false };
     let stem = stem.trim_start_matches('!').to_ascii_lowercase();
     let stem = stem.strip_suffix("_p").unwrap_or(&stem);
     let stem = stem.rsplit_once('_').filter(|(_, n)| !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit())).map_or(stem, |(base, _)| base);
-    stem.eq_ignore_ascii_case(GALACTA_STEM.trim_start_matches('!').split('_').next().unwrap())
+    LOADER_STEMS.contains(&stem)
 }
 
 fn sha256(bytes: &[u8]) -> String {

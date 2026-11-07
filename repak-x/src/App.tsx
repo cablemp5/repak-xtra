@@ -740,14 +740,8 @@ function App() {
     console.log('Dropped items:', paths)
     if (await installDroppedKit(paths, alert)) return // repakxtra: a preview kit zip installs as the kit, not as a mod
 
-    // A recognized Project Galacta update always replaces the existing install
-    // in place, regardless of which folder (if any) it was dropped on, or how
-    // the drop would otherwise classify - checked first so it pre-empts every
-    // other branch below.
-    if (await tryInstallAsProjectGalactaUpdate(paths)) {
-      setDropTargetFolder(null)
-      return
-    }
+    // repakxtra: no Project Galacta update here. Setup installs and updates the loader, a dropped archive's copy is
+    // skipped and the rest installs (install_mod.rs)
 
     // Check if we should quick-organize to a folder (using ref for current value in closure)
     const targetFolder = dropTargetFolderRef.current
@@ -1577,12 +1571,7 @@ function App() {
       const filePath = event.payload
       console.log('Received mod from extension:', filePath)
 
-      // A recognized Project Galacta update skips the picker overlay entirely
-      // and replaces the existing install in place.
-      const handled = await tryInstallAsProjectGalactaUpdate([filePath], { deleteArchiveOnSuccess: true })
-      if (!handled) {
-        setExtensionModPath(filePath)
-      }
+      setExtensionModPath(filePath) // repakxtra: no Project Galacta update here, Setup owns the loader
     })
 
     // Listen for extension mod errors

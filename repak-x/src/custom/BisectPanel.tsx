@@ -6,7 +6,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
 import { ArchiveRestore, ArrowLeftRight, Check, CircleCheck, CircleHelp, CircleX, Gamepad2, ListChecks, Repeat, RotateCcw, ShieldCheck, TriangleAlert, Undo2 } from 'lucide-react'
 import { useDialogFocus } from './dialogFocus'
-import { type Bisect, type Outcome, OPEN_BISECT, answerBisect, estimate, gameOpen, gameRunning, readBisect, restoreBisect, resumeBisect, returnTo, roundsLeft, startBisect, testOff } from './crashBisect'
+import { type Bisect, type Outcome, OPEN_BISECT, answerBisect, estimate, gameOpen, gameRunning, readBisect, restoreBisect, resumeBisect, returnTo, roundsLeft, startBisect, suspects, testOff } from './crashBisect'
 import { Step } from './FirstRun'
 import { type KeepDeps, stem, turnOffWithUndo } from './keepOne'
 import { nameKey } from './loadoutStore'
@@ -37,7 +37,7 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
   }, [])
   if (!view) return null
 
-  const on = mods.filter(m => m.enabled)
+  const on = suspects(mods)
   const work = async (fn: () => Promise<View | null>) => {
     setBusy(true)
     setNote(null)

@@ -4,6 +4,7 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, listen } from '@tauri-apps/api/event'
+import { isModLoader } from './loadoutStore'
 import { releaseScan, scanEnded, scanHeld, scanStarted } from './scanProgress'
 
 /** usmapWait (Needs VFX update only): files it rebuilds that a patch newer than the saved USMAP changed. While it is not
@@ -67,8 +68,8 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
   useEffect(() => {
     if (!key) return
     let live = true
-    // the mods that are on first: their answers matter before a play session, the off ones can wait
-    const paths = mods.map(m => m.path).sort((a, b) => Number(/\.bak_repak$/i.test(a)) - Number(/\.bak_repak$/i.test(b)))
+    // the mods that are on first: their answers matter before a play session, the off ones can wait. Never a mod loader
+    const paths = mods.map(m => m.path).filter(p => !isModLoader(p)).sort((a, b) => Number(/\.bak_repak$/i.test(a)) - Number(/\.bak_repak$/i.test(b)))
     const check = () => {
       const turn = ++checkSeq
       return Promise.all([invoke<Verdict[]>('xtra_broken_mods', { modPaths: paths }), invoke<{ path: string; partial: boolean; current: boolean }[]>('xtra_made_mods', { modPaths: paths }).catch(() => [])])
