@@ -63,7 +63,7 @@ function useFolded(tabs: React.RefObject<HTMLDivElement | null>) {
 export type OnOff = 'all' | 'enabled' | 'disabled'
 export const readOnOff = (v: string | null): OnOff => (v === 'enabled' || v === 'disabled' ? v : 'all')
 
-/** The Library's All / On / Off tabs with counts, for pages that list things that are on or off (Loadouts, VFX Updater, Encrypt). */
+/** The Library's All / On / Off tabs with counts, for a page that lists things that are on or off (the Loadouts screen). */
 export function OnOffFilter({ value, onChange, on, total, label, titles, className = '' }: {
   value: OnOff; onChange: (v: OnOff) => void; on: number; total: number; label: string; titles?: [string, string, string]; className?: string
 }) {

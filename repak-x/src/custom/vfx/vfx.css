@@ -12,8 +12,8 @@
 .vf-hint { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 
 /* search and sort: a loadout's Add mods row, the field taking the width, with a clear button once there is something to clear */
-.vf-body .vf-filters { flex-wrap: wrap; align-items: stretch; margin: 0; }   /* a narrow window: the filters wrap under the search, not squeeze it */
-.vf-body .vf-search { flex: 1 1 220px; width: auto; min-width: 0; height: auto; min-height: 42px; padding: 0 8px 0 12px; gap: 12px; }
+.vf-body .vf-filters { flex-wrap: nowrap; align-items: stretch; margin: 0; }
+.vf-body .vf-search { flex: 1; width: auto; min-width: 0; height: auto; padding: 0 8px 0 12px; gap: 12px; }
 .vf-search input { font-size: 14px !important; }
 .vf-search input::placeholder { color: var(--text-secondary); opacity: 1; }
 .vf-search-clear { flex: none; width: 28px; height: 28px !important; min-height: 0 !important; }

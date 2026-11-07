@@ -25,7 +25,6 @@ import { STEPS, fixVfxMod, repairOutcome, type AssetKind, type VfxReport } from 
 import { checkVfxMod, checkWords } from './quick'
 import { needsUpdater, skipsUpdater, verdictLabel, verdictsChanged } from '../brokenMods'
 import { HeroFilter, heroOfName } from '../heroFilter'
-import { type OnOff, OnOffFilter } from '../ModStateFilter'
 import ScanButton from './ScanButton'
 import './vfx.css'
 import ModRowsSkeleton from '../ModRowsSkeleton'
@@ -354,7 +353,6 @@ export function VfxUpdaterPanel() {
   const [runs, setRuns] = useState<Record<string, Run>>({}) // by norm(utoc)
   const [picked, setPicked] = useState<Set<string>>(new Set()) // norm(utoc)
   const [q, setQ] = useState('')
-  const [show, setShow] = useState<OnOff>('all')
   const [hero, setHero] = useState('') // '' = every hero (the same filter as a loadout's Add mods)
   const [sort, setSort] = useState<'name' | 'newest'>(() => (localStorage.getItem(SORT) === 'name' ? 'name' : 'newest'))
   const [foldedIds, setFoldedIds] = useState<string[]>(GROUP_IDS)
@@ -801,12 +799,11 @@ export function VfxUpdaterPanel() {
   const list = [...(mods ?? [])].sort((a, b) => Number(Boolean(needsOf(b))) - Number(Boolean(needsOf(a))) || order(a, b))
   const sortBy = (v: 'name' | 'newest') => { setSort(v); localStorage.setItem(SORT, v) }
   const needle = q.trim().toLowerCase()
-  const narrowed = Boolean(needle || hero || show !== 'all') // the Library's All / On / Off, beside the search
   const heroes = [...new Set(list.map(m => heroOfName(m.hero)).filter(Boolean))].sort()
-  const shown = list.filter(m => (!needle || m.name.toLowerCase().includes(needle) || (m.hero ?? '').toLowerCase().includes(needle)) && (!hero || heroOfName(m.hero) === hero) && (show === 'all' || m.enabled === (show === 'enabled')))
+  const shown = list.filter(m => (!needle || m.name.toLowerCase().includes(needle) || (m.hero ?? '').toLowerCase().includes(needle)) && (!hero || heroOfName(m.hero) === hero))
   // ticked mods the search or hero filter hides: Update still takes them, so the footer says so (and shows them in one click)
   const shownKeys = new Set(shown.map(m => norm(m.utoc)))
-  const hiddenTicked = narrowed ? [...picked].filter(k => !shownKeys.has(k)).length : 0
+  const hiddenTicked = needle || hero ? [...picked].filter(k => !shownKeys.has(k)).length : 0
   // three groups: the mods that need an update (with any that ran this session and did not update), the ones updated this
   // session, the rest
   const updatedNow = (m: Mod) => runs[norm(m.utoc)]?.status === 'fixed'
@@ -825,8 +822,7 @@ export function VfxUpdaterPanel() {
   const chosen = shown.filter(isAdded)
   const unknown = shown.filter(m => !first(m) && !isAdded(m) && !updatedNow(m) && uncertain.has(norm(m.path)))
   const others = shown.filter(m => !uncertain.has(norm(m.path)) && !first(m) && !updatedNow(m) && !isAdded(m))
-  const groupIdOf = (m: Mod) => updatedNow(m) ? 'updated' : isAdded(m) ? 'added' : first(m) ? 'needs' : uncertain.has(norm(m.path)) ? 'unknown' : m.ui ? 'ui' : m.materials ? 'materials' : 'rest'
-  groupOf.current = new Map(shown.map(m => [norm(m.utoc), groupIdOf(m)]))
+  groupOf.current = new Map(shown.map(m => [norm(m.utoc), updatedNow(m) ? 'updated' : isAdded(m) ? 'added' : first(m) ? 'needs' : uncertain.has(norm(m.path)) ? 'unknown' : m.ui ? 'ui' : m.materials ? 'materials' : 'rest']))
   const groups = [
     group('added', 'Chosen files', chosen),
     group('needs', 'Needs an update', needing, needing.filter(m => needsOf(m) && !isDone(runs[norm(m.utoc)]?.status)).length),
@@ -899,7 +895,6 @@ export function VfxUpdaterPanel() {
               onKeyDown={e => { if (e.key === 'Escape') setQ('') }} />
             {q && <button type="button" className="lo-icon vf-search-clear" onClick={() => setQ('')} aria-label="Clear the search" title="Clear the search"><X size={14} /></button>}
           </label>
-          <OnOffFilter className="lp-sort" label="Show mods" value={show} onChange={setShow} on={list.filter(m => m.enabled).length} total={list.length} />
           <HeroFilter heroes={heroes} value={hero} onChange={setHero} always />
           <div className="mod-state-filter lp-sort" role="group" aria-label="Sort mods">
             <button type="button" aria-pressed={sort === 'newest'} onClick={() => sortBy('newest')}>Newest</button>
@@ -941,10 +936,10 @@ export function VfxUpdaterPanel() {
         {mods === null
           ? <ModRowsSkeleton />
           : shown.length === 0
-            ? (loadError && !needle ? null : <p className="lp-empty">{narrowed ? (needle || hero ? `No ${show === 'enabled' ? 'mods that are on' : show === 'disabled' ? 'mods that are off' : 'mods'} match${needle ? ` “${q.trim()}”` : ''}${hero ? ` for ${hero}` : ''}.` : `No mods are ${show === 'enabled' ? 'on' : 'off'}.`) : 'No VFX mods in the mods folder. VFX mods and mods with material instances (MI_ files) appear here. Add .utoc takes any other mod.'}</p>)
+            ? (loadError && !needle ? null : <p className="lp-empty">{needle || hero ? `No mods match${needle ? ` “${q.trim()}”` : ''}${hero ? ` for ${hero}` : ''}.` : 'No VFX mods in the mods folder. VFX mods and mods with material instances (MI_ files) appear here. Add .utoc takes any other mod.'}</p>)
             : <div className="vf-groups">{groups.map(g => g.mods.length > 0 && (
               <Group key={g.id} title={g.title} count={g.count} tone={g.id === 'needs' ? 'needs' : g.id === 'updated' ? 'done' : undefined} busy={busy} all={g.all} none={g.none}
-                open={narrowed || !foldedIds.includes(g.id)} onFold={() => fold(g.id)} onPick={on => userPick(g.keys, on)}>
+                open={Boolean(needle || hero) || !foldedIds.includes(g.id)} onFold={() => fold(g.id)} onPick={on => userPick(g.keys, on)}>
                 <ul className="mod-rows vf-rows">
                   {g.mods.map(m => {
                     const key = norm(m.utoc)
@@ -1065,7 +1060,7 @@ export function VfxUpdaterPanel() {
             : state ? <span className={checkRun ? 't-shimmer' : undefined}>{state}</span>
             : <>{/* its own line: the warning and its link stay together, apart from the estimate */}
                 {hiddenTicked > 0 && <span className="vf-hidden-line"><b className="vf-hidden-n">{hiddenTicked} ticked {hiddenTicked === 1 ? 'mod is' : 'mods are'} hidden by the filter.</b>{' '}
-                  <button type="button" className="su-link" onClick={() => { setQ(''); setHero(''); setShow('all'); const ids = new Set([...picked].flatMap(k => { const m = byUtoc.get(k); return m ? [groupIdOf(m)] : [] })); setFoldedIds(f => f.filter(id => !ids.has(id))) }}>Show {hiddenTicked === 1 ? 'it' : 'them'}</button></span>}
+                  <button type="button" className="su-link" onClick={() => { setQ(''); setHero('') }}>Show {hiddenTicked === 1 ? 'it' : 'them'}</button></span>}
                 {ahead !== undefined && <b className="vf-eta">{timeLeft(ahead).replace(/^./, c => c.toUpperCase())} for {plural(todo, 'mod')}. </b>}{policy}.{' '}
                 {partialTodo > 0 && <><b className="vf-partial-n">{partialTodo === todo ? (todo === 1 ? 'It' : `All ${todo}`) : `${partialTodo} of ${todo}`}</b> will only partially update, without {partialTodo === 1 ? 'its' : 'their'} old Niagara files, and keep {partialTodo === 1 ? 'its' : 'their'} original, off, as _ORIGINAL.{' '}</>}
                 <button type="button" className="su-link" onClick={() => showAdvanced(true)}>Change</button></>}

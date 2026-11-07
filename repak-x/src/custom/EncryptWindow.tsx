@@ -12,7 +12,6 @@ import TitleBar from '../components/TitleBar'
 import Checkbox from '../components/ui/Checkbox'
 import { useGlobalTooltips } from '../hooks/useGlobalTooltips'
 import { HeroFilter, heroOfName } from './heroFilter'
-import { type OnOff, OnOffFilter } from './ModStateFilter'
 import { canonKey } from './loadoutIdentity'
 import { loadoutable, modKey, useLoadouts } from './loadoutStore'
 import { plural } from './modName'
@@ -80,7 +79,6 @@ function EncryptPanel() {
   const [cancelling, setCancelling] = useState(false)
   const [gameOpen, setGameOpen] = useState(false)
   const [q, setQ] = useState('')
-  const [show, setShow] = useState<OnOff>('all')
   const [hero, setHero] = useState('')
   const [sort, setSort] = useState<'newest' | 'name'>(() => (localStorage.getItem(SORT) === 'name' ? 'name' : 'newest'))
   const [foldedIds, setFoldedIds] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(FOLDED) ?? '[]') } catch { return [] } })
@@ -138,10 +136,9 @@ function EncryptPanel() {
 
   const all = [...(mods ?? []), ...added.filter(a => !(mods ?? []).some(m => norm(m.path) === norm(a.path)))]
   const needle = q.trim().toLowerCase()
-  const narrowed = Boolean(needle || hero || show !== 'all') // the Library's All / On / Off, beside the search
   const order = (a: Mod, b: Mod) => (sort === 'newest' ? b.modified - a.modified : 0) || a.name.localeCompare(b.name)
   const heroes = [...new Set(all.map(m => m.hero).filter(Boolean))].sort()
-  const shown = all.filter(m => (!needle || m.name.toLowerCase().includes(needle) || m.hero.toLowerCase().includes(needle)) && (!hero || m.hero === hero) && (show === 'all' || m.enabled === (show === 'enabled'))).sort(order)
+  const shown = all.filter(m => (!needle || m.name.toLowerCase().includes(needle) || m.hero.toLowerCase().includes(needle)) && (!hero || m.hero === hero)).sort(order)
   // two groups, not encrypted first (what there is to do), then encrypted (cable's pick, 2026-10-28), as the files say
   const groups = [
     { id: 'plain', title: 'Not encrypted', mods: shown.filter(m => !m.encrypted) },
@@ -208,7 +205,6 @@ function EncryptPanel() {
             <input value={q} placeholder="Search mods" aria-label="Search mods" onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setQ('') }} />
             {q && <button type="button" className="lo-icon vf-search-clear" onClick={() => setQ('')} aria-label="Clear the search" title="Clear the search"><X size={14} /></button>}
           </label>
-          <OnOffFilter className="lp-sort" label="Show mods" value={show} onChange={setShow} on={all.filter(m => m.enabled).length} total={all.length} />
           <HeroFilter heroes={heroes} value={hero} onChange={setHero} always={mods === null} />
           <div className="mod-state-filter lp-sort" role="group" aria-label="Sort mods">
             <button type="button" aria-pressed={sort === 'newest'} onClick={() => { setSort('newest'); localStorage.setItem(SORT, 'newest') }}>Newest</button>
@@ -227,13 +223,13 @@ function EncryptPanel() {
         {mods === null
           ? <ModRowsSkeleton />
           : shown.length === 0
-            ? <p className="lp-empty">{narrowed ? (needle || hero ? `No ${show === 'enabled' ? 'mods that are on' : show === 'disabled' ? 'mods that are off' : 'mods'} match${needle ? ` “${q.trim()}”` : ''}${hero ? ` for ${hero}` : ''}.` : `No mods are ${show === 'enabled' ? 'on' : 'off'}.`) : 'No mods in the mods folder. Add files takes a mod from anywhere.'}</p>
+            ? <p className="lp-empty">{needle || hero ? `No mods match${needle ? ` “${q.trim()}”` : ''}${hero ? ` for ${hero}` : ''}.` : 'No mods in the mods folder. Add files takes a mod from anywhere.'}</p>
             : <div className="vf-groups">{groups.map(g => {
                 const keys = g.mods.map(m => norm(m.path))
                 return g.mods.length > 0 && (
                   <Group key={g.id} title={g.title} count={g.mods.length} busy={busy}
                     all={keys.every(k => picked.has(k))} none={!keys.some(k => picked.has(k))}
-                    open={narrowed || !foldedIds.includes(g.id)} onFold={() => fold(g.id)} onPick={on => pick(keys, on)}>
+                    open={Boolean(needle || hero) || !foldedIds.includes(g.id)} onFold={() => fold(g.id)} onPick={on => pick(keys, on)}>
                     <ul className="mod-rows vf-rows">
                       {g.mods.map(m => {
                         const key = norm(m.path), r = runs[key], lo = inLoadouts(m)
@@ -272,7 +268,7 @@ function EncryptPanel() {
                 <button type="button" className="su-link" onClick={() => void run(failed)}>Try again</button></>}</>
             : <>
                 {hiddenTicked > 0 && <span className="vf-hidden-line"><b className="vf-hidden-n">{hiddenTicked} ticked {hiddenTicked === 1 ? 'mod is' : 'mods are'} hidden by the filter.</b>{' '}
-                  <button type="button" className="su-link" onClick={() => { setQ(''); setHero(''); setShow('all'); const ids = new Set<string>(todo.map(k => (byKey.get(k)?.encrypted ? 'encrypted' : 'plain'))); setFoldedIds(f => { const n = f.filter(id => !ids.has(id)); localStorage.setItem(FOLDED, JSON.stringify(n)); return n }) }}>Show {hiddenTicked === 1 ? 'it' : 'them'}</button></span>}
+                  <button type="button" className="su-link" onClick={() => { setQ(''); setHero('') }}>Show {hiddenTicked === 1 ? 'it' : 'them'}</button></span>}
                 {todo.length ? 'Each mod keeps its name and its on or off state, and is harder for others to unpack. Originals go to encryption-backups.' : 'Tick the mods to encrypt'}
               </>)}
         </p>
