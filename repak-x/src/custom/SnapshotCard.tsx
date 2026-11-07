@@ -32,7 +32,7 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
   }
   // making one keeps the newest 3 in all: imports can leave more, so it can drop several (newest first in the list)
   const drops = list && list.length >= 3 ? list.slice(2) : []
-  const dropText = drops.length === 1 ? `the oldest one, from ${when(drops[0].created)}`
+  const dropText = !drops.length ? '' : drops.length === 1 ? `the oldest one, from ${when(drops[0].created)}`
     : `the ${drops.length} oldest, from ${when(drops[drops.length - 1].created)} to ${when(drops[0].created)}`
   const make = () => run('make', async () => {
     const s = await invoke<Snapshot>('snapshot_create')
