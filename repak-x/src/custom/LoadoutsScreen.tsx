@@ -253,6 +253,12 @@ function LoadoutsHome(p: LoadoutProps) {
   const [smart, setSmart] = useState(false) // repakxtra: the Smart loadouts dialog
   // a loadout opened from elsewhere (an In loadout tag, a toast) shows its page, not the Smart page over it
   useEffect(() => { if (openId) setSmart(false) }, [openId])
+  useEffect(() => { // the first-launch flow's "Automatically make loadouts from my mods" (FirstRun.tsx)
+    const show = () => { sessionStorage.removeItem('repakxtra.smartPending'); openLoadout(null); setSmart(true) }
+    if (sessionStorage.getItem('repakxtra.smartPending')) show() // asked before this screen mounted
+    window.addEventListener('repakxtra-smart-loadouts', show)
+    return () => window.removeEventListener('repakxtra-smart-loadouts', show)
+  }, [])
   const canGenerate = usePreviewsAvailable()
   const genRef = useRef<HTMLDivElement>(null)
   const [newMenu, setNewMenu] = useState(false) // repakxtra: + New's menu (New loadout, Smart loadouts, New collection)

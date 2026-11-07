@@ -16,7 +16,7 @@ import type { useAlert } from '../components/AlertHandler'
 import Switch from '../components/ui/Switch'
 import { DoctorProblems } from './SetupPanel'
 import { BypassTrack, GalactaTrack, InstallTrack, KitTrack, type GalactaStep, galactaWords, useFinished, useGalactaStep } from './installTrack'
-import { isKitZip, usePreviewKit, whenKitReady } from './previewKit'
+import { isKitZip, usePreviewKit } from './previewKit'
 import { OFF_EXT } from './offFiles'
 import WelcomeIntro, { MiniCard } from './WelcomeIntro'
 import catboy from './covers/welcome/catboy.webp'
@@ -28,12 +28,12 @@ import silhouette from './covers/silhouettes/1011.webp'
 import { ShortcutButton, useShortcut } from './shortcut'
 import { useDialogFocus } from './dialogFocus'
 import { createFromMods } from './Loadouts'
-import { type Mod, loadoutable, memberName, modKey, openLoadout, readLoadouts, setView, useLoadouts, withMods, writeLoadouts } from './loadoutStore'
+import { type Mod, loadoutable, memberName, modKey, openLoadout, setView, useLoadouts } from './loadoutStore'
 import { isBuiltin } from './builtinRows'
-import { collectionFor, freeMods, smartRules } from './SmartLoadouts'
+import { freeMods, smartRules } from './SmartLoadouts'
 import { type Proposal, propose } from './smartGroups'
 import { silhouetteOf } from './silhouettes'
-import { generatePreviews, hasPreview, previewSetKey, refreshPreviewsAvailable, usePreviewUrl, usePreviewVersion } from './previews'
+import { generatePreviews, hasPreview, refreshPreviewsAvailable, usePreviewUrl, usePreviewVersion } from './previews'
 import { nameKey } from './loadoutIdentity'
 import { plural } from './modName'
 import { SOUND_PACKS, type SoundName, cue, tryCue } from './sounds'
@@ -43,7 +43,7 @@ import './onboarding.css'
 type Alert = ReturnType<typeof useAlert>
 type Bypass = { state: 'installed' | 'disabled' | 'partial' | 'other' | 'missing' }
 type Galacta = { installed: string | null; disabled: boolean; up_to_date?: boolean | null }
-type Pending = string | null // the loadout Finish opens, picked on the first loadout page
+type Pending = 'smart' | string | null // what Finish opens on Loadouts home, picked on the first loadout page (a string: that loadout's id)
 type Auto = 'checking' | 'game-open' | 'no-game' | 'working' | 'failed' | 'done'
 
 const NEXUS = 'https://www.nexusmods.com/marvelrivals/mods'
@@ -64,7 +64,7 @@ export type Flow = {
   onAutoDetect: () => Promise<void>; onBrowse: () => Promise<void>; addFiles: () => void
   kit: ReturnType<typeof usePreviewKit>; shortcut: ReturnType<typeof useShortcut>
   enableDrp: boolean; onSetDrp: (on: boolean) => void
-  finish: (p?: Pending) => void; makeLoadouts: () => void
+  finish: (p?: Pending) => void
   answer: (yes: boolean) => void; next: () => void; back: () => void; close: () => void
 }
 /** Which pages apply: guided (no mods on hand, or "Not yet") or the background setup, and whether mods are installed. */
@@ -283,25 +283,25 @@ function Smart({ f }: { f: Flow }) {
     <span className="ob-smart">
       <span className="ob-smart-mods">{rows.map(([name, g]) => <span key={`${g}${name}`} className={`is-g${g}`}><i /><em>{name}</em></span>)}</span>
       <ArrowRight size={16} className="ob-smart-arrow" />
-      <span className="ob-smart-out">{two.map((l, g) => <SmartCard key={l.id} hero={l.hero} path={f.shots[g]?.path} g={g} />)}</span>
+      <span className="ob-smart-out">{two.map((l, g) => <SmartCard key={l.id} name={l.name} hero={l.hero} path={f.shots[g]?.path} g={g} />)}</span>
     </span>
   )
 }
 /** One suggested loadout: its mod's preview once there is one, else the hero's silhouette, drawn like a loadout card's
  *  shape while its preview renders (.lo-skel-shape). */
-function SmartCard({ hero, path, g }: { hero: string; path?: string; g: number }) {
+function SmartCard({ name, hero, path, g }: { name: string; hero: string; path?: string; g: number }) {
   const url = usePreviewUrl(path ? nameKey(path) : undefined)
   const shape = `url(${silhouetteOf(hero) ?? silhouette})`
   return (
     <span className={`wi-card is-g${g}`}>
       <span className="wi-card-img">{url ? <img className="wi-shot ob-pop" src={url} alt="" /> : <span className="lo-skel-shape" style={{ maskImage: shape, WebkitMaskImage: shape }} />}</span>
+      <span className="wi-card-body"><b title={name}>{name}</b></span>{/* the name Smart loadouts gives it */}
     </span>
   )
 }
-/** The two suggestions Make loadouts from my mods makes: the card's pictured ones first, then the next ones found. */
+/** The two suggestions the Smart loadouts card pictures: the ones with a preview-able mod first, then the next ones found. */
 const pickTwo = (f: Pick<Flow, 'shots' | 'smart'>) => [...new Set([...f.shots.map(s => s.l), ...f.smart])].slice(0, 2)
 const VISUAL = ['Mesh', 'Static Mesh', 'Texture'] // what a preview can show (CapturePreview.tsx's list), best first
-const BODY = [...VISUAL, 'Material'] // the previews made for them: the body only, no VFX, UI, emote, or sound renders
 type Details = { character_name?: string | null; category?: string | null; mod_type?: string; additional_categories?: string[] }
 /** The Smart loadouts card's two suggestions and the mod each one previews: a mod whose own type is a look a render can
  *  show, a mesh before a static mesh before a texture (a UI mod with textures among its extras is not one), from two
@@ -327,20 +327,18 @@ const SampleSmart = () => (
   </span>
 )
 
-/** A loadout card with nothing in it yet: a dashed picture and its name. */
-const EmptyCard = () => (
-  <span className="wi-card ob-empty"><span className="wi-card-img"><Plus size={22} aria-hidden="true" /></span><span className="wi-card-body"><b>New loadout</b><i className="wi-switch" /></span></span>
-)
+/** One empty loadout: the Not yet page's dashed card, alone. */
+const EmptyCard = () => <span className="ob-fan ob-ghosts ob-one"><i><Plus size={22} /></i></span>
 const loadout: Page = {
   id: 'loadout', title: 'Your first loadout', step: 'Loadout', choice: true,
   sub: () => 'A set of mods that turn on and off together.',
   body: f => (
     <div className="ob-choices">
       {f.hasMods && (
-        <Choice onClick={f.makeLoadouts} stage={<Smart f={f} />} disabled={!f.smart.length} hint={f.smart.length ? undefined : 'Your mods are all in loadouts already'}
+        <Choice onClick={() => f.finish('smart')} stage={<Smart f={f} />}
           title="Automatically make loadouts from my mods" text={f.smart.length
-            ? `Makes ${plural(pickTwo(f).length, 'loadout')} from ${plural(pickTwo(f).reduce((n, x) => n + x.keys.length, 0), 'mod')} of yours, each a whole look on one switch, with previews of each.`
-            : 'Your mods are all in loadouts already.'} />
+            ? `Sorts your ${plural(f.freeCount, 'mod')} into ${plural(f.smart.length, 'loadout')} by look, so one switch turns a whole skin on. You keep the ones you want.`
+            : 'Sorts your mods into loadouts by look, so one switch turns a whole skin on. You keep the ones you want.'} />
       )}
       {f.made ? (
         <Choice onClick={() => f.finish(f.made!.id)} stage={<MiniCard name={f.made.name} src={silhouette} />}
@@ -632,27 +630,14 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
   const finishFlow = (pending: Pending = null) => {
     close()
     setView('home')
-    if (pending) openLoadout(pending)
-  }
-  /** Make loadouts from my mods: the two suggestions become loadouts, and their body mods render the moment previews
-   *  can be made (right away with the kit in, else once its install finishes). */
-  const makeLoadouts = () => {
-    const two = pickTwo({ shots, smart })
-    const made = two.map(x => ({ id: crypto.randomUUID(), name: x.name, label: collectionFor(x.hero), ...withMods({ on: [], scope: [] }, x.keys) }))
-    if (!made.length) return
-    writeLoadouts([...readLoadouts(), ...made])
-    finishFlow()
-    const pathOf = new Map(allMods.map(m => [modKey(m.path), m.path]))
-    whenKitReady(() => made.forEach((l, i) => {
-      const paths = two[i].keys.flatMap(k => pathOf.get(k) ?? []).filter(p => BODY.includes(details?.[p]?.category ?? ''))
-      if (paths.length) void generatePreviews({ paths, set: previewSetKey(l.id), name: l.name })
-    }))
+    if (pending === 'smart') { sessionStorage.setItem('repakxtra.smartPending', '1'); window.dispatchEvent(new Event('repakxtra-smart-loadouts')) } // Loadouts home may mount after this event
+    else if (pending) openLoadout(pending)
   }
   const answer = (yes: boolean) => { const p = yes ? 'yes' : 'no'; setPath(p); move(1, sequence(PAGES, { guided: !yes, hasMods })) }
 
   const f: Flow = {
     alert, gamePath, hasMods, installedCount: installed.length, smart, shots, freeCount: free.length, newMods, made, auto, setAuto, busy, finished, bypass, bypassError, galacta, galactaStep, checkStatus, run, installBypass, installGalacta,
-    setUpAll, setUpMissing, onAutoDetect, onBrowse, addFiles, kit, shortcut, enableDrp, onSetDrp, finish: finishFlow, makeLoadouts, answer,
+    setUpAll, setUpMissing, onAutoDetect, onBrowse, addFiles, kit, shortcut, enableDrp, onSetDrp, finish: finishFlow, answer,
     next: () => move(1), back: () => move(-1), close,
   }
   const last = at === ids[ids.length - 1]

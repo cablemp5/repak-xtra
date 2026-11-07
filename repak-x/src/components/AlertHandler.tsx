@@ -320,6 +320,17 @@ function getAnimationVariants(placement: string) {
     return ANIMATION_VARIANTS.right;
 }
 
+// repakxtra: the stacked look. An older toast at `index` scales down and is cut to the newest toast's height, so its top
+// edge sits index * PEEK px above the newest's top and nothing of a taller toast hangs out. Returns how far it moves up
+// (px, on screen), how much of its far side is cut (px, before scaling) and its scale. Pure.
+const PEEK = 10;
+export function stackBack(index: number, ownH: number, frontH: number) {
+    const scale = 1 - index * 0.05;
+    const top = frontH + index * PEEK; // where its top edge goes, above the stack's bottom
+    const shown = top / scale; // its own px that reach from there down to the bottom
+    return ownH > shown ? { shift: 0, clip: ownH - shown, scale } : { shift: top - ownH * scale, clip: 0, scale };
+}
+
 // Toast Container - renders all active toasts with card stacking
 function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts: Toast[]; onDismiss: (id: number) => void; onDismissAll: () => void; placement: string }) {
     const [isPointer, setIsHovered] = useState(false);
@@ -370,8 +381,10 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
     const reportHeight = useCallback((id: number, h: number) => setHeights(prev => (prev[id] === h ? prev : { ...prev, [id]: h })), []);
     const spread = recentToasts.map((_, i) => recentToasts.slice(0, i).reduce((sum, t) => sum + (heights[t.id] ?? 72) + 8, 0));
     // repakxtra: the stack's visible height (its toasts are absolute), so the footer below it never covers one
-    // repakxtra: not hovered, only the front toast shows (the rest wait behind it), so the stack is its height
-    const extent = isHovered ? Math.max(0, ...recentToasts.map((t, i) => (heights[t.id] ?? 72) + spread[i])) : (recentToasts[0] ? heights[recentToasts[0].id] ?? 72 : 0);
+    // repakxtra: not hovered, the older toasts sit behind the newest at its height, each peeking PEEK px above the one in
+    // front, so the stack is the front toast plus the peeks
+    const frontH = recentToasts[0] ? heights[recentToasts[0].id] ?? 72 : 0;
+    const extent = isHovered ? Math.max(0, ...recentToasts.map((t, i) => (heights[t.id] ?? 72) + spread[i])) : frontH + Math.max(0, recentToasts.length - 1) * PEEK;
 
     const isBottom = placement.startsWith('bottom');
 
@@ -406,6 +419,7 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
                             isHovered={isHovered}
                             placement={placement}
                             spread={spread[index]}
+                            frontH={frontH} ownH={heights[toast.id] ?? 72}
                             onHeight={reportHeight}
                         />
                     ))}
@@ -415,9 +429,9 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
             {/* repakxtra: footer below the stack */}
             {toasts.length > 1 && (
                 <div className="toast-footer-overlay">
-                    {(isHovered ? toasts.length > maxVisible : toasts.length > 1) && ( // repakxtra: how many wait behind
+                    {toasts.length > maxVisible && (
                         <span className="toast-count-badge">
-                            +{toasts.length - (isHovered ? maxVisible : 1)}
+                            +{toasts.length - maxVisible}
                         </span>
                     )}
                     <button
@@ -434,7 +448,7 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
 }
 
 // Individual Toast Item with card stacking effect - memoized to prevent unnecessary re-renders
-const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift, isHovered, placement, spread = index * 100, onHeight }: any) {
+const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift, isHovered, placement, spread = index * 100, frontH = 72, ownH = 72, onHeight }: any) {
     const itemRef = useRef<HTMLDivElement>(null);
     const isPresent = useToastExit(itemRef); // repakxtra
     useEffect(() => { // repakxtra: report this toast's height so the hovered stack spaces by it
@@ -494,12 +508,14 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift,
     // Card stacking calculations - expands on hover
     const isBottom = placement.startsWith('bottom');
 
-    // repakxtra: one toast by default, the rest hidden behind it (a taller one never peeks out); hovered, they fan out by
-    // their measured heights
-    const hidden = !isHovered && index > 0;
-    const yOffset = (isBottom ? -1 : 1) * (isHovered ? spread : 0) - footerLift;
-    const scale = hidden ? 0.96 : 1;
-    const opacity = hidden ? 0 : 1;
+    // repakxtra: not hovered, each older toast steps back (smaller, dimmer) and shows only as tall as the newest, its edge
+    // PEEK px past the one in front (stackBack); hovered, they fan out by their measured heights. Only transform, opacity
+    // and clip-path move, so a new toast pushes the rest back in one smooth step
+    const back = !isHovered && index > 0;
+    const { shift, clip, scale } = back ? stackBack(index, ownH, frontH) : { shift: 0, clip: 0, scale: 1 };
+    const yOffset = (isBottom ? -1 : 1) * (isHovered ? spread : shift) - footerLift;
+    const opacity = back ? Math.max(0.5, 1 - index * 0.2) : 1;
+    const hidden = back && index >= 3;
     const zIndex = 100 - index;
 
     return (
@@ -508,11 +524,13 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift,
             // repakxtra: transitions.dev Banner stacking, using only transform and opacity to avoid layout work during library updates
             initial={{
                 opacity: 0,
-                transform: `translateY(${(isBottom ? 24 : -24) - footerLift}px) scale(0.96)`
+                transform: `translateY(${(isBottom ? 24 : -24) - footerLift}px) scale(0.96)`,
+                clipPath: 'inset(0px 0px 0px 0px round 8px)', // repakxtra: the same shape as animate's, so it eases
             }}
             animate={{
-                opacity: opacity,
-                transform: `translateY(${yOffset}px) scale(${scale})`
+                opacity: hidden ? 0 : opacity,
+                transform: `translateY(${yOffset}px) scale(${scale})`,
+                clipPath: isBottom ? `inset(${clip}px 0px 0px 0px round 8px)` : `inset(0px 0px ${clip}px 0px round 8px)`, // repakxtra: cut on the side away from the edge that peeks
             }}
             transition={{
                 duration: 0.22,
@@ -597,3 +615,9 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift,
 });
 
 export default AlertProvider;
+
+if (import.meta.env.DEV) {
+    const tall = stackBack(1, 200, 72), short = stackBack(2, 40, 72);
+    console.assert(Math.abs((200 - tall.clip) * tall.scale - 82) < 0.01 && tall.shift === 0, 'a taller older toast is cut to peek 10px above the newest', tall);
+    console.assert(Math.abs(short.shift + 40 * short.scale - 92) < 0.01 && short.clip === 0, 'a shorter one moves up to peek 20px', short);
+}

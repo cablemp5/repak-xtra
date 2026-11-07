@@ -339,14 +339,15 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
             {/* its progress above the buttons, like Galacta's and the preview kit's */}
             <BypassTrack on={busy === 'install' || busy === 'enable'}
               done={finished === 'install' ? 'Installed. Mods load from the next game launch.' : finished === 'enable' ? 'On again. Mods load from the next game launch.' : undefined} />
-            <div className="su-actions">
+            {/* only with a button in it: an empty row left a gap under the part row */}
+            {(!bypassOn || b?.state === 'disabled') && <div className="su-actions">
               {!bypassOn && (
                 <button type="button" className="btn-primary su-main" disabled={!b || Boolean(busy)} onClick={() => act('install')}>
                   {busy === 'install' ? 'Installing…' : b?.state === 'missing' ? 'Install' : 'Repair'}
                 </button>
               )}
               {b?.state === 'disabled' && <button type="button" className="btn-primary su-main" disabled={Boolean(busy)} onClick={() => act('enable')}>Turn on</button>}
-            </div>
+            </div>}
           </section>
 
           <section className="su-card">

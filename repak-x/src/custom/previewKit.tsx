@@ -36,20 +36,6 @@ export const progressText = (p: KitProgress | null) =>
 export const progressShare = (p: KitProgress | null) => (p?.stage !== 'unpack' && p?.total ? Math.min(1, p.done / p.total) : null)
 /** Tells every kit card (Setup's, Guided setup's) to re-read the kit: each keeps its own copy of the state. */
 const changed = () => window.dispatchEvent(new Event('preview-kit-changed'))
-/** Runs `fn` once this PC can make previews, the kit and Blender both in: now, or at the kit change that completes them
- *  (every kit and Blender step sends preview-kit-changed). previews_available checks the kit only, so not that.
- *  shortcut: kept in memory only, so a restart before the kit finishes drops it. Persist it if that gets reported */
-export function whenKitReady(fn: () => void) {
-  let done = false
-  const check = () => invoke<KitStatus>('preview_kit_status').then(k => {
-    if (done || !k.version || !k.blender) return
-    done = true
-    window.removeEventListener('preview-kit-changed', check)
-    fn()
-  }).catch(() => undefined)
-  window.addEventListener('preview-kit-changed', check)
-  void check()
-}
 const BLENDER_START: KitProgress = { stage: 'blender', done: 0, total: 0, text: 'Asking winget for Blender (Windows may ask for permission)' }
 const CHECKING: KitProgress = { stage: 'check', done: 0, total: 0 }
 /** A failed kit check's way out: the kit releases page, for the zip by hand (xtra_kit.rs KIT_RELEASES) */

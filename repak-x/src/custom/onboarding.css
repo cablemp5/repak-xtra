@@ -47,8 +47,6 @@
 .ob-choice:hover .ob-fan .wi-card:nth-child(1) { transform: rotate(-12deg) translate(-8px, 4px); }
 .ob-choice:hover .ob-fan .wi-card:nth-child(3) { transform: rotate(12deg) translate(8px, 4px); }
 .ob-choice .ob-stage > .wi-card { width: 88px; }
-.ob-empty .wi-card-img { display: grid; place-items: center; color: var(--text-secondary); background: transparent;
-  border-bottom: 1px dashed color-mix(in srgb, var(--accent-primary), transparent 35%); }
 .ob-ghosts i { display: grid; place-items: center; width: 86px; aspect-ratio: 1358 / 1920; margin: 0 -12px; box-sizing: border-box; border-radius: 9px;
   border: 1px dashed color-mix(in srgb, var(--text-secondary), transparent 55%); background: var(--bg-dark); color: var(--accent-primary);
   transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.25s ease; }
@@ -59,6 +57,8 @@
 .ob-choice:hover .ob-ghosts i:nth-child(1) { transform: rotate(-12deg) translate(-8px, 4px); }
 .ob-choice:hover .ob-ghosts i:nth-child(3) { transform: rotate(12deg) translate(8px, 4px); }
 .ob-choice:hover .ob-ghosts i:nth-child(2) { border-color: var(--accent-primary); }
+.ob-ghosts.ob-one i { transform: none; width: 98px; border-color: color-mix(in srgb, var(--accent-primary), transparent 35%); background: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-dark)); }   /* Make my first loadout myself: the middle card alone */
+.ob-choice:hover .ob-ghosts.ob-one i { transform: none; border-color: var(--accent-primary); }
 .wi-card.ob-empty { display: grid !important; place-items: center; width: var(--ob-card) !important; aspect-ratio: 1358 / 1920; border: 1.5px dashed rgba(255, 255, 255, 0.28); background: transparent; color: var(--text-secondary); }   /* thin and finely dashed, like the New loadout card */
 
 .ob-smart { --g0: var(--accent-primary); --g1: #3ecf6e; display: flex; align-items: center; gap: 12px; }
@@ -76,7 +76,7 @@
 .ob-smart-out .wi-card { width: var(--ob-card); }
 .ob-pop { animation: ob-pop 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards; }   /* a preview that rendered in the background arrives */
 @keyframes ob-pop { from { opacity: 0; transform: scale(1.04); } }
-.ob-smart-out .wi-card-body { display: none; }
+.ob-smart-out .wi-card-body b { font-size: 10.5px; }   /* the name Smart loadouts gives it */
 .ob-smart-out .wi-card.is-g0 { border-color: color-mix(in srgb, var(--g0), transparent 30%); }
 .ob-smart-out .wi-card.is-g1 { border-color: color-mix(in srgb, var(--g1), transparent 40%); }
 
