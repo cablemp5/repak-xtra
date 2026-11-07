@@ -1,21 +1,19 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react'
 import { usePresence, MotionGlobalConfig } from 'framer-motion'
 
-/** Keep the final faded frame until React removes the toast, including during an Undo refresh. */
+/** Keeps a closing toast in place until its leave transition has played, including during an Undo refresh. */
 export function useToastExit(ref: RefObject<HTMLDivElement>) {
   const [present, remove] = usePresence()
   // AnimatePresence hands out a new remove on each of its renders: a dependency on it would restart the fade
   const removeRef = useRef(remove)
   removeRef.current = remove
+  // Banner stacking: the item takes .is-leaving (AlertHandler) and is removed once --stack-close has played
   useLayoutEffect(() => {
     if (present) return
-    const el = ref.current
-    if (!el || MotionGlobalConfig.skipAnimations) { removeRef.current?.(); return }
-    const run = el.animate([{ opacity: getComputedStyle(el).opacity }, { opacity: 0, filter: 'blur(4px)' }], { // Banner stacking: it blurs out where it is
-      duration: 180, easing: 'ease-in', fill: 'forwards', id: 'toast-exit',
-    })
-    void run.finished.then(() => removeRef.current?.(), () => {})
-    return () => run.cancel()
+    if (!ref.current || MotionGlobalConfig.skipAnimations) { removeRef.current?.(); return }
+    const close = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--stack-close')) || 250
+    const t = setTimeout(() => removeRef.current?.(), close + 60)
+    return () => clearTimeout(t)
   }, [present])
   return present
 }
