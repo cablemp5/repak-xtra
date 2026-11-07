@@ -338,7 +338,7 @@ const loadout: Page = {
     <div className="ob-choices">
       {f.hasMods && (
         <Choice onClick={f.makeLoadouts} stage={<Smart f={f} />} disabled={!f.smart.length} hint={f.smart.length ? undefined : 'Your mods are all in loadouts already'}
-          title="Make loadouts from my mods" text={f.smart.length
+          title="Automatically make loadouts from my mods" text={f.smart.length
             ? `Makes ${plural(pickTwo(f).length, 'loadout')} from ${plural(pickTwo(f).reduce((n, x) => n + x.keys.length, 0), 'mod')} of yours, each a whole look on one switch, with previews of each.`
             : 'Your mods are all in loadouts already.'} />
       )}

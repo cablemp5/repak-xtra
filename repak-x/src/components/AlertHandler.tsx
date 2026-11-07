@@ -370,7 +370,8 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
     const reportHeight = useCallback((id: number, h: number) => setHeights(prev => (prev[id] === h ? prev : { ...prev, [id]: h })), []);
     const spread = recentToasts.map((_, i) => recentToasts.slice(0, i).reduce((sum, t) => sum + (heights[t.id] ?? 72) + 8, 0));
     // repakxtra: the stack's visible height (its toasts are absolute), so the footer below it never covers one
-    const extent = Math.max(0, ...recentToasts.map((t, i) => (heights[t.id] ?? 72) * (isHovered ? 1 : 1 - i * 0.05) + (isHovered ? spread[i] : i * 10)));
+    // repakxtra: not hovered, only the front toast shows (the rest wait behind it), so the stack is its height
+    const extent = isHovered ? Math.max(0, ...recentToasts.map((t, i) => (heights[t.id] ?? 72) + spread[i])) : (recentToasts[0] ? heights[recentToasts[0].id] ?? 72 : 0);
 
     const isBottom = placement.startsWith('bottom');
 
@@ -414,9 +415,9 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
             {/* repakxtra: footer below the stack */}
             {toasts.length > 1 && (
                 <div className="toast-footer-overlay">
-                    {toasts.length > maxVisible && (
+                    {(isHovered ? toasts.length > maxVisible : toasts.length > 1) && ( // repakxtra: how many wait behind
                         <span className="toast-count-badge">
-                            +{toasts.length - maxVisible}
+                            +{toasts.length - (isHovered ? maxVisible : 1)}
                         </span>
                     )}
                     <button
@@ -493,15 +494,12 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift,
     // Card stacking calculations - expands on hover
     const isBottom = placement.startsWith('bottom');
 
-    // When hovered, expand the cards; when not hovered, stack them tightly
-    const stackOffset = 10; // stacked tightly; hovered, spread (measured heights) decides
-    const scaleReduction = isHovered ? 0 : 0.05; // No scale reduction when hovered
-    const opacityReduction = isHovered ? 0 : 0.2; // Full opacity when hovered
-
-    // Calculate transforms for stacking effect
-    const yOffset = (isBottom ? -1 : 1) * (isHovered ? spread : index * stackOffset) - footerLift;
-    const scale = 1 - (index * scaleReduction);
-    const opacity = index === 0 ? 1 : Math.max(0.6, 1 - (index * opacityReduction));
+    // repakxtra: one toast by default, the rest hidden behind it (a taller one never peeks out); hovered, they fan out by
+    // their measured heights
+    const hidden = !isHovered && index > 0;
+    const yOffset = (isBottom ? -1 : 1) * (isHovered ? spread : 0) - footerLift;
+    const scale = hidden ? 0.96 : 1;
+    const opacity = hidden ? 0 : 1;
     const zIndex = 100 - index;
 
     return (
@@ -522,7 +520,7 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift,
             }}
             className={`toast-item ${color} ${variant}${isLoading || typeof progressValue === 'number' ? ' is-working' : ''}`} /* repakxtra: shimmer while it works */
             style={{
-                pointerEvents: isPresent ? 'auto' : 'none',
+                pointerEvents: isPresent && !hidden ? 'auto' : 'none', // repakxtra: a hidden toast takes no clicks
                 position: 'absolute',
                 bottom: isBottom ? 0 : 'auto',
                 top: !isBottom ? 0 : 'auto',
