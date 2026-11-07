@@ -2308,6 +2308,10 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
   font-size: 13px !important; font-weight: 500 !important; color: var(--text-primary) !important; background: transparent !important;
   border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important; }
 .settings-content .action-btn:hover:not(:disabled) { background: var(--quiet-hover) !important; }
+/* hover and press like .lo-text-btn (Recently deleted, Crash reports, Join): no 1px lift, the border brightens */
+.settings-content .action-btn { transition: all 0.15s ease !important; }
+.settings-content .action-btn:is(:hover, :active) { transform: none !important; }
+.settings-content .action-btn:not(.settings-reset-btn):hover:not(:disabled) { border-color: rgba(255, 255, 255, 0.14) !important; }
 .settings-content .action-btn.icon-only { width: 32px !important; padding: 0 !important; justify-content: center; }
 .settings-content .action-btn svg { width: 16px !important; height: 16px !important; flex: none; color: var(--text-secondary) !important; }
 /* A switch row's icon sits in the checkbox's 22px column, so its words and note line up with the checkbox rows' */
