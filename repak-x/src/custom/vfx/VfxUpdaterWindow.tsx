@@ -669,8 +669,8 @@ export function VfxUpdaterPanel() {
         // a candidate joins the review card at the top (with a sound, and the taskbar flashes when the window is behind)
         // and the batch goes on: its update finishes once Use candidate or Keep original is pressed
         // after Cancel, a candidate that finishes packing keeps its original at once: no card waits for an answer
-        // with Ask me to review candidates off (the default), or after Approve all, the candidate is used at once
-        policy: repairPolicy, review: report => cancel.current ? Promise.resolve(false) : !askReview || approveRest.current ? Promise.resolve(true) : new Promise(resolve => {
+        // with Ask me to review candidates off (the default) the pipeline decides (autoAccept), after Approve all every candidate goes in
+        policy: repairPolicy, autoAccept: !askReview, review: report => cancel.current ? Promise.resolve(false) : approveRest.current ? Promise.resolve(true) : new Promise(resolve => {
           asked()
           patch(key, { status: 'review', sub: undefined })
           setReviews(q => [...q, { key, name: mod.name, report, resolve: ok => { if (ok) patch(key, { status: 'running', step: STEPS.length }); resolve(ok) } }])
