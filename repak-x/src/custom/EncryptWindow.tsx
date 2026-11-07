@@ -272,7 +272,7 @@ function EncryptPanel() {
                 <button type="button" className="su-link" onClick={() => void run(failed)}>Try again</button></>}</>
             : <>
                 {hiddenTicked > 0 && <span className="vf-hidden-line"><b className="vf-hidden-n">{hiddenTicked} ticked {hiddenTicked === 1 ? 'mod is' : 'mods are'} hidden by the filter.</b>{' '}
-                  <button type="button" className="su-link" onClick={() => { setQ(''); setHero(''); setShow('all') }}>Show {hiddenTicked === 1 ? 'it' : 'them'}</button></span>}
+                  <button type="button" className="su-link" onClick={() => { setQ(''); setHero(''); setShow('all'); const ids = new Set<string>(todo.map(k => (byKey.get(k)?.encrypted ? 'encrypted' : 'plain'))); setFoldedIds(f => { const n = f.filter(id => !ids.has(id)); localStorage.setItem(FOLDED, JSON.stringify(n)); return n }) }}>Show {hiddenTicked === 1 ? 'it' : 'them'}</button></span>}
                 {todo.length ? 'Each mod keeps its name and its on or off state, and is harder for others to unpack. Originals go to encryption-backups.' : 'Tick the mods to encrypt'}
               </>)}
         </p>

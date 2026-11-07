@@ -825,7 +825,8 @@ export function VfxUpdaterPanel() {
   const chosen = shown.filter(isAdded)
   const unknown = shown.filter(m => !first(m) && !isAdded(m) && !updatedNow(m) && uncertain.has(norm(m.path)))
   const others = shown.filter(m => !uncertain.has(norm(m.path)) && !first(m) && !updatedNow(m) && !isAdded(m))
-  groupOf.current = new Map(shown.map(m => [norm(m.utoc), updatedNow(m) ? 'updated' : isAdded(m) ? 'added' : first(m) ? 'needs' : uncertain.has(norm(m.path)) ? 'unknown' : m.ui ? 'ui' : m.materials ? 'materials' : 'rest']))
+  const groupIdOf = (m: Mod) => updatedNow(m) ? 'updated' : isAdded(m) ? 'added' : first(m) ? 'needs' : uncertain.has(norm(m.path)) ? 'unknown' : m.ui ? 'ui' : m.materials ? 'materials' : 'rest'
+  groupOf.current = new Map(shown.map(m => [norm(m.utoc), groupIdOf(m)]))
   const groups = [
     group('added', 'Chosen files', chosen),
     group('needs', 'Needs an update', needing, needing.filter(m => needsOf(m) && !isDone(runs[norm(m.utoc)]?.status)).length),
@@ -1064,7 +1065,7 @@ export function VfxUpdaterPanel() {
             : state ? <span className={checkRun ? 't-shimmer' : undefined}>{state}</span>
             : <>{/* its own line: the warning and its link stay together, apart from the estimate */}
                 {hiddenTicked > 0 && <span className="vf-hidden-line"><b className="vf-hidden-n">{hiddenTicked} ticked {hiddenTicked === 1 ? 'mod is' : 'mods are'} hidden by the filter.</b>{' '}
-                  <button type="button" className="su-link" onClick={() => { setQ(''); setHero(''); setShow('all') }}>Show {hiddenTicked === 1 ? 'it' : 'them'}</button></span>}
+                  <button type="button" className="su-link" onClick={() => { setQ(''); setHero(''); setShow('all'); const ids = new Set([...picked].flatMap(k => { const m = byUtoc.get(k); return m ? [groupIdOf(m)] : [] })); setFoldedIds(f => f.filter(id => !ids.has(id))) }}>Show {hiddenTicked === 1 ? 'it' : 'them'}</button></span>}
                 {ahead !== undefined && <b className="vf-eta">{timeLeft(ahead).replace(/^./, c => c.toUpperCase())} for {plural(todo, 'mod')}. </b>}{policy}.{' '}
                 {partialTodo > 0 && <><b className="vf-partial-n">{partialTodo === todo ? (todo === 1 ? 'It' : `All ${todo}`) : `${partialTodo} of ${todo}`}</b> will only partially update, without {partialTodo === 1 ? 'its' : 'their'} old Niagara files, and keep {partialTodo === 1 ? 'its' : 'their'} original, off, as _ORIGINAL.{' '}</>}
                 <button type="button" className="su-link" onClick={() => showAdvanced(true)}>Change</button></>}
