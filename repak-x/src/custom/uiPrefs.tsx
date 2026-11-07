@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { currentMonitor } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/core'
-import { ChevronDown, Download, EyeOff, PanelTop, Tags, Trash2, TriangleAlert, Volume2, ZoomIn } from 'lucide-react'
+import { Bell, ChevronDown, Download, Droplets, EyeOff, Keyboard, Music, PanelTop, Tags, Trash2, TriangleAlert, Volume2, ZoomIn } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import { MotionGlobalConfig } from 'framer-motion'
 import Checkbox from '../components/ui/Checkbox'
@@ -17,15 +17,15 @@ import { savedItem } from './storageCarryOver'
 const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod' | 'warn' }[] = [
   { key: 'ko-tab', label: 'KO Editor tab (Shift+K)', on: true, group: 'header' },
   { key: 'vfx-updater', label: 'Mod Updater (Shift+M)', on: true, group: 'header' },
-  { key: 'encrypt', label: 'Encrypt (Shift+E)', group: 'header' }, // hidden by default: Settings > Header buttons shows it
+  { key: 'encrypt', label: 'Encryptor (Shift+E)', group: 'header' }, // hidden by default: Settings > Header buttons shows it
   { key: 'galacta', label: 'Galacta Converter (Shift+G)', group: 'header' }, // hidden by default, also in Tools
   { key: 'asset-explorer', label: 'Asset Explorer (Shift+A)', group: 'header' },
   { key: 'tools', label: 'Tools (Shift+T)', group: 'header' },
   { key: 'mod-size', label: 'File size', group: 'mod' },
   { key: 'priority', label: 'Load priority counter (P)', group: 'mod' },
   { key: 'nexus', label: 'Nexus tag on mods installed from Nexus Mods', on: true, group: 'mod' },
-  { key: 'loadout-tag', label: 'In loadout tag, the loadouts a mod is in (I)', group: 'mod' },
-  { key: 'encrypted', label: 'Encrypted tag on encrypted mods, and the Encrypted tab (E)', on: true, group: 'mod' },
+  { key: 'loadout-tag', label: 'In loadout tag, the loadouts a mod is in (I)', on: true, group: 'mod' },
+  { key: 'encrypted', label: 'Encrypted tag on encrypted mods, and the Encrypted tab (E)', group: 'mod' },
   { key: 'broken', label: 'Broken and May crash warnings, and the Problems tab (B)', on: true, group: 'warn' },
   { key: 'ban-risk', label: 'Ban risk badge on mods that match what Marvel Rivals bans', on: true, group: 'warn' },
   { key: 'conflicts', label: 'Conflict warnings, the badge, and the count on Check Conflicts (Shift+C)', on: true, group: 'warn' },
@@ -51,6 +51,9 @@ const MINIMAL_TOASTS_KEY = 'repakxtra.minimalToasts' // off by default: '1' = on
 const DEFAULTS_KEY = 'repakxtra.defaults.v2'
 const PLAIN_INSTALL_KEY = 'repakxtra.install.plain' // off by default: '1' = the install dialog starts without a loadout
 const TAGS_OFF_KEY = 'repakxtra.tagsOff' // tag features hidden by default: '0' = shown
+
+/** Each sound pack's icon, the same in Settings and the welcome screen (FirstRun.tsx). */
+export const PACK_ICON: Record<ThemeName, typeof Bell> = { default: Bell, mech: Keyboard, bubble: Droplets, press: Music }
 
 const storageKey = (key: string) => `repakxtra.show.${key}`
 const listeners = new Set<() => void>()
@@ -304,10 +307,10 @@ export function MotionSection({ extra }: { extra?: React.ReactNode }) {
           <p className="setting-subtext">Click sounds on buttons, typing, switches, and alerts, and an emote's sound when you hover its preview.</p>
           <div className={`setting-sub${soundOn() ? '' : ' is-off'}`}>
             <div className="mod-state-filter sound-pack" role="group" aria-label="Sound pack">
-              {SOUND_PACKS.map(pack => (
+              {SOUND_PACKS.map(pack => { const Icon = PACK_ICON[pack]; return (
                 <button key={pack} type="button" aria-pressed={soundPack() === pack} disabled={!soundOn()}
-                  onClick={() => { update(SOUND_PACK_KEY, pack); cue('select') }}>{pack === 'default' ? 'Bell' : pack[0].toUpperCase() + pack.slice(1)}</button>
-              ))}
+                  onClick={() => { update(SOUND_PACK_KEY, pack); cue('select') }}><Icon size={14} aria-hidden="true" />{pack === 'default' ? 'Bell' : pack[0].toUpperCase() + pack.slice(1)}</button>
+              ) })}
             </div>
           </div>
         </div>

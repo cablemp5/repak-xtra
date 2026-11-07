@@ -11,7 +11,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open as pick } from '@tauri-apps/plugin-dialog'
 import { motion } from 'framer-motion'
-import { ArrowRight, Bell, Check, ChevronDown, CircleAlert, CircleCheck, CircleX, Droplets, Gamepad2, ExternalLink, FileCode, FolderOpen, Keyboard, LoaderCircle, Lock, MousePointerClick, Music, Package, Plus, ShieldCheck, ToggleRight, Upload, VolumeX } from 'lucide-react'
+import { ArrowRight, Bell, Check, ChevronDown, CircleAlert, CircleCheck, CircleX, Gamepad2, ExternalLink, FileCode, FolderOpen, LoaderCircle, Lock, MousePointerClick, Package, Plus, ShieldCheck, ToggleRight, Upload, VolumeX } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import Switch from '../components/ui/Switch'
 import { DoctorProblems } from './SetupPanel'
@@ -37,7 +37,7 @@ import { generatePreviews, hasPreview, refreshPreviewsAvailable, usePreviewUrl, 
 import { nameKey } from './loadoutIdentity'
 import { plural } from './modName'
 import { SOUND_PACKS, type SoundName, cue, tryCue } from './sounds'
-import { holdToasts, setSoundChoice, useSoundChoice } from './uiPrefs'
+import { PACK_ICON, holdToasts, setSoundChoice, useSoundChoice } from './uiPrefs'
 import './onboarding.css'
 
 type Alert = ReturnType<typeof useAlert>
@@ -384,8 +384,8 @@ function Sounds() {
     </section>
   )
 }
-const PACK: Record<string, [string, string, typeof Bell]> = { off: ['Off', 'Quiet', VolumeX], default: ['Bell', 'Soft chimes', Bell], mech: ['Mech', 'Keyboard clicks', Keyboard],
-  bubble: ['Bubble', 'Round pops', Droplets], press: ['Press', 'Instrumental hums', Music] }
+const PACK: Record<string, [string, string, typeof Bell]> = { off: ['Off', 'Quiet', VolumeX], default: ['Bell', 'Soft chimes', PACK_ICON.default], mech: ['Mech', 'Keyboard clicks', PACK_ICON.mech],
+  bubble: ['Bubble', 'Round pops', PACK_ICON.bubble], press: ['Press', 'Instrumental hums', PACK_ICON.press] }
 const TRY: [SoundName, string, typeof Bell][] = [['tap', 'Click', MousePointerClick], ['toggle', 'Switch', ToggleRight], ['success', 'Done', Check], ['error', 'Oops', CircleAlert]]
 /** One Make it yours setting: a picture of what it does, its words, and its control. */
 /** The app's icon, the Geist x (scripts/make-icon.py draws the real one the same way). */

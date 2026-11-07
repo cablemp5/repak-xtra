@@ -42,11 +42,12 @@ function takeHandoff(): string[] {
 }
 
 /** A group of mods that folds to its heading, with Select all and Clear: the VFX Updater's. */
-function Group({ title, count, open, onFold, all, none, busy, onPick, children }: {
-  title: string; count: number; open: boolean; onFold: () => void; all: boolean; none: boolean; busy: boolean; onPick: (on: boolean) => void; children: React.ReactNode
+function Group({ title, count, open, onFold, all, none, busy, onPick, done, children }: {
+  title: string; count: number; open: boolean; onFold: () => void; all: boolean; none: boolean; busy: boolean; onPick: (on: boolean) => void; done?: boolean; children: React.ReactNode
 }) {
+  // done: the Encrypted group, purple like the Encrypted badge (vfx.css .vf-grp.is-encrypted)
   return (
-    <section className={`vf-grp${open ? '' : ' is-folded'}`}>
+    <section className={`vf-grp${done ? ' is-encrypted' : ''}${open ? '' : ' is-folded'}`}>
       <div className="vf-grp-head">
         <h2 className="vf-grp-title">
           <button type="button" className="vf-grp-fold" aria-expanded={open} onClick={onFold}>
@@ -227,7 +228,7 @@ function EncryptPanel() {
             : <div className="vf-groups">{groups.map(g => {
                 const keys = g.mods.map(m => norm(m.path))
                 return g.mods.length > 0 && (
-                  <Group key={g.id} title={g.title} count={g.mods.length} busy={busy}
+                  <Group key={g.id} title={g.title} count={g.mods.length} busy={busy} done={g.id === 'encrypted'}
                     all={keys.every(k => picked.has(k))} none={!keys.some(k => picked.has(k))}
                     open={Boolean(needle || hero) || !foldedIds.includes(g.id)} onFold={() => fold(g.id)} onPick={on => pick(keys, on)}>
                     <ul className="mod-rows vf-rows">
@@ -288,7 +289,7 @@ export default function EncryptWindow() {
   useGlobalTooltips()
   return (
     <div className="vfx-window-container vf-window">
-      <TitleBar title="Encrypt" hideMaximize={true} />
+      <TitleBar title="Encryptor" hideMaximize={true} />
       <EncryptPanel />
     </div>
   )

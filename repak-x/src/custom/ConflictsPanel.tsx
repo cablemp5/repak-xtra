@@ -11,6 +11,7 @@ import { nameKey } from './loadoutStore'
 import { ModName, plural } from './modName'
 import { useDialogFocus } from './dialogFocus'
 import { cue } from './sounds'
+import { LoadoutTag } from './LoadoutTag'
 
 type Clash = { file_path: string; mod_paths: string[]; files?: string[] }
 type Mod = { path: string; priority?: number; enabled?: boolean }
@@ -110,10 +111,10 @@ export function describe(g: ConflictGroup, heroes: Hero[]) {
   return { title: `${who} replace ${whose} ${what}`, hero: known, skin }
 }
 
-function Group({ g, heroes, find, done, onSetPriority, onToggleMod, onKeep }: {
+function Group({ g, heroes, find, done, onSetPriority, onToggleMod, onKeep, onClose }: {
   g: ConflictGroup; heroes: Hero[]; find: (path: string) => Mod | undefined; done: boolean
   onSetPriority?: (path: string, priority: number) => void; onToggleMod?: (path: string) => void
-  onKeep?: (keep: string, others: Mod[]) => void
+  onKeep?: (keep: string, others: Mod[]) => void; onClose: () => void
 }) {
   const [open, setOpen] = useState(false)
   // the moment a group is fixed (Keep this one, a priority, a switch): a quiet success, as the badge turns green
@@ -149,6 +150,7 @@ function Group({ g, heroes, find, done, onSetPriority, onToggleMod, onKeep }: {
           return (
             <li key={stemOf(path)} className={`cf-mod${on ? '' : ' is-off'}`}>
               <span className="cf-mod-name" title={now}><ModName name={name} /></span>
+              <LoadoutTag path={now} onOpen={onClose} />
               {mod && on && onKeep && othersOn.length > 0 && (
                 <button type="button" className="lo-text-btn cf-keep" onClick={() => onKeep(now, othersOn)}
                   title={`Turn off the other ${othersOn.length === 1 ? 'mod' : `${othersOn.length} mods`} in this group that ${othersOn.length === 1 ? 'is' : 'are'} on`}>
@@ -219,7 +221,7 @@ export default function ConflictsPanel({ clashes, mods = [], characterData = [],
           {groups.length === 0
             ? <p className="cf-empty">No conflicts: no two mods that are on share files at the same priority.</p>
             : groups.map(g => <Group key={g.mods.map(stemOf).join('|')} g={g} heroes={characterData} find={find} done={resolved(g, find)}
-                onSetPriority={onSetPriority} onToggleMod={onToggleMod} onKeep={onKeep} />)}
+                onSetPriority={onSetPriority} onToggleMod={onToggleMod} onKeep={onKeep} onClose={onClose} />)}
         </div>
         <div className="modal-footer cf-footer">
           <button type="button" className="btn-primary" onClick={onClose}>Done</button>
