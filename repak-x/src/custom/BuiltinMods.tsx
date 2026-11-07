@@ -136,7 +136,7 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
   }, [revealed, b.id])
   const Icon = about.icon
   // a build not in the game yet warns too, like an error
-  const warn = b.on && (building ? !b.active : Boolean(b.error))
+  const warn = building ? !b.active : b.on && Boolean(b.error) // building a first time: b.on is still false
   const text = status(b, building)
   return (
     <li ref={item} className={`bi-item${b.active || (b.current && b.on) ? ' is-on' : ''}`}>
