@@ -3234,6 +3234,7 @@ function App() {
   const handleInstallMods = async (sent: InstallModPayload[]) => {
     const modsWithSettings = sent.filter(m => m.enabled !== false) // repakxtra: left-out archive mods go to the backend only, to be skipped
     setPanel('install', false)
+    window.dispatchEvent(new Event('repakxtra-install-started')) // repakxtra: Install was pressed, the first-run tour starts now (FirstRun.tsx)
     // Deliberately not cleared: the startup diagnostics above are exactly the
     // context a failed install needs, and wiping them here meant a bug report
     // never contained them. The user can still clear the drawer by hand.
@@ -3345,7 +3346,6 @@ function App() {
 
         await finishInstallLoadout(modsWithSettings, alert) // repakxtra: Save as a loadout
         await recordSources(modsWithSettings) // repakxtra: Nexus source from the archive name
-        window.dispatchEvent(new Event('repakxtra-installed')) // repakxtra: files and loadout are in, the first-run tour may start (FirstRun.tsx)
 
         // Reload in background so alert shows success immediately
         loadMods()

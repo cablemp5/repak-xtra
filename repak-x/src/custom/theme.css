@@ -1781,26 +1781,16 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .su-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .su-actions .btn-primary { width: auto !important; flex: none; }
 .su-main { min-width: 96px; }
-.su-actions .su-safety-btn { font-size: 12px; }
-.su-actions .su-safety-btn:not(:first-child) { margin-left: 8px; }   /* beside the main button, a link's quiet look */
-.su-safety-btn .su-caret { transition: transform 150ms ease; }
-.su-safety-btn[aria-expanded="true"] .su-caret { transform: rotate(90deg); }
 .su-confirm { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; font-size: 13px; color: var(--text-primary);
   background: color-mix(in srgb, var(--accent-primary), transparent 88%); border: 1px solid color-mix(in srgb, var(--accent-primary), transparent 65%); }
 .su-confirm span { margin-right: auto; }
 /* the confirm's action (ConfirmRow.tsx): red text, a red tint, a red outline, a little stronger on hover */
 .su-confirm .lo-text-btn.su-confirm-danger { color: #f2555a !important; background: color-mix(in srgb, #f2555a, transparent 88%) !important; border-color: color-mix(in srgb, #f2555a, transparent 55%) !important; }
 .su-confirm .lo-text-btn.su-confirm-danger:hover:not(:disabled) { background: color-mix(in srgb, #f2555a, transparent 80%) !important; border-color: color-mix(in srgb, #f2555a, transparent 35%) !important; }
-.su-safety { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; border-top: 1px solid var(--panel-border); }   /* a line between the buttons and the facts */
 .su-facts { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .su-facts li { font-size: 13px; line-height: 1.5; color: var(--text-secondary); padding-left: 16px; position: relative; }
 .su-facts li::before { content: ''; position: absolute; left: 2px; top: 8px; width: 4px; height: 4px; border-radius: 50%; background: var(--text-primary); }
 .su-facts b { color: var(--text-primary); font-weight: 500; }   /* a step up from the sentence, not a shout */
-.su-files { width: 100%; border-collapse: collapse; font-size: 12px; }
-.su-files th { text-align: left; font-weight: 500; color: var(--text-secondary); padding: 8px 8px; border-bottom: 1px solid var(--panel-border); }
-.su-files td { padding: 8px 8px; color: var(--text-secondary); border-bottom: 1px solid var(--panel-border); }
-.su-files code { font: 12px var(--font-mono); }
-.su-files td:first-child code { color: var(--text-primary); }   /* only the file names in white, like the bold lead-ins */
 .su-hash { display: inline-flex; align-items: center; gap: 8px; border: none; background: transparent; color: inherit; font: inherit; cursor: pointer; padding: 0; }
 .su-hash svg { color: var(--text-secondary); }
 .su-options { display: flex; flex-wrap: wrap; align-items: center; gap: 20px; padding-top: 12px; border-top: 1px solid var(--panel-border); }
@@ -3211,7 +3201,7 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .su-risk-off { flex: none; font-size: 12.5px !important; }
 .su-part.is-banned .su-risk-icon, .su-part.is-banned b { color: #f05252; }
 .su-part.is-unknown .su-risk-icon { color: #f5d342; }
-.su-part.is-bundled .su-risk-icon { color: #3ecf8e; }
+.su-part:is(.is-bundled, .is-clean) .su-risk-icon { color: #3ecf8e; }
 /* a Remove or Delete that asks in its own row: the question drops under the row, full width */
 .su-part:has(.su-row-confirm) { flex-wrap: wrap; }
 .su-row-confirm { flex-basis: 100%; }
@@ -3282,3 +3272,48 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .crash-screen p { margin: 0; color: var(--text-secondary); }
 .crash-screen pre { max-width: min(640px, 100%); margin: 4px 0; padding: 10px 12px; border-radius: 8px; background: var(--bg-light); color: var(--text-secondary); font: 12px 'Geist Mono', monospace; white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }
 html[data-toasts-held] .toast-container { display: none; }   /* the welcome flow is open: no toasts, also ones shown before it (uiPrefs.tsx holdToasts) */
+
+/* Transitions.dev: Banner stacking (toasts, AlertHandler.tsx). Sonner-style: a new banner enters at depth 0 from the
+   .is-enter pose while the older ones step one depth back, a fourth (or a closed one) leaves with .is-leaving. repakxtra
+   feeds the moves as --y, --s and --clip (toasts differ in height and sit above the Clear all footer); the depths keep
+   the recipe's opacity, blur, and timing. */
+:root {
+  --stack-open: 350ms;
+  --stack-close: 250ms;
+  --stack-rise: 60px;
+  --stack-blur: 2px;
+  --stack-scale: 0.97;
+  --stack-peek: 12px;
+  --stack-spread-gap: 8px;
+  --stack-depth-scale: 0.06;
+  --stack-depth-fade: 0.4;
+  --stack-depth1-blur: 1px;
+  --stack-depth2-blur: 2px;
+  --stack-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.t-stack-banner {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  transform-origin: 50% 50%;   /* an arriving banner scales from its centre, the depths from the bottom edge */
+  filter: blur(0);   /* explicit, so blur interpolates instead of snapping */
+  clip-path: inset(-48px -48px -48px -48px round 8px);   /* past the edges, so the shadow stays */
+  will-change: transform, opacity, filter;
+  transition: transform var(--stack-open) var(--stack-ease), opacity var(--stack-open) var(--stack-ease),
+    filter var(--stack-open) var(--stack-ease), clip-path var(--stack-open) var(--stack-ease);
+}
+.t-stack-banner[data-depth="0"] { z-index: 3; transform: translateY(var(--y, 0px)) scale(1); opacity: 1; }
+.t-stack-banner[data-depth="1"] { z-index: 2; transform-origin: 50% 100%; transform: translateY(var(--y)) scale(var(--s));
+  opacity: calc(1 - var(--stack-depth-fade)); filter: blur(var(--stack-depth1-blur)); clip-path: inset(var(--clip) -48px -48px -48px round 8px); }
+.t-stack-banner[data-depth="2"] { z-index: 1; transform-origin: 50% 100%; transform: translateY(var(--y)) scale(var(--s));
+  opacity: calc(1 - var(--stack-depth-fade) * 1.6); filter: blur(var(--stack-depth2-blur)); clip-path: inset(var(--clip) -48px -48px -48px round 8px); }
+/* Spread: newest stays put, older ones climb the heights in front of them (--y from JS) at full strength */
+.t-stack.is-spread .t-stack-banner[data-depth="1"], .t-stack.is-spread .t-stack-banner[data-depth="2"] { opacity: 1; filter: blur(0); }
+.t-stack.is-spread .t-stack-banner.is-leaving { opacity: 0; filter: blur(var(--stack-blur)); }   /* closed while spread: still fades */
+.t-stack-banner.is-enter { transition: none; transform: translateY(calc(var(--y, 0px) + var(--stack-rise))) scale(var(--stack-scale));
+  opacity: 0; filter: blur(var(--stack-blur)); }
+.t-stack-banner.is-leaving { z-index: 0; transform-origin: 50% 100%;
+  transform: translateY(calc(var(--y, 0px) - var(--stack-peek))) scale(calc(var(--s, 1) - var(--stack-depth-scale)));
+  opacity: 0; filter: blur(var(--stack-blur));
+  transition: transform var(--stack-close) var(--stack-ease), opacity var(--stack-close) var(--stack-ease), filter var(--stack-close) var(--stack-ease); }
+@media (prefers-reduced-motion: reduce) {
+  .t-stack-banner { transition: none !important; filter: none !important; }   /* the poses stay (the peek math needs the scale), only the motion goes */
+}

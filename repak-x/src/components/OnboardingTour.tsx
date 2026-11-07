@@ -106,6 +106,7 @@ function computeTooltipPosition(targetRect: DOMRect | null, placement: Placement
 function OnboardingTour({ isOpen, onClose }: OnboardingTourProps) {
     const [currentStep, setCurrentStep] = useState(0)
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null)
+    const [radius, setRadius] = useState(8) // repakxtra: the outline's corners follow the target's, plus the gap
     const [tooltipPos, setTooltipPos] = useState<TooltipPosition>({ top: 0, left: 0, actualPlacement: 'bottom', arrowOffset: 50 })
     const tooltipRef = useRef<HTMLDivElement | null>(null)
 
@@ -115,7 +116,11 @@ function OnboardingTour({ isOpen, onClose }: OnboardingTourProps) {
         if (!isOpen || !step) return
 
         const rect = getTargetRect(step.target)
-        setTargetRect(rect)
+        // repakxtra: unchanged boxes skip the render (the MutationObserver calls this on every DOM change)
+        setTargetRect(prev => prev && rect && prev.x === rect.x && prev.y === rect.y && prev.width === rect.width && prev.height === rect.height ? prev : rect)
+        const el = document.querySelector<HTMLElement>(step.target) // repakxtra
+        const r = el ? getComputedStyle(el).borderTopLeftRadius : ''
+        if (rect) setRadius((r.endsWith('%') ? Math.min(rect.width, rect.height) * parseFloat(r) / 100 : parseFloat(r) || 0) + PADDING)
 
         if (rect && tooltipRef.current) {
             const tw = tooltipRef.current.offsetWidth
@@ -148,8 +153,12 @@ function OnboardingTour({ isOpen, onClose }: OnboardingTourProps) {
         const ro = new ResizeObserver(() => updatePositions())
         if (el) ro.observe(el)
         window.addEventListener('scroll', updatePositions, true)
+        // repakxtra: the target can be swapped mid-step (a first install's card replaces the empty Loadouts box): find it again
+        let moFrame = 0
+        const mo = new MutationObserver(() => { cancelAnimationFrame(moFrame); moFrame = requestAnimationFrame(updatePositions) })
+        mo.observe(document.body, { childList: true, subtree: true })
 
-        return () => { cancelAnimationFrame(frame); ro.disconnect(); window.removeEventListener('scroll', updatePositions, true) }
+        return () => { cancelAnimationFrame(frame); cancelAnimationFrame(moFrame); ro.disconnect(); mo.disconnect(); window.removeEventListener('scroll', updatePositions, true) }
     }, [isOpen, currentStep, step, updatePositions])
 
     useEffect(() => {
@@ -199,6 +208,7 @@ function OnboardingTour({ isOpen, onClose }: OnboardingTourProps) {
                     <motion.div
                         key={`cutout-${currentStep}`}
                         className="onboarding-cutout"
+                        style={{ borderRadius: radius }} // repakxtra
                         initial={false}
                         animate={{
                             top: cutoutStyle.top,

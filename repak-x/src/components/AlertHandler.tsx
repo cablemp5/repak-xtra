@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo, memo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo, memo } from 'react';
 import type { ReactNode } from 'react';
 import { motion, AnimatePresence, useMotionValue } from 'framer-motion';
 import { Check, X } from 'lucide-react'; // repakxtra: a plain check for success, X for Clear all
@@ -320,11 +320,31 @@ function getAnimationVariants(placement: string) {
     return ANIMATION_VARIANTS.right;
 }
 
+// repakxtra: transitions.dev Banner stacking (theme.css .t-stack) with toasts of any height. An older toast at `index`
+// scales down by --stack-depth-scale and is cut to the newest toast's height, so its top edge sits index * --stack-peek
+// px above the newest's top: a taller one never hangs out, a shorter one still peeks. Returns how far it moves up (px, on
+// screen), how much of its top is cut (px, before scaling) and its scale. Pure.
+const PEEK = 12;
+export function stackBack(index: number, ownH: number, frontH: number) {
+    const scale = 1 - index * 0.06;
+    const top = frontH + index * PEEK; // where its top edge goes, above the stack's bottom
+    const shown = top / scale; // its own px that reach from there down to the bottom
+    return ownH > shown ? { shift: 0, clip: ownH - shown, scale } : { shift: top - ownH * scale, clip: 0, scale };
+}
+
 // Toast Container - renders all active toasts with card stacking
 function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts: Toast[]; onDismiss: (id: number) => void; onDismissAll: () => void; placement: string }) {
-    const [isPointer, setIsHovered] = useState(false);
+    // repakxtra: Banner stacking's spread is pointer geometry, not :hover. The pointer inside the collapsed stack spreads
+    // it, and it holds until the pointer leaves the taller spread column (the wrapper takes the pointer while spread, so
+    // the gaps between spread toasts count as inside)
+    const [spreadOn, setSpread] = useState(false);
+    const stackRef = useRef<HTMLDivElement>(null);
     const [hasFocus, setHasFocus] = useState(false); // repakxtra: keyboard focus fans the stack out too
-    const isHovered = isPointer || hasFocus;
+    const isHovered = spreadOn || hasFocus;
+    const onPointerMove = (e: React.PointerEvent) => {
+        const r = stackRef.current?.getBoundingClientRect();
+        if (!spreadOn && r && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) setSpread(true);
+    };
     const maxVisible = 3; // Show max 3 stacked cards
 
     // Get the most recent toasts (reverse so newest is first)
@@ -355,8 +375,12 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
         const toast = (e.target as HTMLElement).closest<HTMLElement>('[data-toast-id]');
         focusedId.current = toast ? Number(toast.dataset.toastId) : null;
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) cameFrom.current = e.relatedTarget as HTMLElement | null;
-        setHasFocus(true);
+        setHasFocus((e.target as HTMLElement).matches(':focus-visible')); // keyboard focus spreads it, a click does not
     };
+    // A focused toast that is removed takes its focus without a blur event: once focus is outside, the stack collapses
+    // (and with no toasts left there is nothing to send pointerleave, so the pointer spread ends too)
+    useEffect(() => { if (!toasts.length) setSpread(false); }, [toasts.length]);
+    useEffect(() => { if (!document.activeElement?.closest('.toast-container')) setHasFocus(false); }, [toasts]);
     const onBlur = (e: React.FocusEvent<HTMLDivElement>) => {
         if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
         // Moved on by itself, or clicked away while that toast stays: not a toast that went
@@ -370,21 +394,26 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
     const reportHeight = useCallback((id: number, h: number) => setHeights(prev => (prev[id] === h ? prev : { ...prev, [id]: h })), []);
     const spread = recentToasts.map((_, i) => recentToasts.slice(0, i).reduce((sum, t) => sum + (heights[t.id] ?? 72) + 8, 0));
     // repakxtra: the stack's visible height (its toasts are absolute), so the footer below it never covers one
-    const extent = Math.max(0, ...recentToasts.map((t, i) => (heights[t.id] ?? 72) * (isHovered ? 1 : 1 - i * 0.05) + (isHovered ? spread[i] : i * 10)));
+    // repakxtra: not hovered, the older toasts sit behind the newest at its height, each peeking PEEK px above the one in
+    // front, so the stack is the front toast plus the peeks
+    const frontH = recentToasts[0] ? heights[recentToasts[0].id] ?? 72 : 0;
+    const extent = isHovered ? Math.max(0, ...recentToasts.map((t, i) => (heights[t.id] ?? 72) + spread[i])) : frontH + Math.max(0, recentToasts.length - 1) * PEEK;
 
     const isBottom = placement.startsWith('bottom');
 
     return (
         <div
             className={`toast-container ${placement}`}
-            onMouseEnter={() => setIsHovered(true)}
-            onMouseLeave={() => setIsHovered(false)}
+            onPointerMove={onPointerMove}
+            onPointerLeave={() => setSpread(false)}
             onFocus={onFocus} onBlur={onBlur} // repakxtra
         >
             {/* Wrapper for stacked cards - relative positioned to contain absolutes */}
             <div
-                className="toast-stack-wrapper"
+                ref={stackRef}
+                className={`toast-stack-wrapper t-stack${isHovered ? ' is-spread' : ''}`}
                 style={{
+                    pointerEvents: spreadOn ? 'auto' : undefined, // repakxtra: the spread column, gaps included
                     position: 'relative',
                     width: '100%',
                     height: extent + (toasts.length > 1 ? 36 : 0), // repakxtra: 28px footer plus its 8px gap
@@ -405,6 +434,7 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
                             isHovered={isHovered}
                             placement={placement}
                             spread={spread[index]}
+                            frontH={frontH} ownH={heights[toast.id] ?? 72}
                             onHeight={reportHeight}
                         />
                     ))}
@@ -433,7 +463,7 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
 }
 
 // Individual Toast Item with card stacking effect - memoized to prevent unnecessary re-renders
-const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift, isHovered, placement, spread = index * 100, onHeight }: any) {
+const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift, isHovered, placement, spread = index * 100, frontH = 72, ownH = 72, onHeight }: any) {
     const itemRef = useRef<HTMLDivElement>(null);
     const isPresent = useToastExit(itemRef); // repakxtra
     useEffect(() => { // repakxtra: report this toast's height so the hovered stack spaces by it
@@ -446,7 +476,7 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift,
     const progress = useMotionValue(1); // repakxtra: the countdown updates its bar without rerendering the toast
     const [isPaused, setIsPaused] = useState(false);
     const [hasFocus, setHasFocus] = useState(false); // repakxtra: focus in the toast holds its timer, like the pointer
-    const held = isPaused || hasFocus;
+    const held = isPaused || hasFocus || isHovered; // repakxtra: a spread stack is being read, gaps included
     const clock = useRef<ToastClock>({ elapsed: 0, since: null }); // repakxtra: time run so far, kept across holds
 
     const { id, title, description, color, variant, icon, hideIcon, duration, endContent, action, isLoading, progressValue } = toast;
@@ -490,50 +520,28 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift,
         return color && color in Icons ? Icons[color as IconColor] : Icons.default;
     };
 
-    // Card stacking calculations - expands on hover
-    const isBottom = placement.startsWith('bottom');
-
-    // When hovered, expand the cards; when not hovered, stack them tightly
-    const stackOffset = 10; // stacked tightly; hovered, spread (measured heights) decides
-    const scaleReduction = isHovered ? 0 : 0.05; // No scale reduction when hovered
-    const opacityReduction = isHovered ? 0 : 0.2; // Full opacity when hovered
-
-    // Calculate transforms for stacking effect
-    const yOffset = (isBottom ? -1 : 1) * (isHovered ? spread : index * stackOffset) - footerLift;
-    const scale = 1 - (index * scaleReduction);
-    const opacity = index === 0 ? 1 : Math.max(0.6, 1 - (index * opacityReduction));
-    const zIndex = 100 - index;
+    // repakxtra: transitions.dev Banner stacking (theme.css .t-stack). The depth classes carry the opacity, blur and
+    // timing; the moves come from here as --y, --s and --clip, since toasts differ in height (stackBack) and sit above
+    // the Clear all footer. Spread: each older toast climbs the measured heights in front of it
+    const back = !isHovered && index > 0;
+    const { shift, clip, scale } = back ? stackBack(index, ownH, frontH) : { shift: 0, clip: 0, scale: 1 };
+    const y = -(isHovered ? spread : shift) - footerLift;
+    // A new toast mounts in the pre-open pose (.is-enter), the reflow flushes it, and it is released in the same task
+    const [entering, setEntering] = useState(index === 0); // one that comes back into the three from behind does not arrive again
+    useLayoutEffect(() => { void itemRef.current?.offsetWidth; setEntering(false); }, []);
 
     return (
-        <motion.div
+        <div
             ref={itemRef}
-            // repakxtra: transitions.dev Banner stacking, using only transform and opacity to avoid layout work during library updates
-            initial={{
-                opacity: 0,
-                transform: `translateY(${(isBottom ? 24 : -24) - footerLift}px) scale(0.96)`
-            }}
-            animate={{
-                opacity: opacity,
-                transform: `translateY(${yOffset}px) scale(${scale})`
-            }}
-            transition={{
-                duration: 0.22,
-                ease: [0.22, 1, 0.36, 1]
-            }}
-            className={`toast-item ${color} ${variant}${isLoading || typeof progressValue === 'number' ? ' is-working' : ''}`} /* repakxtra: shimmer while it works */
+            data-depth={index}
+            className={`t-stack-banner toast-item ${color} ${variant}${isLoading || typeof progressValue === 'number' ? ' is-working' : ''}${entering ? ' is-enter' : ''}${isPresent ? '' : ' is-leaving'}`} /* repakxtra: shimmer while it works */
             style={{
                 pointerEvents: isPresent ? 'auto' : 'none',
-                position: 'absolute',
-                bottom: isBottom ? 0 : 'auto',
-                top: !isBottom ? 0 : 'auto',
-                left: 0,
-                right: 0,
-                zIndex: zIndex,
-                transformOrigin: isBottom ? 'bottom center' : 'top center',
-            }}
+                '--y': `${y}px`, '--s': scale, '--clip': `${clip}px`,
+            } as React.CSSProperties}
             onMouseEnter={() => setIsPaused(true)}
             onMouseLeave={() => setIsPaused(false)}
-            onFocus={() => setHasFocus(true)} // repakxtra
+            onFocus={e => setHasFocus((e.target as HTMLElement).matches(':focus-visible'))} // repakxtra: keyboard focus holds its timer, a clicked button does not
             onBlur={(e: React.FocusEvent<HTMLDivElement>) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setHasFocus(false); }}
             data-toast-id={id}
         >
@@ -594,8 +602,14 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift,
                     />
                 </div>
             )}
-        </motion.div>
+        </div>
     );
 });
 
 export default AlertProvider;
+
+if (import.meta.env.DEV) {
+    const tall = stackBack(1, 200, 72), short = stackBack(2, 40, 72);
+    console.assert(Math.abs((200 - tall.clip) * tall.scale - 84) < 0.01 && tall.shift === 0, 'a taller older toast is cut to peek 12px above the newest', tall);
+    console.assert(Math.abs(short.shift + 40 * short.scale - 96) < 0.01 && short.clip === 0, 'a shorter one moves up to peek 24px', short);
+}

@@ -5,7 +5,7 @@ import { LOADER_NAME, LOADER_PAK, APP_NAME } from './edition'
 // background setup that installs only what is missing, then Make it yours (previews, Discord, the shortcut, sounds), then
 // the first loadout: from the mods already there, or a mod installed right there as one. Finish lands on Loadouts home. Mods dropped on the window hide the flow for the install,
 // and it comes back after, except on the first loadout page, where a drop or a picked mod ends the flow. The tour plays
-// after the first install that follows it.
+// once Install is pressed on the first mod or loadout after it.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
@@ -48,7 +48,7 @@ type Auto = 'checking' | 'game-open' | 'no-game' | 'working' | 'failed' | 'done'
 
 const NEXUS = 'https://www.nexusmods.com/marvelrivals/mods'
 const ONBOARDED = 'repakxtra.onboarded2'
-const TOUR_AFTER = 'repakxtra.tourAfterInstall' // set when the flow closes: the next finished install plays the tour
+const TOUR_AFTER = 'repakxtra.tourAfterInstall' // set when the flow closes: the next Install pressed plays the tour
 /** Mods a person installed: not the loader pak or built-ins. */
 const realMods = (mods: Mod[]) => mods.filter(m => loadoutable(modKey(m.path)) && !isBuiltin(m.path))
 const openUrl = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
@@ -102,7 +102,8 @@ export function Choice({ stage, title, text, icon, onClick, disabled, hint }: { 
 /** An install button: its step's words shimmer inside while it runs (no spinner, the Nexus Mods card's look), then a
  *  green Installed for a moment once it finished (`done`). */
 function StepButton({ working, done, label, className = 'lo-text-btn', ...rest }: { working?: string | false | null; done?: boolean; label: string } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  if (done) return <span key="done" className={`${className} is-installed t-text-in`}><Check size={14} strokeWidth={2.75} aria-hidden="true" />Installed</span>
+  // a status, not a button: the Make it yours page's green "ready" line
+  if (done) return <span key="done" className="ob-ok t-text-in"><Check size={14} strokeWidth={2.75} aria-hidden="true" />Installed</span>
   return (
     <button type="button" {...rest} className={`${className}${working ? ' is-working' : ''}`} aria-busy={Boolean(working)} disabled={rest.disabled || Boolean(working)}>
       {working ? <span key={working} className="t-text-in"><span className="t-shimmer">{working}</span></span> : label}
@@ -182,7 +183,7 @@ const setup: Page = {
       : f.bypass?.state === 'disabled' ? 'Installed but turned off. Mods that need it will not load.'
       : f.bypass?.state === 'other' ? 'A different loader or bypass is installed. Installing keeps it next to the new one as a .repakxtra-backup file.'
       : f.bypass?.state === 'partial' ? 'Part of it is missing. Repair puts the missing files back.'
-      : 'Lets the game load mods. Every mod needs it, and Setup shows why it is safe.'
+      : 'Lets the game load mods. Every mod needs it.'
     return (
       <div className="ob-split">
         <div className="ob-col">
@@ -271,7 +272,7 @@ const SMART_ROWS: [string, string, number][] = [['Catboy Mesh', 'Mesh', 0], ['Ul
 /** Smart loadouts in miniature, from the person's own mods when there are groups to show: two of their mods from each
  *  of the first two loadouts it would make, then those loadouts as their heroes' silhouettes. */
 function Smart({ f }: { f: Flow }) {
-  const two = f.shots.length ? f.shots.map(s => s.l) : f.smart.slice(0, 2)
+  const two = pickTwo(f)
   if (!two.length) return <SampleSmart />
   // each loadout's rows lead with the mod its picture shows
   const rows = two.flatMap((l, g) => {
@@ -282,21 +283,24 @@ function Smart({ f }: { f: Flow }) {
     <span className="ob-smart">
       <span className="ob-smart-mods">{rows.map(([name, g]) => <span key={`${g}${name}`} className={`is-g${g}`}><i /><em>{name}</em></span>)}</span>
       <ArrowRight size={16} className="ob-smart-arrow" />
-      <span className="ob-smart-out">{two.map((l, g) => <SmartCard key={l.id} hero={l.hero} path={f.shots[g]?.path} g={g} />)}</span>
+      <span className="ob-smart-out">{two.map((l, g) => <SmartCard key={l.id} name={l.name} hero={l.hero} path={f.shots[g]?.path} g={g} />)}</span>
     </span>
   )
 }
 /** One suggested loadout: its mod's preview once there is one, else the hero's silhouette, drawn like a loadout card's
  *  shape while its preview renders (.lo-skel-shape). */
-function SmartCard({ hero, path, g }: { hero: string; path?: string; g: number }) {
+function SmartCard({ name, hero, path, g }: { name: string; hero: string; path?: string; g: number }) {
   const url = usePreviewUrl(path ? nameKey(path) : undefined)
   const shape = `url(${silhouetteOf(hero) ?? silhouette})`
   return (
     <span className={`wi-card is-g${g}`}>
       <span className="wi-card-img">{url ? <img className="wi-shot ob-pop" src={url} alt="" /> : <span className="lo-skel-shape" style={{ maskImage: shape, WebkitMaskImage: shape }} />}</span>
+      <span className="wi-card-body"><b title={name}>{name}</b></span>{/* the name Smart loadouts gives it */}
     </span>
   )
 }
+/** The two suggestions the Smart loadouts card pictures: the ones with a preview-able mod first, then the next ones found. */
+const pickTwo = (f: Pick<Flow, 'shots' | 'smart'>) => [...new Set([...f.shots.map(s => s.l), ...f.smart])].slice(0, 2)
 const VISUAL = ['Mesh', 'Static Mesh', 'Texture'] // what a preview can show (CapturePreview.tsx's list), best first
 type Details = { character_name?: string | null; category?: string | null; mod_type?: string; additional_categories?: string[] }
 /** The Smart loadouts card's two suggestions and the mod each one previews: a mod whose own type is a look a render can
@@ -323,6 +327,8 @@ const SampleSmart = () => (
   </span>
 )
 
+/** One empty loadout: the Not yet page's dashed card, alone. */
+const EmptyCard = () => <span className="ob-fan ob-ghosts ob-one"><i><Plus size={22} /></i></span>
 const loadout: Page = {
   id: 'loadout', title: 'Your first loadout', step: 'Loadout', choice: true,
   sub: () => 'A set of mods that turn on and off together.',
@@ -330,9 +336,9 @@ const loadout: Page = {
     <div className="ob-choices">
       {f.hasMods && (
         <Choice onClick={() => f.finish('smart')} stage={<Smart f={f} />}
-          title="Make loadouts from my mods" text={f.smart.length
-            ? `Automatically sorts your ${plural(f.freeCount, 'mod')} into ${plural(f.smart.length, 'loadout')} by look, so one switch turns a whole skin on. You keep the ones you want.`
-            : 'Automatically sorts your mods into loadouts by look, so one switch turns a whole skin on. You keep the ones you want.'} />
+          title="Automatically make loadouts from my mods" text={f.smart.length
+            ? `Sorts your ${plural(f.freeCount, 'mod')} into ${plural(f.smart.length, 'loadout')} by look, so one switch turns a whole skin on. You keep the ones you want.`
+            : 'Sorts your mods into loadouts by look, so one switch turns a whole skin on. You keep the ones you want.'} />
       )}
       {f.made ? (
         <Choice onClick={() => f.finish(f.made!.id)} stage={<MiniCard name={f.made.name} src={silhouette} />}
@@ -340,6 +346,9 @@ const loadout: Page = {
       ) : f.newMods.length > 0 ? (
         <Choice onClick={() => f.finish(createFromMods(f.newMods).id)} stage={<MiniCard name="New loadout" src={silhouette} />}
           title={`From the ${plural(f.newMods.length, 'mod')} you added`} text="Made now and opened, ready to switch on." />
+      ) : f.hasMods ? (
+        <Choice onClick={() => f.finish(createFromMods([]).id)} stage={<EmptyCard />}
+          title="Make my first loadout myself" text="Starts one empty loadout. Add mods to it from its page." />
       ) : (
         <Choice onClick={f.addFiles} disabled={!f.gamePath} hint={f.gamePath ? undefined : 'Find the game in Setup first'}
           stage={<span className="ob-fan ob-ghosts"><i /><i><Upload size={22} /></i><i /></span>}
@@ -520,11 +529,11 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
     if (!localStorage.getItem('hasSeenOnboarding')) localStorage.setItem(TOUR_AFTER, '1')
     setOpen(false)
   }
-  /** The first install after the flow, once its files and loadout are in (App's repakxtra-installed): the tour. */
+  /** The first Install pressed after the flow (App's repakxtra-install-started): the tour, while the files go in. */
   useEffect(() => {
     const done = () => { if (localStorage.getItem(TOUR_AFTER)) { localStorage.removeItem(TOUR_AFTER); onTour() } }
-    window.addEventListener('repakxtra-installed', done)
-    return () => window.removeEventListener('repakxtra-installed', done)
+    window.addEventListener('repakxtra-install-started', done)
+    return () => window.removeEventListener('repakxtra-install-started', done)
   }, [])
   /** Out of the way for an install (App's drop handler shows its panel), back when the panel closes, installed or
    *  cancelled. Not marked seen: a restart while hidden shows the flow again. */
@@ -684,6 +693,8 @@ if (import.meta.env.DEV) {
     const details = { [ui]: { category: 'UI', additional_categories: ['Texture'] }, [mesh]: { category: 'Mesh' }, [tex]: { category: 'Texture' }, [storm]: { category: 'Texture' } }
     const got = smartShots(smart, mods, details).map(x => `${x.l.id}:${x.path}`).join()
     console.assert(got === `a:${mesh},c:${storm}`, 'smartShots: a mesh or texture mod, then another hero', got)
+    const one = smartShots(smart, mods, details).slice(0, 1)
+    console.assert(pickTwo({ shots: one, smart }).map(x => x.id).join() === 'a,b', 'pickTwo: the pictured one, then the next suggestion, never twice')
   }
   const shared = (ids: string[]) => ids.filter(id => ['welcome', 'ask', 'setup', 'auto', 'yours', 'loadout'].includes(id)).join() // another edition's pages left out
   console.assert(shared(sequence(PAGES, { guided: true, hasMods: false })) === 'welcome,ask,setup,yours,loadout', 'no mods, not yet: the guided path')

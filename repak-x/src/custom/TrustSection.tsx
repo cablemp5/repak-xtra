@@ -13,7 +13,7 @@ const REPO = 'https://github.com/cablemp5/repak-xtra'
 let hashOnce: Promise<string> | undefined
 const open = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
 
-export default function IsItSafe({ alert, onOpenSetup }: { alert: ReturnType<typeof useAlert>; onOpenSetup: () => void }) {
+export default function IsItSafe({ alert }: { alert: ReturnType<typeof useAlert> }) {
   const [hash, setHash] = useState<string | null | false>(null) // false: could not be read
   useEffect(() => { (hashOnce ??= invoke<string>('xtra_self_sha256')).then(setHash).catch(() => setHash(false)) }, [])
   return (
@@ -25,7 +25,7 @@ export default function IsItSafe({ alert, onOpenSetup }: { alert: ReturnType<typ
         {/* .setting-item makes the facts one Settings search row, so a search for "telemetry" finds them */}
         <div className="setting-item">
           <ul className="su-facts">{/* Setup's Is it safe? report look (Jakob's Law: one report style across the app) */}
-            <li><b>It only moves mod files.</b> .pak, .utoc, and .ucas files in the game's ~mods folder. Setup also puts the signature bypass and its loader (dsound.dll and one .asi) in Binaries\Win64. repakxtra never touches the game's own files or runs inside the game. The bypass does, and <a href="#" onClick={e => { e.preventDefault(); onOpenSetup() }}>Setup &gt; Is it safe?</a> reports on it.</li>
+            <li><b>It only moves mod files.</b> .pak, .utoc, and .ucas files in the game's ~mods folder. Setup also puts the signature bypass and its loader (dsound.dll and one .asi) in Binaries\Win64. repakxtra never touches the game's own files or runs inside the game. The bypass does: it only patches the game in memory, with no internet, file, registry, or program-launch calls. Its loader is ThirteenAG's open source Ultimate ASI Loader.</li>
             <li><b>Open source.</b> The full source is public on <a href={REPO} onClick={e => { e.preventDefault(); open(REPO) }}>GitHub</a>, built on Repak X. Releases are built from that code.</li>
             <li><b>Network.</b> It only talks to GitHub (app updates, Project Galacta, the preview kit, and game mappings) and Discord (the server widget), and loads mod images from Nexus Mods and imgur. Blender downloads from blender.org only when you install the preview kit's Blender. The optional Discord role claim signs in with Discord in your browser and passes through a small Cloudflare Worker that only grants the role. No repakxtra account, ads, analytics, or telemetry, and nothing about your PC is uploaded.</li>
             <li><b>Mods can still get you banned.</b> Mods break the game's terms, and repakxtra cannot make any mod safe from a ban. Mods and plugins that trip the anti-cheat get a Ban risk badge.</li>

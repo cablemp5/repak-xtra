@@ -527,7 +527,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                 </div>
 
                 {/* repakxtra: Is repakxtra safe? last, after Help and Community (Serial Position: the trust facts close the page, read once) */}
-                <IsItSafe alert={alert} onOpenSetup={() => { onClose(); window.dispatchEvent(new CustomEvent('repakxtra-open-setup', { detail: 'bypass' })) }} />
+                <IsItSafe alert={alert} />
               </>
             )}
           </div>
