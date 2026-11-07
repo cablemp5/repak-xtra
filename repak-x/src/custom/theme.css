@@ -1781,26 +1781,16 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .su-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .su-actions .btn-primary { width: auto !important; flex: none; }
 .su-main { min-width: 96px; }
-.su-actions .su-safety-btn { font-size: 12px; }
-.su-actions .su-safety-btn:not(:first-child) { margin-left: 8px; }   /* beside the main button, a link's quiet look */
-.su-safety-btn .su-caret { transition: transform 150ms ease; }
-.su-safety-btn[aria-expanded="true"] .su-caret { transform: rotate(90deg); }
 .su-confirm { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; font-size: 13px; color: var(--text-primary);
   background: color-mix(in srgb, var(--accent-primary), transparent 88%); border: 1px solid color-mix(in srgb, var(--accent-primary), transparent 65%); }
 .su-confirm span { margin-right: auto; }
 /* the confirm's action (ConfirmRow.tsx): red text, a red tint, a red outline, a little stronger on hover */
 .su-confirm .lo-text-btn.su-confirm-danger { color: #f2555a !important; background: color-mix(in srgb, #f2555a, transparent 88%) !important; border-color: color-mix(in srgb, #f2555a, transparent 55%) !important; }
 .su-confirm .lo-text-btn.su-confirm-danger:hover:not(:disabled) { background: color-mix(in srgb, #f2555a, transparent 80%) !important; border-color: color-mix(in srgb, #f2555a, transparent 35%) !important; }
-.su-safety { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; border-top: 1px solid var(--panel-border); }   /* a line between the buttons and the facts */
 .su-facts { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .su-facts li { font-size: 13px; line-height: 1.5; color: var(--text-secondary); padding-left: 16px; position: relative; }
 .su-facts li::before { content: ''; position: absolute; left: 2px; top: 8px; width: 4px; height: 4px; border-radius: 50%; background: var(--text-primary); }
 .su-facts b { color: var(--text-primary); font-weight: 500; }   /* a step up from the sentence, not a shout */
-.su-files { width: 100%; border-collapse: collapse; font-size: 12px; }
-.su-files th { text-align: left; font-weight: 500; color: var(--text-secondary); padding: 8px 8px; border-bottom: 1px solid var(--panel-border); }
-.su-files td { padding: 8px 8px; color: var(--text-secondary); border-bottom: 1px solid var(--panel-border); }
-.su-files code { font: 12px var(--font-mono); }
-.su-files td:first-child code { color: var(--text-primary); }   /* only the file names in white, like the bold lead-ins */
 .su-hash { display: inline-flex; align-items: center; gap: 8px; border: none; background: transparent; color: inherit; font: inherit; cursor: pointer; padding: 0; }
 .su-hash svg { color: var(--text-secondary); }
 .su-options { display: flex; flex-wrap: wrap; align-items: center; gap: 20px; padding-top: 12px; border-top: 1px solid var(--panel-border); }

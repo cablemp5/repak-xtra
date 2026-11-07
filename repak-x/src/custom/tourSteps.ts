@@ -1,5 +1,5 @@
-// repakxtra: the tour (components/OnboardingTour.tsx draws it), played once after the first mod installs from the
-// welcome flow (FirstRun.tsx) and again from Settings. Written for someone new to modding: five steps, one short idea
+// repakxtra: the tour (components/OnboardingTour.tsx draws it), played once when Install is pressed on the first mod after
+// the welcome flow (FirstRun.tsx) and again from Settings. Written for someone new to modding: five steps, one short idea
 // each, in the order they use the app (loadouts, switching one on, getting more mods, fixing a mod that does not show,
 // playing). Each step shows the view its target lives in; a target that is missing gets the tip centered instead.
 import { openLoadout, setView } from './loadoutStore'

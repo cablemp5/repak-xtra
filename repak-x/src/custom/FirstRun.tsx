@@ -16,7 +16,7 @@ import type { useAlert } from '../components/AlertHandler'
 import Switch from '../components/ui/Switch'
 import { DoctorProblems } from './SetupPanel'
 import { BypassTrack, GalactaTrack, InstallTrack, KitTrack, type GalactaStep, galactaWords, useFinished, useGalactaStep } from './installTrack'
-import { isKitZip, usePreviewKit } from './previewKit'
+import { isKitZip, usePreviewKit, whenKitReady } from './previewKit'
 import { OFF_EXT } from './offFiles'
 import WelcomeIntro, { MiniCard } from './WelcomeIntro'
 import catboy from './covers/welcome/catboy.webp'
@@ -33,7 +33,7 @@ import { isBuiltin } from './builtinRows'
 import { collectionFor, freeMods, smartRules } from './SmartLoadouts'
 import { type Proposal, propose } from './smartGroups'
 import { silhouetteOf } from './silhouettes'
-import { generatePreviews, hasPreview, previewSetKey, refreshPreviewsAvailable, usePreviewUrl, usePreviewVersion, whenPreviewsAvailable } from './previews'
+import { generatePreviews, hasPreview, previewSetKey, refreshPreviewsAvailable, usePreviewUrl, usePreviewVersion } from './previews'
 import { nameKey } from './loadoutIdentity'
 import { plural } from './modName'
 import { SOUND_PACKS, type SoundName, cue, tryCue } from './sounds'
@@ -339,7 +339,7 @@ const loadout: Page = {
       {f.hasMods && (
         <Choice onClick={f.makeLoadouts} stage={<Smart f={f} />} disabled={!f.smart.length} hint={f.smart.length ? undefined : 'Your mods are all in loadouts already'}
           title="Make loadouts from my mods" text={f.smart.length
-            ? `Makes ${plural(pickTwo(f).length, 'loadout')} from your ${plural(f.freeCount, 'mod')}, each a whole look on one switch, with previews of each.`
+            ? `Makes ${plural(pickTwo(f).length, 'loadout')} from ${plural(pickTwo(f).reduce((n, x) => n + x.keys.length, 0), 'mod')} of yours, each a whole look on one switch, with previews of each.`
             : 'Your mods are all in loadouts already.'} />
       )}
       {f.made ? (
@@ -643,7 +643,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
     writeLoadouts([...readLoadouts(), ...made])
     finishFlow()
     const pathOf = new Map(allMods.map(m => [modKey(m.path), m.path]))
-    whenPreviewsAvailable(() => made.forEach((l, i) => {
+    whenKitReady(() => made.forEach((l, i) => {
       const paths = two[i].keys.flatMap(k => pathOf.get(k) ?? []).filter(p => BODY.includes(details?.[p]?.category ?? ''))
       if (paths.length) void generatePreviews({ paths, set: previewSetKey(l.id), name: l.name })
     }))

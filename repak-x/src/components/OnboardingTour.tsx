@@ -152,8 +152,12 @@ function OnboardingTour({ isOpen, onClose }: OnboardingTourProps) {
         const ro = new ResizeObserver(() => updatePositions())
         if (el) ro.observe(el)
         window.addEventListener('scroll', updatePositions, true)
+        // repakxtra: the target can be swapped mid-step (a first install's card replaces the empty Loadouts box): find it again
+        let moFrame = 0
+        const mo = new MutationObserver(() => { cancelAnimationFrame(moFrame); moFrame = requestAnimationFrame(updatePositions) })
+        mo.observe(document.body, { childList: true, subtree: true })
 
-        return () => { cancelAnimationFrame(frame); ro.disconnect(); window.removeEventListener('scroll', updatePositions, true) }
+        return () => { cancelAnimationFrame(frame); cancelAnimationFrame(moFrame); ro.disconnect(); mo.disconnect(); window.removeEventListener('scroll', updatePositions, true) }
     }, [isOpen, currentStep, step, updatePositions])
 
     useEffect(() => {

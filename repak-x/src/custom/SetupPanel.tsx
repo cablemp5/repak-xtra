@@ -2,7 +2,7 @@ import ConfirmRow from './ConfirmRow'
 import { LOADER_NAME, LOADER_PAK, APP_NAME } from './edition'
 // repakxtra: Setup, what the game needs to load mods (backend: xtra_setup.rs). The UTOC signature bypass ships inside
 // repakxtra; Project Galacta comes from its GitHub releases, with an update check and the release notes.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { motion } from 'framer-motion'
@@ -223,6 +223,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   const [notes, setNotes] = useState<string | null>(null)
   const [askGalacta, setAskGalacta] = useState(false) // Galacta's Remove asks first
   const { finished, finish } = useFinished() // an install that just finished, said in its card for a moment
+  const acted = useRef(0) // bumped by every action: a quiet check that started before one is out of date
 
   // Opened from a grayed-out Generate button: straight to the Mod previews card (its top, so it can still grow as it loads)
   // repakxtra: and a startup toast's card (Snapshots, Ban risk)
@@ -233,7 +234,8 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
     invoke<Galacta>('setup_galacta_status', { online: false }).then(g => {
       const known = withLastCheck(g)
       setGalacta(known)
-      if (!known.latest) invoke<Galacta>('setup_galacta_status', { online: true }).then(o => setGalacta(remember(o))).catch(() => {})
+      const at = acted.current
+      if (!known.latest && autoCheck()) invoke<Galacta>('setup_galacta_status', { online: true }).then(o => { if (acted.current === at) setGalacta(remember(o)) }).catch(() => {})
     }).catch(() => {})
     invoke<{ id: string; depth: number }[]>('get_folders')   // subfolders by their path below ~mods ("A/B")
       .then(fs => setFolders((fs ?? []).filter(f => f.depth > 0).map(f => f.id))).catch(() => {})
@@ -241,6 +243,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
 
   const run = async <T,>(what: string, f: () => Promise<T>) => {
     setBusy(what)
+    acted.current++
     try { return await f() } catch (e) { alert.warning('Setup', String(e)) } finally { setBusy(null) }
   }
   const act = (action: 'install' | 'enable' | 'disable' | 'remove') => run(action, async () => {
