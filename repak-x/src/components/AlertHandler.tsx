@@ -378,6 +378,8 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
         setHasFocus((e.target as HTMLElement).matches(':focus-visible')); // keyboard focus spreads it, a click does not
     };
     // A focused toast that is removed takes its focus without a blur event: once focus is outside, the stack collapses
+    // (and with no toasts left there is nothing to send pointerleave, so the pointer spread ends too)
+    useEffect(() => { if (!toasts.length) setSpread(false); }, [toasts.length]);
     useEffect(() => { if (!document.activeElement?.closest('.toast-container')) setHasFocus(false); }, [toasts]);
     const onBlur = (e: React.FocusEvent<HTMLDivElement>) => {
         if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
@@ -474,7 +476,7 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift,
     const progress = useMotionValue(1); // repakxtra: the countdown updates its bar without rerendering the toast
     const [isPaused, setIsPaused] = useState(false);
     const [hasFocus, setHasFocus] = useState(false); // repakxtra: focus in the toast holds its timer, like the pointer
-    const held = isPaused || hasFocus;
+    const held = isPaused || hasFocus || isHovered; // repakxtra: a spread stack is being read, gaps included
     const clock = useRef<ToastClock>({ elapsed: 0, since: null }); // repakxtra: time run so far, kept across holds
 
     const { id, title, description, color, variant, icon, hideIcon, duration, endContent, action, isLoading, progressValue } = toast;
@@ -525,7 +527,7 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift,
     const { shift, clip, scale } = back ? stackBack(index, ownH, frontH) : { shift: 0, clip: 0, scale: 1 };
     const y = -(isHovered ? spread : shift) - footerLift;
     // A new toast mounts in the pre-open pose (.is-enter), the reflow flushes it, and it is released in the same task
-    const [entering, setEntering] = useState(true);
+    const [entering, setEntering] = useState(index === 0); // one that comes back into the three from behind does not arrive again
     useLayoutEffect(() => { void itemRef.current?.offsetWidth; setEntering(false); }, []);
 
     return (

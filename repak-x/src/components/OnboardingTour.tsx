@@ -116,7 +116,8 @@ function OnboardingTour({ isOpen, onClose }: OnboardingTourProps) {
         if (!isOpen || !step) return
 
         const rect = getTargetRect(step.target)
-        setTargetRect(rect)
+        // repakxtra: unchanged boxes skip the render (the MutationObserver calls this on every DOM change)
+        setTargetRect(prev => prev && rect && prev.x === rect.x && prev.y === rect.y && prev.width === rect.width && prev.height === rect.height ? prev : rect)
         const el = document.querySelector<HTMLElement>(step.target) // repakxtra
         const r = el ? getComputedStyle(el).borderTopLeftRadius : ''
         if (rect) setRadius((r.endsWith('%') ? Math.min(rect.width, rect.height) * parseFloat(r) / 100 : parseFloat(r) || 0) + PADDING)

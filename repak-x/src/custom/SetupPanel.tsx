@@ -231,10 +231,10 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   useEffect(() => {
     invoke<Bypass>('setup_bypass_status').then(setBypass).catch(e => alert.warning('Setup', String(e)))
     // Its version, What's new and Up to date from the start: without a check this run, a quiet one now (offline: none)
+    const at = acted.current // an action from here on makes the quiet check out of date
     invoke<Galacta>('setup_galacta_status', { online: false }).then(g => {
       const known = withLastCheck(g)
       setGalacta(known)
-      const at = acted.current
       if (!known.latest && autoCheck()) invoke<Galacta>('setup_galacta_status', { online: true }).then(o => { if (acted.current === at) setGalacta(remember(o)) }).catch(() => {})
     }).catch(() => {})
     invoke<{ id: string; depth: number }[]>('get_folders')   // subfolders by their path below ~mods ("A/B")
