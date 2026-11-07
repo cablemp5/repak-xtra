@@ -114,7 +114,7 @@ export function describe(g: ConflictGroup, heroes: Hero[]) {
 function Group({ g, heroes, find, done, onSetPriority, onToggleMod, onKeep, onClose }: {
   g: ConflictGroup; heroes: Hero[]; find: (path: string) => Mod | undefined; done: boolean
   onSetPriority?: (path: string, priority: number) => void; onToggleMod?: (path: string) => void
-  onKeep?: (keep: string, others: Mod[]) => void; onClose: () => void
+  onKeep?: (keep: string, others: Mod[]) => unknown; onClose: () => void
 }) {
   const [open, setOpen] = useState(false)
   // the moment a group is fixed (Keep this one, a priority, a switch): a quiet success, as the badge turns green
@@ -153,7 +153,7 @@ function Group({ g, heroes, find, done, onSetPriority, onToggleMod, onKeep, onCl
               <span className="cf-mod-name" title={now}><ModName name={name} /></span>
               <LoadoutTag path={now} onOpen={onClose} />
               {mod && on && onKeep && othersOn.length > 0 && (
-                <button type="button" className="lo-text-btn cf-keep" onClick={() => { kept.current = true; onKeep(now, othersOn) }}
+                <button type="button" className="lo-text-btn cf-keep" onClick={() => { kept.current = true; void Promise.resolve(onKeep(now, othersOn)).finally(() => { setTimeout(() => { kept.current = false }, 1000) }) }}
                   title={`Turn off the other ${othersOn.length === 1 ? 'mod' : `${othersOn.length} mods`} in this group that ${othersOn.length === 1 ? 'is' : 'are'} on`}>
                   Keep this one
                 </button>
@@ -179,7 +179,7 @@ function Group({ g, heroes, find, done, onSetPriority, onToggleMod, onKeep, onCl
 export default function ConflictsPanel({ clashes, mods = [], characterData = [], onSetPriority, onToggleMod, onKeep, onClose }: {
   clashes: Clash[]; mods?: Mod[]; characterData?: Hero[]
   onSetPriority?: (path: string, priority: number) => void; onToggleMod?: (path: string) => void
-  onKeep?: (keep: string, others: Mod[]) => void; onClose: () => void
+  onKeep?: (keep: string, others: Mod[]) => unknown; onClose: () => void
 }) {
   useHeroImages()
   const { ref: dialog, onKeyDown: trap } = useDialogFocus(true, onClose) // focus inside, Tab stays inside, Esc closes, back to the opener on close

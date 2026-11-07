@@ -1143,24 +1143,26 @@ pub(crate) fn original_of(mod_path: &Path) -> Option<PathBuf> {
     let dir = mod_path.parent()?;
     // the file as it is spelled on disk (stems_in is lowercase). The folder's .utoc files are listed once and kept while
     // the folder's time stands (it moves when a file is added, removed or renamed): the Library asks for every mod
-    static LISTED: std::sync::Mutex<Option<HashMap<PathBuf, (Option<std::time::SystemTime>, HashMap<String, PathBuf>)>>> = std::sync::Mutex::new(None);
-    // by lowercase stem: a scan of every file name per mod, on every verdict call, was most of xtra_broken_mods' time
-    let listed = |f: &mut dyn FnMut(&HashMap<String, PathBuf>)| {
+    // the .utoc files by lowercase stem, and every mod file's stem (stems_in: a .pak-only mod names clashes too)
+    type Listing = (HashMap<String, PathBuf>, HashSet<String>);
+    static LISTED: std::sync::Mutex<Option<HashMap<PathBuf, (Option<std::time::SystemTime>, Listing)>>> = std::sync::Mutex::new(None);
+    // a scan of every file name per mod, on every verdict call, was most of xtra_broken_mods' time
+    let listed = |f: &mut dyn FnMut(&Listing)| {
         let at = std::fs::metadata(dir).and_then(|m| m.modified()).ok();
         let mut all = LISTED.lock().unwrap_or_else(|e| e.into_inner());
         let cached = all.get_or_insert_with(HashMap::new);
         if at.is_none() || cached.get(dir).is_none_or(|(t, _)| *t != at) {
-            let found = std::fs::read_dir(dir).into_iter().flatten().flatten().map(|e| e.path())
+            let utocs = std::fs::read_dir(dir).into_iter().flatten().flatten().map(|e| e.path())
                 .filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("utoc")))
                 .filter_map(|p| Some((p.file_stem()?.to_string_lossy().to_lowercase(), p)))
                 .collect();
-            cached.insert(dir.to_path_buf(), (at, found));
+            cached.insert(dir.to_path_buf(), (at, (utocs, stems_in(dir))));
         }
         f(&cached[dir].1)
     };
     let utoc = |s: &str| {
         let mut hit = None;
-        listed(&mut |all| hit = all.get(&s.to_lowercase()).cloned());
+        listed(&mut |(utocs, _)| hit = utocs.get(&s.to_lowercase()).cloned());
         hit
     };
     if partial_stem(&stem).eq_ignore_ascii_case(&stem) {
@@ -1174,7 +1176,7 @@ pub(crate) fn original_of(mod_path: &Path) -> Option<PathBuf> {
     }
     if is_update(&stem) {
         let mut siblings = HashSet::new();
-        listed(&mut |all| siblings = all.keys().cloned().collect());
+        listed(&mut |(_, stems)| siblings = stems.clone());
         let me = stem.to_lowercase();
         // fixed_stem_among walks every sibling: only originals whose plain update name clashes need it (it was n squared
         // per update, most of xtra_broken_mods' time with 16 updates among 240 mods)

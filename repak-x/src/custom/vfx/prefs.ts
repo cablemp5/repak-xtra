@@ -24,7 +24,8 @@ export async function retireUnsafe(modPath: string, reason: string, trash: boole
   const off = await invoke<string | null>('xtra_vfx_turn_off', { modPath, reason })
   if (!trash) return off ? 'off' : false
   // still off if the delete fails: safe either way
-  return invoke('delete_mod', { path: off ?? modPath.replace(/\.(utoc|pak)$/i, '.bak_repak'), trashId: null }).then(() => 'trashed' as const, () => (off ? 'off' : false))
+  return invoke('delete_mod', { path: off ?? modPath.replace(/\.(utoc|pak)$/i, '.bak_repak'), trashId: null })
+    .then(() => 'trashed' as const, e => { console.warn('[safety] could not move it to Recently deleted, it stays off', e); return off ? 'off' as const : false as const })
 }
 export const REPAIR_POLICY = 'repakxtra.vfx.repairPolicy'
 export type RepairPolicy = 'strict' | 'bestEffort'

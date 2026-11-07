@@ -100,7 +100,8 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       .then(() => (live ? invoke<number>('xtra_layout_scan', { modPaths: scanPaths }) : 0))
       .then(checked => (live && checked ? check() : undefined))
       // and mesh mods whose skeleton the game rebuilt: more bones than it has gets May crash (xtra_mesh.rs)
-      .then(() => (live ? invoke<number>('xtra_mesh_scan', { modPaths: scanPaths }) : 0))
+      // every mod: an update carries the original's meshes as they were, and nothing in the Mod Updater checks them
+      .then(() => (live ? invoke<number>('xtra_mesh_scan', { modPaths: paths }) : 0))
       .then(checked => (live && checked ? check() : undefined))
       .then(() => (live ? invoke<boolean>('xtra_scan_stopped').catch(() => false) : true))
       .then(stopped => live && !stopped, e => { console.warn('[brokenMods] background scan failed', e); return false })
