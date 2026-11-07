@@ -3074,7 +3074,7 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .bs-answers { display: inline-flex; gap: 8px; flex: none; }
 .bs-launch, .bs-back { display: inline-flex; align-items: center; gap: 6px; flex: none; }
 .bs-modal .bs-launch.btn-primary { padding: 0 14px !important; }
-.bs-modal .cs-footer .bs-back + :not(.bs-back, .bs-safe) { margin-left: auto; }   /* Undo and Not sure on the left, the way out on the right */
+.bs-modal .cs-footer .bs-back + :not(.bs-back) { margin-left: auto; }   /* Undo and Not sure on the left, the way out on the right */
 .bs-link { align-self: flex-start; padding: 0; border: 0; background: none; font: inherit; font-size: 12px; color: var(--text-secondary);
   text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .bs-link:hover { color: var(--text-primary); }
@@ -3111,7 +3111,7 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .bs-overlay { z-index: 2100 !important; }   /* above Settings, where Crash reports opens it */
 .cs-note .bs-link { font-size: inherit; }
 
-/* Find the crashing mod: the saved-mods line, and motion (transitions.dev recipes:
+/* Find the crashing mod: motion (transitions.dev recipes:
    Page side-by-side for each step, Texts reveal for lists, Number pop-in for the test number and done checks) */
 .bs-roles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .bs-role { padding: 12px 14px; border: 1px solid var(--panel-border); border-radius: 10px; }
@@ -3123,9 +3123,7 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .bs-role.is-app li > svg { color: var(--accent-primary); }
 .bs-role li { display: flex; align-items: center; gap: 8px; font-size: 13px; line-height: 1.5; color: var(--text-primary);
   animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; animation-delay: calc(var(--i, 0) * var(--stagger-stagger) + 80ms); }
-.bs-safe { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #3ecf6e; white-space: nowrap; }
-.bs-modal .cs-footer .bs-back + .bs-safe { margin-left: auto; }
-.bs-modal .cs-footer > .bs-safe:first-child { margin-left: auto; }
+.bs-modal .cs-footer > .bs-stop { margin-left: auto; }
 .bs-stop { display: inline-flex; align-items: center; gap: 6px; }
 @keyframes bs-from-right { from { opacity: 0; transform: translateX(var(--page-slide-distance)); filter: blur(var(--page-blur)); } }
 @keyframes bs-from-left { from { opacity: 0; transform: translateX(calc(var(--page-slide-distance) * -1)); filter: blur(var(--page-blur)); } }
@@ -3139,15 +3137,12 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 @keyframes bs-fill { from { transform: scaleX(0.2); transform-origin: left; } }
 /* the two numbers before a run: small label over a big number, two cards */
 .bs-facts { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 0; }   /* one card, full width */
-.bs-dt-note { opacity: 0.75; }
-.bs-facts > div { padding: 12px 14px; border: 1px solid var(--panel-border); border-radius: 10px; animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; }
-.bs-facts > div + div { animation-delay: var(--stagger-stagger); }
+.bs-facts > div { padding: 12px 14px; border: 1px solid var(--panel-border); border-radius: 10px; }
 .bs-facts dt { font-size: 12px; color: var(--text-secondary); }
-.bs-facts dd { margin: 2px 0 0; font-size: 24px; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--text-primary);
-  animation: t-num-pop var(--digit-dur) var(--digit-ease) 120ms backwards; }
+.bs-facts dd { margin: 2px 0 0; font-size: 24px; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--text-primary); }
 .bs-hint { display: inline-flex; align-items: center; gap: 6px; margin-right: auto; font-size: 12px; color: var(--text-secondary); }
 .bs-hint > svg { flex: none; color: var(--text-secondary); }
-.bs-modal .cs-footer { flex-wrap: wrap; row-gap: 8px; }   /* Undo, Not sure, the saved count, and Stop never squeeze each other */
+.bs-modal .cs-footer { flex-wrap: wrap; row-gap: 8px; }   /* Undo, Not sure, and Stop never squeeze each other */
 .bs-modal .cs-footer > * { flex: none; white-space: nowrap; }
 
 /* The app's busy overlay (upstream PromiseTransitionLoader: "Checking conflicts..."): a quiet panel like the header's scan

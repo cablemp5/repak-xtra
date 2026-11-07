@@ -81,7 +81,7 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
               </section>
             </div>
             <dl className="bs-facts">
-              <div><dt>Launches, at most <span className="bs-dt-note">(with {plural(on.length, 'mod')} enabled)</span></dt><dd>{estimate({ start: [], candidates: on.map(m => m.path), off: [], phase: 'baseline', tests: 0 })}</dd></div>
+              <div><dt>Launches, at most (with {plural(on.length, 'mod')} enabled)</dt><dd>{estimate({ start: [], candidates: on.map(m => m.path), off: [], phase: 'baseline', tests: 0 })}</dd></div>
             </dl>
             <p className="cs-note">That is when one mod causes the crash. Each other mod that crashes it adds up to {roundsLeft(on.length) + 1} launches.</p>
           </div>
@@ -228,8 +228,7 @@ function Test({ run, resumed, back, busy, deps, answer, undo, stop }: {
     <div className="modal-footer cs-footer">
       {run.prev && <button type="button" className="lo-text-btn bs-back" disabled={busy || live || !ready} onClick={undo}><Undo2 size={14} aria-hidden="true" />Undo last answer</button>}
       {played && <button type="button" className="lo-text-btn bs-back" disabled={busy || live || !ready} onClick={() => { cue('navigate'); setPlayed(false); setLaunched(false); setStarting(false); clearTimeout(unseen.current); setAttempt(a => a + 1) }}><CircleHelp size={14} aria-hidden="true" />Not sure, test again</button>}
-      {/* the way back, always in the same place, with what it puts back right beside it (proximity) */}
-      <span className="bs-safe"><ShieldCheck size={14} aria-hidden="true" />{plural(run.start.length, 'mod')} saved</span>
+      {/* the way back, always in the same place */}
       <button type="button" className="lo-text-btn bs-stop" disabled={busy || live || (!ready && !stuck)} onClick={stop}
         title="Ends the test and turns every mod back on or off exactly as before it started"><RotateCcw size={14} aria-hidden="true" />Stop and restore mods</button>
     </div>
