@@ -612,6 +612,7 @@ export function VfxUpdaterPanel() {
     setBusy(true); setBatch(todo); setLastTook(null); setEnded(null); cancel.current = false
     const startedAt = performance.now()
     todo.forEach(k => patch(k, { status: 'waiting', step: undefined, sub: undefined, report: undefined }))
+    setOpen(o => { const n = new Set(o); todo.forEach(k => n.delete(k)); return n }) // a retried mod's new result starts folded too
     const filter = readFilter()
     let fixed = 0, failed = 0, partial = 0, cleared = 0, turnedOff = 0 // cleared: Nothing to update, so no longer flagged
     const retry: string[] = [], stopped: string[] = [], broke: string[] = [], kept: string[] = []
