@@ -24,8 +24,10 @@ export const isKitZip = (path: string) => /(^|[\\/])repakxtra-preview-kit[^\\/]*
 export const isNewerKit = (latest: string, installed?: string | null) =>
   !installed || (Number.isFinite(+latest) && Number.isFinite(+installed) ? +latest > +installed : latest > installed)
 const mb = (n: number) => `${Math.round(n / 1048576)} MB`
-/** The generator's check of this PC; when it cannot run (no kit, busy, would not start) that is its one problem. */
-const checkPc = () => invoke<Doctor>('previews_doctor').catch((e): Doctor => ({ ok: false, problems: [String(e)] }))
+/** The generator's check of this PC; when it cannot run (no kit, busy, would not start) that is its one problem. A run
+ *  that printed no answer twice (xtra_previews.rs, its reason in Logs) is no verdict (null): the kit and Blender are in
+ *  place, and a false warning beside "ready" read as broken on a fresh PC. */
+const checkPc = () => invoke<Doctor>('previews_doctor').catch((e): Doctor | null => /gave no answer/.test(String(e)) ? null : { ok: false, problems: [String(e)] })
 /** "38 MB of 108 MB", "Unpacking", "Downloading Blender · 120 MB of 345 MB" */
 export const progressText = (p: KitProgress | null) =>
   !p ? '' : p.stage === 'unpack' ? 'Unpacking' : p.stage === 'check' ? 'Checking this PC'
@@ -128,7 +130,7 @@ export function usePreviewKit(alert: Alert) {
       if (needKit) await installKit()
       if (!now.blender) { setProgress(BLENDER_START); await invoke<string>('preview_kit_install_blender'); await status(); changed() }
       const d = await checkAfter()
-      if (d.ok) { alert.success('Mod previews', 'Ready. Generate previews from a loadout.'); finish('Previews are ready on this PC') }
+      if (d?.ok !== false) { alert.success('Mod previews', 'Ready. Generate previews from a loadout.'); finish('Previews are ready on this PC') }
       return d
     }, BY_HAND),
   }

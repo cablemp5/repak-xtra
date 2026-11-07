@@ -3418,6 +3418,7 @@ function App() {
 
         await finishInstallLoadout(modsWithSettings, alert) // repakxtra: Save as a loadout
         await recordSources(modsWithSettings) // repakxtra: Nexus source from the archive name
+        window.dispatchEvent(new Event('repakxtra-installed')) // repakxtra: files and loadout are in, the first-run tour may start (FirstRun.tsx)
 
         // Reload in background so alert shows success immediately
         loadMods()
@@ -4574,7 +4575,7 @@ function App() {
         onClose={handleCloseTour}
       />
       <FirstRun alert={alert} gamePath={gamePath} mods={mods} details={modDetails} installing={panels.install} enableDrp={enableDrp} onSetDrp={on => saveAllSettings({ enableDrp: on })}
-        onAutoDetect={() => handleAutoDetect(true)} onBrowse={handleBrowseGamePath} onAddFiles={handleFileDrop} />{/* repakxtra */}
+        onAutoDetect={() => handleAutoDetect(true)} onBrowse={handleBrowseGamePath} onAddFiles={handleFileDrop} onTour={() => setShowOnboarding(true)} />{/* repakxtra */}
     </div >
   )
 }
