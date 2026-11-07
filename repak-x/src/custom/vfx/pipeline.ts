@@ -164,6 +164,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
   const warn = (w: string) => { report.warnings.push(w); log(w, 'warning') }
   // a refusal by the repair policy or a game build change, not a broken mod: it stays as it was, never turned off
   let keepOn = false
+  let runId: string | undefined // its work folder, removed when the run ends (placed or dropped by then)
   const strict = o.policy !== 'bestEffort'
   const changePolicy = 'Review the asset report, or choose Best effort in Advanced > Repair policy.'
 
@@ -181,7 +182,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     if (wait?.changed) { report.error = `Not updated yet. ${usmapWaitText(wait)}`; return report }
     // the game as it is now: an update that lands mid-run makes this one stale, so placing checks it again
     const buildAt = await invoke<{ updated: number }>('xtra_game_build').then(b => b.updated)
-    const runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+    runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
     const dirs = await invoke<Dirs>('xtra_vfx_dirs', { gamePaks: o.gamePaksPath, runId, usmapPath: o.usmapPath }) // the game files' cache is per USMAP too
     const extracted = await invoke<string[]>('vfx_extract_mod_assets', { gamePaks: o.gamePaksPath, modPath: src, outputDir: dirs.modExtract })
     check()
@@ -596,6 +597,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     const now = performance.now()
     if (step) report.steps.push({ step, ms: now - stepAt })
     report.ms = now - t0
+    if (runId) await invoke('xtra_vfx_run_done', { runId }).catch(() => {})
     // here, where the early returns pass too: Needs VFX update stops flagging it until the mod or the game changes (xtra_broken.rs)
     // not when its materials were rewritten: the original stays installed in the old layout and still needs turning off
     if (report.status === 'nothing' && !report.counts.relaid) await invoke('xtra_vfx_no_update', { modPath: o.modPath }).catch(e => log(`Could not note that it needs nothing: ${e}`, 'warning'))

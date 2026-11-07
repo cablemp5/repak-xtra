@@ -8727,6 +8727,8 @@ fn main() {
             xtra_ko::xtra_ko_heroes, xtra_ko::xtra_ko_load, xtra_ko::xtra_ko_file, xtra_ko::xtra_ko_stage, xtra_ko::xtra_ko_mod, xtra_ko::xtra_ko_is_mod, xtra_ko::xtra_ko_save_preview, // repakxtra: KO Editor
             xtra_ko::xtra_ko_portrait, xtra_ko::xtra_ko_hero_portrait, // repakxtra: hero logos in the installer and KO editor
             xtra_vfx::xtra_vfx_dirs, // repakxtra: VFX Updater
+            xtra_vfx::xtra_vfx_run_done, // repakxtra: VFX Updater
+            xtra_vfx::xtra_vfx_warm, // repakxtra: VFX Updater
             xtra_vfx::xtra_vfx_detect,
             xtra_vfx::xtra_vfx_place,
             xtra_vfx::xtra_vfx_turn_off, // repakxtra

@@ -437,6 +437,9 @@ export function VfxUpdaterPanel() {
       .finally(() => setChecking(false))
   }, [addLog])
 
+  // the game's file index loads while the list is read, so the first mod does not wait for it (xtra_vfx.rs xtra_vfx_warm)
+  useEffect(() => { if (paks) void invoke('xtra_vfx_warm', { gamePaks: paks }).catch(() => {}) }, [paks])
+
   useEffect(() => {
     if (!usmap) { setUsmapOk(null); return }
     let live = true

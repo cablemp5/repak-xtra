@@ -456,6 +456,8 @@ function mockVfx(cmd: string, args: any): unknown {
     case 'vfx_check_usmap_update': return vfxStep().then(() => ({ updated: false, upToDate: true, skipped: false, localPath: VFX_USMAP,
       filename: '5.3.2-3939753+++depot_marvel+S10.5_release-Marvel.usmap', version: 'S10.5_release', buildNumber: 3939753, commitDate: '2026-10-16', message: 'USMAP is up to date' }))
     case 'vfx_usmap_exists': return true
+    case 'xtra_vfx_run_done': return null
+    case 'xtra_vfx_warm': return null
     case 'xtra_vfx_dirs': return { modExtract: dirOf('mod_extract'), modJson: dirOf('mod_json'), editedJson: dirOf('edited_json'), finalUassets: dirOf('final'), stage: dirOf('stage'),
       vanillaExtract: dirOf('vanilla_extract'), vanillaJson: dirOf('vanilla_json'), vanillaIndex: dirOf('vanilla/index.json') }
     case 'vfx_extract_mod_assets':
