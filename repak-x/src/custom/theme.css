@@ -3287,8 +3287,8 @@ html[data-toasts-held] .toast-container { display: none; }   /* the welcome flow
   --stack-spread-gap: 8px;
   --stack-depth-scale: 0.06;
   --stack-depth-fade: 0.4;
-  --stack-depth1-blur: 1px;
-  --stack-depth2-blur: 2px;
+  --stack-depth1-blur: 0px;   /* repakxtra: the older toasts stay sharp (recipe: 1px) */
+  --stack-depth2-blur: 0px;   /* recipe: 2px */
   --stack-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 .t-stack-banner {
