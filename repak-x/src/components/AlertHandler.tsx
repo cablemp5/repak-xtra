@@ -375,8 +375,10 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
         const toast = (e.target as HTMLElement).closest<HTMLElement>('[data-toast-id]');
         focusedId.current = toast ? Number(toast.dataset.toastId) : null;
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) cameFrom.current = e.relatedTarget as HTMLElement | null;
-        setHasFocus(true);
+        setHasFocus((e.target as HTMLElement).matches(':focus-visible')); // keyboard focus spreads it, a click does not
     };
+    // A focused toast that is removed takes its focus without a blur event: once focus is outside, the stack collapses
+    useEffect(() => { if (!document.activeElement?.closest('.toast-container')) setHasFocus(false); }, [toasts]);
     const onBlur = (e: React.FocusEvent<HTMLDivElement>) => {
         if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
         // Moved on by itself, or clicked away while that toast stays: not a toast that went
@@ -537,7 +539,7 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift,
             } as React.CSSProperties}
             onMouseEnter={() => setIsPaused(true)}
             onMouseLeave={() => setIsPaused(false)}
-            onFocus={() => setHasFocus(true)} // repakxtra
+            onFocus={e => setHasFocus((e.target as HTMLElement).matches(':focus-visible'))} // repakxtra: keyboard focus holds its timer, a clicked button does not
             onBlur={(e: React.FocusEvent<HTMLDivElement>) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setHasFocus(false); }}
             data-toast-id={id}
         >
