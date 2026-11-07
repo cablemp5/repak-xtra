@@ -3268,3 +3268,9 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .xs-storage-confirm { margin-top: 12px; }
 .xs-storage-confirm > span { flex: 1 1 auto; min-width: 0; line-height: 1.45; }
 .xs-storage-confirm .lo-text-btn { flex: none; }
+
+/* repakxtra: CrashScreen.tsx, shown in place of a blank window */
+.crash-screen { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; background: var(--bg-darkest); color: var(--text-primary); text-align: center; }
+.crash-screen h2 { margin: 0; font-size: 18px; font-weight: 600; }
+.crash-screen p { margin: 0; color: var(--text-secondary); }
+.crash-screen pre { max-width: min(640px, 100%); margin: 4px 0; padding: 10px 12px; border-radius: 8px; background: var(--bg-light); color: var(--text-secondary); font: 12px 'Geist Mono', monospace; white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }

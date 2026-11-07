@@ -10,6 +10,7 @@ const VfxUpdaterWindow = lazy(() => import('./custom/vfx/VfxUpdaterWindow')) // 
 const EncryptWindow = lazy(() => import('./custom/EncryptWindow')) // repakxtra
 const GalactaWindow = lazy(() => import('./custom/GalactaWindow')) // repakxtra
 import StartedOk from './custom/startedOk' // repakxtra: an update keeps its rollback until the window has rendered
+import CrashScreen from './custom/CrashScreen' // repakxtra
 const AssetExplorerPage = lazy(() => import('./modules/asset-explorer/AssetExplorerPage'))
 import './custom/theme.css' // repakxtra: theme for every window, last so it wins the cascade
 import './custom/uiPrefs' // repakxtra: UI scale and optional controls in every window
@@ -44,7 +45,8 @@ const rootView = secondary ? <Suspense fallback={null}>{secondary.view()}</Suspe
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    {rootView}
-    {!secondary && <StartedOk />}{/* repakxtra */}
+    {/* repakxtra: never a blank window. StartedOk stays inside, so an update that crashes at start still rolls back */}
+    <CrashScreen>{rootView}{!secondary && <StartedOk />}</CrashScreen>
+
   </React.StrictMode>,
 )
