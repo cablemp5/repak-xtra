@@ -521,19 +521,22 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift,
     return (
         <motion.div
             ref={itemRef}
-            // repakxtra: transitions.dev Banner stacking, using only transform and opacity to avoid layout work during library updates
+            // repakxtra: transitions.dev Banner stacking. A new banner rises in from a blur and pushes the others back (three
+            // deep, each smaller, dimmer and a little blurred). No layout properties move, so library updates stay smooth
             initial={{
                 opacity: 0,
+                filter: 'blur(4px)',
                 transform: `translateY(${(isBottom ? 24 : -24) - footerLift}px) scale(0.96)`,
                 clipPath: 'inset(0px 0px 0px 0px round 8px)', // repakxtra: the same shape as animate's, so it eases
             }}
             animate={{
                 opacity: hidden ? 0 : opacity,
+                filter: back ? `blur(${index * 0.5}px)` : 'blur(0px)',
                 transform: `translateY(${yOffset}px) scale(${scale})`,
                 clipPath: isBottom ? `inset(${clip}px 0px 0px 0px round 8px)` : `inset(0px 0px ${clip}px 0px round 8px)`, // repakxtra: cut on the side away from the edge that peeks
             }}
             transition={{
-                duration: 0.22,
+                duration: 0.4,
                 ease: [0.22, 1, 0.36, 1]
             }}
             className={`toast-item ${color} ${variant}${isLoading || typeof progressValue === 'number' ? ' is-working' : ''}`} /* repakxtra: shimmer while it works */

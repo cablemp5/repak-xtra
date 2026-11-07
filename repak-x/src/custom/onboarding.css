@@ -76,7 +76,11 @@
 .ob-smart-out .wi-card { width: var(--ob-card); }
 .ob-pop { animation: ob-pop 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards; }   /* a preview that rendered in the background arrives */
 @keyframes ob-pop { from { opacity: 0; transform: scale(1.04); } }
-.ob-smart-out .wi-card-body b { font-size: 10.5px; }   /* the name Smart loadouts gives it */
+.ob-smart-out .wi-card { position: relative; }
+/* the name Smart loadouts gives it, over the preview's foot on a fade into the card's color */
+.ob-smart-out .wi-card-body { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 7px 6px; background: linear-gradient(to top, var(--bg-darker) 25%, transparent); }
+.ob-smart-out .wi-card-body b { font-size: 10.5px; }
+.ob-smart-out .wi-switch { display: none; }
 .ob-smart-out .wi-card.is-g0 { border-color: color-mix(in srgb, var(--g0), transparent 30%); }
 .ob-smart-out .wi-card.is-g1 { border-color: color-mix(in srgb, var(--g1), transparent 40%); }
 

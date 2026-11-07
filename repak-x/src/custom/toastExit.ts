@@ -11,7 +11,7 @@ export function useToastExit(ref: RefObject<HTMLDivElement>) {
     if (present) return
     const el = ref.current
     if (!el || MotionGlobalConfig.skipAnimations) { removeRef.current?.(); return }
-    const run = el.animate([{ opacity: getComputedStyle(el).opacity }, { opacity: 0 }], {
+    const run = el.animate([{ opacity: getComputedStyle(el).opacity }, { opacity: 0, filter: 'blur(4px)' }], { // Banner stacking: it blurs out where it is
       duration: 180, easing: 'ease-in', fill: 'forwards', id: 'toast-exit',
     })
     void run.finished.then(() => removeRef.current?.(), () => {})
