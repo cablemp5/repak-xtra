@@ -264,7 +264,7 @@ impl<const N: usize> From<[(String, u64); N]> for GameAssets {
 }
 
 /// FNV-1a: the same number for the same key in every build and on every PC, so the saved list stays readable.
-fn fingerprint(key: &str) -> u64 {
+pub(crate) fn fingerprint(key: &str) -> u64 {
     key.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3))
 }
 

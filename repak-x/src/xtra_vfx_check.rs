@@ -51,17 +51,18 @@ enum Built {
 /// Shader data shorter than this is no evidence either way (a material instance without its own, 2026-10-24: 20 characters).
 const MIN_SHADER_DATA: usize = 64;
 
-/// Each material instance's verdict: `versions[0]` holds the game's current shader data, the rest older copies found.
-fn verdicts(of_mod: &HashMap<String, String>, versions: &[HashMap<String, String>]) -> HashMap<String, Built> {
+/// Each material instance's verdict: `current` holds the game's current shader data, `older` the fingerprints
+/// (xtra_broken fingerprint) of older copies found.
+fn verdicts(of_mod: &HashMap<String, String>, current: &HashMap<String, String>, older: &[HashMap<String, u64>]) -> HashMap<String, Built> {
     of_mod
         .iter()
-        .filter(|(k, _)| versions.first().is_some_and(|cur| cur.contains_key(*k)))
+        .filter(|(k, _)| current.contains_key(*k))
         .map(|(k, mine)| {
             let b = if mine.len() < MIN_SHADER_DATA {
                 Built::Empty
-            } else if versions[0].get(k) == Some(mine) {
+            } else if current.get(k) == Some(mine) {
                 Built::Current
-            } else if versions[1..].iter().any(|v| v.get(k) == Some(mine)) {
+            } else if older.iter().any(|v| v.get(k) == Some(&crate::xtra_broken::fingerprint(mine))) {
                 Built::Older
             } else {
                 Built::Unknown
@@ -210,42 +211,124 @@ async fn check_in(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, wo
         return Ok(no_materials(mods_dir, &utoc, all_known));
     }
     let rels = extract(paks, Some(&utoc), &names, &work.join("mod")).await?;
-    finish(mod_path, usmap, mods_dir, paks, work, bases, &details.files, all_known, &rels, deep).await
+    Ok(finish(mod_path, usmap, mods_dir, paks, work, bases, &details.files, all_known, &rels, deep, false).await?.expect("never deferred"))
 }
 
-/// The rest of a check once the mod's material instances (`rels`) are extracted under `work`/mod.
+// ---- what the deep search found, kept: an older container's copy of a game material never changes ----
+// Per container file (its size and time), decoder and USMAP: each material's shader data as a fingerprint, or None
+// when the container does not hold it. Many mods replace the same game materials, so each container is read once per
+// material, not once per mod. Entries for containers that changed (a game update) are dropped when it loads.
+
+type Found = HashMap<String, HashMap<String, Option<u64>>>;
+static FOUND: Mutex<Option<Found>> = Mutex::new(None);
+
+fn found_store() -> PathBuf {
+    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-deep-found.json")
+}
+
+/// This container as the decoder reads it with this USMAP: its file, size and time, the decoder and the USMAP.
+fn found_key(container: &Path, usmap: &str) -> Option<String> {
+    let (size, at) = crate::xtra_broken::file_stamp(container)?;
+    Some(format!("{}|{size}|{at}|{}|{}", crate::xtra_broken::checked_key(container), crate::xtra_vfx::parser_id(), crate::xtra_vfx::usmap_hash(usmap)))
+}
+
+/// Runs `f` on the kept answers, loaded once (only the ones whose container is still that file).
+fn with_found<T>(f: impl FnOnce(&mut Found) -> T) -> T {
+    let mut slot = FOUND.lock().unwrap_or_else(|e| e.into_inner());
+    let all = slot.get_or_insert_with(|| {
+        let mut all: Found = std::fs::read_to_string(found_store()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+        all.retain(|k, _| {
+            let mut p = k.split('|');
+            let (Some(path), Some(size), Some(at)) = (p.next(), p.next(), p.next()) else { return false };
+            crate::xtra_broken::file_stamp(Path::new(path)).is_some_and(|(s, t)| s.to_string() == size && t.to_string() == at)
+        });
+        all
+    });
+    f(all)
+}
+
+fn save_found() {
+    let text = with_found(|all| serde_json::to_string(&*all).unwrap_or_default());
+    let store = found_store();
+    let tmp = store.with_extension("json.tmp");
+    if std::fs::write(&tmp, text).is_ok() {
+        let _ = std::fs::rename(&tmp, store);
+    }
+}
+
+/// The rest of a check once the mod's material instances (`rels`) are extracted under `work`/mod. `defer`: when a
+/// material matches no current copy, stop before the deep search and say so (None): the scan's second pass does it, so
+/// every other mod gets its badges first.
 #[allow(clippy::too_many_arguments)]
-async fn finish(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, work: &Path, bases: &[PathBuf], files: &[String], all_known: bool, rels: &[String], deep: bool) -> Result<VfxCheck, String> {
+async fn finish(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, work: &Path, bases: &[PathBuf], files: &[String], all_known: bool, rels: &[String], deep: bool, defer: bool) -> Result<Option<VfxCheck>, String> {
     let utoc = mod_path.with_extension("utoc");
     let mine = decode(&work.join("mod"), rels, usmap, &work.join("mod_json")).await?;
     // the game's current copies of the same packages: extracted and decoded once per game build and USMAP, kept for
     // every mod that replaces them (xtra_niagara game_copies)
     let vanilla = crate::xtra_vfx::vanilla_dir(&paks.to_string_lossy(), usmap);
     let (_, game_json) = crate::xtra_niagara::game_copies(&paks.to_string_lossy(), usmap, rels, work, &vanilla, &NoOpProgressSink).await?;
-    let mut versions = vec![shader_of(&game_json, rels)];
+    let current = shader_of(&game_json, rels);
+    if defer && verdicts(&mine, &current, &[]).values().any(|b| *b == Built::Unknown) {
+        return Ok(None);
+    }
+    let mut older: Vec<HashMap<String, u64>> = Vec::new();
     let mut unreadable = false;
     // the older copies: each game container alone, newest first, until every one of the mod's is placed (or none is left)
     let mut containers: Vec<_> = crate::xtra_broken::game_containers(paks).into_iter().filter(|c| !c.0.file_stem().is_some_and(|s| s.eq_ignore_ascii_case("global"))).collect();
     containers.sort_by(|a, b| b.2.cmp(&a.2).then(a.0.cmp(&b.0)));
     for (i, (container, _, _)) in containers.iter().enumerate().filter(|_| deep) {
-        let open: Vec<String> = verdicts(&mine, &versions).into_iter().filter(|(_, b)| *b == Built::Unknown).map(|(k, _)| k).collect();
+        let open: Vec<String> = verdicts(&mine, &current, &older).into_iter().filter(|(_, b)| *b == Built::Unknown).map(|(k, _)| k).collect();
         if open.is_empty() {
             break;
         }
-        let Some(dir) = alone(container, bases, &format!("alone{i}")) else {
-            unreadable = true; // no folder could link it: the rest stays not known, and the toast says why
-            break;
-        };
-        let wanted: Vec<String> = open.iter().map(|k| k.rsplit('/').next().unwrap_or(k).to_string()).collect::<HashSet<_>>().into_iter().collect();
-        let found = read(&dir, None, &wanted, usmap, &work.join(format!("alone{i}_out")), &work.join(format!("alone{i}_json"))).await;
-        let _ = std::fs::remove_dir_all(&dir);
-        match found {
-            Ok(v) => versions.push(v),
-            Err(_) => unreadable = true,
+        // what an earlier mod's search already read from this container
+        let key = found_key(container, usmap);
+        let mut here: HashMap<String, u64> = HashMap::new();
+        let mut ask = Vec::new();
+        with_found(|all| {
+            let known = key.as_ref().and_then(|k| all.get(k));
+            for k in &open {
+                match known.and_then(|m| m.get(k)) {
+                    Some(Some(fp)) => {
+                        here.insert(k.clone(), *fp);
+                    }
+                    Some(None) => {} // not in this container
+                    None => ask.push(k.clone()),
+                }
+            }
+        });
+        if !ask.is_empty() {
+            let Some(dir) = alone(container, bases, &format!("alone{i}")) else {
+                unreadable = true; // no folder could link it: the rest stays not known, and the toast says why
+                break;
+            };
+            let wanted: Vec<String> = ask.iter().map(|k| k.rsplit('/').next().unwrap_or(k).to_string()).collect::<HashSet<_>>().into_iter().collect();
+            let found = read(&dir, None, &wanted, usmap, &work.join(format!("alone{i}_out")), &work.join(format!("alone{i}_json"))).await;
+            let _ = std::fs::remove_dir_all(&dir);
+            match found {
+                Ok(v) => {
+                    // an extract of a bare name brings every package of that name, so one asked for and missing is not
+                    // in this container
+                    let got: HashMap<String, Option<u64>> = ask.iter().map(|k| (k.clone(), v.get(k).map(|s| crate::xtra_broken::fingerprint(s)))).collect();
+                    for (k, fp) in &got {
+                        if let Some(fp) = fp {
+                            here.insert(k.clone(), *fp);
+                        }
+                    }
+                    if let Some(key) = &key {
+                        with_found(|all| all.entry(key.clone()).or_default().extend(got));
+                    }
+                }
+                Err(_) => unreadable = true, // not kept: the next check tries again
+            }
         }
+        older.push(here);
+    }
+    if deep {
+        save_found();
     }
     let mut out = none();
-    let mut all: Vec<_> = verdicts(&mine, &versions).into_iter().collect();
+    let mut all: Vec<_> = verdicts(&mine, &current, &older).into_iter().collect();
     all.sort_by(|a, b| a.0.cmp(&b.0));
     for (k, b) in all {
         let name = k.rsplit('/').next().unwrap_or(&k).to_string();
@@ -322,7 +405,7 @@ async fn finish(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, work
         // the date check and the Niagara checks judge it again, as for a mod never checked
         crate::xtra_broken::forget_uncertain(&utoc);
     }
-    Ok(out)
+    Ok(Some(out))
 }
 
 static USER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -396,8 +479,10 @@ struct Job {
 /// Checks the mods among `mod_paths` (the Library passes those the date check calls current) that have material
 /// instances, each once per file and game update (outdated ones get their flag), and returns how many it looked at. Stops
 /// while an update runs (the next scan goes on from there), skipped while another runs or the USMAP is not the game's.
+/// `defer` (the Library's first pass): a mod whose materials need the deep search is left for the pass without it.
 #[tauri::command]
-pub async fn xtra_vfx_check_scan(app: tauri::AppHandle, mod_paths: Vec<String>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<usize, String> {
+pub async fn xtra_vfx_check_scan(app: tauri::AppHandle, mod_paths: Vec<String>, defer: Option<bool>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<usize, String> {
+    let defer = defer.unwrap_or(false);
     let Ok(_one) = SCAN.try_lock() else {
         crate::xtra_vfx::note_stopped();
         return Ok(0);
@@ -503,12 +588,13 @@ pub async fn xtra_vfx_check_scan(app: tauri::AppHandle, mod_paths: Vec<String>, 
                     continue; // replaced since its extract (also while waiting for the lock): its own scan follows
                 }
                 // deep: older builds are read only for materials that match no current copy, so most mods cost nothing more
-                finish(&j.path, &usmap, &mods_dir, &paks, &lane(i), &bases, &j.files, j.all_known, &rels, true).await
+                finish(&j.path, &usmap, &mods_dir, &paks, &lane(i), &bases, &j.files, j.all_known, &rels, true, defer).await
             }
             Err(e) => Err(e),
         };
         match r {
-            Ok(_) => {
+            Ok(None) => {} // left for the deep pass: not remembered, so it is still to do
+            Ok(Some(_)) => {
                 remember(&mut done, &j.utoc);
                 found += 1;
             }
@@ -558,12 +644,13 @@ mod tests {
         let mine = map(&[("a/mi_old", &s1), ("a/mi_new", &s2), ("a/mi_cooked", &x), ("a/mi_own", &x), ("a/mi_eyes", "AAAA")]);
         let current = map(&[("a/mi_old", &s1b), ("a/mi_new", &s2), ("a/mi_cooked", &s3b), ("a/mi_eyes", "AAAA")]);
         let previous = map(&[("a/mi_old", &s1), ("a/mi_cooked", &s3)]);
-        let v = verdicts(&mine, &[current.clone(), previous]);
+        let previous: HashMap<String, u64> = previous.iter().map(|(k, s)| (k.clone(), crate::xtra_broken::fingerprint(s))).collect();
+        let v = verdicts(&mine, &current, &[previous]);
         assert_eq!(v.get("a/mi_old"), Some(&Built::Older), "an older game copy's shader data");
         assert_eq!(v.get("a/mi_new"), Some(&Built::Current));
         assert_eq!(v.get("a/mi_cooked"), Some(&Built::Unknown), "cooked by the modder: like none of them");
         assert_eq!(v.get("a/mi_own"), None, "the mod's own, not in the game");
         assert_eq!(v.get("a/mi_eyes"), Some(&Built::Empty), "no shader data of its own: the same everywhere, so no evidence");
-        assert_eq!(verdicts(&mine, &[current]).get("a/mi_old"), Some(&Built::Unknown), "no older copy found yet");
+        assert_eq!(verdicts(&mine, &current, &[]).get("a/mi_old"), Some(&Built::Unknown), "no older copy found yet");
     }
 }

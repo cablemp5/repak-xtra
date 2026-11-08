@@ -105,13 +105,18 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     const scans = (vfx: string[], meshes: string[]) => Promise.resolve()
       .then(() => (live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: vfx }) : 0))
       .then(found => (live && found ? check() : undefined))
-      .then(() => (live ? invoke<number>('xtra_vfx_check_scan', { modPaths: vfx }) : 0))
+      // materials that match no current game copy wait for the deep pass at the end (deep, below)
+      .then(() => (live ? invoke<number>('xtra_vfx_check_scan', { modPaths: vfx, defer: true }) : 0))
       .then(found => (live && found ? check() : undefined))
       .then(() => (live ? invoke<number>('xtra_layout_scan', { modPaths: vfx }) : 0))
       .then(checked => (live && checked ? check() : undefined))
       // and mesh mods whose skeleton the game rebuilt: more bones than it has gets May crash (xtra_mesh.rs)
       .then(() => (live ? invoke<number>('xtra_mesh_scan', { modPaths: meshes }) : 0))
       .then(checked => (live && checked ? check() : undefined))
+    // the slow part last: the materials check's search of the game's older containers, once every mod has its badges
+    const deep = (vfx: string[]) => Promise.resolve()
+      .then(() => (live ? invoke<number>('xtra_vfx_check_scan', { modPaths: vfx, defer: false }) : 0))
+      .then(found => (live && found ? check() : undefined))
     const chain = (first?: Promise<boolean>): Promise<boolean> => !live ? Promise.resolve(false) : (scanStarted(), invoke('xtra_scan_stopped').catch(() => false))
       .then(() => first ?? check())
       .then(ok => { if (!ok) throw new Error('the first check failed') })
@@ -122,9 +127,10 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       })
       .then(() => (live ? invoke('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
       // a manual Scan's mods first, through all four scans, so they never wait behind the mods not checked yet
-      .then(() => (ticked.length ? scans(ticked, ticked) : undefined))
+      .then(() => (ticked.length ? scans(ticked, ticked).then(() => deep(ticked)) : undefined))
       // every mod for meshes: an update carries the original's meshes as they were, and nothing in the Mod Updater checks them
       .then(() => scans(scanPaths, paths))
+      .then(() => deep(scanPaths))
       .then(() => (live ? invoke<boolean>('xtra_scan_stopped').catch(() => false) : true))
       .then(stopped => live && !stopped, e => { console.warn('[brokenMods] background scan failed', e); return false })
       // runs take turns (queued), so this one's end is never another's. One the library outdated is not "paused":
