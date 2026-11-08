@@ -23,7 +23,8 @@ const isAnimated = (src: string) => {
   if (!src.startsWith('blob:')) return Promise.resolve(false) // a remote picture would taint the canvas
   let p = sniffed.get(src)
   if (!p) {
-    p = fetch(src).then(r => r.blob()).then(b => b.slice(0, 4096).arrayBuffer()).then(b => animatedBytes(new Uint8Array(b)), () => false)
+    // only the head: a blob: URL honors Range, so a big preview is not copied whole at the moment focus leaves
+    p = fetch(src, { headers: { Range: 'bytes=0-4095' } }).then(r => r.arrayBuffer()).then(b => animatedBytes(new Uint8Array(b.slice(0, 4096))), () => false)
     sniffed.set(src, p)
   }
   return p
@@ -31,6 +32,7 @@ const isAnimated = (src: string) => {
 
 async function freeze(img: HTMLImageElement) {
   const src = img.src
+  if (stills.get(img)?.still === src) return // its own still loading (the load listener): nothing to read
   if (!img.complete || !img.naturalWidth || !(await isAnimated(src)) || !isIdle() || img.src !== src) return
   const c = document.createElement('canvas')
   c.width = img.naturalWidth
@@ -46,7 +48,7 @@ async function freeze(img: HTMLImageElement) {
 
 function thaw() {
   // Only where the still is still showing: a preview that changed meanwhile keeps its new picture
-  stills.forEach(({ src, still }, img) => { if (img.src === still) img.src = src; URL.revokeObjectURL(still) })
+  stills.forEach(({ src, still }, img) => { if (img.src === still) img.src = src; URL.revokeObjectURL(still); sniffed.delete(still) })
   stills.clear()
 }
 
