@@ -1674,7 +1674,7 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
 /* Pause, Resume, and Stop: small solid glyphs (8 to 9px) with square corners, so they read as one set. Stop is the
    same 8px square on every Stop and Cancel button. Pause is Lucide's, filled with no stroke (11px: its bars are 8px
    tall, centered in the box) */
-.stop-glyph { width: 8px; height: 8px; margin: 0 2px; background: currentColor; flex: none; }
+.stop-glyph { width: 7px; height: 7px; margin: 0 2.5px; border-radius: 1.5px; background: currentColor; flex: none; }
 /* each glyph centered in one 12px slot, so the labels share a left edge and the marks share a center line. Pause's bars
    (11px icon: 8.25px tall) stand a touch taller than the 8px square, which reads heavier at the same height */
 .lo-gen-stop .play-glyph { width: 8px; height: 9px; margin: 0 2px; }

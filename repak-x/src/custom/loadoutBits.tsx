@@ -179,6 +179,13 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
     if (slides.length > 1) { void ready(index + 1); void ready(index - 1) } // the neighbors decode while the pointer is on its way to an arrow
   }
   const leave = () => { hovering.current = false; clearTimeout(hoverTimer.current); dropRestart() }
+  // focus leaving the app ends the hover (no mouseleave comes): the restarted copy and its sound stop, and the card's own
+  // preview goes back, which idlePause.ts holds still until focus returns
+  useEffect(() => {
+    const blur = () => { if (hovering.current) leave() }
+    window.addEventListener('blur', blur)
+    return () => window.removeEventListener('blur', blur)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // On the page a click on the card does what its source is for: choose a file, or edit the text
   const cardClick = !page || cover === 'image' ? onClick : words ? () => setTyping(true) : undefined
