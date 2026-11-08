@@ -70,7 +70,7 @@ function MoreMenu({ items, danger, l, loadouts }: { items: MoreItem[]; danger: M
   }, [open, view])
   const pin = (n: number) => { pinHotkey(l.id, n); close() }
   const action = (it: MoreItem) => (
-    <button key={it.label} type="button" role="menuitem" className={`sigeon-item${it.danger ? ' is-danger' : ''}`} disabled={it.disabled} onClick={() => { close(); it.onClick() }}>
+    <button key={it.label} type="button" role="menuitem" className={`xtra-item${it.danger ? ' is-danger' : ''}`} disabled={it.disabled} onClick={() => { close(); it.onClick() }}>
       {it.label}
       {it.danger && <Trash2 size={14} className="context-menu-trash" aria-hidden="true" />}{/* the Library menu's Delete icon */}
     </button>
@@ -81,11 +81,11 @@ function MoreMenu({ items, danger, l, loadouts }: { items: MoreItem[]; danger: M
         <Ellipsis size={15} /> More
       </button>
       {open && (
-        <div className="sigeon-menu lp-more-menu" role="menu" aria-label={keysView ? 'Hotkey' : 'More actions'}>
+        <div className="xtra-menu lp-more-menu" role="menu" aria-label={keysView ? 'Hotkey' : 'More actions'}>
           {!keysView ? (
             <div className={`lp-more-view${view === 'back' ? ' is-back' : ''}`} key="actions">
               {items.map(action)}
-              <button type="button" role="menuitem" aria-haspopup="menu" className="sigeon-item lp-more-sub" onClick={() => setView('keys')}
+              <button type="button" role="menuitem" aria-haspopup="menu" className="xtra-item lp-more-sub" onClick={() => setView('keys')}
                 title={mine ? `Ctrl+${mine} turns ${l.name} on or off` : `Give ${l.name} a Ctrl+1 to 9 hotkey`}>
                 Hotkey
                 <span className="lp-more-value">{mine ? <Keys n={mine} /> : 'None'}<ChevronRight size={14} /></span>
@@ -94,16 +94,16 @@ function MoreMenu({ items, danger, l, loadouts }: { items: MoreItem[]; danger: M
             </div>
           ) : (
             <div className="lp-more-view is-keys" key="keys">
-              <button type="button" role="menuitem" className="sigeon-item lp-more-back" onClick={() => setView('back')}>
+              <button type="button" role="menuitem" className="xtra-item lp-more-back" onClick={() => setView('back')}>
                 <ChevronLeft size={14} />Hotkey
               </button>
-              <button type="button" role="menuitemradio" aria-checked={!mine} className="sigeon-item lp-key-row" onClick={() => pin(0)}>
+              <button type="button" role="menuitemradio" aria-checked={!mine} className="xtra-item lp-key-row" onClick={() => pin(0)}>
                 None{!mine && <Check size={14} />}
               </button>
               {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => {
                 const holder = slots.get(n), me = n === mine
                 return (
-                  <button key={n} type="button" role="menuitemradio" aria-checked={me} className="sigeon-item lp-key-row" onClick={() => pin(n)}
+                  <button key={n} type="button" role="menuitemradio" aria-checked={me} className="xtra-item lp-key-row" onClick={() => pin(n)}
                     title={me ? `${l.name} has Ctrl+${n}` : holder ? `Moves Ctrl+${n} from ${holder.name} to ${l.name}` : `Ctrl+${n} turns ${l.name} on or off`}>
                     <Keys n={n} />
                     {me ? <Check size={14} /> : holder && <span className="lp-key-holder">{holder.name}</span>}

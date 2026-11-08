@@ -1,6 +1,5 @@
 // repakxtra: the KO Editor's hero list groups heroes by role. The game files the editor reads have no role, so this is a
-// list by hero id, from the modding notes' costume list (Claude Assisted Mods modding-kb/reference/character-costume-ids.txt,
-// 2026-10-25, the same list Force default skin's role buttons used). Deadpool (1057) has no role there, and a hero added
+// list by hero id, from the game's costume id list (2026-10-25). Deadpool (1057) has no role there, and a hero added
 // later shows under Other heroes until here, never missing.
 export type HeroRole = 'Vanguard' | 'Duelist' | 'Strategist' | 'Other heroes'
 export const ROLE_ORDER: HeroRole[] = ['Vanguard', 'Duelist', 'Strategist', 'Other heroes']

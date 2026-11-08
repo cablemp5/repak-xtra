@@ -24,8 +24,8 @@ import { useDialogFocus } from './dialogFocus'
 // Not for this dialog: the dropdown, switch tile and button styles other dialogs share (they loaded with InstallModPanel)
 import '../components/InstallModPanel.css'
 import './install.css'
-// Each hero's default skin as a shape (rendered once by the preview kit's renderer, Claude Assisted Mods
-// Misc/previews/cover_test/heroes.py), shown on the cover until the loadout's own preview exists
+// Each hero's default skin as a shape (rendered once by the preview kit's renderer),
+// shown on the cover until the loadout's own preview exists
 
 type Folder = { id: string; name: string; is_root?: boolean }
 type ModInput = {
@@ -155,11 +155,11 @@ function TargetPicker({ options, value, onChange }: { options: { value: string; 
         {current}<ChevronDown size={14} aria-hidden="true" />
       </button>
       {open && (
-        <div className="sigeon-menu ip-target-menu" role="menu" aria-label="Which loadout">
+        <div className="xtra-menu ip-target-menu" role="menu" aria-label="Which loadout">
           {[...options.slice(1), options[0]].map((o, i, all) => (
             <div key={o.value} className="ip-target-group">
               {i === all.length - 1 && all.length > 1 && <div className="ip-target-sep" role="separator" />}
-              <button type="button" role="menuitemradio" aria-checked={o.value === value} className={`sigeon-item${o === options[0] ? ' is-new' : ''}`}
+              <button type="button" role="menuitemradio" aria-checked={o.value === value} className={`xtra-item${o === options[0] ? ' is-new' : ''}`}
                 title={o.name ?? o.label} onClick={() => { onChange(o.value); setOpen(false) }}>
                 <span className="ip-target-name">{o === options[0] ? `+ ${o.label}` : o.name ?? o.label}</span>
               </button>

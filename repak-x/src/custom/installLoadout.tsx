@@ -94,11 +94,11 @@ export function InstallToLoadouts({ ids, onChange }: { ids: string[]; onChange: 
         </button>
         {/* On the page itself: inside the dialog's moving (transformed) sheet a fixed menu would be placed from the sheet */}
         {at && createPortal(
-          <div className="sigeon-menu ip-join-menu" role="menu" style={{ position: 'fixed', top: at.y, left: at.x }} onClick={e => e.stopPropagation()}>
+          <div className="xtra-menu ip-join-menu" role="menu" style={{ position: 'fixed', top: at.y, left: at.x }} onClick={e => e.stopPropagation()}>
             {rest.length === 0
               ? <div className="ip-join-empty">{loadouts.length ? 'Already in every loadout' : 'No loadouts yet'}</div>
               : rest.map(l => (
-                <button type="button" role="menuitem" key={l.id} className="sigeon-item" onClick={() => { onChange([...ids, l.id]); setAt(null) }}>
+                <button type="button" role="menuitem" key={l.id} className="xtra-item" onClick={() => { onChange([...ids, l.id]); setAt(null) }}>
                   {l.name}
                 </button>
               ))}

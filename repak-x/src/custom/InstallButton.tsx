@@ -39,8 +39,8 @@ export default function InstallButton({ onAddFiles, onAddFolder }: { onAddFiles:
         <ChevronDown size={14} />
       </button>
       {open && (
-        <div className="sigeon-menu install-btn-menu" role="menu" aria-label="More ways to install">
-          <button type="button" role="menuitem" className="sigeon-item" onClick={() => choose(true)}>
+        <div className="xtra-menu install-btn-menu" role="menu" aria-label="More ways to install">
+          <button type="button" role="menuitem" className="xtra-item" onClick={() => choose(true)}>
             <FolderPlus size={14} /> Install a folder <small>raw or uasset files</small>
           </button>
         </div>

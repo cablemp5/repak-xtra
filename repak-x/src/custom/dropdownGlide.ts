@@ -2,7 +2,7 @@ import './dropdownGlide.css'
 
 // Like segSlide, this reaches menus in every window, including portals and nested scrolling lists.
 const MENUS = '[role="menu"], .custom-dropdown-menu, .context-menu, .submenu, .scrollable-menu-list, .sl-menu-items, .lp-more-view, .ae-export-menu, .ae-mod-menu, .ae-mod-menu-list'
-const ROWS = '[role^="menuitem"], [role="option"], .context-menu-item, .custom-dropdown-item, .sigeon-item, .ae-export-menu > button, .ae-mod-menu-item, .ae-mod-menu-clear'
+const ROWS = '[role^="menuitem"], [role="option"], .context-menu-item, .custom-dropdown-item, .xtra-item, .ae-export-menu > button, .ae-mod-menu-item, .ae-mod-menu-clear'
 const SELECTED = '[aria-selected="true"], [aria-checked="true"], .selected'
 const DISABLED = ':disabled, [aria-disabled="true"], .disabled, .is-disabled'
 const menus = new Map<HTMLElement, HTMLElement | null>()

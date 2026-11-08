@@ -40,25 +40,25 @@ export default function ScanStatus() {
           : <span className="scan-status-in"><span className="pause-glyph" aria-hidden="true" />Checks paused</span>}
       </button>
       {open && (
-        <div className="sigeon-menu lo-gen-menu scan-menu" role="menu">
+        <div className="xtra-menu lo-gen-menu scan-menu" role="menu">
           <div className="lo-gen-status" role="status">
             <b>{r.running ? 'Checking mods for this game version' : 'Mod checks paused'}</b>
             <span>{status}</span>
           </div>
           {r.running
             ? <>
-                <button type="button" role="menuitem" className="sigeon-item" disabled={stopping} onClick={() => { setOpen(false); void holdScan('paused') }}
+                <button type="button" role="menuitem" className="xtra-item" disabled={stopping} onClick={() => { setOpen(false); void holdScan('paused') }}
                   title="Stop after the mod being read. Resume picks up where it stopped">
                   <span className="lo-gen-stop"><span className="pause-glyph" aria-hidden="true" />Pause</span></button>
-                <button type="button" role="menuitem" className="sigeon-item run-stop-btn" disabled={stopping && r.held === 'cancelled'} onClick={() => { setOpen(false); void holdScan('cancelled') }}
+                <button type="button" role="menuitem" className="xtra-item run-stop-btn" disabled={stopping && r.held === 'cancelled'} onClick={() => { setOpen(false); void holdScan('cancelled') }}
                   title="Stop after the mod being read, and hide this until the checks run again">
                   <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />Cancel</span></button>
               </>
             : <>
-                <button type="button" role="menuitem" className="sigeon-item" onClick={() => { setOpen(false); void rescanVerdicts() }}
+                <button type="button" role="menuitem" className="xtra-item" onClick={() => { setOpen(false); void rescanVerdicts() }}
                   title="Check the mods left to read now">
                   <span className="lo-gen-stop"><span className="play-glyph" aria-hidden="true" />Resume</span></button>
-                <button type="button" role="menuitem" className="sigeon-item run-stop-btn" onClick={() => { setOpen(false); void holdScan('cancelled') }}
+                <button type="button" role="menuitem" className="xtra-item run-stop-btn" onClick={() => { setOpen(false); void holdScan('cancelled') }}
                   title="Leave the rest unchecked and hide this until the checks run again">
                   <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />Cancel</span></button>
               </>}

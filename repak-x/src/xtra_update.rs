@@ -142,10 +142,10 @@ mod tests {
     }
 
     #[test]
-    fn existing_users_update_to_standard_and_never_extended() {
+    fn existing_users_update_to_standard_and_never_another_channel() {
         let list = serde_json::json!([
-            {"tag_name": "extended-v99.0.0", "prerelease": true, "assets": [
-                {"name": "repak-xtra-extended-v99.0.0-windows.zip", "browser_download_url": "https://example.com/extended.zip"}
+            {"tag_name": "other-channel-v99.0.0", "prerelease": true, "assets": [
+                {"name": "repak-xtra-other-v99.0.0-windows.zip", "browser_download_url": "https://example.com/other.zip"}
             ]},
             {"tag_name": "v0.26.0", "assets": [
                 {"name": "repak-xtra-standard-v0.26.0-windows.zip.sha256"},
@@ -245,7 +245,7 @@ mod tests {
             release(crate::xtra_edition::TAG_PREFIX, "0.2.0", crate::xtra_edition::NAME),
             release(crate::xtra_edition::TAG_PREFIX, "0.3.1", crate::xtra_edition::NAME),
             draft,
-            release("extended-v", "99.0.0", "extended"),
+            release("other-channel-v", "99.0.0", "other"),
             release(crate::xtra_edition::TAG_PREFIX, "88.0.0", "wrong-edition"),
             serde_json::json!({"tag_name": format!("{}77.0.0", crate::xtra_edition::TAG_PREFIX)}),
         ];
