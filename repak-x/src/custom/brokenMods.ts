@@ -27,6 +27,10 @@ export const needsUpdater = (path: string, v?: { kind: string }, on = !/\.bak_re
  *  renames .bak_repak to .pak (or back), so the badge stays put through a switch instead of waiting for the next check. */
 const norm = (path: string) => path.replace(/\//g, '\\').toLowerCase().replace(/\.(pak|bak_repak)$/, '')
 
+/** The update beside an original the Mod Updater renamed (norm keys): A_BROKEN_9999999_P beside A_9999999_P,
+ *  A_ORIGINAL_9999999_P beside A_PARTIAL_9999999_P. The key itself for any other mod. Pure. */
+export const updateBeside = (k: string) => k.replace(/_broken(?=(_\d+)?_p$)/, '').replace(/_original(?=(_\d+)?_p$)/, '_partial')
+
 let verdicts = new Map<string, Verdict>()
 /** Mods the Mod Updater made for the installed game (xtra_stamp.rs): their Updated or Partly updated tag. */
 let made = new Map<string, { partial: boolean; current: boolean }>()
@@ -92,7 +96,8 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     // `first`: the quick check just started at launch, reused so the chain does not run the same check beside it
     // `finished` is false when a scan stopped with mods left (xtra_scan_stopped, read and cleared at both ends)
     // a run the library outdated before it began checked nothing: not finished (gameUpdate.ts asks the new one instead)
-    // never the Mod Updater's own updates for this game (xtra_stamp.rs): they were checked as they were made
+    // never the Mod Updater's own updates for this game (xtra_stamp.rs): they were checked as they were made. Nor the
+    // original it renamed beside one (a new path, so no record): it is off and kept, the update is what loads
     let scanPaths = paths
     let ticked: string[] = []
     // the four scans (vfx: the VFX and Blueprint ones, meshes: the mesh one), each followed by the badges when it found something.
@@ -111,7 +116,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       .then(() => first ?? check())
       .then(ok => { if (!ok) throw new Error('the first check failed') })
       .then(() => {
-        ticked = paths.filter(p => forced.has(norm(p))); scanPaths = paths.filter(p => forced.has(norm(p)) || !made.get(norm(p))?.current)
+        ticked = paths.filter(p => forced.has(norm(p))); scanPaths = paths.filter(p => forced.has(norm(p)) || !(made.get(norm(p))?.current || made.get(updateBeside(norm(p)))?.current))
         const forget = paths.filter(p => fresh.has(norm(p))); forced = new Set(); fresh = new Set()
         return live && forget.length ? invoke('xtra_scan_forget', { modPaths: forget }).catch(e => console.warn('[brokenMods] could not clear earlier checks', e)) : undefined
       })
@@ -162,5 +167,7 @@ if (import.meta.env.DEV) {
   console.assert(norm('C:/Games/~mods/A_9999999_P.pak') === norm('C:/Games/~mods/A_9999999_P.bak_repak'), 'a mod keeps its verdict on and off')
   console.assert(skipsUpdater('C:/G/~mods/!ProjectFoo_9999999_P.pak') && skipsUpdater('C:/G/~mods/ProjectFoo.bak_repak') && skipsUpdater('C:/G/~mods/.repakxtra-builtin/repakxtra-a_9999999_P.pak')
     && !skipsUpdater('C:/G/~mods/Project Hail Mary Skin_9999999_P.pak') && !skipsUpdater('C:/G/~mods/A_9999999_P.pak'), 'loaders and built-ins only')
+  console.assert(updateBeside('a_broken_9999999_p') === 'a_9999999_p' && updateBeside('a_original_9999999_p') === 'a_partial_9999999_p'
+    && updateBeside('broken_glass_9999999_p') === 'broken_glass_9999999_p', 'the update beside a renamed original')
   console.assert(needsUpdater('a.pak', { kind: 'risky' }) && !needsUpdater('a.bak_repak', { kind: 'risky' }) && needsUpdater('a.bak_repak', { kind: 'vfx' }) && !needsUpdater('a.pak', { kind: 'broken' }), 'needs the updater')
 }
