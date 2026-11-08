@@ -5,6 +5,8 @@ import { type Scene, drawClear, duration, frameFor } from './render'
 import { type Frame, muxWebm } from './webm'
 
 const FPS = 60
+/** A turn of the event loop that a hidden or minimized window does not throttle (its timers wait up to a second). */
+const yieldNow = () => new Promise<void>(r => { const c = new MessageChannel(); c.port1.onmessage = () => r(); c.port2.postMessage(0) })
 
 /** The clip rendered offline, frame i at i / FPS seconds, so a busy or hidden window never drops a frame (the realtime
  *  recorder below made 15 to 35 fps files with gaps up to 411 ms). Color and alpha go through two VP8 encoders (WebCodecs
@@ -40,8 +42,8 @@ async function encodeClip(ctx: CanvasRenderingContext2D, size: { w: number; h: n
         try { enc.encode(frame, { keyFrame: key }) } finally { frame.close() }
       }
       // backpressure, and a breath for the page: wait for the encoders, not the display clock
-      while (!failed && color.encodeQueueSize + alpha.encodeQueueSize > 6) await new Promise(r => setTimeout(r, 1))
-      if (i % 10 === 9) await new Promise(r => setTimeout(r, 0))
+      while (!failed && color.encodeQueueSize + alpha.encodeQueueSize > 6) await yieldNow()
+      if (i % 10 === 9) await yieldNow()
     }
     await Promise.all([color.flush(), alpha.flush()])
   } finally {

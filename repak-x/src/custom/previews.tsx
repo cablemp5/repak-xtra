@@ -87,6 +87,12 @@ const queue: QueuedJob[] = []
 const RAN_KEY = 'repakxtra.previewRan'
 const ran: Record<string, string[]> = (() => { try { return JSON.parse(localStorage.getItem(RAN_KEY) ?? '{}') } catch { return {} } })()
 const modsOf = (paths: string[]) => [...new Set(paths.map(nameKey))].sort()
+/** A loadout's mods match its last finished run, or that is unknown (no run recorded, no member list): Regenerate then
+ *  renders everything again. Otherwise it redoes only the changed previews (the kit and koPreview keep the rest). */
+const sameAsLast = (set: string, paths: string[], members?: string[] | null) => {
+  const last = ran[set]
+  return last ? JSON.stringify(last) === JSON.stringify(modsOf(paths)) : members == null || sameMods(members, paths)
+}
 let active = false // a run was accepted and its done event has not arrived yet
 let batchDone = 0  // jobs finished since the queue was last empty, for Home's "3 of 21"
 type SetResult = 'ok' | 'none' | 'failed' | undefined
@@ -190,6 +196,10 @@ function finish(ok: boolean) {
   const stoppedEarly = run.stopping && !run.made && !run.none && !run.failed
   const summary = run.quiet ? '' : run.busy || (stoppedEarly ? 'Stopped' : ok || run.made || run.none || run.failed ? parts.filter(Boolean).join(' · ') : FAILED)
   const stopped = run.stopping
+  if (run.set && !run.busy && !stopped) { // a run that went through: its mods are what the next Regenerate compares
+    ran[run.set] = [...runPaths.keys()].sort()
+    try { localStorage.setItem(RAN_KEY, JSON.stringify(ran)) } catch { /* storage full or off: the render's own list decides */ }
+  }
   run = { ...run, stopping: false, summary }
   // Previews made for a loadout become what its card shows when asked for (not on Stop: the user ended it)
   if (run.set && !stopped && (run.setResult === 'ok' || run.made > 0)) showPreviewCover(run.set, run.show)
@@ -420,11 +430,7 @@ const start = async (job: QueuedJob): Promise<string | null> => {
   if (jobs.length === 0) return null
   active = true
   jobs.forEach(([, k]) => { pending.add(k); outcome.delete(k) })
-  if (job.set) {
-    outcome.delete(job.set)
-    ran[job.set] = modsOf(job.paths)
-    try { localStorage.setItem(RAN_KEY, JSON.stringify(ran)) } catch { /* storage full or off: the render's own list decides */ }
-  }
+  if (job.set) outcome.delete(job.set)
   runPaths = new Map(job.paths.map(p => [nameKey(p), p]))
   run = { id: job.id, total: jobs.length, made: 0, none: 0, failed: 0, stopping: false, summary: '', set: job.set, name: job.name, setResult: undefined, busy: '',
     show: Boolean(job.show), step: undefined, quiet: Boolean(job.quiet) }
@@ -525,7 +531,8 @@ export async function generateAllLoadouts(loadouts: { id: string; name: string; 
   const byKey = new Map(mods.map(m => [modKey(m.path), m.path]))
   const jobs = loadouts
     .filter(l => which === 'all' || !loadoutHasPreview(l))
-    .map(l => ({ paths: l.on.map(k => byKey.get(displayName(k))).filter((x): x is string => Boolean(x)), set: previewSetKey(l.id), name: l.name, force: which === 'all' }))
+    .map(l => ({ paths: l.on.map(k => byKey.get(displayName(k))).filter((x): x is string => Boolean(x)), set: previewSetKey(l.id), name: l.name }))
+    .map(j => ({ ...j, force: which === 'all' && sameAsLast(j.set, j.paths) }))
     .filter(j => j.paths.length > 0)
   const started = jobs.map(generatePreviews) // all asked for in this tick: the first starts, the rest queue behind it
   const error = (await Promise.all(started)).find(Boolean) ?? null
@@ -652,12 +659,8 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
   const n = new Set(paths.map(modKey)).size
   // A loadout that already has its preview: the button renders it again, even when nothing changed
   const again = Boolean(set && (hasPreview(set) || paths.some(p => hasPreview(nameKey(p)))))
-  // A loadout whose mods changed since its last run redoes only the changed previews (the kit and koPreview keep the
-  // rest); with the same mods, or when that is unknown (no run recorded, no member list), Regenerate renders everything
   const rendered = useCovers(set ?? '')?.members
-  const last = set ? ran[set] : undefined
-  const same = last ? JSON.stringify(last) === JSON.stringify(modsOf(paths)) : rendered == null || sameMods(rendered, paths)
-  const job: Job = { paths, set, name: name ?? `${n} selected mod${n === 1 ? '' : 's'}`, force: again && (!set || same), show: Boolean(set) }
+  const job: Job = { paths, set, name: name ?? `${n} selected mod${n === 1 ? '' : 's'}`, force: again && (!set || sameAsLast(set, paths, rendered)), show: Boolean(set) }
   const text = again ? label.replace(/^Generate/, 'Regenerate') : label
   if (!canGenerate) return <PreviewsUnavailable className={className} label={label} />
   const id = jobId(job)
