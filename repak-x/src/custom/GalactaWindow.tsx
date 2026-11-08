@@ -233,9 +233,9 @@ function GalactaPanel() {
         <span className="xtra-sr-only" aria-live="polite">{busy || cancelling ? state : ''}</span>
         <div className="vf-foot-actions">
           {busy && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={stop} title="Stops after the mod in progress"><span className="stop-glyph" aria-hidden="true" />{cancelling ? 'Stopping' : 'Stop'}</button>}
-          {/* while it runs: the Mod Encryptor and Mod Updater buttons' look, its icon and Converting… */}
+          {/* while it runs: the Mod Encryptor and Mod Updater buttons' look, its icon and Converting */}
           <button type="button" className="btn-primary" disabled={busy || !todo.length} onClick={() => void run()}>
-            <GalactaLogo size={14} />{busy ? 'Converting…' : todo.length ? <>Convert <Num id="gal-todo" value={todo.length} /> {todo.length === 1 ? 'mod' : 'mods'}</> : 'Convert'}
+            <GalactaLogo size={14} />{busy ? 'Converting' : todo.length ? <>Convert <Num id="gal-todo" value={todo.length} /> {todo.length === 1 ? 'mod' : 'mods'}</> : 'Convert'}
           </button>
         </div>
       </footer>
