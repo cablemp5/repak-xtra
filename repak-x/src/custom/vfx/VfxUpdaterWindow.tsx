@@ -130,18 +130,6 @@ function placedText(r: VfxReport) {
     + (p.replaced ? ' An earlier copy is in Recently deleted.' : '')
 }
 
-/** One mod's report as plain text, for Copy report. */
-function reportText(r: VfxReport) {
-  const lines = [`${r.name}: ${statusText(r)}${r.error ? `. ${r.error}` : ''}`]
-  if (r.status === 'fixed') lines.push(`  ${placedText(r)}`)
-  if (r.counts.left) lines.push(`  ${leftText(r)}`)
-  if (r.counts.ownGame) lines.push(`  ${ownText(r)}`)
-  lines.push(`  ${r.counts.updated} rebuilt with ${r.counts.changes} edits, ${r.counts.same} match the game, ${r.counts.added} the mod's own, ${r.counts.passed} kept, ${r.counts.left} left out, ${r.counts.unreadable} unreadable, ${took(r.ms)}`)
-  r.warnings.forEach(w => lines.push(`  ! ${w}`))
-  for (const k of KIND_ORDER) for (const a of r.assets.filter(x => x.kind === k)) lines.push(`  [${KIND_LABEL[k]}] ${a.name}: ${a.detail}`)
-  return lines.join('\n')
-}
-
 /** `candidate`: a Best effort build waiting for review, not placed yet: no placement to tell, its counts and warnings
  *  folded with its assets. `actions`: the review's answers, on one line with Show assets. */
 function Report({ r, onRetry, onUsmap, busy, candidate = false, actions }: { r: VfxReport; onRetry: () => void; onUsmap: () => void; busy: boolean; candidate?: boolean; actions?: React.ReactNode }) {
@@ -762,9 +750,8 @@ export function VfxUpdaterPanel() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
-  const copy = async (what: 'report' | 'log') => {
-    const text = what === 'log' ? logs.map(l => `[${l.time}] ${l.text}`).join('\n') : Object.values(runs).filter(r => r.report).map(r => reportText(r.report!)).join('\n\n')
-    await navigator.clipboard.writeText(text).catch(() => {})
+  const copy = async (what: 'log') => {
+    await navigator.clipboard.writeText(logs.map(l => `[${l.time}] ${l.text}`).join('\n')).catch(() => {})
     setCopied(what); setTimeout(() => setCopied(null), 3000)
   }
 
@@ -1041,7 +1028,6 @@ export function VfxUpdaterPanel() {
         {/* read out: the run's progress and its result, not every tick's estimate */}
         <span className="xtra-sr-only" aria-live="polite">{summary ? summary.text : busy || scan || cancelling ? state : ''}</span>
         <div className="vf-foot-actions">
-          {reports.length > 0 && !busy && <button type="button" className="lo-text-btn" onClick={() => copy('report')}><Copy size={14} /> {copied === 'report' ? 'Copied' : 'Copy report'}</button>}
           {/* Cancel beside the button, never in its place: a double-click on Update must not cancel the run */}
           {busy && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={() => stop('Cancel button')} title="Esc"><span className="stop-glyph" aria-hidden="true" />{cancelling ? 'Cancelling…' : 'Cancel'}</button>}
           {/* the same checks as the header's Checking mods (Pause and Cancel live there) */}

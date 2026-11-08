@@ -614,7 +614,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
   } catch (e) {
     if (e instanceof Cancelled) { report.status = 'cancelled'; report.error = 'Cancelled.' }
     else {
-      // a tool's own message, said as what it is: the run stopped on it (Copy report keeps it word for word)
+      // a tool's own message, said as what it is: the run stopped on it (the log keeps it word for word)
       const why = String(e instanceof Error ? e.message : e).replace(/^\[VFX\]\s*/, '').replace(/[.!]?\s*$/, '')
       report.status = 'failed'; report.error = `Stopped on an unexpected problem: ${why}.`; log(report.error, 'error')
     }

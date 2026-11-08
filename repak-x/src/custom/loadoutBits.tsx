@@ -7,7 +7,7 @@ import Switch from '../components/ui/Switch'
 import type { LoadoutProps } from './Loadouts'
 import { useMediaUrl } from './loadoutMedia'
 import { COVERS, type Cover, type Loadout, type Mod, captureKey, coverFills, displayName, flipMods, memberName, modKey, modsByKey, nameKey, patchLoadout, pickCover } from './loadoutStore'
-import { ModName } from './modName'
+import { ModName, ordinal } from './modName'
 import { revealOnLoad, SwapText } from './motion'
 import { BeatVideo, formKeys, hasPreview, isDecoded, isKoPreview, isVideoPreview, noPreviewPossible, previewMade, previewSetKey, readyPreview, useCovers, usePreviewStage, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
 import { isEmoteAnim, playEmoteSound, stopEmoteSound, useEmoteSound, webpSeconds } from './emoteSound'
@@ -206,7 +206,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
           <span className="lo-skel-label">
             {/* transitions.dev: Text states swap. One label from queued to each render step, so every change rises in */}
             <span className={working.kind === 'running' ? 'lo-skel-stage' : undefined}>
-              <SwapText text={working.kind === 'running' ? stage : working.at === 1 ? 'Queued, up next' : `Queued, ${working.at} in line`} />
+              <SwapText text={working.kind === 'running' ? stage : `Queued, ${ordinal(working.at)} in line`} />
             </span>
           </span>
         </span>

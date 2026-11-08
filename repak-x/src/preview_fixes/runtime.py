@@ -182,13 +182,21 @@ source = source.replace(vanilla_dir, 'f"v{VERSION}' + ("r" if rim_on else "") + 
 # sound PAKs can be read. ANIM 10 renders animation previews again, one per emote and the
 # mod's UI after them (emote_split.py). ANIM 11 retries "nothing to show" once (skin_blueprint.py). ANIM 12 retries it once
 # more with the app's newer mappings (app_usmap.py: skin table mods read under stale mappings). Existing successful previews keep their own REDO thresholds.
+# ANIM 13 with REDO sound 13: cached sound cards render once more at the VFX text size (each "nothing to show" retries once too).
 vfx_hooks = [
     ("label, gap, top = 140, 40, 100", "label, gap, top = 92, 40, 100"),
     ("(MARGIN + 4, y + bh + 24)", "(MARGIN + 4, y + bh + 16)"),
     ("(w - MARGIN - 4, y + bh + 24)", "(w - MARGIN - 4, y + bh + 16)"),
     ("font(84", "font(55"),
-    ("\nANIM = 7 ", "\nANIM = 12 "),
-    ('REDO = {"sound": 4, "anim": 6}', 'REDO = {"sound": 4, "anim": 10, "vfx": 8}'),
+    ("\nANIM = 7 ", "\nANIM = 13 "),
+    ('REDO = {"sound": 4, "anim": 6}', 'REDO = {"sound": 13, "anim": 10, "vfx": 8}'),
+    # sound cards: the VFX labels' size (55 px, weight 560), the speaker icon and spacing scaled to match
+    ("font(52, 520)", "font(55, 560)"),
+    ("icon_image(VOLUME_ICON, 48,", "icon_image(VOLUME_ICON, 51,"),
+    ("(MARGIN, y + 11)", "(MARGIN, y + 12)"),
+    ("(MARGIN + 68, y)", "(MARGIN + 72, y)"),
+    ("w - 2 * MARGIN - 68", "w - 2 * MARGIN - 72"),
+    ("step = 104   # one line per sound", "step = 110   # one line per sound"),
 ]
 # A mod packed with another project's mount point (WhiteFox_Bows/Content/Marvel/...) lists its packages under that
 # folder: the kit read only Marvel/Content/ and saw none (nothing to show). Its files still sit at /Game/Marvel/...

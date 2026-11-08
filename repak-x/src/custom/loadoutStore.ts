@@ -157,6 +157,7 @@ export function forgetDeleted(ids: string[]) {
   const items = parseDeleted(LIVE.getItem(DELETED)), live = new Set(readLoadouts().map(l => l.id))
   try { putDeleted(LIVE, items.filter(r => !ids.includes(r.loadout.id))) } finally { notify() }
   for (const id of ids.filter(i => !live.has(i))) { deleteMedia(id); deleteMedia(captureKey(id)); deleteMedia(captionBackgroundKey(id)) }
+  window.dispatchEvent(new CustomEvent('repakxtra-loadouts-gone', { detail: ids.filter(i => !live.has(i)) })) // and their renders (previews.tsx)
 }
 /** Deleted loadouts not expired and not live, newest first; null while the list is unreadable. */
 export const useDeletedLoadouts = (): DeletedLoadout[] | null => {
@@ -217,6 +218,7 @@ export function sweepMediaOnce() {
     return
   }
   sweepOrphanMedia(sessionIds).catch(e => console.warn('Loadout media sweep skipped:', e))
+  window.dispatchEvent(new CustomEvent('repakxtra-loadouts-kept', { detail: sessionIds })) // previews.tsx drops the renders of the rest
 }
 
 let lastKeys: string[] | null = null

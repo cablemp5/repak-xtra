@@ -404,6 +404,18 @@ pub fn xtra_ko_save_preview(app: tauri::AppHandle, request: tauri::ipc::Request<
     Ok(())
 }
 
+/// The KO prompt mod's saved preview is newer than every file of the mod (its .pak, .utoc, .ucas): a Regenerate that
+/// is not forced keeps it instead of recording it again.
+#[tauri::command]
+pub fn xtra_ko_preview_fresh(mod_path: String, key: String) -> bool {
+    if key.is_empty() || key.contains(['/', '\\', ':']) || key.contains("..") { return false; }
+    let made = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
+    let Some(preview) = made(&crate::app_dir().join("previews").join(format!("{key}.webm"))) else { return false };
+    let path = Path::new(&mod_path);
+    let files: Vec<_> = ["pak", "utoc", "ucas"].iter().filter_map(|x| made(&path.with_extension(x))).collect();
+    !files.is_empty() && files.iter().all(|t| *t <= preview) // no file found: no evidence, render it
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
