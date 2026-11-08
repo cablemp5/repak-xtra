@@ -1671,13 +1671,14 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
 .run-group .is-running { display: inline-flex !important; align-items: center; gap: 8px; cursor: default; pointer-events: none;
   border-color: transparent !important; background: transparent !important; padding-left: 4px !important; color: var(--text-primary) !important; }
 .run-stop-btn { display: inline-flex !important; align-items: center; gap: 8px; }
-/* Pause, Resume, and Stop: solid glyphs about one height (9 to 10px) with square corners, so they read as one set. Stop is the
-   same 10px square on every Stop and Cancel button. Pause is Lucide's, filled with no stroke (12px: its bars are 9px
+/* Pause, Resume, and Stop: small solid glyphs (8 to 9px) with square corners, so they read as one set. Stop is the
+   same 8px square on every Stop and Cancel button. Pause is Lucide's, filled with no stroke (11px: its bars are 8px
    tall, centered in the box) */
-.stop-glyph { width: 10px; height: 10px; margin: 0 1px; background: currentColor; flex: none; }
-/* the mod checks' menu (and the Generate menu sharing its rows): Stop and Play at the pause's height */
-.lo-gen-stop .play-glyph { width: 10px; height: 10px; margin: 0 1px; } /* the pause's 12px slot: the three labels share one left edge */
-.lo-gen-stop > svg { flex: none; }
+.stop-glyph { width: 8px; height: 8px; margin: 0 2px; background: currentColor; flex: none; }
+/* each glyph centered in one 12px slot, so the labels share a left edge and the marks share a center line. Pause's bars
+   (11px icon: 8.25px tall) stand a touch taller than the 8px square, which reads heavier at the same height */
+.lo-gen-stop .play-glyph { width: 8px; height: 9px; margin: 0 2px; }
+.lo-gen-stop > svg { flex: none; margin: 0 0.5px; }
 .play-glyph { width: 8px; height: 8px; flex: none; background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%); }
 /* A Generate button on a PC without the preview kit: grayed out, with a small blue "Set up" that says where to go */
 .is-unavailable { color: var(--text-secondary) !important; opacity: 0.85; }
