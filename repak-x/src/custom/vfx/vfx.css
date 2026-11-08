@@ -228,7 +228,7 @@ button.vf-assets-toggle:hover { color: var(--text-primary) !important; }
 .vf-copy-log { margin-top: 12px; }
 
 .vf-foot { position: relative; display: flex; flex-wrap: nowrap; align-items: center; gap: 8px 16px; padding: 12px 24px; border-top: 1px solid var(--panel-border); }
-/* the note has its own row above the buttons and wraps there: never cut off, never squeezed beside them */
+/* the note shares the row with the buttons and wraps inside its own column: never cut off */
 .vf-state { flex: 1 1 0; min-width: 0; margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 .vf-foot-actions { flex: none; margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .vf-spin { animation: vf-spin 1.1s linear infinite; }

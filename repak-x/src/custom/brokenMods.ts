@@ -122,7 +122,8 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       .then(ok => { if (!ok) throw new Error('the first check failed') })
       .then(() => {
         ticked = paths.filter(p => forced.has(norm(p))); scanPaths = paths.filter(p => forced.has(norm(p)) || !(made.get(norm(p))?.current || made.get(updateBeside(norm(p)))?.current))
-        const forget = paths.filter(p => fresh.has(norm(p))); forced = new Set(); fresh = new Set()
+        const forget = paths.filter(p => fresh.has(norm(p))); forced = new Set()
+        if (live) fresh = new Set() // a run the library outdated leaves them for the next one
         return live && forget.length ? invoke('xtra_scan_forget', { modPaths: forget }).catch(e => console.warn('[brokenMods] could not clear earlier checks', e)) : undefined
       })
       .then(() => (live ? invoke('vfx_check_usmap_update', { force: false }).catch(() => null) : null))

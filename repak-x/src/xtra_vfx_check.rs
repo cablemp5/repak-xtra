@@ -131,7 +131,10 @@ fn bare(name: &str) -> String {
 /// took 34 s, a full path list well under a second). A name with no path in the list goes as it is.
 fn filters_of(mics: &[String], files: &[String]) -> Vec<String> {
     let mut by_key: HashMap<String, &String> = files.iter().filter(|f| crate::xtra_broken::is_package(f)).map(|f| (crate::xtra_broken::match_key(f), f)).collect();
-    let mut out: Vec<String> = mics.iter().map(|k| by_key.remove(k).cloned().unwrap_or_else(|| k.rsplit('/').next().unwrap_or(k).to_string())).collect();
+    // only a path the tool indexes as written (under Marvel/, after any ../): another spelling (a plugin's mount alias,
+    // MarvelGAS/Marvel/...) goes as its bare name, which the tool's slower search finds whatever the spelling
+    let indexed = |f: &&String| f.replace('\\', "/").trim_start_matches("../").starts_with("Marvel/");
+    let mut out: Vec<String> = mics.iter().map(|k| by_key.remove(k).filter(indexed).cloned().unwrap_or_else(|| k.rsplit('/').next().unwrap_or(k).to_string())).collect();
     out.sort();
     out.dedup();
     out
@@ -198,7 +201,6 @@ async fn check(mod_path: &Path, usmap: &str, state: &Arc<Mutex<AppState>>, deep:
     r
 }
 
-/// Bare names of material instances (match keys), for the extract's filter.
 fn none() -> VfxCheck {
     VfxCheck { verdict: "none", outdated: vec![], current: vec![], unknown: vec![], old_layout: vec![], why: None }
 }
@@ -215,7 +217,7 @@ fn no_materials(mods_dir: &Path, utoc: &Path, all_known: bool) -> VfxCheck {
 async fn check_in(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, work: &Path, bases: &[PathBuf], state: &Arc<Mutex<AppState>>, deep: bool) -> Result<VfxCheck, String> {
     let details = crate::compute_mod_details(&mod_path.to_path_buf(), state)?;
     let utoc = mod_path.with_extension("utoc");
-    // by class where the name does not tell (a UI material named M_..._Inst), bare names for the extract's filter. The
+    // by class where the name does not tell (a UI material named M_..._Inst), the extract's filter from them (filters_of). The
     // listing runs a process and may read the game's asset list first: off the async workers
     let (p, u, f) = (paks.to_path_buf(), utoc.clone(), details.files.clone());
     let (mics, all_known) = tauri::async_runtime::spawn_blocking(move || crate::xtra_broken::material_instances(&p, &u, &f)).await.map_err(|e| e.to_string())?;
@@ -663,6 +665,8 @@ mod tests {
         let files = vec!["Marvel/Content/Marvel/VFX/MI_Glow.uasset".to_string(), "Marvel/Content/Marvel/VFX/MI_Glow.uexp".to_string(), "Marvel/Content/Marvel/VFX/T_Glow.uasset".to_string()];
         let mics = vec![crate::xtra_broken::match_key(&files[0]), "content/marvel/other/mi_listed".to_string()];
         assert_eq!(filters_of(&mics, &files), vec!["Marvel/Content/Marvel/VFX/MI_Glow.uasset".to_string(), "mi_listed".to_string()], "a path when the list has it, else the bare name");
+        let alias = vec!["MarvelGAS/Marvel/VFX/MI_Hit.uasset".to_string()];
+        assert_eq!(filters_of(&[crate::xtra_broken::match_key(&alias[0])], &alias), vec!["mi_hit".to_string()], "a mount alias goes as its bare name");
         assert_eq!((bare("Marvel/Content/Marvel/VFX/MI_Glow.uasset"), bare("MI_Glow")), ("mi_glow".to_string(), "mi_glow".to_string()));
     }
 

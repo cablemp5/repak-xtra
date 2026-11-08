@@ -635,7 +635,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       })
     }
     // not made safe: off, so it cannot crash the game (xtra_safe_off.rs keeps it off). Its Needs update flag goes: the
-    // updater has done what it can for this game build, and Update again or the Library's Turn on anyway still reach it
+    // updater has done what it can for this game build, and another update or the Library's Turn on anyway still reach it
     const unsafe = (report.status === 'failed' && o.safeOff) || (report.status === 'nothing' && report.counts.relaid > 0 && o.safeOff !== false)
     if (unsafe && !keepOn && !o.outputDir) {
       const out = await retireUnsafe(o.modPath, report.error ?? 'An update could not make it safe.', Boolean(o.trashUnsafe))

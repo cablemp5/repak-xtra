@@ -890,6 +890,10 @@ fn forget_in(store: &Path, utocs: &[String]) -> usize {
 #[tauri::command(async)]
 pub fn xtra_scan_forget(mod_paths: Vec<String>) -> usize {
     let utocs: Vec<String> = mod_paths.iter().map(|p| checked_key(&Path::new(p).with_extension("utoc"))).collect();
+    // and an earlier "not known": the fresh check decides again (an outdated finding is rewritten by what it finds)
+    for p in &mod_paths {
+        forget_uncertain(&Path::new(p).with_extension("utoc"));
+    }
     [crate::xtra_vfx_check::scan_store(), crate::xtra_layout::store(), crate::xtra_mesh::store(), crate::xtra_niagara::layout_store()]
         .iter()
         .map(|s| forget_in(s, &utocs))
