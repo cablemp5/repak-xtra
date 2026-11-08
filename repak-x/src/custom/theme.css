@@ -3165,7 +3165,6 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .bs-facts dt { font-size: 12px; color: var(--text-secondary); }
 .bs-facts dd { margin: 2px 0 0; font-size: 24px; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--text-primary); }
 .bs-hint { display: inline-flex; align-items: center; gap: 6px; margin-right: auto; font-size: 12px; color: var(--text-secondary); }
-.bs-hint > svg { flex: none; color: var(--text-secondary); }
 .bs-modal .cs-footer { flex-wrap: wrap; row-gap: 8px; }   /* Undo, Not sure, and Stop never squeeze each other */
 .bs-modal .cs-footer > * { flex: none; white-space: nowrap; }
 
