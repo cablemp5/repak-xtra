@@ -407,8 +407,10 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       else {
         // turned off earlier because it could crash: the safe update goes in on, as the mod was before
         const kept = await invoke<string | null>('xtra_safe_off_kept', { modPath: src }).catch(() => null)
-        const retainOriginal = missing > 0 || report.warnings.length > 0
-        // The partial marker queues a Niagara retry. Other reviewed losses keep their original without that marker.
+        // assets the update could not rebuild: the original stays (off), since a later update starts from it. A review
+        // warning alone follows Originals like any update (Recently deleted keeps it 7 days). The partial marker queues a
+        // Niagara retry and keeps its _ORIGINAL (xtra_vfx.rs place)
+        const retainOriginal = missing > 0
         report.placed = await invoke<Placed>('xtra_vfx_place', { source: src, stagedBase: base, turnOffOriginal: retainOriginal || (o.turnOffOriginal ?? true), keepName: o.keepName ?? true, trashOriginal: !retainOriginal && (o.trashOriginal ?? false), partial: report.counts.left > 0 })
         if (kept && /\.bak_repak$/i.test(report.placed.fixed) && await invoke('toggle_mod', { modPath: report.placed.fixed }).then(() => true, () => false)) {
           report.placed.fixed = report.placed.fixed.replace(/\.bak_repak$/i, '.pak')
