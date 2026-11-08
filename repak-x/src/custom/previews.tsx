@@ -82,7 +82,6 @@ type QueuedJob = Job & { id: string }
 export const jobId = (j: { paths: string[]; set?: string }) => j.set ?? `mods:${JSON.stringify([...new Set(j.paths.map(nameKey))].sort())}`
 const keysOf = (j: Job) => [...new Set(j.paths.map(nameKey)), ...(j.set ? [j.set] : [])]
 const queue: QueuedJob[] = []
-const modsOf = (paths: string[]) => [...new Set(paths.map(nameKey))].sort()
 /** Deletes the renders of loadouts that are gone for good (set keys): "Delete for good" in Recently
  *  deleted, or the Loadouts screen's once-a-session sweep (loadoutStore.ts sweepMediaOnce, which also skips when the
  *  lists cannot be read). A loadout in Recently deleted keeps them, so Restore brings its picture back. */
@@ -589,13 +588,6 @@ export function PreviewsUnavailable({ className, label }: { className: string; l
   )
 }
 
-/** The loadout render was made for exactly these mods (KO prompt mods never reach the kit, so they are left out). Pure
- *  apart from the KO list. Unknown members (no render, or one from before they were recorded): not the same. */
-export const sameMods = (members: string[] | null | undefined, paths: string[]) => {
-  const now = modsOf(paths).filter(k => !isKoPreview(k))
-  return Boolean(members) && JSON.stringify([...new Set(members)].sort()) === JSON.stringify(now)
-}
-
 /** "Electric Blue · preview 2 of 9", shimmering while it works. */
 const progressText = () => `${run.name} · preview ${doneOf()} of ${run.total}`
 const Shimmer = ({ text }: { text: string }) => <span className="t-shimmer">{text}</span>
@@ -718,5 +710,4 @@ if (import.meta.env.DEV) {
   console.assert(jobId({ paths: ['A.pak'] }) !== jobId({ paths: ['A.pak', 'B.pak'] }), 'jobId: different mods')
   console.assert(jobId({ paths: ['A.pak'], set: 'loadout-x' }) === jobId({ paths: ['B.pak'], set: 'loadout-x' }), 'jobId: a loadout keeps its id')
   console.assert(loadoutRenderKeys(['loadout-a', 'loadout-a.vanilla', 'loadout-a@2', 'loadout-b', 'Mod', 'Mod@2']).join() === 'loadout-a,loadout-b', 'loadoutRenderKeys')
-  console.assert(sameMods(['A', 'B'], ['C:/m/B.pak', 'C:/x/A.pak']) && !sameMods(['A'], ['A.pak', 'B.pak']) && !sameMods(null, ['A.pak']) && !sameMods(undefined, ['A.pak']), 'sameMods')
 }
