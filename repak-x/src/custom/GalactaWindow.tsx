@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, listen } from '@tauri-apps/api/event'
-import { AlertTriangle, ChevronRight, Info, Search, X } from 'lucide-react'
+import { AlertTriangle, ChevronRight, Info, Search, Square, X } from 'lucide-react'
 import TitleBar from '../components/TitleBar'
 import Checkbox from '../components/ui/Checkbox'
 import { useGlobalTooltips } from '../hooks/useGlobalTooltips'
@@ -236,11 +236,10 @@ function GalactaPanel() {
             <span title="Off: the Galacta version is made off, and the original stays as it is">Turn the original off, the Galacta version on</span>
         </Checkbox>
         <div className="vf-foot-actions">
-          {busy && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={stop} title="Stops after the mod in progress"><X size={12} strokeWidth={2.5} aria-hidden="true" />{cancelling ? 'Stopping' : 'Stop'}</button>}
-          {/* while it runs: the Nexus Mods and KO Editor Install buttons' look, quiet with its words shimmering */}
-          <button type="button" className={`btn-primary${busy ? ' is-working' : ''}`} disabled={busy || !todo.length} onClick={() => void run()}>
-            {busy ? <span className="t-text-in"><span className="t-shimmer">Converting</span></span>
-              : <><GalactaLogo size={14} />{todo.length ? <>Convert <Num id="gal-todo" value={todo.length} /> {todo.length === 1 ? 'mod' : 'mods'}</> : 'Convert'}</>}
+          {busy && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={stop} title="Stops after the mod in progress"><Square size={12} fill="currentColor" aria-hidden="true" />{cancelling ? 'Stopping' : 'Stop'}</button>}
+          {/* while it runs: the Mod Encryptor and Mod Updater buttons' look, its icon and Converting… */}
+          <button type="button" className="btn-primary" disabled={busy || !todo.length} onClick={() => void run()}>
+            <GalactaLogo size={14} />{busy ? 'Converting…' : todo.length ? <>Convert <Num id="gal-todo" value={todo.length} /> {todo.length === 1 ? 'mod' : 'mods'}</> : 'Convert'}
           </button>
         </div>
       </footer>

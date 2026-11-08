@@ -1660,24 +1660,21 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
 /* an icon in the portrait's place (All heroes): the same round size, quiet */
 .custom-dropdown-img.is-glyph { display: grid; place-items: center; background: var(--quiet-hover); color: var(--text-secondary); }
 .custom-dropdown-img.is-glyph svg { width: 12px; height: 12px; }
-/* Generating: what it is doing (dot loader, "2 of 9") as a quiet status, and Stop as its own button beside it with
-   an X, the same Stop as Home's batch line */
+/* Generating: what it is doing (dot loader, "2 of 9") as a quiet status, and Stop as its own button beside it with a
+   small rounded square, the same Stop as Home's batch line */
 .run-group { display: inline-flex; align-items: center; gap: 8px; flex: none; }
 .run-group .is-running { display: inline-flex !important; align-items: center; gap: 8px; cursor: default; pointer-events: none;
   border-color: transparent !important; background: transparent !important; padding-left: 4px !important; color: var(--text-primary) !important; }
 .run-stop-btn { display: inline-flex !important; align-items: center; gap: 8px; }
-/* Pause and Resume beside Stop (ScanStatus.tsx): solid glyphs one height (10px), so the three read as one set.
-   Pause: two square 4px bars 8px apart. Each bar starts on a whole device pixel at 100, 125, 150, 175, and 200% scale
-   (8 times any of those is whole), so both bars always round to the same width with crisp edges */
-.pause-glyph { position: relative; width: 12px; height: 10px; flex: none; }
-.pause-glyph::before, .pause-glyph::after { content: ''; position: absolute; top: 0; bottom: 0; width: 4px; background: currentColor; }
-.pause-glyph::before { left: 0; }
-.pause-glyph::after { left: 8px; }
+/* Pause, Resume, and Stop (ScanStatus.tsx): solid glyphs one height (10px), so the three read as one set. Pause is
+   Lucide's, filled (12px: its bars are 10px tall and centered in the box) */
+.stop-glyph { width: 8px; height: 8px; border-radius: 2px; background: currentColor; flex: none; }
 /* the header's paused state: centered in the 14px spot the running spinner takes, so the words do not shift */
-.scan-status-in .pause-glyph { margin: 0 1px; }
+.scan-status-in .pause-icon { margin: 0 1px; }
 /* the mod checks' menu (and the Generate menu sharing its rows): Stop and Play at the pause's height */
-.lo-gen-stop .play-glyph { width: 10px; height: 10px; margin: 0 1px; } /* the pause's 12px slot: the three labels share one left edge */
-.lo-gen-stop > svg { flex: none; } /* Cancel's X fills the same 12px slot */
+.lo-gen-stop :is(.stop-glyph, .play-glyph) { width: 10px; height: 10px; margin: 0 1px; } /* the pause's 12px slot: the three labels share one left edge */
+.lo-gen-stop .stop-glyph { border-radius: 0; } /* square like the pause bars: one corner language in this menu */
+.lo-gen-stop > svg { flex: none; }
 .play-glyph { width: 8px; height: 8px; flex: none; background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%); }
 /* A Generate button on a PC without the preview kit: grayed out, with a small blue "Set up" that says where to go */
 .is-unavailable { color: var(--text-secondary) !important; opacity: 0.85; }

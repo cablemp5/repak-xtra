@@ -2,7 +2,7 @@
 // change its colors, and open the normal installer. Layout: heroes, stage, colors.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { Download, Lock, RotateCcw, Search } from 'lucide-react'
+import { Download, Lock, Pause, RotateCcw, Search } from 'lucide-react'
 import ColorPicker, { RAINBOW, hexToHsv, hsvToHex } from './ColorPicker'
 import { ROLE_ORDER, heroRole } from './heroRoles'
 import { RoleIcon } from '../icons/rivals'
@@ -439,5 +439,5 @@ function HexField({ value, onCommit, label }: { value: string; onCommit: (hex: s
 
 /* Play and pause as solid glyphs, as media players draw them (option A, cable 2026-11-01): Lucide's are hollow outlines
    that looked out of place on the transport. The icon swap (t-icon-swap) crossfades them by data-icon. */
-const PauseGlyph = () => <svg className="t-icon" data-icon="a" width={14} height={14} viewBox="0 0 24 24" fill="currentColor" aria-hidden><rect x={6} y={4} width={4} height={16} rx={1.2} /><rect x={14} y={4} width={4} height={16} rx={1.2} /></svg>
+const PauseGlyph = () => <Pause className="t-icon" data-icon="a" size={14} fill="currentColor" aria-hidden />
 const PlayGlyph = () => <svg className="t-icon" data-icon="b" width={14} height={14} viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M7 4.8a1.4 1.4 0 0 1 2.1-1.2l11 6.9a1.6 1.6 0 0 1 0 2.8l-11 6.9A1.4 1.4 0 0 1 7 19.2z" /></svg>

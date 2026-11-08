@@ -10,7 +10,7 @@ import { APP_NAME } from '../edition'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, emitTo, listen } from '@tauri-apps/api/event'
-import { AlertTriangle, Archive, Check, CheckCheck, ChevronDown, ChevronRight, Copy, Eye, Info, PackageCheck, Undo2, FilePlus, Map as MapIcon, Palette, RefreshCw, RotateCcw, ScrollText, Search, Tag, X } from 'lucide-react'
+import { AlertTriangle, Archive, Check, CheckCheck, ChevronDown, ChevronRight, Copy, Eye, Info, PackageCheck, Undo2, FilePlus, Map as MapIcon, Palette, RefreshCw, RotateCcw, ScrollText, Search, Square, Tag, X } from 'lucide-react'
 import TitleBar from '../../components/TitleBar'
 import { useGlobalTooltips } from '../../hooks/useGlobalTooltips'
 import Checkbox from '../../components/ui/Checkbox'
@@ -237,7 +237,8 @@ function Row({ mod, rowKey, loadouts, run, needs, partial, waits, made, picked, 
           <div className="vf-bar" role="progressbar" aria-valuenow={step} aria-valuemin={0} aria-valuemax={STEPS.length} aria-label={`${mod.name} progress`}>
             <i style={{ width: `${((step - 0.5) / STEPS.length) * 100}%` }} />
           </div>
-          <p className="vf-step">{/* the footer announces the step: one live region, not two */}<SwapText text={STEPS[step - 1]} />{run?.sub ? <span className="vf-count">{run.sub}</span> : null}{/* plain: it changes many times a second, faster than a swap-in finishes */}</p>
+          {/* one line: what the step is doing now once it reports it, else its name. The footer announces the step: one live region, not two */}
+          <p className="vf-step">{run?.sub ? <span className="vf-step-sub">{run.sub}</span>/* plain: it changes many times a second, faster than a swap-in finishes */ : <SwapText text={STEPS[step - 1]} />}</p>
         </div>
       ) : null}
       {run?.report && <div className="t-acc-panel vf-row-panel" data-open={open}><div className="t-acc-panel-inner" {...folded(!open)}><Report r={run.report} onRetry={onRetry} onUsmap={onUsmap} busy={busy} /></div></div>}
@@ -1040,7 +1041,7 @@ export function VfxUpdaterPanel() {
         <div className="vf-foot-actions">
           {reports.length > 0 && !busy && <button type="button" className="lo-text-btn" onClick={() => copy('report')}><Copy size={14} /> {copied === 'report' ? 'Copied' : 'Copy report'}</button>}
           {/* Cancel beside the button, never in its place: a double-click on Update must not cancel the run */}
-          {busy && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={() => stop('Cancel button')} title="Esc"><X size={14} strokeWidth={2.5} aria-hidden="true" /> {cancelling ? 'Cancelling…' : 'Cancel'}</button>}
+          {busy && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={() => stop('Cancel button')} title="Esc"><Square size={14} fill="currentColor" aria-hidden="true" /> {cancelling ? 'Cancelling…' : 'Cancel'}</button>}
           {/* the same checks as the header's Checking mods (Pause and Cancel live there) */}
           {!busy && <button type="button" className="lo-text-btn" disabled={Boolean(scan) || !picked.size} onClick={() => void scanTicked()}
             title="Check the ticked mods again from scratch, without changing files. Progress shows in the main window's header too">

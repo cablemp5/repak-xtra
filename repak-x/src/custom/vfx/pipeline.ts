@@ -466,7 +466,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       } catch (e) {
         warn(`${stem(path)}: could not read its JSON (${e}). The mod's copy is kept.`)
       }
-      o.onProgress?.(++read, modJson.length, `Read ${read} of ${modJson.length}`)
+      o.onProgress?.(++read, modJson.length, `Reading the mod: ${read} of ${modJson.length} files`)
     })
     if (notMine.size) {
       const pass = editable.filter(p => notMine.has(assetKey(rel(p))))
@@ -560,7 +560,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
           asset(p, 'same', 'Supported parameters match the game. Original asset omitted, so vanilla is used. Other creator edits are not proven preserved.')
         }
       }
-      o.onProgress?.(++done, editable.length, `Carried ${done} of ${editable.length}`)
+      o.onProgress?.(++done, editable.length, `Carrying the edits over: ${done} of ${editable.length} assets`)
     })
     if (lost) await saveIndex()
     if (own.length) await invoke('vfx_copy_uasset_files', { sourcePaths: own, sourceBaseDir: dirs.modExtract, destBaseDir: dirs.finalUassets })
