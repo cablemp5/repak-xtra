@@ -3898,9 +3898,9 @@ function App() {
             className="btn-settings"
             data-tour="tools-btn"
             title="Tools"
-            aria-label="Tools" // repakxtra: icon only, named by its tooltip
+            aria-label="Tools" // repakxtra: keeps its name when Icons only hides the label
           >
-            <FaToolbox size={20} />
+            <FaToolbox size={16} /> <span className="hdr-label">Tools</span>{/* repakxtra: hdr-label, Icons only hides it */}
           </button>
           <button
             onClick={() => setPanel('settings', true)}

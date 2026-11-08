@@ -2,7 +2,7 @@
 // (main.tsx). One pill sits under the picked button and glides to the next pick. Buttons differ in width (labels,
 // counts), so the pill's place and size are measured, not set in CSS as the two equal header tabs are (theme.css).
 
-const BARS = '.mod-state-filter, .ob-seg, .segmented-control'
+const BARS = '.mod-state-filter, .ob-seg, .segmented-control, .ae-view-switch'
 const PICKED = ':scope > [aria-pressed="true"], :scope > [aria-checked="true"], :scope > .active'
 
 // repakxtra: several bars at once (a screen mounting) read all offsets first, then write, so they share one layout

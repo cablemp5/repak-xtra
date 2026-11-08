@@ -1,0 +1,164 @@
+/* repakxtra: the Asset Explorer window in the app's quiet theme (theme.css): hairline borders, 8px corners, grey hover and
+   picked states, the accent only for focus. Look only, the upstream AssetExplorer.css keeps layout and sizes the tree
+   math depends on (26px rows, the 28px mod picker rows, the 280px picker list).
+   That sheet loads later (the window's lazy chunk), so every rule here starts with .ae-window to outrank it.
+   Dark theme only, like theme.css: the light theme keeps the upstream look. */
+
+html:not([data-theme="light"]) .ae-window { background: var(--bg-darkest); font-family: var(--font-primary); }
+
+/* ---------- toolbar ---------- */
+html:not([data-theme="light"]) .ae-window .ae-toolbar { gap: 8px; padding: 10px 12px; background: var(--bg-darkest); border-bottom-color: var(--panel-border); }
+html:not([data-theme="light"]) .ae-window .ae-search input {
+  height: 32px; padding: 0 32px 0 34px; border-radius: var(--quiet-radius); border: 1px solid var(--panel-border);
+  background: var(--field-bg); font-size: 13px; caret-color: var(--text-primary); transition: border-color 0.15s ease;
+}
+html:not([data-theme="light"]) .ae-window .ae-search input::placeholder { color: var(--text-secondary); opacity: 0.8; }
+/* Text fields never get the blue ring: focus looks as at rest (theme.css) */
+html:not([data-theme="light"]) .ae-window .ae-search input:focus { box-shadow: none; outline: none; }
+html:not([data-theme="light"]) .ae-window .ae-search-icon { left: 12px; font-size: 15px; }
+html:not([data-theme="light"]) .ae-window .ae-search-clear { right: 6px; padding: 4px; border-radius: 6px; }
+html:not([data-theme="light"]) .ae-window .ae-search-clear:hover { background: var(--quiet-active); }
+
+/* Tree | Flat | By Mod, the same bar as the header's Home | Library tabs, with the app's sliding pill (segSlide.ts) */
+html:not([data-theme="light"]) .ae-window .ae-view-switch { padding: 2px; gap: 2px; border-radius: var(--quiet-radius); background: var(--bg-dark); border-color: var(--panel-border); }
+html:not([data-theme="light"]) .ae-window .ae-view-btn { height: 26px; padding: 0 12px; gap: 6px; border-radius: 6px; font-size: 13px; font-weight: 500; }
+html:not([data-theme="light"]) .ae-window .ae-view-btn:hover { background: transparent; color: var(--text-primary); }
+html:not([data-theme="light"]) .ae-window .ae-view-btn.active { background: var(--bg-lighter); color: var(--text-primary); }
+html:not([data-theme="light"]) .ae-window .ae-view-btn svg { font-size: 14px; }
+
+/* Square ghost buttons, like the Library's (theme.css .btn-ghost.btn-square) */
+html:not([data-theme="light"]) .ae-window .ae-toolbar-actions { gap: 6px; }
+html:not([data-theme="light"]) .ae-window .ae-icon-btn {
+  justify-content: center; min-width: 32px; height: 32px; padding: 0 8px; gap: 4px; box-sizing: border-box;
+  border: 1px solid var(--panel-border); border-radius: var(--quiet-radius); font-size: 15px;
+}
+html:not([data-theme="light"]) .ae-window .ae-icon-btn:hover,
+html:not([data-theme="light"]) .ae-window .ae-icon-btn[aria-expanded="true"] { background: var(--quiet-hover); border-color: rgba(255, 255, 255, 0.14); color: var(--text-primary); }
+html:not([data-theme="light"]) .ae-window .ae-export-caret { font-size: 12px; }
+
+/* Menus: the app's context menu (theme.css .context-menu) */
+html:not([data-theme="light"]) .ae-window :is(.ae-export-menu, .ae-mod-menu) {
+  background: var(--bg-dark); border: 1px solid rgba(255, 255, 255, 0.09); border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+/* Export: the app's small menus (theme.css .xtra-menu and .xtra-item). !important beats the bare button rules
+   (App.css centered bold labels) that reach this window through the shared sheet */
+html:not([data-theme="light"]) .ae-window .ae-export-menu { width: 200px; min-width: 0; padding: 4px; gap: 0; }
+html:not([data-theme="light"]) .ae-window .ae-export-menu button {
+  width: 100%; height: 32px !important; min-height: 0 !important; padding: 0 12px !important;
+  display: flex !important; justify-content: flex-start !important; align-items: center; text-align: left !important;
+  border: none !important; border-radius: 6px !important; background: transparent !important;
+  color: var(--text-primary) !important; font-size: 13px !important; font-weight: 400 !important;
+  letter-spacing: 0 !important; text-transform: none !important; box-shadow: none !important; transform: none !important;
+}
+html:not([data-theme="light"]) .ae-window .ae-export-menu button:hover { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
+
+/* ---------- filters ---------- */
+html:not([data-theme="light"]) .ae-window .ae-filters { gap: 10px; padding: 8px 12px; background: var(--bg-darkest); border-bottom-color: var(--panel-border); }
+html:not([data-theme="light"]) .ae-window .ae-chip-row { gap: 6px; }
+html:not([data-theme="light"]) .ae-window .ae-filter-chip {
+  height: 28px; padding: 0 10px; gap: 6px; box-sizing: border-box; border-radius: var(--quiet-radius);
+  border: 1px solid var(--panel-border); background: transparent; font-size: 12px; font-weight: 500;
+}
+html:not([data-theme="light"]) .ae-window .ae-filter-chip:hover { background: var(--quiet-hover); border-color: rgba(255, 255, 255, 0.14); color: var(--text-primary); }
+html:not([data-theme="light"]) .ae-window .ae-filter-chip.active { background: var(--quiet-active); border-color: rgba(255, 255, 255, 0.18); color: var(--text-primary); }
+html:not([data-theme="light"]) .ae-window .ae-filter-count { color: var(--text-secondary); opacity: 1; font-weight: 500; }
+html:not([data-theme="light"]) .ae-window .ae-filter-chip .ae-kind-dot { border-radius: 50%; }
+html:not([data-theme="light"]) .ae-window .ae-filter-controls { gap: 12px; }
+html:not([data-theme="light"]) .ae-window .ae-toggle .repakx-checkbox-label { font-size: 12px; }
+html:not([data-theme="light"]) .ae-window .ae-filter-select {
+  height: 28px; padding: 0 10px; gap: 6px; box-sizing: border-box; border-radius: var(--quiet-radius);
+  border: 1px solid var(--panel-border); background: transparent; font-size: 12px; font-weight: 500; color: var(--text-primary);
+}
+html:not([data-theme="light"]) .ae-window .ae-filter-select svg { color: var(--text-secondary); }
+html:not([data-theme="light"]) .ae-window .ae-filter-select:hover { background: var(--quiet-hover); border-color: rgba(255, 255, 255, 0.14); }
+html:not([data-theme="light"]) .ae-window .ae-filter-select.active { background: var(--quiet-active); border-color: rgba(255, 255, 255, 0.18); color: var(--text-primary); }
+html:not([data-theme="light"]) .ae-window .ae-clear-filters { height: 28px; padding: 0 8px; border-radius: 6px; color: var(--text-secondary); font-size: 12px; font-weight: 500; }
+html:not([data-theme="light"]) .ae-window .ae-clear-filters:hover { background: var(--quiet-hover); color: var(--text-primary); }
+
+/* mod picker */
+html:not([data-theme="light"]) .ae-window .ae-mod-menu { width: 280px; }
+html:not([data-theme="light"]) .ae-window .ae-mod-menu-search { gap: 8px; padding: 0 12px; height: 38px; border-bottom-color: var(--panel-border); }
+html:not([data-theme="light"]) .ae-window .ae-mod-menu-search input { font-size: 13px; caret-color: var(--text-primary); }
+html:not([data-theme="light"]) .ae-window .ae-mod-menu-list { padding: 4px; }
+html:not([data-theme="light"]) .ae-window .ae-mod-menu-item.repakx-checkbox { padding: 0 8px; border-radius: 6px; }
+html:not([data-theme="light"]) .ae-window .ae-mod-menu-item.repakx-checkbox:hover { background: var(--quiet-active); }
+html:not([data-theme="light"]) .ae-window .ae-mod-menu-item .repakx-checkbox-label { font-size: 13px; font-weight: 400; }
+html:not([data-theme="light"]) .ae-window .ae-mod-menu-clear { height: 34px; padding: 0; border-top-color: var(--panel-border); color: var(--text-secondary); font-size: 12px; font-weight: 500; }
+html:not([data-theme="light"]) .ae-window .ae-mod-menu-clear:hover { background: var(--quiet-hover); color: var(--text-primary); }
+
+/* ---------- tree ---------- */
+html:not([data-theme="light"]) .ae-window .ae-tree-pane { background: var(--bg-darkest); }
+html:not([data-theme="light"]) .ae-window .ae-row { gap: 8px; padding-right: 12px; font-size: 13px; }
+/* No zebra: hover and the picked row carry the eye, as in the Library's lists */
+html:not([data-theme="light"]) .ae-window .ae-row.is-alt { background: transparent; }
+html:not([data-theme="light"]) .ae-window .ae-row:hover { background: var(--quiet-hover); }
+html:not([data-theme="light"]) .ae-window .ae-row-folder { font-weight: 500; }
+html:not([data-theme="light"]) .ae-window .ae-row-folder.is-mod-group { background: rgba(255, 255, 255, 0.025); border-top-color: var(--panel-border); font-weight: 600; }
+html:not([data-theme="light"]) .ae-window .ae-row-folder.is-mod-group:hover { background: var(--quiet-hover); }
+html:not([data-theme="light"]) .ae-window .ae-row-file.is-selected { background: var(--quiet-active); color: var(--text-primary); }
+html:not([data-theme="light"]) .ae-window .ae-tree-scroll:focus-visible .ae-row.is-active { outline: 1px solid var(--focus-ring); outline-offset: -1px; }
+html:not([data-theme="light"]) .ae-window .ae-tree-scroll:focus:not(:focus-visible) .ae-row.is-active { outline: none; }
+html:not([data-theme="light"]) .ae-window .ae-row-file.is-conflict::before { background: rgba(255, 255, 255, 0.35); }
+/* Folders grey: the accent only marks state in this app */
+html:not([data-theme="light"]) .ae-window .ae-icon-folder { color: var(--text-secondary); opacity: 1; }
+html:not([data-theme="light"]) .ae-window .ae-icon { font-size: 15px; }
+html:not([data-theme="light"]) .ae-window .ae-chevron { opacity: 0.7; }
+html:not([data-theme="light"]) .ae-window .ae-kind-dot { width: 6px; height: 6px; border-radius: 50%; }
+html:not([data-theme="light"]) .ae-window .ae-meta { font-size: 11px; opacity: 1; }
+html:not([data-theme="light"]) .ae-window .ae-meta-dim { opacity: 0.6; }
+html:not([data-theme="light"]) .ae-window :is(.ae-conflict-count, .ae-conflict-flag) { color: var(--text-primary); font-size: 11px; font-weight: 600; }
+html:not([data-theme="light"]) .ae-window .ae-tree-empty { font-size: 13px; }
+
+/* chips: the kind chip keeps the Library's type badge colors (KIND_BADGES), the rest go quiet */
+html:not([data-theme="light"]) .ae-window .ae-chip { height: 20px; padding: 0 7px; box-sizing: border-box; border-radius: 6px; font-size: 11px; font-weight: 500; }
+html:not([data-theme="light"]) .ae-window :is(.ae-chip-quiet, .ae-chip-mod) { background: var(--field-bg); border-color: var(--panel-border); color: var(--text-secondary); }
+html:not([data-theme="light"]) .ae-window .ae-row:hover .ae-chip-mod, html:not([data-theme="light"]) .ae-window .ae-row-file.is-selected .ae-chip-mod { color: var(--text-primary); }
+html:not([data-theme="light"]) .ae-window .ae-chip-mod.is-disabled { font-style: normal; }
+html:not([data-theme="light"]) .ae-window .ae-chip-conflict { background: var(--quiet-active); border-color: rgba(255, 255, 255, 0.14); color: var(--text-primary); }
+html:not([data-theme="light"]) .ae-window .ae-mod-dot { width: 8px; height: 8px; }
+html:not([data-theme="light"]) .ae-window .ae-mod-dot.is-on { background: #3ecf6e; }   /* the Library's on dot (.mod-row-on) */
+html:not([data-theme="light"]) .ae-window .ae-copied {
+  height: 20px; display: inline-flex; align-items: center; padding: 0 8px; border-radius: 6px;
+  background: var(--bg-lighter); border: 1px solid rgba(255, 255, 255, 0.09); color: var(--text-primary); font-size: 11px; font-weight: 500;
+}
+
+/* ---------- details ---------- */
+html:not([data-theme="light"]) .ae-window .ae-detail { background: var(--bg-darker); border-left-color: var(--panel-border); }
+html:not([data-theme="light"]) .ae-window .ae-detail-inner { padding: 12px 16px 16px; gap: 20px; }
+html:not([data-theme="light"]) .ae-window .ae-detail-header h3 { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+html:not([data-theme="light"]) .ae-window .ae-detail-header .ae-icon-btn { min-width: 28px; height: 28px; padding: 0; border-color: transparent; }
+html:not([data-theme="light"]) .ae-window .ae-detail-header .ae-icon-btn:hover { background: var(--quiet-active); border-color: transparent; }
+html:not([data-theme="light"]) .ae-window .ae-detail-name { font-size: 14px; font-weight: 600; line-height: 1.35; }
+html:not([data-theme="light"]) .ae-window .ae-detail-path { margin-top: 4px; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5; }
+html:not([data-theme="light"]) .ae-window .ae-detail-badges { gap: 6px; margin-top: 10px; }
+html:not([data-theme="light"]) .ae-window .ae-detail-section h4 { margin: 0 0 6px; font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+html:not([data-theme="light"]) .ae-window .ae-detail-hint { margin: 0 0 8px; font-size: 12px; opacity: 0.7; }
+html:not([data-theme="light"]) .ae-window .ae-owner-list { gap: 4px; }
+html:not([data-theme="light"]) .ae-window .ae-owner {
+  min-height: 36px; padding: 0 10px; gap: 8px; border-radius: var(--quiet-radius); border: 1px solid var(--panel-border);
+  background: transparent; font-size: 13px;
+}
+html:not([data-theme="light"]) .ae-window .ae-owner:hover { background: var(--quiet-hover); border-color: rgba(255, 255, 255, 0.14); }
+html:not([data-theme="light"]) .ae-window .ae-owner.is-source { background: var(--quiet-active); border-color: rgba(255, 255, 255, 0.14); }
+html:not([data-theme="light"]) .ae-window .ae-owner-meta { font-family: var(--font-mono); font-size: 11px; font-weight: 500; }
+html:not([data-theme="light"]) .ae-window .ae-detail-rows { gap: 0; font-size: 13px; }
+html:not([data-theme="light"]) .ae-window .ae-detail-rows > div { padding: 7px 0; border-top: 1px solid var(--panel-border); }
+html:not([data-theme="light"]) .ae-window .ae-detail-rows > div:last-child { border-bottom: 1px solid var(--panel-border); }
+
+/* ---------- status bar ---------- */
+html:not([data-theme="light"]) .ae-window .ae-status { padding: 0 12px; gap: 10px; background: var(--bg-darkest); border-top-color: var(--panel-border); font-size: 12px; }
+html:not([data-theme="light"]) .ae-window .ae-status strong { font-weight: 600; }
+html:not([data-theme="light"]) .ae-window .ae-status-conflicts { padding: 0 6px; border-radius: 6px; color: var(--text-secondary); font-size: 12px; }
+html:not([data-theme="light"]) .ae-window .ae-status-conflicts strong { color: var(--text-primary); }
+html:not([data-theme="light"]) .ae-window .ae-status-conflicts:hover { background: var(--quiet-hover); color: var(--text-primary); }
+html:not([data-theme="light"]) .ae-window .ae-status-failed { color: var(--text-secondary); }
+
+/* ---------- empty, busy, toast ---------- */
+html:not([data-theme="light"]) .ae-window .ae-state { font-size: 13px; }
+html:not([data-theme="light"]) .ae-window .ae-state h3 { font-size: 15px; font-weight: 600; }
+html:not([data-theme="light"]) .ae-window .ae-state-detail { font-family: var(--font-mono); font-size: 12px; }
+html:not([data-theme="light"]) .ae-window .ae-spinner { width: 22px; height: 22px; border-color: rgba(255, 255, 255, 0.1); border-top-color: var(--text-primary); }
+html:not([data-theme="light"]) .ae-window .ae-toast {
+  padding: 8px 14px; border-radius: 10px; background: #161616; border: 1px solid rgba(255, 255, 255, 0.09);
+  font-size: 13px; font-weight: 500; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
