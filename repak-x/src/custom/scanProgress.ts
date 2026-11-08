@@ -3,10 +3,10 @@
 // button (ScanStatus.tsx) is the only sign: it shows once work has gone on for a moment, says which check, which mod and
 // how far, and a run stopped with mods left says so until it picks up again. Never a toast.
 import { useEffect, useSyncExternalStore } from 'react'
-import { listen } from '@tauri-apps/api/event'
+import { emit, listen } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 
-type Progress = { step: 'effects' | 'materials' | 'blueprints' | 'meshes'; at: number; total: number; path: string }
+export type ScanStep = { step: 'effects' | 'materials' | 'blueprints' | 'meshes'; at: number; total: number; path: string }
 /** Sent when a full run of the checks ends (finished, stopped for the game, or failed) */
 export const SCAN_DONE = 'repakxtra-scan-done'
 
@@ -14,12 +14,12 @@ const STEP = { effects: 'VFX effects', materials: 'VFX materials', blueprints: '
 /** "C:/x/Cool Mod_9999999_P.bak_repak" is "Cool Mod". Pure. */
 export const modLabel = (path: string) => (path.split(/[\\/]/).pop() ?? path).replace(/\.(pak|bak_repak|utoc)$/i, '').replace(/_\d+_P$/i, '')
 /** "VFX materials · Cool Mod (12 of 216)". Pure. */
-export const progressLine = (p: Progress) => `${STEP[p.step] ?? 'Mods'} · ${modLabel(p.path)} (${p.at} of ${p.total})`
+export const progressLine = (p: ScanStep) => `${STEP[p.step] ?? 'Mods'} · ${modLabel(p.path)} (${p.at} of ${p.total})`
 const SHOW_AFTER_MS = 1500
 
 /** `shown`: the run has read mods for a moment. `paused`: the last run stopped with mods left.
  *  `held`: the header's Pause or Cancel stopped them (xtra_vfx.rs HELD): they stay stopped until Resume or Refresh list. */
-export type ScanRun = { running: boolean; shown: boolean; paused: boolean; last: Progress | null; read: number; held: 'paused' | 'cancelled' | null }
+export type ScanRun = { running: boolean; shown: boolean; paused: boolean; last: ScanStep | null; read: number; held: 'paused' | 'cancelled' | null }
 let run: ScanRun = { running: false, shown: false, paused: false, last: null, read: 0, held: null }
 const listeners = new Set<() => void>()
 const set = (next: Partial<ScanRun>) => { run = { ...run, ...next }; listeners.forEach(l => l()) }
@@ -32,6 +32,7 @@ export const scanStarted = () => set({ running: true, last: null, read: 0 })
 export const scanEnded = (finished: boolean) => {
   set({ running: false, paused: !finished && run.held !== 'cancelled' })
   window.dispatchEvent(new Event(SCAN_DONE))
+  void emit(SCAN_DONE).catch(() => {}) // and the Mod Updater window, which follows the run (its Scan starts one)
 }
 
 /** The header's Pause or Cancel: the checks stop at the next mod. Cancel also hides the header's status once they do. */
@@ -51,7 +52,7 @@ export const scanHeld = () => run.held !== null
 export function useScanProgress() {
   useEffect(() => {
     let timer: number | undefined
-    const off = listen<Progress>('mod-scan-progress', e => {
+    const off = listen<ScanStep>('mod-scan-progress', e => {
       // a mod being read means a run is on, whatever the start and end calls said
       set({ last: e.payload, read: run.read + 1, running: true, paused: false })
       if (!run.shown && timer === undefined) timer = window.setTimeout(() => { timer = undefined; if (run.last) set({ shown: true }) }, SHOW_AFTER_MS)

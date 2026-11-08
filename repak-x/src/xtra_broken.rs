@@ -214,7 +214,7 @@ pub(crate) fn build_key(containers: &[(PathBuf, u64, u64)]) -> String {
 }
 
 /// Packages only (.uasset, .umap): their sidecars (.uexp, .ubulk) follow them, raw files are not game assets.
-fn is_package(file: &str) -> bool {
+pub(crate) fn is_package(file: &str) -> bool {
     let f = file.to_ascii_lowercase();
     f.ends_with(".uasset") || f.ends_with(".umap")
 }
@@ -264,7 +264,7 @@ impl<const N: usize> From<[(String, u64); N]> for GameAssets {
 }
 
 /// FNV-1a: the same number for the same key in every build and on every PC, so the saved list stays readable.
-fn fingerprint(key: &str) -> u64 {
+pub(crate) fn fingerprint(key: &str) -> u64 {
     key.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3))
 }
 
@@ -661,11 +661,16 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
             if anims == 1 { "it" } else { "them" }
         ));
     }
+    // a KO prompt mod: the Mod Updater rebuilds its widget on the game's new copy, so Needs update, not May crash
+    let ko = m.materials && !m.fixed && !m.cleared && crate::xtra_ko::ko_only_files(m.files);
+    let needs = |reason: String| Some(Verdict { path: path.to_string(), kind: "vfx", reason, stale_niagara: 0, usmap_wait: 0, off_only: false });
     match &m.layout {
         _ if !m.has_blueprint => None,
+        Some(Some(reason)) if ko => needs(format!("{reason} The Mod Updater rebuilds the KO prompt on the new game files.")),
         // what the update changed decides, whatever the date: one made after it from old files is caught too
         Some(Some(reason)) => risky(reason.clone()),
         Some(None) => None,
+        None if ko && m.installed > 0 && m.installed < game_updated => needs("A KO prompt installed before the last game update. Updates often change the game's KO widget, and the game can crash on an old copy. The Mod Updater rebuilds it on the new game files.".into()),
         // not compared yet: the date stands in until the background check has looked
         None if m.installed > 0 && m.installed < game_updated => risky("A Blueprint mod installed before the last game update. Updates often change the game classes it carries, and the game can crash on it. Turn it off if the game crashes, and look for an updated version.".into()),
         None => None,
@@ -868,6 +873,33 @@ pub fn xtra_vfx_no_update(mod_path: String, state: State<'_, Arc<Mutex<AppState>
     record_check(&mods_dir, &Path::new(&mod_path).with_extension("utoc"), false, false)
 }
 
+/// Drops every record of `utocs` (checked_key, any decoder) from the JSON store at `store`. How many went.
+fn forget_in(store: &Path, utocs: &[String]) -> usize {
+    let Some(mut all) = std::fs::read_to_string(store).ok().and_then(|t| serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&t).ok()) else { return 0 };
+    let before = all.len();
+    all.retain(|k, _| !utocs.iter().any(|key| k.strip_prefix(key.as_str()).is_some_and(|rest| rest.is_empty() || rest.starts_with('|'))));
+    let gone = before - all.len();
+    if gone > 0 {
+        let _ = std::fs::write(store, serde_json::Value::Object(all).to_string());
+    }
+    gone
+}
+
+/// The Mod Updater's Scan: the background checks forget these mods, so the run it starts reads each one fresh. A
+/// clearance (Nothing to update) stays: the fresh check overwrites it only with what it finds.
+#[tauri::command(async)]
+pub fn xtra_scan_forget(mod_paths: Vec<String>) -> usize {
+    let utocs: Vec<String> = mod_paths.iter().map(|p| checked_key(&Path::new(p).with_extension("utoc"))).collect();
+    // and an earlier "not known": the fresh check decides again (an outdated finding is rewritten by what it finds)
+    for p in &mod_paths {
+        forget_uncertain(&Path::new(p).with_extension("utoc"));
+    }
+    [crate::xtra_vfx_check::scan_store(), crate::xtra_layout::store(), crate::xtra_mesh::store(), crate::xtra_niagara::layout_store()]
+        .iter()
+        .map(|s| forget_in(s, &utocs))
+        .sum()
+}
+
 /// The mods (of `mod_paths`) that will not work, or may crash, in the installed game. Empty when the game's assets
 /// cannot be read (no game folder, a custom mods folder outside the game).
 #[tauri::command]
@@ -1033,6 +1065,15 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scan_forget_drops_only_that_mods_records() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = dir.path().join("s.json");
+        std::fs::write(&store, r#"{"c:/m/a_p.utoc|x":1,"c:/m/a_p.utoc":2,"c:/m/a_p.utoc|9|8|y":3,"c:/m/a_p2.utoc|x":4}"#).unwrap();
+        assert_eq!(forget_in(&store, &[checked_key(Path::new(r"C:\m\A_P.utoc"))]), 3);
+        assert_eq!(std::fs::read_to_string(&store).unwrap(), r#"{"c:/m/a_p2.utoc|x":4}"#, "a name that only starts the same stays");
+    }
 
     #[test]
     fn an_extracted_package_and_the_game_listing_share_a_key() {
@@ -1282,6 +1323,13 @@ mod tests {
         game.insert(match_key("/Game/Marvel/UI/Blueprints/Battle/Custom/1026/WBP_Battle_Kill_1026_V3.uasset"), 100);
         let verdict = judge("m.pak", &Facts { materials: true, ..facts(&v(&[ko]), 50) }, 200, &game).unwrap();
         assert_eq!((verdict.kind, verdict.reason.contains("changed the KO prompt")), ("vfx", true), "a KO prompt the update rewrote");
+        // the class check or the date flags a KO prompt the game did not rewrite: Needs update, the updater rebuilds it
+        let ko_files = v(&[ko, &ko.replace(".uasset", ".uexp")]);
+        let kp = |layout| Facts { materials: true, has_blueprint: true, layout, ..facts(&ko_files, 150) };
+        assert_eq!(judge("m.pak", &kp(Some(Some("x".into()))), 200, &game).map(|v| v.kind), Some("vfx"), "a class change");
+        assert_eq!(judge("m.pak", &kp(None), 200, &game).map(|v| v.kind), Some("vfx"), "the date rule");
+        let other = v(&[ko, "Marvel/Content/Marvel/UI/Blueprints/WBP_Other.uasset"]);
+        assert_eq!(judge("m.pak", &Facts { materials: true, has_blueprint: true, ..facts(&other, 150) }, 200, &game).map(|v| v.kind), Some("risky"), "another Blueprint too");
     }
 
     #[test]

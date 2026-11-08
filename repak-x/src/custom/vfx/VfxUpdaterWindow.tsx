@@ -20,12 +20,11 @@ import { DEFAULT_FILTER, parseWords, readFilter, resetFilter, writeFilter, type 
 import { canonKey } from '../loadoutIdentity'
 import { modKey, useLoadouts } from '../loadoutStore'
 import { FIXED_EVENT, onHandoff, openLoadoutInMain, onReport, takeHandoff, takeReport, utocOf, type Fixed } from './handoff'
-import { ASK_REVIEW, CHECK_RUN, KEEP_NAME, ORIGINALS, REPAIR_POLICY, SAFE_OFF, claimRun, newRunToken, onRunChange, readAskReview, readNaming, readOriginals, readRepairPolicy, readSafeOff, releaseRun, runLock, type Naming, type Originals, type RunLock } from './prefs'
+import { ASK_REVIEW, KEEP_NAME, ORIGINALS, REPAIR_POLICY, SAFE_OFF, claimRun, newRunToken, onRunChange, readAskReview, readNaming, readOriginals, readRepairPolicy, readSafety, releaseRun, retireUnsafe, runLock, type Naming, type Originals, type RunLock, type Safety } from './prefs'
 import { STEPS, fixVfxMod, repairOutcome, type AssetKind, type VfxReport } from './pipeline'
-import { checkVfxMod, checkWords } from './quick'
-import { needsUpdater, skipsUpdater, verdictLabel, verdictsChanged } from '../brokenMods'
+import { needsUpdater, rescanForced, skipsUpdater, verdictLabel, verdictsChanged } from '../brokenMods'
+import { SCAN_DONE, progressLine, type ScanStep } from '../scanProgress'
 import { HeroFilter, heroOfName } from '../heroFilter'
-import ScanButton from './ScanButton'
 import './vfx.css'
 import ModRowsSkeleton from '../ModRowsSkeleton'
 
@@ -92,13 +91,23 @@ const isDone = (s?: Status) => s === 'fixed' || s === 'nothing'
 
 /** A mod not marked as needing an update, on hover: what ticking it does */
 const NO_NEED = "Not marked as needing an update. Updating it rebuilds it on the game's current files anyway."
+/** The Paks folder above the mods folder, as the backend finds it (xtra_broken.rs paks_dir), else its parent: the
+ *  extract tool's long-lived process serves only a folder named Paks (xtra_uat_cli.rs). Pure. */
+function paksOf(modsDir: string) {
+  const parts = modsDir.split(/(?=[\\/])/) // each piece keeps its leading slash
+  const at = parts.map(p => p.replace(/^[\\/]/, '').toLowerCase()).lastIndexOf('paks')
+  if (at >= 0) return parts.slice(0, at + 1).join('')
+  const cut = Math.max(modsDir.lastIndexOf('/'), modsDir.lastIndexOf('\\'))
+  return cut > 0 ? modsDir.slice(0, cut) : modsDir
+}
+
 const STATUS: Record<Status, string> = { waiting: 'Queued', running: 'Updating', review: 'Needs your review', fixed: 'Updated', nothing: 'Nothing to update', failed: 'Failed', cancelled: 'Cancelled', declined: 'Original kept' }
 const KIND_ORDER: AssetKind[] = ['failed', 'left', 'unreadable', 'added', 'updated', 'same', 'passed']
 const KIND_LABEL: Record<AssetKind, string> = { updated: 'Rebuilt', same: 'Match the game', added: 'The mod\'s own', passed: 'Kept as they were', left: 'Left out', unreadable: 'Could not be read', failed: 'Not updated' }
 /** An update that left out Niagara files made for an older game build: it works, without those effects' colors */
 const isPartial = (r?: VfxReport) => r?.status === 'fixed' && (r.counts.left + r.counts.ownGame + r.counts.unreadable > 0 || r.assets.some(a => a.kind === 'failed'))
 const statusText = (r: VfxReport) => (isPartial(r) ? 'Partially updated'
-  : r.turnedOff && r.status !== 'fixed' ? `${r.status === 'failed' ? 'Failed' : r.counts.relaid ? 'Not updated' : 'May crash'}, turned off` : r.status === 'fixed' || r.status === 'failed' ? repairOutcome(r) : STATUS[r.status])
+  : r.turnedOff && r.status !== 'fixed' ? `${r.status === 'failed' ? 'Failed' : r.counts.relaid ? 'Not updated' : 'May crash'}, ${r.trashed ? 'in Recently deleted' : 'turned off'}` : r.status === 'fixed' || r.status === 'failed' ? repairOutcome(r) : STATUS[r.status])
 const leftText = (r: VfxReport) => `Left out ${plural(r.counts.left, 'effect file')} made for an older game build, so the game uses its own and ${r.counts.left === 1 ? 'that effect shows' : 'those effects show'} their usual colors.`
 /** Niagara files the update could not carry with today's USMAP: the game's own effect, for good (a partial repair). */
 const ownText = (r: VfxReport) => (r.counts.ownGame ? `${plural(r.counts.ownGame, 'asset')} could not be carried, so ${r.counts.ownGame === 1 ? 'that effect shows' : 'those effects show'} the game's own colors.` : '')
@@ -366,14 +375,21 @@ export function VfxUpdaterPanel() {
   const [checking, setChecking] = useState(true)
   const [naming, setNaming] = useState<Naming>(readNaming)
   const [originals, setOriginals] = useState<Originals>(readOriginals)
-  const [safeOff, setSafeOff] = useState(readSafeOff)
+  const [safety, setSafety] = useState<Safety>(readSafety)
+  const safeOff = safety !== 'on'
   const [moved, setMoved] = useState<LayoutNews | null>(null)
   useEffect(() => { void invoke<LayoutNews>('xtra_layout_moves').then(setMoved, () => {}) }, [usmapInfo])
   const keepName = naming === 'broken'
   const [advanced, setAdvanced] = useState(false)
   const [busy, setBusy] = useState(false)
-  const checkingBatch = useRef(false)
-  const [checkRun, setCheckRun] = useState<{ at: number; of: number; name: string } | null>(null) // Check: the ticked mods, one by one
+  // the Library's mod checks (brokenMods.ts, the header's Checking mods): Scan starts them, this follows their progress
+  const [scan, setScan] = useState<string | null>(null)
+  useEffect(() => {
+    // only a run Scan started: the Library's own runs (after an update, at launch) leave this window as it is
+    const step = listen<ScanStep>('mod-scan-progress', e => setScan(s => (s === null ? s : progressLine(e.payload))))
+    const done = listen(SCAN_DONE, () => setScan(s => { if (s !== null) setReload(r => r + 1); return null }))
+    return () => { void step.then(f => f()); void done.then(f => f()) }
+  }, [])
   const [cancelling, setCancelling] = useState(false)
   const [logs, setLogs] = useState<Log[]>([])
   const [copied, setCopied] = useState<string | null>(null)
@@ -428,8 +444,7 @@ export function VfxUpdaterPanel() {
   useEffect(() => {
     invoke<string | null>('get_game_path').then(dir => {
       if (!dir) return
-      const cut = Math.max(dir.lastIndexOf('/'), dir.lastIndexOf('\\'))
-      setPaks(cut > 0 ? dir.slice(0, cut) : dir)
+      setPaks(paksOf(dir))
     }).catch(() => {})
     invoke<GameBuild>('xtra_game_build').then(setBuild).catch(() => {})
     invoke<{ usmapPath?: string | null }>('vfx_get_settings').then(s => { if (s?.usmapPath) setUsmap(s.usmapPath) }).catch(() => {})
@@ -593,10 +608,9 @@ export function VfxUpdaterPanel() {
   }
 
   const elsewhere = busy || !held || held.token === myToken.current ? null : held
-  const lock = busy ? null : elsewhere ? `${elsewhere.name === CHECK_RUN ? 'Rechecking mods' : `Updating ${elsewhere.name ?? 'a mod'}`} elsewhere. Update waits for it.` : checking ? 'Checking for a newer USMAP…' : !usmap ? 'Choose a USMAP file in Advanced first' : usmapOk === false ? 'The USMAP file is missing' : !paks ? 'Set the game folder in Setup first' : null
+  const lock = busy ? null : elsewhere ? `Updating ${elsewhere.name ?? 'a mod'} elsewhere. Update waits for it.` : checking ? 'Checking for a newer USMAP…' : !usmap ? 'Choose a USMAP file in Advanced first' : usmapOk === false ? 'The USMAP file is missing' : !paks ? 'Set the game folder in Setup first' : null
 
   const run = useCallback(async (keys?: string[]) => {
-    if (checkingBatch.current) return
     const byKey = new Map((modsRef.current ?? []).map(m => [norm(m.utoc), m]))
     const rank = new Map(orderRef.current.map((k, i) => [k, i]))
     const asked = (keys ?? [...picked].filter(k => !isDone(runsRef.current[k]?.status))).filter(k => byKey.has(k))
@@ -650,13 +664,13 @@ export function VfxUpdaterPanel() {
       const mod = byKey.get(key)!
       void claimRun(token, mod.name) // the lock says which mod, for the other window's message
       if (mod.risky) {
-        // nothing here rebuilds it: off, so it cannot crash the game, and its May crash flag says why
-        const off = await invoke<string | null>('xtra_vfx_turn_off', { modPath: mod.path, reason: `May crash: ${mod.risky}` }).then(() => ({ ok: true, why: '' }), e => ({ ok: false, why: String(e) }))
-        const report: VfxReport = { mod: mod.utoc, name: mod.name, status: off.ok ? 'nothing' : 'failed', turnedOff: off.ok,
-          error: off.ok ? `May crash: ${mod.risky} Turned off, so it cannot crash the game.` : `Could not turn it off: ${off.why}`,
+        // nothing here rebuilds it: off (then to Recently deleted, as Safety says), so it cannot crash the game, and its May crash flag says why
+        const off = await retireUnsafe(mod.path, `May crash: ${mod.risky}`, safety === 'trash').then(out => ({ ok: true, trashed: out === 'trashed', why: '' }), e => ({ ok: false, trashed: false, why: String(e) }))
+        const report: VfxReport = { mod: mod.utoc, name: mod.name, status: off.ok ? 'nothing' : 'failed', turnedOff: off.ok, trashed: off.trashed,
+          error: off.ok ? `May crash: ${mod.risky} ${off.trashed ? 'Moved to Recently deleted' : 'Turned off'}, so it cannot crash the game.` : `Could not turn it off: ${off.why}`,
           assets: [], warnings: [], counts: { updated: 0, same: 0, added: 0, passed: 0, left: 0, ownGame: 0, unreadable: 0, changes: 0, relaid: 0 }, ms: 0, steps: [] }
         patch(key, { status: report.status, report })
-        addLog(off.ok ? `Turned ${mod.name} off: it may crash the game.` : `${mod.name}: ${report.error}`, 'warning')
+        addLog(off.ok ? `${off.trashed ? 'Moved' : 'Turned'} ${mod.name} ${off.trashed ? 'to Recently deleted' : 'off'}: it may crash the game.` : `${mod.name}: ${report.error}`, 'warning')
         if (off.ok) { turnedOff++; pick([key], false) } else { failed++; broke.push(key); retry.push(key) }
         continue
       }
@@ -680,6 +694,7 @@ export function VfxUpdaterPanel() {
         }),
         modPath: mod.utoc, usmapPath: usmap, gamePaksPath: paks, turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash', keepName, filter,
         safeOff: safeOff && needs.has(norm(mod.path)), // only a flagged mod: an unflagged one that fails stays as it was
+        trashUnsafe: safety === 'trash',
         log: addLog, cancelled: () => cancel.current,
         onStep: s => patch(key, { step: s.step, sub: undefined }),
         onProgress: (_, __, message) => patch(key, { sub: message }),
@@ -696,19 +711,19 @@ export function VfxUpdaterPanel() {
     setLastTook(performance.now() - startedAt)
     const parts = [
       `${fixed === todo.length ? plural(fixed, 'mod') : `${fixed} of ${plural(todo.length, 'mod')}`} updated${partial ? ` (${partial === fixed ? (fixed === 1 ? 'partially' : 'all partially') : `${partial} partially`})` : ''}`,
-      broke.length ? `${broke.length} failed` : '', turnedOff ? `${turnedOff} turned off so ${turnedOff === 1 ? 'it' : 'they'} cannot crash the game` : '', stopped.length ? `${stopped.length} cancelled` : '',
+      broke.length ? `${broke.length} failed` : '', turnedOff ? `${turnedOff} taken out of the game so ${turnedOff === 1 ? 'it' : 'they'} cannot crash it` : '', stopped.length ? `${stopped.length} cancelled` : '',
       kept.length ? `${kept.length} kept as ${kept.length === 1 ? 'it was' : 'they were'}` : '',
     ].filter(Boolean)
     setEnded({ text: `${parts.join(', ')}${parts.length > 1 ? ',' : ''} in ${took(performance.now() - startedAt)}.`, retry, edits: pickEditsRef.current })
     cue(failed ? 'warning' : 'success', { emphasis: fixed > 1 ? undefined : 'subtle' }) // a problem is a warning, never an error sound
     setBusy(false); setCancelling(false)
-  }, [picked, usmap, paks, originals, keepName, safeOff, needs, repairPolicy, askReview, addLog])
+  }, [picked, usmap, paks, originals, keepName, safety, needs, repairPolicy, askReview, addLog])
 
   // the Library's notice updates exactly the mods it sent, as soon as the list and the USMAP are ready (after a run in
   // progress)
   useEffect(() => {
-    if (autoRun.current && mods && !lock && !busy && !checkRun && !checkingBatch.current) { const keys = autoRun.current; autoRun.current = null; void run(keys) }
-  }, [mods, lock, busy, checkRun, run])
+    if (autoRun.current && mods && !lock && !busy) { const keys = autoRun.current; autoRun.current = null; void run(keys) }
+  }, [mods, lock, busy, run])
 
   const showAdvanced = (on: boolean) => {
     setAdvanced(on)
@@ -721,59 +736,16 @@ export function VfxUpdaterPanel() {
   const approveAll = () => { approveRest.current = true; const all = reviewsRef.current; setReviews([]); reviewsRef.current = []; all.forEach(r => r.resolve(true)); cue('success') }
   const stop = (source: 'Cancel button' | 'Escape') => { reviewsRef.current.forEach(r => r.resolve(false)); setReviews([]); reviewsRef.current = []; cancel.current = true; setCancelling(true); addLog(`Cancellation requested by ${source}. Stopping after the current step.`, 'warning') }
 
-  // Check: the ticked mods' materials against this game version and the earlier ones (xtra_vfx_check.rs). Their Needs an
-  // update follows, here and in the Library
-  const checkTicked = async (flagged = false) => {
-    if (checkingBatch.current || busy || lock) return
-    const list = (modsRef.current ?? []).filter(m => !m.risky && (flagged ? needs.has(norm(m.path)) || uncertain.has(norm(m.path)) : picked.has(norm(m.utoc))))
-    if (!list.length) return
-    checkingBatch.current = true
-    const token = newRunToken()
-    try {
-      if (!(await claimRun(token, CHECK_RUN))) { addLog('Another update or check is running. Try again when it is done.', 'warning'); return }
-      myToken.current = token
-      setEnded(null)
-      const n = { outdated: 0, current: 0, custom: 0, unknown: 0, none: 0, failed: 0 }
-      cancel.current = false
-      setCancelling(false)
-      let done = 0
-      cue('select')
-      for (const [i, m] of list.entries()) {
-        if (cancel.current) break // Cancel: after the mod being checked
-        setCheckRun({ at: i + 1, of: list.length, name: m.name })
-        try {
-          const c = await checkVfxMod(m.path)
-          const w = checkWords(c, m.name)
-          addLog(`${w.title}. ${w.text}`, c.verdict === 'outdated' ? 'warning' : c.verdict === 'current' ? 'success' : 'info')
-          const verdicts = await invoke<Verdict[]>('xtra_broken_mods', { modPaths: [m.path] })
-          setNeeds(previous => {
-            const next = new Map(previous)
-            next.delete(norm(m.path))
-            for (const v of verdicts) if (needsUpdater(v.path, v)) next.set(norm(v.path), v.reason)
-            return next
-          })
-          setUncertain(previous => {
-            const next = new Map(previous)
-            next.delete(norm(m.path))
-            for (const v of verdicts) if (v.kind === 'unknown') next.set(norm(v.path), v.reason)
-            return next
-          })
-          if (!verdicts.some(v => needsUpdater(v.path, v))) pick([norm(m.utoc)], false)
-          await verdictsChanged()
-          n[c.verdict]++
-        } catch (e) { n.failed++; addLog(`${m.name} could not finish its check: ${e}`, 'warning') }
-        done++
-      }
-      const parts = [n.outdated && `${n.outdated} need${n.outdated === 1 ? 's' : ''} an update`, n.current && `${n.current} up to date`, n.custom && `${n.custom} ${n.custom === 1 ? 'uses its' : 'use their'} own materials`, n.unknown && `${verdictLabel('unknown').toLowerCase()} for ${plural(n.unknown, 'mod')}`, n.none && `${n.none} have no materials to check`, n.failed && `${n.failed} could not finish`].filter(Boolean)
-      setEnded({ text: `${cancel.current ? 'Stopped. ' : ''}Checked ${done === list.length ? plural(done, 'mod') : `${done} of ${plural(list.length, 'mod')}`}${parts.length ? `: ${parts.join(', ')}` : ''}. No mod files changed. The Log has each result.`, retry: [], edits: pickEditsRef.current })
-      cue(n.failed || n.unknown ? 'warning' : 'success')
-    } finally {
-      await releaseRun(token)
-      myToken.current = null
-      checkingBatch.current = false
-      setCheckRun(null); setCancelling(false)
-      setReload(r => r + 1)
-    }
+  // Scan: the header's run drops the ticked mods' check records, reads them fresh first, then every mod not checked yet
+  const scanTicked = async () => {
+    // the Library checks its mods folder only: a file added from elsewhere (Add .utoc) is not one of them
+    const ticked = (modsRef.current ?? []).filter(m => picked.has(norm(m.utoc)))
+    const paths = ticked.filter(m => !addedKeys.has(norm(m.utoc))).map(m => m.path)
+    if (!paths.length) { if (ticked.length) addLog('The ticked files are not in the mods folder, so the mod checks do not cover them.', 'warning'); return }
+    setScan('Getting ready')
+    cue('select')
+    addLog(`Checking ${plural(paths.length, 'mod')} again. Progress also shows in the main window's header.`)
+    await rescanForced(paths)
   }
 
   // Ctrl+Enter updates the ticked mods. Escape stops repairs only. Scans require the Cancel button.
@@ -816,7 +788,6 @@ export function VfxUpdaterPanel() {
     const keys = ms.map(m => norm(m.utoc))
     return { id, title, mods: ms, count, keys, all: keys.length > 0 && keys.every(k => picked.has(k)), none: !keys.some(k => picked.has(k)) }
   }
-  const recheckCount = list.filter(m => !m.risky && (needsOf(m) || uncertain.has(norm(m.path)))).length
   const needing = shown.filter(first)
   const done = shown.filter(updatedNow)
   const chosen = shown.filter(isAdded)
@@ -867,15 +838,14 @@ export function VfxUpdaterPanel() {
     const xs = [...picked].filter(k => !isDone(runs[k]?.status) && !waits.has(k)).map(k => expected(times, byUtoc.get(k)?.niagara))
     return xs.some(x => x === undefined) ? undefined : xs.reduce<number>((a, b) => a + (b ?? 0), 0)
   })() : undefined
-  const state = checkRun ? `${cancelling ? 'Stopping after' : 'Checking'} ${checkRun.at} of ${checkRun.of}: ${checkRun.name}`
-    : cancelling ? 'Cancelling. The current step finishes first.'
+  const state = cancelling ? 'Cancelling. The current step finishes first.'
     : busy && runningAt < 0 && reviews.length ? `Waiting for your review of ${plural(reviews.length, 'candidate')} at the top`
     : busy ? `Updating ${runningAt + 1} of ${batch.length}${runningMod ? `: ${runningMod.name}` : '…'}${left !== undefined ? `. ${timeLeft(left).replace(/^./, c => c.toUpperCase())} left` : ''}` // its row shows the step
-      : lock ?? (todo ? '' : reports.length ? `${updated === reports.length ? plural(updated, 'mod') : `${updated} of ${plural(reports.length, 'mod')}`} updated${partly ? ` (${partly === updated ? (updated === 1 ? 'partially' : 'all partially') : `${partly} partially`})` : ''}${lastTook ? ` in ${took(lastTook)}` : ''}` : 'Tick the mods to update')
+      : scan ? `Checking mods: ${scan}` : lock ?? (todo ? '' : reports.length ? `${updated === reports.length ? plural(updated, 'mod') : `${updated} of ${plural(reports.length, 'mod')}`} updated${partly ? ` (${partly === updated ? (updated === 1 ? 'partially' : 'all partially') : `${partly} partially`})` : ''}${lastTook ? ` in ${took(lastTook)}` : ''}` : 'Tick the mods to update')
 
   // the last batch's result, until the ticks change
-  const summary = !busy && !checkRun && !lock && ended && ended.edits === pickEdits ? ended : null
-  keys.current = { go: () => { if (!busy && !checkRun && !lock && todo) void run() }, stop: () => { if (reviews.length) decline(); else if (busy && !checkRun && !cancelling) stop('Escape') } }
+  const summary = !busy && !scan && !lock && ended && ended.edits === pickEdits ? ended : null
+  keys.current = { go: () => { if (!busy && !lock && todo) void run() }, stop: () => { if (reviews.length) decline(); else if (busy && !cancelling) stop('Escape') } }
   const openUsmap = () => showAdvanced(true)
 
   // what Update will do to the files, beside the button, so a choice made once in Advanced is never a surprise
@@ -1000,10 +970,10 @@ export function VfxUpdaterPanel() {
                 </Section>
 
                 <Section icon={<AlertTriangle size={15} aria-hidden="true" />} title="Safety" about="What happens to a flagged mod an update could not make safe.">
-                  <Seg label="Safety" value={safeOff ? 'off' : 'on'} disabled={busy}
-                    note={safeOff ? 'It is turned off, so it cannot crash the game. Its flag stays, and you can update it again later.' : 'It stays on as it was, and can crash the game.'}
-                    options={[['off', 'Turn it off'], ['on', 'Leave it on']]}
-                    onChange={v => { setSafeOff(v === 'off'); localStorage.setItem(SAFE_OFF, v === 'off' ? '1' : '0') }} />
+                  <Seg label="Safety" value={safety} disabled={busy}
+                    note={{ trash: 'It is turned off and moved to Recently deleted, so it cannot crash the game. Restore it in Settings within 7 days.', off: 'It is turned off, so it cannot crash the game. Its flag stays, and you can update it again later.', on: 'It stays on as it was, and can crash the game.' }[safety]}
+                    options={[['trash', 'Move to Recently deleted'], ['off', 'Turn it off'], ['on', 'Leave it on']]}
+                    onChange={v => { setSafety(v); localStorage.setItem(SAFE_OFF, v === 'trash' ? 'trash' : v === 'off' ? '1' : '0') }} />
                 </Section>
 
                 <Section icon={<MapIcon size={15} aria-hidden="true" />} title="USMAP"
@@ -1057,7 +1027,7 @@ export function VfxUpdaterPanel() {
         <p className="vf-state">
           {summary
             ? <>{summary.text}{summary.retry.length > 0 && <>{' '}<button type="button" className="su-link" onClick={() => void run(summary.retry)}>Try {plural(summary.retry.length, 'mod')} again</button></>}</>
-            : state ? <span className={checkRun ? 't-shimmer' : undefined}>{state}</span>
+            : state ? <span className={scan && !busy ? 't-shimmer' : undefined}>{state}</span>
             : <>{/* its own line: the warning and its link stay together, apart from the estimate */}
                 {hiddenTicked > 0 && <span className="vf-hidden-line"><b className="vf-hidden-n">{hiddenTicked} ticked {hiddenTicked === 1 ? 'mod is' : 'mods are'} hidden by the filter.</b>{' '}
                   <button type="button" className="su-link" onClick={() => { setQ(''); setHero('') }}>Show {hiddenTicked === 1 ? 'it' : 'them'}</button></span>}
@@ -1066,14 +1036,16 @@ export function VfxUpdaterPanel() {
                 <button type="button" className="su-link" onClick={() => showAdvanced(true)}>Change</button></>}
         </p>
         {/* read out: the run's progress and its result, not every tick's estimate */}
-        <span className="xtra-sr-only" aria-live="polite">{summary ? summary.text : busy || checkRun || cancelling ? state : ''}</span>
+        <span className="xtra-sr-only" aria-live="polite">{summary ? summary.text : busy || scan || cancelling ? state : ''}</span>
         <div className="vf-foot-actions">
           {reports.length > 0 && !busy && <button type="button" className="lo-text-btn" onClick={() => copy('report')}><Copy size={14} /> {copied === 'report' ? 'Copied' : 'Copy report'}</button>}
           {/* Cancel beside the button, never in its place: a double-click on Update must not cancel the run */}
-          {(busy || checkRun) && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={() => stop('Cancel button')} title={checkRun ? 'Stop after the current mod finishes' : 'Esc'}><X size={14} strokeWidth={2.5} aria-hidden="true" /> {cancelling ? 'Cancelling…' : 'Cancel'}</button>}
-          {!busy && <ScanButton scanning={Boolean(checkRun)} disabled={Boolean(checkRun) || Boolean(lock)}
-            selected={picked.size} flagged={recheckCount} onScan={flagged => void checkTicked(flagged)} />}
-          <button type="button" className="btn-primary" disabled={busy || Boolean(checkRun) || Boolean(lock) || !todo} title={busy ? undefined : 'Ctrl+Enter'}
+          {busy && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={() => stop('Cancel button')} title="Esc"><X size={14} strokeWidth={2.5} aria-hidden="true" /> {cancelling ? 'Cancelling…' : 'Cancel'}</button>}
+          {/* the same checks as the header's Checking mods (Pause and Cancel live there) */}
+          {!busy && <button type="button" className="lo-text-btn" disabled={Boolean(scan) || !picked.size} onClick={() => void scanTicked()}
+            title="Check the ticked mods again from scratch, without changing files. Progress shows in the main window's header too">
+            {scan ? <span className="t-shimmer">Scanning</span> : 'Scan'}</button>}
+          <button type="button" className="btn-primary" disabled={busy || Boolean(lock) || !todo} title={busy ? undefined : 'Ctrl+Enter'}
             ref={el => { if (el && !busy) updateWidth.current = el.offsetWidth }} style={busy ? { minWidth: updateWidth.current } : undefined} onClick={() => run()}>
             <RefreshCw size={14} aria-hidden="true" className={busy ? 'vf-spin' : undefined} />{busy ? 'Updating…' : todo ? <>Update <Num id="vf-todo" value={todo} /> {todo === 1 ? 'mod' : 'mods'}</> : 'Update'}
           </button>
@@ -1094,6 +1066,8 @@ export default function VfxUpdaterWindow() {
 }
 
 if (import.meta.env.DEV) {
+  console.assert(paksOf('C:/G/Marvel/Content/Paks/~mods') === 'C:/G/Marvel/Content/Paks' && paksOf(String.raw`C:\G\Paks\~mods\sub`) === String.raw`C:\G\Paks`, 'the Paks ancestor', paksOf(String.raw`C:\G\Paks\~mods\sub`))
+  console.assert(paksOf('D:/Mods/~mods') === 'D:/Mods', 'no Paks folder: the parent')
   // the estimate: the benchmark until 3 runs, then the middle one (a slow outlier does not move it)
   console.assert(expected({ n: [409_000], p: [] }, true) === START.n && expected({ n: [], p: [] }, false) === START.p, 'under 3 runs: the benchmark')
   console.assert(expected({ n: [20_000, 409_000, 24_000], p: [] }, true) === 24_000, 'the middle run, not the average')

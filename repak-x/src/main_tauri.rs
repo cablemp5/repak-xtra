@@ -8726,6 +8726,7 @@ fn main() {
             xtra_role::xtra_role_claim_start, xtra_role::xtra_role_ready, // repakxtra: Claim role
             xtra_broken::xtra_broken_mods, // repakxtra: broken mods
             xtra_broken::xtra_vfx_no_update, // repakxtra: Nothing to update stops the Needs VFX update flag
+            xtra_broken::xtra_scan_forget, // repakxtra: the Mod Updater's Scan checks the ticked mods fresh
             xtra_vfx_check::xtra_vfx_check, // repakxtra: Check for VFX update
             xtra_vfx_check::xtra_vfx_check_scan, // repakxtra: the same check in the background, for the date's blind spot
             xtra_layout::xtra_layout_scan, // repakxtra: Blueprint mods compared with the game's classes, in the background

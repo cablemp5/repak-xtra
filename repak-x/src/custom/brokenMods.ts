@@ -27,6 +27,10 @@ export const needsUpdater = (path: string, v?: { kind: string }, on = !/\.bak_re
  *  renames .bak_repak to .pak (or back), so the badge stays put through a switch instead of waiting for the next check. */
 const norm = (path: string) => path.replace(/\//g, '\\').toLowerCase().replace(/\.(pak|bak_repak)$/, '')
 
+/** The update beside an original the Mod Updater renamed (norm keys): A_BROKEN_9999999_P beside A_9999999_P,
+ *  A_ORIGINAL_9999999_P beside A_PARTIAL_9999999_P. The key itself for any other mod. Pure. */
+export const updateBeside = (k: string) => k.replace(/_broken(?=(_\d+)?_p$)/, '').replace(/_original(?=(_\d+)?_p$)/, '_partial')
+
 let verdicts = new Map<string, Verdict>()
 /** Mods the Mod Updater made for the installed game (xtra_stamp.rs): their Updated or Partly updated tag. */
 let made = new Map<string, { partial: boolean; current: boolean }>()
@@ -39,9 +43,15 @@ const subscribe = (l: () => void) => { listeners.add(l); return () => { listener
 export const VERDICTS_CHANGED = 'xtra-verdicts-changed'
 export const verdictsChanged = () => emit(VERDICTS_CHANGED).catch(() => {})
 
-/** Scan (Refresh list, Ctrl+Shift+R) sends it: the Library runs every check again, the background ones too. */
+/** Scan (Refresh list, Ctrl+Shift+R) sends it: the Library runs every check again, the background ones too. `force`:
+ *  mods the Mod Updater's Scan wants read fresh (their records already dropped), its own updates included. */
 export const VERDICTS_RESCAN = 'xtra-verdicts-rescan'
-export const rescanVerdicts = () => emit(VERDICTS_RESCAN).catch(() => {})
+export const rescanVerdicts = () => emit(VERDICTS_RESCAN, []).catch(() => {})
+export const rescanForced = (force: string[]) => emit(VERDICTS_RESCAN, force).catch(() => {})
+/** Mods a manual Scan asked for: checked first, even when the Mod Updater made them, until a run finishes with them. */
+let forced = new Set<string>()
+/** Of those, the ones whose check records the next run drops first (in the run: a scan in flight would write them back). */
+let fresh = new Set<string>()
 
 /** Full scans run one at a time: the backend's background checks skip a call while one runs (they answer 0), so a scan
  *  started beside another would end early with half the answers. Each waits for the one before it. */
@@ -86,24 +96,48 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     // `first`: the quick check just started at launch, reused so the chain does not run the same check beside it
     // `finished` is false when a scan stopped with mods left (xtra_scan_stopped, read and cleared at both ends)
     // a run the library outdated before it began checked nothing: not finished (gameUpdate.ts asks the new one instead)
+    // never the Mod Updater's own updates for this game (xtra_stamp.rs): they were checked as they were made. Nor the
+    // original it renamed beside one (a new path, so no record): it is off and kept, the update is what loads
+    let scanPaths = paths
+    let ticked: string[] = []
+    // the four scans (vfx: the VFX and Blueprint ones, meshes: the mesh one), each followed by the badges when it found something.
+    // A scan skips a mod it already checked as this file in this game, so a list can be scanned twice cheaply
+    const scans = (vfx: string[], meshes: string[]) => Promise.resolve()
+      .then(() => (live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: vfx }) : 0))
+      .then(found => (live && found ? check() : undefined))
+      // materials that match no current game copy wait for the deep pass at the end (deep, below)
+      .then(() => (live ? invoke<number>('xtra_vfx_check_scan', { modPaths: vfx, defer: true }) : 0))
+      .then(found => (live && found ? check() : undefined))
+      .then(() => (live ? invoke<number>('xtra_layout_scan', { modPaths: vfx }) : 0))
+      .then(checked => (live && checked ? check() : undefined))
+      // and mesh mods whose skeleton the game rebuilt: more bones than it has gets May crash (xtra_mesh.rs)
+      .then(() => (live ? invoke<number>('xtra_mesh_scan', { modPaths: meshes }) : 0))
+      .then(checked => (live && checked ? check() : undefined))
+    // the slow part last: the materials check's search of the game's older containers, once every mod has its badges
+    const deep = (vfx: string[]) => Promise.resolve()
+      .then(() => (live ? invoke<number>('xtra_vfx_check_scan', { modPaths: vfx, defer: false }) : 0))
+      .then(found => (live && found ? check() : undefined))
     const chain = (first?: Promise<boolean>): Promise<boolean> => !live ? Promise.resolve(false) : (scanStarted(), invoke('xtra_scan_stopped').catch(() => false))
       .then(() => first ?? check())
       .then(ok => { if (!ok) throw new Error('the first check failed') })
+      .then(() => {
+        ticked = paths.filter(p => forced.has(norm(p))); scanPaths = paths.filter(p => forced.has(norm(p)) || !(made.get(norm(p))?.current || made.get(updateBeside(norm(p)))?.current))
+        const forget = paths.filter(p => fresh.has(norm(p))); forced = new Set()
+        if (live) fresh = new Set() // a run the library outdated leaves them for the next one
+        return live && forget.length ? invoke('xtra_scan_forget', { modPaths: forget }).catch(e => console.warn('[brokenMods] could not clear earlier checks', e)) : undefined
+      })
       .then(() => (live ? invoke('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
-      .then(() => (live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: paths }) : 0))
-      .then(found => (live && found ? check() : undefined))
-      .then(() => (live ? invoke<number>('xtra_vfx_check_scan', { modPaths: paths }) : 0))
-      .then(found => (live && found ? check() : undefined))
-      .then(() => (live ? invoke<number>('xtra_layout_scan', { modPaths: paths }) : 0))
-      .then(checked => (live && checked ? check() : undefined))
-      // and mesh mods whose skeleton the game rebuilt: more bones than it has gets May crash (xtra_mesh.rs)
-      .then(() => (live ? invoke<number>('xtra_mesh_scan', { modPaths: paths }) : 0))
-      .then(checked => (live && checked ? check() : undefined))
+      // a manual Scan's mods first, through all four scans, so they never wait behind the mods not checked yet
+      .then(() => (ticked.length ? scans(ticked, ticked).then(() => deep(ticked)) : undefined))
+      // every mod for meshes: an update carries the original's meshes as they were, and nothing in the Mod Updater checks them
+      .then(() => scans(scanPaths, paths))
+      .then(() => deep(scanPaths))
       .then(() => (live ? invoke<boolean>('xtra_scan_stopped').catch(() => false) : true))
       .then(stopped => live && !stopped, e => { console.warn('[brokenMods] background scan failed', e); return false })
       // runs take turns (queued), so this one's end is never another's. One the library outdated is not "paused":
       // the new list's own run follows
-      .then(finished => { unfinished = !finished; scanEnded(finished || !live); return finished })
+      // a run that stopped first (the game, a held scan, an old USMAP) keeps a manual Scan's mods for the next one
+      .then(finished => { unfinished = !finished; if (!finished) ticked.forEach(p => forced.add(norm(p))); scanEnded(finished || !live); return finished })
     let unfinished = false
     // one run waiting its turn is enough: a focus, a Rescan and the game update notice asking meanwhile all get that one
     let waiting: Promise<boolean> | null = null
@@ -120,7 +154,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     window.addEventListener('focus', resume)
     const again = listen(VERDICTS_CHANGED, () => { void check() })
     // a Refresh list or Resume: checks the header paused or cancelled run again
-    const rescan = listen(VERDICTS_RESCAN, () => { void releaseScan().then(() => full()) })
+    const rescan = listen<string[] | null>(VERDICTS_RESCAN, e => { for (const p of e.payload ?? []) { forced.add(norm(p)); fresh.add(norm(p)) } void releaseScan().then(() => full()) })
     return () => { live = false; window.removeEventListener('focus', resume); if (runFull === full) runFull = null; clearTimeout(t); void again.then(f => f()); void rescan.then(f => f()) }
   }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
 }
@@ -140,5 +174,7 @@ if (import.meta.env.DEV) {
   console.assert(norm('C:/Games/~mods/A_9999999_P.pak') === norm('C:/Games/~mods/A_9999999_P.bak_repak'), 'a mod keeps its verdict on and off')
   console.assert(skipsUpdater('C:/G/~mods/!ProjectFoo_9999999_P.pak') && skipsUpdater('C:/G/~mods/ProjectFoo.bak_repak') && skipsUpdater('C:/G/~mods/.repakxtra-builtin/repakxtra-a_9999999_P.pak')
     && !skipsUpdater('C:/G/~mods/Project Hail Mary Skin_9999999_P.pak') && !skipsUpdater('C:/G/~mods/A_9999999_P.pak'), 'loaders and built-ins only')
+  console.assert(updateBeside('a_broken_9999999_p') === 'a_9999999_p' && updateBeside('a_original_9999999_p') === 'a_partial_9999999_p'
+    && updateBeside('broken_glass_9999999_p') === 'broken_glass_9999999_p', 'the update beside a renamed original')
   console.assert(needsUpdater('a.pak', { kind: 'risky' }) && !needsUpdater('a.bak_repak', { kind: 'risky' }) && needsUpdater('a.bak_repak', { kind: 'vfx' }) && !needsUpdater('a.pak', { kind: 'broken' }), 'needs the updater')
 }

@@ -77,7 +77,10 @@ pub(crate) async fn extract(request: &VfxUatRequest<'_>) -> Option<Result<VfxUat
             // the long-lived command line first (the game's containers stay loaded between calls), else a one-shot run
             let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().to_string()).collect();
             let mut one_shot = || cmd.output().map(|o| (o.status.success(), String::from_utf8_lossy(&o.stderr).to_string()));
-            let served = serve(&exe, &args);
+            // only for the game's own Paks folder: the server keeps one folder's containers loaded, and the material
+            // check's one-container folders (xtra_vfx_check.rs alone) made the next mod's extract load the whole game again
+            let game = Path::new(&paks).file_name().is_some_and(|n| n.eq_ignore_ascii_case("Paks"));
+            let served = if game { serve(&exe, &args) } else { None };
             let changed = || files(&out_dir).into_iter().filter(|(p, at)| before.get(p).is_none_or(|old| old != at)).map(|(p, _)| p).collect::<Vec<_>>();
             let ran = match served {
                 // a running server that lost the game's class names (seen once, cause not found) writes them as
