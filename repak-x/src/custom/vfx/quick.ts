@@ -71,7 +71,7 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
     }
     if (!(await claimRun(token, name))) { busy((await runLock())?.name); return }
     setUpdating(mod.path)
-    id = alert.showAlert({ color: 'default', title: `Updating ${name}`, description: `${STEPS[0]}…`, isLoading: true, duration: 0, progressValue: 0 })
+    id = alert.showAlert({ color: 'default', title: `Updating ${name}`, description: `${STEPS[0]}`, isLoading: true, duration: 0, progressValue: 0 })
     const originals = readOriginals(), naming = readNaming()
     const r = await fixVfxMod({
       modPath: mod.utoc_path || utocOf(mod.path), usmapPath: usmap, gamePaksPath: paks, filter: readFilter(), policy: readRepairPolicy(),

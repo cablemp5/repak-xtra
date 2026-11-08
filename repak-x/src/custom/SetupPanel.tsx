@@ -132,7 +132,7 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
     if (typeof f === 'string') k.pickBlender(f)
   }
   const ready = Boolean(kit?.version && kit?.blender)
-  const chip = !kit ? 'Checking…' : ready ? (update ? 'Update available' : latest ? 'Up to date' : 'Installed') : 'Not set up'
+  const chip = !kit ? 'Checking' : ready ? (update ? 'Update available' : latest ? 'Up to date' : 'Installed') : 'Not set up'
   const missing = kit && !ready
   const kitOk = Boolean(kit?.version)
   const from = kit?.source === 'github' ? 'Downloaded from GitHub' : kit?.source === 'file' ? 'Loaded from a file' : null
@@ -156,7 +156,7 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
           <div className="su-part-text">
             <b>Preview kit</b>
             <span>
-              {!kit ? 'Checking…' : kit.version ? [`v${kit.version}`, from].filter(Boolean).join(' · ') : `Not installed${size ? ` · ${size} MB on GitHub` : ''}`}
+              {!kit ? 'Checking' : kit.version ? [`v${kit.version}`, from].filter(Boolean).join(' · ') : `Not installed${size ? ` · ${size} MB on GitHub` : ''}`}
               {latest && <> · <button type="button" className="su-link" onClick={() => setNotes("What's new")}>{update ? `v${latest.version} on GitHub` : `What's new in v${latest.version}`}</button></>}
               {/* After Check for updates: what GitHub has, here rather than in a toast (Minimal toasts would hide that) */}
               {k.checked && busy !== 'check' && (latest === null ? ' · No kit on GitHub yet' : kit?.version && latest && !update ? <> · <span className="su-ok">Up to date</span></> : null)}
@@ -164,9 +164,9 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
           </div>
           <span className="su-part-links">
             <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => k.check()} title="Ask GitHub for the newest preview kit">
-              {busy === 'check' ? 'Checking…' : 'Check for updates'}
+              {busy === 'check' ? 'Checking' : 'Check for updates'}
             </button>
-            <button type="button" className="su-link" disabled={Boolean(busy)} onClick={fromFile} title="Install a preview kit zip (or drop one on the window)">Install from file…</button>
+            <button type="button" className="su-link" disabled={Boolean(busy)} onClick={fromFile} title="Install a preview kit zip (or drop one on the window)">Install from file</button>
             {kit?.version && <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => setAsking(true)}
               title="Deletes the kit. It downloads again from here.">Remove</button>}
           </span>
@@ -179,7 +179,7 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
           </div>
           <span className="su-part-links">
             {kit && !kit.blender && <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => k.installBlender()} title="Installs Blender with winget">Install</button>}
-            <button type="button" className="su-link" disabled={Boolean(busy)} onClick={pickBlender} title="Choose the blender.exe previews use">{kit?.blender ? 'Change…' : 'Choose blender.exe…'}</button>
+            <button type="button" className="su-link" disabled={Boolean(busy)} onClick={pickBlender} title="Choose the blender.exe previews use">{kit?.blender ? 'Change' : 'Choose blender.exe'}</button>
           </span>
         </li>
       </ul>
@@ -192,7 +192,7 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
         {(missing || update) && (
           <button type="button" className="btn-primary su-main" disabled={Boolean(busy) || (!kit?.version && latest === null)} onClick={() => k.setUp()}
             title={update ? 'Downloads the newest kit from GitHub' : 'Installs what is missing: the kit (from GitHub) and Blender (with winget), then checks this PC'}>
-            {busy === 'setup' ? (installingBlender ? 'Installing Blender…' : k.progress ? 'Installing kit…' : 'Setting up…') : busy === 'blender' ? 'Installing Blender…' : update ? `Update to v${latest!.version}` : 'Set up previews'}
+            {busy === 'setup' ? (installingBlender ? 'Installing Blender' : k.progress ? 'Installing kit' : 'Setting up') : busy === 'blender' ? 'Installing Blender' : update ? `Update to v${latest!.version}` : 'Set up previews'}
           </button>
         )}
         {k.doctor?.ok && !busy && !k.finished && <span className="su-meta su-ok">This PC can make previews</span>}{/* not twice: the finished line says it first */}
@@ -288,7 +288,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   const b = bypass
   const g = galacta
   const bypassOn = b?.state === 'installed' || b?.state === 'disabled'
-  const bypassLine = !b ? 'Checking…' : {
+  const bypassLine = !b ? 'Checking' : {
     missing: 'Not installed', installed: `In ${b.files[0]?.place ?? 'the game folder'}`, disabled: 'Off, its files stay in place',
     partial: `${b.files.filter(f => f.found === 'same').length} of ${b.files.length} files there`, other: 'A different loader or bypass is there',
   }[b.state]
@@ -316,7 +316,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                 <h3>Signature bypass</h3>
                 <p>Lets the game load mods that replace its files. Every mod needs it. Comes with {APP_NAME}.</p>
               </div>
-              <span className={`su-chip is-${b?.state ?? 'missing'}`}>{b ? BYPASS_LABEL[b.state] : 'Checking…'}</span>
+              <span className={`su-chip is-${b?.state ?? 'missing'}`}>{b ? BYPASS_LABEL[b.state] : 'Checking'}</span>
             </div>
             {b?.state === 'other' && <p className="su-note">A different loader or bypass is installed. Installing keeps it next to the new one as a .repakxtra-backup file.</p>}
             {/* One part row like Galacta's and the preview kit's: its state, Turn off and Remove as links on the right */}
@@ -343,7 +343,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
             {(!bypassOn || b?.state === 'disabled') && <div className="su-actions">
               {!bypassOn && (
                 <button type="button" className="btn-primary su-main" disabled={!b || Boolean(busy)} onClick={() => act('install')}>
-                  {busy === 'install' ? 'Installing…' : b?.state === 'missing' ? 'Install' : 'Repair'}
+                  {busy === 'install' ? 'Installing' : b?.state === 'missing' ? 'Install' : 'Repair'}
                 </button>
               )}
               {b?.state === 'disabled' && <button type="button" className="btn-primary su-main" disabled={Boolean(busy)} onClick={() => act('enable')}>Turn on</button>}
@@ -356,7 +356,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                 <h3>{LOADER_NAME}</h3>
                 <p>{<>Loads more types of mods and lets you toggle mods in game. By <a onClick={() => open(GALACTA)}>0xSaturno</a>.</>}</p>
               </div>
-              <span className={`su-chip ${g?.up_to_date === false ? 'is-update' : g?.installed ? 'is-installed' : 'is-missing'}`}>{g ? galactaState : 'Checking…'}</span>
+              <span className={`su-chip ${g?.up_to_date === false ? 'is-update' : g?.installed ? 'is-installed' : 'is-missing'}`}>{g ? galactaState : 'Checking'}</span>
             </div>
             {/* One part row, the same as the preview kit's: state, where it is and the newest release, links on the right */}
             <ul className="su-parts">
@@ -366,13 +366,13 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                   <b>{GALACTA_PAK}</b>
                   {/* like the preview kit's line: its version (known once a check finds it matches), where, then What's new */}
                   <span>
-                    {!g ? 'Checking…' : [g.installed && g.up_to_date && g.latest, g.installed ? `in ${where}${g.disabled ? ', switched off' : ''}` : 'Not installed'].filter(Boolean).join(' · ')}
+                    {!g ? 'Checking' : [g.installed && g.up_to_date && g.latest, g.installed ? `in ${where}${g.disabled ? ', switched off' : ''}` : 'Not installed'].filter(Boolean).join(' · ')}
                     {g?.latest && <> · <button type="button" className="su-link" onClick={() => setNotes("What's new")}>{g.up_to_date === false ? `${g.latest} on GitHub` : `What's new in ${g.latest}`}</button></>}
                   </span>
                 </div>
                 <span className="su-part-links">
                   <button type="button" className="su-link" disabled={Boolean(busy)} onClick={check} title={`Ask GitHub for the newest ${LOADER_NAME}`}>
-                    {busy === 'check' ? 'Checking…' : 'Check for updates'}
+                    {busy === 'check' ? 'Checking' : 'Check for updates'}
                   </button>
                   {g?.installed && !g.disabled && <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => toggleGalacta(false)}
                     title="Mods that need it stop loading. Turn it on again here">Turn off</button>}
@@ -390,14 +390,14 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
             {g?.installed && g.disabled && (
               <div className="su-actions">
                 <button type="button" className="btn-primary su-main" disabled={Boolean(busy)} onClick={() => toggleGalacta(true)}>
-                  {busy === 'galacta-on' ? 'Turning on…' : 'Turn on'}
+                  {busy === 'galacta-on' ? 'Turning on' : 'Turn on'}
                 </button>
               </div>
             )}
             {(!g?.installed || g.up_to_date === false) && (
               <div className="su-actions">
                 <button type="button" className="btn-primary su-main" disabled={Boolean(busy)} onClick={install}>
-                  {busy === 'install-galacta' ? 'Installing…' : g?.installed ? `Update${g.latest ? ` to ${g.latest}` : ''}` : 'Install'}
+                  {busy === 'install-galacta' ? 'Installing' : g?.installed ? `Update${g.latest ? ` to ${g.latest}` : ''}` : 'Install'}
                 </button>
                 <span className="su-option">
                   <span>into</span>

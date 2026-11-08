@@ -478,9 +478,7 @@ export function usePreviewStage(on: boolean) {
     return () => clearTimeout(id)
   }, [egg, seed])
   if (!on) return ''
-  // every line trails off ("Rendering in Blender…"): it is still going
-  const line = run.stopping ? 'Stopping' : egg && eggDone !== seed ? egg : stepText(run.step)
-  return line.endsWith('…') ? line : `${line}…`
+  return run.stopping ? 'Stopping' : egg && eggDone !== seed ? egg : stepText(run.step)
 }
 
 /** What waits behind the run: loadouts, selections, or "preview jobs" when the queue holds both. */
@@ -642,7 +640,7 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
     const stopBtn = stopOnly
       ? <button type="button" className={className} onClick={stop} disabled={run.stopping}
           title={queue.length ? `Stop generating previews, and clear the ${queue.length} queued` : 'Stop generating previews'}>
-          <span className="stop-glyph" aria-hidden="true" />{run.stopping ? 'Stopping…' : 'Stop'}
+          <span className="stop-glyph" aria-hidden="true" />{run.stopping ? 'Stopping' : 'Stop'}
         </button>
       : <button type="button" className={`${className} run-stop-btn`} onClick={stop} disabled={run.stopping}
           title={queue.length ? `Stop now, and clear the ${queue.length} queued` : 'Stop now'}>
@@ -652,7 +650,7 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
     return (
       <span className="run-group">
         <span className={`${className} is-running`} role="status">
-          {run.stopping ? 'Stopping…' : <Shimmer text={`Generating ${doneOf()} of ${run.total}`} />}
+          {run.stopping ? 'Stopping' : <Shimmer text={`Generating ${doneOf()} of ${run.total}`} />}
         </span>
         {stopBtn}
       </span>

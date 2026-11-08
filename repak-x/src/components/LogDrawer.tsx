@@ -289,7 +289,7 @@ export default function LogDrawer({
                 <input
                   type="text"
                   value={search}
-                  placeholder="Filter..."
+                  placeholder="Filter"
                   onChange={(e) => setSearch(e.target.value)}
                   spellCheck={false}
                 />
@@ -342,7 +342,7 @@ export default function LogDrawer({
             {logs.length === 0 ? (
               <div className="log-drawer-empty">
                 <span className="log-drawer-prompt">$</span>
-                <span className="log-drawer-waiting">Waiting for output...</span>
+                <span className="log-drawer-waiting">Waiting for output</span>
                 <span className="log-drawer-cursor" />
               </div>
             ) : visibleLogs.length === 0 ? (

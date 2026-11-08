@@ -192,7 +192,7 @@ export default function SwipeDelete({ children, disabled, animated, onDelete, la
     <button ref={drawer} type="button" className="mod-swipe-delete" tabIndex={open ? 0 : -1} disabled={disabled}
       aria-hidden={!open} aria-label={`Delete ${label}`} onClick={() => { if (!hold) void remove() }}
       {...(hold ? { onPointerDown: holdStart, onPointerUp: holdEnd, onPointerLeave: holdEnd, onPointerCancel: holdEnd, ...holdKeys(true, holdStart, holdEnd) } : {})}>
-      <span ref={glyph} className="mod-swipe-glyph"><Trash2 size={18} aria-hidden="true" /><span>{ready ? 'Release to delete' : holding ? 'Hold to delete…' : hold ? 'Hold 2s' : 'Delete'}</span></span>
+      <span ref={glyph} className="mod-swipe-glyph"><Trash2 size={18} aria-hidden="true" /><span>{ready ? 'Release to delete' : holding ? 'Hold to delete' : hold ? 'Hold 2s' : 'Delete'}</span></span>
     </button>
     <div ref={surface} className="mod-swipe-surface">{children}</div>
   </div>

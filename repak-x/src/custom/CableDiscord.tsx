@@ -30,7 +30,7 @@ export function DiscordCard({ invite, fallbackName, claim = false }: { invite: s
       <div className="cd-text">
         <span className="cd-name">{g?.name ?? fallbackName}</span>
         <span className="cd-meta">
-          <span className="cd-dot" />{info?.approximate_presence_count ?? '…'} online
+          {info?.approximate_presence_count !== undefined && <><span className="cd-dot" />{info.approximate_presence_count} online</>}
           {info?.approximate_member_count !== undefined && <span className="cd-members">{info.approximate_member_count} members</span>}
         </span>
         {line && <span className="cd-claim" role="status"><SwapText text={line} /></span>}

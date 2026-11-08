@@ -419,7 +419,7 @@ const ExtensionModOverlay = ({
                                     <VscPackage />
                                     <span>
                                         {isInspecting
-                                            ? 'Reading archive...'
+                                            ? 'Reading archive'
                                             : entries.length === 1
                                                 ? '1 mod found'
                                                 : `${entries.length} mods found`}
@@ -503,7 +503,7 @@ const ExtensionModOverlay = ({
                                                             placeholder="Mod name"
                                                             title={
                                                                 parts.prefix || parts.suffix
-                                                                    ? `Installs as ${parts.prefix}${value || '...'}${parts.suffix}\nThe author's load-order marks are kept`
+                                                                    ? `Installs as ${parts.prefix}${value || ''}${parts.suffix}\nThe author's load-order marks are kept`
                                                                     : undefined
                                                             }
                                                         />
@@ -574,7 +574,7 @@ const ExtensionModOverlay = ({
                                         title="New folder"
                                     >
                                         <VscNewFolder />
-                                        {isCreatingFolder ? 'Creating...' : 'New folder'}
+                                        {isCreatingFolder ? 'Creating' : 'New folder'}
                                     </button>
                                 </div>
 
@@ -623,9 +623,9 @@ const ExtensionModOverlay = ({
                                 title={hasInvalidName ? 'Every selected mod needs a name' : undefined}
                             >
                                 {isInstalling
-                                    ? 'Installing...'
+                                    ? 'Installing'
                                     : isInspecting || inspectedPath !== filePath
-                                        ? 'Reading archive...'
+                                        ? 'Reading archive'
                                         : selected.size > 1
                                             ? `Install ${selected.size} Mods`
                                             : 'Install Mod'}

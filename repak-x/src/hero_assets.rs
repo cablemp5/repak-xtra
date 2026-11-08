@@ -131,9 +131,9 @@ pub async fn sync_hero_images(app: AppHandle, force: bool) -> Result<HeroSyncRes
     ui_log::info(
         SCOPE,
         if force {
-            "Re-checking hero icons (ignoring cached listing)...".to_string()
+            "Re-checking hero icons (ignoring cached listing)".to_string()
         } else {
-            "Checking hero icons for updates...".to_string()
+            "Checking hero icons for updates".to_string()
         },
     );
 
@@ -302,14 +302,14 @@ async fn apply_listing(
 
     let total = pending.len();
     if total > 0 {
-        ui_log::info(SCOPE, format!("Downloading {} hero icon(s)...", total));
+        ui_log::info(SCOPE, format!("Downloading {} hero icon(s)", total));
         emit_progress(
             app,
             HeroSyncProgress {
                 current: 0,
                 total,
                 percent: 0,
-                message: format!("Downloading hero icons... 0/{}", total),
+                message: format!("Downloading hero icons 0/{}", total),
                 done: false,
             },
         );
@@ -346,7 +346,7 @@ async fn apply_listing(
                 current,
                 total,
                 percent: ((current * 100) / total.max(1)) as u8,
-                message: format!("Downloading hero icons... {}/{}", current, total),
+                message: format!("Downloading hero icons {}/{}", current, total),
                 done: false,
             },
         );

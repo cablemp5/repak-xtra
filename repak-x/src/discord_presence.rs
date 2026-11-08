@@ -30,7 +30,7 @@ fn open(client: &mut Option<DiscordIpcClient>) -> Result<(), String> {
     if client.is_some() {
         return Ok(());
     }
-    info!("Connecting to Discord...");
+    info!("Connecting to Discord");
     let mut c = DiscordIpcClient::new(DISCORD_APP_ID);
     c.connect().map_err(|e| format!("Failed to connect to Discord: {e}"))?;
     info!("Connected to Discord Rich Presence");
@@ -105,7 +105,7 @@ impl DiscordPresenceManager {
         *self.current_details.lock() = None;
         self.queue(|client| {
             if let Some(mut c) = client.take() {
-                info!("Disconnecting from Discord...");
+                info!("Disconnecting from Discord");
                 let _ = c.clear_activity();
                 let _ = c.close();
             }

@@ -140,7 +140,7 @@ pub fn convert_to_iostore_directory(
     // This replaces retoc's action_to_zen function
     let output_base = mod_dir.join(&pak.mod_name);
 
-    info!("Converting to IoStore using UAssetTool...");
+    info!("Converting to IoStore using UAssetTool");
     info!("  Input directory: {}", to_pak_dir.display());
     info!("  Output base: {}", output_base.display());
 
@@ -373,7 +373,7 @@ fn fix_static_mesh_serializesize(
 
     // Apply binary patches to the .uasset header ONLY
     // The C# tool calculates correct sizes from .uexp, Rust patches the .uasset header
-    info!("Applying binary patches to .uasset header...");
+    info!("Applying binary patches to .uasset header");
     let fixes_json: serde_json::Value = serde_json::from_str(&stdout)?;
     if let Some(fixes_array) = fixes_json.get("fixes").and_then(|f| f.as_array()) {
         for fix in fixes_array {

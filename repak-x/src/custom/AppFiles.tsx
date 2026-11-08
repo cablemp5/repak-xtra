@@ -69,11 +69,11 @@ export default function AppFiles({ alert }: { alert: ReturnType<typeof useAlert>
         {off > 0 && (
           <button type="button" className="action-btn" disabled={!!busy || !!reason} onClick={repair}
             title="Puts back only the missing or different files, then restarts repakxtra. If it does not start, the previous files go back.">
-            <Wrench size={14} /> {busy === 'repair' ? 'Repairing…' : 'Repair'}
+            <Wrench size={14} /> {busy === 'repair' ? 'Repairing' : 'Repair'}
           </button>
         )}
         <button type="button" className="action-btn" disabled={!!busy || !!reason} onClick={check} title={reason || 'Downloads this version and compares every file. Nothing is changed.'}>
-          <FileCheck size={14} /> {busy === 'check' ? 'Checking…' : 'Check app files'}
+          <FileCheck size={14} /> {busy === 'check' ? 'Checking' : 'Check app files'}
         </button>
       </div>
     </div>

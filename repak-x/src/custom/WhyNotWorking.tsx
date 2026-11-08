@@ -87,7 +87,7 @@ export function WhyNotWorking({ alert }: { alert: ReturnType<typeof useAlert> })
         </div>
         <div className="modal-body">
           {error ? <p className="su-note">Could not check this mod. {error}</p> : !found
-            ? <p className="su-note why-checking"><LoaderCircle size={14} className="scan-status-spin" aria-hidden="true" /> Checking…</p> : (
+            ? <p className="su-note why-checking"><LoaderCircle size={14} className="scan-status-spin" aria-hidden="true" /> Checking</p> : (
             <>
               <p className="why-summary" role="status">{problems ? `Found ${problems} thing${problems === 1 ? '' : 's'} that can stop it from working.` : 'These checks found nothing that stops it from loading.'}</p>
               <ul className="why-list">

@@ -9,7 +9,7 @@ type PromiseTransitionLoaderProps = {
 
 export default function PromiseTransitionLoader({
   isVisible,
-  message = 'Working...'
+  message = 'Working'
 }: PromiseTransitionLoaderProps) {
   return (
     <AnimatePresence>

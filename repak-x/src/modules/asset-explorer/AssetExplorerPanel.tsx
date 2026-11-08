@@ -344,7 +344,7 @@ export default function AssetExplorerPanel() {
         return (
             <div className="ae-state">
                 <div className="ae-spinner" />
-                <p>Reading every installed mod…</p>
+                <p>Reading every installed mod</p>
             </div>
         )
     }
@@ -370,7 +370,7 @@ export default function AssetExplorerPanel() {
                     <input
                         value={rawQuery}
                         onChange={e => setRawQuery(e.target.value)}
-                        placeholder="Search assets… (include a / to search full paths)"
+                        placeholder="Search assets (include a / to search full paths)"
                         aria-label="Search assets"
                         spellCheck={false}
                     />
@@ -571,7 +571,7 @@ export default function AssetExplorerPanel() {
                     </>
                 )}
                 <span className="ae-status-spacer" />
-                {refreshing && <span className="ae-status-dim">Rescanning…</span>}
+                {refreshing && <span className="ae-status-dim">Rescanning</span>}
             </div>
 
             {/* The anchor centers it: Framer's inline transform replaces any CSS one */}
@@ -722,7 +722,7 @@ function ModFilter({ mods, selected, showDisabled, onToggle, onClear }: ModFilte
                             <input
                                 value={search}
                                 onChange={e => setSearch(e.target.value)}
-                                placeholder="Filter mods…"
+                                placeholder="Filter mods"
                                 spellCheck={false}
                                 autoFocus
                             />

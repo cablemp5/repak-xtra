@@ -293,7 +293,7 @@ const QuickOrganizeOverlay = ({
                                             title="New folder"
                                         >
                                             <VscNewFolder />
-                                            {isCreatingFolder ? 'Creating...' : 'New folder'}
+                                            {isCreatingFolder ? 'Creating' : 'New folder'}
                                         </button>
                                     )}
                                 </div>
@@ -341,7 +341,7 @@ const QuickOrganizeOverlay = ({
                                 onClick={handleInstall}
                                 disabled={isInstalling}
                             >
-                                {isInstalling ? 'Copying...' : `Copy ${paths.length} File${paths.length > 1 ? 's' : ''}`}
+                                {isInstalling ? 'Copying' : `Copy ${paths.length} File${paths.length > 1 ? 's' : ''}`}
                             </button>
                         </div>
                     </motion.div>

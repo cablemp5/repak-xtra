@@ -336,7 +336,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
           {...deleteProps}
         >
           <div className="danger-bg" />
-          <span style={{ position: 'relative', zIndex: 2 }}>{!holdToDelete ? 'Delete Folder' : isDeleting ? 'Hold to delete…' : 'Delete Folder (Hold 2s)'}</span><Trash2 size={14} className="context-menu-trash" aria-hidden="true" />{/* repakxtra */}
+          <span style={{ position: 'relative', zIndex: 2 }}>{!holdToDelete ? 'Delete Folder' : isDeleting ? 'Hold to delete' : 'Delete Folder (Hold 2s)'}</span><Trash2 size={14} className="context-menu-trash" aria-hidden="true" />{/* repakxtra */}
         </div>
       </div>
     )
@@ -486,7 +486,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
         {...deleteProps}
       >
         <div className="danger-bg" />
-        <span style={{ position: 'relative', zIndex: 2 }}>{!holdToDelete ? 'Delete' : isDeleting ? 'Hold to delete…' : 'Delete (Hold 2s)'}</span><Trash2 size={14} className="context-menu-trash" aria-hidden="true" />{/* repakxtra */}
+        <span style={{ position: 'relative', zIndex: 2 }}>{!holdToDelete ? 'Delete' : isDeleting ? 'Hold to delete' : 'Delete (Hold 2s)'}</span><Trash2 size={14} className="context-menu-trash" aria-hidden="true" />{/* repakxtra */}
       </div>
     </div>
   )

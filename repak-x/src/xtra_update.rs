@@ -29,7 +29,7 @@ fn newest(list: &[serde_json::Value]) -> Option<(semver::Version, &serde_json::V
 
 /// The newest release when it is newer than this build, with its app zip (never the preview kit's).
 pub async fn check() -> Result<Option<crate::UpdateInfo>, String> {
-    crate::ui_log::info("Update", "Checking for a newer repakxtra release...");
+    crate::ui_log::info("Update", "Checking for a newer repakxtra release");
     let res = reqwest::Client::new()
         .get(RELEASES)
         .header("User-Agent", "repakxtra")

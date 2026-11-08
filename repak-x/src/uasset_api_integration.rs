@@ -209,7 +209,7 @@ pub fn batch_convert_textures_to_inline_with_parallel(
         .collect();
 
     info!(
-        "[C#] Calling batch_strip_mipmaps_native_parallel with {} files...",
+        "[C#] Calling batch_strip_mipmaps_native_parallel with {} files",
         file_paths.len()
     );
 

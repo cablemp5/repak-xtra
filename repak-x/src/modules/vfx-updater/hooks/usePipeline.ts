@@ -136,8 +136,8 @@ export function usePipeline({
 
       // ===== STEP 1: Extract Mod Assets =====
       checkCancel();
-      addLog("Step 1: Extracting mod assets...", "info");
-      setStepStatus({ message: "Extracting mod assets..." });
+      addLog("Step 1: Extracting mod assets", "info");
+      setStepStatus({ message: "Extracting mod assets" });
 
       const modAssets = await invoke<string[]>("vfx_extract_mod_assets", {
         gamePaks: gamePaksPath,
@@ -166,8 +166,8 @@ export function usePipeline({
 
       // ===== STEP 1.5: Scan Asset Classes =====
       checkCancel();
-      addLog("Scanning asset classes...", "info");
-      setStepStatus({ message: "Scanning asset classes..." });
+      addLog("Scanning asset classes", "info");
+      setStepStatus({ message: "Scanning asset classes" });
 
       // Get UAssetTool path
       const uatPath = await invoke<string>("vfx_get_uasset_tool_path");
@@ -207,7 +207,7 @@ export function usePipeline({
 
       // Copy non-updatable assets directly to final output (they pass through unchanged)
       if (nonUpdatableAssets.length > 0) {
-        addLog(`Copying ${nonUpdatableAssets.length} bypass assets to output...`, "info");
+        addLog(`Copying ${nonUpdatableAssets.length} bypass assets to output`, "info");
         await invoke("vfx_copy_uasset_files", {
           sourcePaths: nonUpdatableAssets,
           sourceBaseDir: tempDirs.modExtract,
@@ -223,7 +223,7 @@ export function usePipeline({
         // Jump directly to pack step (step 8)
         setCurrentStep(8);
         addLog("Step 8: Creating IOStore mod bundle.", "info");
-        setStepStatus({ message: "Packing IOStore..." });
+        setStepStatus({ message: "Packing IOStore" });
 
         const outputBase = updatedModOutputBase(modPath, outputPath, gamePaksPath);
 
@@ -261,7 +261,7 @@ export function usePipeline({
       checkCancel();
       setCurrentStep(2);
       addLog("Step 2: Converting processable mod assets to JSON.", "info");
-      setStepStatus({ message: "Converting mod assets to JSON..." });
+      setStepStatus({ message: "Converting mod assets to JSON" });
 
       const modJsonFiles = await invoke<string[]>("vfx_convert_uassets_to_json", {
         usmapPath,
@@ -293,7 +293,7 @@ export function usePipeline({
       checkCancel();
       setCurrentStep(3);
       addLog("Step 3: Extracting color and scalar parameters.", "info");
-      setStepStatus({ message: "Parsing parameters from mod assets..." });
+      setStepStatus({ message: "Parsing parameters from mod assets" });
 
       const allColors: ColorParam[] = [];
       // Material parameters are ported wholesale, keyed by asset like the colors. The color
@@ -357,8 +357,8 @@ export function usePipeline({
       // ===== STEP 4: Extract Vanilla Assets =====
       checkCancel();
       setCurrentStep(4);
-      addLog("Step 4: Extracting vanilla assets...", "info");
-      setStepStatus({ message: "Extracting vanilla assets from game..." });
+      addLog("Step 4: Extracting vanilla assets", "info");
+      setStepStatus({ message: "Extracting vanilla assets from game" });
 
       // Extract relative game paths from full paths for vanilla filter
       const filterPatterns = updatableAssets.map((p) => toRelative(p).replace(/\.uasset$/, ""));
@@ -379,7 +379,7 @@ export function usePipeline({
       checkCancel();
       setCurrentStep(5);
       addLog("Step 5: Converting vanilla assets to JSON.", "info");
-      setStepStatus({ message: "Converting game assets to JSON..." });
+      setStepStatus({ message: "Converting game assets to JSON" });
 
       const vanillaJsonFiles = await invoke<string[]>("vfx_convert_uassets_to_json", {
         usmapPath,
@@ -395,7 +395,7 @@ export function usePipeline({
       checkCancel();
       setCurrentStep(6);
       addLog("Step 6: Applying mod parameters to vanilla assets.", "info");
-      setStepStatus({ message: "Applying parameters..." });
+      setStepStatus({ message: "Applying parameters" });
 
       let appliedCount = 0;
       const applyConcurrency = 6;
@@ -473,8 +473,8 @@ export function usePipeline({
       // ===== STEP 7: JSON → UAssets =====
       checkCancel();
       setCurrentStep(7);
-      addLog("Step 7: Converting edited JSON back to UAssets...", "info");
-      setStepStatus({ message: "Converting to UAsset..." });
+      addLog("Step 7: Converting edited JSON back to UAssets", "info");
+      setStepStatus({ message: "Converting to UAsset" });
 
       const outputUassets = await invoke<string[]>("vfx_convert_json_to_uassets", {
         usmapPath,
@@ -490,7 +490,7 @@ export function usePipeline({
       checkCancel();
       setCurrentStep(8);
       addLog("Step 8: Creating IOStore mod bundle.", "info");
-      setStepStatus({ message: "Packing updated mod..." });
+      setStepStatus({ message: "Packing updated mod" });
 
       const outputBase = updatedModOutputBase(modPath, outputPath, gamePaksPath);
 
@@ -541,7 +541,7 @@ export function usePipeline({
 
   const cancelPipeline = useCallback(async () => {
     if (isProcessing) {
-      addLog("Cancelling pipeline...", "warning");
+      addLog("Cancelling pipeline", "warning");
       runIdRef.current++;
       try {
         await invoke("vfx_stop_session");

@@ -38,8 +38,8 @@ export default function IsItSafe({ alert }: { alert: ReturnType<typeof useAlert>
             <span className="xs-label xs-label-row">Scan this copy
               {hash
                 ? <button type="button" className="su-hash xs-hash" title="Copy the SHA-256" onClick={() => { navigator.clipboard.writeText(hash); alert.success('Copied', `SHA-256 of this ${APP_NAME}.exe`) }}>
-                    <code>{hash.slice(0, 12)}…</code><Copy size={12} aria-hidden="true" /></button>
-                : <span className="su-meta">{hash === false ? 'SHA-256 unavailable' : 'Reading SHA-256…'}</span>}
+                    <code>{hash.slice(0, 12)}</code><Copy size={12} aria-hidden="true" /></button>
+                : <span className="su-meta">{hash === false ? 'SHA-256 unavailable' : 'Reading SHA-256'}</span>}
             </span>
             <span className="setting-subtext">If VirusTotal has no report for this exact file yet, its page lets you upload it.</span>
           </div>

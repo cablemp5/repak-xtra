@@ -79,7 +79,7 @@ export function checkBannedPlugins(alert: Alert, openSetup: () => void) {
     if (!bad.length) return
     const id = alert.warning('Ban risk', `${bad.map(p => p.name).join(' and ')} ${bad.length === 1 ? 'is' : 'are'} in your game folder. Marvel Rivals' anti-cheat detects ${bad.length === 1 ? 'it' : 'them'}.`, {
       duration: 15000,
-      action: { label: 'Review…', onClick: () => { alert.dismissAlert(id); openSetup() } },
+      action: { label: 'Review', onClick: () => { alert.dismissAlert(id); openSetup() } },
     })
   }).catch(() => {})
 }
@@ -122,12 +122,12 @@ export function SafetyCard({ alert }: { alert: Alert }) {
   const flagged = (plugins ?? []).filter(p => p.kind !== 'bundled')
   const banned = flagged.some(p => p.kind === 'banned')
   // the chip sums up the whole card, mods too: "No flagged plugins" read as all clear while flagged mods were on
-  const chip = failed ? 'Could not check' : !plugins ? 'Checking…' : banned ? 'Remove flagged files'
+  const chip = failed ? 'Could not check' : !plugins ? 'Checking' : banned ? 'Remove flagged files'
     : on.length ? `${on.length} mod${on.length === 1 ? '' : 's'} on` : flagged.length ? 'Unknown plugins'
-    : state === null ? 'Checking…' : state === 'failed' ? 'Could not check' : unread.length ? 'Not all checked'
+    : state === null ? 'Checking' : state === 'failed' ? 'Could not check' : unread.length ? 'Not all checked'
     : all.size ? 'Flagged mods off' : 'Nothing flagged'
   const found = all.size === 0 ? 'None match what the notice describes.' : `${all.size} marked, ${on.length ? `${on.length} of them on` : 'all off'}.`
-  const mods = state === null ? 'Checking your mods…'
+  const mods = state === null ? 'Checking your mods'
     : state === 'failed' ? `Could not be checked${all.size ? `. The last results: ${found}` : '.'}`
     : `${found}${unread.length ? ` ${unread.length} could not be read, so ${unread.length === 1 ? 'it is' : 'they are'} not checked.` : ''}`
   return (
@@ -158,7 +158,7 @@ export function SafetyCard({ alert }: { alert: Alert }) {
             </button>
             {on.length > 0 && <button type="button" className="su-link" disabled={Boolean(busy || asking)} onClick={() => void turnOff(on, 'mods')}
               title="Switches them off like the Library does. The toast's Undo turns them back on">
-              {busy === 'mods' ? 'Turning off…' : `Turn off all ${on.length}`}</button>}
+              {busy === 'mods' ? 'Turning off' : `Turn off all ${on.length}`}</button>}
           </span>}
           {/* the flagged mods nest under their summary, lighter and tighter than a part row, so they read as its items
               and not as more summaries (Common Region, Law of Proximity) */}
@@ -177,7 +177,7 @@ export function SafetyCard({ alert }: { alert: Alert }) {
                     <span className="su-risk-why" title={why}>{r.short}</span>
                     {live && <button type="button" className="su-link su-risk-off" disabled={Boolean(busy || asking)}
                       onClick={() => void turnOff([{ path: r.path, enabled: true }], r.path)} aria-label={`Turn off ${name}`}>
-                      {busy === r.path ? 'Turning off…' : 'Turn off'}</button>}
+                      {busy === r.path ? 'Turning off' : 'Turn off'}</button>}
                     {/* an empty cell when off, so the grid's rows stay in step */}
                     {!live && <span className="su-link su-risk-off" aria-hidden="true" style={{ visibility: 'hidden' }}>Turn off</span>}
                   </div>
@@ -195,7 +195,7 @@ export function SafetyCard({ alert }: { alert: Alert }) {
             </div>
             <span className="su-part-links">
               <button type="button" className="su-link" disabled={Boolean(busy || asking)} onClick={() => setAsking(p)}
-                title="Moves it out of the game folder to %APPDATA%\Repak-X\removed-plugins">{busy === p.name ? 'Removing…' : 'Remove'}</button>
+                title="Moves it out of the game folder to %APPDATA%\Repak-X\removed-plugins">{busy === p.name ? 'Removing' : 'Remove'}</button>
             </span>
             {asking === p && <div className="su-confirm su-row-confirm" role="alert">
               <span>Remove {p.name}? It moves to %APPDATA%\Repak-X\removed-plugins{p.kind === 'unknown' ? ', and whatever tool it belongs to stops working' : ''}.</span>

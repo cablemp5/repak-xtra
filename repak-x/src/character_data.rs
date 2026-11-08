@@ -607,7 +607,7 @@ fn parse_github_markdown(content: &str) -> Result<Vec<CharacterSkin>, String> {
             warn!("  {}", error);
         }
         if errors.len() > 10 {
-            warn!("  ... and {} more errors", errors.len() - 10);
+            warn!("  and {} more errors", errors.len() - 10);
         }
     }
 
@@ -638,7 +638,7 @@ where
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-    on_progress("Connecting to GitHub...");
+    on_progress("Connecting to GitHub");
     info!(
         "Fetching character data from GitHub: {}",
         GITHUB_CHARACTER_DATA_URL
@@ -661,7 +661,7 @@ where
         return Err(format!("GitHub returned status: {}", response.status()));
     }
 
-    on_progress("Downloading character data...");
+    on_progress("Downloading character data");
 
     let content = response
         .text()
@@ -674,7 +674,7 @@ where
         return Err("Cancelled".to_string());
     }
 
-    on_progress("Parsing character data...");
+    on_progress("Parsing character data");
     on_progress(&format!(
         "Downloaded {} bytes, {} lines",
         content.len(),
@@ -735,7 +735,7 @@ where
     let new_skins = fetch_github_data_with_progress(&mut on_progress).await?;
     info!("Fetched {} skins from GitHub", new_skins.len());
 
-    on_progress(&format!("Validating {} fetched skins...", new_skins.len()));
+    on_progress(&format!("Validating {} fetched skins", new_skins.len()));
 
     // Validate all skins
     let mut validation_errors = 0;
@@ -754,7 +754,7 @@ where
     }
 
     // Merge existing and new skins using a HashMap to deduplicate by skin ID
-    on_progress("Merging with existing data...");
+    on_progress("Merging with existing data");
     use std::collections::HashMap;
     let mut skin_map: HashMap<String, CharacterSkin> = HashMap::new();
 
@@ -773,12 +773,12 @@ where
     let merged_count = merged_skins.len();
 
     on_progress(&format!(
-        "Saving {} character skins to disk...",
+        "Saving {} character skins to disk",
         merged_count
     ));
     save_character_data(&merged_skins)?;
 
-    on_progress("Refreshing cache...");
+    on_progress("Refreshing cache");
     refresh_cache();
 
     let new_count = if merged_count > existing_count {
@@ -857,7 +857,7 @@ pub async fn check_for_update_on_launch() -> Option<usize> {
         return None;
     }
 
-    ui_log::info(SCOPE, "Checking character database for updates...");
+    ui_log::info(SCOPE, "Checking character database for updates");
     // Record the check time up-front so a failure (e.g. offline) doesn't
     // cause a retry on every subsequent launch until the interval passes.
     write_last_check_time();

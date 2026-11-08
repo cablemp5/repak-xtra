@@ -193,7 +193,7 @@ function EncryptPanel() {
   const done = runsNow.filter(([, r]) => r.status === 'done').length
   const failed = runsNow.filter(([, r]) => r.status === 'failed').map(([k]) => k)
   const state = cancelling ? 'Cancelling. The mod in progress finishes first.'
-    : busy ? `Encrypting ${runningAt + 1} of ${batch.length}${running ? `: ${running.name}` : '…'}`
+    : busy ? `Encrypting ${runningAt + 1} of ${batch.length}${running ? `: ${running.name}` : ''}`
     : gameOpen ? 'Close Marvel Rivals to encrypt mods.'
     : ''
 
@@ -275,9 +275,9 @@ function EncryptPanel() {
         </p>
         <span className="xtra-sr-only" aria-live="polite">{busy || cancelling ? state : ''}</span>
         <div className="vf-foot-actions">
-          {busy && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={stop}>{cancelling ? 'Cancelling…' : 'Cancel'}</button>}
+          {busy && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={stop}>{cancelling ? 'Cancelling' : 'Cancel'}</button>}
           <button type="button" className="btn-primary" disabled={busy || !todo.length} onClick={() => void run()}>
-            <Lock size={14} aria-hidden="true" />{busy ? 'Encrypting…' : todo.length ? <>Encrypt <Num id="enc-todo" value={todo.length} /> {todo.length === 1 ? 'mod' : 'mods'}</> : 'Encrypt'}
+            <Lock size={14} aria-hidden="true" />{busy ? 'Encrypting' : todo.length ? <>Encrypt <Num id="enc-todo" value={todo.length} /> {todo.length === 1 ? 'mod' : 'mods'}</> : 'Encrypt'}
           </button>
         </div>
       </footer>
