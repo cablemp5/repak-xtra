@@ -1671,14 +1671,15 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
 .run-group .is-running { display: inline-flex !important; align-items: center; gap: 8px; cursor: default; pointer-events: none;
   border-color: transparent !important; background: transparent !important; padding-left: 4px !important; color: var(--text-primary) !important; }
 .run-stop-btn { display: inline-flex !important; align-items: center; gap: 8px; }
-/* Pause, Resume, and Stop: small solid glyphs (8 to 9px) with square corners, so they read as one set. Stop is the
-   same 8px square on every Stop and Cancel button. Pause is Lucide's, filled with no stroke (11px: its bars are 8px
-   tall, centered in the box) */
-.stop-glyph { width: 7px; height: 7px; margin: 0 2.5px; border-radius: 1.5px; background: currentColor; flex: none; }
-/* each glyph centered in one 12px slot, so the labels share a left edge and the marks share a center line. Pause's bars
-   (11px icon: 8.25px tall) stand a touch taller than the 8px square, which reads heavier at the same height */
-.lo-gen-stop .play-glyph { width: 8px; height: 9px; margin: 0 2px; }
-.lo-gen-stop > svg { flex: none; margin: 0 0.5px; }
+/* Pause, Resume, and Stop: small solid glyphs (7.5px) so they read as one set. Stop is the same slightly rounded square
+   on every Stop and Cancel button. Pause is Lucide's, filled with no stroke */
+.stop-glyph { width: 7.5px; height: 7.5px; margin: 0 2.25px; border-radius: 1.5px; background: currentColor; flex: none; }
+/* each glyph centered in one 12px slot, so the labels share a left edge and the marks share a center line. Pause is a
+   box cropped to its bars (viewBox 0 3 24 18, ScanStatus.tsx): 7.5px tall like the square, so both center on the same
+   pixel row (a taller box rounded 1px high). The header's 16px icon rule (icon sizes, above) would blow it up, so its
+   size is pinned here */
+.lo-gen-stop .play-glyph { width: 7.5px; height: 8.5px; margin: 0 2.25px; }
+:is(.lo-gen-stop, .scan-status-in) > svg.lucide-pause { flex: none; width: 10px !important; height: 7.5px !important; margin: 0 1px; }
 .play-glyph { width: 8px; height: 8px; flex: none; background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%); }
 /* A Generate button on a PC without the preview kit: grayed out, with a small blue "Set up" that says where to go */
 .is-unavailable { color: var(--text-secondary) !important; opacity: 0.85; }
