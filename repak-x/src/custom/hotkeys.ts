@@ -92,7 +92,7 @@ export const isTyping = (target: EventTarget | null) => {
  *  Library's plain-letter shortcuts pause. */
 export const dialogOpen = () => modalOpen() || document.documentElement.dataset.view !== 'library'
 
-const VIEWS = ['List View', 'Grid View', 'Compact Grid View'] // the four view buttons, in the menu's order
+const VIEWS = ['List View', 'Grid View', 'Compact Grid View'] // the three view buttons, in the menu's order
 
 window.addEventListener('keydown', e => {
   // A dialog owns the keyboard, Ctrl+G and Ctrl+O included; an IME finishing a word is not a shortcut

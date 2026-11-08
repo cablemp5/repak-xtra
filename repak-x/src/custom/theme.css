@@ -2816,6 +2816,7 @@ html[data-motion="off"] .vfx-dot { animation: none; }
   padding: 0 8px 0 10px !important; border: none !important; border-radius: 0 !important; background: none !important;
   color: var(--text-primary); font-size: 13px; font-weight: 500; line-height: normal; white-space: nowrap; }
 .bulk-actions-toolbar .bulk-count-value { margin: 0; transform: none !important; background: rgba(255, 255, 255, 0.12); color: var(--text-primary); }
+[data-theme="light"] .bulk-actions-toolbar .bulk-count-value { background: rgba(0, 0, 0, 0.08); }
 .bulk-actions-toolbar svg { width: 16px !important; height: 16px !important; flex: none; color: var(--text-secondary) !important; opacity: 1 !important; stroke-width: 2; }
 .bulk-actions-toolbar .btn-ghost, .bulk-actions-toolbar .bulk-field .custom-dropdown-trigger { height: 36px !important; min-height: 0 !important;
   gap: 8px !important; padding: 0 12px !important; border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important;
@@ -2828,7 +2829,7 @@ html[data-motion="off"] .vfx-dot { animation: none; }
 /* the Move and Add to loadout menus sit in a 30px wrapper: give it the buttons' 36px so they line up with the rest */
 .bulk-actions-toolbar .bulk-field, .bulk-actions-toolbar .bulk-field .custom-dropdown-container { height: 36px !important; display: flex; align-items: center; }
 .bulk-actions-toolbar .bulk-toggle-group { display: flex; align-items: center; border: none !important; background: none !important; gap: 4px; height: 36px; }
-.bulk-actions-toolbar .bulk-toggle-group .btn-ghost { border-radius: var(--quiet-radius) !important; }   /* two buttons, not one split one */
+.bulk-actions-toolbar .bulk-toggle-group .btn-ghost { border-radius: var(--quiet-radius) !important; margin: 0 !important; }   /* two buttons, not one split one (App.css pulls Turn off 1px in) */
 .bulk-actions-toolbar .bulk-delete > span { gap: 8px !important; }
 .btn-ghost.danger.bulk-delete, .btn-ghost.danger.bulk-delete:hover { color: #f2555a !important; }
 .btn-ghost.danger.bulk-delete svg { color: #f2555a !important; }

@@ -114,7 +114,7 @@ function GroupHead({ p, name, count, at, total, editing, setEditing, folded, onF
   )
 }
 
-/** Home | Library switch for the app header. Its own class: the 1/2/3 hotkeys click the first .mod-state-filter. The
+/** Home | Library switch for the app header. Its own class, not .mod-state-filter (the Library's All / On / Off tabs). The
  *  Loadouts tab lands on the cards (not a loadout page left open). The Library tab and L keep the Library as it was
  *  (search, filters, folder, checked and viewed mods, scroll): its Show all button is the deliberate reset (App.tsx). */
 export function ViewTabs() {
