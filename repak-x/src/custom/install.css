@@ -62,7 +62,10 @@
 .ip-title { min-width: 0; margin: 0 -8px; padding: 2px 8px; font: 600 24px/1.2 var(--font-primary); letter-spacing: -0.02em; color: var(--text-primary);
   background: transparent; border: 1px solid transparent; border-radius: 8px; outline: none; }
 .ip-title-wrap .ip-title { flex: 0 1 auto; field-sizing: content; min-width: 4ch; max-width: 100%; }   /* as wide as the name: the pencil follows it */
-.ip-modal input.ip-title:is(:hover, :focus, :focus-visible) { border-color: transparent !important; }   /* no text box outline: the pencil says it is editable */
+/* the name reads as a text box: the quiet outline always, brighter on hover (focused, it keeps its resting border, theme.css) */
+.ip-modal input.ip-title { border-color: var(--panel-border) !important; }
+.ip-modal input.ip-title:hover { border-color: rgba(255, 255, 255, 0.16) !important; }
+[data-theme="light"] .ip-modal input.ip-title:hover { border-color: rgba(0, 0, 0, 0.2) !important; }
 .ip-title.is-static { margin: 0; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ip-pen { flex: none; margin-left: 8px; width: 28px; height: 28px !important; color: var(--text-secondary) !important; }
 .ip-pen:hover { color: var(--text-primary) !important; }

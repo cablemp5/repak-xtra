@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
-import { ArchiveRestore, ArrowLeftRight, Check, CircleCheck, CircleHelp, CircleX, Gamepad2, ListChecks, Repeat, RotateCcw, ShieldCheck, TriangleAlert, Undo2 } from 'lucide-react'
+import { ArchiveRestore, ArrowLeftRight, Check, CircleCheck, CircleHelp, CircleX, Gamepad2, ListChecks, Repeat, RotateCcw, TriangleAlert, Undo2 } from 'lucide-react'
 import { useDialogFocus } from './dialogFocus'
 import { type Bisect, type Outcome, OPEN_BISECT, answerBisect, estimate, gameOpen, gameRunning, readBisect, restoreBisect, resumeBisect, returnTo, roundsLeft, startBisect, suspects, testOff } from './crashBisect'
 import { Step } from './FirstRun'
@@ -87,7 +87,7 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
           </div>
           <div className="modal-footer cs-footer">
             {/* a hint, not a section: the way back is on every step, so it only needs saying once, quietly */}
-            <span className="bs-hint"><ShieldCheck size={14} aria-hidden="true" />Restore your mods at any time</span>
+            <span className="bs-hint">Restore your mods at any time</span>
             <button type="button" className="lo-text-btn" onClick={close}>Not now</button>
             <button type="button" className="btn-primary" disabled={busy || on.length === 0}
               onClick={() => work(async () => { cue('tap'); const r = await startBisect(d, mods); if (r) cue('toggle'); return r && { step: 'test', run: r } })}>

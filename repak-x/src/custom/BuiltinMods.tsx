@@ -138,6 +138,9 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
   // a build not in the game yet warns too, like an error
   const warn = building ? !b.active : b.on && Boolean(b.error) // building a first time: b.on is still false
   const text = status(b, building)
+  // the warning (icon and amber) is the "Not in the game" part, after what is happening. Other errors warn whole
+  const cut = warn ? Math.max(0, text.indexOf('Not in the game')) : text.length
+  const lead = text.slice(0, cut).trim()
   return (
     <li ref={item} className={`bi-item${b.active || (b.current && b.on) ? ' is-on' : ''}`}>
       <div className="bi-row">
@@ -145,8 +148,8 @@ function Row({ b, building, blocked, alert, revealed }: { b: Builtin; building: 
         <div className="bi-text">
           <span className="bi-name">{about.name}{b.current && b.partial ? <span className="bi-partial" tabIndex={0} title={`${partialText(b.partial)}. ${b.summary ?? ''}`}>Partly built</span> : null}</span>
           <span className={`bi-status${warn ? ' is-warn' : ''}`} title={text} aria-live="polite">
-            {warn && <TriangleAlert size={13} aria-hidden="true" />}
-            {building ? <span className="t-shimmer"><SwapText text={text} /></span> : <SwapText text={text} />}
+            {lead && (building ? <span className="t-shimmer"><SwapText text={lead} /></span> : <SwapText text={lead} />)}
+            {warn && <span className="bi-warn"><TriangleAlert size={13} aria-hidden="true" />{text.slice(cut)}</span>}
           </span>
         </div>
         {warn && !building && retryable(b.error) && (

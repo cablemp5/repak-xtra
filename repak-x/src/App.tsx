@@ -18,7 +18,6 @@ import {
   GridView as GridViewIcon,
   ViewModule as ViewModuleIcon,
   ViewList as ViewListIcon,
-  ViewHeadline as ViewHeadlineIcon,
   ViewSidebar as ViewSidebarIcon,
   PlayArrow as PlayArrowIcon,
   Check as CheckIcon,
@@ -3507,9 +3506,9 @@ function App() {
 
         // 3. Apply ViewMode
         const parsedViewMode: ViewMode =
-          settings.viewMode === 'grid' || settings.viewMode === 'compact' || settings.viewMode === 'list-compact'
+          settings.viewMode === 'grid' || settings.viewMode === 'compact'
             ? settings.viewMode
-            : 'list';
+            : 'list'; // repakxtra: Compact list is no longer offered, a saved one opens as List
         setViewMode(parsedViewMode);
 
         // 4. Apply all other settings
@@ -4134,14 +4133,6 @@ function App() {
                     >
                       <ViewListIcon fontSize="small" />
                     </button>
-                    {/* repakxtra: always offered (Settings no longer hides it) */}
-                    <button
-                      onClick={() => handleViewModeChange('list-compact')}
-                      className={`btn-icon-small ${viewMode === 'list-compact' ? 'active' : ''}`}
-                      title="Compact List View"
-                    >
-                      <ViewHeadlineIcon fontSize="small" />
-                    </button>
                   </div>
                   </div>
                   {/* repakxtra: the view buttons as one menu when the header is narrow (theme.css swaps them) */}
@@ -4149,7 +4140,6 @@ function App() {
                     { id: 'grid', label: 'Grid', icon: <GridViewIcon fontSize="small" /> },
                     { id: 'compact', label: 'Compact grid', icon: <ViewModuleIcon fontSize="small" /> },
                     { id: 'list', label: 'List', icon: <ViewListIcon fontSize="small" /> },
-                    { id: 'list-compact', label: 'Compact list', icon: <ViewHeadlineIcon fontSize="small" /> },
                   ]} />
                   <div className="divider-vertical" />
                   <button
@@ -4170,7 +4160,7 @@ function App() {
               {/* Bulk Actions Toolbar */}
               <div className={`bulk-actions-toolbar ${selectedMods.size === 0 ? 'inactive' : ''}`}>
                 <div className="selection-info">
-                  <span className="bulk-count"><span className="bulk-count-value"><Num id="bulk-count" value={`${selectedMods.size} selected`} /></span></span>{/* repakxtra: transitions.dev Number pop-in, the whole phrase rolls */}
+                  <span className="bulk-count">Selected<span className="mod-state-count bulk-count-value"><Num id="bulk-count" value={selectedMods.size.toLocaleString()} /></span></span>{/* repakxtra: the filter tabs' count chip */}
                   <button onClick={() => {
                     const allPaths = libraryMods.map(m => m.path) // repakxtra: the built-in rows shown too
                     setSelectedMods(new Set(allPaths))
@@ -4266,7 +4256,7 @@ function App() {
                   })()}
 
                   <button
-                    className={`btn-ghost danger bulk-delete ${isDeletingBulk ? 'holding' : ''}`}
+                    className={`danger btn-ghost bulk-delete ${isDeletingBulk ? 'holding' : ''}`} /* repakxtra: danger first, the red kind of button (.agent design checks group by it) */
                     onPointerDown={handleBulkDeleteDown} /* repakxtra: pointer events, so a pen holds too */
                     onPointerUp={handleBulkDeleteUp}
                     onPointerLeave={handleBulkDeleteUp}
