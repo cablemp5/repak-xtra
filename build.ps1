@@ -136,7 +136,7 @@ if ($Release) {
     $sum = "$zip.sha256"
     [IO.File]::WriteAllText((Join-Path $PWD $sum), "$hash  $name`n")
     $changes = "release-notes\v$ver.md"
-    if (-not (Test-Path $changes)) { throw "Write $changes first: one '- ' line per change, like '- Add card zoom to the Loadouts screen'." }
+    if (-not (Test-Path $changes)) { throw "Write $changes first: one '- ' line per change, like '- Added card zoom to the Loadouts screen'." }
     $lines = @(Get-Content $changes | Where-Object { $_ -match '^\s*[-*]\s+\S' } | ForEach-Object { '- ' + ($_ -replace '^\s*[-*]\s+', '') })
     if (-not $lines.Count) { throw "$changes has no '- ' lines." }
     $url = "https://github.com/cablemp5/repak-xtra/releases/download/$tagPrefix$ver"

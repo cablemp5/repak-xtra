@@ -41,17 +41,17 @@
 .ip-target-btn:hover, .ip-target-btn[aria-expanded="true"] { color: var(--text-primary) !important; background: var(--quiet-hover) !important; }
 .ip-target-btn svg.lucide { flex: none; width: 16px !important; height: 16px !important; opacity: 0.8; transition: transform 0.15s ease; }
 .ip-target-btn[aria-expanded="true"] svg.lucide { transform: rotate(180deg); }
-.sigeon-menu.ip-target-menu { top: calc(100% + 4px); left: 0; right: auto; width: 260px; max-height: 300px; overflow-y: auto; transform-origin: top left; z-index: 20; }
+.xtra-menu.ip-target-menu { top: calc(100% + 4px); left: 0; right: auto; width: 260px; max-height: 300px; overflow-y: auto; transform-origin: top left; z-index: 20; }
 /* New loadout on top with its plus, then a line and a small heading over the loadouts to add to; long names end in ... */
-.ip-target-menu .sigeon-item { justify-content: flex-start !important; gap: 8px; }
-.ip-target-menu .sigeon-item .ip-target-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
-.ip-target-menu .sigeon-item svg.lucide { flex: none; }
+.ip-target-menu .xtra-item { justify-content: flex-start !important; gap: 8px; }
+.ip-target-menu .xtra-item .ip-target-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.ip-target-menu .xtra-item svg.lucide { flex: none; }
 /* Like the Collection dropdown: names in the quiet color, the picked one brighter on a soft fill, no blue; + New
    loadout muted at the foot under a line. Keyboard focus is the hover fill, not a ring */
-.ip-target-menu .sigeon-item { color: var(--text-secondary) !important; }
-.ip-target-menu .sigeon-item:hover:not(:disabled), .ip-target-menu .sigeon-item:focus-visible { background: var(--quiet-hover) !important; color: var(--text-primary) !important; outline: none !important; }
-.ip-target-menu .sigeon-item[aria-checked="true"] { color: var(--text-primary) !important; }
-.ip-target-menu .sigeon-item[aria-checked="true"]:focus-visible { background: var(--quiet-active) !important; }
+.ip-target-menu .xtra-item { color: var(--text-secondary) !important; }
+.ip-target-menu .xtra-item:hover:not(:disabled), .ip-target-menu .xtra-item:focus-visible { background: var(--quiet-hover) !important; color: var(--text-primary) !important; outline: none !important; }
+.ip-target-menu .xtra-item[aria-checked="true"] { color: var(--text-primary) !important; }
+.ip-target-menu .xtra-item[aria-checked="true"]:focus-visible { background: var(--quiet-active) !important; }
 .ip-target-sep { height: 1px; margin: 4px 8px; background: var(--panel-border); }
 /* + New loadout and its line stay pinned at the foot while the loadouts scroll, like the Collection dropdown's + New collection */
 .ip-target-menu .ip-target-group:last-child:not(:first-child) { position: sticky; bottom: -4px; padding-bottom: 4px; margin-bottom: -4px; background: var(--bg-dark); }

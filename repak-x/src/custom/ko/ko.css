@@ -164,10 +164,10 @@ html[data-motion="off"] .ko-stage canvas, html[data-motion="off"] .ko-play { ani
 .ko-random-more[aria-expanded="true"] { background: var(--quiet-hover) !important; }
 .ko-random-more[aria-expanded="true"] .lo-new-chev { transform: rotate(180deg); }
 .ko-random-card { width: 100%; box-sizing: border-box; }
-.ko-random-card .sigeon-item { cursor: pointer; }
-.ko-random-card .sigeon-item[aria-checked="true"] { background: transparent !important; }
-.ko-random-card .sigeon-item:hover { background: var(--quiet-hover) !important; }
-.ko-random-card .sigeon-item[aria-checked="true"] svg { color: var(--text-primary); }
+.ko-random-card .xtra-item { cursor: pointer; }
+.ko-random-card .xtra-item[aria-checked="true"] { background: transparent !important; }
+.ko-random-card .xtra-item:hover { background: var(--quiet-hover) !important; }
+.ko-random-card .xtra-item[aria-checked="true"] svg { color: var(--text-primary); }
 .ko-random-option { display: inline-flex; align-items: center; gap: 8px; }
 .ko-random-option svg { flex: none; }
 .ko-random-separator { margin: 4px 8px; border-top: 1px solid var(--panel-border); }

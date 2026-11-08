@@ -2,7 +2,7 @@
 //! - the UTOC signature bypass, bundled in the exe (resources/utoc-bypass, provenance in its SOURCE.md): dsound.dll (the
 //!   Ultimate ASI Loader) in Binaries\Win64 and MarvelRivalsUTOCSignatureBypass.asi in Binaries\Win64\plugins;
 //! - Project Galacta from its GitHub releases (0xSaturno/ProjectGalacta), checked and updated in one click.
-//! Sigeon's SigeonLoader.asi loads through the same dsound.dll, so turning the loader off turns Sigeon off too.
+//! Other loaders that use a plugins .asi load through the same dsound.dll, so turning the bypass off turns them off too.
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -192,7 +192,7 @@ pub async fn setup_bypass(action: String, state: State<'_, Arc<Mutex<crate::AppS
 
 // ---------- Project Galacta ----------
 
-/// The other mod loader: both on at once load the same mods twice.
+/// Another mod loader's pak (matched by file name only): both on at once load the same mods twice.
 const OTHER_LOADER: &str = "!ProjectSigeon_9999999_P";
 
 #[derive(Serialize, Clone)]
@@ -283,7 +283,7 @@ fn install_galacta(mods: &Path, target: &Path, files: &[(String, Vec<u8>)], back
         return Err("The loader goes inside the mods folder".into());
     }
     if find_enabled_loader(mods, OTHER_LOADER).is_some() {
-        return Err("Turn off the other Project Galacta / Project Sigeon loader in the Library before installing this one.".into());
+        return Err("Turn off the other mod loader in the Library before installing this one.".into());
     }
     fs::create_dir_all(target).map_err(|e| e.to_string())?;
     if let Some(old) = find_galacta(mods) {
@@ -387,7 +387,7 @@ fn galacta_local(mods: &Path) -> (Option<PathBuf>, bool) {
 pub async fn setup_galacta_status(online: bool, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<GalactaStatus, String> {
     let mods = state.lock().unwrap().game_path.clone();
     let (dir, disabled) = galacta_local(&mods);
-    let other_loader = find_enabled_loader(&mods, OTHER_LOADER).map(|_| "Project Sigeon".to_string());
+    let other_loader = find_enabled_loader(&mods, OTHER_LOADER).map(|_| "Another mod loader".to_string());
     let mut s = GalactaStatus { installed: dir.as_ref().map(|d| d.display().to_string()), disabled, latest: None, published: None, notes: None, url: None, up_to_date: None, other_loader };
     if online {
         let (tag, published, notes, url, zip) = latest_release(None).await?;
@@ -483,7 +483,7 @@ mod tests {
         let win = temp("bypass");
         assert_eq!(bypass_status(&win).state, "missing");
         fs::create_dir_all(win.join("plugins")).unwrap();
-        fs::write(win.join("plugins").join("SigeonLoader.asi"), b"sigeon").unwrap();
+        fs::write(win.join("plugins").join("SigeonLoader.asi"), b"other loader").unwrap();
         fs::write(win.join(LOADER), b"an older loader").unwrap();
         assert_eq!(bypass_status(&win).state, "other");
         bypass_action(&win, "install").unwrap();
@@ -498,7 +498,7 @@ mod tests {
         assert_eq!(bypass_status(&win).state, "installed");
         bypass_action(&win, "remove").unwrap();
         assert_eq!(bypass_status(&win).state, "missing");
-        assert!(win.join("plugins").join("SigeonLoader.asi").exists(), "Sigeon's own files stay");
+        assert!(win.join("plugins").join("SigeonLoader.asi").exists(), "another loader's own files stay");
         assert!(bypass_action(&win, "explode").is_err());
         let _ = fs::remove_dir_all(&win);
     }

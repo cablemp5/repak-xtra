@@ -211,7 +211,7 @@ html[data-show-header-icons] .header-actions-right .btn-vfx svg { margin-right: 
   box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.22) !important; }
 .install-btn svg { flex: none; width: 16px !important; height: 16px !important; color: #fff !important; }
 .install-btn-menu { width: 250px; }
-.install-btn-menu .sigeon-item { gap: 8px; }
+.install-btn-menu .xtra-item { gap: 8px; }
 .install-btn-menu small { margin-left: auto; color: var(--text-secondary); }
 
 /* ---------- panels ---------- */
@@ -330,7 +330,7 @@ html[data-show-header-icons] .header-actions-right .btn-vfx svg { margin-right: 
    title, the state tabs and the buttons keep to one row */
 .view-menu { position: relative; display: none; }
 .center-header .view-menu-btn { gap: 2px !important; height: 36px !important; min-height: 0 !important; padding: 0 8px 0 8px !important; }
-.sigeon-menu.view-menu-list { right: 0; width: 200px; }
+.xtra-menu.view-menu-list { right: 0; width: 200px; }
 .view-menu-item { display: inline-flex; align-items: center; gap: 12px; }
 .view-menu-item svg { color: var(--text-secondary); }
 @container modheader (max-width: 800px) {
@@ -362,11 +362,11 @@ html[data-show-header-icons] .header-actions-right .btn-vfx svg { margin-right: 
 .mod-state-btn { animation: t-swap-in var(--icon-swap-dur) var(--icon-swap-ease) backwards; }
 .mod-state-btn { display: inline-flex !important; align-items: center; gap: 8px; height: 32px !important; min-height: 0 !important; padding: 0 8px 0 12px !important;
   font-size: 13px !important; font-weight: 500 !important; color: var(--text-primary) !important; white-space: nowrap; }
-.mod-state-btn.is-broken, .mod-state-menu .sigeon-item.is-broken { color: #f5d342 !important; }
+.mod-state-btn.is-broken, .mod-state-menu .xtra-item.is-broken { color: #f5d342 !important; }
 .mod-state-btn svg { color: var(--text-secondary); }
 .mod-state-menu { left: 0; right: auto; width: 180px; }
-.mod-state-menu .sigeon-item { gap: 8px; }
-.mod-state-menu .sigeon-item .mod-state-count { margin-left: auto; }
+.mod-state-menu .xtra-item { gap: 8px; }
+.mod-state-menu .xtra-item .mod-state-count { margin-left: auto; }
 .btn-ghost {
   border-radius: var(--quiet-radius) !important;
   border-color: var(--panel-border) !important;
@@ -529,7 +529,7 @@ html[data-show-header-icons] .header-actions-right .btn-vfx svg { margin-right: 
 .context-menu .submenu > .context-menu-item { white-space: nowrap; }
 /* Delete is the one red word in the menu */
 .context-menu-item.danger, .context-menu-item.danger span { color: #f2555a !important; }
-.sigeon-item.is-danger > .context-menu-trash { flex: none; margin-left: auto; padding-left: 12px; box-sizing: content-box; color: #f2555a; } /* at the right edge, like the Library menu */
+.xtra-item.is-danger > .context-menu-trash { flex: none; margin-left: auto; padding-left: 12px; box-sizing: content-box; color: #f2555a; } /* at the right edge, like the Library menu */
 .context-menu-item.danger > .context-menu-trash { position: relative; z-index: 2; flex: none; margin-left: 12px; color: #f2555a; }   /* above the hold fill */
 .context-menu-item.danger:hover, .app .context-menu-item.danger:focus-visible { background: rgba(242, 85, 90, 0.1) !important; }
 .context-menu-separator { background: rgba(255, 255, 255, 0.07) !important; }
@@ -759,7 +759,7 @@ html[data-motion="off"] .lo-screen { animation: none; }
 /* Generate all previews: its choice menu hangs under the button */
 .lo-gen { position: relative; }
 .lo-gen-menu { left: 0; right: auto; min-width: 270px; z-index: 30; }
-.lo-gen-menu .sigeon-item small { margin-left: auto; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.lo-gen-menu .xtra-item small { margin-left: auto; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 /* A running preview run's menu: which loadout and the step it is on, a line, then Stop */
 .lo-gen-status { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px 12px; margin-bottom: 4px; border-bottom: 1px solid var(--panel-border);
   font-size: 13px; color: var(--text-secondary); }
@@ -904,22 +904,22 @@ html[data-motion="off"] .lo-screen { animation: none; }
 .lo-text-btn:hover:not(:disabled) { background: var(--quiet-hover) !important; border-color: rgba(255, 255, 255, 0.14) !important; }
 .lo-text-btn:disabled, .lo-text-btn[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }   /* e.g. Revert and Rename with no config to act on */
 
-/* ---------- the app's small menus (.sigeon-menu and .sigeon-item, named after their first use) ---------- */
-.sigeon-menu {
+/* ---------- the app's small menus (.xtra-menu and .xtra-item) ---------- */
+.xtra-menu {
   position: absolute; top: calc(100% + 6px); right: 0; z-index: 950; width: 240px; padding: 4px;
   background: var(--bg-dark); border: 1px solid rgba(255, 255, 255, 0.09); border-radius: 10px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
 }
-.sigeon-item {
+.xtra-item {
   width: 100%; height: 32px !important; min-height: 0 !important; padding: 0 12px !important;
   display: flex !important; justify-content: space-between !important; align-items: center;
   border: none !important; border-radius: 6px !important; background: transparent !important;
   color: var(--text-primary) !important; font-size: 13px !important; font-weight: 400 !important;
 }
-.sigeon-item:hover:not(:disabled) { background: var(--quiet-hover) !important; }
-.sigeon-item[aria-checked="true"] { background: var(--quiet-active) !important; opacity: 1 !important; cursor: default; }
-.sigeon-item[aria-checked="true"] svg { color: var(--accent-primary); }
-.sigeon-item:disabled:not([aria-checked="true"]) { opacity: 0.45; cursor: not-allowed; }
+.xtra-item:hover:not(:disabled) { background: var(--quiet-hover) !important; }
+.xtra-item[aria-checked="true"] { background: var(--quiet-active) !important; opacity: 1 !important; cursor: default; }
+.xtra-item[aria-checked="true"] svg { color: var(--accent-primary); }
+.xtra-item:disabled:not([aria-checked="true"]) { opacity: 0.45; cursor: not-allowed; }
 /* 20+ loadouts must not push Filters off screen */
 .loadouts { max-height: 34vh; overflow-y: auto; flex-shrink: 0; }
 
@@ -996,8 +996,8 @@ html[data-motion="off"] .lo-screen { animation: none; }
 .tags-toggle-wrap.is-shown .tags-toggle svg { color: var(--accent-primary); }
 .tags-toggle-wrap.is-hidden { border-style: dashed; }
 .tags-menu { right: 0; left: auto; top: calc(100% + 6px); min-width: 250px; z-index: 40; }
-.tags-menu .sigeon-item span { display: inline-flex; align-items: center; gap: 8px; }
-.tags-menu .sigeon-item small { margin-left: auto; color: var(--text-secondary); }
+.tags-menu .xtra-item span { display: inline-flex; align-items: center; gap: 8px; }
+.tags-menu .xtra-item small { margin-left: auto; color: var(--text-secondary); }
 .tags-confirm { padding: 8px; display: flex; flex-direction: column; gap: 12px; }
 .tags-confirm p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-primary); }
 .tags-confirm > div { display: flex; justify-content: flex-end; gap: 8px; }
@@ -1245,10 +1245,10 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .lo-new { position: relative; }
 .lo-new-chev { margin-left: -2px; opacity: 0.7; transition: transform 0.15s ease; }
 .lo-new > button[aria-expanded="true"] .lo-new-chev { transform: rotate(180deg); }
-.sigeon-menu.lo-new-menu { left: 0; right: auto; width: 250px; transform-origin: top left; }
-.lo-new-menu .sigeon-item span { display: inline-flex; align-items: center; gap: 8px; }
-.lo-new-menu .sigeon-item small { font-size: 12px; color: var(--text-secondary); }
-.lo-new-menu .sigeon-item:focus-visible { outline: none !important; background: var(--quiet-hover) !important; }   /* the app's menus: focus is the hover fill */
+.xtra-menu.lo-new-menu { left: 0; right: auto; width: 250px; transform-origin: top left; }
+.lo-new-menu .xtra-item span { display: inline-flex; align-items: center; gap: 8px; }
+.lo-new-menu .xtra-item small { font-size: 12px; color: var(--text-secondary); }
+.lo-new-menu .xtra-item:focus-visible { outline: none !important; background: var(--quiet-hover) !important; }   /* the app's menus: focus is the hover fill */
 /* a narrow window: the actions take their own row under the title rather than squeeze */
 @media (max-width: 1000px) {
   .lo-screen-head { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main view" "tools tools"; }
@@ -1552,8 +1552,8 @@ html[data-motion="off"] .t-shimmer-all { animation: none !important; -webkit-mas
   transition: opacity var(--icon-swap-dur) var(--icon-swap-ease), filter var(--icon-swap-dur) var(--icon-swap-ease), transform var(--icon-swap-dur) var(--icon-swap-ease); }
 .t-icon-swap[data-state="a"] .t-icon[data-icon="b"], .t-icon-swap[data-state="b"] .t-icon[data-icon="a"] {
   opacity: 0; filter: blur(var(--icon-swap-blur)); transform: scale(var(--icon-swap-start-scale)); }
-/* transitions.dev: Menu dropdown. The Sigeon menu opens like the other menus */
-.sigeon-menu { transform-origin: top right; animation: t-dropdown-open var(--dropdown-open-dur) var(--dropdown-ease) backwards; }
+/* transitions.dev: Menu dropdown. The small menus open like the other menus */
+.xtra-menu { transform-origin: top right; animation: t-dropdown-open var(--dropdown-open-dur) var(--dropdown-ease) backwards; }
 
 /* the Library's upstream card entrance (ModsList.css) off too, for the same reason */
 .mod-list-grid .mod-card:not(.mod-leaving) { animation: none !important; }
@@ -1561,7 +1561,7 @@ html[data-motion="off"] .t-shimmer-all { animation: none !important; -webkit-mas
 .xtra-fps { position: fixed; right: 8px; bottom: 52px; z-index: 99999; padding: 4px 8px; border-radius: 6px; pointer-events: none;
   font: 600 11px var(--font-mono); white-space: pre; color: var(--text-secondary); background: rgba(6, 7, 9, 0.8); }
 .xtra-fps.is-slow { color: #f2b155; }
-html[data-motion="off"] .t-num-pop, html[data-motion="off"] .t-text-in, html[data-motion="off"] .sigeon-menu, html[data-motion="off"] .lp-more-view { animation: none !important; }
+html[data-motion="off"] .t-num-pop, html[data-motion="off"] .t-text-in, html[data-motion="off"] .xtra-menu, html[data-motion="off"] .lp-more-view { animation: none !important; }
 html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner, html[data-motion="off"] .t-icon-swap .t-icon, html[data-motion="off"] .lo-card-image img, html[data-motion="off"] .mod-preview-frame img { transition: none !important; }
 
 /* Install panel: Save as a loadout (2+ mods), left of Cancel / Install */
@@ -1697,19 +1697,19 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
 .lp-more { position: relative; display: flex; align-items: center; }
 .lp-more-btn[aria-expanded="true"] { background: var(--quiet-hover) !important; }
 .lp-more-menu { left: 0; right: auto; width: 252px; z-index: 30; }
-.lp-more-menu .sigeon-item { justify-content: flex-start !important; }
-.lp-more-menu .sigeon-item:focus-visible { background: var(--quiet-active) !important; outline: none !important; }
+.lp-more-menu .xtra-item { justify-content: flex-start !important; }
+.lp-more-menu .xtra-item:focus-visible { background: var(--quiet-active) !important; outline: none !important; }
 .lp-more-view { display: flex; flex-direction: column; }
-.lp-more-view:not(.is-keys) > .sigeon-item:last-child { position: relative; margin-top: 8px; }
-.lp-more-view:not(.is-keys) > .sigeon-item:last-child::before { content: ''; position: absolute; left: -4px; right: -4px; top: -5px; border-top: 1px solid var(--panel-border); }
+.lp-more-view:not(.is-keys) > .xtra-item:last-child { position: relative; margin-top: 8px; }
+.lp-more-view:not(.is-keys) > .xtra-item:last-child::before { content: ''; position: absolute; left: -4px; right: -4px; top: -5px; border-top: 1px solid var(--panel-border); }
 /* More > Hotkey: a row that opens its choices in place (they slide in from the side they lead to), keys drawn as caps */
 @keyframes lp-view-in { from { opacity: 0; transform: translateX(var(--lp-view-from)); } }
 .lp-more-view.is-keys { --lp-view-from: 12px; animation: lp-view-in 180ms var(--dropdown-ease) backwards; }
 .lp-more-view.is-back { --lp-view-from: -12px; animation: lp-view-in 180ms var(--dropdown-ease) backwards; }
-.lp-more-menu .sigeon-item.lp-more-sub, .lp-more-menu .sigeon-item.lp-key-row { justify-content: space-between !important; gap: 12px; }
+.lp-more-menu .xtra-item.lp-more-sub, .lp-more-menu .xtra-item.lp-key-row { justify-content: space-between !important; gap: 12px; }
 .lp-more-value { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
 .lp-more-value > svg { margin-right: -4px; }
-.lp-more-menu .sigeon-item.lp-more-back { position: relative; margin-bottom: 8px; gap: 8px; padding-left: 8px !important; color: var(--text-secondary) !important; font-size: 12px !important; }
+.lp-more-menu .xtra-item.lp-more-back { position: relative; margin-bottom: 8px; gap: 8px; padding-left: 8px !important; color: var(--text-secondary) !important; font-size: 12px !important; }
 .lp-more-back::after { content: ''; position: absolute; left: -4px; right: -4px; bottom: -5px; border-top: 1px solid var(--panel-border); }
 .lp-more-back:hover { color: var(--text-primary) !important; }
 .lp-keys { display: inline-flex; align-items: center; gap: 4px; flex: none; }
@@ -2551,8 +2551,8 @@ html[data-motion] .hold-delete.holding::after { transition-duration: 2s !importa
   transition: border-color 1000000s step-end, background-color 1000000s step-end, color 1000000s step-end !important;
 }
 /* A loadout page's More menu: Delete in red, like the Library's right-click Delete (cable, 2026-10-17) */
-.lp-more-menu .sigeon-item.is-danger { color: #f2555a !important; }
-.lp-more-menu .sigeon-item.is-danger:hover, .lp-more-menu .sigeon-item.is-danger:focus-visible { background: rgba(242, 85, 90, 0.1) !important; }
+.lp-more-menu .xtra-item.is-danger { color: #f2555a !important; }
+.lp-more-menu .xtra-item.is-danger:hover, .lp-more-menu .xtra-item.is-danger:focus-visible { background: rgba(242, 85, 90, 0.1) !important; }
 /* A loadout's mod that was deleted: a red "Deleted" tag where its switch was, the On tag's shape without the dot
    (cable, 2026-10-17) */
 .mod-row .mod-type-badge.category-badge.deleted-badge { color: #f2555a !important; flex: none;
@@ -2868,7 +2868,7 @@ html[data-motion="off"] .vfx-dot { animation: none; }
 
 /* ---------- transitions.dev recipes on this round's features (the tokens above, html[data-motion="off"] stops them) ---------- */
 /* Menu dropdown: the right-click menu and its submenus, the Library's Install and All/On/Off menus (the last two are
-   sigeon-menus, which already open this way) */
+   xtra-menus, which already open this way) */
 .context-menu { transform-origin: top left; animation: t-dropdown-open var(--dropdown-open-dur) var(--dropdown-ease) backwards; }
 .context-menu-item:hover > .submenu, .context-menu-item.kb-open > .submenu { transform-origin: top left; animation: t-dropdown-open var(--dropdown-open-dur) var(--dropdown-ease) backwards; }
 .mod-state-menu { transform-origin: top left; }
@@ -3043,7 +3043,7 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .segmented-control .segment-btn { border-radius: 4px !important; }
 
 /* Launcher (Settings > General): the picked launcher gets the selected fill the app's other switches use (All, On, Off).
-   SettingsPanel.css gave it the panel color, which is the track's own black in AMOLED */
+   SettingsPanel.css gave it the panel color, which is the track's own color in black themes */
 .segmented-control .segment-btn { transition: background-color 150ms ease, color 150ms ease !important; }
 .segmented-control .segment-btn.active { background: var(--bg-lighter) !important; border-color: transparent !important; box-shadow: none !important; color: var(--text-primary) !important; }
 

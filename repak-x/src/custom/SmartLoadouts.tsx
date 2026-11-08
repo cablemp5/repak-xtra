@@ -77,7 +77,7 @@ function Menu({ at, onClose }: { at: MenuAt; onClose: () => void }) {
   const left = Math.max(8, Math.min(at.x, window.innerWidth - 288))
   const top = Math.max(8, Math.min(at.y, window.innerHeight - 24 - (at.title ? 30 : 0) - rows * 36))
   return createPortal(
-    <div ref={ref} className="sigeon-menu sl-menu" role="menu" aria-label={at.title} style={{ position: 'fixed', left, top, right: 'auto' }}>
+    <div ref={ref} className="xtra-menu sl-menu" role="menu" aria-label={at.title} style={{ position: 'fixed', left, top, right: 'auto' }}>
       {at.title && <div className="sl-menu-title">{at.title}</div>}
       {searchable && (
         <input className="sl-menu-search" value={q} placeholder="Find a loadout" aria-label="Find a loadout" spellCheck={false}
@@ -86,7 +86,7 @@ function Menu({ at, onClose }: { at: MenuAt; onClose: () => void }) {
       )}
       <div className="sl-menu-items">
         {shown.map(it => (
-          <button key={it.label} type="button" role="menuitem" className={`sigeon-item${it.pinned ? ' is-pinned' : ''}`} title={it.label} onClick={() => pick(it)}>
+          <button key={it.label} type="button" role="menuitem" className={`xtra-item${it.pinned ? ' is-pinned' : ''}`} title={it.label} onClick={() => pick(it)}>
             {/* a count sits at the right; words say what the pick does, under it */}
             {it.hint && !/^\d+$/.test(it.hint)
               ? <span className="sl-menu-label is-two">{it.label}<small>{it.hint}</small></span>

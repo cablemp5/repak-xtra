@@ -127,10 +127,10 @@ export default function ModStateFilter({ value, onChange, mods, encrypted }: Pro
             {label}<span className="mod-state-count">{count.toLocaleString()}</span><ChevronDown size={13} aria-hidden="true" />
           </button>
           {open && (
-            <div className="sigeon-menu mod-state-menu" role="menu" aria-label="Show mods">
+            <div className="xtra-menu mod-state-menu" role="menu" aria-label="Show mods">
               {options.map(([state, label, count]) => (
                 <button key={state} type="button" role="menuitemradio" aria-checked={value === state}
-                  className={`sigeon-item${state === 'broken' ? ' is-broken' : ''}`} onClick={() => { onChange(state); setOpen(false) }}
+                  className={`xtra-item${state === 'broken' ? ' is-broken' : ''}`} onClick={() => { onChange(state); setOpen(false) }}
                   title={state === 'broken' ? BROKEN_TITLE : undefined}>
                   {label}<span className="mod-state-count">{count.toLocaleString()}</span>{value === state && <Check size={14} aria-hidden="true" />}
                 </button>

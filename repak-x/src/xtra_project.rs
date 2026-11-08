@@ -1,4 +1,4 @@
-//! repakxtra switches no project loader: Project Sigeon lists in the Library as an ordinary mod, and the Project Galacta
+//! repakxtra switches no project loader: another mod loader lists in the Library as an ordinary mod, and the Project Galacta
 //! loader is Setup's. Another app sharing ~mods may switch them itself. The launch, start and focus hooks still call in,
 //! only so a loader an older switch hid (`<name>.pak.repakxtra-project-off`, a name no list shows) becomes an ordinary
 //! off mod (`.bak_repak`) the Library lists. Nothing is turned on or off.

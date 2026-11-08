@@ -554,15 +554,15 @@ function LoadoutsHome(p: LoadoutProps) {
               <Plus size={14} /> New <ChevronDown size={13} className="lo-new-chev" aria-hidden="true" />
             </button>
             {newMenu && (
-              <div className="sigeon-menu lo-gen-menu lo-new-menu" role="menu" aria-label="New">
-                <button type="button" role="menuitem" className="sigeon-item" disabled={p.mods.length === 0} onClick={() => { setNewMenu(false); setSmart(true) }}
+              <div className="xtra-menu lo-gen-menu lo-new-menu" role="menu" aria-label="New">
+                <button type="button" role="menuitem" className="xtra-item" disabled={p.mods.length === 0} onClick={() => { setNewMenu(false); setSmart(true) }}
                   title="Make loadouts from the mods that are in none: mods that share a look become one loadout, a lone mod gets its own">
                   <span><Shapes size={14} /> Smart loadouts</span><small>from your mods</small>
                 </button>
-                <button type="button" role="menuitem" className="sigeon-item" onClick={() => { setNewMenu(false); createEmpty() }}>
+                <button type="button" role="menuitem" className="xtra-item" onClick={() => { setNewMenu(false); createEmpty() }}>
                   <span><Plus size={14} /> New loadout</span><small>empty</small>
                 </button>
-                <button type="button" role="menuitem" className="sigeon-item" data-tour="new-collection" onClick={() => { setNewMenu(false); newGroup() }}
+                <button type="button" role="menuitem" className="xtra-item" data-tour="new-collection" onClick={() => { setNewMenu(false); newGroup() }}
                   title="A new collection: a named shelf for loadouts that belong together (drag cards onto it)">
                   <span><FolderPlus size={14} /> New collection</span><small>empty</small>
                 </button>
@@ -581,20 +581,20 @@ function LoadoutsHome(p: LoadoutProps) {
                 : <><WandSparkles size={14} /><span className="lo-gen-text">Generate all previews</span></>}
             </button>
             {genMenu && batch && (
-              <div className="sigeon-menu lo-gen-menu" role="menu">
+              <div className="xtra-menu lo-gen-menu" role="menu">
                 <div className="lo-gen-status" role="status"><b>{batch.name}</b><span>{stage || 'Starting…'}</span></div>
-                <button type="button" role="menuitem" className="sigeon-item run-stop-btn" disabled={batch.stopping} onClick={() => { setGenMenu(false); stopPreviews() }}
+                <button type="button" role="menuitem" className="xtra-item run-stop-btn" disabled={batch.stopping} onClick={() => { setGenMenu(false); stopPreviews() }}
                   title={batch.left ? 'Stop now and clear the queue' : 'Stop now'}>
                   <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />{batch.stopping ? 'Stopping…' : batch.left ? 'Stop all' : 'Stop'}</span>
                 </button>
               </div>
             )}
             {genMenu && !batch && (
-              <div className="sigeon-menu lo-gen-menu" role="menu">
-                <button type="button" role="menuitem" className="sigeon-item" disabled={withPreview === loadouts.length} onClick={() => generate('missing')}>
+              <div className="xtra-menu lo-gen-menu" role="menu">
+                <button type="button" role="menuitem" className="xtra-item" disabled={withPreview === loadouts.length} onClick={() => generate('missing')}>
                   <span>Only the ones without a preview</span><small>{loadouts.length - withPreview}</small>
                 </button>
-                <button type="button" role="menuitem" className="sigeon-item" onClick={() => generate('all')}>
+                <button type="button" role="menuitem" className="xtra-item" onClick={() => generate('all')}>
                   <span>Regenerate every loadout</span><small>{loadouts.length}</small>
                 </button>
               </div>

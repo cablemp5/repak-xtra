@@ -111,7 +111,7 @@
 .sl-mod:hover .sl-move, .sl-mod:focus-within .sl-move, .sl-move[aria-expanded="true"] { opacity: 1; }
 
 /* menus: a title saying what the pick does, then the choices (long lists scroll) */
-.sigeon-menu.sl-menu { width: 280px; z-index: 10001; transform-origin: top left; }
+.xtra-menu.sl-menu { width: 280px; z-index: 10001; transform-origin: top left; }
 .sl-menu-title { padding: 8px 12px 4px; font-size: 12px; font-weight: 500; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sl-menu-items { max-height: 306px; overflow-y: auto; }
 /* a long list's search, as the app's other search fields */
@@ -119,17 +119,17 @@
   border-radius: var(--quiet-radius) !important; background: var(--field-bg) !important; font: 500 13px var(--font-primary) !important; color: var(--text-primary) !important;
   outline: none !important; box-shadow: none !important; }
 .sl-menu-search::placeholder { color: var(--text-secondary); opacity: 1; }
-.sl-menu .sigeon-item.is-pinned { color: var(--text-secondary) !important; }
-.sl-menu .sigeon-item.is-pinned + .sigeon-item:not(.is-pinned) { margin-top: 4px; box-shadow: 0 -1px 0 var(--panel-border); border-top-left-radius: 0 !important; border-top-right-radius: 0 !important; }
+.sl-menu .xtra-item.is-pinned { color: var(--text-secondary) !important; }
+.sl-menu .xtra-item.is-pinned + .xtra-item:not(.is-pinned) { margin-top: 4px; box-shadow: 0 -1px 0 var(--panel-border); border-top-left-radius: 0 !important; border-top-right-radius: 0 !important; }
 .sl-menu-none { padding: 8px 12px; font-size: 13px; color: var(--text-secondary); }
-.sl-menu .sigeon-item { gap: 12px; }
+.sl-menu .xtra-item { gap: 12px; }
 .sl-menu-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
-.sl-menu .sigeon-item small { flex: none; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-.sl-menu .sigeon-item:has(.is-two) { height: auto !important; padding-block: 8px !important; }
+.sl-menu .xtra-item small { flex: none; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.sl-menu .xtra-item:has(.is-two) { height: auto !important; padding-block: 8px !important; }
 .sl-menu-label.is-two { display: flex; flex-direction: column; gap: 1px; white-space: normal; }
 .sl-menu-label.is-two small { font-weight: 400; }
 /* keyboard focus in a menu is the hover fill, as in the install dialog's menus, not a ring */
-.sl-menu .sigeon-item:focus-visible { outline: none !important; background: var(--quiet-hover) !important; }
+.sl-menu .xtra-item:focus-visible { outline: none !important; background: var(--quiet-hover) !important; }
 
 .sl-empty { padding: 32px 28px; }
 .sl-page :is(button, input):focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }

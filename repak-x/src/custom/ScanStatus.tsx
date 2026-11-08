@@ -5,7 +5,7 @@
 // Laws of UX: the work in progress stays in view (Doherty Threshold), and the count shows how far along it is
 // (Goal-Gradient Effect). A paused run stays listed until it is done (Zeigarnik Effect).
 import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Eye } from 'lucide-react'
 import { rescanVerdicts } from './brokenMods'
 import { holdScan, progressLine, useScanRun } from './scanProgress'
 import { APP_NAME } from './edition'
@@ -34,31 +34,31 @@ export default function ScanStatus() {
     <div className="lo-gen scan-gen" ref={ref}>
       <button type="button" className="btn-ghost scan-status" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(v => !v)}
         title={r.running ? 'Show the mod checks: pause or cancel them' : 'The mod checks are paused: resume or cancel them'}>
-        {/* running: only its words, shimmering */}
+        {/* running: an eye and its words, shimmering together (t-shimmer-all: an SVG cannot take the text gradient) */}
         {r.running
-          ? <span className="scan-status-in t-shimmer">{stopping ? (r.held === 'paused' ? 'Pausing checks' : 'Stopping checks') : 'Checking mods'}</span>
+          ? <span className="scan-status-in t-shimmer-all"><Eye size={14} aria-hidden="true" />{stopping ? (r.held === 'paused' ? 'Pausing checks' : 'Stopping checks') : 'Checking mods'}</span>
           : <span className="scan-status-in"><span className="pause-glyph" aria-hidden="true" />Checks paused</span>}
       </button>
       {open && (
-        <div className="sigeon-menu lo-gen-menu scan-menu" role="menu">
+        <div className="xtra-menu lo-gen-menu scan-menu" role="menu">
           <div className="lo-gen-status" role="status">
             <b>{r.running ? 'Checking mods for this game version' : 'Mod checks paused'}</b>
             <span>{status}</span>
           </div>
           {r.running
             ? <>
-                <button type="button" role="menuitem" className="sigeon-item" disabled={stopping} onClick={() => { setOpen(false); void holdScan('paused') }}
+                <button type="button" role="menuitem" className="xtra-item" disabled={stopping} onClick={() => { setOpen(false); void holdScan('paused') }}
                   title="Stop after the mod being read. Resume picks up where it stopped">
                   <span className="lo-gen-stop"><span className="pause-glyph" aria-hidden="true" />Pause</span></button>
-                <button type="button" role="menuitem" className="sigeon-item run-stop-btn" disabled={stopping && r.held === 'cancelled'} onClick={() => { setOpen(false); void holdScan('cancelled') }}
+                <button type="button" role="menuitem" className="xtra-item run-stop-btn" disabled={stopping && r.held === 'cancelled'} onClick={() => { setOpen(false); void holdScan('cancelled') }}
                   title="Stop after the mod being read, and hide this until the checks run again">
                   <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />Cancel</span></button>
               </>
             : <>
-                <button type="button" role="menuitem" className="sigeon-item" onClick={() => { setOpen(false); void rescanVerdicts() }}
+                <button type="button" role="menuitem" className="xtra-item" onClick={() => { setOpen(false); void rescanVerdicts() }}
                   title="Check the mods left to read now">
                   <span className="lo-gen-stop"><span className="play-glyph" aria-hidden="true" />Resume</span></button>
-                <button type="button" role="menuitem" className="sigeon-item run-stop-btn" onClick={() => { setOpen(false); void holdScan('cancelled') }}
+                <button type="button" role="menuitem" className="xtra-item run-stop-btn" onClick={() => { setOpen(false); void holdScan('cancelled') }}
                   title="Leave the rest unchecked and hide this until the checks run again">
                   <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />Cancel</span></button>
               </>}

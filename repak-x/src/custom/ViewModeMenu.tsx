@@ -25,9 +25,9 @@ export default function ViewModeMenu({ modes, value, onChange }: { modes: ViewMo
         {current?.icon}<ChevronDown size={13} aria-hidden="true" />
       </button>
       {open && (
-        <div className="sigeon-menu view-menu-list" role="menu" aria-label="View">
+        <div className="xtra-menu view-menu-list" role="menu" aria-label="View">
           {modes.map(m => (
-            <button key={m.id} type="button" role="menuitemradio" aria-checked={m.id === value} className="sigeon-item"
+            <button key={m.id} type="button" role="menuitemradio" aria-checked={m.id === value} className="xtra-item"
               onClick={() => { onChange(m.id); setOpen(false) }}>
               <span className="view-menu-item">{m.icon}{m.label}</span>{m.id === value && <Check size={14} aria-hidden="true" />}
             </button>

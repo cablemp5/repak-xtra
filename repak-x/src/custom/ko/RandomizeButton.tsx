@@ -29,13 +29,13 @@ export default function RandomizeButton({ disabled, onRandomize }: { disabled: b
       <button type="button" className="lo-text-btn ko-random-more" ref={arrow} aria-label="Randomize settings" title="Randomize settings"
         aria-haspopup="menu" aria-expanded={open} aria-controls={open ? 'ko-random-settings' : undefined}
         onClick={() => { setOpen(v => !v); cue(open ? 'close' : 'open') }}><ChevronDown className="lo-new-chev" size={14} aria-hidden /></button>
-      {open && <div className="sigeon-menu ko-random-card" id="ko-random-settings" role="menu" aria-label="Randomize settings"
+      {open && <div className="xtra-menu ko-random-card" id="ko-random-settings" role="menu" aria-label="Randomize settings"
         onMouseDown={e => { if (e.target instanceof Element && !e.target.closest('button')) e.preventDefault() }}>
-        <button type="button" className="sigeon-item" role="menuitemcheckbox" aria-checked={options.hue} onClick={() => toggle('hue', !options.hue)}><span className="ko-random-option"><Palette size={14} aria-hidden />Hue</span>{options.hue && <Check size={14} aria-hidden />}</button>
-        <button type="button" className="sigeon-item" role="menuitemcheckbox" aria-checked={options.saturation} onClick={() => toggle('saturation', !options.saturation)}><span className="ko-random-option"><Droplets size={14} aria-hidden />Saturation</span>{options.saturation && <Check size={14} aria-hidden />}</button>
-        <button type="button" className="sigeon-item" role="menuitemcheckbox" aria-checked={options.value} onClick={() => toggle('value', !options.value)}><span className="ko-random-option"><Sun size={14} aria-hidden />Value (brightness)</span>{options.value && <Check size={14} aria-hidden />}</button>
+        <button type="button" className="xtra-item" role="menuitemcheckbox" aria-checked={options.hue} onClick={() => toggle('hue', !options.hue)}><span className="ko-random-option"><Palette size={14} aria-hidden />Hue</span>{options.hue && <Check size={14} aria-hidden />}</button>
+        <button type="button" className="xtra-item" role="menuitemcheckbox" aria-checked={options.saturation} onClick={() => toggle('saturation', !options.saturation)}><span className="ko-random-option"><Droplets size={14} aria-hidden />Saturation</span>{options.saturation && <Check size={14} aria-hidden />}</button>
+        <button type="button" className="xtra-item" role="menuitemcheckbox" aria-checked={options.value} onClick={() => toggle('value', !options.value)}><span className="ko-random-option"><Sun size={14} aria-hidden />Value (brightness)</span>{options.value && <Check size={14} aria-hidden />}</button>
         <div className="ko-random-separator" role="separator" />
-        <button type="button" className="sigeon-item" role="menuitemcheckbox" aria-checked={options.keepNeutral} onClick={() => toggle('keepNeutral', !options.keepNeutral)}><span className="ko-random-option"><Contrast size={14} aria-hidden />Ignore black &amp; white</span>{options.keepNeutral && <Check size={14} aria-hidden />}</button>
+        <button type="button" className="xtra-item" role="menuitemcheckbox" aria-checked={options.keepNeutral} onClick={() => toggle('keepNeutral', !options.keepNeutral)}><span className="ko-random-option"><Contrast size={14} aria-hidden />Ignore black &amp; white</span>{options.keepNeutral && <Check size={14} aria-hidden />}</button>
       </div>}
     </div>
   )

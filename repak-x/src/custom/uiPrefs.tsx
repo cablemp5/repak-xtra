@@ -244,9 +244,9 @@ function TagsToggleButton({ tags, mods, onChanged, alert }: {
         <ChevronDown size={14} />
       </button>
       {menu && (
-        <div className="sigeon-menu tags-menu" role="menu">
+        <div className="xtra-menu tags-menu" role="menu">
           {!confirm ? (
-            <button type="button" role="menuitem" className="sigeon-item" disabled={every.length === 0} onClick={() => setConfirm(true)}>
+            <button type="button" role="menuitem" className="xtra-item" disabled={every.length === 0} onClick={() => setConfirm(true)}>
               <span><Trash2 size={14} /> Delete all tags</span><small>{every.length}</small>
             </button>
           ) : (
