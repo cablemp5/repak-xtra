@@ -248,7 +248,7 @@ function EncryptPanel() {
                             )}
                             {r?.status === 'running' && <span className="vf-pill is-running enc-pill">Encrypting</span>}
                             {r?.status === 'waiting' && <span className="vf-status">Waiting</span>}
-                            {r?.status === 'done' && <span className="vf-pill is-fixed enc-pill">Encrypted</span>}
+                            {r?.status === 'done' && <span className="vf-pill is-encrypted enc-pill">Encrypted</span>}
                             {r?.status === 'failed' && <>
                               <span className="vf-pill is-failed enc-pill"><AlertTriangle size={12} className="vf-pill-icon" aria-hidden="true" />Failed</span>
                               <p className="vf-note vf-row-panel enc-error">{r.error}</p>
@@ -289,7 +289,7 @@ export default function EncryptWindow() {
   useGlobalTooltips()
   return (
     <div className="vfx-window-container vf-window">
-      <TitleBar title="Encryptor" hideMaximize={true} />
+      <TitleBar title="Mod Encryptor" hideMaximize={true} />
       <EncryptPanel />
     </div>
   )

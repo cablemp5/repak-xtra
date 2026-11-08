@@ -10,6 +10,7 @@ import TitleBar from '../components/TitleBar'
 import Checkbox from '../components/ui/Checkbox'
 import { useGlobalTooltips } from '../hooks/useGlobalTooltips'
 import { HeroFilter, heroOfName } from './heroFilter'
+import ModRowsSkeleton from './ModRowsSkeleton'
 import { usmapPath } from './ko/load'
 import { canonKey } from './loadoutIdentity'
 import { modKey, useLoadouts } from './loadoutStore'
@@ -163,7 +164,7 @@ function GalactaPanel() {
             <input value={q} placeholder="Search mods" aria-label="Search mods" onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setQ('') }} />
             {q && <button type="button" className="lo-icon vf-search-clear" onClick={() => setQ('')} aria-label="Clear the search" title="Clear the search"><X size={14} /></button>}
           </label>
-          <HeroFilter heroes={heroes} value={hero} onChange={setHero} always={mods === null} />
+          <HeroFilter heroes={heroes} value={hero} onChange={setHero} always />
           <div className="mod-state-filter lp-sort" role="group" aria-label="Sort mods">
             <button type="button" aria-pressed={sort === 'newest'} onClick={() => { setSort('newest'); localStorage.setItem(SORT, 'newest') }}>Newest</button>
             <button type="button" aria-pressed={sort === 'name'} onClick={() => { setSort('name'); localStorage.setItem(SORT, 'name') }}>A to Z</button>
@@ -178,7 +179,7 @@ function GalactaPanel() {
           </p>
         )}
         {mods === null
-          ? <p className="lp-empty" aria-live="polite">Reading the mods folder…</p>
+          ? <ModRowsSkeleton />
           : shown.length === 0
             ? <p className="lp-empty">{needle || hero ? `No mods match${needle ? ` “${q.trim()}”` : ''}${hero ? ` for ${hero}` : ''}.` : 'No mesh or texture mods in the mods folder.'}</p>
             : <div className="vf-groups">{groups.map(g => {
@@ -204,7 +205,7 @@ function GalactaPanel() {
                             )}
                             {r?.status === 'running' && <span className="vf-pill is-running enc-pill">Converting</span>}
                             {r?.status === 'waiting' && <span className="vf-status">Queued</span>}
-                            {(r?.status === 'done' || (!r && m.made)) && <span className="vf-pill is-fixed enc-pill" title={`${m.name} (Galacta) is beside it in the Library`}>Converted</span>}
+                            {(r?.status === 'done' || (!r && m.made)) && <span className="vf-pill is-galacta enc-pill" title={`${m.name} (Galacta) is beside it in the Library`}>Converted</span>}
                             {r?.made?.note && <p className="setting-warn vf-row-panel gal-note"><AlertTriangle size={14} aria-hidden="true" /><span>{r.made.note}</span></p>}
                             {r?.made && r.made.leftOut > 0 && <p className="vf-note vf-row-panel enc-error">{plural(r.made.leftOut, 'file')} left out: Galacta swaps only the gameplay mesh, so lobby meshes, VFX, sounds, and UI stay in the original.</p>}
                             {r?.status === 'failed' && <>
