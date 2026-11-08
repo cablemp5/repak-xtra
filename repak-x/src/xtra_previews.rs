@@ -99,6 +99,21 @@ fn preview_file(dir: &std::path::Path, key: &str) -> Option<PathBuf> {
         .map(|(_, p)| p)
 }
 
+/// Deletes the combined renders of loadouts that are gone for good (each key's image, before picture, animation, other
+/// forms and member list). Only loadout keys: a mod's preview is never removed here. Returns how many files went.
+#[tauri::command(async)]
+pub fn delete_loadout_previews(keys: Vec<String>) -> usize {
+    let dir = previews_dir();
+    let keys: Vec<&String> = keys.iter().filter(|k| valid_key(k) && k.starts_with("loadout-") && !k.contains(['.', '@'])).collect();
+    let Ok(entries) = std::fs::read_dir(&dir) else { return 0 };
+    entries
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
+        .filter(|e| e.file_name().to_str().is_some_and(|n| keys.iter().any(|k| n.starts_with(&format!("{k}.")) || n.starts_with(&format!("{k}@")))))
+        .filter(|e| std::fs::remove_file(e.path()).is_ok())
+        .count()
+}
+
 #[tauri::command(async)]
 pub fn get_mod_preview(key: String) -> Result<tauri::ipc::Response, String> {
     if !valid_key(&key) {

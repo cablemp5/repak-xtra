@@ -87,6 +87,24 @@ const queue: QueuedJob[] = []
 const RAN_KEY = 'repakxtra.previewRan'
 const ran: Record<string, string[]> = (() => { try { return JSON.parse(localStorage.getItem(RAN_KEY) ?? '{}') } catch { return {} } })()
 const modsOf = (paths: string[]) => [...new Set(paths.map(nameKey))].sort()
+/** Deletes the renders and remembered mods of loadouts that are gone for good (set keys): "Delete for good" in Recently
+ *  deleted, or the Loadouts screen's once-a-session sweep (loadoutStore.ts sweepMediaOnce, which also skips when the
+ *  lists cannot be read). A loadout in Recently deleted keeps them, so Restore brings its picture back. */
+const dropLoadoutPreviews = (gone: string[]) => {
+  if (!gone.length) return
+  gone.forEach(k => delete ran[k])
+  try { localStorage.setItem(RAN_KEY, JSON.stringify(ran)) } catch { /* dropped next session */ }
+  invoke<number>('delete_loadout_previews', { keys: gone }).then(() => { gone.forEach(k => { revs.delete(k); dropCached(k) }); notify() }).catch(() => undefined)
+}
+/** The loadout render keys among preview keys, one per loadout (its before picture and other forms fold into it). */
+export const loadoutRenderKeys = (keys: string[]) => [...new Set(keys.filter(k => k.startsWith('loadout-')).map(k => k.split(/[.@]/)[0]))]
+window.addEventListener('repakxtra-loadouts-kept', e => {
+  const keep = (e as CustomEvent<Set<string>>).detail
+  invoke<string[]>('list_mod_previews')
+    .then(keys => dropLoadoutPreviews(loadoutRenderKeys([...keys, ...Object.keys(ran)]).filter(k => !keep.has(k.slice('loadout-'.length)))))
+    .catch(() => undefined)
+})
+window.addEventListener('repakxtra-loadouts-gone', e => dropLoadoutPreviews((e as CustomEvent<string[]>).detail.map(id => `loadout-${id}`)))
 /** A loadout's mods match its last finished run, or that is unknown (no run recorded, no member list): Regenerate then
  *  renders everything again. Otherwise it redoes only the changed previews (the kit and koPreview keep the rest). */
 const sameAsLast = (set: string, paths: string[], members?: string[] | null) => {
@@ -717,5 +735,6 @@ if (import.meta.env.DEV) {
   console.assert(jobId({ paths: ['C:/m/A_9999999_P.pak', 'B.bak_repak'] }) === jobId({ paths: ['C:/x/B.pak', 'A.pak', 'A.pak'] }), 'jobId: same mods, any order')
   console.assert(jobId({ paths: ['A.pak'] }) !== jobId({ paths: ['A.pak', 'B.pak'] }), 'jobId: different mods')
   console.assert(jobId({ paths: ['A.pak'], set: 'loadout-x' }) === jobId({ paths: ['B.pak'], set: 'loadout-x' }), 'jobId: a loadout keeps its id')
+  console.assert(loadoutRenderKeys(['loadout-a', 'loadout-a.vanilla', 'loadout-a@2', 'loadout-b', 'Mod', 'Mod@2']).join() === 'loadout-a,loadout-b', 'loadoutRenderKeys')
   console.assert(sameMods(['A', 'B'], ['C:/m/B.pak', 'C:/x/A.pak']) && !sameMods(['A'], ['A.pak', 'B.pak']) && !sameMods(null, ['A.pak']) && !sameMods(undefined, ['A.pak']), 'sameMods')
 }

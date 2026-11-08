@@ -8695,7 +8695,7 @@ fn main() {
             xtra_trash::restore_trashed_mods,
             xtra_trash::list_trashed_mods,
             xtra_trash::empty_trashed_mods,
-            xtra_previews::list_mod_previews,
+            xtra_previews::list_mod_previews, xtra_previews::delete_loadout_previews,
             xtra_previews::get_mod_preview,
             xtra_previews::get_preview_covers,
             xtra_previews::generate_mod_previews,

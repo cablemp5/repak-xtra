@@ -1,5 +1,5 @@
-// repakxtra: a KO prompt played once into a WebM with a transparent background: a loadout card's video (KoEditor.tsx)
-// and a KO prompt mod's Library preview (koPreview.ts). Video, not an animated image: a video can be started on the
+// repakxtra: a KO prompt played once into a WebM with a transparent background: a KO prompt mod's Library preview
+// (koPreview.ts). Video, not an animated image: a video can be started on the
 // shared beat (KO_BEAT), so every KO prompt on screen plays the same frame at the same time.
 import { type Scene, drawClear, duration, frameFor } from './render'
 import { type Frame, muxWebm } from './webm'
