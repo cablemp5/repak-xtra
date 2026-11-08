@@ -227,7 +227,7 @@ function GalactaPanel() {
             : <>
                 {hiddenTicked > 0 && <span className="vf-hidden-line"><b className="vf-hidden-n">{hiddenTicked} ticked {hiddenTicked === 1 ? 'mod is' : 'mods are'} hidden by the filter.</b>{' '}
                   <button type="button" className="su-link" onClick={() => { setQ(''); setHero('') }}>Show {hiddenTicked === 1 ? 'it' : 'them'}</button></span>}
-                Each mod gets a copy, “<name> (Galacta)”, turned on in its place. The original is turned off, not changed.
+                {'Each mod gets a copy, “<name> (Galacta)”, turned on in its place. The original is turned off, not changed.'}
               </>)}
         </p>
         <span className="xtra-sr-only" aria-live="polite">{busy || cancelling ? state : ''}</span>
