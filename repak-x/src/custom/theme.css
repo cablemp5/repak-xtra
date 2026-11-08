@@ -64,8 +64,8 @@ body, .app { font-family: var(--font-primary); font-size: 14px; }
 :root:not([data-theme="light"]) body { background: var(--bg-darkest); }
 button, input, select, textarea, .MuiButton-root { font-family: inherit !important; }
 ::selection { background: color-mix(in srgb, var(--accent-primary), transparent 60%); color: #fff; }
-/* the VFX Updater is its own window, outside .app: the same ring */
-.app :focus-visible, .vf-window :focus-visible {
+/* the VFX Updater and Asset Explorer are their own windows, outside .app: the same ring */
+.app :focus-visible, .vf-window :focus-visible, .ae-window :focus-visible {
   outline: 2px solid var(--focus-ring) !important;
   outline-offset: 2px !important;
 }
@@ -135,8 +135,9 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 }
 .header-actions-right .btn-settings svg { color: var(--text-secondary); }
 .header-actions-right .btn-settings .gal-logo { color: var(--text-secondary); }   /* Galacta's white mark, gray like the header's other icons */
-/* Tools and Settings are icon only (their tooltips name them): square, the icon centered */
-.header-actions-right :is([data-tour="tools-btn"], [data-tour="settings-btn"]) { width: 36px; padding: 0 !important; justify-content: center; }   /* 36: the buttons' min-height */
+.tool-card-icon .gal-logo { color: currentColor; }   /* Tools window: the accent blue like the other tool icons */
+/* Settings is icon only (its tooltip names it): square, the icon centered. Tools shows its name like the rest */
+.header-actions-right [data-tour="settings-btn"] { width: 36px; padding: 0 !important; justify-content: center; }   /* 36: the buttons' min-height */
 .header-actions-right .btn-vfx::before, .header-actions-right .btn-vfx::after { display: none !important; }
 /* Settings > Header buttons > Icons only (uiPrefs.tsx header-icons): every header button the same square as Tools, its
    name gone (the tooltip says what it does), and the Library's Asset Explorer too */

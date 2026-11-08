@@ -13,6 +13,7 @@ import StartedOk from './custom/startedOk' // repakxtra: an update keeps its rol
 import CrashScreen from './custom/CrashScreen' // repakxtra
 const AssetExplorerPage = lazy(() => import('./modules/asset-explorer/AssetExplorerPage'))
 import './custom/theme.css' // repakxtra: theme for every window, last so it wins the cascade
+import './custom/assetExplorer.css' // repakxtra: the Asset Explorer window in that theme
 import './custom/uiPrefs' // repakxtra: UI scale and optional controls in every window
 import './custom/smoothCaret' // repakxtra: the gliding caret in every text field
 import './custom/segSlide' // repakxtra: the sliding pill on every segmented bar

@@ -7,7 +7,7 @@ export const REACT_ICONS: Record<string, Record<string, string>> = {
   bs: { BsFiletypeRaw: 'FileType', BsKeyboardFill: 'Keyboard' },
   cg: { CgMaximizeAlt: 'Maximize2', CgMinimizeAlt: 'Minimize2', CgPerformance: 'Gauge' },
   fa: { FaExchangeAlt: 'ArrowLeftRight', FaTag: 'Tag', FaTerminal: 'Terminal', FaUsers: 'Users' },
-  fa6: { FaSort: 'ArrowUpDown', FaTag: 'Tag', FaToolbox: 'Wrench' },
+  fa6: { FaSort: 'ArrowUpDown', FaTag: 'Tag', FaToolbox: 'Toolbox' },
   fi: { FiChevronDown: 'ChevronDown', FiDownload: 'Download', FiExternalLink: 'ExternalLink', FiHeart: 'Heart', FiSearch: 'Search', FiX: 'X' },
   gi: { GiLightningTrio: 'Atom' }, // VFX Updater: particles in motion (cable's pick, 2026-10-28, was CloudLightning)
   gr: { GrClose: 'X', GrInstall: 'Download' },
