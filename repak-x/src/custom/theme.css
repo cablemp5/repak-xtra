@@ -2787,7 +2787,7 @@ html[data-motion="off"] .vfx-dot { animation: none; }
 
 /* ---------- The Library's selection bar (rebuilt 2026-11-08 from the header's parts, a floating bar since 2026-10-30): it
    floats over the bottom of the list while mods are checked, and the header and the list never move. Every button is the
-   header's quiet bordered button (36px, 8px corners, 13px medium, its hover and timing), the groups are split by the
+   header's quiet button without its outline (36px, 8px corners, 13px medium, its hover and timing), the groups are split by the
    header's short dividers, the count is the filter tabs' chip, and the surface is the menus' dark one. Delete keeps its red
    words and sits last, past a divider (Law of Proximity: the one that removes things stands apart). The menus open upward.
    custom/selectionScroll.ts sees it takes no room ---------- */
@@ -2820,11 +2820,11 @@ html[data-motion="off"] .vfx-dot { animation: none; }
 [data-theme="light"] .bulk-actions-toolbar .bulk-count-value { background: rgba(0, 0, 0, 0.08); }
 .bulk-actions-toolbar svg { width: 16px !important; height: 16px !important; flex: none; color: var(--text-secondary) !important; opacity: 1 !important; stroke-width: 2; }
 .bulk-actions-toolbar .btn-ghost, .bulk-actions-toolbar .bulk-field .custom-dropdown-trigger { height: 36px !important; min-height: 0 !important;
-  gap: 8px !important; padding: 0 12px !important; border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important;
+  gap: 8px !important; padding: 0 12px !important; border: 1px solid transparent !important; border-radius: var(--quiet-radius) !important;
   background: transparent !important; box-shadow: none !important; color: var(--text-primary) !important; font-size: 13px !important; font-weight: 500 !important;
   transition: border-color 0.2s, background 0.2s !important; }
 .bulk-actions-toolbar .btn-ghost:hover:not(:disabled), .bulk-actions-toolbar .custom-dropdown-trigger:hover:not(:disabled) { background: var(--quiet-hover) !important;
-  border-color: rgba(255, 255, 255, 0.14) !important; color: var(--text-primary) !important; }
+  border-color: transparent !important; color: var(--text-primary) !important; }
 .bulk-actions-toolbar .btn-ghost:disabled, .bulk-actions-toolbar .custom-dropdown-trigger:disabled { opacity: 0.4 !important; }
 .bulk-actions-toolbar .bulk-field .custom-dropdown-icon { opacity: 1 !important; font-size: 0 !important; }
 /* the Move and Add to loadout menus sit in a 30px wrapper: give it the buttons' 36px so they line up with the rest */
@@ -2834,7 +2834,7 @@ html[data-motion="off"] .vfx-dot { animation: none; }
 .bulk-actions-toolbar .bulk-delete > span { gap: 8px !important; }
 .btn-ghost.danger.bulk-delete, .btn-ghost.danger.bulk-delete:hover { color: #f2555a !important; }
 .btn-ghost.danger.bulk-delete svg { color: #f2555a !important; }
-.btn-ghost.danger.bulk-delete:hover { background: color-mix(in srgb, #f2555a, transparent 90%) !important; border-color: color-mix(in srgb, #f2555a, transparent 70%) !important; }
+.btn-ghost.danger.bulk-delete:hover { background: color-mix(in srgb, #f2555a, transparent 90%) !important; border-color: transparent !important; }
 /* a narrow column (details panel open) folds the actions to icons: each one a 36px square like the header's icon buttons */
 @container bulkbar (max-width: 780px) {
   .bulk-actions-toolbar :is(.bulk-field .custom-dropdown-trigger, .bulk-toggle-group .btn-ghost, .bulk-delete) { width: 36px; padding: 0 !important; justify-content: center !important; }
