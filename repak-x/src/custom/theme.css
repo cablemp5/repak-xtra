@@ -138,6 +138,11 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 /* Tools and Settings are icon only (their tooltips name them): square, the icon centered */
 .header-actions-right :is([data-tour="tools-btn"], [data-tour="settings-btn"]) { width: 36px; padding: 0 !important; justify-content: center; }   /* 36: the buttons' min-height */
 .header-actions-right .btn-vfx::before, .header-actions-right .btn-vfx::after { display: none !important; }
+/* Settings > Header buttons > Icons only (uiPrefs.tsx header-icons): every header button the same square as Tools, its
+   name gone (the tooltip says what it does), and the Library's Asset Explorer too */
+html[data-show-header-icons] :is(.header-actions-right .hdr-label, .btn-asset-explorer .btn-label) { display: none !important; }
+html[data-show-header-icons] .header-actions-right .btn-settings { width: 36px; padding: 0 !important; justify-content: center; }
+html[data-show-header-icons] .header-actions-right .btn-vfx svg { margin-right: 0 !important; }
 /* Launch is the one primary action: solid light button. Running/launched keep upstream colors. */
 .header-actions-right .btn-settings[data-launch="idle"] {
   background: #ededed !important;

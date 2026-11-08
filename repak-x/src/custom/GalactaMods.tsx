@@ -17,7 +17,7 @@ export default function GalactaMods() {
   return (
     <button type="button" className="btn-settings" data-tour="galacta-btn" title="Make mods Project Galacta compatible"
       onClick={() => void openGalacta().catch(e => console.error('[Galacta] Window error:', e))}>
-      <GalactaLogo /> Galacta Converter
+      <GalactaLogo /> <span className="hdr-label">Galacta Converter</span>
     </button>
   )
 }

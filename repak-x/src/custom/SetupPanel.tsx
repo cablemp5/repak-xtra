@@ -487,7 +487,7 @@ export default function SetupButton({ alert }: { alert: Alert }) {
   return (
     <>
       <button type="button" className="btn-settings su-btn" data-tour="setup-btn" onClick={() => setOpen(true)} title="What the game needs to load mods">
-        <Wrench size={16} /> Setup {(attention || warn) && <i className={`su-dot${warn ? ' is-warn' : ''}`} aria-label="Needs attention" />}
+        <Wrench size={16} /> <span className="hdr-label">Setup</span> {(attention || warn) && <i className={`su-dot${warn ? ' is-warn' : ''}`} aria-label="Needs attention" />}
       </button>
       {open && <SetupPanel alert={alert} focus={focus} onClose={() => { setOpen(false); setFocus(null); recheck(); checkLoader() }} />}
     </>

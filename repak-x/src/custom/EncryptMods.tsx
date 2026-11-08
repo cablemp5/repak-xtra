@@ -23,7 +23,7 @@ export default function EncryptMods() {
   return (
     <button type="button" className="btn-settings" data-tour="encrypt-btn" title="Encrypt mods so they are harder to unpack"
       onClick={() => void openEncrypt().catch(e => console.error('[Encrypt] Window error:', e))}>
-      <Lock size={16} aria-hidden="true" /> Mod Encryptor
+      <Lock size={16} aria-hidden="true" /> <span className="hdr-label">Mod Encryptor</span>
     </button>
   )
 }
