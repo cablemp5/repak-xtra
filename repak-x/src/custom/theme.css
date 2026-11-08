@@ -2842,7 +2842,7 @@ html[data-motion="off"] .vfx-dot { animation: none; }
 /* The mod list sits further left: its checkboxes line up under the panel title ("All Mods", 14px in), not 26px */
 .center-panel .mod-list-grid { padding-left: 4px !important; padding-right: 8px !important; padding-top: 8px !important; }   /* and close under the header */
 /* Settings: a setting that belongs to the one above it (Moving hero art under Animations), set in under it and dimmed while that one is off */
-.setting-sub { margin: 12px 0 0 32px; }
+.setting-sub { margin: 8px 0 0 32px; }   /* 8px above it, as the 8px gap under it to the next setting */
 .setting-sub.is-off { opacity: 0.45; pointer-events: none; }
 /* A Settings heading with its icon (every section): the icon before the words, grey, one size */
 .setting-icon-label { display: inline-flex; align-items: center; gap: 8px; }

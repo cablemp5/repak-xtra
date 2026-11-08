@@ -80,7 +80,8 @@ export function useLibraryFocus<M extends { path: string }>(mods: M[], viewMode:
     if (was.mode === viewMode && was.keys.length === keys.length && was.keys.every((k, i) => k === keys[i])) return
     const to = survivor(was.keys, keys, focused)
     if (!to) {
-      const next = [...document.querySelectorAll('.center-panel .empty-state button, .main-search-input')].find(shown)
+      // never the search box: typing there turns off the one-key shortcuts (1 to show every mod again, say)
+      const next = [...document.querySelectorAll('.center-panel .empty-state button')].find(shown)
       if (next) quietFocus(next)
       return
     }

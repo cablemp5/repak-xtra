@@ -11,8 +11,9 @@ const FOCUSABLE = 'button:not(:disabled), input:not(:disabled), select:not(:disa
 export const MODAL = '[aria-modal="true"], .modal-overlay, .input-prompt-overlay, .quick-organize-overlay, .extension-overlay'
 /** Never inert behind a dialog: the window's own title bar, toasts and their announcements, menus a dialog put on <body>. */
 const KEEP = '.titlebar, .toast-container, .xtra-live, body > [role="menu"], body > [role="listbox"]'
-/** Where focus goes when a dialog closes and its opener is gone (a menu item, say): the viewed mod, else the search. */
-const FALLBACK = '.mod-card.viewing .mod-name-button, .main-search-input'
+/** Where focus goes when a dialog closes and its opener is gone (a menu item, or a shortcut pressed with nothing focused):
+ *  the viewed mod, else it stays on the page. Never the search box: typing there turns off every one-key shortcut. */
+const FALLBACK = '.mod-card.viewing .mod-name-button'
 
 /** Pure: the top one of `found` (document order). The most recently opened wins, the later one on a tie (a dialog
  *  inside its own overlay, both new at once). */

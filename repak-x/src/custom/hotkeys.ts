@@ -135,7 +135,8 @@ window.addEventListener('keydown', e => {
       break
     }
     case '1': case '2': case '3':
-      click(`.mod-state-filter button:nth-child(${key})`)
+      // the Library's own tabs: the Loadouts screen stays in the page once opened, and its All / On / Off tabs come first
+      click(`[data-tour="mod-state"] .mod-state-filter button:nth-child(${key})`)
       break
     case ' ': {
       // A focused control keeps its own Space; the mod name button is the usual focus after a click
@@ -172,7 +173,7 @@ window.addEventListener('keydown', e => {
       break
     }
     case 'x':
-      click('.fp-clear')
+      click('.filter-panel .fp-clear') // never the KO Editor's Reset all, which shares the class
       break
     case 't':
       e.preventDefault()
