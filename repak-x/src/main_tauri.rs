@@ -4938,7 +4938,7 @@ async fn toggle_mod(
     }
 
     if let Err(e) = std::fs::rename(&path, &new_path) {
-        let error_msg = format!("Failed to toggle mod: {}", e);
+        let error_msg = xtra_vfx::in_use_message(&e).unwrap_or_else(|| format!("Failed to toggle mod: {}", e)); // repakxtra: says when the game holds it
         toast_events::emit_toggle_failed(&window, &error_msg);
         return Err(error_msg);
     }

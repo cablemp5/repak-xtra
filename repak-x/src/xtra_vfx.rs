@@ -230,6 +230,15 @@ pub(crate) fn game_running() -> bool {
     running
 }
 
+/// A mod file Windows reports in use (os error 32), in plain words: the game holds every mod it loaded open.
+pub(crate) fn in_use_message(e: &std::io::Error) -> Option<String> {
+    (e.raw_os_error() == Some(32)).then(|| if game_running() {
+        "The game is open and is using this mod. Close the game, then try again.".to_string()
+    } else {
+        "Another program is using this mod file. If the game just closed, wait a few seconds, then try again.".to_string()
+    })
+}
+
 /// Set when a background scan stopped with mods left to read (the game, an update or a check took over, or another scan
 /// held its lock). brokenMods.ts then treats the run as unfinished: no game update toast yet, and the next focus resumes.
 static STOPPED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -1232,6 +1241,12 @@ pub async fn xtra_vfx_stale(mod_path: String, game_paks: String, files: Vec<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_a_file_in_use_gets_the_plain_message() {
+        assert!(in_use_message(&std::io::Error::from_raw_os_error(32)).unwrap().contains("try again"));
+        assert!(in_use_message(&std::io::Error::from_raw_os_error(5)).is_none(), "access denied keeps the system text");
+    }
 
     #[test]
     fn a_new_run_keeps_the_other_runs_a_review_waits_on() {
