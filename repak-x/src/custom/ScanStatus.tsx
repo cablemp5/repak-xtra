@@ -5,7 +5,7 @@
 // Laws of UX: the work in progress stays in view (Doherty Threshold), and the count shows how far along it is
 // (Goal-Gradient Effect). A paused run stays listed until it is done (Zeigarnik Effect).
 import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, LoaderCircle, Pause } from 'lucide-react'
+import { AlertTriangle, Pause } from 'lucide-react'
 import { rescanVerdicts } from './brokenMods'
 import { holdScan, progressLine, useScanRun } from './scanProgress'
 import { APP_NAME } from './edition'
@@ -34,9 +34,9 @@ export default function ScanStatus() {
     <div className="lo-gen scan-gen" ref={ref}>
       <button type="button" className="btn-ghost scan-status" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(v => !v)}
         title={r.running ? 'Show the mod checks: pause or cancel them' : 'The mod checks are paused: resume or cancel them'}>
-        {/* running: the spinner and its words under one shimmer sweep (theme.css t-shimmer-all) */}
+        {/* running: only its words, shimmering */}
         {r.running
-          ? <span className="scan-status-in t-shimmer-all"><LoaderCircle size={14} className="scan-status-spin" aria-hidden="true" />{stopping ? 'Stopping checks' : 'Checking mods'}</span>
+          ? <span className="scan-status-in t-shimmer">{stopping ? 'Stopping checks' : 'Checking mods'}</span>
           : <span className="scan-status-in"><Pause size={12} fill="currentColor" className="pause-icon" aria-hidden="true" />Checks paused</span>}
       </button>
       {open && (
