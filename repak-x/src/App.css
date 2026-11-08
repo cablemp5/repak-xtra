@@ -1856,6 +1856,7 @@ input[type="text"]:focus {
 /* The button's own gap and padding shrink alongside its label */
 .btn-check-conflicts,
 .btn-asset-explorer {
+  gap: 8px; /* repakxtra: the app's icon-to-label gap, not .btn-ghost's 0.35rem */
   transition: gap 0.22s ease, padding 0.22s ease, border-color 0.2s ease, background 0.2s ease;
 }
 
