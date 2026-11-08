@@ -1480,7 +1480,7 @@ html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="
    chosen Blur background is content, so it stays. */
 html[data-lite] { --page-blur: 0px; --icon-swap-blur: 0px; --stagger-blur: 0px; --reveal-blur: 0px; --digit-blur: 0px; --text-swap-blur: 0px; }
 html[data-lite] *, html[data-lite] *::before, html[data-lite] *::after { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
-html[data-lite] .t-acc-panel-inner, html[data-lite] .lo-media.is-running .lo-card-image img, html[data-lite] .lo-media.is-queued .lo-card-image img,
+html[data-lite] .t-acc-panel-inner, html[data-lite] .lo-media:is(.is-running, .is-queued) .lo-card-image :is(img, video),
 html[data-lite] .shine-border::after, html[data-lite] .toast-item { filter: none !important; }
 html[data-lite] .shine-border::after { animation: none !important; }
 
@@ -1734,7 +1734,7 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
 /* ---------- preview batches: card skeletons (transitions.dev Skeleton loader) ---------- */
 :root { --pulse-dur: 1000ms; --pulse-min: 0.5; --skel-tone: rgba(255, 255, 255, 0.07); }
 /* The card: its image darkens and blurs under a shimmer while the render runs or waits, its status written on it */
-.lo-media.is-running .lo-card-image img, .lo-media.is-queued .lo-card-image img { opacity: 0.3; filter: blur(10px); }
+.lo-media:is(.is-running, .is-queued) .lo-card-image :is(img, video) { opacity: 0.3; filter: blur(10px); }   /* video: KO prompt previews play as one */
 .lo-media.is-running .lo-card-placeholder, .lo-media.is-queued .lo-card-placeholder { visibility: hidden; }
 .lo-skel { position: absolute; inset: 0; z-index: 1; pointer-events: none; display: flex; align-items: center; justify-content: center;
   overflow: hidden; background: rgba(6, 7, 9, 0.55); animation: t-skel-pulse var(--pulse-dur) ease-in-out infinite; }
