@@ -1621,7 +1621,7 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
    sits right after the name */
 .mod-row-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px; }
 .mod-row-main .mod-row-name { flex: 0 1 auto; }
-.mod-row .row-rename { opacity: 0; transition: opacity 0.12s ease; }
+.mod-row .row-rename { flex: none; margin-left: 6px; opacity: 0; transition: opacity 0.12s ease; }   /* 8px from the name: its hover box and hit area never touch the last letter */
 .mod-row:hover .row-rename, .mod-row .row-rename:focus-visible { opacity: 1; }
 .mod-row-rename { flex: 1; min-width: 0; height: 28px; padding: 0 8px !important; font: 13px var(--font-primary); color: var(--text-primary);
   background: var(--field-bg) !important; border: 1px solid rgba(255, 255, 255, 0.16) !important; border-radius: 6px !important;
@@ -2624,6 +2624,10 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 .lo-media-cta .lo-text-btn { pointer-events: auto; margin: 8px 0 0; background: var(--bg-darker) !important; }
 .lo-media-cta .lo-text-btn .bulk-num { color: var(--text-secondary); }
 .lo-media-cta small { max-width: 26ch; line-height: 1.45; text-wrap: balance; }
+/* Generate previews stays one line in the card: its words cut with an ellipsis, the icon and mod count keep their size */
+.lo-media-cta .lo-text-btn { max-width: 100%; min-width: 0; white-space: nowrap; }
+.lo-media-cta .lo-text-btn > :is(svg, .bulk-num, .setup-chip) { flex: none; }
+.lo-media-cta .lo-text-btn .bulk-btn-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* The empty Capture card: whether the game is open (amber dot closed, green open), and while it is closed the button
    reads as unavailable (dimmed, dashed, a lock in place of the camera) */
 .cap-status { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 999px; margin-bottom: 2px;
@@ -2687,6 +2691,8 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
   color: var(--cap, var(--text-primary)); font: 600 24px/1.15 var(--font-primary); letter-spacing: -0.02em; text-align: center; cursor: text;
   transition: border-color 0.15s ease; }
 /* selected words keep their color, so a color picked with the text selected shows */
+/* a picked color shows while typing: the app-wide focus rule holds a focused field's color with a 1000000s transition */
+.lo-caption-wrap .lo-caption-edit:is(:focus, :focus-visible) { transition: none !important; }
 .lo-caption-edit::selection { color: var(--cap, var(--text-primary)); }
 .app .lo-caption-edit::placeholder { color: rgba(255, 255, 255, 0.28); }   /* .app: past the app-wide .app textarea::placeholder grey */
 /* Empty, the field is as wide as "Type a title" and starts at its left, so the caret sits at the start of the words */
