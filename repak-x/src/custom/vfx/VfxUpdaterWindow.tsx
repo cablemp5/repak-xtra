@@ -570,7 +570,9 @@ export function VfxUpdaterPanel() {
   useEffect(() => {
     const un = listen<{ message: string }>('vfx_progress', e => {
       const key = Object.keys(runsRef.current).find(k => runsRef.current[k].status === 'running')
-      if (key && e.payload?.message) patch(key, { sub: e.payload.message })
+      // a command's closing "done" line (uasset_tool.rs, just before it returns) can land after the next step started,
+      // where it would stand in for that step's name: those are skipped
+      if (key && e.payload?.message && !/^(Extracted|Converted) \d|created successfully$/.test(e.payload.message)) patch(key, { sub: e.payload.message })
     })
     return () => { un.then(f => f()) }
   }, [])
