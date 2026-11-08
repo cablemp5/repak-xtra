@@ -173,7 +173,7 @@ const LoadoutCard = memo(function LoadoutCard({ p, l, groupBy, canGenerate, busy
             title={label} aria-label={label} onChange={(checked: boolean) => onToggle(l, checked && !partial)} />
         </div>
         <p className="lo-card-meta">
-          {busy ? 'Switching mods' : p.mods.length === 0 ? 'Loading mods' : <>
+          {busy ? 'Switching mods…' : p.mods.length === 0 ? 'Loading mods…' : <>
             {groupBy === 'hero' && <>{l.label}<span className="lo-sep">·</span></>}
             {`${onNow}/${l.on.length}`}
             <OnDot on={onNow} of={present} />
@@ -582,10 +582,10 @@ function LoadoutsHome(p: LoadoutProps) {
             </button>
             {genMenu && batch && (
               <div className="sigeon-menu lo-gen-menu" role="menu">
-                <div className="lo-gen-status" role="status"><b>{batch.name}</b><span>{stage || 'Starting'}</span></div>
+                <div className="lo-gen-status" role="status"><b>{batch.name}</b><span>{stage || 'Starting…'}</span></div>
                 <button type="button" role="menuitem" className="sigeon-item run-stop-btn" disabled={batch.stopping} onClick={() => { setGenMenu(false); stopPreviews() }}
                   title={batch.left ? 'Stop now and clear the queue' : 'Stop now'}>
-                  <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />{batch.stopping ? 'Stopping' : batch.left ? 'Stop all' : 'Stop'}</span>
+                  <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />{batch.stopping ? 'Stopping…' : batch.left ? 'Stop all' : 'Stop'}</span>
                 </button>
               </div>
             )}

@@ -112,7 +112,7 @@ export function UpdateModal({ isOpen, updateInfo, downloadProgress, downloadedPa
           {ready
             ? <button type="button" className="btn-primary" onClick={onApply}>Install and restart</button>
             : updateInfo.asset_url && <button type="button" className="btn-primary" disabled={downloading} onClick={onDownload}>
-                <Download size={14} /> {downloading ? 'Downloading' : 'Download update'}</button>}
+                <Download size={14} /> {downloading ? 'Downloading…' : 'Download update'}</button>}
         </div>
       </motion.div>
     </div>

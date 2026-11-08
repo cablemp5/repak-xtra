@@ -74,7 +74,7 @@ fn simulate_winget(app: &AppHandle) -> Result<(Option<i32>, String), String> {
         say("Downloading https://download.blender.org/release/blender-windows-x64.msi", i * 9_500_000, 380_000_000, 250);
     }
     say("Successfully verified installer hash", 0, 0, 1000);
-    say("Starting package install", 0, 0, 8000);
+    say("Starting package install...", 0, 0, 8000);
     SANDBOX_BLENDER_IN.store(true, std::sync::atomic::Ordering::Relaxed);
     Ok((Some(0), "Successfully installed".into()))
 }

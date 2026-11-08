@@ -48,7 +48,7 @@ const Progress = ({
       aria-valuenow={isIndeterminate ? undefined : value}
       aria-valuemin={minValue}
       aria-valuemax={maxValue}
-      aria-label={label || 'Loading'}
+      aria-label={label || 'Loading...'}
       {...props}
     >
       {(label || showValueLabel) && (

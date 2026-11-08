@@ -503,7 +503,7 @@ function App() {
     obfuscatePreference: null
   })
   const [promiseLoaderCount, setPromiseLoaderCount] = useState(0)
-  const [promiseLoaderMessage, setPromiseLoaderMessage] = useState('Working')
+  const [promiseLoaderMessage, setPromiseLoaderMessage] = useState('Working...')
 
   const dropTargetFolderRef = useRef<string | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -738,7 +738,7 @@ function App() {
         {
           loading: {
             title: 'Quick Installing',
-            description: `Copying ${plural(pathCount, 'file')} to "${folderName}"`
+            description: `Copying ${plural(pathCount, 'file')} to "${folderName}"...`
           },
           success: (result) => ({
             title: 'Installation Complete',
@@ -755,7 +755,7 @@ function App() {
     }
 
     try {
-      setStatus('Processing dropped items')
+      setStatus('Processing dropped items...')
       const modsData = await invoke('parse_dropped_files', { paths }) as DroppedModParse[]
       if (!modsData || modsData.length === 0) {
         setStatus('No installable mods found in dropped items')
@@ -795,9 +795,9 @@ function App() {
 
   const handleCheckClashes = async () => {
     try {
-      await withPromiseTransitionLoader('Checking conflicts', async () => {
+      await withPromiseTransitionLoader('Checking conflicts...', async () => {
         console.debug('[Conflicts] Starting global conflict check')
-        setStatus('Checking for clashes')
+        setStatus('Checking for clashes...')
         clashScopeModPath.current = null
         const result = await invoke('check_mod_clashes') as any
         setClashes(result)
@@ -909,9 +909,9 @@ function App() {
 
   const handleCheckSingleModClashes = async (mod: ModRecord) => {
     try {
-      await withPromiseTransitionLoader('Checking conflicts', async () => {
+      await withPromiseTransitionLoader('Checking conflicts...', async () => {
         console.debug('[Conflicts] Starting single-mod conflict check', { modPath: mod.path })
-        setStatus(`Checking conflicts for ${mod.customName || mod.mod_name || 'mod'}`)
+        setStatus(`Checking conflicts for ${mod.customName || mod.mod_name || 'mod'}...`)
         clashScopeModPath.current = mod.path
         const conflicts = await invoke('check_single_mod_conflicts', { modPath: mod.path }) as SingleModConflict[]
 
@@ -1133,7 +1133,7 @@ function App() {
     if (gameRunning && !bypassGameRunningLock) { stableDeleteBlocked(); return } // repakxtra: the same lock as one mod's Delete
 
     try {
-      setStatus(`Deleting ${selectedFiles.size} mods`)
+      setStatus(`Deleting ${selectedFiles.size} mods...`)
       setModLoadingProgress(-1)
       setIsModsLoading(true)
 
@@ -1208,7 +1208,7 @@ function App() {
     if (targetMods.length === 0) return
 
     try {
-      setStatus(`${enable ? 'Enabling' : 'Disabling'} ${targetMods.length} mods`)
+      setStatus(`${enable ? 'Enabling' : 'Disabling'} ${targetMods.length} mods...`)
       const oldPaths = new Set(selectedMods)
       const normalizeToggleKey = (path: string) => path.replace(/\.(pak|bak_repak|pak_disabled)$/i, '')
       let count = 0
@@ -1282,7 +1282,7 @@ function App() {
         modPath = mod.utoc_path
       }
 
-      setStatus('Extracting assets')
+      setStatus('Extracting assets...')
       setModLoadingProgress(-1)
       setIsModsLoading(true)
 
@@ -1357,7 +1357,7 @@ function App() {
     setUpdateModState(prev => ({ ...prev, isOpen: false }))
 
     try {
-      setStatus(`Updating ${mod.custom_name || 'mod'}`)
+      setStatus(`Updating ${mod.custom_name || 'mod'}...`)
       setModLoadingProgress(-1)
       setIsModsLoading(true)
 
@@ -1443,7 +1443,7 @@ function App() {
     // Listen for install progress
     const unlisten = listen('install_progress', (event: any) => {
       const progress = Math.round(event.payload)
-      setStatus(`Installing ${progress}%`)
+      setStatus(`Installing... ${progress}%`)
       setModLoadingProgress(progress)
       setIsModsLoading(true)
     })
@@ -1483,7 +1483,7 @@ function App() {
 
     // Listen for directory changes (new folders, deleted folders, etc.)
     const unlistenDirChanged = listen('mods_dir_changed', () => {
-      console.log('Directory changed, reloading mods and folders')
+      console.log('Directory changed, reloading mods and folders...')
       loadMods()
       loadFolders()
     })
@@ -1821,10 +1821,10 @@ function App() {
     // may set the list: an older scan answering late put the pre-install list back, hiding a mod just installed
     const mine = ++loadModsSeq.current
     try {
-      console.log('Loading mods')
+      console.log('Loading mods...')
       setIsModsLoading(true)
       setModLoadingProgress(-1) // Indeterminate while fetching list
-      setStatus('Loading mods')
+      setStatus('Loading mods...')
 
       const modList = await invoke('get_pak_files') as any
       console.log('Loaded mods:', modList)
@@ -1832,7 +1832,7 @@ function App() {
       syncLoadoutKeys(modList) // repakxtra: loadout members follow moved mods and old saves migrate, before the list shows
       setMods(modList)
       requestAnimationFrame(hideSplash) // repakxtra: after the list paints
-      setStatus(`Loading details for ${plural(modList.length, 'mod')}`)
+      setStatus(`Loading details for ${plural(modList.length, 'mod')}...`)
 
       // Also check the base game's Paks folder for Project Galacta, in case it
       // was dropped there instead of into ~mods. Fire-and-forget: it shouldn't
@@ -2349,10 +2349,10 @@ function App() {
               ? 'Creating Folder & Moving'
               : 'Creating Folder',
           description: isQuickOrganize
-            ? `Creating "${folderName}" and copying ${plural(pathCount, 'file')}`
+            ? `Creating "${folderName}" and copying ${plural(pathCount, 'file')}...`
             : isMoveModsAfterCreate
-              ? `Creating "${folderName}" and moving ${plural(moveModPaths.length, 'mod')}`
-              : `Creating folder "${folderName}"`
+              ? `Creating "${folderName}" and moving ${plural(moveModPaths.length, 'mod')}...`
+              : `Creating folder "${folderName}"...`
         },
         success: (result) => ({
           title: result.isInstall
@@ -2812,7 +2812,7 @@ function App() {
       {
         loading: {
           title: 'Installing from Extension',
-          description: 'Copying mod file'
+          description: 'Copying mod file...'
         },
         success: () => ({
           title: 'Installation Complete',
@@ -3238,7 +3238,7 @@ function App() {
     // Deliberately not cleared: the startup diagnostics above are exactly the
     // context a failed install needs, and wiping them here meant a bug report
     // never contained them. The user can still clear the drawer by hand.
-    uiLog.info('Install', `Installing ${plural(modsWithSettings.length, 'mod')}`)
+    uiLog.info('Install', `Installing ${plural(modsWithSettings.length, 'mod')}...`)
 
     // Update DRP status to Installing
     invoke('discord_set_installing').catch(console.warn)
@@ -3695,7 +3695,7 @@ function App() {
           <InputPromptModal
             isOpen={!!newFolderPrompt}
             title={promptPathCount > 0 ? "New folder and install" : newFolderPrompt?.parentId ? `New folder in ${newFolderPrompt.parentId.split('/').pop()}` : "New folder"}
-            placeholder="Enter folder name"
+            placeholder="Enter folder name..."
             confirmText={promptPathCount > 0 ? "Create & Install" : "Create"}
             onConfirm={handleNewFolderConfirm}
             onCancel={() => {
@@ -3709,7 +3709,7 @@ function App() {
       <InputPromptModal
         isOpen={!!renameFolderPrompt}
         title="Rename Folder"
-        placeholder="Enter new folder name"
+        placeholder="Enter new folder name..."
         confirmText="Rename"
         initialValue={renameFolderPrompt?.currentName || ''}
         onConfirm={handleRenameFolderConfirm}
@@ -3719,7 +3719,7 @@ function App() {
       <InputPromptModal
         isOpen={!!newTagPrompt}
         title="New tag"
-        placeholder="Enter tag name"
+        placeholder="Enter tag name..."
         confirmText="Create"
         icon={<FaTag />}
         onConfirm={(tag) => {
@@ -3732,7 +3732,7 @@ function App() {
       <InputPromptModal
         isOpen={!!newFolderFromInstall}
         title="New folder"
-        placeholder="Enter folder name"
+        placeholder="Enter folder name..."
         confirmText="Create"
         onConfirm={(name) => {
           if (newFolderFromInstall?.callback) newFolderFromInstall.callback(name)

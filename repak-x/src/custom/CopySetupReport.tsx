@@ -48,7 +48,7 @@ export default function CopySetupReport({ alert, className = 'action-btn' }: { a
   return (
     <button type="button" className={className} disabled={busy} onClick={run}
       title="Copies your setup and the mods that are on, ready to paste in a help channel. No folder paths or user name.">
-      {copied ? <Check size={14} /> : <ClipboardCopy size={14} />} {busy ? 'Copying' : copied ? 'Copied' : 'Copy setup report'}
+      {copied ? <Check size={14} /> : <ClipboardCopy size={14} />} {busy ? 'Copying…' : copied ? 'Copied' : 'Copy setup report'}
     </button>
   )
 }

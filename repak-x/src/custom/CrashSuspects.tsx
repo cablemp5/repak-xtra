@@ -131,7 +131,7 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
         <div className="modal-body cs-body">
           {crash.previous && <p className="cs-note">This crash happened before repakxtra started, and its report does not say which mods were on. These are the mods that are on now.</p>}
           {suspects === null
-            ? <p className="cs-empty">Looking through the mods that are on</p>
+            ? <p className="cs-empty">Looking through the mods that are on…</p>
             : suspects.length === 0
               ? <p className="cs-empty">{failed ? 'The mods could not be checked just now. Open this again, or find the mod by testing the game.' : 'repakxtra can still find it by testing: it switches groups of mods off while you launch the game, and puts them all back at the end.'}</p>
               // one group per match strength, closest first: a heading instead of the same reason on every row (common
@@ -167,7 +167,7 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
           )}
           {Boolean(suspects?.length) && (
             <button type="button" className="btn-primary" disabled={busy || picked.size === 0} onClick={turnOff}>
-              {busy ? 'Turning off' : picked.size ? `Turn off ${plural(picked.size, 'mod')}` : 'Turn off'}
+              {busy ? 'Turning off…' : picked.size ? `Turn off ${plural(picked.size, 'mod')}` : 'Turn off'}
             </button>
           )}
         </div>

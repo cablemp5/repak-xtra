@@ -33,7 +33,7 @@ const CustomDropdown = ({
     options = [],
     value,
     onChange,
-    placeholder = "Select",
+    placeholder = "Select...",
     icon = null,
     className = "",
     disabled = false,

@@ -21,7 +21,7 @@ const AGAIN = 'Discord did not answer. Try again in a moment.'
 /** The line under the card for each state (null: nothing to say). Pure. */
 export function claimText(state: ClaimState): string | null {
   switch (state) {
-    case 'waiting': return 'Finish in your browser'
+    case 'waiting': return 'Finish in your browser…'
     case 'ok': return null // the card's own "Role claimed" says it
     case 'not_member': return 'Join the server first, then claim again.'
     case 'denied': return 'Nothing changed. Try again any time.'
@@ -93,7 +93,7 @@ export function checkReady() {
 export const useClaim = () => useSyncExternalStore(f => { subscribers.add(f); return () => { subscribers.delete(f) } }, () => state, () => 'unset' as ClaimState)
 
 if (import.meta.env.DEV) {
-  console.assert(claimText('waiting') === 'Finish in your browser', 'the click answers at once')
+  console.assert(claimText('waiting') === 'Finish in your browser…', 'the click answers at once')
   console.assert(claimText('ok') === null &&claimText('not_member') === 'Join the server first, then claim again.', 'ok and not a member')
   console.assert(claimText('denied') === 'Nothing changed. Try again any time.', 'denied')
   console.assert(claimText('error') === AGAIN && claimText('timeout') === AGAIN, 'an error and the timeout read alike')

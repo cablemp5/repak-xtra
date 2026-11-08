@@ -36,7 +36,7 @@ type InputPromptModalProps = {
 const InputPromptModal = ({
     isOpen,
     title = 'Enter value',
-    placeholder = 'Enter value',
+    placeholder = 'Enter value...',
     confirmText = 'Confirm',
     cancelText = 'Cancel',
     icon = <VscNewFolder />,

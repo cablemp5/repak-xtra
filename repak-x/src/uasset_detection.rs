@@ -40,7 +40,7 @@ pub async fn detect_mesh_files_async(mod_contents: &[String]) -> bool {
                 info!("[Detection] UAssetAPI checking file {}: {}", i + 1, file);
             }
 
-            info!("[Detection] Calling batch_detect_skeletal_mesh");
+            info!("[Detection] Calling batch_detect_skeletal_mesh...");
             match toolkit.batch_detect_skeletal_mesh(&uasset_files) {
                 Ok(true) => {
                     info!("[Detection] ✓ FOUND SkeletalMesh (UAssetAPI returned true)");

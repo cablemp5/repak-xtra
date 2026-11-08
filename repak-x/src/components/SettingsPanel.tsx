@@ -238,7 +238,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                           title="Find the game's mods folder"
                         >
                           <RiSparkling2Fill />
-                          {isGamePathLoading ? 'Detecting' : 'Auto-detect'}
+                          {isGamePathLoading ? 'Detecting…' : 'Auto-detect'}
                         </button>
                         <button
                           onClick={onBrowseGamePath}
@@ -330,7 +330,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                         style={{ minWidth: '140px' }}
                       >
                         <MdRefresh className={isCheckingUpdates ? 'spin-icon' : ''} />
-                        {isCheckingUpdates ? 'Checking' : 'Check now'}
+                        {isCheckingUpdates ? 'Checking…' : 'Check now'}
                       </button>
                       <button
                         onClick={onViewChangelog}
@@ -395,7 +395,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                     </div>
                     <div className="setting-item">
                       <Checkbox checked={showModType} onChange={(checked: boolean) => live('showModType', setShowModType)(checked)}>
-                        <span>Mod type tag (Mesh, Texture, VFX, and more)</span>
+                        <span>Mod type tag (Mesh, Texture, VFX…)</span>
                       </Checkbox>
                     </div>
                     <ModPrefs />

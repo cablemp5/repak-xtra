@@ -420,7 +420,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
                               <div className="ip-field">
                                 <span className="ip-label">Folder</span>
                                 <CustomDropdown options={folderOptions} value={folderOf(s)}
-                                  onChange={(v: string) => update(i, { installSubfolder: v === ROOT ? null : v })} onAddNew={() => newFolderFor(i)} addNewLabel="+ New folder" />
+                                  onChange={(v: string) => update(i, { installSubfolder: v === ROOT ? null : v })} onAddNew={() => newFolderFor(i)} addNewLabel="+ New folder…" />
                               </div>
                             )}
                           </div>

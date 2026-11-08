@@ -88,7 +88,7 @@ export default function StorageCleanup({ alert }: { alert: ReturnType<typeof use
         <p className="setting-subtext">
           What {APP_NAME} keeps on this PC{sections ? `, ${size(sum(shown))} in all` : ''}. Your mods, settings, and loadouts are never part of it.
         </p>
-        {!sections && !failed && <p className="setting-subtext">Measuring</p>}
+        {!sections && !failed && <p className="setting-subtext">Measuring…</p>}
         {failed && <p className="setting-subtext xs-storage-fail">Could not measure the storage. {failed} <button type="button" className="su-link" onClick={() => void load()}>Try again</button></p>}
         {shown.length > 0 && <div className="xs-storage-list">
           {GROUPS.map(g => {
@@ -98,7 +98,7 @@ export default function StorageCleanup({ alert }: { alert: ReturnType<typeof use
         </div>}
         {asking && chosen.length > 0 ? (
           // the same one-line question and plain buttons as Setup's removes (Jakob's Law: one confirm look in the app)
-          <ConfirmRow className="xs-storage-confirm" text={question} yes={busy ? 'Deleting' : 'Delete'} busy={busy} onYes={() => void clear()} onNo={() => setAsking(false)} />
+          <ConfirmRow className="xs-storage-confirm" text={question} yes={busy ? 'Deleting…' : 'Delete'} busy={busy} onYes={() => void clear()} onNo={() => setAsking(false)} />
         ) : shown.length > 0 && (
           <div className="xs-buttons xs-storage-actions">
             <button type="button" className="action-btn settings-reset-btn" disabled={!chosen.length || busy} onClick={() => setAsking(true)}

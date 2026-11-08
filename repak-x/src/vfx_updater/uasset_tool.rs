@@ -209,7 +209,7 @@ pub async fn extract_mod_assets(
         step: 1,
         current: 0,
         total: 1,
-        message: "Extracting mod assets from IOStore".to_string(),
+        message: "Extracting mod assets from IOStore...".to_string(),
     });
 
     vfx_debug(&format!(
@@ -303,7 +303,7 @@ pub async fn convert_uassets_to_json(
         step: 2,
         current: 0,
         total: 1,
-        message: "Converting assets".to_string(),
+        message: "Converting assets...".to_string(),
     });
 
     let list_path = Path::new(input_dir).join("uasset_list.txt");
@@ -469,7 +469,7 @@ pub async fn convert_json_to_uassets(
         current: 0,
         total: 1,
         message: format!(
-            "Converting {} JSON files in single batch",
+            "Converting {} JSON files in single batch...",
             json_files.len()
         ),
     });
@@ -601,7 +601,7 @@ pub async fn extract_vanilla_assets_split(
         step: 4,
         current: 0,
         total: 1,
-        message: format!("Extracting {} vanilla assets", filter_patterns.len()),
+        message: format!("Extracting {} vanilla assets...", filter_patterns.len()),
     });
 
     let normalized_patterns: Vec<String> = filter_patterns
@@ -634,7 +634,7 @@ pub async fn extract_vanilla_assets_split(
     }
     if package_patterns.len() > 20 {
         vfx_debug(&format!(
-            "    and {} more",
+            "    ... and {} more",
             package_patterns.len() - 20
         ));
     }
@@ -919,7 +919,7 @@ pub async fn pack_to_iostore(
         step: 8,
         current: 0,
         total: 1,
-        message: format!("Packing {} assets", uasset_files.len()),
+        message: format!("Packing {} assets...", uasset_files.len()),
     });
 
     // Mirrors the legacy CLI `create_mod_iostore <output_base> <input_dir>` (compression
@@ -981,7 +981,7 @@ pub async fn get_asset_classes(
         step: 0,
         current: 0,
         total: uasset_paths.len(),
-        message: format!("Scanning {} assets", uasset_paths.len()),
+        message: format!("Scanning {} assets...", uasset_paths.len()),
     });
 
     let mut class_map: HashMap<String, String> = HashMap::new();
@@ -1099,7 +1099,7 @@ pub async fn batch_detect_asset_types(
         step: 0,
         current: 0,
         total: uasset_paths.len(),
-        message: format!("Detecting {} assets", uasset_paths.len()),
+        message: format!("Detecting {} assets...", uasset_paths.len()),
     });
 
     let mut type_map: HashMap<String, String> = HashMap::new();

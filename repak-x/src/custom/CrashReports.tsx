@@ -37,7 +37,7 @@ export default function CrashReports() {
       <p className="setting-subtext">Marvel Rivals' crash folder holds each crash as its own UECC folder. Zip the newest one when sharing a crash with support.</p>
       <div className="setting-group">
         {crashes === null
-          ? <p className="rd-empty">Loading</p>
+          ? <p className="rd-empty">Loading…</p>
           : crashes.length === 0
             ? <p className="rd-empty">No crashes found.</p>
             : (

@@ -91,7 +91,7 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
             <button type="button" className="lo-text-btn" onClick={close}>Not now</button>
             <button type="button" className="btn-primary" disabled={busy || on.length === 0}
               onClick={() => work(async () => { cue('tap'); const r = await startBisect(d, mods); if (r) cue('toggle'); return r && { step: 'test', run: r } })}>
-              {busy ? 'Switching mods' : 'Start testing'}
+              {busy ? 'Switching mods…' : 'Start testing'}
             </button>
           </div>
         </>}
@@ -188,7 +188,7 @@ function Test({ run, resumed, back, busy, deps, answer, undo, stop }: {
     : run.phase === 'confirm' ? (found.length ? 'Last check: repakxtra turned every mod back on except this one and the ones found so far.' : 'Last check: repakxtra turned every mod back on except this one.')
     : `repakxtra turned ${run.start.length - offNow.length} of your mods on and ${offNow.length} off for this test. ${plural(run.candidates.length, 'suspect')} left.`
   const live = running || starting
-  const state = busy ? 'Switching mods' : !ready ? 'Checking your mods' : running ? 'Game running' : starting ? 'Starting the game' : played ? 'Game closed' : null
+  const state = busy ? 'Switching mods…' : !ready ? 'Checking your mods…' : running ? 'Game running' : starting ? 'Starting the game…' : played ? 'Game closed' : null
   const waiting = busy || live || !played || !ready
   return <>
     <div className={`modal-body cs-body bs-body ${back ? 'bs-in-back' : 'bs-in'}`}>

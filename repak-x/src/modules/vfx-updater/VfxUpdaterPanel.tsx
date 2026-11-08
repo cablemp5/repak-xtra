@@ -304,7 +304,7 @@ export default function VfxUpdaterPanel() {
   const runUsmapCheck = useCallback(async (force: boolean) => {
     if (force) {
       setIsFetchingUsmap(true);
-      addLog(`Fetching latest USMAP from rivals-depot`, "info");
+      addLog(`Fetching latest USMAP from rivals-depot...`, "info");
     }
     try {
       const result = await invoke<{
@@ -397,11 +397,11 @@ export default function VfxUpdaterPanel() {
 
   // Why UPDATE MOD is locked, or null once the pipeline has everything it needs.
   const startLockReason: string | null = (() => {
-    if (isProcessing) return "Pipeline is running";
-    if (!settingsLoaded) return "Loading settings";
-    if (!initialUsmapCheckDone || isFetchingUsmap) return "Checking for the latest USMAP";
+    if (isProcessing) return "Pipeline is running...";
+    if (!settingsLoaded) return "Loading settings...";
+    if (!initialUsmapCheckDone || isFetchingUsmap) return "Checking for the latest USMAP...";
     if (!usmapPath) return "Select a USMAP file";
-    if (usmapCheck?.path !== usmapPath) return "Checking USMAP";
+    if (usmapCheck?.path !== usmapPath) return "Checking USMAP...";
     if (!usmapCheck.exists) return "USMAP file not found - Fetch or Browse for one";
     if (!gamePaksPath) return "Game path is not set";
     if (!modPath) return "Select a mod to update";
@@ -578,13 +578,13 @@ export default function VfxUpdaterPanel() {
               <div className="vfx-setting-row">
                 <label>USMAP File</label>
                 <div className="vfx-input-group">
-                  <TailInput value={usmapPath || ""} placeholder="Select .usmap file" />
+                  <TailInput value={usmapPath || ""} placeholder="Select .usmap file..." />
                   <button
                     onClick={() => { void runUsmapCheck(true); }}
                     disabled={isFetchingUsmap}
                     title="Check rivals-depot for the latest USMAP and replace the current one"
                   >
-                    {isFetchingUsmap ? "Fetching" : "Fetch"}
+                    {isFetchingUsmap ? "Fetching..." : "Fetch"}
                   </button>
                   <button onClick={() => handleFilePick(setUsmapPath, [{ name: "USMAP", extensions: ["usmap"] }], true)}>Browse</button>
                 </div>
@@ -593,7 +593,7 @@ export default function VfxUpdaterPanel() {
               <div className="vfx-setting-row">
                 <label>Mod File (.utoc)</label>
                 <div className="vfx-input-group">
-                  <TailInput value={modPath || ""} placeholder="Select mod to update" />
+                  <TailInput value={modPath || ""} placeholder="Select mod to update..." />
                   <button onClick={() => handleFilePick(setModPath, [{ name: "IOStore", extensions: ["utoc"] }])}>Browse</button>
                 </div>
               </div>
@@ -643,7 +643,7 @@ export default function VfxUpdaterPanel() {
                   <div key={step.id} className={`vfx-segment ${clampedStep > step.id ? 'completed' : clampedStep === step.id ? 'active' : ''}`} />
                 ))}
               </div>
-              <div className="vfx-step-status">{stepStatus?.message || "Running Pipeline"}</div>
+              <div className="vfx-step-status">{stepStatus?.message || "Running Pipeline..."}</div>
             </div>
 
             <div className="vfx-dial-panel">
@@ -748,7 +748,7 @@ export default function VfxUpdaterPanel() {
           </button>
         )}
         <div className="vfx-logs-content">
-          {logs.length === 0 && <span style={{ opacity: 0.5 }}>Awaiting pipeline execution</span>}
+          {logs.length === 0 && <span style={{ opacity: 0.5 }}>Awaiting pipeline execution...</span>}
           {logs.map((log, i) => (
             <div key={i} className={`vfx-log-entry log-${log.type}`}>
               <span className="log-time">[{log.time}]</span>

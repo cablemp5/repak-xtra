@@ -308,16 +308,16 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
                 onChange={(on: boolean) => onToggle(on && !partial)} title={switchTitle} aria-label={switchTitle} />
               {/* On, Off, or how far it is on, each with its dot (green, red, yellow) */}
               <span className="lp-switch-state">
-                <SwapText text={busy ? 'Switching' : active ? 'On' : onNow ? `${onNow}/${present}` : 'Off'} />
+                <SwapText text={busy ? 'Switching…' : active ? 'On' : onNow ? `${onNow}/${present}` : 'Off'} />
                 {!busy && present > 0 && <OnDot on={onNow} of={present} />}
               </span>
             </label>
             {/* The rest are occasional: one menu instead of a wrapping row of equal buttons */}
             <MoreMenu items={[
               ...((l.cover ?? pickCover(l, coverFills(l, previewMade(l)))) === 'text' ? [] : [
-                { label: previewExport.busy ? 'Exporting preview' : 'Export preview as PNG', onClick: previewExport.exportPng, disabled: previewExport.busy }]),
+                { label: previewExport.busy ? 'Exporting preview…' : 'Export preview as PNG', onClick: previewExport.exportPng, disabled: previewExport.busy }]),
               { label: 'Duplicate', onClick: () => openLoadout(duplicateLoadout(l).id, true) },
-              { label: exporting ? 'Exporting' : 'Export as zip', onClick: exportZip, disabled: exporting },
+              { label: exporting ? 'Exporting…' : 'Export as zip', onClick: exportZip, disabled: exporting },
               ...(missing.length ? [{ label: `Remove ${plural(missing.length, 'missing mod')}`, onClick: dropMissing }] : []),
               ...(hasMedia ? [{ label: 'Remove image', onClick: removeImage }] : []),
             ]} l={l} loadouts={loadouts} danger={{ label: 'Delete', danger: true, onClick: () => { if (deleteWithUndo(p, l)) onBack() } }} />

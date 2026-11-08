@@ -64,7 +64,7 @@ export default function RecentlyDeleted() {
       <p className="setting-subtext">Deleted mods stay here for 7 days, then they are deleted for good. Restore puts a mod back where it was.</p>
       <div className="setting-group">
         {items === null
-          ? <p className="rd-empty">Loading</p>
+          ? <p className="rd-empty">Loading…</p>
           : items.length === 0
             ? <p className="rd-empty">Nothing deleted in the last 7 days.</p>
             : (
@@ -85,7 +85,7 @@ export default function RecentlyDeleted() {
                         </>
                       : <>
                           <button type="button" className="lo-text-btn" disabled={Boolean(busy)} onClick={() => restore(t)}>
-                            <RotateCcw size={14} /> {busy === t.id ? 'Restoring' : 'Restore'}
+                            <RotateCcw size={14} /> {busy === t.id ? 'Restoring…' : 'Restore'}
                           </button>
                           <button type="button" className="lo-icon" disabled={Boolean(busy)} onClick={() => setAsking(t.id)}
                             title={`Delete ${name(t)} for good`} aria-label={`Delete ${name(t)} for good`}>
@@ -106,7 +106,7 @@ export default function RecentlyDeleted() {
               </div>
             )
             : <button type="button" className="lo-text-btn rd-empty-btn" disabled={Boolean(busy)} onClick={() => setConfirm(true)}>
-                {busy === 'all' ? 'Emptying' : 'Empty trash'}
+                {busy === 'all' ? 'Emptying…' : 'Empty trash'}
               </button>
         )}
       </div>

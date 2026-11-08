@@ -142,12 +142,12 @@ function Folder({ f }: { f: Flow }) {
 
 /** Step 1 of the guided setup, also the fallback when the background setup cannot find the game. */
 const findGame = (f: Flow) => {
-  const where = f.gamePath.split(/[\\/]/).filter(Boolean).slice(-2).join('\\') // the last two folders, the whole path in its tooltip
+  const where = '…\\' + f.gamePath.split(/[\\/]/).filter(Boolean).slice(-2).join('\\') // the last two folders, the whole path in its tooltip
   return (
     <Step n={1} done={Boolean(f.gamePath)} title="Find the game"
       action={!f.gamePath && <>
         <StepButton className="btn-primary" working={f.busy === 'find' && 'Looking'} label="Find it" disabled={Boolean(f.busy)} onClick={() => f.run('find', f.onAutoDetect)} />
-        <button type="button" className="lo-text-btn" onClick={() => f.onBrowse()}>Browse</button></>}>
+        <button type="button" className="lo-text-btn" onClick={() => f.onBrowse()}>Browse…</button></>}>
       <p>{!f.gamePath ? 'Not found yet. Find it searches your Steam libraries.' : <>Found. Mods go to <code title={f.gamePath}>{where}</code></>}</p>
     </Step>
   )

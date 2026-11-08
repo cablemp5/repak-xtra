@@ -247,7 +247,7 @@ fn find_mods_from_archive(path: &str) -> Vec<InstallableMod> {
     // Second pass: if no .pak files found, look for content folders with .uasset files
     // This handles archives that contain loose mod files (folders) instead of pre-packed .pak files
     if !found_pak_files {
-        debug!("No .pak files found in archive, looking for content folders");
+        debug!("No .pak files found in archive, looking for content folders...");
 
         // Find directories that contain .uasset files (these are mod content folders)
         let archive_root = std::path::Path::new(path);

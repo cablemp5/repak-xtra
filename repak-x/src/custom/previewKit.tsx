@@ -140,7 +140,7 @@ export function usePreviewKit(alert: Alert) {
 export async function installDroppedKit(paths: string[], alert: Alert) {
   const zip = paths.length === 1 ? paths[0] : undefined
   if (!zip || !isKitZip(zip)) return false
-  const id = alert.showAlert({ color: 'default', title: 'Installing the preview kit', description: 'Unpacking', isLoading: true, duration: 0 })
+  const id = alert.showAlert({ color: 'default', title: 'Installing the preview kit', description: 'Unpacking…', isLoading: true, duration: 0 })
   try {
     const v = await invoke<string>('preview_kit_install', { file: zip })
     await refreshPreviewsAvailable()

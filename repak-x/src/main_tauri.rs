@@ -1008,7 +1008,7 @@ async fn parse_dropped_files(
     use std::fs::File;
 
     // Emit start detection log
-    let _ = window.emit("install_log", "[Detection] Starting UAssetAPI detection");
+    let _ = window.emit("install_log", "[Detection] Starting UAssetAPI detection...");
 
     let mut mods = Vec::new();
 
@@ -1103,7 +1103,7 @@ async fn parse_dropped_files(
             // No PAK files - analyze directory contents for loose assets
             let _ = window.emit(
                 "install_log",
-                "[Detection] No PAK files found, analyzing directory for loose assets",
+                "[Detection] No PAK files found, analyzing directory for loose assets...",
             );
 
             use crate::utils::collect_files;
@@ -1179,7 +1179,7 @@ async fn parse_dropped_files(
 
                     // Only scan for textures - SkeletalMesh and StaticMesh are auto-fixed by ZenConverter
                     // This significantly speeds up detection by skipping unnecessary UAssetAPI calls
-                    let _ = window.emit("install_log", "[Detection] Checking for textures with .ubulk (mesh fixes are automatic)");
+                    let _ = window.emit("install_log", "[Detection] Checking for textures with .ubulk (mesh fixes are automatic)...");
 
                     // For texture detection, we need ALL files (including .ubulk) to check for bulk data
                     let all_files_absolute: Vec<String> = all_files
@@ -1276,7 +1276,7 @@ async fn parse_dropped_files(
                             let _ = window.emit(
                                 "install_log",
                                 format!(
-                                    "[Detection] Found {} PAK files in archive, analyzing each",
+                                    "[Detection] Found {} PAK files in archive, analyzing each...",
                                     pak_files_in_archive.len()
                                 ),
                             );
@@ -1435,7 +1435,7 @@ async fn parse_dropped_files(
                                     .take(40) // Limit to 40 files (20 uasset + 20 uexp pairs)
                                     .collect();
 
-                                let _ = window.emit("install_log", format!("[Detection] Extracting {} files from archive PAK for analysis", files_to_extract.len()));
+                                let _ = window.emit("install_log", format!("[Detection] Extracting {} files from archive PAK for analysis...", files_to_extract.len()));
 
                                 // Extract to temp directory for UAssetAPI analysis
                                 let mut extracted_paths: Vec<String> = Vec::new();
@@ -1482,7 +1482,7 @@ async fn parse_dropped_files(
                                 }
 
                                 // Only scan for textures - mesh fixes are automatic in ZenConverter
-                                let _ = window.emit("install_log", "[Detection] Checking for textures with .ubulk (mesh fixes automatic)");
+                                let _ = window.emit("install_log", "[Detection] Checking for textures with .ubulk (mesh fixes automatic)...");
 
                                 // Texture detection - use extracted files but also check for .ubulk in original file list
                                 let has_ubulk =
@@ -1529,7 +1529,7 @@ async fn parse_dropped_files(
 
                         // If no .pak files found, look for content folders with loose assets
                         if !found_pak {
-                            let _ = window.emit("install_log", "[Detection] No PAK files found in archive, looking for content folders");
+                            let _ = window.emit("install_log", "[Detection] No PAK files found in archive, looking for content folders...");
 
                             use crate::utils::collect_files;
 
@@ -1567,7 +1567,7 @@ async fn parse_dropped_files(
                                         get_current_pak_characteristics(content_files.clone());
 
                                     // Only scan for textures - mesh fixes are automatic in ZenConverter
-                                    let _ = window.emit("install_log", "[Detection] Checking for textures with .ubulk (mesh fixes automatic)");
+                                    let _ = window.emit("install_log", "[Detection] Checking for textures with .ubulk (mesh fixes automatic)...");
                                     let has_texture =
                                         detect_texture_files_async(&content_files).await;
                                     let _ = window.emit(
@@ -1679,7 +1679,7 @@ async fn parse_dropped_files(
                         let _ = window.emit(
                             "install_log",
                             format!(
-                                "[Detection] Extracting {} files from PAK for analysis",
+                                "[Detection] Extracting {} files from PAK for analysis...",
                                 files_to_extract.len()
                             ),
                         );
@@ -1722,7 +1722,7 @@ async fn parse_dropped_files(
                         }
 
                         // Only scan for textures - mesh fixes are automatic in ZenConverter
-                        let _ = window.emit("install_log", "[Detection] Checking for textures with .ubulk (mesh fixes automatic)");
+                        let _ = window.emit("install_log", "[Detection] Checking for textures with .ubulk (mesh fixes automatic)...");
 
                         // Texture detection - use extracted files but also check for .ubulk in original file list
                         let has_ubulk = files.iter().any(|f| f.to_lowercase().ends_with(".ubulk"));
@@ -1945,7 +1945,7 @@ fn copy_iostore_with_compression_check(
     } else {
         // Not compressed, need to recompress with Oodle
         info!(
-            "[QuickOrganize] IoStore {} is NOT compressed, recompressing with Oodle",
+            "[QuickOrganize] IoStore {} is NOT compressed, recompressing with Oodle...",
             utoc_name.to_string_lossy()
         );
         let _ = window.emit(
@@ -3097,7 +3097,7 @@ async fn install_mods(
     for installable in installable_mods.iter_mut() {
         // Try to find matching user settings by mod name, then fallback to path match
         crate::install_mod::write_install_debug(&format!(
-            "  Matching installable '{}' (repak={})",
+            "  Matching installable '{}' (repak={})...",
             installable.mod_name, installable.repak
         ));
         let by_name = user_settings.get(&installable.mod_name).copied();
@@ -3154,7 +3154,7 @@ async fn install_mods(
 
         let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
             window_for_logs
-                .emit("install_log", "Starting installation")
+                .emit("install_log", "Starting installation...")
                 .ok();
             window_for_logs
                 .emit(
@@ -3187,7 +3187,7 @@ async fn install_mods(
             }
 
             window_for_logs
-                .emit("install_log", "Calling installation logic")
+                .emit("install_log", "Calling installation logic...")
                 .ok();
             window_for_logs
                 .emit(
@@ -3199,7 +3199,7 @@ async fn install_mods(
             use crate::install_mod::install_mod_logic::install_mods_in_viewport;
 
             window_for_logs
-                .emit("install_log", "Entering install_mods_in_viewport")
+                .emit("install_log", "Entering install_mods_in_viewport...")
                 .ok();
 
             // Log each mod's path before processing
@@ -5842,7 +5842,7 @@ async fn recompress_mods(
 }
 
 fn recompress_mods_now(game_path: PathBuf, window: Window) -> Result<RecompressResult, String> {
-    ui_log::info("Recompress", "Scanning mods for non-Oodle compression");
+    ui_log::info("Recompress", "Scanning mods for non-Oodle compression...");
 
     let mut result = RecompressResult {
         total_scanned: 0,
@@ -5871,7 +5871,7 @@ fn recompress_mods_now(game_path: PathBuf, window: Window) -> Result<RecompressR
         serde_json::json!({
             "current": 0,
             "total": pak_files.len(),
-            "status": "Scanning"
+            "status": "Scanning..."
         }),
     );
 
@@ -6227,7 +6227,7 @@ async fn check_for_updates(window: Window) -> Result<Option<UpdateInfo>, String>
         }
         return Ok(info);
     }
-    ui_log::info("Update", "Checking for a newer Repak-X release");
+    ui_log::info("Update", "Checking for a newer Repak-X release...");
 
     let client = reqwest::Client::new();
     let url = "https://api.github.com/repos/X-zant/Repak-X/releases/latest";
@@ -6444,7 +6444,7 @@ async fn download_update(
                     && (status.as_u16() == 502 || status.as_u16() == 503 || status.as_u16() == 429)
                 {
                     info!(
-                        "Download attempt {}/{} failed with status {}, retrying",
+                        "Download attempt {}/{} failed with status {}, retrying...",
                         attempt, max_retries, status
                     );
                     tokio::time::sleep(std::time::Duration::from_secs(2 * attempt as u64)).await;
@@ -6455,7 +6455,7 @@ async fn download_update(
             Err(e) => {
                 if attempt < max_retries {
                     info!(
-                        "Download attempt {}/{} failed: {}, retrying",
+                        "Download attempt {}/{} failed: {}, retrying...",
                         attempt, max_retries, e
                     );
                     tokio::time::sleep(std::time::Duration::from_secs(2 * attempt as u64)).await;
@@ -6983,7 +6983,7 @@ async fn monitor_game_for_crashes(
         ui_log::info(
             "Game",
             format!(
-                "Marvel Rivals closed after {}m {}s - checking for crashes",
+                "Marvel Rivals closed after {}m {}s - checking for crashes...",
                 played_secs / 60,
                 played_secs % 60
             ),
@@ -7205,7 +7205,7 @@ async fn get_character_by_skin_id(
 
 #[tauri::command]
 async fn refresh_character_cache() -> Result<String, String> {
-    info!("Manually refreshing character data cache");
+    info!("Manually refreshing character data cache...");
     character_data::refresh_cache();
     info!("Character data cache refreshed successfully");
     Ok("Character data cache refreshed successfully".to_string())
@@ -7215,7 +7215,7 @@ async fn refresh_character_cache() -> Result<String, String> {
 /// Supports cancellation via cancel_character_update command
 #[tauri::command]
 async fn update_character_data_from_github(window: Window) -> Result<usize, String> {
-    ui_log::info("CharDB", "Manual update requested - fetching from GitHub");
+    ui_log::info("CharDB", "Manual update requested - fetching from GitHub...");
 
     let on_progress = move |msg: &str| {
         // Step-by-step chatter is debug: useful when a fetch stalls, noise when
@@ -7252,7 +7252,7 @@ async fn update_character_data_from_github(window: Window) -> Result<usize, Stri
 #[tauri::command]
 async fn cancel_character_update() -> Result<(), String> {
     character_data::request_cancel_update();
-    ui_log::warn("CharDB", "Cancelling character database update");
+    ui_log::warn("CharDB", "Cancelling character database update...");
     Ok(())
 }
 
@@ -7529,7 +7529,7 @@ fn compute_mod_details(
             }
         }
     }
-    info!("Cache miss for mod: {}, opening PAK", path.display());
+    info!("Cache miss for mod: {}, opening PAK...", path.display());
     // --- End cache check ---
 
     // Check if it's IoStore (has .utoc file) BEFORE trying to open the PAK
@@ -7739,7 +7739,7 @@ async fn get_asset_explorer_index(
         return Err(format!("Game path does not exist: {}", game_path.display()));
     }
 
-    ui_log::info("Asset Explorer", "Building asset index for all mods");
+    ui_log::info("Asset Explorer", "Building asset index for all mods...");
 
     let inner = (*state).clone();
     let mut mods: Vec<AssetExplorerMod> = Vec::new();
@@ -7913,7 +7913,7 @@ fn scan_mod_clashes(quiet: bool, game_path: &Path, state: &Arc<Mutex<AppState>>)
     let started = std::time::Instant::now();
 
     if !quiet { // repakxtra
-    ui_log::info("Conflicts", "Checking enabled mods for file conflicts");
+    ui_log::info("Conflicts", "Checking enabled mods for file conflicts...");
     }
 
     if !game_path.exists() {
@@ -8500,7 +8500,7 @@ fn main() {
     // This starts the UAssetTool process once and keeps it alive for the app lifetime
     // repakxtra: loads the .NET toolkit beside the window opening instead of before it (first callers wait on its OnceLock)
     std::thread::spawn(|| {
-        info!("Initializing UAssetToolkit global singleton");
+        info!("Initializing UAssetToolkit global singleton...");
         if let Err(e) = uasset_toolkit::init_global_toolkit() {
             warn!(
                 "Failed to initialize UAssetToolkit singleton: {} - detection features may be slower",
@@ -8512,7 +8512,7 @@ fn main() {
     });
 
     // Initialize character data cache on startup
-    info!("Initializing character data cache");
+    info!("Initializing character data cache...");
     character_data::refresh_cache();
 
     let state = Arc::new(Mutex::new(load_state()));
@@ -8939,7 +8939,7 @@ fn main() {
                 // Ensure Discord RPC is disconnected on exit
                 let discord_state = app_handle.state::<DiscordState>();
                 if discord_state.manager.is_connected() {
-                    info!("App exiting, disconnecting Discord RPC");
+                    info!("App exiting, disconnecting Discord RPC...");
                     let _ = discord_state.manager.disconnect();
                 }
             }

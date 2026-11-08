@@ -114,7 +114,7 @@ function CaptureDialog({ p, l, hero, onUse, onClose }: {
           {!shot && (
             <div className={`cp-status is-${phase}`} role="status">
               {phase === 'listening' && <><i className="cp-listen-dot" aria-hidden="true" /><span>Listening for <Keys /></span></>}
-              {phase === 'capturing' && <><MatrixLoader size={12} /><span>Switching to the game</span></>}
+              {phase === 'capturing' && <><MatrixLoader size={12} /><span>Switching to the game…</span></>}
               {phase === 'idle' && <><i className="cp-listen-dot is-off" aria-hidden="true" /><span>Not listening.</span>
                 <button type="button" className="cp-link" onClick={() => take('capture_game_hotkey')}>Listen again</button></>}
             </div>
@@ -122,12 +122,12 @@ function CaptureDialog({ p, l, hero, onUse, onClose }: {
           {shot
             ? <>
                 <button type="button" className="lo-text-btn" disabled={phase === 'saving'} onClick={retake}><RotateCcw size={14} /> Retake</button>
-                <button type="button" className="btn-primary" disabled={phase === 'saving'} onClick={use}>{phase === 'saving' ? 'Saving' : 'Use as loadout image'}</button>
+                <button type="button" className="btn-primary" disabled={phase === 'saving'} onClick={use}>{phase === 'saving' ? 'Saving…' : 'Use as loadout image'}</button>
               </>
             : <>
                 <button type="button" className="lo-text-btn" onClick={onClose}>Cancel</button>
                 <button type="button" className="btn-primary" disabled={phase === 'capturing'} onClick={() => take('capture_game_now')}>
-                  <Camera size={14} /> {phase === 'capturing' ? 'Capturing' : 'Capture now'}
+                  <Camera size={14} /> {phase === 'capturing' ? 'Capturing…' : 'Capture now'}
                 </button>
               </>}
         </div>

@@ -74,7 +74,7 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
           <p>A full copy of your mods and the bypass files. Make one before you verify game files in Steam, reinstall, or move the game. Restore puts back only what went missing, so later changes stay.</p>
         </div>
         {/* optional, so None yet is the plain gray chip, not the blue one that means an install is needed */}
-        <span className={`su-chip${list?.length ? ' is-installed' : ''}`}>{failed ? 'Unknown' : !list ? 'Checking' : list.length ? `${list.length} saved` : 'None yet'}</span>
+        <span className={`su-chip${list?.length ? ' is-installed' : ''}`}>{failed ? 'Unknown' : !list ? 'Checking…' : list.length ? `${list.length} saved` : 'None yet'}</span>
       </div>
       {failed && <p className="su-note">Could not read your snapshots. {failed} <button type="button" className="su-link" onClick={refresh}>Try again</button></p>}
       {list && list.length > 0 && <ul className="su-parts">
@@ -87,10 +87,10 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
             </div>
             <span className="su-part-links">
               <button type="button" className="su-link" disabled={locked} onClick={() => restore(s.id)}
-                title="Puts back the files this snapshot has that are gone now. Never overwrites a file">{busy === `restore:${s.id}` ? 'Restoring' : 'Restore'}</button>
+                title="Puts back the files this snapshot has that are gone now. Never overwrites a file">{busy === `restore:${s.id}` ? 'Restoring…' : 'Restore'}</button>
               <button type="button" className="su-link" disabled={locked} onClick={() => void exportZip(s)}
-                title="Saves its mod files as a .zip, to keep elsewhere or import on another PC">{busy === `export:${s.id}` ? 'Exporting' : 'Export'}</button>
-              <button type="button" className="su-link" disabled={locked} onClick={() => setAsking(s.id)}>{busy === `delete:${s.id}` ? 'Deleting' : 'Delete'}</button>
+                title="Saves its mod files as a .zip, to keep elsewhere or import on another PC">{busy === `export:${s.id}` ? 'Exporting…' : 'Export'}</button>
+              <button type="button" className="su-link" disabled={locked} onClick={() => setAsking(s.id)}>{busy === `delete:${s.id}` ? 'Deleting…' : 'Delete'}</button>
             </span>
             {/* asks in its own row, naming it, like Setup's other removes (Law of Proximity) */}
             {asking === s.id && <ConfirmRow className="su-row-confirm" text={`Delete the ${when(s.created)} snapshot (${size(s.bytes)})? Your mods stay.`}
@@ -100,8 +100,8 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
       </ul>}
       <div className="su-actions">
         {/* only once the list is read: its warning about the oldest one has to be right before a snapshot can drop it */}
-        <button type="button" className="btn-primary su-main" disabled={locked || !list || Boolean(failed)} onClick={make}><Camera size={14} aria-hidden="true" />{busy === 'make' ? 'Copying' : 'Make a snapshot'}</button>
-        <button type="button" className="lo-text-btn" disabled={locked || !list} onClick={importZip}><Import size={14} aria-hidden="true" />{busy === 'import' ? 'Importing' : 'Import a snapshot'}</button>
+        <button type="button" className="btn-primary su-main" disabled={locked || !list || Boolean(failed)} onClick={make}><Camera size={14} aria-hidden="true" />{busy === 'make' ? 'Copying…' : 'Make a snapshot'}</button>
+        <button type="button" className="lo-text-btn" disabled={locked || !list} onClick={importZip}><Import size={14} aria-hidden="true" />{busy === 'import' ? 'Importing…' : 'Import a snapshot'}</button>
         {list && <span className="su-meta">{estimate ? `${plural(estimate[0], 'file')}, about ${size(estimate[1])} each. ` : ''}{drops.length ? `Making one removes ${dropText}.` : 'The newest 3 are kept.'}</span>}
       </div>
     </section>
@@ -121,7 +121,7 @@ export function checkSnapshotLoss(alert: Alert, openSetup: () => void) {
     const what = [mods && plural(mods, 'mod file'), setup && plural(setup, 'bypass file')].filter(Boolean).join(' and ')
     const id = alert.warning('Files missing since your snapshot', `${what} from your snapshot of ${when(s.created)} are gone. A game update or a Steam verify can do this. If you removed them yourself, make a new snapshot to stop this notice.`, {
       duration: 15000,
-      action: { label: 'Restore', onClick: () => { alert.dismissAlert(id); openSetup() } },
+      action: { label: 'Restore…', onClick: () => { alert.dismissAlert(id); openSetup() } },
     })
   }).catch(() => {})
 }

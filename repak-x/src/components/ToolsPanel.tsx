@@ -165,7 +165,7 @@ export default function ToolsPanel({ onClose, onOpenAssetExplorer, projectGalact
 
     const handleUpdateCharacterData = async () => {
         setIsUpdatingChars(true);
-        setCharUpdateStatus('Updating');
+        setCharUpdateStatus('Updating...');
         try {
             const count = await invoke('update_character_data_from_github') as any;
             setCharUpdateStatus(`Successfully updated! ${count} new skins added.`);
@@ -221,7 +221,7 @@ export default function ToolsPanel({ onClose, onOpenAssetExplorer, projectGalact
 
     const handleReCompress = async () => {
         setIsRecompressing(true);
-        setRecompressStatus('Scanning mods');
+        setRecompressStatus('Scanning mods...');
         setRecompressResult(null);
         try {
             const result = await invoke('recompress_mods') as any;

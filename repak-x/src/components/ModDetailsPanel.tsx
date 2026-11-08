@@ -191,7 +191,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
             title="Replace this mod's file with another .pak"
             style={{ marginLeft: 'auto', flexShrink: 0 }}
           >
-            <FaExchangeAlt /> Replace file
+            <FaExchangeAlt /> Replace file…
           </button>
         )}
       </div>
@@ -199,7 +199,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
       <div className="details-body">
         <ModPreview path={mod.path} />
         {loading ? (
-          <div className="loading-state">Loading mod details</div>
+          <div className="loading-state">Loading mod details...</div>
         ) : error ? (
           <div className="error-state">
             <h3>Error Loading Details</h3>

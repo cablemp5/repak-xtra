@@ -10,12 +10,12 @@ pub async fn merge_mods_for_hybrid(
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
 ) -> Result<Vec<crate::InstallableModInfo>, String> {
-    let _ = window.emit("install_log", "[Merge] Starting hybrid merge process");
+    let _ = window.emit("install_log", "[Merge] Starting hybrid merge process...");
     let w = window.clone();
     // repakxtra: copying and unpacking run off the async runtime
     let persisted_temp_path = crate::blocking(move || stage(path1, path2, &w)).await?;
 
-    let _ = window.emit("install_log", "[Merge] Merge complete, parsing new folder");
+    let _ = window.emit("install_log", "[Merge] Merge complete, parsing new folder...");
 
     // Parse the merged directory
     let parse_result = crate::parse_dropped_files(
