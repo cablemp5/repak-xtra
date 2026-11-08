@@ -51,7 +51,7 @@ export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
       { keys: ['1'], action: 'Show all mods' },
       { keys: ['2'], action: 'Show mods that are on' },
       { keys: ['3'], action: 'Show mods that are off' },
-      { keys: ['V'], action: 'Cycle list / compact list / grid / compact grid' },
+      { keys: ['V'], action: 'Cycle list / grid / compact grid' },
       { keys: ['X'], action: 'Clear hero and type filters' },
       { keys: ['T'], action: 'Show / hide tags on mods' },
       { keys: ['P'], action: 'Show / hide the load priority counter' },
@@ -92,7 +92,7 @@ export const isTyping = (target: EventTarget | null) => {
  *  Library's plain-letter shortcuts pause. */
 export const dialogOpen = () => modalOpen() || document.documentElement.dataset.view !== 'library'
 
-const VIEWS = ['List View', 'Compact List View', 'Grid View', 'Compact Grid View'] // the four view buttons, in the menu's order
+const VIEWS = ['List View', 'Grid View', 'Compact Grid View'] // the four view buttons, in the menu's order
 
 window.addEventListener('keydown', e => {
   // A dialog owns the keyboard, Ctrl+G and Ctrl+O included; an IME finishing a word is not a shortcut

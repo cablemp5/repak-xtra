@@ -1813,6 +1813,7 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 /* Library right-click menu: loadouts already holding the mod */
 .context-menu-item.is-disabled { opacity: 0.5; cursor: default; }
 .context-menu-item .lo-menu-check { margin-left: auto; color: var(--text-secondary); }
+.context-menu-item:has(> .lo-menu-check) { gap: 16px; }   /* a short name in a narrow menu kept the check against it */
 /* Setup and changelog: every button one height (the primary ones were 44px beside 32px ones); a closed "Is it safe?"
    adds no gap under the buttons */
 .su-modal .btn-primary, .su-changelog .btn-primary, .why-modal .btn-primary {
@@ -2784,51 +2785,58 @@ html[data-motion="off"] .vfx-dot { animation: none; }
 .fp-section-picked { --pill-h: 16px; padding-inline: 8px !important; }
 .fr-step .fr-num:not(:has(svg)) { width: 28px; height: 28px !important; padding: 0 !important; display: grid !important; text-box: normal; }   /* the shared ring (.nx-step-n) centers its digit itself */
 
-/* ---------- The Library's selection bar (option B, 2026-10-30, was a drawer under the header since 2026-10-21): a raised
-   bar that floats over the bottom of the list while mods are checked. The header and the list never move (Law of Common
-   Region: one surface holds every action). Its buttons are borderless inside it, the count leads in an accent block, Delete
-   keeps its red text, and its menus open upward. custom/selectionScroll.ts sees it takes no room ---------- */
+/* ---------- The Library's selection bar (rebuilt 2026-11-08 from the header's parts, a floating bar since 2026-10-30): it
+   floats over the bottom of the list while mods are checked, and the header and the list never move. Every button is the
+   header's quiet bordered button (36px, 8px corners, 13px medium, its hover and timing), the groups are split by the
+   header's short dividers, the count is the filter tabs' chip, and the surface is the menus' dark one. Delete keeps its red
+   words and sits last, past a divider (Law of Proximity: the one that removes things stands apart). The menus open upward.
+   custom/selectionScroll.ts sees it takes no room ---------- */
 .center-panel { position: relative; container: bulkbar / inline-size; }   /* the bar sizes to its buttons, so the column answers the bulkbar queries (App.css made the bar itself the container) */
 .bulk-actions-toolbar { position: absolute !important; left: 50%; bottom: 16px; z-index: 20; display: flex; flex: none; box-sizing: border-box;
-  width: max-content; max-width: calc(100% - 32px); height: 48px; margin: 0 !important; padding: 5px !important; gap: 4px !important;
-  align-items: center !important; border-radius: 12px !important; background: var(--bg-lighter) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6) !important;
+  width: max-content; max-width: calc(100% - 32px); height: auto; margin: 0 !important; padding: 6px !important; gap: 4px !important;
+  align-items: center !important; border-radius: 14px !important; background: var(--bg-lighter) !important;   /* 14px: the buttons' 8px plus the 6px around them */
+  border: 1px solid var(--panel-border) !important; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5) !important;
   container-type: normal !important; transform: translate(-50%, 0); opacity: 1;
   transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms cubic-bezier(0.22, 1, 0.36, 1), display 200ms allow-discrete; }
 .bulk-actions-toolbar.inactive { transform: translate(-50%, 16px); opacity: 0; pointer-events: none; transition-duration: 120ms; }
 @starting-style { .bulk-actions-toolbar:not(.inactive) { transform: translate(-50%, 16px); opacity: 0; } }
 .mods-list-wrapper::after { content: none; }   /* no fade over the last rows (ModsList.css) */
-/* dark theme: the menus' surface and edge, not the lighter button gray */
+/* dark theme: the menus' surface and edge */
 :root:not([data-theme="light"]) .bulk-actions-toolbar { background: var(--bg-dark) !important; border-color: rgba(255, 255, 255, 0.09) !important; }
 /* room under the last rows for the bar, always there: adding it only while the bar shows moved the rows near the end */
 .center-panel .mod-list-grid { padding-bottom: 72px !important; }
 .bulk-actions-toolbar .custom-dropdown-menu { top: auto !important; bottom: calc(100% + 12px) !important; }
-.bulk-actions-toolbar .selection-info, .bulk-actions-toolbar .bulk-controls { display: flex; align-items: center !important; gap: 4px !important; }
-.bulk-actions-toolbar .selection-info { align-self: stretch; margin: -5px 4px -5px 0; padding: 5px 4px 5px 0; border-right: 1px solid rgba(255, 255, 255, 0.12); }   /* the divider runs the bar's full height */
-.bulk-count-label { max-width: none !important; margin: 0 12px 0 0 !important; display: flex !important; align-items: center; font-size: 13px !important; font-weight: 500 !important;
-  line-height: normal !important; opacity: 1 !important; color: var(--text-primary) !important; }
-.bulk-count { min-width: 0 !important; height: 36px !important; padding: 0 0 0 12px !important; margin: 0 12px 0 0 !important; white-space: nowrap; background: none !important; display: flex; align-items: center; }
-/* the count is set apart from Select all and Clear by a full-height line, as the actions are (.selection-info) */
-.bulk-actions-toolbar .bulk-count { align-self: stretch; height: auto !important; margin: -5px 4px -5px 0 !important; padding-right: 17px !important;
-  border-right: 1px solid rgba(255, 255, 255, 0.12); border-radius: 0 !important; }
-/* plain text, all white: "2 selected" read as one phrase (the 4px gap is a space), on the buttons' line height so the glyphs sit level */
-.bulk-count-value { display: inline-block; height: auto; min-width: 0; padding: 0;
-  border-radius: 0; background: none; color: var(--text-primary); font-size: 13px; font-weight: 500; line-height: normal;
-  font-variant-numeric: tabular-nums; transform: none !important; }
-.bulk-actions-toolbar svg { width: 16px !important; height: 16px !important; flex: none; color: currentColor !important; opacity: 1 !important; stroke-width: 2; }
+.bulk-actions-toolbar .selection-info, .bulk-actions-toolbar .bulk-controls { display: flex; align-items: center !important; gap: 4px !important;
+  margin: 0 !important; padding: 0 !important; border: none !important; }
+/* the header's divider (1 x 24px) after the selection group and before Delete */
+.bulk-actions-toolbar .selection-info::after, .bulk-actions-toolbar .bulk-toggle-group::after { content: ''; flex: none; width: 1px; height: 24px;
+  margin: 0 4px; background: var(--panel-border); }
+/* "Selected" and its count chip, like the filter tabs' "All 260" */
+.bulk-actions-toolbar .bulk-count { display: flex; align-items: center; gap: 8px; min-width: 0 !important; height: 36px !important; margin: 0 !important;
+  padding: 0 8px 0 10px !important; border: none !important; border-radius: 0 !important; background: none !important;
+  color: var(--text-primary); font-size: 13px; font-weight: 500; line-height: normal; white-space: nowrap; }
+.bulk-actions-toolbar .bulk-count-value { margin: 0; transform: none !important; background: rgba(255, 255, 255, 0.12); color: var(--text-primary); }
+.bulk-actions-toolbar svg { width: 16px !important; height: 16px !important; flex: none; color: var(--text-secondary) !important; opacity: 1 !important; stroke-width: 2; }
 .bulk-actions-toolbar .btn-ghost, .bulk-actions-toolbar .bulk-field .custom-dropdown-trigger { height: 36px !important; min-height: 0 !important;
-  gap: 8px !important; padding: 0 12px !important; border: 1px solid transparent !important; border-radius: 6px !important;
-  background: transparent !important; box-shadow: none !important; color: var(--text-secondary) !important; font-size: 13px !important; font-weight: 500 !important; }
-.bulk-actions-toolbar .btn-ghost:hover:not(:disabled), .bulk-actions-toolbar .custom-dropdown-trigger:hover { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
-.bulk-actions-toolbar .btn-ghost:disabled { opacity: 0.4 !important; }
+  gap: 8px !important; padding: 0 12px !important; border: 1px solid var(--panel-border) !important; border-radius: var(--quiet-radius) !important;
+  background: transparent !important; box-shadow: none !important; color: var(--text-primary) !important; font-size: 13px !important; font-weight: 500 !important;
+  transition: border-color 0.2s, background 0.2s !important; }
+.bulk-actions-toolbar .btn-ghost:hover:not(:disabled), .bulk-actions-toolbar .custom-dropdown-trigger:hover:not(:disabled) { background: var(--quiet-hover) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important; color: var(--text-primary) !important; }
+.bulk-actions-toolbar .btn-ghost:disabled, .bulk-actions-toolbar .custom-dropdown-trigger:disabled { opacity: 0.4 !important; }
 .bulk-actions-toolbar .bulk-field .custom-dropdown-icon { opacity: 1 !important; font-size: 0 !important; }
 /* the Move and Add to loadout menus sit in a 30px wrapper: give it the buttons' 36px so they line up with the rest */
 .bulk-actions-toolbar .bulk-field, .bulk-actions-toolbar .bulk-field .custom-dropdown-container { height: 36px !important; display: flex; align-items: center; }
-.bulk-actions-toolbar .bulk-toggle-group { border: none !important; background: none !important; gap: 4px; height: 36px; }
+.bulk-actions-toolbar .bulk-toggle-group { display: flex; align-items: center; border: none !important; background: none !important; gap: 4px; height: 36px; }
+.bulk-actions-toolbar .bulk-toggle-group .btn-ghost { border-radius: var(--quiet-radius) !important; }   /* two buttons, not one split one */
 .bulk-actions-toolbar .bulk-delete > span { gap: 8px !important; }
-.btn-ghost.danger.bulk-delete, .btn-ghost.danger.bulk-delete:hover { color: #f2555a !important; border-color: transparent !important; }
-.btn-ghost.danger.bulk-delete:hover { background: color-mix(in srgb, #f2555a, transparent 90%) !important; }
-.btn-ghost.danger.bulk-delete:hover { background: color-mix(in srgb, #f2555a, transparent 90%) !important; }
+.btn-ghost.danger.bulk-delete, .btn-ghost.danger.bulk-delete:hover { color: #f2555a !important; }
+.btn-ghost.danger.bulk-delete svg { color: #f2555a !important; }
+.btn-ghost.danger.bulk-delete:hover { background: color-mix(in srgb, #f2555a, transparent 90%) !important; border-color: color-mix(in srgb, #f2555a, transparent 70%) !important; }
+/* a narrow column (details panel open) folds the actions to icons: each one a 36px square like the header's icon buttons */
+@container bulkbar (max-width: 780px) {
+  .bulk-actions-toolbar :is(.bulk-field .custom-dropdown-trigger, .bulk-toggle-group .btn-ghost, .bulk-delete) { width: 36px; padding: 0 !important; justify-content: center !important; }
+}
 /* Library: a little air between the Filters / Folders column and the mods panel (they shared a border) */
 .content-wrapper { gap: 12px; }
 /* The mod list sits further left: its checkboxes line up under the panel title ("All Mods", 14px in), not 26px */
@@ -2895,8 +2903,13 @@ html[data-motion="off"] .setting-sub, html[data-motion="off"] .bulk-actions-tool
 .bi-status { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; color: var(--text-secondary);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bi-status > span { overflow: hidden; text-overflow: ellipsis; }
-.bi-status.is-warn { color: #f5a524; white-space: normal; align-items: flex-start; }
-.bi-status.is-warn > svg { flex: none; margin-top: 1px; }
+/* a warning reads as one sentence: what is happening in gray, then the icon and "Not in the game yet" in amber */
+.bi-status.is-warn { display: block; white-space: normal; }
+.bi-status.is-warn > span { overflow: visible; }
+.bi-warn { color: #f5a524; }
+.bi-status > span + .bi-warn { margin-left: 6px; white-space: nowrap; }
+.bi-warn > svg { display: inline-block; vertical-align: -2px; margin-right: 4px; }
+[data-theme="light"] .bi-warn { color: #a35d00; }
 .bi-row .lo-text-btn { height: 28px !important; padding: 0 12px !important; font-size: 12px !important; }
 .bi-row .repakx-switch-control { height: 24px !important; min-height: 0 !important; }
 /* the Library's built-in rows: a blue Built-in badge that opens the row on Home, no checkbox (never in a bulk action) */
