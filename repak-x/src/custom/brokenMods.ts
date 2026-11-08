@@ -44,11 +44,11 @@ export const VERDICTS_CHANGED = 'xtra-verdicts-changed'
 export const verdictsChanged = () => emit(VERDICTS_CHANGED).catch(() => {})
 
 /** Scan (Refresh list, Ctrl+Shift+R) sends it: the Library runs every check again, the background ones too. `force`:
- *  mods the Mod Updater's Scan wants read fresh (their records already dropped), its own updates included. */
+ *  mods the Mod Updater's Check wants read fresh (their records already dropped), its own updates included. */
 export const VERDICTS_RESCAN = 'xtra-verdicts-rescan'
 export const rescanVerdicts = () => emit(VERDICTS_RESCAN, []).catch(() => {})
 export const rescanForced = (force: string[]) => emit(VERDICTS_RESCAN, force).catch(() => {})
-/** Mods a manual Scan asked for: checked first, even when the Mod Updater made them, until a run finishes with them. */
+/** Mods a manual Check asked for: checked first, even when the Mod Updater made them, until a run finishes with them. */
 let forced = new Set<string>()
 /** Of those, the ones whose check records the next run drops first (in the run: a scan in flight would write them back). */
 let fresh = new Set<string>()
@@ -127,7 +127,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
         return live && forget.length ? invoke('xtra_scan_forget', { modPaths: forget }).catch(e => console.warn('[brokenMods] could not clear earlier checks', e)) : undefined
       })
       .then(() => (live ? invoke('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
-      // a manual Scan's mods first, through all four scans, so they never wait behind the mods not checked yet
+      // a manual Check's mods first, through all four scans, so they never wait behind the mods not checked yet
       .then(() => (ticked.length ? scans(ticked, ticked).then(() => deep(ticked)) : undefined))
       // every mod for meshes: an update carries the original's meshes as they were, and nothing in the Mod Updater checks them
       .then(() => scans(scanPaths, paths))
@@ -136,7 +136,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       .then(stopped => live && !stopped, e => { console.warn('[brokenMods] background scan failed', e); return false })
       // runs take turns (queued), so this one's end is never another's. One the library outdated is not "paused":
       // the new list's own run follows
-      // a run that stopped first (the game, a held scan, an old USMAP) keeps a manual Scan's mods for the next one
+      // a run that stopped first (the game, a held scan, an old USMAP) keeps a manual Check's mods for the next one
       .then(finished => { unfinished = !finished; if (!finished) ticked.forEach(p => forced.add(norm(p))); scanEnded(finished || !live); return finished })
     let unfinished = false
     // one run waiting its turn is enough: a focus, a Rescan and the game update notice asking meanwhile all get that one

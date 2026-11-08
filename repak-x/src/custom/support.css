@@ -20,10 +20,6 @@
 /* its pills hold a word only (no caret): even padding, the word in the middle */
 .vf-row .enc-pill { padding: 0 8px !important; }
 .vf-row .enc-pill.is-failed { padding-left: 8px !important; }
-/* repakxtra: the Galacta Converter footer switch reads like the footer line beside it */
-.vf-foot .gal-swap .repakx-checkbox-label { font-size: 13px; color: var(--text-secondary, inherit); }
-/* the footer line takes its own row, the switch and the button share the next */
-.vf-foot:has(.gal-swap) .vf-state { flex-basis: 100%; }
 
 /* repakxtra: the Galacta Converter's welcome card (GalactaWelcome.tsx), over the window's list. Type as in Setup's cards:
    a 20px bold title (a welcome, a step above Setup's 16px card titles), 13px body. Rhythm: the title and its lead sit tight, the picture and the steps form the middle,

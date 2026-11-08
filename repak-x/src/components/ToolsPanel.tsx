@@ -307,10 +307,10 @@ export default function ToolsPanel({ onClose, onOpenAssetExplorer, projectGalact
             onClick: () => { onClose(); void openGalacta(); },
             busy: false,
         },
-        { // repakxtra: the Encryptor window
+        { // repakxtra: the Mod Encryptor window
             id: 'encryptor',
             icon: () => <Lock size="1em" aria-hidden="true" />,
-            title: 'Encryptor',
+            title: 'Mod Encryptor',
             description: 'Encrypt mods so they are harder to unpack.',
             onClick: () => { onClose(); void openEncrypt(); },
             busy: false,

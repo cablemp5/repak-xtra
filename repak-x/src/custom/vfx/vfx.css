@@ -42,11 +42,13 @@
 .vf-grp.is-done .vf-grp-count { color: #3ecf6e; background: color-mix(in srgb, #3ecf6e, transparent 88%); }
 .vf-grp.is-done .vf-grp-name { color: #3ecf6e; }
 [data-theme="light"] .vf-grp.is-done .vf-grp-count, [data-theme="light"] .vf-grp.is-done .vf-grp-name { color: #166236; }
-/* the Encryptor's Encrypted and the Galacta Converter's Converted: their badge's color (theme.css .mod-lock, .pg-badge) */
-.vf-grp.is-encrypted { --grp-tone: #a78bfa; }
-.vf-grp.is-galacta { --grp-tone: #ec5fe0; }
-[data-theme="light"] .vf-grp.is-encrypted { --grp-tone: #6d28d9; }
-[data-theme="light"] .vf-grp.is-galacta { --grp-tone: #a3229a; }
+/* the Mod Encryptor's Encrypted and the Galacta Converter's Converted, the group heading and each row's badge: the
+   Library badge's color (theme.css .mod-lock, .pg-badge) */
+:is(.vf-grp, .vf-pill).is-encrypted { --grp-tone: #a78bfa; }
+:is(.vf-grp, .vf-pill).is-galacta { --grp-tone: #ec5fe0; }
+[data-theme="light"] :is(.vf-grp, .vf-pill).is-encrypted { --grp-tone: #6d28d9; }
+[data-theme="light"] :is(.vf-grp, .vf-pill).is-galacta { --grp-tone: #a3229a; }
+.vf-pill:is(.is-encrypted, .is-galacta) { color: var(--grp-tone) !important; background: color-mix(in srgb, var(--grp-tone), transparent 88%) !important; }
 .vf-grp:is(.is-encrypted, .is-galacta) .vf-grp-count { color: var(--grp-tone); background: color-mix(in srgb, var(--grp-tone), transparent 88%); }
 .vf-grp:is(.is-encrypted, .is-galacta) .vf-grp-name { color: var(--grp-tone); }
 .vf-selects { flex: none; display: inline-flex; gap: 2px; }
@@ -104,8 +106,7 @@ button.vf-loadouts:focus-visible { outline: 2px solid var(--accent-primary); out
 .vf-pill[aria-expanded="true"] .vf-caret { transform: rotate(180deg); }
 
 /* running: the app's thin progress bar (the update dialog's), the step and what it is on */
-/* running: under the name (lined up with it, past the tick), the app's thin bar, then the step and its own count. The
-   step count and the count inside the step are pills, so the numbers read apart from the words */
+/* running: under the name (lined up with it, past the tick), the app's thin bar, then one line of what it is doing */
 .vf-progress { flex-basis: 100%; min-width: 0; margin-top: -8px; padding: 0 0 12px 28px; }   /* close under the name: the tick row is 40px tall, the name sits in its middle */
 .vf-bar { height: 4px; border-radius: 999px; overflow: hidden; background: var(--bg-lighter); }
 /* the fill carries the app's shimmer sweep (transitions.dev: Shimmer), so a long step still reads as working */
@@ -114,10 +115,8 @@ button.vf-loadouts:focus-visible { outline: 2px solid var(--accent-primary); out
     var(--accent-primary) 62%, var(--accent-primary) 100%) 0 0 / 250% 100% no-repeat;
   animation: t-shimmer var(--shimmer-dur, 2s) var(--shimmer-ease, linear) infinite; }
 .vf-step { margin: 8px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 8px; font-size: 13px; color: var(--text-secondary); }
-/* a long path (Packing the update) cuts off with an ellipsis inside the pill, never past the row */
-/* the line trimmed to its capitals and baseline with even padding, like .vf-pill-label (the 2px top nudge sat low) */
-.vf-count { display: inline-block; box-sizing: border-box; max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; height: 20px; padding: 5.5px 8px; text-box: trim-both cap alphabetic; border-radius: 999px; font-size: 12px; font-weight: 500;
-  font-variant-numeric: tabular-nums; color: var(--text-secondary); background: var(--quiet-active); }
+/* a long message cuts off with an ellipsis, never past the row */
+.vf-step-sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .vf-pill.is-running { height: 20px !important; padding: 0 8px !important; font-size: 11px !important; cursor: default; color: color-mix(in srgb, var(--accent-primary), white 35%) !important; background: color-mix(in srgb, var(--accent-primary), transparent 84%) !important;
   font-variant-numeric: tabular-nums; }
 .vf-pill.is-running:hover { filter: none; }

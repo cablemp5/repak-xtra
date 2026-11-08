@@ -237,7 +237,8 @@ function Row({ mod, rowKey, loadouts, run, needs, partial, waits, made, picked, 
           <div className="vf-bar" role="progressbar" aria-valuenow={step} aria-valuemin={0} aria-valuemax={STEPS.length} aria-label={`${mod.name} progress`}>
             <i style={{ width: `${((step - 0.5) / STEPS.length) * 100}%` }} />
           </div>
-          <p className="vf-step">{/* the footer announces the step: one live region, not two */}<SwapText text={STEPS[step - 1]} />{run?.sub ? <span className="vf-count">{run.sub}</span> : null}{/* plain: it changes many times a second, faster than a swap-in finishes */}</p>
+          {/* one line: what the step is doing now once it reports it, else its name. The footer announces the step: one live region, not two */}
+          <p className="vf-step">{run?.sub ? <span className="vf-step-sub">{run.sub}</span>/* plain: it changes many times a second, faster than a swap-in finishes */ : <SwapText text={STEPS[step - 1]} />}</p>
         </div>
       ) : null}
       {run?.report && <div className="t-acc-panel vf-row-panel" data-open={open}><div className="t-acc-panel-inner" {...folded(!open)}><Report r={run.report} onRetry={onRetry} onUsmap={onUsmap} busy={busy} /></div></div>}
@@ -382,10 +383,10 @@ export function VfxUpdaterPanel() {
   const keepName = naming === 'broken'
   const [advanced, setAdvanced] = useState(false)
   const [busy, setBusy] = useState(false)
-  // the Library's mod checks (brokenMods.ts, the header's Checking mods): Scan starts them, this follows their progress
+  // the Library's mod checks (brokenMods.ts, the header's Checking mods): Check starts them, this follows their progress
   const [scan, setScan] = useState<string | null>(null)
   useEffect(() => {
-    // only a run Scan started: the Library's own runs (after an update, at launch) leave this window as it is
+    // only a run Check started: the Library's own runs (after an update, at launch) leave this window as it is
     const step = listen<ScanStep>('mod-scan-progress', e => setScan(s => (s === null ? s : progressLine(e.payload))))
     const done = listen(SCAN_DONE, () => setScan(s => { if (s !== null) setReload(r => r + 1); return null }))
     return () => { void step.then(f => f()); void done.then(f => f()) }
@@ -569,7 +570,9 @@ export function VfxUpdaterPanel() {
   useEffect(() => {
     const un = listen<{ message: string }>('vfx_progress', e => {
       const key = Object.keys(runsRef.current).find(k => runsRef.current[k].status === 'running')
-      if (key && e.payload?.message) patch(key, { sub: e.payload.message })
+      // a command's closing "done" line (uasset_tool.rs, just before it returns) can land after the next step started,
+      // where it would stand in for that step's name: those are skipped
+      if (key && e.payload?.message && !/^(Extracted|Converted) \d|created successfully$/.test(e.payload.message)) patch(key, { sub: e.payload.message })
     })
     return () => { un.then(f => f()) }
   }, [])
@@ -736,7 +739,7 @@ export function VfxUpdaterPanel() {
   const approveAll = () => { approveRest.current = true; const all = reviewsRef.current; setReviews([]); reviewsRef.current = []; all.forEach(r => r.resolve(true)); cue('success') }
   const stop = (source: 'Cancel button' | 'Escape') => { reviewsRef.current.forEach(r => r.resolve(false)); setReviews([]); reviewsRef.current = []; cancel.current = true; setCancelling(true); addLog(`Cancellation requested by ${source}. Stopping after the current step.`, 'warning') }
 
-  // Scan: the header's run drops the ticked mods' check records, reads them fresh first, then every mod not checked yet
+  // Check: the header's run drops the ticked mods' check records, reads them fresh first, then every mod not checked yet
   const scanTicked = async () => {
     // the Library checks its mods folder only: a file added from elsewhere (Add .utoc) is not one of them
     const ticked = (modsRef.current ?? []).filter(m => picked.has(norm(m.utoc)))
@@ -1040,11 +1043,11 @@ export function VfxUpdaterPanel() {
         <div className="vf-foot-actions">
           {reports.length > 0 && !busy && <button type="button" className="lo-text-btn" onClick={() => copy('report')}><Copy size={14} /> {copied === 'report' ? 'Copied' : 'Copy report'}</button>}
           {/* Cancel beside the button, never in its place: a double-click on Update must not cancel the run */}
-          {busy && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={() => stop('Cancel button')} title="Esc"><X size={14} strokeWidth={2.5} aria-hidden="true" /> {cancelling ? 'Cancelling…' : 'Cancel'}</button>}
+          {busy && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={() => stop('Cancel button')} title="Esc"><span className="stop-glyph" aria-hidden="true" />{cancelling ? 'Cancelling…' : 'Cancel'}</button>}
           {/* the same checks as the header's Checking mods (Pause and Cancel live there) */}
           {!busy && <button type="button" className="lo-text-btn" disabled={Boolean(scan) || !picked.size} onClick={() => void scanTicked()}
             title="Check the ticked mods again from scratch, without changing files. Progress shows in the main window's header too">
-            {scan ? <span className="t-shimmer">Scanning</span> : 'Scan'}</button>}
+            {scan ? <span className="t-shimmer">Checking</span> : 'Check'}</button>}
           <button type="button" className="btn-primary" disabled={busy || Boolean(lock) || !todo} title={busy ? undefined : 'Ctrl+Enter'}
             ref={el => { if (el && !busy) updateWidth.current = el.offsetWidth }} style={busy ? { minWidth: updateWidth.current } : undefined} onClick={() => run()}>
             <RefreshCw size={14} aria-hidden="true" className={busy ? 'vf-spin' : undefined} />{busy ? 'Updating…' : todo ? <>Update <Num id="vf-todo" value={todo} /> {todo === 1 ? 'mod' : 'mods'}</> : 'Update'}

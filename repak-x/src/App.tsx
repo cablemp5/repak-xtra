@@ -469,7 +469,7 @@ function App() {
     const said = (e: Event) => {
       if (fewerPopups()) return // the sound said it (uiPrefs.tsx togglePref)
       const { key, name, on } = (e as CustomEvent<PrefToggled>).detail
-      const id = alert.info(`${name} ${on ? 'shown' : 'hidden'}`, 'The same switch is in Settings > Library.', { duration: 4000, action: { label: 'Undo', onClick: () => { alert.dismissAlert(id); setPref(key, !on) } } }) // back to before this press, whatever came after
+      const id = alert.info(`${name} ${key === 'header-icons' ? (on ? 'on' : 'off') : on ? 'shown' : 'hidden'}`, 'The same switch is in Settings > Library.', { duration: 4000, action: { label: 'Undo', onClick: () => { alert.dismissAlert(id); setPref(key, !on) } } }) // back to before this press, whatever came after
     }
     window.addEventListener(PREF_TOGGLED, said)
     return () => window.removeEventListener(PREF_TOGGLED, said)
@@ -3851,7 +3851,7 @@ function App() {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.5 }}
                 >
-                  <span className="blink-icon"><IoMdWarning /></span> Game Running
+                  <span className="blink-icon"><IoMdWarning /></span> <span className="hdr-label">Game Running</span>{/* repakxtra: hdr-label, Icons only hides it */}
                 </motion.span>
               ) : launchSuccess ? (
                 <motion.span
@@ -3861,7 +3861,7 @@ function App() {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.5 }}
                 >
-                  <CheckIcon fontSize="small" /> Launched
+                  <CheckIcon fontSize="small" /> <span className="hdr-label">Launched</span>
                 </motion.span>
               ) : (
                 <motion.span
@@ -3871,7 +3871,7 @@ function App() {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.5 }}
                 >
-                  <PlayArrowIcon fontSize="small" /> Launch
+                  <PlayArrowIcon fontSize="small" /> <span className="hdr-label">Launch</span>
                 </motion.span>
               )}
             </AnimatePresence>
@@ -3887,7 +3887,7 @@ function App() {
             }}
           >
             <GiLightningTrio style={{ marginRight: '6px' }} />
-            <span>Mod Updater</span>
+            <span className="hdr-label">Mod Updater</span>{/* repakxtra: hdr-label, Icons only hides it */}
             <VfxDot mods={mods} />{/* repakxtra: VFX mods need an update */}
           </button>
           <EncryptMods />{/* repakxtra */}

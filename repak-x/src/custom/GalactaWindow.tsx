@@ -1,7 +1,7 @@
 // repakxtra: the Galacta Converter window (route galacta), built like the Encrypt window (EncryptWindow.tsx) from the same
 // parts: search, hero filter and sort over folding groups of ticked rows, and a footer with what the button does. Each
 // ticked mod gets a second copy, "<name> (Galacta)", that Project Galacta can swap in per skin (xtra_galacta.rs). The
-// copy goes beside the mod, off, and the original stays as it is. The main window opens it (GalactaMods.tsx).
+// copy goes beside the mod, on, and the original is turned off, not changed. The main window opens it (GalactaMods.tsx).
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, listen } from '@tauri-apps/api/event'
@@ -10,6 +10,7 @@ import TitleBar from '../components/TitleBar'
 import Checkbox from '../components/ui/Checkbox'
 import { useGlobalTooltips } from '../hooks/useGlobalTooltips'
 import { HeroFilter, heroOfName } from './heroFilter'
+import ModRowsSkeleton from './ModRowsSkeleton'
 import { usmapPath } from './ko/load'
 import { canonKey } from './loadoutIdentity'
 import { modKey, useLoadouts } from './loadoutStore'
@@ -28,7 +29,6 @@ type Run = { status: 'waiting' | 'running' | 'done' | 'failed'; error?: string; 
 
 const SORT = 'repakxtra.galacta.sort'
 const FOLDED = 'repakxtra.galacta.folded'
-const SWAP = 'repakxtra.galacta.swap' // on unless switched off: '0'
 const norm = (p: string) => p.replace(/\//g, '\\').toLowerCase()
 
 /** A group of mods that folds to its heading, with Select all and Clear: the Encrypt window's. */
@@ -69,7 +69,6 @@ function GalactaPanel() {
   const [hero, setHero] = useState('')
   const [sort, setSort] = useState<'newest' | 'name'>(() => (localStorage.getItem(SORT) === 'name' ? 'name' : 'newest'))
   const [foldedIds, setFoldedIds] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(FOLDED) ?? '[]') } catch { return [] } })
-  const [swap, setSwap] = useState(() => localStorage.getItem(SWAP) !== '0')
   const [welcome, setWelcome] = useState(welcomeOnOpen)
   const stopRef = useRef(false)
   const busyRef = useRef(false)
@@ -132,8 +131,8 @@ function GalactaPanel() {
       try {
         usmap ??= await usmapPath()
         const m = byKey.get(k)!
-        const made = await invoke<Made>('xtra_galacta_make', { path: m.path, name: m.name, usmapPath: usmap, on: swap })
-        changed = true // with swap on, the backend also turned the original off (xtra_galacta.rs)
+        const made = await invoke<Made>('xtra_galacta_make', { path: m.path, name: m.name, usmapPath: usmap, on: true })
+        changed = true // the backend turns the original off and the Galacta version on (xtra_galacta.rs)
         setRuns(r => ({ ...r, [k]: { status: 'done', made } }))
         setPicked(p => { const n = new Set(p); n.delete(k); return n })
       } catch (e) { setRuns(r => ({ ...r, [k]: { status: 'failed', error: String(e) } })) }
@@ -163,7 +162,7 @@ function GalactaPanel() {
             <input value={q} placeholder="Search mods" aria-label="Search mods" onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setQ('') }} />
             {q && <button type="button" className="lo-icon vf-search-clear" onClick={() => setQ('')} aria-label="Clear the search" title="Clear the search"><X size={14} /></button>}
           </label>
-          <HeroFilter heroes={heroes} value={hero} onChange={setHero} always={mods === null} />
+          <HeroFilter heroes={heroes} value={hero} onChange={setHero} always />
           <div className="mod-state-filter lp-sort" role="group" aria-label="Sort mods">
             <button type="button" aria-pressed={sort === 'newest'} onClick={() => { setSort('newest'); localStorage.setItem(SORT, 'newest') }}>Newest</button>
             <button type="button" aria-pressed={sort === 'name'} onClick={() => { setSort('name'); localStorage.setItem(SORT, 'name') }}>A to Z</button>
@@ -178,7 +177,7 @@ function GalactaPanel() {
           </p>
         )}
         {mods === null
-          ? <p className="lp-empty" aria-live="polite">Reading the mods folder…</p>
+          ? <ModRowsSkeleton />
           : shown.length === 0
             ? <p className="lp-empty">{needle || hero ? `No mods match${needle ? ` “${q.trim()}”` : ''}${hero ? ` for ${hero}` : ''}.` : 'No mesh or texture mods in the mods folder.'}</p>
             : <div className="vf-groups">{groups.map(g => {
@@ -204,7 +203,7 @@ function GalactaPanel() {
                             )}
                             {r?.status === 'running' && <span className="vf-pill is-running enc-pill">Converting</span>}
                             {r?.status === 'waiting' && <span className="vf-status">Queued</span>}
-                            {(r?.status === 'done' || (!r && m.made)) && <span className="vf-pill is-fixed enc-pill" title={`${m.name} (Galacta) is beside it in the Library`}>Converted</span>}
+                            {(r?.status === 'done' || (!r && m.made)) && <span className="vf-pill is-galacta enc-pill" title={`${m.name} (Galacta) is beside it in the Library`}>Converted</span>}
                             {r?.made?.note && <p className="setting-warn vf-row-panel gal-note"><AlertTriangle size={14} aria-hidden="true" /><span>{r.made.note}</span></p>}
                             {r?.made && r.made.leftOut > 0 && <p className="vf-note vf-row-panel enc-error">{plural(r.made.leftOut, 'file')} left out: Galacta swaps only the gameplay mesh, so lobby meshes, VFX, sounds, and UI stay in the original.</p>}
                             {r?.status === 'failed' && <>
@@ -223,24 +222,20 @@ function GalactaPanel() {
       <footer className="vf-foot">
         <p className="vf-state">
           {state || (runsNow.length && !busy
-            ? <>{done ? `${plural(done, 'mod')} converted. ${swap ? 'They are on and in Galacta’s skin list. Pick one in game with P on that skin.' : 'Turn one on, then open the Galacta Companion App so it lists it.'}` : ''}{failed.length > 0 && <>{done ? ' ' : ''}{plural(failed.length, 'mod')} failed.{' '}
+            ? <>{done ? `${plural(done, 'mod')} converted. They are on and in Galacta’s skin list. Pick one in game with P on that skin.` : ''}{failed.length > 0 && <>{done ? ' ' : ''}{plural(failed.length, 'mod')} failed.{' '}
                 <button type="button" className="su-link" onClick={() => void run(failed)}>Try again</button></>}</>
             : <>
                 {hiddenTicked > 0 && <span className="vf-hidden-line"><b className="vf-hidden-n">{hiddenTicked} ticked {hiddenTicked === 1 ? 'mod is' : 'mods are'} hidden by the filter.</b>{' '}
                   <button type="button" className="su-link" onClick={() => { setQ(''); setHero('') }}>Show {hiddenTicked === 1 ? 'it' : 'them'}</button></span>}
-                {swap ? 'Each mod gets a copy, “<name> (Galacta)”, turned on in its place. The original is turned off, not changed.' : 'Each mod gets a copy, “<name> (Galacta)”, left off. The original stays as it is.'}
+                {'Each mod gets a copy, “<name> (Galacta)”, turned on in its place. The original is turned off, not changed.'}
               </>)}
         </p>
         <span className="xtra-sr-only" aria-live="polite">{busy || cancelling ? state : ''}</span>
-        <Checkbox size="sm" className="gal-swap" checked={swap} isDisabled={busy} disabled={busy} onChange={(v: boolean) => { setSwap(v); localStorage.setItem(SWAP, v ? '1' : '0') }}>
-            <span title="Off: the Galacta version is made off, and the original stays as it is">Turn the original off, the Galacta version on</span>
-        </Checkbox>
         <div className="vf-foot-actions">
-          {busy && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={stop} title="Stops after the mod in progress"><X size={12} strokeWidth={2.5} aria-hidden="true" />{cancelling ? 'Stopping' : 'Stop'}</button>}
-          {/* while it runs: the Nexus Mods and KO Editor Install buttons' look, quiet with its words shimmering */}
-          <button type="button" className={`btn-primary${busy ? ' is-working' : ''}`} disabled={busy || !todo.length} onClick={() => void run()}>
-            {busy ? <span className="t-text-in"><span className="t-shimmer">Converting</span></span>
-              : <><GalactaLogo size={14} />{todo.length ? <>Convert <Num id="gal-todo" value={todo.length} /> {todo.length === 1 ? 'mod' : 'mods'}</> : 'Convert'}</>}
+          {busy && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={stop} title="Stops after the mod in progress"><span className="stop-glyph" aria-hidden="true" />{cancelling ? 'Stopping' : 'Stop'}</button>}
+          {/* while it runs: the Mod Encryptor and Mod Updater buttons' look, its icon and Converting */}
+          <button type="button" className="btn-primary" disabled={busy || !todo.length} onClick={() => void run()}>
+            <GalactaLogo size={14} />{busy ? 'Converting' : todo.length ? <>Convert <Num id="gal-todo" value={todo.length} /> {todo.length === 1 ? 'mod' : 'mods'}</> : 'Convert'}
           </button>
         </div>
       </footer>

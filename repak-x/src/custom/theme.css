@@ -138,6 +138,11 @@ button, input, select, textarea, .MuiButton-root { font-family: inherit !importa
 /* Tools and Settings are icon only (their tooltips name them): square, the icon centered */
 .header-actions-right :is([data-tour="tools-btn"], [data-tour="settings-btn"]) { width: 36px; padding: 0 !important; justify-content: center; }   /* 36: the buttons' min-height */
 .header-actions-right .btn-vfx::before, .header-actions-right .btn-vfx::after { display: none !important; }
+/* Settings > Header buttons > Icons only (uiPrefs.tsx header-icons): every header button the same square as Tools, its
+   name gone (the tooltip says what it does), and the Library's Asset Explorer too */
+html[data-show-header-icons] :is(.header-actions-right .hdr-label, .btn-asset-explorer .btn-label) { display: none !important; }
+html[data-show-header-icons] .header-actions-right .btn-settings { width: 36px; padding: 0 !important; justify-content: center; }
+html[data-show-header-icons] .header-actions-right .btn-vfx svg { margin-right: 0 !important; }
 /* Launch is the one primary action: solid light button. Running/launched keep upstream colors. */
 .header-actions-right .btn-settings[data-launch="idle"] {
   background: #ededed !important;
@@ -1660,24 +1665,21 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
 /* an icon in the portrait's place (All heroes): the same round size, quiet */
 .custom-dropdown-img.is-glyph { display: grid; place-items: center; background: var(--quiet-hover); color: var(--text-secondary); }
 .custom-dropdown-img.is-glyph svg { width: 12px; height: 12px; }
-/* Generating: what it is doing (dot loader, "2 of 9") as a quiet status, and Stop as its own button beside it with
-   an X, the same Stop as Home's batch line */
+/* Generating: what it is doing (dot loader, "2 of 9") as a quiet status, and Stop as its own button beside it with a
+   small square, the same Stop as Home's batch line */
 .run-group { display: inline-flex; align-items: center; gap: 8px; flex: none; }
 .run-group .is-running { display: inline-flex !important; align-items: center; gap: 8px; cursor: default; pointer-events: none;
   border-color: transparent !important; background: transparent !important; padding-left: 4px !important; color: var(--text-primary) !important; }
 .run-stop-btn { display: inline-flex !important; align-items: center; gap: 8px; }
-/* Pause and Resume beside Stop (ScanStatus.tsx): solid glyphs one height (10px), so the three read as one set.
-   Pause: two square 4px bars 8px apart. Each bar starts on a whole device pixel at 100, 125, 150, 175, and 200% scale
-   (8 times any of those is whole), so both bars always round to the same width with crisp edges */
-.pause-glyph { position: relative; width: 12px; height: 10px; flex: none; }
-.pause-glyph::before, .pause-glyph::after { content: ''; position: absolute; top: 0; bottom: 0; width: 4px; background: currentColor; }
-.pause-glyph::before { left: 0; }
-.pause-glyph::after { left: 8px; }
-/* the header's paused state: centered in the 14px spot the running spinner takes, so the words do not shift */
-.scan-status-in .pause-glyph { margin: 0 1px; }
-/* the mod checks' menu (and the Generate menu sharing its rows): Stop and Play at the pause's height */
-.lo-gen-stop .play-glyph { width: 10px; height: 10px; margin: 0 1px; } /* the pause's 12px slot: the three labels share one left edge */
-.lo-gen-stop > svg { flex: none; } /* Cancel's X fills the same 12px slot */
+/* Pause, Resume, and Stop: small solid glyphs (7.5px) so they read as one set. Stop is the same slightly rounded square
+   on every Stop and Cancel button. Pause is Lucide's, filled with no stroke */
+.stop-glyph { width: 7.5px; height: 7.5px; margin: 0 2.25px; border-radius: 1.5px; background: currentColor; flex: none; }
+/* each glyph centered in one 12px slot, so the labels share a left edge and the marks share a center line. Pause is a
+   box cropped to its bars (viewBox 0 3 24 18, ScanStatus.tsx): 7.5px tall like the square, so both center on the same
+   pixel row (a taller box rounded 1px high). The header's 16px icon rule (icon sizes, above) would blow it up, so its
+   size is pinned here */
+.lo-gen-stop .play-glyph { width: 7.5px; height: 8.5px; margin: 0 2.25px; }
+:is(.lo-gen-stop, .scan-status-in) > svg.lucide-pause { flex: none; width: 10px !important; height: 7.5px !important; margin: 0 1px; }
 .play-glyph { width: 8px; height: 8px; flex: none; background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%); }
 /* A Generate button on a PC without the preview kit: grayed out, with a small blue "Set up" that says where to go */
 .is-unavailable { color: var(--text-secondary) !important; opacity: 0.85; }

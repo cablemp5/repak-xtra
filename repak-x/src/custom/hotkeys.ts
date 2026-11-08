@@ -12,7 +12,7 @@ export type Shortcut = { keys: string[]; action: string }
 const HEADER = [
   { key: 'k', pref: 'ko-tab', name: 'KO Editor tab' },
   { key: 'm', pref: 'vfx-updater', name: 'Mod Updater' },
-  { key: 'e', pref: 'encrypt', name: 'Encryptor' },
+  { key: 'e', pref: 'encrypt', name: 'Mod Encryptor' },
   { key: 'g', pref: 'galacta', name: 'Galacta Converter' },
   { key: 'a', pref: 'asset-explorer', name: 'Asset Explorer' },
   { key: 't', pref: 'tools', name: 'Tools' },
@@ -67,7 +67,7 @@ export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
   },
   {
     title: 'Header buttons',
-    items: HEADER.map(h => ({ keys: ['Shift', h.key.toUpperCase()], action: `Show / hide ${h.name}` })),
+    items: [...HEADER.map(h => ({ keys: ['Shift', h.key.toUpperCase()], action: `Show / hide ${h.name}` })), { keys: ['Shift', 'I'], action: 'Icons only on / off' }],
   },
   {
     title: 'Loadouts',
@@ -113,6 +113,7 @@ window.addEventListener('keydown', e => {
   if (e.ctrlKey || e.altKey || e.metaKey) return
   const header = e.shiftKey ? HEADER.find(h => h.key === key) : undefined
   if (header) { e.preventDefault(); togglePref(header.pref, `${header.name} button`); return }
+  if (e.shiftKey && key === 'i') { e.preventDefault(); togglePref('header-icons', 'Icons only'); return }
   if (dialogOpen()) return
 
   // Shift+F10 or the Menu key opens the right-click menu for the selected mod: the browser fires it on the focused
