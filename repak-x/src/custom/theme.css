@@ -2912,6 +2912,9 @@ html[data-motion="off"] .setting-sub, html[data-motion="off"] .bulk-actions-tool
 .bi-status > span + .bi-warn { margin-left: 6px; white-space: nowrap; }
 .bi-warn > svg { display: inline-block; vertical-align: -2px; margin-right: 4px; }
 [data-theme="light"] .bi-warn { color: #a35d00; }
+/* a status drawn without the split warning part (an icon and the words straight in it) warns as one amber line */
+.bi-status.is-warn:not(:has(.bi-warn)) { display: flex; align-items: flex-start; color: #f5a524; }
+.bi-status.is-warn:not(:has(.bi-warn)) > svg { flex: none; margin-top: 1px; }
 .bi-row .lo-text-btn { height: 28px !important; padding: 0 12px !important; font-size: 12px !important; }
 .bi-row .repakx-switch-control { height: 24px !important; min-height: 0 !important; }
 /* the Library's built-in rows: a blue Built-in badge that opens the row on Home, no checkbox (never in a bulk action) */
