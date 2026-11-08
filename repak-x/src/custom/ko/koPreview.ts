@@ -12,11 +12,12 @@ const SIZE = { w: 640, h: 904 } // the kit's preview size (640 by 905), even for
 
 let heroes: Promise<Hero[]> | null = null
 
-/** Makes and saves the mod's KO preview. False when the mod is not a KO-only mod, or its files cannot be listed (the kit
- *  renders it then). Throws when a KO mod fails to render.
- *  `onKo` runs once it is known to be one, before the slow part. */
-export async function koPreview(modPath: string, key: string, onKo: () => void): Promise<boolean> {
+/** Makes and saves the mod's KO preview: 'made', or 'kept' when its saved one is newer than the mod and `force` is off.
+ *  False when the mod is not a KO-only mod, or its files cannot be listed (the kit renders it then). Throws when a KO
+ *  mod fails to render. `onKo` runs once it is known to be one, before the slow part. */
+export async function koPreview(modPath: string, key: string, onKo: () => void, force: boolean): Promise<false | 'made' | 'kept'> {
   if (!await invoke<boolean>('xtra_ko_is_mod', { modPath })) return false
+  if (!force && await invoke<boolean>('xtra_ko_preview_fresh', { modPath, key })) return 'kept'
   const usmap = await usmapPath()
   const m = await invoke<{ hero: string; widgetJson: string; materials: [string, string][]; textures: [string, string][] } | null>('xtra_ko_mod', { usmapPath: usmap, modPath })
   if (!m) throw new Error('This KO prompt mod could not be read.')
@@ -32,5 +33,5 @@ export async function koPreview(modPath: string, key: string, onKo: () => void):
   const clip = await recordClip(scene, SIZE, 4, new Map())
   if (!clip) throw new Error('This WebView cannot record video.')
   await invoke('xtra_ko_save_preview', new Uint8Array(await clip.arrayBuffer()), { headers: { key: encodeURIComponent(key) } })
-  return true
+  return 'made'
 }

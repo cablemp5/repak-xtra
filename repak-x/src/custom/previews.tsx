@@ -13,7 +13,7 @@ import { useAlert } from '../components/AlertHandler'
 import { type Loadout, coverFills, displayName, memberName, modKey, nameKey, patchLoadout, pickCover, readLoadouts } from './loadoutStore'
 import { revealOnLoad } from './motion'
 import { EGG_MS, stepEgg, stepText } from './previewStages'
-import { plural } from './modName'
+import { ordinal, plural } from './modName'
 import { animatedUrls, isIdle } from './idlePause'
 import { koPreview } from './ko/koPreview'
 import { verdictOf } from './brokenMods'
@@ -426,8 +426,12 @@ const start = async (job: QueuedJob): Promise<string | null> => {
     if (run.stopping) break
     const path = job.paths.find(p => nameKey(p) === k)!
     try {
-      if (await koPreview(path, k, () => { run.step = 'ko'; notify() })) { koKeys.add(k); localStorage.setItem(KO_KEYS, JSON.stringify([...koKeys])) }
-      else kit.push([dir, k])
+      const ko = await koPreview(path, k, () => { run.step = 'ko'; notify() }, Boolean(job.force))
+      if (!ko) kit.push([dir, k])
+      else {
+        koKeys.add(k); localStorage.setItem(KO_KEYS, JSON.stringify([...koKeys]))
+        if (ko === 'kept' && pending.delete(k)) { run.made++; notify() } // unchanged: no ready event comes for it
+      }
     } catch (e) {
       console.warn(`KO preview of ${k} failed:`, e)
       outcome.set(k, FAILED)
@@ -455,7 +459,7 @@ const startNext = () => {
   while (!running() && (next = queue.shift())) start(next)
 }
 
-/** Where a loadout's combined render stands: rendering now (mod done of total), waiting (1 = up next), or neither.
+/** Where a loadout's combined render stands: rendering now (mod done of total), waiting (1 = 1st in line), or neither.
  *  Once its own render lands the card is done, though the run goes on for mods the render does not show (an emote, a
  *  UI or sound mod): their steps are not this card's work. */
 export function usePreviewState(set: string) {
@@ -568,6 +572,13 @@ export function PreviewsUnavailable({ className, label }: { className: string; l
   )
 }
 
+/** The loadout render was made for exactly these mods (KO prompt mods never reach the kit, so they are left out). Pure
+ *  apart from the KO list. Unknown members (no render, or one from before they were recorded): not the same. */
+export const sameMods = (members: string[] | null | undefined, paths: string[]) => {
+  const now = [...new Set(paths.map(nameKey))].filter(k => !isKoPreview(k)).sort()
+  return Boolean(members) && JSON.stringify([...new Set(members)].sort()) === JSON.stringify(now)
+}
+
 /** "Electric Blue · preview 2 of 9", shimmering while it works. */
 const progressText = () => `${run.name} · preview ${doneOf()} of ${run.total}`
 const Shimmer = ({ text }: { text: string }) => <span className="t-shimmer">{text}</span>
@@ -632,7 +643,10 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
   const n = new Set(paths.map(modKey)).size
   // A loadout that already has its preview: the button renders it again, even when nothing changed
   const again = Boolean(set && (hasPreview(set) || paths.some(p => hasPreview(nameKey(p)))))
-  const job: Job = { paths, set, name: name ?? `${n} selected mod${n === 1 ? '' : 's'}`, force: again, show: Boolean(set) }
+  // A loadout whose mods changed since its render redoes only the changed previews (the kit and koPreview keep the rest);
+  // with the same mods, Regenerate renders everything again
+  const rendered = useCovers(set ?? '')?.members
+  const job: Job = { paths, set, name: name ?? `${n} selected mod${n === 1 ? '' : 's'}`, force: again && (!set || sameMods(rendered, paths)), show: Boolean(set) }
   const text = again ? label.replace(/^Generate/, 'Regenerate') : label
   if (!canGenerate) return <PreviewsUnavailable className={className} label={label} />
   const id = jobId(job)
@@ -664,7 +678,7 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
       <>
         {at >= 0
           ? <button type="button" className={`${className} is-queued`} onClick={() => unqueue(id)} title="Remove from the preview queue">
-              <X size={14} /><span className="bulk-btn-label">Queued{at > 0 ? ` (${at + 1} in line)` : ', up next'}</span>
+              <X size={14} /><span className="bulk-btn-label">Queued, {ordinal(at + 1)} in line</span>
             </button>
           : <button type="button" className={className} disabled={n === 0} onClick={() => ask(alert, job)}
               title={`Previews for ${run.name} are generating; this starts when they finish`}>
@@ -689,4 +703,5 @@ if (import.meta.env.DEV) {
   console.assert(jobId({ paths: ['C:/m/A_9999999_P.pak', 'B.bak_repak'] }) === jobId({ paths: ['C:/x/B.pak', 'A.pak', 'A.pak'] }), 'jobId: same mods, any order')
   console.assert(jobId({ paths: ['A.pak'] }) !== jobId({ paths: ['A.pak', 'B.pak'] }), 'jobId: different mods')
   console.assert(jobId({ paths: ['A.pak'], set: 'loadout-x' }) === jobId({ paths: ['B.pak'], set: 'loadout-x' }), 'jobId: a loadout keeps its id')
+  console.assert(sameMods(['A', 'B'], ['C:/m/B.pak', 'C:/x/A.pak']) && !sameMods(['A'], ['A.pak', 'B.pak']) && !sameMods(null, ['A.pak']) && !sameMods(undefined, ['A.pak']), 'sameMods')
 }

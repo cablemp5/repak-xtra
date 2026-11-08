@@ -577,7 +577,7 @@ function LoadoutsHome(p: LoadoutProps) {
               title={batch ? `Generating previews for ${batch.name}` : 'Render a preview for every loadout, one after another (each card shows its progress)'}
               onClick={() => (batch || withPreview > 0 ? setGenMenu(v => !v) : generate('all'))}>
               {batch
-                ? <span className="lo-gen-label t-shimmer-all"><WandSparkles size={14} />{batch.jobs > 1 ? `Previews ${batch.job} of ${batch.jobs}` : 'Generating preview'}</span>
+                ? <span className="lo-gen-label t-shimmer-all"><WandSparkles size={14} />{batch.jobs > 1 ? `Generating preview ${batch.job} of ${batch.jobs}` : 'Generating preview'}</span>
                 : <><WandSparkles size={14} /><span className="lo-gen-text">Generate all previews</span></>}
             </button>
             {genMenu && batch && (
