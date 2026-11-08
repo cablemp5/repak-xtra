@@ -2808,9 +2808,10 @@ html[data-motion="off"] .vfx-dot { animation: none; }
 .bulk-actions-toolbar .custom-dropdown-menu { top: auto !important; bottom: calc(100% + 12px) !important; }
 .bulk-actions-toolbar .selection-info, .bulk-actions-toolbar .bulk-controls { display: flex; align-items: center !important; gap: 4px !important;
   margin: 0 !important; padding: 0 !important; border: none !important; }
-/* the header's divider (1 x 24px) after the selection group and before Delete */
-.bulk-actions-toolbar .selection-info::after, .bulk-actions-toolbar .bulk-toggle-group::after { content: ''; flex: none; width: 1px; height: 24px;
-  margin: 0 4px; background: var(--panel-border); }
+/* a divider after the selection group and before Delete, the bar's full height: 48px is the 36px row plus the 6px
+   padding above and below, and the -6px margins keep the row 36px */
+.bulk-actions-toolbar .selection-info::after, .bulk-actions-toolbar .bulk-toggle-group::after { content: ''; flex: none; width: 1px; height: 48px;
+  margin: -6px 4px; background: var(--panel-border); }
 /* "Selected" and its count chip, like the filter tabs' "All 260" */
 .bulk-actions-toolbar .bulk-count { display: flex; align-items: center; gap: 8px; min-width: 0 !important; height: 36px !important; margin: 0 !important;
   padding: 0 8px 0 10px !important; border: none !important; border-radius: 0 !important; background: none !important;
