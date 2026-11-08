@@ -469,7 +469,7 @@ function App() {
     const said = (e: Event) => {
       if (fewerPopups()) return // the sound said it (uiPrefs.tsx togglePref)
       const { key, name, on } = (e as CustomEvent<PrefToggled>).detail
-      const id = alert.info(`${name} ${on ? 'shown' : 'hidden'}`, 'The same switch is in Settings > Library.', { duration: 4000, action: { label: 'Undo', onClick: () => { alert.dismissAlert(id); setPref(key, !on) } } }) // back to before this press, whatever came after
+      const id = alert.info(`${name} ${key === 'header-icons' ? (on ? 'on' : 'off') : on ? 'shown' : 'hidden'}`, 'The same switch is in Settings > Library.', { duration: 4000, action: { label: 'Undo', onClick: () => { alert.dismissAlert(id); setPref(key, !on) } } }) // back to before this press, whatever came after
     }
     window.addEventListener(PREF_TOGGLED, said)
     return () => window.removeEventListener(PREF_TOGGLED, said)

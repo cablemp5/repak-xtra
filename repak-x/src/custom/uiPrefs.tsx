@@ -21,7 +21,7 @@ const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod
   { key: 'galacta', label: 'Galacta Converter (Shift+G)', group: 'header' }, // hidden by default, also in Tools
   { key: 'asset-explorer', label: 'Asset Explorer (Shift+A)', group: 'header' },
   { key: 'tools', label: 'Tools (Shift+T)', group: 'header' },
-  { key: 'header-icons', label: 'Icons only, without names (hover a button for what it does)', group: 'header' }, // off by default: theme.css hides .hdr-label
+  { key: 'header-icons', label: 'Icons only, without names (Shift+I)', group: 'header' }, // off by default: theme.css hides .hdr-label
   { key: 'mod-size', label: 'File size', group: 'mod' },
   { key: 'priority', label: 'Load priority counter (P)', group: 'mod' },
   { key: 'nexus', label: 'Nexus tag on mods installed from Nexus Mods', on: true, group: 'mod' },
