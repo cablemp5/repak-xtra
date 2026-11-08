@@ -10,7 +10,7 @@ import { APP_NAME } from '../edition'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, emitTo, listen } from '@tauri-apps/api/event'
-import { AlertTriangle, Archive, Check, CheckCheck, ChevronDown, ChevronRight, Copy, Eye, Info, PackageCheck, Undo2, FilePlus, Map as MapIcon, Palette, RefreshCw, RotateCcw, ScrollText, Search, Square, Tag, X } from 'lucide-react'
+import { AlertTriangle, Archive, Check, CheckCheck, ChevronDown, ChevronRight, Copy, Eye, Info, PackageCheck, Undo2, FilePlus, Map as MapIcon, Palette, RefreshCw, RotateCcw, ScrollText, Search, Tag, X } from 'lucide-react'
 import TitleBar from '../../components/TitleBar'
 import { useGlobalTooltips } from '../../hooks/useGlobalTooltips'
 import Checkbox from '../../components/ui/Checkbox'
@@ -1043,7 +1043,7 @@ export function VfxUpdaterPanel() {
         <div className="vf-foot-actions">
           {reports.length > 0 && !busy && <button type="button" className="lo-text-btn" onClick={() => copy('report')}><Copy size={14} /> {copied === 'report' ? 'Copied' : 'Copy report'}</button>}
           {/* Cancel beside the button, never in its place: a double-click on Update must not cancel the run */}
-          {busy && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={() => stop('Cancel button')} title="Esc"><Square size={14} fill="currentColor" aria-hidden="true" /> {cancelling ? 'Cancelling…' : 'Cancel'}</button>}
+          {busy && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={() => stop('Cancel button')} title="Esc"><span className="stop-glyph" aria-hidden="true" />{cancelling ? 'Cancelling…' : 'Cancel'}</button>}
           {/* the same checks as the header's Checking mods (Pause and Cancel live there) */}
           {!busy && <button type="button" className="lo-text-btn" disabled={Boolean(scan) || !picked.size} onClick={() => void scanTicked()}
             title="Check the ticked mods again from scratch, without changing files. Progress shows in the main window's header too">

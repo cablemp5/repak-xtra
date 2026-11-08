@@ -37,7 +37,7 @@ export default function ScanStatus() {
         {/* running: only its words, shimmering */}
         {r.running
           ? <span className="scan-status-in t-shimmer">{stopping ? 'Stopping checks' : 'Checking mods'}</span>
-          : <span className="scan-status-in"><Pause size={12} fill="currentColor" className="pause-icon" aria-hidden="true" />Checks paused</span>}
+          : <span className="scan-status-in"><Pause size={12} fill="currentColor" stroke="none" aria-hidden="true" />Checks paused</span>}
       </button>
       {open && (
         <div className="sigeon-menu lo-gen-menu scan-menu" role="menu">
@@ -49,7 +49,7 @@ export default function ScanStatus() {
             ? <>
                 <button type="button" role="menuitem" className="sigeon-item" disabled={stopping} onClick={() => { setOpen(false); void holdScan('paused') }}
                   title="Stop after the mod being read. Resume picks up where it stopped">
-                  <span className="lo-gen-stop"><Pause size={12} fill="currentColor" className="pause-icon" aria-hidden="true" />Pause</span></button>
+                  <span className="lo-gen-stop"><Pause size={12} fill="currentColor" stroke="none" aria-hidden="true" />Pause</span></button>
                 <button type="button" role="menuitem" className="sigeon-item run-stop-btn" disabled={stopping && r.held === 'cancelled'} onClick={() => { setOpen(false); void holdScan('cancelled') }}
                   title="Stop after the mod being read, and hide this until the checks run again">
                   <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />Cancel</span></button>

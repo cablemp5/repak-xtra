@@ -439,5 +439,5 @@ function HexField({ value, onCommit, label }: { value: string; onCommit: (hex: s
 
 /* Play and pause as solid glyphs, as media players draw them (option A, cable 2026-11-01): Lucide's are hollow outlines
    that looked out of place on the transport. The icon swap (t-icon-swap) crossfades them by data-icon. */
-const PauseGlyph = () => <Pause className="t-icon" data-icon="a" size={14} fill="currentColor" aria-hidden />
+const PauseGlyph = () => <Pause className="t-icon" data-icon="a" size={14} fill="currentColor" stroke="none" aria-hidden />
 const PlayGlyph = () => <svg className="t-icon" data-icon="b" width={14} height={14} viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M7 4.8a1.4 1.4 0 0 1 2.1-1.2l11 6.9a1.6 1.6 0 0 1 0 2.8l-11 6.9A1.4 1.4 0 0 1 7 19.2z" /></svg>
