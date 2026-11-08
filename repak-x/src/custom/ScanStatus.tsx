@@ -36,7 +36,7 @@ export default function ScanStatus() {
         title={r.running ? 'Show the mod checks: pause or cancel them' : 'The mod checks are paused: resume or cancel them'}>
         {/* running: only its words, shimmering */}
         {r.running
-          ? <span className="scan-status-in t-shimmer">{stopping ? 'Stopping checks' : 'Checking mods'}</span>
+          ? <span className="scan-status-in t-shimmer">{stopping ? (r.held === 'paused' ? 'Pausing checks' : 'Stopping checks') : 'Checking mods'}</span>
           : <span className="scan-status-in"><Pause viewBox="0 3 24 18" fill="currentColor" stroke="none" aria-hidden="true" />Checks paused</span>}
       </button>
       {open && (
