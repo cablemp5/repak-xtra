@@ -1,7 +1,7 @@
 // repakxtra: the Galacta Converter window (route galacta), built like the Encrypt window (EncryptWindow.tsx) from the same
 // parts: search, hero filter and sort over folding groups of ticked rows, and a footer with what the button does. Each
 // ticked mod gets a second copy, "<name> (Galacta)", that Project Galacta can swap in per skin (xtra_galacta.rs). The
-// copy goes beside the mod, off, and the original stays as it is. The main window opens it (GalactaMods.tsx).
+// copy goes beside the mod, on, and the original is turned off, not changed. The main window opens it (GalactaMods.tsx).
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, listen } from '@tauri-apps/api/event'
@@ -29,7 +29,6 @@ type Run = { status: 'waiting' | 'running' | 'done' | 'failed'; error?: string; 
 
 const SORT = 'repakxtra.galacta.sort'
 const FOLDED = 'repakxtra.galacta.folded'
-const SWAP = 'repakxtra.galacta.swap' // on unless switched off: '0'
 const norm = (p: string) => p.replace(/\//g, '\\').toLowerCase()
 
 /** A group of mods that folds to its heading, with Select all and Clear: the Encrypt window's. */
@@ -70,7 +69,6 @@ function GalactaPanel() {
   const [hero, setHero] = useState('')
   const [sort, setSort] = useState<'newest' | 'name'>(() => (localStorage.getItem(SORT) === 'name' ? 'name' : 'newest'))
   const [foldedIds, setFoldedIds] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(FOLDED) ?? '[]') } catch { return [] } })
-  const [swap, setSwap] = useState(() => localStorage.getItem(SWAP) !== '0')
   const [welcome, setWelcome] = useState(welcomeOnOpen)
   const stopRef = useRef(false)
   const busyRef = useRef(false)
@@ -133,8 +131,8 @@ function GalactaPanel() {
       try {
         usmap ??= await usmapPath()
         const m = byKey.get(k)!
-        const made = await invoke<Made>('xtra_galacta_make', { path: m.path, name: m.name, usmapPath: usmap, on: swap })
-        changed = true // with swap on, the backend also turned the original off (xtra_galacta.rs)
+        const made = await invoke<Made>('xtra_galacta_make', { path: m.path, name: m.name, usmapPath: usmap, on: true })
+        changed = true // the backend turns the original off and the Galacta version on (xtra_galacta.rs)
         setRuns(r => ({ ...r, [k]: { status: 'done', made } }))
         setPicked(p => { const n = new Set(p); n.delete(k); return n })
       } catch (e) { setRuns(r => ({ ...r, [k]: { status: 'failed', error: String(e) } })) }
@@ -224,18 +222,15 @@ function GalactaPanel() {
       <footer className="vf-foot">
         <p className="vf-state">
           {state || (runsNow.length && !busy
-            ? <>{done ? `${plural(done, 'mod')} converted. ${swap ? 'They are on and in Galacta’s skin list. Pick one in game with P on that skin.' : 'Turn one on, then open the Galacta Companion App so it lists it.'}` : ''}{failed.length > 0 && <>{done ? ' ' : ''}{plural(failed.length, 'mod')} failed.{' '}
+            ? <>{done ? `${plural(done, 'mod')} converted. They are on and in Galacta’s skin list. Pick one in game with P on that skin.` : ''}{failed.length > 0 && <>{done ? ' ' : ''}{plural(failed.length, 'mod')} failed.{' '}
                 <button type="button" className="su-link" onClick={() => void run(failed)}>Try again</button></>}</>
             : <>
                 {hiddenTicked > 0 && <span className="vf-hidden-line"><b className="vf-hidden-n">{hiddenTicked} ticked {hiddenTicked === 1 ? 'mod is' : 'mods are'} hidden by the filter.</b>{' '}
                   <button type="button" className="su-link" onClick={() => { setQ(''); setHero('') }}>Show {hiddenTicked === 1 ? 'it' : 'them'}</button></span>}
-                {swap ? 'Each mod gets a copy, “<name> (Galacta)”, turned on in its place. The original is turned off, not changed.' : 'Each mod gets a copy, “<name> (Galacta)”, left off. The original stays as it is.'}
+                Each mod gets a copy, “<name> (Galacta)”, turned on in its place. The original is turned off, not changed.
               </>)}
         </p>
         <span className="xtra-sr-only" aria-live="polite">{busy || cancelling ? state : ''}</span>
-        <Checkbox size="sm" className="gal-swap" checked={swap} isDisabled={busy} disabled={busy} onChange={(v: boolean) => { setSwap(v); localStorage.setItem(SWAP, v ? '1' : '0') }}>
-            <span title="Off: the Galacta version is made off, and the original stays as it is">Turn the original off, the Galacta version on</span>
-        </Checkbox>
         <div className="vf-foot-actions">
           {busy && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={stop} title="Stops after the mod in progress"><span className="stop-glyph" aria-hidden="true" />{cancelling ? 'Stopping' : 'Stop'}</button>}
           {/* while it runs: the Mod Encryptor and Mod Updater buttons' look, its icon and Converting… */}
