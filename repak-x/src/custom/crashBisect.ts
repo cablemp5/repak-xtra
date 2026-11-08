@@ -10,6 +10,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { type KeepDeps, flipAll, stem } from './keepOne'
 import { isModLoader, nameKey } from './loadoutStore'
+import { MOD_LOADERS } from './edition'
 
 type Mod = { path: string; enabled?: boolean }
 export type Phase = 'baseline' | 'halve' | 'confirm'
@@ -224,7 +225,8 @@ async function restore(d: KeepDeps, b: Bisect) {
 if (import.meta.env.DEV) {
   const mods = Array.from({ length: 30 }, (_, i) => `m${i}.pak`)
   console.assert(halve(['a', 'b', 'c']).join('|') === 'a,b|c', 'odd counts keep the bigger half on')
-  console.assert(drift([{ path: 'C:/g/~mods/!ProjectGalacta_9999999_P.pak', enabled: true }, { path: 'C:/g/~mods/a.pak', enabled: true }], firstTest(['C:/g/~mods/a.pak'])) === null, 'an enabled loader is no drift')
+  // this edition's own loader (another edition's is an ordinary mod)
+  console.assert(drift([{ path: `C:/g/~mods/!${MOD_LOADERS[0]}_9999999_P.pak`, enabled: true }, { path: 'C:/g/~mods/a.pak', enabled: true }], firstTest(['C:/g/~mods/a.pak'])) === null, 'an enabled loader is no drift')
   // a player who answers truthfully: the game crashes while `cause` is on
   const play = (cause: (on: (p: string) => boolean) => boolean, start = mods) => {
     let b = firstTest(start)
