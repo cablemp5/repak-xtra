@@ -1848,9 +1848,9 @@ function App() {
         invoke('discord_set_managing_mods', { modCount: modList.length }).catch(console.warn);
       }
 
-      // repakxtra: the count the Library's All tab shows, which leaves Project Galacta out (it lives in Setup)
-      // shortcut: matched by its pak name, not its files (those land in modDetails later), so a renamed Galacta still counts
-      const listed = modList.filter((m: ModRecord) => !/projectgalacta/i.test(m.path.split(/[\\/]/).pop() ?? '') && loadoutable(modKey(m.path))).length
+      // repakxtra: the count the Library's All tab shows, which leaves this edition's loader out (it lives in Setup)
+      // shortcut: matched by its pak name, not its files (those land in modDetails later), so a renamed loader still counts
+      const listed = modList.filter((m: ModRecord) => loadoutable(modKey(m.path))).length
       setStatus(`Loaded ${listed} mod${listed === 1 ? '' : 's'}`)
       return modList as ModRecord[]
     } catch (error) {
