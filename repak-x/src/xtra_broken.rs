@@ -214,7 +214,7 @@ pub(crate) fn build_key(containers: &[(PathBuf, u64, u64)]) -> String {
 }
 
 /// Packages only (.uasset, .umap): their sidecars (.uexp, .ubulk) follow them, raw files are not game assets.
-fn is_package(file: &str) -> bool {
+pub(crate) fn is_package(file: &str) -> bool {
     let f = file.to_ascii_lowercase();
     f.ends_with(".uasset") || f.ends_with(".umap")
 }

@@ -99,8 +99,8 @@ fn shader_of(dir: &Path, rels: &[String]) -> HashMap<String, String> {
         .collect()
 }
 
-/// Extracts the packages named in `names` (bare names) from `paks` (a Paks folder: every container in it), or from the
-/// mod at `mod_utoc`, into `out`: their paths there. The tool's command line runs it as a process of its own when it
+/// Extracts the packages `names` picks (bare names, or full paths the tool finds by lookup) from `paks` (a Paks folder:
+/// every container in it), or from the mod at `mod_utoc`, into `out`: their paths there. The tool's command line runs it as a process of its own when it
 /// ships (xtra_uat_cli.rs), so the background scan extracts the next mod while this one decodes.
 async fn extract(paks: &Path, mod_utoc: Option<&Path>, names: &[String], out: &Path) -> Result<Vec<String>, String> {
     let _ = std::fs::remove_dir_all(out);
@@ -117,7 +117,24 @@ async fn extract(paks: &Path, mod_utoc: Option<&Path>, names: &[String], out: &P
     if !r.success {
         return Err(r.message);
     }
-    Ok(packages(out, &names.iter().map(|n| n.to_lowercase()).collect()))
+    Ok(packages(out, &names.iter().map(|n| bare(n)).collect()))
+}
+
+/// "Marvel/Content/X/MI_A.uasset" or "MI_A" is "mi_a": what packages() matches extracted files by.
+fn bare(name: &str) -> String {
+    let n = name.rsplit(['/', '\\']).next().unwrap_or(name).to_lowercase();
+    n.strip_suffix(".uasset").map(str::to_string).unwrap_or(n)
+}
+
+/// The extract's filter for the material instances `mics` (match_key): each one's own path in the mod's file list,
+/// which the tool finds by lookup. A bare name makes it test every game package against every pattern (541 patterns
+/// took 34 s, a full path list well under a second). A name with no path in the list goes as it is.
+fn filters_of(mics: &[String], files: &[String]) -> Vec<String> {
+    let mut by_key: HashMap<String, &String> = files.iter().filter(|f| crate::xtra_broken::is_package(f)).map(|f| (crate::xtra_broken::match_key(f), f)).collect();
+    let mut out: Vec<String> = mics.iter().map(|k| by_key.remove(k).cloned().unwrap_or_else(|| k.rsplit('/').next().unwrap_or(k).to_string())).collect();
+    out.sort();
+    out.dedup();
+    out
 }
 
 /// The packages `rels` extracted under `out`, decoded into `json`: their shader data.
@@ -182,10 +199,6 @@ async fn check(mod_path: &Path, usmap: &str, state: &Arc<Mutex<AppState>>, deep:
 }
 
 /// Bare names of material instances (match keys), for the extract's filter.
-fn names_of(mics: &[String]) -> Vec<String> {
-    mics.iter().map(|k| k.rsplit('/').next().unwrap_or(k).to_string()).collect::<HashSet<_>>().into_iter().collect()
-}
-
 fn none() -> VfxCheck {
     VfxCheck { verdict: "none", outdated: vec![], current: vec![], unknown: vec![], old_layout: vec![], why: None }
 }
@@ -206,11 +219,10 @@ async fn check_in(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, wo
     // listing runs a process and may read the game's asset list first: off the async workers
     let (p, u, f) = (paks.to_path_buf(), utoc.clone(), details.files.clone());
     let (mics, all_known) = tauri::async_runtime::spawn_blocking(move || crate::xtra_broken::material_instances(&p, &u, &f)).await.map_err(|e| e.to_string())?;
-    let names = names_of(&mics);
-    if names.is_empty() {
+    if mics.is_empty() {
         return Ok(no_materials(mods_dir, &utoc, all_known));
     }
-    let rels = extract(paks, Some(&utoc), &names, &work.join("mod")).await?;
+    let rels = extract(paks, Some(&utoc), &filters_of(&mics, &details.files), &work.join("mod")).await?;
     Ok(finish(mod_path, usmap, mods_dir, paks, work, bases, &details.files, all_known, &rels, deep, false).await?.expect("never deferred"))
 }
 
@@ -262,12 +274,16 @@ fn save_found() {
 #[allow(clippy::too_many_arguments)]
 async fn finish(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, work: &Path, bases: &[PathBuf], files: &[String], all_known: bool, rels: &[String], deep: bool, defer: bool) -> Result<Option<VfxCheck>, String> {
     let utoc = mod_path.with_extension("utoc");
+    // each step's seconds, logged once per mod: what a slow check spent its time on
+    let t = std::time::Instant::now();
     let mine = decode(&work.join("mod"), rels, usmap, &work.join("mod_json")).await?;
+    let t_decode = t.elapsed().as_secs_f64();
     // the game's current copies of the same packages: extracted and decoded once per game build and USMAP, kept for
     // every mod that replaces them (xtra_niagara game_copies)
     let vanilla = crate::xtra_vfx::vanilla_dir(&paks.to_string_lossy(), usmap);
     let (_, game_json) = crate::xtra_niagara::game_copies(&paks.to_string_lossy(), usmap, rels, work, &vanilla, &NoOpProgressSink).await?;
     let current = shader_of(&game_json, rels);
+    let t_game = t.elapsed().as_secs_f64();
     if defer && verdicts(&mine, &current, &[]).values().any(|b| *b == Built::Unknown) {
         return Ok(None);
     }
@@ -327,6 +343,7 @@ async fn finish(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, work
     if deep {
         save_found();
     }
+    let t_deep = t.elapsed().as_secs_f64();
     let mut out = none();
     let mut all: Vec<_> = verdicts(&mine, &current, &older).into_iter().collect();
     all.sort_by(|a, b| a.0.cmp(&b.0));
@@ -347,6 +364,8 @@ async fn finish(mod_path: &Path, usmap: &str, mods_dir: &Path, paks: &Path, work
     // today's decode is the one just made (mod_json): the relayout reads it rather than decoding the same files again
     let layout = crate::xtra_mi_layout::relayout(usmap, &work.join("mod"), rels, older, written, crate::xtra_mi_layout::Game::Json(&game_json), Some(&work.join("mod_json")), &work.join("relayout"), &NoOpProgressSink).await;
     let layout_ok = layout.as_ref().is_ok_and(|r| r.complete);
+    let t_all = t.elapsed().as_secs_f64();
+    log::info!("[vfx check] {}: {} materials, decode {t_decode:.1}s, game copies {:.1}s, deep {:.1}s, relayout {:.1}s", mod_path.display(), rels.len(), t_game - t_decode, t_deep - t_game, t_all - t_deep);
     if let Ok(r) = &layout {
         // lowercase, as the shader data's names are
         let mut old: Vec<String> = r.files.iter().chain(&r.failed).map(|k| k.rsplit('/').next().unwrap_or(k).to_lowercase()).collect();
@@ -541,7 +560,7 @@ pub async fn xtra_vfx_check_scan(app: tauri::AppHandle, mod_paths: Vec<String>, 
             found += 1; // the Library reads the verdicts again
             continue;
         }
-        let names = names_of(&mics);
+        let names = filters_of(&mics, &files);
         if names.is_empty() {
             no_materials(&mods_dir, &utoc, all_known); // no tool to run
             remember(&mut done, &utoc);
@@ -577,10 +596,12 @@ pub async fn xtra_vfx_check_scan(app: tauri::AppHandle, mod_paths: Vec<String>, 
         }
         crate::xtra_broken::scan_progress(&app, "materials", i, total, &j.path);
         next = todo.get(i + 1).map(|n| start(n, lane(i + 1)));
+        let te = std::time::Instant::now();
         let rels = match this {
             Some(h) => h.await.unwrap_or_else(|e| Err(e.to_string())),
             None => extract(&paks, Some(&j.utoc), &j.names, &lane(i).join("mod")).await,
         };
+        log::info!("[vfx check] {}: extract waited {:.1}s", j.p, te.elapsed().as_secs_f64());
         let r = match rels {
             Ok(rels) => {
                 let _one = CHECKING.lock().await; // a Check for update the user started waits for this mod
@@ -635,6 +656,14 @@ mod tests {
         std::fs::write(&utoc, b"toc v2").unwrap();
         assert!(needs_scan(&done, &utoc, 200), "the mod changed");
         assert!(!needs_scan(&done, &dir.path().join("gone.utoc"), 200), "no file, nothing to look at");
+    }
+
+    #[test]
+    fn the_extract_gets_each_material_by_its_own_path() {
+        let files = vec!["Marvel/Content/Marvel/VFX/MI_Glow.uasset".to_string(), "Marvel/Content/Marvel/VFX/MI_Glow.uexp".to_string(), "Marvel/Content/Marvel/VFX/T_Glow.uasset".to_string()];
+        let mics = vec![crate::xtra_broken::match_key(&files[0]), "content/marvel/other/mi_listed".to_string()];
+        assert_eq!(filters_of(&mics, &files), vec!["Marvel/Content/Marvel/VFX/MI_Glow.uasset".to_string(), "mi_listed".to_string()], "a path when the list has it, else the bare name");
+        assert_eq!((bare("Marvel/Content/Marvel/VFX/MI_Glow.uasset"), bare("MI_Glow")), ("mi_glow".to_string(), "mi_glow".to_string()));
     }
 
     #[test]
