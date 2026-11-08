@@ -82,18 +82,11 @@ type QueuedJob = Job & { id: string }
 export const jobId = (j: { paths: string[]; set?: string }) => j.set ?? `mods:${JSON.stringify([...new Set(j.paths.map(nameKey))].sort())}`
 const keysOf = (j: Job) => [...new Set(j.paths.map(nameKey)), ...(j.set ? [j.set] : [])]
 const queue: QueuedJob[] = []
-// The mods each loadout's last run was asked for: Regenerate redoes only changed previews when they differ (any loadout,
-// with or without a combined render), everything when they match
-const RAN_KEY = 'repakxtra.previewRan'
-const ran: Record<string, string[]> = (() => { try { return JSON.parse(localStorage.getItem(RAN_KEY) ?? '{}') } catch { return {} } })()
-const modsOf = (paths: string[]) => [...new Set(paths.map(nameKey))].sort()
-/** Deletes the renders and remembered mods of loadouts that are gone for good (set keys): "Delete for good" in Recently
+/** Deletes the renders of loadouts that are gone for good (set keys): "Delete for good" in Recently
  *  deleted, or the Loadouts screen's once-a-session sweep (loadoutStore.ts sweepMediaOnce, which also skips when the
  *  lists cannot be read). A loadout in Recently deleted keeps them, so Restore brings its picture back. */
 const dropLoadoutPreviews = (gone: string[]) => {
   if (!gone.length) return
-  gone.forEach(k => delete ran[k])
-  try { localStorage.setItem(RAN_KEY, JSON.stringify(ran)) } catch { /* dropped next session */ }
   invoke<number>('delete_loadout_previews', { keys: gone }).then(() => { gone.forEach(k => { revs.delete(k); dropCached(k) }); notify() }).catch(() => undefined)
 }
 /** The loadout render keys among preview keys, one per loadout (its before picture and other forms fold into it). */
@@ -101,16 +94,10 @@ export const loadoutRenderKeys = (keys: string[]) => [...new Set(keys.filter(k =
 window.addEventListener('repakxtra-loadouts-kept', e => {
   const keep = (e as CustomEvent<Set<string>>).detail
   invoke<string[]>('list_mod_previews')
-    .then(keys => dropLoadoutPreviews(loadoutRenderKeys([...keys, ...Object.keys(ran)]).filter(k => !keep.has(k.slice('loadout-'.length)))))
+    .then(keys => dropLoadoutPreviews(loadoutRenderKeys(keys).filter(k => !keep.has(k.slice('loadout-'.length)))))
     .catch(() => undefined)
 })
 window.addEventListener('repakxtra-loadouts-gone', e => dropLoadoutPreviews((e as CustomEvent<string[]>).detail.map(id => `loadout-${id}`)))
-/** A loadout's mods match its last finished run, or that is unknown (no run recorded, no member list): Regenerate then
- *  renders everything again. Otherwise it redoes only the changed previews (the kit and koPreview keep the rest). */
-const sameAsLast = (set: string, paths: string[], members?: string[] | null) => {
-  const last = ran[set]
-  return last ? JSON.stringify(last) === JSON.stringify(modsOf(paths)) : members == null || sameMods(members, paths)
-}
 let active = false // a run was accepted and its done event has not arrived yet
 let batchDone = 0  // jobs finished since the queue was last empty, for Home's "3 of 21"
 type SetResult = 'ok' | 'none' | 'failed' | undefined
@@ -214,10 +201,6 @@ function finish(ok: boolean) {
   const stoppedEarly = run.stopping && !run.made && !run.none && !run.failed
   const summary = run.quiet ? '' : run.busy || (stoppedEarly ? 'Stopped' : ok || run.made || run.none || run.failed ? parts.filter(Boolean).join(' · ') : FAILED)
   const stopped = run.stopping
-  if (run.set && !run.busy && !stopped) { // a run that went through: its mods are what the next Regenerate compares
-    ran[run.set] = [...runPaths.keys()].sort()
-    try { localStorage.setItem(RAN_KEY, JSON.stringify(ran)) } catch { /* storage full or off: the render's own list decides */ }
-  }
   run = { ...run, stopping: false, summary }
   // Previews made for a loadout become what its card shows when asked for (not on Stop: the user ended it)
   if (run.set && !stopped && (run.setResult === 'ok' || run.made > 0)) showPreviewCover(run.set, run.show)
@@ -549,8 +532,7 @@ export async function generateAllLoadouts(loadouts: { id: string; name: string; 
   const byKey = new Map(mods.map(m => [modKey(m.path), m.path]))
   const jobs = loadouts
     .filter(l => which === 'all' || !loadoutHasPreview(l))
-    .map(l => ({ paths: l.on.map(k => byKey.get(displayName(k))).filter((x): x is string => Boolean(x)), set: previewSetKey(l.id), name: l.name }))
-    .map(j => ({ ...j, force: which === 'all' && sameAsLast(j.set, j.paths) }))
+    .map(l => ({ paths: l.on.map(k => byKey.get(displayName(k))).filter((x): x is string => Boolean(x)), set: previewSetKey(l.id), name: l.name, force: which === 'all' }))
     .filter(j => j.paths.length > 0)
   const started = jobs.map(generatePreviews) // all asked for in this tick: the first starts, the rest queue behind it
   const error = (await Promise.all(started)).find(Boolean) ?? null
@@ -604,13 +586,6 @@ export function PreviewsUnavailable({ className, label }: { className: string; l
       <WandSparkles size={16} /><span className="bulk-btn-label">{label}</span><span className="setup-chip">Set up</span>
     </button>
   )
-}
-
-/** The loadout render was made for exactly these mods (KO prompt mods never reach the kit, so they are left out). Pure
- *  apart from the KO list. Unknown members (no render, or one from before they were recorded): not the same. */
-export const sameMods = (members: string[] | null | undefined, paths: string[]) => {
-  const now = modsOf(paths).filter(k => !isKoPreview(k))
-  return Boolean(members) && JSON.stringify([...new Set(members)].sort()) === JSON.stringify(now)
 }
 
 /** "Electric Blue · preview 2 of 9", shimmering while it works. */
@@ -677,8 +652,7 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
   const n = new Set(paths.map(modKey)).size
   // A loadout that already has its preview: the button renders it again, even when nothing changed
   const again = Boolean(set && (hasPreview(set) || paths.some(p => hasPreview(nameKey(p)))))
-  const rendered = useCovers(set ?? '')?.members
-  const job: Job = { paths, set, name: name ?? `${n} selected mod${n === 1 ? '' : 's'}`, force: again && (!set || sameAsLast(set, paths, rendered)), show: Boolean(set) }
+  const job: Job = { paths, set, name: name ?? `${n} selected mod${n === 1 ? '' : 's'}`, force: again, show: Boolean(set) }
   const text = again ? label.replace(/^Generate/, 'Regenerate') : label
   if (!canGenerate) return <PreviewsUnavailable className={className} label={label} />
   const id = jobId(job)
@@ -736,5 +710,4 @@ if (import.meta.env.DEV) {
   console.assert(jobId({ paths: ['A.pak'] }) !== jobId({ paths: ['A.pak', 'B.pak'] }), 'jobId: different mods')
   console.assert(jobId({ paths: ['A.pak'], set: 'loadout-x' }) === jobId({ paths: ['B.pak'], set: 'loadout-x' }), 'jobId: a loadout keeps its id')
   console.assert(loadoutRenderKeys(['loadout-a', 'loadout-a.vanilla', 'loadout-a@2', 'loadout-b', 'Mod', 'Mod@2']).join() === 'loadout-a,loadout-b', 'loadoutRenderKeys')
-  console.assert(sameMods(['A', 'B'], ['C:/m/B.pak', 'C:/x/A.pak']) && !sameMods(['A'], ['A.pak', 'B.pak']) && !sameMods(null, ['A.pak']) && !sameMods(undefined, ['A.pak']), 'sameMods')
 }
