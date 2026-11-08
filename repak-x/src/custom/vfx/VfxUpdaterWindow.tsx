@@ -383,10 +383,10 @@ export function VfxUpdaterPanel() {
   const keepName = naming === 'broken'
   const [advanced, setAdvanced] = useState(false)
   const [busy, setBusy] = useState(false)
-  // the Library's mod checks (brokenMods.ts, the header's Checking mods): Scan starts them, this follows their progress
+  // the Library's mod checks (brokenMods.ts, the header's Checking mods): Check starts them, this follows their progress
   const [scan, setScan] = useState<string | null>(null)
   useEffect(() => {
-    // only a run Scan started: the Library's own runs (after an update, at launch) leave this window as it is
+    // only a run Check started: the Library's own runs (after an update, at launch) leave this window as it is
     const step = listen<ScanStep>('mod-scan-progress', e => setScan(s => (s === null ? s : progressLine(e.payload))))
     const done = listen(SCAN_DONE, () => setScan(s => { if (s !== null) setReload(r => r + 1); return null }))
     return () => { void step.then(f => f()); void done.then(f => f()) }
@@ -739,7 +739,7 @@ export function VfxUpdaterPanel() {
   const approveAll = () => { approveRest.current = true; const all = reviewsRef.current; setReviews([]); reviewsRef.current = []; all.forEach(r => r.resolve(true)); cue('success') }
   const stop = (source: 'Cancel button' | 'Escape') => { reviewsRef.current.forEach(r => r.resolve(false)); setReviews([]); reviewsRef.current = []; cancel.current = true; setCancelling(true); addLog(`Cancellation requested by ${source}. Stopping after the current step.`, 'warning') }
 
-  // Scan: the header's run drops the ticked mods' check records, reads them fresh first, then every mod not checked yet
+  // Check: the header's run drops the ticked mods' check records, reads them fresh first, then every mod not checked yet
   const scanTicked = async () => {
     // the Library checks its mods folder only: a file added from elsewhere (Add .utoc) is not one of them
     const ticked = (modsRef.current ?? []).filter(m => picked.has(norm(m.utoc)))
@@ -1047,7 +1047,7 @@ export function VfxUpdaterPanel() {
           {/* the same checks as the header's Checking mods (Pause and Cancel live there) */}
           {!busy && <button type="button" className="lo-text-btn" disabled={Boolean(scan) || !picked.size} onClick={() => void scanTicked()}
             title="Check the ticked mods again from scratch, without changing files. Progress shows in the main window's header too">
-            {scan ? <span className="t-shimmer">Scanning</span> : 'Scan'}</button>}
+            {scan ? <span className="t-shimmer">Checking</span> : 'Check'}</button>}
           <button type="button" className="btn-primary" disabled={busy || Boolean(lock) || !todo} title={busy ? undefined : 'Ctrl+Enter'}
             ref={el => { if (el && !busy) updateWidth.current = el.offsetWidth }} style={busy ? { minWidth: updateWidth.current } : undefined} onClick={() => run()}>
             <RefreshCw size={14} aria-hidden="true" className={busy ? 'vf-spin' : undefined} />{busy ? 'Updating…' : todo ? <>Update <Num id="vf-todo" value={todo} /> {todo === 1 ? 'mod' : 'mods'}</> : 'Update'}
