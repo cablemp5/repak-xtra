@@ -412,7 +412,8 @@ pub fn xtra_ko_preview_fresh(mod_path: String, key: String) -> bool {
     let made = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
     let Some(preview) = made(&crate::app_dir().join("previews").join(format!("{key}.webm"))) else { return false };
     let path = Path::new(&mod_path);
-    ["pak", "utoc", "ucas"].iter().filter_map(|x| made(&path.with_extension(x))).all(|t| t <= preview)
+    let files: Vec<_> = ["pak", "utoc", "ucas"].iter().filter_map(|x| made(&path.with_extension(x))).collect();
+    !files.is_empty() && files.iter().all(|t| *t <= preview) // no file found: no evidence, render it
 }
 
 #[cfg(test)]

@@ -82,6 +82,11 @@ type QueuedJob = Job & { id: string }
 export const jobId = (j: { paths: string[]; set?: string }) => j.set ?? `mods:${JSON.stringify([...new Set(j.paths.map(nameKey))].sort())}`
 const keysOf = (j: Job) => [...new Set(j.paths.map(nameKey)), ...(j.set ? [j.set] : [])]
 const queue: QueuedJob[] = []
+// The mods each loadout's last run was asked for: Regenerate redoes only changed previews when they differ (any loadout,
+// with or without a combined render), everything when they match
+const RAN_KEY = 'repakxtra.previewRan'
+const ran: Record<string, string[]> = (() => { try { return JSON.parse(localStorage.getItem(RAN_KEY) ?? '{}') } catch { return {} } })()
+const modsOf = (paths: string[]) => [...new Set(paths.map(nameKey))].sort()
 let active = false // a run was accepted and its done event has not arrived yet
 let batchDone = 0  // jobs finished since the queue was last empty, for Home's "3 of 21"
 type SetResult = 'ok' | 'none' | 'failed' | undefined
@@ -415,7 +420,11 @@ const start = async (job: QueuedJob): Promise<string | null> => {
   if (jobs.length === 0) return null
   active = true
   jobs.forEach(([, k]) => { pending.add(k); outcome.delete(k) })
-  if (job.set) outcome.delete(job.set)
+  if (job.set) {
+    outcome.delete(job.set)
+    ran[job.set] = modsOf(job.paths)
+    try { localStorage.setItem(RAN_KEY, JSON.stringify(ran)) } catch { /* storage full or off: the render's own list decides */ }
+  }
   runPaths = new Map(job.paths.map(p => [nameKey(p), p]))
   run = { id: job.id, total: jobs.length, made: 0, none: 0, failed: 0, stopping: false, summary: '', set: job.set, name: job.name, setResult: undefined, busy: '',
     show: Boolean(job.show), step: undefined, quiet: Boolean(job.quiet) }
@@ -575,7 +584,7 @@ export function PreviewsUnavailable({ className, label }: { className: string; l
 /** The loadout render was made for exactly these mods (KO prompt mods never reach the kit, so they are left out). Pure
  *  apart from the KO list. Unknown members (no render, or one from before they were recorded): not the same. */
 export const sameMods = (members: string[] | null | undefined, paths: string[]) => {
-  const now = [...new Set(paths.map(nameKey))].filter(k => !isKoPreview(k)).sort()
+  const now = modsOf(paths).filter(k => !isKoPreview(k))
   return Boolean(members) && JSON.stringify([...new Set(members)].sort()) === JSON.stringify(now)
 }
 
@@ -643,10 +652,12 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
   const n = new Set(paths.map(modKey)).size
   // A loadout that already has its preview: the button renders it again, even when nothing changed
   const again = Boolean(set && (hasPreview(set) || paths.some(p => hasPreview(nameKey(p)))))
-  // A loadout whose mods changed since its render redoes only the changed previews (the kit and koPreview keep the rest);
-  // with the same mods, Regenerate renders everything again
+  // A loadout whose mods changed since its last run redoes only the changed previews (the kit and koPreview keep the
+  // rest); with the same mods, or when that is unknown (no run recorded, no member list), Regenerate renders everything
   const rendered = useCovers(set ?? '')?.members
-  const job: Job = { paths, set, name: name ?? `${n} selected mod${n === 1 ? '' : 's'}`, force: again && (!set || sameMods(rendered, paths)), show: Boolean(set) }
+  const last = set ? ran[set] : undefined
+  const same = last ? JSON.stringify(last) === JSON.stringify(modsOf(paths)) : rendered == null || sameMods(rendered, paths)
+  const job: Job = { paths, set, name: name ?? `${n} selected mod${n === 1 ? '' : 's'}`, force: again && (!set || same), show: Boolean(set) }
   const text = again ? label.replace(/^Generate/, 'Regenerate') : label
   if (!canGenerate) return <PreviewsUnavailable className={className} label={label} />
   const id = jobId(job)

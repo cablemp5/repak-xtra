@@ -20,8 +20,12 @@ async function encodeClip(ctx: CanvasRenderingContext2D, size: { w: number; h: n
     e.configure({ ...config, bitrate })
     return e
   }
-  const color = encoder(made.color, 4_000_000), alpha = encoder(made.alpha, 1_000_000)
+  const encoders: VideoEncoder[] = []
   try {
+    const color = encoder(made.color, 4_000_000)
+    encoders.push(color)
+    const alpha = encoder(made.alpha, 1_000_000)
+    encoders.push(alpha)
     const count = Math.ceil(length * FPS) + 1
     for (let i = 0; i < count && !failed; i++) {
       paint(Math.min(i / FPS, length))
@@ -31,9 +35,9 @@ async function encodeClip(ctx: CanvasRenderingContext2D, size: { w: number; h: n
       for (let p = 0; p < rgba.length; p += 4) gray[p] = gray[p + 1] = gray[p + 2] = rgba[p + 3]
       const timestamp = Math.round(i * 1e6 / FPS), key = i % FPS === 0 // both streams keyed on the same frames
       for (const [enc, data] of [[color, rgba], [alpha, gray]] as const) {
+        if (enc.state !== 'configured') continue // failed: its error ends the loop
         const frame = new VideoFrame(data, { format: 'RGBX', codedWidth: size.w, codedHeight: size.h, timestamp })
-        enc.encode(frame, { keyFrame: key })
-        frame.close()
+        try { enc.encode(frame, { keyFrame: key }) } finally { frame.close() }
       }
       // backpressure, and a breath for the page: wait for the encoders, not the display clock
       while (!failed && color.encodeQueueSize + alpha.encodeQueueSize > 6) await new Promise(r => setTimeout(r, 1))
@@ -41,11 +45,11 @@ async function encodeClip(ctx: CanvasRenderingContext2D, size: { w: number; h: n
     }
     await Promise.all([color.flush(), alpha.flush()])
   } finally {
-    if (color.state !== 'closed') color.close()
-    if (alpha.state !== 'closed') alpha.close()
+    encoders.forEach(e => { if (e.state !== 'closed') e.close() })
   }
   if (failed) throw failed
-  if (!made.color.length || made.color.length !== made.alpha.length) return null
+  // a keyframe in one stream only would leave alpha referencing the cluster before: the realtime recorder then
+  if (!made.color.length || made.color.length !== made.alpha.length || made.color.some((c, i) => c.type !== made.alpha[i].type)) return null
   const bytes = (c: EncodedVideoChunk) => { const b = new Uint8Array(c.byteLength); c.copyTo(b); return b }
   const frames: Frame[] = made.color.map((c, i) => ({ ms: Math.round(c.timestamp / 1000), key: c.type === 'key', color: bytes(c), alpha: bytes(made.alpha[i]) }))
   return new Blob([muxWebm(frames, size.w, size.h, Math.round(length * 1000))], { type: 'video/webm' })
