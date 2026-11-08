@@ -3,7 +3,7 @@
 // app stops drawing frames nobody sees. Spinners, shimmers, skeletons, and progress bars keep playing, they show work is
 // still going. A one-time animation always finishes, so nothing waiting on its end stalls. KO prompt videos
 // (previews.tsx BeatVideo) pause on their own, to rejoin their shared beat. Animated WebP previews (dances, animated
-// materials) cannot pause, so each shows a still of its current frame until focus returns: ten of them on Home cost
+// materials, a loadout's own GIF) cannot pause, so each shows a still of its current frame until focus returns: ten of them on Home cost
 // about 85% of a CPU core to keep playing, 3% as stills (.agent/perf/tree-cpu.ps1, 2026-11-04).
 const videos = new Set<HTMLVideoElement>()
 const loops = new Set<Animation>()
@@ -11,9 +11,27 @@ const loops = new Set<Animation>()
 export const animatedUrls = new Set<string>()
 const stills = new Map<HTMLImageElement, { src: string; still: string }>()
 
-function freeze(img: HTMLImageElement) {
+// Any other blob: picture (a loadout's own GIF or WebP, a hovered emote's restarted copy) is checked by its file header
+// once: an animated WebP, an APNG, or a GIF (a still GIF frozen is the same picture)
+const sniffed = new Map<string, Promise<boolean>>()
+export const animatedBytes = (h: Uint8Array) => {
+  const text = String.fromCharCode(...h)
+  return text.startsWith('GIF8') || (text.slice(8, 16) === 'WEBPVP8X' && (h[20] & 0x02) !== 0) || (h[0] === 0x89 && text.slice(1, 4) === 'PNG' && text.includes('acTL'))
+}
+const isAnimated = (src: string) => {
+  if (animatedUrls.has(src)) return Promise.resolve(true)
+  if (!src.startsWith('blob:')) return Promise.resolve(false) // a remote picture would taint the canvas
+  let p = sniffed.get(src)
+  if (!p) {
+    p = fetch(src).then(r => r.blob()).then(b => b.slice(0, 4096).arrayBuffer()).then(b => animatedBytes(new Uint8Array(b)), () => false)
+    sniffed.set(src, p)
+  }
+  return p
+}
+
+async function freeze(img: HTMLImageElement) {
   const src = img.src
-  if (!animatedUrls.has(src) || !img.complete || !img.naturalWidth) return
+  if (!img.complete || !img.naturalWidth || !(await isAnimated(src)) || !isIdle() || img.src !== src) return
   const c = document.createElement('canvas')
   c.width = img.naturalWidth
   c.height = img.naturalHeight
@@ -40,7 +58,7 @@ const DECOR = /^(rainbow-scroll|heartbeat|dropzone-|border-beam-|aurora-text-flo
 function update() {
   if (isIdle()) {
     document.querySelectorAll('video').forEach(v => { if (v.loop && !v.paused) { v.pause(); videos.add(v) } })
-    document.querySelectorAll('img').forEach(freeze)
+    document.querySelectorAll('img').forEach(img => void freeze(img))
     document.getAnimations().forEach(a => {
       // Not one under the pointer: pause() and play() pin a CSS animation's state, and the hero art drift runs on hover only
       const target = a.effect instanceof KeyframeEffect ? a.effect.target : null
@@ -61,8 +79,15 @@ window.addEventListener('focus', update)
 document.addEventListener('visibilitychange', update)
 // A preview that loads, changes, or mounts after focus left (a copy started in the background, a card still decoding)
 // missed that moment: it is caught as it lands. load and play do not bubble, so they are caught on the way down
-document.addEventListener('load', e => { if (isIdle() && e.target instanceof HTMLImageElement) freeze(e.target) }, true)
+document.addEventListener('load', e => { if (isIdle() && e.target instanceof HTMLImageElement) void freeze(e.target) }, true)
 document.addEventListener('play', e => {
   const v = e.target
   if (isIdle() && v instanceof HTMLVideoElement && v.loop) { v.pause(); videos.add(v) }
 }, true)
+
+if (import.meta.env.DEV) {
+  const b = (s: string, at20 = 0) => { const a = new Uint8Array(32); [...s].forEach((c, i) => { a[i] = c.charCodeAt(0) }); a[20] = at20; return a }
+  const png = (chunk: string) => { const a = b(`_PNG____${chunk}`); a[0] = 0x89; return a }
+  console.assert(animatedBytes(b('GIF89a')) && animatedBytes(b('RIFF____WEBPVP8X', 0x02)) && !animatedBytes(b('RIFF____WEBPVP8X', 0x10))
+    && !animatedBytes(b('RIFF____WEBPVP8 ')) && animatedBytes(png('acTL')) && !animatedBytes(png('IHDR')), 'animated picture sniffing')
+}
