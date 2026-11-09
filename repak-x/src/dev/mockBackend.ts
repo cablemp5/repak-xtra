@@ -375,17 +375,30 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
           if (!data.mods.some((x: any) => x.path === path)) data.mods.push({ ...data.mods[0], path, enabled: true, modified_date: Date.now() / 1000 })
           data.details[path] ??= { ...data.details[data.mods[0].path], mod_name: path.split('\\').pop()?.replace(/\.pak$/, '') } // details open for it
         }
+        if (mock.__mockSame) setTimeout(() => emit('xtra_install_same', [{ name: 'Dropped mod', path: data.mods[0].path }]), 200)
         if (slow()) [20, 45, 70, 90, 100].forEach((p, i) => setTimeout(() => emit('install_progress', p), slow() * 0.3 * (i + 1)))
         setTimeout(() => emit('install_complete', null), 300 + slow() * 1.6)
         return null
+      // repakxtra: Duplicates (xtra_dupes.rs) and the shared dialogs' refusals (xtra_ops.rs):
+      // window.__mockDupes = true lists two sets, __mockLocked = part of a path makes its toggle refused as in use,
+      // __mockCollision = true makes Rename's name taken until Keep both or Replace, __mockSame = true makes an
+      // install report its first mod as already installed
+      case 'xtra_find_duplicates': {
+        if (!mock.__mockDupes) return wait(0.4).then(() => [])
+        const p = data.mods.map((m: any) => m.path)
+        return wait(0.4).then(() => [p.slice(0, 2), p.slice(2, 5)].filter((s: string[]) => s.length > 1))
+      }
       case 'rename_mod': { // same folder, priority suffix and extension, new name
         const mod = data.mods.find((m: any) => m.path === args?.modPath)
         if (!mod) throw 'Mod not found'
+        if (mock.__mockCollision && !args?.mode) throw `[collision] A mod named ${args.newName} is already there.`
+        if (args?.mode === 'keep_both') args = { ...args, newName: `${args.newName} (1)` }
         const [, dir, , tail] = mod.path.match(/^(.*[\\/])(.*?)((_\d+_P)?(\.pak)?(\.bak_repak|\.pak_disabled)?)$/)
         mod.path = `${dir}${args.newName}${tail}`
         return mod.path
       }
       case 'toggle_mod': {
+        if (mock.__mockLocked && String(args?.modPath).includes(mock.__mockLocked)) throw '[locked] Another program is using this mod file. If the game just closed, wait a few seconds, then try again.'
         if (mock.__toggleFail && String(args?.modPath).includes(mock.__toggleFail)) throw 'The file is in use' // window.__toggleFail = part of a path
         if (mock.__repakXOpen) throw 'Repak X is open too. Close it to change mods in repakxtra: both apps change the same files.' // window.__repakXOpen = true
         const mod = data.mods.find((m: any) => m.path === args?.modPath)

@@ -67,6 +67,7 @@ import KoEditor from './custom/ko/KoView' // repakxtra: the KO Editor view, its 
 import ViewModeMenu from './custom/ViewModeMenu' // repakxtra: view buttons folded into one when narrow
 import { loadoutable, modKey, nameKey, renameModKey, setView, syncLoadoutKeys } from './custom/loadoutStore' // repakxtra
 import { setModsRoot } from './custom/loadoutIdentity' // repakxtra
+import { OpDialogs, gameClosed, opText, retryAfter, runOp } from './custom/opDialogs' // repakxtra: game open, file in use, name taken
 import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
 import { rescanVerdicts, useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
@@ -512,6 +513,7 @@ function App() {
   setModsBlocked(undoBlocked) // repakxtra: the same guard for Setup's Ban risk and Why isn't it working? (refs keep it live)
   const lastSelectedModIndex = useRef<number | null>(null) // For Shift+click range selection
   const filteredModsRef = useRef<ModRecord[]>([]) // Keep in sync with filteredMods for selection handler
+  const sameNames = useRef<string[]>([]) // repakxtra: this install's mods left out as already installed (xtra_install_same)
   const loadModsSeq = useRef(0) // repakxtra: the newest loadMods call, so a slow older one cannot overwrite it
   const clashScopeModPath = useRef<string | null>(null) // null = global clashes, path = single-mod scope
   const safeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -955,15 +957,9 @@ function App() {
   }
 
   const handleSetPriority = async (modPath: string, priority: number) => {
-    if (gameRunning && !bypassGameRunningLock) {
-      alert.warning(
-        'Game Running',
-        'Cannot change priority while game is running.'
-      )
-      return
-    }
+    if (gameRunning && !bypassGameRunningLock && !(await gameClosed('change its priority'))) return // repakxtra: waits for the game to close, then goes on (custom/opDialogs.tsx)
     try {
-      await invoke('set_mod_priority', { modPath, priority })
+      if (!(await runOp('change its priority', () => invoke('set_mod_priority', { modPath, priority }), { modes: false }))) return // repakxtra: game open or file in use asks
       setStatus(`Priority set to ${priority}`)
 
       // If the modified mod is currently selected, clear selection to force refresh of details
@@ -1128,7 +1124,7 @@ function App() {
       if (selectedMods.size) alert.warning('Built-in mods are not deleted', 'Turn them off with their switch instead.')
       return
     }
-    if (gameRunning && !bypassGameRunningLock) { stableDeleteBlocked(); return } // repakxtra: the same lock as one mod's Delete
+    if (gameRunning && !bypassGameRunningLock && !(await gameClosed(`delete ${plural(selectedFiles.size, 'mod')}`))) return // repakxtra: waits for the game to close, then goes on (custom/opDialogs.tsx)
 
     try {
       setStatus(`Deleting ${selectedFiles.size} mods...`)
@@ -1145,7 +1141,7 @@ function App() {
           // Find mod details to check if it's a folder mod or regular file
           // If we don't have details, try delete_mod anyway
           const trashId = crypto.randomUUID() // repakxtra
-          await invoke('delete_mod', { path: path, trashId })
+          if (!(await runOp('delete this mod', () => invoke('delete_mod', { path: path, trashId }), { modes: false }))) break // repakxtra: game open or file in use asks, Cancel stops the rest
           deletedCount++
           deletedPaths.push({ id: trashId, path }) // repakxtra
         } catch (e) {
@@ -1194,10 +1190,8 @@ function App() {
   }
 
   const handleBulkToggle = async (enable: boolean) => {
-    if (selectedMods.size === 0 || (gameRunning && !bypassGameRunningLock)) {
-      if (gameRunning && !bypassGameRunningLock) alert.warning('Game Running', 'Cannot toggle mods while game is running.')
-      return
-    }
+    if (selectedMods.size === 0) return
+    if (gameRunning && !bypassGameRunningLock && !(await gameClosed(`turn ${enable ? 'on' : 'off'} ${plural(selectedMods.size, 'mod')}`))) return // repakxtra: waits for the game to close, then goes on (custom/opDialogs.tsx)
     const targetMods = mods.filter(m => selectedMods.has(m.path) && m.enabled !== enable)
     // repakxtra: checked built-ins switch too (each rebuilds or removes its own files), not waited for: a build takes a
     // while and the other mods switch at once
@@ -1220,7 +1214,7 @@ function App() {
 
       for (const mod of targetMods) {
         try {
-          await invoke('toggle_mod', { modPath: mod.path })
+          if (!(await runOp(`turn ${enable ? 'on' : 'off'} this mod`, () => invoke('toggle_mod', { modPath: mod.path }), { modes: false }))) break // repakxtra: game open or file in use asks, Cancel stops the rest
           count++
         } catch (e) {
           const why = blockedReason(e) // repakxtra: turned off because it can crash the game
@@ -1446,6 +1440,8 @@ function App() {
       setIsModsLoading(true)
     })
 
+    // repakxtra: an install from the Library that was already installed (xtra_dupes.rs): nothing changed, Show it selects it
+    const unlistenSame = listen('xtra_install_same', (event: any) => stableShowSame(event.payload))
     const unlistenComplete = listen('install_complete', () => {
       uiLog.success('Install', 'Installation complete')
       setStatus('Installation complete!')
@@ -1586,6 +1582,7 @@ function App() {
       // Cleanup listeners
       unlisten.then(f => f())
       unlistenComplete.then(f => f())
+      unlistenSame.then(f => f()) // repakxtra
       unlistenCharUpdate.then(f => f())
       unlistenDragDrop.then(f => f())
       unlistenFileDrop.then(f => f())
@@ -2120,20 +2117,14 @@ function App() {
   }
 
   const handleDeleteMod = async (modPath: string) => {
-    if (gameRunning && !bypassGameRunningLock) {
-      alert.warning(
-        'Game Running',
-        'Cannot delete mods while game is running.'
-      )
-      return false
-    }
+    if (gameRunning && !bypassGameRunningLock && !(await gameClosed('delete this mod'))) return false // repakxtra: waits for the game to close, then goes on (custom/opDialogs.tsx)
     // No confirmation prompt needed here, the hold-to-delete button handles the intent
 
     try {
       // Pass the real path: delete_mod resolves the associated IoStore files itself, and
       // rewriting .bak_repak to .pak deleted the enabled copy when both exist.
       const trashId = crypto.randomUUID() // repakxtra
-      await invoke('delete_mod', { path: modPath, trashId })
+      if (!(await runOp('delete this mod', () => invoke('delete_mod', { path: modPath, trashId }), { modes: false }))) return false // repakxtra: game open or file in use asks
       // repakxtra: close the row's gap when deletion succeeds, without waiting for the library rescan.
       setMods(current => current.filter(mod => mod.path !== modPath))
       setSelectedMods(current => { const next = new Set(current); next.delete(modPath); return next })
@@ -2153,13 +2144,7 @@ function App() {
 
   const togglingModsRef = useRef<Set<string>>(new Set())
   const handleToggleMod = async (modPath: string) => {
-    if (gameRunning && !bypassGameRunningLock) {
-      alert.warning(
-        'Game Running',
-        'Cannot toggle mods while game is running.'
-      )
-      return
-    }
+    if (gameRunning && !bypassGameRunningLock && !(await gameClosed('switch this mod'))) return // repakxtra: waits for the game to close, then goes on (custom/opDialogs.tsx)
     if (isBuiltin(modPath)) { // repakxtra: the built-in's own switch (it rebuilds or removes its files), one change at a time
       const b = builtinList.find(x => x.path.toLowerCase() === modPath.replace(/\.bak_repak$/i, '.pak').toLowerCase())
       if (b && !builtinBusy.has(b.id)) await toggleBuiltin(b.id, !b.on, alert)
@@ -2171,7 +2156,9 @@ function App() {
     if (togglingModsRef.current.has(toggleKey)) return
     togglingModsRef.current.add(toggleKey)
     try {
-      const newState = await invoke('toggle_mod', { modPath })
+      const toggled = await runOp('switch this mod', () => invoke('toggle_mod', { modPath }), { modes: false }) // repakxtra: game open or file in use asks
+      if (!toggled) return
+      const newState = toggled.value
       setStatus(newState ? 'Mod enabled' : 'Mod disabled')
 
       // Extract the base name (without extension) to find the mod after toggle
@@ -2253,13 +2240,7 @@ function App() {
 
     if ((isMoveAfterCreate || isMoveModsAfterCreate) && gameRunning && !bypassGameRunningLock) {
       setNewFolderPrompt(null)
-      alert.warning(
-        'Game Running',
-        isMoveModsAfterCreate
-          ? 'Cannot move mods while game is running.'
-          : 'Cannot move folders while game is running.'
-      )
-      return
+      if (!(await gameClosed(isMoveModsAfterCreate ? 'move mods' : 'move this folder'))) return // repakxtra: waits for the game to close, then goes on (custom/opDialogs.tsx)
     }
 
     setNewFolderPrompt(null) // Close the modal
@@ -2300,7 +2281,7 @@ function App() {
             }
 
             for (const modPath of moveModPaths) {
-              await invoke('assign_mod_to_folder', { modPath, folderId: finalFolderName })
+              if (!(await moveMod(modPath, finalFolderName, 'move mods'))) break // repakxtra: game open, file in use, or name taken asks
             }
 
             setSelectedMods(prev => {
@@ -2424,13 +2405,7 @@ function App() {
   }
 
   const handleMoveFolder = async (folderId: string, newParentId: string | null) => {
-    if (gameRunning && !bypassGameRunningLock) {
-      alert.warning(
-        'Game Running',
-        'Cannot move folders while game is running.'
-      )
-      return
-    }
+    if (gameRunning && !bypassGameRunningLock && !(await gameClosed('move this folder'))) return // repakxtra: waits for the game to close, then goes on (custom/opDialogs.tsx)
     try {
       const newId = await invoke('move_folder', { id: folderId, newParentId }) as string
       if (selectedFolderId === folderId) {
@@ -2513,14 +2488,19 @@ function App() {
     setSelectedMods(new Set())
   }
 
-  const handleAssignToFolder = async (folderId: string | null) => {
-    if (gameRunning && !bypassGameRunningLock) {
-      alert.warning(
-        'Game Running',
-        'Cannot move mods while game is running.'
-      )
-      return
+  // repakxtra: one mod into a folder through the shared dialogs. Keep both gives it a new name there, which loadouts and
+  // its Nexus source follow, as after a rename
+  const moveMod = async (modPath: string, folderId: string | null, what: string) => {
+    const r = await runOp(what, mode => invoke<string>('assign_mod_to_folder', { modPath, folderId, mode }))
+    if (r && nameKey(r.value) !== nameKey(modPath)) {
+      renameModKey(modKey(modPath), modKey(r.value))
+      renameSource(nameKey(modPath), nameKey(r.value))
     }
+    return r
+  }
+
+  const handleAssignToFolder = async (folderId: string | null) => {
+    if (gameRunning && !bypassGameRunningLock && !(await gameClosed('move mods'))) return // repakxtra: waits for the game to close, then goes on (custom/opDialogs.tsx)
 
     if (selectedFiles.size === 0) {
       setStatus('No mods selected')
@@ -2537,7 +2517,7 @@ function App() {
 
     try {
       for (const modPath of selectedFiles) {
-        await invoke('assign_mod_to_folder', { modPath, folderId: effectiveFolderId })
+        if (!(await moveMod(modPath, effectiveFolderId, 'move mods'))) break // repakxtra: game open, file in use, or name taken asks
       }
       setStatus(`Moved ${plural(selectedFiles.size, 'mod')} to folder!`)
       setSelectedMods(new Set())
@@ -2549,13 +2529,7 @@ function App() {
   }
 
   const handleMoveSingleMod = async (modPath: string, folderId: string | null) => {
-    if (gameRunning && !bypassGameRunningLock) {
-      alert.warning(
-        'Game Running',
-        'Cannot move mods while game is running.'
-      )
-      return
-    }
+    if (gameRunning && !bypassGameRunningLock && !(await gameClosed('move mods'))) return // repakxtra: waits for the game to close, then goes on (custom/opDialogs.tsx)
 
     // Check if folderId corresponds to the root folder (depth 0)
     const targetFolder = folders.find(f => f.id === folderId)
@@ -2567,7 +2541,7 @@ function App() {
     }
 
     try {
-      await invoke('assign_mod_to_folder', { modPath, folderId: effectiveFolderId })
+      if (!(await moveMod(modPath, effectiveFolderId, 'move this mod'))) return // repakxtra: game open, file in use, or name taken asks
       setStatus('Mod moved to folder')
       // The mod's path changed, so any selection entry for the old location is
       // now dangling. Drop it rather than leave the toolbar acting on a file
@@ -2693,16 +2667,13 @@ function App() {
 
   // Rename a mod (calls backend to rename actual file)
   const handleRenameMod = async (modPath: string, newName: string) => {
-    if (gameRunning && !bypassGameRunningLock) {
-      alert.warning(
-        'Game Running',
-        'Cannot rename mods while game is running.'
-      )
-      return
-    }
+    if (gameRunning && !bypassGameRunningLock && !(await gameClosed('rename this mod'))) return // repakxtra: waits for the game to close, then goes on (custom/opDialogs.tsx)
 
     try {
-      const newPath = await invoke('rename_mod', { modPath, newName }) as string
+      // repakxtra: file in use or name taken asks (Keep both, Replace) through the shared dialog
+      const renamed = await runOp('rename this mod', mode => invoke<string>('rename_mod', { modPath, newName, mode }))
+      if (!renamed) return
+      const newPath = renamed.value
       renameModKey(modKey(modPath), modKey(newPath)) // repakxtra: loadouts follow the rename
       renameSource(nameKey(modPath), nameKey(newPath)) // repakxtra: so does its Nexus source
       setStatus(`Renamed to "${newName}"`)
@@ -2731,13 +2702,33 @@ function App() {
   const stableSetPriority = useStableCallback(handleSetPriority)
   const stableContextMenu = useStableCallback(handleContextMenu)
   const stableRenameMod = useStableCallback(handleRenameMod)
+  // repakxtra: "Already installed" (A1): one neutral toast for the batch, Show it opens the Library on those mods
+  const list = (xs: string[]) => (xs.length < 3 ? xs.join(' and ') : `${xs.slice(0, -1).join(', ')}, and ${xs[xs.length - 1]}`)
+  const stableShowSame = useStableCallback((items: { name: string; path: string }[]) => {
+    if (!items?.length) return
+    sameNames.current.push(...items.map(i => i.name))
+    const names = items.map(i => nameKey(i.path))
+    const one = items.length === 1
+    const show = async () => {
+      setView('library')
+      const fresh = await loadMods()
+      const found = fresh.filter(m => items.some(i => i.path.toLowerCase() === m.path.toLowerCase()))
+      if (!found.length) return
+      setSearchQuery('')
+      setSelectedMod(found[0])
+      if (!one) setSelectedMods(new Set(found.map(m => m.path)))
+      requestAnimationFrame(() => focusRow(found[0].path))
+    }
+    alert.info(one ? 'Already installed' : `${items.length} mods already installed`,
+      one ? `${names[0]} is in your Library. Nothing changed.` : `Nothing changed for ${list(items.length > 3 ? [...names.slice(0, 3), `${items.length - 3} more`] : names)}.`,
+      { action: { label: one ? 'Show it' : 'Show them', onClick: () => void show() } })
+  })
   const stableClearRenaming = useStableCallback(() => setRenamingModPath(null))
   const stableRenameBlocked = useStableCallback(() =>
     alert.warning('Game Running', 'Cannot rename mods while game is running.')
   )
-  const stableDeleteBlocked = useStableCallback(() =>
-    alert.warning('Game Running', 'Cannot delete mods while game is running.')
-  )
+  // repakxtra: a row's Delete while the game runs: the delete waits for the game to close (handleDeleteMod asks)
+  const stableDeleteBlocked = useStableCallback((path?: string) => { if (path) void handleDeleteMod(path) })
 
   // Handle installing a mod received from the browser extension
   const handleExtensionModInstall = async (
@@ -3154,8 +3145,7 @@ function App() {
       // Delete - delete the checked mods, or the viewed one (undoable, repakxtra)
       else if (key === 'delete' && (selectedMods.size > 0 || selectedMod)) {
         e.preventDefault()
-        if (gameRunning && !bypassGameRunningLock) alert.warning('Game Running', 'Cannot delete mods while game is running.')
-        else { // repakxtra: the deletion key has the same cue as its button
+        { // repakxtra: the deletion key has the same cue as its button, and the delete waits for the game to close
           cue('close', { emphasis: 'strong' })
           if (selectedMods.size > 0) handleBulkDelete()
           else if (selectedMod) handleDeleteMod(selectedMod.path)
@@ -3242,6 +3232,8 @@ function App() {
     invoke('discord_set_installing').catch(console.warn)
 
     const modCount = modsWithSettings.length
+    sameNames.current = [] // repakxtra
+    const isNew = (m: InstallModPayload) => !sameNames.current.includes(m.customName || m.mod_name || '') // repakxtra: not left out as already installed
 
     // Start progress bar (indeterminate until backend sends progress events)
     setIsModsLoading(true)
@@ -3263,12 +3255,14 @@ function App() {
         const installCompletePromise = new Promise<void>((resolve, reject) => {
           let unlistenComplete: UnlistenFn | null = null
           let unlistenError: UnlistenFn | null = null
+          let unlistenRefused: UnlistenFn | null = null // repakxtra
           let timeoutId: ReturnType<typeof setTimeout> | null = null
 
           // Set a reasonable timeout (10 minutes for large mods)
           timeoutId = setTimeout(() => {
             if (unlistenComplete) unlistenComplete()
             if (unlistenError) unlistenError()
+            if (unlistenRefused) unlistenRefused() // repakxtra
             reject(new Error('Installation timed out after 10 minutes'))
           }, 10 * 60 * 1000)
 
@@ -3277,8 +3271,20 @@ function App() {
             if (timeoutId) clearTimeout(timeoutId)
             if (unlistenComplete) unlistenComplete()
             if (unlistenError) unlistenError()
+            if (unlistenRefused) unlistenRefused() // repakxtra
             resolve()
           }).then(unlisten => { unlistenComplete = unlisten })
+
+          // repakxtra: a failure the shared dialog explains (game open, file in use) comes without a toast
+          listen('xtra_op_refused', (event: any) => {
+            if (event.payload?.title === 'Installation Failed') {
+              if (timeoutId) clearTimeout(timeoutId)
+              if (unlistenComplete) unlistenComplete()
+              if (unlistenError) unlistenError()
+            if (unlistenRefused) unlistenRefused() // repakxtra
+              reject(new Error(event.payload?.description || 'Installation failed'))
+            }
+          }).then(unlisten => { unlistenRefused = unlisten })
 
           // Listen for failure (from toast_events via toast_notification)
           listen('toast_notification', (event: any) => {
@@ -3287,6 +3293,7 @@ function App() {
               if (timeoutId) clearTimeout(timeoutId)
               if (unlistenComplete) unlistenComplete()
               if (unlistenError) unlistenError()
+            if (unlistenRefused) unlistenRefused() // repakxtra
               reject(new Error(event.payload?.description || 'Installation failed'))
             }
           }).then(unlisten => { unlistenError = unlisten })
@@ -3297,7 +3304,7 @@ function App() {
 
         // Wait for the actual installation to complete
         await installCompletePromise
-        return { count: modCount }
+        return { count: modsWithSettings.filter(isNew).length } // repakxtra: without the ones already installed
       })().finally(() => { ended = true; unlistenToastProgress.then(u => u()) })
     installToast = alert.promise(installed, {
         loading: {
@@ -3307,19 +3314,19 @@ function App() {
         },
         success: (result) => ({
           title: 'Installation Complete',
-          description: `Successfully installed ${plural(result.count, 'mod')}`,
+          description: result.count ? `Successfully installed ${plural(result.count, 'mod')}` : 'Nothing new. Every mod was already installed.', // repakxtra
           progressValue: undefined, // repakxtra: back to the auto-dismiss bar
         }),
         error: (err) => ({
           title: 'Installation Failed',
-          description: String(err),
+          description: opText(err), // repakxtra: without the shared dialog's tag
           progressValue: undefined,
         })
       })
     installed.then(async () => {
         // Mirror tag assignment flow used by the main list/context menu
         const typeTracker: Record<string, number> = {}
-        for (const mod of modsWithSettings) {
+        for (const mod of modsWithSettings.filter(isNew)) { // repakxtra: no tags for a mod left out as already installed
           const modType = mod.mod_type || 'Unknown'
           const count = typeTracker[modType] || 0
           const minNines = 7 + count
@@ -3342,8 +3349,9 @@ function App() {
           typeTracker[modType] = count + 1
         }
 
-        await finishInstallLoadout(modsWithSettings, alert) // repakxtra: Save as a loadout
-        await recordSources(modsWithSettings) // repakxtra: Nexus source from the archive name
+        const fresh = modsWithSettings.filter(isNew) // repakxtra: a mod left out as already installed has no new file to save or source
+        if (fresh.length) await finishInstallLoadout(fresh, alert) // repakxtra: Save as a loadout
+        await recordSources(fresh) // repakxtra: Nexus source from the archive name
 
         // Reload in background so alert shows success immediately
         loadMods()
@@ -3363,7 +3371,9 @@ function App() {
             { duration: 8000 }
           )
         }
-    }, () => undefined).catch(e => console.error('[install] after the install', e)) // the failure is the toast's
+    }, e => { // the failure is the toast's. repakxtra: game open or file in use also asks, and Retry installs again
+      void retryAfter(e, 'install these mods').then(again => { if (again) void handleInstallMods(sent) })
+    }).catch(e => console.error('[install] after the install', e))
   }
 
   const saveAllSettings = async (overrides: Partial<AppSettings>) => {
@@ -3608,10 +3618,22 @@ function App() {
           onSetPriority={handleSetPriority}
           onToggleMod={stableToggleMod}
           onKeep={(keep, others) => keepThisOne({ alert, isBlocked: undoBlocked, reload: loadMods }, keep, others)} /* repakxtra */
+          onRemoveDuplicates={async paths => { // repakxtra: Duplicates' copies, each its own Recently deleted entry, one Undo for all
+            if (gameRunning && !bypassGameRunningLock && !(await gameClosed('remove the copies'))) return
+            const done: TrashedMod[] = []
+            for (const path of paths) {
+              const trashId = crypto.randomUUID()
+              if (await runOp('remove this copy', () => invoke('delete_mod', { path, trashId }), { modes: false })) done.push({ id: trashId, path })
+              else break // Cancel stops the rest
+            }
+            offerUndoDelete(alert, done, loadMods, undoBlocked, done.length === 1 ? undefined : `${done.length} duplicate copies`)
+            await loadMods()
+          }}
           onClose={() => setPanel('clash', false)}
         />
       )}
 
+      <OpDialogs />{/* repakxtra: game open, file in use, and name taken, one dialog each */}
       <CrashSuspects deps={{ alert, isBlocked: undoBlocked, reload: loadMods }} mods={mods} details={modDetails} heroes={characterData} />{/* repakxtra */}
       <WhyNotWorking alert={alert} onSetPriority={handleSetPriority} />{/* repakxtra: Why isn't this mod working? Load on top renames through the Library's own priority change */}
 

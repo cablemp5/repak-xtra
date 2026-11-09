@@ -38,7 +38,7 @@ pub fn name_taken(parent: &Path, old_stem: &str, new_stem: &str) -> Option<Strin
         .iter()
         .map(|ext| format!("{new_stem}.{ext}"))
         .find(|name| parent.join(name).exists())
-        .map(|name| format!("Another mod already uses the name '{name}'"))
+        .map(|name| format!("A mod named {} is already there.", crate::xtra_dupes::bare_name(Path::new(&name)))) // repakxtra: the name a player sees, not the file's
 }
 
 fn write_zip(paths: &[String], dest: &Path) -> io::Result<usize> {

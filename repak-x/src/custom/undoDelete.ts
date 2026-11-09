@@ -3,6 +3,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { useAlert } from '../components/AlertHandler'
 import { nameKey as displayName } from './loadoutStore'
+import { gameClosed, runOp } from './opDialogs'
 
 export type TrashedMod = { id: string; path: string }
 
@@ -16,14 +17,11 @@ export function offerUndoDelete(alert: ReturnType<typeof useAlert>, entries: Tra
     action: {
       label: 'Undo',
       onClick: async () => {
-        if (blocked()) {
-          alert.warning('Game Running', 'Undo waits until the game is closed.')
-          return
-        }
+        if (blocked() && !(await gameClosed('put it back'))) return // the shared dialog waits for the game to close
         alert.dismissAlert(id)
         try {
-          await invoke('restore_trashed_mods', { ids: entries.map(e => e.id) })
-          alert.success('Restored', what)
+          // a mod of that name installed since: Keep both or Replace (the shared dialog, xtra_trash.rs restore_from)
+          if (await runOp('put it back', mode => invoke('restore_trashed_mods', { ids: entries.map(e => e.id), mode }))) alert.success('Restored', what)
         } catch (e) {
           alert.error('Undo incomplete', String(e))
         }

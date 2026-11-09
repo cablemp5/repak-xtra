@@ -133,6 +133,9 @@ fn ensure_mod_not_locked(output_dir: &Path, base_name: &str) -> Result<(), Strin
         // Write access without truncating: fails with a sharing violation while
         // another process holds the file open.
         if let Err(e) = fs::OpenOptions::new().write(true).open(entry.path()) {
+            if let Some(msg) = crate::xtra_ops::io(&e) {
+                return Err(msg); // repakxtra: the shared game open or file in use dialog, with Retry
+            }
             if e.kind() == std::io::ErrorKind::PermissionDenied || e.raw_os_error() == Some(32) {
                 return Err(format!(
                     "'{}' is in use by another process. Close the game (or unload the mod) and try again; nothing was changed.",

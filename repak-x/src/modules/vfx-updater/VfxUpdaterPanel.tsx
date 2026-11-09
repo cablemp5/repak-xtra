@@ -20,6 +20,7 @@ import { BiCopyAlt } from 'react-icons/bi';
 
 import "../../components/ExtensionModOverlay.css";
 import "./VfxUpdater.css";
+import { opText } from '../../custom/opDialogs'; // repakxtra
 
 const VFX_UPDATER_MOD_PREFILL_KEY = 'repakx:vfxUpdater:modPath'
 
@@ -475,7 +476,7 @@ export default function VfxUpdaterPanel() {
           addLog(`Mod moved to ${selectedFolderId} successfully!`, "success");
         } catch (e) {
           console.error("Error moving:", e);
-          addLog(`Failed to move mod to folder: ${e}`, "error");
+          addLog(`Failed to move mod to folder: ${opText(e)}`, "error"); // repakxtra: its own window has no shared dialog, the log says why
         }
       }
     }

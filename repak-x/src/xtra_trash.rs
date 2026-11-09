@@ -301,25 +301,27 @@ fn empty_in(root: &Path, ids: &[String]) -> Result<usize, String> {
 /// Puts back every file of the given deletions (ids from delete_mod), each where it was deleted from. Not while Repak X
 /// is open, nor while the game runs (unless Settings bypasses that lock, as for every other mod change).
 #[tauri::command]
-pub async fn restore_trashed_mods(ids: Vec<String>, state: tauri::State<'_, std::sync::Arc<std::sync::Mutex<crate::AppState>>>) -> Result<usize, String> {
+pub async fn restore_trashed_mods(ids: Vec<String>, mode: Option<String>, state: tauri::State<'_, std::sync::Arc<std::sync::Mutex<crate::AppState>>>) -> Result<usize, String> {
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // Undo moves files back into the mods folder: not while Repak X is open
     let bypass = state.lock().map(|s| s.bypass_game_running_lock).unwrap_or(false);
     if !bypass && crate::is_game_process_running() {
-        return Err("Marvel Rivals is running. Close it first, then restore.".into());
+        return Err(crate::xtra_ops::game_running("Marvel Rivals is running. Close it first, then restore.")); // the shared dialog
     }
-    restore_from(&trash_dir(), &ids)
+    restore_from(&trash_dir(), &ids, mode.as_deref())
 }
 
-fn restore_from(root: &Path, ids: &[String]) -> Result<usize, String> {
+/// `mode` answers a name taken in the mods folder since the delete (xtra_ops::place): "replace" sends the mod there to
+/// Recently deleted, "keep_both" restores this one as "Name (1)". Without one that is a collision error.
+fn restore_from(root: &Path, ids: &[String], mode: Option<&str>) -> Result<usize, String> {
     if let Some(bad) = ids.iter().find(|id| !valid_id(id)) {
         return Err(format!("Invalid trash id: {bad}"));
     }
-    let mut restored = 0;
-    let mut errors = Vec::new();
+    // Every deletion's records first, so a name taken again stops the restore before any file moves (a retry with the
+    // user's answer then restores all of them, not the rest of a half-done Undo)
+    let mut plans = Vec::new();
     for id in ids {
         let dir = root.join(id);
-        // Read every record of this deletion before moving anything
         let mut records: Vec<(PathBuf, PathBuf, PathBuf)> = Vec::new(); // (sidecar, trashed, original)
         let mut problem = None;
         match fs::read_dir(&dir) {
@@ -342,11 +344,21 @@ fn restore_from(root: &Path, ids: &[String]) -> Result<usize, String> {
                 }
             }
         }
-        if problem.is_none() {
-            if let Some((_, _, original)) = records.iter().find(|(_, _, o)| o.exists()) {
-                problem = Some(format!("{} already exists, left the trashed copy alone", original.display()));
-            }
+        let taken = records.iter().find(|(_, _, o)| o.exists()).map(|(_, _, o)| crate::xtra_dupes::bare_name(o));
+        plans.push((dir, records, problem, taken));
+    }
+    if mode.is_none() {
+        if let Some(name) = plans.iter().find_map(|p| p.3.clone()) {
+            return Err(crate::xtra_ops::collision(format!("A mod named {name} is in the mods folder again.")));
         }
+    }
+    let mut restored = 0;
+    let mut errors = Vec::new();
+    for (dir, mut records, problem, taken) in plans {
+        let problem = problem.or_else(|| match (&taken, mode) {
+            (Some(_), Some(m)) => retarget(&mut records, m).err(),
+            _ => None,
+        });
         if let Some(p) = problem {
             errors.push(p);
             continue;
@@ -370,6 +382,32 @@ fn restore_from(root: &Path, ids: &[String]) -> Result<usize, String> {
     } else {
         Err(format!("Restored {restored} file(s); failed: {}", errors.join("; ")))
     }
+}
+
+/// Each mod (files sharing a folder and name) whose name is taken again gets its new place once: `place` moves the mod
+/// there aside (replace) or finds the next free name (keep both), and every file of the set follows that name.
+fn retarget(records: &mut [(PathBuf, PathBuf, PathBuf)], mode: &str) -> Result<(), String> {
+    let mut done: std::collections::HashMap<(PathBuf, String), String> = std::collections::HashMap::new();
+    let key = |o: &Path| (o.parent().map(Path::to_path_buf).unwrap_or_default(), crate::xtra_bundle::stem(&o.file_name().unwrap_or_default().to_string_lossy()).to_lowercase());
+    for i in 0..records.len() {
+        let original = records[i].2.clone();
+        let k = key(&original);
+        let name = original.file_name().unwrap_or_default().to_string_lossy().into_owned();
+        let stem_len = crate::xtra_bundle::stem(&name).len();
+        let new_stem = match done.get(&k) {
+            Some(s) => s.clone(),
+            None => {
+                let in_use = records.iter().any(|r| key(&r.2) == k && r.2.exists());
+                let placed = if in_use { crate::xtra_ops::place(&original, &records[i].1, Some(mode))? } else { original.clone() };
+                let placed_name = placed.file_name().unwrap_or_default().to_string_lossy().into_owned();
+                let s = crate::xtra_bundle::stem(&placed_name).to_string();
+                done.insert(k, s.clone());
+                s
+            }
+        };
+        records[i].2 = original.with_file_name(format!("{new_stem}{}", &name[stem_len..]));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -423,7 +461,7 @@ mod tests {
         let list = list_in(&root);
         assert_eq!(list.len(), 2, "one deletion per folder: {list:?}");
         assert_eq!(ids.len(), 2, "every deletion's id comes back for Undo");
-        restore_from(&root, &ids).unwrap();
+        restore_from(&root, &ids, None).unwrap();
         assert_eq!(fs::read(mods.join("Hulk/Old/A_9999999_P.pak")).unwrap(), b"22", "restored into the folder it was deleted from");
         assert!(mods.join("Hulk/A_9999999_P.pak").exists());
         let _ = fs::remove_dir_all(base);
@@ -482,7 +520,7 @@ mod tests {
         discard(&b, &other).unwrap();
         assert!(!pak.exists() && !ucas.exists() && !other.exists());
 
-        assert_eq!(restore_from(&trash, &["a".into()]).unwrap(), 2);
+        assert_eq!(restore_from(&trash, &["a".into()], None).unwrap(), 2);
         assert!(pak.exists() && ucas.exists() && !other.exists());
         assert!(!a.exists(), "emptied id folder is removed");
         let _ = fs::remove_dir_all(&base);
@@ -500,7 +538,7 @@ mod tests {
         let two = reserve_in(&trash, Some("two".into())).unwrap();
         discard(&two, &in_b).unwrap();
 
-        assert_eq!(restore_from(&trash, &["one".into()]).unwrap(), 1);
+        assert_eq!(restore_from(&trash, &["one".into()], None).unwrap(), 1);
         assert_eq!(fs::read(&in_a).unwrap(), b"a");
         assert!(!in_b.exists() && two.join("X_9999999_P.pak").exists(), "B's copy stays trashed");
         let _ = fs::remove_dir_all(&base);
@@ -517,12 +555,16 @@ mod tests {
         let two = reserve_in(&trash, Some("two".into())).unwrap();
         discard(&two, &pak).unwrap();
 
-        assert_eq!(restore_from(&trash, &["one".into()]).unwrap(), 1);
+        assert_eq!(restore_from(&trash, &["one".into()], None).unwrap(), 1);
         assert_eq!(fs::read(&pak).unwrap(), b"first");
-        let err = restore_from(&trash, &["two".into()]).unwrap_err();
-        assert!(err.contains("already exists"), "{err}");
+        let err = restore_from(&trash, &["two".into()], None).unwrap_err();
+        assert!(err.contains("[collision]"), "{err}");
         assert_eq!(fs::read(two.join("M_9999999_P.pak")).unwrap(), b"second");
         assert!(two.join("M_9999999_P.pak.from").exists());
+        // Keep both: the deleted copy comes back beside the one there now
+        assert_eq!(restore_from(&trash, &["two".into()], Some("keep_both")).unwrap(), 1);
+        assert_eq!(fs::read(&pak).unwrap(), b"first");
+        assert_eq!(fs::read(pak.with_file_name("M (1)_9999999_P.pak")).unwrap(), b"second");
         let _ = fs::remove_dir_all(&base);
     }
 
@@ -533,10 +575,10 @@ mod tests {
         assert!(reserve_in(&trash, Some("x".into())).is_err(), "reused id");
         for bad in ["", "..", "a/b", "a\\b", "C:", "a.b", "é"] {
             assert!(reserve_in(&trash, Some(bad.into())).is_err(), "reserve {bad:?}");
-            assert!(restore_from(&trash, &[bad.into()]).is_err(), "restore {bad:?}");
+            assert!(restore_from(&trash, &[bad.into()], None).is_err(), "restore {bad:?}");
         }
         // the whole list is checked before any I/O
-        assert!(restore_from(&trash, &["x".into(), "../x".into()]).unwrap_err().contains("Invalid"));
+        assert!(restore_from(&trash, &["x".into(), "../x".into()], None).unwrap_err().contains("Invalid"));
         assert!(trash.join("x").exists());
         // without an id each call gets a fresh folder
         let a = reserve_in(&trash, None).unwrap();
@@ -576,7 +618,7 @@ mod tests {
         }
         assert!(ucas.exists() && !dir.join("M_9999999_P.ucas.from").exists());
         fs::remove_file(&ucas).unwrap(); // the user deals with the stuck file; the trashed pak still restores
-        assert_eq!(restore_from(&trash, &["m".into()]).unwrap(), 1);
+        assert_eq!(restore_from(&trash, &["m".into()], None).unwrap(), 1);
         assert_eq!(fs::read(&pak).unwrap(), b"p");
         let _ = fs::remove_dir_all(&base);
     }
