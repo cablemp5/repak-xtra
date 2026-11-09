@@ -71,6 +71,7 @@ import { OpDialogs, gameClosed, opText, retryAfter, runOp } from './custom/opDia
 import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
 import { rescanVerdicts, useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
+import { soundMergeBeforeLaunch, useSoundMergeWatch } from './custom/soundMerge' // repakxtra
 import { useSafetyWatch } from './custom/safetyScan' // repakxtra
 import { WhyNotWorking } from './custom/WhyNotWorking' // repakxtra
 import { useScanProgress } from './custom/scanProgress' // repakxtra
@@ -447,6 +448,7 @@ function App() {
   const [isLogDrawerOpen, setIsLogDrawerOpen] = useState(false)
   useConflictWatch(mods) // repakxtra
   useBrokenWatch(mods) // repakxtra
+  useSoundMergeWatch(mods) // repakxtra: sound mods sharing a bank, merged when that setting is on
   useSafetyWatch(mods) // repakxtra: Ban risk badges (custom/safetyScan.tsx)
   useNexusScan(mods) // repakxtra: Nexus sources for mods installed before they were recorded, once
   const brokenVersion = useBrokenVersion() // repakxtra: the Broken filter re-runs when the verdicts land
@@ -3871,6 +3873,7 @@ function App() {
             onClick={async () => {
               if (gameRunning || launchSuccess) return
               try {
+                await soundMergeBeforeLaunch() // repakxtra: a sound mod change made while the game was open
                 await invoke('launch_game')
                 setStatus('Game launched')
                 setLaunchSuccess(true)

@@ -19,6 +19,7 @@ mod xtra_setup; // repakxtra: Setup panel (signature bypass, Project Galacta)
 mod xtra_project;
 mod xtra_kit; // repakxtra: preview kit (previews on other PCs)
 mod xtra_previews; // repakxtra: generated mod previews
+mod xtra_soundmerge; // repakxtra: sound mods that share a bank, merged into one pak (off by default)
 mod xtra_trash; // repakxtra: undoable delete
 mod xtra_capture; // repakxtra: capture preview in game
 mod xtra_update; // repakxtra: updates from repakxtra's own releases
@@ -8720,6 +8721,7 @@ fn main() {
             xtra_trash::empty_trashed_mods,
             xtra_previews::list_mod_previews, xtra_previews::delete_loadout_previews,
             xtra_previews::get_mod_preview,
+            xtra_soundmerge::sound_merge_get, xtra_soundmerge::sound_merge_set, xtra_soundmerge::sound_merge_rebuild, xtra_soundmerge::sound_merge_report, // repakxtra: sound mod merger
             xtra_previews::get_preview_covers,
             xtra_previews::generate_mod_previews,
             xtra_previews::previews_available, // repakxtra: hide Generate where there is no generator
