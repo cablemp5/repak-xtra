@@ -212,13 +212,17 @@ fn rand_id() -> u64 {
 }
 
 /// The game's own copy of a bank: its patch paks first (newest build first: the game's bnk_ui_battle sits in a
-/// Patch_-Windows pak, not pakchunkWwise), then pakchunkWwise-Windows.pak.
+/// Patch_-Windows pak, not pakchunkWwise), then pakchunkWwise-Windows.pak. Its paks mount deeper than a mod's
+/// (pakchunkWwise at ../../../Marvel/Content/WwiseAudio/), so the file is asked for under each shorter spelling too.
 fn game_file(paks: &Path, inner: &str, tmp: &Path) -> Option<Vec<u8>> {
     let mut patches: Vec<PathBuf> = std::fs::read_dir(paks).ok()?.flatten().map(|e| e.path())
         .filter(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.to_lowercase().starts_with("patch_") && n.to_lowercase().ends_with(".pak")))
         .collect();
     patches.sort_by_key(|p| std::cmp::Reverse(p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()));
-    patches.into_iter().chain([paks.join("pakchunkWwise-Windows.pak")]).find_map(|p| extract(&p, inner, tmp))
+    // the game's pak lists its entries with a leading slash after its mount point (/bnk_display_1026001.bnk)
+    let names: Vec<String> = ["Marvel/Content/WwiseAudio/", "Marvel/Content/", ""].iter().filter_map(|pre| inner.strip_prefix(pre))
+        .flat_map(|n| [format!("/{n}"), n.to_string()]).collect();
+    patches.into_iter().chain([paks.join("pakchunkWwise-Windows.pak")]).find_map(|p| names.iter().find_map(|n| extract(&p, n, tmp)))
 }
 
 /// What the last build did: shown in a sound mod's details (custom/SoundMergeNote.tsx).
@@ -321,7 +325,8 @@ fn rebuild(dir: &Path, mod_paths: &[String]) -> Result<Report, String> {
     } else {
         // written beside it, then swapped in: a failed build never leaves half a pak where the game loads it
         let part = dir.join(format!("{PAK}.part"));
-        uasset_toolkit::create_pak(&part.to_string_lossy(), entries, Some("../../../"), None, Some(AES_KEY_HEX)).map_err(|e| format!("Could not pack the merged sounds: {e}"))?;
+        // the tool wants a path hash seed (null fails)
+        uasset_toolkit::create_pak(&part.to_string_lossy(), entries, Some("../../../"), Some(0), Some(AES_KEY_HEX)).map_err(|e| format!("Could not pack the merged sounds: {e}"))?;
         std::fs::rename(&part, dir.join(PAK)).map_err(|e| format!("Could not put the merged sounds in place: {e}"))?;
     }
     let _ = std::fs::write(dir.join("stamp.json"), stamp.to_string());

@@ -3373,3 +3373,6 @@ html[data-toasts-held] .toast-container { display: none; }   /* the welcome flow
 /* the dialog's blue action: the app's .btn-primary at the quiet buttons' height and type (as in Check Conflicts' footer) */
 .op-modal .btn-primary { height: 32px !important; min-height: 0 !important; padding: 0 16px !important; font-size: 13px !important; font-weight: 500 !important;
   width: auto !important; flex: none; border-radius: var(--quiet-radius) !important; }
+
+/* ---------- sound mod merger note in mod details (custom/soundMerge.tsx), the details panel's small secondary text ---------- */
+.sound-merge-note p { margin: 0 0 4px; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
