@@ -29,7 +29,6 @@ import { MdDriveFileMoveOutline } from "react-icons/md"
 import { IoLayersSharp } from "react-icons/io5"
 import { FaTag, FaToolbox, FaSort } from "react-icons/fa6"
 import { IoIosSettings, IoMdWarning } from "react-icons/io"
-import { VscListTree } from "react-icons/vsc"
 import { GrInstall } from "react-icons/gr"
 import { GiLightningTrio } from "react-icons/gi"
 import Checkbox from './components/ui/Checkbox'
@@ -3605,6 +3604,7 @@ function App() {
           clashes={clashes}
           mods={mods}
           characterData={characterData}
+          scope={clashScopeModPath.current} /* repakxtra: a mod's own check lists only its hidden pairs */
           onSetPriority={handleSetPriority}
           onToggleMod={stableToggleMod}
           onKeep={(keep, others) => keepThisOne({ alert, isBlocked: undoBlocked, reload: loadMods }, keep, others)} /* repakxtra */
@@ -3613,7 +3613,7 @@ function App() {
       )}
 
       <CrashSuspects deps={{ alert, isBlocked: undoBlocked, reload: loadMods }} mods={mods} details={modDetails} heroes={characterData} />{/* repakxtra */}
-      <WhyNotWorking alert={alert} />{/* repakxtra: Why isn't this mod working? */}
+      <WhyNotWorking alert={alert} onSetPriority={handleSetPriority} />{/* repakxtra: Why isn't this mod working? Load on top renames through the Library's own priority change */}
 
       {panels.settings && (
         <Suspense fallback={null}><SettingsPanel
@@ -4092,16 +4092,7 @@ function App() {
                   <ModStateFilter value={modState} onChange={setModState} mods={folderMods} encrypted={isEncrypted} />
                 </div>
                 <div className="header-actions" data-tour="header-actions">
-                  <button
-                    onClick={openAssetExplorerWindow}
-                    className="btn-ghost btn-asset-explorer"
-                    data-tour="asset-explorer-btn"
-                    title="Browse every asset in every installed mod"
-                  >
-                    <VscListTree style={{ color: 'var(--accent-primary)', width: '18px', height: '18px' }} />
-                    <span className="btn-label">Asset Explorer</span>
-                  </button>
-                  <div className="divider-vertical" />
+                  {/* repakxtra: no Asset Explorer button and no dividers here: it opens from Tools, a mod's menu, and its details */}
                   <button onClick={handleCheckClashes} className="btn-ghost btn-check-conflicts"
                     title={conflictCount ? `${conflictCount === 1 ? 'A group of enabled mods conflicts' : `${conflictCount} groups of enabled mods conflict`}: check which` : 'Check for conflicts'}>
                     <IoLayersSharp className="warning-icon" style={{ color: 'var(--accent-primary)', width: '18px', height: '18px' }} />
@@ -4109,7 +4100,6 @@ function App() {
                     <span className={`btn-label${conflictCount ? ' has-conflicts' : ''}`}>{conflictCount ? `${conflictCount} ${conflictCount === 1 ? 'conflict' : 'conflicts'}` : 'Check Conflicts'}</span>
                     {conflictCount > 0 && <i className="conflict-dot" aria-label={`${conflictCount} ${conflictCount === 1 ? 'conflict' : 'conflicts'}`} />}{/* repakxtra */}
                   </button>
-                  <div className="divider-vertical" />
                   <div className="view-switcher-slot">{/* repakxtra: holds one button's room, the views open over it on hover */}
                   <div className="view-switcher">
                     <button
@@ -4141,7 +4131,6 @@ function App() {
                     { id: 'compact', label: 'Compact grid', icon: <ViewModuleIcon fontSize="small" /> },
                     { id: 'list', label: 'List', icon: <ViewListIcon fontSize="small" /> },
                   ]} />
-                  <div className="divider-vertical" />
                   <button
                     onClick={toggleRightPanel}
                     className={`btn-ghost btn-square ${isRightPanelOpen ? 'active' : ''}`} /* repakxtra: lit while the details panel is open */
@@ -4150,7 +4139,6 @@ function App() {
                   >
                     <ViewSidebarIcon fontSize="small" style={{ transform: isRightPanelOpen ? 'none' : 'rotate(180deg)' }} />
                   </button>
-                  <div className="divider-vertical" />
                   <button onClick={() => { void loadMods().then(rescanVerdicts) }} className="btn-ghost btn-square" title="Refresh list"> {/* repakxtra: and every update check */}
                     <RefreshIcon fontSize="small" />
                   </button>

@@ -111,8 +111,11 @@ const BYPASS: Record<string, string> = { installed: 'installed', disabled: 'off'
 const isOwnLoader = (path: string) =>
   new RegExp(String.raw`^!?projectgalacta(_\d+)?(_p)?\.(pak|bak_repak)$`, 'i').test(path.split(/[\\/]/).pop() ?? '')
 
-/** Reads everything the report needs; whatever cannot be read says "unknown". */
-export async function gatherReport(): Promise<string> {
+export type ReportStage = 'setup' | 'mods'
+/** Reads everything the report needs; whatever cannot be read says "unknown". Two passes: the setup (versions, loaders,
+ *  conflicts, crashes), then what the app knows about each mod that is on. `onStage` names the pass that is running. */
+export async function gatherReport(onStage?: (stage: ReportStage) => void): Promise<string> {
+  onStage?.('setup')
   const src = reportSource.get?.() ?? { mods: [], modDetails: {}, launcherType: '', gamePath: '' }
   const [repakx, bypass, galacta, clashes, crash, kit, recent] = await Promise.all([
     settled(invoke<string>('get_app_version')),
@@ -127,6 +130,7 @@ export async function gatherReport(): Promise<string> {
   const mods = src.mods.filter(m => !isOwnLoader(m.path))
   const onPaths = mods.filter(m => m.enabled).map(m => m.path)
   // what the app knows about the mods that are on: checked now, not from the last background scan
+  onStage?.('mods')
   const [verdicts, niagara, suspects] = await Promise.all([
     settled(invoke<Verdict[]>('xtra_broken_mods', { modPaths: onPaths })),
     settled(invoke<string[]>('xtra_niagara_mods', { modPaths: onPaths })),

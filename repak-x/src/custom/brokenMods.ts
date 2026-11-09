@@ -92,7 +92,8 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     // repakxtra kept made dates, is flagged too. Both need the game's USMAP: fetched first (an ETag check when it has
     // it), so a library whose VFX Updater was never opened is checked as well. Last, the Blueprint mods: their classes
     // compared with the game's once each per game update (xtra_layout.rs). One the update changed gets May crash with
-    // what changed, one that matches loses the date-only warning, so the badges follow each one checked
+    // what changed. A badge only comes from what a check found, never from a date (xtra_broken.rs), so a mod gets its
+    // badge once checked and never loses one a later check disproves
     // `first`: the quick check just started at launch, reused so the chain does not run the same check beside it
     // `finished` is false when a scan stopped with mods left (xtra_scan_stopped, read and cleared at both ends)
     // a run the library outdated before it began checked nothing: not finished (gameUpdate.ts asks the new one instead)

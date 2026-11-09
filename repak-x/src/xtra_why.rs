@@ -3,9 +3,12 @@
 //! outside the game, the bypass or Project Galacta missing, and other enabled mods that replace the same files at a
 //! higher priority (the conflict check compares only mods at the same priority, so an overridden mod never shows there).
 //! The frontend adds what it already knows: Broken, May crash, and Ban risk badges.
+//! Two passes: xtra_why_mod reads only this mod and the game folder (instant), xtra_why_overrides reads every enabled
+//! mod's file list (slow on a big library), so the dialog shows the first answers while the second pass runs.
+//! xtra_hidden_mods gives Check Conflicts every enabled mod a higher priority one covers.
 
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tauri::State;
@@ -17,13 +20,16 @@ pub struct Finding {
     level: &'static str,
     title: String,
     detail: String,
-    /// the one-click fix the dialog offers: "turn_on" (the Library's switch) or "setup" (opens Setup)
+    /// the one-click fix the dialog offers: "turn_on" (the Library's switch), "setup" (opens Setup) or "load_on_top"
     #[serde(skip_serializing_if = "Option::is_none")]
     action: Option<&'static str>,
+    /// load_on_top: the priority that puts it above every mod that wins over it or ties with it
+    #[serde(skip_serializing_if = "Option::is_none")]
+    priority: Option<usize>,
 }
 
 fn f(level: &'static str, title: impl Into<String>, detail: impl Into<String>) -> Finding {
-    Finding { level, title: title.into(), detail: detail.into(), action: None }
+    Finding { level, title: title.into(), detail: detail.into(), action: None, priority: None }
 }
 
 impl Finding {
@@ -33,10 +39,11 @@ impl Finding {
     }
 }
 
-/// Load order rank: the nines run (more nines load later and win). None for a "!" name, whose order the app does not know.
+/// Load order rank: the nines run (more nines load later and win). None for a "!" name or one without a nines run (the
+/// Library's priority 0 for both), whose order against the others the app does not know.
 fn rank(path: &Path) -> Option<usize> {
     let stem = path.file_stem()?.to_string_lossy().to_string();
-    (!stem.starts_with('!')).then(|| crate::asset_explorer::mod_priority(&stem))
+    (!stem.starts_with('!')).then(|| crate::asset_explorer::mod_priority(&stem)).filter(|r| *r > 0)
 }
 
 fn name(path: &Path) -> String {
@@ -67,16 +74,23 @@ fn own_checks(path: &Path, mods_dir: &Path) -> Vec<Finding> {
 }
 
 /// Enabled mods that replace files this one has, at a higher priority (they win) or one the app cannot order ("!").
-/// `others`: (path, file keys) of every other enabled mod.
+/// `others`: (path, file keys) of every other enabled mod. Each problem carries Load on top: one priority above the
+/// highest mod that wins or ties, so one click fixes them all.
 fn overrides(path: &Path, mine: &HashSet<String>, others: &[(PathBuf, HashSet<String>)]) -> Vec<Finding> {
     let my_rank = rank(path);
     let mut out = Vec::new();
+    let mut top = None;
     for (other, keys) in others {
         let shared = mine.intersection(keys).count();
         if shared == 0 {
             continue;
         }
         let what = format!("{shared} of its {} files", mine.len());
+        if let (Some(a), Some(b)) = (my_rank, rank(other)) {
+            if b >= a {
+                top = top.max(Some(b));
+            }
+        }
         match (my_rank, rank(other)) {
             (Some(a), Some(b)) if b > a => out.push(f("problem", format!("{} wins over it", name(other)),
                 format!("{} replaces {what} at a higher priority ({b} against {a}), so the game shows that mod's versions. Turn one off or give this one a higher priority.", name(other)))),
@@ -87,18 +101,61 @@ fn overrides(path: &Path, mine: &HashSet<String>, others: &[(PathBuf, HashSet<St
                 format!("Both replace {what}. A name starting with ! loads in its own order, so the one you want may lose. Give it a higher priority to be sure."))),
         }
     }
+    if let Some(top) = top {
+        for x in out.iter_mut().filter(|x| x.level == "problem") {
+            x.action = Some("load_on_top");
+            x.priority = Some(top + 1);
+        }
+    }
     out
 }
 
-/// Every other enabled mod's file keys (cached by size and date, as the conflict check does).
-fn enabled_others(mods_dir: &Path, path: &Path) -> Vec<(PathBuf, HashSet<String>)> {
-    let me = path.with_extension("pak");
+#[derive(Serialize, Debug, PartialEq)]
+pub struct Hidden {
+    hidden: String,
+    winner: String,
+    /// the shared files, in the hidden mod's own spelling
+    files: Vec<String>,
+}
+
+/// Every pair where an enabled mod replaces files of another at a higher priority, so the lower one is hidden there.
+/// Mods whose order the app cannot know ("!") are left out, as in `overrides`.
+fn hidden_pairs(mods: &[(PathBuf, Arc<Vec<String>>)]) -> Vec<Hidden> {
+    let ranks: Vec<_> = mods.iter().map(|(p, _)| rank(p)).collect();
+    let mut owners: HashMap<String, Vec<usize>> = HashMap::new();
+    for (i, (_, files)) in mods.iter().enumerate() {
+        if ranks[i].is_some() {
+            for k in keys(files) {
+                owners.entry(k).or_default().push(i);
+            }
+        }
+    }
+    let mut pairs: BTreeMap<(usize, usize), HashSet<&str>> = BTreeMap::new(); // (hidden, winner) -> shared keys
+    for (k, list) in owners.iter().filter(|(_, l)| l.len() > 1) {
+        for &a in list {
+            for &b in list {
+                if ranks[b] > ranks[a] {
+                    pairs.entry((a, b)).or_default().insert(k.as_str());
+                }
+            }
+        }
+    }
+    pairs.into_iter().map(|((a, b), shared)| {
+        let mut files: Vec<String> = mods[a].1.iter().filter(|f| shared.contains(crate::xtra_conflicts::asset_key(f).as_str())).cloned().collect();
+        files.sort();
+        files.dedup();
+        Hidden { hidden: mods[a].0.to_string_lossy().into(), winner: mods[b].0.to_string_lossy().into(), files }
+    }).collect()
+}
+
+/// Every enabled mod's file list (cached by size and date, as the conflict check does).
+fn enabled(mods_dir: &Path) -> Vec<(PathBuf, Arc<Vec<String>>)> {
     WalkDir::new(mods_dir).into_iter().filter_entry(crate::xtra_bundle::library_walk).filter_map(Result::ok)
         .map(|e| e.into_path())
-        .filter(|p| p.extension().is_some_and(|e| e == "pak") && *p != me && !crate::xtra_builtins::is_own(p) && !crate::xtra_setup::is_managed_loader(p))
+        .filter(|p| p.extension().is_some_and(|e| e == "pak") && !crate::xtra_builtins::is_own(p) && !crate::xtra_setup::is_managed_loader(p))
         // a .utoc without its .ucas (or the reverse) is skipped by the game, so it wins over nothing
         .filter(|p| p.with_extension("utoc").is_file() == p.with_extension("ucas").is_file())
-        .filter_map(|p| Some((p.clone(), keys(&files_of(&p)?))))
+        .filter_map(|p| Some((p.clone(), files_of(&p)?)))
         .collect()
 }
 
@@ -141,17 +198,40 @@ pub async fn xtra_why_mod(mod_path: String, state: State<'_, Arc<Mutex<crate::Ap
                         if top.is_empty() { String::new() } else { format!(" (they are in {})", top.join(", ")) })));
             }
         }
-        // only an enabled mod is overridden: one that is off loses to nothing, it simply does not load
-        if !path.extension().is_some_and(|e| e.eq_ignore_ascii_case("bak_repak")) {
-            if let Some(mine) = files_of(&path.with_extension("pak")) {
-                out.extend(overrides(&path, &keys(&mine), &enabled_others(&mods_dir, &path)));
-            }
-        }
         if crate::is_game_process_running() {
             out.push(f("info", "The game is running", "Changes to mods load from the next game launch."));
         }
         Ok(out)
     }).await.map_err(|e| e.to_string())?
+}
+
+/// The second pass: other enabled mods that replace this one's files at a higher or the same priority.
+#[tauri::command]
+pub async fn xtra_why_overrides(mod_path: String, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<Vec<Finding>, String> {
+    let mods_dir = state.lock().unwrap().game_path.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = PathBuf::from(&mod_path);
+        // only an enabled mod is overridden: one that is off loses to nothing, it simply does not load
+        if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("bak_repak")) {
+            return Vec::new();
+        }
+        let me = path.with_extension("pak");
+        let Some(mine) = files_of(&me) else { return Vec::new() };
+        let others: Vec<_> = enabled(&mods_dir).into_iter().filter(|(p, _)| *p != me).map(|(p, f)| (p, keys(&f))).collect();
+        let mut out = overrides(&path, &keys(&mine), &others);
+        // a built-in keeps its name, and set_mod_priority only rewrites a name ending in exactly _P (another would get a
+        // second suffix), so neither gets Load on top
+        if crate::xtra_builtins::in_folder(&path) || !path.file_stem().is_some_and(|s| s.to_string_lossy().ends_with("_P")) {
+            out.iter_mut().for_each(|x| { x.action = None; x.priority = None });
+        }
+        out
+    }).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn xtra_hidden_mods(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<Vec<Hidden>, String> {
+    let mods_dir = state.lock().unwrap().game_path.clone();
+    tauri::async_runtime::spawn_blocking(move || hidden_pairs(&enabled(&mods_dir))).await.map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -191,11 +271,26 @@ mod tests {
             (PathBuf::from("Apart_99999999_P.pak"), set(&["z"])),
             (PathBuf::from("!Bang_P.pak"), set(&["a"])),
         ];
-        let got: Vec<_> = overrides(Path::new("Me_9999999_P.pak"), &mine, &others).into_iter().map(|x| (x.level, x.title)).collect();
+        let got: Vec<_> = overrides(Path::new("Me_9999999_P.pak"), &mine, &others).into_iter().map(|x| (x.level, x.title, x.priority)).collect();
         assert_eq!(got, [
-            ("problem", "High_99999999_P wins over it".to_string()),
-            ("problem", "It clashes with Same_9999999_P".to_string()),
-            ("info", "It shares files with !Bang_P".to_string()),
-        ]);
+            ("problem", "High_99999999_P wins over it".to_string(), Some(3)),
+            ("info", "It shares files with Low_P".to_string(), None),
+            ("problem", "It clashes with Same_9999999_P".to_string(), Some(3)),
+            ("info", "It shares files with !Bang_P".to_string(), None),
+        ], "Load on top goes one above the highest mod that wins");
+    }
+
+    #[test]
+    fn hidden_by_higher_priority() {
+        let m = |name: &str, files: &[&str]| (PathBuf::from(name), Arc::new(files.iter().map(|s| s.to_string()).collect::<Vec<_>>()));
+        let mods = [
+            m("Addon_9999999_P.pak", &["/Game/Marvel/Characters/1026/MI_A.uasset", "/Game/Marvel/Characters/1026/MI_B.uasset"]),
+            m("Base_999999999_P.pak", &["Marvel/Content/Marvel/Characters/1026/MI_A.uasset"]),
+            m("Peer_9999999_P.pak", &["/Game/Marvel/Characters/1026/MI_B.uasset"]),
+            m("!Bang_P.pak", &["/Game/Marvel/Characters/1026/MI_A.uasset"]),
+        ];
+        let got = hidden_pairs(&mods);
+        assert_eq!(got, [Hidden { hidden: "Addon_9999999_P.pak".into(), winner: "Base_999999999_P.pak".into(), files: vec!["/Game/Marvel/Characters/1026/MI_A.uasset".into()] }],
+            "a higher priority hides, the same priority is a conflict, a ! mod is left out");
     }
 }
