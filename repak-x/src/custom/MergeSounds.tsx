@@ -31,7 +31,7 @@ const heroOf = new Map((heroes as { name: string; id: string }[]).map(h => [h.id
 const bankLabel = (key: string) => {
   const file = key.split('/').pop()!.replace(/\.(bnk|wem)$/, '')
   const hero = heroOf.get(file.match(/(\d{4})\d{3}/)?.[1] ?? '')
-  return { hero: key.endsWith('.wem') ? 'A streamed sound' : hero ?? 'Sound bank', file }
+  return { hero: hero ?? (key.endsWith('.wem') ? 'Streamed sound' : 'Sound bank'), file }
 }
 const isAudio = (d?: { mod_type?: string; category?: string }) => /Audio/.test(d?.mod_type ?? '') || d?.category === 'Audio'
 
@@ -129,10 +129,14 @@ function MergeSoundsWindow({ open, onClose, onDone }: { open: Open; onClose: () 
   }
 
   const n = plan?.mods.length ?? 2
+  // the sound column, then a column per mod; the window widens with the mods so six still fit side by side
+  const cols = `176px repeat(${n}, minmax(150px, 1fr))`
+  // Use all rests when that mod already plays every sound it has a version of
+  const allPicked = (i: number) => (plan?.banks ?? []).every(b => b.sounds.every(s => !s.has.includes(i) || (picks[b.key]?.[s.id] ?? s.pick) === i))
   const [doneText, doneName] = done.split('|')
   return createPortal(
     <div className="modal-overlay" onClick={onClose}>
-      <motion.div ref={trap.ref} onKeyDown={trap.onKeyDown} tabIndex={-1} className="modal-content ms-modal" role="dialog" aria-modal="true" aria-label="Merge sounds"
+      <motion.div ref={trap.ref} onKeyDown={trap.onKeyDown} tabIndex={-1} className="modal-content ms-modal" style={{ width: `min(${Math.max(920, 240 + n * 230)}px, 96vw)` }} role="dialog" aria-modal="true" aria-label="Merge sounds"
         onClick={e => e.stopPropagation()} initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.15 }}>
         <div className="modal-header">
           <div className="ms-title">
@@ -150,36 +154,47 @@ function MergeSoundsWindow({ open, onClose, onDone }: { open: Open; onClose: () 
           {plan && !done && shared === 0 && (plan.shared_files > 0
             ? <Empty icon={<AudioLines />} title="Nothing to pick" text={`They change different sounds in the same bank, so only one of them plays today. The merged pack keeps all ${plan.only_one === 1 ? 'of their sounds' : `${plan.only_one} of their sounds`}.`} />
             : <Empty icon={<CircleCheck />} title="These already play together" text="Each one changes its own sound banks, so the game loads both. There is nothing to merge." />)}
+          {plan && !done && plan.banks.length > 0 && (
+            <div className="ms-colhead" style={{ gridTemplateColumns: cols }}>
+              <div className="ms-head">Sound</div>
+              {plan.mods.map((m, i) => (
+                <div key={m} className="ms-head">
+                  <span className="ms-head-name" title={name(m)}>{name(m)}</span>
+                  <button type="button" className="ms-all" onClick={() => pickAll(i)} disabled={allPicked(i)}>Use all</button>
+                </div>
+              ))}
+            </div>
+          )}
           {plan && !done && plan.banks.map(b => {
             const label = bankLabel(b.key)
             return (
               <section key={b.key} className="ms-bank">
-                <div className="ms-bank-head"><b>{label.hero}</b><span>{label.file}</span><em>{b.sounds.length === 1 ? '1 sound' : `${b.sounds.length} sounds`}</em></div>
-                <div className="ms-grid" style={{ gridTemplateColumns: `minmax(150px, 1fr) repeat(${n}, minmax(190px, 1.25fr))` }}>
-                  <div className="ms-head ms-sticky">Sound</div>
-                  {plan.mods.map((m, i) => (
-                    <div key={m} className="ms-head">
-                      <span title={name(m)}>{name(m)}</span>
-                      <button type="button" className="ms-all" onClick={() => pickAll(i)}>Use all</button>
-                    </div>
-                  ))}
+                <div className="ms-bank-head">
+                  <span className="ms-bank-hero">{label.hero}</span>
+                  <span className="ms-bank-file" title={label.file}>{label.file}</span>
+                  <span className="ms-bank-count">{b.sounds.length === 1 ? '1 sound' : `${b.sounds.length} sounds`}</span>
+                </div>
+                <div className="ms-grid" style={{ gridTemplateColumns: cols }}>
                   {b.sounds.map(s => (
                     <div key={s.id} className="ms-row" role="radiogroup" aria-label={`Sound ${s.id}`}>
-                      <div className="ms-sticky ms-num"><b>{s.id}</b>{s.stream && <span className="ms-tag">Streamed</span>}</div>
+                      <div className="ms-num"><span>{s.id}</span>{s.stream && !b.key.endsWith('.wem') && <span className="ms-tag">Streamed</span>}</div>
                       {plan.mods.map((m, i) => {
-                        if (!s.has.includes(i)) return <div key={m} className="ms-tile is-none">Not changed</div>
+                        if (!s.has.includes(i)) return <div key={m} className="ms-cell is-none">Not changed</div>
                         const on = (picks[b.key]?.[s.id] ?? s.pick) === i
                         const id = `${b.key}|${s.id}|${i}`
                         return (
-                          <div key={m} className={`ms-tile${on ? ' is-on' : ''}`} role="radio" aria-checked={on} tabIndex={on ? 0 : -1}
+                          <div key={m} className={`ms-cell is-choice${on ? ' is-picked' : ''}`} role="radio" aria-checked={on} tabIndex={on ? 0 : -1}
                             aria-label={`${name(m)}'s version`} onClick={() => pick(b.key, s.id, i)}
                             onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); pick(b.key, s.id, i) } }}>
-                            <button type="button" className="ms-play" aria-label={player.playing === id ? `Stop ${name(m)}'s version` : `Play ${name(m)}'s version`} aria-busy={player.loading === id}
+                            <button type="button" className={`ms-play${player.playing === id ? ' is-on' : ''}`} aria-busy={player.loading === id}
+                              aria-label={player.playing === id ? `Stop ${name(m)}'s version` : `Play ${name(m)}'s version`}
                               onClick={e => { e.stopPropagation(); player.toggle(id, m, s.stream ?? b.key, s.id) }}>
-                              {player.loading === id ? <LoaderCircle size={13} className="scan-status-spin" aria-hidden="true" /> : player.playing === id ? <Square size={11} fill="currentColor" aria-hidden="true" /> : <Play size={12} fill="currentColor" aria-hidden="true" />}
+                              {player.loading === id ? <LoaderCircle className="scan-status-spin" aria-hidden="true" />
+                                : player.playing === id ? <Square fill="currentColor" strokeWidth={0} aria-hidden="true" />
+                                : <Play fill="currentColor" strokeWidth={0} aria-hidden="true" />}
                             </button>
-                            <span>{on ? 'Plays' : 'Use this'}</span>
-                            <span className="ms-check" aria-hidden="true">{on && <Check size={11} strokeWidth={3} />}</span>
+                            <span className="ms-cell-label">{on ? 'Plays' : 'Use this'}</span>
+                            <span className="ms-check" aria-hidden="true"><Check strokeWidth={2.5} /></span>
                           </div>
                         )
                       })}
