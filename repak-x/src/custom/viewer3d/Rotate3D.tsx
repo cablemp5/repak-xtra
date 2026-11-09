@@ -1,9 +1,9 @@
 // repakxtra: Rotate in 3D. A button beside Regenerate preview (the mod details panel, a loadout page's preview corner)
-// swaps the preview for the model in 3D in the same frame (cable's overnight pick B, docs\rivalsfps\overnight). The first
+// swaps the preview for the model in 3D in the same frame. The first
 // time for a mod the preview kit exports it (--viewer, xtra_viewer.rs, 5 to 15 s) while the kit's step shows; after that
 // it opens at once. States: loading, ready (the lobby idle plays, drag turns, middle drag moves, scroll zooms, double
 // click resets), the game's own model wins (the kit found the mod's mesh loses to the game's by pak order), nothing to
-// show, and error. On a loadout page it opens in a centered window instead (cable's pick A, Viewer3DWindow), so the
+// show, and error. On a loadout page it opens in a centered window instead (Viewer3DWindow), so the
 // model shows bigger. Loading is the KO prompt editor's loader (ProgressLoader): a title, the bar following the kit's
 // steps, and the step under it, shimmering.
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'

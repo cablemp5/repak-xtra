@@ -325,7 +325,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   return (
     <div className="lp-cover">
       {media}
-      {/* Rotate in 3D opens a centered window on a loadout's page, so the model shows bigger than the card (cable's pick A).
+      {/* Rotate in 3D opens a centered window on a loadout's page, so the model shows bigger than the card.
           Outside the card: the window's pointer events must not reach the card's hover (its emote sound) */}
       {threeD && rotate?.length ? <Viewer3DWindow title={l.name} viewKey={previewSetKey(l.id)} paths={rotate} set={previewSetKey(l.id)} onClose={() => setThreeD(false)}
         sub={[heroLabel(loadoutHero(l.on, p.mods, p.modDetails) ?? ''), `${rotate.length} mod${rotate.length === 1 ? '' : 's'} on the model`].filter(Boolean).join(', ')} /> : null}
