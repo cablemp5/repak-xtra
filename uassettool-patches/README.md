@@ -21,6 +21,12 @@ its parallel loop.
 
 | `0011-cli-to-json-streams-unindented.patch` | The command line's `to_json` writes unindented JSON straight into the file, as `batch_to_json` does since 0002, instead of building an indented string first (a Niagara system's is up to 30 MB). The effect built-ins decode through it, one process per file, several at once. Same values, whitespace only. | 16 Niagara files, 8 one after another 8.0 s to 7.0 s, 8 at once 3.5 s to 2.8 s. The three effect built-ins built from it come out byte for byte the same |
 
+`0013-no-chunknames.patch`: companion PAKs no longer carry a `chunknames` entry. The game loads a mod with or without one
+(tested on a library with about 210 of them), and the empty companion PAK is the same 416 bytes RivalsFPS's Fix Mods writes,
+so new mods carry nothing an anti-cheat could object to. 0012's stripped-directory recovery also matches the companion's own
+`chunknames` and `patched_files` entries, which no game PAK lists, so such a mod reads unless it also carries its own loose files
+that no game PAK has (0012's existing limit).
+
 Patches stack: each applies on top of the ones before it, in name order.
 
 `0012-read-stripped-pak-directories.patch` recovers a mod's missing filename directory by matching its V11 path hashes

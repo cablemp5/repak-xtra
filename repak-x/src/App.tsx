@@ -812,11 +812,26 @@ function App() {
     }
   }
 
-  const handleCheckForUpdates = async (silent = false) => {
+  // repakxtra: the start-up check tries again at 8, 25, 60, and 180 s when it fails (offline at start, GitHub busy), and
+  // an update once found stays found: a later check (one that fails, or GitHub's list cached without it) never hides it
+  // A retry never reopens it (only a click on Check now does), and one check runs at a time
+  const foundUpdate = useRef<any>(null)
+  const checkingUpdate = useRef(false)
+  const handleCheckForUpdates = async (silent = false, attempt = 0) => {
+    if (foundUpdate.current) {
+      if (!silent) {
+        setUpdateInfo(foundUpdate.current);
+        setShowUpdateModal(true);
+      }
+      return;
+    }
+    if (checkingUpdate.current) return;
+    checkingUpdate.current = true;
     setIsCheckingUpdates(true);
     try {
       const result = await invoke('check_for_updates') as any;
       if (result) {
+        foundUpdate.current = result;
         setUpdateInfo(result);
         setShowUpdateModal(true);
         console.debug('[Updates] Update available, opening UpdateAppModal', { latest: result.latest });
@@ -825,10 +840,13 @@ function App() {
       }
     } catch (error) {
       uiLog.warn('Update', `Update check failed: ${error}`);
+      const retry = [8, 25, 60, 180][attempt]
+      if (silent && retry) setTimeout(() => { void handleCheckForUpdates(true, attempt + 1) }, retry * 1000)
       if (!silent) {
         alert.error('Update Check Failed', String(error));
       }
     } finally {
+      checkingUpdate.current = false;
       setIsCheckingUpdates(false);
     }
   };
@@ -3651,7 +3669,7 @@ function App() {
           onBrowseGamePath={handleBrowseGamePath}
           isGamePathLoading={loading}
           setParallelProcessing={handleSetParallelProcessing}
-          onCheckForUpdates={handleCheckForUpdates}
+          onCheckForUpdates={() => void handleCheckForUpdates(false)} /* repakxtra: the click event was read as silent */
           onViewChangelog={handleViewChangelog}
           isCheckingUpdates={isCheckingUpdates}
           onReplayTour={handleReplayTour}

@@ -1,0 +1,52 @@
+--- a/src/UAssetTool/IoStore/ChunkNamesPakWriter.cs
++++ b/src/UAssetTool/IoStore/ChunkNamesPakWriter.cs
+@@ -7,8 +7,8 @@ namespace UAssetTool.IoStore;
+ 
+ /// <summary>
+ /// Creates companion PAK files for IoStore bundles.
+-/// The companion PAK contains a single "chunknames" entry listing all files in the IoStore.
+-/// This is required for the game's mod loader to recognize and mount the IoStore container.
++/// The companion PAK must exist for the game to mount the IoStore container. repakxtra writes it empty (plus any hybrid
++/// raw files). The game loads a mod with or without the "chunknames" entry it used to carry, so it is left out.
+ /// 
+ /// Reference: repak-gui/src/install_mod/install_mod_logic/iotoc.rs lines 269-288
+ /// </summary>
+@@ -36,15 +36,12 @@ public static class ChunkNamesPakWriter
+         string? aesKeyHex = null,
+         IEnumerable<(string inPakPath, byte[] data)>? rawFiles = null)
+     {
+-        // Build chunknames content - newline-separated list of relative paths
+-        string chunkNamesContent = string.Join("\n", filePaths);
+-        byte[] chunkNamesBytes = Encoding.UTF8.GetBytes(chunkNamesContent);
+ 
+         // Create PAK writer
+         using var pakWriter = new PakWriter(mountPoint, pathHashSeed, aesKeyHex);
+ 
+-        // Add the chunknames entry (no compression)
+-        pakWriter.AddEntry("chunknames", chunkNamesBytes);
++        // repakxtra: no chunknames entry: the game mounts the container without it (an empty companion PAK, as RivalsFPS
++        // writes too). Hybrid raw files below still go in.
+ 
+         // Add any hybrid raw files as real loose entries alongside chunknames.
+         int rawCount = 0;
+@@ -61,7 +58,6 @@ public static class ChunkNamesPakWriter
+         pakWriter.Write(pakPath);
+ 
+         Console.Error.WriteLine($"[ChunkNamesPakWriter] Created companion PAK: {pakPath}");
+-        Console.Error.WriteLine($"[ChunkNamesPakWriter]   Files listed: {chunkNamesContent.Split('\n').Length}");
+         if (rawCount > 0)
+             Console.Error.WriteLine($"[ChunkNamesPakWriter]   Raw (hybrid) files embedded: {rawCount}");
+     }
+--- a/src/UAssetTool/IoStore/PakReader.cs
++++ b/src/UAssetTool/IoStore/PakReader.cs
+@@ -374,6 +374,10 @@ public class PakReader : IDisposable
+             throw new InvalidDataException("This PAK has no filename directory. Read it from the game's Paks folder.");
+ 
+         var remaining = hashes.Where(h => (h.Value & 0x80000000u) == 0).ToDictionary(h => h.Key, h => h.Value);
++        // repakxtra: a companion PAK's own entries are not game paths, so no game PAK lists them
++        foreach (string own in new[] { "chunknames", "patched_files" })
++            if (remaining.Remove(PakWriter.Fnv64Path(own, PathHashSeed), out uint ownOffset))
++                _entries[own] = ParseEncodedEntry(encodedEntries, checked((int)ownOffset));
+         foreach (string candidate in Directory.EnumerateFiles(paks.FullName, "*.pak").OrderBy(p => p, StringComparer.OrdinalIgnoreCase))
+         {
+             if (remaining.Count == 0) break;
