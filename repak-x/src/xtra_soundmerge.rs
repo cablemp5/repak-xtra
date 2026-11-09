@@ -651,7 +651,7 @@ mod tests {
         assert_eq!(file_name("../.."), "Merged sounds");
         assert_eq!(wem_id("wwiseaudio/media/12/345.wem"), 345);
         assert_eq!(file_label(r"C:\m\minecraft_sfx_v7_9999999_P.pak"), "minecraft_sfx_v7");
-        assert_eq!(file_label(r"C:\mbc_v7.pak"), "abc_v7");
+        assert_eq!(file_label(r"C:\m\abc_v7.pak"), "abc_v7");
         assert_eq!(bank_name("wwiseaudio/bnk_sfx_1026001.bnk"), "bnk_sfx_1026001");
         assert_eq!(sound_key("Marvel/Content/WwiseAudio/bnk_X.bnk").as_deref(), Some("wwiseaudio/bnk_x.bnk"));
         assert_eq!(sound_key("WwiseAudio/Media/12/34.wem").as_deref(), Some("wwiseaudio/media/12/34.wem"));
