@@ -85,7 +85,7 @@ type ModItemProps = {
     onClearRenaming?: () => void
     gameRunning?: boolean
     onRenameBlocked?: () => void
-    onDeleteBlocked?: () => void
+    onDeleteBlocked?: (path?: string) => void // repakxtra: the path, so its delete can wait for the game to close
     modDetails?: ModDetailsRecord
     holdToDelete?: boolean
     animationsEnabled?: boolean
@@ -118,7 +118,7 @@ type ModsListProps = {
     gridRef?: React.Ref<HTMLDivElement>
     gameRunning?: boolean
     onRenameBlocked?: () => void
-    onDeleteBlocked?: () => void
+    onDeleteBlocked?: (path?: string) => void // repakxtra: the path, so its delete can wait for the game to close
     holdToDelete?: boolean
     enableAnimations?: boolean
 }
@@ -221,7 +221,7 @@ const ModItem = memo(function ModItem({
         e.stopPropagation()
         if (!holdToDelete) return // repakxtra: without hold, Delete acts on click (release, Enter or Space), see clickDelete
         if (gameRunning) {
-            onDeleteBlocked?.()
+            onDeleteBlocked?.(mod.path)
             return
         }
         const shouldPermanentDelete = e.shiftKey
@@ -246,7 +246,7 @@ const ModItem = memo(function ModItem({
         e.stopPropagation()
         if (holdToDelete) return
         if (gameRunning) {
-            onDeleteBlocked?.()
+            onDeleteBlocked?.(mod.path)
             return
         }
         requestDelete(e.shiftKey)

@@ -1,7 +1,7 @@
 // repakxtra: the conflicts screen (Check Conflicts, and a mod's own conflict check), in place of Repak X's ClashPanel.
 // Mods that are on and change the same game files are grouped by exactly which files they share, and each group says
 // in words what they replace ("Both replace Black Panther's materials"), with each mod's priority and switch below.
-// Below them, mods hidden by a higher priority mod (xtra_hidden_mods), each with Load on top.
+// Below them, mods hidden by a higher priority mod (xtra_hidden_mods), each with Load on top, then Duplicates.tsx.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { invoke } from '@tauri-apps/api/core'
@@ -15,6 +15,7 @@ import { useDialogFocus } from './dialogFocus'
 import { cue } from './sounds'
 import { LoadoutTag } from './LoadoutTag'
 import { useShownBusy } from './shownBusy'
+import Duplicates, { type DupMod } from './Duplicates'
 
 type Clash = { file_path: string; mod_paths: string[]; files?: string[] }
 type Mod = { path: string; priority?: number; enabled?: boolean }
@@ -210,10 +211,11 @@ function Group({ g, heroes, find, done, hidden, onSetPriority, onToggleMod, onKe
 }
 
 /** `scope`: a mod's own conflict check, whose hidden section lists only that mod's pairs. */
-export default function ConflictsPanel({ clashes, mods = [], characterData = [], scope, onSetPriority, onToggleMod, onKeep, onClose }: {
+export default function ConflictsPanel({ clashes, mods = [], characterData = [], scope, onSetPriority, onToggleMod, onKeep, onRemoveDuplicates, onClose }: {
   clashes: Clash[]; mods?: Mod[]; characterData?: Hero[]; scope?: string | null
   onSetPriority?: (path: string, priority: number) => void; onToggleMod?: (path: string) => void
   onKeep?: (keep: string, others: Mod[]) => unknown; onClose: () => void
+  onRemoveDuplicates?: (paths: string[]) => Promise<unknown> // repakxtra: Duplicates' copies to Recently deleted
 }) {
   useHeroImages()
   const { ref: dialog, onKeyDown: trap } = useDialogFocus(true, onClose) // focus inside, Tab stays inside, Esc closes, back to the opener on close
@@ -297,6 +299,7 @@ export default function ConflictsPanel({ clashes, mods = [], characterData = [],
               </div>
             </section>
           )}
+          {!scope && <Duplicates mods={mods as DupMod[]} onRemove={onRemoveDuplicates} />}{/* repakxtra: the whole library's, not in a mod's own check */}
         </div>
         <div className="modal-footer cf-footer">
           <button type="button" className="btn-primary" onClick={onClose}>Done</button>

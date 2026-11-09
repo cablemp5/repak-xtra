@@ -90,6 +90,12 @@ pub const TOAST_EVENT: &str = "toast_notification";
 
 /// Emit a toast notification to the frontend
 pub fn emit_toast(window: &Window, payload: ToastPayload) {
+    if crate::xtra_ops::tagged(&payload.description) {
+        // repakxtra: the operation's own dialog says it (xtra_ops.rs, custom/opDialogs.tsx). The install, which only
+        // hears of a failure through its toast, hears it here
+        let _ = window.emit("xtra_op_refused", &payload);
+        return;
+    }
     if let Err(e) = window.emit(TOAST_EVENT, &payload) {
         log::error!("Failed to emit toast notification: {}", e);
     }

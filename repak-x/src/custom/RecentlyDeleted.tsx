@@ -9,6 +9,7 @@ import { useAlert } from '../components/AlertHandler'
 import { formatFileSize } from '../utils/format'
 import { type DeletedLoadout, forgetDeleted, nameKey, restoreLoadout, useDeletedLoadouts } from './loadoutStore'
 import { ModName, plural } from './modName'
+import { runOp } from './opDialogs'
 
 type Trashed = { id: string; paths: string[]; size: number; deleted: number; expires: number }
 
@@ -35,8 +36,8 @@ export default function RecentlyDeleted() {
   const restore = async (t: Trashed) => {
     setBusy(t.id)
     try {
-      await invoke('restore_trashed_mods', { ids: [t.id] })
-      alert.success('Restored', `${name(t)} is back in the mods folder.`)
+      // game open, or a mod of that name installed since: the shared dialog asks (custom/opDialogs.tsx)
+      if (await runOp('restore this mod', mode => invoke('restore_trashed_mods', { ids: [t.id], mode }))) alert.success('Restored', `${name(t)} is back in the mods folder.`)
     } catch (e) {
       alert.error('Not restored', String(e))
     } finally {

@@ -5,6 +5,8 @@
 
 mod asset_explorer;
 mod xtra_classify; // repakxtra: extra mod types, Project Galacta check
+mod xtra_dupes; // repakxtra: same-content installs and Check Conflicts' Duplicates
+mod xtra_ops; // repakxtra: game open, file in use, and name taken, one dialog each
 mod xtra_made; // repakxtra: installed mods keep when they were made (the Needs VFX update check)
 mod xtra_vfx_check; // repakxtra: Check for VFX update (built for this game version or an older one)
 mod xtra_edition;
@@ -971,7 +973,10 @@ async fn set_mod_priority(
             return Err(format!("{} already exists", new_f.display()));
         }
     }
-    crate::xtra_bundle::move_all(&moves).map_err(|e| format!("Failed to rename mod: {}", e))?;
+    crate::xtra_bundle::move_all(&moves).map_err(|e| match e.contains("os error 32") { // repakxtra: the shared in-use dialog
+        true => xtra_ops::io(&std::io::Error::from_raw_os_error(32)).unwrap_or(e),
+        false => format!("Failed to rename mod: {}", e),
+    })?;
 
     // Invalidate cache for old path
     {
@@ -3152,6 +3157,7 @@ async fn install_mods(
         let _mutation = _mutation;
         use std::panic;
 
+        let mut same_count = 0; // repakxtra: mods left out as already installed
         let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
             window_for_logs
                 .emit("install_log", "Starting installation...")
@@ -3220,12 +3226,15 @@ async fn install_mods(
 
             // repakxtra: an install from the Library never replaces a mod already installed under its name
             installable_mods.iter_mut().for_each(|m| m.keep_both = true);
+            let left = xtra_dupes::leave_out_installed(&mod_directory, &mut installable_mods, &window_for_logs); // repakxtra
+            same_count = left.same;
             let install_results = install_mods_in_viewport(
                 &mut installable_mods,
                 &mod_directory,
                 &installed_counter,
                 &stop_flag,
             );
+            xtra_dupes::record_installed(&mod_directory, left, &installable_mods, &install_results); // repakxtra
             window_for_logs
                 .emit("install_log", "Exited install_mods_in_viewport")
                 .ok();
@@ -3269,7 +3278,9 @@ async fn install_mods(
                 let failed: Vec<&crate::install_mod::install_mod_logic::ModInstallResult> =
                     install_results.iter().filter(|r| !r.success).collect();
                 let failed_count = failed.len();
-                if total == 0 {
+                if total == 0 && same_count > 0 {
+                    // repakxtra: every mod was already installed: xtra_install_same said so, nothing failed
+                } else if total == 0 {
                     let msg = "No mods were processed.".to_string();
                     window_for_logs.emit("install_log", &msg).ok();
                     toast_events::emit_installation_failed(&window_for_logs, &msg);
@@ -3409,11 +3420,17 @@ async fn delete_mod(
         is_disabled
     );
 
+    // repakxtra: nothing moves unless every file of the mod can (the game or another program can hold the .ucas alone)
+    if let Err(e) = xtra_ops::all_free(&[actual_path.clone(), crate::xtra_bundle::companion(&actual_path, "utoc"), crate::xtra_bundle::companion(&actual_path, "ucas")]) {
+        xtra_trash::release_if_empty(&trash);
+        return Err(e);
+    }
+
     // Try to delete the main file
     if actual_path.exists() {
         if let Err(e) = xtra_trash::discard(&trash, &actual_path) { // repakxtra
             xtra_trash::release_if_empty(&trash); // repakxtra
-            let error_msg = format!("Failed to delete mod file: {}", e);
+            let error_msg = xtra_ops::io(&e).unwrap_or_else(|| format!("Failed to delete mod file: {}", e)); // repakxtra
             toast_events::emit_delete_failed(&window, &error_msg);
             return Err(error_msg);
         }
@@ -4174,6 +4191,7 @@ mod rename_mod_files_tests {
 async fn rename_mod(
     mod_path: String,
     new_name: String,
+    mode: Option<String>, // repakxtra: "replace" or "keep_both" when the name is taken (xtra_ops::place)
     window: Window,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<String, String> {
@@ -4261,10 +4279,12 @@ async fn rename_mod(
         format!("{}.{}", new_stem, extension)
     };
     let new_path = parent.join(&new_file_name);
+    // repakxtra: a picked Replace (the mod there to Recently deleted) or Keep both ("Name (1)")
+    let new_path = if mode.is_some() && is_pak_type { xtra_ops::place(&new_path, &old_path_buf, mode.as_deref())? } else { new_path };
 
-    let overwrite = is_pak_type && state.lock().unwrap().allow_mod_overwrite;
-    if !overwrite {
-        if let Some(error_msg) = xtra_export::name_taken(parent, &old_stem, &new_stem) { // repakxtra: on, off and .utoc/.ucas names too
+    let overwrite = mode.is_none() && is_pak_type && state.lock().unwrap().allow_mod_overwrite; // repakxtra: mode
+    if !overwrite && mode.is_none() { // repakxtra: mode
+        if let Some(error_msg) = xtra_export::name_taken(parent, &old_stem, &new_stem).map(xtra_ops::collision) { // repakxtra: on, off and .utoc/.ucas names too; the shared dialog
             toast_events::emit_rename_failed(&window, &error_msg);
             return Err(error_msg);
         }
@@ -4284,7 +4304,7 @@ async fn rename_mod(
         rename_path_case_safe(&old_path_buf, &new_path)
     };
     if let Err(e) = renamed {
-        let error_msg = format!("Failed to rename file: {}", e);
+        let error_msg = xtra_ops::io(&e).unwrap_or_else(|| format!("Failed to rename file: {}", e)); // repakxtra
         toast_events::emit_rename_failed(&window, &error_msg);
         return Err(error_msg);
     }
@@ -4754,9 +4774,10 @@ async fn move_folder(
 async fn assign_mod_to_folder(
     mod_path: String,
     folder_id: Option<String>,
+    mode: Option<String>, // repakxtra: "replace" or "keep_both" when the name is taken there (xtra_ops::place)
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
-) -> Result<(), String> {
+) -> Result<String, String> { // repakxtra: where it ended up (Keep both gives it a new name)
     crate::xtra_builtins::fixed_place(Path::new(&mod_path))?; // repakxtra
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
@@ -4787,31 +4808,32 @@ async fn assign_mod_to_folder(
     };
 
     if dest_path == source_path {
-        return Ok(());
+        return Ok(mod_path); // repakxtra
     }
 
     // repakxtra: on Windows a rename replaces the file already there, which would delete a same-named mod in that folder
     // (on or off, and its .utoc/.ucas). Unless Settings allows overwriting
+    let dest_path = if mode.is_some() { xtra_ops::place(&dest_path, &source_path, mode.as_deref())? } else { dest_path }; // repakxtra
     let taken = ["pak", "bak_repak", "pak_disabled", "utoc", "ucas"].iter().any(|x| dest_path.with_extension(x).exists());
-    if !state.allow_mod_overwrite && dest_path.parent() != source_path.parent() && taken {
-        let error_msg = "A mod with the same file name is already in that folder".to_string();
+    if mode.is_none() && !state.allow_mod_overwrite && dest_path.parent() != source_path.parent() && taken {
+        let error_msg = xtra_ops::collision("A mod with the same file name is already in that folder."); // repakxtra: the shared dialog
         toast_events::emit_move_failed(&window, &error_msg);
         return Err(error_msg);
     }
 
     // Move the mod together with its .utoc and .ucas files (IoStore files)
-    let moved = if state.allow_mod_overwrite {
+    let moved = if state.allow_mod_overwrite && mode.is_none() { // repakxtra: mode
         replace_mod_files(&source_path, &dest_path)
     } else {
         rename_mod_files(&source_path, &dest_path)
     };
     if let Err(e) = moved {
-        let error_msg = format!("Failed to move mod: {}", e);
+        let error_msg = xtra_ops::io(&e).unwrap_or_else(|| format!("Failed to move mod: {}", e)); // repakxtra
         toast_events::emit_move_failed(&window, &error_msg);
         return Err(error_msg);
     }
 
-    Ok(())
+    Ok(dest_path.to_string_lossy().into_owned())
 }
 
 #[tauri::command]
@@ -4938,7 +4960,7 @@ async fn toggle_mod(
     }
 
     if let Err(e) = std::fs::rename(&path, &new_path) {
-        let error_msg = xtra_vfx::in_use_message(&e).unwrap_or_else(|| format!("Failed to toggle mod: {}", e)); // repakxtra: says when the game holds it
+        let error_msg = xtra_ops::io(&e).unwrap_or_else(|| format!("Failed to toggle mod: {}", e)); // repakxtra: says when the game holds it
         toast_events::emit_toggle_failed(&window, &error_msg);
         return Err(error_msg);
     }
@@ -8694,6 +8716,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             xtra_trash::restore_trashed_mods,
             xtra_trash::list_trashed_mods,
+            xtra_dupes::xtra_find_duplicates, // repakxtra
             xtra_trash::empty_trashed_mods,
             xtra_previews::list_mod_previews, xtra_previews::delete_loadout_previews,
             xtra_previews::get_mod_preview,

@@ -3353,3 +3353,23 @@ html[data-toasts-held] .toast-container { display: none; }   /* the welcome flow
 @media (prefers-reduced-motion: reduce) {
   .t-stack-banner { transition: none !important; filter: none !important; }   /* the poses stay (the peek math needs the scale), only the motion goes */
 }
+
+/* repakxtra: game open, file in use, and name taken (custom/opDialogs.tsx): one small dialog over every other modal,
+   Settings and the changelog included, title and words left, actions right (Jakob: Windows' own replace dialog) */
+.op-overlay { z-index: 10002 !important; }
+.op-modal { width: min(420px, calc(100vw - 32px)) !important; max-width: none !important; padding: 20px !important; display: flex; flex-direction: column; gap: 8px; }
+.op-modal:focus { outline: none; }
+.op-title { margin: 0; font-size: 15px !important; font-weight: 600; line-height: 1.4; color: var(--text-primary); text-wrap: balance; }
+.op-body { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
+.op-wait { margin: 4px 0 0; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
+.op-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+/* repakxtra: Check Conflicts' Duplicates (custom/Duplicates.tsx): the hidden mods' fold and cards, a quiet count, Stays in
+   the lifted accent like Wins, and the one action under the sets (one look per button kind: .lo-text-btn) */
+.cf-dupe-count { margin-left: 4px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 500; line-height: 18px; color: var(--text-secondary); background: rgba(255, 255, 255, 0.08); }
+.cf-stays { flex: none; font-size: 12px; font-weight: 500; color: var(--focus-ring); }
+.cf-dupe-meta { flex: none; font-size: 12px; color: var(--text-secondary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cf-dupe-actions { display: flex; }
+/* the dialog's blue action: the app's .btn-primary at the quiet buttons' height and type (as in Check Conflicts' footer) */
+.op-modal .btn-primary { height: 32px !important; min-height: 0 !important; padding: 0 16px !important; font-size: 13px !important; font-weight: 500 !important;
+  width: auto !important; flex: none; border-radius: var(--quiet-radius) !important; }
