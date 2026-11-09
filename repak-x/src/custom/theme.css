@@ -3400,7 +3400,7 @@ html[data-toasts-held] .toast-container { display: none; }   /* the welcome flow
 .ms-row { display: contents; }
 .ms-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; min-width: 0; padding: 0 4px 2px; font-size: 12px; font-weight: 600; color: var(--text-primary); }
 .ms-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ms-all { flex: none; padding: 0; border: 0; background: none; font: 500 12px var(--font-sans, inherit); color: color-mix(in srgb, var(--accent-primary), white 30%); cursor: pointer; }
+.ms-all { flex: none; display: inline; height: auto !important; min-height: 0 !important; padding: 0; border: 0; background: none; font: 500 12px/1.5 var(--font-sans, inherit); color: color-mix(in srgb, var(--accent-primary), white 30%); cursor: pointer; }
 .ms-all:hover { text-decoration: underline; }
 .ms-sticky { position: sticky; left: 0; z-index: 1; background: var(--bg-darker); }
 .ms-num { display: flex; align-items: center; gap: 8px; padding: 0 4px; font: 12px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-secondary); }
