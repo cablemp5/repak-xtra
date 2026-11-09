@@ -125,8 +125,11 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       if (!live || !(await invoke<boolean>('previews_available').catch(() => false))) return
       const mods = list.filter(p => !isModLoader(p))
       let found = 0
-      for (let i = 0; i < mods.length && live; i += 5) {
-        try { found += await invoke<number>('run_texcheck', { paths: mods.slice(i, i + 5) }) } catch { break }
+      // 40 a run: the kit starts (and mounts the game) once per run, and a click on Rotate in 3D or Generate preview
+      // stops it after its current mod (xtra_viewer.rs reserve_waiting), so it never waits on a whole run
+      const BATCH = 40
+      for (let i = 0; i < mods.length && live; i += BATCH) {
+        try { found += await invoke<number>('run_texcheck', { paths: mods.slice(i, i + BATCH) }) } catch { break }
       }
       if (live && found) await check()
     }

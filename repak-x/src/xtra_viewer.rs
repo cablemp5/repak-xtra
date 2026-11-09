@@ -48,7 +48,9 @@ fn stamp_of(paths: &[String]) -> serde_json::Value {
     let mut rows: Vec<serde_json::Value> = paths.iter().map(|p| {
         let m = std::fs::metadata(p).ok();
         let t = m.as_ref().and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_nanos() as u64);
-        serde_json::json!([p.to_lowercase().replace('/', "\\"), m.map(|m| m.len()), t])
+        let k = p.to_lowercase().replace('/', "\\");
+        let k = [".pak_disabled", ".bak_repak", ".pak"].iter().find_map(|x| k.strip_suffix(x)).unwrap_or(&k).to_string();
+        serde_json::json!([k, m.map(|m| m.len()), t])
     }).collect();
     rows.sort_by_key(|r| r[0].as_str().unwrap_or_default().to_string());
     serde_json::Value::Array(rows)
@@ -70,6 +72,10 @@ pub fn viewer_state(key: String, paths: Vec<String>) -> &'static str {
         // kit 20: the skin's shared part it reads can be gone (the kit removes bases from an older game build): made again
         let base_gone = base_of(&read(export.join("model.json"))).is_some_and(|b| !dir.join("3d-base").join(b).join("model.glb").is_file());
         return if !base_gone && (paths.is_empty() || read(export.join("stamp.json")) == stamp_of(&paths)) { "ready" } else { "stale" };
+    }
+    let none = dir.join(format!("{key}.3d-none.json"));
+    if none.is_file() && (paths.is_empty() || read(none) == stamp_of(&paths)) {
+        return "none";
     }
     let kind = read(dir.join("index.json"))[&key]["kind"].as_str().map(str::to_string).unwrap_or_default();
     if kind == "overridden" || read(dir.join(format!("{key}.json")))["overridden"] == true {
@@ -144,10 +150,22 @@ pub(crate) fn reserve_waiting(who: &'static str) -> Result<crate::xtra_previews:
     }
     let _done = Done(who != "texcheck");
     let until = std::time::Instant::now() + std::time::Duration::from_secs(90);
+    let stop = previews_dir().join("cancel");
+    let mut stopped = false;
     loop {
         match reserve(who) {
-            Err("texcheck") if who != "texcheck" && std::time::Instant::now() < until => std::thread::sleep(std::time::Duration::from_millis(200)),
-            other => return other,
+            Err("texcheck") if who != "texcheck" && std::time::Instant::now() < until => {
+                if !stopped {
+                    stopped = std::fs::write(&stop, b"").is_ok();
+                }
+                std::thread::sleep(std::time::Duration::from_millis(200))
+            }
+            other => {
+                if stopped {
+                    let _ = std::fs::remove_file(&stop); // only the Stop this click wrote, before its own run starts
+                }
+                return other;
+            }
         }
     }
 }
@@ -182,8 +200,12 @@ pub async fn generate_mod_viewer(app: AppHandle, paths: Vec<String>, set: Option
                 result = "ready";
             }
         })?;
+        let none = previews_dir().join(format!("{key}.3d-none.json"));
         if result == "ready" {
             let _ = std::fs::write(previews_dir().join(format!("{key}.3d")).join("stamp.json"), stamp_of(&paths).to_string());
+            let _ = std::fs::remove_file(none);
+        } else if result == "none" {
+            let _ = std::fs::write(none, stamp_of(&paths).to_string());
         }
         Ok(result.to_string())
     })
@@ -198,20 +220,40 @@ pub async fn generate_mod_viewer(app: AppHandle, paths: Vec<String>, set: Option
 pub async fn run_texcheck(paths: Vec<String>, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<usize, String> {
     let paks = paks_of(&state);
     tauri::async_runtime::spawn_blocking(move || {
-        // answers the kit already has for these files: no kit start for them (most Library scans start none)
-        let store = texcheck_store();
-        let todo: Vec<String> = paths.into_iter().filter(|p| utoc_of(Path::new(p)).is_file() && texcheck_entry(&store, Path::new(p)).is_none()).collect();
+        // mods the kit already answered (or could not check) for these files and this game build: no kit start for
+        // them, so most Library scans start none, and a game update asks again
+        let game = paks.as_deref().map(|p| crate::xtra_broken::build_key(&crate::xtra_broken::game_containers(p))).unwrap_or_default();
+        let seen_path = previews_dir().join("texcheck-seen.json");
+        let mut seen: serde_json::Map<String, serde_json::Value> = std::fs::read_to_string(&seen_path).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+        let sig = |p: &Path| -> Option<String> {
+            let m = std::fs::metadata(utoc_of(p)).ok()?;
+            let ns = m.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_nanos();
+            Some(format!("{}:{ns}:{game}", m.len()))
+        };
+        let todo: Vec<String> = paths.into_iter().filter(|p| sig(Path::new(p)).is_some_and(|s| seen.get(&kit_key(&utoc_of(Path::new(p)))).and_then(|v| v.as_str()) != Some(s.as_str()))).collect();
         if todo.is_empty() {
             return Ok(0);
         }
         let jobs = jobs_of(&todo);
         let mut found = 0;
+        let mut answered: Vec<String> = Vec::new();
         let ok = run_kit("texcheck", "--texcheck", &jobs, None, paks, |l| {
+            // TEXCHECK <key> {json} or TEXCHECK_FAIL <key>: either way the kit has had its say on this mod
+            if let Some(key) = l.strip_prefix("TEXCHECK_FAIL ").or_else(|| l.strip_prefix("TEXCHECK ").and_then(|r| r.split(' ').next())) {
+                answered.push(key.trim().to_string());
+            }
             let bad = l.strip_prefix("TEXCHECK ").and_then(|rest| rest.split_once(' '))
                 .and_then(|(_, json)| serde_json::from_str::<serde_json::Value>(json).ok())
                 .is_some_and(|v| v["unreadable"].as_array().is_some_and(|a| !a.is_empty()));
             found += usize::from(bad);
         })?;
+        for p in &todo {
+            let key = kit_key(&utoc_of(Path::new(p)));
+            if let (true, Some(s)) = (answered.contains(&key), sig(Path::new(p))) {
+                seen.insert(key, serde_json::Value::String(s));
+            }
+        }
+        let _ = std::fs::write(&seen_path, serde_json::Value::Object(seen).to_string());
         if !ok {
             return Err("The texture check did not finish (a preview kit older than 19 has none). The details are in Logs.".to_string());
         }

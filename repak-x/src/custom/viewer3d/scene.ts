@@ -1,8 +1,7 @@
 // repakxtra: the Rotate in 3D scene (three.js) for one preview kit export, <previews>\<key>.3d (kit 19, mod_previews.py
 // export_viewer): model.glb (mesh and skeleton), Materials\<slot>.json, tex\ + textures.json, idle.json + idle.bin, props.json.
 // Every file comes over IPC as bytes (xtra_viewer.rs get_viewer_file): the glb is parsed from memory and textures are
-// ImageBitmaps, so nothing needs a new CSP source. The look follows the approach in docs\rivalsfps\BREAKDOWN.md ("3D skin
-// viewer"), written fresh: toon bands, one key light that follows the camera, flat ambient, no outline or rim band
+// ImageBitmaps, so nothing needs a new CSP source. The look: toon bands, one key light that follows the camera, flat ambient, no outline or rim band
 // (repakxtra's rule: no preview outlines). Renders on demand: the idle at 30 fps while the canvas is on screen and the
 // window is shown, nothing otherwise. dispose() frees every GPU resource and the WebGL context.
 import * as THREE from 'three'
