@@ -2676,7 +2676,7 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 .lo-media-chip:hover { background: rgba(10, 11, 14, 0.9) !important; }
 .lo-media-chip svg.lucide { width: 12px !important; height: 12px !important; }
 .lo-media-chip .bulk-num, .lo-media-chip .setup-chip { display: none; }
-.lo-media-gen { gap: 8px; }
+.lo-media-gen { gap: 6px; flex-direction: column; align-items: flex-start; }   /* Rotate in 3D above Regenerate: side by side they overlapped on narrow cards */
 
 /* Typed words in place of a picture: big, bold, centered, sized to the card (container query units), with the picked
    icon above them; a picked color tints the words and the icon */
@@ -3388,7 +3388,30 @@ html[data-toasts-held] .toast-container { display: none; }   /* the welcome flow
 .v3d-state p { margin: 0; max-width: 220px; line-height: 1.45; }
 .v3d-hint { position: absolute; bottom: 8px; left: 0; right: 0; text-align: center; font-size: 11px; color: var(--text-secondary); pointer-events: none; }
 html[data-motion="off"] .v3d-state, html[data-motion="off"] .v3d-canvas { animation: none; transition: none; }
-.lo-media .v3d { z-index: 1; }
-.lo-media .v3d-hint { top: 8px; bottom: auto; }   /* the corner chips sit at the bottom on hover */
+/* transitions.dev: Skeleton loader. While the model is made or loads: a rendering preview card's look (.lo-skel), the dim
+   layer and one band sweeping across, over a silhouette (the Blender logo for 3D) lit from the top and fading down, with
+   one white line for the step (each new one rises in with SwapText) */
+.v3d-skel { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden;
+  background: rgba(6, 7, 9, 0.55); pointer-events: none; }
+.v3d-skel::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.07) 50%, transparent 100%);
+  transform: translateX(-100%); animation: lo-skel-sweep 1.6s ease-in-out infinite; }
+.v3d-skel-shape { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.08) 55%, rgba(255, 255, 255, 0) 100%);
+  mask-size: 78% auto; mask-position: center; mask-repeat: no-repeat; -webkit-mask-size: 78% auto; -webkit-mask-position: center; -webkit-mask-repeat: no-repeat;
+  animation: t-swap-in var(--reveal-dur) var(--reveal-ease) backwards; }
+.v3d-skel-stage { position: relative; z-index: 1; padding: 0 12px; text-align: center; font-size: 13px; font-weight: 600; line-height: 1.3;
+  color: var(--text-primary); text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8); }
+html[data-motion="off"] .v3d-skel::after, html[data-motion="off"] .v3d-skel-shape { animation: none !important; }
+/* A loadout's model in its centered window (Viewer3DWindow): as big as the screen allows, the controls once at the bottom */
+.v3d-window { width: min(960px, 92vw) !important; max-width: none !important; height: min(860px, 90vh); max-height: 90vh; padding: 0 !important;
+  display: flex; flex-direction: column; overflow: hidden; }
+.v3d-window .modal-header { padding: 16px 20px !important; align-items: flex-start; gap: 12px; }
+.v3d-window-title { min-width: 0; }
+.v3d-window-title h2 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v3d-window .modal-close { display: grid; place-items: center; width: 32px; height: 32px; line-height: 1; flex: none; margin-left: auto; }
+.v3d-window-view { position: relative; flex: 1; min-height: 0; }
+.v3d-window-view .v3d { border-radius: 0; }
+.v3d-window-foot { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--panel-border); }
+.v3d-window-foot span { margin-right: auto; font-size: 12px; color: var(--text-secondary); }
+.v3d-window-foot .lo-text-btn { width: auto !important; flex: none; }
 /* ---------- sound mod merger note in mod details (custom/soundMerge.tsx), the details panel's small secondary text ---------- */
 .sound-merge-note p { margin: 0 0 4px; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }

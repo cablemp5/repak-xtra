@@ -18,10 +18,26 @@ fn viewer_path(key: &str, file: &str) -> Option<PathBuf> {
     (valid_key(key) && file.split('/').all(plain)).then(|| previews_dir().join(format!("{key}.3d")).join(file.replace('/', "\\")))
 }
 
+/// Where a file of an export lives: its own folder, else (kit 20) the skin's shared part, previews\3d-base\<base>\, that
+/// texture and material mods on one mesh share (model.glb, idle.json, idle.bin), named by model.json's "base".
+fn viewer_file(key: &str, file: &str) -> Option<PathBuf> {
+    let own = viewer_path(key, file)?;
+    if own.is_file() || file == "model.json" {
+        return Some(own);
+    }
+    let model: serde_json::Value = serde_json::from_slice(&std::fs::read(viewer_path(key, "model.json")?).ok()?).ok()?;
+    Some(previews_dir().join("3d-base").join(base_of(&model)?).join(file.replace('/', "\\")))
+}
+
+/// model.json's "base" when it is a kit base key (16 hex digits), so it never names a path outside 3d-base.
+fn base_of(model: &serde_json::Value) -> Option<&str> {
+    model["base"].as_str().filter(|b| b.len() == 16 && b.bytes().all(|c| c.is_ascii_hexdigit()))
+}
+
 /// One file of a mod's (or loadout's) 3D export, as bytes (parsed in memory and decoded as ImageBitmaps, so no new CSP source).
 #[tauri::command(async)]
 pub fn get_viewer_file(key: String, file: String) -> Result<tauri::ipc::Response, String> {
-    let path = viewer_path(&key, &file).ok_or_else(|| format!("Invalid viewer file: {key} {file}"))?;
+    let path = viewer_file(&key, &file).ok_or_else(|| format!("Invalid viewer file: {key} {file}"))?;
     std::fs::read(path).map(tauri::ipc::Response::new).map_err(|e| e.to_string())
 }
 
@@ -281,6 +297,11 @@ mod tests {
             assert!(viewer_path("Mod", bad).is_none(), "{bad}");
         }
         assert!(viewer_path("../Mod", "model.glb").is_none());
+        assert_eq!(base_of(&serde_json::json!({"base": "936e846268379a8f"})), Some("936e846268379a8f"));
+        for bad in ["..", "936e846268379a8", "936e846268379a8f0", "936e846268379a8g", "../../../../../x"] {
+            assert_eq!(base_of(&serde_json::json!({ "base": bad })), None, "{bad}");
+        }
+        assert_eq!(base_of(&serde_json::json!({})), None);
     }
 
     #[test]

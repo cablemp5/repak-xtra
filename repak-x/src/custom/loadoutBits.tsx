@@ -16,11 +16,11 @@ import { VerdictBadge } from './VerdictBadge'
 import { useVfxUpdating } from './vfx/quick'
 import { GAME_RUNNING } from './keepOne'
 import { CaptionIcon, CaptionStyleBar } from './captionStyle'
-import { loadoutHero, silhouetteOf } from './silhouettes'
+import { heroLabel, loadoutHero, silhouetteOf } from './silhouettes'
 import { CardTools } from './CardTools'
 import { CarouselSlide } from './Carousel'
 import WipeCompare from './WipeCompare'
-import { Rotate3DButton, Viewer3D } from './viewer3d/Rotate3D'
+import { Rotate3DButton, Viewer3DWindow } from './viewer3d/Rotate3D'
 import './support.css'
 import { captionBackgroundKey } from './loadoutStore'
 
@@ -240,9 +240,11 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
               </CarouselSlide>}
       </button>
       {/* before and after, once the kit has the hero's vanilla render (before the arrows, so they stay on top) */}
-      {page && cover === 'preview' && !working && src && slide?.key && !slide.keys && !threeD && <WipeCompare key={slide.key} previewKey={slide.key} />}
-      {threeD && rotate?.length ? <Viewer3D viewKey={previewSetKey(l.id)} paths={rotate} set={previewSetKey(l.id)} /> : null}
-      {slides.length > 1 && !working && !threeD && ( /* no paging while a new preview renders */
+      {page && cover === 'preview' && !working && src && slide?.key && !slide.keys && <WipeCompare key={slide.key} previewKey={slide.key} />}
+      {/* Rotate in 3D opens a centered window on a loadout's page, so the model shows bigger than the card (cable's pick A) */}
+      {threeD && rotate?.length ? <Viewer3DWindow title={l.name} viewKey={previewSetKey(l.id)} paths={rotate} set={previewSetKey(l.id)} onClose={() => setThreeD(false)}
+        sub={[heroLabel(loadoutHero(l.on, p.mods, p.modDetails) ?? ''), `${rotate.length} mod${rotate.length === 1 ? '' : 's'} on the model`].filter(Boolean).join(', ')} /> : null}
+      {slides.length > 1 && !working && ( /* no paging while a new preview renders */
         <>
           <button type="button" className="lo-media-arrow is-prev" title="Previous preview" aria-label="Previous preview" onClick={() => turn(-1)}>
             <ChevronLeft size={16} />
@@ -294,7 +296,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
       {page && !editing && (!empty || working) && (cover === 'preview' || cover === 'capture') && (
         <div className={`lo-media-gen${working ? ' is-busy' : ''}`}>
           {cover === 'preview' && !impossible && !working && rotate && rotate.length > 0 && (
-            <Rotate3DButton on={threeD} hasImage={Boolean(src)} onClick={() => setThreeD(v => !v)} className="lo-media-chip" />)}
+            <Rotate3DButton on={false} hasImage={Boolean(src)} onClick={() => setThreeD(true)} className="lo-media-chip" />)}
           {cover === 'preview' && !impossible && generate!('lo-media-chip')}
           {cover === 'capture' && capture?.show && capture.button('lo-media-chip', 'Capture again')}
         </div>

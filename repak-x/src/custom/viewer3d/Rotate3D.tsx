@@ -1,15 +1,25 @@
 // repakxtra: Rotate in 3D. A button beside Regenerate preview (the mod details panel, a loadout page's preview corner)
 // swaps the preview for the model in 3D in the same frame (cable's overnight pick B, docs\rivalsfps\overnight). The first
 // time for a mod the preview kit exports it (--viewer, xtra_viewer.rs, 5 to 15 s) while the kit's step shows; after that
-// it opens at once. States: loading, ready (the lobby idle plays, drag turns, scroll zooms, double click resets), the
-// game's own model wins (the kit found the mod's mesh loses to the game's by pak order), nothing to show, and error.
-import { useEffect, useRef, useState } from 'react'
+// it opens at once. States: loading, ready (the lobby idle plays, drag turns, middle drag moves, scroll zooms, double
+// click resets), the game's own model wins (the kit found the mod's mesh loses to the game's by pak order), nothing to
+// show, and error. On a loadout page it opens in a centered window instead (cable's pick A, Viewer3DWindow), so the
+// model shows bigger. Loading looks like a preview card rendering: the dim layer and its sweep over a silhouette (the
+// Blender logo for 3D, cable's pick), with one white line for the step, each new step rising in.
+import { useEffect, useRef, useState, type MutableRefObject } from 'react'
+import { createPortal } from 'react-dom'
+import { motion } from 'framer-motion'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { Image as ImageIcon, LoaderCircle, RotateCcw, Rotate3d, TriangleAlert, X } from 'lucide-react'
+import { Image as ImageIcon, RotateCcw, Rotate3d, TriangleAlert, X } from 'lucide-react'
 import { cue } from '../sounds'
 import { stepText } from '../previewStages'
+import { SwapText } from '../motion'
+import { useDialogFocus } from '../dialogFocus'
+import shape from './blender-mask.webp'
 import type { Viewer } from './scene'
+
+const HINT = 'Drag to turn. Middle drag to move. Scroll to zoom.'
 
 type Phase = 'checking' | 'making' | 'loading' | 'ready' | 'overridden' | 'none' | 'failed'
 
@@ -25,7 +35,9 @@ export function Rotate3DButton({ on, hasImage, onClick, className }: { on: boole
 }
 
 /** The 3D view of one preview key (a mod, or a loadout's combined render with `set`), filling its parent. */
-export function Viewer3D({ viewKey, paths, set }: { viewKey: string; paths: string[]; set?: string }) {
+export function Viewer3D({ viewKey, paths, set, control, hint = true }: {
+  viewKey: string; paths: string[]; set?: string; control?: MutableRefObject<Viewer | null>; hint?: boolean
+}) {
   const host = useRef<HTMLDivElement>(null)
   const [phase, setPhase] = useState<Phase>('checking')
   const [step, setStep] = useState('')
@@ -44,6 +56,7 @@ export function Viewer3D({ viewKey, paths, set }: { viewKey: string; paths: stri
       const { createViewer } = await import('./scene') // three.js is fetched on first use, not at app start
       viewer = await createViewer(host.current!, viewKey, document.documentElement.getAttribute('data-motion') === 'off', () => live)
       if (!live) { viewer.dispose(); return }
+      if (control) control.current = viewer
       setPhase('ready')
     }
     ;(async () => {
@@ -66,7 +79,7 @@ export function Viewer3D({ viewKey, paths, set }: { viewKey: string; paths: stri
       setError(typeof e === 'string' ? e : 'The 3D files could not be opened. Try again makes them anew.')
       setPhase('failed')
     })
-    return () => { live = false; stopStage.then(f => f()).catch(() => undefined); viewer?.dispose() }
+    return () => { live = false; stopStage.then(f => f()).catch(() => undefined); viewer?.dispose(); if (control) control.current = null }
   }, [viewKey, set, attempt, pathsSig])
 
   useEffect(() => { if (phase === 'ready') cue('ready') }, [phase])
@@ -75,11 +88,11 @@ export function Viewer3D({ viewKey, paths, set }: { viewKey: string; paths: stri
   return (
     <div className={`v3d is-${phase}`} aria-busy={busy}>
       <div ref={host} className="v3d-host" aria-label={phase === 'ready' ? 'Model in 3D: drag to turn, scroll to zoom, double click to reset' : undefined} />
+      {/* transitions.dev: Skeleton loader and Text states swap, as on a rendering preview card (theme.css .lo-skel) */}
       {busy && (
-        <div className="v3d-state" role="status">
-          <LoaderCircle size={20} className="scan-status-spin" aria-hidden="true" />
-          <b>Preparing the 3D model</b>
-          <span className="t-shimmer">{phase === 'loading' ? 'Loading the model' : step || (phase === 'making' ? 'Starting the preview kit' : 'Looking for the 3D files')}</span>
+        <div className="v3d-skel" role="status">
+          <span className="v3d-skel-shape" aria-hidden="true" style={{ maskImage: `url(${shape})`, WebkitMaskImage: `url(${shape})` }} />
+          <span className="v3d-skel-stage"><SwapText text={phase === 'loading' ? 'Loading the model' : step || (phase === 'making' ? 'Starting the preview kit' : 'Looking for the 3D files')} /></span>
         </div>
       )}
       {phase === 'overridden' && (
@@ -103,8 +116,36 @@ export function Viewer3D({ viewKey, paths, set }: { viewKey: string; paths: stri
           <button type="button" className="mod-preview-btn" onClick={() => setAttempt(a => a + 1)}><RotateCcw size={14} aria-hidden="true" />Try again</button>
         </div>
       )}
-      {phase === 'ready' && <span className="v3d-hint" aria-hidden="true">Drag to turn. Scroll to zoom.</span>}
+      {phase === 'ready' && hint && <span className="v3d-hint" aria-hidden="true">{HINT}</span>}
     </div>
+  )
+}
+
+/** A loadout's model in 3D in a centered window, as big as the screen allows: its name and hero on top, the controls
+ *  written once at the bottom with Reset view and Close. Esc, Close, or a click outside closes it. */
+export function Viewer3DWindow({ title, sub, viewKey, paths, set, onClose }: {
+  title: string; sub: string; viewKey: string; paths: string[]; set?: string; onClose: () => void
+}) {
+  const control = useRef<Viewer | null>(null)
+  const trap = useDialogFocus(true, onClose)
+  return createPortal(
+    <div className="modal-overlay" onClick={onClose}>
+      <motion.div ref={trap.ref} onKeyDown={trap.onKeyDown} tabIndex={-1} className="modal-content v3d-window" role="dialog" aria-modal="true"
+        aria-label={`${title} in 3D`} onClick={e => e.stopPropagation()}
+        initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.15 }}>
+        <div className="modal-header">
+          <div className="v3d-window-title"><h2>{title}</h2><p className="su-sub">{sub}</p></div>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close">×</button>
+        </div>
+        <div className="v3d-window-view"><Viewer3D viewKey={viewKey} paths={paths} set={set} control={control} hint={false} /></div>
+        <div className="v3d-window-foot">
+          <span>{HINT}</span>
+          <button type="button" className="lo-text-btn" onClick={() => control.current?.reset()}><RotateCcw size={14} aria-hidden="true" />Reset view</button>
+          <button type="button" className="lo-text-btn" onClick={onClose}>Close</button>
+        </div>
+      </motion.div>
+    </div>,
+    document.body,
   )
 }
 
