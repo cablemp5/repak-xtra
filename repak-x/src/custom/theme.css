@@ -3373,3 +3373,19 @@ html[data-toasts-held] .toast-container { display: none; }   /* the welcome flow
 /* the dialog's blue action: the app's .btn-primary at the quiet buttons' height and type (as in Check Conflicts' footer) */
 .op-modal .btn-primary { height: 32px !important; min-height: 0 !important; padding: 0 16px !important; font-size: 13px !important; font-weight: 500 !important;
   width: auto !important; flex: none; border-radius: var(--quiet-radius) !important; }
+
+/* ---------- Rotate in 3D (custom/viewer3d): the model in the preview's own frame, its states in the middle ---------- */
+.mod-preview-frame.is-3d { position: relative; }
+.v3d { position: absolute; inset: 0; border-radius: 8px; overflow: hidden; background: radial-gradient(ellipse at 50% 85%, var(--bg-light), var(--bg-darker) 70%); }
+.v3d-host, .v3d-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.v3d-canvas { cursor: grab; opacity: 0; transition: opacity var(--reveal-dur) var(--reveal-ease); touch-action: none; }
+.v3d-canvas:active { cursor: grabbing; }
+.v3d.is-ready .v3d-canvas { opacity: 1; }
+/* transitions.dev: Texts reveal. Each state's words rise in once */
+.v3d-state { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 18px;
+  text-align: center; font-size: 12px; color: var(--text-secondary); animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; }
+.v3d-state b { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.v3d-state p { margin: 0; max-width: 220px; line-height: 1.45; }
+.v3d-hint { position: absolute; bottom: 8px; left: 0; right: 0; text-align: center; font-size: 11px; color: var(--text-secondary); pointer-events: none; }
+html[data-motion="off"] .v3d-state, html[data-motion="off"] .v3d-canvas { animation: none; transition: none; }
+.lo-media .v3d { z-index: 1; }

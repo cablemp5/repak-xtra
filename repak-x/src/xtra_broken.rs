@@ -981,6 +981,12 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                 };
             }
         }
+        // textures the game cannot read, from the preview kit's texture check (xtra_viewer.rs), on a mod no check flagged yet
+        for (path, reason) in crate::xtra_viewer::texcheck_reasons(&mod_paths) {
+            if !verdicts.iter().any(|v| v.path == path) {
+                verdicts.push(Verdict { path, kind: "broken", reason, stale_niagara: 0, usmap_wait: 0, off_only: false });
+            }
+        }
         Ok(verdicts)
     })
     .await

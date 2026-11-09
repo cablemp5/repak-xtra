@@ -275,7 +275,8 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
           title={hasMedia ? 'Change image or video (or paste one)' : 'Add an image, GIF, or video (or paste one)'}
           capture={{ ...target, button: (className, label, note) => <CaptureButton p={p} l={l} onUse={onSetCapture} className={className} label={label} note={note} /> }}
           generate={className => <GeneratePreviewsButton className={className} label="Generate previews" set={previewSetKey(l.id)} name={l.name} stopOnly
-            paths={mine.map(k => byKey.get(k)?.path).filter((x): x is string => Boolean(x))} />} />
+            paths={mine.map(k => byKey.get(k)?.path).filter((x): x is string => Boolean(x))} />}
+          rotate={mine.map(k => byKey.get(k)?.path).filter((x): x is string => Boolean(x))} />
         <div className="lp-info">
           <span className="lp-name-wrap">
             <input ref={nameRef} className="lp-name" value={name} title="Rename" aria-label="Loadout name" onChange={e => setName(e.target.value)} onBlur={commit}

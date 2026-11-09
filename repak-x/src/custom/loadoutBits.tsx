@@ -20,6 +20,7 @@ import { loadoutHero, silhouetteOf } from './silhouettes'
 import { CardTools } from './CardTools'
 import { CarouselSlide } from './Carousel'
 import WipeCompare from './WipeCompare'
+import { Rotate3DButton, Viewer3D } from './viewer3d/Rotate3D'
 import './support.css'
 import { captionBackgroundKey } from './loadoutStore'
 
@@ -92,11 +93,15 @@ export type CaptureSlot = { show: boolean; hero?: string; button: (className: st
  *  (an icon above the words, in a picked color). The card shows the picked source (cover), or the first it has.
  *  With generate (the loadout page) a Cover switch under the card picks the source; an empty source holds its own way
  *  to fill it (Generate, Capture, choose a file, type), and a filled one keeps it in a corner with an X to remove it. */
-export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage, onRemoveCapture, emptyText = 'Click to add an image, or paste one', generate, capture }: {
+export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage, onRemoveCapture, emptyText = 'Click to add an image, or paste one', generate, capture, rotate }: {
   p: LoadoutProps; l: Loadout; className?: string; title: string; onClick: () => void; onRemoveImage?: () => void; onRemoveCapture?: () => void
   emptyText?: string; generate?: (className: string) => React.ReactNode; capture?: CaptureSlot
+  /** a loadout page's Rotate in 3D: the loadout's mod files, rendered together on its hero like its combined preview */
+  rotate?: string[]
 }) {
   usePreviewVersion()
+  const [threeD, setThreeD] = useState(false)
+  useEffect(() => setThreeD(false), [l.id])
   const page = Boolean(generate)
   const ownUrl = useMediaUrl(l.id, l.mediaRev)
   const savedBackground = useMediaUrl(captionBackgroundKey(l.id), l.captionBackgroundRev)
@@ -235,8 +240,9 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
               </CarouselSlide>}
       </button>
       {/* before and after, once the kit has the hero's vanilla render (before the arrows, so they stay on top) */}
-      {page && cover === 'preview' && !working && src && slide?.key && !slide.keys && <WipeCompare key={slide.key} previewKey={slide.key} />}
-      {slides.length > 1 && !working && ( /* no paging while a new preview renders */
+      {page && cover === 'preview' && !working && src && slide?.key && !slide.keys && !threeD && <WipeCompare key={slide.key} previewKey={slide.key} />}
+      {threeD && rotate && <Viewer3D viewKey={previewSetKey(l.id)} paths={rotate} keyOf={nameKey} set={previewSetKey(l.id)} />}
+      {slides.length > 1 && !working && !threeD && ( /* no paging while a new preview renders */
         <>
           <button type="button" className="lo-media-arrow is-prev" title="Previous preview" aria-label="Previous preview" onClick={() => turn(-1)}>
             <ChevronLeft size={16} />
@@ -287,6 +293,8 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
       {/* A filled source keeps its way to redo it in the corner (the preview's also shows Stop while it renders) */}
       {page && !editing && (!empty || working) && (cover === 'preview' || cover === 'capture') && (
         <div className={`lo-media-gen${working ? ' is-busy' : ''}`}>
+          {cover === 'preview' && !impossible && !working && rotate && rotate.length > 0 && (
+            <Rotate3DButton on={threeD} hasImage={Boolean(src)} onClick={() => setThreeD(v => !v)} className="lo-media-chip" />)}
           {cover === 'preview' && !impossible && generate!('lo-media-chip')}
           {cover === 'capture' && capture?.show && capture.button('lo-media-chip', 'Capture again')}
         </div>
