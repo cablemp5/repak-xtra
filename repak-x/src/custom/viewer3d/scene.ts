@@ -24,14 +24,19 @@ export type Viewer = { dispose: () => void; reset: () => void }
 const FPS = 30
 // Slots the game draws only in effects or as shells around the body (the kit's still render hides them too)
 const HIDE = /armou?r|shell|lod|rim/i
-const BASE_KEYS = /^(BaseColor|PM_Diffuse|DiffuseTex|Diffuse|BaseTex|Albedo)$/i
 
 const bytes = (key: string, file: string) => invoke<ArrayBuffer>('get_viewer_file', { key, file })
 const readJson = async <T,>(key: string, file: string): Promise<T> => JSON.parse(new TextDecoder().decode(await bytes(key, file))) as T
 
-/** The texture a slot draws for one role: by parameter name first, then by the texture's own name suffix. */
-const pick = (t: Record<string, string>, byParam: RegExp, byName: RegExp) =>
-  Object.entries(t).find(([k]) => byParam.test(k))?.[1] ?? Object.values(t).find(v => byName.test(v.split('/').pop() ?? ''))
+/** The texture a slot draws for one role: the master's own parameter names in order (the kit's BASE_KEYS order), then
+ *  any parameter or texture name like it. Effect textures (under /VFX/) never stand in: Rogue's head lists a diamond
+ *  noise "BaseTex" before its BaseColor, and its "BaseNormal" before its Normal, so the face drew black and white. */
+const pick = (t: Record<string, string>, keys: string[], byParam: RegExp, byName: RegExp) => {
+  const ok = ([, v]: [string, string]) => !/\/VFX\//i.test(v)
+  const rows = Object.entries(t).filter(ok)
+  return keys.map(k => t[k]).find(v => v && ok(['', v]))
+    ?? rows.find(([k]) => byParam.test(k))?.[1] ?? rows.find(([, v]) => byName.test(v.split('/').pop() ?? ''))?.[1]
+}
 
 /** Builds the viewer in `host` (a sized element). Resolves once the first frame is drawn; rejects when the export
  *  cannot be read. `still`: no idle playback (reduced motion), its first frame only. */
@@ -87,12 +92,12 @@ export async function createViewer(host: HTMLElement, key: string, still: boolea
     const root = gltf.scene
     scene.add(root)
     const textures = new Map<string, Promise<unknown | null>>()
-    const tex = (path: string | undefined, color: boolean, normal = false) => {
+    const tex = (path: string | undefined, color: boolean, normal = false, channel = 0) => {
       if (!path) return Promise.resolve(null)
       const file = texMap[path.split('.')[0]]
       if (!file) return Promise.resolve(null)
-      const id = `${file}|${color}|${normal}`
-      if (!textures.has(id)) textures.set(id, loadTexture(key, file, color, normal).then(t => { if (t) owned.push(t as never); return t }, e => { console.warn('[viewer3d] texture', file, e); return null }))
+      const id = `${file}|${color}|${normal}|${channel}`
+      if (!textures.has(id)) textures.set(id, loadTexture(key, file, color, normal, channel).then(t => { if (t) owned.push(t as never); return t }, e => { console.warn('[viewer3d] texture', file, e); return null }))
       return textures.get(id)!
     }
     const materials = new Map<string, Promise<Mat | null>>()
@@ -142,7 +147,12 @@ export async function createViewer(host: HTMLElement, key: string, still: boolea
       key3.position.set(fit.x + Math.sin(a) * 4, fit.y + 2.5, fit.z + Math.cos(a) * 4)
       key3.target.position.set(fit.x, fit.y, fit.z)
     }
-    controls.enablePan = false
+    // left drag turns, middle (or right) drag moves the model in the frame, the wheel zooms
+    controls.enablePan = true
+    controls.screenSpacePanning = true
+    controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN }
+    renderer.domElement.addEventListener('mousedown', (e: MouseEvent) => { if (e.button === 1) e.preventDefault() }) // no autoscroll
+    renderer.domElement.addEventListener('contextmenu', (e: MouseEvent) => e.preventDefault())
     controls.enableDamping = true
     controls.minPolarAngle = Math.PI * 0.3
     controls.maxPolarAngle = Math.PI * 0.62
@@ -189,7 +199,7 @@ function boneMap(root: InstanceType<typeof THREE.Object3D>) {
 
 /** One texture from the export: an ImageBitmap (decoded off the main thread), color or data. A normal map saved from
  *  BC5 (red and green only, blue empty) gets its blue rebuilt, or every normal would point sideways. */
-async function loadTexture(key: string, file: string, color: boolean, normal: boolean): Promise<unknown | null> {
+async function loadTexture(key: string, file: string, color: boolean, normal: boolean, channel = 0): Promise<unknown | null> {
   const blob = new Blob([await bytes(key, file)], { type: 'image/png' })
   let bmp: ImageBitmap = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' })
   let image: ImageBitmap | OffscreenCanvas = bmp
@@ -211,6 +221,7 @@ async function loadTexture(key: string, file: string, color: boolean, normal: bo
   t.colorSpace = color ? THREE.SRGBColorSpace : THREE.NoColorSpace
   t.wrapS = t.wrapT = THREE.RepeatWrapping
   t.anisotropy = 4
+  t.channel = channel // the UV set it reads: 1 for a hair master's ShadowColor(UV1)
   t.needsUpdate = true
   const dispose = t.dispose.bind(t)
   t.dispose = () => { dispose(); if (image instanceof ImageBitmap) image.close() }
@@ -239,7 +250,7 @@ function bands() {
 /** Each mesh's slots get their game material: toon shading from its base color, normal, AO (ORM's red) and emissive;
  *  eyes unlit; effect shells, translucent glows and the game's invisible M_Hide hidden; masked cut by alpha. */
 async function dress(root: InstanceType<typeof THREE.Object3D>, matOf: (name: string) => Promise<Mat | null>,
-  tex: (path: string | undefined, color: boolean, normal?: boolean) => Promise<unknown | null>, owned: { dispose?: () => void }[]) {
+  tex: (path: string | undefined, color: boolean, normal?: boolean, channel?: number) => Promise<unknown | null>, owned: { dispose?: () => void }[]) {
   const gradient = bands()
   owned.push(gradient)
   const meshes: { material: unknown; frustumCulled: boolean; isMesh?: boolean }[] = []
@@ -258,24 +269,41 @@ async function dress(root: InstanceType<typeof THREE.Object3D>, matOf: (name: st
         return none
       }
       const t = m.Textures ?? {}
-      const base = pick(t, BASE_KEYS, /_D(_\w+)?$/) ?? pick(t, /Base.?Color|Diffuse|Albedo/i, /^$/)
-      const [map, normalMap, orm, emissiveMap] = await Promise.all([
-        tex(base, true), tex(pick(t, /Normal/i, /_N$/), false, true), tex(pick(t, /ORM|MRA/i, /_ORM$/), false), tex(pick(t, /Emissive/i, /_E$/), true),
+      const base = pick(t, ['BaseColor', 'PM_Diffuse', 'DiffuseTex', 'Diffuse', 'BaseTex', 'Albedo'], /Base.?Color|Diffuse|Albedo/i, /_D(_\w+)?$/)
+      // the kit's game_material, in toon form: a hair master colors its gray strands with ShadowColor(UV1) on the second
+      // UV set (Rogue's brown and white hair drew all white without it), and clips cards by their own OpacityMask
+      const [map, normalMap, orm, emissiveMap, shade, alphaMap] = await Promise.all([
+        tex(base, true), tex(pick(t, ['Normal', 'PM_Normals'], /Normal/i, /_N$/), false, true), tex(pick(t, ['ORM'], /ORM|MRA/i, /_ORM$/), false),
+        tex(pick(t, ['Emissive', 'PM_Emissive'], /Emissive/i, /_E$/), true), tex(t['ShadowColor(UV1)'], true, false, 1), tex(t.OpacityMask, false),
       ])
       const side = m.TwoSided ? THREE.DoubleSide : THREE.FrontSide
-      const alphaTest = /Masked/.test(m.BlendMode ?? '') ? 0.33 : 0
+      const alphaTest = /Masked/.test(m.BlendMode ?? '') ? 0.3333 : 0
       if (/Eye/i.test(name)) {
         const eye = new THREE.MeshBasicMaterial({ map, side, alphaTest })
         owned.push(eye)
         return eye
       }
       const glow = m.Vectors?.EmissiveColor ?? m.Vectors?.EmissiveTint
+      // BaseTint multiplies the base color: a gray one at full strength, a colored one at half (the kit's values)
+      const tint = m.Vectors?.BaseTint
+      const neutral = tint ? Math.max(tint.R, tint.G, tint.B) - Math.min(tint.R, tint.G, tint.B) < 0.02 : true
+      const k = neutral ? 1 : 0.5, part = (v: number) => 1 - k + k * v
       const mat = new THREE.MeshToonMaterial({
-        map, normalMap, aoMap: orm, emissiveMap, gradientMap: gradient, side, alphaTest,
-        color: map ? 0xffffff : 0x9a9a9a,
+        map, normalMap, aoMap: shade ?? orm, emissiveMap, gradientMap: gradient, side, alphaTest,
+        alphaMap: alphaTest ? alphaMap : null,
+        color: map ? (tint ? new THREE.Color(part(tint.R), part(tint.G), part(tint.B)) : 0xffffff) : 0x9a9a9a,
         emissive: emissiveMap ? new THREE.Color(glow?.R ?? 1, glow?.G ?? 1, glow?.B ?? 1) : 0x000000,
         emissiveIntensity: emissiveMap ? Math.min(2, m.Scalars?.EmissiveStrength ?? 1) : 0,
       })
+      if (shade) {
+        // the hair color rides in the AO slot (so three sets up its second UV set) and multiplies the base color instead
+        mat.onBeforeCompile = (s: { fragmentShader: string }) => {
+          s.fragmentShader = s.fragmentShader
+            .replace('#include <map_fragment>', '#include <map_fragment>\n\tdiffuseColor.rgb *= texture2D( aoMap, vAoMapUv ).rgb;')
+            .replace('#include <aomap_fragment>', '')
+        }
+        mat.customProgramCacheKey = () => 'shade-uv1'
+      }
       if (normalMap) mat.normalScale.set(1, -1) // Unreal's normal maps keep green the other way up
       owned.push(mat)
       return mat
