@@ -409,7 +409,8 @@ fn read_store() -> serde_json::Map<String, serde_json::Value> {
 }
 
 fn stem_of(p: &Path) -> String {
-    p.with_extension("").to_string_lossy().to_lowercase()
+    // one spelling for a path however the app wrote it (the game folder setting can mix / and \)
+    p.with_extension("").to_string_lossy().to_lowercase().replace('/', "\\")
 }
 
 /// A merged pack's name as a file name: letters, digits, spaces, and - _ + . kept, the rest dropped.

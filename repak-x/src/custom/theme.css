@@ -3388,7 +3388,7 @@ html[data-toasts-held] .toast-container { display: none; }   /* the welcome flow
 /* past four mods the columns scroll sideways, the sound column pinned */
 .ms-grid { display: grid; border: 1px solid var(--panel-border); border-radius: 10px; overflow: auto; }
 .ms-row { display: contents; }
-.ms-grid > div, .ms-row > div { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 10px; border-top: 1px solid var(--panel-border); }
+.ms-grid > div:not(.ms-row), .ms-row > div { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 10px; border-top: 1px solid var(--panel-border); }
 .ms-head { border-top: 0 !important; background: var(--bg-dark); flex-direction: column; align-items: flex-start !important; gap: 0 !important; font-size: 12px; font-weight: 600; color: var(--text-primary); }
 .ms-head span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ms-all { padding: 0; border: 0; background: none; font: 500 12px var(--font-sans, inherit); color: color-mix(in srgb, var(--accent-primary), white 30%); cursor: pointer; }
