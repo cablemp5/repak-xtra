@@ -40,6 +40,11 @@ fn installed(dir: &Path) -> Option<String> {
     }
 }
 
+/// The installed kit's version number (kit.json), None without a kit or with a version that is no number.
+pub(crate) fn installed_version() -> Option<u32> {
+    installed(&kit_dir())?.parse().ok()
+}
+
 pub fn installed_kit() -> Option<PathBuf> {
     installed(&kit_dir()).map(|_| kit_dir())
 }

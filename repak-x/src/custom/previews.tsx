@@ -19,6 +19,7 @@ import { koPreview } from './ko/koPreview'
 import { verdictOf } from './brokenMods'
 import { fixInVfxWindow } from './vfx/handoff'
 import { KO_BEAT } from './ko/render'
+import { Rotate3DButton, Viewer3D, use3dPossible } from './viewer3d/Rotate3D'
 
 const NOTHING = 'Nothing to show for this mod: previews cover skins, meshes, textures, animations, UI icons, VFX colors, and sounds.'
 const FAILED = 'The last render failed. The full error is in Logs.'
@@ -610,9 +611,13 @@ export function ModPreview({ path }: { path: string }) {
   const message = outcome.get(key)
   const forms = formKeys(key)
   const stage = usePreviewStage(busy)
+  const [threeD, setThreeD] = useState(false) // Rotate in 3D: the model in this frame instead of the image
+  useEffect(() => setThreeD(false), [key])
+  const can3d = use3dPossible(key, usePreviewVersion())
   return (
     <div className="detail-section mod-preview">
-      {url && (
+      {threeD && <div className="mod-preview-frame is-3d"><Viewer3D viewKey={key} paths={[path]} name={path.split(/[\\/]/).pop()!.replace(/(_\d+_P)?\.(pak|bak_repak|utoc|ucas)$/i, '')} /></div>}
+      {!threeD && url && (
         <div className={`mod-preview-frame${forms.length ? ' has-forms' : ''}`}>
           {isVideoPreview(url) ? <BeatVideo src={url} beat={KO_BEAT} /> : <img src={url} alt="Generated preview" onLoad={revealOnLoad} />}
           {forms.map(k => <FormImage key={k} k={k} />)}
@@ -620,6 +625,7 @@ export function ModPreview({ path }: { path: string }) {
       )}
       {!canGenerate && <div className="mod-preview-bar"><PreviewsUnavailable className="mod-preview-btn" label="Generate preview" /></div>}
       {canGenerate && <div className="mod-preview-bar">
+        {(can3d || threeD) && <Rotate3DButton on={threeD} hasImage={Boolean(url)} onClick={() => setThreeD(v => !v)} className="mod-preview-btn" />}
         <button type="button" className="mod-preview-btn" disabled={busy}
           onClick={() => (queued ? unqueue(id) : ask(alert, { paths: [path], name: key, force: Boolean(url) }))}
           title={queued ? 'Remove from the preview queue' : running() ? `Queue it: previews for ${run.name} are generating` : 'Render this mod on its character in the lobby look (about 10 to 40 seconds)'}>

@@ -71,6 +71,7 @@ import { OpDialogs, gameClosed, opText, retryAfter, runOp } from './custom/opDia
 import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
 import { rescanVerdicts, useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
+import { MergeSoundsButton, MergeSoundsHost } from './custom/MergeSounds' // repakxtra
 import { useSafetyWatch } from './custom/safetyScan' // repakxtra
 import { WhyNotWorking } from './custom/WhyNotWorking' // repakxtra
 import { useScanProgress } from './custom/scanProgress' // repakxtra
@@ -3652,6 +3653,7 @@ function App() {
       )}
 
       <OpDialogs />{/* repakxtra: game open, file in use, and name taken, one dialog each */}
+      <MergeSoundsHost onDone={() => { void loadMods() }} />{/* repakxtra: the Merge sounds window */}
       <CrashSuspects deps={{ alert, isBlocked: undoBlocked, reload: loadMods }} mods={mods} details={modDetails} heroes={characterData} />{/* repakxtra */}
       <WhyNotWorking alert={alert} onSetPriority={handleSetPriority} />{/* repakxtra: Why isn't this mod working? Load on top renames through the Library's own priority change */}
 
@@ -4250,6 +4252,7 @@ function App() {
 
                   {/* repakxtra: add the selected mods to a loadout */}
                   <AddToLoadoutField paths={[...selectedFiles]} alert={alert} />
+                  <MergeSoundsButton paths={[...selectedFiles]} details={modDetails} />{/* repakxtra: two or more sound mods selected */}
 
                   {(() => {
                     const selMods = [...mods, ...builtinRows].filter(m => selectedMods.has(m.path)) // repakxtra: every checked mod, shown or filtered out, built-ins too

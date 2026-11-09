@@ -40,12 +40,14 @@ pub fn busy_text(who: &str) -> String {
         "previews" => "Previews are generating. Stop them or wait, then try again.",
         "kit" => "The preview kit is installing or being removed. Wait for it to finish.",
         "cleanup" => "Settings > Storage is deleting previews or the preview kit. Try again when it is done.", // repakxtra
+        "texcheck" => "The preview kit is checking textures. Try again in a moment.", // repakxtra
+        "viewer" => "The 3D model is being prepared. Try again in a moment.", // repakxtra
         _ => "This PC is being checked for previews. Try again in a moment.",
     }
     .into()
 }
 
-fn previews_dir() -> PathBuf {
+pub(crate) fn previews_dir() -> PathBuf {
     crate::app_dir().join("previews")
 }
 
@@ -64,7 +66,7 @@ pub fn previews_available() -> bool {
 }
 
 /// A mod key is a bare file stem from the frontend: never let it leave the previews folder.
-fn valid_key(key: &str) -> bool {
+pub(crate) fn valid_key(key: &str) -> bool {
     !key.is_empty() && !key.contains(['/', '\\', ':']) && !key.contains("..")
 }
 
@@ -213,7 +215,7 @@ pub fn generate_mod_previews(app: AppHandle, jobs: Vec<(String, String)>, set: O
     if let Some(bad) = jobs.iter().map(|(_, k)| k).chain(set.iter()).find(|k| !valid_key(k)) {
         return Err(format!("Invalid preview key: {bad}"));
     }
-    let hold = match reserve("previews") {
+    let hold = match crate::xtra_viewer::reserve_waiting("previews") { // repakxtra: waits out a background texture check
         Ok(h) => h,
         Err("previews") => return Ok(false),
         Err(other) => return Err(busy_text(other)),
@@ -330,7 +332,7 @@ fn clear_stale_work(scratch: &Path) {
 
 /// Copies the generator's stderr to generator.log and the app's Logs: lines that report a failure (an error, a Python
 /// traceback) as errors, the rest (what it rendered, optional assets not in the game) as notes.
-fn log_generator(err: std::process::ChildStderr, mut file: Option<std::fs::File>) {
+pub(crate) fn log_generator(err: std::process::ChildStderr, mut file: Option<std::fs::File>) {
     use std::io::Write;
     let mut traceback = false;
     for line in BufReader::new(err).lines().map_while(Result::ok) {
@@ -396,7 +398,7 @@ static STOPPED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::n
 /// The newest USMAP the app has downloaded that is not newer than the installed game (the newest of all while the game's
 /// build is unknown). None leaves the kit's own, also when the game is older than every download (newer mappings would
 /// misread its structs).
-fn app_usmap() -> Option<PathBuf> {
+pub(crate) fn app_usmap() -> Option<PathBuf> {
     use crate::vfx_updater::commands::{extract_usmap_build_number, managed_usmap_dir};
     let game = crate::xtra_vfx::LAST_GAME_CL.load(std::sync::atomic::Ordering::Relaxed);
     let all: Vec<(u64, PathBuf)> = std::fs::read_dir(managed_usmap_dir()).ok()?
@@ -415,7 +417,7 @@ fn app_usmap() -> Option<PathBuf> {
 
 /// The generator's command so far (the kit's python and script, run in its folder, with the kit's variables). The error
 /// says what to install.
-fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Result<Command, String> {
+pub(crate) fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Result<Command, String> {
     let Some((root, python, _script)) = generator() else {
         return Err("Previews need the preview kit: install it in Setup.".into());
     };

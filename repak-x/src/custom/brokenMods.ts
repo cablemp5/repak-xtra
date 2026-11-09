@@ -118,6 +118,21 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     const deep = (vfx: string[]) => Promise.resolve()
       .then(() => (live ? invoke<number>('xtra_vfx_check_scan', { modPaths: vfx, defer: false }) : 0))
       .then(found => (live && found ? check() : undefined))
+    // last, textures the game cannot read (the preview kit's texture check, kit 19 and newer; xtra_viewer.rs): 5 mods a
+    // run, so a Generate preview clicked meanwhile waits seconds, not minutes. The kit keeps each mod's answer until its
+    // files change, so later runs cost little. Stops at the first refusal: previews running, no kit, or an older kit
+    const textures = async (list: string[]) => {
+      if (!live || !(await invoke<boolean>('previews_available').catch(() => false))) return
+      const mods = list.filter(p => !isModLoader(p))
+      let found = 0
+      // 40 a run: the kit starts (and mounts the game) once per run, and a click on Rotate in 3D or Generate preview
+      // stops it after its current mod (xtra_viewer.rs reserve_waiting), so it never waits on a whole run
+      const BATCH = 40
+      for (let i = 0; i < mods.length && live; i += BATCH) {
+        try { found += await invoke<number>('run_texcheck', { paths: mods.slice(i, i + BATCH) }) } catch { break }
+      }
+      if (live && found) await check()
+    }
     const chain = (first?: Promise<boolean>): Promise<boolean> => !live ? Promise.resolve(false) : (scanStarted(), invoke('xtra_scan_stopped').catch(() => false))
       .then(() => first ?? check())
       .then(ok => { if (!ok) throw new Error('the first check failed') })
@@ -133,6 +148,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       // every mod for meshes: an update carries the original's meshes as they were, and nothing in the Mod Updater checks them
       .then(() => scans(scanPaths, paths))
       .then(() => deep(scanPaths))
+      .then(() => textures(paths))
       .then(() => (live ? invoke<boolean>('xtra_scan_stopped').catch(() => false) : true))
       .then(stopped => live && !stopped, e => { console.warn('[brokenMods] background scan failed', e); return false })
       // runs take turns (queued), so this one's end is never another's. One the library outdated is not "paused":

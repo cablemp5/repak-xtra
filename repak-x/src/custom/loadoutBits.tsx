@@ -16,10 +16,11 @@ import { VerdictBadge } from './VerdictBadge'
 import { useVfxUpdating } from './vfx/quick'
 import { GAME_RUNNING } from './keepOne'
 import { CaptionIcon, CaptionStyleBar } from './captionStyle'
-import { loadoutHero, silhouetteOf } from './silhouettes'
+import { heroLabel, loadoutHero, silhouetteOf } from './silhouettes'
 import { CardTools } from './CardTools'
 import { CarouselSlide } from './Carousel'
 import WipeCompare from './WipeCompare'
+import { Rotate3DButton, Viewer3DWindow } from './viewer3d/Rotate3D'
 import './support.css'
 import { captionBackgroundKey } from './loadoutStore'
 
@@ -92,11 +93,15 @@ export type CaptureSlot = { show: boolean; hero?: string; button: (className: st
  *  (an icon above the words, in a picked color). The card shows the picked source (cover), or the first it has.
  *  With generate (the loadout page) a Cover switch under the card picks the source; an empty source holds its own way
  *  to fill it (Generate, Capture, choose a file, type), and a filled one keeps it in a corner with an X to remove it. */
-export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage, onRemoveCapture, emptyText = 'Click to add an image, or paste one', generate, capture }: {
+export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage, onRemoveCapture, emptyText = 'Click to add an image, or paste one', generate, capture, rotate }: {
   p: LoadoutProps; l: Loadout; className?: string; title: string; onClick: () => void; onRemoveImage?: () => void; onRemoveCapture?: () => void
   emptyText?: string; generate?: (className: string) => React.ReactNode; capture?: CaptureSlot
+  /** a loadout page's Rotate in 3D: the loadout's mod files, rendered together on its hero like its combined preview */
+  rotate?: string[]
 }) {
   usePreviewVersion()
+  const [threeD, setThreeD] = useState(false)
+  useEffect(() => setThreeD(false), [l.id])
   const page = Boolean(generate)
   const ownUrl = useMediaUrl(l.id, l.mediaRev)
   const savedBackground = useMediaUrl(captionBackgroundKey(l.id), l.captionBackgroundRev)
@@ -287,6 +292,8 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
       {/* A filled source keeps its way to redo it in the corner (the preview's also shows Stop while it renders) */}
       {page && !editing && (!empty || working) && (cover === 'preview' || cover === 'capture') && (
         <div className={`lo-media-gen${working ? ' is-busy' : ''}`}>
+          {cover === 'preview' && !impossible && !working && rotate && rotate.length > 0 && (
+            <Rotate3DButton on={false} hasImage={Boolean(src)} onClick={() => setThreeD(true)} className="lo-media-chip" />)}
           {cover === 'preview' && !impossible && generate!('lo-media-chip')}
           {cover === 'capture' && capture?.show && capture.button('lo-media-chip', 'Capture again')}
         </div>
@@ -318,6 +325,10 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   return (
     <div className="lp-cover">
       {media}
+      {/* Rotate in 3D opens a centered window on a loadout's page, so the model shows bigger than the card.
+          Outside the card: the window's pointer events must not reach the card's hover (its emote sound) */}
+      {threeD && rotate?.length ? <Viewer3DWindow title={l.name} viewKey={previewSetKey(l.id)} paths={rotate} set={previewSetKey(l.id)} onClose={() => setThreeD(false)}
+        sub={[heroLabel(loadoutHero(l.on, p.mods, p.modDetails) ?? ''), `${rotate.length} mod${rotate.length === 1 ? '' : 's'} on the model`].filter(Boolean).join(', ')} /> : null}
       {/* What the card shows, everywhere: one source at a time, picked from four */}
       <div className="cover-tabs" role="radiogroup" aria-label="The card shows">
         {COVERS.map(c => {
