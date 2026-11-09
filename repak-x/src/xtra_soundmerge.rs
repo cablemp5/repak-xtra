@@ -301,7 +301,7 @@ pub async fn sound_merge_plan(paths: Vec<String>, state: State<'_, Arc<Mutex<cra
         let src = sources(&paths);
         let mut plan = Plan { mods: src.iter().map(|s| s.path.to_string_lossy().to_string()).collect(), ..Default::default() };
         for p in paths.iter().filter(|p| !src.iter().any(|s| stem_of(&s.path) == stem_of(Path::new(p)))) {
-            plan.skipped.push((p.clone(), "it is left out: only sound mods packed as a single .pak can be merged".into()));
+            plan.skipped.push((p.clone(), "only sound mods packed as a single .pak can be merged".into()));
         }
         let mut keys: BTreeMap<&String, Vec<usize>> = BTreeMap::new();
         for (i, s) in src.iter().enumerate() {
