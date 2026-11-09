@@ -10,7 +10,7 @@ import { detectHeroesWithData } from '../utils/heroes'
 import { FALLBACK_HERO_ID, resolveHeroImage, useHeroImages } from '../utils/heroImages'
 import './ModDetailsPanel.css'
 import { ModPreview } from '../custom/previews' // repakxtra
-import { SoundMergeNote } from '../custom/soundMerge' // repakxtra
+import { MergedPackNote } from '../custom/MergeSounds' // repakxtra
 import { ModName } from '../custom/modName' // repakxtra
 import { NexusSourceLine } from '../custom/nexusSource' // repakxtra
 import { heroLabel } from '../custom/silhouettes' // repakxtra
@@ -199,7 +199,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
 
       <div className="details-body">
         <ModPreview path={mod.path} />
-        <SoundMergeNote path={mod.path} />{/* repakxtra: what the sound merger did for it */}
+        <MergedPackNote path={mod.path} />{/* repakxtra: a merged sound pack, with Change picks */}
         {loading ? (
           <div className="loading-state">Loading mod details...</div>
         ) : error ? (

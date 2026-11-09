@@ -71,7 +71,7 @@ import { OpDialogs, gameClosed, opText, retryAfter, runOp } from './custom/opDia
 import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
 import { rescanVerdicts, useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
-import { soundMergeBeforeLaunch, useSoundMergeWatch } from './custom/soundMerge' // repakxtra
+import { MergeSoundsButton, MergeSoundsHost } from './custom/MergeSounds' // repakxtra
 import { useSafetyWatch } from './custom/safetyScan' // repakxtra
 import { WhyNotWorking } from './custom/WhyNotWorking' // repakxtra
 import { useScanProgress } from './custom/scanProgress' // repakxtra
@@ -448,7 +448,6 @@ function App() {
   const [isLogDrawerOpen, setIsLogDrawerOpen] = useState(false)
   useConflictWatch(mods) // repakxtra
   useBrokenWatch(mods) // repakxtra
-  useSoundMergeWatch(mods) // repakxtra: sound mods sharing a bank, merged when that setting is on
   useSafetyWatch(mods) // repakxtra: Ban risk badges (custom/safetyScan.tsx)
   useNexusScan(mods) // repakxtra: Nexus sources for mods installed before they were recorded, once
   const brokenVersion = useBrokenVersion() // repakxtra: the Broken filter re-runs when the verdicts land
@@ -3654,6 +3653,7 @@ function App() {
       )}
 
       <OpDialogs />{/* repakxtra: game open, file in use, and name taken, one dialog each */}
+      <MergeSoundsHost onDone={() => { void loadMods() }} />{/* repakxtra: the Merge sounds window */}
       <CrashSuspects deps={{ alert, isBlocked: undoBlocked, reload: loadMods }} mods={mods} details={modDetails} heroes={characterData} />{/* repakxtra */}
       <WhyNotWorking alert={alert} onSetPriority={handleSetPriority} />{/* repakxtra: Why isn't this mod working? Load on top renames through the Library's own priority change */}
 
@@ -3873,7 +3873,6 @@ function App() {
             onClick={async () => {
               if (gameRunning || launchSuccess) return
               try {
-                await soundMergeBeforeLaunch(setStatus) // repakxtra: a sound mod change made while the game was open
                 await invoke('launch_game')
                 setStatus('Game launched')
                 setLaunchSuccess(true)
@@ -4253,6 +4252,7 @@ function App() {
 
                   {/* repakxtra: add the selected mods to a loadout */}
                   <AddToLoadoutField paths={[...selectedFiles]} alert={alert} />
+                  <MergeSoundsButton paths={[...selectedFiles]} details={modDetails} />{/* repakxtra: two or more sound mods selected */}
 
                   {(() => {
                     const selMods = [...mods, ...builtinRows].filter(m => selectedMods.has(m.path)) // repakxtra: every checked mod, shown or filtered out, built-ins too
