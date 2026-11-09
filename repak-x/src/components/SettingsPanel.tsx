@@ -37,6 +37,7 @@ import IsItSafe from '../custom/TrustSection' // repakxtra: Settings > Is it saf
 import { invoke } from '@tauri-apps/api/core'
 import { ShortcutSetting } from '../custom/shortcut' // repakxtra
 import { PreviewRimSetting } from '../custom/PreviewRimSetting' // repakxtra
+import { SoundMergeSetting } from '../custom/soundMerge' // repakxtra
 import { APP_NAME } from '../custom/edition' // repakxtra
 import './SettingsPanel.css'
 import { useAlert } from './AlertHandler'
@@ -317,6 +318,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
 
                 <ShortcutSetting />{/* repakxtra: desktop shortcut */}
                 <PreviewRimSetting />{/* repakxtra: rim light on previews */}
+                <SoundMergeSetting />{/* repakxtra: sound mods sharing a bank, merged (off by default) */}
 
                 <div className="setting-section">
                   <h3 className="setting-icon-label"><LuRefreshCw size={18} aria-hidden="true" />Updates</h3>

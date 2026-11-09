@@ -3390,3 +3390,5 @@ html[data-toasts-held] .toast-container { display: none; }   /* the welcome flow
 html[data-motion="off"] .v3d-state, html[data-motion="off"] .v3d-canvas { animation: none; transition: none; }
 .lo-media .v3d { z-index: 1; }
 .lo-media .v3d-hint { top: 8px; bottom: auto; }   /* the corner chips sit at the bottom on hover */
+/* ---------- sound mod merger note in mod details (custom/soundMerge.tsx), the details panel's small secondary text ---------- */
+.sound-merge-note p { margin: 0 0 4px; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
