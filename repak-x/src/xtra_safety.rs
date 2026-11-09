@@ -114,7 +114,7 @@ pub async fn xtra_safety_plugins(state: State<'_, Arc<Mutex<crate::AppState>>>) 
 }
 
 /// Moves a plugin the scan lists (never the bundled bypass) to %APPDATA%\Repak-X\removed-plugins\<unix secs>, so it
-/// can be put back by hand.
+/// can be put back by hand (quarantine, never a delete), then scans again to verify it is gone.
 #[tauri::command]
 pub async fn xtra_safety_remove_plugin(name: String, place: String, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<Vec<Plugin>, String> {
     let _mutation = crate::xtra_mutation::edit()?;
@@ -124,7 +124,8 @@ pub async fn xtra_safety_remove_plugin(name: String, place: String, state: State
     }
     let win64 = crate::xtra_setup::win64_dir(&mods_dir(&state)).ok_or("Set the game mods path in Settings first")?;
     // only a file the scan lists right now: the name and place never reach outside Win64
-    if !plugins_in(&win64)?.iter().any(|p| p.name == name && p.place == place && p.kind != "bundled") {
+    let listed = plugins_in(&win64)?;
+    if !listed.iter().any(|p| p.name == name && p.place == place && p.kind != "bundled") {
         return Err(format!("{name} is not there any more."));
     }
     let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_secs();
@@ -135,7 +136,16 @@ pub async fn xtra_safety_remove_plugin(name: String, place: String, state: State
     if fs::rename(&from, to.join(&name)).is_err() {
         fs::copy(&from, to.join(&name)).and_then(|_| fs::remove_file(&from)).map_err(|e| format!("Could not remove {name}: {e}"))?;
     }
-    plugins_in(&win64)
+    // repakxtra: scan again, so a removal is only reported once the folder really no longer has it
+    // a scan that fails after a move that worked: the moved file is gone, so the list without it is the answer
+    let left = plugins_in(&win64).unwrap_or_else(|e| {
+        crate::ui_log::warn("Ban risk", format!("Could not scan the plugins again: {e}"));
+        listed.into_iter().filter(|p| !(p.name == name && p.place == place)).collect()
+    });
+    if left.iter().any(|p| p.name.eq_ignore_ascii_case(&name) && p.place == place) {
+        return Err(format!("{name} is still beside the game after the move. Another program may have put it back."));
+    }
+    Ok(left)
 }
 
 #[tauri::command]
