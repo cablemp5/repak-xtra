@@ -241,9 +241,6 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
       </button>
       {/* before and after, once the kit has the hero's vanilla render (before the arrows, so they stay on top) */}
       {page && cover === 'preview' && !working && src && slide?.key && !slide.keys && <WipeCompare key={slide.key} previewKey={slide.key} />}
-      {/* Rotate in 3D opens a centered window on a loadout's page, so the model shows bigger than the card (cable's pick A) */}
-      {threeD && rotate?.length ? <Viewer3DWindow title={l.name} viewKey={previewSetKey(l.id)} paths={rotate} set={previewSetKey(l.id)} onClose={() => setThreeD(false)}
-        sub={[heroLabel(loadoutHero(l.on, p.mods, p.modDetails) ?? ''), `${rotate.length} mod${rotate.length === 1 ? '' : 's'} on the model`].filter(Boolean).join(', ')} /> : null}
       {slides.length > 1 && !working && ( /* no paging while a new preview renders */
         <>
           <button type="button" className="lo-media-arrow is-prev" title="Previous preview" aria-label="Previous preview" onClick={() => turn(-1)}>
@@ -328,6 +325,10 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   return (
     <div className="lp-cover">
       {media}
+      {/* Rotate in 3D opens a centered window on a loadout's page, so the model shows bigger than the card (cable's pick A).
+          Outside the card: the window's pointer events must not reach the card's hover (its emote sound) */}
+      {threeD && rotate?.length ? <Viewer3DWindow title={l.name} viewKey={previewSetKey(l.id)} paths={rotate} set={previewSetKey(l.id)} onClose={() => setThreeD(false)}
+        sub={[heroLabel(loadoutHero(l.on, p.mods, p.modDetails) ?? ''), `${rotate.length} mod${rotate.length === 1 ? '' : 's'} on the model`].filter(Boolean).join(', ')} /> : null}
       {/* What the card shows, everywhere: one source at a time, picked from four */}
       <div className="cover-tabs" role="radiogroup" aria-label="The card shows">
         {COVERS.map(c => {
