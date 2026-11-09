@@ -127,6 +127,9 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'xtra_storage_clear': return wait(0.6).then(() => 1e9)
       case 'xtra_storage_clear_at_start': (args?.ids as string[]).forEach(id => clearAtStart.add(id)); return (args?.ids as string[]).includes('vfx') ? 1.9e9 : 1.2e8
       case 'xtra_why_mod': return wait(0.3).then(() => /\.bak_repak$/i.test(args?.modPath ?? '') ? [{ level: 'problem', title: 'It is switched off', detail: 'The game loads it from the next launch once it is on.', action: 'turn_on' }] : [])
+      // the second Why pass and Check Conflicts' hidden mods: set mock.whyOverrides / mock.hidden in localStorage to show them
+      case 'xtra_why_overrides': return wait(1.2).then(() => JSON.parse(localStorage.getItem('mock.whyOverrides') || '[]'))
+      case 'xtra_hidden_mods': return wait(0.6).then(() => JSON.parse(localStorage.getItem('mock.hidden') || '[]'))
       case 'xtra_self_sha256': return wait(0.2).then(() => '1ed6e63a2417' + 'f'.repeat(52))
       case 'xtra_safety_plugins': return [{ name: 'dsound.dll', place: '', kind: 'bundled' }, { name: 'MarvelRivalsUTOCSignatureBypass.asi', place: 'plugins', kind: 'bundled' }]
       case 'xtra_safety_mods': return { risks: [], unread: [] } // the mock's file lists are guessed: no risk badges

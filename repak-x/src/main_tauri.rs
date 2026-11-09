@@ -8790,6 +8790,8 @@ fn main() {
             xtra_setup::setup_bypass_status, // repakxtra: Setup panel
             xtra_cleanup::xtra_storage_sections, xtra_cleanup::xtra_storage_clear, xtra_cleanup::xtra_storage_clear_at_start, // repakxtra
             xtra_why::xtra_why_mod, // repakxtra
+            xtra_why::xtra_why_overrides, // repakxtra
+            xtra_why::xtra_hidden_mods, // repakxtra
             xtra_safety::xtra_safety_plugins, xtra_safety::xtra_safety_remove_plugin, xtra_safety::xtra_safety_mods, // repakxtra
             xtra_snapshot::snapshot_list, xtra_snapshot::snapshot_estimate, xtra_snapshot::snapshot_create, xtra_snapshot::snapshot_import, xtra_snapshot::snapshot_export, xtra_snapshot::snapshot_missing, xtra_snapshot::snapshot_restore, xtra_snapshot::snapshot_delete, // repakxtra
             xtra_setup::setup_bypass,

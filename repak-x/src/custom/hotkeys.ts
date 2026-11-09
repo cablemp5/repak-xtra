@@ -14,7 +14,6 @@ const HEADER = [
   { key: 'm', pref: 'vfx-updater', name: 'Mod Updater' },
   { key: 'e', pref: 'encrypt', name: 'Mod Encryptor' },
   { key: 'g', pref: 'galacta', name: 'Galacta Converter' },
-  { key: 'a', pref: 'asset-explorer', name: 'Asset Explorer' },
   { key: 't', pref: 'tools', name: 'Tools' },
 ]
 export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [

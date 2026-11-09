@@ -19,7 +19,6 @@ const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod
   { key: 'vfx-updater', label: 'Mod Updater (Shift+M)', on: true, group: 'header' },
   { key: 'encrypt', label: 'Mod Encryptor (Shift+E)', group: 'header' }, // hidden by default: Settings > Header buttons shows it
   { key: 'galacta', label: 'Galacta Converter (Shift+G)', group: 'header' }, // hidden by default, also in Tools
-  { key: 'asset-explorer', label: 'Asset Explorer (Shift+A)', group: 'header' },
   { key: 'tools', label: 'Tools (Shift+T)', group: 'header' },
   { key: 'header-icons', label: 'Icons only, without names (Shift+I)', group: 'header' }, // off by default: theme.css hides .hdr-label
   { key: 'mod-size', label: 'File size', group: 'mod' },

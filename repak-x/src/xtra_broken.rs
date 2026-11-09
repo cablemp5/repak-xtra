@@ -2,12 +2,14 @@
 //! Two checks, both from files alone:
 //! - broken: every game asset the mod replaces is gone from the game (an update renamed or removed it), so the mod
 //!   changes nothing. The game's own asset list is read once per game build, saved, and kept in memory.
-//! - vfx: a VFX mod made before a game update that rewrote game files it replaces (on or off). Its effects can look wrong
-//!   or crash the game until it is rebuilt on the new files (custom/vfx/, the VFX Updater).
-//!   A material mod (a skin's material instances, xtra_vfx::updatable) gets it too, when the update rewrote one of those.
+//! - vfx: a mod whose materials a check found built for an older game (xtra_vfx_check.rs), or whose Niagara files are in
+//!   an older layout (xtra_niagara.rs). Its effects can look wrong or crash the game until the Mod Updater rebuilds it.
 //! - risky: a Blueprint mod whose game classes the last game update changed (on or off: the warning matters before it goes
-//!   on). Blueprint mods carry whole game classes, and an update that changes a class layout makes the game crash on them.
-//!   xtra_layout.rs compares its classes with the game's. Until it has, a mod installed before the update is flagged by date.
+//!   on), as xtra_layout.rs found by comparing them with the game's, a mesh with bones its rebuilt skeleton lacks
+//!   (xtra_mesh.rs), or an Animation Blueprint the game cooked again since the mod was made.
+//! A badge only ever comes from what a check found, never from a guess a later check could take back (a mod older than
+//! the game update, say): those made badges appear and vanish in the Library (cable's rule). Until a mod is checked it
+//! has no badge.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -51,26 +53,15 @@ fn is_niagara(key: &str) -> bool {
     ["ns_", "ne_", "curveatlas_"].iter().any(|p| name.starts_with(p))
 }
 
-/// The game build that inserted properties into material instances' overrides (xtra_mi_layout.rs): one cooked before
-/// it crashes the game when it overrides a later property (scripts/usmap-diff.py lists what each patch moved).
-const MATERIAL_LAYOUT_BUILD: u64 = 3984769;
-
 /// An Animation Blueprint, by its name. shortcut: ABP_ names only, list classes (xtra_uat_cli::classes) if a mod ever
 /// names one otherwise.
 fn is_anim_blueprint(key: &str) -> bool {
     key.rsplit('/').next().unwrap_or(key).starts_with("abp_")
 }
 
-/// When the installed game took that build (its first patch container from it on), None before it. A later patch that
-/// moves the overrides again (xtra_usmap_diff.rs reads the USMAPs on disk) takes its place, with no app update.
-fn material_layout_patched(containers: &[(PathBuf, u64, u64)]) -> Option<u64> {
-    let build = crate::xtra_usmap_diff::last_moved("MaterialInstanceBasePropertyOverrides").map_or(MATERIAL_LAYOUT_BUILD, |b| b.max(MATERIAL_LAYOUT_BUILD));
-    layout_patched_at(containers, build)
-}
-
-fn layout_patched_at(containers: &[(PathBuf, u64, u64)], build: u64) -> Option<u64> {
-    containers.iter().filter(|(p, ..)| container_cl(p).is_some_and(|cl| cl >= build)).map(|c| c.2).min()
-}
+/// The game build that inserted properties into material instances' overrides (xtra_mi_layout.rs): one cooked before
+/// it crashes the game when it overrides a later property (scripts/usmap-diff.py lists what each patch moved).
+const MATERIAL_LAYOUT_BUILD: u64 = 3984769;
 
 fn is_material_instance(key: &str) -> bool {
     key.rsplit('/').next().unwrap_or(key).starts_with("mi_")
@@ -551,18 +542,12 @@ struct Facts<'a> {
     /// its classes against the game's (xtra_layout.rs): None not checked yet, Some(None) they match, Some(Some(reason))
     /// the game's have what its copies lack
     layout: Option<Option<String>>,
-    /// made before MATERIAL_LAYOUT_BUILD with no update beside it, and no update since found nothing to rewrite in it
-    old_materials: bool,
-    /// its material instances (material_instances: by class where the name does not tell)
-    mics: Vec<String>,
-    /// a UI mod (the Library's UI type): its reasons name its UI materials
-    ui: bool,
     /// a mesh with more bones than its rebuilt skeleton (xtra_mesh.rs), the reason
     mesh: Option<String>,
 }
 
 /// The verdict for one mod, or None when it looks fine. Pure: the facts come in, the words go out.
-fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<Verdict> {
+fn judge(path: &str, m: &Facts, _game_updated: u64, game: &GameAssets) -> Option<Verdict> {
     let packages: Vec<String> = m.files.iter().filter(|f| is_package(f)).map(|f| match_key(f)).collect();
     // Project Galacta skins bring their own new files (meshes, textures, configs) by design: never "broken" for that
     if !m.galacta && !packages.is_empty() && !packages.iter().any(|k| game.contains_key(k)) {
@@ -585,9 +570,8 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
     if let Some(reason) = m.mesh.as_ref().filter(|_| !m.fixed) {
         return Some(Verdict { path: path.to_string(), kind: "risky", reason: reason.clone(), stale_niagara: 0, usmap_wait: 0, off_only: true });
     }
-    // A VFX mod carries cooked copies of the game's materials and blueprints: an update that rewrote them leaves it stale
+    // the game files it replaces that the game rewrote since the mod was made
     let stale: Vec<&String> = packages.iter().filter(|k| game.get(*k).is_some_and(|at| *at > m.installed)).collect();
-    let changed = stale.len();
     if m.vfx && !m.fixed && !m.cleared && m.old_layout {
         let niagara = packages.iter().filter(|k| is_niagara(k) && game.contains_key(*k)).count();
         return Some(Verdict {
@@ -595,56 +579,6 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
             kind: "vfx",
             reason: "Its Niagara effects are in the layout of an older game build, although the file is newer than the last game update (an earlier update made with an old USMAP, or an old mod installed again). The game can crash on them. The Mod Updater rebuilds them on the new game files.".into(),
             stale_niagara: niagara.max(1),
-            usmap_wait: 0,
-        off_only: false,
-        });
-    }
-    if m.vfx && !m.fixed && !m.cleared && m.installed > 0 && changed > 0 {
-        return Some(Verdict {
-            path: path.to_string(),
-            kind: "vfx",
-            reason: format!(
-                "A game update changed {changed} of the game files this VFX mod replaces, so its effects may look wrong or crash the game. The Mod Updater rebuilds it on the new game files."
-            ),
-            stale_niagara: stale.iter().filter(|k| is_niagara(k)).count(),
-            usmap_wait: 0,
-        off_only: false,
-        });
-    }
-    // A material mod: the updater rebuilds only its material instances and KO prompts, so a rewritten texture alone does not count
-    let stale_mi = stale.iter().filter(|k| m.mics.contains(**k)).count();
-    let stale_ko = stale.iter().filter(|k| crate::xtra_vfx::is_ko_prompt(k.rsplit('/').next().unwrap_or(k))).count();
-    if m.materials && !m.fixed && !m.cleared && m.installed > 0 && stale_mi + stale_ko > 0 {
-        let what = match (stale_mi, stale_ko) {
-            (0, _) => "the KO prompt".to_string(),
-            (_, 0) => format!("{stale_mi} of the {}material instances", if m.ui { "UI " } else { "" }),
-            _ => format!("{stale_mi} of the {}material instances and the KO prompt", if m.ui { "UI " } else { "" }),
-        };
-        return Some(Verdict {
-            path: path.to_string(),
-            kind: "vfx",
-            reason: format!(
-                "A game update changed {what} this mod replaces, so {} may look wrong. The Mod Updater rebuilds {} on the new game files.",
-                if stale_mi == 0 { "it" } else { "its materials" },
-                if stale_mi + stale_ko == 1 { "it" } else { "them" }
-            ),
-            stale_niagara: 0,
-            usmap_wait: 0,
-        off_only: false,
-        });
-    }
-    // its material instances in the older layout, whether or not the game rewrote them: the game can crash loading them
-    let mi = packages.iter().filter(|k| m.mics.contains(*k)).count();
-    if m.old_materials && mi > 0 {
-        return Some(Verdict {
-            path: path.to_string(),
-            kind: "vfx",
-            reason: format!(
-                "Made before the game update that changed how materials are stored, so {} can crash the game. The Mod Updater rewrites {} in the new layout.",
-                if mi == 1 { format!("its {}material", if m.ui { "UI " } else { "" }) } else { format!("its {mi} {}materials", if m.ui { "UI " } else { "" }) },
-                if mi == 1 { "it" } else { "them" }
-            ),
-            stale_niagara: 0,
             usmap_wait: 0,
         off_only: false,
         });
@@ -670,9 +604,7 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
         // what the update changed decides, whatever the date: one made after it from old files is caught too
         Some(Some(reason)) => risky(reason.clone()),
         Some(None) => None,
-        None if ko && m.installed > 0 && m.installed < game_updated => needs("A KO prompt installed before the last game update. Updates often change the game's KO widget, and the game can crash on an old copy. The Mod Updater rebuilds it on the new game files.".into()),
-        // not compared yet: the date stands in until the background check has looked
-        None if m.installed > 0 && m.installed < game_updated => risky("A Blueprint mod installed before the last game update. Updates often change the game classes it carries, and the game can crash on it. Turn it off if the game crashes, and look for an updated version.".into()),
+        // not compared yet: no badge until the background check has looked
         None => None,
     }
 }
@@ -684,7 +616,6 @@ fn judge_checked(path: &str, mut facts: Facts<'_>, updated: u64, game: &GameAsse
     if facts.old_layout || facts.fixed { return judge(path, &facts, updated, game); }
     facts.vfx = false;
     facts.materials = false;
-    facts.old_materials = false;
     judge(path, &facts, updated, game).or_else(|| Some(Verdict {
         path: path.into(), kind: "unknown", reason: reason.into(), stale_niagara: 0, usmap_wait: 0, off_only: false,
     }))
@@ -796,6 +727,7 @@ fn checked_record<'a>(store: &'a HashMap<String, Checked>, utoc: &Path, game_upd
 }
 
 /// A "nothing to update" for `utoc` as it is now, from an update that rewrites older material layouts.
+#[cfg(test)]
 fn layout_cleared(store: &HashMap<String, Checked>, utoc: &Path, game_updated: u64) -> bool {
     checked_record(store, utoc, game_updated).is_some_and(|c| !c.outdated && c.unknown.is_none() && c.material_layout)
 }
@@ -919,8 +851,6 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
         };
         let containers = game_containers(&paks);
         let game_updated = containers.iter().map(|c| c.2).max().unwrap_or(0);
-        let layout_patched = material_layout_patched(&containers);
-        let builds = asset_builds(&paks);
         let stamps = crate::xtra_stamp::load_all();
         let base = |p: &Path| p.with_extension("").to_string_lossy().to_lowercase();
         let installed_mods: HashSet<String> = mod_paths.iter().map(|p| base(Path::new(p))).collect();
@@ -1006,14 +936,11 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                         .map_or(installed, |o| installed.min(o.as_secs())),
                 };
                 let vfx = details.category == "VFX";
-                let (mics, _) = material_instances_with(builds.as_deref(), &paks, &path.with_extension("utoc"), &details.files);
                 let facts = Facts {
                     files: &details.files,
                     galacta: details.mod_type.contains("Project Galacta"),
                     vfx,
-                    materials: !vfx && (crate::xtra_vfx::updatable(&details.category, &details.files) || !mics.is_empty()),
-                    mics,
-                    ui: details.category == "UI",
+                    materials: !vfx && crate::xtra_vfx::updatable(&details.category, &details.files),
                     mesh: crate::xtra_mesh::found_now(&meshes, &path.with_extension("utoc"), game_updated),
                     // an update found nothing to rebuild in it (this file, this game): judged like one with its fix beside it
                     fixed: has_fix(&path),
@@ -1022,8 +949,6 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                     installed,
                     old_layout: details.category == "VFX" && crate::xtra_niagara::known_old_layout(&path, &niagara_layouts),
                     layout: crate::xtra_layout::found_now(&layouts, &path.with_extension("utoc"), game_updated, &usmap_id),
-                    old_materials: layout_patched.is_some_and(|at| installed > 0 && installed < at) && !has_fix(&path)
-                        && !layout_cleared(&checked, &path.with_extension("utoc"), game_updated),
                 };
                 judge_checked(p, facts, game_updated, &game, record.and_then(|c| c.unknown.as_deref()))
             })
@@ -1167,16 +1092,8 @@ mod tests {
     fn v(files: &[&str]) -> Vec<String> {
         files.iter().map(|s| s.to_string()).collect()
     }
-    #[test]
-    fn the_material_layout_patch_is_its_first_container_from_that_build_on() {
-        let c = |n: &str, at| (PathBuf::from(format!("Paks/{n}")), 1, at);
-        assert_eq!(layout_patched_at(&[c("pakchunk0-Windows.utoc", 5), c("Patch_-Windows_1.1.3962284_P.utoc", 10)], MATERIAL_LAYOUT_BUILD), None);
-        assert_eq!(layout_patched_at(&[c("Patch_-Windows_1.1.3962284_P.utoc", 10), c("Patch_-Windows_1.1.3984769_P.utoc", 20), c("Patch_-Windows_1.1.3990000_P.utoc", 30)], MATERIAL_LAYOUT_BUILD), Some(20));
-    }
     fn facts(files: &[String], installed: u64) -> Facts<'_> {
-        // the MI_ names, as material_instances finds them without listing classes
-        let mics = files.iter().filter(|f| is_package(f)).map(|f| match_key(f)).filter(|k| is_material_instance(k)).collect();
-        Facts { files, galacta: false, vfx: false, materials: false, fixed: false, cleared: false, has_blueprint: false, installed, old_layout: false, layout: None, old_materials: false, mics, ui: false, mesh: None }
+        Facts { files, galacta: false, vfx: false, materials: false, fixed: false, cleared: false, has_blueprint: false, installed, old_layout: false, layout: None, mesh: None }
     }
     const LIVE: &str = "Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uasset";
 
@@ -1211,12 +1128,11 @@ mod tests {
     }
 
     #[test]
-    fn old_blueprint_mods_are_risky_new_ones_are_not() {
+    fn a_blueprint_mod_gets_no_badge_from_its_date_alone() {
         let files = v(&[LIVE]);
-        let bp = |installed| Facts { has_blueprint: true, ..facts(&files, installed) };
-        assert_eq!(judge("m.pak", &bp(100), 200, &game()).map(|j| j.kind), Some("risky"));
-        assert_eq!(judge("m.bak_repak", &bp(100), 200, &game()).map(|j| j.kind), Some("risky"), "off too: it crashes once a loadout turns it on");
-        assert_eq!(judge("m", &bp(300), 200, &game()), None);
+        let bp = |installed, layout| Facts { has_blueprint: true, layout, ..facts(&files, installed) };
+        assert_eq!(judge("m.pak", &bp(100, None), 200, &game()), None, "older than the update, not compared yet: no guess a later check takes back");
+        assert_eq!(judge("m.bak_repak", &bp(100, Some(Some("x".into()))), 200, &game()).map(|j| j.kind), Some("risky"), "off too, once the check found it");
     }
 
     #[test]
@@ -1226,7 +1142,7 @@ mod tests {
         assert_eq!(judge("m.pak", &bp(100, Some(None)), 200, &game()), None, "older than the update, but its classes match the game's");
         let found = judge("m.pak", &bp(300, Some(Some("The game's WBP_X has 1 function this copy lacks (OnA).".into()))), 200, &game()).unwrap();
         assert_eq!((found.kind, found.reason.as_str()), ("risky", "The game's WBP_X has 1 function this copy lacks (OnA)."), "newer than the update, made from old files");
-        assert_eq!(judge("m.pak", &bp(100, None), 200, &game()).map(|j| j.kind), Some("risky"), "not compared yet: the date stands in");
+        assert_eq!(judge("m.pak", &bp(100, None), 200, &game()), None, "not compared yet: no badge");
         assert_eq!(judge("m.pak", &Facts { layout: Some(Some("x".into())), ..facts(&files, 100) }, 200, &game()), None, "not a Blueprint mod");
     }
 
@@ -1237,24 +1153,17 @@ mod tests {
             game.insert(match_key(f), 100);
         }
         let files = v(&["Marvel/Content/Marvel/VFX/NS_Burst.uasset", "Marvel/Content/Marvel/VFX/CurveAtlas_1026.uasset", "Marvel/Content/Marvel/VFX/MI_Glow.uasset"]);
-        let verdict = judge("m.pak", &Facts { vfx: true, ..facts(&files, 50) }, 200, &game).unwrap();
+        let verdict = judge("m.pak", &Facts { vfx: true, old_layout: true, ..facts(&files, 50) }, 200, &game).unwrap();
         assert_eq!((verdict.kind, verdict.stale_niagara), ("vfx", 2), "the material is rebuilt, the two Niagara files are left out");
     }
 
     #[test]
-    fn a_vfx_mod_older_than_its_game_files_needs_a_fix() {
+    fn a_vfx_mod_gets_a_badge_only_from_a_check() {
         let files = v(&[LIVE, "Marvel/Content/Marvel/VFX/NS_Own.uasset"]);
-        let vfx = |installed| Facts { vfx: true, has_blueprint: true, ..facts(&files, installed) };
-        let verdict = judge("m.pak", &vfx(50), 200, &game()).unwrap();
-        assert_eq!((verdict.kind, verdict.reason.contains("changed 1 of")), ("vfx", true), "the VFX verdict wins over risky");
-        assert_eq!(judge("m.pak", &vfx(150), 200, &game()).map(|j| j.kind), Some("risky"), "made after its files changed: only the Blueprint warning");
-        assert_eq!(judge("m.pak", &Facts { vfx: true, ..facts(&files, 150) }, 200, &game()), None);
-        assert_eq!(judge("m.pak", &Facts { vfx: true, old_layout: true, ..facts(&files, 150) }, 200, &game()).map(|j| j.kind), Some("vfx"), "newer than the update, still in the old layout");
-        let mats = v(&["Marvel/Content/Marvel/Characters/1026/1026001/Materials/Lobby/MI_1026001_Eyes.uasset", LIVE]);
-        assert_eq!(judge("m.pak", &Facts { materials: true, old_materials: true, ..facts(&mats, 150) }, 200, &game()).map(|j| j.kind), Some("vfx"), "materials from before the layout change");
-        assert_eq!(judge("m.pak", &Facts { old_materials: true, ..facts(&files, 150) }, 200, &game()), None, "no material instance, nothing to rewrite");
-        assert_eq!(judge("m.pak", &Facts { vfx: false, ..facts(&files, 50) }, 200, &game()), None, "only VFX mods");
-        assert_eq!(judge("m.pak", &Facts { fixed: true, ..vfx(50) }, 200, &game()).map(|j| j.kind), Some("risky"), "fixed already: its copy is judged instead");
+        let vfx = |installed| Facts { vfx: true, ..facts(&files, installed) };
+        assert_eq!(judge("m.pak", &vfx(50), 200, &game()), None, "game files newer than the mod: a guess the materials check could take back");
+        assert_eq!(judge("m.pak", &Facts { old_layout: true, ..vfx(150) }, 200, &game()).map(|j| j.kind), Some("vfx"), "the Niagara scan found the old layout");
+        assert_eq!(judge("m.pak", &Facts { old_layout: true, cleared: true, ..vfx(150) }, 200, &game()), None, "a materials check cleared it");
     }
 
     #[test]
@@ -1262,7 +1171,7 @@ mod tests {
         let files = v(&[LIVE]);
         let unknown = || Facts { vfx: true, ..facts(&files, 50) };
         assert_eq!(judge_checked("m.pak", unknown(), 200, &game(), Some("Custom shader data")).unwrap().kind, "unknown");
-        assert_eq!(judge_checked("m.pak", unknown(), 200, &game(), None).unwrap().kind, "vfx");
+        assert_eq!(judge_checked("m.pak", unknown(), 200, &game(), None), None, "no check, no badge");
         assert_eq!(judge_checked("m.pak", Facts { old_layout: true, ..unknown() }, 200, &game(), Some("Custom shader data")).unwrap().kind, "vfx");
         assert_eq!(judge_checked("m.pak", Facts { mesh: Some("Bone mismatch".into()), ..unknown() }, 200, &game(), Some("Custom shader data")).unwrap().kind, "risky");
         assert_eq!(judge_checked("m.pak", Facts { has_blueprint: true, layout: Some(Some("Class changed".into())), ..unknown() }, 200, &game(), Some("Custom shader data")).unwrap().kind, "risky");
@@ -1305,31 +1214,19 @@ mod tests {
     }
 
     #[test]
-    fn a_material_mod_needs_a_fix_only_when_its_material_instances_changed() {
+    fn a_material_or_ko_mod_gets_a_badge_only_from_a_check() {
         let mut game = game();
-        for f in ["/Game/Marvel/Characters/1026/1026800/Materials/MI_Body.uasset", "/Game/Marvel/Characters/1026/1026800/Texture/T_Body_D.uasset"] {
-            game.insert(match_key(f), 100);
-        }
         let mi = "Marvel/Content/Marvel/Characters/1026/1026800/Materials/MI_Body.uasset";
-        let tex = "Marvel/Content/Marvel/Characters/1026/1026800/Texture/T_Body_D.uasset";
-        let skin = v(&[mi, tex]);
-        let verdict = judge("m.pak", &Facts { materials: true, ..facts(&skin, 50) }, 200, &game).unwrap();
-        assert_eq!((verdict.kind, verdict.reason.contains("changed 1 of the material instances")), ("vfx", true));
-        let textures = v(&[tex]);
-        assert_eq!(judge("m.pak", &Facts { materials: true, ..facts(&textures, 50) }, 200, &game), None, "a rewritten texture alone");
-        assert_eq!(judge("m.pak", &Facts { materials: true, ..facts(&skin, 150) }, 200, &game), None, "made after the update");
-        assert_eq!(judge("m.pak", &facts(&skin, 50), 200, &game), None, "not a material mod");
+        game.insert(match_key("/Game/Marvel/Characters/1026/1026800/Materials/MI_Body.uasset"), 100);
+        assert_eq!(judge("m.pak", &Facts { materials: true, ..facts(&v(&[mi]), 50) }, 200, &game), None, "the game rewrote its material: the materials check decides, not the date");
         let ko = "Marvel/Content/Marvel/UI/Blueprints/Battle/Custom/1026/WBP_Battle_Kill_1026_V3.uasset";
         game.insert(match_key("/Game/Marvel/UI/Blueprints/Battle/Custom/1026/WBP_Battle_Kill_1026_V3.uasset"), 100);
-        let verdict = judge("m.pak", &Facts { materials: true, ..facts(&v(&[ko]), 50) }, 200, &game).unwrap();
-        assert_eq!((verdict.kind, verdict.reason.contains("changed the KO prompt")), ("vfx", true), "a KO prompt the update rewrote");
-        // the class check or the date flags a KO prompt the game did not rewrite: Needs update, the updater rebuilds it
         let ko_files = v(&[ko, &ko.replace(".uasset", ".uexp")]);
-        let kp = |layout| Facts { materials: true, has_blueprint: true, layout, ..facts(&ko_files, 150) };
-        assert_eq!(judge("m.pak", &kp(Some(Some("x".into()))), 200, &game).map(|v| v.kind), Some("vfx"), "a class change");
-        assert_eq!(judge("m.pak", &kp(None), 200, &game).map(|v| v.kind), Some("vfx"), "the date rule");
+        let kp = |layout| Facts { materials: true, has_blueprint: true, layout, ..facts(&ko_files, 50) };
+        assert_eq!(judge("m.pak", &kp(Some(Some("x".into()))), 200, &game).map(|v| v.kind), Some("vfx"), "the class check found a change: Needs update, the updater rebuilds it");
+        assert_eq!(judge("m.pak", &kp(None), 200, &game), None, "not compared yet");
         let other = v(&[ko, "Marvel/Content/Marvel/UI/Blueprints/WBP_Other.uasset"]);
-        assert_eq!(judge("m.pak", &Facts { materials: true, has_blueprint: true, ..facts(&other, 150) }, 200, &game).map(|v| v.kind), Some("risky"), "another Blueprint too");
+        assert_eq!(judge("m.pak", &Facts { materials: true, has_blueprint: true, layout: Some(Some("x".into())), ..facts(&other, 150) }, 200, &game).map(|v| v.kind), Some("risky"), "another Blueprint too");
     }
 
     #[test]
@@ -1363,20 +1260,6 @@ mod tests {
     }
 
     #[test]
-    fn a_material_instance_found_by_class_counts_whatever_its_name() {
-        let ui = "Marvel/Content/Marvel/UI/Materials/Battle/PP_Sceen_Effect_Dying_Ins.uasset";
-        let mut game = game();
-        game.insert(match_key(ui), 100);
-        let files = v(&[ui]);
-        let by_class = |installed| Facts { materials: true, ui: true, mics: vec![match_key(ui)], ..facts(&files, installed) };
-        let verdict = judge("m.pak", &by_class(50), 200, &game).unwrap();
-        assert_eq!((verdict.kind, verdict.reason.contains("1 of the UI material instances")), ("vfx", true), "{}", verdict.reason);
-        assert_eq!(judge("m.pak", &Facts { materials: true, ..facts(&files, 50) }, 200, &game), None, "by its name alone it is no material instance");
-        let old = judge("m.pak", &Facts { old_materials: true, ..by_class(150) }, 200, &game).unwrap();
-        assert!(old.reason.contains("its UI material can crash"), "{}", old.reason);
-    }
-
-    #[test]
     fn stale_files_are_those_the_game_rewrote_after_the_mod() {
         let files = vec![
             "Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uasset".to_string(),
@@ -1399,8 +1282,6 @@ mod tests {
         let t = std::time::Instant::now();
         let again = game_assets(&paks).expect("cached");
         println!("second read: {} in {:?}", again.len(), t.elapsed());
-        let patched = material_layout_patched(&game_containers(&paks));
-        println!("material layout patch installed at {patched:?}");
         for e in std::fs::read_dir(paks.join("~mods")).unwrap().flatten() {
             let p = e.path();
             if !p.extension().is_some_and(|x| x == "pak" || x == "bak_repak") {
@@ -1412,7 +1293,7 @@ mod tests {
             let newer = files.iter().filter(|f| is_package(f) && game.get(&match_key(f)).is_some_and(|at| *at > installed)).count();
             let pk = files.iter().filter(|f| is_package(f)).count();
             let vfx = p.to_string_lossy().to_lowercase().contains("vfx");
-            let v = judge(&p.to_string_lossy(), &Facts { vfx, old_materials: patched.is_some_and(|at| installed < at), ..facts(&files, installed) }, 0, &game).map(|v| v.kind).unwrap_or("ok");
+            let v = judge(&p.to_string_lossy(), &Facts { vfx, ..facts(&files, installed) }, 0, &game).map(|v| v.kind).unwrap_or("ok");
             println!("{v:7} {hits:4}/{pk:<4} newer {newer:4} {}", p.file_name().unwrap().to_string_lossy());
         }
     }
@@ -1447,8 +1328,6 @@ mod tests {
                 galacta: d.mod_type.contains("Project Galacta"),
                 vfx,
                 materials: !vfx && crate::xtra_vfx::updatable(&d.category, &d.files),
-                mics: material_instances(&paks, &p.with_extension("utoc"), &d.files).0,
-                ui: d.category == "UI",
                 mesh: None,
                 fixed: false,
                 cleared: false,
@@ -1456,7 +1335,6 @@ mod tests {
                 installed,
                 old_layout: vfx && crate::xtra_niagara::known_old_layout(&p, &niagara_layouts),
                 layout,
-                old_materials: false,
             };
             let label = |v: Option<Verdict>| v.map_or("ok", |v| match v.kind {
                 "risky" => "May crash",
@@ -1471,8 +1349,8 @@ mod tests {
             let (after, note) = match &r {
                 Ok(o) if o.reason.is_some() => (judge(&name, &facts(Some(o.reason.clone())), updated, &game), "older than the game".to_string()),
                 Ok(o) if o.complete => (judge(&name, &facts(Some(None)), updated, &game), "matches the game".to_string()),
-                Ok(_) => (judge(&name, &facts(None), updated, &game), "partly read, date rule".to_string()),
-                Err(e) => (judge(&name, &facts(None), updated, &game), format!("not checked, date rule: {e}")),
+                Ok(_) => (judge(&name, &facts(None), updated, &game), "partly read, no badge".to_string()),
+                Err(e) => (judge(&name, &facts(None), updated, &game), format!("not checked, no badge: {e}")),
             };
             println!("{:9} -> {:9} {:5.1}s  {name}  [{note}]", label(before), label(after), took.as_secs_f64());
             // shown even when a VFX verdict outranks it

@@ -532,7 +532,7 @@ const ModItem = memo(function ModItem({
                     {!builtin && <NumberInput
                         value={mod.priority || 0}
                         min={0}
-                        max={7}
+                        max={(mod.priority || 0) > 7 ? (mod.priority || 0) + 1 : 7} /* repakxtra: Load on top can go past 7, then it moves either way */
                         onChange={(newPriority) => handleSetPriority(mod.path, newPriority)}
                         disabled={gameRunning}
                     />}

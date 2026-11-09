@@ -591,8 +591,6 @@ html:not([data-show-vfx-updater]) [data-tour="vfx-updater-btn"] { display: none 
 html:not([data-show-encrypt]) [data-tour="encrypt-btn"] { display: none !important; }
 html:not([data-show-galacta]) [data-tour="galacta-btn"] { display: none !important; }
 html:not([data-show-conflicts]) .mod-type-badge.conflict-badge, html:not([data-show-conflicts]) .conflict-dot { display: none !important; }   /* Settings > On each mod */
-html:not([data-show-asset-explorer]) .btn-asset-explorer,
-html:not([data-show-asset-explorer]) .btn-asset-explorer + .divider-vertical { display: none !important; }
 html:not([data-show-nexus]) :is(.nexus-badge, .nexus-update-chip, .nexus-split) { display: none !important; }
 html:not([data-show-encrypted]) :is(.mod-lock, .encrypted-badge) { display: none !important; }
 /* mod details: the chip before the hidden Encrypted one gets back its round right corners */
@@ -2078,9 +2076,9 @@ html[data-motion="off"] .lo-row .fp-lead.is-busy .lo-on-dot { animation: none; }
 /* Mod file size: in the tags row, left of the type tag (ModsList.tsx sizeTag); the actions row's own size stays hidden */
 .mod-actions-row .mod-size { display: none !important; }
 .btn-check-conflicts { position: relative; }
-/* Conflicts on: the button names them ("2 conflicting") at every header width, not only as a red dot on an icon */
-.center-header .header-actions .btn-check-conflicts:has(.has-conflicts) { gap: 8px !important; padding-left: 12px !important; padding-right: 12px !important; }
-.center-header .header-actions .btn-check-conflicts .btn-label.has-conflicts { display: inline !important; max-width: 9rem !important; opacity: 1 !important; }
+/* The button keeps its words at every header width ("Check Conflicts", or "2 conflicts" while there are any): never an icon alone */
+.center-header .header-actions .btn-check-conflicts { gap: 8px !important; padding-left: 12px !important; padding-right: 12px !important; }
+.center-header .header-actions .btn-check-conflicts .btn-label { display: inline !important; max-width: 9rem !important; opacity: 1 !important; }
 .conflict-dot { background: #f2555a; --dot-ring: var(--bg-darker); }   /* the Library toolbar behind it */
 /* Attention dots (Setup, Check Conflicts) sit on their button's top-right corner like a notification badge, centered on
    the corner, with a ring in the color behind them */
@@ -2281,6 +2279,16 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
 .cf-mod.is-off .cf-mod-name { color: var(--text-secondary); }
 .cf-priority { flex: none; }
 .cf-keep { flex: none; height: 28px !important; padding: 0 12px !important; font-size: 12px !important; white-space: nowrap; }
+.cf-role { flex: none; font-size: 12px; font-weight: 500; }
+.cf-role.is-hidden { color: #f5d342; }   /* the app's warning yellow (Problems tab, Why's problems) */
+.cf-role.is-wins { color: var(--focus-ring); }   /* the accent blue, lifted for small text on dark */
+.cf-hidden { display: flex; flex-direction: column; margin-top: 8px; }
+.cf-section { margin: 0; font-size: 14px; font-weight: 600; }
+.cf-section button { display: inline-flex; align-items: center; gap: 6px; height: auto !important; min-height: 0 !important; padding: 4px 0 !important;
+  background: none !important; border: 0 !important; color: var(--text-primary) !important; font: inherit; cursor: pointer; }
+.cf-section button[aria-expanded="true"] .cf-caret { transform: rotate(90deg); }
+.cf-hidden .t-acc-panel-inner { display: flex; flex-direction: column; gap: 12px; }
+.cf-hidden .t-acc-panel-inner > .cf-sub { margin: 4px 0 0; }
 .cf-empty { margin: 0; padding: 28px 0; text-align: center; font-size: 13px; color: var(--text-secondary); }
 .cf-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px !important; border-top: 1px solid var(--panel-border); }
 .cf-modal .btn-primary { height: 32px !important; min-height: 0 !important; padding: 0 20px !important; font-size: 13px !important; width: auto !important; flex: none;
@@ -3257,7 +3265,6 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .why-btn { margin-top: 10px; display: inline-flex; align-items: center; gap: 6px; }
 .why-checking { display: flex; align-items: center; gap: 8px; }
 .why-modal .modal-body { gap: 0; }   /* .modal-body's 2rem section gap sat between the summary and its list */
-.why-summary { margin: 0 0 12px; color: var(--text-primary); font-size: 14px; }
 .why-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .why-item { display: flex; gap: 10px; align-items: flex-start; }
 .why-item > svg { flex: none; margin-top: 2px; color: var(--text-secondary); }
@@ -3266,6 +3273,7 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .why-item div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .why-item b { font-size: 13px; color: var(--text-primary); }
 .why-item span { font-size: 13px; color: var(--text-secondary); }
+.why-item.why-more { padding-top: 12px; border-top: 1px dashed var(--panel-border); animation: t-text-in var(--text-swap-dur) var(--text-swap-ease) backwards; }   /* transitions.dev Text states: the second pass's row swaps in */
 .why-item .why-act { flex: none; width: auto !important; align-self: center; }   /* Setup's blue button size (the rule above), one look per button kind */
 
 /* repakxtra: Settings > General > Storage (custom/StorageCleanup.tsx), its own section. Gray notes, a red Delete
