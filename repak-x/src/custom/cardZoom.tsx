@@ -27,14 +27,20 @@ const step = (dir: -1 | 0 | 1) => { localStorage.setItem(KEY, String(stepZoom(ge
 
 export const useCardZoom = () => useSyncExternalStore(subscribe, get)
 
+/** ms after a wheel step in which more wheel events are the same notch's trail */
+const STEP_GAP = 90
+
 /** Ctrl + wheel over `el` zooms the cards (and keeps the webview from zooming the whole app). What is under the pointer
  *  stays under it: the browser's own scroll anchoring is off for the step (it jumped the list hundreds of px). */
 export function useWheelZoom(el: HTMLElement | null) {
   useEffect(() => {
     if (!el) return
+    let last = -Infinity
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return
       e.preventDefault()
+      if (e.timeStamp - last < STEP_GAP) return // one step per notch (CardZoomControl)
+      last = e.timeStamp
       const held = e.target instanceof Element && e.target !== el && el.contains(e.target) ? e.target : null
       const before = held?.getBoundingClientRect().top
       el.style.overflowAnchor = 'none'
@@ -58,14 +64,21 @@ export function CardZoomControl() {
   useEffect(() => {
     const el = box.current
     if (!el) return
-    let sum = 0
+    let sum = 0, last = -Infinity
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
-      sum += e.deltaMode === 0 ? e.deltaY : e.deltaY * 100 // lines and pages count as whole notches
-      const n = Math.trunc(sum / 100) // whole notches; the rest waits for the next event
-      sum -= n * 100
-      if (n && stepZoom(get(), n < 0 ? 1 : -1) !== get()) cue('select')
-      for (let i = 0; i < Math.abs(n); i++) step(n < 0 ? 1 : -1)
+      const d = e.deltaMode === 0 ? e.deltaY : e.deltaY * 100 // lines and pages count as whole notches
+      // One step per notch, whatever its size (a notch came as 300 with Windows set to scroll 3 lines, so it jumped
+      // 30%), and none for a moment after a step (smooth-scrolling mice trail a notch with more events). A trackpad's
+      // small deltas still add up to one step
+      sum = Math.abs(d) >= 100 ? d : sum + d
+      if (e.timeStamp - last < STEP_GAP) { sum = 0; return }
+      if (Math.abs(sum) < 100) return
+      const dir = sum < 0 ? 1 : -1
+      sum = 0
+      last = e.timeStamp
+      if (stepZoom(get(), dir) !== get()) cue('select')
+      step(dir)
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
