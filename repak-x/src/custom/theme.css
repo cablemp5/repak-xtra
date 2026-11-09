@@ -3376,40 +3376,58 @@ html[data-toasts-held] .toast-container { display: none; }   /* the welcome flow
 
 /* ---------- Merge sounds (custom/MergeSounds.tsx): a merged pack's details note, and the window with a column per mod ---------- */
 .sound-merge-note p { margin: 0 0 8px; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
-.ms-modal { width: min(900px, 94vw) !important; max-width: none !important; max-height: 88vh; padding: 0 !important; display: flex; flex-direction: column; }
-.ms-modal .modal-header { padding: 16px 20px !important; align-items: flex-start; gap: 12px; border-bottom: 1px solid var(--panel-border); }
-.ms-title { min-width: 0; } .ms-title h2 { margin: 0; }
+.ms-modal { width: min(920px, 94vw) !important; max-width: none !important; max-height: 88vh; padding: 0 !important; display: flex; flex-direction: column; }
+.ms-modal .modal-header { padding: 18px 20px 16px !important; align-items: flex-start; gap: 12px; border-bottom: 1px solid var(--panel-border); }
+.ms-title { min-width: 0; }
+.ms-title h2 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+.ms-title p { margin: 4px 0 0; max-width: 64ch; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
 .ms-modal .modal-close { display: grid; place-items: center; width: 32px; height: 32px; line-height: 1; flex: none; margin-left: auto; }
-.ms-body { overflow: auto; padding: 16px 20px !important; display: flex; flex-direction: column; gap: 16px; min-height: 120px; }
-.ms-wait, .ms-done { margin: 24px 0; text-align: center; font-size: 13px; }
-.ms-done { color: var(--text-primary); }
-.ms-bank h3 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--text-primary); }
-.ms-bank h3 span { margin-left: 8px; font: 400 12px var(--font-mono); color: var(--text-secondary); }
-/* past four mods the columns scroll sideways, the sound column pinned */
-.ms-grid { display: grid; border: 1px solid var(--panel-border); border-radius: 10px; overflow: auto; }
+.ms-body { overflow: auto; padding: 16px 20px !important; display: flex; flex-direction: column; gap: 20px; min-height: 160px; }
+/* the loader, the empty states and the done state: centered in the body, text centered under the icon */
+.ms-center { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; flex: 1; padding: 28px 12px; }
+.ms-empty { gap: 8px; }
+.ms-empty-icon { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: 4px; border-radius: 12px; background: var(--bg-light); color: var(--text-primary); }
+.ms-empty-icon svg { width: 18px; height: 18px; }
+.ms-empty b { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.ms-empty p { margin: 0; max-width: 46ch; font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-wrap: balance; }
+/* a bank: its hero, the file, and how many sounds, on one baseline */
+.ms-bank-head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; }
+.ms-bank-head b { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.ms-bank-head span { font: 12px var(--font-mono); color: #7d7d7d; }
+.ms-bank-head em { margin-left: auto; font-style: normal; font-size: 12px; color: var(--text-secondary); }
+/* the grid: the sound column, then a tile per mod; past four mods it scrolls sideways with the sound column pinned */
+.ms-grid { display: grid; gap: 6px; align-items: stretch; overflow-x: auto; }
 .ms-row { display: contents; }
-.ms-grid > div:not(.ms-row), .ms-row > div { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 10px; border-top: 1px solid var(--panel-border); }
-.ms-head { border-top: 0 !important; background: var(--bg-dark); flex-direction: column; align-items: flex-start !important; gap: 0 !important; font-size: 12px; font-weight: 600; color: var(--text-primary); }
-.ms-head span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ms-all { padding: 0; border: 0; background: none; font: 500 12px var(--font-sans, inherit); color: color-mix(in srgb, var(--accent-primary), white 30%); cursor: pointer; }
+.ms-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; min-width: 0; padding: 0 4px 2px; font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.ms-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-all { flex: none; padding: 0; border: 0; background: none; font: 500 12px var(--font-sans, inherit); color: color-mix(in srgb, var(--accent-primary), white 30%); cursor: pointer; }
 .ms-all:hover { text-decoration: underline; }
 .ms-sticky { position: sticky; left: 0; z-index: 1; background: var(--bg-darker); }
-.ms-head.ms-sticky { background: var(--bg-dark); }
-.ms-num { font: 12px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-primary); }
-.ms-none { font-size: 12px; color: var(--text-secondary); }
-.ms-play { display: grid; place-items: center; width: 28px; height: 28px; flex: none; padding: 0; border: 1px solid var(--panel-border); border-radius: var(--quiet-radius);
-  background: transparent; color: var(--text-primary); cursor: pointer; transition: background 0.15s ease; }
-.ms-play:hover { background: var(--quiet-hover); }
-.ms-pick { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); cursor: pointer; }
-.ms-pick input { accent-color: var(--accent-primary); margin: 0; width: 15px; height: 15px; cursor: pointer; }
-.ms-cell.is-on .ms-pick { color: var(--text-primary); }
-.ms-skipped p, .ms-error { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.ms-num { display: flex; align-items: center; gap: 8px; padding: 0 4px; font: 12px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.ms-num b { font-weight: 500; color: var(--text-primary); }
+.ms-tag { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border: 1px solid var(--panel-border); border-radius: 5px; font: 11px var(--font-sans, inherit); color: var(--text-secondary); }
+/* a mod's version: the whole tile picks it, its square play plays it; the picked tile turns blue with a check */
+.ms-tile { display: flex; align-items: center; gap: 10px; height: 44px; min-width: 0; padding: 0 10px 0 8px; border: 1px solid var(--panel-border); border-radius: 9px;
+  background: var(--bg-dark); color: var(--text-secondary); font-size: 12px; cursor: pointer; user-select: none;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
+.ms-tile:hover { border-color: rgba(255, 255, 255, 0.14); color: var(--text-primary); }
+.ms-tile:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent-primary), transparent 30%); outline-offset: 1px; }
+.ms-tile.is-on { border-color: color-mix(in srgb, var(--accent-primary), transparent 35%); background: color-mix(in srgb, var(--accent-primary), transparent 88%); color: var(--text-primary); }
+.ms-tile.is-none { justify-content: center; background: transparent; border-style: dashed; color: #7d7d7d; cursor: default; }
+.ms-play { display: grid !important; place-items: center; width: 28px !important; height: 28px !important; min-width: 28px !important; min-height: 0 !important; flex: none;
+  padding: 0 !important; border: 0 !important; border-radius: 7px !important; background: var(--bg-light) !important; color: var(--text-primary) !important; cursor: pointer;
+  transition: background 0.15s ease; }
+.ms-play:hover { background: var(--bg-lighter) !important; }
+.ms-check { display: grid; place-items: center; width: 18px; height: 18px; margin-left: auto; flex: none; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.18);
+  transition: background 0.15s ease, border-color 0.15s ease; }
+.ms-tile.is-on .ms-check { border-color: transparent; background: var(--accent-primary); color: #fff; animation: t-swap-in var(--reveal-dur) var(--reveal-ease) backwards; }
+html[data-motion="off"] .ms-tile.is-on .ms-check { animation: none; }
+.ms-notes p, .ms-error { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
 .ms-error { color: var(--warning-text, #f5d342); }
-.ms-foot { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--panel-border); }
-.ms-foot > :first-child:not(.ms-name) { margin-left: auto; }
+.ms-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--panel-border); }
 .ms-foot .lo-text-btn, .ms-foot .btn-primary { width: auto !important; flex: none; }
-.ms-foot .btn-primary { height: 32px !important; min-height: 0 !important; padding: 0 16px !important; font-size: 13px !important; font-weight: 500 !important;
-  border-radius: var(--quiet-radius) !important; }
-.ms-name { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; margin-right: 8px; font-size: 12px; color: var(--text-secondary); }
+.ms-foot .btn-primary { display: inline-flex !important; align-items: center; gap: 8px; height: 32px !important; min-height: 0 !important; padding: 0 16px !important;
+  font-size: 13px !important; font-weight: 500 !important; border-radius: var(--quiet-radius) !important; }
+.ms-name { display: flex; flex: 1; align-items: center; gap: 10px; min-width: 0; margin-right: 8px; font-size: 12px; color: var(--text-secondary); }
 .ms-name input { flex: 1; min-width: 0; height: 32px; padding: 0 10px; border: 1px solid var(--panel-border); border-radius: var(--quiet-radius);
   background: var(--bg-dark); color: var(--text-primary); font: 13px var(--font-sans, inherit); }

@@ -235,6 +235,8 @@ pub struct Plan {
     pub skipped: Vec<(String, String)>,
     /// what else the merge does that is worth knowing
     pub notes: Vec<String>,
+    /// files (banks, streamed sounds) two or more of them ship: none means they already play together
+    pub shared_files: usize,
 }
 
 #[derive(serde::Serialize)]
@@ -251,6 +253,9 @@ pub struct PlanSound {
     /// the mods with their own version of it, and the one that wins today (the highest priority)
     pub has: Vec<usize>,
     pub pick: usize,
+    /// a streamed sound: its full file (a loose .wem of the same number) beside the bank's short prefetch copy. It is
+    /// picked with the row and plays from this file
+    pub stream: Option<String>,
 }
 
 fn paks_of(state: &State<'_, Arc<Mutex<crate::AppState>>>) -> Option<PathBuf> {
@@ -323,11 +328,13 @@ pub async fn sound_merge_plan(paths: Vec<String>, state: State<'_, Arc<Mutex<cra
             if key.ends_with(".wem") {
                 let copies: Vec<(usize, Arc<Vec<u8>>)> = who.iter().filter_map(|&i| Some((i, extract(&src[i].path, &src[i].sounds[key])?))).collect();
                 let has: Vec<usize> = copies.iter().map(|(i, _)| *i).collect();
+                plan.shared_files += 1;
                 if has.len() > 1 && copies.iter().any(|(_, d)| *d != copies[0].1) {
-                    plan.banks.push(PlanBank { key: key.clone(), sounds: vec![PlanSound { id: wem_id(key), pick: *has.last().unwrap(), has }] });
+                    plan.banks.push(PlanBank { key: key.clone(), sounds: vec![PlanSound { id: wem_id(key), pick: *has.last().unwrap(), has, stream: None }] });
                 }
                 continue;
             }
+            plan.shared_files += 1;
             let Some(g) = game.get(key).and_then(|(p, e)| extract(p, e)) else {
                 // a bank the game lacks: the highest-priority mod's plays whole, as it does today
                 plan.notes.push(format!("{} is not in the game, so {}'s version of it is used whole.", bank_name(key), file_label(&plan.mods[*who.last().unwrap()])));
@@ -356,7 +363,7 @@ pub async fn sound_merge_plan(paths: Vec<String>, state: State<'_, Arc<Mutex<cra
             let mut sounds = Vec::new();
             for (id, has) in by_id {
                 if has.len() > 1 {
-                    sounds.push(PlanSound { id, pick: *has.last().unwrap(), has });
+                    sounds.push(PlanSound { id, pick: *has.last().unwrap(), has, stream: None });
                 } else {
                     plan.only_one += 1;
                 }
@@ -364,6 +371,19 @@ pub async fn sound_merge_plan(paths: Vec<String>, state: State<'_, Arc<Mutex<cra
             if !sounds.is_empty() {
                 plan.banks.push(PlanBank { key: key.clone(), sounds });
             }
+        }
+        // a streamed sound shows once: its loose .wem joins the bank row with the same number
+        let loose: Vec<(usize, u32)> = plan.banks.iter().enumerate().filter(|(_, b)| b.key.ends_with(".wem")).map(|(i, b)| (i, b.sounds[0].id)).collect();
+        let mut folded = Vec::new();
+        for (i, id) in loose {
+            let wem = plan.banks[i].key.clone();
+            if let Some(row) = plan.banks.iter_mut().filter(|b| b.key.ends_with(".bnk")).flat_map(|b| b.sounds.iter_mut()).find(|s| s.id == id) {
+                row.stream = Some(wem);
+                folded.push(i);
+            }
+        }
+        for i in folded.into_iter().rev() {
+            plan.banks.remove(i);
         }
         Ok(plan)
     }).await.map_err(|e| e.to_string())?
