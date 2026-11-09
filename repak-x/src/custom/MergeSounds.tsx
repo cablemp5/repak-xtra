@@ -1,19 +1,20 @@
 // repakxtra: Merge sounds (xtra_soundmerge.rs). Select two or more sound mods in the Library and the selection bar's
 // Merge sounds opens a window listing every sound two or more of them change: a column per mod (cable's pick A), each
-// cell playing that mod's version (decoded by the preview kit) and picking it, Use all per column, picks starting on
-// the mod that wins today. Make merged pack writes it as a normal mod and switches off the originals that hold only
+// tile playing that mod's version (decoded by the preview kit) and picking it with a click (cable's pick A, round 3),
+// Use all per column, picks starting on the mod that wins today. A streamed sound is one row with its bank entry. Make merged pack writes it as a normal mod and switches off the originals that hold only
 // sounds. A merged pack's details say what it was made from, with Change picks to open the window again.
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { invoke } from '@tauri-apps/api/core'
-import { Combine, LoaderCircle, Play, Square } from 'lucide-react'
+import { AudioLines, Check, CircleCheck, Combine, LoaderCircle, Play, Square } from 'lucide-react'
 import heroes from '../data/character_data.json'
 import { cue } from './sounds'
 import { runOp } from './opDialogs'
 import { useDialogFocus } from './dialogFocus'
+import { ProgressLoader } from './ProgressLoader'
 
-type Plan = { mods: string[]; banks: { key: string; sounds: { id: number; has: number[]; pick: number }[] }[]; only_one: number; skipped: [string, string][]; notes: string[] }
+type Plan = { mods: string[]; banks: { key: string; sounds: { id: number; has: number[]; pick: number; stream?: string | null }[] }[]; only_one: number; skipped: [string, string][]; notes: string[]; shared_files: number }
 type Picks = Record<string, Record<string, string>> // sound key -> sound id -> the picked mod's path
 type Info = { name: string; sources: string[]; picks: Picks }
 type Open = { paths: string[]; name?: string; picks?: Picks; replace?: string }
@@ -85,8 +86,10 @@ function MergeSoundsWindow({ open, onClose, onDone }: { open: Open; onClose: () 
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const shared = plan?.banks.reduce((n, b) => n + b.sounds.length, 0) ?? 0
+  // nothing to pick, yet they ship the same bank: only one copy loads today, so the merged pack still lets both play
+  const canMake = Boolean(plan) && plan!.mods.length > 1 && (shared > 0 || plan!.shared_files > 0)
   const keeps = useMemo(() => (plan?.mods ?? []).map((_, i) => Object.values(picks).reduce((n, m) => n + Object.values(m).filter(x => x === i).length, 0)), [plan, picks])
-  const pick = (key: string, id: number, i: number) => { cue('select'); setPicks(p => ({ ...p, [key]: { ...p[key], [id]: i } })) }
+  const pick = (key: string, id: number, i: number) => { if (picks[key]?.[id] !== i) cue('select'); setPicks(p => ({ ...p, [key]: { ...p[key], [id]: i } })) }
   const pickAll = (i: number) => {
     cue('select')
     setPicks(p => Object.fromEntries(Object.entries(p).map(([key, m]) => {
@@ -99,8 +102,16 @@ function MergeSoundsWindow({ open, onClose, onDone }: { open: Open; onClose: () 
     setMaking(true)
     setError('')
     try {
-      const payload: Picks = Object.fromEntries(Object.entries(picks).map(([key, m]) => [key, Object.fromEntries(Object.entries(m).map(([id, i]) => [id, plan.mods[i]]))]))
-      const made = await invoke<{ path: string; turn_off: string[] }>('sound_merge_make', { paths: plan.mods, picks: payload, name: title.trim(), replace: open.replace ?? null })
+      // a streamed sound's full file goes with its row's pick
+      const payload: Picks = {}
+      for (const b of plan.banks) {
+        for (const s of b.sounds) {
+          const who = plan.mods[picks[b.key]?.[s.id] ?? s.pick]
+          ;(payload[b.key] ??= {})[String(s.id)] = who
+          if (s.stream) (payload[s.stream] ??= {})[String(s.id)] = who
+        }
+      }
+      const made = await invoke<{ path: string; turn_off: string[] }>('sound_merge_make', { paths: plan.mods, picks: payload, name: title.trim() || `Merged ${plan.mods.map(name).join(' + ')}`, replace: open.replace ?? null })
       let off = 0
       for (const p of made.turn_off) {
         if (!(await runOp('turn off this mod', () => invoke('toggle_mod', { modPath: p }), { modes: false }))) break
@@ -108,7 +119,7 @@ function MergeSoundsWindow({ open, onClose, onDone }: { open: Open; onClose: () 
       }
       onDone()
       cue('success')
-      setDone(`Made ${name(made.path)}. It is on${off ? `, and ${off === 1 ? 'the original is' : `${off} originals are`} off (switch them on again any time)` : ''}.`)
+      setDone(`It is on in your Library${off ? `, and ${off === 1 ? 'the original is' : `${off} originals are`} off. Switch them on again any time` : ''}.|${name(made.path)}`)
     } catch (e) {
       cue('warning')
       setError(String(e))
@@ -117,7 +128,8 @@ function MergeSoundsWindow({ open, onClose, onDone }: { open: Open; onClose: () 
     }
   }
 
-  const cols = plan?.mods.length ?? 2
+  const n = plan?.mods.length ?? 2
+  const [doneText, doneName] = done.split('|')
   return createPortal(
     <div className="modal-overlay" onClick={onClose}>
       <motion.div ref={trap.ref} onKeyDown={trap.onKeyDown} tabIndex={-1} className="modal-content ms-modal" role="dialog" aria-modal="true" aria-label="Merge sounds"
@@ -125,48 +137,49 @@ function MergeSoundsWindow({ open, onClose, onDone }: { open: Open; onClose: () 
         <div className="modal-header">
           <div className="ms-title">
             <h2>Merge sounds</h2>
-            {plan && !done && <p className="su-sub">
-              {shared > 0
-                ? <>{shared === 1 ? '1 sound' : `${shared} sounds`} {plan.mods.length > 2 ? 'two or more of these mods change' : 'both mods change'}. Pick whose version plays. {list(plan.mods.map((m, i) => `${name(m)} keeps ${keeps[i]}`))}.</>
-                : 'These mods change no sound in common.'}
+            {plan && !done && shared > 0 && <p>
+              {shared === 1 ? '1 sound' : `${shared} sounds`} {n > 2 ? 'two or more of these mods change' : 'both mods change'}. Pick whose version plays, {list(plan.mods.map((m, i) => `${name(m)} keeps ${keeps[i]}`))}.
               {plan.only_one > 0 && <> {plan.only_one === 1 ? '1 sound only one mod changes comes' : `${plan.only_one} sounds only one mod changes come`} along.</>}
             </p>}
           </div>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
         <div className="modal-body ms-body">
-          {!plan && !error && <p className="ms-wait"><span className="t-shimmer">Reading the sound banks</span></p>}
-          {done && <p className="ms-done" role="status">{done}</p>}
+          {!plan && !error && <div className="ms-center"><ProgressLoader title="Reading the sound banks" step={`Comparing ${list(open.paths.map(name))}`} /></div>}
+          {done && <Empty icon={<CircleCheck />} title={`Made ${doneName}`} text={doneText} />}
+          {plan && !done && shared === 0 && (plan.shared_files > 0
+            ? <Empty icon={<AudioLines />} title="Nothing to pick" text={`They change different sounds in the same bank, so only one of them plays today. The merged pack keeps all ${plan.only_one === 1 ? 'of their sounds' : `${plan.only_one} of their sounds`}.`} />
+            : <Empty icon={<CircleCheck />} title="These already play together" text="Each one changes its own sound banks, so the game loads both. There is nothing to merge." />)}
           {plan && !done && plan.banks.map(b => {
             const label = bankLabel(b.key)
             return (
               <section key={b.key} className="ms-bank">
-                <h3>{label.hero}<span>{label.file}</span></h3>
-                <div className="ms-grid" role="table" style={{ gridTemplateColumns: `minmax(140px, 1fr) repeat(${cols}, minmax(150px, 1fr))` }}>
-                  <div className="ms-head ms-sticky" role="columnheader">Sound</div>
+                <div className="ms-bank-head"><b>{label.hero}</b><span>{label.file}</span><em>{b.sounds.length === 1 ? '1 sound' : `${b.sounds.length} sounds`}</em></div>
+                <div className="ms-grid" style={{ gridTemplateColumns: `minmax(150px, 1fr) repeat(${n}, minmax(190px, 1.25fr))` }}>
+                  <div className="ms-head ms-sticky">Sound</div>
                   {plan.mods.map((m, i) => (
-                    <div key={m} className="ms-head" role="columnheader">
+                    <div key={m} className="ms-head">
                       <span title={name(m)}>{name(m)}</span>
                       <button type="button" className="ms-all" onClick={() => pickAll(i)}>Use all</button>
                     </div>
                   ))}
                   {b.sounds.map(s => (
-                    <div key={s.id} className="ms-row" role="row">
-                      <div className="ms-sticky ms-num" role="cell">Sound {s.id}</div>
+                    <div key={s.id} className="ms-row" role="radiogroup" aria-label={`Sound ${s.id}`}>
+                      <div className="ms-sticky ms-num"><b>{s.id}</b>{s.stream && <span className="ms-tag">Streamed</span>}</div>
                       {plan.mods.map((m, i) => {
-                        if (!s.has.includes(i)) return <div key={m} className="ms-none" role="cell">Not changed</div>
-                        const on = picks[b.key]?.[s.id] === i
+                        if (!s.has.includes(i)) return <div key={m} className="ms-tile is-none">Not changed</div>
+                        const on = (picks[b.key]?.[s.id] ?? s.pick) === i
                         const id = `${b.key}|${s.id}|${i}`
                         return (
-                          <div key={m} className={`ms-cell${on ? ' is-on' : ''}`} role="cell">
-                            <button type="button" className="ms-play" aria-label={player.playing === id ? `Stop ${name(m)}'s version` : `Play ${name(m)}'s version`}
-                              onClick={() => player.toggle(id, m, b.key, s.id)} aria-busy={player.loading === id}>
-                              {player.loading === id ? <LoaderCircle size={14} className="scan-status-spin" aria-hidden="true" /> : player.playing === id ? <Square size={12} aria-hidden="true" /> : <Play size={14} aria-hidden="true" />}
+                          <div key={m} className={`ms-tile${on ? ' is-on' : ''}`} role="radio" aria-checked={on} tabIndex={on ? 0 : -1}
+                            aria-label={`${name(m)}'s version`} onClick={() => pick(b.key, s.id, i)}
+                            onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); pick(b.key, s.id, i) } }}>
+                            <button type="button" className="ms-play" aria-label={player.playing === id ? `Stop ${name(m)}'s version` : `Play ${name(m)}'s version`} aria-busy={player.loading === id}
+                              onClick={e => { e.stopPropagation(); player.toggle(id, m, s.stream ?? b.key, s.id) }}>
+                              {player.loading === id ? <LoaderCircle size={13} className="scan-status-spin" aria-hidden="true" /> : player.playing === id ? <Square size={11} fill="currentColor" aria-hidden="true" /> : <Play size={12} fill="currentColor" aria-hidden="true" />}
                             </button>
-                            <label className="ms-pick">
-                              <input type="radio" name={`${b.key}|${s.id}`} checked={on} onChange={() => pick(b.key, s.id, i)} />
-                              <span>Use this</span>
-                            </label>
+                            <span>{on ? 'Plays' : 'Use this'}</span>
+                            <span className="ms-check" aria-hidden="true">{on && <Check size={11} strokeWidth={3} />}</span>
                           </div>
                         )
                       })}
@@ -177,22 +190,22 @@ function MergeSoundsWindow({ open, onClose, onDone }: { open: Open; onClose: () 
             )
           })}
           {plan && !done && (plan.skipped.length > 0 || plan.notes.length > 0) && (
-            <div className="ms-skipped">
+            <div className="ms-notes">
               {plan.skipped.map(([m, why], i) => <p key={i}>{name(m)}: {why}.</p>)}
-              {plan.notes.map((n, i) => <p key={`n${i}`}>{n}</p>)}
+              {plan.notes.map((t, i) => <p key={`n${i}`}>{t}</p>)}
             </div>
           )}
           {(error || player.error) && <p className="ms-error" role="alert">{error || player.error}</p>}
         </div>
         <div className="ms-foot">
-          {done
-            ? <button type="button" className="btn-primary" onClick={onClose}>Done</button>
+          {done || (plan && !canMake)
+            ? <button type="button" className="lo-text-btn" onClick={onClose}>{done ? 'Done' : 'Close'}</button>
             : <>
                 {plan && shared > 0 && <label className="ms-name">Name<input value={title} maxLength={80} spellCheck={false} onChange={e => setTitle(e.target.value)} /></label>}
                 <button type="button" className="lo-text-btn" onClick={onClose}>Cancel</button>
-                {plan && shared > 0 && (
-                  <button type="button" className={`btn-primary${making ? ' is-working' : ''}`} onClick={make} disabled={making || !title.trim()} aria-busy={making}>
-                    {making ? <span className="t-shimmer">Making the merged pack</span> : 'Make merged pack'}
+                {plan && (
+                  <button type="button" className={`btn-primary${making ? ' is-working' : ''}`} onClick={make} disabled={making || (shared > 0 && !title.trim())} aria-busy={making}>
+                    {making ? <span className="t-shimmer">Making the merged pack</span> : <><Combine size={14} aria-hidden="true" />Make merged pack</>}
                   </button>
                 )}
               </>}
@@ -200,6 +213,17 @@ function MergeSoundsWindow({ open, onClose, onDone }: { open: Open; onClose: () 
       </motion.div>
     </div>,
     document.body,
+  )
+}
+
+/** A centered state in the window: an icon in a soft square, a title, and a line under it. */
+function Empty({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
+  return (
+    <div className="ms-center ms-empty">
+      <span className="ms-empty-icon" aria-hidden="true">{icon}</span>
+      <b>{title}</b>
+      <p>{text}</p>
+    </div>
   )
 }
 
