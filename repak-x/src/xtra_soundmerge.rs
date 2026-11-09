@@ -156,14 +156,22 @@ fn merge_bank(file: &str, game: &[u8], mods: &[(String, Vec<u8>)]) -> Result<(Ve
             if base_map.get(&id) == Some(&data) {
                 continue;
             }
-            if let Some((_, Some(prev))) = pick.get(&id) {
-                lost(*prev, i, &mut losses);
+            if let Some((prev_data, Some(prev))) = pick.get(&id) {
+                if *prev_data != data {
+                    lost(*prev, i, &mut losses);
+                }
             }
             pick.insert(id, (data, Some(i)));
         }
         if let Some(h) = section(bytes, b"HIRC").filter(|h| Some(*h) != section(game, b"HIRC")) {
-            if let Some((prev, _)) = hirc {
-                lost(prev, i, &mut losses);
+            if let Some((prev, prev_h)) = hirc {
+                // its sound structure (which media each sound plays) goes: every sound it changed is lost with it
+                if prev_h != h {
+                    let n = pick.values().filter(|(_, o)| *o == Some(prev)).count().max(1);
+                    for _ in 0..n {
+                        lost(prev, i, &mut losses);
+                    }
+                }
             }
             hirc = Some((i, h));
         }
@@ -211,21 +219,40 @@ fn rand_id() -> u64 {
     N.fetch_add(1, Ordering::Relaxed)
 }
 
-/// The game's own copy of a bank: its patch paks first (newest build first: the game's bnk_ui_battle sits in a
-/// Patch_-Windows pak, not pakchunkWwise), then pakchunkWwise-Windows.pak. Its paks mount deeper than a mod's
-/// (pakchunkWwise at ../../../Marvel/Content/WwiseAudio/), so the file is asked for under each shorter spelling too.
-fn game_file(paks: &Path, inner: &str, tmp: &Path) -> Option<Vec<u8>> {
-    let mut patches: Vec<PathBuf> = std::fs::read_dir(paks).ok()?.flatten().map(|e| e.path())
-        .filter(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.to_lowercase().starts_with("patch_") && n.to_lowercase().ends_with(".pak")))
-        .collect();
-    patches.sort_by_key(|p| std::cmp::Reverse(p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()));
-    // the game's pak lists its entries with a leading slash after its mount point (/bnk_display_1026001.bnk)
-    let names: Vec<String> = ["Marvel/Content/WwiseAudio/", "Marvel/Content/", ""].iter().filter_map(|pre| inner.strip_prefix(pre))
-        .flat_map(|n| [format!("/{n}"), n.to_string()]).collect();
-    patches.into_iter().chain([paks.join("pakchunkWwise-Windows.pak")]).find_map(|p| names.iter().find_map(|n| extract(&p, n, tmp)))
+/// Where a sound file sits inside the paks, the same for every spelling: lowercase, from "wwiseaudio/" on (a mod packed
+/// at ../../../ lists Marvel/Content/WwiseAudio/x.bnk, the game's pak, mounted deeper, lists /x.bnk). None for anything
+/// else, and for a path that climbs (..), which would write outside the work folder.
+fn sound_key(path: &str) -> Option<String> {
+    let l = path.replace('\\', "/").to_lowercase();
+    let i = l.find("wwiseaudio/")?;
+    let k = l[i..].to_string();
+    ((k.ends_with(".bnk") || k.ends_with(".wem")) && !k.split('/').any(|s| s == "..")).then_some(k)
 }
 
-/// What the last build did: shown in a sound mod's details (custom/SoundMergeNote.tsx).
+/// The game's own sound files by key: (pak, its exact entry name), patch paks first (newest build first: the game's
+/// bnk_ui_battle sits in a Patch_-Windows pak, not pakchunkWwise), then pakchunkWwise-Windows.pak. Each pak's index is
+/// read once (the conflict check's cache keeps it while the file is unchanged).
+fn game_files(paks: &Path) -> BTreeMap<String, (PathBuf, String)> {
+    let mut list: Vec<PathBuf> = std::fs::read_dir(paks).into_iter().flatten().flatten().map(|e| e.path())
+        .filter(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.to_lowercase().starts_with("patch_") && n.to_lowercase().ends_with(".pak")))
+        .collect();
+    list.sort_by_key(|p| std::cmp::Reverse(p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()));
+    list.push(paks.join("pakchunkWwise-Windows.pak"));
+    let mut out = BTreeMap::new();
+    for pak in list {
+        let Ok(files) = crate::xtra_conflicts::files_cached(&pak, None, || uasset_toolkit::list_pak_files(&pak.to_string_lossy(), Some(AES_KEY_HEX)).map_err(|e| e.to_string())) else { continue };
+        for f in files.iter() {
+            // the game pak's mount point is .../WwiseAudio/: its entries are /x.bnk or Media/xx/y.wem
+            let k = sound_key(f).or_else(|| sound_key(&format!("wwiseaudio/{}", f.trim_start_matches('/'))));
+            if let Some(k) = k {
+                out.entry(k).or_insert_with(|| (pak.clone(), f.clone()));
+            }
+        }
+    }
+    out
+}
+
+/// What the last build did: shown in a sound mod's details (custom/soundMerge.tsx).
 #[derive(serde::Serialize, serde::Deserialize, Default, Clone)]
 pub struct Report {
     pub on: bool,
@@ -245,7 +272,16 @@ pub async fn sound_merge_rebuild(mod_paths: Vec<String>, state: State<'_, Arc<Mu
     tauri::async_runtime::spawn_blocking(move || rebuild(&dir, &mod_paths)).await.map_err(|e| e.to_string())?
 }
 
+/// Size and modified time of a file, for the stamp.
+fn meta_of(p: &Path) -> serde_json::Value {
+    let m = std::fs::metadata(p).ok();
+    serde_json::json!([m.as_ref().map(|m| m.len()), m.and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs())])
+}
+
 fn rebuild(dir: &Path, mod_paths: &[String]) -> Result<Report, String> {
+    // one build at a time (the list watch, Launch and the Settings switch can ask at once): they share the files
+    static BUILD: Mutex<()> = Mutex::new(());
+    let _one = BUILD.lock().unwrap_or_else(|e| e.into_inner());
     if !on() {
         if dir.join(PAK).exists() && !crate::xtra_vfx::game_running() {
             let _ = std::fs::remove_dir_all(dir);
@@ -256,68 +292,85 @@ fn rebuild(dir: &Path, mod_paths: &[String]) -> Result<Report, String> {
         return Err("The game is running: sound mods are merged once it is closed.".into());
     }
     let paks = dir.parent().and_then(Path::parent).ok_or("no Paks folder")?.to_path_buf();
-    // enabled legacy sound paks, lowest priority first (ties: by name, the later name winning [inference])
-    let mut mods: Vec<(PathBuf, Vec<String>)> = mod_paths.iter().map(PathBuf::from)
+    let mut candidates: Vec<PathBuf> = mod_paths.iter().map(PathBuf::from)
         .filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("pak")) && !p.with_extension("utoc").exists())
-        .filter_map(|p| {
-            let files = uasset_toolkit::list_pak_files(&p.to_string_lossy(), Some(AES_KEY_HEX)).ok()?;
-            let sounds: Vec<String> = files.into_iter().filter(|f| { let l = f.to_lowercase(); l.contains("wwiseaudio/") && (l.ends_with(".bnk") || l.ends_with(".wem")) }).collect();
-            (!sounds.is_empty()).then_some((p, sounds))
-        })
         .collect();
+    candidates.sort();
+    // the stamp first, from file sizes and times only: an unchanged library costs no pak reads. The game's side: its
+    // containers and every legacy pak the game banks can come from (an update may rewrite those without a new .utoc)
+    let game_paks: Vec<PathBuf> = std::fs::read_dir(&paks).into_iter().flatten().flatten().map(|e| e.path())
+        .filter(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| { let n = n.to_lowercase(); n.ends_with(".pak") && (n.starts_with("patch_") || n.starts_with("pakchunkwwise")) }))
+        .collect();
+    let stamp = serde_json::json!({
+        "mods": candidates.iter().map(|p| (p.to_string_lossy().to_lowercase(), meta_of(p))).collect::<Vec<_>>(),
+        "game": crate::xtra_broken::build_key(&crate::xtra_broken::game_containers(&paks)),
+        "game_paks": game_paks.iter().map(|p| (p.file_name().map(|n| n.to_string_lossy().to_lowercase()), meta_of(p))).collect::<Vec<_>>(),
+    });
+    let read = |f: &str| std::fs::read_to_string(dir.join(f)).ok().and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok());
+    if read("stamp.json").as_ref() == Some(&stamp) {
+        if let Some(r) = read("report.json").and_then(|v| serde_json::from_value::<Report>(v).ok()) {
+            return Ok(r);
+        }
+    }
+    // enabled legacy sound paks, lowest priority first (ties: by name, the later name winning [inference]); each
+    // file under its key, with the mod's own spelling kept for reading it
+    let mut mods: Vec<(PathBuf, BTreeMap<String, String>)> = candidates.into_iter().filter_map(|p| {
+        let files = crate::xtra_conflicts::files_cached(&p, None, || uasset_toolkit::list_pak_files(&p.to_string_lossy(), Some(AES_KEY_HEX)).map_err(|e| e.to_string())).ok()?;
+        let sounds: BTreeMap<String, String> = files.iter().filter_map(|f| Some((sound_key(f)?, f.clone()))).collect();
+        (!sounds.is_empty()).then_some((p, sounds))
+    }).collect();
     let name = |p: &Path| p.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
     mods.sort_by(|a, b| pak_order(&name(&a.0)).cmp(&pak_order(&name(&b.0))).then(name(&a.0).cmp(&name(&b.0))));
     let mut shared: BTreeMap<String, Vec<usize>> = BTreeMap::new();
     for (i, (_, files)) in mods.iter().enumerate() {
-        for f in files {
-            shared.entry(f.clone()).or_default().push(i);
+        for k in files.keys() {
+            shared.entry(k.clone()).or_default().push(i);
         }
     }
     shared.retain(|_, v| v.len() > 1);
     let mut report = Report { on: true, ..Default::default() };
-    if shared.is_empty() {
-        let _ = std::fs::remove_dir_all(dir);
-        return Ok(report);
-    }
-    let stamp = serde_json::json!({
-        "mods": mods.iter().map(|(p, _)| { let m = std::fs::metadata(p).ok(); (p.to_string_lossy().to_lowercase(), m.as_ref().map(|m| m.len()),
-            m.and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs())) }).collect::<Vec<_>>(),
-        "game": crate::xtra_broken::build_key(&crate::xtra_broken::game_containers(&paks)),
-    });
-    let read = |f: &str| std::fs::read_to_string(dir.join(f)).ok().and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok());
-    if dir.join(PAK).exists() && read("stamp.json").as_ref() == Some(&stamp) {
-        if let Some(r) = read("report.json").and_then(|v| serde_json::from_value(v).ok()) {
-            return Ok(r);
-        }
-    }
     let tmp = tempfile::tempdir().map_err(|e| e.to_string())?;
     let tree = tmp.path().join("tree");
+    let game = if shared.keys().any(|k| k.ends_with(".bnk")) { game_files(&paks) } else { BTreeMap::new() };
     let mut entries = Vec::new();
-    for (file, who) in &shared {
-        let copies: Vec<(String, Vec<u8>)> = who.iter().filter_map(|&i| Some((mods[i].0.to_string_lossy().to_string(), extract(&mods[i].0, file, tmp.path())?))).collect();
+    for (key, who) in &shared {
+        let copies: Vec<(String, Vec<u8>)> = who.iter().filter_map(|&i| Some((mods[i].0.to_string_lossy().to_string(), extract(&mods[i].0, &mods[i].1[key], tmp.path())?))).collect();
         if copies.len() < 2 {
             continue;
         }
-        let bytes = if file.to_lowercase().ends_with(".bnk") {
-            let Some(game) = game_file(&paks, file, tmp.path()) else {
+        let file = format!("Marvel/Content/{}", {
+            // the original case of the path, from the first mod's own spelling
+            let own = &mods[who[0]].1[key];
+            own[own.to_lowercase().find("wwiseaudio/").unwrap_or(0)..].to_string()
+        });
+        let bytes = if key.ends_with(".bnk") {
+            let Some(base) = game.get(key).and_then(|(pak, entry)| extract(pak, entry, tmp.path())) else {
                 report.skipped.extend(copies.iter().map(|(p, _)| (p.clone(), format!("the game has no {file} to merge onto"))));
                 continue;
             };
-            let (merged, losses, skipped) = merge_bank(file, &game, &copies)?;
-            report.losses.extend(losses.into_iter().map(|l| serde_json::to_value(l).unwrap_or_default()));
-            report.skipped.extend(skipped);
-            merged
+            match merge_bank(&file, &base, &copies) {
+                Ok((merged, losses, skipped)) => {
+                    report.losses.extend(losses.into_iter().map(|l| serde_json::to_value(l).unwrap_or_default()));
+                    report.skipped.extend(skipped);
+                    merged
+                }
+                Err(e) => {   // one odd bank leaves only its own mods unmerged
+                    report.skipped.extend(copies.iter().map(|(p, _)| (p.clone(), format!("{file} could not be merged ({e})"))));
+                    continue;
+                }
+            }
         } else {
-            // a loose streamed sound: one file, the highest-priority mod's (copies are lowest first)
+            // a loose streamed sound: one file, the highest-priority mod's (copies are lowest first); identical copies lose nothing
             let (winner, data) = copies.last().cloned().unwrap();
-            report.losses.extend(copies[..copies.len() - 1].iter().map(|(p, _)| serde_json::to_value(Loss { loser: p.clone(), winner: winner.clone(), file: file.clone(), sounds: 1 }).unwrap_or_default()));
+            report.losses.extend(copies[..copies.len() - 1].iter().filter(|(_, d)| *d != data)
+                .map(|(p, _)| serde_json::to_value(Loss { loser: p.clone(), winner: winner.clone(), file: file.clone(), sounds: 1 }).unwrap_or_default()));
             data
         };
-        let out = tree.join(file.replace('/', "\\"));
+        let out = tree.join(key.replace('/', "\\"));
         std::fs::create_dir_all(out.parent().unwrap()).map_err(|e| e.to_string())?;
         std::fs::write(&out, bytes).map_err(|e| e.to_string())?;
         entries.push((file.clone(), out.to_string_lossy().to_string()));
-        report.merged.push((file.clone(), copies.into_iter().map(|(p, _)| p).collect()));
+        report.merged.push((file, copies.into_iter().map(|(p, _)| p).collect()));
     }
     std::fs::create_dir_all(dir).map_err(|e| format!("Could not make {}: {e}", dir.display()))?;
     if entries.is_empty() {
@@ -326,8 +379,13 @@ fn rebuild(dir: &Path, mod_paths: &[String]) -> Result<Report, String> {
         // written beside it, then swapped in: a failed build never leaves half a pak where the game loads it
         let part = dir.join(format!("{PAK}.part"));
         // the tool wants a path hash seed (null fails)
-        uasset_toolkit::create_pak(&part.to_string_lossy(), entries, Some("../../../"), Some(0), Some(AES_KEY_HEX)).map_err(|e| format!("Could not pack the merged sounds: {e}"))?;
-        std::fs::rename(&part, dir.join(PAK)).map_err(|e| format!("Could not put the merged sounds in place: {e}"))?;
+        let made = uasset_toolkit::create_pak(&part.to_string_lossy(), entries, Some("../../../"), Some(0), Some(AES_KEY_HEX))
+            .map_err(|e| format!("Could not pack the merged sounds: {e}"))
+            .and_then(|_| std::fs::rename(&part, dir.join(PAK)).map_err(|e| format!("Could not put the merged sounds in place: {e}")));
+        if let Err(e) = made {
+            let _ = std::fs::remove_file(&part);
+            return Err(e);
+        }
     }
     let _ = std::fs::write(dir.join("stamp.json"), stamp.to_string());
     let _ = std::fs::write(dir.join("report.json"), serde_json::to_string(&report).unwrap_or_default());
@@ -403,5 +461,18 @@ mod tests {
         assert!(pak_order(PAK) > pak_order("X_9999999_P.pak") && 100 * 21_000_001u64 < i32::MAX as u64);
         assert_eq!(pak_order("mod.pak"), 3);
         assert_eq!(pak_order("Mod_9999999_P.bak_repak"), pak_order("Mod_9999999_P.pak"));
+    }
+}
+
+#[cfg(test)]
+mod key_tests {
+    use super::sound_key;
+
+    #[test]
+    fn sound_keys_match_across_spellings() {
+        assert_eq!(sound_key("Marvel/Content/WwiseAudio/bnk_X.bnk").as_deref(), Some("wwiseaudio/bnk_x.bnk"));
+        assert_eq!(sound_key("WwiseAudio/Media/12/34.wem").as_deref(), Some("wwiseaudio/media/12/34.wem"));
+        assert_eq!(sound_key("Marvel/Content/WwiseAudio/../../x.bnk"), None);
+        assert_eq!(sound_key("Marvel/Content/Marvel/x.uasset"), None);
     }
 }

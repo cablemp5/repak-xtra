@@ -31,7 +31,11 @@ export function useSoundMergeWatch(mods: { path: string; enabled?: boolean }[]) 
 }
 
 /** Before Launch: one more pass, so a change made while the game was open is merged now (cheap when unchanged). */
-export const soundMergeBeforeLaunch = () => invoke<Report>('sound_merge_rebuild', { modPaths: current }).then(publish).catch(() => undefined)
+export const soundMergeBeforeLaunch = async (say?: (text: string) => void) => {
+  if (!(await invoke<boolean>('sound_merge_get').catch(() => false))) return
+  say?.('Merging sound mods')
+  await invoke<Report>('sound_merge_rebuild', { modPaths: current }).then(publish).catch(() => undefined)
+}
 
 const name = (p: string) => p.split(/[\\/]/).pop()!.replace(/(_\d+_P)?\.(pak|bak_repak)$/i, '')
 const same = (a: string, b: string) => a.replace(/\//g, '\\').toLowerCase() === b.replace(/\//g, '\\').toLowerCase()
@@ -44,7 +48,7 @@ export function SoundMergeSetting() {
   const change = (next: boolean) => {
     setOn(next)
     invoke('sound_merge_set', { on: next })
-      .then(() => { setNote(next ? 'On. Your sound mods are merged the next time the mod list changes or you Launch.' : 'Off. The merged sound pak is gone.'); if (next) void soundMergeBeforeLaunch() })
+      .then(() => { setNote(next ? 'On. Merging your sound mods now.' : 'Off. The merged sound pak is gone.'); if (next) void soundMergeBeforeLaunch() })
       .catch(e => { setNote(String(e)); if (!String(e).startsWith('Saved')) setOn(!next) })
   }
   return (
@@ -80,7 +84,7 @@ export function SoundMergeNote({ path }: { path: string }) {
   return (
     <div className="detail-section sound-merge-note">
       <h3>Sounds</h3>
-      {with_.length > 0 && <p>Merged with {list(with_.map(name))} in one sound pak.</p>}
+      {with_.length > 0 && <p>Merged with {list(with_.map(name))} in one sound pak. Their Conflict badge stays until the merge is checked in game.</p>}
       {[...byWinner].map(([w, n]) => <p key={w}>{n === 1 ? '1 of its sounds loses' : `${n} of its sounds lose`} to {name(w)}, which plays instead.</p>)}
       {skipped.map(([, why], i) => <p key={i}>Left out: {why}.</p>)}
     </div>

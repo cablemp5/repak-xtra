@@ -3873,7 +3873,7 @@ function App() {
             onClick={async () => {
               if (gameRunning || launchSuccess) return
               try {
-                await soundMergeBeforeLaunch() // repakxtra: a sound mod change made while the game was open
+                await soundMergeBeforeLaunch(setStatus) // repakxtra: a sound mod change made while the game was open
                 await invoke('launch_game')
                 setStatus('Game launched')
                 setLaunchSuccess(true)
