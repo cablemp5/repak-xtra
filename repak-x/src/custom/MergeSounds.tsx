@@ -3,7 +3,7 @@
 // tile playing that mod's version (decoded by the preview kit) and picking it with a click (cable's pick A, round 3),
 // Use all per column, picks starting on the mod that wins today. A streamed sound is one row with its bank entry. Make merged pack writes it as a normal mod and switches off the originals that hold only
 // sounds. A merged pack's details say what it was made from, with Change picks to open the window again.
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { invoke } from '@tauri-apps/api/core'
@@ -59,13 +59,14 @@ export function MergeSoundsHost({ onDone }: { onDone: () => void }) {
   return open ? <MergeSoundsWindow key={open.paths.join('|')} open={open} onClose={() => setOpen(null)} onDone={onDone} /> : null
 }
 
-function MergeSoundsWindow({ open, onClose, onDone }: { open: Open; onClose: () => void; onDone: () => void }) {
+function MergeSoundsWindow({ open, onClose: close, onDone }: { open: Open; onClose: () => void; onDone: () => void }) {
+  const [making, setMaking] = useState(false)
+  const onClose = () => { if (!making) close() } // a pack being made keeps the window until it is done
   const trap = useDialogFocus(true, onClose)
   const [plan, setPlan] = useState<Plan | null>(null)
   const [error, setError] = useState('')
   const [picks, setPicks] = useState<Record<string, Record<number, number>>>({}) // key -> id -> mod index
   const [title, setTitle] = useState(open.name ?? '')
-  const [making, setMaking] = useState(false)
   const [done, setDone] = useState('')
   const player = usePlayer()
 
@@ -87,9 +88,19 @@ function MergeSoundsWindow({ open, onClose, onDone }: { open: Open; onClose: () 
 
   const shared = plan?.banks.reduce((n, b) => n + b.sounds.length, 0) ?? 0
   // nothing to pick, yet they ship the same bank: only one copy loads today, so the merged pack still lets both play
-  const canMake = Boolean(plan) && plan!.mods.length > 1 && (shared > 0 || plan!.shared_files > 0)
+  const canMake = Boolean(plan) && plan!.mods.length > 1 && (shared > 0 || (plan!.shared_files > 0 && plan!.only_one > 0))
   const keeps = useMemo(() => (plan?.mods ?? []).map((_, i) => Object.values(picks).reduce((n, m) => n + Object.values(m).filter(x => x === i).length, 0)), [plan, picks])
   const pick = (key: string, id: number, i: number) => { if (picks[key]?.[id] !== i) cue('select'); setPicks(p => ({ ...p, [key]: { ...p[key], [id]: i } })) }
+  // the arrow keys move a sound's pick to the next or previous mod that has a version of it (a radio group's keys)
+  const arrows = (e: ReactKeyboardEvent<HTMLDivElement>, key: string, s: { id: number; has: number[]; pick: number }) => {
+    const dir = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0
+    if (!dir) return
+    e.preventDefault()
+    const at = s.has.indexOf(picks[key]?.[s.id] ?? s.pick)
+    const next = s.has[(at + dir + s.has.length) % s.has.length]
+    pick(key, s.id, next)
+    e.currentTarget.querySelector<HTMLElement>(`[data-mod="${next}"]`)?.focus()
+  }
   const pickAll = (i: number) => {
     cue('select')
     setPicks(p => Object.fromEntries(Object.entries(p).map(([key, m]) => {
@@ -142,18 +153,24 @@ function MergeSoundsWindow({ open, onClose, onDone }: { open: Open; onClose: () 
           <div className="ms-title">
             <h2>Merge sounds</h2>
             {plan && !done && shared > 0 && <p>
-              {shared === 1 ? '1 sound' : `${shared} sounds`} {n > 2 ? 'two or more of these mods change' : 'both mods change'}. Pick whose version plays, {list(plan.mods.map((m, i) => `${name(m)} keeps ${keeps[i]}`))}.
-              {plan.only_one > 0 && <> {plan.only_one === 1 ? '1 sound only one mod changes comes' : `${plan.only_one} sounds only one mod changes come`} along.</>}
+              {shared === 1 ? '1 sound' : `${shared} sounds`} {n > 2 ? 'two or more of these mods change' : 'both mods change'}. Pick whose version plays: {list(plan.mods.map((m, i) => `${name(m)} keeps ${keeps[i]}`))}.
+              {plan.only_one > 0 && <> {plan.only_one === 1 ? '1 more sound, changed by one mod, comes' : `${plan.only_one} more sounds, each changed by one mod, come`} along.</>}
             </p>}
+            {/* 8: a play that fails says so up here, in view, not under a long list */}
+            {player.error && <p className="ms-error" role="alert">{player.error}</p>}
           </div>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
         <div className="modal-body ms-body">
           {!plan && !error && <div className="ms-center"><ProgressLoader title="Reading the sound banks" step={`Comparing ${list(open.paths.map(name))}`} /></div>}
           {done && <Empty icon={<CircleCheck />} title={`Made ${doneName}`} text={doneText} />}
-          {plan && !done && shared === 0 && (plan.shared_files > 0
-            ? <Empty icon={<AudioLines />} title="Nothing to pick" text={`They change different sounds in the same bank, so only one of them plays today. The merged pack keeps all ${plan.only_one === 1 ? 'of their sounds' : `${plan.only_one} of their sounds`}.`} />
-            : <Empty icon={<CircleCheck />} title="These already play together" text="Each one changes its own sound banks, so the game loads both. There is nothing to merge." />)}
+          {plan && !done && shared === 0 && (plan.mods.length < 2
+            ? <Empty icon={<AudioLines />} title="Only one of these can be merged" text="Merging needs two or more sound mods packed as a single .pak. The reason for each one left out is below." />
+            : plan.shared_files === 0
+              ? <Empty icon={<CircleCheck />} title="These already play together" text="Each one changes its own sound banks, so the game loads both. There is nothing to merge." />
+              : plan.only_one === 0
+                ? <Empty icon={<CircleCheck />} title="Nothing to merge" text="They ship the same sounds, so a merged pack would play exactly what plays today." />
+                : <Empty icon={<AudioLines />} title="Nothing to pick" text={`They change different sounds in the same bank, so only one of them plays today. The merged pack keeps all ${plan.only_one === 1 ? 'of their sounds' : `${plan.only_one} of their sounds`}.`} />)}
           {plan && !done && plan.banks.length > 0 && (
             <div className="ms-colhead" style={{ gridTemplateColumns: cols }}>
               <div className="ms-head">Sound</div>
@@ -176,16 +193,14 @@ function MergeSoundsWindow({ open, onClose, onDone }: { open: Open; onClose: () 
                 </div>
                 <div className="ms-grid" style={{ gridTemplateColumns: cols }}>
                   {b.sounds.map(s => (
-                    <div key={s.id} className="ms-row" role="radiogroup" aria-label={`Sound ${s.id}`}>
+                    <div key={s.id} className="ms-row" role="radiogroup" aria-label={`Sound ${s.id}`} onKeyDown={e => arrows(e, b.key, s)}>
                       <div className="ms-num"><span>{s.id}</span>{s.stream && !b.key.endsWith('.wem') && <span className="ms-tag">Streamed</span>}</div>
                       {plan.mods.map((m, i) => {
                         if (!s.has.includes(i)) return <div key={m} className="ms-cell is-none">Not changed</div>
                         const on = (picks[b.key]?.[s.id] ?? s.pick) === i
                         const id = `${b.key}|${s.id}|${i}`
                         return (
-                          <div key={m} className={`ms-cell is-choice${on ? ' is-picked' : ''}`} role="radio" aria-checked={on} tabIndex={on ? 0 : -1}
-                            aria-label={`${name(m)}'s version`} onClick={() => pick(b.key, s.id, i)}
-                            onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); pick(b.key, s.id, i) } }}>
+                          <div key={m} className={`ms-cell is-choice${on ? ' is-picked' : ''}`} onClick={() => pick(b.key, s.id, i)}>
                             <button type="button" className={`ms-play${player.playing === id ? ' is-on' : ''}`} aria-busy={player.loading === id}
                               aria-label={player.playing === id ? `Stop ${name(m)}'s version` : `Play ${name(m)}'s version`}
                               onClick={e => { e.stopPropagation(); player.toggle(id, m, s.stream ?? b.key, s.id) }}>
@@ -193,8 +208,11 @@ function MergeSoundsWindow({ open, onClose, onDone }: { open: Open; onClose: () 
                                 : player.playing === id ? <Square fill="currentColor" strokeWidth={0} aria-hidden="true" />
                                 : <Play fill="currentColor" strokeWidth={0} aria-hidden="true" />}
                             </button>
-                            <span className="ms-cell-label">{on ? 'Plays' : 'Use this'}</span>
-                            <span className="ms-check" aria-hidden="true"><Check strokeWidth={2.5} /></span>
+                            <span className="ms-choice" role="radio" aria-checked={on} tabIndex={on ? 0 : -1} data-mod={i} aria-label={`${name(m)}'s version`}
+                              onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); pick(b.key, s.id, i) } }}>
+                              <span className="ms-cell-label">{on ? 'Plays' : 'Use this'}</span>
+                              <span className="ms-check" aria-hidden="true"><Check strokeWidth={2.5} /></span>
+                            </span>
                           </div>
                         )
                       })}
@@ -210,14 +228,14 @@ function MergeSoundsWindow({ open, onClose, onDone }: { open: Open; onClose: () 
               {plan.notes.map((t, i) => <p key={`n${i}`}>{t}</p>)}
             </div>
           )}
-          {(error || player.error) && <p className="ms-error" role="alert">{error || player.error}</p>}
+          {error && <p className="ms-error" role="alert">{error}</p>}
         </div>
         <div className="ms-foot">
           {done || (plan && !canMake)
             ? <button type="button" className="lo-text-btn" onClick={onClose}>{done ? 'Done' : 'Close'}</button>
             : <>
                 {plan && shared > 0 && <label className="ms-name">Name<input value={title} maxLength={80} spellCheck={false} onChange={e => setTitle(e.target.value)} /></label>}
-                <button type="button" className="lo-text-btn" onClick={onClose}>Cancel</button>
+                <button type="button" className="lo-text-btn" onClick={onClose} disabled={making}>Cancel</button>
                 {plan && (
                   <button type="button" className={`btn-primary${making ? ' is-working' : ''}`} onClick={make} disabled={making || (shared > 0 && !title.trim())} aria-busy={making}>
                     {making ? <span className="t-shimmer">Making the merged pack</span> : <><Combine size={14} aria-hidden="true" />Make merged pack</>}
@@ -251,7 +269,9 @@ function usePlayer() {
   const [error, setError] = useState('')
   const stop = () => { audio.current?.pause(); audio.current = null; setPlaying('') }
   useEffect(() => () => { stop(); urls.current.forEach(u => URL.revokeObjectURL(u)) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const turn = useRef(0) // the latest play asked for: an older one still decoding never starts
   const toggle = async (id: string, path: string, key: string, sound: number) => {
+    const mine = ++turn.current
     if (playing === id) { stop(); return }
     stop()
     setError('')
@@ -263,12 +283,14 @@ function usePlayer() {
         url = URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }))
         urls.current.set(id, url)
       } catch (e) {
-        setError(String(e))
+        if (mine === turn.current) setError(String(e))
         return
       } finally {
-        setLoading('')
+        if (mine === turn.current) setLoading('')
       }
     }
+    if (mine !== turn.current) return
+    stop()
     const a = new Audio(url)
     audio.current = a
     a.onended = () => { if (audio.current === a) setPlaying('') }

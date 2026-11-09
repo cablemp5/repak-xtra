@@ -3446,12 +3446,14 @@ html[data-motion="off"] .v3d-state, html[data-motion="off"] .v3d-canvas { animat
 .ms-tag { flex: none; white-space: nowrap; display: inline-flex; align-items: center; height: 18px; margin-left: auto; padding: 0 6px; border-radius: 4px; background: var(--quiet-active);
   font-family: var(--font-primary); font-size: 10px; font-weight: 500; color: var(--text-secondary); }
 .ms-cell.is-none { padding: 0 12px; font-size: 12px; color: color-mix(in srgb, var(--text-secondary) 65%, transparent); user-select: none; }
-/* a mod's version: the whole cell picks it, its play button plays it (blue only while playing); the picked cell tints blue and fills its check */
+/* a mod's version: the whole cell picks it, its play button plays it (blue only while playing); the picked cell tints blue and fills its check.
+   The radio is the label and check beside the play button (a button never sits inside a radio) */
+.ms-choice { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 100%; outline: none; }
+.ms-cell.is-choice:has(.ms-choice:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .ms-cell.is-choice { gap: 8px; padding: 0 12px 0 10px; cursor: pointer; user-select: none; transition: background 0.12s ease; }
 .ms-cell.is-choice:hover { background: var(--bg-dark); }
 .ms-cell.is-picked { background: color-mix(in srgb, var(--accent-primary) 9%, var(--bg-darker)); }
 .ms-cell.is-picked:hover { background: color-mix(in srgb, var(--accent-primary) 13%, var(--bg-darker)); }
-.ms-cell.is-choice:focus-visible { outline: 2px solid var(--focus-ring) !important; outline-offset: -2px !important; }
 .ms-play { display: inline-flex !important; align-items: center; justify-content: center; flex: none; width: 26px !important; height: 26px !important; min-width: 0 !important; min-height: 0 !important;
   padding: 0 !important; border-radius: 6px !important; border: 1px solid var(--panel-border) !important; background: var(--quiet-hover) !important; color: var(--text-secondary) !important;
   cursor: pointer; transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease; }
