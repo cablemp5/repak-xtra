@@ -32,8 +32,8 @@ export function useSoundMergeWatch(mods: { path: string; enabled?: boolean }[]) 
 
 /** Before Launch: one more pass, so a change made while the game was open is merged now (cheap when unchanged). */
 export const soundMergeBeforeLaunch = async (say?: (text: string) => void) => {
-  if (!(await invoke<boolean>('sound_merge_get').catch(() => false))) return
-  say?.('Merging sound mods')
+  // always asked: with the setting off it removes a merged pak the game held when it was switched off
+  if (await invoke<boolean>('sound_merge_get').catch(() => false)) say?.('Merging sound mods')
   await invoke<Report>('sound_merge_rebuild', { modPaths: current }).then(publish).catch(() => undefined)
 }
 
