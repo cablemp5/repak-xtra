@@ -241,7 +241,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
       </button>
       {/* before and after, once the kit has the hero's vanilla render (before the arrows, so they stay on top) */}
       {page && cover === 'preview' && !working && src && slide?.key && !slide.keys && !threeD && <WipeCompare key={slide.key} previewKey={slide.key} />}
-      {threeD && rotate && <Viewer3D viewKey={previewSetKey(l.id)} paths={rotate} keyOf={nameKey} set={previewSetKey(l.id)} />}
+      {threeD && rotate?.length ? <Viewer3D viewKey={previewSetKey(l.id)} paths={rotate} set={previewSetKey(l.id)} /> : null}
       {slides.length > 1 && !working && !threeD && ( /* no paging while a new preview renders */
         <>
           <button type="button" className="lo-media-arrow is-prev" title="Previous preview" aria-label="Previous preview" onClick={() => turn(-1)}>

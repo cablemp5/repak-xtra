@@ -35,7 +35,7 @@ const pick = (t: Record<string, string>, byParam: RegExp, byName: RegExp) =>
 
 /** Builds the viewer in `host` (a sized element). Resolves once the first frame is drawn; rejects when the export
  *  cannot be read. `still`: no idle playback (reduced motion), its first frame only. */
-export async function createViewer(host: HTMLElement, key: string, still: boolean): Promise<Viewer> {
+export async function createViewer(host: HTMLElement, key: string, still: boolean, live: () => boolean = () => true): Promise<Viewer> {
   const owned: { dispose?: () => void; close?: () => void }[] = [] // GPU textures, materials, bitmaps: freed on dispose
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'low-power' })
   renderer.outputColorSpace = THREE.SRGBColorSpace
@@ -82,7 +82,8 @@ export async function createViewer(host: HTMLElement, key: string, still: boolea
       readJson<Record<string, string>>(key, 'textures.json').catch(() => ({} as Record<string, string>)),
       readJson<{ glb: string }>(key, 'model.json').then(m => bytes(key, m.glb)).then(parseGlb),
     ])
-    if (disposed) throw new Error('closed')
+    const check = () => { if (disposed || !live()) throw new Error('closed') }
+    check()
     const root = gltf.scene
     scene.add(root)
     const textures = new Map<string, Promise<unknown | null>>()
@@ -91,7 +92,7 @@ export async function createViewer(host: HTMLElement, key: string, still: boolea
       const file = texMap[path.split('.')[0]]
       if (!file) return Promise.resolve(null)
       const id = `${file}|${color}|${normal}`
-      if (!textures.has(id)) textures.set(id, loadTexture(key, file, color, normal).then(t => { if (t) owned.push(t as never); return t }))
+      if (!textures.has(id)) textures.set(id, loadTexture(key, file, color, normal).then(t => { if (t) owned.push(t as never); return t }, e => { console.warn('[viewer3d] texture', file, e); return null }))
       return textures.get(id)!
     }
     const materials = new Map<string, Promise<Mat | null>>()
@@ -100,6 +101,7 @@ export async function createViewer(host: HTMLElement, key: string, still: boolea
       return materials.get(name)!
     }
     await dress(root, matOf, tex, owned)
+    check()
     const bones = boneMap(root)
     const idle = await readJson<Idle>(key, 'idle.json').catch(() => null)
     if (idle?.tracks && idle.bin) {
@@ -128,11 +130,11 @@ export async function createViewer(host: HTMLElement, key: string, still: boolea
       } catch (e) { console.warn('[viewer3d] lobby weapon left out', e) } // never fatal: the body still shows
     }
     mixers.forEach(m => m.update(0))
-    if (disposed) throw new Error('closed')
+    check()
 
     // light: flat ambient and one key light that turns with the camera (the bands stay readable from every side)
-    scene.add(new THREE.AmbientLight(0xffffff, 0.9))
-    const key3 = new THREE.DirectionalLight(0xfff6ee, 2.4)
+    scene.add(new THREE.AmbientLight(0xffffff, 1.5))
+    const key3 = new THREE.DirectionalLight(0xfff6ee, 2.6)
     scene.add(key3, key3.target)
     const fit = frame(root, camera, controls)
     const follow = () => {
@@ -228,7 +230,7 @@ function blueEmpty(bmp: ImageBitmap) {
 /** Three tones (dark, mid, lit): the toon bands. shortcut: fixed tones, the game's MC_Shade_* band values are not read
  *  yet (their meaning in the master material is not known); read them when a material shows the bands are off. */
 function bands() {
-  const t = new THREE.DataTexture(new Uint8Array([120, 120, 120, 255, 200, 200, 200, 255, 255, 255, 255, 255]), 3, 1)
+  const t = new THREE.DataTexture(new Uint8Array([150, 150, 150, 255, 215, 215, 215, 255, 255, 255, 255, 255]), 3, 1)
   t.minFilter = t.magFilter = THREE.NearestFilter
   t.needsUpdate = true
   return t
@@ -248,8 +250,8 @@ async function dress(root: InstanceType<typeof THREE.Object3D>, matOf: (name: st
     const made = await Promise.all(slots.map(async (old: { name: string; dispose: () => void }) => {
       const name = old?.name ?? ''
       old?.dispose()
-      const m = name ? await matOf(name) : null
-      const hidden = !m || m.Parent === 'M_Hide' || HIDE.test(name) || Boolean(m.Parameters?.IsTranslucent) || /Translucent|Additive/.test(m.BlendMode ?? '')
+      const m: Mat = (name ? await matOf(name) : null) ?? {}
+      const hidden = m.Parent === 'M_Hide' || HIDE.test(name) || Boolean(m.Parameters?.IsTranslucent) || /Translucent|Additive/.test(m.BlendMode ?? '')
       if (hidden) {
         const none = new THREE.MeshBasicMaterial({ visible: false })
         owned.push(none)

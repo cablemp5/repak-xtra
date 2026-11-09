@@ -41,6 +41,7 @@ pub fn busy_text(who: &str) -> String {
         "kit" => "The preview kit is installing or being removed. Wait for it to finish.",
         "cleanup" => "Settings > Storage is deleting previews or the preview kit. Try again when it is done.", // repakxtra
         "texcheck" => "The preview kit is checking textures. Try again in a moment.", // repakxtra
+        "viewer" => "The 3D model is being prepared. Try again in a moment.", // repakxtra
         _ => "This PC is being checked for previews. Try again in a moment.",
     }
     .into()

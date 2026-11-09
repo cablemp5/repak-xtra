@@ -4,7 +4,7 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, listen } from '@tauri-apps/api/event'
-import { isModLoader, nameKey } from './loadoutStore'
+import { isModLoader } from './loadoutStore'
 import { releaseScan, scanEnded, scanHeld, scanStarted } from './scanProgress'
 
 /** usmapWait (Needs VFX update only): files it rebuilds that a patch newer than the saved USMAP changed. While it is not
@@ -123,10 +123,10 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     // files change, so later runs cost little. Stops at the first refusal: previews running, no kit, or an older kit
     const textures = async (list: string[]) => {
       if (!live || !(await invoke<boolean>('previews_available').catch(() => false))) return
-      const jobs = list.filter(p => !isModLoader(p)).map(p => [p.replace(/[\\/][^\\/]*$/, ''), nameKey(p)])
+      const mods = list.filter(p => !isModLoader(p))
       let found = 0
-      for (let i = 0; i < jobs.length && live; i += 5) {
-        try { found += await invoke<number>('run_texcheck', { jobs: jobs.slice(i, i + 5) }) } catch { break }
+      for (let i = 0; i < mods.length && live; i += 5) {
+        try { found += await invoke<number>('run_texcheck', { paths: mods.slice(i, i + 5) }) } catch { break }
       }
       if (live && found) await check()
     }

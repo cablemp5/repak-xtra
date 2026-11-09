@@ -18,15 +18,28 @@ fn viewer_path(key: &str, file: &str) -> Option<PathBuf> {
     (valid_key(key) && file.split('/').all(plain)).then(|| previews_dir().join(format!("{key}.3d")).join(file.replace('/', "\\")))
 }
 
-/// One file of a mod's (or loadout's) 3D export, as bytes (the viewer makes blob: URLs of them, so the CSP is unchanged).
+/// One file of a mod's (or loadout's) 3D export, as bytes (parsed in memory and decoded as ImageBitmaps, so no new CSP source).
 #[tauri::command(async)]
 pub fn get_viewer_file(key: String, file: String) -> Result<tauri::ipc::Response, String> {
     let path = viewer_path(&key, &file).ok_or_else(|| format!("Invalid viewer file: {key} {file}"))?;
     std::fs::read(path).map(tauri::ipc::Response::new).map_err(|e| e.to_string())
 }
 
-/// What Rotate in 3D finds for a key: "ready" (an export newer than every one of `paths`, the mod files it shows),
-/// "stale" (one changed since), "overridden" (the last preview found the game's own mesh winning: the kit's index.json
+/// The mod files an export was made from, as the app sees them: each path (lowercase), size and modified time. Written
+/// beside the export (stamp.json) when it is made, so a renamed mod (its priority changes with its name), an edited one,
+/// or a loadout that gained or lost a mod reads as stale and is made again.
+fn stamp_of(paths: &[String]) -> serde_json::Value {
+    let mut rows: Vec<serde_json::Value> = paths.iter().map(|p| {
+        let m = std::fs::metadata(p).ok();
+        let t = m.as_ref().and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_nanos() as u64);
+        serde_json::json!([p.to_lowercase().replace('/', "\\"), m.map(|m| m.len()), t])
+    }).collect();
+    rows.sort_by_key(|r| r[0].as_str().unwrap_or_default().to_string());
+    serde_json::Value::Array(rows)
+}
+
+/// What Rotate in 3D finds for a key: "ready" (an export made from exactly these `paths`, the mod files it shows, as
+/// they are now; with no paths, any export), "stale" (they changed since), "overridden" (the last preview found the game's own mesh winning: the kit's index.json
 /// for a mod, a loadout's <key>.json), "none" (its last preview found no character: a VFX, UI, sound or animation mod),
 /// or "missing".
 #[tauri::command(async)]
@@ -36,9 +49,9 @@ pub fn viewer_state(key: String, paths: Vec<String>) -> &'static str {
     }
     let dir = previews_dir();
     let read = |p: PathBuf| std::fs::read_to_string(p).ok().and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok()).unwrap_or_default();
-    if let Ok(made) = std::fs::metadata(dir.join(format!("{key}.3d")).join("model.json")).and_then(|m| m.modified()) {
-        let newer = paths.iter().any(|p| std::fs::metadata(p).and_then(|m| m.modified()).is_ok_and(|t| t > made));
-        return if newer { "stale" } else { "ready" };
+    let export = dir.join(format!("{key}.3d"));
+    if export.join("model.json").is_file() {
+        return if paths.is_empty() || read(export.join("stamp.json")) == stamp_of(&paths) { "ready" } else { "stale" };
     }
     let kind = read(dir.join("index.json"))[&key]["kind"].as_str().map(str::to_string).unwrap_or_default();
     if kind == "overridden" || read(dir.join(format!("{key}.json")))["overridden"] == true {
@@ -111,11 +124,13 @@ fn paks_of(state: &State<'_, Arc<Mutex<crate::AppState>>>) -> Option<PathBuf> {
 /// "overridden" (the game's own mesh wins) or "failed" (the error is in Logs). The kit's steps come as
 /// `mod-viewer-stage` events (custom/previewStages.ts words) while it works. Err: busy or no kit, said plainly.
 #[tauri::command]
-pub async fn generate_mod_viewer(app: AppHandle, jobs: Vec<(String, String)>, set: Option<String>, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<String, String> {
+pub async fn generate_mod_viewer(app: AppHandle, paths: Vec<String>, set: Option<String>, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<String, String> {
+    let jobs = jobs_of(&paths);
     let paks = paks_of(&state);
     tauri::async_runtime::spawn_blocking(move || {
         let mut result = "failed";
-        run_kit("previews", "--viewer", &jobs, set.as_deref(), paks, |l| {
+        let key = set.clone().or_else(|| jobs.first().map(|(_, k)| k.clone())).unwrap_or_default();
+        run_kit("viewer", "--viewer", &jobs, set.as_deref(), paks, |l| {
             if let Some(step) = l.strip_prefix("PREVIEW_STAGE ") {
                 let _ = app.emit("mod-viewer-stage", step.trim().to_string());
             } else if l.starts_with("VIEWER_OVERRIDDEN ") {
@@ -128,6 +143,9 @@ pub async fn generate_mod_viewer(app: AppHandle, jobs: Vec<(String, String)>, se
                 result = "ready";
             }
         })?;
+        if result == "ready" {
+            let _ = std::fs::write(previews_dir().join(format!("{key}.3d")).join("stamp.json"), stamp_of(&paths).to_string());
+        }
         Ok(result.to_string())
     })
     .await
@@ -138,9 +156,16 @@ pub async fn generate_mod_viewer(app: AppHandle, jobs: Vec<(String, String)>, se
 /// unchanged mod costs nothing). Returns how many have textures the game cannot read. The Library calls it a few mods
 /// at a time, so the reservation is free again within seconds when Generate preview is clicked meanwhile.
 #[tauri::command]
-pub async fn run_texcheck(jobs: Vec<(String, String)>, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<usize, String> {
+pub async fn run_texcheck(paths: Vec<String>, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<usize, String> {
     let paks = paks_of(&state);
     tauri::async_runtime::spawn_blocking(move || {
+        // answers the kit already has for these files: no kit start for them (most Library scans start none)
+        let store = texcheck_store();
+        let todo: Vec<String> = paths.into_iter().filter(|p| texcheck_entry(&store, Path::new(p)).is_none()).collect();
+        if todo.is_empty() {
+            return Ok(0);
+        }
+        let jobs = jobs_of(&todo);
         let mut found = 0;
         let ok = run_kit("texcheck", "--texcheck", &jobs, None, paks, |l| {
             let bad = l.strip_prefix("TEXCHECK ").and_then(|rest| rest.split_once(' '))
@@ -155,6 +180,38 @@ pub async fn run_texcheck(jobs: Vec<(String, String)>, state: State<'_, Arc<Mute
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// [folder, kit key] per mod file, what the kit's --mods and --key take.
+fn jobs_of(paths: &[String]) -> Vec<(String, String)> {
+    paths.iter().map(|p| {
+        let path = Path::new(p);
+        (path.parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default(), kit_key(path))
+    }).collect()
+}
+
+/// A mod's .utoc, as the kit pairs them (mod_previews.py installed): X.pak, X.bak_repak, X.pak_disabled and an older
+/// Repak's X.pak.bak_repak all belong with X.utoc.
+fn utoc_of(path: &Path) -> PathBuf {
+    let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let lower = name.to_lowercase();
+    let stem = [".pak.bak_repak", ".pak_disabled", ".bak_repak", ".pak", ".utoc", ".ucas"].iter()
+        .find(|x| lower.ends_with(*x)).map(|x| &name[..name.len() - x.len()]).unwrap_or(&name);
+    path.with_file_name(format!("{stem}.utoc"))
+}
+
+fn texcheck_store() -> serde_json::Value {
+    std::fs::read_to_string(previews_dir().join("texcheck.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+}
+
+/// The kit's texture check entry for a mod, when its .utoc size and time still match (the kit's signature fields 2 and
+/// 3), so an edited mod is never judged by its older files.
+fn texcheck_entry<'a>(store: &'a serde_json::Value, path: &Path) -> Option<&'a serde_json::Value> {
+    let entry = store.get(kit_key(&utoc_of(path)))?;
+    let meta = std::fs::metadata(utoc_of(path)).ok()?;
+    let ns = meta.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_nanos();
+    let sig: Vec<&str> = entry["sig"].as_str()?.split(':').collect();
+    (sig.get(1) == Some(&meta.len().to_string().as_str()) && sig.get(2) == Some(&ns.to_string().as_str())).then_some(entry)
 }
 
 /// The kit's mod key for a mod file (mod_previews.py mod_key): the stem without _disabled and the _<n>_P priority.
@@ -178,17 +235,10 @@ fn kit_key(path: &Path) -> String {
 /// .utoc size and time still match the mod (the kit's signature fields 2 and 3), so an edited mod is never judged by
 /// its older files.
 pub(crate) fn texcheck_reasons(mod_paths: &[String]) -> Vec<(String, String)> {
-    let Some(store) = std::fs::read_to_string(previews_dir().join("texcheck.json")).ok().and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok()) else {
-        return Vec::new();
-    };
+    let store = texcheck_store();
     mod_paths.iter().filter_map(|p| {
-        let path = Path::new(p);
-        let entry = &store[kit_key(path)];
+        let entry = texcheck_entry(&store, Path::new(p))?;
         let bad = entry["result"]["unreadable"].as_array().filter(|a| !a.is_empty())?;
-        let meta = std::fs::metadata(path.with_extension("utoc")).ok()?;
-        let ns = meta.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_nanos();
-        let sig: Vec<&str> = entry["sig"].as_str()?.split(':').collect();
-        (sig.get(1) == Some(&meta.len().to_string().as_str()) && sig.get(2) == Some(&ns.to_string().as_str())).then_some(())?;
         let names: Vec<&str> = bad.iter().filter_map(|t| t["path"].as_str()?.rsplit('/').next()).collect();
         let shown = names.iter().take(5).copied().collect::<Vec<_>>().join(", ");
         let more = if names.len() > 5 { format!(" and {} more", names.len() - 5) } else { String::new() };
@@ -218,5 +268,8 @@ mod tests {
         assert_eq!(kit_key(Path::new(r"C:\m\Foo_disabled.pak")), "Foo");
         assert_eq!(kit_key(Path::new(r"C:\m\B_P.pak")), "B_P");
         assert_eq!(kit_key(Path::new(r"C:\m\A_1_P_2_P.bak_repak")), "A");
+        assert_eq!(utoc_of(Path::new(r"C:\m\X_P.pak.bak_repak")), Path::new(r"C:\m\X_P.utoc"));
+        assert_eq!(utoc_of(Path::new(r"C:\m\X_9_P.bak_repak")), Path::new(r"C:\m\X_9_P.utoc"));
+        assert_eq!(utoc_of(Path::new(r"C:\m\X.pak")), Path::new(r"C:\m\X.utoc"));
     }
 }

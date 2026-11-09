@@ -13,10 +13,6 @@ import { createViewer, type Viewer } from './scene'
 
 type Phase = 'checking' | 'making' | 'loading' | 'ready' | 'overridden' | 'none' | 'failed'
 
-/** [mod folder, preview key] pairs, the shape xtra_previews.rs takes for a run. */
-const jobsOf = (paths: string[], keyOf: (p: string) => string): [string, string][] =>
-  paths.map(p => [p.replace(/[\\/][^\\/]*$/, ''), keyOf(p)])
-
 /** The button for the preview bar or a loadout page's corner: one look with Regenerate (same class). */
 export function Rotate3DButton({ on, hasImage, onClick, className }: { on: boolean; hasImage: boolean; onClick: () => void; className: string }) {
   return (
@@ -29,33 +25,34 @@ export function Rotate3DButton({ on, hasImage, onClick, className }: { on: boole
 }
 
 /** The 3D view of one preview key (a mod, or a loadout's combined render with `set`), filling its parent. */
-export function Viewer3D({ viewKey, paths, keyOf, set }: { viewKey: string; paths: string[]; keyOf: (p: string) => string; set?: string }) {
+export function Viewer3D({ viewKey, paths, set }: { viewKey: string; paths: string[]; set?: string }) {
   const host = useRef<HTMLDivElement>(null)
   const [phase, setPhase] = useState<Phase>('checking')
   const [step, setStep] = useState('')
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
-  const args = useRef({ paths, keyOf })
-  args.current = { paths, keyOf }
+  const args = useRef(paths)
+  args.current = paths
   const pathsSig = paths.join('|')
 
   useEffect(() => {
     let live = true, viewer: Viewer | null = null
-    const stopStage = listen<string>('mod-viewer-stage', e => { if (live) setStep(stepText(e.payload) ?? '') })
+    // an unknown step word (a newer kit) shows the line's default, not the preview card's wording
+    const stopStage = listen<string>('mod-viewer-stage', e => { if (live) setStep(stepText(e.payload) === stepText(undefined) ? '' : stepText(e.payload)) })
     const open = async () => {
       setPhase('loading')
-      viewer = await createViewer(host.current!, viewKey, document.documentElement.getAttribute('data-motion') === 'off')
+      viewer = await createViewer(host.current!, viewKey, document.documentElement.getAttribute('data-motion') === 'off', () => live)
       if (!live) { viewer.dispose(); return }
       setPhase('ready')
     }
     ;(async () => {
-      const { paths, keyOf } = args.current
+      const paths = args.current
       const state = await invoke<string>('viewer_state', { key: viewKey, paths })
       if (!live) return
-      if (state === 'ready') return open()
+      if (state === 'ready' && attempt === 0) return open() // Try again makes the files anew
       if (state === 'overridden' && attempt === 0) { setPhase('overridden'); return }
       setPhase('making')
-      const made = await invoke<string>('generate_mod_viewer', { jobs: jobsOf(paths, keyOf), set: set ?? null })
+      const made = await invoke<string>('generate_mod_viewer', { paths, set: set ?? null })
       if (!live) return
       if (made === 'ready') return open()
       if (made === 'failed') { setError('The full error is in Logs.'); setPhase('failed'); return }
@@ -63,7 +60,9 @@ export function Viewer3D({ viewKey, paths, keyOf, set }: { viewKey: string; path
     })().catch(e => {
       if (!live) return
       console.warn('[viewer3d]', e)
-      setError(typeof e === 'string' ? e : 'The full error is in Logs.')
+      // a string is the backend's own sentence (busy, no kit); anything else broke while opening the files here (the
+      // detail stays in the console: the app's Logs take backend lines only)
+      setError(typeof e === 'string' ? e : 'The 3D files could not be opened. Try again makes them anew.')
       setPhase('failed')
     })
     return () => { live = false; stopStage.then(f => f()).catch(() => undefined); viewer?.dispose() }
@@ -87,7 +86,6 @@ export function Viewer3D({ viewKey, paths, keyOf, set }: { viewKey: string; path
           <TriangleAlert size={20} aria-hidden="true" />
           <b>The game loads its own model</b>
           <p>This mod&apos;s file name gives it a lower priority than the game&apos;s own files, so the game shows the original model. Previews show what the game loads.</p>
-          <button type="button" className="mod-preview-btn" onClick={() => setAttempt(a => a + 1)}><RotateCcw size={14} aria-hidden="true" />Check again</button>
         </div>
       )}
       {phase === 'none' && (
