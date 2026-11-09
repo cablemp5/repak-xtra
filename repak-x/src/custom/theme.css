@@ -3404,52 +3404,71 @@ html[data-motion="off"] .v3d-state, html[data-motion="off"] .v3d-canvas { animat
 .v3d-window-foot .lo-text-btn { width: auto !important; flex: none; }
 /* ---------- Merge sounds (custom/MergeSounds.tsx): a merged pack's details note, and the window with a column per mod ---------- */
 .sound-merge-note p { margin: 0 0 8px; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
-.ms-modal { width: min(920px, 94vw) !important; max-width: none !important; max-height: 88vh; padding: 0 !important; display: flex; flex-direction: column; }
+.ms-modal { width: min(920px, 94vw); max-width: none !important; max-height: 88vh; padding: 0 !important; display: flex; flex-direction: column; }
 .ms-modal .modal-header { padding: 18px 20px 16px !important; align-items: flex-start; gap: 12px; border-bottom: 1px solid var(--panel-border); }
 .ms-title { min-width: 0; }
 .ms-title h2 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
 .ms-title p { margin: 4px 0 0; max-width: 64ch; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
 .ms-modal .modal-close { display: grid; place-items: center; width: 32px; height: 32px; line-height: 1; flex: none; margin-left: auto; }
-.ms-body { overflow: auto; padding: 16px 20px !important; display: flex; flex-direction: column; gap: 20px; min-height: 160px; }
+.ms-body { overflow: auto; padding: 16px 20px !important; display: flex; flex-direction: column; gap: 12px; }
+.ms-body:has(.ms-colhead) { padding-top: 0 !important; }   /* the pinned header sits flush under the title */
 /* the loader, the empty states and the done state: centered in the body, text centered under the icon */
-.ms-center { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; flex: 1; padding: 28px 12px; }
+.ms-center { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; flex: 1; min-height: 160px; padding: 28px 12px; }
 .ms-empty { gap: 8px; }
 .ms-empty-icon { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: 4px; border-radius: 12px; background: var(--bg-light); color: var(--text-primary); }
 .ms-empty-icon svg { width: 18px; height: 18px; }
 .ms-empty b { font-size: 14px; font-weight: 600; color: var(--text-primary); }
 .ms-empty p { margin: 0; max-width: 46ch; font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-wrap: balance; }
-/* a bank: its hero, the file, and how many sounds, on one baseline */
-.ms-bank-head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; }
-.ms-bank-head b { font-size: 13px; font-weight: 600; color: var(--text-primary); }
-.ms-bank-head span { font: 12px var(--font-mono); color: #7d7d7d; }
-.ms-bank-head em { margin-left: auto; font-style: normal; font-size: 12px; color: var(--text-secondary); }
-/* the grid: the sound column, then a tile per mod; past four mods it scrolls sideways with the sound column pinned */
-.ms-grid { display: grid; gap: 6px; align-items: stretch; overflow-x: auto; }
+/* the column heads once, above every bank (Use all switches picks in all of them), pinned while the list scrolls;
+   then one hairline card per bank like Setup's parts and Check Conflicts' groups, a header bar and hairline rows */
+.ms-colhead { position: sticky; top: 0; z-index: 3; display: grid; flex: none; margin: 0 -20px; padding: 0 21px; background: var(--bg-dark); border-bottom: 1px solid var(--panel-border); }
+.ms-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; height: 36px; padding: 0 12px;
+  font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.ms-head + .ms-head { border-left: 1px solid var(--panel-border); }
+.ms-head-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--text-primary); }
+.ms-all { display: inline-flex !important; align-items: center; flex: none; height: 24px !important; min-height: 0 !important; padding: 0 8px !important; border-radius: 6px !important;
+  border: 1px solid var(--panel-border) !important; background: transparent !important; color: var(--text-secondary) !important;
+  font-family: var(--font-primary) !important; font-size: 11px !important; font-weight: 500 !important; cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease; }
+.ms-all:disabled { opacity: 0.38; cursor: default; pointer-events: none; }
+.ms-all:hover { background: var(--quiet-hover) !important; color: var(--text-primary) !important; border-color: rgba(255, 255, 255, 0.14) !important; }
+.ms-bank { flex: none; border: 1px solid var(--panel-border); border-radius: 10px; background: var(--bg-darker); overflow: clip; }
+.ms-bank-head { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; background: var(--field-bg); border-bottom: 1px solid var(--panel-border); }
+.ms-bank-hero { flex: none; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.ms-bank-file { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px var(--font-mono); color: var(--text-secondary); }
+.ms-bank-count { flex: none; white-space: nowrap; margin-left: auto; font-size: 12px; font-weight: 500; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.ms-grid { display: grid; }
 .ms-row { display: contents; }
-.ms-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; min-width: 0; padding: 0 4px 2px; font-size: 12px; font-weight: 600; color: var(--text-primary); }
-.ms-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ms-all { flex: none; display: inline; height: auto !important; min-height: 0 !important; padding: 0; border: 0; background: none; font: 500 12px/1.5 var(--font-sans, inherit); color: color-mix(in srgb, var(--accent-primary), white 30%); cursor: pointer; }
-.ms-all:hover { text-decoration: underline; }
-.ms-sticky { position: sticky; left: 0; z-index: 1; background: var(--bg-darker); }
-.ms-num { display: flex; align-items: center; gap: 8px; padding: 0 4px; font: 12px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-secondary); }
-.ms-num b { font-weight: 500; color: var(--text-primary); }
-.ms-tag { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border: 1px solid var(--panel-border); border-radius: 5px; font: 11px var(--font-sans, inherit); color: var(--text-secondary); }
-/* a mod's version: the whole tile picks it, its square play plays it; the picked tile turns blue with a check */
-.ms-tile { display: flex; align-items: center; gap: 10px; height: 44px; min-width: 0; padding: 0 10px 0 8px; border: 1px solid var(--panel-border); border-radius: 9px;
-  background: var(--bg-dark); color: var(--text-secondary); font-size: 12px; cursor: pointer; user-select: none;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
-.ms-tile:hover { border-color: rgba(255, 255, 255, 0.14); color: var(--text-primary); }
-.ms-tile:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent-primary), transparent 30%); outline-offset: 1px; }
-.ms-tile.is-on { border-color: color-mix(in srgb, var(--accent-primary), transparent 35%); background: color-mix(in srgb, var(--accent-primary), transparent 88%); color: var(--text-primary); }
-.ms-tile.is-none { justify-content: center; background: transparent; border-style: dashed; color: #7d7d7d; cursor: default; }
-.ms-play { display: grid !important; place-items: center; width: 28px !important; height: 28px !important; min-width: 28px !important; min-height: 0 !important; flex: none;
-  padding: 0 !important; border: 0 !important; border-radius: 7px !important; background: var(--bg-light) !important; color: var(--text-primary) !important; cursor: pointer;
-  transition: background 0.15s ease; }
-.ms-play:hover { background: var(--bg-lighter) !important; }
-.ms-check { display: grid; place-items: center; width: 18px; height: 18px; margin-left: auto; flex: none; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.18);
-  transition: background 0.15s ease, border-color 0.15s ease; }
-.ms-tile.is-on .ms-check { border-color: transparent; background: var(--accent-primary); color: #fff; animation: t-swap-in var(--reveal-dur) var(--reveal-ease) backwards; }
-html[data-motion="off"] .ms-tile.is-on .ms-check { animation: none; }
+.ms-row > div + div { border-left: 1px solid var(--panel-border); }
+.ms-num, .ms-cell { display: flex; align-items: center; height: 40px; min-width: 0; border-bottom: 1px solid var(--panel-border); }
+.ms-row:last-child > div { border-bottom: 0; }
+.ms-num { gap: 6px; padding: 0 10px 0 12px; font: 500 12px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.ms-tag { flex: none; white-space: nowrap; display: inline-flex; align-items: center; height: 18px; margin-left: auto; padding: 0 6px; border-radius: 4px; background: var(--quiet-active);
+  font-family: var(--font-primary); font-size: 10px; font-weight: 500; color: var(--text-secondary); }
+.ms-cell.is-none { padding: 0 12px; font-size: 12px; color: color-mix(in srgb, var(--text-secondary) 65%, transparent); user-select: none; }
+/* a mod's version: the whole cell picks it, its play button plays it (blue only while playing); the picked cell tints blue and fills its check */
+.ms-cell.is-choice { gap: 8px; padding: 0 12px 0 10px; cursor: pointer; user-select: none; transition: background 0.12s ease; }
+.ms-cell.is-choice:hover { background: var(--bg-dark); }
+.ms-cell.is-picked { background: color-mix(in srgb, var(--accent-primary) 9%, var(--bg-darker)); }
+.ms-cell.is-picked:hover { background: color-mix(in srgb, var(--accent-primary) 13%, var(--bg-darker)); }
+.ms-cell.is-choice:focus-visible { outline: 2px solid var(--focus-ring) !important; outline-offset: -2px !important; }
+.ms-play { display: inline-flex !important; align-items: center; justify-content: center; flex: none; width: 26px !important; height: 26px !important; min-width: 0 !important; min-height: 0 !important;
+  padding: 0 !important; border-radius: 6px !important; border: 1px solid var(--panel-border) !important; background: var(--quiet-hover) !important; color: var(--text-secondary) !important;
+  cursor: pointer; transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease; }
+.ms-play:hover { background: var(--bg-lighter) !important; border-color: rgba(255, 255, 255, 0.16) !important; color: var(--text-primary) !important; }
+.ms-play.is-on { background: var(--accent-primary) !important; border-color: var(--accent-primary) !important; color: #fff !important; }
+/* the modal's global 16px icon size (.modal-content svg.lucide) would blow these up; the play triangle sits a hair right to look centered */
+.ms-modal .ms-play svg.lucide { width: 11px !important; height: 11px !important; }
+.ms-modal .ms-play:not(.is-on):not([aria-busy="true"]) svg.lucide { transform: translateX(0.5px); }
+.ms-modal .ms-check svg.lucide { width: 10px !important; height: 10px !important; }
+.ms-cell-label { font-size: 12px; font-weight: 500; color: var(--text-secondary); transition: color 0.12s ease; }
+.ms-cell.is-choice:hover .ms-cell-label, .ms-cell.is-picked .ms-cell-label { color: var(--text-primary); }
+.ms-check { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 16px; height: 16px; margin-left: auto; border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1); background: transparent; color: transparent; transition: background 0.12s ease, border-color 0.12s ease; }
+.ms-cell.is-choice:hover .ms-check { border-color: rgba(255, 255, 255, 0.24); }
+.ms-cell.is-picked .ms-check { border-color: var(--accent-primary); background: var(--accent-primary); color: #fff; animation: t-swap-in var(--reveal-dur) var(--reveal-ease) backwards; }
+html[data-motion="off"] .ms-cell.is-picked .ms-check { animation: none; }
+.ms-notes, .ms-error { padding: 0 4px; }
 .ms-notes p, .ms-error { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
 .ms-error { color: var(--warning-text, #f5d342); }
 .ms-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--panel-border); }
@@ -3458,4 +3477,4 @@ html[data-motion="off"] .ms-tile.is-on .ms-check { animation: none; }
   font-size: 13px !important; font-weight: 500 !important; border-radius: var(--quiet-radius) !important; }
 .ms-name { display: flex; flex: 1; align-items: center; gap: 10px; min-width: 0; margin-right: 8px; font-size: 12px; color: var(--text-secondary); }
 .ms-name input { flex: 1; min-width: 0; height: 32px; padding: 0 10px; border: 1px solid var(--panel-border); border-radius: var(--quiet-radius);
-  background: var(--bg-dark); color: var(--text-primary); font: 13px var(--font-sans, inherit); }
+  background: var(--bg-dark); color: var(--text-primary); font-family: var(--font-primary); font-size: 13px; }
