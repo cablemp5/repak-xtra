@@ -67,7 +67,9 @@ pub fn viewer_state(key: String, paths: Vec<String>) -> &'static str {
     let read = |p: PathBuf| std::fs::read_to_string(p).ok().and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok()).unwrap_or_default();
     let export = dir.join(format!("{key}.3d"));
     if export.join("model.json").is_file() {
-        return if paths.is_empty() || read(export.join("stamp.json")) == stamp_of(&paths) { "ready" } else { "stale" };
+        // kit 20: the skin's shared part it reads can be gone (the kit removes bases from an older game build): made again
+        let base_gone = base_of(&read(export.join("model.json"))).is_some_and(|b| !dir.join("3d-base").join(b).join("model.glb").is_file());
+        return if !base_gone && (paths.is_empty() || read(export.join("stamp.json")) == stamp_of(&paths)) { "ready" } else { "stale" };
     }
     let kind = read(dir.join("index.json"))[&key]["kind"].as_str().map(str::to_string).unwrap_or_default();
     if kind == "overridden" || read(dir.join(format!("{key}.json")))["overridden"] == true {
