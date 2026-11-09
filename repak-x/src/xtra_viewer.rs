@@ -71,6 +71,9 @@ fn run_kit(who: &'static str, extra: &str, jobs: &[(String, String)], set: Optio
     if let Some(bad) = jobs.iter().map(|(_, k)| k.as_str()).chain(set).find(|k| !valid_key(k)) {
         return Err(format!("Invalid preview key: {bad}"));
     }
+    if crate::xtra_kit::installed_version().is_some_and(|v| v < 19) {
+        return Err("Rotate in 3D and the texture check need preview kit 19 or newer. Update it in Setup.".into());
+    }
     let _hold = reserve_waiting(who).map_err(busy_text)?;
     let mut cmd = generator_command(paks, false)?;
     cmd.arg("--out").arg(previews_dir()).arg(extra);
@@ -107,6 +110,21 @@ fn run_kit(who: &'static str, extra: &str, jobs: &[(String, String)], set: Optio
 /// (seconds), so a click on Rotate in 3D or Generate preview meanwhile starts right after it instead of failing.
 /// Anything else holding it (a preview run, a kit install) is answered at once.
 pub(crate) fn reserve_waiting(who: &'static str) -> Result<crate::xtra_previews::Hold, &'static str> {
+    use std::sync::atomic::Ordering;
+    // someone else (a click) is waiting: the texture check steps aside instead of taking its next batch first
+    if who == "texcheck" && WAITERS.load(Ordering::SeqCst) > 0 {
+        return Err("texcheck");
+    }
+    WAITERS.fetch_add(usize::from(who != "texcheck"), Ordering::SeqCst);
+    struct Done(bool);
+    impl Drop for Done {
+        fn drop(&mut self) {
+            if self.0 {
+                WAITERS.fetch_sub(1, Ordering::SeqCst);
+            }
+        }
+    }
+    let _done = Done(who != "texcheck");
     let until = std::time::Instant::now() + std::time::Duration::from_secs(90);
     loop {
         match reserve(who) {
@@ -115,6 +133,9 @@ pub(crate) fn reserve_waiting(who: &'static str) -> Result<crate::xtra_previews:
         }
     }
 }
+
+/// Clicks (Rotate in 3D, Generate preview) waiting for the reservation right now (reserve_waiting).
+static WAITERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 fn paks_of(state: &State<'_, Arc<Mutex<crate::AppState>>>) -> Option<PathBuf> {
     state.lock().unwrap().game_path.parent().map(Path::to_path_buf)
@@ -161,7 +182,7 @@ pub async fn run_texcheck(paths: Vec<String>, state: State<'_, Arc<Mutex<crate::
     tauri::async_runtime::spawn_blocking(move || {
         // answers the kit already has for these files: no kit start for them (most Library scans start none)
         let store = texcheck_store();
-        let todo: Vec<String> = paths.into_iter().filter(|p| texcheck_entry(&store, Path::new(p)).is_none()).collect();
+        let todo: Vec<String> = paths.into_iter().filter(|p| utoc_of(Path::new(p)).is_file() && texcheck_entry(&store, Path::new(p)).is_none()).collect();
         if todo.is_empty() {
             return Ok(0);
         }
