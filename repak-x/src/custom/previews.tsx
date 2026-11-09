@@ -616,7 +616,7 @@ export function ModPreview({ path }: { path: string }) {
   const can3d = use3dPossible(key, usePreviewVersion())
   return (
     <div className="detail-section mod-preview">
-      {threeD && <div className="mod-preview-frame is-3d"><Viewer3D viewKey={key} paths={[path]} /></div>}
+      {threeD && <div className="mod-preview-frame is-3d"><Viewer3D viewKey={key} paths={[path]} name={path.split(/[\\/]/).pop()!.replace(/(_\d+_P)?\.(pak|bak_repak|utoc|ucas)$/i, '')} /></div>}
       {!threeD && url && (
         <div className={`mod-preview-frame${forms.length ? ' has-forms' : ''}`}>
           {isVideoPreview(url) ? <BeatVideo src={url} beat={KO_BEAT} /> : <img src={url} alt="Generated preview" onLoad={revealOnLoad} />}
