@@ -1,8 +1,9 @@
 // repakxtra: Merge sounds (xtra_soundmerge.rs). Select two or more sound mods in the Library and the selection bar's
-// Merge sounds opens a window listing every sound two or more of them change: a column per mod (cable's pick A), each
-// tile playing that mod's version (decoded by the preview kit) and picking it with a click (cable's pick A, round 3),
-// Use all per column, picks starting on the mod that wins today. A streamed sound is one row with its bank entry. Make merged pack writes it as a normal mod and switches off the originals that hold only
-// sounds. A merged pack's details say what it was made from, with Change picks to open the window again.
+// Merge sounds opens a window listing every sound two or more of them change: a column per mod, each cell playing that
+// mod's version (decoded by the preview kit) and picking it with a click, Use all per column, picks starting on the mod
+// that wins today. A streamed sound is one row with its bank entry. Make merged pack writes it as a normal mod and
+// switches off the originals that hold only sounds. A merged pack's details say what it was made from, with Change
+// picks to open the window again.
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'

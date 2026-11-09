@@ -27,7 +27,8 @@ fn pak_order(name: &str) -> u64 {
     3 + 100 * if n >= 1 { n + 1 } else { 1 }
 }
 
-/// The merged pack's priority suffix: above every _9999999_P mod, under the int32 pak order limit.
+/// The merged pack's priority suffix: above every _9999999_P mod, under the int32 pak order limit. The Library's priority
+/// number reads only all-nines suffixes, so it shows this pack as 0, while the game loads it above them.
 const SUFFIX: &str = "_19999999_P";
 
 /// Sections of a bank: (tag, body range). Err when a section runs past the end or bytes trail the last one.
@@ -521,8 +522,11 @@ pub async fn sound_merge_make(paths: Vec<String>, picks: BTreeMap<String, BTreeM
         }
         let mods_dir = paks.join("~mods");
         let dest = mods_dir.join(format!("{}{SUFFIX}.pak", file_name(&name)));
+        let replace = replace.map(PathBuf::from).filter(|r| {
+            r.parent().is_some_and(|d| stem_of(d) == stem_of(&mods_dir)) && read_store().contains_key(&stem_of(r))
+        });
         // 6: never over another mod of that name, unless it is the merged pack being changed (on or off)
-        let changing = replace.as_deref().is_some_and(|r| stem_of(Path::new(r)) == stem_of(&dest));
+        let changing = replace.as_deref().is_some_and(|r| stem_of(r) == stem_of(&dest));
         if !changing && (dest.exists() || dest.with_extension("bak_repak").exists()) {
             return Err(format!("A mod named {} is already in the mods folder. Pick another name.", file_name(&name)));
         }
@@ -535,11 +539,12 @@ pub async fn sound_merge_make(paths: Vec<String>, picks: BTreeMap<String, BTreeM
             let _ = std::fs::remove_file(&part);
             return Err(e);
         }
-        if let Some(old) = replace.map(PathBuf::from).filter(|o| o.to_string_lossy().to_lowercase() != dest.to_string_lossy().to_lowercase()) {
+        let mut store = read_store();
+        if let Some(old) = replace.filter(|o| o.to_string_lossy().to_lowercase() != dest.to_string_lossy().to_lowercase()) {
             let _ = std::fs::remove_file(&old);
+            store.remove(&stem_of(&old)); // 5: renamed, so its old record goes with it
         }
         // what was picked, by source path, so its details can open the window again
-        let mut store = read_store();
         let real = |p: &Path| p.with_extension("").to_string_lossy().to_string();
         let by_source: serde_json::Map<String, serde_json::Value> = picks.iter().map(|(k, m)| (k.clone(), serde_json::json!(
             m.iter().filter_map(|(id, p)| Some((id.clone(), real(&src[index(p)?].path)))).collect::<BTreeMap<_, _>>()))).collect();
