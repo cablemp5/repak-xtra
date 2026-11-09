@@ -221,7 +221,7 @@ pub async fn xtra_why_overrides(mod_path: String, state: State<'_, Arc<Mutex<cra
         let mut out = overrides(&path, &keys(&mine), &others);
         // a built-in keeps its name, and set_mod_priority only rewrites a name ending in exactly _P (another would get a
         // second suffix), so neither gets Load on top
-        if crate::xtra_builtins::fixed_place(&path).is_err() || !path.file_stem().is_some_and(|s| s.to_string_lossy().ends_with("_P")) {
+        if crate::xtra_builtins::in_folder(&path) || !path.file_stem().is_some_and(|s| s.to_string_lossy().ends_with("_P")) {
             out.iter_mut().for_each(|x| { x.action = None; x.priority = None });
         }
         out
