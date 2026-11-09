@@ -14,3 +14,4 @@
   animation: pl-step-in var(--text-swap-dur, 150ms) var(--text-swap-ease, ease-in-out) both; }
 @keyframes pl-step-in { from { opacity: 0; transform: translateY(var(--text-swap-translate-y, 4px)); filter: blur(var(--text-swap-blur, 2px)); } }
 html[data-motion="off"] .pl-bar span, html[data-motion="off"] .pl-step { animation: none; }
+html[data-motion="off"] .pl-bar span.is-creep { width: 30%; }   /* still: a part of the way, never a nearly full bar */

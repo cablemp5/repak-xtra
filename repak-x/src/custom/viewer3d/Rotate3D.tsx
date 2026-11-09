@@ -36,8 +36,8 @@ export function Rotate3DButton({ on, hasImage, onClick, className }: { on: boole
 }
 
 /** The 3D view of one preview key (a mod, or a loadout's combined render with `set`), filling its parent. */
-export function Viewer3D({ viewKey, paths, set, control, hint = true, name }: {
-  viewKey: string; paths: string[]; set?: string; control?: MutableRefObject<Viewer | null>; hint?: boolean; name?: string
+export function Viewer3D({ viewKey, paths, set, control, hint = true, name, onReady }: {
+  viewKey: string; paths: string[]; set?: string; control?: MutableRefObject<Viewer | null>; hint?: boolean; name?: string; onReady?: (ready: boolean) => void
 }) {
   const host = useRef<HTMLDivElement>(null)
   const [phase, setPhase] = useState<Phase>('checking')
@@ -51,6 +51,7 @@ export function Viewer3D({ viewKey, paths, set, control, hint = true, name }: {
 
   useEffect(() => {
     let live = true, viewer: Viewer | null = null
+    setWord(''); setStep('') // Try again starts the bar and the step line over, not on the last run's step
     // an unknown step word (a newer kit) shows the line's default, not the preview card's wording
     const stopStage = listen<string>('mod-viewer-stage', e => { if (!live) return; setWord(e.payload); setStep(stepText(e.payload) === stepText(undefined) ? '' : stepText(e.payload)) })
     const open = async () => {
@@ -59,6 +60,7 @@ export function Viewer3D({ viewKey, paths, set, control, hint = true, name }: {
       viewer = await createViewer(host.current!, viewKey, document.documentElement.getAttribute('data-motion') === 'off', () => live)
       if (!live) { viewer.dispose(); return }
       if (control) control.current = viewer
+      onReady?.(true)
       setPhase('ready')
     }
     ;(async () => {
@@ -81,7 +83,7 @@ export function Viewer3D({ viewKey, paths, set, control, hint = true, name }: {
       setError(typeof e === 'string' ? e : 'The 3D files could not be opened. Try again makes them anew.')
       setPhase('failed')
     })
-    return () => { live = false; stopStage.then(f => f()).catch(() => undefined); viewer?.dispose(); if (control) control.current = null }
+    return () => { live = false; stopStage.then(f => f()).catch(() => undefined); viewer?.dispose(); if (control) control.current = null; onReady?.(false) }
   }, [viewKey, set, attempt, pathsSig])
 
   useEffect(() => { if (phase === 'ready') cue('ready') }, [phase])
@@ -129,6 +131,7 @@ export function Viewer3DWindow({ title, sub, viewKey, paths, set, onClose }: {
   title: string; sub: string; viewKey: string; paths: string[]; set?: string; onClose: () => void
 }) {
   const control = useRef<Viewer | null>(null)
+  const [ready, setReady] = useState(false) // Reset view waits for the model
   const trap = useDialogFocus(true, onClose)
   return createPortal(
     <div className="modal-overlay" onClick={onClose}>
@@ -139,10 +142,10 @@ export function Viewer3DWindow({ title, sub, viewKey, paths, set, onClose }: {
           <div className="v3d-window-title"><h2>{title}</h2><p className="su-sub">{sub}</p></div>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
-        <div className="v3d-window-view"><Viewer3D viewKey={viewKey} paths={paths} set={set} control={control} hint={false} name={title} /></div>
+        <div className="v3d-window-view"><Viewer3D viewKey={viewKey} paths={paths} set={set} control={control} hint={false} name={title} onReady={setReady} /></div>
         <div className="v3d-window-foot">
           <span>{HINT}</span>
-          <button type="button" className="lo-text-btn" onClick={() => control.current?.reset()}><RotateCcw size={14} aria-hidden="true" />Reset view</button>
+          <button type="button" className="lo-text-btn" onClick={() => control.current?.reset()} disabled={!ready}><RotateCcw size={14} aria-hidden="true" />Reset view</button>
           <button type="button" className="lo-text-btn" onClick={onClose}>Close</button>
         </div>
       </motion.div>
