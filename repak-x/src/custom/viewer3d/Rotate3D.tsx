@@ -9,7 +9,7 @@ import { listen } from '@tauri-apps/api/event'
 import { Image as ImageIcon, LoaderCircle, RotateCcw, Rotate3d, TriangleAlert, X } from 'lucide-react'
 import { cue } from '../sounds'
 import { stepText } from '../previewStages'
-import { createViewer, type Viewer } from './scene'
+import type { Viewer } from './scene'
 
 type Phase = 'checking' | 'making' | 'loading' | 'ready' | 'overridden' | 'none' | 'failed'
 
@@ -41,6 +41,7 @@ export function Viewer3D({ viewKey, paths, set }: { viewKey: string; paths: stri
     const stopStage = listen<string>('mod-viewer-stage', e => { if (live) setStep(stepText(e.payload) === stepText(undefined) ? '' : stepText(e.payload)) })
     const open = async () => {
       setPhase('loading')
+      const { createViewer } = await import('./scene') // three.js is fetched on first use, not at app start
       viewer = await createViewer(host.current!, viewKey, document.documentElement.getAttribute('data-motion') === 'off', () => live)
       if (!live) { viewer.dispose(); return }
       setPhase('ready')
