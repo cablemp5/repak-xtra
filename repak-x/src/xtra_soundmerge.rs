@@ -233,6 +233,8 @@ pub struct Plan {
     pub only_one: usize,
     /// mods left out of a file, and why
     pub skipped: Vec<(String, String)>,
+    /// what else the merge does that is worth knowing
+    pub notes: Vec<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -256,6 +258,29 @@ fn paks_of(state: &State<'_, Arc<Mutex<crate::AppState>>>) -> Option<PathBuf> {
     crate::xtra_broken::paks_dir(&mods)
 }
 
+/// A bank's file name for the window's notes: bnk_sfx_1026001.
+fn bank_name(key: &str) -> String {
+    key.rsplit('/').next().unwrap_or(key).trim_end_matches(".bnk").to_string()
+}
+
+/// A mod's name for the window's notes: its file name without the priority suffix.
+fn file_label(path: &str) -> String {
+    let n = Path::new(path).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    match n.strip_suffix("_P").and_then(|r| r.rsplit_once('_')) {
+        Some((head, num)) if !num.is_empty() && num.bytes().all(|b| b.is_ascii_digit()) => head.to_string(),
+        _ => n,
+    }
+}
+
+/// One file of the merged pack, written into the build folder under its key.
+fn write_entry(tmp: &Path, key: &str, file: &str, bytes: Vec<u8>, entries: &mut Vec<(String, String)>) -> Result<(), String> {
+    let out = tmp.join("tree").join(key.replace('/', "\\"));
+    std::fs::create_dir_all(out.parent().unwrap()).map_err(|e| e.to_string())?;
+    std::fs::write(&out, bytes).map_err(|e| e.to_string())?;
+    entries.push((file.to_string(), out.to_string_lossy().to_string()));
+    Ok(())
+}
+
 /// A loose .wem's number (its file name), the id the window keys it by.
 fn wem_id(key: &str) -> u32 {
     key.rsplit('/').next().and_then(|n| n.strip_suffix(".wem")).and_then(|n| n.parse().ok()).unwrap_or(0)
@@ -270,13 +295,16 @@ pub async fn sound_merge_plan(paths: Vec<String>, state: State<'_, Arc<Mutex<cra
         cache().lock().unwrap().clear();
         let src = sources(&paths);
         let mut plan = Plan { mods: src.iter().map(|s| s.path.to_string_lossy().to_string()).collect(), ..Default::default() };
+        for p in paths.iter().filter(|p| !src.iter().any(|s| stem_of(&s.path) == stem_of(Path::new(p)))) {
+            plan.skipped.push((p.clone(), "it is left out: only sound mods packed as a single .pak can be merged".into()));
+        }
         let mut keys: BTreeMap<&String, Vec<usize>> = BTreeMap::new();
         for (i, s) in src.iter().enumerate() {
             for k in s.sounds.keys() {
                 keys.entry(k).or_default().push(i);
             }
         }
-        let game = if keys.iter().any(|(k, w)| w.len() > 1 && k.ends_with(".bnk")) { game_files(&paks) } else { BTreeMap::new() };
+        let game = if keys.keys().any(|k| k.ends_with(".bnk")) { game_files(&paks) } else { BTreeMap::new() };
         for (key, who) in keys {
             if who.len() < 2 {
                 // one mod's bank: every sound it changes comes along (counted against the game's when it has one)
@@ -301,7 +329,8 @@ pub async fn sound_merge_plan(paths: Vec<String>, state: State<'_, Arc<Mutex<cra
                 continue;
             }
             let Some(g) = game.get(key).and_then(|(p, e)| extract(p, e)) else {
-                plan.skipped.extend(who.iter().map(|&i| (plan.mods[i].clone(), format!("the game has no {key} to merge onto"))));
+                // a bank the game lacks: the highest-priority mod's plays whole, as it does today
+                plan.notes.push(format!("{} is not in the game, so {}'s version of it is used whole.", bank_name(key), file_label(&plan.mods[*who.last().unwrap()])));
                 continue;
             };
             let gm = media(&g)?;
@@ -310,8 +339,19 @@ pub async fn sound_merge_plan(paths: Vec<String>, state: State<'_, Arc<Mutex<cra
                 let Some(m) = extract(&src[i].path, &src[i].sounds[key]) else { continue };
                 match changes(&gm, &m) {
                     Ok(c) => c.keys().for_each(|id| by_id.entry(*id).or_default().push(i)),
-                    Err(why) => plan.skipped.push((plan.mods[i].clone(), format!("its {key}: {why}"))),
+                    Err(why) => plan.skipped.push((plan.mods[i].clone(), format!("left out of {}: {why}", bank_name(key)))),
                 }
+            }
+            // 7: only one HIRC (which media each sound plays) survives a bank
+            let distinct = {
+                let mut v: Vec<Vec<u8>> = who.iter().filter_map(|&i| extract(&src[i].path, &src[i].sounds[key]))
+                    .filter_map(|m| section(&m, b"HIRC").filter(|h| Some(*h) != section(&g, b"HIRC")).map(|h| h.to_vec())).collect();
+                v.sort();
+                v.dedup();
+                v.len()
+            };
+            if distinct > 1 {
+                plan.notes.push(format!("Two or more of these mods also change how {} plays its sounds: the mod you pick most keeps its version of that.", bank_name(key)));
             }
             let mut sounds = Vec::new();
             for (id, has) in by_id {
@@ -422,7 +462,13 @@ pub async fn sound_merge_make(paths: Vec<String>, picks: BTreeMap<String, BTreeM
                 let i = chosen(wem_id(key)).filter(|i| who.contains(i)).unwrap_or(*who.last().unwrap());
                 extract(&src[i].path, &src[i].sounds[*key]).ok_or_else(|| format!("{file} could not be read"))?.to_vec()
             } else {
-                let g = game.get(*key).and_then(|(p, e)| extract(p, e)).ok_or_else(|| format!("The game has no {file} to merge onto."))?;
+                let top = *who.last().unwrap();
+                let whole = || extract(&src[top].path, &src[top].sounds[*key]).map(|b| b.to_vec()).ok_or_else(|| format!("{file} could not be read"));
+                let Some(g) = game.get(*key).and_then(|(p, e)| extract(p, e)) else {
+                    let b = whole()?;
+                    write_entry(tmp.path(), key, &file, b, &mut entries)?;
+                    continue;
+                };
                 let gm = media(&g)?;
                 let copies: Vec<(usize, Arc<Vec<u8>>)> = who.iter().filter_map(|&i| Some((i, extract(&src[i].path, &src[i].sounds[*key])?))).collect();
                 let mut mods = Vec::new();
@@ -435,6 +481,11 @@ pub async fn sound_merge_make(paths: Vec<String>, picks: BTreeMap<String, BTreeM
                         at.push(*i);
                     }
                 }
+                if mods.is_empty() {
+                    let b = whole()?;
+                    write_entry(tmp.path(), key, &file, b, &mut entries)?;
+                    continue;
+                }
                 let mut p = BTreeMap::new();
                 for (id_s, path) in picks.get(*key).into_iter().flatten() {
                     if let (Ok(id), Some(i)) = (id_s.parse::<u32>(), index(path)) {
@@ -445,13 +496,15 @@ pub async fn sound_merge_make(paths: Vec<String>, picks: BTreeMap<String, BTreeM
                 }
                 build_bank(&g, &mods, &hircs, &p).map_err(|e| format!("{file} could not be merged ({e})"))?
             };
-            let out = tmp.path().join("tree").join(key.replace('/', "\\"));
-            std::fs::create_dir_all(out.parent().unwrap()).map_err(|e| e.to_string())?;
-            std::fs::write(&out, bytes).map_err(|e| e.to_string())?;
-            entries.push((file, out.to_string_lossy().to_string()));
+            write_entry(tmp.path(), key, &file, bytes, &mut entries)?;
         }
         let mods_dir = paks.join("~mods");
         let dest = mods_dir.join(format!("{}{SUFFIX}.pak", file_name(&name)));
+        // 6: never over another mod of that name, unless it is the merged pack being changed (on or off)
+        let changing = replace.as_deref().is_some_and(|r| stem_of(Path::new(r)) == stem_of(&dest));
+        if !changing && (dest.exists() || dest.with_extension("bak_repak").exists()) {
+            return Err(format!("A mod named {} is already in the mods folder. Pick another name.", file_name(&name)));
+        }
         // written beside it, then swapped in: a failed build never leaves half a pak where the game loads it
         let part = dest.with_extension("pak.part");
         let made = uasset_toolkit::create_pak(&part.to_string_lossy(), entries, Some("../../../"), Some(0), Some(AES_KEY_HEX))
@@ -461,15 +514,17 @@ pub async fn sound_merge_make(paths: Vec<String>, picks: BTreeMap<String, BTreeM
             let _ = std::fs::remove_file(&part);
             return Err(e);
         }
-        if let Some(old) = replace.map(PathBuf::from).filter(|o| stem_of(o) != stem_of(&dest)) {
+        if let Some(old) = replace.map(PathBuf::from).filter(|o| o.to_string_lossy().to_lowercase() != dest.to_string_lossy().to_lowercase()) {
             let _ = std::fs::remove_file(&old);
         }
         // what was picked, by source path, so its details can open the window again
         let mut store = read_store();
+        let real = |p: &Path| p.with_extension("").to_string_lossy().to_string();
         let by_source: serde_json::Map<String, serde_json::Value> = picks.iter().map(|(k, m)| (k.clone(), serde_json::json!(
-            m.iter().filter_map(|(id, p)| Some((id.clone(), stem_of(&src[index(p)?].path)))).collect::<BTreeMap<_, _>>()))).collect();
+            m.iter().filter_map(|(id, p)| Some((id.clone(), real(&src[index(p)?].path)))).collect::<BTreeMap<_, _>>()))).collect();
         store.insert(stem_of(&dest), serde_json::json!({
-            "name": name, "sources": src.iter().map(|s| stem_of(&s.path)).collect::<Vec<_>>(), "picks": by_source }));
+            "name": name, "sources": src.iter().map(|s| real(&s.path)).collect::<Vec<_>>(), "picks": by_source }));
+        cache().lock().unwrap().clear();
         std::fs::write(store_path(), serde_json::Value::Object(store).to_string()).map_err(|e| format!("Made, but its picks could not be saved: {e}"))?;
         Ok(Made {
             path: dest.to_string_lossy().to_string(),
@@ -485,6 +540,12 @@ pub struct MergeInfo {
     pub sources: Vec<String>,
     /// sound key -> media id -> source path as it is now
     pub picks: BTreeMap<String, BTreeMap<String, String>>,
+}
+
+/// The window closed: the banks it read are let go.
+#[tauri::command]
+pub fn sound_merge_done() {
+    cache().lock().unwrap().clear();
 }
 
 /// For a merged pack (its details): what it was made from, to open the window again. None for any other mod.
@@ -589,6 +650,9 @@ mod tests {
         assert_eq!(file_name("Merged: cosmic + minecraft"), "Merged cosmic + minecraft");
         assert_eq!(file_name("../.."), "Merged sounds");
         assert_eq!(wem_id("wwiseaudio/media/12/345.wem"), 345);
+        assert_eq!(file_label(r"C:\m\minecraft_sfx_v7_9999999_P.pak"), "minecraft_sfx_v7");
+        assert_eq!(file_label(r"C:\mbc_v7.pak"), "abc_v7");
+        assert_eq!(bank_name("wwiseaudio/bnk_sfx_1026001.bnk"), "bnk_sfx_1026001");
         assert_eq!(sound_key("Marvel/Content/WwiseAudio/bnk_X.bnk").as_deref(), Some("wwiseaudio/bnk_x.bnk"));
         assert_eq!(sound_key("WwiseAudio/Media/12/34.wem").as_deref(), Some("wwiseaudio/media/12/34.wem"));
         assert_eq!(sound_key("Marvel/Content/WwiseAudio/../../x.bnk"), None);

@@ -8721,7 +8721,7 @@ fn main() {
             xtra_trash::empty_trashed_mods,
             xtra_previews::list_mod_previews, xtra_previews::delete_loadout_previews,
             xtra_previews::get_mod_preview,
-            xtra_soundmerge::sound_merge_plan, xtra_soundmerge::sound_merge_play, xtra_soundmerge::sound_merge_make, xtra_soundmerge::sound_merge_info, xtra_soundmerge::sound_merge_cleanup, // repakxtra: Merge sounds
+            xtra_soundmerge::sound_merge_plan, xtra_soundmerge::sound_merge_play, xtra_soundmerge::sound_merge_make, xtra_soundmerge::sound_merge_info, xtra_soundmerge::sound_merge_cleanup, xtra_soundmerge::sound_merge_done, // repakxtra: Merge sounds
             xtra_previews::get_preview_covers,
             xtra_previews::generate_mod_previews,
             xtra_previews::previews_available, // repakxtra: hide Generate where there is no generator

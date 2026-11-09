@@ -13,7 +13,7 @@ import { cue } from './sounds'
 import { runOp } from './opDialogs'
 import { useDialogFocus } from './dialogFocus'
 
-type Plan = { mods: string[]; banks: { key: string; sounds: { id: number; has: number[]; pick: number }[] }[]; only_one: number; skipped: [string, string][] }
+type Plan = { mods: string[]; banks: { key: string; sounds: { id: number; has: number[]; pick: number }[] }[]; only_one: number; skipped: [string, string][]; notes: string[] }
 type Picks = Record<string, Record<string, string>> // sound key -> sound id -> the picked mod's path
 type Info = { name: string; sources: string[]; picks: Picks }
 type Open = { paths: string[]; name?: string; picks?: Picks; replace?: string }
@@ -81,7 +81,7 @@ function MergeSoundsWindow({ open, onClose, onDone }: { open: Open; onClose: () 
       }))])))
       if (!open.name) setTitle(`Merged ${p.mods.map(name).join(' + ')}`.slice(0, 80))
     }).catch(e => { if (live) setError(String(e)) })
-    return () => { live = false; player.stop() }
+    return () => { live = false; player.stop(); invoke('sound_merge_done').catch(() => undefined) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const shared = plan?.banks.reduce((n, b) => n + b.sounds.length, 0) ?? 0
@@ -176,8 +176,11 @@ function MergeSoundsWindow({ open, onClose, onDone }: { open: Open; onClose: () 
               </section>
             )
           })}
-          {plan && !done && plan.skipped.length > 0 && (
-            <div className="ms-skipped">{plan.skipped.map(([m, why], i) => <p key={i}>{name(m)} is left out of one bank: {why}.</p>)}</div>
+          {plan && !done && (plan.skipped.length > 0 || plan.notes.length > 0) && (
+            <div className="ms-skipped">
+              {plan.skipped.map(([m, why], i) => <p key={i}>{name(m)}: {why}.</p>)}
+              {plan.notes.map((n, i) => <p key={`n${i}`}>{n}</p>)}
+            </div>
           )}
           {(error || player.error) && <p className="ms-error" role="alert">{error || player.error}</p>}
         </div>
