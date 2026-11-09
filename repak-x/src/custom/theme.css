@@ -3388,19 +3388,8 @@ html[data-toasts-held] .toast-container { display: none; }   /* the welcome flow
 .v3d-state p { margin: 0; max-width: 220px; line-height: 1.45; }
 .v3d-hint { position: absolute; bottom: 8px; left: 0; right: 0; text-align: center; font-size: 11px; color: var(--text-secondary); pointer-events: none; }
 html[data-motion="off"] .v3d-state, html[data-motion="off"] .v3d-canvas { animation: none; transition: none; }
-/* transitions.dev: Skeleton loader. While the model is made or loads: a rendering preview card's look (.lo-skel), the dim
-   layer and one band sweeping across, over a silhouette (the Blender logo for 3D) lit from the top and fading down, with
-   one white line for the step (each new one rises in with SwapText) */
-.v3d-skel { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden;
-  background: rgba(6, 7, 9, 0.55); pointer-events: none; }
-.v3d-skel::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.07) 50%, transparent 100%);
-  transform: translateX(-100%); animation: lo-skel-sweep 1.6s ease-in-out infinite; }
-.v3d-skel-shape { position: absolute; inset: 16% 11%; background: linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.08) 55%, rgba(255, 255, 255, 0) 100%);
-  mask-size: contain; mask-position: center; mask-repeat: no-repeat; -webkit-mask-size: contain; -webkit-mask-position: center; -webkit-mask-repeat: no-repeat;   /* fits a tall details frame and the wide window alike */
-  animation: t-swap-in var(--reveal-dur) var(--reveal-ease) backwards; }
-.v3d-skel-stage { position: relative; z-index: 1; padding: 0 12px; text-align: center; font-size: 13px; font-weight: 600; line-height: 1.3;
-  color: var(--text-primary); text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8); }
-html[data-motion="off"] .v3d-skel::after, html[data-motion="off"] .v3d-skel-shape { animation: none !important; }
+/* the KO prompt's loader (ProgressLoader) in the middle of the frame while the model is made or loads */
+.v3d-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; }
 /* A loadout's model in its centered window (Viewer3DWindow): as big as the screen allows, the controls once at the bottom */
 .v3d-window { width: min(960px, 92vw) !important; max-width: none !important; height: min(860px, 90vh); max-height: 90vh; padding: 0 !important;
   display: flex; flex-direction: column; overflow: hidden; }

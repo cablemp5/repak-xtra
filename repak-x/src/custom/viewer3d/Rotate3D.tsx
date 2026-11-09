@@ -4,8 +4,8 @@
 // it opens at once. States: loading, ready (the lobby idle plays, drag turns, middle drag moves, scroll zooms, double
 // click resets), the game's own model wins (the kit found the mod's mesh loses to the game's by pak order), nothing to
 // show, and error. On a loadout page it opens in a centered window instead (cable's pick A, Viewer3DWindow), so the
-// model shows bigger. Loading looks like a preview card rendering: the dim layer and its sweep over a silhouette (the
-// Blender logo for 3D, cable's pick), with one white line for the step, each new step rising in.
+// model shows bigger. Loading is the KO prompt editor's loader (ProgressLoader): a title, the bar following the kit's
+// steps, and the step under it, shimmering.
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
@@ -14,12 +14,13 @@ import { listen } from '@tauri-apps/api/event'
 import { Image as ImageIcon, RotateCcw, Rotate3d, TriangleAlert, X } from 'lucide-react'
 import { cue } from '../sounds'
 import { stepText } from '../previewStages'
-import { SwapText } from '../motion'
 import { useDialogFocus } from '../dialogFocus'
-import shape from './blender-mask.webp'
+import { ProgressLoader } from '../ProgressLoader'
 import type { Viewer } from './scene'
 
 const HINT = 'Drag to turn. Middle drag to move. Scroll to zoom.'
+/** How far along the bar is at each of the kit's --viewer steps (mod_previews.py stage), and around them. */
+const PCT: Record<string, number> = { checking: 4, making: 8, read: 18, mount: 30, unpack: 34, skins: 40, table: 44, export: 55, materials: 72, pose: 86, loading: 94 }
 
 type Phase = 'checking' | 'making' | 'loading' | 'ready' | 'overridden' | 'none' | 'failed'
 
@@ -35,12 +36,13 @@ export function Rotate3DButton({ on, hasImage, onClick, className }: { on: boole
 }
 
 /** The 3D view of one preview key (a mod, or a loadout's combined render with `set`), filling its parent. */
-export function Viewer3D({ viewKey, paths, set, control, hint = true }: {
-  viewKey: string; paths: string[]; set?: string; control?: MutableRefObject<Viewer | null>; hint?: boolean
+export function Viewer3D({ viewKey, paths, set, control, hint = true, name }: {
+  viewKey: string; paths: string[]; set?: string; control?: MutableRefObject<Viewer | null>; hint?: boolean; name?: string
 }) {
   const host = useRef<HTMLDivElement>(null)
   const [phase, setPhase] = useState<Phase>('checking')
   const [step, setStep] = useState('')
+  const [word, setWord] = useState('') // the kit's step word, for the bar
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
   const args = useRef(paths)
@@ -50,7 +52,7 @@ export function Viewer3D({ viewKey, paths, set, control, hint = true }: {
   useEffect(() => {
     let live = true, viewer: Viewer | null = null
     // an unknown step word (a newer kit) shows the line's default, not the preview card's wording
-    const stopStage = listen<string>('mod-viewer-stage', e => { if (live) setStep(stepText(e.payload) === stepText(undefined) ? '' : stepText(e.payload)) })
+    const stopStage = listen<string>('mod-viewer-stage', e => { if (!live) return; setWord(e.payload); setStep(stepText(e.payload) === stepText(undefined) ? '' : stepText(e.payload)) })
     const open = async () => {
       setPhase('loading')
       const { createViewer } = await import('./scene') // three.js is fetched on first use, not at app start
@@ -88,11 +90,11 @@ export function Viewer3D({ viewKey, paths, set, control, hint = true }: {
   return (
     <div className={`v3d is-${phase}`} aria-busy={busy}>
       <div ref={host} className="v3d-host" aria-label={phase === 'ready' ? 'Model in 3D: drag to turn, scroll to zoom, double click to reset' : undefined} />
-      {/* transitions.dev: Skeleton loader and Text states swap, as on a rendering preview card (theme.css .lo-skel) */}
       {busy && (
-        <div className="v3d-skel" role="status">
-          <span className="v3d-skel-shape" aria-hidden="true" style={{ maskImage: `url(${shape})`, WebkitMaskImage: `url(${shape})` }} />
-          <span className="v3d-skel-stage"><SwapText text={phase === 'loading' ? 'Loading the model' : step || (phase === 'making' ? 'Starting the preview kit' : 'Looking for the 3D files')} /></span>
+        <div className="v3d-loading">
+          <ProgressLoader title={name ? `Opening ${name} in 3D` : 'Opening the model in 3D'}
+            pct={PCT[phase === 'loading' ? 'loading' : phase === 'making' ? (PCT[word] ? word : 'making') : 'checking']}
+            step={phase === 'loading' ? 'Loading the model' : step || (phase === 'making' ? 'Starting the preview kit' : 'Looking for the 3D files')} />
         </div>
       )}
       {phase === 'overridden' && (
@@ -137,7 +139,7 @@ export function Viewer3DWindow({ title, sub, viewKey, paths, set, onClose }: {
           <div className="v3d-window-title"><h2>{title}</h2><p className="su-sub">{sub}</p></div>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
-        <div className="v3d-window-view"><Viewer3D viewKey={viewKey} paths={paths} set={set} control={control} hint={false} /></div>
+        <div className="v3d-window-view"><Viewer3D viewKey={viewKey} paths={paths} set={set} control={control} hint={false} name={title} /></div>
         <div className="v3d-window-foot">
           <span>{HINT}</span>
           <button type="button" className="lo-text-btn" onClick={() => control.current?.reset()}><RotateCcw size={14} aria-hidden="true" />Reset view</button>
