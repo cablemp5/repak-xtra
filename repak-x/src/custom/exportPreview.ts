@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { save } from '@tauri-apps/plugin-dialog'
 import { writeFile } from '@tauri-apps/plugin-fs'
+import { invoke } from '@tauri-apps/api/core'
 import type { LoadoutProps } from './Loadouts'
 
 export function previewCanvas(root: ParentNode): HTMLCanvasElement {
@@ -35,7 +36,14 @@ export function useExportPreview(name: string, alert: LoadoutProps['alert']) {
       const canvas = previewCanvas(document)
       const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error('Could not encode the preview.')), 'image/png'))
       const path = await save({ defaultPath: `${name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_') || 'loadout'}-preview.png`, filters: [{ name: 'PNG image', extensions: ['png'] }] })
-      if (path) { await writeFile(path, new Uint8Array(await blob.arrayBuffer())); alert.success('Preview saved', path) }
+      if (path) {
+        await writeFile(path, new Uint8Array(await blob.arrayBuffer()))
+        // the zip export's toast: what was saved, and a way to it
+        const id = alert.showAlert({
+          color: 'success', duration: 8000, title: `Exported ${name}'s preview`, description: `${path.split(/[/\\]/).pop()}.`,
+          action: { label: 'Show in folder', onClick: () => { alert.dismissAlert(id); invoke('open_in_explorer', { path }).catch(() => undefined) } },
+        })
+      }
     } catch (e) { alert.warning('Preview not saved', e instanceof Error ? e.message : String(e)) }
     finally { setBusy(false) }
   }

@@ -198,7 +198,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
       </div>
 
       <div className="details-body">
-        <ModPreview path={mod.path} />
+        <ModPreview path={mod.path} categories={[details?.category, ...(details?.additional_categories ?? [])]} />
         <MergedPackNote path={mod.path} />{/* repakxtra: a merged sound pack, with Change picks */}
         {loading ? (
           <div className="loading-state">Loading mod details...</div>

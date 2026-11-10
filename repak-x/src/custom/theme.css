@@ -3378,6 +3378,7 @@ html[data-toasts-held] .toast-container { display: none; }   /* the welcome flow
 .mod-preview-frame.is-3d { position: relative; }
 .v3d { position: absolute; inset: 0; border-radius: 8px; overflow: hidden; background: var(--bg-darker); }   /* flat, no background gradient */
 .v3d-host, .v3d-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.v3d-host.is-waiting { visibility: hidden; pointer-events: none; }   /* the view not shown (mod or default skin), ready */
 .v3d-canvas { cursor: grab; opacity: 0; transition: opacity var(--reveal-dur) var(--reveal-ease); touch-action: none; }
 .v3d-canvas:active { cursor: grabbing; }
 .v3d.is-ready .v3d-canvas { opacity: 1; }
@@ -3386,6 +3387,21 @@ html[data-toasts-held] .toast-container { display: none; }   /* the welcome flow
   text-align: center; font-size: 12px; color: var(--text-secondary); animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; }
 .v3d-state b { font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .v3d-state p { margin: 0; max-width: 220px; line-height: 1.45; }
+.v3d-look { position: absolute; top: 8px; right: 8px; z-index: 2; }
+/* the cosmic note, top left: the app's warning amber (.setting-warn), no box, the icon on the first line */
+.v3d-note { position: absolute; top: 14px; left: 16px; right: 120px; z-index: 2; margin: 0; display: flex; align-items: flex-start; gap: 6px;
+  font-size: 12px; line-height: 1.4; color: #f5a524; pointer-events: none; }
+/* the icon's box is one text line tall, so it sits centered on the first line (2px of margin sat it low) */
+.v3d-note svg { flex: none; width: 14px; height: 1.4em; }
+.v3d-look-menu { width: 200px; box-sizing: border-box; }
+/* the KO editor's Randomize settings card (ko.css), repeated: ko.css loads with the KO editor only */
+.ko-random-card .xtra-item { cursor: pointer; }
+.ko-random-card .xtra-item[aria-checked="true"] { background: transparent !important; }
+.ko-random-card .xtra-item:hover { background: var(--quiet-hover) !important; }
+.ko-random-card .xtra-item[aria-checked="true"] svg { color: var(--text-primary); }
+.ko-random-option { display: inline-flex; align-items: center; gap: 8px; }
+.ko-random-option svg { flex: none; }
+.ko-random-separator { margin: 4px 8px; border-top: 1px solid var(--panel-border); }
 .v3d-hint { position: absolute; bottom: 8px; left: 0; right: 0; text-align: center; font-size: 11px; color: var(--text-secondary); pointer-events: none; }
 html[data-motion="off"] .v3d-state, html[data-motion="off"] .v3d-canvas { animation: none; transition: none; }
 /* the KO prompt's loader (ProgressLoader) in the middle of the frame while the model is made or loads */
@@ -3401,7 +3417,8 @@ html[data-motion="off"] .v3d-state, html[data-motion="off"] .v3d-canvas { animat
 .v3d-window-view .v3d { border-radius: 0; }
 .v3d-window-foot { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--panel-border); }
 .v3d-window-foot span { margin-right: auto; font-size: 12px; color: var(--text-secondary); }
-.v3d-window-foot .lo-text-btn { width: auto !important; flex: none; }
+.v3d-window-foot .lo-text-btn, .v3d-window-foot .btn-primary { width: auto !important; flex: none; height: 32px !important; min-height: 0 !important;
+  padding: 0 16px !important; font-size: 13px !important; display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box; }
 /* ---------- Merge sounds (custom/MergeSounds.tsx): a merged pack's details note, and the window with a column per mod ---------- */
 .sound-merge-note p { margin: 0 0 8px; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
 .ms-modal { width: min(920px, 94vw); max-width: none !important; max-height: 88vh; padding: 0 !important; display: flex; flex-direction: column; }

@@ -30,6 +30,24 @@ fn viewer_file(key: &str, file: &str) -> Option<PathBuf> {
 }
 
 /// model.json's "base" when it is a kit base key (16 hex digits), so it never names a path outside 3d-base.
+/// Whether a .glb's JSON chunk names a material "None": a slot whose material the export could not load.
+/// Reads the JSON chunk only (a few hundred KB), not the whole file (up to 30 MB of mesh and animation).
+fn glb_has_unnamed_slot(glb: &std::path::Path) -> bool {
+    use std::io::Read;
+    let Ok(mut f) = std::fs::File::open(glb) else { return false };
+    let mut head = [0u8; 20];
+    if f.read_exact(&mut head).is_err() {
+        return false;
+    }
+    let n = u32::from_le_bytes([head[12], head[13], head[14], head[15]]) as usize;
+    let mut chunk = vec![0u8; n.min(64 << 20)];
+    if f.read_exact(&mut chunk).is_err() {
+        return false;
+    }
+    let Ok(json) = serde_json::from_slice::<serde_json::Value>(&chunk) else { return false };
+    json["materials"].as_array().is_some_and(|m| m.iter().any(|m| m["name"].as_str().unwrap_or("None") == "None"))
+}
+
 fn base_of(model: &serde_json::Value) -> Option<&str> {
     model["base"].as_str().filter(|b| b.len() == 16 && b.bytes().all(|c| c.is_ascii_hexdigit()))
 }
@@ -38,7 +56,53 @@ fn base_of(model: &serde_json::Value) -> Option<&str> {
 #[tauri::command(async)]
 pub fn get_viewer_file(key: String, file: String) -> Result<tauri::ipc::Response, String> {
     let path = viewer_file(&key, &file).ok_or_else(|| format!("Invalid viewer file: {key} {file}"))?;
+    if file == "model.json" {
+        // the viewer reads this first: the export counts as opened now (prune_exports keeps the latest opened)
+        let _ = std::fs::write(path.with_file_name("used"), b"");
+    }
     std::fs::read(path).map(tauri::ipc::Response::new).map_err(|e| e.to_string())
+}
+
+/// How many 3D exports stay on disk, the ones opened last. One is 10 to 100 MB (the mesh and every texture as PNG), so
+/// without a cap the folder grew by that much per mod and loadout ever opened. An export past the cap is made again in
+/// 10 to 60 s when it is opened. The parts skins share (3d-base) stay while a kept export uses them. (12 was too few:
+/// going through 14 loadouts in turn made every one again.)
+const KEEP_EXPORTS: usize = 24;
+/// How many Default skin exports (default-<mesh>.3d) stay on disk beside them, the ones opened last.
+const KEEP_DEFAULTS: usize = 12;
+
+/// Of these exports (folder name, last opened), the ones past the `keep` opened last.
+fn past_keep(mut rows: Vec<(String, std::time::SystemTime)>, keep: usize) -> Vec<String> {
+    rows.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    rows.into_iter().skip(keep).map(|r| r.0).collect()
+}
+
+/// After an export is made: deletes the exports opened longest ago beyond KEEP_EXPORTS (never `current`, the one just
+/// made), then every shared base no export left names.
+fn prune_exports(current: &str) {
+    let dir = previews_dir();
+    let exports = || -> Vec<PathBuf> {
+        std::fs::read_dir(&dir).map(|r| r.flatten().map(|e| e.path()).filter(|p| p.is_dir() && p.extension().is_some_and(|x| x == "3d")).collect()).unwrap_or_default()
+    };
+    let rows: Vec<(String, std::time::SystemTime)> = exports().into_iter().filter(|p| p.file_stem().is_some_and(|n| n != current)).map(|p| {
+        let used = std::fs::metadata(p.join("used")).or_else(|_| std::fs::metadata(p.join("model.json"))).and_then(|m| m.modified()).unwrap_or(std::time::UNIX_EPOCH);
+        (p.file_name().unwrap_or_default().to_string_lossy().to_string(), used)
+    }).collect();
+    // the game's own skins (Default skin, made behind every open view) keep a cap of their own: counted with the mods,
+    // each view's default pushed a mod out and an evicted default was made again in the background
+    let (defaults, mods): (Vec<_>, Vec<_>) = rows.into_iter().partition(|r| r.0.starts_with("default-"));
+    for name in past_keep(mods, KEEP_EXPORTS - 1).into_iter().chain(past_keep(defaults, KEEP_DEFAULTS - 1)) {
+        let _ = std::fs::remove_dir_all(dir.join(name));
+    }
+    let live: std::collections::HashSet<String> = exports().iter().filter_map(|p| {
+        let model: serde_json::Value = serde_json::from_slice(&std::fs::read(p.join("model.json")).ok()?).ok()?;
+        base_of(&model).map(str::to_string)
+    }).collect();
+    for base in std::fs::read_dir(dir.join("3d-base")).into_iter().flatten().flatten() {
+        if base.path().is_dir() && !live.contains(&base.file_name().to_string_lossy().to_string()) {
+            let _ = std::fs::remove_dir_all(base.path());
+        }
+    }
 }
 
 /// The mod files an export was made from, as the app sees them: each path (lowercase), size and modified time. Written
@@ -70,8 +134,15 @@ pub fn viewer_state(key: String, paths: Vec<String>) -> &'static str {
     let export = dir.join(format!("{key}.3d"));
     if export.join("model.json").is_file() {
         // kit 20: the skin's shared part it reads can be gone (the kit removes bases from an older game build): made again
-        let base_gone = base_of(&read(export.join("model.json"))).is_some_and(|b| !dir.join("3d-base").join(b).join("model.glb").is_file());
-        return if !base_gone && (paths.is_empty() || read(export.join("stamp.json")) == stamp_of(&paths)) { "ready" } else { "stale" };
+        let model = read(export.join("model.json"));
+        let base_gone = base_of(&model).is_some_and(|b| !dir.join("3d-base").join(b).join("model.glb").is_file());
+        // model.json v2: the export carries the lobby rig, the show rim and the master's defaults; older ones are made again
+        let old = model["v"].as_u64().unwrap_or(1) < 2;
+        // a slot the glTF export could not load ("None", drew white): made again once the kit names such slots (slots.json)
+        // a lobby model made before the kit wrote its physics (hair and cloth swing, pose drivers): made again once
+        let no_physics = model["lobby"] == true && !export.join("physics.json").is_file();
+        let unnamed = || !export.join("slots.json").is_file() && glb_has_unnamed_slot(&export.join("model.glb")); // last: it reads the file
+        return if !base_gone && !old && !no_physics && !unnamed() && (paths.is_empty() || read(export.join("stamp.json")) == stamp_of(&paths)) { "ready" } else { "stale" };
     }
     let none = dir.join(format!("{key}.3d-none.json"));
     if none.is_file() && (paths.is_empty() || read(none) == stamp_of(&paths)) {
@@ -85,13 +156,17 @@ pub fn viewer_state(key: String, paths: Vec<String>) -> &'static str {
     if matches!(kind.as_str(), "none" | "vfx" | "ui" | "sound" | "anim") {
         return "none";
     }
+    // the kit found a character it changes (a mod's preview kind, or a loadout preview's target mesh): none made yet
+    if kind == "character" || read(dir.join(format!("{key}.json")))["target"].is_string() {
+        return "character";
+    }
     "missing"
 }
 
 /// The kit run with `extra` (--viewer or --texcheck) for these mods (`jobs` = [folder, mod key] pairs) and loadout
 /// (`set`): its stdout lines go to `line` as they come, its notes and errors to the app's Logs. Err: the reservation
 /// is taken (busy_text), the kit is missing, or it did not start.
-fn run_kit(who: &'static str, extra: &str, jobs: &[(String, String)], set: Option<&str>, paks: Option<PathBuf>, mut line: impl FnMut(&str)) -> Result<bool, String> {
+fn run_kit(who: &'static str, extra: &str, jobs: &[(String, String)], set: Option<&str>, more: &[&str], paks: Option<PathBuf>, mut line: impl FnMut(&str)) -> Result<bool, String> {
     if let Some(bad) = jobs.iter().map(|(_, k)| k.as_str()).chain(set).find(|k| !valid_key(k)) {
         return Err(format!("Invalid preview key: {bad}"));
     }
@@ -113,6 +188,7 @@ fn run_kit(who: &'static str, extra: &str, jobs: &[(String, String)], set: Optio
     if let Some(s) = set {
         cmd.arg("--set").arg(s);
     }
+    cmd.args(more);
     if let Some(usmap) = app_usmap() {
         cmd.env("REPAKXTRA_USMAP", usmap);
     }
@@ -130,8 +206,9 @@ fn run_kit(who: &'static str, extra: &str, jobs: &[(String, String)], set: Optio
     Ok(ok)
 }
 
-/// The kit's reservation (xtra_previews.rs reserve), waiting out a background texture check: it runs 5 mods at a time
-/// (seconds), so a click on Rotate in 3D or Generate preview meanwhile starts right after it instead of failing.
+/// The kit's reservation (xtra_previews.rs reserve), waiting out a background texture check (it runs 5 mods at a time)
+/// or a 3D export (up to 3 minutes, the default skin made behind an open view). A texture check's batches take
+/// seconds, so a click on Rotate in 3D or Generate preview meanwhile starts right after it instead of failing.
 /// Anything else holding it (a preview run, a kit install) is answered at once.
 pub(crate) fn reserve_waiting(who: &'static str) -> Result<crate::xtra_previews::Hold, &'static str> {
     use std::sync::atomic::Ordering;
@@ -149,7 +226,7 @@ pub(crate) fn reserve_waiting(who: &'static str) -> Result<crate::xtra_previews:
         }
     }
     let _done = Done(who != "texcheck");
-    let until = std::time::Instant::now() + std::time::Duration::from_secs(90);
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(180);
     let stop = previews_dir().join("cancel");
     let mut stopped = false;
     loop {
@@ -160,6 +237,9 @@ pub(crate) fn reserve_waiting(who: &'static str) -> Result<crate::xtra_previews:
                 }
                 std::thread::sleep(std::time::Duration::from_millis(200))
             }
+            // the default skin exported in the background behind an open 3D view (Rotate3D.tsx): the click waits its
+            // turn instead of answering "The 3D model is being prepared"
+            Err("viewer") if who != "texcheck" && std::time::Instant::now() < until => std::thread::sleep(std::time::Duration::from_millis(200)),
             other => {
                 if stopped {
                     let _ = std::fs::remove_file(&stop); // only the Stop this click wrote, before its own run starts
@@ -187,7 +267,7 @@ pub async fn generate_mod_viewer(app: AppHandle, paths: Vec<String>, set: Option
     tauri::async_runtime::spawn_blocking(move || {
         let mut result = "failed";
         let key = set.clone().or_else(|| jobs.first().map(|(_, k)| k.clone())).unwrap_or_default();
-        run_kit("viewer", "--viewer", &jobs, set.as_deref(), paks, |l| {
+        run_kit("viewer", "--viewer", &jobs, set.as_deref(), &[], paks, |l| {
             if let Some(step) = l.strip_prefix("PREVIEW_STAGE ") {
                 let _ = app.emit("mod-viewer-stage", step.trim().to_string());
             } else if l.starts_with("VIEWER_OVERRIDDEN ") {
@@ -204,10 +284,52 @@ pub async fn generate_mod_viewer(app: AppHandle, paths: Vec<String>, set: Option
         if result == "ready" {
             let _ = std::fs::write(previews_dir().join(format!("{key}.3d")).join("stamp.json"), stamp_of(&paths).to_string());
             let _ = std::fs::remove_file(none);
+            prune_exports(&key);
         } else if result == "none" {
             let _ = std::fs::write(none, stamp_of(&paths).to_string());
+            // a skin table swap draws no mesh of its own, but its preview found the game skin it puts on: that one
+            let index: serde_json::Value = std::fs::read(previews_dir().join("index.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+            if let Some(t) = jobs.iter().find_map(|(_, k)| index[k]["vanilla_target"].as_str()) {
+                return Ok(format!("skin:{t}"));
+            }
         }
         Ok(result.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// The game's own skin of a mesh, no mod mounted (the viewer's Default skin), exported once as default-<mesh>.3d
+/// (the kit's --viewer --target, preview_fixes/viewer_lobby.py). Returns its key; the kit's steps go out as
+/// mod-viewer-stage like a mod's export. An export from before model.json v2 is made again.
+#[tauri::command]
+pub async fn generate_default_viewer(app: AppHandle, target: String, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<String, String> {
+    let name = target.rsplit('/').next().unwrap_or_default().to_string();
+    if !target.starts_with("/Game/Marvel/Characters/") || name.is_empty() || !name.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_') {
+        return Err("This model has no default skin to show.".into());
+    }
+    let key = format!("default-{name}");
+    let model: serde_json::Value = std::fs::read(previews_dir().join(format!("{key}.3d")).join("model.json")).ok()
+        .and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+    let has_physics = model["lobby"] != true || previews_dir().join(format!("{key}.3d")).join("physics.json").is_file();
+    if model["v"].as_u64().unwrap_or(0) >= 2 && has_physics {
+        let _ = std::fs::write(previews_dir().join(format!("{key}.3d")).join("used"), b""); // opened now: prune keeps it
+        return Ok(key);
+    }
+    let paks = paks_of(&state);
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut made = false;
+        run_kit("viewer", "--viewer", &[], Some(&key), &["--target", &target], paks, |l| {
+            if let Some(step) = l.strip_prefix("PREVIEW_STAGE ") {
+                let _ = app.emit("mod-viewer-stage", step.trim().to_string());
+            } else if l.starts_with("VIEWER ") {
+                made = true;
+            }
+        })?;
+        if made {
+            prune_exports(&key);
+        }
+        if made { Ok(key) } else { Err("The default skin could not be exported. The full error is in Logs.".into()) }
     })
     .await
     .map_err(|e| e.to_string())?
@@ -237,7 +359,7 @@ pub async fn run_texcheck(paths: Vec<String>, state: State<'_, Arc<Mutex<crate::
         let jobs = jobs_of(&todo);
         let mut found = 0;
         let mut answered: Vec<String> = Vec::new();
-        let ok = run_kit("texcheck", "--texcheck", &jobs, None, paks, |l| {
+        let ok = run_kit("texcheck", "--texcheck", &jobs, None, &[], paks, |l| {
             // TEXCHECK <key> {json} or TEXCHECK_FAIL <key>: either way the kit has had its say on this mod
             if let Some(key) = l.strip_prefix("TEXCHECK_FAIL ").or_else(|| l.strip_prefix("TEXCHECK ").and_then(|r| r.split(' ').next())) {
                 answered.push(key.trim().to_string());
@@ -346,6 +468,32 @@ mod tests {
             assert_eq!(base_of(&serde_json::json!({ "base": bad })), None, "{bad}");
         }
         assert_eq!(base_of(&serde_json::json!({})), None);
+    }
+
+    #[test]
+    fn oldest_exports_go_first() {
+        let at = |s: u64| std::time::UNIX_EPOCH + std::time::Duration::from_secs(s);
+        let rows = vec![("a.3d".to_string(), at(5)), ("b.3d".to_string(), at(9)), ("c.3d".to_string(), at(1)), ("d.3d".to_string(), at(7))];
+        assert_eq!(past_keep(rows.clone(), 2), vec!["a.3d", "c.3d"]);
+        assert!(past_keep(rows.clone(), 4).is_empty() && past_keep(rows, 9).is_empty());
+    }
+
+    #[test]
+    fn unnamed_slots_are_found() {
+        let glb = |json: &str| {
+            let p = std::env::temp_dir().join(format!("repakxtra-slots-{}.glb", json.len()));
+            let mut b = b"glTF\x02\x00\x00\x00\x00\x00\x00\x00".to_vec();
+            b.extend((json.len() as u32).to_le_bytes());
+            b.extend(b"JSON");
+            b.extend(json.as_bytes());
+            std::fs::write(&p, b).unwrap();
+            let found = glb_has_unnamed_slot(&p);
+            let _ = std::fs::remove_file(p);
+            found
+        };
+        assert!(glb(r#"{"materials":[{"name":"MI_A"},{"name":"None"}]}"#));
+        assert!(!glb(r#"{"materials":[{"name":"MI_A"},{"name":"Bangs301"}]}"#));
+        assert!(!glb("not json") && !glb_has_unnamed_slot(Path::new("missing.glb")));
     }
 
     #[test]
