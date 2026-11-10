@@ -110,6 +110,35 @@ def share_vanillas(a, out_dir, index, cfg):
             print(f"PREVIEW_NONE {k}.vanilla", flush=True)
 
 
+VIEWER_SWAPS = {}   # Rotate in 3D's export of a blueprint skin: its mesh's skin, its own, and its material names
+_kit_export_viewer = export_viewer
+_kit_viewer_files = viewer_files
+
+
+def export_viewer(work, target, pkgs, meshes, dest):
+    """A blueprint skin's 3D export draws its own material in each slot, as its preview does (Nebucy: 1041308 on
+    1041306's mesh drew 1041306's pink galaxy). Slots match by name (MI_1041306_Body -> MI_1041308_Body): the lobby
+    mesh's slot order is not the blueprint's."""
+    VIEWER_SWAPS.clear()
+    hs = mod_skin(pkgs)
+    base = SKIN_MESH.match(target)
+    if hs and base and blueprint_mesh(*hs) == target:
+        mats = {x.rsplit("/", 1)[-1]: x for (s, _), v in BP_SLOTS.items() if s == hs[1] for x in v if "/MI_" in x}
+        VIEWER_SWAPS.update({"from": base[2], "to": hs[1], "names": set(mats)})
+        pkgs = list(pkgs) + [x for x in mats.values() if x not in pkgs]
+    try:
+        return _kit_export_viewer(work, target, pkgs, meshes, dest)
+    finally:
+        VIEWER_SWAPS.clear()
+
+
+def viewer_files(out, glb, dest, lobby, swaps=None):
+    if swaps is None and VIEWER_SWAPS:
+        names, a, b = VIEWER_SWAPS["names"], VIEWER_SWAPS["from"], VIEWER_SWAPS["to"]
+        swaps = {s: s.replace(a, b) for s in glb_materials(glb) if s and s.replace(a, b) in names}
+    return _kit_viewer_files(out, glb, dest, lobby, swaps)
+
+
 assert mod_skin(["/Game/Marvel/Characters/1041/1041308/Textures/T_A", "/Game/Marvel/Characters/1041/1041308/Textures/T_B",
                  "/Game/Marvel/VFX/Characters/1041/1041001/T_C"]) == ("1041", "1041308")
 assert mod_skin(["/Game/Marvel/UI/Textures/T_A"]) is None

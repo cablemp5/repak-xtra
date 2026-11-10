@@ -205,6 +205,41 @@ if any(old not in source for old, _ in vfx_hooks):
     raise RuntimeError("This preview kit does not support the app's VFX card size. Update it in Setup.")
 for old, new in vfx_hooks:
     source = source.replace(old, new)
+# Rotate in 3D's lobby look (viewer_lobby.py): each slot's master defaults, the skin's light rig, its show rim light, its
+# lobby idle's sounds, model.json v2 (older exports are made again), and the Default skin (--viewer --target). A kit that
+# already has a hook's change skips it; the appended functions replace a kit's own copies.
+viewer_hooks = [
+    ('            info["Scalars"], info["Vectors"] = chain.get("scalars", {}), chain.get("vectors", {})',
+     '            _d = chain.get("defaults") or {}\n            info["Scalars"], info["Vectors"] = {**_d.get("scalars", {}), **chain.get("scalars", {})}, {**_d.get("vectors", {}), **chain.get("vectors", {})}'),
+    ('    model = {"v": 1, "glb": "model.glb", "mesh": lobby,', '    model = {"v": 2, "glb": "model.glb", "mesh": lobby,'),
+    ('json.dumps({**base["model"], "base": bkey,', 'json.dumps({**base["model"], "v": 2, "base": bkey,'),
+    ('    ap.add_argument("--mods", required=True,', '    ap.add_argument("--target", help="with --viewer and --set: the game skin of this mesh, no mod")\n    ap.add_argument("--mods", required="--target" not in sys.argv,'),
+    ('        viewer(a, out_dir) if a.viewer else', '        (viewer_default(a, out_dir) if getattr(a, "target", None) else viewer(a, out_dir)) if a.viewer else'),
+    # the 3D export takes a mod's effect materials too (a VFX mod's recolored lobby fires, Devil Dinosaur's teal to orange):
+    # only those named in a mesh slot are read, so no other effect gets in
+    ('    own_mi = [p for p in pkgs if p.startswith("/Game/Marvel/Characters/") and re.search(r"/MI_[^/]+$", p)]\n    own_tex = [p for p in pkgs if p.startswith("/Game/Marvel/Characters/") and re.search(r"/T_[^/]+$", p)]\n    # A texture or material mod keeps',
+     '    own_mi = [p for p in pkgs if p.startswith(("/Game/Marvel/Characters/", "/Game/Marvel/VFX/")) and re.search(r"/MI_[^/]+$", p)]\n    own_tex = [p for p in pkgs if p.startswith(("/Game/Marvel/Characters/", "/Game/Marvel/VFX/")) and re.search(r"/T_[^/]+$", p)]\n    # A texture or material mod keeps'),
+    # a mod's own materials can have any name (Skirtt, MeshLace): read every material file named like a mesh slot, not
+    # only MI_ ones (they were missing and drew white)
+    ('    for f in sorted(content.rglob("MI_*.json")):\n        if f.name.endswith(".chain.json"):',
+     '    _slots = set(glb_materials(glb))\n    for f in sorted(p for p in content.rglob("*.json") if p.name.startswith("MI_") or p.stem in _slots):\n        if f.name.endswith(".chain.json"):'),
+    # a slot whose material the glTF export could not load (a mod's own, cooked against placeholders of another class) is
+    # named after its material, which is exported and walked like a mod's instances (viewer_lobby.py named_slots)
+    ('    shutil.copyfile(glb, tmp / "model.glb")\n    slots, textures, missing = viewer_files(out, glb, tmp, lobby.endswith("_Lobby"))',
+     '    named_slots(work, out, glb, lobby, pkgs, tmp)\n    shutil.copyfile(glb, tmp / "model.glb")\n    slots, textures, missing = viewer_files(out, glb, tmp, lobby.endswith("_Lobby"))'),
+    ('for f in content.rglob("MI_*.json")\n              if not f.name.endswith(".chain.json")}',
+     'for f in content.rglob("*.json")\n              if (f.name.startswith("MI_") or f.stem in SLOT_MATERIALS) and not f.name.endswith(".chain.json")}'),
+]
+if "viewer_lobby(work, target, tmp)" not in source:
+    viewer_hooks += [
+        ('        return place_viewer(tmp, dest)', '        viewer_lobby(work, target, tmp)\n        return place_viewer(tmp, dest)'),
+        ('    (tmp / "model.json").write_text(json.dumps({**model, **extra}, indent=1), encoding="utf-8")\n',
+         '    (tmp / "model.json").write_text(json.dumps({**model, **extra}, indent=1), encoding="utf-8")\n    viewer_lobby(work, target, tmp)\n'),
+    ]
+for old, new in viewer_hooks:
+    if source.count(old) == 1:
+        source = source.replace(old, new, 1)
+source = source.replace(main_guard, (runtime / "viewer_lobby.py").read_text(encoding="utf-8") + "\n" + main_guard, 1)
 # A different fingerprint regenerates cached renders as they are requested. The rim setting is not part of it: changing
 # the setting must not render every preview again
 # (10001: painted galaxy skins, flow lines and their animation. 10002: blueprint skins, galaxy masks and sprites, borrowed

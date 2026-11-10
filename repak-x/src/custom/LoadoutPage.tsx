@@ -20,9 +20,11 @@ import { candidatesFor, keysByName, memberFolder } from './loadoutIdentity'
 import { renameSource } from './nexusSource'
 import { plural } from './modName'
 import { SwapText } from './motion'
-import { GeneratePreviewsButton, previewMade, previewSetKey } from './previews'
+import { GeneratePreviewsButton, previewMade, previewSetKey, usePreviewState, usePreviewVersion } from './previews'
 import { CaptureButton, captureTarget } from './CapturePreview'
 import { useExportPreview } from './exportPreview'
+import { Rotate3DButton, Viewer3DWindow, useLoadout3d } from './viewer3d/Rotate3D'
+import { heroLabel, loadoutHero } from './silhouettes'
 
 const PAGE = 60
 
@@ -142,6 +144,9 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
   const [sort, setSort] = useState<'name' | 'newest'>('newest')
   const [exporting, setExporting] = useState(false)
   const previewExport = useExportPreview(l.name, p.alert)
+  const [threeD, setThreeD] = useState(false)
+  const previewState = usePreviewState(previewSetKey(l.id)) // no 3D while its preview renders
+  useEffect(() => setThreeD(false), [l.id])
   const searchRef = useRef<HTMLInputElement>(null)
   const freshId = useRef<string | null>(null) // just made: Enter on its name goes on to Search mods to add
   useEffect(() => { setName(l.name) }, [l.id, l.name])
@@ -151,6 +156,8 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
   const byKey = modsByKey(p.mods)
   const byName = (a: string, b: string) => memberName(a).localeCompare(memberName(b)) || a.localeCompare(b)
   const mine = [...new Set(l.on.map(displayName))].sort(byName)
+  const rotate = mine.map(k => byKey.get(k)?.path).filter((x): x is string => Boolean(x)) // its installed mods' files
+  const can3d = useLoadout3d(previewSetKey(l.id), rotate.map(path => ({ path, categories: [p.modDetails?.[path]?.category, ...(p.modDetails?.[path]?.additional_categories ?? [])] })), nameKey, usePreviewVersion())
   const inLoadout = new Set(mine)
   const categoryOf = (k: string) => { const m = byKey.get(k); return (m && p.modDetails?.[m.path]?.category) || 'Unknown' }
   const age = (k: string) => byKey.get(k)?.modified_date ?? 0
@@ -276,7 +283,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
           capture={{ ...target, button: (className, label, note) => <CaptureButton p={p} l={l} onUse={onSetCapture} className={className} label={label} note={note} /> }}
           generate={className => <GeneratePreviewsButton className={className} label="Generate previews" set={previewSetKey(l.id)} name={l.name} stopOnly
             paths={mine.map(k => byKey.get(k)?.path).filter((x): x is string => Boolean(x))} />}
-          rotate={mine.map(k => byKey.get(k)?.path).filter((x): x is string => Boolean(x))} />
+          />
         <div className="lp-info">
           <span className="lp-name-wrap">
             <input ref={nameRef} className="lp-name" value={name} title="Rename" aria-label="Loadout name" onChange={e => setName(e.target.value)} onBlur={commit}
@@ -313,6 +320,10 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
                 {!busy && present > 0 && <OnDot on={onNow} of={present} />}
               </span>
             </label>
+            {/* Rotate in 3D: the loadout's mods together on its hero, in a centered window so the model shows big */}
+            {rotate.length > 0 && can3d && previewState?.kind !== 'running' && <Rotate3DButton on={false} hasImage onClick={() => setThreeD(true)} className="lo-text-btn" />}
+            {threeD && rotate.length > 0 && <Viewer3DWindow title={l.name} viewKey={previewSetKey(l.id)} paths={rotate} set={previewSetKey(l.id)} onClose={() => setThreeD(false)}
+              sub={[heroLabel(loadoutHero(l.on, p.mods, p.modDetails) ?? ''), plural(rotate.length, 'mod') + ' on the model'].filter(Boolean).join(', ')} />}
             {/* The rest are occasional: one menu instead of a wrapping row of equal buttons */}
             <MoreMenu items={[
               ...((l.cover ?? pickCover(l, coverFills(l, previewMade(l)))) === 'text' ? [] : [

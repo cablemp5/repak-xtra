@@ -2,16 +2,20 @@
 .pl { display: flex; flex-direction: column; align-items: center; gap: 12px; width: min(380px, 80%); margin: 0 auto; text-align: center; }
 .pl strong { font-size: 14px; font-weight: 600; color: var(--text-primary); text-wrap: balance; }
 .pl-bar { width: 100%; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
-.pl-bar span { display: block; height: 100%; border-radius: 2px; transition: width 300ms cubic-bezier(0.22, 1, 0.36, 1);
-  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.45) 50%, transparent 100%) 0 0 / 50% 100% no-repeat, var(--accent-primary);
-  animation: pl-shine 1.4s cubic-bezier(0.45, 0, 0.55, 1) infinite; }   /* a light running along the filled part */
+.pl-bar span { position: relative; display: block; height: 100%; border-radius: 2px; overflow: hidden; background: var(--accent-primary);
+  transition: width 300ms cubic-bezier(0.22, 1, 0.36, 1); }
+/* a light running along the filled part, moved by transform so it keeps running while the page is busy (a model
+   building its first frame) */
+.pl-bar span::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 50%; will-change: transform;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.45) 50%, transparent 100%);
+  animation: pl-shine 1.4s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
 /* no steps to count: the bar fills slowly toward most of the way, never claiming done */
-.pl-bar span.is-creep { width: 88%; animation: pl-shine 1.4s cubic-bezier(0.45, 0, 0.55, 1) infinite, pl-creep 24s cubic-bezier(0.1, 0.6, 0.2, 1) both; }
-@keyframes pl-shine { from { background-position: -100% 0, 0 0; } to { background-position: 200% 0, 0 0; } }
+.pl-bar span.is-creep { width: 88%; animation: pl-creep 24s cubic-bezier(0.1, 0.6, 0.2, 1) both; }
+@keyframes pl-shine { from { transform: translateX(-100%); } to { transform: translateX(200%); } }
 @keyframes pl-creep { from { width: 6%; } }
 /* transitions.dev: Text states swap. Each step rises in, centered under the bar */
 .pl-step { display: block; max-width: 100%; font-size: 13px; text-align: center; text-wrap: balance;
   animation: pl-step-in var(--text-swap-dur, 150ms) var(--text-swap-ease, ease-in-out) both; }
 @keyframes pl-step-in { from { opacity: 0; transform: translateY(var(--text-swap-translate-y, 4px)); filter: blur(var(--text-swap-blur, 2px)); } }
-html[data-motion="off"] .pl-bar span, html[data-motion="off"] .pl-step { animation: none; }
+html[data-motion="off"] .pl-bar span, html[data-motion="off"] .pl-bar span::after, html[data-motion="off"] .pl-step { animation: none; }
 html[data-motion="off"] .pl-bar span.is-creep { width: 30%; }   /* still: a part of the way, never a nearly full bar */

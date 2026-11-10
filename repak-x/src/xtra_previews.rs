@@ -442,6 +442,7 @@ pub(crate) fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Re
         ("borrowed_pose.py", include_str!("preview_fixes/borrowed_pose.py")),
         ("app_usmap.py", include_str!("preview_fixes/app_usmap.py")),
         ("speed.py", include_str!("preview_fixes/speed.py")),
+        ("viewer_lobby.py", include_str!("preview_fixes/viewer_lobby.py")),
     ] {
         let path = runtime.join(name);
         if std::fs::read_to_string(&path).ok().as_deref() != Some(contents) {

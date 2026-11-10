@@ -19,7 +19,7 @@ import { koPreview } from './ko/koPreview'
 import { verdictOf } from './brokenMods'
 import { fixInVfxWindow } from './vfx/handoff'
 import { KO_BEAT } from './ko/render'
-import { Rotate3DButton, Viewer3D, use3dPossible } from './viewer3d/Rotate3D'
+import { Rotate3DButton, Viewer3D, shows3d, use3dPossible } from './viewer3d/Rotate3D'
 
 const NOTHING = 'Nothing to show for this mod: previews cover skins, meshes, textures, animations, UI icons, VFX colors, and sounds.'
 const FAILED = 'The last render failed. The full error is in Logs.'
@@ -600,7 +600,7 @@ const ask = async (alert: ReturnType<typeof useAlert>, job: Job) => {
 }
 
 /** Preview block for the mod details panel: the image (if any) and a Generate / Regenerate button. */
-export function ModPreview({ path }: { path: string }) {
+export function ModPreview({ path, categories = [] }: { path: string; categories?: (string | null | undefined)[] }) {
   const alert = useAlert()
   const canGenerate = usePreviewsAvailable()
   const key = nameKey(path)
@@ -613,7 +613,7 @@ export function ModPreview({ path }: { path: string }) {
   const stage = usePreviewStage(busy)
   const [threeD, setThreeD] = useState(false) // Rotate in 3D: the model in this frame instead of the image
   useEffect(() => setThreeD(false), [key])
-  const can3d = use3dPossible(key, usePreviewVersion())
+  const can3d = use3dPossible(key, usePreviewVersion()) && shows3d(categories) // a mesh, retexture, or material mod
   return (
     <div className="detail-section mod-preview">
       {threeD && <div className="mod-preview-frame is-3d"><Viewer3D viewKey={key} paths={[path]} name={path.split(/[\\/]/).pop()!.replace(/(_\d+_P)?\.(pak|bak_repak|utoc|ucas)$/i, '')} /></div>}
