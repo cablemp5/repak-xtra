@@ -170,9 +170,6 @@ fn run_kit(who: &'static str, extra: &str, jobs: &[(String, String)], set: Optio
     if let Some(bad) = jobs.iter().map(|(_, k)| k.as_str()).chain(set).find(|k| !valid_key(k)) {
         return Err(format!("Invalid preview key: {bad}"));
     }
-    if crate::xtra_kit::installed_version().is_some_and(|v| v < 19) {
-        return Err("Rotate in 3D and the texture check need preview kit 19 or newer. Update it in Setup.".into());
-    }
     let _hold = reserve_waiting(who).map_err(busy_text)?;
     let mut cmd = generator_command(paks, false)?;
     cmd.arg("--out").arg(previews_dir()).arg(extra);

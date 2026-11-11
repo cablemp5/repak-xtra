@@ -433,6 +433,11 @@ pub(crate) fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Re
     let Some((root, python, _script)) = generator() else {
         return Err("Previews need the preview kit: install it in Setup.".into());
     };
+    // The app's preview fixes need a kit at least this new: one clear sentence here (renders, the doctor, Rotate in 3D,
+    // and the texture check all start the kit through this), not a fix that cannot find its line
+    if let Some(v) = crate::xtra_kit::installed_version().filter(|v| *v < crate::xtra_kit::MIN_KIT) {
+        return Err(format!("This version needs preview kit {} or newer. Yours is {v}.", crate::xtra_kit::MIN_KIT));
+    }
     if need_blender && crate::xtra_kit::blender().is_none() {
         return Err("Previews need Blender: install it in Setup (or from blender.org), or pick blender.exe there.".into());
     }
