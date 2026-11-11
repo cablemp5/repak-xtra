@@ -39,8 +39,56 @@ fn checked_in(raw: &str, downloads: &Path) -> Result<PathBuf, String> {
     Ok(p.to_path_buf())
 }
 
+/// Sends `path` to the Recycle Bin (never deleted for good: a drive without one asks first).
+#[cfg(windows)]
+pub fn recycle(path: &Path) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    #[repr(C)]
+    struct FileOp {
+        hwnd: isize,
+        func: u32,
+        from: *const u16,
+        to: *const u16,
+        flags: u16,
+        aborted: i32,
+        mappings: *mut std::ffi::c_void,
+        title: *const u16,
+    }
+    #[link(name = "shell32")]
+    extern "system" {
+        fn SHFileOperationW(op: *mut FileOp) -> i32;
+    }
+    let from: Vec<u16> = path.as_os_str().encode_wide().chain([0, 0]).collect(); // a double-null-ended list
+    let mut op = FileOp {
+        hwnd: 0,
+        func: 3, // FO_DELETE
+        from: from.as_ptr(),
+        to: std::ptr::null(),
+        flags: 0x40 | 0x10 | 0x4 | 0x400 | 0x4000, // ALLOWUNDO, NOCONFIRMATION, SILENT, NOERRORUI, WANTNUKEWARNING
+        aborted: 0,
+        mappings: std::ptr::null_mut(),
+        title: std::ptr::null(),
+    };
+    let code = unsafe { SHFileOperationW(&mut op) };
+    if code != 0 || op.aborted != 0 || path.exists() {
+        return Err(format!("Could not move {} to the Recycle Bin (code {code})", path.display()));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "puts a small file in this PC's Recycle Bin: run by hand with --ignored"]
+    fn recycle_moves_the_file_away() {
+        let d = tempfile::tempdir().unwrap();
+        let f = d.path().join("repakxtra-recycle-test.zip");
+        std::fs::write(&f, b"x").unwrap();
+        super::recycle(&f).unwrap();
+        assert!(!f.exists());
+    }
+
     use super::*;
 
     #[test]

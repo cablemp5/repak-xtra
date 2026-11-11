@@ -69,6 +69,14 @@ import ViewModeMenu from './custom/ViewModeMenu' // repakxtra: view buttons fold
 import { loadoutable, modKey, nameKey, renameModKey, setView, syncLoadoutKeys } from './custom/loadoutStore' // repakxtra
 import { setModsRoot } from './custom/loadoutIdentity' // repakxtra
 import { OpDialogs, gameClosed, opText, retryAfter, runOp } from './custom/opDialogs' // repakxtra: game open, file in use, name taken
+
+// repakxtra: a quick install asks when the game or another program holds a file, and nothing installed never reads as installed
+const quickInstall = async (args: Record<string, unknown>) => {
+  const r = await runOp('install this mod', () => invoke<number>('quick_organize', args), { modes: false })
+  if (!r) throw new Error('Install cancelled. Nothing was changed')
+  if (!r.value) throw new Error('Nothing was installed')
+  return r.value
+}
 import { TagsToggle, useTagsOff } from './custom/uiPrefs'
 import { useConflictCount, useConflictWatch } from './custom/conflicts' // repakxtra: red conflict dot and badges
 import { rescanVerdicts, useBrokenVersion, useBrokenWatch } from './custom/brokenMods' // repakxtra: Broken and May crash badges
@@ -720,7 +728,7 @@ function App() {
       alert.promise(
         (async () => {
           try {
-            await invoke('quick_organize', { paths: pathsCopy, targetFolder: folderName })
+            await quickInstall({ paths: pathsCopy, targetFolder: folderName })
             await loadMods()
             await loadFolders()
             setStatus(`Installed ${plural(pathCount, 'item')} to ${folderName}!`)
@@ -2329,7 +2337,7 @@ function App() {
 
           if (isQuickOrganize) {
             // Then quick organize to the new folder
-            await invoke('quick_organize', { paths: pathsCopy, targetFolder: folderName })
+            await quickInstall({ paths: pathsCopy, targetFolder: folderName })
             await loadMods()
             await loadFolders()
             setStatus(`Installed ${plural(pathCount, 'item')} to "${folderName}"!`)
@@ -2777,7 +2785,7 @@ function App() {
     alert.promise(
       (async () => {
         try {
-          await invoke('quick_organize', {
+          await quickInstall({
             paths: [modPath],
             targetFolder: targetFolderId || '',
             selections: options.selections,
@@ -2801,7 +2809,7 @@ function App() {
               console.warn('Failed to delete source archive:', cleanupErr)
               alert.warning(
                 'Download Not Removed',
-                `The mod installed fine, but the downloaded file could not be deleted: ${cleanupErr}`
+                `The mod installed fine, but the downloaded file could not be moved to the Recycle Bin: ${cleanupErr}`
               )
             }
           }

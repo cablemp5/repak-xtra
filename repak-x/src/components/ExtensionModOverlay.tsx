@@ -551,7 +551,7 @@ const ExtensionModOverlay = ({
                                 {entries.length > 0 && (
                                     <label
                                         className="ext-cleanup-row"
-                                        title={'Removes the downloaded file once every selected mod is installed\nThe download is left alone if the install fails'}
+                                        title={'Moves the downloaded file to the Recycle Bin once every selected mod is installed\nThe download is left alone if the install fails'}
                                     >
                                         <input
                                             type="checkbox"
