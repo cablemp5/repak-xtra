@@ -131,7 +131,12 @@ pub fn list_preview_files() -> serde_json::Value {
             Some((key, serde_json::json!([name, ms])))
         })
         .collect();
-    serde_json::json!({ "dir": dir.to_string_lossy(), "files": files })
+    // each loadout render's covers and members (get_preview_covers), so the cards need no call each
+    let covers: serde_json::Map<String, serde_json::Value> = files.keys()
+        .filter(|k| k.starts_with("loadout-") && !k.contains(['.', '@']))
+        .map(|k| (k.clone(), get_preview_covers(k.clone())))
+        .collect();
+    serde_json::json!({ "dir": dir.to_string_lossy(), "files": files, "covers": covers })
 }
 
 /// A loadout's combined render (`set`), from the generator's <set>.json: `covers`, the mods it shows (empty when there

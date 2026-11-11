@@ -244,7 +244,7 @@ export function useCovers(setKey: string): Covers | undefined {
   const cached = covers.get(setKey)
   useEffect(() => {
     if (rev === undefined || covers.get(setKey)?.rev === rev || coverLoads.get(setKey)?.rev === rev) return
-    const p: Promise<unknown> = invoke<Covers>('get_preview_covers', { key: setKey }).then(c => {
+    const p: Promise<unknown> = listFor(setKey, rev).then(list => list.covers[setKey] ?? { covers: [], members: null }).then(c => {
       if (coverLoads.get(setKey)?.p !== p || revs.get(setKey) !== rev) return // dropped or replaced meanwhile
       coverLoads.delete(setKey)
       covers.set(setKey, { ...c, rev })
@@ -257,18 +257,23 @@ export function useCovers(setKey: string): Covers | undefined {
 
 /** Every preview's file (name, change time) and their folder, read in one call (list_preview_files) and read again when
  *  a key is missing or a render made one newer: pictures load as files through the asset protocol, never as bytes. */
-type PreviewFiles = { dir: string; files: Record<string, [string, number]> }
+type PreviewFiles = { dir: string; files: Record<string, [string, number]>; covers: Record<string, Covers> }
 let previewFiles: Promise<PreviewFiles> | null = null
 const listFiles = (fresh = false): Promise<PreviewFiles> => {
-  if (fresh || !previewFiles) previewFiles = invoke<PreviewFiles>('list_preview_files').catch(() => { previewFiles = null; return { dir: '', files: {} } })
+  if (fresh || !previewFiles) previewFiles = invoke<PreviewFiles>('list_preview_files').catch(() => { previewFiles = null; return { dir: '', files: {}, covers: {} } })
   return previewFiles
 }
 const reread = new Set<string>() // key@rev the listing was read again for
 /** The preview's address and file name, or null when it has none. A key the listing lacks, or one rendered in this session
  *  (rev > 0), reads the listing once more for that render. The change time in the query: a new render is never a cached one. */
+const listFor = async (key: string, rev: number) => {
+  const list = await listFiles()
+  if ((list.files[key] && rev === 0) || reread.has(`${key}@${rev}`)) return list
+  reread.add(`${key}@${rev}`)
+  return listFiles(true)
+}
 const fileOf = async (key: string, rev: number) => {
-  let list = await listFiles()
-  if ((!list.files[key] || rev > 0) && !reread.has(`${key}@${rev}`)) { reread.add(`${key}@${rev}`); list = await listFiles(true) }
+  const list = await listFor(key, rev)
   const f = list.files[key]
   return f ? { url: `${convertFileSrc(list.dir + '\\' + f[0])}?t=${f[1]}`, name: f[0] } : null
 }

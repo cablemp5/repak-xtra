@@ -1934,12 +1934,17 @@ function App() {
       const totalCount = pathsToFetch.length
       setModLoadingProgress(0)
 
-      // repakxtra: four at a time, so a big library's first read keeps the disk and the other commands free
-      const results: PromiseSettledResult<unknown>[] = new Array(pathsToFetch.length)
+      // repakxtra: what the details cache already holds comes back in one call, the rest four at a time, so a big
+      // library's first read keeps the disk and the other commands free
+      const cached = await invoke<Record<string, unknown>>('get_cached_mod_details', { modPaths: pathsToFetch }).catch(() => ({} as Record<string, unknown>))
+      const results: PromiseSettledResult<unknown>[] = pathsToFetch.map(p => (p in cached ? { status: 'fulfilled' as const, value: cached[p] } : undefined)) as PromiseSettledResult<unknown>[]
+      completedCount = Object.keys(cached).length
+      setModLoadingProgress(Math.round((completedCount / totalCount) * 100))
+      const missing = pathsToFetch.map((_, i) => i).filter(i => !results[i])
       let next = 0
-      await Promise.all(Array.from({ length: Math.min(4, pathsToFetch.length) }, async () => {
-        while (next < pathsToFetch.length) {
-          const i = next++
+      await Promise.all(Array.from({ length: Math.min(4, missing.length) }, async () => {
+        while (next < missing.length) {
+          const i = missing[next++]
           results[i] = await invoke('get_mod_details', { modPath: pathsToFetch[i] })
             .then(value => ({ status: 'fulfilled' as const, value }), reason => ({ status: 'rejected' as const, reason }))
           completedCount++

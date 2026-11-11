@@ -123,6 +123,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         return part ? data.mods.filter((m: any) => m.path.includes(part)).map((m: any) => m.path) : []
       }
       case 'get_mod_details': return data.details[args?.modPath] ?? null
+      case 'get_cached_mod_details': return Object.fromEntries((args?.modPaths ?? []).filter((p: string) => data.details[p]).map((p: string) => [p, data.details[p]]))
       case 'plugin:webview|set_webview_zoom': // the browser has no webview zoom; CSS zoom stands in
         document.documentElement.style.zoom = String(args?.value ?? 1)
         return null
@@ -163,7 +164,10 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         const made = `${localStorage.getItem('mock.setImage') ?? ''}.png`
         const first = Object.keys(previewUrls)[0]?.replace(/^.*\//, '')
         for (const k of setCovers.keys()) files[k] = [previewUrls[`./previews.local/${made}`] ? made : first, Date.now()]
-        return later({ dir: '/src/dev/previews.local', files })
+        const keys = Object.keys(files).filter(k => k.startsWith('loadout-') && !/[.@]/.test(k))
+        return later(Promise.all(keys.map(async k => [k, setCovers.get(k) ?? await previewCovers[`./previews.local/${k}.json`]?.()
+          .then(c => ({ covers: c?.covers ?? [], members: c?.members ?? null })) ?? { covers: [], members: null }] as const))
+          .then(covers => ({ dir: '/src/dev/previews.local', files, covers: Object.fromEntries(covers) })))
       }
       case 'list_mod_previews': // copies of %APPDATA%\Repak-X\previews in src/dev/previews.local
         return Object.keys(previewUrls).map(f => f.replace(/^.*\/|\.(png|webp)$/g, ''))
