@@ -161,7 +161,7 @@ pub fn sweep_staging(mods: &Path, before: std::time::SystemTime) {
                 use std::os::windows::fs::MetadataExt;
                 if meta.file_attributes() & 0x400 != 0 { continue; } // no junction traversal
             }
-            if is_staging(&name) {
+            if is_staging(&name) && meta.modified().is_ok_and(|t| t < before) {
                 let _ = fs::remove_dir_all(e.path());
             } else if !name.starts_with(".repakxtra-") {
                 dirs.push(e.path());
@@ -201,7 +201,9 @@ mod tests {
         fs::write(stage.join("Skin.utoc"), b"toc").unwrap();
         fs::write(stage.join("Skin.ucas"), b"cas").unwrap();
         assert!(!stage.join("Skin.pak").exists());
-        sweep_staging(d.path(), std::time::SystemTime::now());
+        sweep_staging(d.path(), std::time::SystemTime::UNIX_EPOCH);
+        assert!(stage.exists(), "a staging folder newer than the run is live work: kept");
+        sweep_staging(d.path(), std::time::SystemTime::now() + std::time::Duration::from_secs(60));
         assert!(!stage.exists());
         assert_eq!(fs::read(original).unwrap(), b"original");
     }
