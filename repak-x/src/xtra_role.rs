@@ -76,9 +76,14 @@ fn accept(url: &str, pending: &[(String, Instant)], now: Instant) -> Option<(usi
     RESULTS.iter().copied().find(|r| *r == result).map(|r| (at, r))
 }
 
+/// A role-claimed link (repakxtra://role-claimed?...), the only link the app acts on. Pure.
+fn is_role_link(url: &str) -> bool {
+    url::Url::parse(url).is_ok_and(|u| u.scheme() == SCHEME && u.host_str() == Some("role-claimed"))
+}
+
 /// The deep link handler's hook: true when `url` is a role-claimed link (handled here, answered or ignored).
 pub fn on_link(url: &str, app: &tauri::AppHandle) -> bool {
-    if !url::Url::parse(url).is_ok_and(|u| u.scheme() == SCHEME && u.host_str() == Some("role-claimed")) {
+    if !is_role_link(url) {
         return false;
     }
     let mut pending = PENDING.lock().unwrap_or_else(|e| e.into_inner());
@@ -114,6 +119,16 @@ mod tests {
         let both = vec![(S.to_string(), now), (newer.clone(), now)];
         assert_eq!(accept(&format!("repakxtra://role-claimed?state={S}&result=ok"), &both, now), Some((0, "ok")), "an earlier tab still answers");
         assert_eq!(accept(&format!("repakxtra://role-claimed?state={newer}&result=denied"), &both, now), Some((1, "denied")));
+    }
+
+    #[test]
+    fn the_deep_link_handler_takes_only_role_claimed_links() {
+        assert!(is_role_link(&format!("{SCHEME}://role-claimed?state={S}&result=ok")));
+        assert!(is_role_link(&format!("{}://role-claimed/?x=1", SCHEME.to_uppercase())), "the scheme is not case sensitive");
+        for other in [format!("{SCHEME}://install?url=https://x.zip"), format!("{SCHEME}://role-claimed.evil.com/?state={S}"),
+            format!("repakx://role-claimed?state={S}"), "https://role-claimed/".into(), "role-claimed".into(), String::new()] {
+            assert!(!is_role_link(&other), "{other}");
+        }
     }
 
     #[test]
