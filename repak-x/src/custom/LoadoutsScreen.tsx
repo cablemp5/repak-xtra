@@ -29,6 +29,7 @@ import { cue } from './sounds'
 import { savedItem } from './storageCarryOver'
 import { useUpstreamWatch } from './upstream'
 import { useUiPref } from './uiPrefs'
+import { useNearCards } from './nearCards'
 
 type GroupBy = 'group' | 'hero'
 const GROUP_BY_KEY = 'repakxtra.loadoutGroupBy'
@@ -483,6 +484,8 @@ function LoadoutsHome(p: LoadoutProps) {
     : groupBy === 'hero' ? movedBeside(loadouts, drag.dragId, besideOf(drag.dragId, spot))
     : placed(loadouts, drag.dragId, spot.group, besideOf(drag.dragId, spot))
   const groups: [string, Loadout[]][] = (groupBy === 'hero' ? heroGroups(shown) : grouped(shown)).filter(([, list]) => !filtered || list.length > 0)
+  // repakxtra: many cards mount only near the viewport, the rest are empty cards of their height (nearCards.ts)
+  const near = useNearCards(cardsEl, groups.flatMap(([, list]) => list.map(l => l.id)), [renaming, drag.dragId])
   const search = (v: string) => {
     if (!q && v.trim()) scrollBefore.current = cardsEl?.scrollTop ?? 0
     else if (q && !v.trim()) requestAnimationFrame(() => cardsEl?.scrollTo({ top: scrollBefore.current }))
@@ -651,7 +654,7 @@ function LoadoutsHome(p: LoadoutProps) {
             {isFolded ? null : <>
             {list.length === 0 && <p className="lo-group-empty">Empty. Drag a loadout card here, or pick this collection on a loadout's page.</p>}
             <div className="lo-grid">
-              {list.map(l => (
+              {list.map(l => !near.mounted(l.id) ? <article key={l.id} data-loadout={l.id} data-away="" className="lo-card is-away" style={{ height: near.height(l.id) }} aria-hidden /> : (
                 <LoadoutCard key={l.id} p={cardP} l={l} groupBy={groupBy} canGenerate={canGenerate} busy={busy === l.id} anyBusy={busy !== null}
                   renaming={renaming === l.id} draft={renaming === l.id ? draft : ''} placeholder={drag.dragId === l.id} hovered={hovered}
                   onPick={pickCard} onToggle={toggleCard} onStartRename={startRename} onDraft={setDraft} onCommit={commitCard} onCancelRename={cancelRename} />
