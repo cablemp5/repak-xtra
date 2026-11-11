@@ -259,32 +259,32 @@ fn list_at(root: &Path) -> Vec<Snapshot> {
 /// restored .utoc or .ucas always matches the .pak that stayed.
 fn missing_at(snap: &Path, mods: &Path, win64: &Path) -> (Vec<(PathBuf, PathBuf)>, Vec<(PathBuf, PathBuf)>) {
     let now = files(mods);
-    let have: HashSet<_> = now.iter().map(|f| mod_key(&f.0)).collect();
     let base = |key: &str| key.rsplit_once('.').map_or(key, |(b, _)| b).to_string();
-    // each bundle still there: its folder and file name without the extension ("Sub/Cool_99_P")
-    let bundles: std::collections::HashMap<String, PathBuf> = now.iter().filter_map(|f| {
-        let stem = f.0.file_stem()?;
-        Some((base(&mod_key(&f.0)), f.0.with_file_name(stem)))
-    }).collect();
     let have_setup: HashSet<_> = setup_files(win64).iter().map(|f| setup_key(&f.0)).collect();
     // each file still there stands for one snapshot file of its name: one in the same folder first (a new priority, or
     // switched off), then one of the same size in another folder (moved). Two mods that share a name are two mods.
     let folder = |p: &Path| p.parent().map(Path::to_path_buf).unwrap_or_default();
-    let mut left: std::collections::HashMap<String, Vec<(PathBuf, u64)>> = std::collections::HashMap::new();
+    let mut left: std::collections::HashMap<String, Vec<(PathBuf, u64, PathBuf)>> = std::collections::HashMap::new();
     for (p, n) in &now {
-        left.entry(mod_key(p)).or_default().push((folder(p), *n));
+        left.entry(mod_key(p)).or_default().push((folder(p), *n, p.clone()));
     }
+    // each snapshot bundle (its folder and name) found again: where it is now, without the extension ("Sub/Cool_99_P")
+    let mut found: std::collections::HashMap<(PathBuf, String), PathBuf> = std::collections::HashMap::new();
     let mut take = |p: &Path, n: u64, same_folder: bool| {
         let Some(v) = left.get_mut(&mod_key(p)) else { return false };
-        let i = v.iter().position(|(f, m)| if same_folder { *f == folder(p) } else { *m == n });
-        i.map(|i| v.swap_remove(i)).is_some()
+        let Some(i) = v.iter().position(|(f, m, _)| if same_folder { *f == folder(p) } else { *m == n }) else { return false };
+        let (_, _, at) = v.swap_remove(i);
+        if let Some(stem) = at.file_stem() {
+            found.insert((folder(p), base(&mod_key(p))), at.with_file_name(stem));
+        }
+        true
     };
     let unmatched: Vec<_> = files(&snap.join("mods")).into_iter().filter(|(p, n)| !take(p, *n, true)).collect();
-    let gone_mods = unmatched.into_iter().filter(|(p, n)| !take(p, *n, false)).map(|(p, _)| {
-        let ext = p.extension().map(|e| e.to_string_lossy().to_string());
-        let to = match (bundles.get(&base(&mod_key(&p))), ext) {
-            // a companion whose name is gone everywhere goes back beside its renamed pak
-            (Some(stay), Some(ext)) if !have.contains(&mod_key(&p)) => stay.with_extension(ext),
+    let gone: Vec<_> = unmatched.into_iter().filter(|(p, n)| !take(p, *n, false)).map(|(p, _)| p).collect();
+    let gone_mods = gone.into_iter().map(|p| {
+        // a companion of a bundle that is still there (renamed or moved) goes back beside it, under its name now
+        let to = match (found.get(&(folder(&p), base(&mod_key(&p)))), p.extension()) {
+            (Some(stay), Some(ext)) => stay.with_extension(ext),
             _ => p.clone(),
         };
         (p, to)
@@ -542,13 +542,19 @@ mod tests {
         fs::create_dir_all(mods.join("Hero A/Sub")).unwrap();
         fs::rename(mods.join("Moved_P.pak"), mods.join("Hero A/Sub/Moved_P.pak")).unwrap();
 
+        // and the kept folder lost one companion: it goes back to its own folder, the deleted folder's to that one
+        fs::remove_file(mods.join("Hero A/Skin_P.utoc")).unwrap();
+
         let (mut gone, _) = missing_at(&root.join("100"), &mods, &win64);
         gone.sort();
-        let want: Vec<_> = ["Skin_P.pak", "Skin_P.ucas", "Skin_P.utoc"].iter().map(|n| Path::new("Hero B").join(n)).map(|p| (p.clone(), p)).collect();
+        let mut want: Vec<_> = ["Skin_P.pak", "Skin_P.ucas", "Skin_P.utoc"].iter().map(|n| Path::new("Hero B").join(n)).map(|p| (p.clone(), p)).collect();
+        want.insert(0, (Path::new("Hero A/Skin_P.utoc").into(), Path::new("Hero A/Skin_P.utoc").into()));
         assert_eq!(gone, want);
-        assert_eq!(restore_at(&root.join("100"), &mods, &win64).unwrap(), Restored { mods: 3, setup: 0 });
+        assert_eq!(restore_at(&root.join("100"), &mods, &win64).unwrap(), Restored { mods: 4, setup: 0 });
         assert_eq!(fs::read_to_string(mods.join("Hero B/Skin_P.pak")).unwrap(), "bb");
+        assert_eq!(fs::read_to_string(mods.join("Hero B/Skin_P.utoc")).unwrap(), "bb");
         assert_eq!(fs::read_to_string(mods.join("Hero A/Skin_P.pak")).unwrap(), "a");
+        assert_eq!(fs::read_to_string(mods.join("Hero A/Skin_P.utoc")).unwrap(), "a");
     }
 
     #[test]
