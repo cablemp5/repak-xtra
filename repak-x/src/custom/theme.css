@@ -3369,7 +3369,7 @@ html[data-toasts-held] .toast-container { display: none; }   /* the welcome flow
 .op-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px/1.5 var(--font-mono); color: var(--text-primary); }
 .op-file-size { flex: none; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .op-match { margin: 0; display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.5; }
-.op-match svg { flex: none; margin-top: 3px; }
+.op-match svg { flex: none; margin-top: 2px; }   /* as .setting-warn: centered on the first line's letters */
 .op-match.is-match { color: #3ecf6e; }
 .op-match.is-other { color: #f5a524; }
 
