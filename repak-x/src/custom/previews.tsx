@@ -5,7 +5,7 @@
 // One run at a time (the generator holds a lock); asking while another runs puts the request in a queue that starts
 // when the current run ends. Unchanged mods report their existing preview without rendering again; Regenerate forces.
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { invoke } from '@tauri-apps/api/core'
+import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { ListPlus, WandSparkles, X } from 'lucide-react'
 import { play } from 'cuelume'
@@ -255,11 +255,22 @@ export function useCovers(setKey: string): Covers | undefined {
   return rev !== undefined && cached?.rev === rev ? cached : undefined
 }
 
-/** PNG, an animated WebP (animation mods), or a WebM (KO prompt mods): told apart by the file's signature. */
-const imageType = (bytes: ArrayBuffer) => {
-  const head = new Uint8Array(bytes, 0, Math.min(12, bytes.byteLength))
-  if (head[0] === 0x1a && head[1] === 0x45 && head[2] === 0xdf && head[3] === 0xa3) return 'video/webm'
-  return new TextDecoder().decode(head).slice(8) === 'WEBP' ? 'image/webp' : 'image/png'
+/** Every preview's file (name, change time) and their folder, read in one call (list_preview_files) and read again when
+ *  a key is missing or a render made one newer: pictures load as files through the asset protocol, never as bytes. */
+type PreviewFiles = { dir: string; files: Record<string, [string, number]> }
+let previewFiles: Promise<PreviewFiles> | null = null
+const listFiles = (fresh = false): Promise<PreviewFiles> => {
+  if (fresh || !previewFiles) previewFiles = invoke<PreviewFiles>('list_preview_files').catch(() => { previewFiles = null; return { dir: '', files: {} } })
+  return previewFiles
+}
+const reread = new Set<string>() // key@rev the listing was read again for
+/** The preview's address and file name, or null when it has none. A key the listing lacks, or one rendered in this session
+ *  (rev > 0), reads the listing once more for that render. The change time in the query: a new render is never a cached one. */
+const fileOf = async (key: string, rev: number) => {
+  let list = await listFiles()
+  if ((!list.files[key] || rev > 0) && !reread.has(`${key}@${rev}`)) { reread.add(`${key}@${rev}`); list = await listFiles(true) }
+  const f = list.files[key]
+  return f ? { url: `${convertFileSrc(list.dir + '\\' + f[0])}?t=${f[1]}`, name: f[0] } : null
 }
 const videoUrls = new Set<string>()
 /** The preview at this URL is a video (a KO prompt mod's): it plays in a BeatVideo, not an img. */
@@ -310,12 +321,13 @@ function loadUrl(key: string, rev: number): Promise<string | null | undefined> {
   if (c?.rev === rev) return Promise.resolve(c.url)
   const f = urlLoads.get(key)
   if (f?.rev === rev) return f.p
-  const p: Promise<string | null | undefined> = invoke<ArrayBuffer>('get_mod_preview', { key }).then(bytes => {
-    if (urlLoads.get(key)?.p !== p || revs.get(key) !== rev) return undefined // stale: the bytes are dropped unused
+  const p: Promise<string | null | undefined> = fileOf(key, rev).then(file => {
+    if (urlLoads.get(key)?.p !== p || revs.get(key) !== rev) return undefined // stale: dropped unused
     urlLoads.delete(key)
-    const type = imageType(bytes), url = URL.createObjectURL(new Blob([bytes], { type }))
-    if (type === 'video/webm') videoUrls.add(url)
-    if (type === 'image/webp') animatedUrls.add(url) // idlePause.ts shows it still while the window is in the background
+    if (!file) return null
+    const { url, name } = file
+    if (name.endsWith('.webm')) videoUrls.add(url) // a KO prompt mod's recording
+    if (name.endsWith('.webp')) animatedUrls.add(url) // idlePause.ts shows it still while the window is in the background
     urls.set(key, { rev, url })
     return url
   }, () => {

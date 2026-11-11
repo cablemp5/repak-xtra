@@ -80,6 +80,8 @@ const builtins: any[] = ['skip-intro-movies'].map(id => ({ id, on: false, curren
 
 if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
   mockWindows('main')
+  // picture files (list_preview_files, get_hero_cache_dir) are Vite paths here: served as they are, not by the asset protocol
+  mock.__TAURI_INTERNALS__.convertFileSrc = (p: string) => p.replace(/\\/g, '/').split('/').map(encodeURIComponent).join('/')
   mountDataToggle()
   mock.__mockRelease = localStorage.getItem('mock.release') === '1' // custom/AppFiles.tsx
   mockIPC((cmd, args: any) => {
@@ -153,14 +155,19 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         return { ...mockGalacta, ...galactaRelease }
       })
       case 'get_hero_image_ids': return data.heroIds ?? []
+      case 'get_hero_cache_dir': return '/src/dev/heroes.local' // served by Vite (convertFileSrc below)
+      // the real one lists %APPDATA%\Repak-X\previews; a loadout render made in this page shows a local copy ('mock.setImage')
+      case 'list_preview_files': {
+        const files: Record<string, [string, number]> = {}
+        for (const f of Object.keys(previewUrls)) files[f.replace(/^.*\//, '').replace(/\.(png|webp)$/, '')] = [f.replace(/^.*\//, ''), 0]
+        const made = `${localStorage.getItem('mock.setImage') ?? ''}.png`
+        const first = Object.keys(previewUrls)[0]?.replace(/^.*\//, '')
+        for (const k of setCovers.keys()) files[k] = [previewUrls[`./previews.local/${made}`] ? made : first, Date.now()]
+        return later({ dir: '/src/dev/previews.local', files })
+      }
       case 'list_mod_previews': // copies of %APPDATA%\Repak-X\previews in src/dev/previews.local
         return Object.keys(previewUrls).map(f => f.replace(/^.*\/|\.(png|webp)$/g, ''))
-      case 'get_mod_preview': { // a loadout render made in this page shows a local copy's image ('mock.setImage' = its name)
-        const made = previewUrls[`./previews.local/${localStorage.getItem('mock.setImage')}.png`] ?? Object.values(previewUrls)[0]
-        const load = previewUrls[`./previews.local/${args?.key}.png`] ?? previewUrls[`./previews.local/${args?.key}.webp`] ?? (setCovers.has(args?.key) ? made : undefined)
-        if (!load) throw `No preview for ${args?.key}`
-        return later(load().then(url => fetch(url)).then(r => r.arrayBuffer()))
-      }
+
       case 'generate_mod_previews': { // pretend run: each job reports back as already rendered
         const mode = previewMode()
         if (mode === 'throw') throw 'Preview generator not found at C:/Fake/tools/previews/mod_previews.py'

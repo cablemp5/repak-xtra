@@ -8602,7 +8602,7 @@ fn main() {
             xtra_dupes::xtra_find_duplicates, // repakxtra
             xtra_trash::empty_trashed_mods,
             xtra_previews::list_mod_previews, xtra_previews::delete_loadout_previews,
-            xtra_previews::get_mod_preview,
+            xtra_previews::list_preview_files, // repakxtra: pictures load as files (asset protocol)
             xtra_viewer::get_viewer_file, xtra_viewer::viewer_state, xtra_viewer::generate_mod_viewer, xtra_viewer::generate_default_viewer, xtra_viewer::run_texcheck, // repakxtra: Rotate in 3D, texture check
             xtra_soundmerge::sound_merge_plan, xtra_soundmerge::sound_merge_play, xtra_soundmerge::sound_merge_make, xtra_soundmerge::sound_merge_info, xtra_soundmerge::sound_merge_cleanup, xtra_soundmerge::sound_merge_done, // repakxtra: Merge sounds
             xtra_previews::get_preview_covers,

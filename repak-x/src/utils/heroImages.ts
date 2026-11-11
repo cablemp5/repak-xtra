@@ -3,13 +3,13 @@
  *
  * Portraits are no longer bundled with the app — they live in the
  * rivals-resources repo and are cached in %APPDATA%/Repak-X/hero. This module
- * loads that cache once, keeps it in memory as `id -> blob URL`, and lets
+ * loads that cache once, keeps it in memory as `id -> file URL`, and lets
  * components read it synchronously the way the old `import.meta.glob` map did.
  *
  * Because the cache arrives asynchronously, components that render portraits
  * should call `useHeroImages()` so they re-render when the set lands.
  */
-import { invoke } from '@tauri-apps/api/core'
+import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { useSyncExternalStore } from 'react'
 import { uiLog } from './uiLog'
 
@@ -46,49 +46,20 @@ function notify() {
 }
 
 /**
- * Normalize an IPC binary payload into something `Blob` accepts.
+ * Point every cached portrait at its file. Safe to call repeatedly.
  *
- * A Rust command returning `tauri::ipc::Response` arrives as an ArrayBuffer,
- * but the exact shape is decided by the injected runtime rather than by the
- * JS package, so accept the typed-array and plain-array forms too — passing a
- * number[] straight to `Blob` would stringify it into garbage.
- */
-function toBytes(payload: ArrayBuffer | Uint8Array | number[]): BlobPart {
-  if (payload instanceof ArrayBuffer) return payload
-  return new Uint8Array(payload)
-}
-
-/**
- * Pull whatever is on disk into memory as blob URLs. Safe to call repeatedly.
- *
- * Blob URLs rather than data URLs: the bytes cross IPC raw instead of as
- * base64, each portrait decodes once no matter how many rows show it, and the
- * DOM holds a short `blob:` URL instead of a ~46 KB string per `<img>` and
- * per `background-image`.
+ * repakxtra: the window loads them as files through the asset protocol (scoped to the portrait folder in
+ * tauri.conf.json), so no bytes cross the command bridge: two calls in all instead of one per portrait. A new
+ * generation (after a sync) gets a new address, so a replaced portrait never comes from cache.
  */
 async function loadCache(): Promise<number> {
   try {
-    const ids = await invoke<string[]>('get_hero_image_ids')
+    const [ids, dir] = await Promise.all([invoke<string[]>('get_hero_image_ids'), invoke<string>('get_hero_cache_dir')])
     if (!ids || ids.length === 0) return 0
 
-    const loaded: Record<string, string> = {}
-    await Promise.all(
-      ids.map(async id => {
-        try {
-          const bytes = await invoke<ArrayBuffer | Uint8Array | number[]>('get_hero_image', { id })
-          loaded[id] = URL.createObjectURL(new Blob([toBytes(bytes)], { type: 'image/png' }))
-        } catch (e) {
-          console.warn(`[Hero] Failed to load portrait ${id}:`, e)
-        }
-      }),
-    )
-
-    // Release the previous generation only after the new one is built, so
-    // rendered <img> elements never point at a revoked URL.
-    const stale = Object.values(images)
-    images = loaded
+    const t = Date.now()
+    images = Object.fromEntries(ids.map(id => [id, `${convertFileSrc(dir + '\\' + id + '.png')}?t=${t}`]))
     notify()
-    stale.forEach(url => URL.revokeObjectURL(url))
 
     return Object.keys(images).length
   } catch (e) {

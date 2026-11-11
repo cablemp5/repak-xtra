@@ -19,7 +19,7 @@ eula = false
 
 [dependencies]
 # GUI Framework - Tauri
-tauri = { version = "2.0", features = [] }
+tauri = { version = "2.0", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2.0"
 tauri-plugin-fs = "2.0"
 tauri-plugin-shell = "2.0"
