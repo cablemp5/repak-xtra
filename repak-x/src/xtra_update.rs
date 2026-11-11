@@ -168,7 +168,7 @@ mod tests {
     fn an_update_never_goes_back_unless_asked() {
         let p = "https://github.com/cablemp5/repak-xtra/releases/download/";
         let v = |s| semver::Version::parse(s).unwrap();
-        assert_eq!(asset_version(&format!("{p}v0.81.3/repak-xtra-standard-v0.81.3-windows.zip"), p), Some(v("0.81.3")));
+        assert_eq!(asset_version(&format!("{p}{}0.81.3/x.zip", crate::xtra_edition::TAG_PREFIX), p), Some(v("0.81.3")), "this edition's tag");
         assert_eq!(asset_version(&format!("{p}kit-v19/kit.zip"), p), None, "not an app tag");
         assert_eq!(asset_version("https://example.com/v9.9.9/x.zip", p), None);
         assert!(allowed_version(&v("0.82.0"), &v("0.81.3"), false).is_ok());
