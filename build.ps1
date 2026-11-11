@@ -43,6 +43,17 @@ if ($Release) {
     if (-not $minKit) { throw 'No MIN_KIT in repak-x\src\xtra_kit.rs.' }
     $kitVer = (Get-Content -Raw preview-kit.json | ConvertFrom-Json).version
     if ([int]$kitVer -lt [int]$minKit) { throw "preview-kit.json names kit $kitVer, older than MIN_KIT $minKit (xtra_kit.rs): every copy would get a kit its previews cannot run on. Publish kit $minKit or newer and update preview-kit.json in a PR first." }
+    # The notes before the build, not after it: a missing file used to cost a whole build
+    $changes = "release-notes\v$ver.md"
+    if (-not (Test-Path $changes)) { throw "Write $changes first: one '- ' line per change, like '- Added card zoom to the Loadouts screen'." }
+    if (-not @(Get-Content $changes | Where-Object { $_ -match '^\s*[-*]\s+\S' }).Count) { throw "$changes has no '- ' lines." }
+    # Only what CI passed ships: the newest Checks run on main must be this commit's, finished and green
+    $head = (git rev-parse HEAD)
+    $runs = (cmd /c "gh run list -R cablemp5/repak-xtra --workflow checks.yml --branch main --limit 1 --json headSha,status,conclusion 2>&1") -join ' '
+    if ($LASTEXITCODE -ne 0) { throw "Could not read the checks on main (gh: $runs). Check the connection and gh auth status, then try again." }
+    $run = @($runs | ConvertFrom-Json)[0]
+    if (-not $run -or $run.headSha -ne $head) { throw "The newest check on main is not for $($head.Substring(0, 8)) yet: wait for it to start and pass, then run this again." }
+    if ($run.status -ne 'completed' -or $run.conclusion -ne 'success') { throw "The check on main for $($head.Substring(0, 8)) is $($run.status) $($run.conclusion): a release needs it green." }
 }
 # vswhere: the .NET NativeAOT linker step calls it to find MSVC
 $env:PATH = "$env:USERPROFILE\.cargo\bin;${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer;$env:PATH"
@@ -69,7 +80,12 @@ if ($SkipTools) {
     foreach ($tool in @('target\uassettool\UAssetTool.dll', 'target\uassettool-cli\UAssetTool.exe')) {
         if (-not (Test-Path -LiteralPath $tool)) { throw "Cannot reuse missing tool: $tool. Build once without -SkipTools." }
     }
+    # Both editions build into the same folders from different patch sets: reuse only tools built from this one
+    $stamp = Get-Content -Raw -LiteralPath target\uassettool\UAssetTool.source -ErrorAction SilentlyContinue
+    if ("$stamp".Trim() -ne (Get-UatSourceId)) { throw 'The built tools come from another source (the other edition, or older patches). Build once without -SkipTools.' }
 } else {
+# A fresh folder each time, so no file of another edition's or an older build is copied into this one
+Remove-Item target\uassettool, target\uassettool-cli -Recurse -Force -ErrorAction SilentlyContinue
 Use-UatPatches {
     Remove-Item UAssetToolRivals\src\UAssetTool\obj, UAssetToolRivals\src\UAssetTool\bin -Recurse -Force -ErrorAction SilentlyContinue
     Run { dotnet publish UAssetToolRivals/src/UAssetTool/UAssetToolNative.csproj -c Release -r win-x64 -p:DebugType=none -p:DebugSymbols=false -o target/uassettool }
@@ -87,14 +103,16 @@ Write-UatSource
 # A release must say what its tools were built from (xtra_vfx.rs tools_id), or every user's mods are checked again
 if ($Release -and -not (Test-Path target\uassettool\UAssetTool.source)) { throw 'target\uassettool has no UAssetTool.source: build once without -SkipTools.' }
 Push-Location repak-x
-Run { npm install }
+# A release builds exactly the locked versions CI tested (npm ci, cargo --locked)
+if ($Release) { Run { npm ci } } else { Run { npm install } }
 # Test copies mark themselves green. Release branding is blue.
 $env:VITE_REPAKXTRA_TEST = if ($Test) { '1' } else { '' }
 $env:REPAKXTRA_BUILD = if ($Test) { 'test' } else { '' }
 Run { npm run build }
 Pop-Location
 $env:SKIP_UASSET_TOOL_BUILD = '1'
-Run { cargo build --release --target x86_64-pc-windows-msvc --features custom-protocol }
+$locked = if ($Release) { @('--locked') } else { @() }
+Run { cargo build --release --target x86_64-pc-windows-msvc --features custom-protocol @locked }
 
 if (-not (Test-BuildOutputAvailable $out)) { throw 'The selected copy was opened during the build. Close it and run the build again.' }
 New-Item -ItemType Directory -Force "$out\data" | Out-Null
@@ -140,10 +158,7 @@ if ($Release) {
     $name = Split-Path $zip -Leaf
     $sum = "$zip.sha256"
     [IO.File]::WriteAllText((Join-Path $PWD $sum), "$hash  $name`n")
-    $changes = "release-notes\v$ver.md"
-    if (-not (Test-Path $changes)) { throw "Write $changes first: one '- ' line per change, like '- Added card zoom to the Loadouts screen'." }
     $lines = @(Get-Content $changes | Where-Object { $_ -match '^\s*[-*]\s+\S' } | ForEach-Object { '- ' + ($_ -replace '^\s*[-*]\s+', '') })
-    if (-not $lines.Count) { throw "$changes has no '- ' lines." }
     $url = "https://github.com/cablemp5/repak-xtra/releases/download/$tagPrefix$ver"
     $notes = "dist\release-notes-$editionName-v$ver.md"
     $scan = 'https://www.virustotal.com/gui/file/'
