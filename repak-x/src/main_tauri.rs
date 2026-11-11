@@ -8467,8 +8467,14 @@ fn main() {
     }
     // repakxtra: an update cut off part way is finished or undone before anything loads or runs the app's files, and a
     // start while one is copying ends here (the update starts the app itself once it is done)
+    let me = std::env::current_exe().ok(); // before a recovery can rename it
     let recovered = match xtra_updater::recover_killed_update() {
         xtra_updater::Recovery::Busy => return,
+        xtra_updater::Recovery::Restart(_) => {
+            // the previous exe is back under this name: it starts instead of this one (the new version's code)
+            if let Some(exe) = me { let _ = std::process::Command::new(exe).spawn(); }
+            return;
+        }
         xtra_updater::Recovery::Done(done) => Some(done),
         xtra_updater::Recovery::Nothing => None,
     };
