@@ -1,0 +1,16 @@
+diff --git a/src/UAssetTool/Program.cs b/src/UAssetTool/Program.cs
+index 79322e6..1e5b72f 100644
+--- a/src/UAssetTool/Program.cs
++++ b/src/UAssetTool/Program.cs
+@@ -44,6 +44,11 @@ public partial class Program
+     private static int RunCliMode(string[] args)
+     {
+         string command = args[0].ToLower();
++        // repakxtra: the pak readers take the game's key from REPAKXTRA_AES when none is on the command line, so a
++        // caller (the app's preview fixes) never puts it where other programs and logs can read it
++        if (command is "list_pak" or "extract_pak" && !args.Contains("--aes") && !args.Contains("--aes-key")
++            && Environment.GetEnvironmentVariable("REPAKXTRA_AES") is { Length: > 0 } envKey)
++            args = [.. args, "--aes", envKey];
+         
+         try
+         {

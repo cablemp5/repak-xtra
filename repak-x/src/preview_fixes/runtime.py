@@ -240,6 +240,17 @@ for old, new in viewer_hooks:
     if source.count(old) == 1:
         source = source.replace(old, new, 1)
 source = source.replace(main_guard, (runtime / "viewer_lobby.py").read_text(encoding="utf-8") + "\n" + main_guard, 1)
+# "Nothing to show" for a mod that had a preview from the same files (same signature) is a failed try, not an answer:
+# its preview, before picture, and index entry stay and the mod is reported as failed, so no "none" is cached over it and
+# Regenerate tries again (seen twice on an unchanged skin table mod). A kit without this exact line runs as it is.
+kept_none = '        index[key] = {"sig": sig, "kind": kind, "seconds": round(time.time() - t0, 1), "anim": ANIM,\n'
+if source.count(kept_none) == 1:
+    source = source.replace(kept_none, (
+        '        kept_old = kind == "none" and sig is not None and index.get(key, {}).get("sig") == sig and index.get(key, {}).get("kind") in GOOD\n'
+        '        if kept_old:\n'
+        '            print(f"# {key}: nothing to show this time, its preview from the same files is kept (Regenerate tries again)", file=sys.stderr, flush=True)\n'
+        '            kind = "kept"\n'
+        + kept_none.replace('index[key] = {', 'index[key] = index[key] if kept_old else {', 1)), 1)
 # A different fingerprint regenerates cached renders as they are requested. The rim setting is not part of it: changing
 # the setting must not render every preview again
 # (10001: painted galaxy skins, flow lines and their animation. 10002: blueprint skins, galaxy masks and sprites, borrowed
