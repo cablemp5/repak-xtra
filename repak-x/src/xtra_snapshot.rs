@@ -33,6 +33,19 @@ fn root() -> PathBuf {
     crate::app_dir().join("snapshots")
 }
 
+/// repakxtra: staging folders a closed run left (each can hold a whole copy of ~mods), last changed before `before`.
+pub fn sweep_staging(before: std::time::SystemTime) {
+    sweep_staging_in(&root(), before)
+}
+fn sweep_staging_in(root: &Path, before: std::time::SystemTime) {
+    for e in fs::read_dir(root).into_iter().flatten().flatten() {
+        let old = e.metadata().and_then(|m| m.modified()).is_ok_and(|t| t < before);
+        if old && e.file_type().is_ok_and(|t| t.is_dir()) && e.file_name().to_string_lossy().starts_with(".staging-") {
+            let _ = fs::remove_dir_all(e.path());
+        }
+    }
+}
+
 /// Every file under `dir` as (path relative to `dir`, size).
 fn files(dir: &Path) -> Vec<(PathBuf, u64)> {
     WalkDir::new(dir).into_iter().filter_map(Result::ok).filter(|e| e.file_type().is_file())
@@ -246,17 +259,31 @@ fn list_at(root: &Path) -> Vec<Snapshot> {
 /// restored .utoc or .ucas always matches the .pak that stayed.
 fn missing_at(snap: &Path, mods: &Path, win64: &Path) -> (Vec<(PathBuf, PathBuf)>, Vec<(PathBuf, PathBuf)>) {
     let now = files(mods);
-    let have: HashSet<_> = now.iter().map(|f| mod_key(&f.0)).collect();
     let base = |key: &str| key.rsplit_once('.').map_or(key, |(b, _)| b).to_string();
-    // each bundle still there: its folder and file name without the extension ("Sub/Cool_99_P")
-    let bundles: std::collections::HashMap<String, PathBuf> = now.iter().filter_map(|f| {
-        let stem = f.0.file_stem()?;
-        Some((base(&mod_key(&f.0)), f.0.with_file_name(stem)))
-    }).collect();
     let have_setup: HashSet<_> = setup_files(win64).iter().map(|f| setup_key(&f.0)).collect();
-    let gone_mods = files(&snap.join("mods")).into_iter().map(|f| f.0).filter(|p| !have.contains(&mod_key(p))).map(|p| {
-        let ext = p.extension().map(|e| e.to_string_lossy().to_string());
-        let to = match (bundles.get(&base(&mod_key(&p))), ext) {
+    // each file still there stands for one snapshot file of its name: one in the same folder first (a new priority, or
+    // switched off), then one of the same size in another folder (moved). Two mods that share a name are two mods.
+    let folder = |p: &Path| p.parent().map(Path::to_path_buf).unwrap_or_default();
+    let mut left: std::collections::HashMap<String, Vec<(PathBuf, u64, PathBuf)>> = std::collections::HashMap::new();
+    for (p, n) in &now {
+        left.entry(mod_key(p)).or_default().push((folder(p), *n, p.clone()));
+    }
+    // each snapshot bundle (its folder and name) found again: where it is now, without the extension ("Sub/Cool_99_P")
+    let mut found: std::collections::HashMap<(PathBuf, String), PathBuf> = std::collections::HashMap::new();
+    let mut take = |p: &Path, n: u64, same_folder: bool| {
+        let Some(v) = left.get_mut(&mod_key(p)) else { return false };
+        let Some(i) = v.iter().position(|(f, m, _)| if same_folder { *f == folder(p) } else { *m == n }) else { return false };
+        let (_, _, at) = v.swap_remove(i);
+        if let Some(stem) = at.file_stem() {
+            found.insert((folder(p), base(&mod_key(p))), at.with_file_name(stem));
+        }
+        true
+    };
+    let unmatched: Vec<_> = files(&snap.join("mods")).into_iter().filter(|(p, n)| !take(p, *n, true)).collect();
+    let gone: Vec<_> = unmatched.into_iter().filter(|(p, n)| !take(p, *n, false)).map(|(p, _)| p).collect();
+    let gone_mods = gone.into_iter().map(|p| {
+        // a companion of a bundle that is still there (renamed or moved) goes back beside it, under its name now
+        let to = match (found.get(&(folder(&p), base(&mod_key(&p)))), p.extension()) {
             (Some(stay), Some(ext)) => stay.with_extension(ext),
             _ => p.clone(),
         };
@@ -496,6 +523,53 @@ mod tests {
         assert!(!t.path().join("out.zip.repakxtra-part").exists());
         assert_eq!(export_at(&root.join("10"), &out).unwrap(), 2, "an export over an existing file replaces it");
         assert_eq!(import_at(&root, "30", &out).unwrap().files, 2);
+    }
+
+    #[test]
+    fn a_name_kept_in_another_folder_does_not_hide_a_deleted_mod() {
+        let t = tempfile::tempdir().unwrap();
+        let (root, mods, win64) = (t.path().join("snaps"), t.path().join("mods"), t.path().join("win64"));
+        fs::create_dir_all(&win64).unwrap();
+        // the audit's case: the same three names in two folders, one folder deleted
+        for name in ["Skin_P.pak", "Skin_P.utoc", "Skin_P.ucas"] {
+            put(&mods.join("Hero A").join(name), "a");
+            put(&mods.join("Hero B").join(name), "bb");
+        }
+        put(&mods.join("Moved_P.pak"), "moved");
+        create_at(&root, "100", &mods, &win64).unwrap();
+        fs::remove_dir_all(mods.join("Hero B")).unwrap();
+        // a mod moved to another folder with the same size still counts as there
+        fs::create_dir_all(mods.join("Hero A/Sub")).unwrap();
+        fs::rename(mods.join("Moved_P.pak"), mods.join("Hero A/Sub/Moved_P.pak")).unwrap();
+
+        // and the kept folder lost one companion: it goes back to its own folder, the deleted folder's to that one
+        fs::remove_file(mods.join("Hero A/Skin_P.utoc")).unwrap();
+
+        let (mut gone, _) = missing_at(&root.join("100"), &mods, &win64);
+        gone.sort();
+        let mut want: Vec<_> = ["Skin_P.pak", "Skin_P.ucas", "Skin_P.utoc"].iter().map(|n| Path::new("Hero B").join(n)).map(|p| (p.clone(), p)).collect();
+        want.insert(0, (Path::new("Hero A/Skin_P.utoc").into(), Path::new("Hero A/Skin_P.utoc").into()));
+        assert_eq!(gone, want);
+        assert_eq!(restore_at(&root.join("100"), &mods, &win64).unwrap(), Restored { mods: 4, setup: 0 });
+        assert_eq!(fs::read_to_string(mods.join("Hero B/Skin_P.pak")).unwrap(), "bb");
+        assert_eq!(fs::read_to_string(mods.join("Hero B/Skin_P.utoc")).unwrap(), "bb");
+        assert_eq!(fs::read_to_string(mods.join("Hero A/Skin_P.pak")).unwrap(), "a");
+        assert_eq!(fs::read_to_string(mods.join("Hero A/Skin_P.utoc")).unwrap(), "a");
+    }
+
+    #[test]
+    fn the_start_sweep_takes_only_staging_folders() {
+        let t = tempfile::tempdir().unwrap();
+        for d in [".staging-5/mods", ".staging-import-6/raw", "100/mods", ".stagingnot/x"] {
+            put(&t.path().join(d).join("a.pak"), "x");
+        }
+        put(&t.path().join(".staging-file"), "x");
+        sweep_staging_in(t.path(), std::time::SystemTime::UNIX_EPOCH);
+        assert!(t.path().join(".staging-5").exists(), "newer than the run: kept");
+        sweep_staging_in(t.path(), std::time::SystemTime::now() + std::time::Duration::from_secs(60));
+        let mut left: Vec<_> = fs::read_dir(t.path()).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        left.sort();
+        assert_eq!(left, [".staging-file", ".stagingnot", "100"]);
     }
 
     #[test]

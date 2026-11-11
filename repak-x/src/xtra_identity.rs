@@ -33,18 +33,23 @@ mod sys {
     }
 }
 
-/// Whether Repak X is open: its single-instance plugin holds the mutex "<identifier>-sim" while it runs.
-pub fn upstream_running() -> bool {
+/// Whether a copy of the app with this identifier is open: its single-instance plugin holds the mutex "<identifier>-sim".
+pub fn copy_running(identifier: &str) -> bool {
     #[cfg(windows)]
     unsafe {
         const SYNCHRONIZE: u32 = 0x0010_0000;
-        let h = sys::OpenMutexW(SYNCHRONIZE, 0, sys::wide(&format!("{OLD}-sim")).as_ptr());
+        let h = sys::OpenMutexW(SYNCHRONIZE, 0, sys::wide(&format!("{identifier}-sim")).as_ptr());
         if h != 0 {
             sys::CloseHandle(h);
             return true;
         }
     }
     false
+}
+
+/// Whether Repak X is open.
+pub fn upstream_running() -> bool {
+    copy_running(OLD)
 }
 
 /// Refuses a change to the mods folder while Repak X is open.

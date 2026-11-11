@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::{fs, io};
 
-use log::{info, trace};
+use log::{debug, info, trace};
 use regex_lite::Regex;
 
 // Use the runtime character_data module instead of compile-time embedded data
@@ -312,7 +312,7 @@ pub fn get_pak_characteristics_detailed(mod_contents: Vec<String>) -> ModCharact
 
     // One line per mod, replacing what used to be one line per asset path. This
     // is the part that is actually useful when a mod is mis-detected.
-    info!(
+    debug!(
         "Scanned {} path(s): heroes={:?} char_id={:?} skin={:?}",
         mod_contents.len(),
         heroes,

@@ -380,6 +380,8 @@ function App() {
   };
 
   const [gamePath, setGamePath] = useState('')
+  const [gamePathLoaded, setGamePathLoaded] = useState(false) // repakxtra: '' while loading is not "no folder": first-run setup waits for it
+  const [foundGamePath, setFoundGamePath] = useState<string | null>(null) // repakxtra: Auto-detect's find, asked before it replaces a saved folder
   useEffect(() => setModsRoot(gamePath), [gamePath]) // repakxtra: loadout member keys are relative to the mods folder
   const [mods, setMods] = useState<ModRecord[]>([])
   const [folders, setFolders] = useState<FolderRecord[]>([])
@@ -1694,8 +1696,9 @@ function App() {
 
   const loadInitialData = async () => {
     try {
-      const path = await invoke('get_game_path') as any
+      const path = await invoke('get_game_path').catch(e => { setGamePathLoaded(true); throw e }) as any
       setGamePath(path)
+      setGamePathLoaded(true)
 
       const ver = await invoke('get_app_version') as any
       setVersion(ver)
@@ -2040,11 +2043,14 @@ function App() {
     }
   }
 
-  const handleAutoDetect = async (quiet = false) => {
+  const handleAutoDetect = async (quiet = false, replace = false) => {
     try {
       setLoading(true)
-      const path = await invoke('auto_detect_game_path') as any
+      // repakxtra: a saved folder that still exists stays, and the found one is asked about (Settings) instead
+      const { path, found } = await invoke<{ path: string; found?: string }>('auto_detect_game_path', { replace })
       setGamePath(path)
+      setFoundGamePath(found && !quiet ? found : null)
+      if (found) return
       setStatus('Game path detected: ' + path)
       await loadMods()
       await loadFolders()
@@ -3576,6 +3582,7 @@ function App() {
           accentColor={accentColor}
           setAccentColor={handleAccentChange}
           gamePath={gamePath}
+          foundGamePath={foundGamePath} onUseFoundGamePath={() => void handleAutoDetect(false, true)} onKeepGamePath={() => setFoundGamePath(null)}
           onAutoDetectGamePath={() => handleAutoDetect()}
           onBrowseGamePath={handleBrowseGamePath}
           isGamePathLoading={loading}
@@ -4401,8 +4408,8 @@ function App() {
         isOpen={showOnboarding}
         onClose={handleCloseTour}
       />
-      <FirstRun alert={alert} gamePath={gamePath} mods={mods} details={modDetails} installing={panels.install} enableDrp={enableDrp} onSetDrp={on => saveAllSettings({ enableDrp: on })}
-        onAutoDetect={() => handleAutoDetect(true)} onBrowse={handleBrowseGamePath} onAddFiles={handleFileDrop} onTour={() => setShowOnboarding(true)} />{/* repakxtra */}
+      {gamePathLoaded && <FirstRun alert={alert} gamePath={gamePath} mods={mods} details={modDetails} installing={panels.install} enableDrp={enableDrp} onSetDrp={on => saveAllSettings({ enableDrp: on })}
+        onAutoDetect={() => handleAutoDetect(true)} onBrowse={handleBrowseGamePath} onAddFiles={handleFileDrop} onTour={() => setShowOnboarding(true)} />}{/* repakxtra */}
     </div >
   )
 }
