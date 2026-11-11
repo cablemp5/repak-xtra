@@ -49,6 +49,7 @@ import PromiseTransitionLoader from './components/PromiseTransitionLoader'
 import { AuroraText } from './components/ui/AuroraText'
 import { AlertProvider, useAlert } from './components/AlertHandler'
 import { offerUndoDelete, type TrashedMod } from './custom/undoDelete'
+import { checkUnreadable } from './custom/unreadable' // repakxtra
 import { holdKeys } from './custom/holdKeys' // repakxtra
 import InstallButton from './custom/InstallButton' // repakxtra
 import { Num } from './custom/motion' // repakxtra
@@ -1965,6 +1966,7 @@ function App() {
       console.error('Failed to preload mod details:', e)
     } finally {
       setDetailsLoading(false)
+      void checkUnreadable(alert, path => stableDeleteMod(path)) // repakxtra: mods skipped because they closed the app
     }
   }
 

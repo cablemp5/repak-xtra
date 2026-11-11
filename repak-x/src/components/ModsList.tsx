@@ -12,6 +12,7 @@ import { formatFileSize } from '../utils/format'
 import { useIsConflicting } from '../custom/conflicts' // repakxtra
 import { useVerdict } from '../custom/brokenMods' // repakxtra
 import { VerdictBadge } from '../custom/VerdictBadge' // repakxtra
+import { UnreadableBadge } from '../custom/unreadable' // repakxtra
 import { RiskBadge, useRisk } from '../custom/safetyScan' // repakxtra
 import { isBuiltin } from '../custom/builtinRows' // repakxtra
 import { BuiltinIcon, revealBuiltin, useBuiltins } from '../custom/BuiltinMods' // repakxtra
@@ -506,6 +507,7 @@ const ModItem = memo(function ModItem({
                     {/* repakxtra: on, and clashing with another enabled mod (same priority, same files), right of the file size */}
                     {conflicting && <span className="mod-type-badge conflict-badge" title="Conflicts with another enabled mod: Check Conflicts shows which">Conflict</span>}
                     {verdict && <VerdictBadge path={mod.path} verdict={verdict} />}
+                    <UnreadableBadge path={mod.path} />{/* repakxtra */}
                     {risk && <RiskBadge path={mod.path} risk={risk} name={mod.custom_name} />}
                     {builtin && (
                         <button type="button" className="mod-type-badge builtin-badge" title="Made by repakxtra from your game files. Open it on Home to change it"

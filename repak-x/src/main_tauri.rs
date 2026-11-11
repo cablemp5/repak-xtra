@@ -59,6 +59,7 @@ mod xtra_uat_cli; // repakxtra: IoStore extracts through UAssetTool's parallel c
 mod xtra_builtins; // repakxtra: built-in mods made from the game's own tables
 mod xtra_ko; // repakxtra: the KO Editor's game files
 mod xtra_galacta; // repakxtra: the Project Galacta maker
+mod xtra_parse_guard; // repakxtra: skips a mod whose details read ended the last run
 mod character_data;
 mod crash_monitor;
 mod discord_presence;
@@ -7554,6 +7555,7 @@ fn compute_mod_details(
         }
     }
     info!("Cache miss for mod: {}, opening PAK...", path.display());
+    let _reading = xtra_parse_guard::reading(&path, &format!("{fingerprint:?}"))?; // repakxtra: crash-loop guard
     // --- End cache check ---
 
     // Check if it's IoStore (has .utoc file) BEFORE trying to open the PAK
@@ -8716,6 +8718,7 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            xtra_parse_guard::unreadable_mods, // repakxtra
             xtra_trash::restore_trashed_mods,
             xtra_trash::list_trashed_mods,
             xtra_dupes::xtra_find_duplicates, // repakxtra
