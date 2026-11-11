@@ -144,9 +144,9 @@ fn malformed_files_fail_safely() {
     }
 
     // F-100: a damaged .utoc is an error within 2 s (it overflowed the stack or never returned)
-    for f in ["11-utoc-method-count-ffffffff", "12-utoc-dir-self-child", "13-utoc-dir-sibling-loop", "14-utoc-file-self-next"] {
+    for f in ["11-utoc-method-count-ffffffff", "12-utoc-dir-self-child", "13-utoc-dir-sibling-loop", "14-utoc-file-self-next", "15-utoc-dir-self-child-and-sibling"] {
         let o = run("listutoc", &fixture(&format!("{f}.utoc")), "", Duration::from_secs(5));
-        expect(&format!("{f} is an error within 2 s"), &o, o.result.starts_with("err") && o.secs < 2.0);
+        expect(&format!("{f} is an error within 2 s"), &o, o.result.starts_with("err") && o.secs < 2.0 && o.peak_mb - control.peak_mb < 100.0);
     }
 
     // F-50: a rooted name and a ".." name are refused by the tool itself, and nothing lands outside the output folder

@@ -1,5 +1,5 @@
 diff --git a/src/UAssetTool/IoStore/IoStoreReader.cs b/src/UAssetTool/IoStore/IoStoreReader.cs
-index 9664c72..ede40a4 100644
+index 9664c72..fc82465 100644
 --- a/src/UAssetTool/IoStore/IoStoreReader.cs
 +++ b/src/UAssetTool/IoStore/IoStoreReader.cs
 @@ -644,9 +644,14 @@ public class IoStoreToc
@@ -40,30 +40,37 @@ index 9664c72..ede40a4 100644
                  catch (Exception ex)
                  {
                      if (Environment.GetEnvironmentVariable("DEBUG") == "1")
-@@ -883,6 +896,9 @@ public class IoStoreToc
+@@ -883,6 +896,10 @@ public class IoStoreToc
          }
      }
      
-+    // repakxtra: a loop with its own stack and a step limit instead of a recursion. A directory that is its own child or
-+    // sibling, or a file that is its own next, overflowed the stack (which nothing can catch) or never returned. A whole
-+    // walk visits each directory once, lists it once as a child, and each file once.
++    // repakxtra: a loop with its own stack instead of a recursion, and every directory and file taken once. A directory
++    // that was its own child or sibling, or a file that was its own next, overflowed the stack (which nothing can catch)
++    // or never returned. A path is built only when its directory is reached and may not pass 1,024 characters, so a
++    // crafted index cannot pile up long paths either.
      private static void BuildFilePaths(
          IoStoreToc toc,
          List<(uint name, uint firstChild, uint nextSibling, uint firstFile)> dirEntries,
-@@ -891,40 +907,56 @@ public class IoStoreToc
-         uint dirIndex,
-         string currentPath)
+@@ -893,38 +910,53 @@ public class IoStoreToc
      {
--        if (dirIndex >= dirEntries.Count)
--            return;
+         if (dirIndex >= dirEntries.Count)
+             return;
 -        
 -        var dir = dirEntries[(int)dirIndex];
 -        
 -        // Process files in this directory
 -        uint fileIndex = dir.firstFile;
 -        while (fileIndex < fileEntries.Count && fileIndex != 0xFFFFFFFF)
-+        long steps = 0, limit = 2L * dirEntries.Count + fileEntries.Count;
-+        void Step()
++        var dirSeen = new bool[dirEntries.Count];
++        var fileSeen = new bool[fileEntries.Count];
++        static Exception Loop() => new InvalidDataException("The .utoc directory index loops back on itself.");
++
++        // (directory, its parent's path): siblings share their parent's string, so queued directories cost no path each
++        var stack = new Stack<(uint dir, string? parent)>();
++        dirSeen[dirIndex] = true;
++        stack.Push((dirIndex, null));
++        var children = new List<uint>();
++        while (stack.Count > 0)
          {
 -            var file = fileEntries[(int)fileIndex];
 -            string fileName = file.name < strings.Count ? strings[(int)file.name] : "";
@@ -71,46 +78,22 @@ index 9664c72..ede40a4 100644
 -            
 -            // userData is the chunk index
 -            if (file.userData < toc.Chunks.Count)
--            {
--                toc.FileMapRev[file.userData] = fullPath;
--                toc.FileMap[fullPath] = file.userData;
--            }
--            
--            fileIndex = file.nextFile;
-+            if (++steps > limit)
-+                throw new InvalidDataException("The .utoc directory index loops back on itself.");
-         }
--        
--        // Process child directories
--        uint childIndex = dir.firstChild;
--        while (childIndex < dirEntries.Count && childIndex != 0xFFFFFFFF)
-+
-+        var stack = new Stack<(uint dir, string path)>();
-+        stack.Push((dirIndex, currentPath));
-+        var children = new List<(uint dir, string path)>();
-+        while (stack.Count > 0)
-         {
--            var child = dirEntries[(int)childIndex];
--            string dirName = child.name < strings.Count ? strings[(int)child.name] : "";
--            string childPath = string.IsNullOrEmpty(currentPath) ? $"{dirName}/" : $"{currentPath}{dirName}/";
--            
--            BuildFilePaths(toc, dirEntries, fileEntries, strings, childIndex, childPath);
--            
--            childIndex = child.nextSibling;
-+            (dirIndex, currentPath) = stack.Pop();
-+            if (dirIndex >= dirEntries.Count)
-+                continue;
-+            Step();
-+            var dir = dirEntries[(int)dirIndex];
++            var (index, parent) = stack.Pop();
++            var dir = dirEntries[(int)index];
++            string dirName = dir.name < strings.Count ? strings[(int)dir.name] : "";
++            string path = parent == null ? currentPath : string.IsNullOrEmpty(parent) ? $"{dirName}/" : $"{parent}{dirName}/";
++            if (path.Length > 1024)
++                throw new InvalidDataException("A .utoc directory path is longer than 1,024 characters.");
 +
 +            // Process files in this directory
-+            uint fileIndex = dir.firstFile;
-+            while (fileIndex < fileEntries.Count && fileIndex != 0xFFFFFFFF)
++            for (uint fileIndex = dir.firstFile; fileIndex < fileEntries.Count && fileIndex != 0xFFFFFFFF; fileIndex = fileEntries[(int)fileIndex].nextFile)
 +            {
-+                Step();
++                if (fileSeen[fileIndex])
++                    throw Loop();
++                fileSeen[fileIndex] = true;
 +                var file = fileEntries[(int)fileIndex];
 +                string fileName = file.name < strings.Count ? strings[(int)file.name] : "";
-+                string fullPath = string.IsNullOrEmpty(currentPath) ? fileName : $"{currentPath}{fileName}";
++                string fullPath = string.IsNullOrEmpty(path) ? fileName : $"{path}{fileName}";
 +
 +                // userData is the chunk index
 +                if (file.userData < toc.Chunks.Count)
@@ -118,23 +101,36 @@ index 9664c72..ede40a4 100644
 +                    toc.FileMapRev[file.userData] = fullPath;
 +                    toc.FileMap[fullPath] = file.userData;
 +                }
-+
-+                fileIndex = file.nextFile;
 +            }
 +
 +            // Child directories, pushed last first so they are walked in the order the recursion took
 +            children.Clear();
-+            uint childIndex = dir.firstChild;
-+            while (childIndex < dirEntries.Count && childIndex != 0xFFFFFFFF)
-+            {
-+                Step();
-+                var child = dirEntries[(int)childIndex];
-+                string dirName = child.name < strings.Count ? strings[(int)child.name] : "";
-+                children.Add((childIndex, string.IsNullOrEmpty(currentPath) ? $"{dirName}/" : $"{currentPath}{dirName}/"));
-+                childIndex = child.nextSibling;
-+            }
++            for (uint child = dir.firstChild; child < dirEntries.Count && child != 0xFFFFFFFF; child = dirEntries[(int)child].nextSibling)
+             {
+-                toc.FileMapRev[file.userData] = fullPath;
+-                toc.FileMap[fullPath] = file.userData;
++                if (dirSeen[child])
++                    throw Loop();
++                dirSeen[child] = true;
++                children.Add(child);
+             }
+-            
+-            fileIndex = file.nextFile;
+-        }
+-        
+-        // Process child directories
+-        uint childIndex = dir.firstChild;
+-        while (childIndex < dirEntries.Count && childIndex != 0xFFFFFFFF)
+-        {
+-            var child = dirEntries[(int)childIndex];
+-            string dirName = child.name < strings.Count ? strings[(int)child.name] : "";
+-            string childPath = string.IsNullOrEmpty(currentPath) ? $"{dirName}/" : $"{currentPath}{dirName}/";
+-            
+-            BuildFilePaths(toc, dirEntries, fileEntries, strings, childIndex, childPath);
+-            
+-            childIndex = child.nextSibling;
 +            for (int i = children.Count - 1; i >= 0; i--)
-+                stack.Push(children[i]);
++                stack.Push((children[i], path));
          }
      }
  }
