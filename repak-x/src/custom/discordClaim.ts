@@ -1,5 +1,5 @@
 // repakxtra: Claim role on cable's Discord card (CableDiscord.tsx, xtra_role.rs). The click says "Finish in your browser"
-// at once, opens Discord's consent page, and waits for the browser's answer, which comes back through a repakx:// link
+// at once, opens Discord's consent page, and waits for the browser's answer, which comes back through a repakxtra:// link
 // (no polling). Consent pages wait on the member, so it gives up after 5 minutes, and Open again starts a fresh claim
 // when the tab was closed. A claimed role is remembered (the role is kept forever). The claim lives here, not in the card:
 // closing Settings mid-claim keeps it, and reopening shows where it stands. Each answer names its claim's state. A role

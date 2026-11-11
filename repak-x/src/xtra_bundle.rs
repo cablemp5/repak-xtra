@@ -96,11 +96,8 @@ fn replace_with(moves: &[(PathBuf, PathBuf)], old: &[&PathBuf], dir: &Path) -> R
         }
         crate::xtra_trash::release_if_empty(dir);
     };
-    for (i, d) in old.iter().enumerate() {
-        if let Err(e) = crate::xtra_trash::discard(dir, d) {
-            put_back(&old[..i]);
-            return Err(format!("Could not move the old {} aside: {}", d.display(), e));
-        }
+    if let Err((d, e)) = crate::xtra_trash::discard_all(dir, &old.iter().map(|p| p.as_path()).collect::<Vec<_>>()) {
+        return Err(format!("Could not move the old {} aside: {}", d.display(), e));
     }
     if let Err(e) = move_all(moves) {
         put_back(old);

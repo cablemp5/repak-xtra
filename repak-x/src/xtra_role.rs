@@ -1,8 +1,9 @@
 //! repakxtra: Claim role on cable's Discord card (custom/discordClaim.ts). The app opens Discord's consent page in the
 //! browser, the member authorizes repakxtra, and a Cloudflare Worker (kept outside this repo) gives the "repakxtra user"
-//! role, then sends the browser to repakx://role-claimed?state=...&result=... . The app checks the state is one it
+//! role, then sends the browser to repakxtra://role-claimed?state=...&result=... . The app checks the state is one it
 //! made in the last 10 minutes and tells the card. Each state is 32 random bytes from the OS, kept only in memory. The
 //! last few claims all count (Open again makes a new one while the first tab may still be authorized), each answers once.
+//! A state starts with `x`: the Worker sends those to repakxtra://, others (older versions) to repakx://.
 
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -15,6 +16,8 @@ const CLIENT_ID: &str = "1563325728416604231";
 /// The Worker's address (the Worker itself lives outside this repo). None: not set up, and the card hides Claim role.
 const WORKER: Option<&str> = Some("https://repakxtra-role.cablemp5.workers.dev");
 const MAX_AGE: Duration = Duration::from_secs(10 * 60);
+/// repakxtra's own link scheme. repakx:// belongs to Repak X (its browser extension).
+pub const SCHEME: &str = "repakxtra";
 const RESULTS: [&str; 4] = ["ok", "not_member", "denied", "error"];
 /// How many recent claims an answer may belong to.
 const KEEP: usize = 5;
@@ -47,7 +50,7 @@ pub fn xtra_role_claim_start() -> Result<String, String> {
     let worker = WORKER.ok_or("Claim role is not set up yet")?;
     let mut bytes = [0u8; 32];
     rand::rngs::OsRng.fill_bytes(&mut bytes);
-    let state: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+    let state: String = std::iter::once("x".to_string()).chain(bytes.iter().map(|b| format!("{b:02x}"))).collect();
     let mut pending = PENDING.lock().unwrap_or_else(|e| e.into_inner());
     let now = Instant::now();
     pending.retain(|(_, made)| now.saturating_duration_since(*made) <= MAX_AGE);
@@ -63,7 +66,7 @@ pub fn xtra_role_claim_start() -> Result<String, String> {
 /// earlier claim's answer may change (discordClaim.ts answers).
 fn accept(url: &str, pending: &[(String, Instant)], now: Instant) -> Option<(usize, &'static str)> {
     let parsed = url::Url::parse(url).ok()?;
-    if parsed.scheme() != "repakx" || parsed.host_str() != Some("role-claimed") {
+    if parsed.scheme() != SCHEME || parsed.host_str() != Some("role-claimed") {
         return None;
     }
     let get = |k: &str| parsed.query_pairs().find(|(key, _)| key == k).map(|(_, v)| v.into_owned());
@@ -75,7 +78,7 @@ fn accept(url: &str, pending: &[(String, Instant)], now: Instant) -> Option<(usi
 
 /// The deep link handler's hook: true when `url` is a role-claimed link (handled here, answered or ignored).
 pub fn on_link(url: &str, app: &tauri::AppHandle) -> bool {
-    if !url::Url::parse(url).is_ok_and(|u| u.scheme() == "repakx" && u.host_str() == Some("role-claimed")) {
+    if !url::Url::parse(url).is_ok_and(|u| u.scheme() == SCHEME && u.host_str() == Some("role-claimed")) {
         return false;
     }
     let mut pending = PENDING.lock().unwrap_or_else(|e| e.into_inner());
@@ -104,27 +107,27 @@ mod tests {
     fn a_matching_state_answers() {
         let now = Instant::now();
         for r in RESULTS {
-            assert_eq!(accept(&format!("repakx://role-claimed?state={S}&result={r}"), &pending(), now), Some((0, r)));
+            assert_eq!(accept(&format!("repakxtra://role-claimed?state={S}&result={r}"), &pending(), now), Some((0, r)));
         }
-        assert_eq!(accept(&format!("repakx://role-claimed/?result=ok&state={S}&utm=x"), &pending(), now), Some((0, "ok")), "order and extra junk do not matter");
+        assert_eq!(accept(&format!("repakxtra://role-claimed/?result=ok&state={S}&utm=x"), &pending(), now), Some((0, "ok")), "order and extra junk do not matter");
         let newer = "e".repeat(64);
         let both = vec![(S.to_string(), now), (newer.clone(), now)];
-        assert_eq!(accept(&format!("repakx://role-claimed?state={S}&result=ok"), &both, now), Some((0, "ok")), "an earlier tab still answers");
-        assert_eq!(accept(&format!("repakx://role-claimed?state={newer}&result=denied"), &both, now), Some((1, "denied")));
+        assert_eq!(accept(&format!("repakxtra://role-claimed?state={S}&result=ok"), &both, now), Some((0, "ok")), "an earlier tab still answers");
+        assert_eq!(accept(&format!("repakxtra://role-claimed?state={newer}&result=denied"), &both, now), Some((1, "denied")));
     }
 
     #[test]
     fn anything_else_is_ignored() {
         let now = Instant::now();
-        assert_eq!(accept(&format!("repakx://role-claimed?state={}&result=ok", "f".repeat(64)), &pending(), now), None, "wrong state");
-        assert_eq!(accept(&format!("repakx://role-claimed?state={S}&result=ok"), &[], now), None, "no claim started");
-        assert_eq!(accept(&format!("repakx://role-claimed?state={S}"), &pending(), now), None, "missing result");
-        assert_eq!(accept(&format!("repakx://role-claimed?state={S}&result=admin"), &pending(), now), None, "unknown result");
-        assert_eq!(accept(&format!("repakx://install?state={S}&result=ok"), &pending(), now), None, "another link");
+        assert_eq!(accept(&format!("repakxtra://role-claimed?state={}&result=ok", "f".repeat(64)), &pending(), now), None, "wrong state");
+        assert_eq!(accept(&format!("repakxtra://role-claimed?state={S}&result=ok"), &[], now), None, "no claim started");
+        assert_eq!(accept(&format!("repakxtra://role-claimed?state={S}"), &pending(), now), None, "missing result");
+        assert_eq!(accept(&format!("repakxtra://role-claimed?state={S}&result=admin"), &pending(), now), None, "unknown result");
+        assert_eq!(accept(&format!("repakxtra://install?state={S}&result=ok"), &pending(), now), None, "another link");
         assert_eq!(accept("not a url", &pending(), now), None);
         let old = vec![(S.to_string(), now)];
-        assert_eq!(accept(&format!("repakx://role-claimed?state={S}&result=ok"), &old, now + MAX_AGE + Duration::from_secs(1)), None, "expired");
-        assert_eq!(accept(&format!("repakx://role-claimed?state={S}&result=ok"), &old, now + MAX_AGE - Duration::from_secs(1)), Some((0, "ok")), "just in time");
+        assert_eq!(accept(&format!("repakxtra://role-claimed?state={S}&result=ok"), &old, now + MAX_AGE + Duration::from_secs(1)), None, "expired");
+        assert_eq!(accept(&format!("repakxtra://role-claimed?state={S}&result=ok"), &old, now + MAX_AGE - Duration::from_secs(1)), Some((0, "ok")), "just in time");
     }
 
     #[test]
@@ -145,6 +148,7 @@ mod tests {
                 xtra_role_claim_start().unwrap();
             }
             assert_eq!(PENDING.lock().unwrap().len(), KEEP, "only the last few claims are kept");
+            assert!(PENDING.lock().unwrap().iter().all(|(s, _)| s.starts_with('x') && s.len() == 65), "x marks a repakxtra:// answer for the Worker");
         }
     }
 }

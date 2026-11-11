@@ -1833,7 +1833,7 @@ struct ModToInstall {
 fn copy_iostore_with_compression_check(
     utoc_src: &Path,
     output_dir: &Path,
-    window: &Window,
+    log: &dyn Fn(String),
     rename_stem: Option<&str>,
 ) -> Result<u32, String> {
     let utoc_name = utoc_src.file_name().unwrap();
@@ -1874,13 +1874,10 @@ fn copy_iostore_with_compression_check(
                 "[QuickOrganize] Copied: {}",
                 pak_src.file_name().unwrap().to_string_lossy()
             );
-            let _ = window.emit(
-                "install_log",
-                format!(
+            log(format!(
                     "[QuickOrganize] Copied: {}",
                     pak_src.file_name().unwrap().to_string_lossy()
-                ),
-            );
+                ));
             file_count += 1;
         }
     }
@@ -1900,13 +1897,10 @@ fn copy_iostore_with_compression_check(
                 "[QuickOrganize] Copied: {}",
                 bak_repak_src.file_name().unwrap().to_string_lossy()
             );
-            let _ = window.emit(
-                "install_log",
-                format!(
+            log(format!(
                     "[QuickOrganize] Copied: {}",
                     bak_repak_src.file_name().unwrap().to_string_lossy()
-                ),
-            );
+                ));
             file_count += 1;
         }
     }
@@ -1931,13 +1925,10 @@ fn copy_iostore_with_compression_check(
             "[QuickOrganize] IoStore {} is already compressed, copying directly",
             utoc_name.to_string_lossy()
         );
-        let _ = window.emit(
-            "install_log",
-            format!(
+        log(format!(
                 "[QuickOrganize] Copying compressed IoStore: {}",
                 utoc_name.to_string_lossy()
-            ),
-        );
+            ));
 
         std::fs::copy(utoc_src, &utoc_dest)
             .map_err(|e| format!("Failed to copy {}: {}", utoc_name.to_string_lossy(), e))?;
@@ -1956,13 +1947,10 @@ fn copy_iostore_with_compression_check(
             "[QuickOrganize] IoStore {} is NOT compressed, recompressing with Oodle...",
             utoc_name.to_string_lossy()
         );
-        let _ = window.emit(
-            "install_log",
-            format!(
+        log(format!(
                 "[QuickOrganize] Recompressing uncompressed IoStore: {}",
                 utoc_name.to_string_lossy()
-            ),
-        );
+            ));
 
         // First copy to destination
         std::fs::copy(utoc_src, &utoc_dest)
@@ -1984,13 +1972,10 @@ fn copy_iostore_with_compression_check(
                     "[QuickOrganize] Successfully recompressed IoStore: {}",
                     utoc_name.to_string_lossy()
                 );
-                let _ = window.emit(
-                    "install_log",
-                    format!(
+                log(format!(
                         "[QuickOrganize] ✓ Recompressed: {}",
                         utoc_name.to_string_lossy()
-                    ),
-                );
+                    ));
             }
             Err(e) => {
                 warn!(
@@ -1998,14 +1983,11 @@ fn copy_iostore_with_compression_check(
                     utoc_name.to_string_lossy(),
                     e
                 );
-                let _ = window.emit(
-                    "install_log",
-                    format!(
+                log(format!(
                         "[QuickOrganize] Warning: Could not recompress {}: {}",
                         utoc_name.to_string_lossy(),
                         e
-                    ),
-                );
+                    ));
                 // Files are still copied, just not recompressed
             }
         }
@@ -2048,249 +2030,6 @@ fn get_clean_base_name(filename: &str) -> String {
     base_no_p.to_string()
 }
 
-/// One ready-to-install mod found inside an archive, directory, or loose file.
-/// A "mod" is one stem in one directory: the .pak plus any .utoc/.ucas siblings.
-#[derive(serde::Serialize, Clone, Debug)]
-struct ArchiveModEntry {
-    /// Path relative to the archive/directory root, forward-slashed.
-    /// This is the key the install side uses for selection and renaming.
-    rel_path: String,
-    /// Parent directory inside the archive, "" when at the root.
-    rel_dir: String,
-    /// File name without extension - the editable part when renaming.
-    base_name: String,
-    is_iostore: bool,
-    size: u64,
-    mod_type: String,
-    /// 4-digit hero ids detected from the asset paths, so the panel can show
-    /// the same portraits the mod list uses.
-    hero_ids: Vec<String>,
-}
-
-/// List the installable mods inside an archive (or a directory / loose pak)
-/// WITHOUT installing anything, so the user can pick and rename before committing.
-#[tauri::command]
-async fn inspect_archive_mods(path: String, window: Window) -> Result<Vec<ArchiveModEntry>, String> {
-    blocking(move || inspect_archive_mods_now(path, window)).await // repakxtra: unpacking runs off the async runtime
-}
-
-fn inspect_archive_mods_now(path: String, window: Window) -> Result<Vec<ArchiveModEntry>, String> {
-    use crate::install_mod::install_mod_logic::archives::{extract_7z, extract_rar, extract_zip};
-    use walkdir::WalkDir;
-
-    let src = PathBuf::from(&path);
-    if !src.exists() {
-        return Err(format!("Path does not exist: {}", path));
-    }
-
-    let ext = src
-        .extension()
-        .and_then(|s| s.to_str())
-        .unwrap_or("")
-        .to_lowercase();
-
-    // Loose pak / IoStore bundle: a single entry, nothing to extract.
-    if ext == "pak" || ext == "utoc" {
-        let stem = src
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("Unknown")
-            .to_string();
-        let utoc = src.with_extension("utoc");
-        let ucas = src.with_extension("ucas");
-        let is_iostore = utoc.exists() && ucas.exists();
-        let size = bundle_size(&src);
-        let (mod_type, hero_ids) = detect_mod_info(&src, is_iostore);
-
-        return Ok(vec![ArchiveModEntry {
-            rel_path: src
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string(),
-            rel_dir: String::new(),
-            base_name: stem,
-            is_iostore,
-            size,
-            mod_type,
-            hero_ids,
-        }]);
-    }
-
-    // Archives are extracted to a temp dir purely for inspection; the install
-    // side re-extracts from the original archive when the user confirms.
-    let scan_root: PathBuf;
-    let _temp_guard;
-    if ext == "zip" || ext == "rar" || ext == "7z" {
-        let temp_dir = tempfile::tempdir().map_err(|e| format!("Failed to create temp dir: {}", e))?;
-        let temp_path = temp_dir.path().to_path_buf();
-        let temp_path_str = temp_path.to_str().unwrap_or_default();
-        let src_str = src.to_str().unwrap_or_default();
-
-        let extract_result = if ext == "zip" {
-            extract_zip(src_str, temp_path_str)
-        } else if ext == "rar" {
-            extract_rar(src_str, temp_path_str)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
-        } else {
-            extract_7z(src_str, temp_path_str)
-        };
-
-        extract_result.map_err(|e| format!("Failed to extract archive: {}", e))?;
-
-        scan_root = temp_path;
-        _temp_guard = Some(temp_dir);
-    } else if src.is_dir() {
-        scan_root = src.clone();
-        _temp_guard = None;
-    } else {
-        return Ok(Vec::new());
-    }
-
-    let mut entries: Vec<ArchiveModEntry> = Vec::new();
-    let mut seen_stems: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
-
-    for entry in WalkDir::new(&scan_root).into_iter().filter_entry(crate::xtra_bundle::not_staging) /* repakxtra */.filter_map(|e| e.ok()) {
-        let entry_path = entry.path();
-        let entry_ext = entry_path
-            .extension()
-            .and_then(|s| s.to_str())
-            .unwrap_or("")
-            .to_lowercase();
-
-        // Anchor on the .pak; fall back to .utoc for IoStore-only bundles so a
-        // bundle without a .pak still shows up exactly once.
-        let is_anchor = entry_ext == "pak"
-            || (entry_ext == "utoc" && !entry_path.with_extension("pak").exists());
-        if !is_anchor {
-            continue;
-        }
-
-        // One entry per stem+directory, whichever extension we hit first.
-        let stem_key = entry_path.with_extension("");
-        if !seen_stems.insert(stem_key) {
-            continue;
-        }
-
-        let rel = entry_path.strip_prefix(&scan_root).unwrap_or(entry_path);
-        let rel_path = rel.to_string_lossy().replace('\\', "/");
-        let rel_dir = rel
-            .parent()
-            .map(|p| p.to_string_lossy().replace('\\', "/"))
-            .unwrap_or_default();
-
-        let utoc = entry_path.with_extension("utoc");
-        let ucas = entry_path.with_extension("ucas");
-        let is_iostore = utoc.exists() && ucas.exists();
-
-        let (mod_type, hero_ids) = detect_mod_info(entry_path, is_iostore);
-
-        entries.push(ArchiveModEntry {
-            rel_path,
-            rel_dir,
-            base_name: entry_path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("Unknown")
-                .to_string(),
-            is_iostore,
-            size: bundle_size(entry_path),
-            mod_type,
-            hero_ids,
-        });
-    }
-
-    entries.sort_by(|a, b| a.rel_path.to_lowercase().cmp(&b.rel_path.to_lowercase()));
-
-    let _ = window.emit(
-        "install_log",
-        format!("[Inspect] Found {} mod(s) in {}", entries.len(), path),
-    );
-
-    Ok(entries)
-}
-
-/// Total bytes of a mod bundle (the anchor file plus its IoStore companions).
-fn bundle_size(anchor: &Path) -> u64 {
-    ["pak", "utoc", "ucas"]
-        .iter()
-        .filter_map(|ext| std::fs::metadata(anchor.with_extension(ext)).ok())
-        .map(|m| m.len())
-        .sum()
-}
-
-/// Best-effort content classification plus hero detection, from one read of the
-/// bundle's asset list. Mirrors what `parse_dropped_files` reports for the type,
-/// and `utils/heroes.ts` for the hero ids.
-fn detect_mod_info(anchor: &Path, is_iostore: bool) -> (String, Vec<String>) {
-    use crate::utils::get_pak_characteristics_detailed;
-
-    let files: Option<Vec<String>> = if is_iostore {
-        use crate::utoc_utils::read_utoc;
-        let utoc_files: Vec<String> = read_utoc(&anchor.with_extension("utoc"))
-            .iter()
-            .map(|e| e.file_path.clone())
-            .collect();
-        if utoc_files.is_empty() {
-            None
-        } else {
-            Some(utoc_files)
-        }
-    } else {
-        let pak = anchor.with_extension("pak");
-        uasset_toolkit::list_pak_files(
-            pak.to_str().unwrap_or_default(),
-            Some(crate::install_mod::AES_KEY_HEX),
-        )
-        .ok()
-        .filter(|f| !f.is_empty())
-    };
-
-    let Some(files) = files else {
-        return ("Unknown".to_string(), Vec::new());
-    };
-
-    let mod_type = get_pak_characteristics_detailed(files.clone()).mod_type;
-    (mod_type, detect_hero_ids(&files))
-}
-
-/// Hero ids from asset paths. Same two patterns as `detectHeroes` in
-/// utils/heroes.ts: the path form wins, and short-circuits the filename form to
-/// avoid false positives from shared assets.
-fn detect_hero_ids(files: &[String]) -> Vec<String> {
-    let path_re = match Regex::new(r"(?:Characters|Hero_ST|Hero)/(\d{4})") {
-        Ok(r) => r,
-        Err(_) => return Vec::new(),
-    };
-    let name_re = match Regex::new(r"[_/](10[1-6]\d)\d{3}") {
-        Ok(r) => r,
-        Err(_) => return Vec::new(),
-    };
-
-    let mut ids: Vec<String> = Vec::new();
-    for file in files {
-        // WBP_Galacta has no numeric hero ID in its path/filename, so it's
-        // special-cased directly by name (mirrors utils.rs).
-        if file.to_lowercase().contains("wbp_galacta") {
-            if !ids.contains(&"4017".to_string()) {
-                ids.push("4017".to_string());
-            }
-            continue;
-        }
-
-        let found = path_re
-            .captures(file)
-            .or_else(|| name_re.captures(file))
-            .map(|c| c[1].to_string());
-        if let Some(id) = found {
-            if !ids.contains(&id) {
-                ids.push(id);
-            }
-        }
-    }
-    ids
-}
-
 /// Quick Organize: Simply copy/move files to a target folder without any repak processing
 /// This is for organizing existing mod files into subfolders
 /// Now also detects uncompressed IoStore bundles and recompresses them with Oodle
@@ -2298,7 +2037,7 @@ fn detect_hero_ids(files: &[String]) -> Vec<String> {
 ///
 /// `selections`, `renames` and `flatten` are optional so existing callers keep
 /// their behaviour: install everything, keep original names, retain structure.
-///   - `selections`: rel_paths (as reported by `inspect_archive_mods`) to install.
+///   - `selections`: rel_paths (relative to the archive or folder root) to install.
 ///   - `renames`: rel_path -> new base name, applied to the whole bundle.
 ///   - `flatten`: drop the archive's internal folders and install side by side.
 #[tauri::command]
@@ -2356,7 +2095,7 @@ async fn quick_organize(
         target_folder.clone()
     };
 
-    quick_organize_impl(paths, output_dir, location_label, selections, renames, flatten, &window)
+    quick_organize_impl(paths, output_dir, location_label, selections, renames, flatten, &|m| { let _ = window.emit("install_log", m); })
 }
 
 /// Locks the destination to wherever `existing_mod_path` currently lives instead of a
@@ -2403,7 +2142,7 @@ async fn quick_organize_locked(
         selections,
         renames,
         flatten,
-        &window,
+        &|m| { let _ = window.emit("install_log", m); },
     )?;
 
     // The shared copy step above always installs enabled; restore the disabled state the
@@ -2435,18 +2174,21 @@ fn quick_organize_impl(
     selections: Option<Vec<String>>,
     renames: Option<std::collections::HashMap<String, String>>,
     flatten: Option<bool>,
-    window: &Window,
+    log: &dyn Fn(String),
 ) -> Result<i32, String> {
     use crate::install_mod::install_mod_logic::archives::{extract_7z, extract_rar, extract_zip};
     use walkdir::WalkDir;
 
     // Resolve the optional install options into their defaults.
     let flatten = flatten.unwrap_or(false);
+    // repakxtra: keys compare without case (the overlay lists A.PAK, the walk below anchors on A.pak)
     let selections: Option<std::collections::HashSet<String>> =
-        selections.map(|v| v.into_iter().collect());
-    let renames = renames.unwrap_or_default();
+        selections.map(|v| v.into_iter().map(|k| k.to_lowercase()).collect());
+    let renames: std::collections::HashMap<String, String> =
+        renames.unwrap_or_default().into_iter().map(|(k, v)| (k.to_lowercase(), v)).collect();
+    let seen = std::cell::RefCell::new(std::collections::HashSet::<String>::new());
 
-    // The key for an entry, matching what `inspect_archive_mods` reported: a
+    // The key for an entry (its path inside the archive or folder): a
     // bundle is identified by its .pak when it has one, otherwise its .utoc, so
     // the .pak and .utoc branches below agree on a single key per bundle.
     let entry_key = |entry_path: &Path, base_path: &Path| -> String {
@@ -2464,60 +2206,52 @@ fn quick_organize_impl(
     };
 
     let is_selected = |key: &str| -> bool {
-        match &selections {
+        let key = key.to_lowercase();
+        let picked = match &selections {
             // None means "no selection was made", i.e. install everything
             None => true,
-            Some(set) => set.contains(key),
+            Some(set) => set.contains(&key),
+        };
+        if picked {
+            seen.borrow_mut().insert(key);
         }
+        picked
     };
 
+    // repakxtra: everything is built in a private folder beside the mods (same drive) and swapped in only when every
+    // selected file is there, with the replaced copy going to Recently deleted in that same step (as install_mods does)
+    let real_dir = output_dir;
+    let stage = crate::xtra_bundle::staging_dir(&real_dir, "installing")?;
+    struct RemoveStage(PathBuf);
+    impl Drop for RemoveStage {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _remove_stage = RemoveStage(stage.clone());
+    let output_dir = stage.clone();
+    let mut failures: Vec<String> = Vec::new();
+    let mut retire: Vec<PathBuf> = Vec::new();
+    let mut written: std::collections::HashMap<PathBuf, PathBuf> = std::collections::HashMap::new();
     let mut cleaned_bases = std::collections::HashSet::new();
 
+    // the installed files this one replaces (same clean base name in the folder it lands in): noted, moved at the swap
     let mut cleanup_conflicting_mods = |dest_dir: &Path, incoming_filename: &str| {
         let clean_base = get_clean_base_name(incoming_filename);
         if clean_base.is_empty() {
             return;
         }
-
-        // Only run cleanup once per clean base name
-        if !cleaned_bases.insert(clean_base.clone()) {
+        let real = real_dir.join(dest_dir.strip_prefix(&stage).unwrap_or(Path::new("")));
+        if !cleaned_bases.insert((real.clone(), clean_base.clone())) {
             return;
         }
-
-        if !dest_dir.exists() {
-            return;
-        }
-
-        info!(
-            "[QuickOrganize] Cleaning up existing mod variants for clean base '{}' in '{}'",
-            clean_base,
-            dest_dir.display()
-        );
-
-        if let Ok(entries) = std::fs::read_dir(dest_dir) {
-            let trash = xtra_trash::reserve(None).ok(); // repakxtra: the replaced copy goes to Recently deleted
-            for entry in entries.flatten() {
-                let entry_path = entry.path();
-                if entry_path.is_file() {
-                    if let Some(name_str) = entry_path.file_name().and_then(|n| n.to_str()) {
-                        let entry_clean_base = get_clean_base_name(name_str);
-                        if entry_clean_base == clean_base {
-                            info!(
-                                "[QuickOrganize] Removing conflicting pre-existing file: {}",
-                                entry_path.display()
-                            );
-                            if let Err(e) = trash.as_ref().map_or_else(|| std::fs::remove_file(&entry_path), |t| xtra_trash::discard(t, &entry_path)) { // repakxtra
-                                warn!(
-                                    "[QuickOrganize] Failed to remove conflicting file {}: {}",
-                                    entry_path.display(),
-                                    e
-                                );
-                            }
-                        }
-                    }
-                }
+        for entry in std::fs::read_dir(&real).into_iter().flatten().flatten() {
+            let entry_path = entry.path();
+            if entry_path.is_file()
+                && entry_path.file_name().and_then(|n| n.to_str()).is_some_and(|n| get_clean_base_name(n) == clean_base)
+            {
+                retire.push(entry_path);
             }
-            if let Some(t) = &trash { xtra_trash::release_if_empty(t); } // repakxtra
         }
     };
 
@@ -2526,12 +2260,7 @@ fn quick_organize_impl(
         paths.len(),
         output_dir.display()
     );
-    let _ = window.emit(
-        "install_log",
-        format!("[QuickOrganize] Copying to folder: {}", location_label),
-    );
-
-    let mut copied_count = 0;
+    log(format!("[QuickOrganize] Copying to folder: {}", location_label));
 
     /// Helper to compute relative path from a base directory to preserve subfolder structure
     fn get_relative_subpath(entry_path: &Path, base_path: &Path) -> Option<PathBuf> {
@@ -2542,12 +2271,20 @@ fn quick_organize_impl(
             .filter(|rel| !rel.as_os_str().is_empty())
     }
 
+    /// repakxtra: true when another source bundle already lands under this name (two flattened or loose files called
+    /// Foo.pak would silently replace each other). A bundle's own .pak, .utoc, and .ucas share one key.
+    fn clash(written: &mut std::collections::HashMap<PathBuf, PathBuf>, dest_dir: &Path, name: &str, src: &Path) -> bool {
+        let key = |dir: &Path, n: &str| dir.join(crate::xtra_bundle::stem(n).to_lowercase());
+        let from = key(src.parent().unwrap_or(Path::new("")), &src.file_name().unwrap_or_default().to_string_lossy());
+        written.insert(key(dest_dir, name), from.clone()).is_some_and(|prev| prev != from)
+    }
+
     /// Helper to get the destination directory for IoStore bundles with subfolder preservation
     fn get_iostore_dest_dir(
         entry_path: &Path,
         base_path: &Path,
         output_dir: &Path,
-        window: &Window,
+        log: &dyn Fn(String),
     ) -> Result<PathBuf, String> {
         if let Some(rel_subpath) = get_relative_subpath(entry_path, base_path) {
             let dest_subdir = output_dir.join(&rel_subpath);
@@ -2563,13 +2300,10 @@ fn quick_organize_impl(
                     "[QuickOrganize] Created subfolder: {}",
                     rel_subpath.display()
                 );
-                let _ = window.emit(
-                    "install_log",
-                    format!(
+                log(format!(
                         "[QuickOrganize] Created subfolder: {}",
                         rel_subpath.display()
-                    ),
-                );
+                    ));
             }
             Ok(dest_subdir)
         } else {
@@ -2582,20 +2316,18 @@ fn quick_organize_impl(
 
         if !path.exists() {
             warn!("[QuickOrganize] Path does not exist: {}", path_str);
+            failures.push(format!("{} is missing", path_str));
             continue;
         }
 
-        let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+        let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase(); // repakxtra: Mod.ZIP too
 
         // Handle archives - extract and copy contents preserving subfolder structure
         if ext == "zip" || ext == "rar" || ext == "7z" {
-            let _ = window.emit(
-                "install_log",
-                format!(
+            log(format!(
                     "[QuickOrganize] Extracting archive: {}",
                     path.file_name().unwrap_or_default().to_string_lossy()
-                ),
-            );
+                ));
 
             let temp_dir =
                 tempfile::tempdir().map_err(|e| format!("Failed to create temp dir: {}", e))?;
@@ -2614,10 +2346,8 @@ fn quick_organize_impl(
 
             if let Err(e) = extract_result {
                 error!("[QuickOrganize] Failed to extract archive: {}", e);
-                let _ = window.emit(
-                    "install_log",
-                    format!("[QuickOrganize] ERROR: Failed to extract archive: {}", e),
-                );
+                log(format!("[QuickOrganize] ERROR: Failed to extract archive: {}", e));
+                failures.push(format!("Could not unpack {}: {}", path_str, e));
                 continue;
             }
 
@@ -2625,10 +2355,14 @@ fn quick_organize_impl(
             let mut processed_utocs: std::collections::HashSet<PathBuf> =
                 std::collections::HashSet::new();
 
-            for entry in WalkDir::new(temp_path).into_iter().filter_map(|e| e.ok()) {
+            for entry in WalkDir::new(temp_path).into_iter() {
+                let entry = match entry {
+                    Ok(e) => e,
+                    Err(e) => { failures.push(format!("Could not read {}", e)); continue; } // repakxtra: an unreadable folder is not a smaller mod
+                };
                 let entry_path = entry.path();
                 if crate::xtra_setup::is_managed_loader(entry_path) { continue; } // repakxtra: an archive's mod loader is Setup's
-                if let Some(entry_ext) = entry_path.extension().and_then(|s| s.to_str()) {
+                if let Some(entry_ext) = entry_path.extension().and_then(|s| s.to_str()).map(|s| s.to_ascii_lowercase()) {
                     if entry_ext == "pak" {
                         let key = entry_key(entry_path, temp_path);
                         if !is_selected(&key) {
@@ -2643,21 +2377,18 @@ fn quick_organize_impl(
                                 entry_path,
                                 temp_path,
                                 &output_dir,
-                                &window,
+                                log,
                             ) {
                                 Ok(d) => d,
                                 Err(e) => {
                                     error!("[QuickOrganize] {}", e);
-                                    let _ = window.emit(
-                                        "install_log",
-                                        format!("[QuickOrganize] ERROR: {}", e),
-                                    );
+                                    log(format!("[QuickOrganize] ERROR: {}", e)); failures.push(e.to_string());
                                     continue;
                                 }
                             }
                         };
 
-                        let file_name_str = match renames.get(&key) {
+                        let file_name_str = match renames.get(&key.to_lowercase()) {
                             Some(stem) => format!("{}.pak", stem),
                             None => entry_path
                                 .file_name()
@@ -2669,20 +2400,22 @@ fn quick_organize_impl(
 
                         cleanup_conflicting_mods(&dest_dir, &file_name_str);
 
+                        // repakxtra: two different files flattened to one name would silently replace each other
+                        if clash(&mut written, &dest_dir, &file_name_str, entry_path) {
+                            failures.push(format!("Two files would both land as {}", file_name_str));
+                            continue;
+                        }
                         if let Err(e) = std::fs::copy(entry_path, &dest) {
                             error!(
                                 "[QuickOrganize] Failed to copy {}: {}",
                                 entry_path.file_name().unwrap().to_string_lossy(),
                                 e
                             );
+                            failures.push(format!("Could not copy {}: {}", file_name_str, e));
                         } else {
                             let rel_dest = dest.strip_prefix(&output_dir).unwrap_or(&dest);
                             info!("[QuickOrganize] Copied: {}", rel_dest.display());
-                            let _ = window.emit(
-                                "install_log",
-                                format!("[QuickOrganize] Copied: {}", rel_dest.display()),
-                            );
-                            copied_count += 1;
+                            log(format!("[QuickOrganize] Copied: {}", rel_dest.display()));
                         }
                     } else if entry_ext == "utoc" {
                         // Process IoStore with compression check, preserving subfolder structure
@@ -2694,7 +2427,7 @@ fn quick_organize_impl(
                             if !is_selected(&key) {
                                 continue;
                             }
-                            let rename = renames.get(&key).map(|s| s.as_str());
+                            let rename = renames.get(&key.to_lowercase()).map(|s| s.as_str());
 
                             // Flatten drops the archive's internal folders
                             let dest_dir = if flatten {
@@ -2704,15 +2437,12 @@ fn quick_organize_impl(
                                     entry_path,
                                     temp_path,
                                     &output_dir,
-                                    &window,
+                                    log,
                                 ) {
                                     Ok(d) => d,
                                     Err(e) => {
                                         error!("[QuickOrganize] {}", e);
-                                        let _ = window.emit(
-                                            "install_log",
-                                            format!("[QuickOrganize] ERROR: {}", e),
-                                        );
+                                        log(format!("[QuickOrganize] ERROR: {}", e)); failures.push(e.to_string());
                                         continue;
                                     }
                                 }
@@ -2727,17 +2457,18 @@ fn quick_organize_impl(
                                     .to_string(),
                             };
                             cleanup_conflicting_mods(&dest_dir, &file_name_str);
+                            if clash(&mut written, &dest_dir, &file_name_str, entry_path) {
+                                failures.push(format!("Two files would both land as {}", file_name_str));
+                                continue;
+                            }
 
                             match copy_iostore_with_compression_check(
-                                entry_path, &dest_dir, &window, rename,
+                                entry_path, &dest_dir, log, rename,
                             ) {
-                                Ok(count) => copied_count += count as i32,
+                                Ok(_) => {}
                                 Err(e) => {
                                     error!("[QuickOrganize] Failed to process IoStore: {}", e);
-                                    let _ = window.emit(
-                                        "install_log",
-                                        format!("[QuickOrganize] ERROR: {}", e),
-                                    );
+                                    log(format!("[QuickOrganize] ERROR: {}", e)); failures.push(e.to_string());
                                 }
                             }
                         }
@@ -2750,7 +2481,8 @@ fn quick_organize_impl(
         else if ext == "pak" {
             // A loose file is keyed by its own name, and has no structure to flatten
             let orig_name = path.file_name().unwrap().to_string_lossy().to_string();
-            let rename = renames.get(&orig_name).map(|s| s.as_str());
+            seen.borrow_mut().insert(orig_name.to_lowercase());
+            let rename = renames.get(&orig_name.to_lowercase()).map(|s| s.as_str());
 
             let file_name_str = match rename {
                 Some(stem) => format!("{}.pak", stem),
@@ -2759,31 +2491,32 @@ fn quick_organize_impl(
             let dest = output_dir.join(&file_name_str);
 
             cleanup_conflicting_mods(&output_dir, &file_name_str);
+            if clash(&mut written, &output_dir, &file_name_str, &path) {
+                failures.push(format!("Two files would both land as {}", file_name_str));
+                continue;
+            }
 
             // Copy the pak file
             if let Err(e) = std::fs::copy(&path, &dest) {
                 error!("[QuickOrganize] Failed to copy {}: {}", file_name_str, e);
+                failures.push(format!("Could not copy {}: {}", file_name_str, e));
                 continue;
             }
 
             info!("[QuickOrganize] Copied: {}", file_name_str);
-            let _ = window.emit(
-                "install_log",
-                format!("[QuickOrganize] Copied: {}", file_name_str),
-            );
-            copied_count += 1;
+            log(format!("[QuickOrganize] Copied: {}", file_name_str));
 
             // Also handle utoc and ucas if they exist (IoStore package)
             let utoc_path = path.with_extension("utoc");
             let ucas_path = path.with_extension("ucas");
 
             if utoc_path.exists() && ucas_path.exists() {
-                match copy_iostore_with_compression_check(&utoc_path, &output_dir, &window, rename)
+                match copy_iostore_with_compression_check(&utoc_path, &output_dir, log, rename)
                 {
-                    Ok(count) => copied_count += count as i32,
+                    Ok(_) => {}
                     Err(e) => {
                         error!("[QuickOrganize] Failed to process IoStore: {}", e);
-                        let _ = window.emit("install_log", format!("[QuickOrganize] ERROR: {}", e));
+                        log(format!("[QuickOrganize] ERROR: {}", e)); failures.push(e.to_string());
                     }
                 }
             } else if utoc_path.exists() {
@@ -2793,8 +2526,8 @@ fn quick_organize_impl(
                 };
                 if let Err(e) = std::fs::copy(&utoc_path, output_dir.join(&utoc_name)) {
                     error!("[QuickOrganize] Failed to copy {}: {}", utoc_name, e);
+                    failures.push(format!("Could not copy {}: {}", utoc_name, e));
                 } else {
-                    copied_count += 1;
                 }
             }
         }
@@ -2807,18 +2540,23 @@ fn quick_organize_impl(
                     .unwrap_or_default()
                     .to_string_lossy()
                     .to_string();
-                let rename = renames.get(&orig_name).map(|s| s.as_str());
+                seen.borrow_mut().insert(orig_name.to_lowercase());
+                let rename = renames.get(&orig_name.to_lowercase()).map(|s| s.as_str());
                 let file_name_str = match rename {
                     Some(stem) => format!("{}.utoc", stem),
                     None => orig_name.clone(),
                 };
                 cleanup_conflicting_mods(&output_dir, &file_name_str);
+                if clash(&mut written, &output_dir, &file_name_str, &path) {
+                    failures.push(format!("Two files would both land as {}", file_name_str));
+                    continue;
+                }
 
-                match copy_iostore_with_compression_check(&path, &output_dir, &window, rename) {
-                    Ok(count) => copied_count += count as i32,
+                match copy_iostore_with_compression_check(&path, &output_dir, log, rename) {
+                    Ok(_) => {}
                     Err(e) => {
                         error!("[QuickOrganize] Failed to process IoStore: {}", e);
-                        let _ = window.emit("install_log", format!("[QuickOrganize] ERROR: {}", e));
+                        log(format!("[QuickOrganize] ERROR: {}", e)); failures.push(e.to_string());
                     }
                 }
             }
@@ -2828,9 +2566,13 @@ fn quick_organize_impl(
             let mut processed_utocs: std::collections::HashSet<PathBuf> =
                 std::collections::HashSet::new();
 
-            for entry in WalkDir::new(&path).into_iter().filter_map(|e| e.ok()) {
+            for entry in WalkDir::new(&path).into_iter().filter_entry(crate::xtra_bundle::not_staging) {
+                let entry = match entry {
+                    Ok(e) => e,
+                    Err(e) => { failures.push(format!("Could not read {}", e)); continue; } // repakxtra: an unreadable folder is not a smaller mod
+                };
                 let entry_path = entry.path();
-                if let Some(entry_ext) = entry_path.extension().and_then(|s| s.to_str()) {
+                if let Some(entry_ext) = entry_path.extension().and_then(|s| s.to_str()).map(|s| s.to_ascii_lowercase()) {
                     if entry_ext == "pak" {
                         let key = entry_key(entry_path, &path);
                         if !is_selected(&key) {
@@ -2841,20 +2583,17 @@ fn quick_organize_impl(
                         let dest_dir = if flatten {
                             output_dir.clone()
                         } else {
-                            match get_iostore_dest_dir(entry_path, &path, &output_dir, &window) {
+                            match get_iostore_dest_dir(entry_path, &path, &output_dir, log) {
                                 Ok(d) => d,
                                 Err(e) => {
                                     error!("[QuickOrganize] {}", e);
-                                    let _ = window.emit(
-                                        "install_log",
-                                        format!("[QuickOrganize] ERROR: {}", e),
-                                    );
+                                    log(format!("[QuickOrganize] ERROR: {}", e)); failures.push(e.to_string());
                                     continue;
                                 }
                             }
                         };
 
-                        let file_name_str = match renames.get(&key) {
+                        let file_name_str = match renames.get(&key.to_lowercase()) {
                             Some(stem) => format!("{}.pak", stem),
                             None => entry_path
                                 .file_name()
@@ -2866,20 +2605,22 @@ fn quick_organize_impl(
 
                         cleanup_conflicting_mods(&dest_dir, &file_name_str);
 
+                        // repakxtra: two different files flattened to one name would silently replace each other
+                        if clash(&mut written, &dest_dir, &file_name_str, entry_path) {
+                            failures.push(format!("Two files would both land as {}", file_name_str));
+                            continue;
+                        }
                         if let Err(e) = std::fs::copy(entry_path, &dest) {
                             error!(
                                 "[QuickOrganize] Failed to copy {}: {}",
                                 entry_path.file_name().unwrap().to_string_lossy(),
                                 e
                             );
+                            failures.push(format!("Could not copy {}: {}", file_name_str, e));
                         } else {
                             let rel_dest = dest.strip_prefix(&output_dir).unwrap_or(&dest);
                             info!("[QuickOrganize] Copied: {}", rel_dest.display());
-                            let _ = window.emit(
-                                "install_log",
-                                format!("[QuickOrganize] Copied: {}", rel_dest.display()),
-                            );
-                            copied_count += 1;
+                            log(format!("[QuickOrganize] Copied: {}", rel_dest.display()));
                         }
                     } else if entry_ext == "utoc" {
                         // Process IoStore with compression check, preserving subfolder structure
@@ -2891,21 +2632,18 @@ fn quick_organize_impl(
                             if !is_selected(&key) {
                                 continue;
                             }
-                            let rename = renames.get(&key).map(|s| s.as_str());
+                            let rename = renames.get(&key.to_lowercase()).map(|s| s.as_str());
 
                             // Flatten drops the source folder's internal structure
                             let dest_dir = if flatten {
                                 output_dir.clone()
                             } else {
-                                match get_iostore_dest_dir(entry_path, &path, &output_dir, &window)
+                                match get_iostore_dest_dir(entry_path, &path, &output_dir, log)
                                 {
                                     Ok(d) => d,
                                     Err(e) => {
                                         error!("[QuickOrganize] {}", e);
-                                        let _ = window.emit(
-                                            "install_log",
-                                            format!("[QuickOrganize] ERROR: {}", e),
-                                        );
+                                        log(format!("[QuickOrganize] ERROR: {}", e)); failures.push(e.to_string());
                                         continue;
                                     }
                                 }
@@ -2920,17 +2658,18 @@ fn quick_organize_impl(
                                     .to_string(),
                             };
                             cleanup_conflicting_mods(&dest_dir, &file_name_str);
+                            if clash(&mut written, &dest_dir, &file_name_str, entry_path) {
+                                failures.push(format!("Two files would both land as {}", file_name_str));
+                                continue;
+                            }
 
                             match copy_iostore_with_compression_check(
-                                entry_path, &dest_dir, &window, rename,
+                                entry_path, &dest_dir, log, rename,
                             ) {
-                                Ok(count) => copied_count += count as i32,
+                                Ok(_) => {}
                                 Err(e) => {
                                     error!("[QuickOrganize] Failed to process IoStore: {}", e);
-                                    let _ = window.emit(
-                                        "install_log",
-                                        format!("[QuickOrganize] ERROR: {}", e),
-                                    );
+                                    log(format!("[QuickOrganize] ERROR: {}", e)); failures.push(e.to_string());
                                 }
                             }
                         }
@@ -2941,17 +2680,190 @@ fn quick_organize_impl(
         }
     }
 
-    let _ = window.emit(
-        "install_log",
-        format!("[QuickOrganize] Done! Copied {} file(s)", copied_count),
-    );
-    info!(
-        "[QuickOrganize] Completed: {} files copied to {}",
-        copied_count,
-        output_dir.display()
-    );
+    // a picked entry that never came up would otherwise just be missing from a "successful" install
+    if let Some(set) = &selections {
+        let seen = seen.borrow();
+        failures.extend(set.iter().filter(|k| !seen.contains(*k)).map(|k| format!("{} was not found in it", k)));
+    }
+    if !failures.is_empty() {
+        return Err(format!(
+            "Nothing was installed and the mods folder is unchanged. {}{}",
+            failures[0],
+            if failures.len() > 1 { format!(" (and {} more problems)", failures.len() - 1) } else { String::new() }
+        ));
+    }
+    let moves: Vec<(PathBuf, PathBuf)> = WalkDir::new(&stage)
+        .into_iter()
+        .flatten()
+        .filter(|e| e.file_type().is_file())
+        .map(|e| {
+            let mut to = real_dir.join(e.path().strip_prefix(&stage).unwrap_or(e.path()));
+            // Mod.PAK lands as Mod.pak: the Library reads only a lowercase .pak as on
+            if let Some(x) = to.extension().map(|x| x.to_string_lossy().to_ascii_lowercase()) {
+                to.set_extension(x);
+            }
+            (e.path().to_path_buf(), to)
+        })
+        .collect();
+    if moves.is_empty() {
+        return Err("Nothing in it could be installed: no .pak, or .utoc with its .ucas, was found".to_string());
+    }
+    // every file that moves out must be free first, so the game holding one .ucas never leaves a mixed mod
+    let mut in_place: Vec<PathBuf> = moves.iter().map(|(_, to)| to.clone()).collect();
+    in_place.extend(retire.iter().cloned());
+    xtra_ops::all_free(&in_place)?;
+    for (_, to) in &moves {
+        if let Some(dir) = to.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| format!("Could not create {}: {}", dir.display(), e))?;
+        }
+    }
+    crate::xtra_bundle::replace_all_retiring(&moves, &retire)?;
 
-    Ok(copied_count)
+    log(format!("[QuickOrganize] Done! Copied {} file(s)", moves.len()));
+    info!("[QuickOrganize] Completed: {} files copied to {}", moves.len(), real_dir.display());
+    Ok(moves.len() as i32)
+}
+
+#[cfg(test)]
+mod quick_organize_tests {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    struct Lib {
+        _d: tempfile::TempDir,
+        mods: PathBuf,
+        src: PathBuf,
+    }
+
+    fn lib() -> Lib {
+        let d = tempfile::tempdir().unwrap();
+        let (mods, src) = (d.path().join("mods"), d.path().join("src"));
+        fs::create_dir_all(&mods).unwrap();
+        fs::create_dir_all(&src).unwrap();
+        for e in ["pak", "utoc", "ucas"] {
+            fs::write(mods.join(format!("Foo_9999999_P.{e}")), format!("old {e}")).unwrap();
+        }
+        // the new copy is a plain .pak: an IoStore source would ask the .NET asset tool, which CI does not build
+        fs::write(src.join("Foo_9999999_P.pak"), "new pak").unwrap();
+        Lib { _d: d, mods, src }
+    }
+
+    fn run(paths: &[PathBuf], to: &Path) -> Result<i32, String> {
+        let paths = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+        super::quick_organize_impl(paths, to.to_path_buf(), String::new(), None, None, None, &|_| {})
+    }
+
+    fn files(dir: &Path) -> Vec<(String, String)> {
+        let mut v: Vec<_> = fs::read_dir(dir).unwrap().flatten()
+            .map(|e| (e.file_name().to_string_lossy().into_owned(), fs::read_to_string(e.path()).unwrap_or_else(|_| "<dir>".into())))
+            .collect();
+        v.sort();
+        v
+    }
+
+    /// The replaced copy went to the real Recently deleted: remove that entry so tests leave nothing in the app's list.
+    fn forget_trash(under: &Path) {
+        let under = under.to_string_lossy().to_lowercase();
+        for entry in fs::read_dir(crate::xtra_trash::trash_dir()).into_iter().flatten().flatten() {
+            let ours = fs::read_dir(entry.path()).into_iter().flatten().flatten().any(|f| {
+                f.path().extension().is_some_and(|x| x == "from")
+                    && fs::read_to_string(f.path()).is_ok_and(|s| s.to_lowercase().starts_with(&under))
+            });
+            if ours {
+                let _ = fs::remove_dir_all(entry.path());
+            }
+        }
+    }
+
+    #[test]
+    fn a_replace_lands_every_file_and_retires_the_old_copy() {
+        let l = lib();
+        fs::write(l.mods.join("Foo_9999999_P.bak_repak"), "old off").unwrap();
+        let r = run(&[l.src.join("Foo_9999999_P.pak")], &l.mods);
+        forget_trash(&l.mods);
+        assert_eq!(r, Ok(1));
+        assert_eq!(files(&l.mods), [("Foo_9999999_P.pak".to_string(), "new pak".to_string())], "new copy only, no staging folder, the old set and its off copy gone");
+        assert_eq!(files(&l.src).len(), 1, "the source is never touched");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_held_ucas_installs_nothing_and_keeps_the_old_mod() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let l = lib();
+        let before = files(&l.mods);
+        // the game holds its paks open with no sharing
+        let held = fs::OpenOptions::new().read(true).share_mode(0).open(l.mods.join("Foo_9999999_P.ucas")).unwrap();
+        let r = run(&[l.src.join("Foo_9999999_P.pak")], &l.mods);
+        drop(held);
+        forget_trash(&l.mods);
+        assert!(r.is_err());
+        assert_eq!(files(&l.mods), before, "old files intact, nothing new, no staging folder");
+    }
+
+    #[test]
+    fn one_failing_entry_installs_none_of_them() {
+        let l = lib();
+        fs::write(l.src.join("Bar_9999999_P.pak"), "bar").unwrap();
+        let before = files(&l.mods);
+        let r = run(&[l.src.join("Bar_9999999_P.pak"), l.src.join("Gone_9999999_P.pak")], &l.mods);
+        assert!(r.is_err());
+        assert_eq!(files(&l.mods), before);
+    }
+
+    #[test]
+    fn nothing_installable_is_an_error_and_an_uppercase_extension_installs() {
+        let l = lib();
+        fs::write(l.src.join("notes.txt"), "x").unwrap();
+        let before = files(&l.mods);
+        assert!(run(&[l.src.join("notes.txt")], &l.mods).is_err());
+        assert_eq!(files(&l.mods), before);
+
+        fs::write(l.src.join("Up_9999999_P.PAK"), "up").unwrap();
+        assert_eq!(run(&[l.src.join("Up_9999999_P.PAK")], &l.mods), Ok(1));
+        assert!(files(&l.mods).contains(&("Up_9999999_P.pak".to_string(), "up".to_string())));
+    }
+
+    #[test]
+    fn picked_entries_match_without_case_and_a_missing_pick_installs_nothing() {
+        let l = lib();
+        let zip_path = l.src.join("Pack.ZIP");
+        let mut z = zip::ZipWriter::new(fs::File::create(&zip_path).unwrap());
+        for (name, body) in [("A_9999999_P.PAK", "a"), ("B_9999999_P.pak", "b")] {
+            z.start_file(name, zip::write::SimpleFileOptions::default()).unwrap();
+            std::io::Write::write_all(&mut z, body.as_bytes()).unwrap();
+        }
+        z.finish().unwrap();
+        let go = |picks: &[&str]| {
+            let picks = Some(picks.iter().map(|s| s.to_string()).collect());
+            super::quick_organize_impl(vec![zip_path.to_string_lossy().into_owned()], l.mods.clone(), String::new(), picks, None, None, &|_| {})
+        };
+        let before = files(&l.mods);
+        assert!(go(&["A_9999999_P.PAK", "Gone_9999999_P.pak"]).is_err());
+        assert_eq!(files(&l.mods), before);
+        assert_eq!(go(&["A_9999999_P.PAK", "B_9999999_P.pak"]), Ok(2));
+        let landed = files(&l.mods);
+        assert!(landed.contains(&("A_9999999_P.pak".into(), "a".into())) && landed.contains(&("B_9999999_P.pak".into(), "b".into())));
+    }
+
+    #[test]
+    fn flattening_two_files_to_one_name_installs_nothing() {
+        let l = lib();
+        for sub in ["a", "b"] {
+            fs::create_dir_all(l.src.join("pack").join(sub)).unwrap();
+            fs::write(l.src.join("pack").join(sub).join("Baz_9999999_P.pak"), sub).unwrap();
+        }
+        let before = files(&l.mods);
+        let paths = vec![l.src.join("pack").to_string_lossy().into_owned()];
+        let r = super::quick_organize_impl(paths, l.mods.clone(), String::new(), None, None, Some(true), &|_| {});
+        assert!(r.is_err());
+        assert_eq!(files(&l.mods), before);
+
+        // two loose files with one name, from two folders
+        let r = run(&[l.src.join("pack").join("a").join("Baz_9999999_P.pak"), l.src.join("pack").join("b").join("Baz_9999999_P.pak")], &l.mods);
+        assert!(r.is_err());
+        assert_eq!(files(&l.mods), before);
+    }
 }
 
 #[tauri::command]
@@ -3429,15 +3341,10 @@ async fn delete_mod(
         return Err(e);
     }
 
-    // Try to delete the main file
+    // repakxtra: the files to go are gathered first and moved as one set below
+    let mut doomed: Vec<PathBuf> = Vec::new();
     if actual_path.exists() {
-        if let Err(e) = xtra_trash::discard(&trash, &actual_path) { // repakxtra
-            xtra_trash::release_if_empty(&trash); // repakxtra
-            let error_msg = xtra_ops::io(&e).unwrap_or_else(|| format!("Failed to delete mod file: {}", e)); // repakxtra
-            toast_events::emit_delete_failed(&window, &error_msg);
-            return Err(error_msg);
-        }
-        log::info!("Deleted main mod file: {:?}", actual_path);
+        doomed.push(actual_path.clone());
     } else {
         log::warn!("Main mod file does not exist: {:?}", actual_path);
     }
@@ -3480,28 +3387,19 @@ async fn delete_mod(
             "Keeping IoStore files, still used by: {:?}",
             sibling_path
         );
-        return Ok(());
+    } else {
+        // Delete associated IoStore files (.ucas and .utoc)
+        doomed.extend(["ucas", "utoc"].iter().map(|x| base_pak_path.with_extension(x)).filter(|p| p.exists()));
     }
 
-    // Delete associated IoStore files (.ucas and .utoc)
-    let ucas_path = base_pak_path.with_extension("ucas");
-    if ucas_path.exists() {
-        if let Err(e) = xtra_trash::discard(&trash, &ucas_path) { // repakxtra
-            log::warn!("Failed to delete .ucas file: {}", e);
-        } else {
-            log::info!("Deleted associated .ucas file: {:?}", ucas_path);
-        }
+    // repakxtra: all of the mod goes to Recently deleted, or none of it (a file that cannot move puts the rest back)
+    if let Err((p, e)) = xtra_trash::discard_all(&trash, &doomed.iter().map(|p| p.as_path()).collect::<Vec<_>>()) {
+        let error_msg = xtra_ops::io(&e).unwrap_or_else(|| format!("Failed to delete {}: {}", p.display(), e));
+        toast_events::emit_delete_failed(&window, &error_msg);
+        return Err(error_msg);
     }
-
-    let utoc_path = base_pak_path.with_extension("utoc");
-    if utoc_path.exists() {
-        if let Err(e) = xtra_trash::discard(&trash, &utoc_path) { // repakxtra
-            log::warn!("Failed to delete .utoc file: {}", e);
-        } else {
-            log::info!("Deleted associated .utoc file: {:?}", utoc_path);
-        }
-    }
-
+    xtra_trash::release_if_empty(&trash);
+    log::info!("Deleted mod files: {:?}", doomed);
     Ok(())
 }
 
@@ -3754,7 +3652,8 @@ async fn update_mod(
     if !leftover.is_empty() {
         match xtra_trash::reserve(None) {
             Ok(trash) => {
-                old_deleted = leftover.iter().all(|p| xtra_trash::discard(&trash, p).is_ok());
+                // repakxtra: all of the old version goes, or all of it stays (never half of it in Recently deleted)
+                old_deleted = xtra_trash::discard_all(&trash, &leftover.iter().map(|p| p.as_path()).collect::<Vec<_>>()).is_ok();
                 xtra_trash::release_if_empty(&trash);
             }
             Err(e) => warn!("Failed to move the old version aside: {}", e),
@@ -3783,7 +3682,9 @@ async fn update_mod(
             "{}.bak_repak",
             new_mod_path.to_string_lossy().trim_end_matches(".pak")
         ));
-        if let Err(e) = std::fs::rename(&new_mod_path, &disabled_path) {
+        // repakxtra: rename replaces an existing file on Windows, so a .bak_repak already there is never overwritten
+        let renamed = if disabled_path.exists() { Err(std::io::Error::from(std::io::ErrorKind::AlreadyExists)) } else { std::fs::rename(&new_mod_path, &disabled_path) };
+        if let Err(e) = renamed {
             warn!("Failed to disable new mod to match old state: {}", e);
         } else {
             info!("Disabled new mod to match old mod's state");
@@ -3880,30 +3781,48 @@ async fn open_in_explorer(path: String) -> Result<(), String> {
     Ok(())
 }
 
+/// repakxtra: the text rides in an environment variable, never in the command line, so no quote in a mod or folder
+/// name (PowerShell also ends a string at U+2018 to U+201B) can turn part of it into a command.
+#[cfg(target_os = "windows")]
+fn clipboard_command(script: &str, text: &str) -> std::process::Command {
+    let mut c = std::process::Command::new("powershell");
+    c.args(["-NoProfile", "-NonInteractive", "-Command", script]).env("REPAKXTRA_CLIP", text);
+    c
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod clipboard_tests {
+    #[test]
+    fn a_curly_quote_in_a_name_is_copied_as_text_and_nothing_runs() {
+        let dir = tempfile::tempdir().unwrap();
+        let marker = dir.path().join("ran.txt");
+        let out = dir.path().join("out.txt");
+        let text = format!("C:\\mods\\Bob\u{2019};New-Item -Path '{}';\u{2018}_9999999_P.pak", marker.display());
+        let mut c = super::clipboard_command("Set-Content -LiteralPath $env:OUT -Value $env:REPAKXTRA_CLIP -Encoding UTF8 -NoNewline", &text);
+        assert!(!c.get_args().any(|a| a.to_string_lossy().contains("New-Item")));
+        assert!(c.env("OUT", &out).status().unwrap().success());
+        assert!(!marker.exists(), "part of the name ran as a command");
+        assert_eq!(std::fs::read_to_string(&out).unwrap().trim_start_matches('\u{feff}'), text);
+    }
+}
+
 #[tauri::command]
 async fn copy_to_clipboard(text: String, window: Window) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
-        use std::process::{Command, Stdio};
+        use std::process::Stdio;
 
-        let mut child = Command::new("powershell")
-            .args([
-                "-Command",
-                "Set-Clipboard",
-                "-Value",
-                &format!("'{}'", text.replace("'", "''")),
-            ])
+        let status = clipboard_command("Set-Clipboard -Value $env:REPAKXTRA_CLIP", &text)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .creation_flags(0x08000000) // CREATE_NO_WINDOW - prevents PowerShell window from showing
-            .spawn()
+            .status()
             .map_err(|e| format!("Failed to copy to clipboard: {}", e))?;
-
-        child
-            .wait()
-            .map_err(|e| format!("Failed to copy to clipboard: {}", e))?;
+        if !status.success() {
+            return Err("Failed to copy to clipboard".to_string());
+        }
     }
 
     #[cfg(target_os = "macos")]
@@ -6139,61 +6058,6 @@ async fn get_app_version() -> Result<String, String> {
     Ok(env!("CARGO_PKG_VERSION").to_string())
 }
 
-/// Delete the archive an extension install was sourced from, once it has been
-/// installed successfully.
-///
-/// The path originates from a `repakx://` deep link, so it is caller-controlled
-/// and must not be deleted on trust. Three guards apply:
-///   1. it must be a regular file, so a link cannot point at a directory;
-///   2. its extension must be one the extension flow actually handles, so a
-///      crafted link cannot reach arbitrary documents;
-///   3. it must live outside the game mods directory, so this can never delete
-///      a mod that is already installed.
-#[tauri::command]
-async fn delete_source_archive(
-    path: String,
-    state: State<'_, Arc<Mutex<AppState>>>,
-) -> Result<(), String> {
-    const DELETABLE_EXTENSIONS: [&str; 6] = ["zip", "rar", "7z", "pak", "utoc", "ucas"];
-
-    let target = PathBuf::from(&path);
-
-    if !target.is_file() {
-        return Err(format!("Not a file: {}", path));
-    }
-
-    let ext = target
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or_default()
-        .to_lowercase();
-    if !DELETABLE_EXTENSIONS.contains(&ext.as_str()) {
-        return Err(format!("Refusing to delete a .{} file", ext));
-    }
-
-    let mods_dir = {
-        let guard = state.lock().unwrap();
-        guard.game_path.clone()
-    };
-
-    // Compare resolved paths so ".." or a symlink cannot smuggle the target
-    // into the mods folder undetected.
-    if let (Ok(resolved_target), Ok(resolved_mods)) =
-        (target.canonicalize(), mods_dir.canonicalize())
-    {
-        if resolved_target.starts_with(&resolved_mods) {
-            return Err(
-                "Refusing to delete a file inside the mods folder - that is an installed mod"
-                    .to_string(),
-            );
-        }
-    }
-
-    std::fs::remove_file(&target).map_err(|e| format!("Failed to delete {}: {}", path, e))?;
-    info!("[Extension] Deleted source archive: {}", path);
-    Ok(())
-}
-
 /// Where the "which version's changelog has been shown" marker lives.
 ///
 /// This deliberately does NOT use localStorage. The webview's storage proved
@@ -8307,8 +8171,7 @@ fn single_mod_conflicts(target_path: PathBuf, game_path: PathBuf) -> Result<Vec<
 // PROTOCOL REGISTRATION (Portable App Support)
 // ============================================================================
 
-/// Registers the repakx:// protocol handler in Windows Registry (HKCU)
-/// This enables the browser extension to communicate with the app.
+/// Registers the repakxtra:// protocol handler in Windows Registry (HKCU), for Claim role's answer.
 /// Safe to call on every startup - it will just update the path if needed.
 #[cfg(target_os = "windows")]
 fn register_protocol_handler() -> Result<(), Box<dyn std::error::Error>> {
@@ -8319,24 +8182,33 @@ fn register_protocol_handler() -> Result<(), Box<dyn std::error::Error>> {
     let exe_path_str = exe_path.to_string_lossy();
 
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    // repakxtra: its own scheme (Claim role's answer). repakx:// is Repak X's (its browser extension): an older
+    // repakxtra pointed it here, so that is handed back by removing it when it still names this program.
+    let scheme = format!(r"Software\Classes\{}", xtra_role::SCHEME);
+    if let Ok(old) = hkcu.open_subkey(r"Software\Classes\repakx\shell\open\command") {
+        let target: String = old.get_value("").unwrap_or_default();
+        if target.to_lowercase().contains(&exe_path_str.to_lowercase()) {
+            let _ = hkcu.delete_subkey_all(r"Software\Classes\repakx");
+        }
+    }
 
     // Create or open the protocol key
-    let (protocol_key, _) = hkcu.create_subkey(r"Software\Classes\repakx")?;
-    protocol_key.set_value("", &"URL:Repak X Protocol")?;
+    let (protocol_key, _) = hkcu.create_subkey(&scheme)?;
+    protocol_key.set_value("", &"URL:repakxtra Protocol")?;
     protocol_key.set_value("URL Protocol", &"")?;
 
     // Create the DefaultIcon key (optional, for nice icon in Windows)
-    let (icon_key, _) = hkcu.create_subkey(r"Software\Classes\repakx\DefaultIcon")?;
+    let (icon_key, _) = hkcu.create_subkey(format!(r"{scheme}\DefaultIcon"))?;
     icon_key.set_value("", &format!("\"{}\",0", exe_path_str))?;
 
     // Create the shell\open\command key
-    let (command_key, _) = hkcu.create_subkey(r"Software\Classes\repakx\shell\open\command")?;
+    let (command_key, _) = hkcu.create_subkey(format!(r"{scheme}\shell\open\command"))?;
     let command = format!("\"{}\" \"%1\"", exe_path_str);
     command_key.set_value("", &command)?;
 
     info!(
-        "Registered repakx:// protocol handler for: {}",
-        exe_path_str
+        "Registered {}:// protocol handler for: {}",
+        xtra_role::SCHEME, exe_path_str
     );
     Ok(())
 }
@@ -8414,62 +8286,8 @@ fn register_protocol_handler() -> Result<(), Box<dyn std::error::Error>> {
 
 fn handle_deep_link_url(url: &str, app_handle: &tauri::AppHandle) {
     if xtra_role::on_link(url, app_handle) { return; } // repakxtra: Claim role's answer, before the log line (its state stays out of the log)
-    info!("Processing deep link URL: {}", url);
-
-    if let Ok(parsed) = url::Url::parse(url) {
-        if parsed.scheme() == "repakx" && parsed.host_str() == Some("install") {
-            if let Some(file_path) = parsed
-                .query_pairs()
-                .find(|(key, _)| key == "file")
-                .map(|(_, value)| value.to_string())
-            {
-                let decoded_path = urlencoding::decode(&file_path)
-                    .unwrap_or(file_path.clone().into())
-                    .to_string();
-
-                let path = std::path::Path::new(&decoded_path);
-                let file_name = path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| decoded_path.clone());
-
-                if path.exists() {
-                    ui_log::info(
-                        "Extension",
-                        format!("Received \"{}\" from the browser extension", file_name),
-                    );
-                    if let Err(e) = app_handle.emit("extension-mod-received", &decoded_path) {
-                        ui_log::error(
-                            "Extension",
-                            format!("Could not hand \"{}\" to the UI: {}", file_name, e),
-                        );
-                    }
-                } else {
-                    ui_log::error(
-                        "Extension",
-                        format!("Extension sent a file that no longer exists: {}", decoded_path),
-                    );
-                    let _ = app_handle.emit(
-                        "extension-mod-error",
-                        format!("File not found: {}", decoded_path),
-                    );
-                }
-            } else {
-                ui_log::warn("Extension", format!("Ignored malformed extension link: {}", url));
-            }
-        } else {
-            ui_log::warn(
-                "Extension",
-                format!(
-                    "Ignored unknown link action: scheme={}, host={:?}",
-                    parsed.scheme(),
-                    parsed.host_str()
-                ),
-            );
-        }
-    } else {
-        ui_log::error("Extension", format!("Could not parse link: {}", url));
-    }
+    // repakxtra: no install links. Installing from a browser extension is Repak X's (its repakx:// scheme)
+    ui_log::warn("Links", format!("Ignored an unknown link: {}", url.split('?').next().unwrap_or("")));
 }
 
 // ============================================================================
@@ -8514,12 +8332,8 @@ fn main() {
     info!("Starting RepakX v{}", env!("CARGO_PKG_VERSION"));
 
     // Register protocol handler for portable app support (self-healing registry)
-    if crate::xtra_identity::upstream_running() { // repakxtra: an open Repak X keeps the links until it closes
-    } else if let Err(e) = register_protocol_handler() {
-        warn!(
-            "Failed to register repakx:// protocol handler: {} - browser extension may not work",
-            e
-        );
+    if let Err(e) = register_protocol_handler() {
+        warn!("Failed to register the {}:// protocol handler: {}", xtra_role::SCHEME, e);
     }
 
     // Initialize UAssetToolkit global singleton on startup
@@ -8632,9 +8446,9 @@ fn main() {
                 let _ = window.unminimize();
             }
 
-            // Check if args contains a repakx:// URL
+            // Check if args contains a repakxtra:// URL
             for arg in args.iter() {
-                if arg.starts_with("repakx://") {
+                if arg.starts_with(&format!("{}://", xtra_role::SCHEME)) {
                     info!("Received deep link from second instance: {}", arg.split('?').next().unwrap_or(""));
                     handle_deep_link_url(arg, app);
                 }
@@ -8660,15 +8474,10 @@ fn main() {
             #[cfg(any(windows, target_os = "linux"))]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
-                if let Err(e) = app.deep_link().register("repakx") {
-                    warn!("Failed to register repakx:// protocol: {}", e);
-                    ui_log::warn(
-                        "Startup",
-                        format!("Browser extension link handler unavailable: {}", e),
-                    );
+                if let Err(e) = app.deep_link().register(xtra_role::SCHEME) {
+                    warn!("Failed to register {}:// protocol: {}", xtra_role::SCHEME, e);
                 } else {
-                    info!("Successfully registered repakx:// protocol handler");
-                    ui_log::debug("Startup", "repakx:// protocol handler registered");
+                    info!("Successfully registered {}:// protocol handler", xtra_role::SCHEME);
                 }
             }
 
@@ -8699,10 +8508,10 @@ fn main() {
 
                 for arg in args.iter().skip(1) {
                     // Skip the exe path itself
-                    if arg.starts_with("repakx://") {
+                    if arg.starts_with(&format!("{}://", xtra_role::SCHEME)) {
                         info!("Found cold-start deep link URL: {}", arg.split('?').next().unwrap_or("")); // repakxtra: no query
                         handle_deep_link_url(arg, &startup_app_handle);
-                        break; // Only process the first repakx:// URL
+                        break; // Only process the first link
                     }
                 }
             });
@@ -8749,7 +8558,6 @@ fn main() {
             xtra_shortcut::shortcut_create,
             xtra_trust::xtra_self_sha256, // repakxtra: Settings > Is it safe?
             xtra_identity::xtra_upstream_running, // repakxtra: beside Repak X
-            xtra_identity::xtra_protocol_reclaim,
             xtra_crash::xtra_newest_crash, // repakxtra: setup report
             xtra_crash::xtra_recent_crashes, // repakxtra: setup report crash list
             xtra_crash::xtra_crash_suspects, // repakxtra: crash suspects
@@ -8839,10 +8647,8 @@ fn main() {
             parse_dropped_files,
             install_mods,
             quick_organize,
-            inspect_archive_mods,
             get_last_seen_version,
             set_last_seen_version,
-            delete_source_archive,
             delete_mod,
             update_mod,
             rename_mod,

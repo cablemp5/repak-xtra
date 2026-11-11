@@ -109,6 +109,20 @@ pub fn put_back(dir: &Path, path: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Discards every one of `paths` into `dir`, or none: when one cannot move, the ones before it are put back, so a mod
+/// never ends half in Recently deleted. The error names the file that stopped it (and any that could not go back).
+pub fn discard_all(dir: &Path, paths: &[&Path]) -> Result<(), (PathBuf, io::Error)> {
+    for (i, p) in paths.iter().enumerate() {
+        if let Err(e) = discard(dir, p) {
+            let stuck: Vec<String> = paths[..i].iter().rev().filter(|d| put_back(dir, d).is_err()).map(|d| d.display().to_string()).collect();
+            release_if_empty(dir);
+            let e = if stuck.is_empty() { e } else { io::Error::new(e.kind(), format!("{e}. Still in Recently deleted: {}", stuck.join(", "))) };
+            return Err((p.to_path_buf(), e));
+        }
+    }
+    Ok(())
+}
+
 /// Deleting a mods subfolder: every file in it (and in its subfolders) goes to the trash first, one deletion per folder
 /// so files with the same name in two folders never collide, then the empty folders go. A file that cannot move stops it
 /// before any folder is removed; what already moved can be restored from Recently deleted. Returns the deletions' ids, so
@@ -425,6 +439,29 @@ mod tests {
     fn put(p: &Path, data: &[u8]) {
         fs::create_dir_all(p.parent().unwrap()).unwrap();
         fs::write(p, data).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn discard_all_puts_every_file_back_when_one_is_held() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let (mods, root, base) = roots("all-or-none");
+        let files: Vec<PathBuf> = ["M.pak", "M.utoc", "M.ucas"].iter().map(|f| mods.join(f)).collect();
+        for f in &files {
+            put(f, f.file_name().unwrap().to_string_lossy().as_bytes());
+        }
+        let dir = reserve_in(&root, None).unwrap();
+        let held = fs::OpenOptions::new().read(true).share_mode(0).open(&files[2]).unwrap();
+        let r = discard_all(&dir, &files.iter().map(|p| p.as_path()).collect::<Vec<_>>());
+        drop(held);
+        assert_eq!(r.unwrap_err().0, files[2]);
+        for f in &files {
+            assert_eq!(fs::read(f).unwrap(), f.file_name().unwrap().to_string_lossy().as_bytes());
+        }
+        assert!(!dir.exists(), "the empty deletion is released");
+        assert!(discard_all(&reserve_in(&root, None).unwrap(), &files.iter().map(|p| p.as_path()).collect::<Vec<_>>()).is_ok());
+        assert!(files.iter().all(|f| !f.exists()));
+        let _ = fs::remove_dir_all(base);
     }
 
     #[test]

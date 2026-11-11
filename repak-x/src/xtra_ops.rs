@@ -64,12 +64,10 @@ pub fn place(dest: &Path, own: &Path, mode: Option<&str>) -> Result<PathBuf, Str
                     return Err(io(&e).unwrap_or_else(|| format!("{}: {e}", p.display())));
                 }
             }
+            // repakxtra: one that cannot move puts the ones before it back, so the mod there is never left half in the trash
             let trash = crate::xtra_trash::reserve(None)?;
-            for p in &there {
-                if let Err(e) = crate::xtra_trash::discard(&trash, p) {
-                    crate::xtra_trash::release_if_empty(&trash);
-                    return Err(io(&e).unwrap_or_else(|| format!("{}: {e}", p.display())));
-                }
+            if let Err((p, e)) = crate::xtra_trash::discard_all(&trash, &there.iter().map(|p| p.as_path()).collect::<Vec<_>>()) {
+                return Err(io(&e).unwrap_or_else(|| format!("{}: {e}", p.display())));
             }
             Ok(dest.to_path_buf())
         }
