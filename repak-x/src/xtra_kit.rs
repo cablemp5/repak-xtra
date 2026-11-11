@@ -431,7 +431,7 @@ struct Progress {
 
 /// Downloads the kit zip to `to` (an app-owned file, not memory), reporting about every megabyte.
 async fn download(app: &AppHandle, url: &str, to: &Path) -> Result<(), String> {
-    let mut resp = reqwest::Client::new().get(url).header("User-Agent", "repakxtra").send().await
+    let mut resp = crate::xtra_update::download_client().get(url).header("User-Agent", "repakxtra").send().await
         .and_then(|r| r.error_for_status()).map_err(|e| format!("Download failed: {e}"))?;
     let total = resp.content_length().unwrap_or(0);
     let mut file = fs::File::create(to).map_err(|e| format!("Could not save the download: {e}"))?;

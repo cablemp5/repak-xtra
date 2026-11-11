@@ -57,29 +57,6 @@ function Fail([string]$msg) {
 $waitFor = [int]$env:RX_PID
 while (Get-Process -Id $waitFor -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 300 }
 
-# What the app started from its own folder (UAssetTool's command line, mid-extract) can outlive it and keeps its files in
-# use: it gets a moment to finish, then it is stopped. The folder by both names: the dist\repakxtra link and its target.
-# Every path through Get-Item, which spells it out in full (a short 8.3 RUNNER~1 and its long name compare equal). Never
-# what stops an update: a failure here leaves the copy below to try
-try {
-    $long = { param($p) try { (Get-Item -LiteralPath $p -ErrorAction Stop).FullName } catch { $p } }
-    $roots = @((& $long $app).TrimEnd('\') + '\')
-    $linked = (Get-Item -LiteralPath $app).Target
-    if ($linked) { $roots += @($linked | ForEach-Object { (& $long $_).TrimEnd('\') + '\' }) }
-    function Left {
-        @(Get-Process | Where-Object {
-            $p = try { $_.Path } catch { $null }
-            if ($p) { $p = & $long $p }
-            $p -and @($roots | Where-Object { $p.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count
-        })
-    }
-    $deadline = (Get-Date).AddSeconds($(if ($env:RX_WAIT) { [int]$env:RX_WAIT } else { 30 }))
-    while (@(Left).Count -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 300 }
-    $stop = @(Left)
-    $stop | Stop-Process -Force -ErrorAction SilentlyContinue
-    $stop | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
-} catch { }
-
 $extracted = Join-Path $temp 'extracted'
 try { Expand-Archive -LiteralPath $zip -DestinationPath $extracted -Force }
 catch { Fail "The update could not be unpacked, so nothing was changed. Download it from github.com/cablemp5/repak-xtra/releases" }
@@ -94,6 +71,32 @@ if ($dirs.Count -eq 1 -and @(Get-ChildItem -LiteralPath $dirs[0].FullName -File 
 if (@(Get-ChildItem -LiteralPath $src -File -Filter '*.exe').Count -eq 0) {
     Fail "The update holds no app, so nothing was changed. Download it from github.com/cablemp5/repak-xtra/releases"
 }
+
+# What the app started from its own folder (UAssetTool's command line, mid-extract) can outlive it and keeps its files in
+# use: it gets a moment to finish, then it is stopped. Only programs the app ships (an .exe name in the update, or the
+# app's own), so another program run from the same folder (a flat zip unpacked into Downloads) is never stopped. The
+# folder by both names: the dist\repakxtra link and its target. Every path through Get-Item, which spells it out in full
+# (a short 8.3 RUNNER~1 and its long name compare equal). Never what stops an update: a failure here leaves the copy
+# below to try
+try {
+    $shipped = @(Get-ChildItem -LiteralPath $src -Recurse -File -Filter '*.exe' | ForEach-Object { $_.Name }) + @(Split-Path $exe -Leaf)
+    $long = { param($p) try { (Get-Item -LiteralPath $p -ErrorAction Stop).FullName } catch { $p } }
+    $roots = @((& $long $app).TrimEnd('\') + '\')
+    $linked = (Get-Item -LiteralPath $app).Target
+    if ($linked) { $roots += @($linked | ForEach-Object { (& $long $_).TrimEnd('\') + '\' }) }
+    function Left {
+        @(Get-Process | Where-Object {
+            $p = try { $_.Path } catch { $null }
+            if ($p) { $p = & $long $p }
+            $p -and $shipped -contains (Split-Path $p -Leaf) -and @($roots | Where-Object { $p.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count
+        })
+    }
+    $deadline = (Get-Date).AddSeconds($(if ($env:RX_WAIT) { [int]$env:RX_WAIT } else { 30 }))
+    while (@(Left).Count -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 300 }
+    $stop = @(Left)
+    $stop | Stop-Process -Force -ErrorAction SilentlyContinue
+    $stop | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
+} catch { }
 
 # Copy every file (a repair: only the ones RX_ONLY lists), keeping a backup of each one it replaces
 $backup = Join-Path $temp 'previous'
@@ -113,8 +116,16 @@ function Restore {
     $failed
 }
 $broken = 'Download repakxtra again from github.com/cablemp5/repak-xtra/releases'
+# What a killed update (power cut, Task Manager) leaves for the app's next start (xtra_updater.rs recover_killed_update):
+# this script's process, the folders, the files it began copying, and whether every file is in
+$state = Join-Path $temp 'state.json'
+function Save-State([string]$phase) {
+    [IO.File]::WriteAllText($state, (@{ pid = $PID; phase = $phase; app = $app; src = $src; files = @($copied) } | ConvertTo-Json -Compress))
+}
+$exeName = Split-Path $exe -Leaf
 try {
-    foreach ($f in Get-ChildItem -LiteralPath $src -Recurse -File) {
+    # The app's exe last: a kill part way leaves the previous exe in place, and it puts the rest back at its next start
+    foreach ($f in @(Get-ChildItem -LiteralPath $src -Recurse -File | Sort-Object { $_.Name -ieq $exeName })) {
         $rel = $f.FullName.Substring($src.Length).TrimStart('\')
         if ($only.Count -and $only -notcontains $rel) { continue }
         $dest = Join-Path $app $rel
@@ -123,13 +134,17 @@ try {
             [void][System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($b))
             Copy-Item -LiteralPath $dest -Destination $b -Force
         }
+        # Listed before the copy: one that fails part way (disk full, a lock after a partial write) is put back too
+        $copied.Add($rel)
+        Save-State 'copying'
         [void][System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($dest))
         Copy-Item -LiteralPath $f.FullName -Destination $dest -Force
-        $copied.Add($rel)
     }
+    Save-State 'copied'
 } catch {
     $err = $_.Exception.Message
     $bad = Restore
+    if (-not $bad) { Remove-Item -LiteralPath $state -Force -ErrorAction SilentlyContinue } # else the next start tries again
     if ($bad) { Fail "The update could not be copied ($err), and $bad files could not be put back. $broken" }
     Fail "The update could not be copied ($err). The previous version was kept."
 }
@@ -226,6 +241,50 @@ pub fn xtra_started_ok() {
     let dir = update_dir();
     if dir.is_dir() {
         let _ = std::fs::write(dir.join("started"), b"ok");
+    }
+}
+
+/// At start: an update whose script was killed part way (power cut, Task Manager) left its state file and backups in the
+/// update folder, with nothing to finish or undo it. While it was copying, the previous exe was still in place (the
+/// script copies it last), so the files it began copying are put back from the backup and the ones it added go. Once
+/// every file was in, or the new exe already is, the update is kept. Either way the update folder goes, unless a file
+/// could not be put back (the next start tries again). Returns what was done, for the log.
+pub fn recover_killed_update() -> Option<String> {
+    let exe = std::env::current_exe().ok()?;
+    recover_in(&update_dir(), exe.parent()?, exe.file_name()?.to_str()?, |pid| {
+        use sysinfo::{ProcessRefreshKind, RefreshKind, System};
+        System::new_with_specifics(RefreshKind::new().with_processes(ProcessRefreshKind::new())).process(sysinfo::Pid::from_u32(pid)).is_some()
+    })
+}
+
+fn recover_in(dir: &Path, app: &Path, exe_name: &str, alive: impl Fn(u32) -> bool) -> Option<String> {
+    let text = std::fs::read_to_string(dir.join("state.json")).ok()?;
+    let state: serde_json::Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).ok()?;
+    if alive(u32::try_from(state["pid"].as_u64()?).ok()?) { return None } // still at work: the new version's start check
+    let same = |a: &Path, b: &Path| matches!((std::fs::canonicalize(a), std::fs::canonicalize(b)), (Ok(a), Ok(b)) if a == b);
+    if !same(Path::new(state["app"].as_str()?), app) { return None } // another install's update
+    // only plain relative names, so nothing outside the app folder or the backup is ever touched
+    let files: Vec<PathBuf> = state["files"].as_array()?.iter().filter_map(|f| f.as_str()).map(PathBuf::from)
+        .filter(|p| p.components().all(|c| matches!(c, std::path::Component::Normal(_)))).collect();
+    let src = Path::new(state["src"].as_str().unwrap_or_default());
+    let hash = |p: &Path| crate::xtra_update::sha256_file(p).ok();
+    let exe_in = files.iter().any(|f| f.as_os_str().eq_ignore_ascii_case(exe_name))
+        && hash(&app.join(exe_name)).is_some_and(|h| Some(h) == hash(&src.join(exe_name)));
+    if state["phase"] == "copied" || exe_in {
+        let _ = std::fs::remove_dir_all(dir);
+        return Some(format!("A cut-off update had copied every file: kept it ({} files)", files.len()));
+    }
+    let mut failed = 0;
+    for rel in &files {
+        let (b, d) = (dir.join("previous").join(rel), app.join(rel));
+        let done = if b.is_file() { std::fs::copy(&b, &d).is_ok() } else { !d.exists() || std::fs::remove_file(&d).is_ok() };
+        if !done { failed += 1 }
+    }
+    if failed == 0 {
+        let _ = std::fs::remove_dir_all(dir);
+        Some(format!("A cut-off update was undone: {} files put back", files.len()))
+    } else {
+        Some(format!("A cut-off update was undone, but {failed} files could not be put back (tried again at the next start)"))
     }
 }
 
@@ -457,6 +516,114 @@ mod tests {
         drop(lock);
         assert!(!ok);
         assert_eq!(fs::read(app.join("repakxtra.exe")).unwrap(), b"old exe");
+        let _ = fs::remove_dir_all(r.parent().unwrap());
+    }
+
+    #[test]
+    fn a_program_the_app_does_not_ship_survives_the_update() {
+        let r = root("foreign");
+        let other = r.join("app").join("tools");
+        fs::create_dir_all(&other).unwrap();
+        // another program started from under the app's folder (a flat zip unpacked into Downloads): never stopped
+        let stub = other.join("other-tool.exe");
+        fs::copy(r"C:\Windows\System32\PING.EXE", &stub).unwrap();
+        let mut foreign = std::process::Command::new(&stub).args(["-n", "60", "127.0.0.1"]).stdout(std::process::Stdio::null()).spawn().unwrap();
+        let (ok, _) = apply(&r, &[("repakxtra.exe", b"new exe")]);
+        let survived = foreign.try_wait().unwrap().is_none();
+        let _ = foreign.kill();
+        let _ = foreign.wait();
+        assert!(ok, "the update went in");
+        assert!(survived, "the foreign program kept running");
+        let _ = fs::remove_dir_all(r.parent().unwrap());
+    }
+
+    /// A made-up killed update: `app` holds what was copied, `previous` the backups, `src` the unpacked update.
+    fn killed(tag: &str, phase: &str, files: &[&str]) -> (PathBuf, PathBuf, PathBuf) {
+        let r = plain_root(tag);
+        let (dir, app) = (r.join("update"), r.join("app"));
+        for d in [dir.join("previous"), dir.join("extracted"), app.clone()] { fs::create_dir_all(d).unwrap() }
+        fs::write(dir.join("previous").join("a.dll"), b"old a").unwrap();
+        fs::write(dir.join("previous").join("repakxtra.exe"), b"old exe").unwrap();
+        fs::write(dir.join("extracted").join("repakxtra.exe"), b"new exe").unwrap();
+        fs::write(app.join("a.dll"), b"new a").unwrap();
+        fs::write(app.join("added.dll"), b"new only").unwrap();
+        fs::write(app.join("repakxtra.exe"), b"old exe").unwrap();
+        fs::write(app.join("keep.txt"), b"untouched").unwrap();
+        let state = serde_json::json!({ "pid": 1, "phase": phase, "app": app, "src": dir.join("extracted"), "files": files });
+        fs::write(dir.join("state.json"), state.to_string()).unwrap();
+        (r, dir, app)
+    }
+
+    #[test]
+    fn a_killed_update_is_undone_at_the_next_start() {
+        let (r, dir, app) = killed("undo", "copying", &["a.dll", "added.dll", "..\\..\\outside.txt"]);
+        let said = recover_in(&dir, &app, "repakxtra.exe", |_| false).unwrap();
+        assert!(said.contains("undone"), "{said}");
+        assert_eq!(fs::read(app.join("a.dll")).unwrap(), b"old a");
+        assert!(!app.join("added.dll").exists(), "a file the update added goes");
+        assert_eq!(fs::read(app.join("keep.txt")).unwrap(), b"untouched");
+        assert!(!dir.exists(), "the update folder goes");
+        let _ = fs::remove_dir_all(r.parent().unwrap());
+    }
+
+    #[test]
+    fn a_killed_update_with_every_file_in_is_kept() {
+        for (tag, phase, files) in [("copied", "copied", &["a.dll", "added.dll"][..]), ("exe-in", "copying", &["a.dll", "added.dll", "repakxtra.exe"][..])] {
+            let (r, dir, app) = killed(tag, phase, files);
+            if tag == "exe-in" { fs::write(app.join("repakxtra.exe"), b"new exe").unwrap() } // the exe, copied last, is in
+            let said = recover_in(&dir, &app, "repakxtra.exe", |_| false).unwrap();
+            assert!(said.contains("kept"), "{tag}: {said}");
+            assert_eq!(fs::read(app.join("a.dll")).unwrap(), b"new a", "{tag}");
+            assert!(app.join("added.dll").exists(), "{tag}");
+            assert!(!dir.exists(), "{tag}");
+            let _ = fs::remove_dir_all(r.parent().unwrap());
+        }
+    }
+
+    #[test]
+    fn an_update_still_running_or_for_another_install_is_left_alone() {
+        let (r, dir, app) = killed("alive", "copying", &["a.dll"]);
+        assert!(recover_in(&dir, &app, "repakxtra.exe", |_| true).is_none(), "its script is still at work");
+        assert!(recover_in(&dir, &r.join("elsewhere"), "repakxtra.exe", |_| false).is_none(), "another folder's update");
+        assert_eq!(fs::read(app.join("a.dll")).unwrap(), b"new a");
+        assert!(dir.join("state.json").exists());
+        let _ = fs::remove_dir_all(r.parent().unwrap());
+    }
+
+    #[test]
+    fn the_real_script_killed_mid_copy_is_undone_at_the_next_start() {
+        let r = plain_root("kill");
+        let (temp, app) = (r.join("update"), r.join("app"));
+        fs::create_dir_all(app.join("data")).unwrap();
+        fs::create_dir_all(&temp).unwrap();
+        fs::write(app.join("repakxtra.exe"), b"old exe").unwrap();
+        // many files, so the copy is still under way when it is killed
+        let names: Vec<String> = (0..600).map(|i| format!("data/f{i:03}.json")).collect();
+        for n in names.iter().step_by(2) { fs::write(app.join(n), b"old").unwrap() }
+        let mut files: Vec<(&str, &[u8])> = names.iter().map(|n| (n.as_str(), &b"new"[..])).collect();
+        files.push(("repakxtra.exe", b"new exe"));
+        zip_with(&temp.join("u.zip"), &files);
+        let mut gone = std::process::Command::new("cmd").args(["/c", "exit"]).spawn().unwrap();
+        gone.wait().unwrap();
+        let mut script = powershell(APPLY_ZIP).env("RX_PID", gone.id().to_string()).env("RX_ZIP", temp.join("u.zip")).env("RX_TEMP", &temp)
+            .env("RX_APP", &app).env("RX_EXE", app.join("repakxtra.exe")).env("RX_TEST", "1").spawn().unwrap();
+        // the signal: the state file says at least 20 files are under way
+        let state = temp.join("state.json");
+        let copying = || fs::read_to_string(&state).ok().and_then(|t| serde_json::from_str::<serde_json::Value>(t.trim_start_matches('\u{feff}')).ok())
+            .is_some_and(|v| v["phase"] == "copying" && v["files"].as_array().is_some_and(|f| f.len() >= 20));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        while !copying() && std::time::Instant::now() < deadline { std::thread::sleep(std::time::Duration::from_millis(20)) }
+        let _ = script.kill();
+        let _ = script.wait();
+        assert!(fs::read_to_string(&state).is_ok_and(|t| t.contains("copying")), "killed while copying");
+        assert_eq!(fs::read(app.join("repakxtra.exe")).unwrap(), b"old exe", "the exe goes last");
+        let said = recover_in(&temp, &app, "repakxtra.exe", |_| false).unwrap();
+        assert!(said.contains("undone"), "{said}");
+        for (i, n) in names.iter().enumerate() {
+            let now = fs::read(app.join(n)).ok();
+            assert_eq!(now.as_deref(), if i % 2 == 0 { Some(&b"old"[..]) } else { None }, "{n}");
+        }
+        assert!(!temp.exists());
         let _ = fs::remove_dir_all(r.parent().unwrap());
     }
 

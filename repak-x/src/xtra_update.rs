@@ -27,6 +27,29 @@ fn newest(list: &[serde_json::Value]) -> Option<(semver::Version, &serde_json::V
         .max_by(|a, b| a.0.cmp(&b.0))
 }
 
+/// A client for downloads: it gives up when GitHub stops answering (15 s to connect, 60 s with no data) instead of hanging
+/// with the progress bar frozen. No total limit, so a big file on a slow line still finishes.
+pub fn download_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .read_timeout(std::time::Duration::from_secs(60))
+        .build()
+        .unwrap_or_default()
+}
+
+/// The release an update asset URL belongs to (".../releases/download/v0.81.3/<zip>"), when its tag is this edition's.
+pub fn asset_version(asset_url: &str, prefix: &str) -> Option<semver::Version> {
+    semver::Version::parse(asset_url.strip_prefix(prefix)?.split('/').next()?.strip_prefix(crate::xtra_edition::TAG_PREFIX)?).ok()
+}
+
+/// An update may not go back to an older version unless the user asked for that one.
+pub fn allowed_version(update: &semver::Version, current: &semver::Version, allow_older: bool) -> Result<(), String> {
+    if update < current && !allow_older {
+        return Err(format!("v{update} is older than this version (v{current}), so it was not downloaded."));
+    }
+    Ok(())
+}
+
 /// The newest release when it is newer than this build, with its app zip (never the preview kit's).
 pub async fn check() -> Result<Option<crate::UpdateInfo>, String> {
     crate::ui_log::info("Update", "Checking for a newer repakxtra release...");
@@ -139,6 +162,19 @@ mod tests {
 
     mod legacy {
         include!("../tests/fixtures/legacy_update.rs");
+    }
+
+    #[test]
+    fn an_update_never_goes_back_unless_asked() {
+        let p = "https://github.com/cablemp5/repak-xtra/releases/download/";
+        let v = |s| semver::Version::parse(s).unwrap();
+        assert_eq!(asset_version(&format!("{p}v0.81.3/repak-xtra-standard-v0.81.3-windows.zip"), p), Some(v("0.81.3")));
+        assert_eq!(asset_version(&format!("{p}kit-v19/kit.zip"), p), None, "not an app tag");
+        assert_eq!(asset_version("https://example.com/v9.9.9/x.zip", p), None);
+        assert!(allowed_version(&v("0.82.0"), &v("0.81.3"), false).is_ok());
+        assert!(allowed_version(&v("0.81.3"), &v("0.81.3"), false).is_ok(), "the same version again is a reinstall");
+        assert!(allowed_version(&v("0.80.0"), &v("0.81.3"), false).is_err());
+        assert!(allowed_version(&v("0.80.0"), &v("0.81.3"), true).is_ok(), "asked for");
     }
 
     #[test]

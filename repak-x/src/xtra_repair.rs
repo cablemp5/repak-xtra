@@ -80,7 +80,7 @@ fn compare(zip: &Path, app: &Path) -> Result<(Diff, usize), String> {
 
 /// Downloads this version's release zip into the update folder, checked against its published checksum.
 async fn download(zip: &Path) -> Result<(), String> {
-    let client = reqwest::Client::new();
+    let client = crate::xtra_update::download_client();
     let tag = format!("{}{}", crate::xtra_edition::TAG_PREFIX, crate::xtra_update::version());
     let offline = |e: reqwest::Error| format!("Could not reach GitHub ({e}). Check your connection and try again.");
     let res = client.get(format!("https://api.github.com/repos/cablemp5/repak-xtra/releases/tags/{tag}"))
