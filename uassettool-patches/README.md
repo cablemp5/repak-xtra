@@ -77,3 +77,9 @@ UAssetTool's output), extracts are byte for byte the same as before, and `serve`
 key from `REPAKXTRA_AES` when no `--aes` is given. The app's preview fixes (`preview_fixes\sound_pak.py`) run inside the
 generator, which the app starts with that variable, so the key no longer shows on a helper's command line, where any
 process and the kit's logs could read it. An `--aes` on the command line still wins.
+
+`0016-oodle-loads-only-known-builds.patch`: the Oodle library loads only when its SHA-256 is one of three known builds (go-oodle's
+Windows and Linux downloads, and the Windows build FModel and the preview kit ship), each read from the real file on
+2026-11-11. A download that does not match is not saved, an unknown file in a search folder is not loaded (the tool
+downloads the known one instead), and the download is written to a `.part` file and renamed, so a cut-off write never
+leaves a half library under the real name.

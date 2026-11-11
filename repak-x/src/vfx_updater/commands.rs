@@ -452,6 +452,15 @@ async fn fetch_usmap_commit_date(client: &reqwest::Client, file_name: &str) -> O
     Some(date.split('T').next().unwrap_or(date).to_string())
 }
 
+/// repakxtra: a depot listing's file, by one plain .usmap file name (no folder, drive or ".."), so a listing can never
+/// write outside the usmap folder.
+fn usmap_file(name: &str) -> Result<PathBuf, String> {
+    if !crate::xtra_updater::safe_file_name(name) || !name.to_ascii_lowercase().ends_with(".usmap") {
+        return Err(format!("[VFX] Unexpected usmap name in the depot listing: {name}"));
+    }
+    Ok(usmap_dir().join(name))
+}
+
 fn usmap_dir() -> PathBuf {
     vfx_app_dir().join("usmap")
 }
@@ -709,7 +718,7 @@ async fn apply_listing(
     // always takes over the selection — including over a custom one.
     let adopt_managed = force || !user_has_custom;
 
-    let managed_target = usmap_dir().join(&latest_name);
+    let managed_target = usmap_file(&latest_name)?;
     let local_managed_ok =
         managed_target.exists() && settings.usmap_sha.as_deref() == Some(latest_sha.as_str());
 
@@ -760,14 +769,13 @@ async fn apply_listing(
         .await
         .map_err(|e| format!("[VFX] Download body error: {}", e))?;
 
-    std::fs::write(&managed_target, &bytes)
+    crate::hero_assets::write_whole(&managed_target, &bytes) // repakxtra: never half a usmap under its name
         .map_err(|e| format!("[VFX] Failed to write usmap: {}", e))?;
 
     // Clean up the previous managed file if it has a different name.
     if let Some(old_name) = settings.usmap_filename.clone() {
         if old_name != latest_name {
-            let old_path = usmap_dir().join(&old_name);
-            if old_path.exists() {
+            if let Some(old_path) = usmap_file(&old_name).ok().filter(|p| p.exists()) {
                 let _ = std::fs::remove_file(&old_path);
             }
         }
@@ -861,7 +869,7 @@ async fn fetch_older_usmap(
     name: &str,
     url: &str,
 ) -> Result<PathBuf, String> {
-    let path = usmap_dir().join(name);
+    let path = usmap_file(name)?;
     if path.exists() {
         return Ok(path);
     }
@@ -880,7 +888,7 @@ async fn fetch_older_usmap(
 
     std::fs::create_dir_all(usmap_dir())
         .map_err(|e| format!("[VFX] Failed to create usmap dir: {}", e))?;
-    std::fs::write(&path, &bytes).map_err(|e| format!("[VFX] Failed to write usmap: {}", e))?;
+    crate::hero_assets::write_whole(&path, &bytes).map_err(|e| format!("[VFX] Failed to write usmap: {}", e))?;
     Ok(path)
 }
 
@@ -978,6 +986,15 @@ pub async fn vfx_recover_raw_materials(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_depot_listing_never_names_a_file_outside_the_usmap_folder() {
+        assert_eq!(usmap_file("5.3.2-3484986+++depot_marvel+S7.5_release-Marvel.usmap").unwrap(),
+            usmap_dir().join("5.3.2-3484986+++depot_marvel+S7.5_release-Marvel.usmap"));
+        for bad in ["..\\..\\x.usmap", "../x.usmap", "a/b.usmap", "C:\\x.usmap", "C:x.usmap", "\\\\server\\x.usmap", "x.usmap.", "x.exe", ""] {
+            assert!(usmap_file(bad).is_err(), "{bad}");
+        }
+    }
 
     #[test]
     fn older_usmaps_are_newest_first_and_below_current() {

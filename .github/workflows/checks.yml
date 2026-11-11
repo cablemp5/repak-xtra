@@ -87,8 +87,8 @@ jobs:
     timeout-minutes: 60
     env:
       SKIP_UASSET_TOOL_BUILD: '1'   # the .NET asset tool is only needed to package, not to test (so no submodule)
-      # rust-toolchain.toml asks for nightly, which rustup would download (about 90 s) and which changes daily,
-      # so the cached build never matched and every run rebuilt all crates. No crate needs nightly.
+      # The stable compiler rust-toolchain.toml pins for local and release builds too (it used to ask for nightly, which
+      # changes daily, so the cached build never matched)
       RUSTUP_TOOLCHAIN: stable
       CARGO_INCREMENTAL: '0'        # incremental files only bloat the cache on a fresh runner
       CARGO_PROFILE_DEV_DEBUG: '0'  # no debug info: the app crate's test build is about a quarter faster

@@ -30,10 +30,13 @@ function Use-UatPatches([scriptblock]$block) {
 # What the tools were built from: the submodule's commit and every patch, written as UAssetTool.source beside both
 # builds once they are published (dev.ps1, build.ps1). The app keys its saved mod checks on it (xtra_vfx.rs tools_id):
 # two builds of the same source differ byte for byte, so keying on the bytes checked every mod again after each rebuild.
-function Write-UatSource {
+function Get-UatSourceId {
     $sub = Join-Path $PSScriptRoot '..\UAssetToolRivals'
     $parts = @(git -C $sub rev-parse HEAD) + @(Get-ChildItem (Join-Path $PSScriptRoot '*.patch') | Sort-Object Name | ForEach-Object { "$($_.Name) $((Get-FileHash $_.FullName).Hash)" })
     $bytes = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($parts -join "`n"))
-    $id = -join ($bytes | ForEach-Object { $_.ToString('x2') })
+    -join ($bytes | ForEach-Object { $_.ToString('x2') })
+}
+function Write-UatSource {
+    $id = Get-UatSourceId
     foreach ($dir in @('target\uassettool', 'target\uassettool-cli')) { [IO.File]::WriteAllText((Join-Path (Join-Path $PSScriptRoot '..') "$dir\UAssetTool.source"), $id) }
 }

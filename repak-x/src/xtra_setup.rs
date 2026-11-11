@@ -19,6 +19,30 @@ const BYPASS_BYTES: &[u8] = include_bytes!("../resources/utoc-bypass/MarvelRival
 const LICENSE_TEXT: &str = include_str!("../resources/utoc-bypass/Ultimate ASI Loader License.txt");
 const GALACTA_API: &str = "https://api.github.com/repos/0xSaturno/ProjectGalacta/releases/latest";
 pub(crate) const GALACTA_STEM: &str = "!ProjectGalacta_9999999_P";
+/// The SHA-256 of each Project Galacta release's mod zip this version installs, read from the downloaded files on
+/// 2026-11-11 (each also matched GitHub's own digest). A release not listed, or a zip that does not match, is never put
+/// into the game folder: a newer release needs a newer repakxtra, or the install from its GitHub page.
+const GALACTA_SHA256: &[(&str, &str)] = &[
+    ("v1.5.0", "0d403ec8525a3e55ca75c2435b72d5eabf84de545c7158eb671144a7368cd9a1"),
+    ("v1.4.2", "af0b0e923f778a043f32e40111b5d34b02b408ff0ca1c27199631cdbe2929eb3"),
+    ("v1.4.1", "c58eddf4d41aec5bb73129f18505f4e82f2435b123ea1d28cf6d352d8a02e076"),
+    ("v1.4.0", "23c527d5443563712bccbeac198882f5772492ff365ab96bc5f47f0601d018f5"),
+    ("v1.3.0", "0b1efc55f62539b9775898269657468d5bd88361d8555a42209f3dd4f7aad615"),
+    ("v1.2.2", "08de90c56d08d6ff99a4998b606b3e5a78dee0fa9ceaf223a44dd8173e9a49e1"),
+    ("v1.2.1", "f1b389be7007f43ce057d8a1dabdaf74c9c75c291b7cdb3c0f863faafe28a52e"),
+    ("v1.2.0", "232184433fb01795e7165f12e07f3e4a1a61812f2925fda957f5136441d4c25e"),
+    ("v1.1.0", "05fec843c61b17d90de90cb606dbddb11f5a810a47f6ca84912fd3fd5d4579ab"),
+    ("v1.0.0", "d4dc40bfe9bdd8d13d5d835484f829d55b50f17104634de86654e626a2b18daf"),
+];
+
+/// The release's zip is one this version knows, byte for byte.
+fn galacta_pinned(tag: &str, zip: &[u8]) -> Result<(), String> {
+    match GALACTA_SHA256.iter().find(|(t, _)| *t == tag) {
+        None => Err(format!("Project Galacta {tag} is newer than this repakxtra knows, so it was not installed. Update repakxtra, or install it from its GitHub page.")),
+        Some((_, sum)) if *sum != sha256(zip) => Err(format!("The Project Galacta {tag} download does not match its known checksum, so nothing was installed. Try again.")),
+        Some(_) => Ok(()),
+    }
+}
 
 /// Mod loaders by pak name (with an optional !, _digits and _P). custom/edition.ts MOD_LOADERS lists the same names.
 pub(crate) const LOADER_STEMS: &[&str] = &["projectgalacta"];
@@ -326,7 +350,7 @@ fn tell(app: Option<&AppHandle>, stage: &'static str, done: u64, total: u64) {
 /// The newest release and its mod zip (downloaded once per tag). With `app`, says how the download goes.
 async fn latest_release(app: Option<&AppHandle>) -> Result<(String, String, String, String, Vec<u8>), String> {
     tell(app, "check", 0, 0);
-    let client = reqwest::Client::new();
+    let client = crate::xtra_update::download_client();
     let json: serde_json::Value = client
         .get(GALACTA_API)
         .header("User-Agent", "repakxtra")
@@ -410,7 +434,8 @@ pub async fn setup_galacta_install(app: AppHandle, folder: Option<String>, state
     if !mods.is_dir() {
         return Err("Set the game mods path in Settings first".into());
     }
-    let (_, _, _, _, zip) = latest_release(Some(&app)).await?;
+    let (tag, _, _, _, zip) = latest_release(Some(&app)).await?;
+    galacta_pinned(&tag, &zip)?; // repakxtra: only a release whose zip is known goes into the game folder
     let files = zip_files(&zip)?;
     tell(Some(&app), "install", 0, 0);
     let target = match folder.filter(|f| !f.trim().is_empty()) {
@@ -425,6 +450,13 @@ pub async fn setup_galacta_install(app: AppHandle, folder: Option<String>, state
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn galacta_installs_only_known_release_zips() {
+        assert!(super::galacta_pinned("v1.5.0", b"swapped").unwrap_err().contains("does not match"));
+        assert!(super::galacta_pinned("v9.0.0", b"anything").unwrap_err().contains("newer than this repakxtra knows"));
+        assert!(super::GALACTA_SHA256.iter().all(|(t, s)| t.starts_with('v') && s.len() == 64 && s.bytes().all(|c| c.is_ascii_hexdigit())));
+    }
+
     #[test]
     fn only_this_editions_project_loader_is_managed() {
         let stem = super::GALACTA_STEM;

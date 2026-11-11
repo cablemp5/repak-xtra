@@ -1,0 +1,60 @@
+diff --git a/src/UAssetTool/IoStore/OodleCompression.cs b/src/UAssetTool/IoStore/OodleCompression.cs
+index b300cb0..228b40c 100644
+--- a/src/UAssetTool/IoStore/OodleCompression.cs
++++ b/src/UAssetTool/IoStore/OodleCompression.cs
+@@ -3,6 +3,7 @@ using System.IO;
+ using System.Net.Http;
+ using System.Reflection;
+ using System.Runtime.InteropServices;
++using System.Security.Cryptography;
+ 
+ namespace UAssetTool.IoStore;
+ 
+@@ -51,6 +52,15 @@ public static class OodleCompression
+     private const string OODLE_DLL_NAME = "oo2core_9_win64"; // logical name, resolved per-platform
+     private const string OODLE_DOWNLOAD_BASE_URL = "https://github.com/new-world-tools/go-oodle/releases/download/v0.2.3-files/";
+     private const long OODLE_MIN_VALID_SIZE = 500_000; // 500KB minimum
++    // repakxtra: only these Oodle builds load into the process, so a swapped download or a planted file never runs.
++    // Each SHA-256 was read from the real file on 2026-11-11.
++    private static readonly HashSet<string> OODLE_SHA256 = new(StringComparer.OrdinalIgnoreCase)
++    {
++        "6f5d41a7892ea6b2db420f2458dad2f84a63901c9a93ce9497337b16c195f457", // oo2core_9_win64.dll, go-oodle v0.2.3-files (the download below)
++        "19452ae1abae65e1305d3818354d4fae7b1200294322f0d9c6d5ddeb7bd9f978", // oo2core_9_win64.dll as FModel and repakxtra's preview kit ship it
++        "7354655eb25b587dc34cbf98696b91e30e6d7a3f0eefad3872e6c1b76ef86a6e", // liboo2corelinux64.so.9, go-oodle v0.2.3-files
++    };
++    private static bool IsKnownOodle(byte[] bytes) => OODLE_SHA256.Contains(Convert.ToHexString(SHA256.HashData(bytes)));
+ 
+     private static volatile bool _initialized = false;
+     private static volatile bool _available = false;
+@@ -261,6 +271,11 @@ public static class OodleCompression
+             Console.Error.WriteLine($"[Oodle] DLL at {path} is too small ({info.Length} bytes), likely corrupted");
+             return false;
+         }
++        if (!IsKnownOodle(File.ReadAllBytes(path)))
++        {
++            Console.Error.WriteLine($"[Oodle] {path} is not a known Oodle build, so it is not loaded");
++            return false;
++        }
+ 
+         return true;
+     }
+@@ -283,6 +298,8 @@ public static class OodleCompression
+             
+             if (bytes.Length < OODLE_MIN_VALID_SIZE)
+                 throw new Exception($"Downloaded file is too small ({bytes.Length} bytes)");
++            if (!IsKnownOodle(bytes))
++                throw new Exception("The download is not a known Oodle build, so it was not saved");
+ 
+             foreach (string dir in GetLibraryDirectories())
+             {
+@@ -290,7 +307,9 @@ public static class OodleCompression
+                 try
+                 {
+                     Directory.CreateDirectory(dir);
+-                    File.WriteAllBytes(targetPath, bytes);
++                    // through a .part file, so a cut-off write never leaves a half library under the real name
++                    File.WriteAllBytes(targetPath + ".part", bytes);
++                    File.Move(targetPath + ".part", targetPath, overwrite: true);
+                     Console.Error.WriteLine($"[Oodle] Downloaded successfully ({bytes.Length} bytes) to {targetPath}");
+                     return targetPath;
+                 }

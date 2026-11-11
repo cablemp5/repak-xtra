@@ -3315,19 +3315,10 @@ async fn install_mods(
     Ok(())
 }
 
-#[tauri::command]
-async fn delete_mod(
-    path: String,
-    trash_id: Option<String>, // repakxtra: one trash folder per deletion, named by the frontend's Undo
-    window: Window,
-    state: State<'_, Arc<Mutex<AppState>>>,
-) -> Result<(), String> {
-    let _mutation = crate::xtra_mutation::edit()?;
-    crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
-    let path_buf = PathBuf::from(&path);
-    log::info!("delete_mod called with path: {}", path);
-    let trash = xtra_trash::reserve(trash_id)?; // repakxtra: undoable delete
-
+/// repakxtra: which file a delete of `path` takes (its .pak, or the .bak_repak beside it when the other is gone) and
+/// every file that goes with it. The .utoc and .ucas stay while an on and an off copy share them. Reads only.
+fn delete_set(path: &str) -> (PathBuf, Vec<PathBuf>) {
+    let path_buf = PathBuf::from(path);
     // Determine the actual file to delete - check both .pak and .bak_repak variants
     let (actual_path, is_disabled) = if path_buf.exists() {
         (path_buf.clone(), path.ends_with(".bak_repak"))
@@ -3360,25 +3351,12 @@ async fn delete_mod(
         is_disabled
     );
 
-    // repakxtra: nothing moves unless every file of the mod can (the game or another program can hold the .ucas alone)
-    if let Err(e) = xtra_ops::all_free(&[actual_path.clone(), crate::xtra_bundle::companion(&actual_path, "utoc"), crate::xtra_bundle::companion(&actual_path, "ucas")]) {
-        xtra_trash::release_if_empty(&trash);
-        return Err(e);
-    }
-
     // repakxtra: the files to go are gathered first and moved as one set below
     let mut doomed: Vec<PathBuf> = Vec::new();
     if actual_path.exists() {
         doomed.push(actual_path.clone());
     } else {
         log::warn!("Main mod file does not exist: {:?}", actual_path);
-    }
-
-    // Invalidate cache for deleted path
-    {
-        let mut state_guard = state.lock().unwrap();
-        state_guard.mod_details_cache.remove(&actual_path);
-        xtra_details_cache::mark_dirty(); // repakxtra: the saved copy follows
     }
 
     // Determine the base path for IoStore files (always based on .pak name, not .bak_repak)
@@ -3415,6 +3393,35 @@ async fn delete_mod(
     } else {
         // Delete associated IoStore files (.ucas and .utoc)
         doomed.extend(["ucas", "utoc"].iter().map(|x| base_pak_path.with_extension(x)).filter(|p| p.exists()));
+    }
+
+    (actual_path, doomed)
+}
+
+#[tauri::command]
+async fn delete_mod(
+    path: String,
+    trash_id: Option<String>, // repakxtra: one trash folder per deletion, named by the frontend's Undo
+    window: Window,
+    state: State<'_, Arc<Mutex<AppState>>>,
+) -> Result<(), String> {
+    let _mutation = crate::xtra_mutation::edit()?;
+    crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
+    log::info!("delete_mod called with path: {}", path);
+    let trash = xtra_trash::reserve(trash_id)?; // repakxtra: undoable delete
+
+    let (actual_path, doomed) = delete_set(&path);
+    // repakxtra: nothing moves unless every file of the mod can (the game or another program can hold the .ucas alone)
+    if let Err(e) = xtra_ops::all_free(&[actual_path.clone(), crate::xtra_bundle::companion(&actual_path, "utoc"), crate::xtra_bundle::companion(&actual_path, "ucas")]) {
+        xtra_trash::release_if_empty(&trash);
+        return Err(e);
+    }
+
+    // Invalidate cache for deleted path
+    {
+        let mut state_guard = state.lock().unwrap();
+        state_guard.mod_details_cache.remove(&actual_path);
+        xtra_details_cache::mark_dirty(); // repakxtra: the saved copy follows
     }
 
     // repakxtra: all of the mod goes to Recently deleted, or none of it (a file that cannot move puts the rest back)
@@ -4043,6 +4050,65 @@ fn replace_mod_files(old: &Path, new: &Path) -> std::io::Result<()> {
         }
     }
     result
+}
+
+#[cfg(test)]
+mod toggle_and_delete_tests {
+    use super::{delete_set, toggle_file};
+
+    fn folder(files: &[&str]) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        for f in files { std::fs::write(dir.path().join(f), f).unwrap() }
+        dir
+    }
+
+    #[test]
+    fn a_toggle_renames_one_file_and_back() {
+        let dir = folder(&["M_P.pak", "M_P.utoc", "M_P.ucas"]);
+        let p = |n: &str| dir.path().join(n);
+        assert_eq!(toggle_file(&p("M_P.pak"), false).unwrap(), p("M_P.bak_repak"));
+        assert!(!p("M_P.pak").exists() && p("M_P.bak_repak").exists());
+        assert!(p("M_P.utoc").exists() && p("M_P.ucas").exists(), "the IoStore files stay where they are");
+        assert_eq!(toggle_file(&p("M_P.bak_repak"), false).unwrap(), p("M_P.pak"));
+        assert_eq!(std::fs::read_to_string(p("M_P.pak")).unwrap(), "M_P.pak", "the same file, renamed");
+    }
+
+    #[test]
+    fn a_toggle_never_replaces_the_other_copy() {
+        let dir = folder(&["M_P.pak", "M_P.bak_repak"]);
+        let p = |n: &str| dir.path().join(n);
+        assert!(toggle_file(&p("M_P.pak"), false).unwrap_err().contains("Both an on and an off copy"));
+        assert_eq!(std::fs::read_to_string(p("M_P.bak_repak")).unwrap(), "M_P.bak_repak", "the off copy is untouched");
+        assert!(toggle_file(&p("Gone_P.pak"), false).is_err(), "a missing file fails without touching anything");
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn a_delete_takes_the_mod_and_its_iostore_files() {
+        let dir = folder(&["M_P.pak", "M_P.utoc", "M_P.ucas", "Other_P.pak"]);
+        let p = |n: &str| dir.path().join(n);
+        let (actual, mut doomed) = delete_set(p("M_P.pak").to_str().unwrap());
+        doomed.sort();
+        assert_eq!(actual, p("M_P.pak"));
+        assert_eq!(doomed, vec![p("M_P.pak"), p("M_P.ucas"), p("M_P.utoc")]);
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 4, "deciding deletes nothing");
+    }
+
+    #[test]
+    fn a_delete_finds_the_off_copy_and_keeps_shared_files() {
+        // asked for the .pak that is now off: the .bak_repak goes with its IoStore files
+        let off = folder(&["M_P.bak_repak", "M_P.utoc", "M_P.ucas"]);
+        let p = |n: &str| off.path().join(n);
+        let (actual, mut doomed) = delete_set(p("M_P.pak").to_str().unwrap());
+        doomed.sort();
+        assert_eq!(actual, p("M_P.bak_repak"));
+        assert_eq!(doomed, vec![p("M_P.bak_repak"), p("M_P.ucas"), p("M_P.utoc")]);
+        // an on and an off copy side by side share the IoStore files: deleting one keeps them
+        let both = folder(&["M_P.pak", "M_P.bak_repak", "M_P.utoc", "M_P.ucas"]);
+        let q = |n: &str| both.path().join(n);
+        assert_eq!(delete_set(q("M_P.pak").to_str().unwrap()).1, vec![q("M_P.pak")]);
+        assert_eq!(delete_set(q("M_P.bak_repak").to_str().unwrap()).1, vec![q("M_P.bak_repak")]);
+    }
 }
 
 #[cfg(test)]
@@ -4864,6 +4930,19 @@ async fn get_all_tags(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Stri
     Ok(tags_vec)
 }
 
+/// repakxtra: switches one mod file on (.pak) or off (.bak_repak) by renaming it and returns its new path. Never over an
+/// on and an off copy side by side unless `allow_overwrite` (a rename on Windows would delete the other copy).
+fn toggle_file(path: &Path, allow_overwrite: bool) -> Result<PathBuf, String> {
+    let is_enabled = path.extension().and_then(|s| s.to_str()) == Some("pak");
+    let new_path = if is_enabled { path.with_extension("bak_repak") } else { path.with_extension("pak") };
+    if new_path.exists() && !allow_overwrite {
+        return Err(format!("Both an on and an off copy of {} are in the mods folder. Delete one of them, then switch it.",
+            path.file_stem().and_then(|s| s.to_str()).unwrap_or("this mod")));
+    }
+    std::fs::rename(path, &new_path).map_err(|e| xtra_ops::io(&e).unwrap_or_else(|| format!("Failed to toggle mod: {}", e)))?; // says when the game holds it
+    Ok(new_path)
+}
+
 #[tauri::command]
 async fn toggle_mod(
     mod_path: String,
@@ -4891,26 +4970,14 @@ async fn toggle_mod(
         }
     }
 
-    // Toggle by renaming
-    let new_path = if is_enabled {
-        path.with_extension("bak_repak")
-    } else {
-        path.with_extension("pak")
+    let allow_overwrite = state.lock().unwrap().allow_mod_overwrite;
+    let new_path = match toggle_file(&path, allow_overwrite) {
+        Ok(p) => p,
+        Err(error_msg) => {
+            toast_events::emit_toggle_failed(&window, &error_msg);
+            return Err(error_msg);
+        }
     };
-
-    // repakxtra: an on and an off copy can sit side by side; a rename on Windows would replace (delete) the other copy
-    if new_path.exists() && !state.lock().unwrap().allow_mod_overwrite {
-        let error_msg = format!("Both an on and an off copy of {} are in the mods folder. Delete one of them, then switch it.",
-            path.file_stem().and_then(|s| s.to_str()).unwrap_or("this mod"));
-        toast_events::emit_toggle_failed(&window, &error_msg);
-        return Err(error_msg);
-    }
-
-    if let Err(e) = std::fs::rename(&path, &new_path) {
-        let error_msg = xtra_ops::io(&e).unwrap_or_else(|| format!("Failed to toggle mod: {}", e)); // repakxtra: says when the game holds it
-        toast_events::emit_toggle_failed(&window, &error_msg);
-        return Err(error_msg);
-    }
 
     // Carry cached details over to the new path (rename keeps the mtime)
     {
@@ -6311,6 +6378,7 @@ const UPDATE_ASSET_URL_PREFIX: &str = "https://github.com/cablemp5/repak-xtra/re
 async fn download_update(
     asset_url: String,
     asset_name: String,
+    allow_older: Option<bool>,
     window: Window,
 ) -> Result<String, String> {
     use tokio::io::AsyncWriteExt;
@@ -6321,6 +6389,10 @@ async fn download_update(
     if !asset_url.starts_with(UPDATE_ASSET_URL_PREFIX) {
         return Err(format!("Refusing update from unexpected URL: {}", asset_url));
     }
+    // repakxtra: never back to an older version unless asked (the tag in the URL is the release's version)
+    let update = xtra_update::asset_version(&asset_url, UPDATE_ASSET_URL_PREFIX).ok_or("The update's release has no version tag")?;
+    let current = semver::Version::parse(xtra_update::version()).map_err(|e| e.to_string())?;
+    xtra_update::allowed_version(&update, &current, allow_older.unwrap_or(false))?;
 
     // Create temp directory for the update
     let temp_dir = crate::xtra_updater::update_dir(); // repakxtra: not Repak X's
@@ -6338,7 +6410,7 @@ async fn download_update(
     let download_path = temp_dir.join(&asset_name);
 
     // Download the file with progress reporting and retry logic
-    let client = reqwest::Client::new();
+    let client = xtra_update::download_client(); // repakxtra: gives up when GitHub stops answering
     let mut response = None;
     let max_retries = 3;
     for attempt in 1..=max_retries {
@@ -8393,6 +8465,19 @@ fn main() {
         let _ = tauri::Builder::default().plugin(tauri_plugin_single_instance::init(|_, _, _| {})).build(context);
         return; // the open copy was still starting (no window to hand the link to yet): this start ends here
     }
+    // repakxtra: an update cut off part way is finished or undone before anything loads or runs the app's files, and a
+    // start while one is copying ends here (the update starts the app itself once it is done)
+    let me = std::env::current_exe().ok(); // before a recovery can rename it
+    let recovered = match xtra_updater::recover_killed_update() {
+        xtra_updater::Recovery::Busy => return,
+        xtra_updater::Recovery::Restart(_) => {
+            // the previous exe is back under this name: it starts instead of this one (the new version's code)
+            if let Some(exe) = me { let _ = std::process::Command::new(exe).spawn(); }
+            return;
+        }
+        xtra_updater::Recovery::Done(done) => Some(done),
+        xtra_updater::Recovery::Nothing => None,
+    };
     xtra_vfx::tune_dotnet_gc(); // repakxtra: before UAssetTool loads, while no other thread runs
     xtra_identity::carry_over_webview_storage(); // repakxtra: before the window opens
     xtra_cleanup::on_start(); // repakxtra: Settings > Storage sections marked to clear at the next start
@@ -8561,6 +8646,7 @@ fn main() {
             // the startup checks below are captured instead of emitted into a
             // void. Entries land in a replay buffer until the webview mounts.
             ui_log::init(app.handle().clone());
+            if let Some(done) = &recovered { ui_log::warn("Update", done.clone()) } // repakxtra: said once the log can show it
             emit_session_banner(app);
             // Plugin initialization has established that this is the primary instance. Secondary opens must not sweep live work.
             let mods = app.state::<Arc<Mutex<AppState>>>().lock().unwrap().game_path.clone();

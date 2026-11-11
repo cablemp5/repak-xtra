@@ -405,12 +405,11 @@ mods that are on, without folder paths or your user name.
 
 ## Building from source
 
-**Requirements (Windows):** Git with [Git LFS](https://git-lfs.com/), [rustup](https://rustup.rs/) (`rust-toolchain.toml` picks the toolchain and the MSVC target), [Node.js](https://nodejs.org/) 22, the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0), and Visual Studio Build Tools with the C++ workload (the MSVC linker).
+**Requirements (Windows):** Git, [rustup](https://rustup.rs/) (`rust-toolchain.toml` picks the stable toolchain and the MSVC target), [Node.js](https://nodejs.org/) 22, the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0), and Visual Studio Build Tools with the C++ workload (the MSVC linker). Git LFS is not needed: no file in the repo is stored with it.
 
 Clone with submodules (the asset tool lives in `UAssetToolRivals`):
 
 ```powershell
-git lfs install
 git clone --recurse-submodules https://github.com/cablemp5/repak-xtra.git
 cd repak-xtra
 ```
@@ -424,18 +423,18 @@ Build:
 # Builds the folder as it is, uncommitted edits included, into dist\Repak-X-Test\repakxtra.exe
 .\build.ps1 -Test
 
-# The stable build: only from a clean main. Open it as dist\repakxtra\repakxtra.exe (always the newest stable build)
-.\build.ps1
-
-# A release: builds main into dist\repak-xtra-v<version>-windows.zip and copies the gh command that publishes it
+# A release: only from a clean main whose check passed on GitHub. Builds the locked versions into
+# dist\repak-xtra-standard-v<version>-windows.zip and copies the gh command that publishes it
 .\build.ps1 -Release
 ```
+
+There is no plain stable build: an installed copy updates itself from the releases (**Settings > Updates**).
 
 > [!NOTE]
 > The app runs one copy at a time and both builds share `%APPDATA%\Repak-X`: close the stable repakxtra before opening the test one.
 
 <details>
-<summary>What <code>build.ps1</code> runs (the same steps as the release workflow)</summary>
+<summary>What <code>build.ps1</code> runs</summary>
 
 ```powershell
 dotnet publish UAssetToolRivals/src/UAssetTool/UAssetToolNative.csproj -c Release -r win-x64 -p:DebugType=none -p:DebugSymbols=false -o target/uassettool
@@ -448,6 +447,7 @@ cargo build --release --target x86_64-pc-windows-msvc --features custom-protocol
 ```
 
 It then copies `REPAK-X.exe` as `repakxtra.exe`, with the asset tool and `data\character_data.json`, into the output folder.
+`-Release` uses `npm ci` and `cargo build --locked` instead, so it builds exactly the versions CI tested.
 </details>
 
 ### Checks
