@@ -127,9 +127,10 @@ let available = false
 export const refreshPreviewsAvailable = () => invoke<boolean>('previews_available').then(v => { available = v; notify() }).catch(() => undefined)
 refreshPreviewsAvailable()
 export const usePreviewsAvailable = () => useSyncExternalStore(subscribe, () => available)
+let lastRev = 0 // one counter for every key, so a key deleted and rendered again never gets back a revision it had
 listen<string>('mod-preview-ready', e => {
   dropCached(e.payload)
-  revs.set(e.payload, (revs.get(e.payload) ?? 0) + 1)
+  revs.set(e.payload, ++lastRev)
   outcome.delete(e.payload)
   markNone(e.payload, false)
   // The loadout's own render is done: its card shows it now, not after the mods it does not cover render one by one

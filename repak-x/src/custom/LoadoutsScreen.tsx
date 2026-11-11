@@ -485,7 +485,9 @@ function LoadoutsHome(p: LoadoutProps) {
     : placed(loadouts, drag.dragId, spot.group, besideOf(drag.dragId, spot))
   const groups: [string, Loadout[]][] = (groupBy === 'hero' ? heroGroups(shown) : grouped(shown)).filter(([, list]) => !filtered || list.length > 0)
   // repakxtra: many cards mount only near the viewport, the rest are empty cards of their height (nearCards.ts)
-  const near = useNearCards(cardsEl, groups.flatMap(([, list]) => list.map(l => l.id)), [renaming, drag.dragId], `${[...folded].join()}|${cardZoom}|${q}|${drag.dragId}`)
+  // the card holding keyboard focus stays mounted too, so focus is never dropped by scrolling
+  const focused = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('.lo-card[data-loadout]')?.dataset.loadout ?? null
+  const near = useNearCards(cardsEl, groups.flatMap(([, list]) => list.map(l => l.id)), [renaming, drag.dragId, focused], `${[...folded].join()}|${cardZoom}|${q}|${drag.dragId}`)
   const search = (v: string) => {
     if (!q && v.trim()) scrollBefore.current = cardsEl?.scrollTop ?? 0
     else if (q && !v.trim()) requestAnimationFrame(() => cardsEl?.scrollTo({ top: scrollBefore.current }))

@@ -25,6 +25,7 @@ export function useNearCards(root: HTMLElement | null, ids: string[], pins: (str
   const [near, setNear] = useState<Set<string> | null>(() => (on ? new Set(ids.slice(0, FIRST)) : null))
   const heights = useRef(new Map<string, number>())
   const pickRef = useRef<(() => void) | null>(null)
+  const width = useRef(0)
   const key = `${ids.join('|')}#${layout}`
   useLayoutEffect(() => {
     if (!on || !root) { setNear(null); return }
@@ -32,6 +33,8 @@ export function useNearCards(root: HTMLElement | null, ids: string[], pins: (str
     const pick = () => {
       const view = root.getBoundingClientRect()
       const was = lastHeight
+      // a new width changes every card's height (the pictures keep their shape): heights measured before it are stale
+      if (root.clientWidth !== width.current) { width.current = root.clientWidth; heights.current.clear() }
       const boxes: { id: string; top: number; bottom: number }[] = []
       for (const el of root.querySelectorAll<HTMLElement>('.lo-card[data-loadout]')) {
         const id = el.dataset.loadout!
