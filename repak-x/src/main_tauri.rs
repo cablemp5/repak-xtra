@@ -2507,6 +2507,14 @@ fn quick_organize_impl(
             .filter(|rel| !rel.as_os_str().is_empty())
     }
 
+    /// repakxtra: true when another source bundle already lands under this name (two flattened or loose files called
+    /// Foo.pak would silently replace each other). A bundle's own .pak, .utoc, and .ucas share one key.
+    fn clash(written: &mut std::collections::HashMap<PathBuf, PathBuf>, dest_dir: &Path, name: &str, src: &Path) -> bool {
+        let key = |dir: &Path, n: &str| dir.join(crate::xtra_bundle::stem(n).to_lowercase());
+        let from = key(src.parent().unwrap_or(Path::new("")), &src.file_name().unwrap_or_default().to_string_lossy());
+        written.insert(key(dest_dir, name), from.clone()).is_some_and(|prev| prev != from)
+    }
+
     /// Helper to get the destination directory for IoStore bundles with subfolder preservation
     fn get_iostore_dest_dir(
         entry_path: &Path,
@@ -2583,7 +2591,11 @@ fn quick_organize_impl(
             let mut processed_utocs: std::collections::HashSet<PathBuf> =
                 std::collections::HashSet::new();
 
-            for entry in WalkDir::new(temp_path).into_iter().filter_map(|e| e.ok()) {
+            for entry in WalkDir::new(temp_path).into_iter() {
+                let entry = match entry {
+                    Ok(e) => e,
+                    Err(e) => { failures.push(format!("Could not read {}", e)); continue; } // repakxtra: an unreadable folder is not a smaller mod
+                };
                 let entry_path = entry.path();
                 if crate::xtra_setup::is_managed_loader(entry_path) { continue; } // repakxtra: an archive's mod loader is Setup's
                 if let Some(entry_ext) = entry_path.extension().and_then(|s| s.to_str()).map(|s| s.to_ascii_lowercase()) {
@@ -2625,7 +2637,7 @@ fn quick_organize_impl(
                         cleanup_conflicting_mods(&dest_dir, &file_name_str);
 
                         // repakxtra: two different files flattened to one name would silently replace each other
-                        if written.insert(dest.clone(), entry_path.to_path_buf()).is_some_and(|prev| prev != entry_path) {
+                        if clash(&mut written, &dest_dir, &file_name_str, entry_path) {
                             failures.push(format!("Two files would both land as {}", file_name_str));
                             continue;
                         }
@@ -2681,6 +2693,10 @@ fn quick_organize_impl(
                                     .to_string(),
                             };
                             cleanup_conflicting_mods(&dest_dir, &file_name_str);
+                            if clash(&mut written, &dest_dir, &file_name_str, entry_path) {
+                                failures.push(format!("Two files would both land as {}", file_name_str));
+                                continue;
+                            }
 
                             match copy_iostore_with_compression_check(
                                 entry_path, &dest_dir, log, rename,
@@ -2710,6 +2726,10 @@ fn quick_organize_impl(
             let dest = output_dir.join(&file_name_str);
 
             cleanup_conflicting_mods(&output_dir, &file_name_str);
+            if clash(&mut written, &output_dir, &file_name_str, &path) {
+                failures.push(format!("Two files would both land as {}", file_name_str));
+                continue;
+            }
 
             // Copy the pak file
             if let Err(e) = std::fs::copy(&path, &dest) {
@@ -2761,6 +2781,10 @@ fn quick_organize_impl(
                     None => orig_name.clone(),
                 };
                 cleanup_conflicting_mods(&output_dir, &file_name_str);
+                if clash(&mut written, &output_dir, &file_name_str, &path) {
+                    failures.push(format!("Two files would both land as {}", file_name_str));
+                    continue;
+                }
 
                 match copy_iostore_with_compression_check(&path, &output_dir, log, rename) {
                     Ok(_) => {}
@@ -2776,7 +2800,11 @@ fn quick_organize_impl(
             let mut processed_utocs: std::collections::HashSet<PathBuf> =
                 std::collections::HashSet::new();
 
-            for entry in WalkDir::new(&path).into_iter().filter_entry(crate::xtra_bundle::not_staging).filter_map(|e| e.ok()) {
+            for entry in WalkDir::new(&path).into_iter().filter_entry(crate::xtra_bundle::not_staging) {
+                let entry = match entry {
+                    Ok(e) => e,
+                    Err(e) => { failures.push(format!("Could not read {}", e)); continue; } // repakxtra: an unreadable folder is not a smaller mod
+                };
                 let entry_path = entry.path();
                 if let Some(entry_ext) = entry_path.extension().and_then(|s| s.to_str()).map(|s| s.to_ascii_lowercase()) {
                     if entry_ext == "pak" {
@@ -2812,7 +2840,7 @@ fn quick_organize_impl(
                         cleanup_conflicting_mods(&dest_dir, &file_name_str);
 
                         // repakxtra: two different files flattened to one name would silently replace each other
-                        if written.insert(dest.clone(), entry_path.to_path_buf()).is_some_and(|prev| prev != entry_path) {
+                        if clash(&mut written, &dest_dir, &file_name_str, entry_path) {
                             failures.push(format!("Two files would both land as {}", file_name_str));
                             continue;
                         }
@@ -2864,6 +2892,10 @@ fn quick_organize_impl(
                                     .to_string(),
                             };
                             cleanup_conflicting_mods(&dest_dir, &file_name_str);
+                            if clash(&mut written, &dest_dir, &file_name_str, entry_path) {
+                                failures.push(format!("Two files would both land as {}", file_name_str));
+                                continue;
+                            }
 
                             match copy_iostore_with_compression_check(
                                 entry_path, &dest_dir, log, rename,
@@ -3032,6 +3064,18 @@ mod quick_organize_tests {
         let paths = vec![l.src.join("pack").to_string_lossy().into_owned()];
         let r = super::quick_organize_impl(paths, l.mods.clone(), String::new(), None, None, Some(true), &|_| {});
         assert!(r.is_err());
+        assert_eq!(files(&l.mods), before);
+
+        // two loose files with one name, from two folders, and two IoStore bundles flattened to one name
+        let r = run(&[l.src.join("pack").join("a").join("Baz_9999999_P.pak"), l.src.join("pack").join("b").join("Baz_9999999_P.pak")], &l.mods);
+        assert!(r.is_err());
+        for sub in ["a", "b"] {
+            fs::remove_file(l.src.join("pack").join(sub).join("Baz_9999999_P.pak")).unwrap();
+            fs::write(l.src.join("pack").join(sub).join("Qux_9999999_P.utoc"), sub).unwrap();
+            fs::write(l.src.join("pack").join(sub).join("Qux_9999999_P.ucas"), sub).unwrap();
+        }
+        let paths = vec![l.src.join("pack").to_string_lossy().into_owned()];
+        assert!(super::quick_organize_impl(paths, l.mods.clone(), String::new(), None, None, Some(true), &|_| {}).is_err());
         assert_eq!(files(&l.mods), before);
     }
 }
