@@ -138,7 +138,7 @@ impl SyncToolkit {
     /// Low-level FFI call: send a raw JSON request envelope and return the raw JSON
     /// response string. Serializes concurrent calls into the native tool via `call_lock`.
     fn invoke_raw(&self, request_json: &str) -> Result<String> {
-        log::info!("[SyncToolkit] Invoking native: {}...", log_preview(request_json));
+        log::debug!("[SyncToolkit] Invoking native: {}...", log_preview(request_json));
 
         // JSON text never contains an interior NUL, but guard anyway rather than panic.
         let c_request = CString::new(request_json)
@@ -169,7 +169,7 @@ impl SyncToolkit {
             let response_json = CStr::from_ptr(response_ptr).to_string_lossy().into_owned();
             free(response_ptr);
 
-            log::info!("[SyncToolkit] Got response: {} bytes", response_json.len());
+            log::debug!("[SyncToolkit] Got response: {} bytes", response_json.len());
             Ok(response_json)
         }
     }

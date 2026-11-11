@@ -128,15 +128,33 @@ pub fn library_walk(e: &walkdir::DirEntry) -> bool {
     !builtin_subfolder && (not_staging(e) || (e.file_type().is_dir() && e.file_name() == crate::xtra_builtins::FOLDER))
 }
 
+/// A work file one of the app's own writes leaves beside the mods when it is cut short (VFX update, snapshot restore,
+/// Merge sounds, the Galacta install, a rename's set-aside copy). Never a mod's or a player's own name.
+fn is_leftover(name: &str) -> bool {
+    [".repakxtra-tmp", ".repakxtra-restoring", ".pak.part", REPLACED].iter().any(|s| name.ends_with(s))
+        || (name.starts_with(crate::xtra_setup::GALACTA_STEM) && name.ends_with(".part"))
+}
+const REPLACED: &str = ".repakx_replaced";
+
 /// Removes staging folders a closed or crashed run left under `mods` (one level of subfolders deep), so the game
 /// never loads a half-built copy. Only names `staging_dir` makes are touched; the replaced files are in the trash.
-pub fn sweep_staging(mods: &Path) {
+/// repakxtra: also the leftover work files (is_leftover) last changed before `before` (this run's start), so nothing
+/// this run is writing. A rename's set-aside copy goes back under its name when that name is free (the only copy then).
+pub fn sweep_staging(mods: &Path, before: std::time::SystemTime) {
     let is_staging = |n: &str| ["installing", "incoming", "encrypt"].iter().any(|t| n.starts_with(&format!(".repakxtra-{}-", t)));
     let mut dirs = vec![mods.to_path_buf()];
     while let Some(d) = dirs.pop() {
         for e in fs::read_dir(&d).into_iter().flatten().flatten() {
             let name = e.file_name().to_string_lossy().to_string();
             let Ok(meta) = fs::symlink_metadata(e.path()) else { continue };
+            if meta.is_file() && is_leftover(&name) && meta.modified().is_ok_and(|t| t < before) {
+                let back = name.strip_suffix(REPLACED).map(|n| e.path().with_file_name(n)).filter(|b| !b.exists());
+                let _ = match back {
+                    Some(b) => fs::rename(e.path(), b),
+                    None => fs::remove_file(e.path()),
+                };
+                continue;
+            }
             if !meta.is_dir() || meta.file_type().is_symlink() { continue; }
             #[cfg(windows)]
             {
@@ -183,7 +201,7 @@ mod tests {
         fs::write(stage.join("Skin.utoc"), b"toc").unwrap();
         fs::write(stage.join("Skin.ucas"), b"cas").unwrap();
         assert!(!stage.join("Skin.pak").exists());
-        sweep_staging(d.path());
+        sweep_staging(d.path(), std::time::SystemTime::now());
         assert!(!stage.exists());
         assert_eq!(fs::read(original).unwrap(), b"original");
     }
@@ -193,6 +211,37 @@ mod tests {
         let _ = fs::remove_dir_all(&d);
         fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn the_start_sweep_takes_only_old_leftovers_and_leaves_every_other_file() {
+        let d = tempfile::tempdir().unwrap();
+        let keep = [
+            "Cool_9999999_P.pak", "Cool_9999999_P.utoc", "Cool_9999999_P.ucas", "Off_P.pak.bak_repak", "notes.txt", "song.part",
+            "Hero/Skin_P.pak", "Hero/readme.part", "Hero/Skin_P.pak.repakxtra-tmp-not", "Hero/Other.repakx_replaced.txt",
+        ];
+        let gone = ["A_P.utoc.repakxtra-tmp", "Hero/B_P.pak.repakxtra-restoring", "Merged_P.pak.part",
+            "Hero/Deep/!ProjectGalacta_9999999_P.pak.part", "Taken_P.pak.repakx_replaced"];
+        for f in keep.iter().chain(gone.iter()).chain(["Lost_P.pak.repakx_replaced"].iter()) {
+            let p = d.path().join(f);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, f.as_bytes()).unwrap();
+        }
+        std::fs::write(d.path().join("Taken_P.pak"), b"the mod that replaced it").unwrap();
+        // newer than the run: nothing goes, a .part from this run included
+        sweep_staging(d.path(), std::time::SystemTime::UNIX_EPOCH);
+        assert!(gone.iter().all(|f| d.path().join(f).exists()));
+
+        sweep_staging(d.path(), std::time::SystemTime::now() + std::time::Duration::from_secs(60));
+        for f in keep {
+            assert_eq!(std::fs::read(d.path().join(f)).unwrap(), f.as_bytes(), "{f} kept as it was");
+        }
+        assert!(gone.iter().all(|f| !d.path().join(f).exists()), "leftovers removed");
+        assert_eq!(std::fs::read(d.path().join("Taken_P.pak")).unwrap(), b"the mod that replaced it");
+        assert_eq!(std::fs::read(d.path().join("Lost_P.pak")).unwrap(), b"Lost_P.pak.repakx_replaced", "a set-aside only copy goes back");
+        let mut all: Vec<_> = walkdir::WalkDir::new(d.path()).into_iter().flatten().filter(|e| e.file_type().is_file()).collect();
+        all.retain(|e| e.file_name() != "Lost_P.pak" && e.file_name() != "Taken_P.pak");
+        assert_eq!(all.len(), keep.len(), "no other file touched or added");
     }
 
     #[test]

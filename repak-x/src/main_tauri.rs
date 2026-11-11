@@ -495,12 +495,20 @@ async fn get_game_path(state: State<'_, Arc<Mutex<AppState>>>) -> Result<String,
 }
 
 #[tauri::command]
-async fn set_game_path(path: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<String, String> {
+async fn set_game_path(
+    path: String,
+    state: State<'_, Arc<Mutex<AppState>>>,
+    window: Window,
+    watcher_state: State<'_, WatcherState>,
+) -> Result<String, String> {
     let mods_path = xtra_setup::mods_folder_for(&PathBuf::from(&path))?; // repakxtra: the install folder means its ~mods
 
-    let mut state = state.lock().unwrap();
-    state.game_path = mods_path.clone();
-    save_state(&state).map_err(|e| e.to_string())?;
+    {
+        let mut state = state.lock().unwrap();
+        state.game_path = mods_path.clone();
+        save_state(&state).map_err(|e| e.to_string())?;
+    }
+    let _ = watch_mods_folder(&window, &mods_path, &watcher_state); // repakxtra: the watcher follows the new folder
     Ok(mods_path.to_string_lossy().to_string()) // repakxtra: the folder actually stored
 }
 
@@ -508,6 +516,7 @@ async fn set_game_path(path: String, state: State<'_, Arc<Mutex<AppState>>>) -> 
 async fn auto_detect_game_path(
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
+    watcher_state: State<'_, WatcherState>,
 ) -> Result<String, String> {
     match find_marvel_rivals() {
         Some(game_root) => {
@@ -528,9 +537,12 @@ async fn auto_detect_game_path(
                 );
             }
 
-            let mut state = state.lock().unwrap();
-            state.game_path = mods_path.clone();
-            save_state(&state).map_err(|e| e.to_string())?;
+            {
+                let mut state = state.lock().unwrap();
+                state.game_path = mods_path.clone();
+                save_state(&state).map_err(|e| e.to_string())?;
+            }
+            let _ = watch_mods_folder(&window, &mods_path, &watcher_state); // repakxtra: the watcher follows the new folder
             ui_log::success(
                 "GamePath",
                 format!("Detected Marvel Rivals mods folder: {}", mods_path.display()),
@@ -555,15 +567,18 @@ async fn start_file_watcher(
     state: State<'_, Arc<Mutex<AppState>>>,
     watcher_state: State<'_, WatcherState>,
 ) -> Result<(), String> {
-    let state_guard = state.lock().unwrap();
-    let game_path = state_guard.game_path.clone();
-    drop(state_guard);
+    let game_path = state.lock().unwrap().game_path.clone();
+    watch_mods_folder(&window, &game_path, &watcher_state)
+}
 
+/// repakxtra: (re)starts the one folder watcher on this folder. The old watcher, and with it its debounce thread, is
+/// dropped first, so a changed game path stops watching the old folder.
+fn watch_mods_folder(window: &Window, game_path: &Path, watcher_state: &WatcherState) -> Result<(), String> {
+    let mut watcher_guard = watcher_state.watcher.lock().unwrap();
+    *watcher_guard = None;
     if !game_path.exists() {
         return Ok(()); // Can't watch non-existent path
     }
-
-    let mut watcher_guard = watcher_state.watcher.lock().unwrap();
 
     // repakxtra: trailing-edge debounce. One reload 750 ms after the folder goes quiet, instead of the first event and then
     // one every 500 ms while a big file copies (each reload re-lists the library and restarts its background scans).
@@ -610,7 +625,7 @@ async fn start_file_watcher(
 
     match watcher_result {
         Ok(mut watcher) => {
-            if let Err(e) = watcher.watch(&game_path, RecursiveMode::Recursive) {
+            if let Err(e) = watcher.watch(game_path, RecursiveMode::Recursive) {
                 error!("Failed to watch game path: {}", e);
                 return Err(e.to_string());
             }
@@ -7250,13 +7265,44 @@ fn emit_session_banner(app: &tauri::App) {
     );
 }
 
+/// repakxtra: the log appends, so nothing can empty it under a running copy, and rolls over to repakx.old.log at start and
+/// past LOG_CAP, so the previous file is always kept and the pair stays under 2 x LOG_CAP.
+const LOG_CAP: u64 = 10 * 1024 * 1024;
+struct RollingLog {
+    path: PathBuf,
+    file: File,
+    size: u64,
+}
+impl RollingLog {
+    fn open(path: PathBuf) -> std::io::Result<Self> {
+        let _ = std::fs::rename(&path, path.with_extension("old.log"));
+        let file = std::fs::OpenOptions::new().create(true).append(true).open(&path)?;
+        Ok(Self { size: file.metadata().map(|m| m.len()).unwrap_or(0), path, file })
+    }
+}
+impl std::io::Write for RollingLog {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if self.size > LOG_CAP {
+            if let Ok(next) = Self::open(self.path.clone()) {
+                *self = next;
+            }
+        }
+        let n = self.file.write(buf)?;
+        self.size += n as u64;
+        Ok(n)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.file.flush()
+    }
+}
+
 fn setup_logging() {
     // Try exe-relative Logs folder first
     let log_dir = log_dir();
     let log_file = log_dir.join("repakx.log");
 
     // Attempt to create the log directory
-    let log_file_result = std::fs::create_dir_all(&log_dir).and_then(|_| File::create(&log_file));
+    let log_file_result = std::fs::create_dir_all(&log_dir).and_then(|_| RollingLog::open(log_file.clone()));
 
     let final_log_file = match log_file_result {
         Ok(file) => {
@@ -7269,7 +7315,7 @@ fn setup_logging() {
             eprintln!("Failed to create log at {}: {}", log_file.display(), e);
             let temp_log = std::env::temp_dir().join("repakx.log");
             eprintln!("Fallback logging to: {}", temp_log.display());
-            File::create(&temp_log).expect("Failed to create log file even in temp directory")
+            RollingLog::open(temp_log).expect("Failed to create log file even in temp directory")
         }
     };
 
@@ -7395,7 +7441,7 @@ fn compute_mod_details(
 ) -> Result<ModDetails, String> {
     let path = path.clone();
 
-    info!("Getting details for mod: {}", path.display());
+    debug!("Getting details for mod: {}", path.display());
 
     if !path.exists() {
         return Err(format!("Mod file does not exist: {}", path.display()));
@@ -7418,7 +7464,7 @@ fn compute_mod_details(
             }
         }
     }
-    info!("Cache miss for mod: {}, opening PAK...", path.display());
+    debug!("Cache miss for mod: {}, opening PAK...", path.display());
     let _reading = xtra_parse_guard::reading(&path, &format!("{fingerprint:?}"))?; // repakxtra: crash-loop guard
     // --- End cache check ---
 
@@ -7487,7 +7533,7 @@ fn compute_mod_details(
 
     let file_count = files.len();
 
-    info!("PAK contains {} files", file_count);
+    debug!("PAK contains {} files", file_count);
     if file_count > 0 && file_count <= 10 {
         info!("Files: {:?}", files);
     } else if file_count > 10 {
@@ -7498,8 +7544,8 @@ fn compute_mod_details(
     use crate::utils::get_pak_characteristics_detailed;
     let characteristics = get_pak_characteristics_detailed(files.clone());
     info!("Detected mod type: {}", characteristics.mod_type);
-    info!("Character name: {}", characteristics.character_name);
-    info!("Category: {}", characteristics.category);
+    debug!("Character name: {}", characteristics.character_name);
+    debug!("Category: {}", characteristics.category);
 
     // Run fast Blueprint detection using filename heuristics
     let has_blueprint = files.iter().any(|f| {
@@ -7584,7 +7630,7 @@ fn compute_mod_details(
             .mod_details_cache
             .insert(path.clone(), (fingerprint, details.clone()));
         xtra_details_cache::mark_dirty(); // repakxtra
-        info!("Cached details for mod: {}", path.display());
+        debug!("Cached details for mod: {}", path.display());
     }
     // --- End cache store ---
 
@@ -8295,6 +8341,15 @@ fn handle_deep_link_url(url: &str, app_handle: &tauri::AppHandle) {
 // ============================================================================
 
 fn main() {
+    let started = std::time::SystemTime::now(); // repakxtra: the start sweeps never touch a file this run wrote
+    let context = tauri::generate_context!();
+    // repakxtra: a second start only hands its arguments (a link) to the open copy, which the single-instance plugin does
+    // inside build(), before any window. Nothing below may run first: it would empty the open copy's log, point the link
+    // scheme at this exe, and sweep work folders the open copy is using.
+    if xtra_identity::copy_running(&context.config().identifier) {
+        let _ = tauri::Builder::default().plugin(tauri_plugin_single_instance::init(|_, _, _| {})).build(context);
+        return; // the open copy was still starting (no window to hand the link to yet): this start ends here
+    }
     xtra_vfx::tune_dotnet_gc(); // repakxtra: before UAssetTool loads, while no other thread runs
     xtra_identity::carry_over_webview_storage(); // repakxtra: before the window opens
     xtra_cleanup::on_start(); // repakxtra: Settings > Storage sections marked to clear at the next start
@@ -8458,7 +8513,7 @@ fn main() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_deep_link::init())
-        .setup(|app| {
+        .setup(move |app| {
             // Wire the drawer's log bus before anything else in setup runs, so
             // the startup checks below are captured instead of emitted into a
             // void. Entries land in a replay buffer until the webview mounts.
@@ -8466,7 +8521,10 @@ fn main() {
             emit_session_banner(app);
             // Plugin initialization has established that this is the primary instance. Secondary opens must not sweep live work.
             let mods = app.state::<Arc<Mutex<AppState>>>().lock().unwrap().game_path.clone();
-            crate::xtra_bundle::sweep_staging(&mods);
+            std::thread::spawn(move || {
+                crate::xtra_bundle::sweep_staging(&mods, started);
+                crate::xtra_snapshot::sweep_staging(started);
+            });
             crate::xtra_kit::sweep(&crate::xtra_kit::kit_dir()); // repakxtra: what a kit install stopped half way left
             xtra_project::on_open(app.handle());
             xtra_buildmark::tint_window_icon(app); // repakxtra: green (test) or amber (dev) taskbar icon
@@ -8772,7 +8830,7 @@ fn main() {
                 }
             }
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while running tauri application")
         .run(|app_handle, event| {
             if let tauri::RunEvent::ExitRequested { .. } = event {
