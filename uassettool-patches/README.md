@@ -72,3 +72,8 @@ loads them that way) comes back with a null `ClassIndex`, and `create_mod_iostor
 reference not set"). Extracts never take that path, so the app's use of the command line was never affected. With the
 flag, on 467 Niagara and material assets: packing works (1.1 s, every unpacked file the same as the preview kit's own
 UAssetTool's output), extracts are byte for byte the same as before, and `serve` matches one-shot runs.
+
+`0015-pak-readers-take-the-key-from-the-environment.patch`: the command line's `list_pak` and `extract_pak` take the game's
+key from `REPAKXTRA_AES` when no `--aes` is given. The app's preview fixes (`preview_fixes\sound_pak.py`) run inside the
+generator, which the app starts with that variable, so the key no longer shows on a helper's command line, where any
+process and the kit's logs could read it. An `--aes` on the command line still wins.

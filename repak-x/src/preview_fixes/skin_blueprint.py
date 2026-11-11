@@ -71,6 +71,13 @@ def render_character(work, targets, pkgs, out_png, bl, meshes=()):
 
 
 _kit_render_vanillas = _render_vanillas
+_kit_load_result = load_result
+
+
+def load_result(path):
+    """The app's "no 3D" marker (<loadout key>.3d-none.json, xtra_viewer.rs) holds a list and matches loadout-*.json: no
+    result, so the loops over loadouts (saved_skin, share_vanillas) skip it instead of failing the run."""
+    return None if Path(path).name.endswith(".3d-none.json") else _kit_load_result(path)
 
 
 def saved_skin(out_dir, key, index):

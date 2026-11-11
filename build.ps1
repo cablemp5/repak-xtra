@@ -38,6 +38,11 @@ if ($Release) {
     $viewed = (cmd /c "gh release view $tagPrefix$ver -R cablemp5/repak-xtra --json tagName 2>&1") -join ' '
     if ($LASTEXITCODE -eq 0) { throw "$tagPrefix$ver is already released: bump REPAKXTRA_VERSION in custom/version.ts (in a PR) first." }
     if ($viewed -notmatch 'release not found') { throw "Could not check whether $tagPrefix$ver is already released (gh: $viewed). Check the connection and gh auth status, then try again." }
+    # The published kit (preview-kit.json, what every copy downloads) must be one this version's preview fixes run on
+    $minKit = [regex]::Match((Get-Content -Raw repak-x\src\xtra_kit.rs), 'pub const MIN_KIT: u32 = (\d+);').Groups[1].Value
+    if (-not $minKit) { throw 'No MIN_KIT in repak-x\src\xtra_kit.rs.' }
+    $kitVer = (Get-Content -Raw preview-kit.json | ConvertFrom-Json).version
+    if ([int]$kitVer -lt [int]$minKit) { throw "preview-kit.json names kit $kitVer, older than MIN_KIT $minKit (xtra_kit.rs): every copy would get a kit its previews cannot run on. Publish kit $minKit or newer and update preview-kit.json in a PR first." }
 }
 # vswhere: the .NET NativeAOT linker step calls it to find MSVC
 $env:PATH = "$env:USERPROFILE\.cargo\bin;${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer;$env:PATH"

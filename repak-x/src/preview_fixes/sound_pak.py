@@ -1,4 +1,5 @@
-"""Give the kit's sound renderer a named copy of a PAK with a stripped directory."""
+"""Give the kit's sound renderer a named copy of a PAK with a stripped directory. The app's asset reader takes the game's
+key from REPAKXTRA_AES (the environment the app gave this run), never from its command line."""
 
 
 def sound_pak(work, cfg, pak):
@@ -7,7 +8,7 @@ def sound_pak(work, cfg, pak):
     tool = os.environ.get("REPAKXTRA_UAT")
     if not tool:
         raise RuntimeError("This PAK needs the app's asset reader to recover its filenames. Update the app.")
-    paths = run([tool, "list_pak", pak, "--paths-only", "--aes", cfg["aes"]], 120).stdout.splitlines()
+    paths = run([tool, "list_pak", pak, "--paths-only"], 120).stdout.splitlines()
     if not paths:
         return pak
     # The native extractor joins names to its output folder. Refuse paths that could leave it.
@@ -17,7 +18,7 @@ def sound_pak(work, cfg, pak):
             raise RuntimeError("This sound PAK contains an unsafe file path.")
     folder = work / "sound-files"
     folder.mkdir(parents=True, exist_ok=True)
-    run([tool, "extract_pak", pak, folder, "--aes", cfg["aes"]], 120)
+    run([tool, "extract_pak", pak, folder], 120)
     named = work / "sound.pak"
     run([REPAK, "pack", folder, named, "--compression", "Zlib"], 120)
     return named

@@ -15,6 +15,9 @@ use tauri::{AppHandle, Emitter};
 const MANIFEST: &str = "https://raw.githubusercontent.com/cablemp5/repak-xtra/main/preview-kit.json";
 /// The kit releases, for a download by hand when a check fails
 pub const KIT_RELEASES: &str = "https://github.com/cablemp5/repak-xtra/releases?q=preview-kit&expanded=true";
+/// The oldest kit this version's preview fixes (preview_fixes\runtime.py) run on: generator_command refuses an older one
+/// with one sentence, and build.ps1 -Release refuses while preview-kit.json names an older one.
+pub const MIN_KIT: u32 = 20;
 /// A check younger than this is reused (Check for updates still asks, unless GitHub said to wait)
 const FRESH_SECS: i64 = 6 * 3600;
 
@@ -342,8 +345,8 @@ fn unpack_from(zip: impl Read + Seek, dir: &Path, from: &str) -> Result<String, 
     if archive.len() > MAX_ENTRIES {
         return Err(format!("That zip holds {} files, more than a preview kit can ({MAX_ENTRIES}).", archive.len()));
     }
+    sweep(dir);
     let side = dir.with_extension("new");
-    let _ = fs::remove_dir_all(&side);
     let written = (|| -> Result<(), String> {
         let mut total = 0u64;
         for i in 0..archive.len() {
@@ -379,9 +382,40 @@ fn unpack_from(zip: impl Read + Seek, dir: &Path, from: &str) -> Result<String, 
         let _ = fs::remove_dir_all(&side);
         return Err(e);
     }
-    let _ = fs::remove_dir_all(dir);
-    fs::rename(&side, dir).map_err(|e| format!("Could not put the kit in place: {e}"))?;
+    // The old kit moves aside whole before the new one goes in: a folder with an open file refuses the rename as a whole,
+    // so a held file leaves the old kit complete instead of half deleted
+    let old = dir.with_extension("old");
+    let had = dir.exists();
+    if had {
+        if let Err(e) = fs::rename(dir, &old) {
+            let _ = fs::remove_dir_all(&side);
+            return Err(format!("Could not replace the kit, a program has one of its files open ({e}). Nothing was changed. Try again in a moment."));
+        }
+    }
+    if let Err(e) = fs::rename(&side, dir) {
+        if had {
+            let _ = fs::rename(&old, dir);
+        }
+        let _ = fs::remove_dir_all(&side);
+        return Err(format!("Could not put the kit in place: {e}"));
+    }
+    let _ = fs::remove_dir_all(&old);
     Ok(version)
+}
+
+/// What an install stopped half way leaves beside the kit folder `dir`: the old kit put back when it is the only complete
+/// one, then the side folders (.new, .old) removed. Runs before each install and at start (main_tauri.rs setup, the
+/// primary copy only: a second copy must not sweep a running install's folder).
+pub fn sweep(dir: &Path) {
+    let old = dir.with_extension("old");
+    if installed(dir).is_none() && installed(&old).is_some() {
+        let _ = fs::remove_dir_all(dir);
+        if fs::rename(&old, dir).is_err() {
+            return; // a file in it is held: the only complete kit stays as .old for the next sweep
+        }
+    }
+    let _ = fs::remove_dir_all(&old);
+    let _ = fs::remove_dir_all(dir.with_extension("new"));
 }
 
 /// Install progress for Setup (`preview-kit-progress`): the stage, and the bytes so far of `total` (0 when unknown).
@@ -428,6 +462,13 @@ pub async fn preview_kit_install(app: AppHandle, file: Option<String>) -> Result
         Some(f) => PathBuf::from(f),
         None => {
             let release = preview_kit_latest(None).await?.ok_or("No preview kit has been published yet.")?;
+            // Never an older kit over a newer one (a kit from a file, or a newer build): the app never offers it, so it
+            // is refused here rather than asked
+            if let (Some(have), Ok(new)) = (installed_version(), release.version.parse::<u32>()) {
+                if have > new {
+                    return Err(format!("The kit on this PC (v{have}) is newer than GitHub's newest (v{new}). Nothing was changed."));
+                }
+            }
             let mut got = download(&app, &release.asset, &downloaded).await;
             if got.is_ok() {
                 got = crate::xtra_update::verify_checksum(&reqwest::Client::new(), &release.asset, &downloaded).await;
@@ -450,6 +491,32 @@ pub async fn preview_kit_install(app: AppHandle, file: Option<String>) -> Result
     .map_err(|e| e.to_string())?;
     let _ = fs::remove_file(&downloaded);
     result
+}
+
+/// What the confirm before a kit install from a file shows: its size, and whether its SHA-256 is the newest published
+/// kit's (`published`: that kit's version; both None when GitHub could not be asked).
+#[derive(Serialize)]
+pub struct KitFile {
+    size: u64,
+    published: Option<String>,
+    matches: Option<bool>,
+}
+
+#[tauri::command]
+pub async fn preview_kit_check_file(file: String) -> Result<KitFile, String> {
+    let path = PathBuf::from(&file);
+    let size = fs::metadata(&path).map_err(|e| format!("Could not read {file}: {e}"))?.len();
+    let hashed = path.clone();
+    let hash = tauri::async_runtime::spawn_blocking(move || crate::xtra_update::sha256_file(&hashed)).await.map_err(|e| e.to_string())??;
+    let published = async {
+        let release = preview_kit_latest(None).await?.ok_or("none published")?;
+        let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(15)).build().map_err(|e| e.to_string())?;
+        let text = client.get(format!("{}.sha256", release.asset)).header("User-Agent", "repakxtra").send().await
+            .and_then(|r| r.error_for_status()).map_err(|e| e.to_string())?.text().await.map_err(|e| e.to_string())?;
+        let name = release.asset.rsplit('/').next().unwrap_or_default().to_string();
+        Ok::<_, String>((release.version, crate::xtra_update::parse_sha256(&text, &name)?))
+    }.await.ok();
+    Ok(KitFile { size, matches: published.as_ref().map(|(_, h)| *h == hash), published: published.map(|(v, _)| v) })
 }
 
 /// Installs Blender with winget (Windows' package manager: the official BlenderFoundation.Blender package; Blender's own
@@ -678,6 +745,30 @@ mod tests {
         assert!(unpack(&kit_zip(&[("source.json/x", b"x")]), &dir, "file").is_err());
         assert_eq!(source(&dir).as_deref(), Some("github"), "the old kit stays when its source cannot be recorded");
         assert!(!dir.with_extension("new").exists(), "no side folder is left behind");
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            let held = fs::OpenOptions::new().read(true).share_mode(1).open(dir.join(r"python\python.exe")).unwrap(); // read sharing only, as a scanner holds it
+            assert!(unpack(&kit_zip(&[]), &dir, "file").is_err(), "a held file refuses the swap");
+            drop(held);
+            assert_eq!(fs::read_dir(&dir).unwrap().count(), 4, "the old kit stays whole (kit.json, python, previews, source.json)");
+            assert_eq!(source(&dir).as_deref(), Some("github"));
+            assert!(!dir.with_extension("new").exists() && !dir.with_extension("old").exists());
+        }
+        // An install stopped between its two renames: the old kit is put back at the next start
+        fs::rename(&dir, dir.with_extension("old")).unwrap();
+        fs::create_dir_all(dir.with_extension("new")).unwrap();
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            let held = fs::OpenOptions::new().read(true).share_mode(1).open(dir.with_extension("old").join("kit.json")).unwrap();
+            sweep(&dir);
+            drop(held);
+            assert_eq!(installed(&dir.with_extension("old")).as_deref(), Some("2"), "a held .old kit is kept, not deleted");
+        }
+        sweep(&dir);
+        assert_eq!((installed(&dir).as_deref(), source(&dir).as_deref()), (Some("2"), Some("github")));
+        assert!(!dir.with_extension("new").exists() && !dir.with_extension("old").exists());
         record_source(&dir, "file").unwrap();
         assert_eq!(source(&dir).as_deref(), Some("file"));
         fs::write(dir.join("source.json"), r#"{"from": "elsewhere"}"#).unwrap();

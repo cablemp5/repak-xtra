@@ -8653,6 +8653,7 @@ fn main() {
             // Plugin initialization has established that this is the primary instance. Secondary opens must not sweep live work.
             let mods = app.state::<Arc<Mutex<AppState>>>().lock().unwrap().game_path.clone();
             crate::xtra_bundle::sweep_staging(&mods);
+            crate::xtra_kit::sweep(&crate::xtra_kit::kit_dir()); // repakxtra: what a kit install stopped half way left
             xtra_project::on_open(app.handle());
             xtra_buildmark::tint_window_icon(app); // repakxtra: green (test) or amber (dev) taskbar icon
 
@@ -8733,6 +8734,7 @@ fn main() {
             xtra_kit::preview_kit_status, // repakxtra: preview kit in Setup
             xtra_kit::preview_kit_latest,
             xtra_kit::preview_kit_install,
+            xtra_kit::preview_kit_check_file, // repakxtra: the confirm before a kit from a file
             xtra_kit::preview_kit_remove,
             xtra_kit::preview_kit_set_blender,
             xtra_storage::xtra_storage_snapshot_write,

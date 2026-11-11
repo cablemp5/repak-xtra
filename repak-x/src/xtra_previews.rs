@@ -336,6 +336,7 @@ pub(crate) fn log_generator(err: std::process::ChildStderr, mut file: Option<std
     use std::io::Write;
     let mut traceback = false;
     for line in BufReader::new(err).lines().map_while(Result::ok) {
+        let line = hide_key(&line);
         if let Some(f) = file.as_mut() {
             let _ = writeln!(f, "{line}");
         }
@@ -358,6 +359,17 @@ pub(crate) fn log_generator(err: std::process::ChildStderr, mut file: Option<std
             crate::ui_log::info("Previews", text);
         }
     }
+}
+
+/// `text` with the game's key replaced: a tool's command line the kit logged can carry it, and the Logs and
+/// generator.log go into bug reports.
+fn hide_key(text: &str) -> String {
+    let key = crate::install_mod::AES_KEY_HEX.trim_start_matches("0x").to_ascii_lowercase();
+    let mut out = text.to_string();
+    while let Some(i) = out.to_ascii_lowercase().find(&key) {
+        out.replace_range(i..i + key.len(), "<key>");
+    }
+    out
 }
 
 /// A generator line that reports a failure ("<key>: error: ...", "spec: export failed: ..."), not a note: a count like
@@ -421,6 +433,11 @@ pub(crate) fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Re
     let Some((root, python, _script)) = generator() else {
         return Err("Previews need the preview kit: install it in Setup.".into());
     };
+    // The app's preview fixes need a kit at least this new: one clear sentence here (renders, the doctor, Rotate in 3D,
+    // and the texture check all start the kit through this), not a fix that cannot find its line
+    if let Some(v) = crate::xtra_kit::installed_version().filter(|v| *v < crate::xtra_kit::MIN_KIT) {
+        return Err(format!("This version needs preview kit {} or newer. Yours is {v}.", crate::xtra_kit::MIN_KIT));
+    }
     if need_blender && crate::xtra_kit::blender().is_none() {
         return Err("Previews need Blender: install it in Setup (or from blender.org), or pick blender.exe there.".into());
     }
@@ -494,7 +511,7 @@ pub async fn previews_doctor(state: State<'_, Arc<Mutex<crate::AppState>>>) -> R
                 return Ok(v);
             }
             last = format!("The preview check gave no answer (exit {}).", out.status.code().unwrap_or(-1));
-            let err = String::from_utf8_lossy(&out.stderr);
+            let err = hide_key(&String::from_utf8_lossy(&out.stderr));
             let tail: Vec<&str> = err.lines().filter(|l| !l.trim().is_empty()).rev().take(3).collect(); // a traceback's last lines name the error
             crate::ui_log::error("Previews", format!("{last} {}", tail.into_iter().rev().collect::<Vec<_>>().join(" | ")));
         }
@@ -542,6 +559,15 @@ mod tests {
         assert!(super::generator_error("spec: export failed: package not found"));
         assert!(!super::generator_error("done: 4 made, 0 failed"));
         assert!(super::generator_error("blender.exe exit 1") && !super::generator_error("blender.exe exit 0"));
+    }
+
+    #[test]
+    fn logged_command_lines_lose_the_key() {
+        let key = crate::install_mod::AES_KEY_HEX;
+        let line = format!("# uassettool.exe exit 1: ['x.exe', 'list_pak', 'a.pak', '--aes', '0x{}'] and {key}", key.to_ascii_lowercase());
+        let hidden = super::hide_key(&line);
+        assert!(!hidden.to_ascii_lowercase().contains(&key.to_ascii_lowercase()), "{hidden}");
+        assert_eq!(hidden, "# uassettool.exe exit 1: ['x.exe', 'list_pak', 'a.pak', '--aes', '0x<key>'] and <key>");
     }
 
     use super::*;

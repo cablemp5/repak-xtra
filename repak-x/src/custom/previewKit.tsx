@@ -8,6 +8,7 @@ import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { refreshPreviewsAvailable } from './previews'
 import type { useAlert } from '../components/AlertHandler'
 import { useFinished } from './installTrack'
+import { confirmKitFile } from './opDialogs'
 
 type Alert = ReturnType<typeof useAlert>
 /** source: where the installed kit came from ("github" or "file"; null for a kit installed before that was recorded) */
@@ -20,6 +21,22 @@ export type KitProgress = { stage: 'download' | 'unpack' | 'blender' | 'check'; 
 
 /** A kit zip by its file name (repakxtra-preview-kit-v2.zip, also "... (1).zip" from a browser). */
 export const isKitZip = (path: string) => /(^|[\\/])repakxtra-preview-kit[^\\/]*\.zip$/i.test(path)
+let modsExpected = false
+/** First run's loadout page waits for mods: while it shows, a kit-named zip dropped on the window is a mod drop. */
+export const expectMods = (on: boolean) => { modsExpected = on }
+/** The dropped path that installs as the kit: one kit-named zip, never while the install panel (`installing`) or first
+ *  run's loadout page waits for mods. */
+export const kitDrop = (paths: string[], installing = false) =>
+  paths.length === 1 && isKitZip(paths[0]) && !installing && !modsExpected ? paths[0] : undefined
+/** A kit zip from a file holds programs the app runs: checked (size, and its hash against the published kit's) with a
+ *  toast meanwhile (a 117 MB zip takes a moment), then the confirm. True to install. */
+async function askKitFile(file: string, alert: Alert) {
+  const id = alert.showAlert({ color: 'default', title: 'Preview kit', description: 'Checking the file…', isLoading: true, duration: 0 })
+  try {
+    const info = await invoke<{ size: number; published: string | null; matches: boolean | null }>('preview_kit_check_file', { file }).finally(() => alert.dismissAlert(id))
+    return await confirmKitFile(file, info)
+  } catch (e) { alert.warning('Preview kit not installed', String(e)); return false }
+}
 /** Kit versions are whole numbers ("2"); anything else compares as text. */
 export const isNewerKit = (latest: string, installed?: string | null) =>
   !installed || (Number.isFinite(+latest) && Number.isFinite(+installed) ? +latest > +installed : latest > installed)
@@ -85,7 +102,7 @@ export function usePreviewKit(alert: Alert) {
     /** The newest kit, quietly (offline: nothing to say). */
     peek: () => fetchLatest().catch(() => null),
     checkPc: () => runDoctorAfter(Promise.resolve(), 'doctor'),
-    install: (file?: string) => run('install', async () => {
+    install: async (file?: string) => file && !await askKitFile(file, alert) ? undefined : run('install', async () => {
       setPlan(file ? ['Unpack', 'Check'] : ['Download', 'Unpack', 'Check'])
       const was = kit?.version
       const v = await installKit(file)
@@ -136,10 +153,12 @@ export function usePreviewKit(alert: Alert) {
   }
 }
 
-/** A kit zip dropped on the window installs as the kit (not as a mod). Returns whether it handled the drop. */
-export async function installDroppedKit(paths: string[], alert: Alert) {
-  const zip = paths.length === 1 ? paths[0] : undefined
-  if (!zip || !isKitZip(zip)) return false
+/** A kit zip dropped on the window installs as the kit (not as a mod) once confirmed (kitDrop says when a drop is one).
+ *  Returns whether it handled the drop. */
+export async function installDroppedKit(paths: string[], alert: Alert, installing = false) {
+  const zip = kitDrop(paths, installing)
+  if (!zip) return false
+  if (!await askKitFile(zip, alert)) return true
   const id = alert.showAlert({ color: 'default', title: 'Installing the preview kit', description: 'Unpacking…', isLoading: true, duration: 0 })
   try {
     const v = await invoke<string>('preview_kit_install', { file: zip })
@@ -155,5 +174,7 @@ export async function installDroppedKit(paths: string[], alert: Alert) {
 if (import.meta.env.DEV) {
   console.assert(isKitZip('C:/Downloads/repakxtra-preview-kit-v2.zip') && isKitZip('D:\\x\\repakxtra-preview-kit-v2 (1).zip'), 'isKitZip names')
   console.assert(!isKitZip('C:/mods/repakxtra-preview-kit.pak') && !isKitZip('C:/repakxtra-preview-kit-v2/skin.zip'), 'isKitZip others')
+  console.assert(kitDrop(['C:/d/repakxtra-preview-kit-v20.zip']) === 'C:/d/repakxtra-preview-kit-v20.zip' && !kitDrop(['C:/d/repakxtra-preview-kit-v20.zip'], true)
+    && !kitDrop(['C:/d/repakxtra-preview-kit-v20.zip', 'C:/d/mod.pak']), 'kitDrop: alone, and not while the install panel waits')
   console.assert(isNewerKit('10', '9') && !isNewerKit('2', '2') && isNewerKit('1', null), 'isNewerKit')
 }
