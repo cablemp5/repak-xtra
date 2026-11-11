@@ -5,15 +5,23 @@
 
 use std::path::Path;
 
-/// Whether one archive path stays inside the output folder (PAK entries are relative to the mount point, IoStore
-/// paths start with "/Game/" or a mount; a leading "/" is fine, a ".." part anywhere is not).
+/// Whether one archive path stays inside the output folder (PAK entries are relative to the mount point). A name that
+/// starts with "/" or "\" is refused before anything is trimmed: the tool joins it to the output folder as a rooted
+/// path ("/x/y" goes to the drive root, "//host/share/x" to a network share). The one exception is UE's root
+/// directory "/", which gives a root-level file the name "/name" (a companion PAK's chunknames).
 pub fn safe_entry(path: &str) -> bool {
     const RESERVED: [&str; 22] = [
         "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
         "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
     ];
-    let p = path.replace('\\', "/");
-    let rel = p.trim_start_matches('/');
+    let rel = match path.strip_prefix('/') {
+        Some(leaf) if !leaf.contains(['/', '\\']) => leaf,
+        Some(_) => return false,
+        None if path.starts_with('\\') => return false,
+        None => path,
+    };
+    let p = rel.replace('\\', "/");
+    let rel = p.as_str();
     !rel.is_empty()
         && rel.split('/').all(|seg| {
             let stem = seg.split('.').next().unwrap_or("").to_ascii_lowercase();
@@ -85,7 +93,10 @@ pub fn extract_pak_all(file_path: &str, output_path: &str, aes_key: Option<&str>
 
 /// uasset_toolkit::extract_iostore after checking every package path the .utoc lists.
 pub fn extract_iostore(file_path: &str, output_path: &str, aes_key: Option<&str>) -> Result<usize, String> {
-    let files = crate::utoc_utils::read_utoc(Path::new(file_path)).into_iter().map(|e| e.file_path);
+    // IoStore paths are virtual ("/Game/..."): one leading "/" is theirs, a second still fails the check
+    let files = crate::utoc_utils::read_utoc(Path::new(file_path))
+        .into_iter()
+        .map(|e| e.file_path.strip_prefix('/').map(str::to_string).unwrap_or(e.file_path));
     check(files, file_path, Some(Path::new(output_path)))?;
     uasset_toolkit::extract_iostore(file_path, output_path, aes_key).map_err(|e| e.to_string())
 }
@@ -96,10 +107,10 @@ mod tests {
 
     #[test]
     fn only_paths_inside_the_folder_pass() {
-        for ok in ["Marvel/Content/Marvel/X.uasset", "/Game/Marvel/X.uasset", "a\\b\\c.uexp", "Engine/Content/x.v2.uasset"] {
+        for ok in ["Marvel/Content/Marvel/X.uasset", "/chunknames","a\\b\\c.uexp", "Engine/Content/x.v2.uasset"] {
             assert!(safe_entry(ok), "refused {ok}");
         }
-        for bad in ["../outside.txt", "Marvel/../../x", "..\\x", "C:/x", "a/C:x", "a/b.txt:stream", "a/CON.txt", "a/nul", "a/b./c", "a/b /c", "a//b", "", "/", "a/./b"] {
+        for bad in ["../outside.txt", "Marvel/../../x", "..\\x", "C:/x", "a/C:x", "a/b.txt:stream", "a/CON.txt", "a/nul", "a/b./c", "a/b /c", "a//b", "", "/", "a/./b", "/x/y", "//h/s/x", "\\x\\y", "\\x", "/Game/Marvel/X.uasset", "/a\\b"] {
             assert!(!safe_entry(bad), "accepted {bad:?}");
         }
     }

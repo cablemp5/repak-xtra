@@ -25,3 +25,6 @@ repak-x/resources/ubol/uBOLite.edge.zip -filter -diff -merge binary
 
 # repakxtra: the FOV logic source is compiled into the exe (include_bytes!): a real file, never an LFS pointer
 repak-x/resources/visual-builtins/fov-logic.zip -filter -diff -merge binary
+
+# repakxtra: tiny synthetic malformed paks for uasset_app's tests: real files, never LFS pointers
+uasset_toolkit/uasset_app/tests/fixtures/** -filter -diff -merge binary
