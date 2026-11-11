@@ -8465,8 +8465,13 @@ fn main() {
         let _ = tauri::Builder::default().plugin(tauri_plugin_single_instance::init(|_, _, _| {})).build(context);
         return; // the open copy was still starting (no window to hand the link to yet): this start ends here
     }
-    // repakxtra: an update cut off part way is finished or undone before anything loads or runs the app's files
-    let recovered = xtra_updater::recover_killed_update();
+    // repakxtra: an update cut off part way is finished or undone before anything loads or runs the app's files, and a
+    // start while one is copying ends here (the update starts the app itself once it is done)
+    let recovered = match xtra_updater::recover_killed_update() {
+        xtra_updater::Recovery::Busy => return,
+        xtra_updater::Recovery::Done(done) => Some(done),
+        xtra_updater::Recovery::Nothing => None,
+    };
     xtra_vfx::tune_dotnet_gc(); // repakxtra: before UAssetTool loads, while no other thread runs
     xtra_identity::carry_over_webview_storage(); // repakxtra: before the window opens
     xtra_cleanup::on_start(); // repakxtra: Settings > Storage sections marked to clear at the next start
