@@ -161,7 +161,8 @@ try {
     try { Save-State 'restoring' } catch { } # never what stops the rollback (a full disk can refuse it too)
     $bad = Restore
     # a file that could not go back: 'retry' has the next start (the one Fail opens) put it back, never wait for this script
-    if (-not $bad) { Remove-Item -LiteralPath $state -Force -ErrorAction SilentlyContinue } else { try { Save-State 'retry' } catch { } }
+    # (no record at all rather than 'restoring' with this script still alive: that would make the start below wait for it)
+    if (-not $bad) { Remove-Item -LiteralPath $state -Force -ErrorAction SilentlyContinue } else { try { Save-State 'retry' } catch { Remove-Item -LiteralPath $state -Force -ErrorAction SilentlyContinue } }
     if ($bad) { Fail "The update could not be copied ($err), and $bad files could not be put back. $broken" }
     Fail "The update could not be copied ($err). The previous version was kept."
 }
@@ -189,7 +190,7 @@ if ($env:RX_TEST -ne '1') {
             try { Save-State 'restoring' } catch { }
             $bad = Restore
             # the backups stay when a file could not be put back: the next start (opened below) tries again
-            if (-not $bad) { Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue } else { try { Save-State 'retry' } catch { } }
+            if (-not $bad) { Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue } else { try { Save-State 'retry' } catch { Remove-Item -LiteralPath $state -Force -ErrorAction SilentlyContinue } }
             try { Start-Process -FilePath $exe } catch { }
             if ($bad) { Say "The new version did not start, and $bad files of the previous one could not be put back. $broken" }
             else { Say 'The new version did not start, so repakxtra went back to the previous one.' }
@@ -339,8 +340,14 @@ fn recover_state(dir: &Path, app: &Path, exe_name: &str, alive: impl Fn(u32, u64
             // the running exe cannot be overwritten, but it can be renamed: moved aside, the previous one goes in, and this
             // start reopens as the previous version
             let running = rel.as_os_str().eq_ignore_ascii_case(exe_name);
-            let moved = !running || std::fs::rename(&d, with(".repakxtra-old")).is_ok();
-            let ok = moved && std::fs::copy(&b, &part).is_ok() && std::fs::rename(&part, &d).is_ok(); // whole, never half a file
+            // staged first, so the only gap with no exe under its name is between two renames, and a failed second rename
+            // puts the running one back
+            let staged = std::fs::copy(&b, &part).is_ok();
+            let aside = with(".repakxtra-old");
+            let moved = staged && (!running || std::fs::rename(&d, &aside).is_ok());
+            let ok = moved && std::fs::rename(&part, &d).is_ok(); // whole, never half a file
+            if moved && !ok && running { let _ = std::fs::rename(&aside, &d); }
+            if !ok { let _ = std::fs::remove_file(&part); }
             restart |= ok && running;
             ok
         };
