@@ -35,7 +35,7 @@ type ModInput = {
 }
 type ModSetting = {
   enabled: boolean; obfuscate: boolean; toRepak: boolean; forceLegacy: boolean; hybrid: boolean; compression: string
-  customName: string; selectedTags: string[]; loadouts?: string[]; installSubfolder: string | null; path: string
+  customName: string; selectedTags: string[]; loadouts?: string[]; installSubfolder: string | null; row: string
 }
 type Props = {
   mods: ModInput[]
@@ -59,6 +59,10 @@ const ROOT = '__root'
 const NEW = '__new'
 const NONE = '__none'
 
+/** A row's identity: every pak of one archive carries the archive's path, so the path alone named them all. */
+const rowOf = (mod: ModInput) => `${mod.path}
+${mod.mod_name ?? ''}`
+
 /** A folder drop is never repaked (InstallModPanel's rule). */
 const repakLocked = (mod: ModInput) => Boolean(mod.is_dir)
 
@@ -70,7 +74,7 @@ const initialSetting = (mod: ModInput, currentFolderId?: string): ModSetting => 
   const forceLegacy = hybrid ? false : mod.contains_uassets === false ? true : Boolean(mod.auto_force_legacy)
   return {
     enabled: true, obfuscate: false, toRepak, forceLegacy, hybrid, compression: 'Oodle', customName: '', selectedTags: [],
-    installSubfolder: currentFolderId && currentFolderId !== 'all' ? currentFolderId : null, path: mod.path,
+    installSubfolder: currentFolderId && currentFolderId !== 'all' ? currentFolderId : null, row: rowOf(mod),
   }
 }
 
@@ -184,8 +188,8 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
   const groups = useGroups()
   const canGenerate = usePreviewsAvailable()
   const [stored, setSettings] = useState<ModSetting[]>(() => mods.map(m => initialSetting(m, currentFolderId)))
-  // by path, every render: mods added while the dialog is open (a drop, a Nexus download) have a row before the effect below stores it
-  const settings = mods.map((m, i) => (stored[i]?.path === m.path ? stored[i] : stored.find(s => s.path === m.path) ?? initialSetting(m, currentFolderId)))
+  // by row, every render: mods added while the dialog is open (a drop, a Nexus download) have a row before the effect below stores it
+  const settings = mods.map((m, i) => (stored[i]?.row === rowOf(m) ? stored[i] : stored.find(s => s.row === rowOf(m)) ?? initialSetting(m, currentFolderId)))
   // Installing from a loadout's page: that loadout. Otherwise a new one, or none with Settings' classic installer
   const [target, setTarget] = useState(() => startingLoadouts()[0] ?? (installsPlain() ? NONE : NEW))
   const [name, setName] = useState<string | null>(null) // null: untouched, the suggested name shows (and follows the mods)
@@ -193,16 +197,16 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
   const [label, setLabel] = useState(OTHER)
   const [naming, setNaming] = useState(false) // the collection picker's + New collection: a name field in its place
   const [previewPick, setPreviewPick] = useState<boolean | null>(null) // null: untouched, on unless every mod is raw (audio has nothing to render)
-  const [open, setOpen] = useState<Set<string>>(new Set()) // mod rows showing their details, by path
+  const [open, setOpen] = useState<Set<string>>(new Set()) // mod rows showing their details, by row
   // A second drop while open adds to the list: rows already here keep what was typed or switched
   useEffect(() => {
-    setSettings(prev => mods.map(m => prev.find(s => s.path === m.path) ?? initialSetting(m, currentFolderId)))
+    setSettings(prev => mods.map(m => prev.find(s => s.row === rowOf(m)) ?? initialSetting(m, currentFolderId)))
   }, [mods]) // eslint-disable-line react-hooks/exhaustive-deps
   const update = (i: number, patch: Partial<ModSetting>) => {
     if ('toRepak' in patch && repakLocked(mods[i])) delete patch.toRepak
-    setSettings(prev => mods.map((m, j) => { const s = prev.find(x => x.path === m.path) ?? initialSetting(m, currentFolderId); return j === i ? { ...s, ...patch } : s }))
+    setSettings(prev => mods.map((m, j) => { const s = prev.find(x => x.row === rowOf(m)) ?? initialSetting(m, currentFolderId); return j === i ? { ...s, ...patch } : s }))
   }
-  const toggleOpen = (path: string) => setOpen(prev => { const next = new Set(prev); if (!next.delete(path)) next.add(path); return next })
+  const toggleOpen = (row: string) => setOpen(prev => { const next = new Set(prev); if (!next.delete(row)) next.add(row); return next })
 
   const rootFolder = folders.find(f => f.is_root)
   const subfolders = useMemo(() => folders.filter(f => !f.is_root).sort((a, b) => a.id.localeCompare(b.id)), [folders])
@@ -268,7 +272,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
         const sub = s?.installSubfolder
         // The root folder's id is its on-disk name (~mods): the backend wants an empty subfolder for it
         return {
-          ...mod, ...s, toRepak: repakLocked(mod) ? false : Boolean(s?.toRepak), forceLegacy: Boolean(s?.forceLegacy),
+          ...mod, ...s, row: undefined, toRepak: repakLocked(mod) ? false : Boolean(s?.toRepak), forceLegacy: Boolean(s?.forceLegacy),
           installSubfolder: !sub || sub === rootFolder?.id ? '' : sub,
           loadouts: asLoadout && into !== NEW ? [into] : [], // joining a loadout that exists: every mod joins it
         }
@@ -381,14 +385,14 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
                 const portraitHero = character ?? heroOf(i)
                 const portrait = resolveHeroImage(portraitHero, heroes, undefined, FALLBACK_HERO_ID) // no hero: the Library's own placeholder
                 const off = s.enabled === false
-                const isOpen = open.has(mod.path) && !off
+                const isOpen = open.has(rowOf(mod)) && !off
                 const shown = s.customName || plainName(mod.mod_name)
                 const noCooked = mod.contains_uassets === false || mod.contains_raw_assets === false
                 return (
-                  <li key={mod.path || i} className={`ip-row${off ? ' is-off' : ''}${isOpen ? ' is-open' : ''}`}>
+                  <li key={rowOf(mod)} className={`ip-row${off ? ' is-off' : ''}${isOpen ? ' is-open' : ''}`}>
                     {/* Like a Library row: round hero icon and name, then on the right Leave out, its type and Advanced */}
                     <div className="ip-row-main">
-                      <button type="button" className="ip-row-open" aria-expanded={isOpen} disabled={off} onClick={() => toggleOpen(mod.path)}
+                      <button type="button" className="ip-row-open" aria-expanded={isOpen} disabled={off} onClick={() => toggleOpen(rowOf(mod))}
                         title={isOpen ? 'Hide its details' : 'File name, folder, and install options'}>
                         {portrait ? <img className="ip-row-hero" src={portrait} alt="" title={portraitHero ?? undefined} /> : <span className="ip-row-hero" />}
                         <span className="ip-row-name">{shown}</span>
@@ -402,7 +406,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
                         {additional.map(t => <span key={t} className={`additional-badge ${badge(t)}`}>{t}</span>)}
                         {mod.contains_uassets === false && <span className="no-uassets-badge" title="No UAsset files: audio, config, or other raw files">Raw Assets</span>}
                       </span>
-                      <button type="button" className="ip-row-advanced" aria-expanded={isOpen} disabled={off} onClick={() => toggleOpen(mod.path)}
+                      <button type="button" className="ip-row-advanced" aria-expanded={isOpen} disabled={off} onClick={() => toggleOpen(rowOf(mod))}
                         title={isOpen ? 'Hide its file name, folder, and install options' : 'File name, folder, and install options'}>
                         Advanced<ChevronDown size={14} className="ip-row-caret" aria-hidden="true" />
                       </button>
