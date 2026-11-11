@@ -661,9 +661,11 @@ function App() {
   const installOpen = useRef(false); installOpen.current = panels.install // repakxtra: read by the drop listener's old closure
   const handleFileDrop = async (paths: string[], asMods = false) => {
     if (!paths || paths.length === 0) return
+    // repakxtra: a preview kit zip installs as the kit (after a confirm), not as a mod. Decided before the first await:
+    // first run's drop listener can end its loadout page (which waits for mods) meanwhile
+    if (!asMods && await installDroppedKit(paths, alert, installOpen.current)) return
     paths = await stageOffFiles(paths) // repakxtra: .pak.off sets install like .pak
     console.log('Dropped items:', paths)
-    if (!asMods && await installDroppedKit(paths, alert, installOpen.current)) return // repakxtra: a preview kit zip installs as the kit (after a confirm), not as a mod
 
     // repakxtra: no Project Galacta update here. Setup installs and updates the loader, a dropped archive's copy is
     // skipped and the rest installs (install_mod.rs)
