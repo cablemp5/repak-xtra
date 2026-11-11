@@ -144,7 +144,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   // picking Text goes straight into its field, the cursor in it ready to type (also when the field was already showing)
   const captionRef = useRef<HTMLTextAreaElement>(null)
   useEffect(() => { if (typing) captionRef.current?.focus() }, [typing, cover])
-  const pick = (c: Cover) => { setTyping(c === 'text'); setIndex(0); target.current = 0; if (l.cover !== c) patchLoadout(l.id, { cover: c }) }
+  const pick = (c: Cover) => { setTyping(c === 'text'); setIndex(0); target.current = 0; slideAtById.delete(l.id); if (l.cover !== c) patchLoadout(l.id, { cover: c }) }
   const tint = l.captionColor ? { '--cap': l.captionColor } as React.CSSProperties : undefined
   // An animation slide whose emote has a sound in this loadout: while hovered, the clip restarts (a fresh copy of its
   // image) and the sound plays once the restarted clip is on screen (custom/emoteSound.ts). The restart belongs to the
