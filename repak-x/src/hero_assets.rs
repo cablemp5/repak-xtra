@@ -14,7 +14,7 @@ use crate::ui_log;
 use log::warn;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter};
 
 /// Contents API listing for the repo folder holding the portraits.
@@ -272,7 +272,8 @@ async fn apply_listing(
         let Some(name) = entry.get("name").and_then(|v| v.as_str()) else {
             continue;
         };
-        if !name.to_lowercase().ends_with(".png") {
+        // repakxtra: one plain file name (no folder, drive or "..") so a listing can never write outside the cache
+        if !name.to_lowercase().ends_with(".png") || !crate::xtra_updater::safe_file_name(name) {
             continue;
         }
         let sha = entry
@@ -319,7 +320,8 @@ async fn apply_listing(
         let target = cache_dir.join(&item.name);
 
         match download_portrait(client, &item.download_url).await {
-            Ok(bytes) => match std::fs::write(&target, &bytes) {
+            // repakxtra: through a .part file, so a cut-off write never leaves half a portrait under its name
+            Ok(bytes) => match write_whole(&target, &bytes) {
                 Ok(_) => {
                     index.files.insert(item.name.clone(), item.sha.clone());
                     if item.is_new {
@@ -488,6 +490,15 @@ pub fn get_hero_image(id: String) -> Result<tauri::ipc::Response, String> {
 #[tauri::command(async)]
 pub fn get_hero_cache_dir() -> Result<String, String> {
     Ok(hero_cache_dir().to_string_lossy().to_string())
+}
+
+/// Writes `bytes` to `<path>.part`, then renames it over `path`: a write cut off part way never leaves a half file under
+/// the real name (the next sync downloads it again).
+pub(crate) fn write_whole(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let mut part = path.as_os_str().to_owned();
+    part.push(".part");
+    std::fs::write(&part, bytes)?;
+    std::fs::rename(&part, path)
 }
 
 #[cfg(test)]
