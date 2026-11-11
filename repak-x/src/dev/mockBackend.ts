@@ -116,6 +116,10 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
           return structuredClone(builtins)
         })
       }
+      case 'unreadable_mods': { // window.__unreadable or localStorage mock.unreadable = part of a path (the guard skipped it)
+        const part = mock.__unreadable ?? localStorage.getItem('mock.unreadable')
+        return part ? data.mods.filter((m: any) => m.path.includes(part)).map((m: any) => m.path) : []
+      }
       case 'get_mod_details': return data.details[args?.modPath] ?? null
       case 'plugin:webview|set_webview_zoom': // the browser has no webview zoom; CSS zoom stands in
         document.documentElement.style.zoom = String(args?.value ?? 1)

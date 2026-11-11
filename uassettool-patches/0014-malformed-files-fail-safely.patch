@@ -1,0 +1,245 @@
+diff --git a/src/UAssetTool/IoStore/IoStoreReader.cs b/src/UAssetTool/IoStore/IoStoreReader.cs
+index 9664c72..6492021 100644
+--- a/src/UAssetTool/IoStore/IoStoreReader.cs
++++ b/src/UAssetTool/IoStore/IoStoreReader.cs
+@@ -644,9 +644,14 @@ public class IoStoreToc
+         }
+ 
+         // Read compression methods - they come right after compression blocks
+-        for (int i = 0; i < compressionMethodNameCount; i++)
++        // repakxtra: a method index is one byte, so more than 255 names is a damaged header (0xFFFFFFFF spun for ever)
++        if (compressionMethodNameCount > 255)
++            throw new InvalidDataException($"Invalid compression method count: {compressionMethodNameCount}");
++        for (uint i = 0; i < compressionMethodNameCount; i++)
+         {
+             byte[] nameBytes = reader.ReadBytes((int)compressionMethodNameLength);
++            if (nameBytes.Length < compressionMethodNameLength)
++                throw new EndOfStreamException("The .utoc ends inside its compression method names.");
+             string name = Encoding.ASCII.GetString(nameBytes).TrimEnd('\0');
+             if (!string.IsNullOrEmpty(name))
+                 toc.CompressionMethods.Add(name);
+@@ -719,6 +724,10 @@ public class IoStoreToc
+                                 Console.Error.WriteLine($"[TOC] Raw parse produced invalid mount point, trying decrypt...");
+                         }
+                     }
++                    catch (InvalidDataException) when (!toc.IsEncrypted)
++                    {
++                        throw; // repakxtra: a plain index is the only copy, so its loop is the container's error
++                    }
+                     catch
+                     {
+                         // Raw parse failed, will try decryption below
+@@ -756,6 +765,10 @@ public class IoStoreToc
+                     if (!parsed && Environment.GetEnvironmentVariable("DEBUG") == "1")
+                         Console.Error.WriteLine($"[TOC] Could not parse directory index");
+                 }
++                catch (InvalidDataException) when (!toc.IsEncrypted)
++                {
++                    throw; // repakxtra: see the raw parse above
++                }
+                 catch (Exception ex)
+                 {
+                     if (Environment.GetEnvironmentVariable("DEBUG") == "1")
+@@ -883,6 +896,10 @@ public class IoStoreToc
+         }
+     }
+     
++    // repakxtra: a loop with its own stack instead of a recursion, and every directory and file taken once. A directory
++    // that was its own child or sibling, or a file that was its own next, overflowed the stack (which nothing can catch)
++    // or never returned. A path is built only when its directory is reached and may not pass 1,024 characters, so a
++    // crafted index cannot pile up long paths either.
+     private static void BuildFilePaths(
+         IoStoreToc toc,
+         List<(uint name, uint firstChild, uint nextSibling, uint firstFile)> dirEntries,
+@@ -893,38 +910,56 @@ public class IoStoreToc
+     {
+         if (dirIndex >= dirEntries.Count)
+             return;
+-        
+-        var dir = dirEntries[(int)dirIndex];
+-        
+-        // Process files in this directory
+-        uint fileIndex = dir.firstFile;
+-        while (fileIndex < fileEntries.Count && fileIndex != 0xFFFFFFFF)
++        var dirSeen = new bool[dirEntries.Count];
++        var fileSeen = new bool[fileEntries.Count];
++        static Exception Loop() => new InvalidDataException("The .utoc directory index loops back on itself.");
++        static Exception TooLong() => new InvalidDataException("A .utoc path is longer than 1,024 characters.");
++
++        // (directory, its parent's path): siblings share their parent's string, so queued directories cost no path each
++        var stack = new Stack<(uint dir, string? parent)>();
++        dirSeen[dirIndex] = true;
++        stack.Push((dirIndex, null));
++        var children = new List<uint>();
++        while (stack.Count > 0)
+         {
+-            var file = fileEntries[(int)fileIndex];
+-            string fileName = file.name < strings.Count ? strings[(int)file.name] : "";
+-            string fullPath = string.IsNullOrEmpty(currentPath) ? fileName : $"{currentPath}{fileName}";
+-            
+-            // userData is the chunk index
+-            if (file.userData < toc.Chunks.Count)
++            var (index, parent) = stack.Pop();
++            var dir = dirEntries[(int)index];
++            string dirName = dir.name < strings.Count ? strings[(int)dir.name] : "";
++            if (parent != null && parent.Length + dirName.Length + 1 > 1024)
++                throw TooLong();
++            string path = parent == null ? currentPath : string.IsNullOrEmpty(parent) ? $"{dirName}/" : $"{parent}{dirName}/";
++
++            // Process files in this directory
++            for (uint fileIndex = dir.firstFile; fileIndex < fileEntries.Count && fileIndex != 0xFFFFFFFF; fileIndex = fileEntries[(int)fileIndex].nextFile)
++            {
++                if (fileSeen[fileIndex])
++                    throw Loop();
++                fileSeen[fileIndex] = true;
++                var file = fileEntries[(int)fileIndex];
++                string fileName = file.name < strings.Count ? strings[(int)file.name] : "";
++                if (path.Length + fileName.Length > 1024)
++                    throw TooLong(); // checked first: one huge name shared by many files would be copied for each
++                string fullPath = string.IsNullOrEmpty(path) ? fileName : $"{path}{fileName}";
++
++                // userData is the chunk index
++                if (file.userData < toc.Chunks.Count)
++                {
++                    toc.FileMapRev[file.userData] = fullPath;
++                    toc.FileMap[fullPath] = file.userData;
++                }
++            }
++
++            // Child directories, pushed last first so they are walked in the order the recursion took
++            children.Clear();
++            for (uint child = dir.firstChild; child < dirEntries.Count && child != 0xFFFFFFFF; child = dirEntries[(int)child].nextSibling)
+             {
+-                toc.FileMapRev[file.userData] = fullPath;
+-                toc.FileMap[fullPath] = file.userData;
++                if (dirSeen[child])
++                    throw Loop();
++                dirSeen[child] = true;
++                children.Add(child);
+             }
+-            
+-            fileIndex = file.nextFile;
+-        }
+-        
+-        // Process child directories
+-        uint childIndex = dir.firstChild;
+-        while (childIndex < dirEntries.Count && childIndex != 0xFFFFFFFF)
+-        {
+-            var child = dirEntries[(int)childIndex];
+-            string dirName = child.name < strings.Count ? strings[(int)child.name] : "";
+-            string childPath = string.IsNullOrEmpty(currentPath) ? $"{dirName}/" : $"{currentPath}{dirName}/";
+-            
+-            BuildFilePaths(toc, dirEntries, fileEntries, strings, childIndex, childPath);
+-            
+-            childIndex = child.nextSibling;
++            for (int i = children.Count - 1; i >= 0; i--)
++                stack.Push((children[i], path));
+         }
+     }
+ }
+diff --git a/src/UAssetTool/IoStore/PakReader.cs b/src/UAssetTool/IoStore/PakReader.cs
+index 8cc1038..6ce8b14 100644
+--- a/src/UAssetTool/IoStore/PakReader.cs
++++ b/src/UAssetTool/IoStore/PakReader.cs
+@@ -400,7 +400,18 @@ public class PakReader : IDisposable
+     /// <summary>
+     /// Parse encoded entry (from repak entry.rs read_encoded)
+     /// </summary>
+-    private static PakEntry ParseEncodedEntry(byte[] data, int offset)
++    // repakxtra: many names may point at one encoded entry. Decode each offset once, so a small PAK cannot make every
++    // name reserve its own block list (65,535 blocks each, about 1 MB a name).
++    private readonly Dictionary<int, PakEntry> _decoded = new();
++
++    private PakEntry ParseEncodedEntry(byte[] data, int offset)
++    {
++        if (!_decoded.TryGetValue(offset, out var entry))
++            _decoded[offset] = entry = DecodeEncodedEntry(data, offset, _stream.Length);
++        return entry;
++    }
++
++    private static PakEntry DecodeEncodedEntry(byte[] data, int offset, long fileLength)
+     {
+         using var stream = new MemoryStream(data, offset, data.Length - offset);
+         using var reader = new BinaryReader(stream);
+@@ -417,6 +428,9 @@ public class PakReader : IDisposable
+         bool isEncrypted = (bits & (1 << 22)) != 0;
+         uint compressionBlockCount = (bits >> 6) & 0xFFFF;
+         uint compressionBlockSizeRaw = bits & 0x3F;
++        // repakxtra: every block takes room in the file, so a count the file cannot hold is a damaged entry
++        if (compressionBlockCount > fileLength / 8)
++            throw new InvalidDataException($"A PAK entry claims {compressionBlockCount} blocks, more than the file can hold.");
+         
+         // Handle special case where block size needs extra read
+         uint compressionBlockSize;
+diff --git a/src/UAssetTool/Program.cs b/src/UAssetTool/Program.cs
+index f652ea7..f3d63b5 100644
+--- a/src/UAssetTool/Program.cs
++++ b/src/UAssetTool/Program.cs
+@@ -1891,7 +1891,7 @@ public partial class Program
+                     }
+ 
+                     string relPath = ResolveVfsOutputPath(context, packageId, packageName);
+-                    string outputAssetPath = Path.Combine(outputDir, relPath);
++                    string outputAssetPath = InsideOutput(outputDir, relPath);
+                     string? outputAssetDir = Path.GetDirectoryName(outputAssetPath);
+                     if (!string.IsNullOrEmpty(outputAssetDir))
+                         Directory.CreateDirectory(outputAssetDir);
+@@ -6090,7 +6090,7 @@ public partial class Program
+                     }
+                     relativePath = relativePath.TrimStart('/', '\\');
+                     
+-                    string outputPath = Path.Combine(outputDir, relativePath);
++                    string outputPath = InsideOutput(outputDir, relativePath);
+                     string? outputDirPath = Path.GetDirectoryName(outputPath);
+                     if (!string.IsNullOrEmpty(outputDirPath))
+                         Directory.CreateDirectory(outputDirPath);
+@@ -6238,7 +6238,10 @@ public partial class Program
+                 try
+                 {
+                     byte[] data = pakReader.Get(file);
+-                    string outPath = Path.Combine(outputDir, file.Replace('/', Path.DirectorySeparatorChar));
++                    // repakxtra: UE names the root directory "/", so a root-level file reads "/name" (a companion's
++                    // chunknames): only that one slash is dropped, anything else rooted is refused below
++                    string rel = file.StartsWith('/') && file.IndexOf('/', 1) < 0 ? file[1..] : file;
++                    string outPath = InsideOutput(outputDir, rel.Replace('/', Path.DirectorySeparatorChar));
+                     
+                     string? dir = Path.GetDirectoryName(outPath);
+                     if (!string.IsNullOrEmpty(dir))
+@@ -6622,6 +6625,19 @@ public partial class Program
+     /// <summary>
+     /// VFS output path for a package, the way CUE4Parse spells it.
+     /// </summary>
++    /// <summary>
++    /// repakxtra: an archive's own path joined to the output folder, refused when it resolves outside it. Path.Combine
++    /// drops the folder for a rooted name ("/x", "//host/share/x") or a drive ("C:/x"), and ".." climbs out of it.
++    /// </summary>
++    internal static string InsideOutput(string outputDir, string relPath)
++    {
++        string root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(outputDir)) + Path.DirectorySeparatorChar;
++        string full = Path.GetFullPath(Path.Combine(root, relPath));
++        if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase))
++            throw new InvalidDataException($"Refused a path outside the output folder: {relPath}");
++        return full;
++    }
++
+     private static string ResolveVfsOutputPath(ZenPackage.FZenPackageContext context, ulong packageId, string packageName)
+     {
+         // A cooked VFS path always has a /Content/ segment; a mod container may index by mount.
+@@ -6869,7 +6885,7 @@ public partial class Program
+                     var legacyBundle = converter.Convert();
+ 
+                     string relPath = ResolveVfsOutputPath(context, packageId, packageName);
+-                    string outputAssetPath = Path.Combine(outputDir, relPath);
++                    string outputAssetPath = InsideOutput(outputDir, relPath);
+                     string? outputAssetDir = Path.GetDirectoryName(outputAssetPath);
+                     if (!string.IsNullOrEmpty(outputAssetDir))
+                         Directory.CreateDirectory(outputAssetDir);
+@@ -7089,7 +7105,7 @@ public partial class Program
+                         imports.AddRange(converter.GetImportedPackageIds());
+ 
+                     string relPath = ResolveVfsOutputPath(context, packageId, packageName);
+-                    string outputAssetPath = Path.Combine(outputPath, relPath);
++                    string outputAssetPath = InsideOutput(outputPath, relPath);
+                     string? outputAssetDir = Path.GetDirectoryName(outputAssetPath);
+                     if (!string.IsNullOrEmpty(outputAssetDir))
+                         Directory.CreateDirectory(outputAssetDir);
