@@ -201,7 +201,7 @@ const ExtensionModOverlay = ({
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [names, setNames] = useState<Record<string, string>>({});
     const [flatten, setFlatten] = useState(false);
-    const [deleteArchive, setDeleteArchive] = useState(true);
+    const [deleteArchive, setDeleteArchive] = useState(false); // repakxtra: a link-opened file is never pre-set to go
     // Which archive the entries above actually describe. Installing is only
     // allowed once this matches the incoming file.
     const [inspectedPath, setInspectedPath] = useState<string | null>(null);
@@ -243,7 +243,7 @@ const ExtensionModOverlay = ({
         setSelected(new Set());
         setNames({});
         setFlatten(false);
-        setDeleteArchive(true);
+        setDeleteArchive(false);
         setInspectedPath(null);
 
         invoke('inspect_archive_mods', { path: filePath })

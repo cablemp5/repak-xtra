@@ -7,6 +7,7 @@ mod asset_explorer;
 mod xtra_classify; // repakxtra: extra mod types, Project Galacta check
 mod xtra_dupes; // repakxtra: same-content installs and Check Conflicts' Duplicates
 mod xtra_ops; // repakxtra: game open, file in use, and name taken, one dialog each
+mod xtra_download; // repakxtra: which file a repakx:// link may name
 mod xtra_made; // repakxtra: installed mods keep when they were made (the Needs VFX update check)
 mod xtra_vfx_check; // repakxtra: Check for VFX update (built for this game version or an older one)
 mod xtra_edition;
@@ -6172,9 +6173,9 @@ async fn delete_source_archive(
     path: String,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<(), String> {
-    const DELETABLE_EXTENSIONS: [&str; 6] = ["zip", "rar", "7z", "pak", "utoc", "ucas"];
+    const DELETABLE_EXTENSIONS: [&str; 6] = xtra_download::EXTENSIONS;
 
-    let target = PathBuf::from(&path);
+    let target = xtra_download::checked(&path)?; // repakxtra: only a file a link may name
 
     if !target.is_file() {
         return Err(format!("Not a file: {}", path));
@@ -8451,7 +8452,11 @@ fn handle_deep_link_url(url: &str, app_handle: &tauri::AppHandle) {
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_else(|| decoded_path.clone());
 
-                if path.exists() {
+                let checked = xtra_download::checked(&decoded_path); // repakxtra: before the disk is touched
+                if let Err(e) = &checked {
+                    ui_log::error("Extension", e.clone());
+                    let _ = app_handle.emit("extension-mod-error", e.clone());
+                } else if path.exists() {
                     ui_log::info(
                         "Extension",
                         format!("Received \"{}\" from the browser extension", file_name),
