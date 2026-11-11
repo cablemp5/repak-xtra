@@ -2425,9 +2425,12 @@ fn quick_organize_impl(
 
     // Resolve the optional install options into their defaults.
     let flatten = flatten.unwrap_or(false);
+    // repakxtra: keys compare without case (the overlay lists A.PAK, the walk below anchors on A.pak)
     let selections: Option<std::collections::HashSet<String>> =
-        selections.map(|v| v.into_iter().collect());
-    let renames = renames.unwrap_or_default();
+        selections.map(|v| v.into_iter().map(|k| k.to_lowercase()).collect());
+    let renames: std::collections::HashMap<String, String> =
+        renames.unwrap_or_default().into_iter().map(|(k, v)| (k.to_lowercase(), v)).collect();
+    let seen = std::cell::RefCell::new(std::collections::HashSet::<String>::new());
 
     // The key for an entry, matching what `inspect_archive_mods` reported: a
     // bundle is identified by its .pak when it has one, otherwise its .utoc, so
@@ -2447,11 +2450,16 @@ fn quick_organize_impl(
     };
 
     let is_selected = |key: &str| -> bool {
-        match &selections {
+        let key = key.to_lowercase();
+        let picked = match &selections {
             // None means "no selection was made", i.e. install everything
             None => true,
-            Some(set) => set.contains(key),
+            Some(set) => set.contains(&key),
+        };
+        if picked {
+            seen.borrow_mut().insert(key);
         }
+        picked
     };
 
     // repakxtra: everything is built in a private folder beside the mods (same drive) and swapped in only when every
@@ -2624,7 +2632,7 @@ fn quick_organize_impl(
                             }
                         };
 
-                        let file_name_str = match renames.get(&key) {
+                        let file_name_str = match renames.get(&key.to_lowercase()) {
                             Some(stem) => format!("{}.pak", stem),
                             None => entry_path
                                 .file_name()
@@ -2663,7 +2671,7 @@ fn quick_organize_impl(
                             if !is_selected(&key) {
                                 continue;
                             }
-                            let rename = renames.get(&key).map(|s| s.as_str());
+                            let rename = renames.get(&key.to_lowercase()).map(|s| s.as_str());
 
                             // Flatten drops the archive's internal folders
                             let dest_dir = if flatten {
@@ -2717,7 +2725,8 @@ fn quick_organize_impl(
         else if ext == "pak" {
             // A loose file is keyed by its own name, and has no structure to flatten
             let orig_name = path.file_name().unwrap().to_string_lossy().to_string();
-            let rename = renames.get(&orig_name).map(|s| s.as_str());
+            seen.borrow_mut().insert(orig_name.to_lowercase());
+            let rename = renames.get(&orig_name.to_lowercase()).map(|s| s.as_str());
 
             let file_name_str = match rename {
                 Some(stem) => format!("{}.pak", stem),
@@ -2775,7 +2784,8 @@ fn quick_organize_impl(
                     .unwrap_or_default()
                     .to_string_lossy()
                     .to_string();
-                let rename = renames.get(&orig_name).map(|s| s.as_str());
+                seen.borrow_mut().insert(orig_name.to_lowercase());
+                let rename = renames.get(&orig_name.to_lowercase()).map(|s| s.as_str());
                 let file_name_str = match rename {
                     Some(stem) => format!("{}.utoc", stem),
                     None => orig_name.clone(),
@@ -2827,7 +2837,7 @@ fn quick_organize_impl(
                             }
                         };
 
-                        let file_name_str = match renames.get(&key) {
+                        let file_name_str = match renames.get(&key.to_lowercase()) {
                             Some(stem) => format!("{}.pak", stem),
                             None => entry_path
                                 .file_name()
@@ -2866,7 +2876,7 @@ fn quick_organize_impl(
                             if !is_selected(&key) {
                                 continue;
                             }
-                            let rename = renames.get(&key).map(|s| s.as_str());
+                            let rename = renames.get(&key.to_lowercase()).map(|s| s.as_str());
 
                             // Flatten drops the source folder's internal structure
                             let dest_dir = if flatten {
@@ -2914,6 +2924,11 @@ fn quick_organize_impl(
         }
     }
 
+    // a picked entry that never came up would otherwise just be missing from a "successful" install
+    if let Some(set) = &selections {
+        let seen = seen.borrow();
+        failures.extend(set.iter().filter(|k| !seen.contains(*k)).map(|k| format!("{} was not found in it", k)));
+    }
     if !failures.is_empty() {
         return Err(format!(
             "Nothing was installed and the mods folder is unchanged. {}{}",
@@ -3051,6 +3066,28 @@ mod quick_organize_tests {
         fs::write(l.src.join("Up_9999999_P.PAK"), "up").unwrap();
         assert_eq!(run(&[l.src.join("Up_9999999_P.PAK")], &l.mods), Ok(1));
         assert!(files(&l.mods).contains(&("Up_9999999_P.pak".to_string(), "up".to_string())));
+    }
+
+    #[test]
+    fn picked_entries_match_without_case_and_a_missing_pick_installs_nothing() {
+        let l = lib();
+        let zip_path = l.src.join("Pack.ZIP");
+        let mut z = zip::ZipWriter::new(fs::File::create(&zip_path).unwrap());
+        for (name, body) in [("A_9999999_P.PAK", "a"), ("B_9999999_P.pak", "b")] {
+            z.start_file(name, zip::write::SimpleFileOptions::default()).unwrap();
+            std::io::Write::write_all(&mut z, body.as_bytes()).unwrap();
+        }
+        z.finish().unwrap();
+        let go = |picks: &[&str]| {
+            let picks = Some(picks.iter().map(|s| s.to_string()).collect());
+            super::quick_organize_impl(vec![zip_path.to_string_lossy().into_owned()], l.mods.clone(), String::new(), picks, None, None, &|_| {})
+        };
+        let before = files(&l.mods);
+        assert!(go(&["A_9999999_P.PAK", "Gone_9999999_P.pak"]).is_err());
+        assert_eq!(files(&l.mods), before);
+        assert_eq!(go(&["A_9999999_P.PAK", "B_9999999_P.pak"]), Ok(2));
+        let landed = files(&l.mods);
+        assert!(landed.contains(&("A_9999999_P.pak".into(), "a".into())) && landed.contains(&("B_9999999_P.pak".into(), "b".into())));
     }
 
     #[test]
