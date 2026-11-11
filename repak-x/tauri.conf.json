@@ -37,16 +37,23 @@
         "default-src": "'self'",
         "script-src": "'self'",
         "style-src": "'self' 'unsafe-inline'",
-        "img-src": "'self' data: blob: https://*.githubusercontent.com https://github.com https://i.imgur.com https://cdn.discordapp.com https://*.nexusmods.com",
-        "media-src": "'self' data: blob:",
+        "img-src": "'self' data: blob: asset: http://asset.localhost https://*.githubusercontent.com https://github.com https://i.imgur.com https://cdn.discordapp.com https://*.nexusmods.com",
+        "media-src": "'self' data: blob: asset: http://asset.localhost",
         "font-src": "'self' data:",
-        "connect-src": "'self' ipc: http://ipc.localhost data: blob: https://api.github.com https://discord.com",
+        "connect-src": "'self' ipc: http://ipc.localhost asset: http://asset.localhost data: blob: https://api.github.com https://discord.com",
         "object-src": "'none'",
         "base-uri": "'self'",
         "form-action": "'none'",
         "frame-src": "'none'"
       },
       "dangerousDisableAssetCspModification": ["style-src"],
+      "assetProtocol": {
+        "enable": true,
+        "scope": {
+          "allow": ["$CONFIG/Repak-X/previews/*", "$CONFIG/Repak-X/hero/*"],
+          "requireLiteralLeadingDot": false
+        }
+      },
       "capabilities": [
         "default"
       ]

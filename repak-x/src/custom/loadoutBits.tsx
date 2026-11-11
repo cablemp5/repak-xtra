@@ -92,6 +92,7 @@ export type CaptureSlot = { show: boolean; hero?: string; button: (className: st
  *  (an icon above the words, in a picked color). The card shows the picked source (cover), or the first it has.
  *  With generate (the loadout page) a Cover switch under the card picks the source; an empty source holds its own way
  *  to fill it (Generate, Capture, choose a file, type), and a filled one keeps it in a corner with an X to remove it. */
+const slideAtById = new Map<string, number>() // the slide a card was turned to, kept while Loadouts unmounts it far from view
 export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage, onRemoveCapture, emptyText = 'Click to add an image, or paste one', generate, capture }: {
   p: LoadoutProps; l: Loadout; className?: string; title: string; onClick: () => void; onRemoveImage?: () => void; onRemoveCapture?: () => void
   emptyText?: string; generate?: (className: string) => React.ReactNode; capture?: CaptureSlot
@@ -109,7 +110,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   // the page shows the picked source even while empty (with its way to fill it); Home shows what there is
   const cover: Cover | null = page ? (l.cover ?? auto ?? 'preview') : auto
   const slides = cover === 'preview' ? previewSlides : []
-  const [index, setIndex] = useState(0)
+  const [index, setIndex] = useState(() => slideAtById.get(l.id) ?? 0)
   const [dir, setDir] = useState<1 | -1>(1)
   const at = slides.length ? ((index % slides.length) + slides.length) % slides.length : 0
   // a turn waits until the next picture is read and decoded, so it slides in whole instead of blank, then popping in
@@ -118,7 +119,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   const target = useRef(index)
   const turn = (d: 1 | -1) => {
     const to = target.current = target.current + d
-    void ready(to).then(() => { if (target.current === to) { setDir(d); setIndex(to) } })
+    void ready(to).then(() => { if (target.current === to) { setDir(d); setIndex(to); slideAtById.set(l.id, to) } })
   }
   const slide = slides[at]
   // a card draws the card-sized copy, a loadout's page the full picture
@@ -143,7 +144,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   // picking Text goes straight into its field, the cursor in it ready to type (also when the field was already showing)
   const captionRef = useRef<HTMLTextAreaElement>(null)
   useEffect(() => { if (typing) captionRef.current?.focus() }, [typing, cover])
-  const pick = (c: Cover) => { setTyping(c === 'text'); setIndex(0); target.current = 0; if (l.cover !== c) patchLoadout(l.id, { cover: c }) }
+  const pick = (c: Cover) => { setTyping(c === 'text'); setIndex(0); target.current = 0; slideAtById.delete(l.id); if (l.cover !== c) patchLoadout(l.id, { cover: c }) }
   const tint = l.captionColor ? { '--cap': l.captionColor } as React.CSSProperties : undefined
   // An animation slide whose emote has a sound in this loadout: while hovered, the clip restarts (a fresh copy of its
   // image) and the sound plays once the restarted clip is on screen (custom/emoteSound.ts). The restart belongs to the
@@ -230,7 +231,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
           : video
             ? l.mediaBeat ? <BeatVideo src={video} beat={l.mediaBeat} /> : <video src={video} autoPlay loop muted playsInline />
             : <CarouselSlide slide={slides.length > 1 ? at : 0} dir={dir}>
-                {isVideoPreview(src) ? <BeatVideo key={src} src={src} beat={KO_BEAT} /> : <img key={src} src={live?.url ?? src} alt="" className={src === warm || isDecoded(src) ? 'is-loaded' : undefined} decoding="async" loading={page ? undefined : 'lazy'}
+                {isVideoPreview(src) ? <BeatVideo key={src} src={src} beat={KO_BEAT} /> : <img key={src} src={live?.url ?? src} alt="" className={src === warm || isDecoded(src) ? 'is-loaded' : undefined} decoding="async" loading={page ? undefined : 'lazy'} crossOrigin="anonymous"
                   onLoad={e => { revealOnLoad(e); if (audible && live && hovering.current && e.currentTarget.src === live.url) playEmoteSound(audible, live.seconds) }} />}
               </CarouselSlide>}
       </button>
@@ -344,7 +345,7 @@ function SlideImage({ k, thumb }: { k: string; thumb: boolean }) {
   const src = usePreviewUrl(k, thumb)
   const [warm] = useState(src)
   return !src ? <span /> : isVideoPreview(src) ? <BeatVideo src={src} beat={KO_BEAT} />
-    : <img src={src} alt="" className={src === warm || isDecoded(src) ? 'is-loaded' : undefined} onLoad={revealOnLoad} />
+    : <img src={src} alt="" className={src === warm || isDecoded(src) ? 'is-loaded' : undefined} onLoad={revealOnLoad} crossOrigin="anonymous" />
 }
 
 /** How many of a loadout's installed mods are on: green all, yellow some, red none. */

@@ -5,7 +5,7 @@
 // One run at a time (the generator holds a lock); asking while another runs puts the request in a queue that starts
 // when the current run ends. Unchanged mods report their existing preview without rendering again; Regenerate forces.
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { invoke } from '@tauri-apps/api/core'
+import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { ListPlus, WandSparkles, X } from 'lucide-react'
 import { play } from 'cuelume'
@@ -127,9 +127,10 @@ let available = false
 export const refreshPreviewsAvailable = () => invoke<boolean>('previews_available').then(v => { available = v; notify() }).catch(() => undefined)
 refreshPreviewsAvailable()
 export const usePreviewsAvailable = () => useSyncExternalStore(subscribe, () => available)
+let lastRev = 0 // one counter for every key, so a key deleted and rendered again never gets back a revision it had
 listen<string>('mod-preview-ready', e => {
   dropCached(e.payload)
-  revs.set(e.payload, (revs.get(e.payload) ?? 0) + 1)
+  revs.set(e.payload, ++lastRev)
   outcome.delete(e.payload)
   markNone(e.payload, false)
   // The loadout's own render is done: its card shows it now, not after the mods it does not cover render one by one
@@ -244,7 +245,7 @@ export function useCovers(setKey: string): Covers | undefined {
   const cached = covers.get(setKey)
   useEffect(() => {
     if (rev === undefined || covers.get(setKey)?.rev === rev || coverLoads.get(setKey)?.rev === rev) return
-    const p: Promise<unknown> = invoke<Covers>('get_preview_covers', { key: setKey }).then(c => {
+    const p: Promise<unknown> = listFor(setKey, rev).then(list => list.covers[setKey] ?? { covers: [], members: null }).then(c => {
       if (coverLoads.get(setKey)?.p !== p || revs.get(setKey) !== rev) return // dropped or replaced meanwhile
       coverLoads.delete(setKey)
       covers.set(setKey, { ...c, rev })
@@ -255,11 +256,28 @@ export function useCovers(setKey: string): Covers | undefined {
   return rev !== undefined && cached?.rev === rev ? cached : undefined
 }
 
-/** PNG, an animated WebP (animation mods), or a WebM (KO prompt mods): told apart by the file's signature. */
-const imageType = (bytes: ArrayBuffer) => {
-  const head = new Uint8Array(bytes, 0, Math.min(12, bytes.byteLength))
-  if (head[0] === 0x1a && head[1] === 0x45 && head[2] === 0xdf && head[3] === 0xa3) return 'video/webm'
-  return new TextDecoder().decode(head).slice(8) === 'WEBP' ? 'image/webp' : 'image/png'
+/** Every preview's file (name, change time) and their folder, read in one call (list_preview_files) and read again when
+ *  a key is missing or a render made one newer: pictures load as files through the asset protocol, never as bytes. */
+type PreviewFiles = { dir: string; files: Record<string, [string, number]>; covers: Record<string, Covers> }
+let previewFiles: Promise<PreviewFiles> | null = null
+const listFiles = (fresh = false): Promise<PreviewFiles> => {
+  if (fresh || !previewFiles) previewFiles = invoke<PreviewFiles>('list_preview_files').catch(() => { previewFiles = null; return { dir: '', files: {}, covers: {} } })
+  return previewFiles
+}
+const reread = new Map<string, Promise<PreviewFiles>>() // key@rev -> the listing read again for it, shared by every caller
+/** The preview's address and file name, or null when it has none. A key the listing lacks, or one rendered in this session
+ *  (rev > 0), reads the listing once more for that render. The change time in the query: a new render is never a cached one. */
+const listFor = async (key: string, rev: number) => {
+  const list = await listFiles()
+  if (list.files[key] && rev === 0) return list
+  const k = `${key}@${rev}`
+  if (!reread.has(k)) reread.set(k, listFiles(true))
+  return reread.get(k)!
+}
+const fileOf = async (key: string, rev: number) => {
+  const list = await listFor(key, rev)
+  const f = list.files[key]
+  return f ? { url: `${convertFileSrc(list.dir + '\\' + f[0])}?t=${f[1]}`, name: f[0] } : null
 }
 const videoUrls = new Set<string>()
 /** The preview at this URL is a video (a KO prompt mod's): it plays in a BeatVideo, not an img. */
@@ -299,7 +317,7 @@ export function BeatVideo({ src, beat }: { src: string; beat: number }) {
     window.addEventListener('focus', join)
     return () => { clearTimeout(t); observer.disconnect(); v.pause(); v.removeEventListener('ended', next); v.removeEventListener('loadeddata', join); document.removeEventListener('visibilitychange', join); window.removeEventListener('blur', join); window.removeEventListener('focus', join) }
   }, [src, beat])
-  return <video ref={ref} src={src} muted playsInline preload="auto" />
+  return <video ref={ref} src={src} muted playsInline preload="auto" crossOrigin="anonymous" />
 }
 
 
@@ -310,12 +328,13 @@ function loadUrl(key: string, rev: number): Promise<string | null | undefined> {
   if (c?.rev === rev) return Promise.resolve(c.url)
   const f = urlLoads.get(key)
   if (f?.rev === rev) return f.p
-  const p: Promise<string | null | undefined> = invoke<ArrayBuffer>('get_mod_preview', { key }).then(bytes => {
-    if (urlLoads.get(key)?.p !== p || revs.get(key) !== rev) return undefined // stale: the bytes are dropped unused
+  const p: Promise<string | null | undefined> = fileOf(key, rev).then(file => {
+    if (urlLoads.get(key)?.p !== p || revs.get(key) !== rev) return undefined // stale: dropped unused
     urlLoads.delete(key)
-    const type = imageType(bytes), url = URL.createObjectURL(new Blob([bytes], { type }))
-    if (type === 'video/webm') videoUrls.add(url)
-    if (type === 'image/webp') animatedUrls.add(url) // idlePause.ts shows it still while the window is in the background
+    if (!file) return null
+    const { url, name } = file
+    if (name.endsWith('.webm')) videoUrls.add(url) // a KO prompt mod's recording
+    if (name.endsWith('.webp')) animatedUrls.add(url) // idlePause.ts shows it still while the window is in the background
     urls.set(key, { rev, url })
     return url
   }, () => {
@@ -619,7 +638,7 @@ export function ModPreview({ path, categories = [] }: { path: string; categories
       {threeD && <div className="mod-preview-frame is-3d"><Viewer3D viewKey={key} paths={[path]} name={path.split(/[\\/]/).pop()!.replace(/(_\d+_P)?\.(pak|bak_repak|utoc|ucas)$/i, '')} /></div>}
       {!threeD && url && (
         <div className={`mod-preview-frame${forms.length ? ' has-forms' : ''}`}>
-          {isVideoPreview(url) ? <BeatVideo src={url} beat={KO_BEAT} /> : <img src={url} alt="Generated preview" onLoad={revealOnLoad} />}
+          {isVideoPreview(url) ? <BeatVideo src={url} beat={KO_BEAT} /> : <img src={url} alt="Generated preview" onLoad={revealOnLoad} crossOrigin="anonymous" />}
           {forms.map(k => <FormImage key={k} k={k} />)}
         </div>
       )}
@@ -642,7 +661,7 @@ export function ModPreview({ path, categories = [] }: { path: string; categories
 /** Another form's image beside the first in the details panel. */
 function FormImage({ k }: { k: string }) {
   const src = usePreviewUrl(k)
-  return src ? <img src={src} alt="Generated preview, another form" onLoad={revealOnLoad} /> : null
+  return src ? <img src={src} alt="Generated preview, another form" onLoad={revealOnLoad} crossOrigin="anonymous" /> : null
 }
 
 /** Previews for a set of mods (the selection bar, a loadout page), with progress and Stop while its own run goes.

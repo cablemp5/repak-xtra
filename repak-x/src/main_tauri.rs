@@ -7429,6 +7429,39 @@ pub(crate) async fn blocking<T: Send + 'static>(work: impl FnOnce() -> Result<T,
 }
 
 /// repakxtra: the Library's copy of cached details: every field but the whole file list, which stays in the cache.
+/// repakxtra: the Library's copy of every mod in `mod_paths` the details cache already holds unchanged, in one call
+/// instead of one get_mod_details each (a start with a warm cache asked 286 times). The rest are left out: the
+/// frontend reads those one by one with get_mod_details.
+#[tauri::command]
+async fn get_cached_mod_details(
+    mod_paths: Vec<String>,
+    state: State<'_, Arc<Mutex<AppState>>>,
+) -> Result<std::collections::HashMap<String, ModDetails>, String> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        // the fingerprints (file times and sizes) before the lock, which the other commands share
+        let prints: Vec<(String, PathBuf, ModFingerprint)> = mod_paths.into_iter().map(|p| {
+            let path = PathBuf::from(&p);
+            let print = mod_fingerprint(&path);
+            (p, path, print)
+        }).collect();
+        let mut st = state.lock().unwrap();
+        let mut out = std::collections::HashMap::new();
+        for (key, path, print) in prints {
+            if let Some((cached, d)) = st.mod_details_cache.get_mut(&path) {
+                if *cached == print {
+                    if let Some(copy) = library_copy(d) {
+                        out.insert(key, copy);
+                    }
+                }
+            }
+        }
+        out
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
 fn library_copy(d: &mut ModDetails) -> Option<ModDetails> {
     let library = d.library_files.clone()?;
     let files = std::mem::take(&mut d.files);
@@ -8602,7 +8635,7 @@ fn main() {
             xtra_dupes::xtra_find_duplicates, // repakxtra
             xtra_trash::empty_trashed_mods,
             xtra_previews::list_mod_previews, xtra_previews::delete_loadout_previews,
-            xtra_previews::get_mod_preview,
+            xtra_previews::list_preview_files, // repakxtra: pictures load as files (asset protocol)
             xtra_viewer::get_viewer_file, xtra_viewer::viewer_state, xtra_viewer::generate_mod_viewer, xtra_viewer::generate_default_viewer, xtra_viewer::run_texcheck, // repakxtra: Rotate in 3D, texture check
             xtra_soundmerge::sound_merge_plan, xtra_soundmerge::sound_merge_play, xtra_soundmerge::sound_merge_make, xtra_soundmerge::sound_merge_info, xtra_soundmerge::sound_merge_cleanup, xtra_soundmerge::sound_merge_done, // repakxtra: Merge sounds
             xtra_previews::get_preview_covers,
@@ -8760,6 +8793,7 @@ fn main() {
             dismiss_crash_dialog,
             get_crash_log_path,
             get_mod_details,
+            get_cached_mod_details, // repakxtra: the warm part of a start's details in one call
             set_mod_priority,
             check_mod_clashes,
             get_asset_explorer_index,

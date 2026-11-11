@@ -116,13 +116,27 @@ pub fn delete_loadout_previews(keys: Vec<String>) -> usize {
         .count()
 }
 
+/// Every preview's file name and change time (ms) by key, and the folder they are in, read in one call: the window loads
+/// the pictures as files (Tauri's asset protocol, scoped to this folder in tauri.conf.json), not as bytes through the
+/// command bridge. The time goes into the picture's address, so a re-rendered preview is never served from cache.
 #[tauri::command(async)]
-pub fn get_mod_preview(key: String) -> Result<tauri::ipc::Response, String> {
-    if !valid_key(&key) {
-        return Err(format!("Invalid preview key: {key}"));
-    }
-    let file = preview_file(&previews_dir(), &key).ok_or_else(|| format!("No preview for {key}"))?;
-    std::fs::read(file).map(tauri::ipc::Response::new).map_err(|e| e.to_string())
+pub fn list_preview_files() -> serde_json::Value {
+    let dir = previews_dir();
+    let files: serde_json::Map<String, serde_json::Value> = list_mod_previews()
+        .into_iter()
+        .filter_map(|key| {
+            let file = preview_file(&dir, &key)?;
+            let ms = std::fs::metadata(&file).ok()?.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_millis() as u64;
+            let name = file.file_name()?.to_string_lossy().to_string();
+            Some((key, serde_json::json!([name, ms])))
+        })
+        .collect();
+    // each loadout render's covers and members (get_preview_covers), so the cards need no call each
+    let covers: serde_json::Map<String, serde_json::Value> = files.keys()
+        .filter(|k| k.starts_with("loadout-") && !k.contains(['.', '@']))
+        .map(|k| (k.clone(), get_preview_covers(k.clone())))
+        .collect();
+    serde_json::json!({ "dir": dir.to_string_lossy(), "files": files, "covers": covers })
 }
 
 /// A loadout's combined render (`set`), from the generator's <set>.json: `covers`, the mods it shows (empty when there
