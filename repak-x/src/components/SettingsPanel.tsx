@@ -8,6 +8,7 @@ import { TriangleAlert } from 'lucide-react' // repakxtra: setting warnings
 import { useDialogFocus } from '../custom/dialogFocus' // repakxtra
 import { SettingsSearch, useSettingsFilter } from '../custom/settingsSearch' // repakxtra: Settings search
 import TailInput from './ui/TailInput'
+import ConfirmRow from '../custom/ConfirmRow' // repakxtra: Auto-detect asks before it replaces a saved folder
 import { LuFolderInput, LuFolderOpen, LuLibrary, LuLifeBuoy, LuRefreshCw, LuRocket, LuRotateCcw, LuSlidersHorizontal, LuTags, LuUsers } from "react-icons/lu"
 import { RiSparkling2Fill } from "react-icons/ri"
 import {
@@ -89,6 +90,9 @@ type SettingsPanelProps = {
   accentColor: string;
   setAccentColor: (accent: string) => void;
   gamePath?: string;
+  foundGamePath?: string | null; // repakxtra: what Auto-detect found while the saved folder still exists, asked before it replaces it
+  onUseFoundGamePath?: () => void;
+  onKeepGamePath?: () => void;
   onAutoDetectGamePath: () => void;
   onBrowseGamePath: () => void;
   isGamePathLoading: boolean;
@@ -101,7 +105,7 @@ type SettingsPanelProps = {
 };
 
 
-export default function SettingsPanel({ settings, onSave, onClose, theme, setTheme, accentColor, setAccentColor, gamePath, onAutoDetectGamePath, onBrowseGamePath, isGamePathLoading, setParallelProcessing, onCheckForUpdates, onViewChangelog, isCheckingUpdates, onReplayTour, onOpenShortcuts }: SettingsPanelProps) {
+export default function SettingsPanel({ settings, onSave, onClose, theme, setTheme, accentColor, setAccentColor, gamePath, foundGamePath, onUseFoundGamePath, onKeepGamePath, onAutoDetectGamePath, onBrowseGamePath, isGamePathLoading, setParallelProcessing, onCheckForUpdates, onViewChangelog, isCheckingUpdates, onReplayTour, onOpenShortcuts }: SettingsPanelProps) {
   const alert = useAlert();
   const [activeCategory, setActiveCategory] = useState<CategoryId>('general');
   const focus = useDialogFocus(); // repakxtra
@@ -254,6 +258,8 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                         </button>
                       </div>
                     </div>
+                    {foundGamePath && <ConfirmRow danger={false} yes="Use it" busy={isGamePathLoading} onYes={() => onUseFoundGamePath?.()} onNo={() => onKeepGamePath?.()}
+                      text={<>Found another install at <code title={foundGamePath}>{'…\\' + foundGamePath.replace(/[\\/]MarvelGame[\\/].*$/i, '').split(/[\\/]/).filter(Boolean).slice(-2).join('\\')}</code>. Use its mods folder instead of this one?</>} />}{/* repakxtra */}
                   </div>
                 </div>
 

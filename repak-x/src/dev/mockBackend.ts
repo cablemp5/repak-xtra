@@ -91,7 +91,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         return localStorage.getItem('mock.bypass') === 'false' ? { ...data.settings, bypassGameRunningLock: false } : data.settings
       case 'save_app_settings': Object.assign(data.settings, args?.settings); return null // the first-launch flow's Discord switch
       case 'discord_connect': case 'discord_disconnect': case 'discord_set_managing_mods': case 'discord_set_theme': case 'launch_game': return null
-      case 'get_game_path': return data.gamePath
+      case 'get_game_path': return new Promise(r => setTimeout(() => r(data.gamePath), 300)) // async like the real one: first-run setup must wait for it
       case 'get_all_tags': return data.tags
       case 'delete_tag_from_all_mods':
         data.tags = data.tags.filter((t: string) => t !== args?.tag)
@@ -223,9 +223,14 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       })()
       case 'set_game_path': if (fresh) data.gamePath = String(args?.path ?? ''); return String(args?.path ?? '')
       // localStorage 'mock.noGame' = '1': the search finds nothing (an Epic install or a moved folder), like the backend's error
-      case 'auto_detect_game_path':
+      // localStorage 'mock.foundGame' = a path: the search finds another install while the saved folder exists (the ask)
+      case 'auto_detect_game_path': {
         if (localStorage.getItem('mock.noGame') === '1') throw 'Could not auto-detect Marvel Rivals installation'
-        if (fresh) data.gamePath = freshGame; return freshGame
+        const other = localStorage.getItem('mock.foundGame')
+        if (other && data.gamePath && !args?.replace) return { path: data.gamePath, found: other }
+        if (other) { data.gamePath = other; return { path: other } }
+        if (fresh) data.gamePath = freshGame; return { path: freshGame }
+      }
       case 'previews_doctor': return localStorage.getItem('mock.doctor') === 'fail'
         ? { ok: false, problems: ["The game's Paks folder was not found (REPAKXTRA_PAKS is not set)."] } : { ok: true, problems: [] }
       // Capture: the game counts as open while window.__mockGameRunning is set; captures fail (no game to picture)

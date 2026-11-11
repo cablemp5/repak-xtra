@@ -517,11 +517,21 @@ async fn auto_detect_game_path(
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
     watcher_state: State<'_, WatcherState>,
-) -> Result<String, String> {
+    replace: Option<bool>,
+) -> Result<serde_json::Value, String> {
     match find_marvel_rivals() {
         Some(game_root) => {
             // game_path should be the ~mods directory (matching egui behavior)
             let mods_path = game_root.join("~mods");
+
+            // repakxtra: a saved folder that still exists is never replaced without asking: it stays, and the found one
+            // comes back as `found` for the caller to offer (replace: true is the yes)
+            let saved = state.lock().unwrap().game_path.clone();
+            let same = |a: &Path, b: &Path| a.to_string_lossy().replace('/', "\\").to_lowercase() == b.to_string_lossy().replace('/', "\\").to_lowercase();
+            if replace != Some(true) && !saved.as_os_str().is_empty() && saved.is_dir() && !same(&saved, &mods_path) {
+                ui_log::info("GamePath", format!("Kept the saved mods folder {} (found {})", saved.display(), mods_path.display()));
+                return Ok(serde_json::json!({ "path": saved.to_string_lossy(), "found": mods_path.to_string_lossy() }));
+            }
 
             // Create ~mods directory if it doesn't exist
             if !mods_path.exists() {
@@ -547,7 +557,7 @@ async fn auto_detect_game_path(
                 "GamePath",
                 format!("Detected Marvel Rivals mods folder: {}", mods_path.display()),
             );
-            Ok(mods_path.to_string_lossy().to_string())
+            Ok(serde_json::json!({ "path": mods_path.to_string_lossy() }))
         }
         None => {
             let error_msg = "Could not auto-detect Marvel Rivals installation".to_string();
