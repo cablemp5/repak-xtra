@@ -3511,15 +3511,10 @@ async fn delete_mod(
         return Err(e);
     }
 
-    // Try to delete the main file
+    // repakxtra: the files to go are gathered first and moved as one set below
+    let mut doomed: Vec<PathBuf> = Vec::new();
     if actual_path.exists() {
-        if let Err(e) = xtra_trash::discard(&trash, &actual_path) { // repakxtra
-            xtra_trash::release_if_empty(&trash); // repakxtra
-            let error_msg = xtra_ops::io(&e).unwrap_or_else(|| format!("Failed to delete mod file: {}", e)); // repakxtra
-            toast_events::emit_delete_failed(&window, &error_msg);
-            return Err(error_msg);
-        }
-        log::info!("Deleted main mod file: {:?}", actual_path);
+        doomed.push(actual_path.clone());
     } else {
         log::warn!("Main mod file does not exist: {:?}", actual_path);
     }
@@ -3562,28 +3557,19 @@ async fn delete_mod(
             "Keeping IoStore files, still used by: {:?}",
             sibling_path
         );
-        return Ok(());
+    } else {
+        // Delete associated IoStore files (.ucas and .utoc)
+        doomed.extend(["ucas", "utoc"].iter().map(|x| base_pak_path.with_extension(x)).filter(|p| p.exists()));
     }
 
-    // Delete associated IoStore files (.ucas and .utoc)
-    let ucas_path = base_pak_path.with_extension("ucas");
-    if ucas_path.exists() {
-        if let Err(e) = xtra_trash::discard(&trash, &ucas_path) { // repakxtra
-            log::warn!("Failed to delete .ucas file: {}", e);
-        } else {
-            log::info!("Deleted associated .ucas file: {:?}", ucas_path);
-        }
+    // repakxtra: all of the mod goes to Recently deleted, or none of it (a file that cannot move puts the rest back)
+    if let Err((p, e)) = xtra_trash::discard_all(&trash, &doomed.iter().map(|p| p.as_path()).collect::<Vec<_>>()) {
+        let error_msg = xtra_ops::io(&e).unwrap_or_else(|| format!("Failed to delete {}: {}", p.display(), e));
+        toast_events::emit_delete_failed(&window, &error_msg);
+        return Err(error_msg);
     }
-
-    let utoc_path = base_pak_path.with_extension("utoc");
-    if utoc_path.exists() {
-        if let Err(e) = xtra_trash::discard(&trash, &utoc_path) { // repakxtra
-            log::warn!("Failed to delete .utoc file: {}", e);
-        } else {
-            log::info!("Deleted associated .utoc file: {:?}", utoc_path);
-        }
-    }
-
+    xtra_trash::release_if_empty(&trash);
+    log::info!("Deleted mod files: {:?}", doomed);
     Ok(())
 }
 
@@ -3836,7 +3822,8 @@ async fn update_mod(
     if !leftover.is_empty() {
         match xtra_trash::reserve(None) {
             Ok(trash) => {
-                old_deleted = leftover.iter().all(|p| xtra_trash::discard(&trash, p).is_ok());
+                // repakxtra: all of the old version goes, or all of it stays (never half of it in Recently deleted)
+                old_deleted = xtra_trash::discard_all(&trash, &leftover.iter().map(|p| p.as_path()).collect::<Vec<_>>()).is_ok();
                 xtra_trash::release_if_empty(&trash);
             }
             Err(e) => warn!("Failed to move the old version aside: {}", e),
@@ -3865,7 +3852,9 @@ async fn update_mod(
             "{}.bak_repak",
             new_mod_path.to_string_lossy().trim_end_matches(".pak")
         ));
-        if let Err(e) = std::fs::rename(&new_mod_path, &disabled_path) {
+        // repakxtra: rename replaces an existing file on Windows, so a .bak_repak already there is never overwritten
+        let renamed = if disabled_path.exists() { Err(std::io::Error::from(std::io::ErrorKind::AlreadyExists)) } else { std::fs::rename(&new_mod_path, &disabled_path) };
+        if let Err(e) = renamed {
             warn!("Failed to disable new mod to match old state: {}", e);
         } else {
             info!("Disabled new mod to match old mod's state");
