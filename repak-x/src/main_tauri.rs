@@ -3880,6 +3880,31 @@ async fn open_in_explorer(path: String) -> Result<(), String> {
     Ok(())
 }
 
+/// repakxtra: the text rides in an environment variable, never in the command line, so no quote in a mod or folder
+/// name (PowerShell also ends a string at U+2018 to U+201B) can turn part of it into a command.
+#[cfg(target_os = "windows")]
+fn clipboard_command(script: &str, text: &str) -> std::process::Command {
+    let mut c = std::process::Command::new("powershell");
+    c.args(["-NoProfile", "-NonInteractive", "-Command", script]).env("REPAKXTRA_CLIP", text);
+    c
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod clipboard_tests {
+    #[test]
+    fn a_curly_quote_in_a_name_is_copied_as_text_and_nothing_runs() {
+        let dir = tempfile::tempdir().unwrap();
+        let marker = dir.path().join("ran.txt");
+        let out = dir.path().join("out.txt");
+        let text = format!("C:\\mods\\Bob\u{2019};New-Item -Path '{}';\u{2018}_9999999_P.pak", marker.display());
+        let mut c = super::clipboard_command("Set-Content -LiteralPath $env:OUT -Value $env:REPAKXTRA_CLIP -Encoding UTF8 -NoNewline", &text);
+        assert!(!c.get_args().any(|a| a.to_string_lossy().contains("New-Item")));
+        assert!(c.env("OUT", &out).status().unwrap().success());
+        assert!(!marker.exists(), "part of the name ran as a command");
+        assert_eq!(std::fs::read_to_string(&out).unwrap().trim_start_matches('\u{feff}'), text);
+    }
+}
+
 #[tauri::command]
 async fn copy_to_clipboard(text: String, window: Window) -> Result<(), String> {
     #[cfg(target_os = "windows")]
@@ -3887,23 +3912,16 @@ async fn copy_to_clipboard(text: String, window: Window) -> Result<(), String> {
         use std::os::windows::process::CommandExt;
         use std::process::{Command, Stdio};
 
-        let mut child = Command::new("powershell")
-            .args([
-                "-Command",
-                "Set-Clipboard",
-                "-Value",
-                &format!("'{}'", text.replace("'", "''")),
-            ])
+        let status = clipboard_command("Set-Clipboard -Value $env:REPAKXTRA_CLIP", &text)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .creation_flags(0x08000000) // CREATE_NO_WINDOW - prevents PowerShell window from showing
-            .spawn()
+            .status()
             .map_err(|e| format!("Failed to copy to clipboard: {}", e))?;
-
-        child
-            .wait()
-            .map_err(|e| format!("Failed to copy to clipboard: {}", e))?;
+        if !status.success() {
+            return Err("Failed to copy to clipboard".to_string());
+        }
     }
 
     #[cfg(target_os = "macos")]
