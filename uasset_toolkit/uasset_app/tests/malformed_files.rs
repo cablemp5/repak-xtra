@@ -144,7 +144,7 @@ fn malformed_files_fail_safely() {
     }
 
     // F-100: a damaged .utoc is an error within 2 s (it overflowed the stack or never returned)
-    for f in ["11-utoc-method-count-ffffffff", "12-utoc-dir-self-child", "13-utoc-dir-sibling-loop", "14-utoc-file-self-next", "15-utoc-dir-self-child-and-sibling"] {
+    for f in ["11-utoc-method-count-ffffffff", "12-utoc-dir-self-child", "13-utoc-dir-sibling-loop", "14-utoc-file-self-next", "15-utoc-dir-self-child-and-sibling", "16-utoc-shared-long-filename"] {
         let o = run("listutoc", &fixture(&format!("{f}.utoc")), "", Duration::from_secs(5));
         expect(&format!("{f} is an error within 2 s"), &o, o.result.starts_with("err") && o.secs < 2.0 && o.peak_mb - control.peak_mb < 100.0);
     }

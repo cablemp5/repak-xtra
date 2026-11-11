@@ -1,5 +1,5 @@
 diff --git a/src/UAssetTool/IoStore/IoStoreReader.cs b/src/UAssetTool/IoStore/IoStoreReader.cs
-index 9664c72..fc82465 100644
+index 9664c72..6492021 100644
 --- a/src/UAssetTool/IoStore/IoStoreReader.cs
 +++ b/src/UAssetTool/IoStore/IoStoreReader.cs
 @@ -644,9 +644,14 @@ public class IoStoreToc
@@ -51,7 +51,7 @@ index 9664c72..fc82465 100644
      private static void BuildFilePaths(
          IoStoreToc toc,
          List<(uint name, uint firstChild, uint nextSibling, uint firstFile)> dirEntries,
-@@ -893,38 +910,53 @@ public class IoStoreToc
+@@ -893,38 +910,56 @@ public class IoStoreToc
      {
          if (dirIndex >= dirEntries.Count)
              return;
@@ -64,6 +64,7 @@ index 9664c72..fc82465 100644
 +        var dirSeen = new bool[dirEntries.Count];
 +        var fileSeen = new bool[fileEntries.Count];
 +        static Exception Loop() => new InvalidDataException("The .utoc directory index loops back on itself.");
++        static Exception TooLong() => new InvalidDataException("A .utoc path is longer than 1,024 characters.");
 +
 +        // (directory, its parent's path): siblings share their parent's string, so queued directories cost no path each
 +        var stack = new Stack<(uint dir, string? parent)>();
@@ -81,9 +82,9 @@ index 9664c72..fc82465 100644
 +            var (index, parent) = stack.Pop();
 +            var dir = dirEntries[(int)index];
 +            string dirName = dir.name < strings.Count ? strings[(int)dir.name] : "";
++            if (parent != null && parent.Length + dirName.Length + 1 > 1024)
++                throw TooLong();
 +            string path = parent == null ? currentPath : string.IsNullOrEmpty(parent) ? $"{dirName}/" : $"{parent}{dirName}/";
-+            if (path.Length > 1024)
-+                throw new InvalidDataException("A .utoc directory path is longer than 1,024 characters.");
 +
 +            // Process files in this directory
 +            for (uint fileIndex = dir.firstFile; fileIndex < fileEntries.Count && fileIndex != 0xFFFFFFFF; fileIndex = fileEntries[(int)fileIndex].nextFile)
@@ -93,6 +94,8 @@ index 9664c72..fc82465 100644
 +                fileSeen[fileIndex] = true;
 +                var file = fileEntries[(int)fileIndex];
 +                string fileName = file.name < strings.Count ? strings[(int)file.name] : "";
++                if (path.Length + fileName.Length > 1024)
++                    throw TooLong(); // checked first: one huge name shared by many files would be copied for each
 +                string fullPath = string.IsNullOrEmpty(path) ? fileName : $"{path}{fileName}";
 +
 +                // userData is the chunk index
