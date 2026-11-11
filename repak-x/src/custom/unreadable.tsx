@@ -27,8 +27,8 @@ export async function checkUnreadable(alert: ReturnType<typeof useAlert>, move: 
   }
 }
 
-export function UnreadableBadge({ path }: { path: string }) {
-  const on = useSyncExternalStore(subscribe, () => paths.has(norm(path)))
-  if (!on) return null
+export const useUnreadable = (path: string) => useSyncExternalStore(subscribe, () => paths.has(norm(path)))
+
+export function UnreadableBadge() {
   return <span className="mod-type-badge broken-badge is-broken" title="This mod closed repakxtra the last time it was read, so it is skipped until the file changes. Delete it, or replace it with a fixed copy.">Could not be read</span>
 }
