@@ -7,7 +7,6 @@ mod asset_explorer;
 mod xtra_classify; // repakxtra: extra mod types, Project Galacta check
 mod xtra_dupes; // repakxtra: same-content installs and Check Conflicts' Duplicates
 mod xtra_ops; // repakxtra: game open, file in use, and name taken, one dialog each
-mod xtra_download; // repakxtra: which file a repakx:// link may name
 mod xtra_made; // repakxtra: installed mods keep when they were made (the Needs VFX update check)
 mod xtra_vfx_check; // repakxtra: Check for VFX update (built for this game version or an older one)
 mod xtra_edition;
@@ -2031,249 +2030,6 @@ fn get_clean_base_name(filename: &str) -> String {
     base_no_p.to_string()
 }
 
-/// One ready-to-install mod found inside an archive, directory, or loose file.
-/// A "mod" is one stem in one directory: the .pak plus any .utoc/.ucas siblings.
-#[derive(serde::Serialize, Clone, Debug)]
-struct ArchiveModEntry {
-    /// Path relative to the archive/directory root, forward-slashed.
-    /// This is the key the install side uses for selection and renaming.
-    rel_path: String,
-    /// Parent directory inside the archive, "" when at the root.
-    rel_dir: String,
-    /// File name without extension - the editable part when renaming.
-    base_name: String,
-    is_iostore: bool,
-    size: u64,
-    mod_type: String,
-    /// 4-digit hero ids detected from the asset paths, so the panel can show
-    /// the same portraits the mod list uses.
-    hero_ids: Vec<String>,
-}
-
-/// List the installable mods inside an archive (or a directory / loose pak)
-/// WITHOUT installing anything, so the user can pick and rename before committing.
-#[tauri::command]
-async fn inspect_archive_mods(path: String, window: Window) -> Result<Vec<ArchiveModEntry>, String> {
-    blocking(move || inspect_archive_mods_now(path, window)).await // repakxtra: unpacking runs off the async runtime
-}
-
-fn inspect_archive_mods_now(path: String, window: Window) -> Result<Vec<ArchiveModEntry>, String> {
-    use crate::install_mod::install_mod_logic::archives::{extract_7z, extract_rar, extract_zip};
-    use walkdir::WalkDir;
-
-    let src = PathBuf::from(&path);
-    if !src.exists() {
-        return Err(format!("Path does not exist: {}", path));
-    }
-
-    let ext = src
-        .extension()
-        .and_then(|s| s.to_str())
-        .unwrap_or("")
-        .to_lowercase();
-
-    // Loose pak / IoStore bundle: a single entry, nothing to extract.
-    if ext == "pak" || ext == "utoc" {
-        let stem = src
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("Unknown")
-            .to_string();
-        let utoc = src.with_extension("utoc");
-        let ucas = src.with_extension("ucas");
-        let is_iostore = utoc.exists() && ucas.exists();
-        let size = bundle_size(&src);
-        let (mod_type, hero_ids) = detect_mod_info(&src, is_iostore);
-
-        return Ok(vec![ArchiveModEntry {
-            rel_path: src
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string(),
-            rel_dir: String::new(),
-            base_name: stem,
-            is_iostore,
-            size,
-            mod_type,
-            hero_ids,
-        }]);
-    }
-
-    // Archives are extracted to a temp dir purely for inspection; the install
-    // side re-extracts from the original archive when the user confirms.
-    let scan_root: PathBuf;
-    let _temp_guard;
-    if ext == "zip" || ext == "rar" || ext == "7z" {
-        let temp_dir = tempfile::tempdir().map_err(|e| format!("Failed to create temp dir: {}", e))?;
-        let temp_path = temp_dir.path().to_path_buf();
-        let temp_path_str = temp_path.to_str().unwrap_or_default();
-        let src_str = src.to_str().unwrap_or_default();
-
-        let extract_result = if ext == "zip" {
-            extract_zip(src_str, temp_path_str)
-        } else if ext == "rar" {
-            extract_rar(src_str, temp_path_str)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
-        } else {
-            extract_7z(src_str, temp_path_str)
-        };
-
-        extract_result.map_err(|e| format!("Failed to extract archive: {}", e))?;
-
-        scan_root = temp_path;
-        _temp_guard = Some(temp_dir);
-    } else if src.is_dir() {
-        scan_root = src.clone();
-        _temp_guard = None;
-    } else {
-        return Ok(Vec::new());
-    }
-
-    let mut entries: Vec<ArchiveModEntry> = Vec::new();
-    let mut seen_stems: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
-
-    for entry in WalkDir::new(&scan_root).into_iter().filter_entry(crate::xtra_bundle::not_staging) /* repakxtra */.filter_map(|e| e.ok()) {
-        let entry_path = entry.path();
-        let entry_ext = entry_path
-            .extension()
-            .and_then(|s| s.to_str())
-            .unwrap_or("")
-            .to_lowercase();
-
-        // Anchor on the .pak; fall back to .utoc for IoStore-only bundles so a
-        // bundle without a .pak still shows up exactly once.
-        let is_anchor = entry_ext == "pak"
-            || (entry_ext == "utoc" && !entry_path.with_extension("pak").exists());
-        if !is_anchor {
-            continue;
-        }
-
-        // One entry per stem+directory, whichever extension we hit first.
-        let stem_key = entry_path.with_extension("");
-        if !seen_stems.insert(stem_key) {
-            continue;
-        }
-
-        let rel = entry_path.strip_prefix(&scan_root).unwrap_or(entry_path);
-        let rel_path = rel.to_string_lossy().replace('\\', "/");
-        let rel_dir = rel
-            .parent()
-            .map(|p| p.to_string_lossy().replace('\\', "/"))
-            .unwrap_or_default();
-
-        let utoc = entry_path.with_extension("utoc");
-        let ucas = entry_path.with_extension("ucas");
-        let is_iostore = utoc.exists() && ucas.exists();
-
-        let (mod_type, hero_ids) = detect_mod_info(entry_path, is_iostore);
-
-        entries.push(ArchiveModEntry {
-            rel_path,
-            rel_dir,
-            base_name: entry_path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("Unknown")
-                .to_string(),
-            is_iostore,
-            size: bundle_size(entry_path),
-            mod_type,
-            hero_ids,
-        });
-    }
-
-    entries.sort_by(|a, b| a.rel_path.to_lowercase().cmp(&b.rel_path.to_lowercase()));
-
-    let _ = window.emit(
-        "install_log",
-        format!("[Inspect] Found {} mod(s) in {}", entries.len(), path),
-    );
-
-    Ok(entries)
-}
-
-/// Total bytes of a mod bundle (the anchor file plus its IoStore companions).
-fn bundle_size(anchor: &Path) -> u64 {
-    ["pak", "utoc", "ucas"]
-        .iter()
-        .filter_map(|ext| std::fs::metadata(anchor.with_extension(ext)).ok())
-        .map(|m| m.len())
-        .sum()
-}
-
-/// Best-effort content classification plus hero detection, from one read of the
-/// bundle's asset list. Mirrors what `parse_dropped_files` reports for the type,
-/// and `utils/heroes.ts` for the hero ids.
-fn detect_mod_info(anchor: &Path, is_iostore: bool) -> (String, Vec<String>) {
-    use crate::utils::get_pak_characteristics_detailed;
-
-    let files: Option<Vec<String>> = if is_iostore {
-        use crate::utoc_utils::read_utoc;
-        let utoc_files: Vec<String> = read_utoc(&anchor.with_extension("utoc"))
-            .iter()
-            .map(|e| e.file_path.clone())
-            .collect();
-        if utoc_files.is_empty() {
-            None
-        } else {
-            Some(utoc_files)
-        }
-    } else {
-        let pak = anchor.with_extension("pak");
-        uasset_toolkit::list_pak_files(
-            pak.to_str().unwrap_or_default(),
-            Some(crate::install_mod::AES_KEY_HEX),
-        )
-        .ok()
-        .filter(|f| !f.is_empty())
-    };
-
-    let Some(files) = files else {
-        return ("Unknown".to_string(), Vec::new());
-    };
-
-    let mod_type = get_pak_characteristics_detailed(files.clone()).mod_type;
-    (mod_type, detect_hero_ids(&files))
-}
-
-/// Hero ids from asset paths. Same two patterns as `detectHeroes` in
-/// utils/heroes.ts: the path form wins, and short-circuits the filename form to
-/// avoid false positives from shared assets.
-fn detect_hero_ids(files: &[String]) -> Vec<String> {
-    let path_re = match Regex::new(r"(?:Characters|Hero_ST|Hero)/(\d{4})") {
-        Ok(r) => r,
-        Err(_) => return Vec::new(),
-    };
-    let name_re = match Regex::new(r"[_/](10[1-6]\d)\d{3}") {
-        Ok(r) => r,
-        Err(_) => return Vec::new(),
-    };
-
-    let mut ids: Vec<String> = Vec::new();
-    for file in files {
-        // WBP_Galacta has no numeric hero ID in its path/filename, so it's
-        // special-cased directly by name (mirrors utils.rs).
-        if file.to_lowercase().contains("wbp_galacta") {
-            if !ids.contains(&"4017".to_string()) {
-                ids.push("4017".to_string());
-            }
-            continue;
-        }
-
-        let found = path_re
-            .captures(file)
-            .or_else(|| name_re.captures(file))
-            .map(|c| c[1].to_string());
-        if let Some(id) = found {
-            if !ids.contains(&id) {
-                ids.push(id);
-            }
-        }
-    }
-    ids
-}
-
 /// Quick Organize: Simply copy/move files to a target folder without any repak processing
 /// This is for organizing existing mod files into subfolders
 /// Now also detects uncompressed IoStore bundles and recompresses them with Oodle
@@ -2281,7 +2037,7 @@ fn detect_hero_ids(files: &[String]) -> Vec<String> {
 ///
 /// `selections`, `renames` and `flatten` are optional so existing callers keep
 /// their behaviour: install everything, keep original names, retain structure.
-///   - `selections`: rel_paths (as reported by `inspect_archive_mods`) to install.
+///   - `selections`: rel_paths (relative to the archive or folder root) to install.
 ///   - `renames`: rel_path -> new base name, applied to the whole bundle.
 ///   - `flatten`: drop the archive's internal folders and install side by side.
 #[tauri::command]
@@ -2432,7 +2188,7 @@ fn quick_organize_impl(
         renames.unwrap_or_default().into_iter().map(|(k, v)| (k.to_lowercase(), v)).collect();
     let seen = std::cell::RefCell::new(std::collections::HashSet::<String>::new());
 
-    // The key for an entry, matching what `inspect_archive_mods` reported: a
+    // The key for an entry (its path inside the archive or folder): a
     // bundle is identified by its .pak when it has one, otherwise its .utoc, so
     // the .pak and .utoc branches below agree on a single key per bundle.
     let entry_key = |entry_path: &Path, base_path: &Path| -> String {
@@ -6309,61 +6065,6 @@ async fn get_app_version() -> Result<String, String> {
     Ok(env!("CARGO_PKG_VERSION").to_string())
 }
 
-/// Delete the archive an extension install was sourced from, once it has been
-/// installed successfully.
-///
-/// The path originates from a `repakx://` deep link, so it is caller-controlled
-/// and must not be deleted on trust. Three guards apply:
-///   1. it must be a regular file, so a link cannot point at a directory;
-///   2. its extension must be one the extension flow actually handles, so a
-///      crafted link cannot reach arbitrary documents;
-///   3. it must live outside the game mods directory, so this can never delete
-///      a mod that is already installed.
-#[tauri::command]
-async fn delete_source_archive(
-    path: String,
-    state: State<'_, Arc<Mutex<AppState>>>,
-) -> Result<(), String> {
-    const DELETABLE_EXTENSIONS: [&str; 6] = xtra_download::EXTENSIONS;
-
-    let target = xtra_download::checked(&path)?; // repakxtra: only a file a link may name
-
-    if !target.is_file() {
-        return Err(format!("Not a file: {}", path));
-    }
-
-    let ext = target
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or_default()
-        .to_lowercase();
-    if !DELETABLE_EXTENSIONS.contains(&ext.as_str()) {
-        return Err(format!("Refusing to delete a .{} file", ext));
-    }
-
-    let mods_dir = {
-        let guard = state.lock().unwrap();
-        guard.game_path.clone()
-    };
-
-    // Compare resolved paths so ".." or a symlink cannot smuggle the target
-    // into the mods folder undetected.
-    if let (Ok(resolved_target), Ok(resolved_mods)) =
-        (target.canonicalize(), mods_dir.canonicalize())
-    {
-        if resolved_target.starts_with(&resolved_mods) {
-            return Err(
-                "Refusing to delete a file inside the mods folder - that is an installed mod"
-                    .to_string(),
-            );
-        }
-    }
-
-    xtra_download::recycle(&target)?; // repakxtra: to the Recycle Bin, never deleted for good
-    info!("[Extension] Sent the source archive to the Recycle Bin: {}", path);
-    Ok(())
-}
-
 /// Where the "which version's changelog has been shown" marker lives.
 ///
 /// This deliberately does NOT use localStorage. The webview's storage proved
@@ -8477,8 +8178,7 @@ fn single_mod_conflicts(target_path: PathBuf, game_path: PathBuf) -> Result<Vec<
 // PROTOCOL REGISTRATION (Portable App Support)
 // ============================================================================
 
-/// Registers the repakx:// protocol handler in Windows Registry (HKCU)
-/// This enables the browser extension to communicate with the app.
+/// Registers the repakxtra:// protocol handler in Windows Registry (HKCU), for Claim role's answer.
 /// Safe to call on every startup - it will just update the path if needed.
 #[cfg(target_os = "windows")]
 fn register_protocol_handler() -> Result<(), Box<dyn std::error::Error>> {
@@ -8489,24 +8189,33 @@ fn register_protocol_handler() -> Result<(), Box<dyn std::error::Error>> {
     let exe_path_str = exe_path.to_string_lossy();
 
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    // repakxtra: its own scheme (Claim role's answer). repakx:// is Repak X's (its browser extension): an older
+    // repakxtra pointed it here, so that is handed back by removing it when it still names this program.
+    let scheme = format!(r"Software\Classes\{}", xtra_role::SCHEME);
+    if let Ok(old) = hkcu.open_subkey(r"Software\Classes\repakx\shell\open\command") {
+        let target: String = old.get_value("").unwrap_or_default();
+        if target.to_lowercase().contains(&exe_path_str.to_lowercase()) {
+            let _ = hkcu.delete_subkey_all(r"Software\Classes\repakx");
+        }
+    }
 
     // Create or open the protocol key
-    let (protocol_key, _) = hkcu.create_subkey(r"Software\Classes\repakx")?;
-    protocol_key.set_value("", &"URL:Repak X Protocol")?;
+    let (protocol_key, _) = hkcu.create_subkey(&scheme)?;
+    protocol_key.set_value("", &"URL:repakxtra Protocol")?;
     protocol_key.set_value("URL Protocol", &"")?;
 
     // Create the DefaultIcon key (optional, for nice icon in Windows)
-    let (icon_key, _) = hkcu.create_subkey(r"Software\Classes\repakx\DefaultIcon")?;
+    let (icon_key, _) = hkcu.create_subkey(format!(r"{scheme}\DefaultIcon"))?;
     icon_key.set_value("", &format!("\"{}\",0", exe_path_str))?;
 
     // Create the shell\open\command key
-    let (command_key, _) = hkcu.create_subkey(r"Software\Classes\repakx\shell\open\command")?;
+    let (command_key, _) = hkcu.create_subkey(format!(r"{scheme}\shell\open\command"))?;
     let command = format!("\"{}\" \"%1\"", exe_path_str);
     command_key.set_value("", &command)?;
 
     info!(
-        "Registered repakx:// protocol handler for: {}",
-        exe_path_str
+        "Registered {}:// protocol handler for: {}",
+        xtra_role::SCHEME, exe_path_str
     );
     Ok(())
 }
@@ -8584,66 +8293,8 @@ fn register_protocol_handler() -> Result<(), Box<dyn std::error::Error>> {
 
 fn handle_deep_link_url(url: &str, app_handle: &tauri::AppHandle) {
     if xtra_role::on_link(url, app_handle) { return; } // repakxtra: Claim role's answer, before the log line (its state stays out of the log)
-    info!("Processing deep link URL: {}", url);
-
-    if let Ok(parsed) = url::Url::parse(url) {
-        if parsed.scheme() == "repakx" && parsed.host_str() == Some("install") {
-            if let Some(file_path) = parsed
-                .query_pairs()
-                .find(|(key, _)| key == "file")
-                .map(|(_, value)| value.to_string())
-            {
-                let decoded_path = urlencoding::decode(&file_path)
-                    .unwrap_or(file_path.clone().into())
-                    .to_string();
-
-                let path = std::path::Path::new(&decoded_path);
-                let file_name = path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| decoded_path.clone());
-
-                let checked = xtra_download::checked(&decoded_path); // repakxtra: before the disk is touched
-                if let Err(e) = &checked {
-                    ui_log::error("Extension", e.clone());
-                    let _ = app_handle.emit("extension-mod-error", e.clone());
-                } else if path.exists() {
-                    ui_log::info(
-                        "Extension",
-                        format!("Received \"{}\" from the browser extension", file_name),
-                    );
-                    if let Err(e) = app_handle.emit("extension-mod-received", &decoded_path) {
-                        ui_log::error(
-                            "Extension",
-                            format!("Could not hand \"{}\" to the UI: {}", file_name, e),
-                        );
-                    }
-                } else {
-                    ui_log::error(
-                        "Extension",
-                        format!("Extension sent a file that no longer exists: {}", decoded_path),
-                    );
-                    let _ = app_handle.emit(
-                        "extension-mod-error",
-                        format!("File not found: {}", decoded_path),
-                    );
-                }
-            } else {
-                ui_log::warn("Extension", format!("Ignored malformed extension link: {}", url));
-            }
-        } else {
-            ui_log::warn(
-                "Extension",
-                format!(
-                    "Ignored unknown link action: scheme={}, host={:?}",
-                    parsed.scheme(),
-                    parsed.host_str()
-                ),
-            );
-        }
-    } else {
-        ui_log::error("Extension", format!("Could not parse link: {}", url));
-    }
+    // repakxtra: no install links. Installing from a browser extension is Repak X's (its repakx:// scheme)
+    ui_log::warn("Links", format!("Ignored an unknown link: {}", url.split('?').next().unwrap_or("")));
 }
 
 // ============================================================================
@@ -8688,12 +8339,8 @@ fn main() {
     info!("Starting RepakX v{}", env!("CARGO_PKG_VERSION"));
 
     // Register protocol handler for portable app support (self-healing registry)
-    if crate::xtra_identity::upstream_running() { // repakxtra: an open Repak X keeps the links until it closes
-    } else if let Err(e) = register_protocol_handler() {
-        warn!(
-            "Failed to register repakx:// protocol handler: {} - browser extension may not work",
-            e
-        );
+    if let Err(e) = register_protocol_handler() {
+        warn!("Failed to register the {}:// protocol handler: {}", xtra_role::SCHEME, e);
     }
 
     // Initialize UAssetToolkit global singleton on startup
@@ -8806,9 +8453,9 @@ fn main() {
                 let _ = window.unminimize();
             }
 
-            // Check if args contains a repakx:// URL
+            // Check if args contains a repakxtra:// URL
             for arg in args.iter() {
-                if arg.starts_with("repakx://") {
+                if arg.starts_with(&format!("{}://", xtra_role::SCHEME)) {
                     info!("Received deep link from second instance: {}", arg.split('?').next().unwrap_or(""));
                     handle_deep_link_url(arg, app);
                 }
@@ -8834,15 +8481,10 @@ fn main() {
             #[cfg(any(windows, target_os = "linux"))]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
-                if let Err(e) = app.deep_link().register("repakx") {
-                    warn!("Failed to register repakx:// protocol: {}", e);
-                    ui_log::warn(
-                        "Startup",
-                        format!("Browser extension link handler unavailable: {}", e),
-                    );
+                if let Err(e) = app.deep_link().register(xtra_role::SCHEME) {
+                    warn!("Failed to register {}:// protocol: {}", xtra_role::SCHEME, e);
                 } else {
-                    info!("Successfully registered repakx:// protocol handler");
-                    ui_log::debug("Startup", "repakx:// protocol handler registered");
+                    info!("Successfully registered {}:// protocol handler", xtra_role::SCHEME);
                 }
             }
 
@@ -8873,10 +8515,10 @@ fn main() {
 
                 for arg in args.iter().skip(1) {
                     // Skip the exe path itself
-                    if arg.starts_with("repakx://") {
+                    if arg.starts_with(&format!("{}://", xtra_role::SCHEME)) {
                         info!("Found cold-start deep link URL: {}", arg.split('?').next().unwrap_or("")); // repakxtra: no query
                         handle_deep_link_url(arg, &startup_app_handle);
-                        break; // Only process the first repakx:// URL
+                        break; // Only process the first link
                     }
                 }
             });
@@ -8923,7 +8565,6 @@ fn main() {
             xtra_shortcut::shortcut_create,
             xtra_trust::xtra_self_sha256, // repakxtra: Settings > Is it safe?
             xtra_identity::xtra_upstream_running, // repakxtra: beside Repak X
-            xtra_identity::xtra_protocol_reclaim,
             xtra_crash::xtra_newest_crash, // repakxtra: setup report
             xtra_crash::xtra_recent_crashes, // repakxtra: setup report crash list
             xtra_crash::xtra_crash_suspects, // repakxtra: crash suspects
@@ -9013,10 +8654,8 @@ fn main() {
             parse_dropped_files,
             install_mods,
             quick_organize,
-            inspect_archive_mods,
             get_last_seen_version,
             set_last_seen_version,
-            delete_source_archive,
             delete_mod,
             update_mod,
             rename_mod,

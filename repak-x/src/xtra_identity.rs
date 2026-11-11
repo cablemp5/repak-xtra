@@ -7,7 +7,7 @@
 //!   open (a copy of a live database could come out torn).
 //! - The mods folder: while Repak X is open, repakxtra changes no mods (upstream_guard), so the two never write the same
 //!   files at once.
-//! - repakx:// links: repakxtra does not take them from an open Repak X, and takes them back once it closes.
+//! - Links: repakxtra has its own repakxtra:// scheme. repakx:// stays Repak X's (its browser extension).
 //! - Settings: repakxtra keeps its own repakxtra-state.json (main_tauri.rs save_state), first copied from state.json.
 
 use std::path::Path;
@@ -58,15 +58,6 @@ pub fn upstream_guard() -> Result<(), String> {
 #[tauri::command(async)]
 pub fn xtra_upstream_running() -> bool {
     upstream_running()
-}
-
-/// Points repakx:// links back at repakxtra once Repak X has closed (it takes them over when it starts).
-#[tauri::command(async)]
-pub fn xtra_protocol_reclaim() -> Result<(), String> {
-    if upstream_running() {
-        return Ok(());
-    }
-    crate::register_protocol_handler().map_err(|e| e.to_string())
 }
 
 /// What carrying the old storage over says when it cannot finish now. Yes: start without it this time; No: quit.

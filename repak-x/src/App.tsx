@@ -39,8 +39,6 @@ import FolderTree from './components/FolderTree'
 import ContextMenu from './components/ContextMenu'
 import LogDrawer from './components/LogDrawer'
 import DropZoneOverlay from './components/DropZoneOverlay'
-import ExtensionModOverlay from './components/ExtensionModOverlay'
-import type { ExtensionInstallOptions } from './components/ExtensionModOverlay'
 import InputPromptModal from './components/InputPromptModal'
 import UpdateModModal from './custom/UpdateModDialog' // repakxtra: the app's own Update mod dialog
 // repakxtra: repakxtra's own update and What's new dialogs (custom/UpdateDialogs.tsx), same props
@@ -496,7 +494,6 @@ function App() {
   const [isDragging, setIsDragging] = useState(false)
   const [dropTargetFolder, setDropTargetFolder] = useState<string | null>(null)
   const [renamingModPath, setRenamingModPath] = useState<string | null>(null) // Track which mod should start inline renaming
-  const [extensionModPath, setExtensionModPath] = useState<string | null>(null) // Path of mod received from browser extension
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [newFolderPrompt, setNewFolderPrompt] = useState<NewFolderPromptState | null>(null) // {paths: []} when prompting for new folder name
   const [newTagPrompt, setNewTagPrompt] = useState<NewTagPromptState | null>(null) // { callback: (tag) => void } when prompting for new tag name
@@ -1513,20 +1510,6 @@ function App() {
       loadFolders()
     })
 
-    // Listen for mods received from browser extension via repakx:// protocol
-    const unlistenExtensionMod = listen('extension-mod-received', async (event: any) => {
-      const filePath = event.payload
-      console.log('Received mod from extension:', filePath)
-
-      setExtensionModPath(filePath) // repakxtra: no Project Galacta update here, Setup owns the loader
-    })
-
-    // Listen for extension mod errors
-    const unlistenExtensionError = listen('extension-mod-error', (event: any) => {
-      uiLog.error('Extension', String(event.payload))
-      alert.error('Extension Error', event.payload)
-    })
-
     // Listen for general toast notifications from Rust backend
     const unlistenToast = listen('toast_notification', (event: any) => {
       const { type, title, description, duration } = event.payload
@@ -1618,8 +1601,6 @@ function App() {
       unlistenDragDrop.then(f => f())
       unlistenFileDrop.then(f => f())
       unlistenDirChanged.then(f => f())
-      unlistenExtensionMod.then(f => f())
-      unlistenExtensionError.then(f => f())
       unlistenToast.then(f => f())
       unlistenCrash.then(f => f())
       unlistenHeroSync.then(f => f())
@@ -2762,91 +2743,6 @@ function App() {
   // repakxtra: a row's Delete while the game runs: the delete waits for the game to close (handleDeleteMod asks)
   const stableDeleteBlocked = useStableCallback((path?: string) => { if (path) void handleDeleteMod(path) })
 
-  // Handle installing a mod received from the browser extension
-  const handleExtensionModInstall = async (
-    targetFolderId: string | null,
-    options: ExtensionInstallOptions
-  ) => {
-    if (!extensionModPath) return
-
-    const modPath = extensionModPath // Copy path before clearing state
-
-    // Close the overlay immediately
-    setExtensionModPath(null)
-
-    // Start progress bar (indeterminate)
-    setIsModsLoading(true)
-    setModLoadingProgress(-1)
-
-    // Update DRP status
-    invoke('discord_set_installing').catch(console.warn)
-
-    // Use promise toast for loading state and result
-    alert.promise(
-      (async () => {
-        try {
-          await quickInstall({
-            paths: [modPath],
-            targetFolder: targetFolderId || '',
-            selections: options.selections,
-            renames: options.renames,
-            flatten: options.flatten
-          })
-          // repakxtra: its Nexus source, for the picked paks under the names they landed as (before the archive goes)
-          await recordSourceAs(modPath, options.selections.map(rel => nameKey(`${options.renames[rel] ?? rel.split(/[\\/]/).pop()!.replace(/\.[^.]+$/, '')}.pak`)))
-
-          await loadMods()
-          await loadFolders()
-          setStatus(`Mod installed successfully!`)
-
-          // Only after the install has actually succeeded. A failure above
-          // throws, so the download is left in place for the user to retry.
-          // Cleanup failing is not itself an install failure, so it only warns.
-          if (options.deleteArchive) {
-            try {
-              await invoke('delete_source_archive', { path: modPath })
-            } catch (cleanupErr) {
-              console.warn('Failed to delete source archive:', cleanupErr)
-              alert.warning(
-                'Download Not Removed',
-                `The mod installed fine, but the downloaded file could not be moved to the Recycle Bin: ${cleanupErr}`
-              )
-            }
-          }
-
-          // Show warning after success if game is running
-          if (gameRunning) {
-            alert.warning(
-              'Game Running',
-              'Mods installed, but changes will only take effect after restarting the game.',
-              { duration: 8000 }
-            )
-          }
-
-          return {}
-        } finally {
-          setIsModsLoading(false)
-          setModLoadingProgress(0)
-          invoke('discord_set_idle').catch(console.warn)
-        }
-      })(),
-      {
-        loading: {
-          title: 'Installing from Extension',
-          description: 'Copying mod file...'
-        },
-        success: () => ({
-          title: 'Installation Complete',
-          description: 'Mod installed successfully from browser extension'
-        }),
-        error: (err) => ({
-          title: 'Installation Failed',
-          description: String(err)
-        })
-      }
-    )
-  }
-
   const handleResizeStart = (e: React.MouseEvent<HTMLDivElement>) => {
     setIsResizing(true)
     e.preventDefault()
@@ -3729,17 +3625,6 @@ function App() {
         }}
         onClose={() => setIsDragging(false)}
         onCreateFolder={handleCreateFolderAndReturn}
-      />
-
-      {/* Extension Mod Overlay - for mods received from browser extension */}
-      <ExtensionModOverlay
-        isVisible={!!extensionModPath}
-        filePath={extensionModPath}
-        folders={folders}
-        onInstall={handleExtensionModInstall}
-        onCancel={() => setExtensionModPath(null)}
-        onCreateFolder={handleCreateFolderAndReturn}
-        onNewFolder={(callback) => setNewFolderFromInstall({ callback })}
       />
 
       {/* New Folder Prompt Modal - for creating folders during drop */}
