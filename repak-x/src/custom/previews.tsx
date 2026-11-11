@@ -263,14 +263,15 @@ const listFiles = (fresh = false): Promise<PreviewFiles> => {
   if (fresh || !previewFiles) previewFiles = invoke<PreviewFiles>('list_preview_files').catch(() => { previewFiles = null; return { dir: '', files: {}, covers: {} } })
   return previewFiles
 }
-const reread = new Set<string>() // key@rev the listing was read again for
+const reread = new Map<string, Promise<PreviewFiles>>() // key@rev -> the listing read again for it, shared by every caller
 /** The preview's address and file name, or null when it has none. A key the listing lacks, or one rendered in this session
  *  (rev > 0), reads the listing once more for that render. The change time in the query: a new render is never a cached one. */
 const listFor = async (key: string, rev: number) => {
   const list = await listFiles()
-  if ((list.files[key] && rev === 0) || reread.has(`${key}@${rev}`)) return list
-  reread.add(`${key}@${rev}`)
-  return listFiles(true)
+  if (list.files[key] && rev === 0) return list
+  const k = `${key}@${rev}`
+  if (!reread.has(k)) reread.set(k, listFiles(true))
+  return reread.get(k)!
 }
 const fileOf = async (key: string, rev: number) => {
   const list = await listFor(key, rev)

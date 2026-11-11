@@ -18,26 +18,29 @@ const same = (a: Set<string> | null, b: Set<string>) => Boolean(a && a.size === 
 let lastHeight = 0 // a card's height, kept across opens so the first placeholders already have it
 
 /** For the scroller `root` showing `ids` (in order): the set of card ids to mount (null: mount all) and each placeholder's
- *  height. `pins` stay mounted (the card being renamed or dragged). */
-export function useNearCards(root: HTMLElement | null, ids: string[], pins: (string | null)[]) {
+ *  height. `pins` stay mounted (the card being renamed or dragged). `layout` changes when cards move without the list
+ *  changing (a collection folded, the card size), so the set is picked again. */
+export function useNearCards(root: HTMLElement | null, ids: string[], pins: (string | null)[], layout = '') {
   const on = ids.length >= NEAR_FROM
   const [near, setNear] = useState<Set<string> | null>(() => (on ? new Set(ids.slice(0, FIRST)) : null))
   const heights = useRef(new Map<string, number>())
   const pickRef = useRef<(() => void) | null>(null)
-  const key = ids.join('|')
+  const key = `${ids.join('|')}#${layout}`
   useLayoutEffect(() => {
     if (!on || !root) { setNear(null); return }
+    heights.current.clear() // a new layout (card size, folds): the cards measured from now on set every placeholder's height
     const pick = () => {
       const view = root.getBoundingClientRect()
+      const was = lastHeight
       const boxes: { id: string; top: number; bottom: number }[] = []
       for (const el of root.querySelectorAll<HTMLElement>('.lo-card[data-loadout]')) {
         const id = el.dataset.loadout!
         const b = el.getBoundingClientRect()
-        if (!el.dataset.away && el.offsetHeight) { heights.current.set(id, el.offsetHeight); lastHeight = el.offsetHeight }
+        if (!el.hasAttribute('data-away') && el.offsetHeight) { heights.current.set(id, el.offsetHeight); lastHeight = el.offsetHeight }
         boxes.push({ id, top: b.top, bottom: b.bottom })
       }
       const next = nearIds(boxes, view.top, view.bottom, root.clientHeight) // one screen above and below
-      setNear(prev => (same(prev, next) ? prev : next))
+      setNear(prev => (same(prev, next) && lastHeight === was ? prev : next)) // a new card height re-renders the placeholders
     }
     pickRef.current = pick
     pick()
