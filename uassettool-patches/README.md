@@ -27,6 +27,18 @@ so new mods carry nothing an anti-cheat could object to. 0012's stripped-directo
 `chunknames` and `patched_files` entries, which no game PAK lists, so such a mod reads unless it also carries its own loose files
 that no game PAK has (0012's existing limit).
 
+`0014-malformed-files-fail-safely.patch`: a crafted or damaged mod file fails with an error instead of writing outside the
+output folder, closing the app, freezing it, or eating memory. Every pak and IoStore extract (the library's `extract_pak_all`,
+`extract_iostore`, `extract_iostore_legacy`, and the command line's pak and legacy extracts) resolves each output path and
+refuses one outside the folder (`InsideOutput`): a rooted name, `//host/share`, a drive letter, or `..`. A root-level pak file
+(`/chunknames`, UE's root directory is `/`) drops that one slash. `BuildFilePaths` walks the .utoc directory index as a loop
+with a step limit (a directory that was its own child overflowed the stack, a sibling or file loop never returned), and a
+plain container's loop is an error. More than 255 compression method names, or a short read of one, is an error (a count of
+0xFFFFFFFF spun for ever). A pak entry may not claim more blocks than the file can hold, and each encoded entry offset is
+decoded once however many names share it. `cargo test -p uasset_app --test malformed_files` runs the fixtures: 1,500 names on
+one entry went from 1,610 MB to 17 MB, the four .utoc cases from a crash or a hang to an error in under 0.1 s, and 528 real
+mod files list byte for byte the same.
+
 Patches stack: each applies on top of the ones before it, in name order.
 
 `0012-read-stripped-pak-directories.patch` recovers a mod's missing filename directory by matching its V11 path hashes
