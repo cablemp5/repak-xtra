@@ -410,7 +410,9 @@ pub fn sweep(dir: &Path) {
     let old = dir.with_extension("old");
     if installed(dir).is_none() && installed(&old).is_some() {
         let _ = fs::remove_dir_all(dir);
-        let _ = fs::rename(&old, dir);
+        if fs::rename(&old, dir).is_err() {
+            return; // a file in it is held: the only complete kit stays as .old for the next sweep
+        }
     }
     let _ = fs::remove_dir_all(&old);
     let _ = fs::remove_dir_all(dir.with_extension("new"));
@@ -756,6 +758,14 @@ mod tests {
         // An install stopped between its two renames: the old kit is put back at the next start
         fs::rename(&dir, dir.with_extension("old")).unwrap();
         fs::create_dir_all(dir.with_extension("new")).unwrap();
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            let held = fs::OpenOptions::new().read(true).share_mode(1).open(dir.with_extension("old").join("kit.json")).unwrap();
+            sweep(&dir);
+            drop(held);
+            assert_eq!(installed(&dir.with_extension("old")).as_deref(), Some("2"), "a held .old kit is kept, not deleted");
+        }
         sweep(&dir);
         assert_eq!((installed(&dir).as_deref(), source(&dir).as_deref()), (Some("2"), Some("github")));
         assert!(!dir.with_extension("new").exists() && !dir.with_extension("old").exists());
