@@ -33,7 +33,8 @@ const isAnimated = (src: string) => {
 async function freeze(img: HTMLImageElement) {
   const src = img.src
   if (stills.get(img)?.still === src) return // its own still loading (the load listener): nothing to read
-  if (!img.complete || !img.naturalWidth || !(await isAnimated(src)) || !isIdle() || img.src !== src) return
+  // a file picture (asset protocol) drawn without crossorigin would taint the canvas: it keeps playing instead
+  if (!img.complete || !img.naturalWidth || (!src.startsWith('blob:') && !img.crossOrigin) || !(await isAnimated(src)) || !isIdle() || img.src !== src) return
   const c = document.createElement('canvas')
   c.width = img.naturalWidth
   c.height = img.naturalHeight
