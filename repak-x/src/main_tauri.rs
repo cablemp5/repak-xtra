@@ -8733,6 +8733,7 @@ fn main() {
             xtra_kit::preview_kit_status, // repakxtra: preview kit in Setup
             xtra_kit::preview_kit_latest,
             xtra_kit::preview_kit_install,
+            xtra_kit::preview_kit_check_file, // repakxtra: the confirm before a kit from a file
             xtra_kit::preview_kit_remove,
             xtra_kit::preview_kit_set_blender,
             xtra_storage::xtra_storage_snapshot_write,

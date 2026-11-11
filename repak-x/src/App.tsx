@@ -658,11 +658,12 @@ function App() {
   useGlobalTooltips();
 
   // Unified file drop handler function
-  const handleFileDrop = async (paths: string[]) => {
+  const installOpen = useRef(false); installOpen.current = panels.install // repakxtra: read by the drop listener's old closure
+  const handleFileDrop = async (paths: string[], asMods = false) => {
     if (!paths || paths.length === 0) return
     paths = await stageOffFiles(paths) // repakxtra: .pak.off sets install like .pak
     console.log('Dropped items:', paths)
-    if (await installDroppedKit(paths, alert)) return // repakxtra: a preview kit zip installs as the kit, not as a mod
+    if (!asMods && await installDroppedKit(paths, alert, installOpen.current)) return // repakxtra: a preview kit zip installs as the kit (after a confirm), not as a mod
 
     // repakxtra: no Project Galacta update here. Setup installs and updates the loader, a dropped archive's copy is
     // skipped and the rest installs (install_mod.rs)

@@ -16,7 +16,7 @@ import type { useAlert } from '../components/AlertHandler'
 import Switch from '../components/ui/Switch'
 import { DoctorProblems } from './SetupPanel'
 import { BypassTrack, GalactaTrack, InstallTrack, KitTrack, type GalactaStep, galactaWords, useFinished, useGalactaStep } from './installTrack'
-import { isKitZip, usePreviewKit } from './previewKit'
+import { expectMods, kitDrop, usePreviewKit } from './previewKit'
 import { OFF_EXT } from './offFiles'
 import WelcomeIntro, { MiniCard } from './WelcomeIntro'
 import catboy from './covers/welcome/catboy.webp'
@@ -466,7 +466,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
   onSetDrp: (on: boolean) => void
   onAutoDetect: () => Promise<void>
   onBrowse: () => Promise<void>
-  onAddFiles: (paths: string[]) => Promise<void>
+  onAddFiles: (paths: string[], asMods?: boolean) => Promise<void>
 }) {
   const [open, setOpen] = useState(firstLaunch)
   const [at, setAt] = useState('welcome')
@@ -572,14 +572,16 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
     kit.peek()
     if (!gamePath && !detected.current) { detected.current = true; onAutoDetect().catch(() => undefined) } // most installs are found, and their mods are known by the question
     // Mods dropped on the window go to the install panel: this screen steps aside for it. A kit zip installs as the
-    // kit (App's drop handler), so the screen stays and the previews row updates
+    // kit after its confirm (App's drop handler), so the screen stays and the previews row updates, except on the
+    // loadout page, which waits for mods (kitDrop)
     const off = listen<{ paths?: string[] } | string[]>('tauri://drag-drop', e => {
       const paths = Array.isArray(e.payload) ? e.payload : e.payload?.paths ?? []
       // on the first loadout page a drop ends the flow: the install card shows, the tour follows the install
-      if (!(paths.length === 1 && isKitZip(paths[0]))) atNow.current === 'loadout' ? finishFlow() : hide()
+      if (!kitDrop(paths, installingNow.current)) atNow.current === 'loadout' ? finishFlow() : hide()
     })
     return () => { asked.current++; off.then(f => f()).catch(() => undefined) }
   }, [open, gamePath])
+  useEffect(() => { expectMods(open && at === 'loadout'); return () => expectMods(false) }, [open, at])
   if (!open) return null
 
   const run = async (what: string, f: () => Promise<void>) => {
@@ -624,7 +626,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
     const paths = Array.isArray(got) ? got : got ? [got] : []
     if (!paths.length) return
     finishFlow() // the flow ends here: the install card shows, the tour follows the install
-    await onAddFiles(paths)
+    await onAddFiles(paths, true) // picked as mods: a kit-named zip is not the kit here
   }
   /** Done: Loadouts home, plus what the first loadout page picked. */
   const finishFlow = (pending: Pending = null) => {

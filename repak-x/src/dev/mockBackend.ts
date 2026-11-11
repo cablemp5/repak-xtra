@@ -205,6 +205,8 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         localStorage.setItem('mock.kit', v); localStorage.setItem('mock.kitSource', args?.file ? 'file' : 'github'); localStorage.removeItem('mock.noPreviews')
         return v
       })()
+      // The confirm before a kit from a file: localStorage 'mock.kitMatch' = 'no' (another file) or 'offline' (GitHub not asked)
+      case 'preview_kit_check_file': { const m = localStorage.getItem('mock.kitMatch'); return { size: 116985301, published: m === 'offline' ? null : '13', matches: m === 'offline' ? null : m !== 'no' } }
       case 'preview_kit_remove': localStorage.setItem('mock.noPreviews', '1'); localStorage.removeItem('mock.kit'); return null
       case 'preview_kit_set_blender': return args?.path ?? null
       // Desktop shortcut: localStorage 'mock.shortcut' = '1' once made (a fresh PC has none)

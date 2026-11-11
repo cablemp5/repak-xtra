@@ -3,16 +3,17 @@
 // close and goes on by itself. File in use offers Retry. Name taken offers Keep both (the safe one, blue), Replace (the
 // mod there goes to Recently deleted), and Cancel. One blue action per dialog (Hick), Windows' own words for the same
 // situations (Jakob), and the words describe the PC, never the app. One dialog at a time: a second request waits.
+// The same dialog asks before a preview kit installs from a file (confirmKitFile): it holds programs the app runs.
 import { useEffect, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
-import { LoaderCircle } from 'lucide-react'
+import { LoaderCircle, ShieldCheck, ShieldAlert } from 'lucide-react'
 import { useDialogFocus } from './dialogFocus'
 import { cue } from './sounds'
 
 export type OpKind = 'game_running' | 'locked' | 'collision'
 export type OpMode = 'replace' | 'keep_both'
-type Answer = 'retry' | OpMode | null
+type Answer = 'retry' | 'install' | OpMode | null
 const TAG = /\[(game_running|locked|collision)\]\s*/
 
 /** The tag xtra_ops.rs put on a refusal, or null for any other error. */
@@ -20,12 +21,14 @@ export const opKind = (e: unknown) => (String(e).match(TAG)?.[1] as OpKind | und
 /** A refusal's words without its tag (and whatever a caller put before it). */
 export const opText = (e: unknown) => { const s = String(e); const m = s.match(TAG); return m ? s.slice((m.index ?? 0) + m[0].length) : s }
 
-type Ask = { kind: OpKind; what: string; text: string; modes: boolean; resolve: (a: Answer) => void }
+/** kit: the file's size and whether it is the newest published kit (matches null: GitHub could not be asked) */
+type KitInfo = { size: number; published: string | null; matches: boolean | null }
+type Ask = { kind: OpKind | 'kit'; what: string; text: string; modes: boolean; kit?: KitInfo; resolve: (a: Answer) => void }
 let queue: Ask[] = []
 const subs = new Set<() => void>()
 const emit = () => subs.forEach(f => f())
-const ask = (kind: OpKind, what: string, text = '', modes = true) =>
-  new Promise<Answer>(resolve => { queue = [...queue, { kind, what, text, modes, resolve }]; emit() })
+const ask = (kind: Ask['kind'], what: string, text = '', modes = true, kit?: KitInfo) =>
+  new Promise<Answer>(resolve => { queue = [...queue, { kind, what, text, modes, kit, resolve }]; emit() })
 const answer = (a: Answer) => { const [first, ...rest] = queue; queue = rest; emit(); first?.resolve(a) }
 
 /** Runs a change to mod files. Refused for one of the three reasons, it asks and runs again with the answer (Replace or
@@ -39,7 +42,7 @@ export async function runOp<T>(what: string, op: (mode?: OpMode) => Promise<T>, 
       if (!kind) throw e
       const a = await ask(kind, what, opText(e), modes)
       if (!a) return null
-      if (a !== 'retry') mode = a
+      if (a !== 'retry' && a !== 'install') mode = a
     }
   }
 }
@@ -47,10 +50,15 @@ export async function runOp<T>(what: string, op: (mode?: OpMode) => Promise<T>, 
 /** The app's own lock while the game runs: true once the game has closed (go on), false when the user cancelled. */
 export const gameClosed = async (what: string) => (await ask('game_running', what)) !== null
 
+/** Asks before a preview kit installs from `file` (dropped or picked): true to install. */
+export const confirmKitFile = async (file: string, kit: KitInfo) =>
+  (await ask('kit', file.split(/[\/]/).pop() || file, '', false, kit)) === 'install'
+
 /** Mounted once (App). Shows the first request in the queue. */
 export function OpDialogs() {
   const top = useSyncExternalStore(f => { subs.add(f); return () => { subs.delete(f) } }, () => queue[0])
-  return top ? <OpDialog key={`${top.kind}:${top.what}:${top.text}`} a={top} /> : null
+  return !top ? null : top.kind === 'kit' && top.kit ? <KitDialog key={`kit:${top.what}`} a={top} k={top.kit} />
+    : <OpDialog key={`${top.kind}:${top.what}:${top.text}`} a={top} />
 }
 
 function OpDialog({ a }: { a: Ask }) {
@@ -107,4 +115,35 @@ if (import.meta.env.DEV) {
 export async function retryAfter(e: unknown, what: string) {
   const kind = opKind(e)
   return kind ? (await ask(kind, what, opText(e), false)) === 'retry' : false
+}
+
+/** The kit confirm: what installing it means, the file (name and size), and whether it is the published kit. Cancel
+ *  first, Install last and blue (Serial position, Hick). The match line has an icon and words, never color alone. */
+function KitDialog({ a, k }: { a: Ask; k: KitInfo }) {
+  const { ref, onKeyDown } = useDialogFocus(true, () => answer(null))
+  useEffect(() => { cue('warning') }, [])
+  const mb = k.size >= 1048576 ? `${Math.round(k.size / 1048576)} MB` : `${Math.max(1, Math.round(k.size / 1024))} KB`
+  const Icon = k.matches ? ShieldCheck : ShieldAlert
+  return (
+    <div className="modal-overlay op-overlay" onClick={() => answer(null)}>
+      <motion.div ref={ref} className="modal-content op-modal" role="alertdialog" aria-modal="true" aria-labelledby="op-title" aria-describedby="op-body"
+        tabIndex={-1} onKeyDown={onKeyDown} onClick={e => e.stopPropagation()}
+        initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.15 }}>
+        <h2 id="op-title" className="op-title">Install this preview kit?</h2>
+        <p id="op-body" className="op-body">It installs programs that repakxtra runs on this PC to make previews. Only continue if you built this kit or got it from the repakxtra releases page.</p>
+        <div className="op-file">
+          <span className="op-file-name" title={a.what}><span>{a.what}</span></span>
+          <span className="op-file-size">{mb}</span>
+        </div>
+        {k.matches === null
+          ? <p className="op-body">Could not check it against the published kit.</p>
+          : <p className={`op-match ${k.matches ? 'is-match' : 'is-other'}`}><Icon size={14} aria-hidden="true" />
+              {k.matches ? `Matches the published kit v${k.published}` : `Not the published kit v${k.published}. Its contents are not checked.`}</p>}
+        <div className="op-actions">
+          <button type="button" className="lo-text-btn" onClick={() => answer(null)}>Cancel</button>
+          <button type="button" className="btn-primary" onClick={() => answer('install')}>Install</button>
+        </div>
+      </motion.div>
+    </div>
+  )
 }

@@ -3363,6 +3363,15 @@ html[data-toasts-held] .toast-container { display: none; }   /* the welcome flow
 .op-body { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 .op-wait { margin: 4px 0 0; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
 .op-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+/* the kit confirm's file: one hairline row, name in mono cut with ..., size on the right; its match line in the app's
+   green (matches) or warning amber (another file), each with an icon */
+.op-file { display: flex; align-items: center; gap: 12px; margin-top: 4px; padding: 8px 12px; border: 1px solid var(--panel-border); border-radius: var(--quiet-radius); }
+.op-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px/1.5 var(--font-mono); color: var(--text-primary); }
+.op-file-size { flex: none; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.op-match { margin: 0; display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.5; }
+.op-match svg { flex: none; margin-top: 3px; }
+.op-match.is-match { color: #3ecf6e; }
+.op-match.is-other { color: #f5a524; }
 
 /* repakxtra: Check Conflicts' Duplicates (custom/Duplicates.tsx): the hidden mods' fold and cards, a quiet count, Stays in
    the lifted accent like Wins, and the one action under the sets (one look per button kind: .lo-text-btn) */

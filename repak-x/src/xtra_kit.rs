@@ -452,6 +452,31 @@ pub async fn preview_kit_install(app: AppHandle, file: Option<String>) -> Result
     result
 }
 
+/// What the confirm before a kit install from a file shows: its size, and whether its SHA-256 is the newest published
+/// kit's (`published`: that kit's version; both None when GitHub could not be asked).
+#[derive(Serialize)]
+pub struct KitFile {
+    size: u64,
+    published: Option<String>,
+    matches: Option<bool>,
+}
+
+#[tauri::command]
+pub async fn preview_kit_check_file(file: String) -> Result<KitFile, String> {
+    let path = PathBuf::from(&file);
+    let size = fs::metadata(&path).map_err(|e| format!("Could not read {file}: {e}"))?.len();
+    let hashed = path.clone();
+    let hash = tauri::async_runtime::spawn_blocking(move || crate::xtra_update::sha256_file(&hashed)).await.map_err(|e| e.to_string())??;
+    let published = async {
+        let release = preview_kit_latest(None).await?.ok_or("none published")?;
+        let text = reqwest::Client::new().get(format!("{}.sha256", release.asset)).header("User-Agent", "repakxtra").send().await
+            .and_then(|r| r.error_for_status()).map_err(|e| e.to_string())?.text().await.map_err(|e| e.to_string())?;
+        let name = release.asset.rsplit('/').next().unwrap_or_default().to_string();
+        Ok::<_, String>((release.version, crate::xtra_update::parse_sha256(&text, &name)?))
+    }.await.ok();
+    Ok(KitFile { size, matches: published.as_ref().map(|(_, h)| *h == hash), published: published.map(|(v, _)| v) })
+}
+
 /// Installs Blender with winget (Windows' package manager: the official BlenderFoundation.Blender package; Blender's own
 /// installer asks for admin rights once), then finds it. Already installed: just finds it. Setup shows winget's progress
 /// as it goes, and every message lands in the app's Logs (scope Blender).
