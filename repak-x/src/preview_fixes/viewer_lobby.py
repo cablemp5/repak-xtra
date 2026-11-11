@@ -189,11 +189,58 @@ def physics_rows(data):
                         "gravity": inst.get("GravityScale", 1.0), "radius": round(max([c.get("Radius", 0) for c in caps] or [1.0]) * 0.01, 5)})
             continue
         for c in caps + [dict(s, Length=0) for s in geo.get("SphereElems") or []]:
-            ce, r = c.get("Center") or {}, c.get("Rotation") or {}
-            axis = [row[2] for row in mat_mul(UE_M, ue_matrix(r.get("Pitch", 0), r.get("Yaw", 0), r.get("Roll", 0)))]   # the capsule's local Z
-            colliders.append({"bone": bone, "center": [round(ce.get(k, 0) * 0.01, 5) for k in ("X", "Z", "Y")],
-                              "axis": [round(a, 5) for a in axis], "half": round(c.get("Length", 0) * 0.005, 5), "radius": round(c.get("Radius", 0) * 0.01, 5)})
+            colliders.append(_collider(bone, c.get("Center"), c.get("Rotation"), c))
     return {"sim": sim, "colliders": colliders}
+
+
+def _collider(bone, center, rot, c):
+    """A capsule (a sphere when its Length is 0) in its bone's space as a collider row, glTF axes and meters."""
+    ce, r = center or {}, rot or {}
+    axis = [row[2] for row in mat_mul(UE_M, ue_matrix(r.get("Pitch", 0), r.get("Yaw", 0), r.get("Roll", 0)))]   # the capsule's local Z
+    return {"bone": bone, "center": [round(ce.get(k, 0) * 0.01, 5) for k in ("X", "Z", "Y")],
+            "axis": [round(a, 5) for a in axis], "half": round(c.get("Length", 0) * 0.005, 5), "radius": round(c.get("Radius", 0) * 0.01, 5)}
+
+
+KAWAII_AXIS = {"X_Positive": [1, 0, 0], "X_Negative": [-1, 0, 0], "Y_Positive": [0, 0, 1], "Y_Negative": [0, 0, -1], "Z_Positive": [0, 1, 0], "Z_Negative": [0, -1, 0]}
+
+
+def kawaii_rows(abp, limits_of):
+    """The viewer's KawaiiPhysics chains from a post-process AnimBlueprint (Cue4Export json): what swings the hair,
+    skirt, tail and straps of a skin (and of most mods with their own physics) that its PhysicsAsset does not simulate.
+    Per chain: its node (chains collide with their own node's limits only), root bone, the bones left out, damping,
+    stiffness, the bones' radius (meters), the angle limit (degrees, 0: none), gravity (m/s2, glTF axes, already times
+    its scale), the leaf's dummy bone (length in meters and axis) and the curves over the chain's length (0 root to 1
+    tip, each scaling its value). Returns (chains, colliders): the nodes' capsule and outer sphere limits, with those
+    of a limits data asset (`limits_of(path)` gives its json). shortcut: box, planar and inner sphere limits, bone
+    constraints, wind and the wave are left out (13 limits and 4 chains of 397 in the game's own skins), and a curve
+    is read as straight lines between its keys"""
+    chains, colliders = [], []
+    nodes = [n for o in abp for k, n in (o.get("Properties") or {}).items() if k.startswith("AnimGraphNode_KawaiiPhysics") and isinstance(n, dict)]
+    for i, n in enumerate(nodes):
+        asset = game_ref((n.get("LimitsDataAsset") or {}).get("ObjectPath") or "")
+        shared = next(((o.get("Properties") or {}) for o in (limits_of(asset) if asset.startswith("/Game/") else []) if "LimitsDataAsset" in str(o.get("Type"))), {})
+        for src in (n, shared):
+            spheres = [dict(s, Length=0) for s in src.get("SphericalLimits") or [] if not str(s.get("LimitType", "")).endswith("Inner")]
+            for l in [c for c in src.get("CapsuleLimits") or [] if c.get("Length", 0) > 0] + spheres:
+                bone = (l.get("DrivingBone") or {}).get("BoneName")
+                if l.get("bEnable", True) and l.get("Radius", 0) > 0 and bone and bone != "None":
+                    colliders.append({**_collider(bone, l.get("OffsetLocation"), l.get("OffsetRotation"), l), "node": i})
+        for c in n.get("Chains") or []:
+            bs, ps, g = c.get("BoneSettings") or {}, c.get("PhysicsSettings") or {}, (c.get("ExternalForceSettings") or {}).get("Gravity") or {}
+            p, root = ps.get("PhysicsSettings") or {}, (bs.get("RootBone") or {}).get("BoneName")
+            if not root or root == "None":
+                continue
+            scale = p.get("GravityScale", 1.0) * 0.01
+            row = {"node": i, "root": root, "exclude": [b.get("BoneName") for b in bs.get("ExcludeBones") or []],
+                   "damping": p.get("Damping", 0.1), "stiffness": p.get("Stiffness", 0.05), "radius": round(p.get("Radius", 3.0) * 0.01, 5),
+                   "limit": p.get("LimitAngle", 0.0), "gravity": [round(g.get(k, 0) * scale, 5) for k in ("X", "Z", "Y")],
+                   "dummy": round(bs.get("DummyBoneLength", 0.0) * 0.01, 5), "axis": KAWAII_AXIS.get(str(bs.get("BoneForwardAxis", "")).rsplit("::", 1)[-1], [1, 0, 0])}
+            if ps.get("bUseCurve"):
+                curves = {k: [[round(x.get("Time", 0), 5), round(x.get("Value", 0), 5)] for x in ((ps.get(f) or {}).get("EditorCurveData") or {}).get("Keys") or []]
+                          for k, f in (("damping", "DampingCurveData"), ("stiffness", "StiffnessCurveData"), ("radius", "RadiusCurveData"), ("limit", "LimitAngleCurveData"))}
+                row["curves"] = {k: v for k, v in curves.items() if v}
+            chains.append(row)
+    return chains, colliders
 
 
 def _quat_matrix(q):
@@ -238,8 +285,13 @@ def driver_rows(abp, poses_of):
                     row.append(q + [round(tr.get(a, 0) * 0.01, 6) for a in ("X", "Z", "Y")])
                 poses.append(row)
             rp = n.get("RBFParams") or {}
+            # how far the source is from a target: the angle between the two rotations, or between their twist axes alone
+            # (the viewer read every driver as the second, so a skirt keyed on the thigh's twist folded wrong). fromRef:
+            # the targets are the source's turn away from its reference pose. normalize: "above1" leaves weights that
+            # sum under 1 as they are, and the rest of the weight stays on the bone's own pose
             rows.append({"source": src[0], "targets": targets, "radius": None if rp.get("bAutomaticRadius") else rp.get("Radius", 45.0),
-                         "bones": bones, "poses": poses})
+                         "bones": bones, "poses": poses, "method": "quat" if str(rp.get("DistanceMethod", "")).endswith("Quaternion") else "swing",
+                         "fromRef": bool(n.get("bEvalFromRefPose")), "normalize": "above1" if str(rp.get("NormalizeMethod", "")).endswith("OnlyNormalizeAboveOne") else "always"})
     return rows
 
 
@@ -267,12 +319,18 @@ def viewer_physics(work, dest):
                 def poses_of(path):
                     export(work, [{"op": "export", "mode": "json", "paths": [path]}], name="physpose", out=out)
                     return read(path)
-                drivers = driver_rows(poses_of(post), poses_of)
+                abp = poses_of(post)
+                drivers = driver_rows(abp, poses_of)
                 if drivers:
                     rows["drivers"] = drivers
+                chains, limits = kawaii_rows(abp, poses_of)
+                if chains:
+                    rows["kawaii"] = chains
+                    rows["colliders"] = rows.get("colliders", []) + limits
     except Exception as e:
         print(f"# viewer: lobby physics left out: {e}", file=sys.stderr, flush=True)
-    (dest / "physics.json").write_text(json.dumps(rows), encoding="utf-8")
+    # v 2: the KawaiiPhysics chains and the pose drivers' distance, reference and normalize settings (the app makes an older export again)
+    (dest / "physics.json").write_text(json.dumps({**rows, "v": 2}), encoding="utf-8")
 
 
 def _check_physics_rows():
@@ -287,6 +345,20 @@ def _check_physics_rows():
     assert c["center"] == [-0.16, 0, 0] and abs(abs(c["axis"][0]) - 1) < 1e-6 and c["half"] == 0.115 and c["radius"] == 0.07, c
     s = r["sim"][0]
     assert s["parent"] == "h1" and s["swing"] == [16.0, None] and s["twist"] == 0.0 and s["linear"] == 2 and s["gravity"] == 1.0, s
+    # a KawaiiPhysics node: its chain in meters and glTF axes (Unreal's -Z gravity is -Y), its capsule kept, an inner
+    # sphere and a switched off capsule left out, a curve only where it has keys
+    node = {"Chains": [{"BoneSettings": {"RootBone": {"BoneName": "hair_01"}, "ExcludeBones": [{"BoneName": "strap"}], "DummyBoneLength": 2.0, "BoneForwardAxis": "EBoneForwardAxis::Y_Negative"},
+                        "PhysicsSettings": {"PhysicsSettings": {"Damping": 0.3, "Stiffness": 0.2, "Radius": 2.0, "LimitAngle": 40.0, "GravityScale": 2.0}, "bUseCurve": True,
+                                            "RadiusCurveData": {"EditorCurveData": {"Keys": [{"Time": 0, "Value": 1}, {"Time": 1, "Value": 0.5}]}}, "DampingCurveData": {"EditorCurveData": {"Keys": []}}},
+                        "ExternalForceSettings": {"Gravity": {"Z": -500.0}}}],
+            "CapsuleLimits": [{"Radius": 9, "Length": 40, "DrivingBone": {"BoneName": "thigh_l"}, "OffsetRotation": {"Pitch": -90}},
+                              {"Radius": 9, "Length": 40, "DrivingBone": {"BoneName": "thigh_r"}, "bEnable": False}],
+            "SphericalLimits": [{"Radius": 11, "LimitType": "ESphericalLimitType::Inner", "DrivingBone": {"BoneName": "head"}}]}
+    chains, limits = kawaii_rows([{"Properties": {"AnimGraphNode_KawaiiPhysics_1": node}}], lambda p: [])
+    k = chains[0]
+    assert k["root"] == "hair_01" and k["exclude"] == ["strap"] and k["gravity"] == [0, -10.0, 0] and k["radius"] == 0.02 and k["dummy"] == 0.02 and k["axis"] == [0, 0, -1], k
+    assert k["curves"] == {"radius": [[0, 1], [1, 0.5]]} and k["node"] == 0, k
+    assert len(limits) == 1 and limits[0]["bone"] == "thigh_l" and limits[0]["half"] == 0.2 and limits[0]["node"] == 0, limits
 
 
 _check_physics_rows()

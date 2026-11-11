@@ -218,6 +218,7 @@ export async function createViewer(host: HTMLElement, key: string, still: boolea
     check()
     onStep(0.75, 'Setting up the stage')
     const bones = boneMap(root)
+    const refPose = new Map([...bones].map(([n, b]) => [n, b.quaternion.clone()])) // before the idle moves them: a pose driver may read its source from it
     const idle = await readJson<Idle>(key, 'idle.json').catch(() => null)
     if (idle?.tracks && idle.bin) {
       mixer = new THREE.AnimationMixer(root)
@@ -247,7 +248,7 @@ export async function createViewer(host: HTMLElement, key: string, still: boolea
     }
     mixers.forEach(m => m.update(0))
     // the lobby physics and pose drivers (hair, skirt, cape, ornaments), run after the idle each frame
-    const physics = mixer ? lobbyPhysics(root, await readJson<PhysicsData>(key, 'physics.json').catch(() => ({})), bones) : null
+    const physics = mixer ? lobbyPhysics(root, await readJson<PhysicsData>(key, 'physics.json').catch(() => ({})), bones, refPose) : null
     check()
 
     // light: the hero's own lobby rig (its rig.json, else Black Panther's) on one group at the stand that turns with the
@@ -305,9 +306,10 @@ export async function createViewer(host: HTMLElement, key: string, still: boolea
     })
     window.addEventListener(OUTLINE_EVENT, onOutline)
     // the stage, centered on where the model stands: a soft pool of light that fades out with no edge, a dark contact
-    // shadow under the feet so the model stands on it, and the shadow light's fake shadow (the game's 0.7), neutral
-    // black and fading out slowly toward the edge. shortcut: the pool and contact strengths are picked by eye, the
-    // lobby's own floor meshes are not exported
+    // shadow under the feet so the model stands on it, and the shadow light's cast shadow, as soft as the pool it
+    // falls on: drawn from a small map (its blur is a few texels, so a 2048 px map's was half a centimeter, a cutout
+    // pasted on the floor), lighter than the contact shadow, and gone well before the pool's edge. shortcut: the
+    // pool, contact and cast strengths are picked by eye, the lobby's own floor meshes are not exported
     const sun = new THREE.DirectionalLight(0xffffff, 0.01)
     sun.position.fromArray(SHADOW_LIGHT.position)
     sun.quaternion.fromArray(SHADOW_LIGHT.quaternion)
@@ -315,8 +317,9 @@ export async function createViewer(host: HTMLElement, key: string, still: boolea
     sun.target.position.set(1, 0, 0)
     shadowed(sun, 0.5357, 0)
     const r = Math.max(1.2, fit.radius * 2.6)
-    Object.assign(sun.shadow.camera, { left: -r, right: r, top: r, bottom: -r }) // a box the floor's size: a crisp shadow
-    sun.shadow.radius = 2.5
+    Object.assign(sun.shadow.camera, { left: -r, right: r, top: r, bottom: -r }) // a box the floor's size
+    sun.shadow.mapSize.set(256, 256)
+    sun.shadow.radius = 2
     scene.add(sun)
     const disc = new THREE.CircleGeometry(r, 128)
     disc.rotateX(-Math.PI / 2)
@@ -327,8 +330,7 @@ export async function createViewer(host: HTMLElement, key: string, still: boolea
     const contactMat = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false })
     contactMat.colorNode = vec4(0, 0, 0, float(1).sub(smoothstep(0, 0.22, d)).pow(1.5).mul(0.5))
     const shadowMat = new THREE.ShadowNodeMaterial({ transparent: true, depthWrite: false })
-    // darker than the game's 0.7: on the app's dark background its 0.7 read gray
-    shadowMat.colorNode = vec4(0, 0, 0, float(1).sub(smoothstep(0.15, 1, d)).pow(1.5).mul(0.92))
+    shadowMat.colorNode = vec4(0, 0, 0, float(1).sub(smoothstep(0.25, 0.85, d)).mul(0.75))
     shadowMat.lightsNode = lights([sun])
     const floor = new THREE.Mesh(disc, floorMat), contact = new THREE.Mesh(disc, contactMat), catcher = new THREE.Mesh(disc, shadowMat)
     catcher.receiveShadow = true

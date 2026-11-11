@@ -105,6 +105,12 @@ fn prune_exports(current: &str) {
     }
 }
 
+/// Whether an export's physics.json is this version's (v 2: with the KawaiiPhysics chains). An older or missing one
+/// reads as not made, so the export is made again.
+fn physics_current(export: &Path) -> bool {
+    std::fs::read(export.join("physics.json")).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok()).is_some_and(|p| p["v"].as_u64().unwrap_or(0) >= 2)
+}
+
 /// The mod files an export was made from, as the app sees them: each path (lowercase), size and modified time. Written
 /// beside the export (stamp.json) when it is made, so a renamed mod (its priority changes with its name), an edited one,
 /// or a loadout that gained or lost a mod reads as stale and is made again.
@@ -140,7 +146,8 @@ pub fn viewer_state(key: String, paths: Vec<String>) -> &'static str {
         let old = model["v"].as_u64().unwrap_or(1) < 2;
         // a slot the glTF export could not load ("None", drew white): made again once the kit names such slots (slots.json)
         // a lobby model made before the kit wrote its physics (hair and cloth swing, pose drivers): made again once
-        let no_physics = model["lobby"] == true && !export.join("physics.json").is_file();
+        // (and once more for its v 2: the KawaiiPhysics chains that swing most hair and skirts, and the pose drivers' settings)
+        let no_physics = model["lobby"] == true && !physics_current(&export);
         let unnamed = || !export.join("slots.json").is_file() && glb_has_unnamed_slot(&export.join("model.glb")); // last: it reads the file
         return if !base_gone && !old && !no_physics && !unnamed() && (paths.is_empty() || read(export.join("stamp.json")) == stamp_of(&paths)) { "ready" } else { "stale" };
     }
@@ -308,7 +315,7 @@ pub async fn generate_default_viewer(app: AppHandle, target: String, state: Stat
     let key = format!("default-{name}");
     let model: serde_json::Value = std::fs::read(previews_dir().join(format!("{key}.3d")).join("model.json")).ok()
         .and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
-    let has_physics = model["lobby"] != true || previews_dir().join(format!("{key}.3d")).join("physics.json").is_file();
+    let has_physics = model["lobby"] != true || physics_current(&previews_dir().join(format!("{key}.3d")));
     if model["v"].as_u64().unwrap_or(0) >= 2 && has_physics {
         let _ = std::fs::write(previews_dir().join(format!("{key}.3d")).join("used"), b""); // opened now: prune keeps it
         return Ok(key);
