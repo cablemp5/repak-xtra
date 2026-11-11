@@ -415,6 +415,7 @@ function App() {
   modDetailsRef.current = modDetails
   // `modified_date:file_size` each mod had when its details were fetched
   const modDetailsSigRef = useRef<Record<string, string>>({})
+  const toggleReloadRef = useRef<ReturnType<typeof setTimeout> | null>(null) // repakxtra: a toggle's reload if no watcher event comes
   const commitModDetails = (next: Record<string, any>) => {
     modDetailsRef.current = next
     setModDetails(next)
@@ -1508,6 +1509,7 @@ function App() {
     // Listen for directory changes (new folders, deleted folders, etc.)
     const unlistenDirChanged = listen('mods_dir_changed', () => {
       console.log('Directory changed, reloading mods and folders...')
+      if (toggleReloadRef.current) { clearTimeout(toggleReloadRef.current); toggleReloadRef.current = null } // repakxtra: this is a toggle's one reload
       loadMods()
       loadFolders()
     })
@@ -2185,24 +2187,20 @@ function App() {
       const newState = toggled.value
       setStatus(newState ? 'Mod enabled' : 'Mod disabled')
 
-      // Extract the base name (without extension) to find the mod after toggle
-      // The path changes from .pak to .bak_repak or vice versa
-      const baseName = modPath.replace(/\.(pak|bak_repak)$/i, '')
-
-      const refreshedMods = await loadMods()
-
-      // Update selectedMod if the toggled mod was selected
-      // Find the mod by matching the base path (without extension)
-      if (selectedMod && selectedMod.path === modPath) {
-        const updatedMod = refreshedMods.find(m =>
-          m.path.replace(/\.(pak|bak_repak)$/i, '') === baseName
-        )
-        if (updatedMod) {
-          setSelectedMod(updatedMod)
-        }
+      // repakxtra: the row changes in place (toggle_mod renamed .pak <-> .bak_repak and moved the cached details), and the
+      // folder watcher's event for the rename does the one reload. Before, the toggle reloaded three times: itself, a
+      // delayed safety refresh, and the watcher. The fallback reload runs only when no watcher event comes.
+      const newPath = modPath.replace(/\.[^.\\/]+$/, newState ? '.pak' : '.bak_repak')
+      const moved = (m: ModRecord): ModRecord => (m.path === modPath ? { ...m, path: newPath, enabled: Boolean(newState) } : m)
+      setMods(prev => prev.map(moved))
+      if (modDetailsRef.current[modPath]) {
+        const { [modPath]: d, ...rest } = modDetailsRef.current
+        commitModDetails({ ...rest, [newPath]: d })
+        modDetailsSigRef.current[newPath] = modDetailsSigRef.current[modPath]
       }
-
-      scheduleSafeModsRefresh('single-toggle-post-reload')
+      if (selectedMod && selectedMod.path === modPath) setSelectedMod(moved(selectedMod))
+      if (toggleReloadRef.current) clearTimeout(toggleReloadRef.current)
+      toggleReloadRef.current = setTimeout(() => { toggleReloadRef.current = null; void loadMods() }, 3000)
     } catch (error) {
       const why = blockedReason(error) // repakxtra: turned off because it can crash the game
       if (why) showKeptOff(alert, [{ path: modPath, reason: why }], loadMods)
