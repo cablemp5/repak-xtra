@@ -2788,11 +2788,14 @@ html[data-motion="off"] .vfx-dot { animation: none; }
 /* ---------- Numbers in a colored bubble: one centering rule for all of them (the conflicts count, the All / On / Off
    counts, a collection's count, the setup step numbers, the selection numbers). Tabular digits, so a 1 sits in the
    middle of its slot instead of left of it. The line is trimmed to the digits' own top and bottom (cap height to baseline), then padded evenly to the bubble's
-   height, so the ink is in the middle at every size and in every pill, with no per-pill nudge. ---------- */
-:is(.cf-count:not(.is-done), .mod-state-count, .lo-group-count, .fr-num:not(:has(svg)), .vf-grp-count, .fp-section-picked) { --pill-h: 20px;
+   height, so the ink is in the middle at every size and in every pill, with no per-pill nudge.
+   The step number's :has() stands outside the :is() list (doubled class: the list's weight). Inside it, the browser
+   could not tell which elements the :has() was about and styled the whole page again on every element added to or
+   taken from <body> or its children: 12 ms a time with 3,000 elements, once a second from the F3 counter alone. ---------- */
+:is(.cf-count:not(.is-done), .mod-state-count, .lo-group-count, .vf-grp-count, .fp-section-picked), .fr-num.fr-num:not(:has(svg)) { --pill-h: 20px;
   display: inline-block !important; height: auto !important; box-sizing: border-box; line-height: 1 !important; text-align: center;
   text-box: trim-both cap alphabetic; padding-block: calc((var(--pill-h) - 1cap) / 2) !important; font-variant-numeric: tabular-nums; }
-:is(.cf-count:not(.is-done), .mod-state-count, .lo-group-count, .fr-num:not(:has(svg)), .vf-grp-count, .fp-section-picked) > * { text-box: trim-both cap alphabetic; line-height: 1; }
+:is(.cf-count:not(.is-done), .mod-state-count, .lo-group-count, .vf-grp-count, .fp-section-picked) > *, .fr-num.fr-num > :not(svg) { text-box: trim-both cap alphabetic; line-height: 1; }   /* (a step number's children: no :has() here, its check mark is the svg) */
 .cf-count:not(.is-done) { --pill-h: 24px; min-width: 22px; padding-inline: 8px !important; }
 .mod-state-count { min-width: 22px; padding-inline: 8px !important; }
 .lo-group-count { min-width: 20px; padding-inline: 8px !important; }
