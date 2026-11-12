@@ -17,8 +17,7 @@ type Mod = { path: string; enabled?: boolean }
 type End = Exclude<Outcome, { kind: 'run' }>
 /** `resumed`: a saved test reopened (after a restart): its switch is checked and finished first, and the player may have
  *  played it while repakxtra was closed. */
-/** `back`: reached by Undo, so it slides in from the left. */
-type View = { step: 'intro' } | { step: 'test'; run: Bisect; resumed?: boolean; back?: boolean } | { step: 'end'; end: End; last: Bisect }
+type View = { step: 'intro' } | { step: 'test'; run: Bisect; resumed?: boolean } | { step: 'end'; end: End; last: Bisect }
 
 export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[] }) {
   const [view, setView] = useState<View | null>(() => { const r = readBisect(); return r ? { step: 'test', run: r, resumed: true } : null })
@@ -66,18 +65,19 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
         {note && <div className="bs-alert" role="alert"><TriangleAlert size={16} aria-hidden="true" /><p><strong>{note.title}</strong> {note.text}</p></div>}
 
         {view.step === 'intro' && <>
-          <div className="modal-body cs-body bs-body bs-in">
+          <div className="modal-body cs-body bs-body">
+            <p className="bs-lead">repakxtra turns half of your mods off and you play. If the game still crashes, the crashing mod is in the half left on. If not, it is in the other half. Each launch halves the mods left, until one remains.</p>
             {/* who does what, side by side: the player's part is three small things (Tesler: the app takes the rest) */}
             <div className="bs-roles">
               <section className="bs-role" aria-label="What you do">
                 <h3>You</h3>
-                <ol>{([[Gamepad2, 'Launch the game from here'], [Repeat, 'Do what made it crash'], [CircleHelp, 'Say if it crashed']] as const).map(([Icon, t], i) =>
-                  <li key={t} style={{ '--i': i } as React.CSSProperties}><Icon size={15} aria-hidden="true" />{t}</li>)}</ol>
+                <ol>{([[Gamepad2, 'Launch the game from here'], [Repeat, 'Do what made it crash'], [CircleHelp, 'Say if it crashed']] as const).map(([Icon, t]) =>
+                  <li key={t}><Icon size={15} aria-hidden="true" />{t}</li>)}</ol>
               </section>
               <section className="bs-role is-app" aria-label="What repakxtra does">
                 <h3>repakxtra</h3>
-                <ul>{([[ArrowLeftRight, 'Switches mods between launches'], [ListChecks, 'Keeps track of every answer'], [ArchiveRestore, 'Names the mod and puts yours back']] as const).map(([Icon, t], i) =>
-                  <li key={t} style={{ '--i': i + 3 } as React.CSSProperties}><Icon size={15} aria-hidden="true" />{t}</li>)}</ul>
+                <ul>{([[ArrowLeftRight, 'Turns half of your mods off for each launch'], [ListChecks, 'Keeps track of every answer'], [ArchiveRestore, 'Names the mod and puts yours back']] as const).map(([Icon, t]) =>
+                  <li key={t}><Icon size={15} aria-hidden="true" />{t}</li>)}</ul>
               </section>
             </div>
             <dl className="bs-facts">
@@ -96,7 +96,7 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
           </div>
         </>}
 
-        {view.step === 'test' && <Test key={`${view.run.tests}-${view.run.phase}`} run={view.run} resumed={Boolean(view.resumed)} back={Boolean(view.back)} busy={busy} deps={d}
+        {view.step === 'test' && <Test key={`${view.run.tests}-${view.run.phase}`} run={view.run} resumed={Boolean(view.resumed)} busy={busy} deps={d}
           answer={crashed => work(async () => {
             cue('tap')
             const o = await answerBisect(d, view.run, crashed)
@@ -105,7 +105,7 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
             cue(o.kind === 'found' ? 'success' : 'warning')
             return { step: 'end', end: o, last: view.run }
           })}
-          undo={() => work(async () => { cue('navigate'); const p = view.run.prev; const r = p ? await returnTo(d, view.run, p) : null; return r && { step: 'test', run: r, back: true } })}
+          undo={() => work(async () => { cue('navigate'); const p = view.run.prev; const r = p ? await returnTo(d, view.run, p) : null; return r && { step: 'test', run: r } })}
           stop={() => work(async () => {
             if (!(await restoreBisect(d, view.run))) return null
             close()
@@ -114,7 +114,7 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
           })} />}
 
         {view.step === 'end' && <End view={view} busy={busy} close={close}
-          undo={() => work(async () => { cue('navigate'); const r = await returnTo(d, null, view.last); return r && { step: 'test', run: r, back: true } })}
+          undo={() => work(async () => { cue('navigate'); const r = await returnTo(d, null, view.last); return r && { step: 'test', run: r } })}
           turnOff={culprits => work(async () => {
             const off = mods.filter(m => culprits.some(c => stem(c) === stem(m.path)))
             if (await gameOpen(d)) return null
@@ -129,8 +129,8 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
 
 /** One test: launch, play, answer. The answers open once the game was seen running and then closed (a crash closes it
  *  too), or when the player says they already tested (the app was closed while they played). */
-function Test({ run, resumed, back, busy, deps, answer, undo, stop }: {
-  run: Bisect; resumed: boolean; back: boolean; busy: boolean; deps: KeepDeps; answer: (crashed: boolean) => void; undo: () => void; stop: () => void
+function Test({ run, resumed, busy, deps, answer, undo, stop }: {
+  run: Bisect; resumed: boolean; busy: boolean; deps: KeepDeps; answer: (crashed: boolean) => void; undo: () => void; stop: () => void
 }) {
   const [running, setRunning] = useState(false)
   const [played, setPlayed] = useState(false)
@@ -191,7 +191,7 @@ function Test({ run, resumed, back, busy, deps, answer, undo, stop }: {
   const state = busy ? 'Switching mods…' : !ready ? 'Checking your mods…' : running ? 'Game running' : starting ? 'Starting the game…' : played ? 'Game closed' : null
   const waiting = busy || live || !played || !ready
   return <>
-    <div className={`modal-body cs-body bs-body ${back ? 'bs-in-back' : 'bs-in'}`}>
+    <div className="modal-body cs-body bs-body">
       <p className="bs-lead">{resumed && !played && !launched && <span className="bs-resumed">Resuming your saved test. </span>}{what}</p>
       {run.phase === 'confirm' && <div className="bs-mod"><span className="cs-name"><ModName name={nameKey(run.candidates[0])} /></span></div>}
       {found.length > 0 && (
@@ -241,9 +241,9 @@ function End({ view, busy, close, undo, turnOff }: {
   const e = view.end
   const one = e.kind === 'found' && e.culprits.length === 1
   return <>
-    <div className="modal-body cs-body bs-body bs-in">
+    <div className="modal-body cs-body bs-body">
       {e.kind === 'found' && <>
-        <ul className="bs-culprits">{e.culprits.map((c, i) => <li key={c} className="bs-culprit" style={{ '--i': i } as React.CSSProperties}><Check size={16} aria-hidden="true" /><span className="cs-name"><ModName name={nameKey(c)} /></span></li>)}</ul>
+        <ul className="bs-culprits">{e.culprits.map(c => <li key={c} className="bs-culprit"><Check size={16} aria-hidden="true" /><span className="cs-name"><ModName name={nameKey(c)} /></span></li>)}</ul>
         <p className="cs-note">{one ? 'The game played fine with only this mod off.' : `Each of these ${e.culprits.length} mods crashes the game, and it played fine with all of them off.`} Every mod is back as it was, {one ? 'this one' : 'these'} included, so turn {one ? 'it' : 'them'} off to play without the crash.</p>
       </>}
       {e.kind === 'not-mods' && <p className="bs-lead">The game crashed with every mod off, so the crash also happens without these mods. They are back on. Verify the game files in Steam, or update your graphics driver.</p>}

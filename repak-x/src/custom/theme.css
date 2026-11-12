@@ -1539,7 +1539,7 @@ html[data-motion="off"] .t-shimmer-all { animation: none !important; -webkit-mas
    marks a kit render, the before picture too: never a loadout's own image, a capture, or a KO prompt preview. filter
    is one property, so every filter rule on these pictures ends with the boost (1 and 1 where it is no kit render) */
 :root { --pv-boost: contrast(1) saturate(1); }
-.pv-kit { --pv-boost: contrast(1.075) saturate(1.15); filter: var(--pv-boost); }
+.pv-kit { --pv-boost: contrast(1.05) saturate(1.1); filter: var(--pv-boost); }
 /* transitions.dev: Skeleton reveal. Previews and loadout images cross-blur in once loaded */
 .lo-card-image img, .mod-preview-frame img { opacity: 0; filter: blur(var(--reveal-blur)) var(--pv-boost);
   transition: opacity var(--reveal-dur) var(--reveal-ease), filter var(--reveal-dur) var(--reveal-ease); }
@@ -1745,6 +1745,9 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
 .lo-media.is-running .lo-card-placeholder, .lo-media.is-queued .lo-card-placeholder { visibility: hidden; }
 .lo-skel { position: absolute; inset: 0; z-index: 1; pointer-events: none; display: flex; align-items: center; justify-content: center;
   overflow: hidden; background: rgba(6, 7, 9, 0.55); animation: t-skel-pulse var(--pulse-dur) ease-in-out infinite; }
+/* A card whose picture is not read yet (right after launch): the plain pulse, no words */
+.lo-card-placeholder.is-loading { background: var(--skel-tone); animation: skeleton-pulse 1.6s ease-in-out infinite; }
+html[data-motion="off"] .lo-card-placeholder.is-loading { animation: none; }
 @keyframes t-skel-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 /* Running: a light band sweeps across, so it reads as working; queued only pulses */
 .lo-media.is-running .lo-skel { animation: none; }
@@ -3039,7 +3042,9 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .repakx-checkbox, .repakx-switch { gap: 8px !important; }
 .resize-handle { margin: 0 -4px !important; }
 .fp-section-btn { height: 32px !important; }
-.settings-content .combined-input-group { height: 40px; box-sizing: border-box; }
+.settings-content .combined-input-group { height: 40px; box-sizing: border-box; padding: 3px; }
+/* its buttons: the same 3px from the box on the top, bottom, and right (the right was 6), and 4px apart */
+.settings-content .combined-input-group .input-actions { gap: 4px !important; padding-right: 0; }
 .vf-window .custom-dropdown-trigger, .vf-window .vf-add { height: 40px !important; }
 .folder-tree .node-content.all-mods, .folder-tree .node-content.all-mods * { font-weight: 600 !important; }
 .modal-body.settings-content { --setting-control-gap: 8px; } /* the descriptions' indent follows the checkbox gap: 20 + 8 */
@@ -3167,18 +3172,11 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .bs-role :is(ol, ul) { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .bs-role li > svg { flex: none; color: var(--text-secondary); }
 .bs-role.is-app li > svg { color: var(--accent-primary); }
-.bs-role li { display: flex; align-items: center; gap: 8px; font-size: 13px; line-height: 1.5; color: var(--text-primary);
-  animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; animation-delay: calc(var(--i, 0) * var(--stagger-stagger) + 80ms); }
+.bs-role li { display: flex; align-items: center; gap: 8px; font-size: 13px; line-height: 1.5; color: var(--text-primary); }
 .bs-modal .cs-footer > .bs-stop { margin-left: auto; }
 .bs-stop { display: inline-flex; align-items: center; gap: 6px; }
-@keyframes bs-from-right { from { opacity: 0; transform: translateX(var(--page-slide-distance)); filter: blur(var(--page-blur)); } }
-@keyframes bs-from-left { from { opacity: 0; transform: translateX(calc(var(--page-slide-distance) * -1)); filter: blur(var(--page-blur)); } }
-.bs-in { animation: bs-from-right var(--page-slide-dur) var(--page-slide-ease) backwards; }
-.bs-in-back { animation: bs-from-left var(--page-slide-dur) var(--page-slide-ease) backwards; }
 .bs-steps .fr-step.is-done .fr-num svg { animation: t-num-pop var(--digit-dur) var(--digit-ease) backwards; }
 .bs-ans { transition: background-color 200ms var(--reveal-ease), border-color 200ms var(--reveal-ease), opacity 200ms var(--reveal-ease); }
-.bs-culprit { animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; animation-delay: calc(var(--i, 0) * var(--stagger-stagger) + 60ms); }
-.bs-alert, .bs-found { animation: t-rise-in 250ms var(--stagger-ease) backwards; }
 .bs-bar i.is-done { animation: bs-fill 300ms var(--page-slide-ease) backwards; }
 @keyframes bs-fill { from { transform: scaleX(0.2); transform-origin: left; } }
 /* the two numbers before a run: small label over a big number, two cards */

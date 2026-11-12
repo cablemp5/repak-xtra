@@ -9,7 +9,7 @@ import { useMediaUrl } from './loadoutMedia'
 import { COVERS, type Cover, type Loadout, type Mod, captureKey, coverFills, displayName, flipMods, memberName, modKey, modsByKey, nameKey, patchLoadout, pickCover } from './loadoutStore'
 import { ModName, ordinal } from './modName'
 import { revealOnLoad, SwapText } from './motion'
-import { BeatVideo, formKeys, hasPreview, isDecoded, isKoPreview, isVideoPreview, noPreviewPossible, previewMade, previewSetKey, readyPreview, useCovers, usePreviewStage, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
+import { BeatVideo, formKeys, hasPreview, isDecoded, isKoPreview, isVideoPreview, noPreviewPossible, previewMade, previewSetKey, previewsListed, readyPreview, useCovers, usePreviewStage, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
 import { isEmoteAnim, playEmoteSound, stopEmoteSound, useEmoteSound, webpSeconds } from './emoteSound'
 import { useVerdict } from './brokenMods'
 import { VerdictBadge } from './VerdictBadge'
@@ -139,6 +139,9 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   const editing = page && cover === 'text' && (typing || !fills.text)
   const empty = !src && !words
   const impossible = noPreviewPossible(l)
+  // Right after launch: the card's picture is known but not read yet, or the saved previews are not listed yet.
+  // shortcut: a picture that never reads (a deleted file still listed) keeps the skeleton, give it a failed state if that shows
+  const loading = !working && (cover ? cover !== 'text' && !src : !previewsListed())
   const saveCaption = (text: string) => { setTyping(false); if (text.trim() !== caption) patchLoadout(l.id, { caption: text.trim() || undefined }) }
   const clearCaption = () => { setTyping(false); patchLoadout(l.id, { caption: undefined, captionIcon: undefined, captionColor: undefined }) }
   // picking Text goes straight into its field, the cursor in it ready to type (also when the field was already showing)
@@ -223,6 +226,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
             </span>
           : !src
             ? page ? <span className="lo-card-placeholder" />
+              : loading ? <span className="lo-card-placeholder is-loading" role="status" aria-label="Loading" />
               : impossible
                 ? <span className="lo-card-placeholder is-none"><Ban size={28} aria-hidden="true" /><span>No render possible. Open it to type text, or hover and paste an image.</span></span>
                 : <span className="lo-card-placeholder"><ImagePlus size={28} aria-hidden="true" /><span>{emptyText}</span></span>

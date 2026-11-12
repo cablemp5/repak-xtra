@@ -115,12 +115,15 @@ const subscribe = (l: () => void) => { listeners.add(l); return () => listeners.
 
 /** Reads which previews exist. After a run it also drops the other-form images (<key>@2) the generator deleted, since
  *  nothing else reports those as gone. */
+let listed = false // the saved previews are known: until then a card with none shows a skeleton, not "No preview yet"
+export const previewsListed = () => listed
 const syncPreviewList = () => invoke<string[]>('list_mod_previews').then(keys => {
+  listed = true
   const now = new Set(keys)
   for (const k of [...revs.keys()]) if (k.includes('@') && !now.has(k)) { revs.delete(k); dropCached(k) }
   keys.forEach(k => { if (!revs.has(k)) revs.set(k, 0) })
   notify()
-}).catch(() => undefined)
+}).catch(() => { listed = true; notify() })
 syncPreviewList()
 /** A character's other forms (Magik's Darkchylde, Hulk's other two), or an animation mod's other emotes: <key>@2, <key>@3 beside <key>. */
 export const formKeys = (key: string) => [2, 3, 4, 5, 6, 7, 8].map(n => `${key}@${n}`).filter(k => revs.has(k))
