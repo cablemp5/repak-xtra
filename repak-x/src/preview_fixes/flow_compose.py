@@ -39,7 +39,7 @@ def flow_anim(prefix, out_png):
     lines removes an older one. Returns whether it made one."""
     import time
     t0 = time.time()
-    frames = sorted(Path(prefix).parent.glob(Path(prefix).name + "_front_flow_*.png"))
+    frames = sorted(Path(prefix).parent.glob(Path(prefix).name + "_front_flow_*.tga"))
     base_path, emit_path = Path(f"{prefix}_front_noflow.png"), Path(f"{prefix}_front_emit_noflow.png")
     out_webp = out_png.with_suffix(".webp")
     if not frames or not base_path.exists():
