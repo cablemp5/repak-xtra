@@ -209,8 +209,8 @@ def kawaii_rows(abp, limits_of):
     skirt, tail and straps of a skin (and of most mods with their own physics) that its PhysicsAsset does not simulate.
     Per chain: its node (chains collide with their own node's limits only), root bone, the bones left out, damping,
     stiffness, the bones' radius (meters), the angle limit (degrees, 0: none), gravity (m/s2, glTF axes, already times
-    its scale), the leaf's dummy bone (length in meters and axis) and the curves over the chain's length (0 root to 1
-    tip, each scaling its value). Returns (chains, colliders): the nodes' capsule and outer sphere limits, with those
+    its scale), the leaf's dummy bone (length in meters and axis), `turn` (the share of a turn of the hero its bones lag
+    behind by: 1 - WorldDampingRotation) and the curves over the chain's length (0 root to 1 tip, each scaling its value). Returns (chains, colliders): the nodes' capsule and outer sphere limits, with those
     of a limits data asset (`limits_of(path)` gives its json). shortcut: box, planar and inner sphere limits, bone
     constraints, wind and the wave are left out (13 limits and 4 chains of 397 in the game's own skins), and a curve
     is read as straight lines between its keys"""
@@ -234,7 +234,7 @@ def kawaii_rows(abp, limits_of):
             row = {"node": i, "root": root, "exclude": [b.get("BoneName") for b in bs.get("ExcludeBones") or []],
                    "damping": p.get("Damping", 0.1), "stiffness": p.get("Stiffness", 0.05), "radius": round(p.get("Radius", 3.0) * 0.01, 5),
                    "limit": p.get("LimitAngle", 0.0), "gravity": [round(g.get(k, 0) * scale, 5) for k in ("X", "Z", "Y")],
-                   "dummy": round(bs.get("DummyBoneLength", 0.0) * 0.01, 5), "axis": KAWAII_AXIS.get(str(bs.get("BoneForwardAxis", "")).rsplit("::", 1)[-1], [1, 0, 0])}
+                   "dummy": round(bs.get("DummyBoneLength", 0.0) * 0.01, 5), "turn": round(1 - p.get("WorldDampingRotation", 0.8), 5), "axis": KAWAII_AXIS.get(str(bs.get("BoneForwardAxis", "")).rsplit("::", 1)[-1], [1, 0, 0])}
             if ps.get("bUseCurve"):
                 curves = {k: [[round(x.get("Time", 0), 5), round(x.get("Value", 0), 5)] for x in ((ps.get(f) or {}).get("EditorCurveData") or {}).get("Keys") or []]
                           for k, f in (("damping", "DampingCurveData"), ("stiffness", "StiffnessCurveData"), ("radius", "RadiusCurveData"), ("limit", "LimitAngleCurveData"))}
@@ -255,7 +255,8 @@ def driver_rows(abp, poses_of):
     drives a PoseAsset's poses from one bone's rotation (Phoenix's skirt roots follow her thighs). Per driver: the source
     bone, its targets (the bone's local rotation, glTF quaternion), the RBF radius (null: automatic), the driven bones,
     and per target that pose's local transform of each driven bone ([qx, qy, qz, qw, tx, ty, tz], glTF meters; null:
-    the bone's rest). `poses_of(path)` gives a PoseAsset's json."""
+    the bone's rest). `additive`: the PoseAsset holds each pose as its turn and move away from the rest (a mod's skirt
+    read as whole poses collapsed onto the pelvis). `poses_of(path)` gives a PoseAsset's json."""
     rows = []
     for o in abp:
         for k, n in (o.get("Properties") or {}).items():
@@ -264,7 +265,8 @@ def driver_rows(abp, poses_of):
             src, pa = [b.get("BoneName") for b in n.get("SourceBones") or []], game_ref((n.get("PoseAsset") or {}).get("ObjectPath") or "")
             if not src or not pa.startswith("/Game/"):
                 continue
-            pc = next((x for x in poses_of(pa) if x.get("Type") == "PoseAsset"), {}).get("Properties", {}).get("PoseContainer") or {}
+            pp = next((x for x in poses_of(pa) if x.get("Type") == "PoseAsset"), {}).get("Properties", {})
+            pc = pp.get("PoseContainer") or {}
             names, tracks = pc.get("PoseFNames") or [], pc.get("Tracks") or []
             bones = [b.get("BoneName") for b in n.get("OnlyDriveBones") or [] if b.get("BoneName") in tracks]
             if not bones:
@@ -291,7 +293,7 @@ def driver_rows(abp, poses_of):
             # sum under 1 as they are, and the rest of the weight stays on the bone's own pose
             rows.append({"source": src[0], "targets": targets, "radius": None if rp.get("bAutomaticRadius") else rp.get("Radius", 45.0),
                          "bones": bones, "poses": poses, "method": "quat" if str(rp.get("DistanceMethod", "")).endswith("Quaternion") else "swing",
-                         "fromRef": bool(n.get("bEvalFromRefPose")), "normalize": "above1" if str(rp.get("NormalizeMethod", "")).endswith("OnlyNormalizeAboveOne") else "always"})
+                         "additive": bool(pp.get("bAdditivePose")), "fromRef": bool(n.get("bEvalFromRefPose")), "normalize": "above1" if str(rp.get("NormalizeMethod", "")).endswith("OnlyNormalizeAboveOne") else "always"})
     return rows
 
 
@@ -329,8 +331,9 @@ def viewer_physics(work, dest):
                     rows["colliders"] = rows.get("colliders", []) + limits
     except Exception as e:
         print(f"# viewer: lobby physics left out: {e}", file=sys.stderr, flush=True)
-    # v 2: the KawaiiPhysics chains and the pose drivers' distance, reference and normalize settings (the app makes an older export again)
-    (dest / "physics.json").write_text(json.dumps({**rows, "v": 2}), encoding="utf-8")
+    # v 2: the KawaiiPhysics chains and the pose drivers' distance, reference and normalize settings. v 3: additive
+    # pose assets and the chains' turn share (the app makes an older export again)
+    (dest / "physics.json").write_text(json.dumps({**rows, "v": 3}), encoding="utf-8")
 
 
 def _check_physics_rows():
@@ -357,6 +360,7 @@ def _check_physics_rows():
     chains, limits = kawaii_rows([{"Properties": {"AnimGraphNode_KawaiiPhysics_1": node}}], lambda p: [])
     k = chains[0]
     assert k["root"] == "hair_01" and k["exclude"] == ["strap"] and k["gravity"] == [0, -10.0, 0] and k["radius"] == 0.02 and k["dummy"] == 0.02 and k["axis"] == [0, 0, -1], k
+    assert k["turn"] == 0.2, k   # the plugin's own WorldDampingRotation (0.8) when the chain leaves it out
     assert k["curves"] == {"radius": [[0, 1], [1, 0.5]]} and k["node"] == 0, k
     assert len(limits) == 1 and limits[0]["bone"] == "thigh_l" and limits[0]["half"] == 0.2 and limits[0]["node"] == 0, limits
 

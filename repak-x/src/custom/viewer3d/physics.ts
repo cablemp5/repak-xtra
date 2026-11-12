@@ -10,14 +10,15 @@
 // pose keeps it steady; Unreal's solver is not replicated, upgrade if a cape needs real cloth
 // Most skins' hair and skirts, and most mods with their own physics, swing on KawaiiPhysics nodes in that AnimBlueprint
 // instead (physics.json `kawaii`): the same particles, stepped as the plugin steps them (the speed kept times
-// 1 - Damping, half the gravity, a pull of Stiffness toward the animated shape, its node's own capsules, its angle limit)
+// 1 - Damping, half the gravity, a pull of Stiffness toward the animated shape, its node's own capsules, its angle limit),
+// and as the view turns they lag behind by the chain's share of the turn, as they do when the hero is turned in the game
 import * as THREE from 'three/webgpu'
 
 type Sim = { bone: string; parent: string | null; swing: (number | null)[]; linear: number; angular: number; gravity: number; radius: number }
 type Collider = { bone: string; center: number[]; axis: number[]; half: number; radius: number; node?: number }
-type Driver = { source: string; targets: number[][]; radius: number | null; bones: string[]; poses: (number[] | null)[][]; method?: 'quat' | 'swing'; fromRef?: boolean; normalize?: 'always' | 'above1' }
+type Driver = { source: string; targets: number[][]; radius: number | null; bones: string[]; poses: (number[] | null)[][]; method?: 'quat' | 'swing'; fromRef?: boolean; normalize?: 'always' | 'above1'; additive?: boolean }
 type Curve = 'damping' | 'stiffness' | 'radius' | 'limit'
-type Chain = { node: number; root: string; exclude?: string[]; damping: number; stiffness: number; radius: number; limit: number; gravity: number[]; dummy: number; axis: number[]; curves?: Partial<Record<Curve, number[][]>> }
+type Chain = { node: number; root: string; exclude?: string[]; damping: number; stiffness: number; radius: number; limit: number; gravity: number[]; dummy: number; axis: number[]; turn?: number; curves?: Partial<Record<Curve, number[][]>> }
 export type PhysicsData = { sim?: Sim[]; colliders?: Collider[]; drivers?: Driver[]; kawaii?: Chain[] }
 type Bone = InstanceType<typeof THREE.Bone>
 type V3 = InstanceType<typeof THREE.Vector3>
@@ -85,14 +86,25 @@ export function lobbyPhysics(root: InstanceType<typeof THREE.Object3D>, data: Ph
     const rest = (driven as Bone[]).map(b => ({ q: b.quaternion.clone(), p: b.position.clone() }))
     // fromRef: the targets are the source's turn away from its reference pose
     const from = d.fromRef ? refPose.get(key(d.source))?.clone().invert() : undefined
-    return [{ source, targets, radius, inv, driven: driven as Bone[], rest, poses: d.poses, far, from, always: d.normalize !== 'above1' }]
+    return [{ source, targets, radius, inv, driven: driven as Bone[], rest, poses: d.poses, far, from, always: d.normalize !== 'above1', additive: d.additive === true }]
   })
   const dq = new THREE.Quaternion(), dp = new THREE.Vector3(), src = new THREE.Quaternion()
   const driverStep = () => {
+    // an additive PoseAsset's poses are turns and moves on top of the bone, so its bones start each frame from their rest
+    for (const d of drivers) if (d.additive) d.driven.forEach((b, k) => { b.quaternion.copy(d.rest[k].q); b.position.copy(d.rest[k].p) })
     for (const d of drivers) {
       if (d.from) src.multiplyQuaternions(d.from, d.source.quaternion)
       else src.copy(d.source.quaternion)
       const w = rbfWeights(d.targets.map(t => d.far(src, t)), d.inv, d.radius, d.always)
+      if (d.additive) { // each pose's share of its turn goes on top of the bone as it stands (two drivers on one bone add up)
+        d.driven.forEach((b, k) => w.forEach((wi, i) => {
+          const pose = d.poses[i]?.[k]
+          if (!pose || wi <= 1e-6) return
+          b.quaternion.premultiply(q2.identity().slerp(q1.fromArray(pose), wi))
+          b.position.addScaledVector(v3.fromArray(pose, 4), wi)
+        }))
+        continue
+      }
       const left = Math.max(0, 1 - w.reduce((s, x) => s + x, 0)) // weight no target took stays on the bone's own pose
       d.driven.forEach((b, k) => {
         const q = dq.set(0, 0, 0, 0), p = dp.set(0, 0, 0)
@@ -118,9 +130,10 @@ export function lobbyPhysics(root: InstanceType<typeof THREE.Object3D>, data: Ph
   })
   const own = colliders.flatMap((c, i) => (c.node === undefined ? [i] : [])) // the PhysicsAsset's bodies
   // simulated bones, parents first, each with its tip (its child's offset, or one link along its axis at a chain's end).
-  // keep, pull and fall are per 1/60 s step: the speed kept, the pull toward the animated pose, and the fall (meters)
+  // keep, pull and fall are per 1/60 s: the speed kept, the pull toward the animated pose, and the fall (meters).
+  // turn: the share of the view's turn the particle lags behind by
   const depth = (o: { parent: unknown } | null) => { let n = 0; for (let p = o; p; p = (p as { parent: { parent: unknown } | null }).parent) n++; return n }
-  const row = (bone: Bone, tip: V3, o: { limit: number; radius: number; keep: number; pull: number; fall: V3; kawaii: boolean; cols: number[] }) => ({
+  const row = (bone: Bone, tip: V3, o: { limit: number; radius: number; keep: number; pull: number; fall: V3; kawaii: boolean; cols: number[]; turn: number }) => ({
     bone, tip, ...o, rest: bone.quaternion.clone(), ref: bone.quaternion.clone(), p: new THREE.Vector3(), prev: new THREE.Vector3(), ready: false,
     driven: drivers.some(d => d.driven.includes(bone)), poseHead: new THREE.Vector3(), poseTip: new THREE.Vector3(), poseQ: new THREE.Quaternion() })
   const sims = (data.sim ?? []).flatMap(s => {
@@ -131,7 +144,7 @@ export function lobbyPhysics(root: InstanceType<typeof THREE.Object3D>, data: Ph
     if (tip.lengthSq() < 1e-10) return []
     // the wider of its two swings (an ellipse in Unreal): the narrower froze a bone with one axis locked
     const limit = s.swing.every(x => x === null) ? Math.PI : THREE.MathUtils.degToRad(Math.max(...s.swing.map(x => x ?? 180)))
-    return [row(bone, tip, { limit, radius: s.radius, keep: Math.exp(-(s.linear + s.angular * 0.25) / 60), pull: 1 / 30, fall: new THREE.Vector3(0, (-9.8 * s.gravity) / 3600, 0), kawaii: false, cols: own })]
+    return [row(bone, tip, { limit, radius: s.radius, keep: Math.exp(-(s.linear + s.angular * 0.25) / 60), pull: 1 / 30, fall: new THREE.Vector3(0, (-9.8 * s.gravity) / 3600, 0), kawaii: false, cols: own, turn: 0 })]
   })
   // a capsule a bone's tip already sits in at the start (a skirt root inside its thigh's capsule) is no wall for it:
   // pushed out every frame, the skirt stood off the legs (the asset's own collision table is not exported)
@@ -167,18 +180,22 @@ export function lobbyPhysics(root: InstanceType<typeof THREE.Object3D>, data: Ph
       const at = (k: Curve) => c[k] * (c.curves?.[k]?.length ? curveAt(c.curves[k]!, f.at / total) : 1)
       const limit = at('limit')
       sims.push(row(f.bone, f.tip, { limit: limit > 0 ? THREE.MathUtils.degToRad(limit) : Math.PI, radius: at('radius'), keep: 1 - THREE.MathUtils.clamp(at('damping'), 0, 1),
-        pull: THREE.MathUtils.clamp(at('stiffness'), 0, 1), fall: new THREE.Vector3().fromArray(c.gravity).multiplyScalar(0.5 / 3600), kawaii: true, cols }))
+        pull: THREE.MathUtils.clamp(at('stiffness'), 0, 1), fall: new THREE.Vector3().fromArray(c.gravity).multiplyScalar(0.5 / 3600), kawaii: true, cols, turn: THREE.MathUtils.clamp(c.turn ?? 0, 0, 1) }))
     }
   }
   sims.sort((a, b) => depth(a.bone) - depth(b.bone))
   if (!drivers.length && !sims.length) return null
   const scale = new THREE.Vector3()
   const head = new THREE.Vector3(), want = new THREE.Vector3(), mp = new THREE.Vector3(), ms = new THREE.Vector3()
-  const parentQ = new THREE.Quaternion(), worldQ = new THREE.Quaternion()
+  const parentQ = new THREE.Quaternion(), worldQ = new THREE.Quaternion(), origin = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0)
+  let before = 1 / 60
 
-  const step = () => { // one 1/60 s
+  // one step of `h` seconds, as the plugin steps at any frame rate: the speed is what the last step moved over its own
+  // length, and the speed kept, the pull and the fall are scaled to the step (`e` sixtieths of a second)
+  const step = (h: number, turn: number) => {
     root.getWorldScale(scale)
-    const k = scale.y || 1
+    root.getWorldPosition(origin)
+    const k = scale.y || 1, e = h * 60
     for (const s of sims) {
       s.bone.quaternion.copy(s.ref) // the animated pose: its rest (the idle never keys it), or its pose driver's
       s.bone.updateWorldMatrix(false, false)
@@ -189,10 +206,12 @@ export function lobbyPhysics(root: InstanceType<typeof THREE.Object3D>, data: Ph
       else want.copy(s.tip).applyMatrix4(s.bone.matrixWorld)
       const len = head.distanceTo(want)
       if (!s.ready) { s.p.copy(want); s.prev.copy(want); s.ready = true }
-      // verlet: keep the speed (damped), fall, and lean toward the animated pose
-      v1.subVectors(s.p, s.prev).multiplyScalar(s.keep)
+      // verlet: keep the speed (damped), lag behind the view's turn, fall, and lean toward the animated pose
+      v1.subVectors(s.p, s.prev).multiplyScalar((Math.pow(s.keep, e) * h) / before)
       s.prev.copy(s.p)
-      s.p.add(v1).addScaledVector(s.fall, k).lerp(want, s.pull)
+      s.p.add(v1)
+      if (turn && s.turn) s.p.add(v2.subVectors(s.prev, origin).applyAxisAngle(UP, turn * s.turn).add(origin).sub(s.prev))
+      s.p.addScaledVector(s.fall, k * e * e).lerp(want, 1 - Math.pow(1 - s.pull, e))
       // out of the body's capsules
       for (const i of s.cols) {
         const c = colliders[i], seg = v2.subVectors(c.wb, c.wa), t = THREE.MathUtils.clamp(v3.subVectors(s.p, c.wa).dot(seg) / Math.max(seg.lengthSq(), 1e-12), 0, 1)
@@ -218,12 +237,14 @@ export function lobbyPhysics(root: InstanceType<typeof THREE.Object3D>, data: Ph
       s.bone.quaternion.copy(parentQ.invert().multiply(q1.multiply(worldQ)))
       s.bone.updateWorldMatrix(false, false)
     }
+    before = h
   }
 
   return {
-    /** One frame: the pose drivers, then the physics in fixed 1/60 s steps (as many as the frame took, at most 4: a
-     *  step length that changed frame to frame made verlet jitter). The body's capsules are placed once a frame. */
-    update(dt: number) {
+    /** One frame: the pose drivers, then the physics in steps of about 1/60 s (one shorter step at a faster screen:
+     *  a whole 1/60 s step per frame ran the hair 2.4 times too fast while a 144 Hz view turned). `turn`: how far the
+     *  view turned about the model since the last frame (radians). The body's capsules are placed once a frame. */
+    update(dt: number, turn = 0) {
       driverStep()
       for (const s of sims) { s.ref.copy(s.driven ? s.bone.quaternion : s.rest); if (s.kawaii) s.bone.quaternion.copy(s.ref) }
       root.updateMatrixWorld(true)
@@ -235,8 +256,9 @@ export function lobbyPhysics(root: InstanceType<typeof THREE.Object3D>, data: Ph
         s.bone.matrixWorld.decompose(mp, s.poseQ, ms)
       }
       for (const c of colliders) { c.wa.copy(c.a).applyMatrix4(c.bone.matrixWorld); c.wb.copy(c.b).applyMatrix4(c.bone.matrixWorld) }
-      const n = THREE.MathUtils.clamp(Math.round(dt * 60), 1, 4)
-      for (let i = 0; i < n; i++) step()
+      const n = THREE.MathUtils.clamp(Math.round(dt * 60), 1, 6), h = Math.max(dt, 1 / 480) / n
+      if (Math.abs(turn) > 2) turn = 0 // a jump, not a turn
+      for (let i = 0; i < n; i++) step(h, turn / n)
     },
   }
 }

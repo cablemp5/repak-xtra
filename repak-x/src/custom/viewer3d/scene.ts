@@ -370,6 +370,7 @@ export async function createViewer(host: HTMLElement, key: string, still: boolea
     check()
     onStep(1, 'Drawing the first frame')
 
+    let facing = controls.getAzimuthalAngle()
     tick = (now: number) => {
       raf = 0
       if (disposed || paused || !onScreen || document.hidden) return
@@ -378,7 +379,10 @@ export async function createViewer(host: HTMLElement, key: string, still: boolea
       if (playing && now - last < 1000 / FPS - 2 && !moving) { schedule(); return }
       last = now
       const dt = Math.min(clock.getDelta(), 0.1)
-      if (playing) { mixers.forEach(m => m.update(dt)); physics?.update(dt); soundTick() }
+      // how far the view turned about the model: its hair and cloth lag behind, as when the hero is turned in the game
+      const at = controls.getAzimuthalAngle(), turned = Math.atan2(Math.sin(at - facing), Math.cos(at - facing))
+      facing = at
+      if (playing) { mixers.forEach(m => m.update(dt)); physics?.update(dt, turned); soundTick() }
       follow()
       post!.render()
       if (playing || moving) schedule()

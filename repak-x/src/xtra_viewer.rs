@@ -108,7 +108,7 @@ fn prune_exports(current: &str) {
 /// Whether an export's physics.json is this version's (v 2: with the KawaiiPhysics chains). An older or missing one
 /// reads as not made, so the export is made again.
 fn physics_current(export: &Path) -> bool {
-    std::fs::read(export.join("physics.json")).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok()).is_some_and(|p| p["v"].as_u64().unwrap_or(0) >= 2)
+    std::fs::read(export.join("physics.json")).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok()).is_some_and(|p| p["v"].as_u64().unwrap_or(0) >= 3)
 }
 
 /// The mod files an export was made from, as the app sees them: each path (lowercase), size and modified time. Written
@@ -146,7 +146,8 @@ pub fn viewer_state(key: String, paths: Vec<String>) -> &'static str {
         let old = model["v"].as_u64().unwrap_or(1) < 2;
         // a slot the glTF export could not load ("None", drew white): made again once the kit names such slots (slots.json)
         // a lobby model made before the kit wrote its physics (hair and cloth swing, pose drivers): made again once
-        // (and once more for its v 2: the KawaiiPhysics chains that swing most hair and skirts, and the pose drivers' settings)
+        // (and once more for its v 2: the KawaiiPhysics chains that swing most hair and skirts, and the pose drivers' settings,
+        // and for its v 3: additive pose assets and how far a chain lags behind a turn)
         let no_physics = model["lobby"] == true && !physics_current(&export);
         let unnamed = || !export.join("slots.json").is_file() && glb_has_unnamed_slot(&export.join("model.glb")); // last: it reads the file
         return if !base_gone && !old && !no_physics && !unnamed() && (paths.is_empty() || read(export.join("stamp.json")) == stamp_of(&paths)) { "ready" } else { "stale" };
