@@ -265,6 +265,7 @@ if source.count(fox_form) == 1:
 # without these exact lines keeps its 15.
 anim_render = kit / "previews" / "render_anim.py"
 anim_hooks = [
+    (mesh_path, repr(str(kit / "meshes"))),   # the copy runs from this folder: its mesh reader is still the kit's
     ("    samples += [(act, min(n - 1, round(i * fps / FPS))) for i in range(shown)]", "    samples += [(act, min(n - 1.0, i * fps / FPS)) for i in range(shown)]"),
     ("    sc.frame_set(frame)\n", "    sc.frame_set(int(frame), subframe=frame - int(frame))\n"),
     ('sc.display.render_aa = "5"', 'sc.display.render_aa = "FXAA"'),
