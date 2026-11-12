@@ -95,6 +95,11 @@ def flow_frames(job, glowing):
                 return
         except Exception as e:
             print("FLOW_ANIMATION_SKIPPED", e)
+        # its keys go first: a keyed value is read from its key at the scene's frame, not from what at() sets below
+        for f in FLOW:
+            _, m = flow_nodes(f)
+            if m is not None and m.node_tree.animation_data:
+                m.node_tree.animation_data_clear()
     for i in range(FLOW_FRAMES):
         at(i)
         sc.render.filepath = f"{prefix}_flow_{i:02d}.tga"

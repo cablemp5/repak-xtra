@@ -425,11 +425,8 @@ pub(crate) async fn verify(usmap_path: &str, dir: &str, rels: &[String], json_di
         stage_links(Path::new(dir), &input, rels)?;
         // the tool loads each file as a decode to JSON does and answers with the counts alone (UAssetTool patch 0019):
         // the JSON of 400 materials was 100 MB written and read back for one number each
-        let path = |r: &str| {
-            let mut p = input.join(r);
-            p.set_extension("uasset"); // as the decode names its inputs (uasset_tool.rs convert_uassets_to_json)
-            p.to_string_lossy().to_string()
-        };
+        // named as stage_links wrote them (the extension added, never swapped in: a name may hold a dot)
+        let path = |r: &str| input.join(format!("{r}.uasset")).to_string_lossy().to_string();
         let req = crate::vfx_updater::uasset_tool::VfxUatRequest { action: "batch_raw_export_counts", file_paths: Some(rels.iter().map(|r| path(r)).collect()), usmap_path: Some(usmap_path), ..Default::default() };
         let answer = crate::vfx_updater::uasset_tool::run_vfx_uat_request(Path::new(""), &req).await?;
         if !answer.success {
