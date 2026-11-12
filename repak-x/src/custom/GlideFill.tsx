@@ -18,13 +18,14 @@ export function glide(shown: number, pct: number, next: number | undefined, secs
 export function GlideFill({ pct, next, secs = 8, tag: Tag = 'i' }: { pct: number; next?: number; secs?: number; tag?: 'i' | 'span' }) {
   const el = useRef<HTMLElement>(null)
   const now = useRef({ pct, next, secs })
-  const shown = useRef(pct)
+  const shown = useRef(pct), peak = useRef(pct)
   useEffect(() => { now.current = { pct, next, secs } })
   useLayoutEffect(() => { // before the first paint: the fill never shows empty first
     const draw = () => {
       const still = document.documentElement.dataset.motion === 'off'
-      const { pct, next, secs } = now.current
-      shown.current = still ? Math.max(shown.current, pct) : glide(shown.current, pct, next, secs)
+      const { next, secs } = now.current
+      peak.current = Math.max(peak.current, now.current.pct) // the furthest the work itself has reported
+      shown.current = still ? peak.current : glide(shown.current, peak.current, next, secs)
       if (el.current) el.current.style.width = `${Math.min(100, Math.max(0, shown.current))}%`
     }
     draw()
