@@ -91,6 +91,13 @@ BC7) went from 28 to 54 s to 1.4 s, and the 44 PNGs have the same SHA-256 before
 
 `0018-the-mappings-are-parsed-once-and-copied.patch`: every tool call parsed the USMAP again (about 0.8 s each, four times
 in one mod update). `Usmap.Shared` parses the file once, hands each call its own copy of the name, enum, and schema
-tables (reading an asset adds what it learns to them, so a call never sees what an earlier call learned), lets the parse
+tables and custom versions (reading an asset adds to the tables and marks versions, so a call never sees what an earlier call learned), lets the parse
 go 60 s after its last use, and reads it again when the file changes. A warm mod update went from 22 to 25 s to 19 to
 21 s, and every file inside the packed mods is byte identical before and after (967 and 1,059 files, three runs each).
+
+`0019-raw-export-counts-without-json.patch`: a new action, `batch_raw_export_counts`, loads each file as `batch_to_json` does
+(the same mappings, the same preload of referenced assets) and answers with how many exports it kept as raw bytes,
+one `count<TAB>path` line per file that loads. The app's read-back check before packing (`xtra_mi_layout.rs` `verify`)
+asked for the whole JSON of every rebuilt file, 100 MB for a mod's 400 materials, to count the RawExport entries in it.
+The check went from 2.0 s to 1.0 s. One difference: a file that loads but whose JSON could not be written used to
+count as unreadable, and now counts by its exports. The packed mods are byte identical.

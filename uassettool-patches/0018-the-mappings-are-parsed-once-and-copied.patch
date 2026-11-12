@@ -1,7 +1,7 @@
 diff --git a/src/UAssetAPI/Unversioned/Usmap.cs b/src/UAssetAPI/Unversioned/Usmap.cs
 --- a/src/UAssetAPI/Unversioned/Usmap.cs
 +++ b/src/UAssetAPI/Unversioned/Usmap.cs
-@@ -778,6 +778,40 @@
+@@ -778,6 +778,41 @@
              return string.Join("\n", res.ToArray());
          }
  
@@ -34,7 +34,8 @@ diff --git a/src/UAssetAPI/Unversioned/Usmap.cs b/src/UAssetAPI/Unversioned/Usma
 +            copy.EnumMap = new ConcurrentDictionary<string, UsmapEnum>(parse.EnumMap, names);
 +            copy.Schemas = new ConcurrentDictionary<string, UsmapSchema>(parse.Schemas, names);
 +            if (parse.FailedExtensions != null) copy.FailedExtensions = new List<string>(parse.FailedExtensions);
-+            if (parse.CustomVersionContainer != null) copy.CustomVersionContainer = new List<CustomVersion>(parse.CustomVersionContainer);
++            // (each entry copied too: reading an asset that lacks one marks the entry itself as not serialized)
++            if (parse.CustomVersionContainer != null) copy.CustomVersionContainer = parse.CustomVersionContainer.ConvertAll(v => (CustomVersion)v.Clone());
 +            copy.PathsAlreadyProcessedForSchemas = new ConcurrentDictionary<string, byte>();
 +            return copy;
 +        }

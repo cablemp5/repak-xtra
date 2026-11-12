@@ -415,20 +415,32 @@ pub async fn xtra_vfx_verify(window: Window, usmap_path: String, dir: String, re
 }
 
 /// xtra_vfx_verify without a window (xtra_vfx.rs vfx_rpc runs the pipeline headless).
-pub(crate) async fn verify(usmap_path: &str, dir: &str, rels: &[String], json_dir: &str, stage_dir: &str, progress: &dyn VfxProgressSink) -> Result<Vec<String>, String> {
+pub(crate) async fn verify(usmap_path: &str, dir: &str, rels: &[String], json_dir: &str, stage_dir: &str, _progress: &dyn VfxProgressSink) -> Result<Vec<String>, String> {
     if rels.is_empty() {
         return Ok(Vec::new());
     }
     let work = Path::new(&stage_dir).join("verify");
-    let (input, json) = (work.join("in"), work.join("json"));
+    let input = work.join("in");
     let r = async {
         stage_links(Path::new(dir), &input, rels)?;
-        to_json(usmap_path, &input, &json, progress).await?;
+        // the tool loads each file as a decode to JSON does and answers with the counts alone (UAssetTool patch 0019):
+        // the JSON of 400 materials was 100 MB written and read back for one number each
+        let path = |r: &str| {
+            let mut p = input.join(r);
+            p.set_extension("uasset"); // as the decode names its inputs (uasset_tool.rs convert_uassets_to_json)
+            p.to_string_lossy().to_string()
+        };
+        let req = crate::vfx_updater::uasset_tool::VfxUatRequest { action: "batch_raw_export_counts", file_paths: Some(rels.iter().map(|r| path(r)).collect()), usmap_path: Some(usmap_path), ..Default::default() };
+        let answer = crate::vfx_updater::uasset_tool::run_vfx_uat_request(Path::new(""), &req).await?;
+        if !answer.success {
+            return Err(format!("The rebuilt files could not be read back: {}", answer.message));
+        }
+        let back: std::collections::HashMap<&str, usize> = answer.message.lines().filter_map(|l| l.split_once('\t')).filter_map(|(n, p)| Some((p, n.parse().ok()?))).collect();
         use rayon::prelude::*;
         let source = |r: &str| raw_count(&Path::new(json_dir).join(format!("{r}.json")));
         Ok::<_, String>(
             rels.par_iter()
-                .filter(|r| match (raw_count(&json.join(format!("{r}.json"))), source(r)) {
+                .filter(|r| match (back.get(path(r).as_str()).copied(), source(r)) {
                     (Some(back), Some(src)) => back > src,
                     (Some(back), None) => back > 0, // no source JSON (a merged table): whole, or not
                     (None, _) => true,
