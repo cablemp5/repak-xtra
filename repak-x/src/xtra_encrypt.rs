@@ -168,6 +168,38 @@ pub async fn xtra_encrypt_mods(window: tauri::Window, paths: Vec<String>) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// Times each part of one encryption on a copy of a real mod (never the mod itself), and prints the sha256 of what
+    /// came out so two builds can be compared:
+    ///   REPAKXTRA_BENCH_MOD=<its .pak> cargo test --release -p repak-x --bin REPAK-X encrypt_bench -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn encrypt_bench() {
+        let Some(from) = std::env::var_os("REPAKXTRA_BENCH_MOD").map(PathBuf::from) else { return };
+        let d = tempfile::tempdir().unwrap();
+        let name = stem(from.file_name().unwrap().to_str().unwrap()).to_string();
+        for f in [from.clone(), companion(&from, "utoc"), companion(&from, "ucas")] {
+            if f.is_file() { fs::copy(&f, d.path().join(f.file_name().unwrap())).unwrap(); }
+        }
+        let source = d.path().join(from.file_name().unwrap()); // on or off, as it is
+        let out = d.path().join("out");
+        fs::create_dir_all(&out).unwrap();
+        let mut clock = std::time::Instant::now();
+        let mut lap = |what: &str| { println!("[encrypt timing] {what}: {:.2} s", clock.elapsed().as_secs_f32()); clock = std::time::Instant::now(); };
+        let before = snapshot(&source).unwrap();
+        lap("hash the originals");
+        let toc = companion(&source, "utoc");
+        if toc.is_file() { tool("encrypt_iostore", &toc, &out.join(format!("{name}.utoc"))).unwrap(); lap("encrypt_iostore (with its read back)"); }
+        tool("encrypt_pak", &source, &out.join(format!("{name}.bak_repak"))).unwrap();
+        lap("encrypt_pak (with its read back)");
+        unchanged(&source, &before).unwrap();
+        lap("hash the originals again");
+        let mut made: Vec<_> = fs::read_dir(&out).unwrap().flatten().map(|e| e.path()).collect();
+        made.sort();
+        for f in made {
+            println!("[encrypt out] {} {} {}", f.file_name().unwrap().to_string_lossy(), f.metadata().unwrap().len(), digest(&f).unwrap().iter().map(|b| format!("{b:02x}")).collect::<String>());
+        }
+    }
+
     #[cfg(windows)]
     #[test]
     fn uppercase_enabled_and_disabled_extensions_reach_backup_validation() {
