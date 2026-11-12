@@ -339,7 +339,8 @@ pub(crate) fn lock_generator() -> Result<Option<std::fs::File>, String> {
 /// Blender and the exporter a preview run leaves open for the next one (preview_fixes/keeper.py, about 3 GB of memory
 /// and the kit's and the game's files held open) end when their state file goes: when the app closes, the game starts,
 /// and before the kit is replaced or removed. `wait`: until they are gone (each keeps an .alive file while it runs), 8 s
-/// at most, for a caller that needs the kit's files free.
+/// at most, for a caller that needs the kit's files free. A preview run under way keeps its helpers until it ends (a
+/// keeper looks for its state file between runs, never in the middle of one): starting the game does not cancel it.
 pub(crate) fn stop_kept(wait: bool) {
     let dir = previews_dir().join("work").join("keep");
     let with = |ext: &str| -> Vec<PathBuf> {
