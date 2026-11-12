@@ -4,7 +4,8 @@
 # renderer) also becomes an animated <key>.webp, which the app shows over the still <key>.png
 
 
-FLOW_FPS = 18   # the animated glow's frame rate (flow_anim.py FLOW_FRAMES make one 4 s loop)
+FLOW_FPS = 60   # the animated glow's frame rate
+FLOW_SECONDS = 4   # one loop: flow_anim.py renders FLOW_FRAMES steps of it, the frames between are blends of two
 FLOW_BLUR = 0.63   # the bloom's blurs scaled to the frames' render size (flow_anim.py FLOW_SCALE)
 FLOW_BLACK = 14    # the base's black point: the suit's darkest values (about 14 to 20) go to black
 
@@ -58,7 +59,15 @@ def flow_anim(prefix, out_png):
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(max(1, min(6, (os.cpu_count() or 2) - 1))) as pool:
         out = list(pool.map(one, frames))
+    # 60 frames a second from the same renders: the lines crawl a 72nd of a tile per render, so a frame between two is
+    # their blend (the loop's last blends into its first). Rendering all 240 took 3.3 times as long for the same motion
+    shown = []
+    for j in range(FLOW_SECONDS * FLOW_FPS):
+        at = j * len(out) / (FLOW_SECONDS * FLOW_FPS)
+        a, b, t = out[int(at) % len(out)], out[(int(at) + 1) % len(out)], at - int(at)
+        shown.append(a if t < 1e-6 else Image.blend(a, b, t))
+    out = shown
     tmp = out_webp.with_suffix(".tmp.webp")   # as save_webp, at this loop's own frame rate
-    out[0].save(tmp, save_all=True, append_images=out[1:], duration=round(1000 / FLOW_FPS), loop=0, quality=80, method=2, kmax=1)
+    write_webp(out, tmp, round(1000 / FLOW_FPS))   # speed.py
     os.replace(tmp, out_webp)
     return True

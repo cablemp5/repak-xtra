@@ -191,8 +191,8 @@ vfx_hooks = [
     ("(MARGIN + 4, y + bh + 24)", "(MARGIN + 4, y + bh + 16)"),
     ("(w - MARGIN - 4, y + bh + 24)", "(w - MARGIN - 4, y + bh + 16)"),
     ("font(84", "font(55"),
-    ("\nANIM = 7 ", "\nANIM = 13 "),
-    ('REDO = {"sound": 4, "anim": 6}', 'REDO = {"sound": 13, "anim": 10, "vfx": 8}'),
+    ("\nANIM = 7 ", "\nANIM = 14 "),   # 14 with REDO anim 14: cached animation previews render once more, at 60 frames a second
+    ('REDO = {"sound": 4, "anim": 6}', 'REDO = {"sound": 13, "anim": 14, "vfx": 8}'),
     # sound cards: the VFX labels' size (55 px, weight 560), the speaker icon and spacing scaled to match
     ("font(52, 520)", "font(55, 560)"),
     ("icon_image(VOLUME_ICON, 48,", "icon_image(VOLUME_ICON, 51,"),
@@ -254,6 +254,43 @@ if source.count(kept_none) == 1:
         '            print(f"# {key}: nothing to show this time, its preview from the same files is kept (Regenerate tries again)", file=sys.stderr, flush=True)\n'
         '            kind = "kept"\n'
         + kept_none.replace('index[key] = {', 'index[key] = index[key] if kept_old else {', 1)), 1)
+# White Fox's fox form (her ultimate, form 10601) gets no picture of its own beside her (cable, 2026-11-12): it is
+# rendered only when it is the one form a mod changes. A kit without this exact line keeps both.
+fox_form = '    return [min([p for p in ps if not p.endswith("_Lobby")] or ps, key=len) for _, ps in sorted(forms.items())]'
+if source.count(fox_form) == 1:
+    source = source.replace(fox_form, fox_form.replace("for _, ps in sorted(forms.items())]", 'for f, ps in sorted(forms.items()) if f != "10601" or len(forms) == 1]'), 1)
+# Animated previews at 60 frames a second (15 before). The game's clips are keyed at 30, so a sample between two keys
+# blends both (the curve read at a subframe), where the kit took the nearest key. Four times the frames in about the old
+# render time: each frame's edges get one FXAA pass instead of five samples (the outline covers the edges). A kit
+# without these exact lines keeps its 15.
+anim_render = kit / "previews" / "render_anim.py"
+anim_hooks = [
+    ("    samples += [(act, min(n - 1, round(i * fps / FPS))) for i in range(shown)]", "    samples += [(act, min(n - 1.0, i * fps / FPS)) for i in range(shown)]"),
+    ("    sc.frame_set(frame)\n", "    sc.frame_set(int(frame), subframe=frame - int(frame))\n"),
+    ('sc.display.render_aa = "5"', 'sc.display.render_aa = "FXAA"'),
+    # the camera is framed from the poses the 15 a second render sampled, not all four times as many (a skinned mesh read each)
+    ("for act, frame in samples:\n    pose(act, frame)\n    ev = M.evaluated_get(", "for act, frame in samples[::max(1, round(FPS / 15))]:\n    pose(act, frame)\n    ev = M.evaluated_get("),
+    # frames are read once and deleted: written uncompressed
+    ('sc.render.image_settings.color_mode = "RGBA"\n', 'sc.render.image_settings.color_mode = "RGBA"\nsc.render.image_settings.compression = 0\n'),
+]
+# their frames get their rim on threads and are encoded in chunks on threads (speed.py write_webp)
+anim_save = [
+    ("    save_webp([outlined(Image.open(f).convert(\"RGBA\")) for f in frames], out_webp)\n", "    save_webp(on_threads(lambda f: outlined(Image.open(f).convert(\"RGBA\")), frames), out_webp)\n"),
+    ("    frames[0].save(tmp, save_all=True, append_images=frames[1:], duration=round(1000 / ANIM_FPS), loop=0, quality=80, method=2, kmax=1)\n", "    write_webp(frames, tmp, round(1000 / ANIM_FPS))\n"),
+]
+if all(source.count(old) == 1 for old, _ in anim_save):
+    for old, new in anim_save:
+        source = source.replace(old, new, 1)
+anim_fps = "ANIM_SIZE, ANIM_FPS, ANIM_SECONDS, ANIM_SHORTEST = (512, 724), 15, 6.0, 0.3"
+anim_path = 'KIT / "previews" / "render_anim.py"'
+anim_source = anim_render.read_text(encoding="utf-8-sig") if anim_render.exists() else ""
+if all(anim_source.count(old) == 1 for old, _ in anim_hooks) and source.count(anim_fps) == 1 and source.count(anim_path) == 1:
+    for old, new in anim_hooks:
+        anim_source = anim_source.replace(old, new, 1)
+    patched_anim = runtime / "render_anim.py"
+    if not patched_anim.exists() or patched_anim.read_text(encoding="utf-8") != anim_source:
+        patched_anim.write_text(anim_source, encoding="utf-8")
+    source = source.replace(anim_fps, anim_fps.replace("15, 6.0", "60, 6.0"), 1).replace(anim_path, "Path(" + repr(str(patched_anim)) + ")", 1)
 # A different fingerprint regenerates cached renders as they are requested. The rim setting is not part of it: changing
 # the setting must not render every preview again
 # (10001: painted galaxy skins, flow lines and their animation. 10002: blueprint skins, galaxy masks and sprites, borrowed
