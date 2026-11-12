@@ -21,9 +21,9 @@ hooks = [   # (the kit's line, with the fix added): the slot's material, which t
     # kit's own values on a painted one (King of the Cosmos keeps its green, blue and purple)
     # A galaxy with black colors (Celestial Soldier's hair) is stars over the painted color, not black space
     ('surface = mix(base_col if base_col is not None else (0.05, 0.06, 0.1), (0.004, 0.005, 0.01), mask if mask is not None else 1.0)', 'surface = mix(base_col if base_col is not None else (0.05, 0.06, 0.1), (0.004, 0.005, 0.01), mask if mask is not None else 1.0)\n        surface = base_col if base_col is not None and dark_space(chain) else surface'),
-    ('L.new(mix(base_col, (0.0, 0.0, 0.0), 0.25), bsdf.inputs["Base Color"])', 'L.new(mix(jelly_skin(mix, base_col, chain), (0.0, 0.0, 0.0), JELLY_BASE_DIM) if jelly(chain) else mix(painted_skin(mix, base_col, chain), (0.0, 0.0, 0.0), 0.25), bsdf.inputs["Base Color"])'),
-    ('L.new(mix(mix(base_col, space, JELLY_SKY), stars, 1.0, "ADD"), bsdf.inputs["Emission Color"])', 'note_lines(chain)\n        L.new(jelly_emission(mix, base_col, space, stars, chain) if jelly(chain) else painted_emission(mix, base_col, space, stars, chain) if painted(chain) else mix(mix(base_col, space, JELLY_SKY), stars, 1.0, "ADD"), bsdf.inputs["Emission Color"])'),
-    ('        bsdf.inputs["Emission Strength"].default_value = JELLY_GLOW\n', '        bsdf.inputs["Emission Strength"].default_value = JELLY_GLOW if jelly(chain) else painted_look(chain)[1] if painted(chain) else 0.55\n'),
+    ('L.new(mix(base_col, (0.0, 0.0, 0.0), 0.25), bsdf.inputs["Base Color"])', 'L.new(mix(jelly_skin(mix, base_col, chain), (0.0, 0.0, 0.0), JELLY_BASE_DIM) if jelly(chain) else mix(base_col, (0.0, 0.0, 0.0), 0.25), bsdf.inputs["Base Color"])'),
+    ('L.new(mix(mix(base_col, space, JELLY_SKY), stars, 1.0, "ADD"), bsdf.inputs["Emission Color"])', 'note_lines(chain)\n        L.new(jelly_emission(mix, base_col, space, stars, chain) if jelly(chain) else mix(mix(base_col, space, JELLY_SKY), stars, 1.0, "ADD"), bsdf.inputs["Emission Color"])'),
+    ('        bsdf.inputs["Emission Strength"].default_value = JELLY_GLOW\n', '        bsdf.inputs["Emission Strength"].default_value = JELLY_GLOW if jelly(chain) else 0.55\n'),
     ('        bsdf.inputs["Roughness"].default_value = 0.22\n', '        bsdf.inputs["Roughness"].default_value = jelly_rough(chain)\n'),
     ('        bsdf.inputs["Coat Weight"].default_value = 0.25\n', '        bsdf.inputs["Coat Weight"].default_value = JELLY_COAT if jelly(chain) else 0.25\n        bsdf.inputs["Specular Tint"].default_value = JELLY_SPEC_TINT if jelly(chain) else (1.0, 1.0, 1.0, 1.0)\n'),
     ('        bsdf.inputs["Specular IOR Level"].default_value = 0.3   # stronger', '        bsdf.inputs["Specular IOR Level"].default_value = jelly_spec(chain)   # stronger'),
@@ -34,6 +34,9 @@ hooks = [   # (the kit's line, with the fix added): the slot's material, which t
     ('        stars = mix(stars, tinted, 0.9, "ADD")', '        stars = mix(stars, tinted, 0.9 * sparkle_gain(chain), "ADD")'),
     ('rim = sun("rim", 7.0, (0.75, 0.92, 1.0), 2)', 'rim = sun("rim", RIM_SUN if RIM_ON else 7.0, RIM_SUN_COLOR if RIM_ON else (0.75, 0.92, 1.0), 2)\nif RIM_ON:\n    studio_lights()'),
     ('    rim.rotation_euler = aim(-d * 0.9 + rt * 0.75 + Vector((0, 0, 0.25)))\n', '    rim.rotation_euler = aim(-d * 0.9 + rt * 0.75 + Vector((0, 0, 0.25)))\n    place_studio(STUDIO, d, rt)\n'),
+    # A painted jelly skin (King of the Cosmos, Cosmic Kumiho's body): unlit, as Rotate in 3D draws it (cosmic_tuning.py viewer_jelly)
+    ('        bsdf.inputs["Coat Tint"].default_value = (0.75 + 0.25 * rim[0] * k, 0.75 + 0.25 * rim[1] * k, 0.75 + 0.25 * rim[2] * k, 1)\n',
+     '        bsdf.inputs["Coat Tint"].default_value = (0.75 + 0.25 * rim[0] * k, 0.75 + 0.25 * rim[1] * k, 0.75 + 0.25 * rim[2] * k, 1)\n        viewer_jelly(m, bsdf, N, L, mix, screen, tiles, base_col, stars, mask, chain)\n'),
     ('print("RESULT " + json.dumps({"ok": True, "renders"', 'interior_rim(renders)\nflow_frames(job, glowing)\nprint("RESULT " + json.dumps({"ok": True, "renders"'),
     # the idle the action really came from (borrowed_pose.py): a later clip that fails to load leaves the loop's `path` on it
     ('        A.animation_data.action = act\n', '        A.animation_data.action = act\n        posed_from = path\n'),

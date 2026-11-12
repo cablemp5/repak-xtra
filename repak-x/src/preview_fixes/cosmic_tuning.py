@@ -83,13 +83,8 @@ def jelly_rough(chain):
     return 1.0 if jelly(chain) and matte(chain) else JELLY_ROUGH if jelly(chain) else 0.22
 
 
-# Painted jelly skins (White Fox's Cosmic Kumiho and King of the Cosmos, after their store shots): the painted colors show
-# light and soft, glowing, with the galaxy faint over them. The kit's (0.4 galaxy, glow 0.55) drew them dim and deep
-PAINTED_LOOK = (0.35, 0.85)   # share of galaxy over the painted skin, and its glow: swirls on King of the Cosmos's bright skin
-PAINTED_LOOK_FOX = (0.2, 1.8)   # White Fox's darker lilac glows harder, the galaxy fainter
-PAINTED_SOFT = 0.3   # color they lose: the store shots' colors are soft, the render's light and AgX deepened them
-PAINTED_WARM = (1.0, 0.68, 0.75)   # White Fox's lilac warmed: the render's light turned it periwinkle blue (King of the
-                                   # Cosmos's green and blue keep their hue)
+# Painted jelly skins (White Fox's Cosmic Kumiho and King of the Cosmos): a jelly master with a brightly painted skin
+# under its galaxy. They are drawn as Rotate in 3D draws them (viewer_jelly, at the end of this file)
 
 
 def dark_space(chain):
@@ -100,28 +95,6 @@ def dark_space(chain):
 def painted(chain):
     """A jelly galaxy skin with a brightly painted skin under its galaxy."""
     return "jelly" in (chain.get("master") or "").lower() and not jelly(chain)
-
-
-def painted_look(chain):
-    return PAINTED_LOOK_FOX if "/Characters/1060/" in chain["chain"][0] else PAINTED_LOOK
-
-
-def painted_skin(mix, base_col, chain):
-    """A painted jelly skin's color, softened (White Fox's also warmed); any other skin's as it is."""
-    if not painted(chain):
-        return base_col
-    if "/Characters/1060/" in chain["chain"][0]:
-        base_col = mix(base_col, PAINTED_WARM, 1.0, "MULTIPLY")
-    return mix(base_col, (0.5, 0.5, 0.5), PAINTED_SOFT, "SATURATION")
-
-
-def painted_emission(mix, base_col, space, stars, chain):
-    """A painted jelly skin's glow: its warmed painted color with a faint galaxy, plus the stars. Galaxy and stars only
-    inside a GalaxyMask, as in game: over a whole body, the glow sprites turned Celestial Soldier's arms flat white."""
-    skin = painted_skin(mix, base_col, chain)
-    glow = mix(mix(skin, space, painted_look(chain)[0]), stars, 1.0, "ADD")
-    mask = galaxy_mask(base_col, chain)
-    return glow if mask is None else mix(skin, glow, mask)
 
 
 def flat(chain):
@@ -306,3 +279,135 @@ def constellations(path):
 def dust_color(mix, layer, chain):
     """A star dust layer, mostly white on a jelly skin."""
     return mix(layer, (0.5, 0.5, 0.5), JELLY_DUST_GRAY, "SATURATION") if jelly(chain) else layer
+
+
+# The jelly galaxy master (King of the Cosmos, Cosmic Kumiho's body) drawn as Rotate in 3D draws it (viewer3d/toon.ts
+# jellyGalaxyMaterial), which is how the game shows it: unlit. The painted color in the master's own three shade steps
+# from its own light direction, its rim, a pin of fake highlight, and the galaxy added over it inside the GalaxyMask
+# where the body faces the camera: smoke in the instance's two galaxy colors, plus the stars. Lit by the scene's suns
+# and glowing at 0.85 on top, the painted color came out far over full brightness, pale lilac all over (the in-game
+# shot of 2026-11-11 shows a green chest, blue thighs and lilac shins).
+# shortcut: the master's matcap, cube map and subsurface noise are left out (black or unset on the skins seen so far),
+# and the light direction is taken in the camera's frame, right for the card's front view
+VIEWER_JELLY = True
+JELLY_VIEW_GAIN = 1.6   # the kit's display curve (AgX) darkens midtones the viewer's film curve keeps: at 1 the body came out dim
+
+
+def shade3(pos, colors, s2, s3):
+    """The master's fake shade as color ramp stops [(g, (r, g, b))] over g 0 to 1: it is straight lines between them."""
+    hi = min(pos[0], pos[1]); lo = min(hi, pos[2])
+    w2, w3 = max((pos[0] - hi) * s2, 1e-4), max((hi - lo) * s3, 1e-4)
+    stops = [(0.0, colors[2]), (lo, colors[2]), (min(lo + w3, hi), colors[1]), (hi, colors[1]), (min(hi + w2, 1.0), colors[0]), (1.0, colors[0])]
+    out = []
+    for g, c in stops:   # a ramp wants rising positions
+        g = min(1.0, max(0.0, g))
+        if out and g <= out[-1][0]:
+            g = min(1.0, out[-1][0] + 1e-3)
+        out.append((g, c))
+    return out
+
+
+def viewer_jelly(m, bsdf, N, L, mix, screen, tiles, base_col, stars, mask, chain):
+    if not VIEWER_JELLY or base_col is None or not painted(chain):
+        return
+    c = with_defaults(chain)
+    num = lambda k, d: float(c["scalars"].get(k, d))
+
+    def calc(op, a, b=None, clamp=False):
+        n = N.new("ShaderNodeMath"); n.operation = op; n.use_clamp = clamp
+        for sock, v in ((n.inputs[0], a), (n.inputs[1], b)):
+            if v is None:
+                continue
+            if isinstance(v, (int, float)):
+                sock.default_value = v
+            else:
+                L.new(v, sock)
+        return n.outputs[0]
+
+    def smooth(value, lo, hi):
+        n = N.new("ShaderNodeMapRange"); n.interpolation_type = "SMOOTHSTEP"
+        n.inputs["From Min"].default_value, n.inputs["From Max"].default_value = lo, hi
+        L.new(value, n.inputs["Value"])
+        return n.outputs["Result"]
+
+    def parts(color):
+        s = N.new("ShaderNodeSeparateColor"); L.new(color, s.inputs[0]); return s.outputs
+
+    cam = N.new("ShaderNodeVectorTransform"); cam.vector_type = "NORMAL"; cam.convert_from = "WORLD"; cam.convert_to = "CAMERA"
+    L.new(N.new("ShaderNodeNewGeometry").outputs["Normal"], cam.inputs[0])
+
+    def toward(v):   # the normal's dot with a direction in the camera's frame (right, up, toward the camera)
+        k = math.sqrt(sum(x * x for x in v)) or 1.0
+        d = N.new("ShaderNodeVectorMath"); d.operation = "DOT_PRODUCT"; L.new(cam.outputs[0], d.inputs[0])
+        d.inputs[1].default_value = tuple(x / k for x in v)
+        return d.outputs["Value"]
+
+    # the fake shade: half-lambert against the master's own light direction, through its three steps
+    dl = vec(c, "ShadowLightDirection", (0.5, 0.5, 0.0))
+    g = N.new("ShaderNodeMath"); g.operation = "MULTIPLY_ADD"; g.inputs[1].default_value = 0.5; g.inputs[2].default_value = 0.5
+    L.new(toward((dl[0], dl[2], dl[1])), g.inputs[0])
+    ramp = N.new("ShaderNodeValToRGB"); ramp.color_ramp.interpolation = "LINEAR"
+    stops = shade3([num("Shadow - ShadePos1", 0.9), num("Shadow - ShadePos2", 0.5), num("Shadow - ShadePos3", 0.2)],
+                   [vec(c, "Shadow - ShadeColor1", (0.75, 0.75, 0.75)), vec(c, "Shadow - ShadeColor2", (0.177, 0.177, 0.177)), vec(c, "Shadow - ShadeColor3", (0.0, 0.0, 0.0))],
+                   num("Shadow - ShadeSmoothness2", 0.5), num("Shadow - ShadeSmoothness3", 0.5))
+    el = ramp.color_ramp.elements   # Blender keeps them sorted as they move: the two it starts with stay at the ends
+    el[0].position, el[0].color = 0.0, (*stops[0][1], 1)
+    el[1].position, el[1].color = 1.0, (*stops[-1][1], 1)
+    for x, col in stops[1:-1]:
+        el.new(x).color = (*col, 1)
+    L.new(g.outputs[0], ramp.inputs[0])
+    tint = vec(c, "BaseTint", (1.0, 1.0, 1.0))
+    albedo = base_col if max(abs(x - 1.0) for x in tint) < 1e-3 else mix(base_col, tint, 1.0, "MULTIPLY")
+    total = mix(albedo, ramp.outputs["Color"], 1.0, "MULTIPLY")
+    # a pin of highlight between the view and the master's fake light
+    fd = vec(c, "FakeSpecularDir", (0.0, 0.0, -1.0))
+    spot = calc("POWER", calc("MAXIMUM", toward((fd[0], fd[2], fd[1] + 1.0)), 0.0), max(1000 - 980 * num("FakeSpecularRoughness", 0.0), 1.0))
+    total = mix(total, mix((0.0, 0.0, 0.0), vec(c, "FakeSpecularColorTint", (1.0, 1.0, 1.0)), spot), 1.0, "ADD")
+    # the rim, toward the silhouette
+    lw = N.new("ShaderNodeLayerWeight"); lw.inputs["Blend"].default_value = 0.5   # Facing: 1 - N.V
+    edge = lw.outputs["Facing"]
+    rim = smooth(calc("POWER", calc("MAXIMUM", edge, 1e-4), num("RimFresnelPower", 3.0)), 0.0, max(1 - num("RimRange", 0.2), 1e-3))
+    total = mix(total, mix((0.0, 0.0, 0.0), vec(c, "RimLightColor", (0.02, 0.1, 0.2)), rim), 1.0, "ADD")
+    # the galaxy seen through the body: smoke in the two galaxy colors, and the stars
+    galaxy = None
+    g1 = screen("GalaxyTex1", tiles("GalaxyTex1_Size", 0.1), color=True)
+    if g1 is not None:
+        field = screen("GalaxyColorTex", tiles("GalaxyColorTex_Size", 0.2))
+        cm = calc("POWER", parts(field)[0], num("GalaxyColorTex_Power", 1.0), clamp=True) if field is not None else 1.0
+        colors = mix(vec(c, "GalaxyColorTex_Color2", (0.0, 0.041, 1.0)), vec(c, "GalaxyColorTex_Color1", (0.8, 0.054, 0.133)), cm)
+        galaxy = mix(g1, colors, 1.0, "MULTIPLY")
+        g2 = screen("GalaxyTex2", tiles("GalaxyTex2_Size", 0.2))
+        if g2 is not None:
+            galaxy = mix((0.0, 0.0, 0.0), galaxy, calc("POWER", parts(g2)[0], num("GalaxyTex2_Power", 5.0), clamp=True))
+    if not isinstance(stars, tuple):
+        galaxy = stars if galaxy is None else mix(galaxy, stars, 1.0, "ADD")
+    if galaxy is not None:
+        # full where the body faces the camera, gone toward its edges, and only on the GalaxyMask
+        gate = smooth(calc("MULTIPLY", calc("SUBTRACT", 0.65, calc("SQRT", edge)), 5.0), 0.0, 1.0)
+        if mask is not None:
+            gate = calc("MULTIPLY", gate, parts(mask)[1])
+        galaxy = mix((0.0, 0.0, 0.0), galaxy, gate)
+    em, strength = bsdf.inputs["Emission Color"], bsdf.inputs["Emission Strength"]
+    for link in list(em.links):
+        L.remove(link)
+    # the glow pass blooms only the galaxy (keep_glow remembers it), not the whole unlit body
+    if galaxy is not None:
+        L.new(galaxy, em)
+        total = mix(total, galaxy, 1.0, "ADD")
+    else:
+        em.default_value = (0.0, 0.0, 0.0, 1)
+    strength.default_value = 1.0
+    keep_glow(m, bsdf)
+    k = num("FakeSpecularNormalStrength", 1.0) * JELLY_VIEW_GAIN
+    if abs(k - 1.0) > 1e-3:
+        total = mix(total, (k, k, k), 1.0, "MULTIPLY")
+    for link in list(em.links):
+        L.remove(link)
+    L.new(total, em)
+    # unlit: the Principled adds nothing of its own
+    base = bsdf.inputs["Base Color"]
+    for link in list(base.links):
+        L.remove(link)
+    base.default_value = (0.0, 0.0, 0.0, 1)
+    bsdf.inputs["Specular IOR Level"].default_value = 0.0
+    bsdf.inputs["Coat Weight"].default_value = 0.0
