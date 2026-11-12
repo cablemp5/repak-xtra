@@ -370,7 +370,7 @@ def viewer_jelly(m, bsdf, N, L, mix, screen, tiles, base_col, stars, mask, chain
     total = mix(total, mix((0.0, 0.0, 0.0), vec(c, "RimLightColor", (0.02, 0.1, 0.2)), rim), 1.0, "ADD")
     # the galaxy seen through the body: smoke in the two galaxy colors, and the stars
     galaxy = None
-    g1 = screen("GalaxyTex1", tiles("GalaxyTex1_Size", 0.1), color=True)
+    g1 = screen("GalaxyTex1", tiles("GalaxyTex1_Size", 0.1))   # plain data, as the kit's own smoke reads it: one image, one color space
     if g1 is not None:
         p1 = num("GalaxyTex1_Power", 1.0)
         if abs(p1 - 1.0) > 1e-3:   # the smoke's own contrast, each channel raised to it
