@@ -224,7 +224,8 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
     let mut pending: Vec<(String, Option<Value>)> = rels
         .iter()
         .filter_map(|r| {
-            let today = whole.remove(r);
+            // (a path listed twice finds the map empty the second time and is read again, as each one used to be)
+            let today = whole.remove(r).or_else(|| decode(&now_json, r).filter(|j| decoded(j).is_some()));
             // Read whole today with the game's own overrides: today's layout is the right one whatever an older USMAP
             // reads (old_reading_right's first case), so no older USMAP is asked about it. For a mod already in
             // today's layout that is every file, and the older decode (5 s for 400 materials) does not run at all
