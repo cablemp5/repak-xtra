@@ -88,3 +88,9 @@ leaves a half library under the real name.
 and a few hundred MB each), which also kept its parallel run no faster than one at a time. The batch now reads it once and
 hands it to each extract, as `batch_to_json` does. The same mappings, so the same files: a KO prompt's 44 textures (31 MP,
 BC7) went from 28 to 54 s to 1.4 s, and the 44 PNGs have the same SHA-256 before and after (`xtra_ko.rs` `ko_bench`).
+
+`0018-the-mappings-are-parsed-once-and-copied.patch`: every tool call parsed the USMAP again (about 0.8 s each, four times
+in one mod update). `Usmap.Shared` parses the file once, hands each call its own copy of the name, enum, and schema
+tables (reading an asset adds what it learns to them, so a call never sees what an earlier call learned), lets the parse
+go 60 s after its last use, and reads it again when the file changes. A warm mod update went from 22 to 25 s to 19 to
+21 s, and every file inside the packed mods is byte identical before and after (967 and 1,059 files, three runs each).
