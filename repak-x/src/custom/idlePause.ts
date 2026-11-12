@@ -55,7 +55,9 @@ function thaw() {
 
 export const isIdle = () => document.hidden || !document.hasFocus()
 
-// While a grid of cards scrolls hard, its animated covers show a still: five of them in view, each decoding a full-size
+// A card plays an animated preview as a small looping video (previews.tsx loadThumb, thumbWorker.ts smallClip), which
+// a scroll costs nothing. Until that video is made, or where this WebView cannot make one, the animated picture itself
+// is on the card, and while the grid scrolls hard it shows a still: five of them in view, each decoding a full-size
 // frame 24 times a second, took a hard scroll of the Loadouts grid from 140 frames a second to 120 (hidden: 140).
 // shortcut: a loadout's own animated cover (a GIF or WebP he picked) has no still and keeps playing, give those one
 // here if a grid of them shows the drop

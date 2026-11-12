@@ -13,7 +13,8 @@ const REST_MS = 1500 // how long the grid rests after a scroll before the cards 
 const KEEP = 150 // a list of up to this many cards ends up with every card mounted
 const STEP = 2 // new cards put in per scrolled frame: those beyond the view, and those in view too while it scrolls hard
 const HARD = 3 // px per ms: a scroll this fast is a hard one (a wheel notch at a time runs near 1)
-const HOLD_MS = 250 // how long after the last scroll event they stay still
+const HOLD_MS = 250 // how long after the last hard frame a scroll still counts as hard (new cards wait their turn)
+const COVER_MS = 80 // how long after the last hard frame the held covers play again
 
 /** Pure: the ids of the cards whose box comes within `margin` px of the viewport [top, bottom). */
 export function nearIds(boxes: { id: string; top: number; bottom: number }[], top: number, bottom: number, margin: number) {
@@ -136,7 +137,7 @@ export function useNearCards(root: HTMLElement | null, ids: string[], pins: (str
       if (!holding || now - swept > 100) { swept = now; holdCovers(root) } // again now and then, for cards put in since
       holding = true
       clearTimeout(release)
-      release = window.setTimeout(() => { holding = false; releaseCovers() }, HOLD_MS)
+      release = window.setTimeout(() => { holding = false; releaseCovers() }, COVER_MS)
     }
     const onScroll = () => { if (!queued) queued = requestAnimationFrame(check) }
     root.addEventListener('scroll', onScroll, { passive: true })

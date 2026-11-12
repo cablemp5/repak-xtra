@@ -1538,12 +1538,15 @@ html[data-motion="off"] .t-shimmer-all { animation: none !important; -webkit-mas
    every saved preview has it at once and a render takes no longer (baked in, an animated one took 2.5 s more). pv-kit
    marks a kit render, the before picture too: never a loadout's own image, a capture, or a KO prompt preview. filter
    is one property, so every filter rule on these pictures ends with the boost (1 and 1 where it is no kit render) */
-:root { --pv-boost: contrast(1) saturate(1); }
-.pv-kit { --pv-boost: contrast(1.05) saturate(1.1); filter: var(--pv-boost); }
+:root { --pv-boost: contrast(1) saturate(1); --pv-rest: none; }
+/* --pv-rest: the filter of a picture at rest. None where there is no boost, or where it is drawn into the card's own
+   copy (previews.tsx BOOST, the same amounts): a filter, even one that changes nothing, is one more surface for the
+   compositor to draw per card on every scrolled frame */
+.pv-kit { --pv-boost: contrast(1.05) saturate(1.1); --pv-rest: var(--pv-boost); filter: var(--pv-boost); }
 /* transitions.dev: Skeleton reveal. Previews and loadout images cross-blur in once loaded */
 .lo-card-image img, .mod-preview-frame img { opacity: 0; filter: blur(var(--reveal-blur)) var(--pv-boost);
   transition: opacity var(--reveal-dur) var(--reveal-ease), filter var(--reveal-dur) var(--reveal-ease); }
-.lo-card-image img.is-loaded, .mod-preview-frame img.is-loaded { opacity: 1; filter: blur(0) var(--pv-boost); }
+.lo-card-image img.is-loaded, .mod-preview-frame img.is-loaded { opacity: 1; filter: var(--pv-rest); }
 /* transitions.dev: Number pop-in. A count that changes pops up into place */
 @keyframes t-num-pop { from { opacity: 0; transform: translateY(var(--digit-distance)); filter: blur(var(--digit-blur)); } }
 .t-num-pop { display: inline-block; animation: t-num-pop var(--digit-dur) var(--digit-ease) backwards; }

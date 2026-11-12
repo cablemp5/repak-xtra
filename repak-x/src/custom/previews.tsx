@@ -15,7 +15,7 @@ import { revealOnLoad } from './motion'
 import { EGG_MS, stepEgg, stepText } from './previewStages'
 import { ordinal, plural } from './modName'
 import { animatedUrls, coverStills, isIdle } from './idlePause'
-import { smallCopyAway } from './thumbWorker'
+import { smallClipAway, smallCopyAway } from './thumbWorker'
 import { koPreview } from './ko/koPreview'
 import { verdictOf } from './brokenMods'
 import { fixInVfxWindow } from './vfx/handoff'
@@ -69,7 +69,7 @@ const dropCached = (key: string) => {
   const s = u && coverStills.get(u.url)
   if (s) { URL.revokeObjectURL(s); coverStills.delete(u.url) }
   const t = thumbs.get(key)
-  if (t && t.url !== u?.url) URL.revokeObjectURL(t.url)
+  if (t && t.url !== u?.url) { URL.revokeObjectURL(t.url); videoUrls.delete(t.url); loopClips.delete(t.url); boosted.delete(t.url) }
   thumbs.delete(key)
   thumbLoads.delete(key)
   urls.delete(key)
@@ -286,6 +286,16 @@ const fileOf = async (key: string, rev: number) => {
   return f ? { url: `${convertFileSrc(list.dir + '\\' + f[0])}?t=${f[1]}`, name: f[0] } : null
 }
 const videoUrls = new Set<string>()
+// A card's own copies (loadThumb). loopClips: an animated preview as a looping video. boosted: the preview boost is
+// drawn into the copy, so its card draws it with no CSS filter (theme.css pv-kit), one less surface per card each frame
+const loopClips = new Set<string>()
+const boosted = new Set<string>()
+/** theme.css .pv-kit's --pv-boost: keep the two the same. */
+const BOOST = 'contrast(1.05) saturate(1.1)'
+/** This preview URL is a card's looping video of an animated preview: it plays in a plain looping video. */
+export const isLoopClip = (url: string | null | undefined) => Boolean(url && loopClips.has(url))
+/** This preview URL already has the preview boost drawn in: its picture takes no pv-kit class. */
+export const isBoosted = (url: string | null | undefined) => Boolean(url && boosted.has(url))
 /** The preview at this URL is a video (a KO prompt mod's): it plays in a BeatVideo, not an img. */
 export const isVideoPreview = (url: string | null | undefined) => Boolean(url && videoUrls.has(url))
 
@@ -386,13 +396,24 @@ function loadThumb(key: string, rev: number): Promise<string | null | undefined>
       // an animated WebP (an emote's animation preview) would freeze on one frame: the full one plays, and its first
       // frame's copy is what the card shows while the grid scrolls hard (idlePause.ts holdCovers)
       const animated = new TextDecoder().decode(head.subarray(12, 16)) === 'VP8X' && (head[20] & 0x02) !== 0
-      const small = await smallCopyAway(blob, THUMB_W, animated) // in a worker: thumbWorker.ts
+      const boost = isKoPreview(key) ? '' : BOOST // a kit render: the boost its picture gets is drawn into the copy
+      const small = await smallCopyAway(blob, THUMB_W, animated, animated ? '' : boost) // in a worker: thumbWorker.ts
       if (small) {
         const copy = URL.createObjectURL(small)
-        if (!animated) url = copy
+        if (!animated) { url = copy; if (boost) boosted.add(copy) }
         else if (urls.get(key)?.url === full) { coverStills.set(full, copy); void decode(copy) } // ready before a scroll asks
         else URL.revokeObjectURL(copy) // the preview changed meanwhile
       }
+      // An animated one also gets a card-sized looping video, which takes the animated picture's place on the cards
+      // once it is made (a second or two in the worker) and plays on through a hard scroll.
+      // shortcut: made again each launch, keep them on disk if the first seconds of a launch show the stills
+      if (animated) void smallClipAway(blob, THUMB_W, boost).then(clip => {
+        if (!clip || thumbs.get(key)?.url !== full || revs.get(key) !== rev) return // changed meanwhile, or no encoder
+        const u = URL.createObjectURL(clip)
+        videoUrls.add(u); loopClips.add(u); if (boost) boosted.add(u)
+        thumbs.set(key, { rev, url: u })
+        notify()
+      }, () => undefined)
     } catch { /* the full picture then */ }
     if (again) await decode(url)
     if (thumbLoads.get(key)?.p !== p || revs.get(key) !== rev) { if (url !== full) URL.revokeObjectURL(url); return undefined }
