@@ -453,7 +453,9 @@ async function dress(root: InstanceType<typeof THREE.Object3D>, matOf: (name: st
   tex: (path: string | undefined, color: boolean, normal?: boolean, channel?: number) => Promise<unknown | null>, kit: Kit) {
   const meshes: InstanceType<typeof THREE.Mesh>[] = []
   root.traverse((o: InstanceType<typeof THREE.Mesh>) => { if (o.isMesh) meshes.push(o) })
-  for (const mesh of meshes) {
+  // every mesh at once: one after another, a mesh's textures were asked for only when the one before had all of its
+  // own (a model with many parts opened about a fifth slower: 9 loads each way, 2026-11-11)
+  await Promise.all(meshes.map(async mesh => {
     mesh.frustumCulled = false // skinned bounds lag the idle: never cull a limb out
     const slots = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
     const made = await Promise.all(slots.map(async (old: { name: string; dispose: () => void }) => {
@@ -530,7 +532,7 @@ async function dress(root: InstanceType<typeof THREE.Object3D>, matOf: (name: st
     }))
     mesh.material = Array.isArray(mesh.material) ? made : made[0]
     mesh.renderOrder = Math.max(0, ...made.map((x: { userData?: { order?: number } }) => x.userData?.order ?? 0)) // eye glints over eyes, hair cards last
-  }
+  }))
 }
 
 /** The kit's idle (format v1) as a clip on these bones: rotations for every bone it keys; translations as they are for
