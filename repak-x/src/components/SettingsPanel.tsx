@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AnimatedThemeToggler } from './ui/AnimatedThemeToggler'
 import Checkbox from './ui/Checkbox'
-import { UiScaleSection, MotionSection, InstallingSection, HeaderButtonsSection, ModPrefs, WarningPrefs, NewStripPref, BuiltinsPref, resetUiPrefs } from '../custom/uiPrefs' // repakxtra
+import { UiScaleSection, MotionSection, InstallingSection, HeaderButtonsSection, ModPrefs, WarningPrefs, NewStripPref, BuiltinsPref, AutoUpdatePref, resetUiPrefs } from '../custom/uiPrefs' // repakxtra
 import RecentlyDeleted from '../custom/RecentlyDeleted' // repakxtra: Settings > Recently deleted
 import CrashReports from '../custom/CrashReports' // repakxtra: Settings > Crash reports
 import { TriangleAlert } from 'lucide-react' // repakxtra: setting warnings
@@ -24,6 +24,7 @@ import {
 import { FaDiscord, FaSteam } from "react-icons/fa"
 import { CgPerformance } from "react-icons/cg"
 import { SiEpicgames } from "react-icons/si"
+import { LoadingBayIcon } from "../custom/icons/loadingBay" // repakxtra
 import { RiGraduationCapFill } from "react-icons/ri"
 import { BsKeyboardFill } from "react-icons/bs"
 import { IoIosSettings } from "react-icons/io"
@@ -77,7 +78,7 @@ type SettingsPayload = {
   showSubfolderMods: boolean;
   bypassGameRunningLock: boolean;
   allowModOverwrite: boolean;
-  launcherType: 'steam' | 'epic';
+  launcherType: 'steam' | 'epic' | 'loadingbay';
   enableAnimations: boolean;
 };
 
@@ -127,7 +128,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
   const [bypassGameRunningLock, setBypassGameRunningLock] = useState(settings.bypassGameRunningLock || false);
   const [allowModOverwrite, setAllowModOverwrite] = useState(settings.allowModOverwrite || false);
   const [enableDrp, setEnableDrp] = useState(settings.enableDrp !== false);
-  const [launcherType, setLauncherType] = useState<'steam' | 'epic'>(settings.launcherType || 'steam');
+  const [launcherType, setLauncherType] = useState<'steam' | 'epic' | 'loadingbay'>(settings.launcherType || 'steam');
   const [enableAnimations, setEnableAnimations] = useState(settings.enableAnimations !== false);
   const [showRatMode, setShowRatMode] = useState(false);
 
@@ -268,7 +269,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                   <div className="setting-group">
                     <p className="setting-hint">Which launcher Launch uses.</p>
 
-                    <div className="segmented-control" style={{ maxWidth: '400px' }}>
+                    <div className="segmented-control" style={{ maxWidth: '520px' }}>
                       <button
                         className={`segment-btn ${launcherType === 'steam' ? 'active' : ''}`}
                         onClick={() => live('launcherType', setLauncherType)('steam')}
@@ -282,6 +283,13 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                         title="Launch via Epic Games executable"
                       >
                         <SiEpicgames size={16} /> Epic Games
+                      </button>
+                      <button
+                        className={`segment-btn ${launcherType === 'loadingbay' ? 'active' : ''}`}
+                        onClick={() => live('launcherType', setLauncherType)('loadingbay')}
+                        title="Launch the Loading Bay install with the game's own launcher"
+                      >
+                        <LoadingBayIcon size={16} /> Loading Bay
                       </button>
                     </div>
                   </div>
@@ -356,6 +364,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                     >
                       <span>Check for updates when {APP_NAME} starts</span>
                     </Checkbox>
+                    <AutoUpdatePref />{/* repakxtra */}
                     <AppFiles alert={alert} />{/* repakxtra */}
                   </div>
                 </div>

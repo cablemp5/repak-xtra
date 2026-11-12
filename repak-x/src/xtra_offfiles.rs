@@ -26,6 +26,31 @@ pub fn strip_off_names(dir: &Path) {
     }
 }
 
+/// A .off mod file already in the mods folder, made this app's own: "X.pak.off" becomes "X.bak_repak" (off, as before)
+/// and its .utoc.off and .ucas.off get their real names, so the set lists, toggles, and joins loadouts like any off
+/// mod. Returns the new main file for a .pak.off. Nothing is renamed over a file that is already there.
+pub fn adopt(path: &Path) -> Option<PathBuf> {
+    let real = strip_off(path.file_name()?.to_str()?)?;
+    let stem = &real[..real.len() - 4 - usize::from(!real.to_ascii_lowercase().ends_with(".pak"))];
+    let side = |ext: &str| {
+        let (from, to) = (path.with_file_name(format!("{stem}.{ext}.off")), path.with_file_name(format!("{stem}.{ext}")));
+        if from.is_file() && !to.exists() {
+            let _ = fs::rename(from, to);
+        }
+    };
+    if !real.to_ascii_lowercase().ends_with(".pak") {
+        side(&real[stem.len() + 1..]); // a .utoc.off or .ucas.off met before its .pak.off, or with none
+        return None;
+    }
+    let off = path.with_file_name(format!("{stem}.bak_repak"));
+    if path.with_file_name(real).exists() || off.exists() || fs::rename(path, &off).is_err() {
+        return None; // the same mod is already here, on or off: the .off copy stays as it is
+    }
+    side("utoc");
+    side("ucas");
+    Some(off)
+}
+
 fn has_off_files(dir: &Path) -> bool {
     WalkDir::new(dir).into_iter().filter_map(Result::ok).any(|e| e.file_name().to_str().is_some_and(|n| strip_off(n).is_some()))
 }
@@ -145,6 +170,26 @@ mod tests {
         assert_eq!(fs::read_to_string(&pak).unwrap(), "Skin_9999999_P.pak.off");
         assert_eq!(out[1], p("Loose.pak"), "a normal file is left alone");
         assert!(src.path().join("Skin_9999999_P.pak.off").is_file(), "the original stays");
+    }
+
+    #[test]
+    fn adopts_an_off_set_in_the_mods_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = |f: &str| dir.path().join(f);
+        for f in ["A_9999999_P.pak.off", "A_9999999_P.utoc.off", "A_9999999_P.ucas.off", "B.pak.off", "B.pak", "C.utoc.off", "D.pak"] {
+            fs::write(p(f), f).unwrap();
+        }
+        assert_eq!(adopt(&p("A_9999999_P.pak.off")), Some(p("A_9999999_P.bak_repak")));
+        for f in ["A_9999999_P.bak_repak", "A_9999999_P.utoc", "A_9999999_P.ucas"] {
+            assert!(p(f).is_file(), "{f}");
+        }
+        assert_eq!(fs::read_to_string(p("A_9999999_P.bak_repak")).unwrap(), "A_9999999_P.pak.off");
+        assert_eq!(adopt(&p("A_9999999_P.utoc.off")), None, "already renamed with its pak");
+        assert_eq!(adopt(&p("B.pak.off")), None);
+        assert!(p("B.pak.off").is_file() && fs::read_to_string(p("B.pak")).unwrap() == "B.pak", "never over the mod that is on");
+        assert_eq!(adopt(&p("C.utoc.off")), None);
+        assert!(p("C.utoc").is_file(), "a side file with no .pak.off gets its name back");
+        assert_eq!(adopt(&p("D.pak")), None);
     }
 
     #[test]

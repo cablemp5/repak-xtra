@@ -454,13 +454,16 @@ pub fn find_marvel_rivals() -> Option<PathBuf> {
     if let Some(paks) = std::env::var_os("REPAKXTRA_SANDBOX_GAME") {
         return Some(PathBuf::from(paks)); // repakxtra: dev.ps1 -Sandbox, a fake game folder
     }
-    let shit = get_steam_library_paths();
-    if shit.is_empty() {
-        return None;
-    }
-
-    for lib in shit {
+    for lib in get_steam_library_paths() {
         let path = lib.join("steamapps/common/MarvelRivals/MarvelGame/Marvel/Content/Paks");
+        if path.exists() {
+            return Some(path);
+        }
+    }
+    // repakxtra: the Loading Bay launcher installs to "<drive>:\Loading Bay Games" on the drive the player picked
+    #[cfg(target_os = "windows")]
+    for drive in 'C'..='Z' {
+        let path = PathBuf::from(format!(r"{drive}:\Loading Bay Games\Marvel Rivals\MarvelGame\Marvel\Content\Paks"));
         if path.exists() {
             return Some(path);
         }

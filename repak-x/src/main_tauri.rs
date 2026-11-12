@@ -678,7 +678,9 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
 
     // Scan root ~mods directory and all subdirectories recursively (no depth limit)
     for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::library_walk) /* repakxtra */.filter_map(|e| e.ok()) {
-        let path = entry.path();
+        // repakxtra: a .pak.off set (RivalsFPS's off state) becomes this app's off state here, so every feature knows it
+        let adopted = entry.file_type().is_file().then(|| crate::xtra_offfiles::adopt(entry.path())).flatten();
+        let path = adopted.as_deref().unwrap_or(entry.path());
 
         // Skip directories themselves (repakxtra: the walk already knows, no extra disk stat per file)
         if entry.file_type().is_dir() || crate::xtra_builtins::is_own(path) {
@@ -5513,7 +5515,7 @@ async fn launch_game(app: tauri::AppHandle, state: State<'_, Arc<Mutex<AppState>
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-        if launcher_type == "epic" {
+        if matches!(launcher_type.as_str(), "epic" | "loadingbay") { // repakxtra: Loading Bay has no launch link, the game's own launcher starts it
             let launcher_exe = game_root.join("MarvelRivals_Launcher.exe");
             Command::new("cmd")
                 .arg("/C")
@@ -5536,7 +5538,7 @@ async fn launch_game(app: tauri::AppHandle, state: State<'_, Arc<Mutex<AppState>
 
     #[cfg(target_os = "linux")]
     let launch_result = {
-        if launcher_type == "epic" {
+        if matches!(launcher_type.as_str(), "epic" | "loadingbay") { // repakxtra: Loading Bay has no launch link, the game's own launcher starts it
             let launcher_exe = game_root.join("MarvelRivals_Launcher.exe");
             Command::new("wine")
                 .arg(&launcher_exe)
