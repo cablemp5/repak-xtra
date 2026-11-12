@@ -14,7 +14,8 @@ import { type Loadout, coverFills, displayName, memberName, modKey, nameKey, pat
 import { revealOnLoad } from './motion'
 import { EGG_MS, stepEgg, stepText } from './previewStages'
 import { ordinal, plural } from './modName'
-import { animatedUrls, isIdle } from './idlePause'
+import { animatedUrls, coverStills, isIdle } from './idlePause'
+import { smallCopyAway } from './thumbWorker'
 import { koPreview } from './ko/koPreview'
 import { verdictOf } from './brokenMods'
 import { fixInVfxWindow } from './vfx/handoff'
@@ -65,6 +66,8 @@ const thumbLoads = new Map<string, { rev: number; p: Promise<string | null | und
 const dropCached = (key: string) => {
   const u = urls.get(key)
   if (u) { URL.revokeObjectURL(u.url); videoUrls.delete(u.url); animatedUrls.delete(u.url) }
+  const s = u && coverStills.get(u.url)
+  if (s) { URL.revokeObjectURL(s); coverStills.delete(u.url) }
   const t = thumbs.get(key)
   if (t && t.url !== u?.url) URL.revokeObjectURL(t.url)
   thumbs.delete(key)
@@ -363,8 +366,8 @@ function loadUrl(key: string, rev: number): Promise<string | null | undefined> {
 /** Width of the copy loadout cards draw (THUMB_W px, WebP, same transparency): a card shows a 640 px render at under
  *  200 px, and the browser keeps every drawn picture decoded at its full size, so a grid of 40 held 86 MB of them. */
 const THUMB_W = 400
-/** A card-sized copy of a preview at this revision, made once in the page from the full picture (which is decoded only
- *  for the moment that takes). The full URL when it is a video, already small, or the copy fails. */
+/** A card-sized copy of a preview at this revision, made once from the full picture (which is decoded only for the
+ *  moment that takes). The full URL when it is a video, already small, or the copy fails. */
 function loadThumb(key: string, rev: number): Promise<string | null | undefined> {
   const c = thumbs.get(key)
   if (c?.rev === rev) return Promise.resolve(c.url)
@@ -377,17 +380,16 @@ function loadThumb(key: string, rev: number): Promise<string | null | undefined>
     try {
       const blob = await (await fetch(full)).blob()
       const head = new Uint8Array(await blob.slice(0, 21).arrayBuffer())
-      // an animated WebP (an emote's animation preview) would freeze on one frame: the full one plays
+      // an animated WebP (an emote's animation preview) would freeze on one frame: the full one plays, and its first
+      // frame's copy is what the card shows while the grid scrolls hard (idlePause.ts holdCovers)
       const animated = new TextDecoder().decode(head.subarray(12, 16)) === 'VP8X' && (head[20] & 0x02) !== 0
-      const bmp = animated ? null : await createImageBitmap(blob)
-      if (bmp && bmp.width > THUMB_W * 1.25) {
-        const small = await createImageBitmap(bmp, { resizeWidth: THUMB_W, resizeQuality: 'high' })
-        const canvas = new OffscreenCanvas(small.width, small.height)
-        canvas.getContext('2d')!.drawImage(small, 0, 0)
-        small.close()
-        url = URL.createObjectURL(await canvas.convertToBlob({ type: 'image/webp', quality: 0.92 }))
+      const small = await smallCopyAway(blob, THUMB_W, animated) // in a worker: thumbWorker.ts
+      if (small) {
+        const copy = URL.createObjectURL(small)
+        if (!animated) url = copy
+        else if (urls.get(key)?.url === full) { coverStills.set(full, copy); void decode(copy) } // ready before a scroll asks
+        else URL.revokeObjectURL(copy) // the preview changed meanwhile
       }
-      bmp?.close()
     } catch { /* the full picture then */ }
     if (again) await decode(url)
     if (thumbLoads.get(key)?.p !== p || revs.get(key) !== rev) { if (url !== full) URL.revokeObjectURL(url); return undefined }

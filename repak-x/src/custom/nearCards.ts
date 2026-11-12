@@ -3,14 +3,17 @@
 // from the viewport is an empty .lo-card of its last measured height in the same grid cell, so the layout, the scroll
 // length and drag-and-drop spots stay what they were. Which cards are near is decided before the browser paints, from
 // where the cards sit in the scroller, one screen ahead of the view each way: no blank card is painted in view.
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { holdCovers, releaseCovers } from './idlePause'
 
 /** Below this many cards every card is mounted, as before. */
 export const NEAR_FROM = 40
 const FIRST = 16 // cards mounted before the first measurement (the rest wait one pre-paint pass)
 const REST_MS = 1500 // how long the grid rests after a scroll before the cards far from view are taken out
 const KEEP = 150 // a list of up to this many cards ends up with every card mounted
-const FILL = 6 // far cards put in per idle moment
+const STEP = 2 // new cards put in per scrolled frame: those beyond the view, and those in view too while it scrolls hard
+const HARD = 3 // px per ms: a scroll this fast is a hard one (a wheel notch at a time runs near 1)
+const HOLD_MS = 250 // how long after the last scroll event they stay still
 
 /** Pure: the ids of the cards whose box comes within `margin` px of the viewport [top, bottom). */
 export function nearIds(boxes: { id: string; top: number; bottom: number }[], top: number, bottom: number, margin: number) {
@@ -53,15 +56,31 @@ export function useNearCards(root: HTMLElement | null, ids: string[], pins: (str
     }
     // A card that came near stays mounted: scrolled up and down, every pass took the cards out and put them back, each
     // a new element to style and a picture to decode again (most of what was left of a hard scroll's frames). A list
-    // of up to KEEP cards keeps them all, and the far ones are put in a few at a time while the page is idle, so a
+    // of up to KEEP cards keeps them all, and the far ones are put in one at a time while the page is idle, so a
     // scroll finds every card already there (the first second of one mounted them, 48 frames instead of 144). A longer
     // list lets the far ones go once the grid has rested (REST_MS).
     // shortcut: a scroll through a very long list holds every card it passed until it rests, cap it if that shows
+    // A scroll puts new cards in a few a frame (STEP), nearest the middle of the view first: a new card takes a few
+    // ms to build (about 20 in the dev copy), and a first hard scroll right after the open put a whole screen of them
+    // into one frame, a stall of 50 to 170 ms each time. A gentle scroll still puts every card in view in at once, so
+    // only a hard one can show a card's empty frame for a moment, and it fills as soon as the scroll slows.
     const keepAll = ids.length <= KEEP
-    let rest = 0, idle = 0
-    const choose = (was: number) => {
+    let rest = 0, idle = 0, queued = 0, lastTop = root.scrollTop, lastAt = performance.now()
+    const choose = (was: number, scrolled = false) => {
       const at = root.scrollTop, h = root.clientHeight
-      const next = nearIds(boxes, at, at + h, h) // one screen above and below
+      const next = nearIds(boxes, at, at + h, scrolled ? 0 : h) // one screen above and below
+      if (scrolled) {
+        const now = performance.now(), hard = Math.abs(at - lastTop) / Math.max(now - lastAt, 1) >= HARD
+        lastTop = at; lastAt = now
+        const have = mountedNow.current, mid = at + h / 2, inView = next
+        const around = boxes.filter(b => b.bottom > at - h && b.top < at + 2 * h)
+        const fresh = around.filter(b => !have.has(b.id) && (hard || !inView.has(b.id)))
+          .sort((a, b) => Math.abs((a.top + a.bottom) / 2 - mid) - Math.abs((b.top + b.bottom) / 2 - mid))
+        if (hard) for (const id of [...inView]) if (!have.has(id)) inView.delete(id) // they wait their turn with the rest
+        for (const b of around) if (have.has(b.id)) next.add(b.id)
+        for (const b of fresh.slice(0, STEP)) next.add(b.id)
+        if (fresh.length > STEP && !queued) queued = requestAnimationFrame(() => { queued = 0; choose(lastHeight, true) }) // the rest, next frame
+      }
       setNear(prev => {
         if ((keepAll || rest) && prev) for (const id of prev) next.add(id)
         return same(prev, next) && lastHeight === was ? prev : next // a new card height re-renders the placeholders
@@ -75,17 +94,16 @@ export function useNearCards(root: HTMLElement | null, ids: string[], pins: (str
       setNear(prev => {
         if (!prev) return prev
         const next = new Set(prev)
-        for (const id of ids) { if (next.size >= prev.size + FILL) break; next.add(id) }
+        for (const id of ids) { if (next.size > prev.size) break; next.add(id) } // one card: a short task a scroll can start behind
         return next.size === prev.size ? prev : next
       })
       idle = requestIdleCallback(fill, { timeout: 1000 })
     }
     if (keepAll) idle = requestIdleCallback(fill, { timeout: 1000 })
-    let queued = 0
     const later = () => {
       clearTimeout(rest)
       rest = window.setTimeout(() => { rest = 0; choose(lastHeight) }, REST_MS)
-      if (!queued) queued = requestAnimationFrame(() => { queued = 0; choose(lastHeight) })
+      if (!queued) queued = requestAnimationFrame(() => { queued = 0; choose(lastHeight, true) })
     }
     root.addEventListener('scroll', later, { passive: true })
     // a card whose real height is not its placeholder's moves the cards below it, and its section's size with them:
@@ -95,6 +113,26 @@ export function useNearCards(root: HTMLElement | null, ids: string[], pins: (str
     for (const child of root.children) ro.observe(child)
     return () => { root.removeEventListener('scroll', later); ro.disconnect(); cancelAnimationFrame(queued); clearTimeout(rest); cancelIdleCallback(idle) }
   }, [on, root, key])
+  // any length of list: the animated covers in view cost a hard scroll the same frames in a short one
+  useEffect(() => {
+    if (!root) return
+    // the speed is read once a frame: read in the scroll event itself, it made the browser lay the grid out again
+    // whenever cards had just been put in (0.4 s of a first scroll)
+    let top = root.scrollTop, at = performance.now(), holding = false, release = 0, queued = 0, swept = 0
+    const check = (now: number) => {
+      queued = 0
+      const y = root.scrollTop, speed = Math.abs(y - top) / Math.max(now - at, 1)
+      top = y; at = now
+      if (!holding && speed < HARD) return
+      if (!holding || now - swept > 100) { swept = now; holdCovers(root) } // again now and then, for cards put in since
+      holding = true
+      clearTimeout(release)
+      release = window.setTimeout(() => { holding = false; releaseCovers() }, HOLD_MS)
+    }
+    const onScroll = () => { if (!queued) queued = requestAnimationFrame(check) }
+    root.addEventListener('scroll', onScroll, { passive: true })
+    return () => { root.removeEventListener('scroll', onScroll); cancelAnimationFrame(queued); clearTimeout(release); releaseCovers() }
+  }, [root])
   const mounted = (id: string) => !near || near.has(id) || pins.includes(id)
   const height = (id: string) => heights.current.get(id) ?? lastHeight
   return { mounted, height }

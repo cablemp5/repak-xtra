@@ -55,6 +55,24 @@ function thaw() {
 
 export const isIdle = () => document.hidden || !document.hasFocus()
 
+// While a grid of cards scrolls hard, its animated covers show a still: five of them in view, each decoding a full-size
+// frame 24 times a second, took a hard scroll of the Loadouts grid from 140 frames a second to 120 (hidden: 140).
+/** Card-sized first frames of animated previews, by the animated picture's URL (previews.tsx makes them). */
+export const coverStills = new Map<string, string>()
+const held = new Map<HTMLImageElement, string>() // a cover showing its still, and the animated URL it goes back to
+/** The animated covers under `root` show their stills from now (called again as a scroll goes on, for new cards). */
+export function holdCovers(root: HTMLElement) {
+  for (const img of root.querySelectorAll<HTMLImageElement>('.lo-card-image img')) {
+    const still = coverStills.get(img.src)
+    if (still) { held.set(img, img.src); img.src = still }
+  }
+}
+/** The held covers play again, where their still is what still shows (a preview that changed keeps its new picture). */
+export function releaseCovers() {
+  held.forEach((src, img) => { if (img.isConnected && img.src === coverStills.get(src)) img.src = src })
+  held.clear()
+}
+
 // Decorative loops only (keyframe names), so a spinner, shimmer, or progress bar never freezes mid-task
 const DECOR = /^(rainbow-scroll|heartbeat|dropzone-|border-beam-|aurora-text-flow|shine-border-spin|wm-flow|mod-card-|wi-)/
 
