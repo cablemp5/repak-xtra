@@ -856,6 +856,7 @@ function App() {
             return;
           } catch (error) {
             uiLog.warn('Update', `Automatic download failed: ${error}`); // the dialog then, where Download can be tried again
+            setUpdateDownloadProgress(null); // not its half-filled bar: the dialog shows Download update again
           }
         }
         setShowUpdateModal(true);
@@ -939,6 +940,9 @@ function App() {
   };
 
   const handleCancelUpdate = async () => {
+    // repakxtra: a finished download stays when the dialog closes (the automatic update's Restart now toast points at
+    // it, and Check now shows it ready again). Only a download still running, or none, is cleared
+    if (downloadedUpdatePath) { setShowUpdateModal(false); return }
     try {
       await invoke('cancel_update_download');
     } catch (e) {
