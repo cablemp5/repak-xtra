@@ -22,7 +22,15 @@ use crate::AppState;
 /// byte for byte the same JSON (2026-10-23). Read when the runtime starts, so this runs first thing in main, before any
 /// other thread. A value the user set stays. The server collector holds more memory, so PCs under 16 GB keep the default
 /// (on a 16 GB PC with other apps open, a Niagara decode already fills the RAM either way, 2026-10-24).
+///
+/// The background (concurrent) collector is off as well: with it, the tool's threads spent most of a batch waiting, and
+/// turning 400 materials' JSON back into assets took 3.9 s instead of 2.3 s (30 thread-seconds of parsing for 100 MB,
+/// 2026-11-12). It only trades shorter pauses for throughput, and nothing waits on the tool's threads but the batch
+/// itself: the window is another process. The same bytes come out. On every PC, whatever its memory.
 pub(crate) fn tune_dotnet_gc() {
+    if std::env::var_os("DOTNET_gcConcurrent").is_none() {
+        std::env::set_var("DOTNET_gcConcurrent", "0");
+    }
     if std::env::var_os("DOTNET_gcServer").is_some() {
         return;
     }
