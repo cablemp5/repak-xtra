@@ -39,7 +39,11 @@ pub fn adopt(path: &Path) -> Option<PathBuf> {
         }
     };
     if !real.to_ascii_lowercase().ends_with(".pak") {
-        side(&real[stem.len() + 1..]); // a .utoc.off or .ucas.off met before its .pak.off, or with none
+        // a .utoc.off or .ucas.off with no main file: one beside a .pak.off waits for it (it may be refused), and one
+        // beside a mod that is on is another copy's, never given to that mod
+        if !path.with_file_name(format!("{stem}.pak.off")).exists() && !path.with_file_name(format!("{stem}.pak")).exists() {
+            side(&real[stem.len() + 1..]);
+        }
         return None;
     }
     let off = path.with_file_name(format!("{stem}.bak_repak"));
@@ -185,8 +189,11 @@ mod tests {
         }
         assert_eq!(fs::read_to_string(p("A_9999999_P.bak_repak")).unwrap(), "A_9999999_P.pak.off");
         assert_eq!(adopt(&p("A_9999999_P.utoc.off")), None, "already renamed with its pak");
+        fs::write(p("B.utoc.off"), "off copy").unwrap();
         assert_eq!(adopt(&p("B.pak.off")), None);
         assert!(p("B.pak.off").is_file() && fs::read_to_string(p("B.pak")).unwrap() == "B.pak", "never over the mod that is on");
+        assert_eq!(adopt(&p("B.utoc.off")), None);
+        assert!(p("B.utoc.off").is_file() && !p("B.utoc").exists(), "a refused set's side files stay off, not given to the mod that is on");
         assert_eq!(adopt(&p("C.utoc.off")), None);
         assert!(p("C.utoc").is_file(), "a side file with no .pak.off gets its name back");
         assert_eq!(adopt(&p("D.pak")), None);

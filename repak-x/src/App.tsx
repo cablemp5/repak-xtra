@@ -1627,10 +1627,10 @@ function App() {
 
   // Listen for update events
   useEffect(() => {
+    // repakxtra: only check_for_updates sends this, and handleCheckForUpdates already has its result: it decides
+    // whether the dialog opens (not on a retry, not when the update installs automatically)
     const unlistenUpdateAvailable = listen('update_available', (event: any) => {
       console.log('Update available:', event.payload);
-      setUpdateInfo(event.payload);
-      setShowUpdateModal(true);
     });
 
     const unlistenUpdateProgress = listen('update_download_progress', (event: any) => {
