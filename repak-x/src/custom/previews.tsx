@@ -416,7 +416,7 @@ function loadThumb(key: string, rev: number): Promise<string | null | undefined>
       }, () => undefined)
     } catch { /* the full picture then */ }
     if (again) await decode(url)
-    if (thumbLoads.get(key)?.p !== p || revs.get(key) !== rev) { if (url !== full) URL.revokeObjectURL(url); return undefined }
+    if (thumbLoads.get(key)?.p !== p || revs.get(key) !== rev) { if (url !== full) { URL.revokeObjectURL(url); boosted.delete(url) } return undefined }
     thumbLoads.delete(key)
     thumbs.set(key, { rev, url })
     return url

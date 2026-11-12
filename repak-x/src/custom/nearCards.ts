@@ -133,7 +133,7 @@ export function useNearCards(root: HTMLElement | null, ids: string[], pins: (str
       queued = 0
       const y = root.scrollTop, speed = Math.abs(y - top) / Math.min(Math.max(now - at, 1), 50) // 50: the first frame after a rest
       top = y; at = now
-      if (!holding && speed < HARD) return
+      if (speed < HARD) return // a slow frame never extends the hold: the covers play again COVER_MS after the last hard one
       if (!holding || now - swept > 100) { swept = now; holdCovers(root) } // again now and then, for cards put in since
       holding = true
       clearTimeout(release)
