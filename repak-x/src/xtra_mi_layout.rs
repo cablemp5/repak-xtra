@@ -206,7 +206,9 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
     lap("decode with today's mappings");
     // today's reading of each file, where it read whole: parsed once (a mod's 400 materials are 100 MB of JSON, and
     // each was read from disk for the question below, and again for the list after it)
-    let mut whole: std::collections::HashMap<&String, Value> = rels.iter().filter_map(|r| Some((r, decode(&now_json, r).filter(|j| decoded(j).is_some())?))).collect();
+    // (several files at a time: reading 400 of them one after the other took over a second)
+    use rayon::prelude::*;
+    let mut whole: std::collections::HashMap<&String, Value> = rels.par_iter().filter_map(|r| Some((r, decode(&now_json, r).filter(|j| decoded(j).is_some())?))).collect();
     let fetched = match game {
         Game::Fetch(paks) => {
             // only what the copies could settle: material instances today's USMAP reads whole
@@ -219,7 +221,7 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
         Game::Json(d) => Some(d),
         _ => fetched.as_deref(),
     };
-    let game: std::collections::HashMap<&String, Value> = game_dir.map_or_else(Default::default, |g| rels.iter().filter_map(|r| Some((r, decode(g, r)?))).collect());
+    let game: std::collections::HashMap<&String, Value> = game_dir.map_or_else(Default::default, |g| rels.par_iter().filter_map(|r| Some((r, decode(g, r)?))).collect());
     // (package, today's decode when it read whole)
     let mut pending: Vec<(String, Option<Value>)> = rels
         .iter()
