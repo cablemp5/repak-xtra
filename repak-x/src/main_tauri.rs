@@ -8766,6 +8766,7 @@ fn main() {
             xtra_vfx::xtra_vfx_dirs, // repakxtra: VFX Updater
             xtra_vfx::xtra_vfx_run_done, // repakxtra: VFX Updater
             xtra_vfx::xtra_vfx_warm, // repakxtra: VFX Updater
+            xtra_vfx::xtra_tool_warm, // repakxtra: the same for the Galacta converter
             xtra_vfx::xtra_vfx_detect,
             xtra_vfx::xtra_vfx_place,
             xtra_vfx::xtra_vfx_turn_off, // repakxtra

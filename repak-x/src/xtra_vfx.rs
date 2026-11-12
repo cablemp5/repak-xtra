@@ -405,6 +405,14 @@ pub async fn xtra_vfx_warm(game_paks: String) {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// xtra_vfx_warm for a window that does not know the game's folder (the Galacta converter): from the app's own.
+#[tauri::command]
+pub async fn xtra_tool_warm(state: tauri::State<'_, std::sync::Arc<std::sync::Mutex<crate::AppState>>>) -> Result<(), String> {
+    let paks = crate::xtra_ko::paks(&state)?;
+    xtra_vfx_warm(paks.to_string_lossy().into_owned()).await;
+    Ok(())
+}
+
 /// A finished run's folder (its update is placed or dropped by now).
 fn run_done(run_id: &str) {
     if valid_run_id(run_id) {

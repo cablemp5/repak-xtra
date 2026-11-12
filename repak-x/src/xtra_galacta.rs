@@ -277,11 +277,23 @@ pub struct Made {
 async fn build(utoc: &Path, original: &Path, name: &str, paks: &Path, usmap: &str, work: &Path) -> Result<(PathBuf, Vec<String>, usize), String> {
     let (ex, game, json, pack) = (work.join("mod"), work.join("game"), work.join("json"), work.join("pack"));
     std::fs::create_dir_all(&ex).map_err(|e| e.to_string())?;
+    // what each part took, in the app's log and (REPAKXTRA_TIMING set) on the console
+    let mut clock = std::time::Instant::now();
+    let mut lap = |what: &str| {
+        let line = format!("[galacta timing] {what}: {:.2} s", clock.elapsed().as_secs_f32());
+        log::info!("{line}");
+        if std::env::var_os("REPAKXTRA_TIMING").is_some() {
+            eprintln!("{line}");
+        }
+        clock = std::time::Instant::now();
+    };
     uat(VfxUatRequest { action: "extract_iostore_legacy", game_paks: Some(paks.to_string_lossy().to_string()), mod_path: Some(utoc.to_string_lossy().to_string()), output_path: Some(ex.to_string_lossy().to_string()), with_deps: Some(false), ..Default::default() }, "Reading the mod").await?;
+    lap("extract the mod");
     let mut files = Vec::new();
     uassets(&ex, &mut files);
     let (mut mine, mut unread) = (Assets::new(), HashSet::new());
     read(&ex, files, &json.join("mod"), usmap, &mut mine, &mut unread).await?;
+    lap(&format!("decode {} mod files", mine.len()));
 
     // the skins it changes, and whether it brings their gameplay mesh
     let mut skins: BTreeMap<(String, String), bool> = BTreeMap::new();
@@ -312,6 +324,7 @@ async fn build(utoc: &Path, original: &Path, name: &str, paks: &Path, usmap: &st
         }
     }
 
+    lap("the game's meshes (extract, decode, bulk data)");
     let folder = folder_of(original);
     let cannot_read = |k: &str| format!("{} could not be read, so nothing was made.", short(k));
     let (mut used, mut made, mut out_json, mut checks, mut kept) = (HashSet::new(), Vec::new(), Vec::new(), Vec::new(), HashSet::new());
@@ -404,6 +417,7 @@ async fn build(utoc: &Path, original: &Path, name: &str, paks: &Path, usmap: &st
         return Err("None of this mod's files are on a hero's gameplay mesh, so Project Galacta has nothing to swap.".into());
     }
 
+    lap("game materials and renaming");
     // write the renamed JSON back to assets, check every body is still the source's, then pack
     let jdir = json.join("out");
     let mut paths = Vec::new();
@@ -413,15 +427,19 @@ async fn build(utoc: &Path, original: &Path, name: &str, paks: &Path, usmap: &st
         std::fs::write(&p, serde_json::to_vec(asset).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
         paths.push(p.to_string_lossy().to_string());
     }
+    lap(&format!("write {} JSON files", out_json.len()));
     uat(VfxUatRequest { action: "batch_from_json", file_paths: Some(paths), usmap_path: Some(usmap), output_path: Some(pack.to_string_lossy().to_string()), base_path: Some(jdir.to_string_lossy().to_string()), ..Default::default() }, "Writing the Galacta files").await?;
+    lap("JSON back to assets");
     for (from, to) in &checks {
         if std::fs::read(from).ok() != std::fs::read(to).ok() {
             return Err(format!("{} changed while it was renamed, so nothing was made.", to.file_stem().unwrap_or_default().to_string_lossy()));
         }
     }
+    lap("compare every body with its source");
     let base = work.join("out").join(copy_stem(original));
     std::fs::create_dir_all(work.join("out")).map_err(|e| e.to_string())?;
     uat(VfxUatRequest { action: "create_mod_iostore", output_path: Some(base.to_string_lossy().to_string()), input_dir: Some(pack.to_string_lossy().to_string()), compress: Some(true), ..Default::default() }, "Packing the copy").await?;
+    lap("pack");
     Ok((base, made, mine.len() - kept.len()))
 }
 
@@ -627,6 +645,34 @@ pub async fn xtra_galacta_list(state: State<'_, Arc<Mutex<AppState>>>) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Times a Galacta conversion of a real mod into a temp folder (nothing is installed), and prints a hash of every
+    /// file it would pack, so two builds can be compared:
+    ///   REPAKXTRA_TIMING=1 REPAKXTRA_BENCH_MOD=<its .utoc> REPAKXTRA_BENCH_USMAP=<usmap> cargo test --release -p repak-x --bin REPAK-X galacta_bench -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn galacta_bench() {
+        let (Some(utoc), Some(usmap)) = (std::env::var_os("REPAKXTRA_BENCH_MOD").map(PathBuf::from), std::env::var("REPAKXTRA_BENCH_USMAP").ok()) else { return };
+        crate::xtra_vfx::tune_dotnet_gc();
+        let paks = utoc.parent().unwrap().parent().unwrap().to_path_buf();
+        let work = tempfile::tempdir().unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        if std::env::var_os("REPAKXTRA_BENCH_WARM").is_some() { // as when its window has been open a moment
+            rt.block_on(crate::xtra_vfx::xtra_vfx_warm(paks.to_string_lossy().into_owned()));
+        }
+        let t = std::time::Instant::now();
+        let made = rt.block_on(build(&utoc, &utoc.with_extension("pak"), "Bench", &paks, &usmap, work.path()));
+        println!("[galacta total] {:.2} s, {:?}", t.elapsed().as_secs_f32(), made.as_ref().map(|m| (&m.1, m.2)));
+        use sha2::{Digest, Sha256};
+        let mut files: Vec<PathBuf> = walkdir::WalkDir::new(work.path().join("pack")).into_iter().flatten().filter(|e| e.file_type().is_file()).map(|e| e.into_path()).collect();
+        files.sort();
+        let mut all = Sha256::new();
+        for f in &files {
+            all.update(f.strip_prefix(work.path()).unwrap().to_string_lossy().as_bytes());
+            all.update(std::fs::read(f).unwrap());
+        }
+        println!("[galacta out] {} files, sha256 {:x}", files.len(), all.finalize());
+    }
     use serde_json::json;
 
     #[test]
