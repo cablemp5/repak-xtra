@@ -122,7 +122,7 @@ pub(crate) async fn merge_tables(game_paks: &str, usmap_path: &str, mod_extract:
         let (input, mine) = (work.join("mod"), work.join("mod_json"));
         stage(Path::new(&mod_extract), &input, files, true)?;
         to_json(&usmap_path, &input, &mine, progress).await?;
-        let game = crate::xtra_mi_layout::game_copies(&game_paks, &usmap_path, files, &work).await.ok_or("the game's tables could not be read")?;
+        let game = crate::xtra_mi_layout::game_copies(&game_paks, &usmap_path, files, &work, false).await.ok_or("the game's tables could not be read")?;
         let merged_json = work.join("merged_json");
         let mut results: Vec<Merged> = files
             .iter()

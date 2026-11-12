@@ -211,7 +211,7 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
         Game::Fetch(paks) => {
             // only what the copies could settle: material instances today's USMAP reads whole
             let ask: Vec<String> = rels.iter().filter(|r| whole.get(r).is_some_and(|j| overrides(j).is_some())).cloned().collect();
-            if ask.is_empty() { None } else { game_copies(paks, usmap, &ask, work).await }
+            if ask.is_empty() { None } else { game_copies(paks, usmap, &ask, work, true).await }
         }
         _ => None,
     };
@@ -418,13 +418,16 @@ pub(crate) async fn verify(usmap_path: &str, dir: &str, rels: &[String], json_di
 }
 
 /// The game's current copies of `rels` decoded with `usmap`, under `work`/game_json. None when they could not be read.
-pub(crate) async fn game_copies(game_paks: &str, usmap: &str, rels: &[String], work: &Path) -> Option<std::path::PathBuf> {
-    // Kept for this game build, USMAP and parser (inside vanilla_dir, which goes when any of them changes): the game's
-    // copy of a file is the same for every mod and every run, and fetching 400 of them took each run about 9 s. A file
-    // the game does not have is remembered too (<file>.none), or a mod's own files would be looked for on every run
+/// `keep`: the copies are kept for this game build, USMAP and parser (inside vanilla_dir, which goes when any of them
+/// changes) and only the ones not yet there are fetched: the game's copy of a material is the same for every mod and
+/// every run, and fetching 400 of them took each run about 5 s. Only for the layout check, which reads nothing of a
+/// copy but its material overrides (a native struct, read by the USMAP alone). The table merger takes the whole
+/// document of a table, whose structs can be read from the files beside it, so it fetches its copies fresh (`keep`
+/// false), each run in its own folder as before. A file the extract did not give is never remembered: it is asked for
+/// again on the next run, since an extract can miss a file once.
+pub(crate) async fn game_copies(game_paks: &str, usmap: &str, rels: &[String], work: &Path, keep: bool) -> Option<std::path::PathBuf> {
     let cache = crate::xtra_vfx::vanilla_dir(game_paks, usmap).join("layout_json");
-    let known = |r: &String| cache.join(format!("{r}.json")).is_file() || cache.join(format!("{r}.none")).is_file();
-    let ask: Vec<String> = rels.iter().filter(|r| !known(r)).cloned().collect();
+    let ask: Vec<String> = rels.iter().filter(|r| !keep || !cache.join(format!("{r}.json")).is_file()).cloned().collect();
     if ask.is_empty() {
         return Some(cache);
     }
@@ -442,17 +445,20 @@ pub(crate) async fn game_copies(game_paks: &str, usmap: &str, rels: &[String], w
     let have: Vec<String> = ask.iter().filter(|r| out.join(format!("{r}.uasset")).is_file()).cloned().collect();
     stage(&out, &work.join("game_in"), &have, true).ok()?;
     to_json(usmap, &work.join("game_in"), &json, &NoOpProgressSink).await.ok()?;
+    if !keep {
+        return Some(json);
+    }
     // into the cache whole or not at all: written beside its place, then renamed (two runs may fill it at once)
-    for (n, r) in ask.iter().enumerate() {
-        let to = cache.join(format!("{r}.{}", if have.contains(r) { "json" } else { "none" }));
+    for (n, r) in have.iter().enumerate() {
+        let (from, to) = (json.join(format!("{r}.json")), cache.join(format!("{r}.json")));
+        if !from.is_file() {
+            continue; // the tool wrote none for it: not known, asked again next run
+        }
         let tmp = to.with_extension(format!("tmp{}-{n}", std::process::id()));
         std::fs::create_dir_all(to.parent()?).ok()?;
-        let made = if have.contains(r) { std::fs::copy(json.join(format!("{r}.json")), &tmp).map(|_| ()) } else { std::fs::write(&tmp, b"") };
-        if made.and_then(|_| std::fs::rename(&tmp, &to)).is_err() {
+        if std::fs::copy(&from, &tmp).and_then(|_| std::fs::rename(&tmp, &to)).is_err() {
             let _ = std::fs::remove_file(&tmp);
-            if have.contains(r) {
-                return None; // a copy the decode did not write: no game copies this run, as when the decode fails
-            }
+            return None; // no game copies this run, as when the decode fails
         }
     }
     Some(cache)
