@@ -381,6 +381,28 @@ fn raw_exports(j: &Value) -> usize {
     j.get("Exports").and_then(Value::as_array).map_or(0, |a| a.iter().filter(|e| e.get("$type").and_then(Value::as_str).unwrap_or_default().contains("RawExport")).count())
 }
 
+/// raw_exports of the JSON file at `p`, None when it cannot be read. Only the exports' types are kept while parsing (a
+/// material's JSON is 250 KB of which this reads one string per export), and a document that is not shaped as the
+/// tool writes them is read whole, as before.
+fn raw_count(p: &Path) -> Option<usize> {
+    #[derive(serde::Deserialize)]
+    struct Export {
+        #[serde(rename = "$type", default)]
+        kind: Option<String>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Doc {
+        #[serde(rename = "Exports", default)]
+        exports: Option<Vec<Export>>,
+    }
+    let b = std::fs::read(p).ok()?;
+    let b = b.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(&b);
+    match serde_json::from_slice::<Doc>(b) {
+        Ok(d) => Some(d.exports.map_or(0, |e| e.iter().filter(|e| e.kind.as_deref().is_some_and(|t| t.contains("RawExport"))).count())),
+        Err(_) => serde_json::from_slice::<Value>(b).ok().map(|j| raw_exports(&j)),
+    }
+}
+
 /// pipeline.ts, before packing: of `rels` (rebuilt packages under `dir`, no extension), those that do not read back
 /// with `usmap` as well as the JSON they were written from (under `json_dir`): no decode at all, or more exports the
 /// tool cannot read than that JSON had. The game's own files keep a few such exports (a KO prompt's widget: 6 of 562,
@@ -400,12 +422,13 @@ pub(crate) async fn verify(usmap_path: &str, dir: &str, rels: &[String], json_di
     let r = async {
         stage(Path::new(dir), &input, rels, true)?;
         to_json(usmap_path, &input, &json, progress).await?;
-        let source = |r: &str| read_json(&Path::new(json_dir).join(format!("{r}.json"))).ok();
+        use rayon::prelude::*;
+        let source = |r: &str| raw_count(&Path::new(json_dir).join(format!("{r}.json")));
         Ok::<_, String>(
-            rels.iter()
-                .filter(|r| match (read_json(&json.join(format!("{r}.json"))).ok(), source(r)) {
-                    (Some(back), Some(src)) => raw_exports(&back) > raw_exports(&src),
-                    (Some(back), None) => raw_exports(&back) > 0, // no source JSON (a merged table): whole, or not
+            rels.par_iter()
+                .filter(|r| match (raw_count(&json.join(format!("{r}.json"))), source(r)) {
+                    (Some(back), Some(src)) => back > src,
+                    (Some(back), None) => back > 0, // no source JSON (a merged table): whole, or not
                     (None, _) => true,
                 })
                 .cloned()
@@ -508,6 +531,16 @@ mod tests {
         let j = json!({ "Exports": [{ "$type": "UAssetAPI.ExportTypes.RawExport, UAssetAPI" }, { "$type": "UAssetAPI.ExportTypes.NormalExport, UAssetAPI" }, { "$type": "UAssetAPI.ExportTypes.RawExport, UAssetAPI" }] });
         assert_eq!(raw_exports(&j), 2);
         assert_eq!(raw_exports(&json!({})), 0);
+        // the file reader counts the same, whatever the document's shape
+        let d = tempfile::tempdir().unwrap();
+        for (n, doc) in [j, json!({}), json!({ "Exports": null }), json!({ "Exports": [{ "$type": 3 }, { "x": 1 }, 7] }), json!({ "Exports": "RawExport" })].iter().enumerate() {
+            let p = d.path().join(format!("{n}.json"));
+            std::fs::write(&p, [&[0xEF, 0xBB, 0xBF], doc.to_string().as_bytes()].concat()).unwrap();
+            assert_eq!(raw_count(&p), Some(raw_exports(doc)), "{doc}");
+        }
+        std::fs::write(d.path().join("bad.json"), "{").unwrap();
+        assert_eq!(raw_count(&d.path().join("bad.json")), None);
+        assert_eq!(raw_count(&d.path().join("none.json")), None);
     }
 
     #[test]
