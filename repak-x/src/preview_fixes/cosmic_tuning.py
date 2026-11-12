@@ -372,6 +372,9 @@ def viewer_jelly(m, bsdf, N, L, mix, screen, tiles, base_col, stars, mask, chain
     galaxy = None
     g1 = screen("GalaxyTex1", tiles("GalaxyTex1_Size", 0.1), color=True)
     if g1 is not None:
+        p1 = num("GalaxyTex1_Power", 1.0)
+        if abs(p1 - 1.0) > 1e-3:   # the smoke's own contrast, each channel raised to it
+            gm = N.new("ShaderNodeGamma"); gm.inputs["Gamma"].default_value = p1; L.new(g1, gm.inputs["Color"]); g1 = gm.outputs[0]
         field = screen("GalaxyColorTex", tiles("GalaxyColorTex_Size", 0.2))
         cm = calc("POWER", parts(field)[0], num("GalaxyColorTex_Power", 1.0), clamp=True) if field is not None else 1.0
         colors = mix(vec(c, "GalaxyColorTex_Color2", (0.0, 0.041, 1.0)), vec(c, "GalaxyColorTex_Color1", (0.8, 0.054, 0.133)), cm)
