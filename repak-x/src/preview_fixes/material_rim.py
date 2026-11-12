@@ -258,7 +258,7 @@ def flow_travel(u, v):
 
 def fix_material(kind, name, info, chain):
     """One slot's material: the kit's builder for it, from the chain with its master defaults, and the master's rim."""
-    special = {"galaxy": galaxy_material, "torch": torch_body_material}.get(kind)
+    special = None if kind == "galaxy" and painted_cloth(chain) else {"galaxy": galaxy_material, "torch": torch_body_material}.get(kind)
     if special:
         if kind == "torch":   # the silhouette rim of a burning body is its fire's color
             c = vec(chain, "Color_Fresnel", (1.0, 0.37, 0.05))

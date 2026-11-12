@@ -191,7 +191,8 @@ def jelly_emission(mix, base_col, space, stars, chain):
 
 
 def dust_gain(chain):
-    return JELLY_DUST if jelly(chain) else 1.0
+    # a painted jelly skin takes its star maps the viewer's way (viewer_jelly), not the kit's full-color layers
+    return JELLY_DUST if jelly(chain) else 0.0 if painted(chain) else 1.0
 
 
 def sparkle_gain(chain):
@@ -287,10 +288,28 @@ def dust_color(mix, layer, chain):
 # where the body faces the camera: smoke in the instance's two galaxy colors, plus the stars. Lit by the scene's suns
 # and glowing at 0.85 on top, the painted color came out far over full brightness, pale lilac all over (the in-game
 # shot of 2026-11-11 shows a green chest, blue thighs and lilac shins).
-# shortcut: the master's matcap, cube map and subsurface noise are left out (black or unset on the skins seen so far),
-# and the light direction is taken in the camera's frame, right for the card's front view
+# shortcut: the master's cube map (a tenth of its strength on these skins) and subsurface noise (black on them) are
+# left out, and the light direction is taken in the camera's frame, right for the card's front view
 VIEWER_JELLY = True
-JELLY_VIEW_GAIN = 1.6   # the kit's display curve (AgX) darkens midtones the viewer's film curve keeps: at 1 the body came out dim
+# The kit's display settings (AgX with the Punchy look) show an unlit color far darker than the game's tone mapper does:
+# a mid gray of 0.5 comes out at 0.56 of full where Rotate in 3D (Unreal's film curve with the lobby grade,
+# viewer3d/post.ts) shows 0.75, so the body read dark and muted beside the game (a flat gain of 1.6 left it so).
+# JELLY_SHOWN undoes that: the scene value AgX Punchy shows as the viewer shows x, at x = (i / 24) squared times
+# JELLY_SHOWN_MAX, measured in Blender 5.2 on a gray ramp. On 45 test colors the kit's mean error against the viewer
+# fell from 0.148 to 0.024 of full, with about a fifth less saturation than the viewer (AgX mixes the channels)
+JELLY_SHOWN_MAX = 4
+# The galaxy's repeats down the card for a layer of Size 1, as Rotate in 3D frames it: its window onto space spans
+# 0.28 of a unit down the view at the start distance, the hero stands 0.46 of the view tall and the card shows three
+# quarters of the hero. The kit's own 0.55 drew the smoke and the star maps five times smaller and denser
+JELLY_VIEW_TILES = 0.1
+JELLY_VIEW_COLOR = 0.8   # how much of its color the body keeps: Rotate in 3D reads a little too saturated beside the game (cable, 2026-11-12)
+
+
+def painted_cloth(chain):
+    """A cloth master that carries galaxy and star textures but is painted cloth (King of the Cosmos's cape,
+    M_1054505_Cape): Rotate in 3D and the game show its own purple, and as a galaxy it blew out to a white-blue."""
+    return bool(chain) and (chain.get("master") or "").lower().endswith("_cape") and game_png(chain["textures"].get("BaseColor")) is not None
+JELLY_SHOWN = (0, 0.01084, 0.03568, 0.08279, 0.16583, 0.29809, 0.49212, 0.78749, 1.1901, 1.71884, 2.55699, 3.6357, 4.61814, 5.52077, 6.50581, 7.48729, 8.53632, 9.5623, 10.5813, 11.6276, 12.6214, 13.564, 14.5274, 15.4578, 15.9002)
 
 
 def shade3(pos, colors, s2, s3):
@@ -305,6 +324,36 @@ def shade3(pos, colors, s2, s3):
             g = min(1.0, out[-1][0] + 1e-3)
         out.append((g, c))
     return out
+
+
+def as_viewer_shows(N, L, mix, color):
+    """`color` through JELLY_SHOWN, so the kit's display settings show it as Rotate in 3D would. The curve's node reads
+    0 to 1, so the color goes in as the square root of its share of JELLY_SHOWN_MAX (the table's own spacing: fine
+    steps near black) and comes out times the table's top."""
+    top = JELLY_SHOWN[-1]
+    root = N.new("ShaderNodeGamma"); root.inputs["Gamma"].default_value = 0.5
+    L.new(mix(color, (1 / JELLY_SHOWN_MAX,) * 3, 1.0, "MULTIPLY"), root.inputs["Color"])
+    curve = N.new("ShaderNodeRGBCurve")
+    pts = curve.mapping.curves[3].points   # the combined curve: the same for red, green and blue
+    last = len(JELLY_SHOWN) - 1
+    pts[0].location, pts[1].location = (0.0, 0.0), (1.0, 1.0)
+    for i in range(1, last):
+        pts.new(i / last, JELLY_SHOWN[i] / top)
+    for pt in pts:
+        pt.handle_type = "VECTOR"   # straight lines between the measured points
+    curve.mapping.update()
+    L.new(root.outputs["Color"], curve.inputs["Color"])
+    return mix(curve.outputs["Color"], (top,) * 3, 1.0, "MULTIPLY")
+
+
+def _check_jelly_shown():
+    # rising all the way (a curve that turns back would band), nothing shown at black, and brighter than it went in
+    assert JELLY_SHOWN[0] == 0 and all(b > a for a, b in zip(JELLY_SHOWN, JELLY_SHOWN[1:])), JELLY_SHOWN
+    last = len(JELLY_SHOWN) - 1
+    assert all(JELLY_SHOWN[i] >= (i / last) ** 2 * JELLY_SHOWN_MAX for i in range(len(JELLY_SHOWN))), JELLY_SHOWN
+
+
+_check_jelly_shown()
 
 
 def viewer_jelly(m, bsdf, N, L, mix, screen, tiles, base_col, stars, mask, chain):
@@ -359,6 +408,14 @@ def viewer_jelly(m, bsdf, N, L, mix, screen, tiles, base_col, stars, mask, chain
     tint = vec(c, "BaseTint", (1.0, 1.0, 1.0))
     albedo = base_col if max(abs(x - 1.0) for x in tint) < 1e-3 else mix(base_col, tint, 1.0, "MULTIPLY")
     total = mix(albedo, ramp.outputs["Color"], 1.0, "MULTIPLY")
+    # the matcap: a sheen in the instance's color, looked up by where the surface faces on screen
+    mc, sheen = vec(c, "Matcap - Color", (0.0, 0.0, 0.0)), game_png(chain["textures"].get("Matcap - Tex"))
+    if sheen and max(mc) > 1e-4:
+        at = N.new("ShaderNodeMapping"); at.inputs["Scale"].default_value = (0.5, -0.5, 1); at.inputs["Location"].default_value = (0.5, 0.5, 0)
+        L.new(cam.outputs[0], at.inputs["Vector"])
+        tx = N.new("ShaderNodeTexImage"); tx.image = image(sheen, color=True); tx.extension = "EXTEND"
+        L.new(at.outputs[0], tx.inputs[0])
+        total = mix(total, mix(tx.outputs[0], mc, 1.0, "MULTIPLY"), 1.0, "ADD")
     # a pin of highlight between the view and the master's fake light
     fd = vec(c, "FakeSpecularDir", (0.0, 0.0, -1.0))
     spot = calc("POWER", calc("MAXIMUM", toward((fd[0], fd[2], fd[1] + 1.0)), 0.0), max(1000 - 980 * num("FakeSpecularRoughness", 0.0), 1.0))
@@ -370,6 +427,7 @@ def viewer_jelly(m, bsdf, N, L, mix, screen, tiles, base_col, stars, mask, chain
     total = mix(total, mix((0.0, 0.0, 0.0), vec(c, "RimLightColor", (0.02, 0.1, 0.2)), rim), 1.0, "ADD")
     # the galaxy seen through the body: smoke in the two galaxy colors, and the stars
     galaxy = None
+    tiles = lambda k, d: JELLY_VIEW_TILES / max(num(k, d), 1e-3)   # the viewer's framing, not the kit's
     g1 = screen("GalaxyTex1", tiles("GalaxyTex1_Size", 0.1))   # plain data, as the kit's own smoke reads it: one image, one color space
     if g1 is not None:
         p1 = num("GalaxyTex1_Power", 1.0)
@@ -382,7 +440,14 @@ def viewer_jelly(m, bsdf, N, L, mix, screen, tiles, base_col, stars, mask, chain
         g2 = screen("GalaxyTex2", tiles("GalaxyTex2_Size", 0.2))
         if g2 is not None:
             galaxy = mix((0.0, 0.0, 0.0), galaxy, calc("POWER", parts(g2)[0], num("GalaxyTex2_Power", 5.0), clamp=True))
-    if not isinstance(stars, tuple):
+    # the two star maps: their green channel in the instance's star colors (drawn in full color at nearly half
+    # strength they read as bright pink and blue clouds over the whole body)
+    for key, size, tint in (("StarTex3", 0.12, (0.446, 0.346, 1.5)), ("StarTex4", 0.1, (0.65, 0.06, 0.151))):
+        dots = screen(key, tiles(key + "_Size", size), color=True)   # as the kit's own star layers load them
+        if dots is not None:
+            layer = mix((0.0, 0.0, 0.0), vec(c, key + "_Color", tint), parts(dots)[1])
+            galaxy = layer if galaxy is None else mix(galaxy, layer, 1.0, "ADD")
+    if not isinstance(stars, tuple):   # the kit's sparkle sprites, in their own colors
         galaxy = stars if galaxy is None else mix(galaxy, stars, 1.0, "ADD")
     if galaxy is not None:
         # full where the body faces the camera, gone toward its edges, and only on the GalaxyMask
@@ -401,9 +466,13 @@ def viewer_jelly(m, bsdf, N, L, mix, screen, tiles, base_col, stars, mask, chain
         em.default_value = (0.0, 0.0, 0.0, 1)
     strength.default_value = 1.0
     keep_glow(m, bsdf)
-    k = num("FakeSpecularNormalStrength", 1.0) * JELLY_VIEW_GAIN
+    k = num("FakeSpecularNormalStrength", 1.0)
     if abs(k - 1.0) > 1e-3:
         total = mix(total, (k, k, k), 1.0, "MULTIPLY")
+    if JELLY_VIEW_COLOR < 1:   # toward its own gray
+        gray = N.new("ShaderNodeRGBToBW"); L.new(total, gray.inputs[0])
+        total = mix(gray.outputs[0], total, JELLY_VIEW_COLOR)
+    total = as_viewer_shows(N, L, mix, total)
     for link in list(em.links):
         L.remove(link)
     L.new(total, em)
