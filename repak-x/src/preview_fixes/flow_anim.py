@@ -1,4 +1,6 @@
-FLOW_FRAMES = 72   # frames in one loop of crawling lines, played at FLOW_FPS (flow_compose.py): one tile of noise in 4 s
+FLOW_FRAMES = 24   # renders of one loop of crawling lines (flow_compose.py blends the frames between, to FLOW_FPS). 72 before:
+                   # a frame rebuilt from two renders three apart is within the renders' own frame to frame noise of the real
+                   # one (mean 0.14 of 255, measured on all 72 of AllBlackMCUskin), and the 72 took 15.8 s of a 33 s preview
 FLOW_SCALE = 63    # the frames' render size, percent of the still's: about the saved card size, so 72 passes stay quick
 FLOW_SAMPLES = 8   # EEVEE samples per frame: 4 shimmered on the thin lines from frame to frame (the still takes 16)
 
@@ -60,6 +62,7 @@ def flow_frames(job, glowing):
             nodes[f["mapping2"]].inputs["Location"].default_value = starts[f["material"]]
     stage("glow")
     sc.render.resolution_percentage = FLOW_SCALE
+    sc.render.image_settings.compression = 0   # read once by the compose, then deleted
     sc.eevee.taa_render_samples = FLOW_SAMPLES
     for i in range(FLOW_FRAMES):
         t = i / FLOW_FRAMES

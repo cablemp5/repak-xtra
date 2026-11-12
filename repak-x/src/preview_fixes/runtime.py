@@ -271,11 +271,39 @@ anim_hooks = [
     ('sc.display.render_aa = "5"', 'sc.display.render_aa = "FXAA"'),
     # the camera is framed from the poses the 15 a second render sampled, not all four times as many (a skinned mesh read each)
     ("for act, frame in samples:\n    pose(act, frame)\n    ev = M.evaluated_get(", "for act, frame in samples[::max(1, round(FPS / 15))]:\n    pose(act, frame)\n    ev = M.evaluated_get("),
-    # frames are read once and deleted: written uncompressed
-    ('sc.render.image_settings.color_mode = "RGBA"\n', 'sc.render.image_settings.color_mode = "RGBA"\nsc.render.image_settings.compression = 0\n'),
+    # frames are read once and deleted: raw TGA, a third of a PNG's write time even uncompressed
+    ('sc.render.image_settings.file_format = "PNG"', 'sc.render.image_settings.file_format = "TARGA_RAW"'),
+    # Each clip in one animation render call over a remapped timeline, instead of a render call per frame. Measured on
+    # 279 frames: posing and rendering 10.9 s as separate calls with PNGs, 4.7 s this way, the frames the same but for
+    # 0.002% of pixels. A clip whose sampling no frame map can express keeps the call per frame
+    ("for i, (act, frame) in enumerate(samples):\n    pose(act, frame)\n    sc.render.filepath = str(out_dir / f\"f_{i:04d}.png\")\n    bpy.ops.render.render(write_still=True)\n",
+     "_runs = []\n"
+     "for _i, (_act, _f) in enumerate(samples):   # one run per clip, in order\n"
+     "    if _runs and _runs[-1][0] is _act:\n"
+     "        _runs[-1][2].append(_f)\n"
+     "    else:\n"
+     "        _runs.append((_act, _i, [_f]))\n"
+     "for _act, _base, _fs in _runs:\n"
+     "    _step = _fs[1] - _fs[0] if len(_fs) > 1 else 0\n"
+     "    _ratio = __import__(\"fractions\").Fraction(_step).limit_denominator(900) if _step > 0 else None\n"
+     "    if _ratio and _ratio.numerator <= 900 and _fs[0] == 0 and abs(float(_ratio) - _step) * len(_fs) < 0.02:\n"
+     "        pose(_act, 0)\n"
+     "        sc.render.frame_map_old, sc.render.frame_map_new = _ratio.numerator, _ratio.denominator\n"
+     "        sc.frame_start, sc.frame_end = 0, len(_fs) - 1\n"
+     "        sc.render.filepath = str(out_dir / f\"c{_base:04d}_####\")\n"
+     "        bpy.ops.render.render(animation=True)\n"
+     "        sc.render.frame_map_old = sc.render.frame_map_new = 100\n"
+     "        for _k in range(len(_fs)):   # the clip's frames take their place in the whole\n"
+     "            (out_dir / f\"c{_base:04d}_{_k:04d}.tga\").rename(out_dir / f\"f_{_base + _k:04d}.tga\")\n"
+     "    else:\n"
+     "        for _k, _f in enumerate(_fs):\n"
+     "            pose(_act, _f)\n"
+     "            sc.render.filepath = str(out_dir / f\"f_{_base + _k:04d}.tga\")\n"
+     "            bpy.ops.render.render(write_still=True)\n"),
 ]
 # their frames get their rim on threads and are encoded in chunks on threads (speed.py write_webp)
 anim_save = [
+    ('    frames = sorted(frames_dir.glob("f_*.png"))\n', '    frames = sorted(frames_dir.glob("f_*.*"))\n'),   # .tga now
     ("    save_webp([outlined(Image.open(f).convert(\"RGBA\")) for f in frames], out_webp)\n", "    save_webp(on_threads(lambda f: outlined(Image.open(f).convert(\"RGBA\")), frames), out_webp)\n"),
     ("    frames[0].save(tmp, save_all=True, append_images=frames[1:], duration=round(1000 / ANIM_FPS), loop=0, quality=80, method=2, kmax=1)\n", "    write_webp(frames, tmp, round(1000 / ANIM_FPS))\n"),
 ]
