@@ -638,7 +638,7 @@ export function ModPreview({ path, categories = [] }: { path: string; categories
       {threeD && <div className="mod-preview-frame is-3d"><Viewer3D viewKey={key} paths={[path]} name={path.split(/[\\/]/).pop()!.replace(/(_\d+_P)?\.(pak|bak_repak|utoc|ucas)$/i, '')} /></div>}
       {!threeD && url && (
         <div className={`mod-preview-frame${forms.length ? ' has-forms' : ''}`}>
-          {isVideoPreview(url) ? <BeatVideo src={url} beat={KO_BEAT} /> : <img src={url} alt="Generated preview" onLoad={revealOnLoad} crossOrigin="anonymous" />}
+          {isVideoPreview(url) ? <BeatVideo src={url} beat={KO_BEAT} /> : <img className={isKoPreview(key) ? undefined : 'pv-kit'} src={url} alt="Generated preview" onLoad={revealOnLoad} crossOrigin="anonymous" />}
           {forms.map(k => <FormImage key={k} k={k} />)}
         </div>
       )}
@@ -661,7 +661,7 @@ export function ModPreview({ path, categories = [] }: { path: string; categories
 /** Another form's image beside the first in the details panel. */
 function FormImage({ k }: { k: string }) {
   const src = usePreviewUrl(k)
-  return src ? <img src={src} alt="Generated preview, another form" onLoad={revealOnLoad} crossOrigin="anonymous" /> : null
+  return src ? <img className={isKoPreview(k) ? undefined : 'pv-kit'} src={src} alt="Generated preview, another form" onLoad={revealOnLoad} crossOrigin="anonymous" /> : null
 }
 
 /** Previews for a set of mods (the selection bar, a loadout page), with progress and Stop while its own run goes.

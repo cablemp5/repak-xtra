@@ -1028,7 +1028,7 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 /* ---------- loadout cards: portrait media (the generated previews' hero card ratio) on the card's own surface ---------- */
 .lo-card-image { aspect-ratio: 1358 / 1920; background: transparent !important; border-bottom: 1px solid var(--panel-border) !important; }
 .lo-card-image img { object-fit: cover; }
-.lo-card-image:hover img { opacity: 1; filter: brightness(1.08); }
+.lo-card-image:hover img { opacity: 1; filter: brightness(1.08) var(--pv-boost); }
 .lo-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
 .mod-preview-frame { height: 380px; max-width: 100%; aspect-ratio: 1358 / 1920; margin: 0 auto; }
 .mod-preview-frame img, .mod-preview-frame video { display: block; width: 100%; height: 100%; object-fit: contain; }
@@ -1453,7 +1453,7 @@ html[data-motion="off"] .has-seg-pill::before { transition: none !important; }
   -webkit-mask-composite: source-in; mask-composite: intersect; }
 .cr-slide.is-out::after { content: ''; position: absolute; inset: 0; background: #000; pointer-events: none;
   animation: cr-dim var(--cr-dur) var(--cr-ease) both; }
-.cr-slide.is-out img { opacity: 1 !important; filter: none !important; }
+.cr-slide.is-out img { opacity: 1 !important; filter: var(--pv-boost) !important; }
 :root { --cr-dur: 450ms; --cr-ease: cubic-bezier(0.22, 1, 0.36, 1); }
 @keyframes cr-enter { from { transform: translate3d(100%, 0, 0); } }
 @keyframes cr-enter-left { from { transform: translate3d(-100%, 0, 0); } }
@@ -1534,10 +1534,16 @@ html[data-motion="off"] .t-shimmer-all { animation: none !important; -webkit-mas
   transition: opacity var(--acc-collapse) var(--acc-ease), filter var(--acc-collapse) var(--acc-ease); }
 .t-acc-panel[data-open="true"] .t-acc-panel-inner { opacity: 1; filter: blur(0); transition: opacity var(--acc-expand) var(--acc-ease), filter var(--acc-expand) var(--acc-ease); }
 .fp-expand svg { transition: transform var(--acc-chevron) var(--acc-ease) !important; }
+/* A preview kit render shows a touch richer than its file: one fixed amount, put on the picture as it is drawn, so
+   every saved preview has it at once and a render takes no longer (baked in, an animated one took 2.5 s more). pv-kit
+   marks a kit render, the before picture too: never a loadout's own image, a capture, or a KO prompt preview. filter
+   is one property, so every filter rule on these pictures ends with the boost (1 and 1 where it is no kit render) */
+:root { --pv-boost: contrast(1) saturate(1); }
+.pv-kit { --pv-boost: contrast(1.075) saturate(1.15); filter: var(--pv-boost); }
 /* transitions.dev: Skeleton reveal. Previews and loadout images cross-blur in once loaded */
-.lo-card-image img, .mod-preview-frame img { opacity: 0; filter: blur(var(--reveal-blur));
+.lo-card-image img, .mod-preview-frame img { opacity: 0; filter: blur(var(--reveal-blur)) var(--pv-boost);
   transition: opacity var(--reveal-dur) var(--reveal-ease), filter var(--reveal-dur) var(--reveal-ease); }
-.lo-card-image img.is-loaded, .mod-preview-frame img.is-loaded { opacity: 1; filter: blur(0); }
+.lo-card-image img.is-loaded, .mod-preview-frame img.is-loaded { opacity: 1; filter: blur(0) var(--pv-boost); }
 /* transitions.dev: Number pop-in. A count that changes pops up into place */
 @keyframes t-num-pop { from { opacity: 0; transform: translateY(var(--digit-distance)); filter: blur(var(--digit-blur)); } }
 .t-num-pop { display: inline-block; animation: t-num-pop var(--digit-dur) var(--digit-ease) backwards; }
@@ -1735,7 +1741,7 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
 /* ---------- preview batches: card skeletons (transitions.dev Skeleton loader) ---------- */
 :root { --pulse-dur: 1000ms; --pulse-min: 0.5; --skel-tone: rgba(255, 255, 255, 0.07); }
 /* The card: its image darkens and blurs under a shimmer while the render runs or waits, its status written on it */
-.lo-media:is(.is-running, .is-queued) .lo-card-image :is(img, video) { opacity: 0.3; filter: blur(10px); }   /* video: KO prompt previews play as one */
+.lo-media:is(.is-running, .is-queued) .lo-card-image :is(img, video) { opacity: 0.3; filter: blur(10px) var(--pv-boost); }   /* video: KO prompt previews play as one */
 .lo-media.is-running .lo-card-placeholder, .lo-media.is-queued .lo-card-placeholder { visibility: hidden; }
 .lo-skel { position: absolute; inset: 0; z-index: 1; pointer-events: none; display: flex; align-items: center; justify-content: center;
   overflow: hidden; background: rgba(6, 7, 9, 0.55); animation: t-skel-pulse var(--pulse-dur) ease-in-out infinite; }

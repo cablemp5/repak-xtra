@@ -294,7 +294,7 @@ function SmartCard({ name, hero, path, g }: { name: string; hero: string; path?:
   const shape = `url(${silhouetteOf(hero) ?? silhouette})`
   return (
     <span className={`wi-card is-g${g}`}>
-      <span className="wi-card-img">{url ? <img className="wi-shot ob-pop" src={url} alt="" /> : <span className="lo-skel-shape" style={{ maskImage: shape, WebkitMaskImage: shape }} />}</span>
+      <span className="wi-card-img">{url ? <img className="wi-shot ob-pop pv-kit" src={url} alt="" /> : <span className="lo-skel-shape" style={{ maskImage: shape, WebkitMaskImage: shape }} />}</span>
       <span className="wi-card-body"><b title={name}>{name}</b></span>{/* the name Smart loadouts gives it */}
     </span>
   )

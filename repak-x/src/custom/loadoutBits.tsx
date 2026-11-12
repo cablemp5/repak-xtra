@@ -231,7 +231,7 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
           : video
             ? l.mediaBeat ? <BeatVideo src={video} beat={l.mediaBeat} /> : <video src={video} autoPlay loop muted playsInline />
             : <CarouselSlide slide={slides.length > 1 ? at : 0} dir={dir}>
-                {isVideoPreview(src) ? <BeatVideo key={src} src={src} beat={KO_BEAT} /> : <img key={src} src={live?.url ?? src} alt="" className={src === warm || isDecoded(src) ? 'is-loaded' : undefined} decoding="async" loading={page ? undefined : 'lazy'} crossOrigin="anonymous"
+                {isVideoPreview(src) ? <BeatVideo key={src} src={src} beat={KO_BEAT} /> : <img key={src} src={live?.url ?? src} alt="" className={`${cover === 'preview' && slide?.key && !isKoPreview(slide.key) ? 'pv-kit' : ''}${src === warm || isDecoded(src) ? ' is-loaded' : ''}`} decoding="async" loading={page ? undefined : 'lazy'} crossOrigin="anonymous"
                   onLoad={e => { revealOnLoad(e); if (audible && live && hovering.current && e.currentTarget.src === live.url) playEmoteSound(audible, live.seconds) }} />}
               </CarouselSlide>}
       </button>
@@ -345,7 +345,7 @@ function SlideImage({ k, thumb }: { k: string; thumb: boolean }) {
   const src = usePreviewUrl(k, thumb)
   const [warm] = useState(src)
   return !src ? <span /> : isVideoPreview(src) ? <BeatVideo src={src} beat={KO_BEAT} />
-    : <img src={src} alt="" className={src === warm || isDecoded(src) ? 'is-loaded' : undefined} onLoad={revealOnLoad} crossOrigin="anonymous" />
+    : <img src={src} alt="" className={`${isKoPreview(k) ? '' : 'pv-kit'}${src === warm || isDecoded(src) ? ' is-loaded' : ''}`} onLoad={revealOnLoad} crossOrigin="anonymous" />
 }
 
 /** How many of a loadout's installed mods are on: green all, yellow some, red none. */
