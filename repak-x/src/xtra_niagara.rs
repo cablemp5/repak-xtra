@@ -309,6 +309,17 @@ fn rel_no_ext(rel: &str) -> String {
 /// Copies these packages (with their .uexp and .ubulk) from `from` to `to`, and lists them for the JSON step. `fresh`
 /// empties `to` first (a run's own folder). The game's cache is added to, never emptied.
 pub(crate) fn stage(from: &Path, to: &Path, rels: &[String], fresh: bool) -> Result<(), String> {
+    stage_as(from, to, rels, fresh, false)
+}
+
+/// stage into a fresh folder that is only read and then deleted (a decode's input): hard links instead of copies,
+/// which for a mod's 400 materials is 800 files not written again. Never for a folder whose files get edited or
+/// kept, since a link is the same file as its source. A file that cannot be linked (another drive) is copied.
+pub(crate) fn stage_links(from: &Path, to: &Path, rels: &[String]) -> Result<(), String> {
+    stage_as(from, to, rels, true, true)
+}
+
+fn stage_as(from: &Path, to: &Path, rels: &[String], fresh: bool, link: bool) -> Result<(), String> {
     if fresh {
         let _ = std::fs::remove_dir_all(to);
     }
@@ -319,7 +330,9 @@ pub(crate) fn stage(from: &Path, to: &Path, rels: &[String], fresh: bool) -> Res
             if src.exists() {
                 let dst = to.join(format!("{r}.{x}"));
                 std::fs::create_dir_all(dst.parent().unwrap_or(to)).map_err(|e| e.to_string())?;
-                std::fs::copy(&src, &dst).map_err(|e| format!("{}: {e}", src.display()))?;
+                if !link || std::fs::hard_link(&src, &dst).is_err() {
+                    std::fs::copy(&src, &dst).map_err(|e| format!("{}: {e}", src.display()))?;
+                }
             }
         }
     }

@@ -15,7 +15,7 @@ use serde_json::Value;
 use tauri::Window;
 
 use crate::vfx_updater::progress::{NoOpProgressSink, TauriVfxProgressSink, VfxProgressSink};
-use crate::xtra_niagara::{older_usmaps, read_json, stage, to_json, usmap_build};
+use crate::xtra_niagara::{older_usmaps, read_json, stage, stage_links, to_json, usmap_build};
 
 #[derive(Serialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
@@ -198,7 +198,7 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
         Some(d) => d.to_path_buf(),
         None => {
             let (now, json) = (work.join("now"), work.join("now_json"));
-            stage(mod_extract, &now, rels, true)?;
+            stage_links(mod_extract, &now, rels)?;
             to_json(usmap, &now, &json, progress).await?;
             json
         }
@@ -255,7 +255,7 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
         read_any = true;
         let (input, json) = (work.join("old"), work.join("old_json"));
         let names: Vec<String> = pending.iter().map(|(r, _)| r.clone()).collect();
-        stage(mod_extract, &input, &names, true)?;
+        stage_links(mod_extract, &input, &names)?;
         if to_json(&old, &input, &json, progress).await.is_err() {
             continue;
         }
@@ -422,7 +422,7 @@ pub(crate) async fn verify(usmap_path: &str, dir: &str, rels: &[String], json_di
     let work = Path::new(&stage_dir).join("verify");
     let (input, json) = (work.join("in"), work.join("json"));
     let r = async {
-        stage(Path::new(dir), &input, rels, true)?;
+        stage_links(Path::new(dir), &input, rels)?;
         to_json(usmap_path, &input, &json, progress).await?;
         use rayon::prelude::*;
         let source = |r: &str| raw_count(&Path::new(json_dir).join(format!("{r}.json")));
