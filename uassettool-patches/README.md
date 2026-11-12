@@ -83,3 +83,8 @@ Windows and Linux downloads, and the Windows build FModel and the preview kit sh
 2026-11-11. A download that does not match is not saved, an unknown file in a search folder is not loaded (the tool
 downloads the known one instead), and the download is written to a `.part` file and renamed, so a cut-off write never
 leaves a half library under the real name.
+
+`0017-batch-texture-extract-reads-the-mappings-once.patch`: `batch_extract_texture_png` read the USMAP again for every texture (about 0.8 s
+and a few hundred MB each), which also kept its parallel run no faster than one at a time. The batch now reads it once and
+hands it to each extract, as `batch_to_json` does. The same mappings, so the same files: a KO prompt's 44 textures (31 MP,
+BC7) went from 28 to 54 s to 1.4 s, and the 44 PNGs have the same SHA-256 before and after (`xtra_ko.rs` `ko_bench`).

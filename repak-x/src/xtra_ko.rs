@@ -420,6 +420,62 @@ pub fn xtra_ko_preview_fresh(mod_path: String, key: String) -> bool {
 mod tests {
     use super::*;
 
+    /// Times the three steps of a first KO prompt load (what xtra_ko_load does on a cold cache) into a temp folder:
+    ///   REPAKXTRA_BENCH_PAKS=<Paks folder> REPAKXTRA_BENCH_USMAP=<usmap> [REPAKXTRA_BENCH_WIDGET=<game path without extension>] [REPAKXTRA_BENCH_WARM=1]
+    ///   cargo test --release -p repak-x --bin REPAK-X ko_bench -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn ko_bench() {
+        let (Some(paks), Ok(usmap)) = (std::env::var_os("REPAKXTRA_BENCH_PAKS").map(PathBuf::from), std::env::var("REPAKXTRA_BENCH_USMAP")) else { return };
+        let widget = std::env::var("REPAKXTRA_BENCH_WIDGET").unwrap_or_else(|_| format!("{WIDGETS}1026/WBP_Battle_Kill_1026_V3"));
+        crate::xtra_vfx::tune_dotnet_gc();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        if std::env::var_os("REPAKXTRA_BENCH_WARM").is_some() {
+            rt.block_on(crate::xtra_vfx::xtra_vfx_warm(paks.to_string_lossy().into_owned()));
+        }
+        let d = tempfile::tempdir().unwrap();
+        let (ex, json, png) = (d.path().join("extract"), d.path().join("json"), d.path().join("png"));
+        let mut clock = std::time::Instant::now();
+        let mut lap = |what: &str| { println!("[ko timing] {what}: {:.2} s", clock.elapsed().as_secs_f32()); clock = std::time::Instant::now(); };
+        rt.block_on(extract(&paks, &ex, vec![widget.clone()], true)).unwrap();
+        let mut files = Vec::new();
+        uassets(&ex, &mut files);
+        let bytes: u64 = walkdir::WalkDir::new(&ex).into_iter().flatten().filter_map(|e| e.metadata().ok()).filter(|m| m.is_file()).map(|m| m.len()).sum();
+        lap(&format!("extract with dependencies ({} packages, {} MB)", files.len(), bytes / 1_048_576));
+        let ui = |p: &PathBuf, dir: &str| rel(&ex, p).starts_with(&format!("Marvel/Content/Marvel/UI/{dir}/"));
+        let name = |p: &PathBuf| p.file_name().map(|n| n.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+        let to_json: Vec<String> = files.iter().filter(|p| rel(&ex, p) == widget || (ui(p, "Materials") && name(p).starts_with("mi_"))).map(|p| p.to_string_lossy().to_string()).collect();
+        let pngs: Vec<String> = files.iter().filter(|p| ui(p, "Textures")).map(|p| p.to_string_lossy().to_string()).collect();
+        let (nj, np) = (to_json.len(), pngs.len());
+        let base_path = Some(ex.to_string_lossy().to_string());
+        rt.block_on(uat(VfxUatRequest { action: "batch_to_json", file_paths: Some(to_json), usmap_path: Some(&usmap), output_path: Some(json.to_string_lossy().to_string()), base_path: base_path.clone(), ..Default::default() }, "json")).unwrap();
+        lap(&format!("{nj} files to JSON"));
+        let data = rt.block_on(uat(VfxUatRequest { action: "batch_extract_texture_png", file_paths: Some(pngs.clone()), usmap_path: Some(&usmap), output_path: Some(png.to_string_lossy().to_string()), base_path: base_path.clone(), parallel: Some(true), ..Default::default() }, "png")).unwrap();
+        lap(&format!("{np} textures to PNG"));
+        {
+            use sha2::{Digest, Sha256};
+            let mut made: Vec<PathBuf> = walkdir::WalkDir::new(&png).into_iter().flatten().filter(|e| e.file_type().is_file()).map(|e| e.into_path()).collect();
+            made.sort();
+            let mut all = Sha256::new();
+            for f in &made {
+                all.update(f.strip_prefix(&png).unwrap().to_string_lossy().as_bytes());
+                all.update(std::fs::read(f).unwrap());
+            }
+            println!("[ko out] {} PNG files, sha256 {:x}", made.len(), all.finalize());
+        }
+        // the largest ones, each alone: which textures the time is in
+        let mut sized: Vec<(u64, String, String)> = data.as_array().or_else(|| data.get("results").and_then(|r| r.as_array())).into_iter().flatten()
+            .map(|r| (r["width"].as_u64().unwrap_or(0) * r["height"].as_u64().unwrap_or(0), format!("{}x{} {}", r["width"], r["height"], r["pixel_format"]), r["file"].as_str().unwrap_or_default().to_string())).collect();
+        sized.sort();
+        sized.reverse();
+        println!("[ko textures] {} results, pixels in all: {} MP", sized.len(), sized.iter().map(|s| s.0).sum::<u64>() / 1_000_000);
+        for (_, what, file) in sized.iter().take(4) {
+            let one = d.path().join("one");
+            rt.block_on(uat(VfxUatRequest { action: "batch_extract_texture_png", file_paths: Some(vec![file.clone()]), usmap_path: Some(&usmap), output_path: Some(one.to_string_lossy().to_string()), base_path: base_path.clone(), parallel: Some(false), ..Default::default() }, "png")).unwrap();
+            lap(&format!("alone: {what} {}", file.rsplit(['/', '\\']).next().unwrap_or_default()));
+        }
+    }
+
     #[test]
     fn hero_logos_only_accept_game_ids() {
         assert!(hero_logo_asset("1069").unwrap().ends_with("img_herologo_1069_logo"));

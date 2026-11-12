@@ -1,0 +1,53 @@
+diff --git a/src/UAssetTool/Program.cs b/src/UAssetTool/Program.cs
+index 79322e6..a7f72e2 100644
+--- a/src/UAssetTool/Program.cs
++++ b/src/UAssetTool/Program.cs
+@@ -8791,6 +8791,13 @@ public partial class Program
+ 
+         var sw = System.Diagnostics.Stopwatch.StartNew();
+ 
++        // repakxtra: the mappings are read once for the batch, as batch_to_json reads them. Each texture read them
++        // again (about 0.8 s and a few hundred MB each), which also kept the parallel run from being any faster than
++        // one at a time: a KO prompt's 44 textures took 28 s. The same mappings, so the same pictures. If they cannot
++        // be read here, each file reads them itself and reports why, as before
++        Usmap? sharedMappings = null;
++        try { if (!string.IsNullOrEmpty(usmapPath) && File.Exists(usmapPath)) sharedMappings = new Usmap(usmapPath); } catch { }
++
+         void ProcessFile(string inputPath)
+         {
+             // Determine output filename: preserve relative directory structure if basePath is set
+@@ -8812,7 +8819,7 @@ public partial class Program
+ 
+             try
+             {
+-                var result = Texture.TextureExtractor.Extract(inputPath, outPath, outputFormat, mipIndex, usmapPath);
++                var result = Texture.TextureExtractor.Extract(inputPath, outPath, outputFormat, mipIndex, usmapPath, sharedMappings);
+                 if (result.Success)
+                 {
+                     Interlocked.Increment(ref successCount);
+diff --git a/src/UAssetTool/Texture/TextureExtractor.cs b/src/UAssetTool/Texture/TextureExtractor.cs
+index 8f901ee..1ff0902 100644
+--- a/src/UAssetTool/Texture/TextureExtractor.cs
++++ b/src/UAssetTool/Texture/TextureExtractor.cs
+@@ -80,7 +80,8 @@ public class TextureExtractor
+         string? outputPath,
+         TextureOutputFormat outputFormat = TextureOutputFormat.PNG,
+         int mipIndex = 0,
+-        string? usmapPath = null)
++        string? usmapPath = null,
++        Usmap? loaded = null)
+     {
+         var result = new TextureExtractionResult();
+         
+@@ -94,8 +95,9 @@ public class TextureExtractor
+             }
+             
+             // Load usmap if provided
+-            Usmap? mappings = null;
+-            if (!string.IsNullOrEmpty(usmapPath) && File.Exists(usmapPath))
++            // repakxtra: a batch hands over the mappings it read once (`loaded`); alone, read here as before
++            Usmap? mappings = loaded;
++            if (mappings == null && !string.IsNullOrEmpty(usmapPath) && File.Exists(usmapPath))
+             {
+                 mappings = new Usmap(usmapPath);
+             }
