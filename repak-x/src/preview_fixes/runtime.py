@@ -46,6 +46,35 @@ if any(old not in source for old, _ in hooks):
     raise RuntimeError("This preview kit needs an update before the material fixes can be applied.")
 for old, new in hooks:
     source = source.replace(old, new, 1)
+# The pose is the lobby idle's first frame: only each bone's first key is read from the file and made into curves (a
+# bone's other 350 keys took about half a second of every character preview to parse and build, never used). The
+# reader is put back right after, so a dance rendered next in the same Blender reads its clips whole. A kit without
+# these exact lines, or an older animation file format (its own reader), imports the whole idle, as before.
+pose_import = "            act, _ = UEFormatImport(UEAnimOptions(scale_factor=1, override_skeleton=A, import_curves=False)).import_file_with_dto(path)\n"
+pose_loop = "    A.animation_data_create()\n    for path in anims:\n"
+if source.count(pose_import) == 1 and source.count(pose_loop) == 1:
+    source = source.replace(pose_import, "            act, _ = pose_import(path)\n", 1)
+    source = source.replace(pose_loop, '''    import io_scene_ueformat.importer.deserialize.anim as _da
+
+    def pose_import(path):
+        whole = _da.read_track
+
+        def first_keys(ar):
+            def one(read, size):   # the first key, the rest stepped over (a key is its frame and 3 or 4 floats)
+                n = ar.read_int()
+                if n <= 0:
+                    return []
+                key = read(ar)
+                ar.skip((n - 1) * size)
+                return [key]
+            return _da.TrackDto(name=ar.read_fstring(), position_keys=one(_da.read_vector_key, 16),
+                                rotation_keys=one(_da.read_quat_key, 20), scale_keys=one(_da.read_vector_key, 16))
+        _da.read_track = first_keys
+        try:
+            return UEFormatImport(UEAnimOptions(scale_factor=1, override_skeleton=A, import_curves=False)).import_file_with_dto(path)
+        finally:
+            _da.read_track = whole
+''' + pose_loop, 1)
 fix = f"RIM_ON = {rim_on}\n" + "\n".join(
     (runtime / f).read_text(encoding="utf-8")
     for f in ("galactic_mane.py", "material_rim.py", "translucent_layers.py", "screen_rim.py", "studio_lights.py", "cosmic_tuning.py", "flow_anim.py", "borrowed_pose.py"))
