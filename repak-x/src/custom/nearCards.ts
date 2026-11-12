@@ -65,13 +65,20 @@ export function useNearCards(root: HTMLElement | null, ids: string[], pins: (str
     // into one frame, a stall of 50 to 170 ms each time. A gentle scroll still puts every card in view in at once, so
     // only a hard one can show a card's empty frame for a moment, and it fills as soon as the scroll slows.
     const keepAll = ids.length <= KEEP
-    let rest = 0, idle = 0, queued = 0, lastTop = root.scrollTop, lastAt = performance.now()
-    const choose = (was: number, scrolled = false) => {
+    let rest = 0, idle = 0, queued = 0, lastTop = root.scrollTop, lastAt = performance.now(), hardUntil = 0
+    const choose = (was: number, scrolled = false, moved = scrolled) => {
       const at = root.scrollTop, h = root.clientHeight
       const next = nearIds(boxes, at, at + h, scrolled ? 0 : h) // one screen above and below
       if (scrolled) {
-        const now = performance.now(), hard = Math.abs(at - lastTop) / Math.max(now - lastAt, 1) >= HARD
-        lastTop = at; lastAt = now
+        // hard for HOLD_MS past its last fast frame: a frame with no scroll event in it (between two flicks, or the
+        // queued frame below) read as gentle and put a whole screen in at once. The time since the last frame counts
+        // for 50 ms at most, so the first frame after a rest is not read as slow
+        const now = performance.now()
+        if (moved) {
+          if (Math.abs(at - lastTop) / Math.min(Math.max(now - lastAt, 1), 50) >= HARD) hardUntil = now + HOLD_MS
+          lastTop = at; lastAt = now
+        }
+        const hard = now < hardUntil
         const have = mountedNow.current, mid = at + h / 2, inView = next
         const around = boxes.filter(b => b.bottom > at - h && b.top < at + 2 * h)
         const fresh = around.filter(b => !have.has(b.id) && (hard || !inView.has(b.id)))
@@ -107,8 +114,10 @@ export function useNearCards(root: HTMLElement | null, ids: string[], pins: (str
     }
     root.addEventListener('scroll', later, { passive: true })
     // a card whose real height is not its placeholder's moves the cards below it, and its section's size with them:
-    // measured again then (inside the observer the layout is already done, so the reads cost nothing)
-    const ro = new ResizeObserver(pick)
+    // measured again then (inside the observer the layout is already done, so the reads cost nothing). New cards come
+    // in at the scroll's pace here too: picked the way an open picks, a screen each way went in at once (23 cards in
+    // one frame of a first hard scroll)
+    const ro = new ResizeObserver(() => { const was = lastHeight; measure(); choose(was, true, false) })
     ro.observe(root)
     for (const child of root.children) ro.observe(child)
     return () => { root.removeEventListener('scroll', later); ro.disconnect(); cancelAnimationFrame(queued); clearTimeout(rest); cancelIdleCallback(idle) }
@@ -121,7 +130,7 @@ export function useNearCards(root: HTMLElement | null, ids: string[], pins: (str
     let top = root.scrollTop, at = performance.now(), holding = false, release = 0, queued = 0, swept = 0
     const check = (now: number) => {
       queued = 0
-      const y = root.scrollTop, speed = Math.abs(y - top) / Math.max(now - at, 1)
+      const y = root.scrollTop, speed = Math.abs(y - top) / Math.min(Math.max(now - at, 1), 50) // 50: the first frame after a rest
       top = y; at = now
       if (!holding && speed < HARD) return
       if (!holding || now - swept > 100) { swept = now; holdCovers(root) } // again now and then, for cards put in since

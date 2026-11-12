@@ -57,6 +57,8 @@ export const isIdle = () => document.hidden || !document.hasFocus()
 
 // While a grid of cards scrolls hard, its animated covers show a still: five of them in view, each decoding a full-size
 // frame 24 times a second, took a hard scroll of the Loadouts grid from 140 frames a second to 120 (hidden: 140).
+// shortcut: a loadout's own animated cover (a GIF or WebP he picked) has no still and keeps playing, give those one
+// here if a grid of them shows the drop
 /** Card-sized first frames of animated previews, by the animated picture's URL (previews.tsx makes them). */
 export const coverStills = new Map<string, string>()
 const held = new Map<HTMLImageElement, string>() // a cover showing its still, and the animated URL it goes back to
