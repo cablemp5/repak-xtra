@@ -184,6 +184,16 @@ fn decode(dir: &Path, rel: &str) -> Option<Value> {
 pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], older: bool, made: u64, game: Game<'_>, today: Option<&Path>, work: &Path, progress: &dyn VfxProgressSink) -> Result<Relaid, String> {
     let mut out = Relaid::default();
     let Some(build) = usmap_build(usmap) else { return Ok(out) };
+    // what each part took, in the app's log and (REPAKXTRA_TIMING set) on the console: .agent/vfx/bench.mjs reads it
+    let mut clock = std::time::Instant::now();
+    let mut lap = |what: &str| {
+        let line = format!("[relayout timing] {what}: {:.2} s", clock.elapsed().as_secs_f32());
+        log::info!("{line}");
+        if std::env::var_os("REPAKXTRA_TIMING").is_some() {
+            eprintln!("{line}");
+        }
+        clock = std::time::Instant::now();
+    };
     let now_json = match today {
         Some(d) => d.to_path_buf(),
         None => {
@@ -193,10 +203,14 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
             json
         }
     };
+    lap("decode with today's mappings");
+    // today's reading of each file, where it read whole: parsed once (a mod's 400 materials are 100 MB of JSON, and
+    // each was read from disk for the question below, and again for the list after it)
+    let mut whole: std::collections::HashMap<&String, Value> = rels.iter().filter_map(|r| Some((r, decode(&now_json, r).filter(|j| decoded(j).is_some())?))).collect();
     let fetched = match game {
         Game::Fetch(paks) => {
             // only what the copies could settle: material instances today's USMAP reads whole
-            let ask: Vec<String> = rels.iter().filter(|r| decode(&now_json, r).filter(|j| decoded(j).is_some()).is_some_and(|j| overrides(&j).is_some())).cloned().collect();
+            let ask: Vec<String> = rels.iter().filter(|r| whole.get(r).is_some_and(|j| overrides(j).is_some())).cloned().collect();
             if ask.is_empty() { None } else { game_copies(paks, usmap, &ask, work).await }
         }
         _ => None,
@@ -210,10 +224,17 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
     let mut pending: Vec<(String, Option<Value>)> = rels
         .iter()
         .filter_map(|r| {
-            let today = decode(&now_json, r).filter(|j| decoded(j).is_some());
+            let today = whole.remove(r);
+            // Read whole today with the game's own overrides: today's layout is the right one whatever an older USMAP
+            // reads (old_reading_right's first case), so no older USMAP is asked about it. For a mod already in
+            // today's layout that is every file, and the older decode (5 s for 400 materials) does not run at all
+            if today.as_ref().is_some_and(|t| game.get(r).and_then(overrides).is_some_and(|g| overrides(t).as_ref() == Some(&g))) {
+                return None;
+            }
             (today.is_none() || older || game.contains_key(r)).then(|| (r.clone(), today))
         })
         .collect();
+    lap(&format!("game copies and reading {} decodes", rels.len()));
     if pending.is_empty() {
         out.complete = true;
         return Ok(out);
@@ -227,6 +248,7 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
             break;
         }
         let Some(old) = candidate.fetch().await else { continue };
+        lap("older mappings fetched");
         read_any = true;
         let (input, json) = (work.join("old"), work.join("old_json"));
         let names: Vec<String> = pending.iter().map(|(r, _)| r.clone()).collect();
@@ -259,6 +281,7 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
             }
             false
         });
+        lap("decode with older mappings and compare");
     }
     out.complete = pending.is_empty();
     out.no_usmap = !out.complete && !read_any;
@@ -274,10 +297,12 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
     if let Err(e) = crate::vfx_updater::pipeline::step_convert_json_to_uassets(Path::new(""), usmap, &fixed_json.to_string_lossy(), &fixed.to_string_lossy(), progress).await {
         log::warn!("[vfx relayout] {e}");
     }
+    lap(&format!("write {} files in today's layout", out.files.len()));
     let written: Vec<&str> = out.files.iter().filter(|r| fixed.join(format!("{r}.uasset")).is_file()).map(String::as_str).collect();
     std::fs::create_dir_all(&fixed).map_err(|e| e.to_string())?;
     std::fs::write(fixed.join("uasset_list.txt"), written.join("\n")).map_err(|e| e.to_string())?;
     to_json(usmap, &fixed, &check, progress).await?;
+    lap("read back");
     let mut surgical_backups = std::collections::HashMap::new();
     for r in &out.files {
         let original_header = std::fs::read(mod_extract.join(format!("{r}.uasset")));
@@ -297,6 +322,7 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
     // read into its own folder: a restored file is again the one `check` read, so a failed read loses only the patches
     let check2 = work.join("check2_json");
     let read2 = out.surgical.is_empty() || to_json(usmap, &fixed, &check2, progress).await.is_ok();
+    lap(&format!("{} header patches and their read back", out.surgical.len()));
     let mut unrestored = HashSet::new();
     out.surgical.retain(|r| {
         let same = read2 && match (decode(&check2, r), decode(&fixed_json, r)) {
@@ -324,6 +350,7 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
     }
     out.surgical.retain(|r| kept.contains(r));
     out.files = kept;
+    lap("compare and copy into the mod");
     Ok(out)
 }
 
@@ -391,21 +418,43 @@ pub(crate) async fn verify(usmap_path: &str, dir: &str, rels: &[String], json_di
 
 /// The game's current copies of `rels` decoded with `usmap`, under `work`/game_json. None when they could not be read.
 pub(crate) async fn game_copies(game_paks: &str, usmap: &str, rels: &[String], work: &Path) -> Option<std::path::PathBuf> {
+    // Kept for this game build, USMAP and parser (inside vanilla_dir, which goes when any of them changes): the game's
+    // copy of a file is the same for every mod and every run, and fetching 400 of them took each run about 9 s. A file
+    // the game does not have is remembered too (<file>.none), or a mod's own files would be looked for on every run
+    let cache = crate::xtra_vfx::vanilla_dir(game_paks, usmap).join("layout_json");
+    let known = |r: &String| cache.join(format!("{r}.json")).is_file() || cache.join(format!("{r}.none")).is_file();
+    let ask: Vec<String> = rels.iter().filter(|r| !known(r)).cloned().collect();
+    if ask.is_empty() {
+        return Some(cache);
+    }
     let (out, json) = (work.join("game"), work.join("game_json"));
     let _ = std::fs::remove_dir_all(&out);
     let req = crate::vfx_updater::uasset_tool::VfxUatRequest {
         action: "extract_iostore_legacy",
         game_paks: Some(game_paks.to_string()),
         output_path: Some(out.to_string_lossy().to_string()),
-        filter_patterns: Some(rels.to_vec()),
+        filter_patterns: Some(ask.clone()),
         with_deps: Some(false),
         ..Default::default()
     };
     crate::vfx_updater::uasset_tool::run_vfx_uat_request(Path::new(""), &req).await.ok().filter(|r| r.success)?;
-    let have: Vec<String> = rels.iter().filter(|r| out.join(format!("{r}.uasset")).is_file()).cloned().collect();
+    let have: Vec<String> = ask.iter().filter(|r| out.join(format!("{r}.uasset")).is_file()).cloned().collect();
     stage(&out, &work.join("game_in"), &have, true).ok()?;
     to_json(usmap, &work.join("game_in"), &json, &NoOpProgressSink).await.ok()?;
-    Some(json)
+    // into the cache whole or not at all: written beside its place, then renamed (two runs may fill it at once)
+    for (n, r) in ask.iter().enumerate() {
+        let to = cache.join(format!("{r}.{}", if have.contains(r) { "json" } else { "none" }));
+        let tmp = to.with_extension(format!("tmp{}-{n}", std::process::id()));
+        std::fs::create_dir_all(to.parent()?).ok()?;
+        let made = if have.contains(r) { std::fs::copy(json.join(format!("{r}.json")), &tmp).map(|_| ()) } else { std::fs::write(&tmp, b"") };
+        if made.and_then(|_| std::fs::rename(&tmp, &to)).is_err() {
+            let _ = std::fs::remove_file(&tmp);
+            if have.contains(r) {
+                return None; // a copy the decode did not write: no game copies this run, as when the decode fails
+            }
+        }
+    }
+    Some(cache)
 }
 
 #[cfg(test)]
