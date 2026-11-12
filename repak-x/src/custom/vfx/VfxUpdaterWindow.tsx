@@ -15,6 +15,7 @@ import TitleBar from '../../components/TitleBar'
 import { useGlobalTooltips } from '../../hooks/useGlobalTooltips'
 import Checkbox from '../../components/ui/Checkbox'
 import { Num, SwapText } from '../motion'
+import { GlideFill } from '../GlideFill'
 import { cue } from '../sounds'
 import { DEFAULT_FILTER, parseWords, readFilter, resetFilter, writeFilter, type ColorFilter } from './filter'
 import { canonKey } from '../loadoutIdentity'
@@ -223,7 +224,7 @@ function Row({ mod, rowKey, loadouts, run, needs, partial, waits, made, picked, 
       {running && step ? (
         <div className="vf-progress">
           <div className="vf-bar" role="progressbar" aria-valuenow={step} aria-valuemin={0} aria-valuemax={STEPS.length} aria-label={`${mod.name} progress`}>
-            <i style={{ width: `${((step - 0.5) / STEPS.length) * 100}%` }} />
+            <GlideFill pct={((step - 1) / STEPS.length) * 100} next={(step / STEPS.length) * 100} />{/* a step counts nothing itself: the fill moves on through its part */}
           </div>
           {/* one line: what the step is doing now once it reports it, else its name. The footer announces the step: one live region, not two */}
           <p className="vf-step">{run?.sub ? <span className="vf-step-sub">{run.sub}</span>/* plain: it changes many times a second, faster than a swap-in finishes */ : <SwapText text={STEPS[step - 1]} />}</p>

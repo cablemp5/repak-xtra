@@ -191,14 +191,17 @@ export function Viewer3D({ viewKey, paths, set, control, hint = true, name, onRe
 
   const busy = shown === 'checking' || shown === 'making' || shown === 'loading'
   const [done, text] = showAlt ? alt.load : load
+  // the bar: the kit's step mark while it makes the files (a step it does not know keeps the last mark: the fill
+  // never steps back), then the textures as they load
+  const pct = shown === 'loading' ? PCT.loading + (100 - PCT.loading) * done * 0.9 : PCT[shown === 'making' ? (PCT[word] ? word : 'making') : 'checking']
   return (
     <div className={`v3d is-${shown}`} aria-busy={busy}>
       <div ref={host} className={`v3d-host${showAlt ? ' is-waiting' : ''}`} aria-hidden={showAlt || undefined} aria-label={!showAlt && phase === 'ready' ? 'Model in 3D: drag to turn, scroll to zoom, double click to reset' : undefined} />
       <div ref={altHost} className={`v3d-host${showAlt ? '' : ' is-waiting'}`} aria-hidden={!showAlt || undefined} aria-label={showAlt && alt.phase === 'ready' ? 'The default skin in 3D: drag to turn, scroll to zoom, double click to reset' : undefined} />
       {busy && (
         <div className="v3d-loading">
-          <ProgressLoader title={showAlt ? 'Opening the default skin in 3D' : name ? `Opening ${name} in 3D` : 'Opening the model in 3D'}
-            pct={shown === 'loading' ? PCT.loading + (100 - PCT.loading) * done * 0.9 : PCT[shown === 'making' ? (PCT[word] ? word : 'making') : 'checking']}
+          <ProgressLoader key={showAlt ? 'alt' : 'mod'} title={showAlt ? 'Opening the default skin in 3D' : name ? `Opening ${name} in 3D` : 'Opening the model in 3D'}
+            pct={pct} next={shown === 'loading' ? undefined : Math.min(...Object.values(PCT).filter(v => v > pct))}
             step={shown === 'loading' ? text || 'Loading the model' : step || (shown === 'making' ? 'Starting the preview kit' : 'Looking for the 3D files')} />
         </div>
       )}
