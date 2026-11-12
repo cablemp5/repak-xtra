@@ -5454,6 +5454,7 @@ async fn launch_game(app: tauri::AppHandle, state: State<'_, Arc<Mutex<AppState>
         (state.game_path.clone(), state.launcher_type.clone())
     };
 
+    crate::xtra_previews::stop_kept(false); // repakxtra: the preview helpers kept warm give their memory to the game
     // repakxtra: selecting the loader is a convenience here, never a reason to refuse Play
     match xtra_project::select(&mods_path) {
         Ok(true) => {
@@ -8966,6 +8967,7 @@ fn main() {
         .expect("error while running tauri application")
         .run(|app_handle, event| {
             if let tauri::RunEvent::ExitRequested { .. } = event {
+                crate::xtra_previews::stop_kept(false); // repakxtra: the preview helpers kept warm end with the app
                 // Ensure Discord RPC is disconnected on exit
                 let discord_state = app_handle.state::<DiscordState>();
                 if discord_state.manager.is_connected() {

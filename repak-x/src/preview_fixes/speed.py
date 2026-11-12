@@ -4,7 +4,136 @@ mounting the game again (about 2.3 s). An older one serves every "game alone" ex
 colors, sound banks, skin tables, the "before" renders) and each mod gets its own, as before. A VFX card's game colors
 are cached per game version, so only instances no earlier card read are exported. The dance outline grows its alpha
 with numpy, the same pixels as MaxFilter in a fifteenth of the time."""
+import socket
 _kit_run_spec, _kit_close_exporters = run_spec, close_exporters
+
+# ---------- helper programs kept running between runs (keeper.py) ----------
+KEEP_IDLE = 90   # seconds a kept program waits for the next run before it ends
+
+
+class _Lines:
+    """A kept program's output or errors: lines as they come, ended by its end or the connection's."""
+    def __init__(self):
+        self.q = queue.Queue()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        line = self.q.get()
+        if line is None:
+            self.q.put(None)   # ended for every later reader too
+            raise StopIteration
+        return line
+
+
+class _In:
+    def __init__(self, kept):
+        self.kept = kept
+
+    def write(self, text):
+        self.kept.sock.sendall(text.encode("utf-8"))
+
+    def flush(self):
+        pass
+
+    def close(self):
+        self.kept.release()
+
+
+class _Kept:
+    """What subprocess.Popen gives the generator (stdin, stdout, stderr, poll, wait, kill, args), for a program a keeper
+    runs: closing its stdin hands it back still running, kill ends it."""
+    def __init__(self, cmd, extra, merge):
+        self.args = [str(c) for c in cmd]
+        state = WORK.parent / "keep" / (hashlib.sha1(json.dumps([self.args, extra], sort_keys=True).encode()).hexdigest()[:16] + ".json")
+        self.stdin, self.stdout, self.stderr = _In(self), _Lines(), _Lines()
+        self.done = False
+        self.sock = self._connect(state)
+        if self.sock is None:
+            state.unlink(missing_ok=True)   # a keeper that is gone left it behind
+            subprocess.Popen([sys.executable, str(runtime / "keeper.py"), str(state), str(KEEP_IDLE), json.dumps(self.args), json.dumps(extra)],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             creationflags=NO_WINDOW | 0x00000200, close_fds=True)   # its own process group: Ctrl+C in a console run stays ours
+            end = time.time() + 15
+            while self.sock is None and time.time() < end:
+                time.sleep(0.05)
+                self.sock = self._connect(state)
+            if self.sock is None:
+                raise RuntimeError("the keeper did not start")
+        errs = self.stdout if merge else self.stderr
+
+        def pump():
+            try:
+                for line in self.lines:
+                    (self.stdout if line[:1] == "O" else errs).q.put(line[1:])
+            except (OSError, ValueError):
+                pass
+            self.done = True
+            self.stdout.q.put(None)
+            self.stderr.q.put(None)
+        threading.Thread(target=pump, daemon=True).start()
+
+    def _connect(self, state):
+        """The keeper's socket once it has let us in (its line "K", after what the program printed at its start, which
+        goes to stdout as if just printed); None without a keeper that answers."""
+        try:
+            st = json.loads(state.read_text(encoding="utf-8"))
+            sock = socket.create_connection(("127.0.0.1", int(st["port"])), timeout=3)
+            sock.settimeout(10)
+            sock.sendall((st["token"] + "\n").encode("utf-8"))
+            lines = sock.makefile("r", encoding="utf-8", errors="replace", newline="\n")
+            while True:
+                line = lines.readline()
+                if not line:   # a keeper on its way out took the connection and dropped it
+                    sock.close()
+                    return None
+                if line[:1] == "K":
+                    break
+                if line[:1] == "O":
+                    self.stdout.q.put(line[1:])
+            sock.settimeout(None)
+            self.lines = lines
+            return sock
+        except (OSError, ValueError, KeyError):
+            return None
+
+    def release(self):
+        if not self.done:
+            self.done = True
+            try:
+                self.sock.sendall(b"\0IDLE\n")
+                self.sock.shutdown(socket.SHUT_WR)
+            except OSError:
+                pass
+
+    def poll(self):
+        return 0 if self.done else None
+
+    def wait(self, timeout=None):
+        return 0
+
+    def kill(self):
+        self.done = True
+        try:
+            self.sock.shutdown(socket.SHUT_RDWR)   # dropped without the idle line: the keeper ends the program. A plain
+            self.sock.close()                      # close waits for the reader thread's file, and never reached it
+        except OSError:
+            pass
+
+
+def kept(cmd, extra=None, merge=False):
+    """The program started, or the one a keeper still has from the last run. Any trouble with the keeper: started the
+    plain way, as before."""
+    if os.environ.get("REPAKXTRA_KEEP", "1") != "0":
+        try:
+            return _Kept(cmd, extra or {}, merge)
+        except Exception as e:
+            print(f"# keeper: {e}, starting {Path(str(cmd[0])).name} the plain way", file=sys.stderr, flush=True)
+    return subprocess.Popen([str(c) for c in cmd], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT if merge else subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
+                            creationflags=NO_WINDOW, env={**os.environ, **(extra or {})})
+
 _SHARED = {}   # (exe, the game's config text) -> {"server": (proc, lines), "swap": bool, "extra": [mounted mod folders]}
 _ASKING = []   # non-empty while a line waits for its answer: a timeout then kills the shared exporters instead of asking them
 
@@ -29,8 +158,7 @@ def shared_exporter(exe, text):
     config = WORK / "_game" / (hashlib.sha1(text.encode()).hexdigest()[:16] + ".json")
     config.parent.mkdir(parents=True, exist_ok=True)
     config.write_text(text, encoding="utf-8")
-    proc = subprocess.Popen([str(exe), "--serve", str(config)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
+    proc = kept([str(exe), "--serve", str(config)], merge=True)   # the one the last run left mounted, when there is one
     q = queue.Queue()
 
     def pump():

@@ -387,6 +387,7 @@ fn unpack_from(zip: impl Read + Seek, dir: &Path, from: &str) -> Result<String, 
     let old = dir.with_extension("old");
     let had = dir.exists();
     if had {
+        crate::xtra_previews::stop_kept(true); // the helpers a preview run left open hold the old kit's files
         if let Err(e) = fs::rename(dir, &old) {
             let _ = fs::remove_dir_all(&side);
             return Err(format!("Could not replace the kit, a program has one of its files open ({e}). Nothing was changed. Try again in a moment."));
@@ -626,6 +627,7 @@ pub async fn preview_kit_remove() -> Result<(), String> {
     // repakxtra: file work on a blocking thread, never on the async workers every other command shares
     crate::blocking(|| {
         let _hold = crate::xtra_previews::reserve("kit").map_err(crate::xtra_previews::busy_text)?;
+        crate::xtra_previews::stop_kept(true); // the helpers a preview run left open hold the kit's files
         fs::remove_dir_all(kit_dir()).or_else(|e| if e.kind() == std::io::ErrorKind::NotFound { Ok(()) } else { Err(e.to_string()) })
     }).await
 }

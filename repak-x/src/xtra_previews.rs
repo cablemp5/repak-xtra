@@ -336,6 +336,29 @@ pub(crate) fn lock_generator() -> Result<Option<std::fs::File>, String> {
     lock_generator_in(&previews_dir().join("work")).map_err(|_| "Previews are being made (here, in another copy of the app, or by hand). Try again when that is done.".into())
 }
 
+/// Blender and the exporter a preview run leaves open for the next one (preview_fixes/keeper.py, about 3 GB of memory
+/// and the kit's and the game's files held open) end when their state file goes: when the app closes, the game starts,
+/// and before the kit is replaced or removed. `wait`: until they are gone (each keeps an .alive file while it runs), 8 s
+/// at most, for a caller that needs the kit's files free.
+pub(crate) fn stop_kept(wait: bool) {
+    let dir = previews_dir().join("work").join("keep");
+    let with = |ext: &str| -> Vec<PathBuf> {
+        std::fs::read_dir(&dir).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == ext)).collect()
+    };
+    for f in with("json") {
+        let _ = std::fs::remove_file(f);
+    }
+    if wait {
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(8);
+        while !with("alive").is_empty() && std::time::Instant::now() < end {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        for f in with("alive") { // a keeper that was killed left its file: never waited on twice
+            let _ = std::fs::remove_file(f);
+        }
+    }
+}
+
 fn clear_stale_work(scratch: &Path) {
     // held until the folders are gone, so no generator starts on them meanwhile (ours starts after this returns)
     let Ok(_held) = lock_generator_in(scratch) else { return };
@@ -473,6 +496,7 @@ pub(crate) fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Re
         ("borrowed_pose.py", include_str!("preview_fixes/borrowed_pose.py")),
         ("app_usmap.py", include_str!("preview_fixes/app_usmap.py")),
         ("speed.py", include_str!("preview_fixes/speed.py")),
+        ("keeper.py", include_str!("preview_fixes/keeper.py")),
         ("viewer_lobby.py", include_str!("preview_fixes/viewer_lobby.py")),
     ] {
         let path = runtime.join(name);

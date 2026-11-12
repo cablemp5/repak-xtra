@@ -320,6 +320,15 @@ if all(anim_source.count(old) == 1 for old, _ in anim_hooks) and source.count(an
     if not patched_anim.exists() or patched_anim.read_text(encoding="utf-8") != anim_source:
         patched_anim.write_text(anim_source, encoding="utf-8")
     source = source.replace(anim_fps, anim_fps.replace("15, 6.0", "60, 6.0"), 1).replace(anim_path, "Path(" + repr(str(patched_anim)) + ")", 1)
+# Blender's render server is the one the last run left open, when a keeper still has it (speed.py kept, keeper.py). A
+# kit without this exact line starts its own each run, as before.
+open_blender = '''        cls.proc = subprocess.Popen([str(bl), "-b", "--factory-startup", "--python", str(BLENDER_SERVER)],
+                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                    encoding="utf-8", errors="replace", creationflags=NO_WINDOW,
+                                    env={**os.environ, "REPAKXTRA_STAGES": "1"})
+'''
+if source.count(open_blender) == 1:
+    source = source.replace(open_blender, '        cls.proc = kept([str(bl), "-b", "--factory-startup", "--python", str(BLENDER_SERVER)], {"REPAKXTRA_STAGES": "1"})\n', 1)
 # A different fingerprint regenerates cached renders as they are requested. The rim setting is not part of it: changing
 # the setting must not render every preview again
 # (10001: painted galaxy skins, flow lines and their animation. 10002: blueprint skins, galaxy masks and sprites, borrowed
