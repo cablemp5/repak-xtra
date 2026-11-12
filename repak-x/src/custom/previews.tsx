@@ -321,6 +321,16 @@ export function BeatVideo({ src, beat }: { src: string; beat: number }) {
 }
 
 
+const had = new Set<string>() // keys that have shown a picture: their next one is a replacement
+const decodedUrls = new Set<string>()
+/** The picture at this URL decoded, so an image given it shows in its first frame. */
+async function decode(url: string) {
+  if (decodedUrls.has(url)) return
+  const img = new Image()
+  img.src = url
+  await img.decode().catch(() => undefined)
+  decodedUrls.add(url)
+}
 /** A preview's object URL at this revision: cached, or read once however many cards ask. Resolves to the URL, null
  *  when the read failed, or undefined when the revision was dropped or replaced before it finished. */
 function loadUrl(key: string, rev: number): Promise<string | null | undefined> {
@@ -328,13 +338,18 @@ function loadUrl(key: string, rev: number): Promise<string | null | undefined> {
   if (c?.rev === rev) return Promise.resolve(c.url)
   const f = urlLoads.get(key)
   if (f?.rev === rev) return f.p
-  const p: Promise<string | null | undefined> = fileOf(key, rev).then(file => {
-    if (urlLoads.get(key)?.p !== p || revs.get(key) !== rev) return undefined // stale: dropped unused
-    urlLoads.delete(key)
-    if (!file) return null
+  const p: Promise<string | null | undefined> = fileOf(key, rev).then(async file => {
+    const stale = () => urlLoads.get(key)?.p !== p || revs.get(key) !== rev
+    if (stale()) return undefined // dropped unused
+    if (!file) { urlLoads.delete(key); return null }
     const { url, name } = file
     if (name.endsWith('.webm')) videoUrls.add(url) // a KO prompt mod's recording
     if (name.endsWith('.webp')) animatedUrls.add(url) // idlePause.ts shows it still while the window is in the background
+    // A picture made again (a Regenerate, a still's animated version arriving) is handed over already decoded, so it
+    // takes the old one's place in the same frame: shown undecoded, the card went blank and faded the new one in
+    if (had.has(key) && !name.endsWith('.webm')) { await decode(url); if (stale()) return undefined }
+    urlLoads.delete(key)
+    had.add(key)
     urls.set(key, { rev, url })
     return url
   }, () => {
@@ -355,6 +370,7 @@ function loadThumb(key: string, rev: number): Promise<string | null | undefined>
   if (c?.rev === rev) return Promise.resolve(c.url)
   const f = thumbLoads.get(key)
   if (f?.rev === rev) return f.p
+  const again = had.has(key) // a replacement: its card-sized copy is decoded before it is handed over too
   const p: Promise<string | null | undefined> = loadUrl(key, rev).then(async full => {
     if (!full || videoUrls.has(full)) return full
     let url = full
@@ -373,6 +389,7 @@ function loadThumb(key: string, rev: number): Promise<string | null | undefined>
       }
       bmp?.close()
     } catch { /* the full picture then */ }
+    if (again) await decode(url)
     if (thumbLoads.get(key)?.p !== p || revs.get(key) !== rev) { if (url !== full) URL.revokeObjectURL(url); return undefined }
     thumbLoads.delete(key)
     thumbs.set(key, { rev, url })
@@ -388,19 +405,14 @@ export const cachedPreviewUrl = (key: string | undefined, thumb = false) => {
   return rev !== undefined && c?.rev === rev ? c.url : null
 }
 
-const decodedUrls = new Set<string>()
-/** Whether readyPreview already decoded this URL: its image can show at once, without the blur-in. */
+/** Whether this URL's picture is already decoded: its image can show at once, without the blur-in. */
 export const isDecoded = (url: string | null | undefined) => Boolean(url && decodedUrls.has(url))
 /** A preview read and its picture decoded, so a carousel turns onto an image that is already there (no blank frame). */
 export async function readyPreview(key: string | undefined, thumb = false): Promise<void> {
   const rev = key !== undefined ? revs.get(key) : undefined
   if (key === undefined || rev === undefined) return
   const url = await (thumb ? loadThumb : loadUrl)(key, rev)
-  if (!url || decodedUrls.has(url)) return
-  const img = new Image()
-  img.src = url
-  await img.decode().catch(() => undefined)
-  decodedUrls.add(url)
+  if (url && !videoUrls.has(url)) await decode(url)
 }
 
 /** Object URL of the mod's preview, or null while none exists. The URL is shared: unmounting never revokes it.
