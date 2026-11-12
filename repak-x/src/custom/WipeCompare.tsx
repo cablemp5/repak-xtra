@@ -74,7 +74,7 @@ export default function WipeCompare({ previewKey }: { previewKey: string }) {
   if (!before) return null
   return (
     <div ref={box} className={`wipe${at > 0 ? ' is-open' : ''}${inRow ? ' is-row' : ''}`}>
-      <img className="wipe-before" src={before} alt="" draggable={false} />
+      <img className="wipe-before pv-kit" src={before} alt="" draggable={false} />
       <span className="wipe-line" role="slider" tabIndex={0} aria-label="Compare with the unmodded hero" aria-valuemin={0} aria-valuemax={100}
         aria-valuenow={Math.round(at)} aria-valuetext={`${Math.round(at)}% unmodded`}
         onKeyDown={e => {

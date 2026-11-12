@@ -54,9 +54,7 @@ html[data-view="ko"] .view-tabs::before { transform: translateX(calc(200% + 4px)
 .ko-load .ko-note { text-wrap: balance; }
 .ko-load-bar { width: 100%; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
 .ko-load-bar span { display: block; height: 100%; border-radius: 2px; transition: width 300ms cubic-bezier(0.22, 1, 0.36, 1);
-  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.45) 50%, transparent 100%) 0 0 / 50% 100% no-repeat, var(--accent-primary);
-  animation: ko-bar-shine 1.4s cubic-bezier(0.45, 0, 0.55, 1) infinite; }   /* a light running along the filled part */
-@keyframes ko-bar-shine { from { background-position: -100% 0, 0 0; } to { background-position: 200% 0, 0 0; } }
+  background: var(--accent-primary); }   /* a plain fill: the bar's movement is the work's own */
 .ko-load-step { font-size: 13px; animation: ko-step-in var(--text-swap-dur, 150ms) var(--text-swap-ease, ease-in-out) both; }
 @keyframes ko-step-in { from { opacity: 0; transform: translateY(var(--text-swap-translate-y, 4px)); filter: blur(var(--text-swap-blur, 2px)); } }
 .ko-shimmer { color: transparent; background: linear-gradient(90deg, var(--text-secondary) 0%, var(--text-secondary) 40%, var(--text-primary) 50%, var(--text-secondary) 60%, var(--text-secondary) 100%) 0 0 / 250% 100%;

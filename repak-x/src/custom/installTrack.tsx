@@ -1,13 +1,14 @@
 // repakxtra: install progress for Setup and the guided setup (FirstRun.tsx), one look for every install: the signature
 // bypass, Project Galacta, the preview kit and Blender. The VFX Updater's look (cable's pick, 2026-10-25, in place of a
 // spinner): what is happening now in shimmer text (three words at most, longer is cut off in a card), how much has
-// downloaded ("38.0/108 MB"), and a thin bar under it with a light running along it. A finished install says so for a moment
+// downloaded ("38.0/108 MB"), and a thin bar under it, one for the whole install (GlideFill.tsx). A finished install says so for a moment
 // in green before the card's own state takes over.
 import { useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { Check } from 'lucide-react'
 import type { KitProgress } from './previewKit'
 import { SwapText } from './motion'
+import { GlideFill } from './GlideFill'
 
 const DONE_MS = 2400
 const MB = (n: number) => (n >= 100 * 1048576 ? `${Math.round(n / 1048576)} MB` : `${(n / 1048576).toFixed(1)} MB`)
@@ -18,9 +19,10 @@ const amountOf = (done: number, total: number) => (total ? `${MB(done).replace('
 export function InstallTrack({ steps = [], at = 0, text, amount, share, done }: {
   steps?: string[]; at?: number; text: string; amount?: string; share: number | null; done?: string
 }) {
-  const pct = share === null ? null : Math.round(Math.min(1, Math.max(0, share)) * 100)
-  // the bar: the share when it is known, else the middle of the current step (the VFX Updater's), else full while it sweeps
-  const width = pct ?? (steps.length > 1 ? ((at + 0.5) / steps.length) * 100 : 100)
+  // one bar for the whole install: each step is an equal part of it, filled by its share when that is known. A step
+  // with no size to count starts at its part's beginning and the fill moves on toward its end by itself (GlideFill)
+  const parts = Math.max(steps.length, 1), part = Math.min(at, parts - 1)
+  const pct = ((part + (share === null ? 0 : Math.min(1, Math.max(0, share)))) / parts) * 100
   return (
     <div className={`su-track${done ? ' is-done' : ''}`} role="status" aria-live="polite">
       <div className="su-track-line">
@@ -29,7 +31,7 @@ export function InstallTrack({ steps = [], at = 0, text, amount, share, done }: 
         <span className="su-track-text">{done ? <SwapText text={done} /> : <span className="t-shimmer"><SwapText text={text} /></span>}</span>
         {!done && amount && <span className="su-track-amount">{amount}</span>}
       </div>
-      {!done && <div className="su-bar" aria-hidden="true"><i style={{ width: `${width}%` }} /></div>}
+      {!done && <div className="su-bar" aria-hidden="true"><GlideFill pct={pct} next={share === null ? ((part + 1) / parts) * 100 : undefined} /></div>}
     </div>
   )
 }

@@ -109,11 +109,8 @@ button.vf-loadouts:focus-visible { outline: 2px solid var(--accent-primary); out
 /* running: under the name (lined up with it, past the tick), the app's thin bar, then one line of what it is doing */
 .vf-progress { flex-basis: 100%; min-width: 0; margin-top: -8px; padding: 0 0 12px 28px; }   /* close under the name: the tick row is 40px tall, the name sits in its middle */
 .vf-bar { height: 4px; border-radius: 999px; overflow: hidden; background: var(--bg-lighter); }
-/* the fill carries the app's shimmer sweep (transitions.dev: Shimmer), so a long step still reads as working */
-.vf-bar i { display: block; height: 100%; transition: width 0.4s var(--acc-ease);
-  background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-primary) 38%, color-mix(in srgb, var(--accent-primary), white 45%) 50%,
-    var(--accent-primary) 62%, var(--accent-primary) 100%) 0 0 / 250% 100% no-repeat;
-  animation: t-shimmer var(--shimmer-dur, 2s) var(--shimmer-ease, linear) infinite; }
+/* a plain fill: it keeps moving through a long step by itself (GlideFill.tsx), so it still reads as working */
+.vf-bar i { display: block; height: 100%; background: var(--accent-primary); }
 .vf-step { margin: 8px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 8px; font-size: 13px; color: var(--text-secondary); }
 /* a long message cuts off with an ellipsis, never past the row */
 .vf-step-sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }

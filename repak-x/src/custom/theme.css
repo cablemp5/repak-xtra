@@ -1028,7 +1028,7 @@ html[data-hide-tags] .mod-tags-row > .tag:not(.hero-tag) { display: none !import
 /* ---------- loadout cards: portrait media (the generated previews' hero card ratio) on the card's own surface ---------- */
 .lo-card-image { aspect-ratio: 1358 / 1920; background: transparent !important; border-bottom: 1px solid var(--panel-border) !important; }
 .lo-card-image img { object-fit: cover; }
-.lo-card-image:hover img { opacity: 1; filter: brightness(1.08); }
+.lo-card-image:hover img { opacity: 1; filter: brightness(1.08) var(--pv-boost); }
 .lo-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
 .mod-preview-frame { height: 380px; max-width: 100%; aspect-ratio: 1358 / 1920; margin: 0 auto; }
 .mod-preview-frame img, .mod-preview-frame video { display: block; width: 100%; height: 100%; object-fit: contain; }
@@ -1453,7 +1453,7 @@ html[data-motion="off"] .has-seg-pill::before { transition: none !important; }
   -webkit-mask-composite: source-in; mask-composite: intersect; }
 .cr-slide.is-out::after { content: ''; position: absolute; inset: 0; background: #000; pointer-events: none;
   animation: cr-dim var(--cr-dur) var(--cr-ease) both; }
-.cr-slide.is-out img { opacity: 1 !important; filter: none !important; }
+.cr-slide.is-out img { opacity: 1 !important; filter: var(--pv-boost) !important; }
 :root { --cr-dur: 450ms; --cr-ease: cubic-bezier(0.22, 1, 0.36, 1); }
 @keyframes cr-enter { from { transform: translate3d(100%, 0, 0); } }
 @keyframes cr-enter-left { from { transform: translate3d(-100%, 0, 0); } }
@@ -1534,10 +1534,16 @@ html[data-motion="off"] .t-shimmer-all { animation: none !important; -webkit-mas
   transition: opacity var(--acc-collapse) var(--acc-ease), filter var(--acc-collapse) var(--acc-ease); }
 .t-acc-panel[data-open="true"] .t-acc-panel-inner { opacity: 1; filter: blur(0); transition: opacity var(--acc-expand) var(--acc-ease), filter var(--acc-expand) var(--acc-ease); }
 .fp-expand svg { transition: transform var(--acc-chevron) var(--acc-ease) !important; }
+/* A preview kit render shows a touch richer than its file: one fixed amount, put on the picture as it is drawn, so
+   every saved preview has it at once and a render takes no longer (baked in, an animated one took 2.5 s more). pv-kit
+   marks a kit render, the before picture too: never a loadout's own image, a capture, or a KO prompt preview. filter
+   is one property, so every filter rule on these pictures ends with the boost (1 and 1 where it is no kit render) */
+:root { --pv-boost: contrast(1) saturate(1); }
+.pv-kit { --pv-boost: contrast(1.075) saturate(1.15); filter: var(--pv-boost); }
 /* transitions.dev: Skeleton reveal. Previews and loadout images cross-blur in once loaded */
-.lo-card-image img, .mod-preview-frame img { opacity: 0; filter: blur(var(--reveal-blur));
+.lo-card-image img, .mod-preview-frame img { opacity: 0; filter: blur(var(--reveal-blur)) var(--pv-boost);
   transition: opacity var(--reveal-dur) var(--reveal-ease), filter var(--reveal-dur) var(--reveal-ease); }
-.lo-card-image img.is-loaded, .mod-preview-frame img.is-loaded { opacity: 1; filter: blur(0); }
+.lo-card-image img.is-loaded, .mod-preview-frame img.is-loaded { opacity: 1; filter: blur(0) var(--pv-boost); }
 /* transitions.dev: Number pop-in. A count that changes pops up into place */
 @keyframes t-num-pop { from { opacity: 0; transform: translateY(var(--digit-distance)); filter: blur(var(--digit-blur)); } }
 .t-num-pop { display: inline-block; animation: t-num-pop var(--digit-dur) var(--digit-ease) backwards; }
@@ -1735,7 +1741,7 @@ html[data-motion="off"] .t-acc-panel, html[data-motion="off"] .t-acc-panel-inner
 /* ---------- preview batches: card skeletons (transitions.dev Skeleton loader) ---------- */
 :root { --pulse-dur: 1000ms; --pulse-min: 0.5; --skel-tone: rgba(255, 255, 255, 0.07); }
 /* The card: its image darkens and blurs under a shimmer while the render runs or waits, its status written on it */
-.lo-media:is(.is-running, .is-queued) .lo-card-image :is(img, video) { opacity: 0.3; filter: blur(10px); }   /* video: KO prompt previews play as one */
+.lo-media:is(.is-running, .is-queued) .lo-card-image :is(img, video) { opacity: 0.3; filter: blur(10px) var(--pv-boost); }   /* video: KO prompt previews play as one */
 .lo-media.is-running .lo-card-placeholder, .lo-media.is-queued .lo-card-placeholder { visibility: hidden; }
 .lo-skel { position: absolute; inset: 0; z-index: 1; pointer-events: none; display: flex; align-items: center; justify-content: center;
   overflow: hidden; background: rgba(6, 7, 9, 0.55); animation: t-skel-pulse var(--pulse-dur) ease-in-out infinite; }
@@ -1902,12 +1908,9 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
    primary color, how far along in grey after it. A finished install turns its words green with a check for a moment */
 .su-track { min-width: 0; margin-top: 8px; font-size: 13px; }
 .su-track-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
-/* the VFX Updater's thin bar (.vf-bar): the fill's shimmer is in the shared loading-bar rule below */
+/* the VFX Updater's thin bar (.vf-bar), with a plain fill: a bar's movement is the work's own (GlideFill.tsx) */
 .su-bar { height: 4px; margin-top: 8px; border-radius: 999px; overflow: hidden; background: var(--bg-lighter); }
-.su-bar i { display: block; height: 100%; transition: width 0.4s var(--acc-ease, cubic-bezier(0.22, 1, 0.36, 1));
-  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.45) 50%, transparent 100%) 0 0 / 50% 100% no-repeat, var(--accent-primary);
-  animation: su-bar-shine 1.4s cubic-bezier(0.45, 0, 0.55, 1) infinite; }   /* a light running along the filled part (the KO Editor's load bar) */
-@keyframes su-bar-shine { from { background-position: -100% 0, 0 0; } to { background-position: 200% 0, 0 0; } }
+.su-bar i { display: block; height: 100%; background: var(--accent-primary); }
 .su-track-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: var(--text-primary); }
 .su-track-amount { flex: none; margin-left: auto; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .su-track.is-done, .su-track.is-done .su-track-text { color: #3ecf6e; }
@@ -2785,11 +2788,14 @@ html[data-motion="off"] .vfx-dot { animation: none; }
 /* ---------- Numbers in a colored bubble: one centering rule for all of them (the conflicts count, the All / On / Off
    counts, a collection's count, the setup step numbers, the selection numbers). Tabular digits, so a 1 sits in the
    middle of its slot instead of left of it. The line is trimmed to the digits' own top and bottom (cap height to baseline), then padded evenly to the bubble's
-   height, so the ink is in the middle at every size and in every pill, with no per-pill nudge. ---------- */
-:is(.cf-count:not(.is-done), .mod-state-count, .lo-group-count, .fr-num:not(:has(svg)), .vf-grp-count, .fp-section-picked) { --pill-h: 20px;
+   height, so the ink is in the middle at every size and in every pill, with no per-pill nudge.
+   The step number's :has() stands outside the :is() list (doubled class: the list's weight). Inside it, the browser
+   could not tell which elements the :has() was about and styled the whole page again on every element added to or
+   taken from <body> or its children: 12 ms a time with 3,000 elements, once a second from the F3 counter alone. ---------- */
+:is(.cf-count:not(.is-done), .mod-state-count, .lo-group-count, .vf-grp-count, .fp-section-picked), .fr-num.fr-num:not(:has(svg)) { --pill-h: 20px;
   display: inline-block !important; height: auto !important; box-sizing: border-box; line-height: 1 !important; text-align: center;
   text-box: trim-both cap alphabetic; padding-block: calc((var(--pill-h) - 1cap) / 2) !important; font-variant-numeric: tabular-nums; }
-:is(.cf-count:not(.is-done), .mod-state-count, .lo-group-count, .fr-num:not(:has(svg)), .vf-grp-count, .fp-section-picked) > * { text-box: trim-both cap alphabetic; line-height: 1; }
+:is(.cf-count:not(.is-done), .mod-state-count, .lo-group-count, .vf-grp-count, .fp-section-picked) > *, .fr-num.fr-num > :not(svg) { text-box: trim-both cap alphabetic; line-height: 1; }   /* (a step number's children: no :has() here, its check mark is the svg) */
 .cf-count:not(.is-done) { --pill-h: 24px; min-width: 22px; padding-inline: 8px !important; }
 .mod-state-count { min-width: 22px; padding-inline: 8px !important; }
 .lo-group-count { min-width: 20px; padding-inline: 8px !important; }
@@ -2943,20 +2949,19 @@ button.mod-type-badge { display: inline-flex; align-items: center; min-height: 0
 /* Home, opened from that badge: the row it points at glows once */
 .bi-item.is-flash { box-shadow: inset 0 0 0 1px var(--accent-primary); transition: box-shadow var(--reveal-dur) var(--reveal-ease); }
 
-/* Every loading bar in the app fills with the VFX Updater's shimmer sweep (transitions.dev: Shimmer), and the text that
-   says what is loading shimmers with it: install progress toasts, the log bar, the app update, the tools.
-   The auto-dismiss line of an ordinary toast is a timer, not loading, so it stays plain. */
+/* Every loading bar in the app has a plain accent fill: no shimmer or light on a bar, its movement is the work's own
+   (it eases to each report). The text that says what is loading shimmers (transitions.dev: Shimmer): install
+   progress toasts, the log bar, the app update, the tools. */
 .toast-item.is-working .toast-progress-bar,
 .log-drawer-progress-bar:not(.indeterminate),
 .progress-bar-fill,
 .download-progress .progress-fill,
 .repakx-progress-indicator,
-.bi-bar i,
 .upd-bar i {
-  background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-primary) 38%, color-mix(in srgb, var(--accent-primary), white 45%) 50%,
-    var(--accent-primary) 62%, var(--accent-primary) 100%) 0 0 / 250% 100% no-repeat !important;
-  animation: t-shimmer var(--shimmer-dur, 2s) var(--shimmer-ease, linear) infinite !important;
+  background: var(--accent-primary) !important;
+  animation: none !important;
 }
+.toast-item.is-working .toast-progress-bar { transition: transform 0.3s ease-out; } /* its reports come seconds apart: it eased 0.1 s, a jump */
 .toast-item.is-working .toast-title,
 .log-drawer-header.is-loading .log-drawer-status-text,
 .transfer-progress-view .progress-info span:first-child,

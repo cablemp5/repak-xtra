@@ -14,7 +14,8 @@ import { type Loadout, coverFills, displayName, memberName, modKey, nameKey, pat
 import { revealOnLoad } from './motion'
 import { EGG_MS, stepEgg, stepText } from './previewStages'
 import { ordinal, plural } from './modName'
-import { animatedUrls, isIdle } from './idlePause'
+import { animatedUrls, coverStills, isIdle } from './idlePause'
+import { smallCopyAway } from './thumbWorker'
 import { koPreview } from './ko/koPreview'
 import { verdictOf } from './brokenMods'
 import { fixInVfxWindow } from './vfx/handoff'
@@ -65,6 +66,8 @@ const thumbLoads = new Map<string, { rev: number; p: Promise<string | null | und
 const dropCached = (key: string) => {
   const u = urls.get(key)
   if (u) { URL.revokeObjectURL(u.url); videoUrls.delete(u.url); animatedUrls.delete(u.url) }
+  const s = u && coverStills.get(u.url)
+  if (s) { URL.revokeObjectURL(s); coverStills.delete(u.url) }
   const t = thumbs.get(key)
   if (t && t.url !== u?.url) URL.revokeObjectURL(t.url)
   thumbs.delete(key)
@@ -321,6 +324,16 @@ export function BeatVideo({ src, beat }: { src: string; beat: number }) {
 }
 
 
+const had = new Set<string>() // keys that have shown a picture: their next one is a replacement
+const decodedUrls = new Set<string>()
+/** The picture at this URL decoded, so an image given it shows in its first frame. */
+async function decode(url: string) {
+  if (decodedUrls.has(url)) return
+  const img = new Image()
+  img.src = url
+  await img.decode().catch(() => undefined)
+  decodedUrls.add(url)
+}
 /** A preview's object URL at this revision: cached, or read once however many cards ask. Resolves to the URL, null
  *  when the read failed, or undefined when the revision was dropped or replaced before it finished. */
 function loadUrl(key: string, rev: number): Promise<string | null | undefined> {
@@ -328,13 +341,18 @@ function loadUrl(key: string, rev: number): Promise<string | null | undefined> {
   if (c?.rev === rev) return Promise.resolve(c.url)
   const f = urlLoads.get(key)
   if (f?.rev === rev) return f.p
-  const p: Promise<string | null | undefined> = fileOf(key, rev).then(file => {
-    if (urlLoads.get(key)?.p !== p || revs.get(key) !== rev) return undefined // stale: dropped unused
-    urlLoads.delete(key)
-    if (!file) return null
+  const p: Promise<string | null | undefined> = fileOf(key, rev).then(async file => {
+    const stale = () => urlLoads.get(key)?.p !== p || revs.get(key) !== rev
+    if (stale()) return undefined // dropped unused
+    if (!file) { urlLoads.delete(key); return null }
     const { url, name } = file
     if (name.endsWith('.webm')) videoUrls.add(url) // a KO prompt mod's recording
     if (name.endsWith('.webp')) animatedUrls.add(url) // idlePause.ts shows it still while the window is in the background
+    // A picture made again (a Regenerate, a still's animated version arriving) is handed over already decoded, so it
+    // takes the old one's place in the same frame: shown undecoded, the card went blank and faded the new one in
+    if (had.has(key) && !name.endsWith('.webm')) { await decode(url); if (stale()) return undefined }
+    urlLoads.delete(key)
+    had.add(key)
     urls.set(key, { rev, url })
     return url
   }, () => {
@@ -348,31 +366,32 @@ function loadUrl(key: string, rev: number): Promise<string | null | undefined> {
 /** Width of the copy loadout cards draw (THUMB_W px, WebP, same transparency): a card shows a 640 px render at under
  *  200 px, and the browser keeps every drawn picture decoded at its full size, so a grid of 40 held 86 MB of them. */
 const THUMB_W = 400
-/** A card-sized copy of a preview at this revision, made once in the page from the full picture (which is decoded only
- *  for the moment that takes). The full URL when it is a video, already small, or the copy fails. */
+/** A card-sized copy of a preview at this revision, made once from the full picture (which is decoded only for the
+ *  moment that takes). The full URL when it is a video, already small, or the copy fails. */
 function loadThumb(key: string, rev: number): Promise<string | null | undefined> {
   const c = thumbs.get(key)
   if (c?.rev === rev) return Promise.resolve(c.url)
   const f = thumbLoads.get(key)
   if (f?.rev === rev) return f.p
+  const again = had.has(key) // a replacement: its card-sized copy is decoded before it is handed over too
   const p: Promise<string | null | undefined> = loadUrl(key, rev).then(async full => {
     if (!full || videoUrls.has(full)) return full
     let url = full
     try {
       const blob = await (await fetch(full)).blob()
       const head = new Uint8Array(await blob.slice(0, 21).arrayBuffer())
-      // an animated WebP (an emote's animation preview) would freeze on one frame: the full one plays
+      // an animated WebP (an emote's animation preview) would freeze on one frame: the full one plays, and its first
+      // frame's copy is what the card shows while the grid scrolls hard (idlePause.ts holdCovers)
       const animated = new TextDecoder().decode(head.subarray(12, 16)) === 'VP8X' && (head[20] & 0x02) !== 0
-      const bmp = animated ? null : await createImageBitmap(blob)
-      if (bmp && bmp.width > THUMB_W * 1.25) {
-        const small = await createImageBitmap(bmp, { resizeWidth: THUMB_W, resizeQuality: 'high' })
-        const canvas = new OffscreenCanvas(small.width, small.height)
-        canvas.getContext('2d')!.drawImage(small, 0, 0)
-        small.close()
-        url = URL.createObjectURL(await canvas.convertToBlob({ type: 'image/webp', quality: 0.92 }))
+      const small = await smallCopyAway(blob, THUMB_W, animated) // in a worker: thumbWorker.ts
+      if (small) {
+        const copy = URL.createObjectURL(small)
+        if (!animated) url = copy
+        else if (urls.get(key)?.url === full) { coverStills.set(full, copy); void decode(copy) } // ready before a scroll asks
+        else URL.revokeObjectURL(copy) // the preview changed meanwhile
       }
-      bmp?.close()
     } catch { /* the full picture then */ }
+    if (again) await decode(url)
     if (thumbLoads.get(key)?.p !== p || revs.get(key) !== rev) { if (url !== full) URL.revokeObjectURL(url); return undefined }
     thumbLoads.delete(key)
     thumbs.set(key, { rev, url })
@@ -388,19 +407,14 @@ export const cachedPreviewUrl = (key: string | undefined, thumb = false) => {
   return rev !== undefined && c?.rev === rev ? c.url : null
 }
 
-const decodedUrls = new Set<string>()
-/** Whether readyPreview already decoded this URL: its image can show at once, without the blur-in. */
+/** Whether this URL's picture is already decoded: its image can show at once, without the blur-in. */
 export const isDecoded = (url: string | null | undefined) => Boolean(url && decodedUrls.has(url))
 /** A preview read and its picture decoded, so a carousel turns onto an image that is already there (no blank frame). */
 export async function readyPreview(key: string | undefined, thumb = false): Promise<void> {
   const rev = key !== undefined ? revs.get(key) : undefined
   if (key === undefined || rev === undefined) return
   const url = await (thumb ? loadThumb : loadUrl)(key, rev)
-  if (!url || decodedUrls.has(url)) return
-  const img = new Image()
-  img.src = url
-  await img.decode().catch(() => undefined)
-  decodedUrls.add(url)
+  if (url && !videoUrls.has(url)) await decode(url)
 }
 
 /** Object URL of the mod's preview, or null while none exists. The URL is shared: unmounting never revokes it.
@@ -638,7 +652,7 @@ export function ModPreview({ path, categories = [] }: { path: string; categories
       {threeD && <div className="mod-preview-frame is-3d"><Viewer3D viewKey={key} paths={[path]} name={path.split(/[\\/]/).pop()!.replace(/(_\d+_P)?\.(pak|bak_repak|utoc|ucas)$/i, '')} /></div>}
       {!threeD && url && (
         <div className={`mod-preview-frame${forms.length ? ' has-forms' : ''}`}>
-          {isVideoPreview(url) ? <BeatVideo src={url} beat={KO_BEAT} /> : <img src={url} alt="Generated preview" onLoad={revealOnLoad} crossOrigin="anonymous" />}
+          {isVideoPreview(url) ? <BeatVideo src={url} beat={KO_BEAT} /> : <img className={isKoPreview(key) ? undefined : 'pv-kit'} src={url} alt="Generated preview" onLoad={revealOnLoad} crossOrigin="anonymous" />}
           {forms.map(k => <FormImage key={k} k={k} />)}
         </div>
       )}
@@ -661,7 +675,7 @@ export function ModPreview({ path, categories = [] }: { path: string; categories
 /** Another form's image beside the first in the details panel. */
 function FormImage({ k }: { k: string }) {
   const src = usePreviewUrl(k)
-  return src ? <img src={src} alt="Generated preview, another form" onLoad={revealOnLoad} crossOrigin="anonymous" /> : null
+  return src ? <img className={isKoPreview(k) ? undefined : 'pv-kit'} src={src} alt="Generated preview, another form" onLoad={revealOnLoad} crossOrigin="anonymous" /> : null
 }
 
 /** Previews for a set of mods (the selection bar, a loadout page), with progress and Stop while its own run goes.
