@@ -11,7 +11,8 @@
 // Most skins' hair and skirts, and most mods with their own physics, swing on KawaiiPhysics nodes in that AnimBlueprint
 // instead (physics.json `kawaii`): the same particles, stepped as the plugin steps them (the speed kept times
 // 1 - Damping, half the gravity, a pull of Stiffness toward the animated shape, its node's own capsules, its angle limit),
-// and as the view turns they lag behind by the chain's share of the turn, as they do when the hero is turned in the game
+// and as the view turns they lag behind by a fifth of the chain's share of the turn: the plugin passes on that much of
+// the hero's own turning (WorldDampingRotation 0.8, its default), the full share threw hair and skirts out on every drag
 import * as THREE from 'three/webgpu'
 
 type Sim = { bone: string; parent: string | null; swing: (number | null)[]; linear: number; angular: number; gravity: number; radius: number }
@@ -25,6 +26,7 @@ type V3 = InstanceType<typeof THREE.Vector3>
 type Q = InstanceType<typeof THREE.Quaternion>
 
 const X = new THREE.Vector3(1, 0, 0)
+const TURN_KEPT = 0.2 // 1 - KawaiiPhysics WorldDampingRotation
 const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3(), q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion()
 
 /** Unreal's swing-angle distance between two local rotations (twist about X ignored), degrees. */
@@ -144,7 +146,7 @@ export function lobbyPhysics(root: InstanceType<typeof THREE.Object3D>, data: Ph
     if (tip.lengthSq() < 1e-10) return []
     // the wider of its two swings (an ellipse in Unreal): the narrower froze a bone with one axis locked
     const limit = s.swing.every(x => x === null) ? Math.PI : THREE.MathUtils.degToRad(Math.max(...s.swing.map(x => x ?? 180)))
-    return [row(bone, tip, { limit, radius: s.radius, keep: Math.exp(-(s.linear + s.angular * 0.25) / 60), pull: 1 / 30, fall: new THREE.Vector3(0, (-9.8 * s.gravity) / 3600, 0), kawaii: false, cols: own, turn: 0 })]
+    return [row(bone, tip, { limit, radius: s.radius, keep: Math.exp(-(s.linear + s.angular * 0.25) / 60), pull: 1 / 12, fall: new THREE.Vector3(0, (-9.8 * s.gravity) / 3600, 0), kawaii: false, cols: own, turn: 0 })]
   })
   // a capsule a bone's tip already sits in at the start (a skirt root inside its thigh's capsule) is no wall for it:
   // pushed out every frame, the skirt stood off the legs (the asset's own collision table is not exported)
@@ -210,7 +212,7 @@ export function lobbyPhysics(root: InstanceType<typeof THREE.Object3D>, data: Ph
       v1.subVectors(s.p, s.prev).multiplyScalar((Math.pow(s.keep, e) * h) / before)
       s.prev.copy(s.p)
       s.p.add(v1)
-      if (turn && s.turn) s.p.add(v2.subVectors(s.prev, origin).applyAxisAngle(UP, turn * s.turn).add(origin).sub(s.prev))
+      if (turn && s.turn) s.p.add(v2.subVectors(s.prev, origin).applyAxisAngle(UP, turn * s.turn * TURN_KEPT).add(origin).sub(s.prev))
       s.p.addScaledVector(s.fall, k * e * e).lerp(want, 1 - Math.pow(1 - s.pull, e))
       // out of the body's capsules
       for (const i of s.cols) {

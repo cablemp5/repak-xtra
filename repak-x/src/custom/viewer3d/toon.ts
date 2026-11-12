@@ -101,7 +101,13 @@ export function fxGlow(m: Mat, fx: Record<string, Tex>) {
         pulse = smoothstep(0.15, 0.85, pow(noise, Math.max(1, num(m, ['FlowNoisePower'], 1) * 0.6)))
       }
       const strength = Math.min(4, Math.max(1, num(m, ['FlowMaskIntensity'], 1) * num(m, ['FlowNoiseIntensity', 'FX_FlowNoise_Strength'], 1) * 0.6))
-      add(lines.mul(col([c[0] / peak, c[1] / peak, c[2] / peak])).mul(pulse).mul(strength * 0.5))
+      // What makes a skin glow in the game: the line color is far over white (Black Panther's MCU suit and its recolors
+      // set 80), and the lobby's bloom spreads whatever is over white around the lines. The color's size is kept as
+      // stops over white (80 is 6.3 of them), so the bloom pass, which reads this, puts the same halo round them. A
+      // color at 1 or under (Electric Violet's veins) is as before. shortcut: stops, not the raw 80, the master's own
+      // scaling between the color and the screen is not read
+      const hdr = Math.max(1, Math.log2(1 + peak))
+      add(lines.mul(col([c[0] / peak, c[1] / peak, c[2] / peak])).mul(pulse).mul(strength * 0.5 * hdr))
     }
   }
   // a glitter (Snow - EmissiveFlickerMap, Phoenix's Snow Veil dress): its star sprites barely visible, as in the game's

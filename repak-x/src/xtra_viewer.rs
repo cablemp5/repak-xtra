@@ -107,6 +107,16 @@ fn prune_exports(current: &str) {
 
 /// Whether an export's physics.json is this version's (v 2: with the KawaiiPhysics chains). An older or missing one
 /// reads as not made, so the export is made again.
+/// A Spider-Man export whose idle is his Lobby_Stand_Idle hangs him upside down from his web. Kit 21 takes the first
+/// lobby idle that stands, so with that kit installed such an export is made again (never with an older kit, which
+/// would only make the same one on every open).
+fn hangs(model: &serde_json::Value) -> bool {
+    crate::xtra_kit::installed_version().is_some_and(|v| v >= 21) && hangs_upside_down(model)
+}
+fn hangs_upside_down(model: &serde_json::Value) -> bool {
+    model["target"].as_str().is_some_and(|t| t.contains("/Characters/1036/")) && model["idle"]["anim"].as_str().is_some_and(|a| a.ends_with("/Lobby_Stand_Idle"))
+}
+
 fn physics_current(export: &Path) -> bool {
     std::fs::read(export.join("physics.json")).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok()).is_some_and(|p| p["v"].as_u64().unwrap_or(0) >= 3)
 }
@@ -150,7 +160,7 @@ pub fn viewer_state(key: String, paths: Vec<String>) -> &'static str {
         // and for its v 3: additive pose assets and how far a chain lags behind a turn)
         let no_physics = model["lobby"] == true && !physics_current(&export);
         let unnamed = || !export.join("slots.json").is_file() && glb_has_unnamed_slot(&export.join("model.glb")); // last: it reads the file
-        return if !base_gone && !old && !no_physics && !unnamed() && (paths.is_empty() || read(export.join("stamp.json")) == stamp_of(&paths)) { "ready" } else { "stale" };
+        return if !base_gone && !old && !no_physics && !hangs(&model) && !unnamed() && (paths.is_empty() || read(export.join("stamp.json")) == stamp_of(&paths)) { "ready" } else { "stale" };
     }
     let none = dir.join(format!("{key}.3d-none.json"));
     if none.is_file() && (paths.is_empty() || read(none) == stamp_of(&paths)) {
@@ -317,7 +327,7 @@ pub async fn generate_default_viewer(app: AppHandle, target: String, state: Stat
     let model: serde_json::Value = std::fs::read(previews_dir().join(format!("{key}.3d")).join("model.json")).ok()
         .and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
     let has_physics = model["lobby"] != true || physics_current(&previews_dir().join(format!("{key}.3d")));
-    if model["v"].as_u64().unwrap_or(0) >= 2 && has_physics {
+    if model["v"].as_u64().unwrap_or(0) >= 2 && has_physics && !hangs(&model) {
         let _ = std::fs::write(previews_dir().join(format!("{key}.3d")).join("used"), b""); // opened now: prune keeps it
         return Ok(key);
     }
@@ -460,6 +470,15 @@ pub(crate) fn texcheck_reasons(mod_paths: &[String]) -> Vec<(String, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_spider_mans_stand_idle_hangs() {
+        let m = |target: &str, anim: &str| serde_json::json!({ "target": target, "idle": { "anim": anim } });
+        assert!(hangs_upside_down(&m("/Game/Marvel/Characters/1036/1036001/Meshes/SK_1036_1036001", "/Game/Marvel/Characters/1036/1036001/Animations/HeroDetails/Lobby_Stand_Idle")));
+        assert!(!hangs_upside_down(&m("/Game/Marvel/Characters/1036/1036001/Meshes/SK_1036_1036001", "/Game/Marvel/Characters/1036/1036001/Animations/HeroDetails/Lobby_Half_Idle")));
+        assert!(!hangs_upside_down(&m("/Game/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001", "/Game/Marvel/Characters/1026/1026001/Animations/HeroDetails/Lobby_Stand_Idle")));
+        assert!(!hangs_upside_down(&serde_json::json!({})));
+    }
 
     #[test]
     fn viewer_files_stay_inside() {
