@@ -21,7 +21,7 @@ import { verdictOf } from './brokenMods'
 import { APP_NAME } from './edition'
 import { fixInVfxWindow } from './vfx/handoff'
 import { KO_BEAT } from './ko/render'
-import { Rotate3DButton, Viewer3D, shows3d, use3dPossible } from './viewer3d/Rotate3D'
+import { Rotate3DButton, Viewer3D, shows3d, use3dPossible, usePrepare3d } from './viewer3d/Rotate3D'
 
 const NOTHING = 'Nothing to show for this mod: previews cover skins, meshes, textures, animations, UI icons, VFX colors, and sounds.'
 const FAILED = 'The last render failed. The full error is in Logs.'
@@ -186,17 +186,23 @@ listen<string>('mod-preview-warn', e => { if (active && !run.quiet) warnListener
 listen('mod-previews-busy', () => { // the generator refused: another one holds its lock. Nothing starts until done
   if (!active) return
   leftPending = unfinished()
+  if (resuming) { active = false; launched = false; pending.clear(); queue.length = 0; retryLater(); return } // the last session's generator, still ending
   run.busy = BUSY
   for (const k of [...pending, ...(run.set ? [run.set] : []), ...queue.flatMap(keysOf)]) outcome.set(k, BUSY)
   pending.clear()
   queue.length = 0
   notify()
 }).catch(() => undefined)
-listen<boolean>('mod-previews-done', e => finish(e.payload)).catch(() => undefined)
+// only for a run the backend took from us (launched): the done of a run that was going before ours (the last session's,
+// stopped by a pickup) came while ours read its KO mods, and ended ours as failed
+let launched = false
+listen<boolean>('mod-previews-done', e => { if (launched) finish(e.payload) }).catch(() => undefined)
 /** A run's end: the kit's done event, or the KO renderer's when the kit had nothing to do (ok: it ran through). */
 function finish(ok: boolean) {
   if (!active) return // a window that did not start this run (Asset Explorer, VFX Updater) stays quiet
   active = false
+  launched = false
+  if (!run.busy) resuming = false // a picked-up batch is under way: later refusals are ordinary ones again
   const left = pending.size
   pending.forEach(k => outcome.set(k, run.stopping ? 'Stopped before this mod.' : FAILED))
   pending.clear()
@@ -500,6 +506,21 @@ let current: QueuedJob | null = null
 let leftArmed = false
 let leftSaved: string | undefined
 let leftPending: Left | null = null
+// A batch picked up at start meets the generator the closed session left running (a crash or a forced close does not end
+// it, and it holds the generator's lock, so every start is refused). It is told to stop (the job it was on starts again
+// here anyway), and the batch tries again every few seconds until it starts, without failure toasts. Starting again on
+// every refusal, with nothing to wait on, ran the batch through as failures in seconds (2026-11-13).
+let resuming = false
+let retryAt = 0
+let tries = 0
+const RETRY_MS = 4000
+const TRIES = 30 // two minutes, then it waits for the next start of the app
+function retryLater() {
+  if (++tries >= TRIES) { resuming = false; return } // kept saved for the next start
+  retryAt = Date.now() + RETRY_MS
+  setTimeout(notify, RETRY_MS + 50)
+  notify()
+}
 function readLeft(text: string | null): Left | null {
   try {
     const value = JSON.parse(text ?? 'null')
@@ -557,6 +578,7 @@ export const generatePreviews = (job: Job): Promise<string | null> => {
 const refuse = (job: Job, reason: string) => {
   leftPending = unfinished()
   active = false
+  if (resuming) { pending.clear(); queue.length = 0; retryLater(); return reason } // the batch waits and tries again, quietly
   pending.clear()
   for (const j of [job, ...queue]) keysOf(j).forEach(k => outcome.set(k, reason))
   queue.length = 0
@@ -571,6 +593,7 @@ const start = async (job: QueuedJob): Promise<string | null> => {
   const jobs = [...new Map(job.paths.map(p => [nameKey(p), [p.replace(/[/\\][^/\\]+$/, ''), nameKey(p)] as [string, string]])).values()]
   if (jobs.length === 0) return null
   active = true
+  launched = false
   current = job
   jobs.forEach(([, k]) => { pending.add(k); outcome.delete(k) })
   if (job.set) outcome.delete(job.set)
@@ -604,7 +627,7 @@ const start = async (job: QueuedJob): Promise<string | null> => {
   }
   run.step = undefined
   try {
-    if (await invoke<boolean>('generate_mod_previews', { jobs: kit, set: job.set ?? null, force: Boolean(job.force) })) return null
+    if (await invoke<boolean>('generate_mod_previews', { jobs: kit, set: job.set ?? null, force: Boolean(job.force) })) { launched = true; return null }
     return refuse(job, 'Another preview run is still going.')
   } catch (e) {
     return refuse(job, String(e))
@@ -711,8 +734,11 @@ export function usePreviewFailureToast(alert: ReturnType<typeof useAlert>) {
       })
     }
     armLeft()
+    let told = false // one toast for the whole pickup, however many tries it takes
     const resume = () => {
-      if (!leftPending || !available || running() || run.busy || run.summary) return
+      if (!leftPending || !available || running() || Date.now() < retryAt) return
+      if (!resuming && (run.busy || run.summary)) return // a batch this session started and ended is not picked up again
+      if (!resuming) { resuming = true; tries = 0; void invoke('cancel_mod_previews').catch(() => undefined) }
       const left = leftPending
       leftPending = null
       batchDone = left.done
@@ -722,6 +748,8 @@ export function usePreviewFailureToast(alert: ReturnType<typeof useAlert>) {
         if (!queue.some(q => q.id === id)) queue.push({ ...j, id })
       }
       startNext()
+      if (told) return
+      told = true
       const n = left.jobs.length
       const id = alert.info('Previews resumed', `${left.done ? `${plural(left.done, 'preview job')} finished before ${APP_NAME} closed. ` : ''}Resuming ${plural(n, 'remaining job')}. The one that was running starts again.`, {
         duration: 10000, action: { label: 'Stop them', onClick: () => { alert.dismissAlert(id); stop() } },
@@ -775,6 +803,7 @@ export function ModPreview({ path, categories = [] }: { path: string; categories
   const [threeD, setThreeD] = useState(false) // Rotate in 3D: the model in this frame instead of the image
   useEffect(() => setThreeD(false), [key])
   const can3d = use3dPossible(key, usePreviewVersion()) && shows3d(categories) // a mesh, retexture, or material mod
+  usePrepare3d(can3d, key, [path], null)
   return (
     <div className="detail-section mod-preview">
       {threeD && <div className="mod-preview-frame is-3d"><Viewer3D viewKey={key} paths={[path]} name={path.split(/[\\/]/).pop()!.replace(/(_\d+_P)?\.(pak|bak_repak|utoc|ucas)$/i, '')} /></div>}
