@@ -393,13 +393,33 @@ def close_uat_serve():
 atexit.register(close_uat_serve)
 
 
+TOGETHER = [False]   # this mount repacks every mod of the set (repack_dir, mount() through runtime.py)
+
+
+def repack_dir(entries, utoc, ucas, pak):
+    """Where a mod's repacked container is kept. Alone (no encrypted mod in the set): by its own files, as the kit keeps
+    it. Repacked with its set (TOGETHER): by its files and every other mod's of the set, which its references resolved
+    against."""
+    own = signature(utoc, ucas, current_pak(utoc, pak))
+    if TOGETHER[0]:
+        own += "|set|" + "|".join(sorted(signature(u, c, current_pak(u, p)) for _, u, c, p in entries if u))
+    return WORK.parent / "cache" / "repacked" / hashlib.sha1(own.encode()).hexdigest()[:16]
+
+
 def unpack_ahead(work, cfg, entries):
     """mount()'s unpack of every encrypted mod that is not kept yet, before it runs: mount() then finds each kept. A
     one-shot run loads the game in the tool each time (5 to 9 s), so a loadout's five took 36 s one after another. They
-    go through the app's tool kept in serve mode (uat_extract), or without it all at once (16 s for the five)."""
+    go through the app's tool kept in serve mode (uat_extract), or without it all at once (16 s for the five).
+    With an encrypted mod in a set of several, every mod of the set is unpacked together, in one extract with all of
+    them mounted, and each is repacked from its own share of it. One mod's references into another (a mesh swap's hair
+    slots pointing at a material only an encrypted mod ships) are written by package hash, and the repacked encrypted mod
+    hashes its packages differently from the tool that made the original, so a mod left as shipped lost them: the
+    HonnasPhoenix loadout rendered bald (its four hair slots read as no material, 2026-11-13)."""
+    TOGETHER[0] = len([e for e in entries if e[1]]) > 1 and any(e[1] and obfuscated(e[1]) for e in entries)
+    if TOGETHER[0]:
+        return unpack_together(work, cfg, entries)
     def kept_at(e):
-        stem, utoc, ucas, pak = e
-        return WORK.parent / "cache" / "repacked" / hashlib.sha1(signature(utoc, ucas, current_pak(utoc, pak)).encode()).hexdigest()[:16]
+        return repack_dir(entries, e[1], e[2], e[3])
     todo = [e for e in entries if obfuscated(e[1]) and not (kept_at(e) / (e[0] + ".utoc")).exists()]
     if not todo:
         return
@@ -417,7 +437,46 @@ def unpack_ahead(work, cfg, entries):
             tmp.rename(repacked)
     on_threads(one, todo, 6)
     # mount() trims the kept ones to the 20 newest only when it unpacks one itself: here, never this run's own
-    mine = {kept_at(e) for e in entries if obfuscated(e[1])}
+    mine = {kept_at(e) for e in entries if e[1] and obfuscated(e[1])}
+    old = sorted((d for d in (WORK.parent / "cache" / "repacked").iterdir() if d.is_dir() and not d.name.endswith(".tmp") and d not in mine),
+                 key=lambda d: d.stat().st_mtime, reverse=True)
+    for d in old[max(0, 20 - len(mine)):]:
+        shutil.rmtree(d, ignore_errors=True)
+    stage("mount")
+
+
+def unpack_together(work, cfg, entries):
+    """unpack_ahead for a set with an encrypted mod: one extract of every mod (all mounted, in their order, so a later
+    mod's copy of a package wins as in the game), then each mod's own packages repacked into its kept folder."""
+    mods = [e for e in entries if e[1]]
+    todo = [e for e in mods if not (repack_dir(entries, e[1], e[2], e[3]) / (e[0] + ".utoc")).exists()]
+    if not todo:
+        return
+    stage("unpack")
+    legacy = work / "legacy" / "_set"
+    shutil.rmtree(legacy, ignore_errors=True)
+    uat_extract(["extract_iostore_legacy", cfg["paks"], legacy, "--mod", *[e[1] for e in mods], "--aes", cfg["aes"]])
+    def one(e):
+        stem, utoc = e[0], e[1]
+        repacked = repack_dir(entries, utoc, e[2], e[3])
+        own, tmp = work / "legacy" / stem, repacked.with_name(repacked.name + ".tmp")
+        shutil.rmtree(own, ignore_errors=True)
+        shutil.rmtree(tmp, ignore_errors=True)
+        tmp.mkdir(parents=True)
+        # its packages, as its listing names them (Marvel/Content/..., a plugin's Content/...): every file of each
+        for rel in {m for m in re.findall(r"(?:\.\./)*(\S+?)\.uasset", listing(utoc))}:
+            for f in (legacy / rel).parent.glob((legacy / rel).name + ".*"):
+                if f.suffix.lower() in (".uasset", ".uexp", ".ubulk", ".uptnl") or f.name.lower().endswith(".m.ubulk"):
+                    (own / rel).parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(f, own / f.relative_to(legacy))
+        if not own.exists():
+            return   # nothing of its own came out: mount() unpacks it alone, as before
+        run([UAT, "create_mod_iostore", tmp / stem, own, "--usmap", cfg["usmap"]], 600)
+        if (tmp / (stem + ".utoc")).exists():
+            shutil.rmtree(repacked, ignore_errors=True)
+            tmp.rename(repacked)
+    on_threads(one, todo, 6)
+    mine = {repack_dir(entries, e[1], e[2], e[3]) for e in mods}
     old = sorted((d for d in (WORK.parent / "cache" / "repacked").iterdir() if d.is_dir() and not d.name.endswith(".tmp") and d not in mine),
                  key=lambda d: d.stat().st_mtime, reverse=True)
     for d in old[max(0, 20 - len(mine)):]:

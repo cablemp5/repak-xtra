@@ -197,6 +197,12 @@ source = source.replace(main_guard, (runtime / "speed.py").read_text(encoding="u
 mount_start = '    stage("mount")\n    (work / "paks").mkdir(parents=True)\n'
 if source.count(mount_start) == 1:
     source = source.replace(mount_start, mount_start + "    unpack_ahead(work, cfg, entries)\n", 1)
+    # a set with an encrypted mod mounts every mod repacked together (speed.py unpack_ahead): mount() takes each from there
+    for old, new in (("        if obfuscated(utoc):\n", "        if obfuscated(utoc) or (TOGETHER[0] and utoc):\n"),
+                     ('            repacked = WORK.parent / "cache" / "repacked" / hashlib.sha1(signature(utoc, ucas, pak).encode()).hexdigest()[:16]\n',
+                      "            repacked = repack_dir(entries, utoc, ucas, pak)\n")):
+        if source.count(old) == 1:
+            source = source.replace(old, new, 1)
 # The animation lives beside its still: a character's cleanup (keep_only .png) keeps a .webp written after the .png (a flow
 # animation; an older animation mod's .webp is older and still goes), and a dropped form or an empty loadout takes its .webp too
 cleanup = [
