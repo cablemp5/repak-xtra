@@ -1,10 +1,10 @@
-//! repakxtra: materials and blueprints cooked in an older game build's property layout, rewritten in today's. Cooked
-//! assets store properties by their index in the class, so a patch that inserts properties moves every later one. Game
-//! build 3984769 (2026-10-29) put bOverride_RenderExtraDepthWithoutMasked and bRenderExtraDepthWithoutMasked at index
-//! 40 of MaterialInstanceBasePropertyOverrides: an older material instance that overrides TwoSided, BlendMode,
-//! ShadingModel or OpacityMaskClipValue is then read wrong and the game crashes loading it ("Bad name index", seen on
-//! MI_1026001_Eyes). Today's USMAP cannot read such a file either, so the VFX Updater found nothing to change.
-//! Each file is read with an older USMAP, the newest first that reads it whole, and written again with today's
+//! repakxtra: packages cooked in an older game build's property layout, rewritten in today's. Cooked assets store
+//! properties by their index in the class, so a patch that inserts properties moves every later one, and the game
+//! crashes loading an older file (3984769 moved the material overrides, 4042190 moved MaterialInstance and
+//! AnimSequenceBase, so every older material and emote animation). Today's USMAP cannot read such a file either.
+//! Each file is read with an older USMAP, the newest first that reads it whole, and written again with today's: the
+//! structs that moved between the two get new headers from the tool, each export's own header is carried over to the
+//! new indices (xtra_usmap_diff remap_headers), and only a file that reads back with the same values goes in
 //! (pipeline.ts runs it right after extracting the mod, so every later step sees the new layout).
 
 use std::collections::HashSet;
@@ -20,9 +20,8 @@ use crate::xtra_niagara::{older_usmaps, read_json, stage, stage_links, to_json, 
 #[derive(Serialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Relaid {
-    /// Rewritten in today's layout (package paths without extension, as given)
+    /// Rewritten in today's layout (package paths without extension, as given), each read back with the same values
     pub(crate) files: Vec<String>,
-    pub(crate) surgical: Vec<String>,
     /// In no layout a USMAP here reads, so kept as they were
     unread: Vec<String>,
     /// In an older layout but not rewritten safely (staging, writing or the read-back failed): the update stops on them
@@ -47,28 +46,32 @@ pub(crate) enum Game<'a> {
     Fetch(&'a str),
 }
 
-/// Each export's properties, or None when the tool could not read one (it keeps such an export as raw bytes).
-fn decoded(json: &Value) -> Option<Vec<&Value>> {
+/// The class an export is of, by name, when it is an import (a native class); None for a class the package defines.
+fn class_of<'a>(json: &'a Value, e: &Value) -> Option<&'a str> {
+    let i = e.get("ClassIndex")?.as_i64().filter(|i| *i < 0)?;
+    json.get("Imports")?.get((-i - 1) as usize)?.get("ObjectName")?.as_str()
+}
+
+/// Each export's values (its properties and its trailing native data), or None when the tool could not read one of a
+/// class whose layout moved (`moved`): it keeps such an export as raw bytes. A raw export of a class that did not move
+/// reads the same in both layouts, its bytes compared as they are (a montage's notify the tool has no schema for).
+fn decoded<'a>(json: &'a Value, moved: &HashSet<String>) -> Option<Vec<(&'a Value, &'a Value)>> {
     json.get("Exports")?
         .as_array()?
         .iter()
-        .map(|e| (!e.get("$type").and_then(Value::as_str).unwrap_or_default().contains("RawExport")).then(|| e.get("Data").unwrap_or(&Value::Null)))
+        .map(|e| {
+            let raw = e.get("$type").and_then(Value::as_str).unwrap_or_default().contains("RawExport");
+            (!raw || class_of(json, e).is_some_and(|c| !moved.contains(c))).then(|| (e.get("Data").unwrap_or(&Value::Null), e.get("Extras").unwrap_or(&Value::Null)))
+        })
         .collect()
 }
 
-/// Structs a patch inserted properties into. shortcut: listed by hand from the USMAPs (3984769, as
-/// mrm.dafyddjon.es found), add a struct when a patch moves another one's properties.
-const MOVED: &[&str] = &["MaterialInstanceBasePropertyOverrides"];
-
-/// Without the unversioned header the tool keeps from the file it read for each struct in MOVED: it holds the old
-/// layout's property indices and is written back as it is, so without it the tool writes a new one from the USMAP. The
-/// other headers stay (the tool's own new ones are wrong for some structs, ScalarParameterValue among them).
+/// Without every header the tool keeps from the file it read: decodes are compared by their values alone, since a
+/// rewrite gives the moved structs new headers.
 fn bare(v: &mut Value) {
     match v {
         Value::Object(m) => {
-            if m.get("StructType").and_then(Value::as_str).is_some_and(|t| MOVED.contains(&t)) {
-                m.remove("OriginalStructHeader");
-            }
+            m.remove("OriginalStructHeader");
             m.values_mut().for_each(bare);
         }
         Value::Array(a) => a.iter_mut().for_each(bare),
@@ -76,52 +79,20 @@ fn bare(v: &mut Value) {
     }
 }
 
-
-/// Only the known two-property insertion at index 40, with no fragment split or size change.
-fn header_bytes(v: &Value) -> Option<Vec<u8>> {
+/// For a rewrite: without the header the tool keeps for each struct in `moved` (it holds the old layout's indices, so
+/// the tool writes a new one from the USMAP). The other headers stay: the tool's own new ones are wrong for some
+/// structs, ScalarParameterValue among them.
+fn bare_moved(v: &mut Value, moved: &HashSet<String>) {
     match v {
-        Value::Object(m) if m.get("StructType").and_then(Value::as_str) == Some(MOVED[0]) => {
-            let fragments = m.get("OriginalStructHeader")?.get("Fragments")?.as_array()?;
-            let mut out = Vec::new();
-            for f in fragments {
-                let skip = u16::try_from(f.get("SkipNum")?.as_u64()?).ok()?;
-                let count = u16::try_from(f.get("ValueNum")?.as_u64()?).ok()?;
-                if skip > 127 || count > 127 { return None }
-                let packed = skip | (count << 9) | if f.get("bHasAnyZeroes")?.as_bool()? { 128 } else { 0 }
-                    | if f.get("bIsLast")?.as_bool()? { 256 } else { 0 };
-                out.extend_from_slice(&packed.to_le_bytes());
+        Value::Object(m) => {
+            if m.get("StructType").and_then(Value::as_str).is_some_and(|t| moved.contains(t)) {
+                m.remove("OriginalStructHeader");
             }
-            (!out.is_empty()).then_some(out)
+            m.values_mut().for_each(|v| bare_moved(v, moved));
         }
-        Value::Object(m) => m.values().find_map(header_bytes),
-        Value::Array(a) => a.iter().find_map(header_bytes),
-        _ => None,
+        Value::Array(a) => a.iter_mut().for_each(|v| bare_moved(v, moved)),
+        _ => {}
     }
-}
-
-fn patch_header(original: &[u8], old: &[u8], new: &[u8]) -> Option<Vec<u8>> {
-    if old.len() != new.len() || old.is_empty() || old.len() % 2 != 0 { return None }
-    let mut index = 0usize;
-    let mut changed = false;
-    for (a, b) in old.chunks_exact(2).zip(new.chunks_exact(2)) {
-        let a = u16::from_le_bytes([a[0], a[1]]);
-        let b = u16::from_le_bytes([b[0], b[1]]);
-        let start = index + usize::from(a & 127);
-        let count = usize::from(a >> 9);
-        if a != b {
-            if changed || start < 40 || b != a.checked_add(2)? || a & 127 > 125 { return None }
-            changed = true;
-        // fragments after the shifted one sit past the insert, and their relative skips are unchanged
-        } else if !changed && start + count > 40 { return None }
-        index = start + count;
-    }
-    if !changed { return None }
-    let mut matches = original.windows(old.len()).enumerate().filter(|(_, bytes)| *bytes == old);
-    let offset = matches.next()?.0;
-    if matches.next().is_some() { return None }
-    let mut patched = original.to_vec();
-    patched[offset..offset + new.len()].copy_from_slice(new);
-    Some(patched)
 }
 
 /// The JSON with every name's base in its NameMap: the tool reads "/Game/.../M_StandardBasic_1026" as the name
@@ -142,12 +113,12 @@ pub(crate) fn to_tool_json(j: &mut Value) -> Vec<u8> {
     serde_json::to_vec(j).unwrap_or_default()
 }
 
-/// The material overrides (MOVED) a decode read, by property name: what tells two layouts' readings apart, since a mod
+/// The material overrides a decode read, by property name: what tells two layouts' readings apart, since a mod
 /// recolors parameters and keeps the game's overrides.
 fn overrides(j: &Value) -> Option<Vec<(&str, &Value)>> {
     fn find(v: &Value) -> Option<&Value> {
         match v {
-            Value::Object(m) if m.get("StructType").and_then(Value::as_str).is_some_and(|t| MOVED.contains(&t)) => Some(v),
+            Value::Object(m) if m.get("StructType").and_then(Value::as_str) == Some("MaterialInstanceBasePropertyOverrides") => Some(v),
             Value::Object(m) => m.values().find_map(find),
             Value::Array(a) => a.iter().find_map(find),
             _ => None,
@@ -194,6 +165,10 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
         }
         clock = std::time::Instant::now();
     };
+    // the layouts the last game updates moved (and below, the ones between each older USMAP and today's): a raw export
+    // of any other class reads the same in both
+    let mut moved = crate::xtra_usmap_diff::moved_lately();
+    let new_layout = crate::xtra_usmap_diff::layout(Path::new(usmap));
     let now_json = match today {
         Some(d) => d.to_path_buf(),
         None => {
@@ -208,7 +183,7 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
     // each was read from disk for the question below, and again for the list after it)
     // (several files at a time: reading 400 of them one after the other took over a second)
     use rayon::prelude::*;
-    let mut whole: std::collections::HashMap<&String, Value> = rels.par_iter().filter_map(|r| Some((r, decode(&now_json, r).filter(|j| decoded(j).is_some())?))).collect();
+    let mut whole: std::collections::HashMap<&String, Value> = rels.par_iter().filter_map(|r| Some((r, decode(&now_json, r).filter(|j| decoded(j, &moved).is_some())?))).collect();
     let fetched = match game {
         Game::Fetch(paks) => {
             // only what the copies could settle: material instances today's USMAP reads whole
@@ -227,7 +202,7 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
         .iter()
         .filter_map(|r| {
             // (a path listed twice finds the map empty the second time and is read again, as each one used to be)
-            let today = whole.remove(r).or_else(|| decode(&now_json, r).filter(|j| decoded(j).is_some()));
+            let today = whole.remove(r).or_else(|| decode(&now_json, r).filter(|j| decoded(j, &moved).is_some()));
             // Read whole today with the game's own overrides: today's layout is the right one whatever an older USMAP
             // reads (old_reading_right's first case), so no older USMAP is asked about it. For a mod already in
             // today's layout that is every file, and the older decode (5 s for 400 materials) does not run at all
@@ -245,7 +220,6 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
     let fixed_json = work.join("fixed_json");
     let _ = std::fs::remove_dir_all(&fixed_json);
     let mut read_any = false;
-    let mut headers = std::collections::HashMap::new();
     for candidate in older_usmaps(build, (made > 0).then_some(made)).await {
         if pending.is_empty() {
             break;
@@ -253,6 +227,15 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
         let Some(old) = candidate.fetch().await else { continue };
         lap("older mappings fetched");
         read_any = true;
+        // what moved between this USMAP and today's: those structs get new headers, the exports' own are remapped
+        let (pair, old_layout) = match (crate::xtra_usmap_diff::moved_between(Path::new(&old), Path::new(usmap)), crate::xtra_usmap_diff::layout(Path::new(&old)), &new_layout) {
+            (Ok(m), Ok(l), Ok(_)) => (m, l),
+            (a, b, c) => {
+                log::warn!("[vfx relayout] {old}: {:?} {:?} {:?}", a.err(), b.err(), c.as_ref().err());
+                continue;
+            }
+        };
+        moved.extend(pair.iter().cloned());
         let (input, json) = (work.join("old"), work.join("old_json"));
         let names: Vec<String> = pending.iter().map(|(r, _)| r.clone()).collect();
         stage_links(mod_extract, &input, &names)?;
@@ -261,26 +244,32 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
         }
         pending.retain(|(r, today)| {
             let Some(j) = decode(&json, r) else { return true };
-            let Some(then) = decoded(&j) else { return today.is_none() }; // read whole today: today's layout is right
-            if today.as_ref().and_then(decoded).is_some_and(|t| t == then) {
+            let Some(then) = decoded(&j, &moved) else { return today.is_none() }; // read whole today: today's layout is right
+            if today.as_ref().and_then(|t| decoded(t, &moved)).is_some_and(|t| t == then) {
                 return false; // the same in both layouts: nothing to rewrite
             }
             if today.as_ref().is_some_and(|t| !old_reading_right(t, &j, game.get(r), older)) {
                 return false; // both read whole and today's reading is the right one
             }
-            // Ambiguous files that both layouts read are left to the reconstruction fallback.
-            if today.is_none() && overrides(&j).is_some() {
-                if let Ok(raw) = read_json(&json.join(format!("{r}.json"))) {
-                    if let Some(h) = header_bytes(&raw) { headers.insert(r.clone(), h); }
+            // the file as the tool read it, headers and all: the moved structs' headers go, the exports' are remapped
+            let rewritten = read_json(&json.join(format!("{r}.json"))).and_then(|mut raw| {
+                bare_moved(&mut raw, &pair);
+                crate::xtra_usmap_diff::remap_headers(&mut raw, &old_layout, new_layout.as_ref().map_err(String::clone)?)?;
+                let to = fixed_json.join(format!("{r}.json"));
+                std::fs::create_dir_all(to.parent().unwrap_or(&fixed_json)).and_then(|_| std::fs::write(&to, to_tool_json(&mut raw))).map_err(|e| e.to_string())
+            });
+            match rewritten {
+                Ok(()) => {
+                    out.files.push(r.clone());
+                    out.old_build = out.old_build.or(usmap_build(&old));
                 }
-            }
-            let to = fixed_json.join(format!("{r}.json"));
-            let moved = std::fs::create_dir_all(to.parent().unwrap_or(&fixed_json)).and_then(|_| std::fs::write(&to, to_tool_json(&mut j.clone())));
-            if moved.is_ok() {
-                out.files.push(r.clone());
-                out.old_build = out.old_build.or(usmap_build(&old));
-            } else {
-                out.failed.push(r.clone());
+                Err(e) => {
+                    log::warn!("[vfx relayout] {r}: {e}");
+                    if std::env::var_os("REPAKXTRA_TIMING").is_some() {
+                        eprintln!("[relayout] {r}: {e}");
+                    }
+                    out.failed.push(r.clone());
+                }
             }
             false
         });
@@ -293,7 +282,8 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
     if out.files.is_empty() {
         return Ok(out);
     }
-    // written with today's USMAP, then read back with it: only a file that reads whole and the same goes into the mod
+    // written with today's USMAP, then read back with it: only a file that reads whole with the same values (every
+    // export's properties and trailing native data) goes into the mod
     let (fixed, check) = (work.join("fixed"), work.join("check_json"));
     let _ = std::fs::remove_dir_all(&fixed);
     // one that cannot be written fails the batch but not the others: the check below keeps only what reads back right
@@ -306,44 +296,24 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
     std::fs::write(fixed.join("uasset_list.txt"), written.join("\n")).map_err(|e| e.to_string())?;
     to_json(usmap, &fixed, &check, progress).await?;
     lap("read back");
-    let mut surgical_backups = std::collections::HashMap::new();
-    for r in &out.files {
-        let original_header = std::fs::read(mod_extract.join(format!("{r}.uasset")));
-        let rebuilt_header = std::fs::read(fixed.join(format!("{r}.uasset")));
-        if !matches!((&original_header, &rebuilt_header), (Ok(a), Ok(b)) if a == b) { continue }
-        let Some(old) = headers.get(r) else { continue };
-        let Some(new) = read_json(&check.join(format!("{r}.json"))).ok().and_then(|j| header_bytes(&j)) else { continue };
-        let Ok(bytes) = std::fs::read(mod_extract.join(format!("{r}.uexp"))) else { continue };
-        let Some(patched) = patch_header(&bytes, old, &new) else { continue };
-        let target = fixed.join(format!("{r}.uexp"));
-        let Ok(backup) = std::fs::read(&target) else { continue };
-        if std::fs::write(&target, patched).is_ok() {
-            surgical_backups.insert(r.clone(), backup);
-            out.surgical.push(r.clone());
-        }
-    }
-    // read into its own folder: a restored file is again the one `check` read, so a failed read loses only the patches
-    let check2 = work.join("check2_json");
-    let read2 = out.surgical.is_empty() || to_json(usmap, &fixed, &check2, progress).await.is_ok();
-    lap(&format!("{} header patches and their read back", out.surgical.len()));
-    let mut unrestored = HashSet::new();
-    out.surgical.retain(|r| {
-        let same = read2 && match (decode(&check2, r), decode(&fixed_json, r)) {
-            (Some(a), Some(b)) => decoded(&a).is_some() && decoded(&a) == decoded(&b),
-            _ => false,
-        };
-        if !same && surgical_backups.get(r).is_none_or(|b| std::fs::write(fixed.join(format!("{r}.uexp")), b).is_err()) {
-            unrestored.insert(r.clone());
-        }
-        same
-    });
     let mut kept = Vec::new();
     for r in std::mem::take(&mut out.files) {
-        let read = if out.surgical.contains(&r) { &check2 } else { &check };
-        let same = !unrestored.contains(&r) && match (decode(read, &r), decode(&fixed_json, &r)) {
-            (Some(a), Some(b)) => decoded(&a).is_some() && decoded(&a) == decoded(&b),
-            _ => false,
+        let why = match (decode(&check, &r), decode(&fixed_json, &r)) {
+            (Some(a), Some(b)) => match (decoded(&a, &moved), decoded(&b, &moved)) {
+                (Some(x), Some(y)) if x == y => None,
+                (None, _) => Some("does not read back whole"),
+                _ => Some("reads back with other values"),
+            },
+            (None, _) => Some("was not written"),
+            _ => Some("its rewrite could not be read"),
         };
+        if let Some(why) = why {
+            log::warn!("[vfx relayout] {r}: {why}");
+            if std::env::var_os("REPAKXTRA_TIMING").is_some() {
+                eprintln!("[relayout] {r}: {why}");
+            }
+        }
+        let same = why.is_none();
         let copied = same
             && ["uasset", "uexp"].iter().all(|x| {
                 let (from, to) = (fixed.join(format!("{r}.{x}")), mod_extract.join(format!("{r}.{x}")));
@@ -351,7 +321,6 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
             });
         if copied { kept.push(r) } else { out.failed.push(r) }
     }
-    out.surgical.retain(|r| kept.contains(r));
     out.files = kept;
     lap("compare and copy into the mod");
     Ok(out)
@@ -504,33 +473,20 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn surgical_header_rejects_ambiguity_and_preserves_payload() {
-        let old = (40u16 | 512 | 256).to_le_bytes();
-        let new = (42u16 | 512 | 256).to_le_bytes();
-        let bytes = [99, old[0], old[1], 17, 18];
-        assert_eq!(patch_header(&bytes, &old, &new), Some(vec![99, new[0], new[1], 17, 18]));
-        assert!(patch_header(&[old[0], old[1], old[0], old[1]], &old, &new).is_none());
-        assert!(patch_header(&bytes, &old, &old).is_none());
-        assert!(patch_header(&bytes, &old, &[43, new[1]]).is_none());
-        // a fragment after the shifted one stays as it is
-        let (first, second) = ((40u16 | 512).to_le_bytes(), (3u16 | 512 | 256).to_le_bytes());
-        let old2 = [first[0], first[1], second[0], second[1]];
-        let new2 = [first[0] + 2, first[1], second[0], second[1]];
-        assert_eq!(patch_header(&[7, old2[0], old2[1], old2[2], old2[3], 9], &old2, &new2), Some(vec![7, new2[0], new2[1], new2[2], new2[3], 9]));
-        // but one before it may not reach past the insert
-        let (a, b) = ((30u16 | 12 << 9).to_le_bytes(), (40u16 | 512 | 256).to_le_bytes());
-        assert!(patch_header(&[a[0], a[1], b[0], b[1]], &[a[0], a[1], b[0], b[1]], &[a[0], a[1], b[0] + 2, b[1]]).is_none());
-    }
-
-    #[test]
-    fn a_raw_export_is_not_decoded() {
-        let ok = json!({ "Exports": [{ "$type": "UAssetAPI.ExportTypes.NormalExport, UAssetAPI", "Data": [1] }] });
-        let raw = json!({ "Exports": [{ "$type": "UAssetAPI.ExportTypes.NormalExport, UAssetAPI", "Data": [] }, { "$type": "UAssetAPI.ExportTypes.RawExport, UAssetAPI" }] });
-        assert_eq!(decoded(&ok), Some(vec![&json!([1])]));
-        assert_eq!(decoded(&raw), None);
+    fn a_raw_export_reads_whole_only_when_its_class_did_not_move() {
+        let doc = |second: &str| json!({ "Imports": [{ "ObjectName": "AnimMontage" }, { "ObjectName": "AnimNotifyState_X" }],
+            "Exports": [{ "$type": "UAssetAPI.ExportTypes.NormalExport, UAssetAPI", "ClassIndex": -1, "Data": [1], "Extras": "AA==" },
+                        { "$type": second, "ClassIndex": -2, "Data": "Ag==" }] });
+        let raw = doc("UAssetAPI.ExportTypes.RawExport, UAssetAPI");
+        let moved: HashSet<String> = ["AnimMontage".to_string()].into();
+        assert_eq!(decoded(&raw, &moved), Some(vec![(&json!([1]), &json!("AA==")), (&json!("Ag=="), &Value::Null)]), "an unmoved class's raw bytes are compared as they are");
+        let notify_moved: HashSet<String> = ["AnimNotifyState_X".to_string()].into();
+        assert_eq!(decoded(&raw, &notify_moved), None, "a moved class's raw export is not read");
         let mut h = json!({ "Data": [{ "StructType": "MaterialInstanceBasePropertyOverrides", "OriginalStructHeader": {} }, { "StructType": "Guid", "OriginalStructHeader": {} }] });
+        bare_moved(&mut h, &["MaterialInstanceBasePropertyOverrides".to_string()].into());
+        assert_eq!(h, json!({ "Data": [{ "StructType": "MaterialInstanceBasePropertyOverrides" }, { "StructType": "Guid", "OriginalStructHeader": {} }] }), "for a rewrite only a moved struct's header goes");
         bare(&mut h);
-        assert_eq!(h, json!({ "Data": [{ "StructType": "MaterialInstanceBasePropertyOverrides" }, { "StructType": "Guid", "OriginalStructHeader": {} }] }), "only a moved struct's header goes");
+        assert_eq!(h, json!({ "Data": [{ "StructType": "MaterialInstanceBasePropertyOverrides" }, { "StructType": "Guid" }] }), "for a comparison every header goes");
         let mut j = json!({ "NameMap": ["/Game/M_Basic_1026", "MI_A_0", "T_01", "Plain"] });
         let out: Value = serde_json::from_slice(&to_tool_json(&mut j)).unwrap();
         assert_eq!(out["NameMap"], json!(["/Game/M_Basic_1026", "MI_A_0", "T_01", "Plain", "/Game/M_Basic", "MI_A"]), "bases of numbered names, not of _01");

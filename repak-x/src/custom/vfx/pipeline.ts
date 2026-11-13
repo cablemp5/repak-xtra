@@ -167,7 +167,6 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     o.onStep?.({ step: n, title: STEPS[n - 1] })
   }
   const check = () => { if (o.cancelled?.()) throw new Cancelled() }
-  const surgical = new Set<string>()
   const relaid = new Set<string>() // file names rewritten in today's layout
   const asset = (path: string, kind: AssetKind, detail: string) => {
     if ([...relaid].some(k => assetKey(path).endsWith('/' + k))) detail = detail.replace(/kept as it was/i, m => `${m[0]}ept, rewritten in the new game build's layout`)
@@ -213,12 +212,10 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     // a patch that inserts properties into a class moves every later one (3984769: material overrides), and a file cooked
     // before it crashes the game and reads as nothing to change. Rewritten in today's layout here, every step below reads it
     const older = ask.filter(p => !NIAGARA_BY_NAME.test(fileName(p))).map(p => rel(p).replace(/\.uasset$/i, ''))
-    const re = older.length ? await invoke<{ files: string[]; failed: string[]; unread: string[]; untold: string[]; complete: boolean; surgical?: string[]; oldBuild: number | null; noUsmap: boolean }>('xtra_vfx_relayout', { modPath: src, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath, modExtract: dirs.modExtract, files: older, stageDir: dirs.stage })
+    const re = older.length ? await invoke<{ files: string[]; failed: string[]; unread: string[]; untold: string[]; complete: boolean; oldBuild: number | null; noUsmap: boolean }>('xtra_vfx_relayout', { modPath: src, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath, modExtract: dirs.modExtract, files: older, stageDir: dirs.stage })
       .catch(e => { warn(`Could not check its material layout (${e}).`); return undefined }) : null
     check()
     re?.files.forEach(f => relaid.add(assetKey(f)))
-    re?.surgical?.forEach(f => surgical.add(assetKey(f)))
-    re?.files.filter(f => !surgical.has(assetKey(f))).forEach(f => warn(`${stem(f)}: layout reconstructed through decoded exports. All creator edits are not proven preserved.`))
     report.counts.relaid = re?.files.length ?? 0
     // not checked, or in the old layout and not rewritten: passed on as they are they can crash the game, so the mod stays
     // as it was before any step can pack it
@@ -232,14 +229,14 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       // no older USMAP could be had at all (offline, or GitHub out of lookups for now): the connection, not the USMAP
       const offline = Boolean(re?.noUsmap) && !unrewritten
       const why = re === undefined ? 'its material layout could not be checked'
-        : unrewritten ? `${plural(unrewritten, 'material or blueprint', 'materials and blueprints')} could not be rewritten in the new game build's layout`
+        : unrewritten ? `${plural(unrewritten, 'file')} could not be rewritten in the new game build's layout`
           : offline ? `checking the layout of ${plural(untold, 'material or blueprint', 'materials and blueprints')} needs an older game build's USMAP, and none could be downloaded`
             : `the layout of ${plural(untold, 'material or blueprint', 'materials and blueprints')} could not be told (no older USMAP read ${untold === 1 ? 'it' : 'them'})`
       report.error = `Not updated: ${why}. The mod was not changed. ${offline ? 'Check the internet connection' : 'Check the USMAP in Advanced'}, then try again.`
       log(report.error, 'warning')
       return report // failed: Try again stays
     }
-    if (re?.files.length) log(`Rewrote ${plural(re.files.length, 'material or blueprint', 'materials and blueprints')} cooked in an older game build's layout${re.oldBuild ? ` (build ${re.oldBuild})` : ''}.`, 'warning')
+    if (re?.files.length) log(`Rewrote ${plural(re.files.length, 'file')} cooked in an older game build's layout${re.oldBuild ? ` (build ${re.oldBuild})` : ''}.`, 'warning')
     log(`Read ${plural(extracted.length, 'asset')}. Reading the type of ${ask.length}.`)
     const found = ask.length ? await invoke<Record<string, Detected>>('xtra_vfx_detect', { usmapPath: o.usmapPath, paths: ask }) : {}
     check()
@@ -251,7 +248,6 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     let editable: string[] = [], keep: string[] = []
     const maybe = new Map<string, string>()
     for (const p of extracted) {
-      if (surgical.has(assetKey(rel(p)))) { keep.push(p); asset(p, 'passed', 'Known material header layout repaired. All other bytes preserved.'); continue }
       const d = passes(p) ? undefined : types.get(assetKey(slash(p)))
       if (d && d.kind !== 'other') { editable.push(p); if (d.kind === 'maybe') maybe.set(assetKey(rel(p)), d.class ?? ''); continue }
       keep.push(p)
