@@ -653,6 +653,12 @@ export function VfxUpdaterPanel() {
       if (cancel.current) { patch(key, { status: 'cancelled' }); stopped.push(key); retry.push(key); continue }
       const mod = byKey.get(key)!
       void claimRun(token, mod.name) // the lock says which mod, for the other window's message
+      if (mod.risky && !safeOff) {
+        // Safety: Leave it on. Nothing here rebuilds it, so it stays exactly as it was, flag and all
+        patch(key, { status: 'nothing', report: { mod: mod.utoc, name: mod.name, status: 'nothing', error: `May crash: ${mod.risky} Left on, as Safety says.`,
+          assets: [], warnings: [], counts: { updated: 0, same: 0, added: 0, passed: 0, left: 0, ownGame: 0, unreadable: 0, changes: 0, relaid: 0 }, ms: 0, steps: [] } })
+        continue
+      }
       if (mod.risky) {
         // nothing here rebuilds it: off, as Safety says, so it cannot crash the game, and its May crash flag says why
         const off = await retireUnsafe(mod.path, `May crash: ${mod.risky}`).then(() => ({ ok: true, why: '' }), e => ({ ok: false, why: String(e) }))
