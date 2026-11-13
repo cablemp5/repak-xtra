@@ -428,6 +428,9 @@ async fn save_app_settings(
     state.show_mod_type = settings.show_mod_type;
     state.show_experimental = settings.show_experimental;
     state.auto_check_updates = settings.auto_check_updates;
+    if state.parallel_processing != settings.parallel_processing {
+        crate::xtra_previews::stop_kept(false); // repakxtra: the kept preview helpers end, the next run keeps them for the new time
+    }
     state.parallel_processing = settings.parallel_processing;
     state.hold_to_delete = settings.hold_to_delete;
     state.show_subfolder_mods = settings.show_subfolder_mods;
@@ -476,6 +479,9 @@ async fn set_parallel_processing(
 ) -> Result<(), String> {
     info!("set_parallel_processing called: enabled={}", enabled);
     let mut state = state.lock().unwrap();
+    if state.parallel_processing != enabled {
+        crate::xtra_previews::stop_kept(false); // repakxtra: as in save_app_settings
+    }
     state.parallel_processing = enabled;
     save_state(&state).map_err(|e| e.to_string())?;
     Ok(())

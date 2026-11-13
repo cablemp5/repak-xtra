@@ -11,7 +11,7 @@ _kit_run_spec, _kit_close_exporters = run_spec, close_exporters
 # Seconds a kept program waits for the next run before it ends. The app says how long (xtra_previews.rs: 300 with Faster
 # processing on, 60 with it off: a 3D view opened after that loads the game again, 17 s instead of 4, and until then the
 # helpers hold about 3 GB). The app ends them when the game starts (stop_kept)
-KEEP_IDLE = int(os.environ.get("REPAKXTRA_KEEP_IDLE") or 90)
+KEEP_IDLE = int(v) if (v := os.environ.get("REPAKXTRA_KEEP_IDLE", "")).isdigit() else 90
 
 
 class _Lines:
@@ -377,6 +377,8 @@ def uat_extract(args, timeout=600):
                     stop(s["proc"])
                 s.clear()
                 s["off"] = True
+                if isinstance(e, queue.Empty):   # no answer in time: it may still be writing these files, so no second run on them
+                    raise RuntimeError("the tool did not answer an unpack in time") from None
     run([UAT, *args], timeout)
 
 
