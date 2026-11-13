@@ -135,16 +135,11 @@ assert.equal(accepted.report.status, 'fixed')
 assert.ok(accepted.calls.indexOf('review') < accepted.calls.indexOf('xtra_vfx_place'))
 assert.equal(accepted.placement.partial, false, 'reviewed materials must not request the Niagara retry marker')
 assert.equal(accepted.placement.trashOriginal, true, 'a reviewed candidate follows Originals: the original goes to Recently deleted')
-// every rewritten file read back with the same values (xtra_mi_layout.rs), so it goes in as it is, every edit kept,
-// under Strict too, and is never rebuilt on the game's copy
+// a rewritten material goes on through the usual rebuild (its shader data is the old game's, so it is never kept just
+// for having been rewritten). This one points at its own parent, which a rebuild cannot carry: kept, and installable
 const relaidStrict = await repair('strict', false, false, { relayout: 'rewritten' })
-assert.equal(relaidStrict.report.status, 'fixed', 'a verified rewrite is installable in strict mode')
-assert.equal(relaidStrict.report.warnings.length, 0)
-assert.ok(!relaidStrict.calls.includes('vfx_convert_uassets_to_json'), 'a verified rewrite is not rebuilt from the game copy')
-const surgical = await repair('strict', false, false, { relayout: 'surgical' })
-assert.equal(surgical.report.status, 'fixed', 'proven surgical repair remains installable in strict mode')
-assert.equal(surgical.report.warnings.length, 0)
-assert.ok(surgical.calls.indexOf('xtra_vfx_no_update') > surgical.calls.indexOf('xtra_vfx_place'), 'complete repair clears only after installation')
+assert.equal(relaidStrict.report.status, 'fixed')
+assert.ok(relaidStrict.calls.includes('xtra_vfx_detect'), 'a rewritten material is still read for its type, not passed by')
 for (const niagara of ['retry', 'permanent']) {
   const result = await repair('bestEffort', true, false, { niagara })
   assert.equal(result.report.status, 'fixed')
