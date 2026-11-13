@@ -5394,8 +5394,16 @@ async fn extract_mod_assets_inner(
 }
 
 #[tauri::command]
-async fn check_game_running() -> Result<bool, String> {
+async fn check_game_running(state: State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
     let running = is_game_process_running();
+    // repakxtra: the mods on as the game starts, and when it ends, so a crash report names only those (xtra_crash.rs).
+    // This is the app's game poll (App.tsx, every 5 s)
+    static WAS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if WAS.swap(running, std::sync::atomic::Ordering::Relaxed) != running {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+        let mods = state.lock().unwrap().game_path.clone();
+        std::thread::spawn(move || if running { xtra_crash::remember_on(&mods, now) } else { xtra_crash::remember_end(now) });
+    }
     if running {
         crate::xtra_previews::stop_kept(false); // repakxtra: a game started outside the app (Steam) gets the kept preview helpers' memory too
     }
@@ -6959,7 +6967,6 @@ async fn discord_get_theme(discord_state: State<'_, DiscordState>) -> Result<Str
 #[tauri::command]
 async fn monitor_game_for_crashes(
     crash_state: State<'_, CrashMonitorState>,
-    state: State<'_, Arc<Mutex<AppState>>>, // repakxtra: the mods folder, for which mods are on as the game starts
     window: Window,
 ) -> Result<Option<crash_monitor::CrashInfo>, String> {
     // Use the shared reliable game detection function
@@ -6973,10 +6980,6 @@ async fn monitor_game_for_crashes(
         let now = std::time::SystemTime::now();
         *game_start_time = Some(now);
         *last_checked = Some(now);
-        // repakxtra: which mods are on for this session, so a crash report names only those (xtra_crash.rs)
-        let mods = state.lock().unwrap().game_path.clone();
-        let start = now.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
-        std::thread::spawn(move || xtra_crash::remember_on(&mods, start));
         ui_log::info("Game", "Marvel Rivals started - watching for crashes");
         return Ok(None);
     }
