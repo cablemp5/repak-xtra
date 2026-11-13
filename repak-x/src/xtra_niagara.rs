@@ -126,23 +126,41 @@ fn walk(m: &Value, g: &Value, path: &str, c: &mut Ctx) -> Result<(), Reject> {
     }
     match (m, g) {
         (Value::Object(mo), Value::Object(go)) => {
+            // which compile of the script the game's file holds (its compiler and script hashes): the game's own, never
+            // an edit. 4042190 compiled every Niagara script again, so each differs from any older file's
+            if go.get("Name").and_then(Value::as_str) == Some("CachedScriptVMId") && mo.get("Name") == go.get("Name") {
+                return Ok(());
+            }
             if mo.get("$type") != go.get("$type") {
                 return Err(shape(format!("{path} has another type")));
             }
             for (k, gv) in go {
-                if k == "OriginalUnversionedHeader" {
+                // the tool's record of how the file numbered its properties: layout, never a value (4042190 gave some
+                // Niagara structs a property, which moved these in every older file)
+                if k == "OriginalUnversionedHeader" || k == "OriginalStructHeader" {
                     continue;
                 }
                 if let Some(mv) = mo.get(k) {
                     walk(mv, gv, &format!("{path}.{k}"), c)?;
                 }
             }
-            match mo.keys().find(|k| *k != "OriginalUnversionedHeader" && !go.contains_key(*k)) {
+            match mo.keys().find(|k| *k != "OriginalUnversionedHeader" && *k != "OriginalStructHeader" && !go.contains_key(*k)) {
                 Some(k) => Err(shape(format!("{path}.{k} is gone from the game's file"))),
                 None => Ok(()),
             }
         }
         (Value::Array(ma), Value::Array(ga)) => {
+            // a struct's properties, where the game's build has ones the mod's lacks (4042190 gave every emitter's
+            // ShowModeSetting a TeamFilter): matched by name, and the new ones stay the game's. Only named properties,
+            // each name once: a list's elements are numbered, and one shorter in the mod is still another shape
+            if ma.len() < ga.len() {
+                let name = |v: &Value| v.get("Name").and_then(Value::as_str).filter(|n| n.parse::<u64>().is_err()).map(str::to_string);
+                let (mn, gn): (Vec<_>, Vec<_>) = (ma.iter().map(name).collect(), ga.iter().map(name).collect());
+                let unique = |ns: &[Option<String>]| ns.iter().all(Option::is_some) && ns.iter().collect::<std::collections::HashSet<_>>().len() == ns.len();
+                if unique(&mn) && unique(&gn) && mn.iter().all(|n| gn.contains(n)) {
+                    return ma.iter().zip(&mn).try_for_each(|(a, n)| walk(a, &ga[gn.iter().position(|g| g == n).unwrap()], &format!("{path}.{}", n.as_deref().unwrap_or_default()), c));
+                }
+            }
             if ma.len() != ga.len() {
                 return Err(shape(format!("{path} has {} entries in the mod and {} in the game's file", ma.len(), ga.len())));
             }
