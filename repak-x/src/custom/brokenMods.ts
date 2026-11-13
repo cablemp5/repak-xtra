@@ -5,7 +5,7 @@ import { useEffect, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, listen } from '@tauri-apps/api/event'
 import { isModLoader } from './loadoutStore'
-import { releaseScan, scanEnded, scanHeld, scanStarted } from './scanProgress'
+import { releaseScan, scanEnded, scanHeld, scanStage, scanStarted } from './scanProgress'
 
 /** usmapWait (Needs VFX update only): files it rebuilds that a patch newer than the saved USMAP changed. While it is not
  *  0 the update waits for that patch's USMAP (xtra_broken.rs changed_since_usmap). */
@@ -108,19 +108,19 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     // the four scans (vfx: the VFX and Blueprint ones, meshes: the mesh one), each followed by the badges when it found something.
     // A scan skips a mod it already checked as this file in this game, so a list can be scanned twice cheaply
     const scans = (vfx: string[], meshes: string[]) => Promise.resolve()
-      .then(() => (live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: vfx }) : 0))
+      .then(() => { scanStage('VFX effects'); return live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: vfx }) : 0 })
       .then(found => (live && found ? check() : undefined))
       // materials that match no current game copy wait for the deep pass at the end (deep, below)
-      .then(() => (live ? invoke<number>('xtra_vfx_check_scan', { modPaths: vfx, defer: true }) : 0))
+      .then(() => { scanStage('VFX materials'); return live ? invoke<number>('xtra_vfx_check_scan', { modPaths: vfx, defer: true }) : 0 })
       .then(found => (live && found ? check() : undefined))
-      .then(() => (live ? invoke<number>('xtra_layout_scan', { modPaths: vfx }) : 0))
+      .then(() => { scanStage('Blueprints'); return live ? invoke<number>('xtra_layout_scan', { modPaths: vfx }) : 0 })
       .then(checked => (live && checked ? check() : undefined))
       // and mesh mods whose skeleton the game rebuilt: more bones than it has gets May crash (xtra_mesh.rs)
-      .then(() => (live ? invoke<number>('xtra_mesh_scan', { modPaths: meshes }) : 0))
+      .then(() => { scanStage('Meshes'); return live ? invoke<number>('xtra_mesh_scan', { modPaths: meshes }) : 0 })
       .then(checked => (live && checked ? check() : undefined))
     // the slow part last: the materials check's search of the game's older containers, once every mod has its badges
     const deep = (vfx: string[]) => Promise.resolve()
-      .then(() => (live ? invoke<number>('xtra_vfx_check_scan', { modPaths: vfx, defer: false }) : 0))
+      .then(() => { scanStage("The game's older files"); return live ? invoke<number>('xtra_vfx_check_scan', { modPaths: vfx, defer: false }) : 0 })
       .then(found => (live && found ? check() : undefined))
     // last, textures the game cannot read (the preview kit's texture check, kit 19 and newer; xtra_viewer.rs): 5 mods a
     // run, so a Generate preview clicked meanwhile waits seconds, not minutes. The kit keeps each mod's answer until its
@@ -133,6 +133,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       // stops it after its current mod (xtra_viewer.rs reserve_waiting), so it never waits on a whole run
       const BATCH = 40
       for (let i = 0; i < mods.length && live; i += BATCH) {
+        scanStage('Textures', { at: i, total: mods.length })
         try { found += await invoke<number>('run_texcheck', { paths: mods.slice(i, i + BATCH) }) } catch { break }
       }
       if (live && found) await check()
@@ -158,7 +159,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       // runs take turns (queued), so this one's end is never another's. One the library outdated is not "paused":
       // the new list's own run follows
       // a run that stopped first (the game, a held scan, an old USMAP) keeps a manual Check's mods for the next one
-      .then(finished => { unfinished = !finished; if (!finished) ticked.forEach(p => forced.add(norm(p))); scanEnded(finished || !live); return finished })
+      .then(finished => { unfinished = !finished; if (!finished) ticked.forEach(p => forced.add(norm(p))); scanEnded(finished || !live); void invoke('xtra_scan_release').catch(() => {}); return finished })
     let unfinished = false
     // one run waiting its turn is enough: a focus, a Rescan and the game update notice asking meanwhile all get that one
     let waiting: Promise<boolean> | null = null

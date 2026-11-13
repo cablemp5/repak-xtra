@@ -3123,6 +3123,7 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 /* The mod checks' progress in the header (ScanStatus.tsx): a quiet pill that rises in (transitions.dev Stagger) while a
    run reads mods, and keeps spinning while the window is in the background (idlePause.ts pauses decorative loops only) */
 .scan-status { height: 32px; padding: 0 10px; font-size: 13px; font-weight: 500; color: var(--text-secondary); white-space: nowrap; cursor: pointer;
+  font-variant-numeric: tabular-nums; /* its percentage counts up without the button changing width */
   animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; }
 .scan-status:hover { background: var(--quiet-hover); color: var(--text-primary); }
 .scan-status-in { display: inline-flex; align-items: center; gap: 8px; }   /* the glyph slot's gap, as in its menu */

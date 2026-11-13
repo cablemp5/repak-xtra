@@ -7,7 +7,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Eye } from 'lucide-react'
 import { rescanVerdicts } from './brokenMods'
-import { holdScan, progressLine, useScanRun } from './scanProgress'
+import { STAGES, holdScan, progressLine, runPercent, useScanRun } from './scanProgress'
+import { GlideFill } from './GlideFill'
 import { APP_NAME } from './edition'
 
 export default function ScanStatus() {
@@ -25,9 +26,10 @@ export default function ScanStatus() {
   }, [open])
   useEffect(() => { if (!shown) setOpen(false) }, [shown])
   if (!shown) return null
+  const pct = runPercent(r.stage, r.last)
   const stopping = r.running && r.held !== null // Pause or Cancel pressed: the mod being read finishes first
   const status = stopping ? `${r.held === 'cancelled' ? 'Cancelling' : 'Pausing'} after the mod being read`
-    : r.running ? (r.last ? progressLine(r.last) : 'Getting ready')
+    : r.running ? (r.last?.path ? progressLine(r.last) : STAGES[r.stage])
     : r.held === 'paused' ? 'Paused by you, with mods left to read'
     : 'Stopped with mods left to read (the game ran, or the Mod Updater needed the tools)'
   return (
@@ -36,14 +38,18 @@ export default function ScanStatus() {
         title={r.running ? 'Show the mod checks: pause or cancel them' : 'The mod checks are paused: resume or cancel them'}>
         {/* running: an eye and its words, shimmering together (t-shimmer-all: an SVG cannot take the text gradient) */}
         {r.running
-          ? <span className="scan-status-in t-shimmer-all"><Eye size={14} aria-hidden="true" />{stopping ? (r.held === 'paused' ? 'Pausing checks' : 'Stopping checks') : 'Checking mods'}</span>
+          ? <span className="scan-status-in t-shimmer-all"><Eye size={14} aria-hidden="true" />{stopping ? (r.held === 'paused' ? 'Pausing checks' : 'Stopping checks') : `Checking mods ${Math.floor(pct)}%`}</span>
           : <span className="scan-status-in"><span className="pause-glyph" aria-hidden="true" />Checks paused</span>}
       </button>
       {open && (
         <div className="xtra-menu lo-gen-menu scan-menu" role="menu">
           <div className="lo-gen-status" role="status">
             <b>{r.running ? 'Checking mods for this game version' : 'Mod checks paused'}</b>
+            {r.running && <span>Step {r.stage + 1} of {STAGES.length}: {STAGES[r.stage]}</span>}
             <span>{status}</span>
+            {/* the whole run: the stages done and this one's share, never stepping back; a stage with no count yet creeps
+                toward its end (GlideFill) */}
+            {r.running && <div className="su-bar" aria-hidden="true"><GlideFill pct={pct} next={r.last?.total ? undefined : ((r.stage + 1) / STAGES.length) * 100} secs={20} /></div>}
           </div>
           {r.running
             ? <>
