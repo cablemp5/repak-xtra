@@ -606,8 +606,11 @@ export function VfxUpdaterPanel() {
     const byKey = new Map((modsRef.current ?? []).map(m => [norm(m.utoc), m]))
     const rank = new Map(orderRef.current.map((k, i) => [k, i]))
     const asked = (keys ?? [...picked].filter(k => !isDone(runsRef.current[k]?.status))).filter(k => byKey.has(k))
+    // top of the list first, but the ones that only need decrypting before any rebuild: a second each, so most of an
+    // encrypted library is done in the first minutes
+    const quick = (k: string) => !keepEncrypted && Boolean(needs.get(norm(byKey.get(k)!.path))?.startsWith(ENCRYPTED))
     const todo = asked.filter(k => !waitsRef.current.has(k))
-      .sort((a, b) => (rank.get(a) ?? Infinity) - (rank.get(b) ?? Infinity)) // top of the list first
+      .sort((a, b) => Number(quick(b)) - Number(quick(a)) || (rank.get(a) ?? Infinity) - (rank.get(b) ?? Infinity))
     const skipped = asked.length - todo.length // their update waits for the USMAP of this game build
     if (skipped) addLog(`${plural(skipped, 'mod')} ${skipped === 1 ? 'waits' : 'wait'} for the USMAP of this game build and ${skipped === 1 ? 'was' : 'were'} skipped.`, 'warning')
     if (!todo.length || !usmap || !paks) return

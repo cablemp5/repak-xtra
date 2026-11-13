@@ -740,9 +740,8 @@ fn checked_now(store: &HashMap<String, Checked>, utoc: &Path, game_updated: u64)
     checked_record(store, utoc, game_updated).map(|c| c.outdated)
 }
 
-/// A clearance (Nothing to update, or a check found it current) outlives a parser change: the background check never
-/// restores one for a mod with Niagara files, and it looks again at the rest anyway. Findings hold for their parser only.
-/// Kept per decoder (decoder_key): this decoder's own record first, else a clearance any decoder wrote.
+/// The record of `utoc` as it is now, for this game: kept per decoder (decoder_key), this decoder's own first, else a
+/// clearance any decoder wrote, else a finding any decoder wrote.
 fn checked_record<'a>(store: &'a HashMap<String, Checked>, utoc: &Path, game_updated: u64) -> Option<&'a Checked> {
     let (key, stamp, parser) = (checked_key(utoc), file_stamp(utoc), crate::xtra_vfx::parser_id());
     let of_mod = || {
@@ -752,18 +751,9 @@ fn checked_record<'a>(store: &'a HashMap<String, Checked>, utoc: &Path, game_upd
             .map(|(_, c)| c)
             .filter(|c| stamp == Some((c.size, c.modified)) && game_updated <= c.game)
     };
-    of_mod().find(|c| c.parser == parser).or_else(|| of_mod().find(|c| !c.outdated && c.unknown.is_none()))
-}
-
-/// Whether another decoder (the other edition, or a test or dev copy) found `utoc`, as it is now, built for an older
-/// game while this one has no record of its own: shown as awaiting this decoder's check, never as its finding.
-fn outdated_elsewhere_only(store: &HashMap<String, Checked>, utoc: &Path, game_updated: u64) -> bool {
-    let (key, stamp, parser) = (checked_key(utoc), file_stamp(utoc), crate::xtra_vfx::parser_id());
-    checked_record(store, utoc, game_updated).is_none()
-        && store
-            .iter()
-            .filter(|(k, _)| k.strip_prefix(key.as_str()).is_some_and(|rest| rest.is_empty() || rest.starts_with('|')))
-            .any(|(_, c)| c.parser != parser && c.outdated && c.unknown.is_none() && stamp == Some((c.size, c.modified)) && game_updated <= c.game)
+    // this decoder's own record first, else another's (the other edition, or the app before its last update): a mod
+    // found built for an older game keeps its badge through an app update, until this decoder's own scan looks again
+    of_mod().find(|c| c.parser == parser).or_else(|| of_mod().find(|c| !c.outdated && c.unknown.is_none())).or_else(|| of_mod().find(|c| c.unknown.is_none()))
 }
 
 /// A "nothing to update" for `utoc` as it is now, from an update that rewrites older material layouts.
@@ -963,16 +953,6 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                         stale_niagara: 0,
                         usmap_wait: 0,
                     off_only: false,
-                    });
-                }
-                if record.is_none() && !has_fix(&path) && outdated_elsewhere_only(&checked, &path.with_extension("utoc"), game_updated) {
-                    return Some(Verdict {
-                        path: p.clone(),
-                        kind: "unknown",
-                        reason: "Another copy of repakxtra found it needs an update. This copy has not checked it yet, so it is marked until its own check looks.".into(),
-                        stale_niagara: 0,
-                        usmap_wait: 0,
-                        off_only: false,
                     });
                 }
                 let details = crate::compute_mod_details(&path, &state).ok()?;
@@ -1237,16 +1217,14 @@ mod tests {
     }
 
     #[test]
-    fn another_decoders_finding_waits_for_this_ones_check() {
+    fn another_decoders_finding_stands_until_this_one_looks() {
         let dir = tempfile::tempdir().unwrap();
         let (utoc, store) = (dir.path().join("mod.utoc"), dir.path().join("checked.json"));
         std::fs::write(&utoc, b"toc").unwrap();
         remember_checked(&store, &utoc, 200, true, true, None).unwrap();
-        let mine = load_checked(&store);
-        assert!(!outdated_elsewhere_only(&mine, &utoc, 200), "its own finding is the finding");
-        let theirs: HashMap<String, Checked> = mine.into_iter().map(|(k, mut c)| { c.parser = "other".into(); (format!("{k}|other"), c) }).collect();
-        assert!(checked_record(&theirs, &utoc, 200).is_none() && outdated_elsewhere_only(&theirs, &utoc, 200), "another decoder's: awaiting this one");
-        assert!(!outdated_elsewhere_only(&theirs, &utoc, 300), "made before the game updated again");
+        let theirs: HashMap<String, Checked> = load_checked(&store).into_iter().map(|(k, mut c)| { c.parser = "other".into(); (format!("{k}|other"), c) }).collect();
+        assert_eq!(checked_now(&theirs, &utoc, 200), Some(true), "found outdated by another decoder: still flagged");
+        assert_eq!(checked_now(&theirs, &utoc, 300), None, "not after the game updated again");
     }
 
     #[test]
@@ -1285,7 +1263,7 @@ mod tests {
         other.values_mut().for_each(|c| c.parser = String::new());
         assert!(layout_cleared(&other, &utoc, 200), "a clearance outlives a parser change, a legacy one too");
         other.values_mut().for_each(|c| c.outdated = true);
-        assert_eq!(checked_now(&other, &utoc, 200), None, "a finding holds for its parser only");
+        assert_eq!(checked_now(&other, &utoc, 200), Some(true), "a finding outlives a parser change too, until this decoder looks");
         remember_checked(&store, &utoc, 200, true, true, None).unwrap();
         remember_checked(&store, &utoc, 200, false, false, Some("Unknown".into())).unwrap();
         assert_eq!(checked_now(&load_checked(&store), &utoc, 200), Some(true), "a check found it outdated");
