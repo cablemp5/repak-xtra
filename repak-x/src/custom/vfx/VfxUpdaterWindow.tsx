@@ -858,10 +858,6 @@ export function VfxUpdaterPanel() {
   keys.current = { go: () => { if (!busy && !lock && todo) void run() }, stop: () => { if (reviews.length) decline(); else if (busy && !cancelling) stop('Escape') } }
   const openUsmap = () => showAdvanced(true)
 
-  // what Update will do to the files, beside the button, so a choice made once in Advanced is never a surprise
-  const policy = naming === 'broken'
-    ? { off: 'Originals get _BROKEN and turn off', trash: 'Originals get _BROKEN and go to Recently deleted', keep: 'Originals get _BROKEN and stay as they are' }[originals]
-    : { off: 'Updates get _UPDATED, originals turn off', trash: 'Updates get _UPDATED, originals go to Recently deleted', keep: 'Updates get _UPDATED, originals stay as they are' }[originals]
 
   return (
     <div className="vf-panel">
@@ -1044,9 +1040,9 @@ export function VfxUpdaterPanel() {
             : <>{/* its own line: the warning and its link stay together, apart from the estimate */}
                 {hiddenTicked > 0 && <span className="vf-hidden-line"><b className="vf-hidden-n">{hiddenTicked} ticked {hiddenTicked === 1 ? 'mod is' : 'mods are'} hidden by the filter.</b>{' '}
                   <button type="button" className="su-link" onClick={() => { setQ(''); setHero('') }}>Show {hiddenTicked === 1 ? 'it' : 'them'}</button></span>}
-                {ahead !== undefined && <b className="vf-eta">{timeLeft(ahead).replace(/^./, c => c.toUpperCase())} for {plural(todo, 'mod')}. </b>}{policy}.{' '}
+                {ahead !== undefined && <b className="vf-eta">{timeLeft(ahead).replace(/^./, c => c.toUpperCase())} for {plural(todo, 'mod')}. </b>}
                 {partialTodo > 0 && <><b className="vf-partial-n">{partialTodo === todo ? (todo === 1 ? 'It' : `All ${todo}`) : `${partialTodo} of ${todo}`}</b> will only partially update, without {partialTodo === 1 ? 'its' : 'their'} old Niagara files, and keep {partialTodo === 1 ? 'its' : 'their'} original, off, as _ORIGINAL.{' '}</>}
-                <button type="button" className="su-link" onClick={() => showAdvanced(true)}>Change</button></>}
+                </>}
         </p>
         {/* read out: the run's progress and its result, not every tick's estimate */}
         <span className="xtra-sr-only" aria-live="polite">{summary ? summary.text : busy || scan || cancelling ? state : ''}</span>
@@ -1058,7 +1054,7 @@ export function VfxUpdaterPanel() {
           {!busy && <div className="lo-gen" ref={scanRef}>
             <button type="button" className="lo-text-btn" disabled={Boolean(scan)} aria-haspopup="menu" aria-expanded={Boolean(scanMenu)} onClick={() => void openScanMenu()}
               title="Scan mods again from scratch, without changing files. Progress shows in the main window's header too">
-              {scan ? <span className="t-shimmer">Scanning</span> : 'Scan'}</button>
+              <Eye size={14} aria-hidden="true" />{scan ? <span className="t-shimmer">Scanning</span> : 'Scan'}</button>
             {scanMenu && (
               <div className="xtra-menu lo-gen-menu vf-scan-menu" role="menu">
                 <button type="button" role="menuitem" className="xtra-item" disabled={!tickedPaths().length} onClick={() => void scanMods(tickedPaths(), 'the ticked mods')}>
