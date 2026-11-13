@@ -752,6 +752,32 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
             }
         }
     };
+    // every change below, noted before the first one: a crash part way puts it all back at the next start, and the
+    // note goes once the update is in or undone (xtra_journal.rs). Step 5 (the original to Recently deleted) is after
+    // it: the update is in by then
+    let main = dir.join(format!("{target}.{}", if update_on { "pak" } else { "bak_repak" }));
+    let finals = [(tmp("utoc"), dir.join(format!("{target}.utoc"))), (tmp("ucas"), dir.join(format!("{target}.ucas"))), (tmp("pak"), main.clone())];
+    let originals: Vec<(PathBuf, PathBuf)> = if replace { Vec::new() } else { files(&stem) }
+        .into_iter()
+        .map(|from| {
+            let x = from.extension().map(|x| x.to_string_lossy().to_string()).unwrap_or_default();
+            let x = if turn_off && x.eq_ignore_ascii_case("pak") { "bak_repak".to_string() } else { x };
+            let to = dir.join(format!("{kept}.{x}"));
+            (from, to)
+        })
+        .filter(|(from, to)| from != to)
+        .collect();
+    let plan = crate::xtra_journal::begin(&crate::xtra_journal::Plan { trash: trash.clone(), trashed: existing.clone(), renames: originals.iter().cloned().chain(finals.iter().cloned()).collect() });
+    let plan = match plan {
+        Ok(p) => p,
+        Err(e) => {
+            drop_temps();
+            if let Some(t) = &trash {
+                crate::xtra_trash::release_if_empty(t);
+            }
+            return Err(format!("{e}. Nothing in the mods folder changed."));
+        }
+    };
     let mut trashed = Vec::new();
     let mut renamed: Vec<(PathBuf, PathBuf)> = Vec::new();
     // puts back what moved, and names what it could not
@@ -788,13 +814,7 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
     }
 
     // 3. the original to its new name, and off
-    for from in if replace { Vec::new() } else { files(&stem) } {
-        let x = from.extension().map(|x| x.to_string_lossy().to_string()).unwrap_or_default();
-        let x = if turn_off && x.eq_ignore_ascii_case("pak") { "bak_repak".to_string() } else { x };
-        let to = dir.join(format!("{kept}.{x}"));
-        if to == from {
-            continue;
-        }
+    for (from, to) in originals {
         if let Err(e) = std::fs::rename(&from, &to) {
             drop_temps();
             return Err(fail(format!("Could not rename the original {}: {e}.", from.display()), undo(&trashed, &renamed)));
@@ -803,8 +823,6 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
     }
 
     // 4. the update to its own names: renames in one folder
-    let main = dir.join(format!("{target}.{}", if update_on { "pak" } else { "bak_repak" }));
-    let finals = [(tmp("utoc"), dir.join(format!("{target}.utoc"))), (tmp("ucas"), dir.join(format!("{target}.ucas"))), (tmp("pak"), main.clone())];
     for (i, (from, to)) in finals.iter().enumerate() {
         if let Err(e) = std::fs::rename(from, to) {
             // the update's files already moved go back to their temporary names (and then away); one that cannot is named
@@ -818,6 +836,7 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
         }
     }
 
+    drop(plan); // the update is in
     let original = if replace { main.clone() } else { dir.join(format!("{kept}.{}", if was_on && !turn_off { "pak" } else { "bak_repak" })) };
     // 5. the original to Recently deleted, as one deletion of its own. The update is in either way: a failure puts back
     //    what moved and says so, naming any file left in Recently deleted

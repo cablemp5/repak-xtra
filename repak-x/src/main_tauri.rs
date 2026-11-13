@@ -36,6 +36,7 @@ mod xtra_layout; // repakxtra: May crash from the game classes an update changed
 mod xtra_nexus; // repakxtra: Nexus source from archive names
 mod xtra_offfiles; // repakxtra: .pak.off files install like .pak
 mod xtra_bundle; // repakxtra: a mod's pak/utoc/ucas found and moved as one set
+mod xtra_journal; // repakxtra: a swap a crash cut short is put back at the next start
 mod xtra_encrypt;
 mod xtra_mutation;
 mod xtra_updater; // repakxtra: applies an update without string-built shell commands
@@ -8664,6 +8665,10 @@ fn main() {
             // Plugin initialization has established that this is the primary instance. Secondary opens must not sweep live work.
             let mods = app.state::<Arc<Mutex<AppState>>>().lock().unwrap().game_path.clone();
             std::thread::spawn(move || {
+                // first: a cut-short swap's files may still sit in a staging folder the sweep removes
+                for s in crate::xtra_journal::recover() {
+                    ui_log::warn("Mods", s);
+                }
                 crate::xtra_bundle::sweep_staging(&mods, started);
                 crate::xtra_snapshot::sweep_staging(started);
             });
