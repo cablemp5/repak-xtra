@@ -27,7 +27,7 @@ const useCallback = (fn, deps) => {
   if (!cached || deps.some((d, i) => !Object.is(d, cached.deps[i]))) cached = { fn, deps }
   return cached.fn
 }
-const stable = Object.fromEntries(['picked', 'usmap', 'paks', 'originals', 'keepName', 'safety', 'needs', 'askReview', 'addLog'].map(k => [k, {}]))
+const stable = Object.fromEntries(['picked', 'usmap', 'paks', 'originals', 'keepName', 'safety', 'needs', 'askReview', 'keepEncrypted', 'addLog'].map(k => [k, {}]))
 const run = declaration('src/custom/vfx/VfxUpdaterWindow.tsx', 'run')
 const render = repairPolicy => vm.runInNewContext(compile(`globalThis.result = ${run}`), { ...stable, repairPolicy, useCallback })
 const strictRun = render('strict')

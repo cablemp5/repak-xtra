@@ -1,5 +1,5 @@
 // repakxtra: the Galacta Converter window (route galacta), built like the Encrypt window (EncryptWindow.tsx) from the same
-// parts: search, hero filter and sort over folding groups of ticked rows, and a footer with what the button does. Each
+// parts: search and hero filter over folding groups of ticked rows (newest first), and a footer with what the button does. Each
 // ticked mod gets a second copy, "<name> (Galacta)", that Project Galacta can swap in per skin (xtra_galacta.rs). The
 // copy goes beside the mod, on, and the original is turned off, not changed. The main window opens it (GalactaMods.tsx).
 import { useEffect, useRef, useState } from 'react'
@@ -27,7 +27,6 @@ type Listed = Omit<Mod, 'hero'> & { hero?: string | null }
 type Made = { path: string; skins: string[]; leftOut: number; note?: string | null }
 type Run = { status: 'waiting' | 'running' | 'done' | 'failed'; error?: string; made?: Made }
 
-const SORT = 'repakxtra.galacta.sort'
 const FOLDED = 'repakxtra.galacta.folded'
 const norm = (p: string) => p.replace(/\//g, '\\').toLowerCase()
 
@@ -67,7 +66,6 @@ function GalactaPanel() {
   const [cancelling, setCancelling] = useState(false)
   const [q, setQ] = useState('')
   const [hero, setHero] = useState('')
-  const [sort, setSort] = useState<'newest' | 'name'>(() => (localStorage.getItem(SORT) === 'name' ? 'name' : 'newest'))
   const [foldedIds, setFoldedIds] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(FOLDED) ?? '[]') } catch { return [] } })
   const [welcome, setWelcome] = useState(welcomeOnOpen)
   const stopRef = useRef(false)
@@ -103,7 +101,7 @@ function GalactaPanel() {
 
   const all = mods ?? []
   const needle = q.trim().toLowerCase()
-  const order = (a: Mod, b: Mod) => (sort === 'newest' ? b.modified - a.modified : 0) || a.name.localeCompare(b.name)
+  const order = (a: Mod, b: Mod) => b.modified - a.modified || a.name.localeCompare(b.name) // newest first
   const heroes = [...new Set(all.map(m => m.hero).filter(Boolean))].sort()
   const shown = all.filter(m => (!needle || m.name.toLowerCase().includes(needle) || m.hero.toLowerCase().includes(needle)) && (!hero || m.hero === hero)).sort(order)
   // converted mods (their Galacta version is beside them) get their own group, like the Mod Updater's Updated. Rows move
@@ -167,10 +165,6 @@ function GalactaPanel() {
             {q && <button type="button" className="lo-icon vf-search-clear" onClick={() => setQ('')} aria-label="Clear the search" title="Clear the search"><X size={14} /></button>}
           </label>
           <HeroFilter heroes={heroes} value={hero} onChange={setHero} always />
-          <div className="mod-state-filter lp-sort" role="group" aria-label="Sort mods">
-            <button type="button" aria-pressed={sort === 'newest'} onClick={() => { setSort('newest'); localStorage.setItem(SORT, 'newest') }}>Newest</button>
-            <button type="button" aria-pressed={sort === 'name'} onClick={() => { setSort('name'); localStorage.setItem(SORT, 'name') }}>A to Z</button>
-          </div>
           <button type="button" className="su-link gal-about" onClick={() => setWelcome(true)} title="What Project Galacta is and what converting does"><Info size={14} aria-hidden="true" />About</button>
         </div>
         {loadError && (

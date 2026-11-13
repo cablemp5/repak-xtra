@@ -14,7 +14,7 @@ import { AlertTriangle, Archive, Check, LockOpen, CheckCheck, ChevronDown, Chevr
 import TitleBar from '../../components/TitleBar'
 import { useGlobalTooltips } from '../../hooks/useGlobalTooltips'
 import Checkbox from '../../components/ui/Checkbox'
-import { Num, SwapText } from '../motion'
+import { SwapText } from '../motion'
 import { GlideFill } from '../GlideFill'
 import { cue } from '../sounds'
 import { DEFAULT_FILTER, parseWords, readFilter, resetFilter, writeFilter, type ColorFilter } from './filter'
@@ -78,7 +78,6 @@ const ORIGINALS_NOTE: Record<Originals, string> = {
 const usmapRelease = (name?: string | null) => name?.match(/\+([^+]+?)-Marvel\.usmap$/i)?.[1]?.replace(/_/g, ' ') ?? null
 // every group and Advanced start folded each time the window opens: a run unfolds what it works on, and that is not kept
 const GROUP_IDS = ['added', 'needs', 'unknown', 'rest', 'ui', 'materials', 'updated']
-const SORT = 'repakxtra.vfx.sort2' // A to Z or Newest (the default since 0.17.1, so a new key), as a loadout's Add mods
 const fileName = (p: string) => p.replace(/\\/g, '/').split('/').pop() ?? p
 const plural = (n: number, word: string, many = `${word}s`) => `${n.toLocaleString()} ${n === 1 ? word : many}`
 /** A folded panel's content: out of reach of Tab and screen readers (the React 18 types this app uses lack inert). */
@@ -352,7 +351,6 @@ export function VfxUpdaterPanel() {
   const [picked, setPicked] = useState<Set<string>>(new Set()) // norm(utoc)
   const [q, setQ] = useState('')
   const [hero, setHero] = useState('') // '' = every hero (the same filter as a loadout's Add mods)
-  const [sort, setSort] = useState<'name' | 'newest'>(() => (localStorage.getItem(SORT) === 'name' ? 'name' : 'newest'))
   const [foldedIds, setFoldedIds] = useState<string[]>(GROUP_IDS)
   const loadouts = useLoadouts()
   const [open, setOpen] = useState<Set<string>>(new Set())
@@ -778,11 +776,10 @@ export function VfxUpdaterPanel() {
     setCopied(what); setTimeout(() => setCopied(null), 3000)
   }
 
-  // the list: mods that need an update first, then A to Z or newest first
+  // the list: mods that need an update first, then newest first (A to Z among mods of the same time)
   const needsOf = (m: Mod) => needs.get(norm(m.path))
-  const order = (a: Mod, b: Mod) => (sort === 'newest' ? (b.modified ?? 0) - (a.modified ?? 0) : 0) || a.name.localeCompare(b.name)
+  const order = (a: Mod, b: Mod) => (b.modified ?? 0) - (a.modified ?? 0) || a.name.localeCompare(b.name)
   const list = [...(mods ?? [])].sort((a, b) => Number(Boolean(needsOf(b))) - Number(Boolean(needsOf(a))) || order(a, b))
-  const sortBy = (v: 'name' | 'newest') => { setSort(v); localStorage.setItem(SORT, v) }
   const needle = q.trim().toLowerCase()
   const heroes = [...new Set(list.map(m => heroOfName(m.hero)).filter(Boolean))].sort()
   const shown = list.filter(m => (!needle || m.name.toLowerCase().includes(needle) || (m.hero ?? '').toLowerCase().includes(needle)) && (!hero || heroOfName(m.hero) === hero))
@@ -879,10 +876,6 @@ export function VfxUpdaterPanel() {
             {q && <button type="button" className="lo-icon vf-search-clear" onClick={() => setQ('')} aria-label="Clear the search" title="Clear the search"><X size={14} /></button>}
           </label>
           <HeroFilter heroes={heroes} value={hero} onChange={setHero} always />
-          <div className="mod-state-filter lp-sort" role="group" aria-label="Sort mods">
-            <button type="button" aria-pressed={sort === 'newest'} onClick={() => sortBy('newest')}>Newest</button>
-            <button type="button" aria-pressed={sort === 'name'} onClick={() => sortBy('name')}>A to Z</button>
-          </div>
           <button type="button" className="lo-text-btn is-primary vf-add" disabled={busy || mods === null} onClick={() => void addUtoc()}
             title="Update a mod this list does not show: choose its .utoc file"><FilePlus size={14} aria-hidden="true" /> Add .utoc</button>
         </div>
@@ -1079,7 +1072,7 @@ export function VfxUpdaterPanel() {
           </div>}
           <button type="button" className="btn-primary" disabled={busy || Boolean(lock) || !todo} title={busy ? undefined : 'Ctrl+Enter'}
             ref={el => { if (el && !busy) updateWidth.current = el.offsetWidth }} style={busy ? { minWidth: updateWidth.current } : undefined} onClick={() => run()}>
-            <RefreshCw size={14} aria-hidden="true" className={busy ? 'vf-spin' : undefined} />{busy ? 'Updating…' : todo ? <>Update <Num id="vf-todo" value={todo} /> {todo === 1 ? 'mod' : 'mods'}</> : 'Update'}
+            <RefreshCw size={14} aria-hidden="true" className={busy ? 'vf-spin' : undefined} />{busy ? 'Updating…' : todo ? `Update ${todo} ${todo === 1 ? 'mod' : 'mods'}` : 'Update'}
           </button>
         </div>
       </footer>
