@@ -240,7 +240,9 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
           : video
             ? l.mediaBeat ? <BeatVideo src={video} beat={l.mediaBeat} card /> : <LoopClip src={video} />
             : <CarouselSlide slide={slides.length > 1 ? at : 0} dir={dir}>
-                {live && loaded === live.url ? null : isLoopClip(src) ? <LoopClip key={src} src={src} /> : isVideoPreview(src) ? <BeatVideo key={src} src={src} beat={KO_BEAT} card /> : null}
+                {/* keys apart from the picture's below: the clip now stays under a restarted picture until it loads, and two children
+                    with one key left the clip in place, a second figure under the restarted one */}
+                {live && loaded === live.url ? null : isLoopClip(src) ? <LoopClip key={`clip:${src}`} src={src} /> : isVideoPreview(src) ? <BeatVideo key={`clip:${src}`} src={src} beat={KO_BEAT} card /> : null}
                 {(live || !isVideoPreview(src)) && <img key={src} src={live?.url ?? src} alt="" className={`${cover === 'preview' && slide?.key && !isKoPreview(slide.key) && !isBoosted(live?.url ?? src) ? 'pv-kit' : ''}${src === warm || isDecoded(src) || loaded === src || (live && loaded === live.url) ? ' is-loaded' : ''}${live ? ' is-restart' : ''}`} decoding="async" crossOrigin="anonymous"
                   onLoad={e => { revealOnLoad(e); setLoaded(e.currentTarget.getAttribute('src')); predecode(e.currentTarget); if (audible && live && hovering.current && !isIdle() && e.currentTarget.src === live.url) playEmoteSound(audible, live.seconds) }} />}
               </CarouselSlide>}
