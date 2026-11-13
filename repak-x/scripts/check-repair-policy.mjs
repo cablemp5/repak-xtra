@@ -39,7 +39,7 @@ for (const kind of [undefined, 'unknown', 'broken', 'vfx', 'risky']) {
   let options
   const scope = {
     reserved: false, nameOf: () => 'Fixture', newRunToken: () => 'fixture', findUsmap: async () => 'fixture.usmap',
-    claimRun: async () => true, setUpdating() {}, readOriginals: () => 'off', readNaming: () => 'broken', readSafeOff: () => true, readSafety: () => 'trash', readRepairPolicy: () => 'bestEffort', readAskReview: () => false, incompleteAssets: () => 0,
+    claimRun: async () => true, setUpdating() {}, readOriginals: () => 'off', readNaming: () => 'broken', readSafeOff: () => true, readSafety: () => 'trash', readKeepEncrypted: () => false, readRepairPolicy: () => 'bestEffort', readAskReview: () => false, incompleteAssets: () => 0,
     readFilter: () => ({}), verdictOf: () => kind ? { kind } : undefined, utocOf: p => p + '.utoc', STEPS: ['Read'],
     fixVfxMod: async o => { options = o; return { status: 'failed' } }, resultToast() {}, releaseRun: async () => {},
     invoke: async () => 'C:/Fixture/Paks/~mods',
@@ -77,7 +77,7 @@ async function repair(policy, accept = false, sameParameters = false, scenario =
       case 'vfx_extract_mod_assets': return [dirs.modExtract + '/' + rel + '.uasset', ...(scenario.niagara ? [dirs.modExtract + '/NS_Fixture.uasset'] : []), ...(scenario.unreadable ? [dirs.modExtract + '/' + rel + 'B.uasset'] : [])]
       case 'xtra_vfx_pak_half': return []
       case 'xtra_vfx_classes': return { [rel.toLowerCase()]: 'MaterialInstanceConstant' }
-      case 'xtra_vfx_relayout': return { files: scenario.relayout ? [rel] : [], surgical: scenario.relayout === 'surgical' ? [rel] : [], failed: [], unread: [], untold: [], complete: true }
+      case 'xtra_vfx_relayout': return { files: scenario.relayout ? [rel] : [], failed: [], unread: [], untold: [], complete: true }
       case 'xtra_vfx_stale': return ['NS_Fixture.uasset']
       case 'xtra_vfx_niagara': return { ready: true, files: [{ file: 'NS_Fixture.uasset', error: 'Fixture omission', retry: scenario.niagara === 'retry' }] }
       case 'xtra_vfx_detect': return { [dirs.modExtract + '/' + rel + '.uasset']: { kind: 'material_instance', class: 'MaterialInstanceConstant' }, ...(scenario.unreadable ? { [dirs.modExtract + '/' + rel + 'B.uasset']: { kind: 'other', class: null, error: 'Fixture unreadable' } } : {}) }
@@ -135,15 +135,12 @@ assert.equal(accepted.report.status, 'fixed')
 assert.ok(accepted.calls.indexOf('review') < accepted.calls.indexOf('xtra_vfx_place'))
 assert.equal(accepted.placement.partial, false, 'reviewed materials must not request the Niagara retry marker')
 assert.equal(accepted.placement.trashOriginal, true, 'a reviewed candidate follows Originals: the original goes to Recently deleted')
-const relaidStrict = await repair('strict', false, false, { relayout: 'reconstructed' })
-assert.equal(relaidStrict.report.status, 'failed')
-assert.ok(relaidStrict.report.warnings.some(w => /creator edits/.test(w)))
-assert.ok(!relaidStrict.calls.includes('xtra_vfx_place'), 'different-parent passthrough cannot bypass strict preservation checks')
-for (const accept of [false, true]) {
-  const relaid = await repair('bestEffort', accept, false, { relayout: 'reconstructed' })
-  assert.ok(relaid.candidate.warnings.some(w => /creator edits/.test(w)), 'review includes non-surgical relayout warning')
-  assert.equal(relaid.calls.includes('xtra_vfx_place'), accept)
-}
+// every rewritten file read back with the same values (xtra_mi_layout.rs), so it goes in as it is, every edit kept,
+// under Strict too, and is never rebuilt on the game's copy
+const relaidStrict = await repair('strict', false, false, { relayout: 'rewritten' })
+assert.equal(relaidStrict.report.status, 'fixed', 'a verified rewrite is installable in strict mode')
+assert.equal(relaidStrict.report.warnings.length, 0)
+assert.ok(!relaidStrict.calls.includes('vfx_convert_uassets_to_json'), 'a verified rewrite is not rebuilt from the game copy')
 const surgical = await repair('strict', false, false, { relayout: 'surgical' })
 assert.equal(surgical.report.status, 'fixed', 'proven surgical repair remains installable in strict mode')
 assert.equal(surgical.report.warnings.length, 0)
@@ -155,7 +152,7 @@ for (const niagara of ['retry', 'permanent']) {
   assert.equal(result.placement.partial, niagara === 'retry', 'only retryable Niagara omissions request the retry marker')
   assert.equal(result.placement.trashOriginal, false, 'omitted content retains its original')
 }
-// no review (the default): a clean candidate goes in without asking, one keeping an unread asset fails and turns off
+// no review (the default): a clean candidate goes in without asking, one keeping an unread asset fails and the mod stays as it was
 const auto = await repair('bestEffort', false, false, { autoAccept: true })
 assert.equal(auto.report.status, 'fixed')
 assert.ok(!auto.calls.includes('review') && auto.calls.includes('xtra_vfx_place'), 'automatic acceptance places without a review')
@@ -163,5 +160,5 @@ assert.ok(auto.calls.includes('turn_off:Fixture.bak_repak'), 'the original is ke
 const autoUnsafe = await repair('bestEffort', false, false, { autoAccept: true, unreadable: true, safeOff: true })
 assert.equal(autoUnsafe.report.status, 'failed')
 assert.ok(!autoUnsafe.calls.includes('xtra_vfx_place') && !autoUnsafe.calls.includes('review'), 'an unread asset blocks automatic placement')
-assert.ok(autoUnsafe.calls.includes('turn_off:Fixture.utoc'), 'a flagged mod whose candidate was refused turns off')
+assert.ok(!autoUnsafe.calls.some(c => c.startsWith('turn_off:')), 'a failed update leaves even a flagged mod as it was, on')
 console.log('PASS repair policy: fresh selection, inconclusive right-click safety, strict preservation gate, and reviewed candidates')

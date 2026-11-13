@@ -692,7 +692,7 @@ export function VfxUpdaterPanel() {
           void import('@tauri-apps/api/window').then(({ getCurrentWindow, UserAttentionType }) => getCurrentWindow().requestUserAttention(UserAttentionType.Informational)).catch(() => {})
         }),
         modPath: mod.utoc, usmapPath: usmap, gamePaksPath: paks, turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash', keepName, filter,
-        safeOff, // only when a run proves the original crashes the game: a failed run leaves every mod as it was
+        safeOff: safeOff && needs.has(norm(mod.path)), // a flagged mod a run proves crashes the game: a failed run leaves every mod as it was
         keepEncrypted,
         log: addLog, cancelled: () => cancel.current,
         onStep: s => patch(key, { step: s.step, sub: undefined }),

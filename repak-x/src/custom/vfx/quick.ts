@@ -79,7 +79,7 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
       // declined and sent to the Mod Updater's review. Off (the default), one without unchecked assets goes in
       autoAccept: !readAskReview(), review: async c => !incompleteAssets(c) && !c.warnings.length,
       keepName: naming === 'broken', turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash',
-      safeOff: readSafety() === 'off', keepEncrypted: readKeepEncrypted(),
+      safeOff: readSafety() !== 'on' && ['broken', 'vfx', 'risky'].includes(verdictOf(mod.path)?.kind ?? ''), keepEncrypted: readKeepEncrypted(),
       onStep: s => { if (id !== null) alert.updateToast(id, { description: `Step ${s.step} of ${STEPS.length}: ${s.title}`, progressValue: ((s.step - 0.5) / STEPS.length) * 100 }) },
     })
     if (r.status === 'fixed' && r.placed) {
