@@ -114,6 +114,9 @@ fn version(widget: &str) -> u32 {
 #[tauri::command]
 pub async fn xtra_ko_heroes(usmap_path: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<KoHero>, String> {
     let paks = paks(&state)?;
+    // The editor opened: the game's file index loads now, while a hero is picked, so the first hero's load does not
+    // wait about 6 s for it (a first load took 8 to 11 s, 5 s with the index ready)
+    tauri::async_runtime::spawn(crate::xtra_vfx::xtra_vfx_warm(paks.to_string_lossy().into_owned()));
     let dir = build_dir(&paks, &usmap_path, "").join("widgets");
     let done = dir.join(".done");
     if !done.exists() {
