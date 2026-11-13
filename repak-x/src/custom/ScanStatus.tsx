@@ -68,7 +68,7 @@ export default function ScanStatus() {
                   <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />Cancel</span></button>
               </>}
           <p className="scan-menu-warn"><AlertTriangle size={14} aria-hidden="true" />
-            <span>Mods not scanned yet get no Broken or May crash warning, and can crash the game. Refresh list (Ctrl+Shift+R) runs the scan again, and so does the next start of {APP_NAME}.</span></p>
+            <span>Mods not scanned yet show no Broken, May crash, or Needs update warning, so they can crash the game or not work. Refresh list (Ctrl+Shift+R) or the next start of {APP_NAME} scans them again.</span></p>
         </div>
       )}
     </div>

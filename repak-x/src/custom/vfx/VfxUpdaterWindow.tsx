@@ -735,15 +735,30 @@ export function VfxUpdaterPanel() {
   const approveAll = () => { approveRest.current = true; const all = reviewsRef.current; setReviews([]); reviewsRef.current = []; all.forEach(r => r.resolve(true)); cue('success') }
   const stop = (source: 'Cancel button' | 'Escape') => { reviewsRef.current.forEach(r => r.resolve(false)); setReviews([]); reviewsRef.current = []; cancel.current = true; setCancelling(true); addLog(`Cancellation requested by ${source}. Stopping after the current step.`, 'warning') }
 
-  // Check: the header's run drops the ticked mods' check records, reads them fresh first, then every mod not checked yet
-  const scanTicked = async () => {
-    // the Library checks its mods folder only: a file added from elsewhere (Add .utoc) is not one of them
-    const ticked = (modsRef.current ?? []).filter(m => picked.has(norm(m.utoc)))
-    const paths = ticked.filter(m => !addedKeys.has(norm(m.utoc))).map(m => m.path)
-    if (!paths.length) { if (ticked.length) addLog('The ticked files are not in the mods folder, so the mod checks do not cover them.', 'warning'); return }
+  // Scan: the header's run drops these mods' check records and reads them fresh first, then every mod not scanned yet.
+  // The ticked mods, or the Library's mods that are on, or all of them (the menu says how many each is)
+  const [scanMenu, setScanMenu] = useState<{ on: string[]; all: string[] } | null>(null)
+  const scanRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!scanMenu) return
+    const close = (e: MouseEvent) => { if (!scanRef.current?.contains(e.target as Node)) setScanMenu(null) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setScanMenu(null) } }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', esc, true)
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc, true) }
+  }, [scanMenu])
+  const openScanMenu = async () => {
+    if (scanMenu) { setScanMenu(null); return }
+    const all = (await invoke<PakFile[]>('get_pak_files').catch(() => [] as PakFile[])).filter(m => !skipsUpdater(m.path))
+    setScanMenu({ on: all.filter(m => m.enabled).map(m => m.path), all: all.map(m => m.path) })
+  }
+  const tickedPaths = () => (modsRef.current ?? []).filter(m => picked.has(norm(m.utoc)) && !addedKeys.has(norm(m.utoc))).map(m => m.path)
+  const scanMods = async (paths: string[], what: string) => {
+    setScanMenu(null)
+    if (!paths.length) return
     setScan('Getting ready')
     cue('select')
-    addLog(`Checking ${plural(paths.length, 'mod')} again. Progress also shows in the main window's header.`)
+    addLog(`Scanning ${what} again (${plural(paths.length, 'mod')}). Progress also shows in the main window's header.`)
     await rescanForced(paths)
   }
 
@@ -1045,10 +1060,23 @@ export function VfxUpdaterPanel() {
         <div className="vf-foot-actions">
           {/* Cancel beside the button, never in its place: a double-click on Update must not cancel the run */}
           {busy && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={() => stop('Cancel button')} title="Esc"><span className="stop-glyph" aria-hidden="true" />{cancelling ? 'Cancelling…' : 'Cancel'}</button>}
-          {/* the same checks as the header's Scanning mods (Pause and Cancel live there) */}
-          {!busy && <button type="button" className="lo-text-btn" disabled={Boolean(scan) || !picked.size} onClick={() => void scanTicked()}
-            title="Check the ticked mods again from scratch, without changing files. Progress shows in the main window's header too">
-            {scan ? <span className="t-shimmer">Checking</span> : 'Check'}</button>}
+          {/* the same scan as the header's Scanning mods (Pause and Cancel live there), from scratch for the mods picked
+              here: a menu like the Loadouts screen's Generate previews, each choice with its count (Hick: three, no more) */}
+          {!busy && <div className="lo-gen" ref={scanRef}>
+            <button type="button" className="lo-text-btn" disabled={Boolean(scan)} aria-haspopup="menu" aria-expanded={Boolean(scanMenu)} onClick={() => void openScanMenu()}
+              title="Scan mods again from scratch, without changing files. Progress shows in the main window's header too">
+              {scan ? <span className="t-shimmer">Scanning</span> : 'Scan'}</button>
+            {scanMenu && (
+              <div className="xtra-menu lo-gen-menu vf-scan-menu" role="menu">
+                <button type="button" role="menuitem" className="xtra-item" disabled={!tickedPaths().length} onClick={() => void scanMods(tickedPaths(), 'the ticked mods')}>
+                  <span>Ticked mods</span><small>{tickedPaths().length}</small></button>
+                <button type="button" role="menuitem" className="xtra-item" disabled={!scanMenu.on.length} onClick={() => void scanMods(scanMenu.on, 'the mods that are on')}>
+                  <span>Mods that are on</span><small>{scanMenu.on.length}</small></button>
+                <button type="button" role="menuitem" className="xtra-item" disabled={!scanMenu.all.length} onClick={() => void scanMods(scanMenu.all, 'all mods')}>
+                  <span>All mods</span><small>{scanMenu.all.length}</small></button>
+              </div>
+            )}
+          </div>}
           <button type="button" className="btn-primary" disabled={busy || Boolean(lock) || !todo} title={busy ? undefined : 'Ctrl+Enter'}
             ref={el => { if (el && !busy) updateWidth.current = el.offsetWidth }} style={busy ? { minWidth: updateWidth.current } : undefined} onClick={() => run()}>
             <RefreshCw size={14} aria-hidden="true" className={busy ? 'vf-spin' : undefined} />{busy ? 'Updating…' : todo ? <>Update <Num id="vf-todo" value={todo} /> {todo === 1 ? 'mod' : 'mods'}</> : 'Update'}

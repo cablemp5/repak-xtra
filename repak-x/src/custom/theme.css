@@ -765,6 +765,8 @@ html[data-motion="off"] .lo-screen { animation: none; }
 .lo-gen { position: relative; }
 .lo-gen-menu { left: 0; right: auto; min-width: 270px; z-index: 30; }
 .lo-gen-menu .xtra-item small { margin-left: auto; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+/* the Mod Updater's Scan, at the window's foot: opens upward, from the button's right edge */
+.lo-gen-menu.vf-scan-menu { top: auto; bottom: calc(100% + 6px); left: auto; right: 0; min-width: 220px; transform-origin: bottom right; }
 /* A running preview run's menu: which loadout and the step it is on, a line, then Stop */
 .lo-gen-status { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px 12px; margin-bottom: 4px; border-bottom: 1px solid var(--panel-border);
   font-size: 13px; color: var(--text-secondary); }
