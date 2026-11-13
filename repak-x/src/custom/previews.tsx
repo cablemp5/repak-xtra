@@ -388,7 +388,7 @@ function loadUrl(key: string, rev: number): Promise<string | null | undefined> {
 /** A card's looping clip of this animated picture: the one kept from an earlier launch, else made now (thumbWorker.ts
  *  smallClip) and kept. Kept in the browser's Cache storage under the picture's own SHA-1, the width and the boost, so
  *  a preview made again never gets an old clip. Any trouble with the storage: made as before, not kept. */
-const CLIPS = 'repakxtra-clips-1'
+const CLIPS = 'repakxtra-clips-2' // 2: the color in BT.601 video range (thumbWorker.ts toI420), clips kept before are made again
 const CLIPS_MOST = 300 // past this many, the 50 kept longest ago go
 async function keptClip(blob: Blob, boost: string): Promise<Blob | null> {
   let cache: Cache | undefined, name = ''

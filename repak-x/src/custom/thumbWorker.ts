@@ -20,6 +20,27 @@ export async function smallCopy(blob: Blob, width: number, animated: boolean, bo
   } finally { bmp.close() }
 }
 
+/** The color frame as I420, BT.601 video range: what the player assumes for a VP8 clip without color tags. Given as RGBX, the
+ *  encoder converted it with another matrix, and the card showed darks 10 to 14 levels darker and greens squeezed (an
+ *  Electric Violet glow deeper and more purple than on its loadout page, 2026-11-13). Chroma: each 2x2 block's mean. */
+export function toI420(rgba: Uint8ClampedArray, w: number, h: number, out: Uint8Array) {
+  // integer weights (x 65536): a clip is 240 frames of 226,000 pixels, in floats it took 3 s
+  const u = w * h, v = u + (w >> 1) * (h >> 1), half = w >> 1
+  for (let i = 0, p = 0; i < u; i++, p += 4) out[i] = (16 * 65536 + 16829 * rgba[p] + 33039 * rgba[p + 1] + 6416 * rgba[p + 2] + 32768) >> 16
+  for (let y = 0; y < h; y += 2) {
+    const a = y * w * 4, c = a + w * 4
+    for (let x = 0; x < w; x += 2) {
+      const p = a + x * 4, q = c + x * 4
+      const r = rgba[p] + rgba[p + 4] + rgba[q] + rgba[q + 4], g = rgba[p + 1] + rgba[p + 5] + rgba[q + 1] + rgba[q + 5], b = rgba[p + 2] + rgba[p + 6] + rgba[q + 2] + rgba[q + 6]
+      const i = (y >> 1) * half + (x >> 1)
+      // the 2x2 sums carry a factor of 4: the weights are a quarter of the 65536 scale
+      out[u + i] = (128 * 65536 - 2428 * r - 4768 * g + 7196 * b + 32768) >> 16
+      out[v + i] = (128 * 65536 + 7196 * r - 6026 * g - 1170 * b + 32768) >> 16
+    }
+  }
+}
+const BT601: VideoColorSpaceInit = { matrix: 'smpte170m', primaries: 'smpte170m', transfer: 'smpte170m', fullRange: false }
+
 /** An animated WebP as a looping WebM `width` px wide (its transparency kept, `boost` drawn in), for a loadout card: a
  *  video's frames are decoded off the page and put on screen by the compositor, where each frame of an animated picture
  *  is drawn again into the page's tiles (five of them cost a hard scroll 20 frames a second, so they were held still).
@@ -36,7 +57,7 @@ export async function smallClip(blob: Blob, width: number, boost = ''): Promise<
     await decoder.tracks.ready // the frame count is known only once both have settled
     const count = decoder.tracks.selectedTrack?.frameCount ?? 0
     if (count < 2) return null
-    let w = 0, h = 0, ctx: OffscreenCanvasRenderingContext2D | null = null, us = 0, lastKey = -1e9, luma = new Uint8Array(0)
+    let w = 0, h = 0, ctx: OffscreenCanvasRenderingContext2D | null = null, us = 0, lastKey = -1e9, luma = new Uint8Array(0), yuv = luma
     for (let i = 0; i < count && !failed; i++) {
       const { image } = await decoder.decode({ frameIndex: i })
       if (!ctx) {
@@ -52,6 +73,7 @@ export async function smallClip(blob: Blob, width: number, boost = ''): Promise<
         ctx = new OffscreenCanvas(w, h).getContext('2d', { willReadFrequently: true })!
         if (boost) ctx.filter = boost
         luma = new Uint8Array(w * h * 3 / 2).fill(128)
+        yuv = new Uint8Array(w * h * 3 / 2)
       }
       ctx.clearRect(0, 0, w, h)
       ctx.drawImage(image, 0, 0, w, h)
@@ -62,11 +84,12 @@ export async function smallClip(blob: Blob, width: number, boost = ''): Promise<
       // the alpha goes in as the luma plane itself (I420, gray chroma): as gray RGB the encoder squeezed it into
       // video range, and a clear pixel came back 6% black, a solid one 92% solid
       for (let p = 0, y = 0; p < rgba.length; p += 4) luma[y++] = rgba[p + 3]
+      toI420(rgba, w, h, yuv)
       const key = us - lastKey >= 1e6 // both streams keyed on the same frames, one a second
       if (key) lastKey = us
       encoders.forEach((enc, n) => {
         if (enc.state !== 'configured') return // failed: its error ends the loop
-        const frame = new VideoFrame(n ? luma : rgba, { format: n ? 'I420' : 'RGBX', codedWidth: w, codedHeight: h, timestamp: us })
+        const frame = new VideoFrame(n ? luma : yuv, { format: 'I420', codedWidth: w, codedHeight: h, timestamp: us, colorSpace: n ? undefined : BT601 })
         try { enc.encode(frame, { keyFrame: key }) } finally { frame.close() }
       })
       us += length
