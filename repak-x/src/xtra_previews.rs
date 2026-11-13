@@ -525,7 +525,9 @@ pub(crate) fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Re
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        // CREATE_NO_WINDOW, BELOW_NORMAL_PRIORITY_CLASS: Blender, the exporter, and the tools it starts inherit it, so a
+        // render on every core no longer takes frames from the window (as fast as before on an idle PC)
+        cmd.creation_flags(0x0800_0000 | 0x0000_4000);
     }
     Ok(cmd)
 }

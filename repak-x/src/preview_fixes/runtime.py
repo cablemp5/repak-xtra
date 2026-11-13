@@ -192,6 +192,11 @@ if source.count(vfx_vanilla) != 1:
     raise RuntimeError("This preview kit does not support the app's faster previews. Update it in Setup.")
 source = source.replace(vfx_vanilla, '    bands = palette(changed_colors(mi_vectors(work / "vfx_raw"), vanilla_vectors(work, mis)))', 1)
 source = source.replace(main_guard, (runtime / "speed.py").read_text(encoding="utf-8") + "\n" + main_guard, 1)
+# A loadout's encrypted mods are unpacked at once before mount() copies them (speed.py unpack_ahead). A kit whose mount()
+# reads differently keeps its own one-by-one unpack
+mount_start = '    stage("mount")\n    (work / "paks").mkdir(parents=True)\n'
+if source.count(mount_start) == 1:
+    source = source.replace(mount_start, mount_start + "    unpack_ahead(work, cfg, entries)\n", 1)
 # The animation lives beside its still: a character's cleanup (keep_only .png) keeps a .webp written after the .png (a flow
 # animation; an older animation mod's .webp is older and still goes), and a dropped form or an empty loadout takes its .webp too
 cleanup = [

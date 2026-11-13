@@ -5388,7 +5388,11 @@ async fn extract_mod_assets_inner(
 
 #[tauri::command]
 async fn check_game_running() -> Result<bool, String> {
-    Ok(is_game_process_running())
+    let running = is_game_process_running();
+    if running {
+        crate::xtra_previews::stop_kept(false); // repakxtra: a game started outside the app (Steam) gets the kept preview helpers' memory too
+    }
+    Ok(running)
 }
 
 /// Reliable game process detection using multiple methods

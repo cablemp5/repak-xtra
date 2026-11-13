@@ -8,7 +8,8 @@ import socket
 _kit_run_spec, _kit_close_exporters = run_spec, close_exporters
 
 # ---------- helper programs kept running between runs (keeper.py) ----------
-KEEP_IDLE = 90   # seconds a kept program waits for the next run before it ends
+KEEP_IDLE = 300   # seconds a kept program waits for the next run before it ends (90 until 2026-11-12: a 3D view opened two
+# minutes after a preview loaded the game again, 17 s instead of 4). The app ends them when the game starts (stop_kept)
 
 
 class _Lines:
@@ -339,6 +340,31 @@ def on_threads(fn, items, most=16):
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(max(1, min(most, (os.cpu_count() or 2) - 1))) as pool:
         return list(pool.map(fn, items))
+
+
+def unpack_ahead(work, cfg, entries):
+    """mount()'s unpack of every encrypted mod that is not kept yet, all at once: each one loads the game in the tool (5 to
+    9 s), so a loadout's five took 36 s one after another and 16 s together. mount() then finds each kept."""
+    def kept_at(e):
+        stem, utoc, ucas, pak = e
+        return WORK.parent / "cache" / "repacked" / hashlib.sha1(signature(utoc, ucas, current_pak(utoc, pak)).encode()).hexdigest()[:16]
+    todo = [e for e in entries if obfuscated(e[1]) and not (kept_at(e) / (e[0] + ".utoc")).exists()]
+    if len(todo) < 2:
+        return   # one: mount() unpacks it as before
+    stage("unpack")
+    def one(e):
+        stem, utoc = e[0], e[1]
+        repacked = kept_at(e)
+        legacy, tmp = work / "legacy" / stem, repacked.with_name(repacked.name + ".tmp")
+        shutil.rmtree(tmp, ignore_errors=True)
+        tmp.mkdir(parents=True)
+        run([UAT, "extract_iostore_legacy", cfg["paks"], legacy, "--mod", utoc, "--aes", cfg["aes"]], 600)
+        run([UAT, "create_mod_iostore", tmp / stem, legacy, "--usmap", cfg["usmap"]], 600)
+        if (tmp / (stem + ".utoc")).exists():   # a failed one is left to mount(), which says why
+            shutil.rmtree(repacked, ignore_errors=True)
+            tmp.rename(repacked)
+    on_threads(one, todo, 6)
+    stage("mount")
 
 
 def write_webp(frames, path, duration):
