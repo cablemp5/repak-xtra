@@ -1024,6 +1024,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
             // an inconclusive check of a mod this updater rebuilt is noise, whichever game it was made for
             if v.kind == "unknown" && made.is_some() { return false; }
             v.kind != "vfx"
+                || v.reason == ENCRYPTED // an update kept encrypted (Keep mods encrypted) is still encrypted
                 || can_finish(p)
                 || crate::xtra_niagara::known_old_layout(p, &niagara_layouts)
                 || checked_record(&checked, &utoc, game_updated).is_some_and(|c| c.outdated && c.old_layout)
@@ -1033,7 +1034,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
         // the update decodes. Otherwise it waits for the USMAP of the installed build, and its reason says which
         let usmap = crate::vfx_updater::commands::saved_usmap_path().filter(|u| Path::new(u).is_file());
         if let Some((u, g)) = usmap.as_deref().and_then(|u| crate::xtra_niagara::usmap_behind(u, &paks)) {
-            for v in verdicts.iter_mut().filter(|v| v.kind == "vfx") {
+            for v in verdicts.iter_mut().filter(|v| v.kind == "vfx" && v.reason != ENCRYPTED) {
                 v.usmap_wait = usmap_wait(&paks, usmap.as_deref().unwrap_or_default(), &Path::new(&v.path).with_extension("utoc"));
                 v.reason += &if v.usmap_wait > 0 {
                     format!(" It waits for the USMAP of game build {g}: the update changed {} of the files it rebuilds, which the saved USMAP (build {u}) would read wrong.", v.usmap_wait)

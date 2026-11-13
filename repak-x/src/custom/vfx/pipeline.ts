@@ -162,7 +162,7 @@ const plural = (n: number, word: string, many = `${word}s`) => `${n.toLocaleStri
 export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
   const report = await rebuild(o)
   // not one Safety just turned off as made for an older game build: that one stays as it is now
-  if (report.status !== 'nothing' || report.turnedOff || o.keepEncrypted || o.outputDir || !await invoke<boolean>('xtra_mod_encrypted', { modPath: o.modPath }).catch(() => false)) return report
+  if (report.status !== 'nothing' || report.turnedOff || o.keepEncrypted || o.outputDir || o.cancelled?.() || !await invoke<boolean>('xtra_mod_encrypted', { modPath: o.modPath }).catch(() => false)) return report
   const log = o.log ?? (() => {})
   try {
     report.output = await invoke<string>('xtra_decrypt_mod', { modPath: o.modPath })
