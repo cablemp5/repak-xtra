@@ -23,7 +23,7 @@ import { modKey, useLoadouts } from '../loadoutStore'
 import { FIXED_EVENT, onHandoff, openLoadoutInMain, onReport, takeHandoff, takeReport, utocOf, type Fixed } from './handoff'
 import { ASK_REVIEW, KEEP_ENCRYPTED, KEEP_NAME, ORIGINALS, REPAIR_POLICY, SAFE_OFF, claimRun, readKeepEncrypted, newRunToken, onRunChange, readAskReview, readNaming, readOriginals, readRepairPolicy, readSafety, releaseRun, retireUnsafe, runLock, type Naming, type Originals, type RunLock, type Safety } from './prefs'
 import { STEPS, fixVfxMod, repairOutcome, type AssetKind, type VfxReport } from './pipeline'
-import { keepsEncrypted, needsUpdater, rescanForced, skipsUpdater, verdictLabel, verdictsChanged } from '../brokenMods'
+import { ENCRYPTED, keepsEncrypted, needsUpdater, rescanForced, skipsUpdater, verdictLabel, verdictsChanged } from '../brokenMods'
 import { SCAN_DONE, modLabel, type ScanStep } from '../scanProgress'
 import { HeroFilter, heroOfName } from '../heroFilter'
 import './vfx.css'
@@ -61,6 +61,8 @@ function rememberTime(niagara: boolean, ms: number) {
 const START = { n: 30_000, p: 12_000 }
 /** One mod's expected time: its kind's median on this PC (3 runs or more), else the benchmark's. */
 const expected = (t: Times, niagara?: boolean) => median(niagara ? t.n : t.p) ?? (niagara ? START.n : START.p)
+/** A mod whose only finding is that it is encrypted: decrypted at once (pipeline.ts decryptOnly), about this long. */
+const DECRYPT_MS = 1000
 const timeLeft = (ms: number) => (ms < 60_000 ? 'under a minute' : `about ${plural(Math.round(ms / 60_000), 'minute')}`)
 
 const NAMING_NOTE: Record<Naming, string> = {
@@ -628,7 +630,8 @@ export function VfxUpdaterPanel() {
     const finish = async (key: string, r: VfxReport) => {
       patch(key, { status: r.status, report: r, sub: undefined })
       // its report stays folded under its pill, a problem too: the pill says what happened, a click shows why
-      if (r.status !== 'cancelled' && r.ms > 0) rememberTime(r.assets.some(a => /^(NS|NE)_/i.test(a.name)), r.ms)
+      // a decrypt alone says nothing about how long a rebuild takes
+      if (r.status !== 'cancelled' && r.ms > 0 && !r.decrypted) rememberTime(r.assets.some(a => /^(NS|NE)_/i.test(a.name)), r.ms)
       if (r.status === 'fixed') { fixed++; pick([key], false) }
       if (r.status === 'nothing') cleared++
       if (r.turnedOff) turnedOff++
@@ -691,7 +694,7 @@ export function VfxUpdaterPanel() {
         }),
         modPath: mod.utoc, usmapPath: usmap, gamePaksPath: paks, turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash', keepName, filter,
         safeOff: safeOff && needs.has(norm(mod.path)), // a flagged mod a run proves crashes the game: a failed run leaves every mod as it was
-        keepEncrypted,
+        keepEncrypted, decryptOnly: needs.get(norm(mod.path))?.startsWith(ENCRYPTED),
         log: addLog, cancelled: () => cancel.current,
         onStep: s => patch(key, { step: s.step, sub: undefined }),
         onProgress: (_, __, message) => patch(key, { sub: message }),
@@ -832,15 +835,18 @@ export function VfxUpdaterPanel() {
   const byUtoc = new Map((mods ?? []).map(m => [norm(m.utoc), m]))
   const times = readTimes()
   // while a batch runs: the mod in progress (its expected time less the time it has run) and the ones after it
+  // one mod's expected time: a decrypt alone for an encrypted-only one, else its kind's median on this PC
+  const encryptedOnly = (k: string) => { const m = byUtoc.get(k); return !keepEncrypted && Boolean(m && needs.get(norm(m.path))?.startsWith(ENCRYPTED)) }
+  const est = (k: string) => (encryptedOnly(k) ? DECRYPT_MS : expected(times, byUtoc.get(k)?.niagara))
   const left = busy ? (() => {
-    const rest = batch.slice(runningAt + 1).map(k => expected(times, byUtoc.get(k)?.niagara))
-    const now = runningAt >= 0 ? expected(times, byUtoc.get(batch[runningAt])?.niagara) : 0
+    const rest = batch.slice(runningAt + 1).map(est)
+    const now = runningAt >= 0 ? est(batch[runningAt]) : 0
     if (now === undefined || rest.some(x => x === undefined)) return undefined
     return Math.max(0, now - (performance.now() - modStart.current)) + rest.reduce<number>((a, b) => a + (b ?? 0), 0)
   })() : undefined
   // before Update: what the ticked mods should take
   const ahead = !busy && todo ? (() => {
-    const xs = [...picked].filter(k => !isDone(runs[k]?.status) && !waits.has(k)).map(k => expected(times, byUtoc.get(k)?.niagara))
+    const xs = [...picked].filter(k => !isDone(runs[k]?.status) && !waits.has(k)).map(est)
     return xs.some(x => x === undefined) ? undefined : xs.reduce<number>((a, b) => a + (b ?? 0), 0)
   })() : undefined
   const state = cancelling ? 'Cancelling. The current step finishes first.'

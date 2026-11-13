@@ -8,7 +8,7 @@ import { useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit } from '@tauri-apps/api/event'
 import type { useAlert } from '../../components/AlertHandler'
-import { verdictLabel, verdictOf, verdictsChanged } from '../brokenMods'
+import { ENCRYPTED, verdictLabel, verdictOf, verdictsChanged } from '../brokenMods'
 import { modKey, nameKey, renameModKey } from '../loadoutStore'
 import { renameSource } from '../nexusSource'
 import { readFilter } from './filter'
@@ -80,6 +80,7 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
       autoAccept: !readAskReview(), review: async c => !incompleteAssets(c) && !c.warnings.length,
       keepName: naming === 'broken', turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash',
       safeOff: readSafety() !== 'on' && ['broken', 'vfx', 'risky'].includes(verdictOf(mod.path)?.kind ?? ''), keepEncrypted: readKeepEncrypted(),
+      decryptOnly: verdictOf(mod.path)?.reason?.startsWith(ENCRYPTED),
       onStep: s => { if (id !== null) alert.updateToast(id, { description: `Step ${s.step} of ${STEPS.length}: ${s.title}`, progressValue: ((s.step - 0.5) / STEPS.length) * 100 }) },
     })
     if (r.status === 'fixed' && r.placed) {

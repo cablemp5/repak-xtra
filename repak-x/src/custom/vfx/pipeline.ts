@@ -98,6 +98,9 @@ export type FixOptions = {
   /** Keep mods encrypted (Advanced): an encrypted mod's update is encrypted again, and none is decrypted. Off (the default):
    *  every update comes out unencrypted, and an encrypted mod that needs nothing else is decrypted in place */
   keepEncrypted?: boolean
+  /** Its only finding is that it is encrypted (xtra_broken.rs ENCRYPTED): decrypted at once, with no rebuild attempt
+   *  (about half a second, where a rebuild attempt reads every file first) */
+  decryptOnly?: boolean
   /** Progress inside a step that runs here (reading files); Rust steps send vfx_progress events */
   onProgress?: (current: number, total: number, message: string) => void
   /** Checked between steps and files: true stops the run once the call in flight returns */
@@ -160,7 +163,12 @@ const plural = (n: number, word: string, many = `${word}s`) => `${n.toLocaleStri
 /** An encrypted mod the update found nothing else to do for: decrypted in place (Season 11's file check reports
  *  encrypted mods, and Project Galacta skips them), unless Keep mods encrypted is on. */
 export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
-  const report = await rebuild(o)
+  const direct = Boolean(o.decryptOnly) && !o.keepEncrypted && !o.outputDir
+  const t0 = performance.now()
+  const report: VfxReport = direct
+    ? { mod: o.modPath, name: stem(o.modPath).replace(/(_\d+)?_P$/i, ''), status: 'nothing', assets: [], warnings: [],
+        counts: { updated: 0, same: 0, added: 0, passed: 0, left: 0, ownGame: 0, unreadable: 0, changes: 0, relaid: 0 }, ms: 0, steps: [] }
+    : await rebuild(o)
   // not one Safety just turned off as made for an older game build: that one stays as it is now
   if (report.status !== 'nothing' || report.turnedOff || o.keepEncrypted || o.outputDir || !await invoke<boolean>('xtra_mod_encrypted', { modPath: o.modPath }).catch(() => false)) return report
   if (o.cancelled?.()) return report
@@ -176,6 +184,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     report.error = `Not decrypted: ${String(e).replace(/[.!]?\s*$/, '')}. The mod was not changed.`
     log(report.error, 'warning')
   }
+  if (direct) report.ms = performance.now() - t0
   return report
 }
 
