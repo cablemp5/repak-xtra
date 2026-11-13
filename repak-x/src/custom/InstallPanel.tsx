@@ -429,13 +429,6 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
                             )}
                           </div>
                           <div className="ip-switches">
-                            <Switch size="sm" color="primary" checked={s.obfuscate} onChange={(v: boolean) => update(i, { obfuscate: v })}
-                              className={`install-toggle obfuscate-toggle${s.obfuscate ? ' active' : ''}`} title="Encrypts the IoStore with the game's AES key to block FModel extraction">
-                              <div className="install-toggle__text">
-                                <span className="install-toggle__label">Obfuscation</span>
-                                <span className="install-toggle__hint">{s.obfuscate ? 'IoStore will be AES encrypted' : 'Encrypt to block FModel extraction'}</span>
-                              </div>
-                            </Switch>
                             <Switch size="sm" color="success" checked={s.hybrid} isDisabled={noCooked}
                               onChange={(v: boolean) => { if (!noCooked) update(i, v ? { hybrid: true, toRepak: true, forceLegacy: false } : { hybrid: false }) }}
                               className={`install-toggle hybrid-toggle${noCooked ? ' locked' : s.hybrid ? ' active' : ''}`}

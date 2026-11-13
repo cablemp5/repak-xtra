@@ -54,6 +54,14 @@ on/off companion explicitly, so encrypting a VFX-updated disabled mod does not l
 disabled before the app publishes the verified bundle. `scripts/check-encryption-roundtrip.py` checks temporary copies
 through the native library; run its Python host beside `oo2core_9_win64.dll`.
 
+`0020-decrypt-iostore.patch` adds a `decrypt_iostore` JSON action, the reverse of 0010's `encrypt_iostore`: the same chunks,
+container id, mount point, version and block size, the file list written in plain text, nothing encrypted. Season 11's file
+check reports a mod whose file list it cannot read, and Project Galacta skips it. The game's key comes with the request (the
+app holds it), so the source gains no copy of it. A container without a readable file list, or with a file its list does not
+name, is refused, as are signed, multi-part, and memory-mapped ones. The output is read back with no key: it must not be
+encrypted, and its chunk ids, file names, and every chunk's bytes must match. Four real mods decrypted (467, 4, 2, and 3
+files, one without the Indexed flag), each listing every file afterwards.
+
 ## Refreshing a patch
 
 When `build.ps1` says a patch no longer applies (the submodule moved to a newer upstream commit):

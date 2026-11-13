@@ -14,7 +14,7 @@ import { renameSource } from '../nexusSource'
 import { readFilter } from './filter'
 import { fixInVfxWindow, openVfxWindow, sendReport, utocOf } from './handoff'
 import { STEPS, fixVfxMod, incompleteAssets, repairOutcome, type VfxReport } from './pipeline'
-import { claimRun, newRunToken, readNaming, readOriginals, readAskReview, readRepairPolicy, readSafety, releaseRun, runLock } from './prefs'
+import { claimRun, newRunToken, readKeepEncrypted, readNaming, readOriginals, readAskReview, readRepairPolicy, readSafety, releaseRun, runLock } from './prefs'
 
 type Alert = ReturnType<typeof useAlert>
 let reserved = false // one right-click update at a time in this window, taken before anything is awaited
@@ -79,7 +79,7 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
       // declined and sent to the Mod Updater's review. Off (the default), one without unchecked assets goes in
       autoAccept: !readAskReview(), review: async c => !incompleteAssets(c) && !c.warnings.length,
       keepName: naming === 'broken', turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash',
-      safeOff: readSafety() === 'off',
+      safeOff: readSafety() === 'off', keepEncrypted: readKeepEncrypted(),
       onStep: s => { if (id !== null) alert.updateToast(id, { description: `Step ${s.step} of ${STEPS.length}: ${s.title}`, progressValue: ((s.step - 0.5) / STEPS.length) * 100 }) },
     })
     if (r.status === 'fixed' && r.placed) {
@@ -89,7 +89,8 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
       await emit('mods_dir_changed').catch(() => {})
       await reload()
     }
-    if (r.status === 'nothing' || r.placed || r.turnedOff) await verdictsChanged() // its Needs VFX update flag goes (xtra_broken.rs)
+    if (r.decrypted) await emit('mods_dir_changed').catch(() => {})
+    if (r.status === 'nothing' || r.placed || r.turnedOff || r.decrypted) await verdictsChanged() // its Needs VFX update flag goes (xtra_broken.rs)
     if (id !== null) alert.dismissAlert(id)
     id = null
     resultToast(r, name, alert, mod.path)
@@ -104,7 +105,9 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
 /** The result, as a new toast: Show report keeps every warning and asset one click away (the VFX Updater shows it). */
 function resultToast(r: VfxReport, name: string, alert: Alert, path: string) {
   const show = { label: 'Show report', onClick: () => { sendReport(r); void openVfxWindow() } }
-  if (r.status === 'fixed' && r.placed) {
+  if (r.decrypted) {
+    alert.showAlert({ color: 'success', duration: 6000, title: `Decrypted: ${name}`, description: "The game's Season 11 check can read it now. The encrypted copy is in Settings > Recently deleted." })
+  } else if (r.status === 'fixed' && r.placed) {
     const warned = r.warnings.length, left = r.counts.left
     const where = left ? 'The original is off and kept for a full update later.' : r.placed.trashed ? 'The original is in Recently deleted.' : r.placed.turnedOff ? 'The original is off.' : ''
     alert.showAlert({

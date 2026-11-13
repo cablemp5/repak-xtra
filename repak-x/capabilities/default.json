@@ -4,7 +4,6 @@
   "windows": [
     "main",
     "vfx-updater",
-    "encrypt",
     "galacta",
     "asset-explorer"
   ],

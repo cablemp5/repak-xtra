@@ -11,6 +11,10 @@ import { releaseScan, scanEnded, scanHeld, scanStarted } from './scanProgress'
  *  0 the update waits for that patch's USMAP (xtra_broken.rs changed_since_usmap). */
 export type Verdict = { path: string; kind: 'broken' | 'vfx' | 'risky' | 'unknown'; reason: string; usmapWait?: number; offOnly?: boolean }
 /** A verdict's badge text. */
+/** The start of an encrypted mod's Needs update reason (xtra_broken.rs ENCRYPTED): dropped while Keep mods encrypted
+ *  is on (vfx/prefs.ts KEEP_ENCRYPTED, read here without importing the Mod Updater's code). */
+export const ENCRYPTED = 'Encrypted: '
+const keepsEncrypted = (v: Verdict) => v.reason.startsWith(ENCRYPTED) && localStorage.getItem('repakxtra.vfx.keepEncrypted') === '1'
 export const verdictLabel = (kind: Verdict['kind']) => (kind === 'broken' ? 'Broken' : kind === 'vfx' ? 'Needs update' : kind === 'unknown' ? 'Safety unknown' : 'May crash')
 
 /** Mods the Mod Updater never offers: built-ins (another app's too, in .repakxtra-builtin) and project loaders
@@ -82,7 +86,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     const check = () => {
       const turn = ++checkSeq
       return Promise.all([invoke<Verdict[]>('xtra_broken_mods', { modPaths: paths }), invoke<{ path: string; partial: boolean; current: boolean }[]>('xtra_made_mods', { modPaths: paths }).catch(() => [])])
-        .then(([r, m]) => { if (live && turn === checkSeq) { verdicts = new Map(r.map(v => [norm(v.path), v])); made = new Map(m.map(x => [norm(x.path), x])); version++; listeners.forEach(l => l()) } return true })
+        .then(([r, m]) => { if (live && turn === checkSeq) { verdicts = new Map(r.filter(v => !keepsEncrypted(v)).map(v => [norm(v.path), v])); made = new Map(m.map(x => [norm(x.path), x])); version++; listeners.forEach(l => l()) } return true })
         // the badges so far stay (the game runs and its file list is not read yet, or the call failed)
         .catch(e => { console.warn('[brokenMods] check failed', e); return false })
     }

@@ -12,7 +12,6 @@ export type Shortcut = { keys: string[]; action: string }
 const HEADER = [
   { key: 'k', pref: 'ko-tab', name: 'KO Editor tab' },
   { key: 'm', pref: 'vfx-updater', name: 'Mod Updater' },
-  { key: 'e', pref: 'encrypt', name: 'Mod Encryptor' },
   { key: 'g', pref: 'galacta', name: 'Galacta Converter' },
   { key: 't', pref: 'tools', name: 'Tools' },
 ]

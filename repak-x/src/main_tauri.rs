@@ -7721,17 +7721,9 @@ fn compute_mod_details(
         .unwrap_or("Unknown")
         .to_string();
 
-    // Check encryption:
-    //   - IoStore: ask UAssetTool whether the container is AES-encrypted
-    //   - PAK: list_pak already told us if the index is encrypted (obfuscated mods)
-    let is_encrypted = if is_iostore {
-        uasset_toolkit::is_iostore_encrypted(&utoc_path.to_string_lossy()).unwrap_or(false)
-    } else {
-        pak_list_info
-            .as_ref()
-            .map(|info| info.encrypted_index)
-            .unwrap_or(false)
-    };
+    // Check encryption: whether the IoStore container is AES-encrypted (the game's Season 11 check reports these)
+    // repakxtra: a .pak alone never: every mod .pak for this game has an encrypted index, so it said Encrypted for all of them
+    let is_encrypted = is_iostore && uasset_toolkit::is_iostore_encrypted(&utoc_path.to_string_lossy()).unwrap_or(false);
 
     let details = ModDetails {
         mod_name,
@@ -8805,8 +8797,9 @@ fn main() {
             xtra_vfx::xtra_vfx_lock,
             xtra_vfx::xtra_scan_stopped,
             xtra_vfx::xtra_scan_hold, // repakxtra: the header's Pause and Cancel for the mod checks
-            xtra_encrypt::xtra_encrypt_mods,
-            xtra_encrypt::xtra_encrypt_list,
+            xtra_encrypt::xtra_mod_encrypted, // repakxtra: Season 11, the Mod Updater decrypts
+            xtra_encrypt::xtra_decrypt_mod,
+            xtra_encrypt::xtra_encrypt_staged,
             xtra_galacta::xtra_galacta_list, // repakxtra
             xtra_galacta::xtra_galacta_make,
             xtra_vfx::xtra_vfx_stale,

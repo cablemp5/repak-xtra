@@ -58,6 +58,8 @@ export type VfxReport = {
   placed?: Placed
   /** Proved to crash the game as it is, so it was turned off (FixOptions.safeOff) */
   turnedOff?: boolean
+  /** Decrypted in place, nothing else changed (fixVfxMod: an encrypted mod that needed nothing else) */
+  decrypted?: boolean
   /** Placed after Use candidate or Approve all (Ask me to review candidates on) */
   reviewed?: boolean
   assets: AssetResult[]
@@ -93,6 +95,9 @@ export type FixOptions = {
   filter?: ColorFilter
   log?: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void
   onStep?: (s: { step: number; title: string }) => void
+  /** Keep mods encrypted (Advanced): an encrypted mod's update is encrypted again, and none is decrypted. Off (the default):
+   *  every update comes out unencrypted, and an encrypted mod that needs nothing else is decrypted in place */
+  keepEncrypted?: boolean
   /** Progress inside a step that runs here (reading files); Rust steps send vfx_progress events */
   onProgress?: (current: number, total: number, message: string) => void
   /** Checked between steps and files: true stops the run once the call in flight returns */
@@ -152,7 +157,28 @@ async function mapLimit<T, R>(items: T[], limit: number, worker: (item: T, i: nu
 
 const plural = (n: number, word: string, many = `${word}s`) => `${n.toLocaleString()} ${n === 1 ? word : many}`
 
+/** An encrypted mod the update found nothing else to do for: decrypted in place (Season 11's file check reports
+ *  encrypted mods, and Project Galacta skips them), unless Keep mods encrypted is on. */
 export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
+  const report = await rebuild(o)
+  // not one Safety just turned off as made for an older game build: that one stays as it is now
+  if (report.status !== 'nothing' || report.turnedOff || o.keepEncrypted || o.outputDir || !await invoke<boolean>('xtra_mod_encrypted', { modPath: o.modPath }).catch(() => false)) return report
+  const log = o.log ?? (() => {})
+  try {
+    report.output = await invoke<string>('xtra_decrypt_mod', { modPath: o.modPath })
+    report.status = 'fixed'
+    report.decrypted = true
+    report.error = undefined
+    log(`Decrypted ${stem(o.modPath)}: the game's Season 11 check can read it now. The encrypted copy is in Recently deleted.`, 'success')
+  } catch (e) {
+    report.status = 'failed'
+    report.error = `Not decrypted: ${String(e).replace(/[.!]?\s*$/, '')}. The mod was not changed.`
+    log(report.error, 'warning')
+  }
+  return report
+}
+
+async function rebuild(o: FixOptions): Promise<VfxReport> {
   const filter = o.filter ?? DEFAULT_FILTER
   const log = o.log ?? (() => {})
   const t0 = performance.now()
@@ -378,6 +404,11 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       const base = o.outputDir ? `${slash(o.outputDir)}/${fixedName(o.modPath)}` : `${dirs.stage}/fixed`
       const utoc = await invoke<string>('vfx_pack_to_iostore', { usmapPath: o.usmapPath, inputDir: dirs.finalUassets, outputBase: base, allowedAssets: manifest })
       report.output = utoc
+      // Keep mods encrypted: an encrypted mod's update is encrypted too, in the run's folder before anything is placed
+      if (o.keepEncrypted && !o.outputDir && await invoke<boolean>('xtra_mod_encrypted', { modPath: src })) {
+        const failed = await invoke('xtra_encrypt_staged', { utoc }).then(() => null, e => String(e))
+        if (failed) { report.error = `Not updated: the update could not be encrypted like the mod (${failed}). The mod was not changed.`; log(report.error, 'warning'); return }
+      }
       if (o.policy === 'bestEffort' && !o.outputDir) {
         const unchecked = uncheckedAssets(report)
         if (o.autoAccept && unchecked) {

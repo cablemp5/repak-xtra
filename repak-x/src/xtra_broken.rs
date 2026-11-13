@@ -59,6 +59,9 @@ fn is_anim_blueprint(key: &str) -> bool {
     key.rsplit('/').next().unwrap_or(key).starts_with("abp_")
 }
 
+/// An encrypted mod's reason (brokenMods.ts ENCRYPTED reads its start, to drop it while Keep mods encrypted is on).
+pub(crate) const ENCRYPTED: &str = "Encrypted: the game's Season 11 check cannot read its file list, so it reports the mod, and Project Galacta skips it. The Mod Updater decrypts it, or turn on Keep mods encrypted in its Advanced to leave it as it is.";
+
 /// An animation or montage (an emote's), by where it sits or its montage name. shortcut: by path and name, list
 /// classes (xtra_uat_cli::classes) if a mod ever keeps one elsewhere under another name.
 fn is_animation(key: &str) -> bool {
@@ -1000,6 +1003,15 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                     layout: crate::xtra_layout::found_now(&layouts, &path.with_extension("utoc"), game_updated, &usmap_id),
                 };
                 judge_checked(p, facts, game_updated, &game, record.and_then(|c| c.unknown.as_deref()))
+                    // last: any other finding says more, and its update comes out unencrypted anyway
+                    .or_else(|| (!has_fix(&path) && crate::xtra_encrypt::encrypted(&path.with_extension("utoc"))).then(|| Verdict {
+                        path: p.to_string(),
+                        kind: "vfx",
+                        reason: ENCRYPTED.into(),
+                        stale_niagara: 0,
+                        usmap_wait: 0,
+                        off_only: false,
+                    }))
             })
             .collect::<Vec<Verdict>>();
         // an update the Mod Updater made for this game is never flagged Needs update or Safety unknown again (the Mod

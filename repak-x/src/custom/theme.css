@@ -595,7 +595,6 @@ html[data-show-header-icons] .header-actions-right .btn-vfx svg { margin-right: 
 html:not([data-show-priority]) .mod-card .number-input-container { display: none !important; }
 html:not([data-show-tools]) [data-tour="tools-btn"] { display: none !important; }
 html:not([data-show-vfx-updater]) [data-tour="vfx-updater-btn"] { display: none !important; }
-html:not([data-show-encrypt]) [data-tour="encrypt-btn"] { display: none !important; }
 html:not([data-show-galacta]) [data-tour="galacta-btn"] { display: none !important; }
 html:not([data-show-conflicts]) .mod-type-badge.conflict-badge, html:not([data-show-conflicts]) .conflict-dot { display: none !important; }   /* Settings > On each mod */
 html:not([data-show-nexus]) :is(.nexus-badge, .nexus-update-chip, .nexus-split) { display: none !important; }

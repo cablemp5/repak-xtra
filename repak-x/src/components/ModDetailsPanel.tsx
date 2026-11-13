@@ -302,7 +302,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
                         color: '#60a5fa',
                         border: '1px solid rgba(59, 130, 246, 0.35)',
                         borderLeft: details.is_iostore || details.is_hybrid ? 'none' : '1px solid rgba(59, 130, 246, 0.35)'
-                      }} title="This mod package is encrypted">Encrypted</div>
+                      }} title="Encrypted. The game's Season 11 check reports it, and Project Galacta skips it. The Mod Updater decrypts it.">Encrypted</div>
                     )}
                   </div>
                 )}

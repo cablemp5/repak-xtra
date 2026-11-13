@@ -198,8 +198,9 @@ channel, with no folder paths or user name. Audio and UI mods say in their detai
 
 **Setup:** the signature bypass ships inside the app (with an "Is it safe?" report), Project Galacta installs and updates in one click, and the preview kit and Blender install from here. Every install shows its steps as it goes. **Guided setup** opens the first-launch setup again.
 
-**Encrypt:** right-click mods in the Library and click **Encrypt** to keep them from being extracted in FModel. The
-originals are kept as backups, and each mod stays on or off as it was.
+**Encrypted mods:** Season 11's file check reports encrypted mods, and Project Galacta skips them. The Mod Updater
+decrypts them (the encrypted copy waits 7 days in Recently deleted), or keeps them encrypted if you choose that in its
+Advanced settings.
 
 **Make it yours:** a sound pack (Bell, Mech, Bubble or Press, or none) in **Settings > Interface**, next to UI scale,
 animations and lighter graphics for slower PCs. `F3` shows a frame rate counter.

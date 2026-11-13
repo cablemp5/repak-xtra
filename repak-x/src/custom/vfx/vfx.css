@@ -42,15 +42,13 @@
 .vf-grp.is-done .vf-grp-count { color: #3ecf6e; background: color-mix(in srgb, #3ecf6e, transparent 88%); }
 .vf-grp.is-done .vf-grp-name { color: #3ecf6e; }
 [data-theme="light"] .vf-grp.is-done .vf-grp-count, [data-theme="light"] .vf-grp.is-done .vf-grp-name { color: #166236; }
-/* the Mod Encryptor's Encrypted and the Galacta Converter's Converted, the group heading and each row's badge: the
+/* the Galacta Converter's Converted, the group heading and each row's badge: the
    Library badge's color (theme.css .mod-lock, .pg-badge) */
-:is(.vf-grp, .vf-pill).is-encrypted { --grp-tone: #a78bfa; }
 :is(.vf-grp, .vf-pill).is-galacta { --grp-tone: #ec5fe0; }
-[data-theme="light"] :is(.vf-grp, .vf-pill).is-encrypted { --grp-tone: #6d28d9; }
 [data-theme="light"] :is(.vf-grp, .vf-pill).is-galacta { --grp-tone: #a3229a; }
-.vf-pill:is(.is-encrypted, .is-galacta) { color: var(--grp-tone) !important; background: color-mix(in srgb, var(--grp-tone), transparent 88%) !important; }
-.vf-grp:is(.is-encrypted, .is-galacta) .vf-grp-count { color: var(--grp-tone); background: color-mix(in srgb, var(--grp-tone), transparent 88%); }
-.vf-grp:is(.is-encrypted, .is-galacta) .vf-grp-name { color: var(--grp-tone); }
+.vf-pill.is-galacta { color: var(--grp-tone) !important; background: color-mix(in srgb, var(--grp-tone), transparent 88%) !important; }
+.vf-grp.is-galacta .vf-grp-count { color: var(--grp-tone); background: color-mix(in srgb, var(--grp-tone), transparent 88%); }
+.vf-grp.is-galacta .vf-grp-name { color: var(--grp-tone); }
 .vf-selects { flex: none; display: inline-flex; gap: 2px; }
 .vf-select { flex: none; height: 28px !important; min-height: 0 !important; padding: 0 12px !important; border: none !important; border-radius: var(--quiet-radius) !important;
   background: none !important; font-size: 13px !important; font-weight: 500 !important; color: var(--text-secondary) !important; cursor: pointer; }

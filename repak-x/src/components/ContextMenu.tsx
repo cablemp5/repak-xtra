@@ -45,7 +45,6 @@ type ContextMenuProps = {
   onCheckVfx?: () => void // repakxtra: Check for VFX update (custom/vfx/quick.ts)
   onShowInAssetExplorer?: (mod: ModRecord) => void
   onExtractAssets?: (mod: ModRecord) => void
-  onEncrypt?: () => void // repakxtra: opens Encrypt with the clicked mod or its selection picked (custom/EncryptMods.tsx)
   allTags: string[]
   onDeleteTag?: (tag: string) => void
   gamePath?: string
@@ -54,7 +53,7 @@ type ContextMenuProps = {
   selectionCount?: number
 }
 
-const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMoveTo, onMoveFolderTo, onCreateFolder, folders, onDelete, onToggle, onRename, onRenameFolder, onCheckConflicts, loadoutMenu, onUpdateMod, onSendToVfxUpdater, onUpdateVfx, onCheckVfx, onShowInAssetExplorer, onExtractAssets, onEncrypt, allTags, onDeleteTag, gamePath, holdToDelete = true, selectionCount = 0 }: ContextMenuProps) => {
+const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMoveTo, onMoveFolderTo, onCreateFolder, folders, onDelete, onToggle, onRename, onRenameFolder, onCheckConflicts, loadoutMenu, onUpdateMod, onSendToVfxUpdater, onUpdateVfx, onCheckVfx, onShowInAssetExplorer, onExtractAssets, allTags, onDeleteTag, gamePath, holdToDelete = true, selectionCount = 0 }: ContextMenuProps) => {
   const [isDeleting, setIsDeleting] = useState(false)
   const deleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
@@ -462,7 +461,6 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
           <div className="context-menu-item" onClick={() => { if (onUpdateMod) onUpdateMod(); onClose(); }}>
             Replace file
           </div>
-          {onEncrypt && <div className="context-menu-item" onClick={() => { onEncrypt(); onClose(); }}>{selectionCount > 1 ? `Encrypt ${selectionCount} mods` : 'Encrypt'}</div>}
           <div className="context-menu-separator" />
           <div className="context-menu-item" onClick={() => { if (onSendToVfxUpdater) onSendToVfxUpdater(mod); onClose(); }}>
             Send to Mod Updater

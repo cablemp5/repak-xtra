@@ -10,7 +10,7 @@ import { APP_NAME } from '../edition'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, emitTo, listen } from '@tauri-apps/api/event'
-import { AlertTriangle, Archive, Check, CheckCheck, ChevronDown, ChevronRight, Copy, Eye, Info, PackageCheck, Undo2, FilePlus, Map as MapIcon, Palette, RefreshCw, RotateCcw, ScrollText, Search, Tag, X } from 'lucide-react'
+import { AlertTriangle, Archive, Check, LockOpen, CheckCheck, ChevronDown, ChevronRight, Copy, Eye, Info, PackageCheck, Undo2, FilePlus, Map as MapIcon, Palette, RefreshCw, RotateCcw, ScrollText, Search, Tag, X } from 'lucide-react'
 import TitleBar from '../../components/TitleBar'
 import { useGlobalTooltips } from '../../hooks/useGlobalTooltips'
 import Checkbox from '../../components/ui/Checkbox'
@@ -21,7 +21,7 @@ import { DEFAULT_FILTER, parseWords, readFilter, resetFilter, writeFilter, type 
 import { canonKey } from '../loadoutIdentity'
 import { modKey, useLoadouts } from '../loadoutStore'
 import { FIXED_EVENT, onHandoff, openLoadoutInMain, onReport, takeHandoff, takeReport, utocOf, type Fixed } from './handoff'
-import { ASK_REVIEW, KEEP_NAME, ORIGINALS, REPAIR_POLICY, SAFE_OFF, claimRun, newRunToken, onRunChange, readAskReview, readNaming, readOriginals, readRepairPolicy, readSafety, releaseRun, retireUnsafe, runLock, type Naming, type Originals, type RunLock, type Safety } from './prefs'
+import { ASK_REVIEW, KEEP_ENCRYPTED, KEEP_NAME, ORIGINALS, REPAIR_POLICY, SAFE_OFF, claimRun, readKeepEncrypted, newRunToken, onRunChange, readAskReview, readNaming, readOriginals, readRepairPolicy, readSafety, releaseRun, retireUnsafe, runLock, type Naming, type Originals, type RunLock, type Safety } from './prefs'
 import { STEPS, fixVfxMod, repairOutcome, type AssetKind, type VfxReport } from './pipeline'
 import { needsUpdater, rescanForced, skipsUpdater, verdictLabel, verdictsChanged } from '../brokenMods'
 import { SCAN_DONE, progressLine, type ScanStep } from '../scanProgress'
@@ -123,6 +123,7 @@ const bare = (path: string) => fileName(path).replace(/\.[^.]+$/, '').replace(/(
 /** Where the update went, in words: the original's new name, or the update's own when it was named _UPDATED. */
 function placedText(r: VfxReport) {
   const p = r.placed
+  if (r.decrypted) return "Decrypted in place: the game's Season 11 check can read it now. The encrypted copy is in Settings > Recently deleted."
   if (!p) return r.output ? `Saved as ${fileName(r.output)}.` : ''
   const kept = bare(p.original)
   const where = p.trashed ? 'is in Recently deleted' : p.turnedOff ? 'is off' : 'is beside it'
@@ -364,6 +365,7 @@ export function VfxUpdaterPanel() {
   const [naming, setNaming] = useState<Naming>(readNaming)
   const [originals, setOriginals] = useState<Originals>(readOriginals)
   const [safety, setSafety] = useState<Safety>(readSafety)
+  const [keepEncrypted, setKeepEncrypted] = useState(readKeepEncrypted)
   const safeOff = safety !== 'on'
   const [moved, setMoved] = useState<LayoutNews | null>(null)
   useEffect(() => { void invoke<LayoutNews>('xtra_layout_moves').then(setMoved, () => {}) }, [usmapInfo])
@@ -638,6 +640,7 @@ export function VfxUpdaterPanel() {
       if (r.status === 'cancelled') { stopped.push(key); retry.push(key) }
       if (r.status === 'declined') { kept.push(key); pick([key], false) } // the user's choice, not a failure: tick it again to retry
       // the main window reloads and moves loadouts from the original to the update (a no-op when the update kept the name)
+      if (r.decrypted) await emit('mods_dir_changed').catch(() => {})
       if (r.placed) await emitTo('main', FIXED_EVENT, { from: r.placed.source, to: r.placed.fixed, swap: true, original: r.placed.original } satisfies Fixed).catch(() => {})
       // an update named _UPDATED is a new file and its original leaves the list: its result moves with it
       const moved = r.placed ? norm(utocOf(r.placed.fixed)) : key
@@ -690,6 +693,7 @@ export function VfxUpdaterPanel() {
         }),
         modPath: mod.utoc, usmapPath: usmap, gamePaksPath: paks, turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash', keepName, filter,
         safeOff, // only when a run proves the original crashes the game: a failed run leaves every mod as it was
+        keepEncrypted,
         log: addLog, cancelled: () => cancel.current,
         onStep: s => patch(key, { step: s.step, sub: undefined }),
         onProgress: (_, __, message) => patch(key, { sub: message }),
@@ -968,6 +972,13 @@ export function VfxUpdaterPanel() {
                     note={{ off: 'It is turned off, so it cannot crash the game. Its flag stays, and you can update it again later.', on: 'It stays on as it was, and can crash the game.' }[safety]}
                     options={[['off', 'Turn it off'], ['on', 'Leave it on']]}
                     onChange={v => { setSafety(v); localStorage.setItem(SAFE_OFF, v === 'off' ? '1' : '0') }} />
+                </Section>
+
+                <Section icon={<LockOpen size={15} aria-hidden="true" />} title="Encrypted mods" about="Season 11's file check reports mods it cannot read, and Project Galacta skips them.">
+                  <Seg label="Encrypted mods" value={keepEncrypted ? 'keep' : 'decrypt'} disabled={busy}
+                    note={keepEncrypted ? 'They stay encrypted, and an update of one is encrypted again. The game reports them.' : 'Updates decrypt them, and an encrypted mod that needs nothing else is decrypted on its own.'}
+                    options={[['decrypt', 'Decrypt them'], ['keep', 'Keep them encrypted']]}
+                    onChange={v => { setKeepEncrypted(v === 'keep'); localStorage.setItem(KEEP_ENCRYPTED, v === 'keep' ? '1' : '0'); void verdictsChanged() }} />
                 </Section>
 
                 <Section icon={<MapIcon size={15} aria-hidden="true" />} title="USMAP"
