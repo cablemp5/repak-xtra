@@ -376,6 +376,30 @@ function loadUrl(key: string, rev: number): Promise<string | null | undefined> {
   urlLoads.set(key, { rev, p })
   return p
 }
+/** A card's looping clip of this animated picture: the one kept from an earlier launch, else made now (thumbWorker.ts
+ *  smallClip) and kept. Kept in the browser's Cache storage under the picture's own SHA-1, the width and the boost, so
+ *  a preview made again never gets an old clip. Any trouble with the storage: made as before, not kept. */
+const CLIPS = 'repakxtra-clips-1'
+const CLIPS_MOST = 300 // past this many, the 50 kept longest ago go
+async function keptClip(blob: Blob, boost: string): Promise<Blob | null> {
+  let cache: Cache | undefined, name = ''
+  try {
+    const sha = new Uint8Array(await crypto.subtle.digest('SHA-1', await blob.arrayBuffer()))
+    name = `/clip/${[...sha].map(x => x.toString(16).padStart(2, '0')).join('')}-${THUMB_W}-${encodeURIComponent(boost)}`
+    cache = await caches.open(CLIPS)
+    const hit = await cache.match(name)
+    if (hit) return await hit.blob()
+  } catch { cache = undefined }
+  const clip = await smallClipAway(blob, THUMB_W, boost)
+  if (clip && cache) {
+    const c = cache
+    void c.put(name, new Response(clip, { headers: { 'content-type': clip.type || 'video/webm' } }))
+      .then(() => c.keys()).then(keys => { if (keys.length > CLIPS_MOST) return Promise.all(keys.slice(0, 50).map(k => c.delete(k))) })
+      .catch(() => undefined)
+  }
+  return clip
+}
+
 /** Width of the copy loadout cards draw (THUMB_W px, WebP, same transparency): a card shows a 640 px render at under
  *  200 px, and the browser keeps every drawn picture decoded at its full size, so a grid of 40 held 86 MB of them. */
 const THUMB_W = 400
@@ -405,9 +429,9 @@ function loadThumb(key: string, rev: number): Promise<string | null | undefined>
         else URL.revokeObjectURL(copy) // the preview changed meanwhile
       }
       // An animated one also gets a card-sized looping video, which takes the animated picture's place on the cards
-      // once it is made (a second or two in the worker) and plays on through a hard scroll.
-      // shortcut: made again each launch, keep them on disk if the first seconds of a launch show the stills
-      if (animated) void smallClipAway(blob, THUMB_W, boost).then(clip => {
+      // once it is made (a second or two in the worker) and plays on through a hard scroll. Kept between launches
+      // (keptClip): making 29 of them took the first 15 s of every launch, and a scroll meanwhile dropped frames
+      if (animated) void keptClip(blob, boost).then(clip => {
         if (!clip || thumbs.get(key)?.url !== full || revs.get(key) !== rev) return // changed meanwhile, or no encoder
         const u = URL.createObjectURL(clip)
         videoUrls.add(u); loopClips.add(u); if (boost) boosted.add(u)

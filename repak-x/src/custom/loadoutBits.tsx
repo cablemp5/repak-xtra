@@ -8,7 +8,7 @@ import type { LoadoutProps } from './Loadouts'
 import { useMediaUrl } from './loadoutMedia'
 import { COVERS, type Cover, type Loadout, type Mod, captureKey, coverFills, displayName, flipMods, memberName, modKey, modsByKey, nameKey, patchLoadout, pickCover } from './loadoutStore'
 import { ModName, ordinal } from './modName'
-import { revealOnLoad, SwapText } from './motion'
+import { predecode, revealOnLoad, SwapText } from './motion'
 import { BeatVideo, cachedPreviewUrl, formKeys, hasPreview, isBoosted, isDecoded, isKoPreview, isLoopClip, isVideoPreview, noPreviewPossible, previewMade, previewSetKey, previewsListed, readyPreview, useCovers, usePreviewStage, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
 import { isEmoteAnim, playEmoteSound, stopEmoteSound, useEmoteSound, webpSeconds } from './emoteSound'
 import { useVerdict } from './brokenMods'
@@ -236,8 +236,8 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
             ? l.mediaBeat ? <BeatVideo src={video} beat={l.mediaBeat} /> : <video src={video} autoPlay loop muted playsInline />
             : <CarouselSlide slide={slides.length > 1 ? at : 0} dir={dir}>
                 {live ? null : isLoopClip(src) ? <video key={src} src={src} autoPlay loop muted playsInline /> : isVideoPreview(src) ? <BeatVideo key={src} src={src} beat={KO_BEAT} /> : null}
-                {(live || !isVideoPreview(src)) && <img key={src} src={live?.url ?? src} alt="" className={`${cover === 'preview' && slide?.key && !isKoPreview(slide.key) && !isBoosted(live?.url ?? src) ? 'pv-kit' : ''}${src === warm || isDecoded(src) ? ' is-loaded' : ''}`} decoding="async" loading={page ? undefined : 'lazy'} crossOrigin="anonymous"
-                  onLoad={e => { revealOnLoad(e); if (audible && live && hovering.current && e.currentTarget.src === live.url) playEmoteSound(audible, live.seconds) }} />}
+                {(live || !isVideoPreview(src)) && <img key={src} src={live?.url ?? src} alt="" className={`${cover === 'preview' && slide?.key && !isKoPreview(slide.key) && !isBoosted(live?.url ?? src) ? 'pv-kit' : ''}${src === warm || isDecoded(src) ? ' is-loaded' : ''}`} decoding="async" crossOrigin="anonymous"
+                  onLoad={e => { revealOnLoad(e); predecode(e.currentTarget); if (audible && live && hovering.current && e.currentTarget.src === live.url) playEmoteSound(audible, live.seconds) }} />}
               </CarouselSlide>}
       </button>
       {/* before and after, once the kit has the hero's vanilla render (before the arrows, so they stay on top) */}
