@@ -1040,8 +1040,8 @@ export function VfxUpdaterPanel() {
             : <>{/* its own line: the warning and its link stay together, apart from the estimate */}
                 {hiddenTicked > 0 && <span className="vf-hidden-line"><b className="vf-hidden-n">{hiddenTicked} ticked {hiddenTicked === 1 ? 'mod is' : 'mods are'} hidden by the filter.</b>{' '}
                   <button type="button" className="su-link" onClick={() => { setQ(''); setHero('') }}>Show {hiddenTicked === 1 ? 'it' : 'them'}</button></span>}
-                {ahead !== undefined && <b className="vf-eta">{timeLeft(ahead).replace(/^./, c => c.toUpperCase())} for {plural(todo, 'mod')}. </b>}
-                {partialTodo > 0 && <><b className="vf-partial-n">{partialTodo === todo ? (todo === 1 ? 'It' : `All ${todo}`) : `${partialTodo} of ${todo}`}</b> will only partially update, without {partialTodo === 1 ? 'its' : 'their'} old Niagara files, and keep {partialTodo === 1 ? 'its' : 'their'} original, off, as _ORIGINAL.{' '}</>}
+                {ahead !== undefined && <b className="vf-eta">{timeLeft(ahead).replace(/^./, c => c.toUpperCase())} for {plural(todo, 'mod')}</b>}
+                {partialTodo > 0 && <>{ahead !== undefined ? '. ' : ''}<b className="vf-partial-n">{partialTodo === todo ? (todo === 1 ? 'It' : `All ${todo}`) : `${partialTodo} of ${todo}`}</b> will only partially update, without {partialTodo === 1 ? 'its' : 'their'} old Niagara files, and keep {partialTodo === 1 ? 'its' : 'their'} original, off, as _ORIGINAL.{' '}</>}
                 </>}
         </p>
         {/* read out: the run's progress and its result, not every tick's estimate */}
