@@ -25,13 +25,14 @@ const SHOW_AFTER_MS = 1500
 /** `shown`: the run has read mods for a moment. `paused`: the last run stopped with mods left.
  *  `held`: the header's Pause or Cancel stopped them (xtra_vfx.rs HELD): they stay stopped until Resume or Refresh list. */
 /** `pct`: the whole run's progress as shown, which only rises in a run (a scan that counts again from 0 never lowers it). */
-/** `stage`: the step the run is on, of `weights` (what each step weighs). `mods`: how many mods it scans. */
-export type ScanRun = { running: boolean; shown: boolean; paused: boolean; last: ScanStep | null; read: number; held: 'paused' | 'cancelled' | null; stage: number; weights: number[]; mods: number; pct: number }
-let run: ScanRun = { running: false, shown: false, paused: false, last: null, read: 0, held: null, stage: 0, weights: [1], mods: 0, pct: 0 }
+/** `stage`: the step the run is on, of `weights` (what each step weighs). `mods`: how many mods it scans. `counting`:
+ *  the mods read now belong to that step (false before the first, while a manual Check's mods go first). */
+export type ScanRun = { running: boolean; shown: boolean; paused: boolean; last: ScanStep | null; read: number; held: 'paused' | 'cancelled' | null; stage: number; weights: number[]; mods: number; counting: boolean; pct: number }
+let run: ScanRun = { running: false, shown: false, paused: false, last: null, read: 0, held: null, stage: 0, weights: [1], mods: 0, counting: false, pct: 0 }
 const listeners = new Set<() => void>()
 const set = (next: Partial<ScanRun>) => {
   run = { ...run, ...next }
-  run.pct = Math.max(run.pct, runPercent(run.stage, run.weights, run.last))
+  run.pct = Math.max(run.pct, runPercent(run.stage, run.weights, run.counting ? run.last : null))
   listeners.forEach(l => l())
 }
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
@@ -55,11 +56,13 @@ const showSoon = () => {
   showTimer = window.setTimeout(() => { showTimer = undefined; if (run.running) set({ shown: true }) }, SHOW_AFTER_MS)
 }
 /** brokenMods.ts: a run of the checks starts, reading the game's files first (step 0). */
-export const scanStarted = () => { set({ running: true, last: null, read: 0, stage: 0, weights: [1], mods: 0, pct: 0 }); run.pct = 0; showSoon() }
+export const scanStarted = () => { set({ running: true, last: null, read: 0, stage: 0, weights: [1], mods: 0, counting: false, pct: 0 }); run.pct = 0; showSoon() }
+/** brokenMods.ts: what the run's steps weigh and how many mods it scans, known before its first step counts. */
+export const scanPlan = (weights: number[], mods: number) => set({ weights, mods })
 /** brokenMods.ts: step `stage` of `weights` starts (its mods are counted from 0), in a run that scans `mods` mods.
  *  `count`: textures, which the frontend counts itself. */
 export const scanStage = (stage: number, weights: number[], mods: number, count?: { at: number; total: number; path: string }) => {
-  set({ stage, weights, mods, last: count ? { step: 'materials', ...count } : null })
+  set({ stage, weights, mods, counting: true, last: count ? { step: 'materials', ...count } : null })
   showSoon()
 }
 /** brokenMods.ts: the run ended. `finished`: false when it stopped with mods left to read, or failed. */
@@ -103,4 +106,12 @@ if (import.meta.env.DEV) {
   const w = [10, ...Array(5).fill(3), ...Array(5).fill(200), 20]
   console.assert(runPercent(0, w, null) === 0 && runPercent(6, w, null) < 5 && runPercent(11, w, { at: 9, total: 9 }) === 100, 'run percent by weight', runPercent(6, w, null))
   console.assert(stageEnd(0, w) === runPercent(1, w, null), 'stage end')
+  // a manual Check's mods first: their counts move nothing until the run's own first step
+  const keep = run
+  run = { ...run, running: true, stage: 0, weights: w, mods: 205, counting: false, pct: 0 }
+  set({ last: { step: 'meshes', at: 9, total: 9, path: 'a' } })
+  const before = run.pct
+  scanStage(1, w, 205)
+  console.assert(before === 0 && run.pct < 5, 'priority mods move nothing', before, run.pct)
+  run = keep
 }

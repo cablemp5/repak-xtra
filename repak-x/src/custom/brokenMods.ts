@@ -5,7 +5,7 @@ import { useEffect, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, listen } from '@tauri-apps/api/event'
 import { isModLoader } from './loadoutStore'
-import { releaseScan, scanEnded, scanHeld, scanStage, scanStarted } from './scanProgress'
+import { releaseScan, scanEnded, scanHeld, scanPlan, scanStage, scanStarted } from './scanProgress'
 
 /** usmapWait (Needs VFX update only): files it rebuilds that a patch newer than the saved USMAP changed. While it is not
  *  0 the update waits for that patch's USMAP (xtra_broken.rs changed_since_usmap). */
@@ -110,7 +110,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     // `at`: the progress step its first scan is (scanProgress.ts; the four scans and the deep pass are five steps in a row),
     // null for a manual Check's mods first, which move no step. `weights`: what each of the run's steps weighs (about the
     // mods it reads), `scanned`: how many mods it scans
-    let weights = [1], scanned = 0
+    let weights = [1], scanned = 0, passes: string[][][] = []
     const step = (at: number | null, i: number) => { if (at !== null) scanStage(at + i, weights, scanned) }
     const scans = (vfx: string[], meshes: string[], at: number | null) => Promise.resolve()
       .then(() => { step(at, 0); return live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: vfx }) : 0 })
@@ -148,6 +148,14 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       .then(ok => { if (!ok) throw new Error('the first check failed') })
       .then(() => {
         ticked = paths.filter(p => forced.has(norm(p))); scanPaths = paths.filter(p => forced.has(norm(p)) || !(made.get(norm(p))?.current || made.get(updateBeside(norm(p)))?.current))
+        // the run's plan, known before a manual Check's mods go first: the mods that are on, through every scan, then the
+        // ones that are off (what loads in the game gets its badges soonest)
+        const isOn = (p: string) => !/\.bak_repak$/i.test(p)
+        passes = [[scanPaths.filter(isOn), paths.filter(isOn)], [scanPaths.filter(p => !isOn(p)), paths.filter(p => !isOn(p))]].filter(([v, m]) => v.length || m.length)
+        scanned = paths.length
+        // reading the game's files and the textures weigh a few mods' worth each; a scan step weighs its mods
+        weights = [Math.max(1, Math.round(scanned / 20)), ...passes.flatMap(([v, m]) => Array(5).fill(Math.max(1, v.length, m.length))), Math.max(1, Math.round(scanned / 10))]
+        scanPlan(weights, scanned)
         const forget = paths.filter(p => fresh.has(norm(p))); forced = new Set()
         if (live) fresh = new Set() // a run the library outdated leaves them for the next one
         return live && forget.length ? invoke('xtra_scan_forget', { modPaths: forget }).catch(e => console.warn('[brokenMods] could not clear earlier checks', e)) : undefined
@@ -156,14 +164,8 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       // a manual Check's mods first, through all four scans, so they never wait behind the mods not checked yet
       .then(() => (ticked.length ? scans(ticked, ticked, null).then(() => deep(ticked, null)) : undefined))
       // every mod for meshes: an update carries the original's meshes as they were, and nothing in the Mod Updater checks them
-      // the mods that are on first, through every scan, then the ones that are off: what loads in the game gets its
-      // badges soonest
+      // the passes planned above, each through every scan
       .then(() => {
-        const isOn = (p: string) => !/\.bak_repak$/i.test(p)
-        const passes = [[scanPaths.filter(isOn), paths.filter(isOn)], [scanPaths.filter(p => !isOn(p)), paths.filter(p => !isOn(p))]].filter(([v, m]) => v.length || m.length)
-        scanned = paths.length
-        // reading the game's files and the textures weigh a few mods' worth each; a scan step weighs its mods
-        weights = [Math.max(1, Math.round(scanned / 20)), ...passes.flatMap(([v, m]) => Array(5).fill(Math.max(1, v.length, m.length))), Math.max(1, Math.round(scanned / 10))]
         return passes.reduce<Promise<unknown>>((r, [v, m], i) => r.then(() => scans(v, m, 1 + 5 * i)).then(() => deep(v, 1 + 5 * i)), Promise.resolve())
       })
       .then(() => textures(paths))
