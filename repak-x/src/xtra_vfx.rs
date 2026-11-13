@@ -1013,6 +1013,9 @@ pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>
                 };
                 // by class too: a UI material named M_..._Inst is no MI_ (xtra_broken::material_instances)
                 let listed = updatable(&details.category, &details.files)
+                    // Season 11: emote animations it rewrites in the new layout, and encrypted mods it decrypts
+                    || details.files.iter().any(|f| crate::xtra_broken::is_animation(&crate::xtra_broken::match_key(f)))
+                    || crate::xtra_encrypt::encrypted(&utoc)
                     || paks.as_ref().is_some_and(|p| !crate::xtra_broken::material_instances(p, &utoc, &details.files).0.is_empty());
                 listed.then(|| VfxMod {
                     name: m.custom_name.clone().filter(|n| !n.trim().is_empty()).unwrap_or_else(|| split_priority(&stem).0.to_string()),

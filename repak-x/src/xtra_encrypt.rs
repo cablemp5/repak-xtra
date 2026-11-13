@@ -42,7 +42,7 @@ fn decrypt(mod_path: &Path) -> Result<PathBuf, String> {
     if crate::is_game_process_running() {
         return Err("Close Marvel Rivals before updating mods.".into());
     }
-    let _mutation = crate::xtra_mutation::edit()?;
+    let _mutation = crate::xtra_mutation::alone("updating it")?;
     let parent = toc.parent().ok_or("The mod has no folder")?;
     // a staging folder the start-up sweep removes if this is cut short (xtra_bundle::sweep_staging)
     let work = tempfile::Builder::new().prefix(".repakxtra-encrypt-").tempdir_in(parent).map_err(|e| e.to_string())?;

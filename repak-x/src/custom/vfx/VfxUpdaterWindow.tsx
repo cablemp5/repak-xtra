@@ -23,7 +23,7 @@ import { modKey, useLoadouts } from '../loadoutStore'
 import { FIXED_EVENT, onHandoff, openLoadoutInMain, onReport, takeHandoff, takeReport, utocOf, type Fixed } from './handoff'
 import { ASK_REVIEW, KEEP_ENCRYPTED, KEEP_NAME, ORIGINALS, REPAIR_POLICY, SAFE_OFF, claimRun, readKeepEncrypted, newRunToken, onRunChange, readAskReview, readNaming, readOriginals, readRepairPolicy, readSafety, releaseRun, retireUnsafe, runLock, type Naming, type Originals, type RunLock, type Safety } from './prefs'
 import { STEPS, fixVfxMod, repairOutcome, type AssetKind, type VfxReport } from './pipeline'
-import { needsUpdater, rescanForced, skipsUpdater, verdictLabel, verdictsChanged } from '../brokenMods'
+import { keepsEncrypted, needsUpdater, rescanForced, skipsUpdater, verdictLabel, verdictsChanged } from '../brokenMods'
 import { SCAN_DONE, progressLine, type ScanStep } from '../scanProgress'
 import { HeroFilter, heroOfName } from '../heroFilter'
 import './vfx.css'
@@ -470,7 +470,7 @@ export function VfxUpdaterPanel() {
         // every other mod too: one that may crash and is on is listed, and Update turns it off (nothing here rebuilds it)
         const all = await invoke<PakFile[]>('get_pak_files').catch(() => [] as PakFile[])
         let verdicts: Verdict[] = [], failed = false
-        try { verdicts = await invoke<Verdict[]>('xtra_broken_mods', { modPaths: [...new Set([...listed, ...all].map(m => m.path))] }) } catch (e) { failed = true; addLog(`Could not check which mods need an update: ${e}`, 'warning') }
+        try { verdicts = (await invoke<Verdict[]>('xtra_broken_mods', { modPaths: [...new Set([...listed, ...all].map(m => m.path))] })).filter(v => !keepsEncrypted(v)) } catch (e) { failed = true; addLog(`Could not check which mods need an update: ${e}`, 'warning') }
         const ours = await invoke<{ path: string; partial: boolean; current: boolean }[]>('xtra_made_mods', { modPaths: listed.map(m => m.path) }).catch(() => [])
         if (!live) return
         const inList = new Set(listed.map(m => norm(m.path)))
@@ -978,7 +978,7 @@ export function VfxUpdaterPanel() {
                   <Seg label="Encrypted mods" value={keepEncrypted ? 'keep' : 'decrypt'} disabled={busy}
                     note={keepEncrypted ? 'They stay encrypted, and an update of one is encrypted again. The game reports them.' : 'Updates decrypt them, and an encrypted mod that needs nothing else is decrypted on its own.'}
                     options={[['decrypt', 'Decrypt them'], ['keep', 'Keep them encrypted']]}
-                    onChange={v => { setKeepEncrypted(v === 'keep'); localStorage.setItem(KEEP_ENCRYPTED, v === 'keep' ? '1' : '0'); void verdictsChanged() }} />
+                    onChange={v => { setKeepEncrypted(v === 'keep'); localStorage.setItem(KEEP_ENCRYPTED, v === 'keep' ? '1' : '0'); void verdictsChanged(); setReload(n => n + 1) }} />
                 </Section>
 
                 <Section icon={<MapIcon size={15} aria-hidden="true" />} title="USMAP"

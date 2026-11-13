@@ -14,7 +14,7 @@ export type Verdict = { path: string; kind: 'broken' | 'vfx' | 'risky' | 'unknow
 /** The start of an encrypted mod's Needs update reason (xtra_broken.rs ENCRYPTED): dropped while Keep mods encrypted
  *  is on (vfx/prefs.ts KEEP_ENCRYPTED, read here without importing the Mod Updater's code). */
 export const ENCRYPTED = 'Encrypted: '
-const keepsEncrypted = (v: Verdict) => v.reason.startsWith(ENCRYPTED) && localStorage.getItem('repakxtra.vfx.keepEncrypted') === '1'
+export const keepsEncrypted = (v: { reason: string }) => v.reason.startsWith(ENCRYPTED) && localStorage.getItem('repakxtra.vfx.keepEncrypted') === '1'
 export const verdictLabel = (kind: Verdict['kind']) => (kind === 'broken' ? 'Broken' : kind === 'vfx' ? 'Needs update' : kind === 'unknown' ? 'Safety unknown' : 'May crash')
 
 /** Mods the Mod Updater never offers: built-ins (another app's too, in .repakxtra-builtin) and project loaders

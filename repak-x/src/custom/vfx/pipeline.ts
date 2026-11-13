@@ -275,6 +275,9 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
     let editable: string[] = [], keep: string[] = []
     const maybe = new Map<string, string>()
     for (const p of extracted) {
+      // rewritten in today's layout and read back with every value the same (xtra_mi_layout.rs): in as it is, so every
+      // edit the mod made stays, its overrides too, which a rebuild on the game's copy would not carry
+      if ([...relaid].some(k => assetKey(rel(p)).endsWith('/' + k) || assetKey(rel(p)) === k)) { keep.push(p); asset(p, 'passed', 'Kept as it was'); continue }
       const d = passes(p) ? undefined : types.get(assetKey(slash(p)))
       if (d && d.kind !== 'other') { editable.push(p); if (d.kind === 'maybe') maybe.set(assetKey(rel(p)), d.class ?? ''); continue }
       keep.push(p)

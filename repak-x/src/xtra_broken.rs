@@ -64,7 +64,7 @@ pub(crate) const ENCRYPTED: &str = "Encrypted: the game's Season 11 check cannot
 
 /// An animation or montage (an emote's), by where it sits or its montage name. shortcut: by path and name, list
 /// classes (xtra_uat_cli::classes) if a mod ever keeps one elsewhere under another name.
-fn is_animation(key: &str) -> bool {
+pub(crate) fn is_animation(key: &str) -> bool {
     !is_anim_blueprint(key) && (key.contains("/animations/") || key.ends_with("_mt"))
 }
 
