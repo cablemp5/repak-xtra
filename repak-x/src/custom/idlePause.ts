@@ -70,10 +70,8 @@ export function holdCovers(root: HTMLElement) {
     const still = coverStills.get(img.src)
     if (still) { held.set(img, img.src); img.src = still }
   }
-  // the clips in view stop where they are until the scroll rests (settle): each canvas keeps the frame it shows
-  let any = false
-  for (const v of seen) if (v.dataset.poster !== undefined && !v.paused && root.contains(v)) { away.add(v); v.pause(); any = true }
-  if (any) settleIn(150) // they start again at rest even when no further scroll event comes (a frame that ran late)
+  // The clips in view play on (canvases, the draw loop below): stopping them for the scroll saved no frame (0, 1, 0 and
+  // 0 late frames in four 6 s runs left playing, the same as stopped). One that scrolls out stops at the rest (settle)
 }
 /** The held covers play again, where their still is what still shows (a preview that changed keeps its new picture). */
 export function releaseCovers() {
