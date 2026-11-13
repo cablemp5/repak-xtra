@@ -268,6 +268,7 @@ html[data-motion="off"] .vfx-notice { animation: none; }
   color: #b9a4ff; border: 1px solid color-mix(in srgb, #9b7bff, transparent 55%); cursor: help; white-space: nowrap; }
 [data-theme="light"] .vf-niagara { color: #5b3fc4; }
 .vf-eta { font-weight: 400; color: var(--text-secondary); }
+.vf-hidden-line { display: block; margin-bottom: 2px; } /* the Galacta Converter's filter warning, its own line */
 /* ticked mods a filter hides: a line of its own above the estimate */
 
 /* Hierarchy (2026-10-30): the mod groups are the job, so they keep the strongest heading (14px 600). Advanced is settings,
