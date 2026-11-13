@@ -96,9 +96,10 @@ export function useNearCards(root: HTMLElement | null, ids: string[], pins: (str
     }
     const pick = () => { const was = lastHeight; measure(); choose(was) }
     pick()
+    let full = false // every card is in and stays in (keepAll): a scroll has nothing left to pick
     const fill = () => {
       idle = 0
-      if (ids.every(id => mountedNow.current.has(id))) return // all in: done
+      if (ids.every(id => mountedNow.current.has(id))) { full = true; return } // all in: done
       setNear(prev => {
         if (!prev) return prev
         const next = new Set(prev)
@@ -109,6 +110,7 @@ export function useNearCards(root: HTMLElement | null, ids: string[], pins: (str
     }
     if (keepAll) idle = requestIdleCallback(fill, { timeout: 1000 })
     const later = () => {
+      if (full) return
       clearTimeout(rest)
       rest = window.setTimeout(() => { rest = 0; choose(lastHeight) }, REST_MS)
       if (!queued) queued = requestAnimationFrame(() => { queued = 0; choose(lastHeight, true) })

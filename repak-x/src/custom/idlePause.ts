@@ -70,6 +70,8 @@ export function holdCovers(root: HTMLElement) {
     const still = coverStills.get(img.src)
     if (still) { held.set(img, img.src); img.src = still }
   }
+  // the clips in view stop where they are until the scroll rests (settle): each canvas keeps the frame it shows
+  for (const v of seen) if (v.dataset.poster !== undefined && !v.paused && root.contains(v)) { away.add(v); v.pause() }
 }
 /** The held covers play again, where their still is what still shows (a preview that changed keeps its new picture). */
 export function releaseCovers() {
@@ -92,7 +94,7 @@ function update() {
     })
   } else {
     // one scrolled out of view while focus was away waits for the view instead (inView)
-    videos.forEach(v => { if (!v.isConnected) return; if (outside.has(v)) away.add(v); else v.play().catch(() => undefined) })
+    videos.forEach(v => { if (!v.isConnected) return; if (isOut(v)) away.add(v); else v.play().catch(() => undefined) })
     loops.forEach(a => { if (a.playState === 'paused') a.play() })
     thaw()
     videos.clear()
@@ -110,26 +112,81 @@ document.addEventListener('load', e => { if (isIdle() && e.target instanceof HTM
 // 29 of 31 animated covers played off screen: each a decoder and a layer redrawn 60 times a second, and a scroll of
 // the grid spent 6.5 ms of every 6.9 ms frame sorting layers (.agent/perf/layers.mjs, trace-summary.mjs, 2026-11-12)
 const away = new WeakSet<HTMLVideoElement>() // paused for being out of view: plays again when it comes into view
-const outside = new WeakSet<HTMLVideoElement>() // out of view as of the observer's last report
-const seen = new WeakSet<HTMLVideoElement>()
-const inView = new IntersectionObserver(entries => {
-  for (const e of entries) {
-    const v = e.target as HTMLVideoElement
-    if (!e.isIntersecting) {
-      outside.add(v)
+// The observer watches a video's parent: a card's clip (loadoutBits.tsx LoopClip, data-poster) is never rendered
+// itself and has no box
+const outside = new WeakSet<Element>() // parents out of view as of the observer's last report
+const watched = new WeakSet<Element>()
+const isOut = (v: HTMLVideoElement) => outside.has(v.parentElement ?? v)
+const seen = new Set<HTMLVideoElement>()
+// Nothing starts or stops while a scroll is going, only once it rests: a fast scroll took videos through the view
+// 185 times in 5 s, and every play and pause restyles the video's own controls and updates its layer (a repaint of the
+// window on most scrolled frames). Until the rest a video keeps doing what it did when the scroll began
+let settling = 0
+const settle = () => {
+  settling = 0
+  for (const v of seen) {
+    if (!v.isConnected) { seen.delete(v); continue }
+    if (isOut(v)) {
       if (!v.paused) { away.add(v); v.pause() }
+      canvasOf(v)?.classList.add('is-away') // out of view the card shows its still: no layer for it (theme.css)
     } else {
-      outside.delete(v)
+      canvasOf(v)?.classList.remove('is-away')
       // into view while the window is in the background: it plays when focus returns (update)
       if (away.delete(v)) { if (isIdle()) videos.add(v); else v.play().catch(() => undefined) }
     }
   }
+}
+const settleIn = (ms: number) => { clearTimeout(settling); settling = window.setTimeout(settle, ms) }
+const inView = new IntersectionObserver(entries => {
+  for (const e of entries) {
+    if (e.isIntersecting) outside.delete(e.target); else outside.add(e.target)
+  }
+  if (!settling) settleIn(0) // no scroll going (a card mounted, the window resized): now
 }, { rootMargin: '200px' })
+window.addEventListener('scroll', () => settleIn(150), { capture: true, passive: true })
+
+// A card's clip plays unseen and its frames are drawn onto the canvas before it (loadoutBits.tsx LoopClip). A <video>
+// on the page cost a scroll its frames however it was handled: 31 of them made 62 layers (every repaint sorted 99), and
+// even two playing in view held the whole window at 72 frames a second of 144 while nothing else moved, so each scroll
+// began at that pace (2026-11-13). A canvas is drawn at the clip's own 60 a second and leaves the window at full rate.
+const canvasOf = (v: HTMLVideoElement) => (v.previousElementSibling instanceof HTMLCanvasElement ? v.previousElementSibling : null)
+const clips = new Set<HTMLVideoElement>() // the videos drawn onto a canvas (data-poster), looping or not
+const drawn = new WeakMap<HTMLVideoElement, number>()
+const paint = (v: HTMLVideoElement) => {
+  const at = Math.floor(v.currentTime * 60), c = canvasOf(v)
+  if (!c || drawn.get(v) === at || v.readyState < 2) return
+  if (c.width !== v.videoWidth || c.height !== v.videoHeight) { c.width = v.videoWidth; c.height = v.videoHeight }
+  c.getContext('2d')?.drawImage(v, 0, 0)
+  drawn.set(v, at)
+}
+let drawing = 0
+const draw = () => {
+  drawing = 0
+  let any = false
+  for (const v of clips) {
+    if (!v.isConnected) { clips.delete(v); continue }
+    if (v.paused) continue
+    any = true
+    paint(v)
+  }
+  if (any) drawing = requestAnimationFrame(draw) // ends with the last clip that plays
+}
+// a clip that is not playing still shows where it stands: its first frame once loaded, the frame a seek lands on
+for (const type of ['loadeddata', 'seeked']) document.addEventListener(type, e => {
+  if (e.target instanceof HTMLVideoElement && e.target.dataset.poster !== undefined) paint(e.target)
+}, true)
 
 document.addEventListener('play', e => {
   const v = e.target
-  if (!(v instanceof HTMLVideoElement) || !v.loop) return
-  if (!seen.has(v)) { seen.add(v); inView.observe(v) } // its first report says where it is
+  if (!(v instanceof HTMLVideoElement)) return
+  if (v.dataset.poster !== undefined) { clips.add(v); if (!drawing) drawing = requestAnimationFrame(draw) }
+  if (!v.loop) return
+  if (!seen.has(v)) {
+    seen.add(v)
+    const box = v.parentElement ?? v
+    if (watched.has(box)) { if (!settling) settleIn(0) } // a new video in a watched parent: its place is known
+    else { watched.add(box); inView.observe(box) } // its first report says where it is
+  }
   if (isIdle()) { v.pause(); videos.add(v) }
 }, true)
 

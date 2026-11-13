@@ -294,6 +294,10 @@ const boosted = new Set<string>()
 const BOOST = 'contrast(1.05) saturate(1.1)'
 /** This preview URL is a card's looping video of an animated preview: it plays in a plain looping video. */
 export const isLoopClip = (url: string | null | undefined) => Boolean(url && loopClips.has(url))
+const clipStills = new Map<string, string>()
+/** The still of a card's looping video (its first frame, card-sized): drawn under it, and alone while the video is
+ *  out of rendering (idlePause.ts). Undefined when none was made. */
+export const clipStill = (url: string | null | undefined) => (url ? clipStills.get(url) : undefined)
 /** This preview URL already has the preview boost drawn in: its picture takes no pv-kit class. */
 export const isBoosted = (url: string | null | undefined) => Boolean(url && boosted.has(url))
 /** The preview at this URL is a video (a KO prompt mod's): it plays in a BeatVideo, not an img. */
@@ -301,7 +305,7 @@ export const isVideoPreview = (url: string | null | undefined) => Boolean(url &&
 
 /** A KO prompt video (a loadout card's, or a KO mod's preview): each play starts on the next beat of one shared clock, so every such card plays the same frame
  *  at the same time. The recording is shorter than the beat: it rests on its last frame (the empty grid) until then. */
-export function BeatVideo({ src, beat }: { src: string; beat: number }) {
+export function BeatVideo({ src, beat, card }: { src: string; beat: number; card?: boolean }) {
   const ref = useRef<HTMLVideoElement>(null)
   useEffect(() => {
     const v = ref.current
@@ -317,7 +321,8 @@ export function BeatVideo({ src, beat }: { src: string; beat: number }) {
     const join = () => {
       clearTimeout(t)
       if (!active()) { v.pause(); return }
-      if (v.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return
+      // a card's video is not rendered, and paused it holds no frame (it stays at HAVE_METADATA): its length is enough to join
+      if (v.readyState < (card ? HTMLMediaElement.HAVE_METADATA : HTMLMediaElement.HAVE_CURRENT_DATA)) return
       const at = (Date.now() % (beat * 1000)) / 1000
       if (at < v.duration - 0.1) { v.currentTime = at; v.play().catch(() => undefined) } else next()
     }
@@ -325,15 +330,16 @@ export function BeatVideo({ src, beat }: { src: string; beat: number }) {
       const nextVisible = entries.some(e => e.isIntersecting)
       if (nextVisible !== visible) { visible = nextVisible; join() }
     })
-    observer.observe(v)
+    observer.observe(card ? v.previousElementSibling ?? v : v) // a card's video is never rendered and has no box: its canvas
     v.addEventListener('ended', next)
-    v.addEventListener('loadeddata', join)
+    v.addEventListener(card ? 'loadedmetadata' : 'loadeddata', join)
     document.addEventListener('visibilitychange', join)
     window.addEventListener('blur', join)
     window.addEventListener('focus', join)
-    return () => { clearTimeout(t); observer.disconnect(); v.pause(); v.removeEventListener('ended', next); v.removeEventListener('loadeddata', join); document.removeEventListener('visibilitychange', join); window.removeEventListener('blur', join); window.removeEventListener('focus', join) }
-  }, [src, beat])
-  return <video ref={ref} src={src} muted playsInline preload="auto" crossOrigin="anonymous" />
+    return () => { clearTimeout(t); observer.disconnect(); v.pause(); v.removeEventListener('ended', next); v.removeEventListener(card ? 'loadedmetadata' : 'loadeddata', join); document.removeEventListener('visibilitychange', join); window.removeEventListener('blur', join); window.removeEventListener('focus', join) }
+  }, [src, beat, card])
+  // `card`: on a loadout card the frames are drawn onto a canvas and the video is not rendered (idlePause.ts, as LoopClip)
+  return <>{card && <canvas className="lo-clip" aria-hidden="true" />}<video ref={ref} src={src} muted playsInline preload="auto" crossOrigin="anonymous" data-poster={card ? '' : undefined} /></>
 }
 
 
@@ -435,6 +441,8 @@ function loadThumb(key: string, rev: number): Promise<string | null | undefined>
         if (!clip || thumbs.get(key)?.url !== full || revs.get(key) !== rev) return // changed meanwhile, or no encoder
         const u = URL.createObjectURL(clip)
         videoUrls.add(u); loopClips.add(u); if (boost) boosted.add(u)
+        const still = coverStills.get(full)
+        if (still) clipStills.set(u, still)
         thumbs.set(key, { rev, url: u })
         notify()
       }, () => undefined)

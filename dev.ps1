@@ -44,7 +44,7 @@ Copy-Item repak-x\src\data\character_data.json target\debug\data\ -Force
 $env:SKIP_UASSET_TOOL_BUILD = '1'
 # WebView2's debugging port, on this PC only, so tools can screenshot and click through the dev copy; the stable and test
 # copies never open it
-$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9223'
+$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = ('--remote-debugging-port=9223 ' + $env:REPAKXTRA_BROWSER_ARGS).Trim() # REPAKXTRA_BROWSER_ARGS: more arguments, to try a browser flag
 if ($Sandbox) {
     $box = Join-Path $env:LOCALAPPDATA 'repakxtra-sandbox'
     if (-not $Keep) { Remove-Item $box -Recurse -Force -ErrorAction SilentlyContinue }

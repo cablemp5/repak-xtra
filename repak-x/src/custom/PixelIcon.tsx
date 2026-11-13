@@ -30,9 +30,12 @@ function snapAll() {
 }
 const later = () => { if (!frame && icons.size) frame = requestAnimationFrame(snapAll) }
 // again whenever the layout around them may have moved them by a fraction of a pixel: the list loading or resizing,
-// a scroll, a zoom, a row's reveal animation ending
+// a zoom, a row's reveal animation ending, and a scroll once it rests. Snapped on every scrolled frame, each new
+// offset restyled and repainted the window 144 times a second (a moving icon shows no blur to snap away)
 new ResizeObserver(later).observe(document.body)
-for (const e of ['resize', 'scroll', 'transitionend', 'animationend']) window.addEventListener(e, later, { capture: true, passive: true })
+for (const e of ['resize', 'transitionend', 'animationend']) window.addEventListener(e, later, { capture: true, passive: true })
+let rest = 0
+window.addEventListener('scroll', () => { clearTimeout(rest); rest = window.setTimeout(later, 120) }, { capture: true, passive: true })
 
 function PixelIcon({ size, draw }: { size?: number | string; draw: Draw }) {
   const ref = useRef<SVGSVGElement>(null)

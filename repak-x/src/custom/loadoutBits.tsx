@@ -9,7 +9,7 @@ import { useMediaUrl } from './loadoutMedia'
 import { COVERS, type Cover, type Loadout, type Mod, captureKey, coverFills, displayName, flipMods, memberName, modKey, modsByKey, nameKey, patchLoadout, pickCover } from './loadoutStore'
 import { ModName, ordinal } from './modName'
 import { predecode, revealOnLoad, SwapText } from './motion'
-import { BeatVideo, cachedPreviewUrl, formKeys, hasPreview, isBoosted, isDecoded, isKoPreview, isLoopClip, isVideoPreview, noPreviewPossible, previewMade, previewSetKey, previewsListed, readyPreview, useCovers, usePreviewStage, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
+import { BeatVideo, cachedPreviewUrl, clipStill, formKeys, hasPreview, isBoosted, isDecoded, isKoPreview, isLoopClip, isVideoPreview, noPreviewPossible, previewMade, previewSetKey, previewsListed, readyPreview, useCovers, usePreviewStage, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
 import { isEmoteAnim, playEmoteSound, stopEmoteSound, useEmoteSound, webpSeconds } from './emoteSound'
 import { useVerdict } from './brokenMods'
 import { VerdictBadge } from './VerdictBadge'
@@ -233,9 +233,9 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
           : slide?.keys
             ? <CarouselSlide slide={at} dir={dir}><span className="lo-media-multi">{slide.keys.map(k => <SlideImage key={k} k={k} thumb={!page} />)}</span></CarouselSlide>
           : video
-            ? l.mediaBeat ? <BeatVideo src={video} beat={l.mediaBeat} /> : <video src={video} autoPlay loop muted playsInline />
+            ? l.mediaBeat ? <BeatVideo src={video} beat={l.mediaBeat} card /> : <LoopClip src={video} />
             : <CarouselSlide slide={slides.length > 1 ? at : 0} dir={dir}>
-                {live ? null : isLoopClip(src) ? <video key={src} src={src} autoPlay loop muted playsInline /> : isVideoPreview(src) ? <BeatVideo key={src} src={src} beat={KO_BEAT} /> : null}
+                {live ? null : isLoopClip(src) ? <LoopClip key={src} src={src} /> : isVideoPreview(src) ? <BeatVideo key={src} src={src} beat={KO_BEAT} card /> : null}
                 {(live || !isVideoPreview(src)) && <img key={src} src={live?.url ?? src} alt="" className={`${cover === 'preview' && slide?.key && !isKoPreview(slide.key) && !isBoosted(live?.url ?? src) ? 'pv-kit' : ''}${src === warm || isDecoded(src) ? ' is-loaded' : ''}`} decoding="async" crossOrigin="anonymous"
                   onLoad={e => { revealOnLoad(e); predecode(e.currentTarget); if (audible && live && hovering.current && e.currentTarget.src === live.url) playEmoteSound(audible, live.seconds) }} />}
               </CarouselSlide>}
@@ -345,11 +345,24 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
 /** How long the pointer rests on an animation card before its emote sound plays. */
 const HOVER_MS = 250
 
+/** A card's looping video (an animated preview's clip, or the loadout's own video): a canvas and the video, which is
+ *  never rendered. idlePause.ts plays the video while the card is in view and draws its frames onto the canvas, so no
+ *  video layer is on the page and a fast scroll holds its frame rate. Under a preview's clip sits its still (the first
+ *  frame, with the preview boost as the clip has it drawn in), which is all an out-of-view card shows. */
+function LoopClip({ src }: { src: string }) {
+  const still = clipStill(src)
+  return <>
+    {still && <img src={still} alt="" className={`is-loaded${isBoosted(src) ? ' pv-kit' : ''}`} decoding="async" />}
+    <canvas className="lo-clip" aria-hidden="true" />
+    <video src={src} autoPlay loop muted playsInline data-poster="" />
+  </>
+}
+
 /** One preview of a slide that shows several (a loadout's VFX swatches). */
 function SlideImage({ k, thumb }: { k: string; thumb: boolean }) {
   const src = usePreviewUrl(k, thumb)
   const [warm] = useState(src)
-  return !src ? <span /> : isLoopClip(src) ? <video src={src} autoPlay loop muted playsInline /> : isVideoPreview(src) ? <BeatVideo src={src} beat={KO_BEAT} />
+  return !src ? <span /> : isLoopClip(src) ? <LoopClip src={src} /> : isVideoPreview(src) ? <BeatVideo src={src} beat={KO_BEAT} card />
     : <img src={src} alt="" className={`${isKoPreview(k) || isBoosted(src) ? '' : 'pv-kit'}${src === warm || isDecoded(src) ? ' is-loaded' : ''}`} onLoad={revealOnLoad} crossOrigin="anonymous" />
 }
 
