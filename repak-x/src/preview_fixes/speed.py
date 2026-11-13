@@ -152,8 +152,30 @@ def split_config(config):
     return json.dumps(cfg, sort_keys=True), extra
 
 
+_SHARED_LOCK = threading.Lock()   # warm_exporter starts it on a thread while a request may already wait for it
+
+
 def shared_exporter(exe, text):
     """The run's exporter for this game config, started with the game alone; None when this build cannot serve."""
+    with _SHARED_LOCK:
+        return _shared_exporter(exe, text)
+
+
+def warm_exporter(cfg):
+    """The run's exporter started on a thread now, the game mounted with no mod: the first export after an unpack finds it
+    ready. Its start and the game's mount (about 6 s) ran after the unpack (about 10 s cold) and now run beside it: a
+    first 3D view of an encrypted mod took 24 s with no helper open. Any trouble: the export starts it as before."""
+    text = json.dumps({k: v for k, v in cfg.items() if k != "extra_paks"}, sort_keys=True)
+    def go():
+        try:
+            if str(CUE) not in _no_serve:
+                shared_exporter(CUE, text)
+        except Exception as e:
+            print(f"# exporter warm-up: {e}", file=sys.stderr, flush=True)
+    threading.Thread(target=go, daemon=True).start()
+
+
+def _shared_exporter(exe, text):
     key = (str(exe), text)
     s = _SHARED.get(key)
     if s and s["server"][0].poll() is None:
@@ -423,6 +445,7 @@ def unpack_ahead(work, cfg, entries):
     todo = [e for e in entries if obfuscated(e[1]) and not (kept_at(e) / (e[0] + ".utoc")).exists()]
     if not todo:
         return
+    warm_exporter(cfg)
     stage("unpack")
     def one(e):
         stem, utoc = e[0], e[1]
@@ -452,6 +475,7 @@ def unpack_together(work, cfg, entries):
     todo = [e for e in mods if not (repack_dir(entries, e[1], e[2], e[3]) / (e[0] + ".utoc")).exists()]
     if not todo:
         return
+    warm_exporter(cfg)
     stage("unpack")
     legacy = work / "legacy" / "_set"
     shutil.rmtree(legacy, ignore_errors=True)
@@ -482,6 +506,34 @@ def unpack_together(work, cfg, entries):
     for d in old[max(0, 20 - len(mine)):]:
         shutil.rmtree(d, ignore_errors=True)
     stage("mount")
+
+
+def prepare_viewer(a, out_dir):
+    """--viewer --prepare (xtra_viewer.rs prepare_mod_viewer): what a 3D view of these mods would mount, unpacked now if
+    an encrypted mod in it is not kept yet, the exporter started beside it, and nothing else. The app asks while a loadout
+    page or a mod's details are open, so a click on Rotate in 3D finds both ready: a first view of an encrypted mod took
+    20 to 24 s with no helper open, most of it the unpack and the game's mount. Mounts what viewer() mounts, in its
+    order, so the kept containers are the ones it looks for."""
+    cfg = cue_config()
+    wanted = lambda k: not (a.key and k not in a.key) and not (a.only and not re.search(a.only, k, re.I))
+    mods = {k: v for k, v in installed(a.mods).items() if wanted(k)}
+    jobs = [(a.set, list(mods))] if a.set else [(k, [k]) for k in mods]
+    for key, keys in jobs:
+        if not any(obfuscated(mods[k][1]) for k in keys) or any(unreadable(mods[k][1]) for k in keys):
+            continue   # nothing to unpack, or nothing that can be read
+        mounted = keys
+        if a.set:
+            plan = plan_set({k: packages(mods[k][1]) for k in keys}, game_meshes(cfg))
+            mounted = plan[2] if plan else []
+        if not any(obfuscated(mods[k][1]) for k in mounted):
+            continue
+        work = WORK / ("p_" + re.sub(r"[^\w.+-]", "_", key))
+        drop_work(work)
+        try:
+            unpack_ahead(work, cfg, [mods[k] for k in mounted])
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+        print(f"VIEWER_PREPARED {key}", flush=True)
 
 
 def write_webp(frames, path, duration):

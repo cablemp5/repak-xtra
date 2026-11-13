@@ -23,7 +23,7 @@ import { SwapText } from './motion'
 import { GeneratePreviewsButton, previewMade, previewSetKey, usePreviewState, usePreviewVersion } from './previews'
 import { CaptureButton, captureTarget } from './CapturePreview'
 import { useExportPreview } from './exportPreview'
-import { Rotate3DButton, Viewer3DWindow, useLoadout3d } from './viewer3d/Rotate3D'
+import { Rotate3DButton, Viewer3DWindow, useLoadout3d, usePrepare3d } from './viewer3d/Rotate3D'
 import { heroLabel, loadoutHero } from './silhouettes'
 
 const PAGE = 60
@@ -158,6 +158,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
   const mine = [...new Set(l.on.map(displayName))].sort(byName)
   const rotate = mine.map(k => byKey.get(k)?.path).filter((x): x is string => Boolean(x)) // its installed mods' files
   const can3d = useLoadout3d(previewSetKey(l.id), rotate.map(path => ({ path, categories: [p.modDetails?.[path]?.category, ...(p.modDetails?.[path]?.additional_categories ?? [])] })), nameKey, usePreviewVersion())
+  usePrepare3d(can3d && rotate.length > 0, previewSetKey(l.id), rotate, previewSetKey(l.id))
   const inLoadout = new Set(mine)
   const categoryOf = (k: string) => { const m = byKey.get(k); return (m && p.modDetails?.[m.path]?.category) || 'Unknown' }
   const age = (k: string) => byKey.get(k)?.modified_date ?? 0

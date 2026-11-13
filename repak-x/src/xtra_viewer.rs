@@ -314,6 +314,24 @@ pub async fn generate_mod_viewer(app: AppHandle, paths: Vec<String>, set: Option
     .map_err(|e| e.to_string())?
 }
 
+/// Gets a 3D view of these mods (or a loadout with `set`) ready before it is asked for: an encrypted mod in it unpacked and
+/// the exporter started (the kit's --viewer --prepare, preview_fixes/speed.py prepare_viewer). A loadout page or a mod's
+/// details call it while open, so a first Rotate in 3D of an encrypted mod skips the unpack (20 to 24 s with no helper
+/// open, 8 s after this). Quiet: when the kit is busy or missing, nothing is prepared and the click works as before.
+#[tauri::command]
+pub async fn prepare_mod_viewer(paths: Vec<String>, set: Option<String>, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<(), String> {
+    if crate::is_game_process_running() {
+        return Ok(()); // the game needs the memory more
+    }
+    let jobs = jobs_of(&paths);
+    let paks = paks_of(&state);
+    tauri::async_runtime::spawn_blocking(move || {
+        let _ = run_kit("viewer", "--viewer", &jobs, set.as_deref(), &["--prepare"], paks, |_| {});
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
 /// The game's own skin of a mesh, no mod mounted (the viewer's Default skin), exported once as default-<mesh>.3d
 /// (the kit's --viewer --target, preview_fixes/viewer_lobby.py). Returns its key; the kit's steps go out as
 /// mod-viewer-stage like a mod's export. An export from before model.json v2 is made again.

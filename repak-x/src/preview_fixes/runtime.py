@@ -1,11 +1,16 @@
 """Run a preview kit with app-owned renderer fixes, leaving the installed kit unchanged."""
 import os
 import re
+import sys
 from pathlib import Path
 
 kit = Path(os.environ["REPAKXTRA_KIT"])
 rim_on = os.environ.get("REPAKXTRA_RIM", "0") == "1"   # Settings > Previews, off unless switched on
 runtime = Path(__file__).resolve().parent
+# --prepare (xtra_viewer.rs prepare_mod_viewer): the kit's own arguments do not know it, a --viewer run then only unpacks
+prepare = "--prepare" in sys.argv
+if prepare:
+    sys.argv.remove("--prepare")
 original = kit / "previews" / "mod_previews.py"
 renderer = kit / "previews" / "render_preview.py"
 source = renderer.read_text(encoding="utf-8-sig")
@@ -192,6 +197,11 @@ if source.count(vfx_vanilla) != 1:
     raise RuntimeError("This preview kit does not support the app's faster previews. Update it in Setup.")
 source = source.replace(vfx_vanilla, '    bands = palette(changed_colors(mi_vectors(work / "vfx_raw"), vanilla_vectors(work, mis)))', 1)
 source = source.replace(main_guard, (runtime / "speed.py").read_text(encoding="utf-8") + "\n" + main_guard, 1)
+dispatch = "viewer(a, out_dir) if a.viewer else"
+if prepare and source.count(dispatch) == 1:
+    source = source.replace(dispatch, "prepare_viewer(a, out_dir) if a.viewer else", 1)
+elif prepare:
+    sys.exit(0)   # a kit this does not fit: nothing is prepared, the 3D view works as before
 # A loadout's encrypted mods are unpacked at once before mount() copies them (speed.py unpack_ahead). A kit whose mount()
 # reads differently keeps its own one-by-one unpack
 mount_start = '    stage("mount")\n    (work / "paks").mkdir(parents=True)\n'
