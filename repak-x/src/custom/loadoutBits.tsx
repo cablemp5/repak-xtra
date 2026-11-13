@@ -352,9 +352,10 @@ const HOVER_MS = 250
 function LoopClip({ src }: { src: string }) {
   const still = clipStill(src)
   return <span className="lo-clip-box">{/* its own box: the canvas covers this clip only, also in a slide of several */}
-    {still && <img src={still} alt="" className={`is-loaded${isBoosted(src) ? ' pv-kit' : ''}`} decoding="async" />}
     <canvas className="lo-clip" aria-hidden="true" />
     <video src={src} autoPlay loop muted playsInline data-poster="" />
+    {/* after the canvas, so theme.css can hide it while the canvas shows a frame: a clip's background is clear, and the still showed through as a second figure */}
+    {still && <img src={still} alt="" className={`is-loaded${isBoosted(src) ? ' pv-kit' : ''}`} decoding="async" />}
   </span>
 }
 

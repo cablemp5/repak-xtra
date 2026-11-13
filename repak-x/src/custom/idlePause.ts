@@ -128,7 +128,14 @@ const settle = () => {
     if (!v.isConnected) { seen.delete(v); continue }
     if (isOut(v)) {
       if (!v.paused) { away.add(v); v.pause() }
-      canvasOf(v)?.classList.add('is-away') // out of view the card shows its still: no layer for it (theme.css)
+      // out of view the card shows its still, no layer for it (theme.css), and the clip goes back to its first frame,
+      // which is that still: back in view it plays on from the picture the card shows, with no jump
+      const c = canvasOf(v)
+      if (c && !c.classList.contains('is-away')) {
+        c.classList.add('is-away'); c.classList.remove('is-drawn')
+        c.getContext('2d')?.clearRect(0, 0, c.width, c.height)
+        drawn.delete(v); v.currentTime = 0
+      }
     } else {
       canvasOf(v)?.classList.remove('is-away')
       // into view while the window is in the background: it plays when focus returns (update)
@@ -161,6 +168,7 @@ const paint = (v: HTMLVideoElement) => {
   g.clearRect(0, 0, c.width, c.height) // a video with transparency: the frame before must not show through
   g.drawImage(v, 0, 0)
   drawn.set(v, at)
+  if (!c.classList.contains('is-drawn')) c.classList.add('is-drawn') // from now its still is hidden (theme.css)
 }
 let drawing = 0
 const draw = () => {
