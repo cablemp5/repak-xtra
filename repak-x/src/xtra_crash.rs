@@ -6,6 +6,45 @@ use regex_lite::Regex;
 use serde::Serialize;
 use std::sync::OnceLock;
 
+// ---- which mods were on while the game ran: a crash report names only those ----
+// Saved when the game is seen starting (main_tauri.rs monitor_game_for_crashes): its start time and every .pak in the
+// mods folder then (on), as keys (on_key). The newest ten sessions are kept.
+
+fn sessions_store() -> std::path::PathBuf {
+    dirs::config_dir().unwrap_or_else(|| std::path::PathBuf::from(".")).join("Repak-X").join("repakxtra-game-sessions.json")
+}
+
+/** A mod's key on or off: its path without .pak, .bak_repak, .utoc or .ucas, forward slashes, lowercase (setupReport.ts onKey). */
+pub(crate) fn on_key(path: &std::path::Path) -> String {
+    let p = path.to_string_lossy().replace('\\', "/").to_lowercase();
+    [".pak", ".bak_repak", ".utoc", ".ucas"].iter().find_map(|x| p.strip_suffix(x)).unwrap_or(&p).to_string()
+}
+
+/// main_tauri.rs: the game started (`start`, Unix seconds): which mods are on now.
+pub(crate) fn remember_on(mods_dir: &std::path::Path, start: u64) {
+    let on: Vec<String> = walkdir::WalkDir::new(mods_dir)
+        .into_iter()
+        .filter_entry(crate::xtra_bundle::library_walk)
+        .flatten()
+        .filter(|e| e.file_type().is_file() && e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("pak")))
+        .map(|e| on_key(e.path()))
+        .collect();
+    let mut all: Vec<(u64, Vec<String>)> = std::fs::read(sessions_store()).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+    all.push((start, on));
+    all.sort_by_key(|s| s.0);
+    let skip = all.len().saturating_sub(10);
+    all.drain(..skip);
+    let _ = std::fs::write(sessions_store(), serde_json::to_vec(&all).unwrap_or_default());
+}
+
+/// setupReport.ts: the mods that were on in the game session a crash at `time` (Unix seconds) happened in, as keys
+/// (on_key). None when no session started before it was saved (a crash from before this was kept).
+#[tauri::command]
+pub fn xtra_mods_on_at(time: u64) -> Option<Vec<String>> {
+    let all: Vec<(u64, Vec<String>)> = std::fs::read(sessions_store()).ok().and_then(|b| serde_json::from_slice(&b).ok())?;
+    all.into_iter().filter(|s| s.0 <= time).max_by_key(|s| s.0).map(|s| s.1)
+}
+
 #[derive(Serialize)]
 pub struct NewestCrash {
     /// Unix seconds when the crash folder was made
@@ -492,6 +531,15 @@ pub async fn xtra_crash_tiers(asset_path: String, hero_id: Option<String>, mod_p
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_mod_has_one_key_on_or_off() {
+        // the same keys setupReport.ts onKey makes
+        let on = on_key(std::path::Path::new(r"C:\Mods\~mods\Cool Mod_9999999_P.pak"));
+        assert_eq!(on, "c:/mods/~mods/cool mod_9999999_p");
+        assert_eq!(on_key(std::path::Path::new("C:/Mods/~mods/Cool Mod_9999999_P.bak_repak")), on);
+        assert_eq!(on_key(std::path::Path::new("C:/Mods/~mods/Cool Mod_9999999_P.utoc")), on);
+    }
     use super::*;
 
     #[test]

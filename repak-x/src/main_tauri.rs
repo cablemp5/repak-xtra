@@ -6959,6 +6959,7 @@ async fn discord_get_theme(discord_state: State<'_, DiscordState>) -> Result<Str
 #[tauri::command]
 async fn monitor_game_for_crashes(
     crash_state: State<'_, CrashMonitorState>,
+    state: State<'_, Arc<Mutex<AppState>>>, // repakxtra: the mods folder, for which mods are on as the game starts
     window: Window,
 ) -> Result<Option<crash_monitor::CrashInfo>, String> {
     // Use the shared reliable game detection function
@@ -6972,6 +6973,10 @@ async fn monitor_game_for_crashes(
         let now = std::time::SystemTime::now();
         *game_start_time = Some(now);
         *last_checked = Some(now);
+        // repakxtra: which mods are on for this session, so a crash report names only those (xtra_crash.rs)
+        let mods = state.lock().unwrap().game_path.clone();
+        let start = now.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+        std::thread::spawn(move || xtra_crash::remember_on(&mods, start));
         ui_log::info("Game", "Marvel Rivals started - watching for crashes");
         return Ok(None);
     }
@@ -8757,6 +8762,8 @@ fn main() {
             xtra_identity::xtra_upstream_running, // repakxtra: beside Repak X
             xtra_crash::xtra_newest_crash, // repakxtra: setup report
             xtra_crash::xtra_recent_crashes, // repakxtra: setup report crash list
+            xtra_crash::xtra_mods_on_at, // repakxtra: the mods on when a crash happened
+            xtra_vfx::xtra_scan_release, // repakxtra: the command line's memory back when the checks end
             xtra_crash::xtra_crash_suspects, // repakxtra: crash suspects
             xtra_crash::xtra_crash_tiers, // repakxtra: crash suspects by asset, skin and hero
             xtra_game::xtra_game_update_check, xtra_game::xtra_game_update_seen, // repakxtra: game update notice

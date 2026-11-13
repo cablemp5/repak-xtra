@@ -271,6 +271,15 @@ pub fn xtra_scan_stopped() -> bool {
     STOPPED.swap(false, std::sync::atomic::Ordering::Relaxed)
 }
 
+/// brokenMods.ts, when a run of the checks ends: the long-lived command line (xtra_uat_cli.rs serve, the game's
+/// containers loaded, a few GB) goes now rather than after its 90 s idle, unless the Mod Updater is running.
+#[tauri::command]
+pub fn xtra_scan_release() {
+    if RUN.lock().unwrap_or_else(|e| e.into_inner()).is_none() {
+        crate::xtra_uat_cli::reset();
+    }
+}
+
 /// Who holds the run lock, if anyone.
 #[tauri::command]
 pub fn xtra_vfx_lock() -> Option<RunLock> {

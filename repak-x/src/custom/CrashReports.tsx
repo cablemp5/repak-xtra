@@ -1,5 +1,6 @@
 // repakxtra: Settings > Crash reports. The game's five newest crashes (xtra_crash.rs xtra_recent_crashes): when, the
-// file it crashed loading, and which installed mods replace that file, matched against the mods installed now. Open
+// file it crashed loading, and which installed mods replace that file and were on when it crashed (saved as the game
+// started), or are on now for a crash from before that was saved. Open
 // crash reports opens the folder the game writes them to, one UECC folder per crash.
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
@@ -9,6 +10,7 @@ import { nameKey } from './loadoutStore'
 import { ModName } from './modName'
 import { type RecentCrash, recentCrashes, reportSource } from './setupReport'
 import { OPEN_BISECT } from './crashBisect'
+import { APP_NAME } from './edition'
 
 const when = (secs: number) => new Date(secs * 1000).toLocaleString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' })
 
@@ -17,7 +19,8 @@ export default function CrashReports() {
   const [crashes, setCrashes] = useState<RecentCrash[] | null>(null)
   useEffect(() => {
     let live = true
-    recentCrashes((reportSource.get?.().mods ?? []).map(m => m.path)).then(c => { if (live) setCrashes(c) })
+    const mods = reportSource.get?.().mods ?? []
+    recentCrashes(mods.map(m => m.path), mods.filter(m => m.enabled).map(m => m.path)).then(c => { if (live) setCrashes(c) })
     return () => { live = false }
   }, [])
   const openFolder = () => invoke<string>('get_crash_log_path')
@@ -51,8 +54,8 @@ export default function CrashReports() {
                       {c.asset && (
                         <span className="rd-meta">
                           {!c.held ? 'Could not check which mods replace that file.'
-                            : !c.held.length ? 'None of your installed mods replace that file.'
-                            : <>Replaced by {c.held.map((p, i) => <span key={p}>{i ? ', ' : ''}<ModName name={nameKey(p)} /></span>)}</>}
+                            : !c.held.length ? (c.onAt === 'crash' ? 'None of the mods that were on replace that file.' : 'None of the mods on now replace that file.')
+                            : <>{c.onAt === 'crash' ? 'Replaced by, on at the time:' : 'Replaced by, on now:'} {c.held.map((p, i) => <span key={p}>{i ? ', ' : ''}<ModName name={nameKey(p)} /></span>)}</>}
                         </span>
                       )}
                     </div>
@@ -62,8 +65,8 @@ export default function CrashReports() {
             )}
       </div>
       <p className="setting-subtext crs-note">
-        Mods are matched against what you have installed now. An older crash may have happened with a different set. A named
-        mod is a suspect, not a verdict: the game can crash on a file for its own reasons.
+        Only mods that were on when the game crashed are named. For a crash from before {APP_NAME} kept that, the mods on now
+        are named instead. A named mod is a suspect, not a verdict: the game can crash on a file for its own reasons.
       </p>
     </div>
   )
