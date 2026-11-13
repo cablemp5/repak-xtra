@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Eye } from 'lucide-react'
 import { rescanVerdicts } from './brokenMods'
-import { STAGES, holdScan, progressLine, runPercent, useScanRun } from './scanProgress'
+import { STAGES, holdScan, progressLine, useScanRun } from './scanProgress'
 import { GlideFill } from './GlideFill'
 import { APP_NAME } from './edition'
 
@@ -26,7 +26,7 @@ export default function ScanStatus() {
   }, [open])
   useEffect(() => { if (!shown) setOpen(false) }, [shown])
   if (!shown) return null
-  const pct = runPercent(r.stage, r.last)
+  const pct = r.pct
   const stopping = r.running && r.held !== null // Pause or Cancel pressed: the mod being read finishes first
   const status = stopping ? `${r.held === 'cancelled' ? 'Cancelling' : 'Pausing'} after the mod being read`
     : r.running ? (r.last?.path ? progressLine(r.last) : STAGES[r.stage])

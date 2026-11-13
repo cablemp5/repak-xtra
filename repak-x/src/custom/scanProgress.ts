@@ -24,10 +24,15 @@ const SHOW_AFTER_MS = 1500
 
 /** `shown`: the run has read mods for a moment. `paused`: the last run stopped with mods left.
  *  `held`: the header's Pause or Cancel stopped them (xtra_vfx.rs HELD): they stay stopped until Resume or Refresh list. */
-export type ScanRun = { running: boolean; shown: boolean; paused: boolean; last: ScanStep | null; read: number; held: 'paused' | 'cancelled' | null; stage: number }
-let run: ScanRun = { running: false, shown: false, paused: false, last: null, read: 0, held: null, stage: 0 }
+/** `pct`: the whole run's progress as shown, which only rises in a run (a scan that counts again from 0 never lowers it). */
+export type ScanRun = { running: boolean; shown: boolean; paused: boolean; last: ScanStep | null; read: number; held: 'paused' | 'cancelled' | null; stage: number; pct: number }
+let run: ScanRun = { running: false, shown: false, paused: false, last: null, read: 0, held: null, stage: 0, pct: 0 }
 const listeners = new Set<() => void>()
-const set = (next: Partial<ScanRun>) => { run = { ...run, ...next }; listeners.forEach(l => l()) }
+const set = (next: Partial<ScanRun>) => {
+  run = { ...run, ...next }
+  run.pct = Math.max(run.pct, runPercent(run.stage, run.last))
+  listeners.forEach(l => l())
+}
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
 export const useScanRun = () => useSyncExternalStore(subscribe, () => run)
 
@@ -42,7 +47,7 @@ const showSoon = () => {
   showTimer = window.setTimeout(() => { showTimer = undefined; if (run.running) set({ shown: true }) }, SHOW_AFTER_MS)
 }
 /** brokenMods.ts: a run of the checks starts, reading the game's files first. */
-export const scanStarted = () => { set({ running: true, last: null, read: 0, stage: 0 }); showSoon() }
+export const scanStarted = () => { set({ running: true, last: null, read: 0, stage: 0, pct: 0 }); run.pct = 0; showSoon() }
 /** brokenMods.ts: the next stage starts (its mods are counted from 0). `count`: textures, which the frontend counts itself. */
 export const scanStage = (stage: Stage, count?: { at: number; total: number }) => {
   set({ stage: STAGES.indexOf(stage), last: count ? { step: 'materials', path: '', ...count } : null })
@@ -76,7 +81,7 @@ export function useScanProgress() {
       set({ last: e.payload, read: run.read + 1, running: true, paused: false })
       showSoon()
     })
-    const done = () => { clearTimeout(showTimer); showTimer = undefined; set({ shown: false, last: null, read: 0, stage: 0 }) }
+    const done = () => { clearTimeout(showTimer); showTimer = undefined; set({ shown: false, last: null, read: 0, stage: 0 }); run.pct = 0 }
     window.addEventListener(SCAN_DONE, done)
     return () => { off.then(f => f()).catch(() => undefined); window.removeEventListener(SCAN_DONE, done) }
   }, [])
