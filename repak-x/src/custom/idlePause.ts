@@ -105,9 +105,24 @@ document.addEventListener('visibilitychange', update)
 // A preview that loads, changes, or mounts after focus left (a copy started in the background, a card still decoding)
 // missed that moment: it is caught as it lands. load and play do not bubble, so they are caught on the way down
 document.addEventListener('load', e => { if (isIdle() && e.target instanceof HTMLImageElement) void freeze(e.target) }, true)
+// A looping video plays only while it is in view (or about to be). Every card of the Loadouts grid stays mounted, so
+// 29 of 31 animated covers played off screen: each a decoder and a layer redrawn 60 times a second, and a scroll of
+// the grid spent 6.5 ms of every 6.9 ms frame sorting layers (.agent/perf/layers.mjs, trace-summary.mjs, 2026-11-12)
+const away = new WeakSet<HTMLVideoElement>() // paused for being out of view
+const seen = new WeakSet<HTMLVideoElement>()
+const inView = new IntersectionObserver(entries => {
+  for (const e of entries) {
+    const v = e.target as HTMLVideoElement
+    if (!e.isIntersecting) { if (!v.paused) { away.add(v); v.pause() } }
+    else if (away.delete(v) && !isIdle()) v.play().catch(() => undefined)
+  }
+}, { rootMargin: '200px' })
+
 document.addEventListener('play', e => {
   const v = e.target
-  if (isIdle() && v instanceof HTMLVideoElement && v.loop) { v.pause(); videos.add(v) }
+  if (!(v instanceof HTMLVideoElement) || !v.loop) return
+  if (!seen.has(v)) { seen.add(v); inView.observe(v) } // its first report says where it is
+  if (isIdle()) { v.pause(); videos.add(v) }
 }, true)
 
 if (import.meta.env.DEV) {
