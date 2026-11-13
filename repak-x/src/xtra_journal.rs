@@ -16,16 +16,44 @@ pub struct Plan {
     pub trashed: Vec<PathBuf>,
     /// each rename, in order (from, to)
     pub renames: Vec<(PathBuf, PathBuf)>,
-    /// each rename's file as it was (size, modified ms), set by begin: a rename is undone only for that same file, so a
-    /// swap that undid itself before the note went never moves a restored original again
+    /// each rename's file (its volume and file number, which a rename keeps), set by begin: a rename is undone only
+    /// for that same file, so a swap that undid itself before the note went never moves a restored original again
     #[serde(default)]
     pub ids: Vec<Option<(u64, u64)>>,
 }
 
-/// A file's size and modified time (ms): kept by a rename, so it names the file wherever it moved.
+/// A file's volume and file number: kept by a rename in one volume and never shared by two files, so it names the
+/// file wherever it moved (size and time do not: an install copies the source's time, and every empty companion .pak
+/// is 416 bytes).
+#[cfg(windows)]
 fn id(p: &Path) -> Option<(u64, u64)> {
-    let m = std::fs::metadata(p).ok()?;
-    Some((m.len(), m.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_millis() as u64))
+    use std::os::windows::io::AsRawHandle;
+    #[repr(C)]
+    #[derive(Default)]
+    struct Info {
+        attributes: u32,
+        times: [u32; 6],
+        volume: u32,
+        size_high: u32,
+        size_low: u32,
+        links: u32,
+        index_high: u32,
+        index_low: u32,
+    }
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetFileInformationByHandle(file: *mut std::ffi::c_void, info: *mut Info) -> i32;
+    }
+    let f = std::fs::File::open(p).ok()?;
+    let mut info = Info::default();
+    // SAFETY: a handle this File owns for the call, and a struct laid out as BY_HANDLE_FILE_INFORMATION
+    (unsafe { GetFileInformationByHandle(f.as_raw_handle(), &mut info) } != 0).then(|| (info.volume as u64, (info.index_high as u64) << 32 | info.index_low as u64))
+}
+
+#[cfg(not(windows))]
+fn id(p: &Path) -> Option<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata(p).ok().map(|m| (m.dev(), m.ino()))
 }
 
 fn dir() -> PathBuf {
@@ -73,7 +101,7 @@ fn recover_in(dir: &Path) -> Vec<String> {
             continue;
         };
         for (i, (from, to)) in plan.renames.iter().enumerate().rev() {
-            // only the file that rename moved (its size and time): never one put back there since
+            // only the file that rename moved (its file number): never one put back there since
             let moved = plan.ids.get(i).copied().flatten().is_some_and(|was| id(to) == Some(was));
             if moved && !from.exists() {
                 if let Err(e) = std::fs::rename(to, from) {
@@ -126,7 +154,12 @@ mod tests {
         assert_eq!(std::fs::read(&tmp).unwrap(), b"update", "the update back to its temporary name (swept later)");
         assert_eq!(std::fs::read(&old_other).unwrap(), b"older broken copy", "the replaced file is back");
         assert!(!broken.exists() && std::fs::read_dir(&j).unwrap().count() == 0);
-        // cut short after the swap undid itself (its temporary files deleted, the original back): nothing moves
+        // cut short after the swap undid itself (its temporary files deleted, the original back): nothing moves, even
+        // when the original matches the update's size and time
+        std::fs::write(&orig, b"original").unwrap();
+        let t = std::fs::metadata(&orig).unwrap().modified().unwrap();
+        std::fs::write(&tmp, b"updated!").unwrap();
+        std::fs::File::options().write(true).open(&tmp).unwrap().set_modified(t).unwrap();
         std::mem::forget(begin_in(&j, &plan).unwrap());
         std::fs::remove_file(&tmp).unwrap();
         assert!(recover_in(&j).is_empty());
