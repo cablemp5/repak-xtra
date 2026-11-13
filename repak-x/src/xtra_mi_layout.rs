@@ -81,17 +81,15 @@ fn bare(v: &mut Value) {
 
 /// For a rewrite: without the header the tool keeps for each struct in `moved` (it holds the old layout's indices, so
 /// the tool writes a new one from the USMAP). The other headers stay: the tool's own new ones are wrong for some
-/// structs, ScalarParameterValue among them.
-fn bare_moved(v: &mut Value, moved: &HashSet<String>) {
+/// structs, ScalarParameterValue among them. True when any header went.
+fn bare_moved(v: &mut Value, moved: &HashSet<String>) -> bool {
     match v {
         Value::Object(m) => {
-            if m.get("StructType").and_then(Value::as_str).is_some_and(|t| moved.contains(t)) {
-                m.remove("OriginalStructHeader");
-            }
-            m.values_mut().for_each(|v| bare_moved(v, moved));
+            let here = m.get("StructType").and_then(Value::as_str).is_some_and(|t| moved.contains(t)) && m.remove("OriginalStructHeader").is_some();
+            m.values_mut().fold(here, |any, v| bare_moved(v, moved) | any)
         }
-        Value::Array(a) => a.iter_mut().for_each(|v| bare_moved(v, moved)),
-        _ => {}
+        Value::Array(a) => a.iter_mut().fold(false, |any, v| bare_moved(v, moved) | any),
+        _ => false,
     }
 }
 
@@ -169,12 +167,18 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
     // of any other class reads the same in both
     let mut moved = crate::xtra_usmap_diff::moved_lately();
     let new_layout = crate::xtra_usmap_diff::layout(Path::new(usmap));
+    // A mod made before the game's last update, with no game copies to settle a file both layouts read: the older
+    // reading is the right one whatever today's says (old_reading_right), so today's decode of every file (14 s for
+    // 400 materials) is not made. Only the files no older USMAP reads are decoded with today's, at the end
+    let old_first = today.is_none() && older && matches!(game, Game::None);
     let now_json = match today {
         Some(d) => d.to_path_buf(),
         None => {
             let (now, json) = (work.join("now"), work.join("now_json"));
-            stage_links(mod_extract, &now, rels)?;
-            to_json(usmap, &now, &json, progress).await?;
+            if !old_first {
+                stage_links(mod_extract, &now, rels)?;
+                to_json(usmap, &now, &json, progress).await?;
+            }
             json
         }
     };
@@ -252,13 +256,20 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
                 return false; // both read whole and today's reading is the right one
             }
             // the file as the tool read it, headers and all: the moved structs' headers go, the exports' are remapped
+            let mut same_layout = false;
             let rewritten = read_json(&json.join(format!("{r}.json"))).and_then(|mut raw| {
-                bare_moved(&mut raw, &pair);
-                crate::xtra_usmap_diff::remap_headers(&mut raw, &old_layout, new_layout.as_ref().map_err(String::clone)?)?;
+                let stripped = bare_moved(&mut raw, &pair);
+                let remapped = crate::xtra_usmap_diff::remap_headers(&mut raw, &old_layout, new_layout.as_ref().map_err(String::clone)?)?;
+                // nothing of it moved between the two layouts: it reads the same in both, and stays as it is
+                if old_first && !stripped && remapped == 0 {
+                    same_layout = true;
+                    return Ok(());
+                }
                 let to = fixed_json.join(format!("{r}.json"));
                 std::fs::create_dir_all(to.parent().unwrap_or(&fixed_json)).and_then(|_| std::fs::write(&to, to_tool_json(&mut raw))).map_err(|e| e.to_string())
             });
             match rewritten {
+                Ok(()) if same_layout => {}
                 Ok(()) => {
                     out.files.push(r.clone());
                     out.old_build = out.old_build.or(usmap_build(&old));
@@ -274,6 +285,14 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
             false
         });
         lap("decode with older mappings and compare");
+    }
+    // old_first: what no older USMAP read is read with today's after all (a file already in today's layout)
+    if old_first && !pending.is_empty() {
+        let names: Vec<String> = pending.iter().map(|(r, _)| r.clone()).collect();
+        stage_links(mod_extract, &work.join("now"), &names)?;
+        to_json(usmap, &work.join("now"), &now_json, progress).await?;
+        pending.retain(|(r, _)| decode(&now_json, r).filter(|j| decoded(j, &moved).is_some()).is_none());
+        lap(&format!("decode {} files no older mappings read with today's", names.len()));
     }
     out.complete = pending.is_empty();
     out.no_usmap = !out.complete && !read_any;
