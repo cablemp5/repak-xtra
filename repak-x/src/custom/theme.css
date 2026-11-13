@@ -522,10 +522,11 @@ html[data-show-header-icons] .header-actions-right .btn-vfx svg { margin-right: 
 .context-menu-item { border-radius: 6px; }
 /* Rows inset 4px on every side, as in the dropdowns (sort, view, collections, More): edge to edge, the 6px-cornered
    hover tint ran into the 10px border and did not sit in the menu */
-.context-menu, .context-menu .submenu { padding: 4px !important; }
+.context-menu, .context-menu .submenu { padding: 4px !important; } .context-menu { min-width: 210px; }   /* the width it had with its 200px header, now that the header no longer sets it */
 .context-menu .submenu { top: -5px; }   /* its first row level with the row that opened it: padding plus border */
 .context-menu-separator { margin: 4px -4px !important; }
-.context-menu-header { margin: 0 -4px 4px !important; padding: 6px 16px !important; max-width: none !important; }
+.context-menu-header { margin: 0 -4px 4px !important; padding: 6px 16px !important; max-width: none !important;
+  width: 0; min-width: calc(100% + 8px); box-sizing: border-box; }   /* the rows set the menu's width: a long file name is cut with ..., never widens it */
 .context-menu-item:hover, .app .context-menu-item:focus-visible { background: var(--quiet-active) !important; color: var(--text-primary) !important; outline: none !important; }
 /* A picked hero in the hero filter: the accent, never upstream's red */
 .hero-filter-base.active { background: color-mix(in srgb, var(--accent-primary), transparent 85%) !important; border-left-color: var(--accent-primary) !important; }
