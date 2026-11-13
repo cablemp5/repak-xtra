@@ -31,8 +31,10 @@ lto = "thin"
 incremental = true
 codegen-units = 256
 lto = false
-opt-level = 0
+opt-level = 1
 debug = 1
 
+# repakxtra: dependencies are built optimized once, so the dev copy's timings match a release build's (a mod update
+# took 46 s in the dev copy at level 0 and 14.5 s with this, as in a release build). Only the app crate rebuilds on an edit
 [profile.dev.package."*"]
-opt-level = 0
+opt-level = 3
