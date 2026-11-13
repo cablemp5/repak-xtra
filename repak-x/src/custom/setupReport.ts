@@ -198,7 +198,8 @@ export async function gatherReport(onStage?: (stage: ReportStage) => void): Prom
     const head = `${when(c.time)}, ${c.asset ? `crashed loading ${c.asset}` : `crashed (${c.type})`}`
     const held = c.held?.map(p => relativeToMods(p, src.gamePath))
     const on = c.onAt === 'crash' ? 'that was on' : 'that is on now'
-    return !c.asset ? head : `${head}: ${!held ? 'not checked' : held.length ? `replaced by ${held.join(', ')}` : `no mod ${on} replaces it`}`
+    const by = c.onAt === 'crash' ? 'replaced by, on at the time,' : 'replaced by, on now,'
+    return !c.asset ? head : `${head}: ${!held ? 'not checked' : held.length ? `${by} ${held.join(', ')}` : `no mod ${on} replaces it`}`
   })
   const gpuInfo = [crash?.gpu_driver, crash?.rhi].filter(Boolean).join(', ')
   const system = [crash?.cpu, crash?.gpu && `${crash.gpu}${gpuInfo ? ` (${gpuInfo})` : ''}`, crash?.ram_gb != null && `${crash.ram_gb} GB`, crash?.os]

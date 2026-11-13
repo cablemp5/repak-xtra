@@ -107,20 +107,21 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     let ticked: string[] = []
     // the four scans (vfx: the VFX and Blueprint ones, meshes: the mesh one), each followed by the badges when it found something.
     // A scan skips a mod it already checked as this file in this game, so a list can be scanned twice cheaply
-    const scans = (vfx: string[], meshes: string[]) => Promise.resolve()
-      .then(() => { scanStage('VFX effects'); return live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: vfx }) : 0 })
+    // `staged`: the run's own pass moves the progress bar's step (scanProgress.ts STAGES); a manual Check's mods first do not
+    const scans = (vfx: string[], meshes: string[], staged = true) => Promise.resolve()
+      .then(() => { if (staged) scanStage('VFX effects'); return live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: vfx }) : 0 })
       .then(found => (live && found ? check() : undefined))
       // materials that match no current game copy wait for the deep pass at the end (deep, below)
-      .then(() => { scanStage('VFX materials'); return live ? invoke<number>('xtra_vfx_check_scan', { modPaths: vfx, defer: true }) : 0 })
+      .then(() => { if (staged) scanStage('VFX materials'); return live ? invoke<number>('xtra_vfx_check_scan', { modPaths: vfx, defer: true }) : 0 })
       .then(found => (live && found ? check() : undefined))
-      .then(() => { scanStage('Blueprints'); return live ? invoke<number>('xtra_layout_scan', { modPaths: vfx }) : 0 })
+      .then(() => { if (staged) scanStage('Blueprints'); return live ? invoke<number>('xtra_layout_scan', { modPaths: vfx }) : 0 })
       .then(checked => (live && checked ? check() : undefined))
       // and mesh mods whose skeleton the game rebuilt: more bones than it has gets May crash (xtra_mesh.rs)
-      .then(() => { scanStage('Meshes'); return live ? invoke<number>('xtra_mesh_scan', { modPaths: meshes }) : 0 })
+      .then(() => { if (staged) scanStage('Meshes'); return live ? invoke<number>('xtra_mesh_scan', { modPaths: meshes }) : 0 })
       .then(checked => (live && checked ? check() : undefined))
     // the slow part last: the materials check's search of the game's older containers, once every mod has its badges
-    const deep = (vfx: string[]) => Promise.resolve()
-      .then(() => { scanStage("The game's older files"); return live ? invoke<number>('xtra_vfx_check_scan', { modPaths: vfx, defer: false }) : 0 })
+    const deep = (vfx: string[], staged = true) => Promise.resolve()
+      .then(() => { if (staged) scanStage("The game's older files"); return live ? invoke<number>('xtra_vfx_check_scan', { modPaths: vfx, defer: false }) : 0 })
       .then(found => (live && found ? check() : undefined))
     // last, textures the game cannot read (the preview kit's texture check, kit 19 and newer; xtra_viewer.rs): 5 mods a
     // run, so a Generate preview clicked meanwhile waits seconds, not minutes. The kit keeps each mod's answer until its
@@ -149,7 +150,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       })
       .then(() => (live ? invoke('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
       // a manual Check's mods first, through all four scans, so they never wait behind the mods not checked yet
-      .then(() => (ticked.length ? scans(ticked, ticked).then(() => deep(ticked)) : undefined))
+      .then(() => (ticked.length ? scans(ticked, ticked, false).then(() => deep(ticked, false)) : undefined))
       // every mod for meshes: an update carries the original's meshes as they were, and nothing in the Mod Updater checks them
       .then(() => scans(scanPaths, paths))
       .then(() => deep(scanPaths))
