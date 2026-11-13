@@ -24,7 +24,7 @@ import { FIXED_EVENT, onHandoff, openLoadoutInMain, onReport, takeHandoff, takeR
 import { ASK_REVIEW, KEEP_ENCRYPTED, KEEP_NAME, ORIGINALS, REPAIR_POLICY, SAFE_OFF, claimRun, readKeepEncrypted, newRunToken, onRunChange, readAskReview, readNaming, readOriginals, readRepairPolicy, readSafety, releaseRun, retireUnsafe, runLock, type Naming, type Originals, type RunLock, type Safety } from './prefs'
 import { STEPS, fixVfxMod, repairOutcome, type AssetKind, type VfxReport } from './pipeline'
 import { keepsEncrypted, needsUpdater, rescanForced, skipsUpdater, verdictLabel, verdictsChanged } from '../brokenMods'
-import { SCAN_DONE, progressLine, type ScanStep } from '../scanProgress'
+import { SCAN_DONE, modLabel, type ScanStep } from '../scanProgress'
 import { HeroFilter, heroOfName } from '../heroFilter'
 import './vfx.css'
 import ModRowsSkeleton from '../ModRowsSkeleton'
@@ -372,11 +372,11 @@ export function VfxUpdaterPanel() {
   const keepName = naming === 'broken'
   const [advanced, setAdvanced] = useState(false)
   const [busy, setBusy] = useState(false)
-  // the Library's mod checks (brokenMods.ts, the header's Checking mods): Check starts them, this follows their progress
+  // the Library's mod checks (brokenMods.ts, the header's Scanning mods): Check starts them, this follows their progress
   const [scan, setScan] = useState<string | null>(null)
   useEffect(() => {
     // only a run Check started: the Library's own runs (after an update, at launch) leave this window as it is
-    const step = listen<ScanStep>('mod-scan-progress', e => setScan(s => (s === null ? s : progressLine(e.payload))))
+    const step = listen<ScanStep>('mod-scan-progress', e => setScan(s => (s === null ? s : modLabel(e.payload.path))))
     const done = listen(SCAN_DONE, () => setScan(s => { if (s !== null) setReload(r => r + 1); return null }))
     return () => { void step.then(f => f()); void done.then(f => f()) }
   }, [])
@@ -839,7 +839,7 @@ export function VfxUpdaterPanel() {
   const state = cancelling ? 'Cancelling. The current step finishes first.'
     : busy && runningAt < 0 && reviews.length ? `Waiting for your review of ${plural(reviews.length, 'candidate')} at the top`
     : busy ? `Updating ${runningAt + 1} of ${batch.length}${runningMod ? `: ${runningMod.name}` : '…'}${left !== undefined ? `. ${timeLeft(left).replace(/^./, c => c.toUpperCase())} left` : ''}` // its row shows the step
-      : scan ? `Checking mods: ${scan}` : lock ?? (todo ? '' : reports.length ? `${updated === reports.length ? plural(updated, 'mod') : `${updated} of ${plural(reports.length, 'mod')}`} updated${partly ? ` (${partly === updated ? (updated === 1 ? 'partially' : 'all partially') : `${partly} partially`})` : ''}${lastTook ? ` in ${took(lastTook)}` : ''}` : 'Tick the mods to update')
+      : scan ? `Scanning mods: ${scan}` : lock ?? (todo ? '' : reports.length ? `${updated === reports.length ? plural(updated, 'mod') : `${updated} of ${plural(reports.length, 'mod')}`} updated${partly ? ` (${partly === updated ? (updated === 1 ? 'partially' : 'all partially') : `${partly} partially`})` : ''}${lastTook ? ` in ${took(lastTook)}` : ''}` : 'Tick the mods to update')
 
   // the last batch's result, until the ticks change
   const summary = !busy && !scan && !lock && ended && ended.edits === pickEdits ? ended : null
@@ -1045,7 +1045,7 @@ export function VfxUpdaterPanel() {
         <div className="vf-foot-actions">
           {/* Cancel beside the button, never in its place: a double-click on Update must not cancel the run */}
           {busy && <button type="button" className="lo-text-btn" disabled={cancelling} onClick={() => stop('Cancel button')} title="Esc"><span className="stop-glyph" aria-hidden="true" />{cancelling ? 'Cancelling…' : 'Cancel'}</button>}
-          {/* the same checks as the header's Checking mods (Pause and Cancel live there) */}
+          {/* the same checks as the header's Scanning mods (Pause and Cancel live there) */}
           {!busy && <button type="button" className="lo-text-btn" disabled={Boolean(scan) || !picked.size} onClick={() => void scanTicked()}
             title="Check the ticked mods again from scratch, without changing files. Progress shows in the main window's header too">
             {scan ? <span className="t-shimmer">Checking</span> : 'Check'}</button>}

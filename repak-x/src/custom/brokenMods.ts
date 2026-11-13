@@ -107,21 +107,25 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     let ticked: string[] = []
     // the four scans (vfx: the VFX and Blueprint ones, meshes: the mesh one), each followed by the badges when it found something.
     // A scan skips a mod it already checked as this file in this game, so a list can be scanned twice cheaply
-    // `staged`: the run's own pass moves the progress bar's step (scanProgress.ts STAGES); a manual Check's mods first do not
-    const scans = (vfx: string[], meshes: string[], staged = true) => Promise.resolve()
-      .then(() => { if (staged) scanStage('VFX effects'); return live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: vfx }) : 0 })
+    // `at`: the progress step its first scan is (scanProgress.ts; the four scans and the deep pass are five steps in a row),
+    // null for a manual Check's mods first, which move no step. `weights`: what each of the run's steps weighs (about the
+    // mods it reads), `scanned`: how many mods it scans
+    let weights = [1], scanned = 0
+    const step = (at: number | null, i: number) => { if (at !== null) scanStage(at + i, weights, scanned) }
+    const scans = (vfx: string[], meshes: string[], at: number | null) => Promise.resolve()
+      .then(() => { step(at, 0); return live ? invoke<number>('xtra_vfx_layout_scan', { modPaths: vfx }) : 0 })
       .then(found => (live && found ? check() : undefined))
       // materials that match no current game copy wait for the deep pass at the end (deep, below)
-      .then(() => { if (staged) scanStage('VFX materials'); return live ? invoke<number>('xtra_vfx_check_scan', { modPaths: vfx, defer: true }) : 0 })
+      .then(() => { step(at, 1); return live ? invoke<number>('xtra_vfx_check_scan', { modPaths: vfx, defer: true }) : 0 })
       .then(found => (live && found ? check() : undefined))
-      .then(() => { if (staged) scanStage('Blueprints'); return live ? invoke<number>('xtra_layout_scan', { modPaths: vfx }) : 0 })
+      .then(() => { step(at, 2); return live ? invoke<number>('xtra_layout_scan', { modPaths: vfx }) : 0 })
       .then(checked => (live && checked ? check() : undefined))
       // and mesh mods whose skeleton the game rebuilt: more bones than it has gets May crash (xtra_mesh.rs)
-      .then(() => { if (staged) scanStage('Meshes'); return live ? invoke<number>('xtra_mesh_scan', { modPaths: meshes }) : 0 })
+      .then(() => { step(at, 3); return live ? invoke<number>('xtra_mesh_scan', { modPaths: meshes }) : 0 })
       .then(checked => (live && checked ? check() : undefined))
     // the slow part last: the materials check's search of the game's older containers, once every mod has its badges
-    const deep = (vfx: string[], staged = true) => Promise.resolve()
-      .then(() => { if (staged) scanStage("The game's older files"); return live ? invoke<number>('xtra_vfx_check_scan', { modPaths: vfx, defer: false }) : 0 })
+    const deep = (vfx: string[], at: number | null) => Promise.resolve()
+      .then(() => { step(at, 4); return live ? invoke<number>('xtra_vfx_check_scan', { modPaths: vfx, defer: false }) : 0 })
       .then(found => (live && found ? check() : undefined))
     // last, textures the game cannot read (the preview kit's texture check, kit 19 and newer; xtra_viewer.rs): 5 mods a
     // run, so a Generate preview clicked meanwhile waits seconds, not minutes. The kit keeps each mod's answer until its
@@ -134,7 +138,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       // stops it after its current mod (xtra_viewer.rs reserve_waiting), so it never waits on a whole run
       const BATCH = 40
       for (let i = 0; i < mods.length && live; i += BATCH) {
-        scanStage('Textures', { at: i, total: mods.length })
+        scanStage(weights.length - 1, weights, scanned || mods.length, { at: i, total: mods.length, path: mods[i] })
         try { found += await invoke<number>('run_texcheck', { paths: mods.slice(i, i + BATCH) }) } catch { break }
       }
       if (live && found) await check()
@@ -150,10 +154,18 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       })
       .then(() => (live ? invoke('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
       // a manual Check's mods first, through all four scans, so they never wait behind the mods not checked yet
-      .then(() => (ticked.length ? scans(ticked, ticked, false).then(() => deep(ticked, false)) : undefined))
+      .then(() => (ticked.length ? scans(ticked, ticked, null).then(() => deep(ticked, null)) : undefined))
       // every mod for meshes: an update carries the original's meshes as they were, and nothing in the Mod Updater checks them
-      .then(() => scans(scanPaths, paths))
-      .then(() => deep(scanPaths))
+      // the mods that are on first, through every scan, then the ones that are off: what loads in the game gets its
+      // badges soonest
+      .then(() => {
+        const isOn = (p: string) => !/\.bak_repak$/i.test(p)
+        const passes = [[scanPaths.filter(isOn), paths.filter(isOn)], [scanPaths.filter(p => !isOn(p)), paths.filter(p => !isOn(p))]].filter(([v, m]) => v.length || m.length)
+        scanned = paths.length
+        // reading the game's files and the textures weigh a few mods' worth each; a scan step weighs its mods
+        weights = [Math.max(1, Math.round(scanned / 20)), ...passes.flatMap(([v, m]) => Array(5).fill(Math.max(1, v.length, m.length))), Math.max(1, Math.round(scanned / 10))]
+        return passes.reduce<Promise<unknown>>((r, [v, m], i) => r.then(() => scans(v, m, 1 + 5 * i)).then(() => deep(v, 1 + 5 * i)), Promise.resolve())
+      })
       .then(() => textures(paths))
       .then(() => (live ? invoke<boolean>('xtra_scan_stopped').catch(() => false) : true))
       .then(stopped => live && !stopped, e => { console.warn('[brokenMods] background scan failed', e); return false })

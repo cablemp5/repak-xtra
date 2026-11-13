@@ -1,9 +1,11 @@
 // repakxtra: the background mod checks' progress (brokenMods.ts runs them, each backend scan sends `mod-scan-progress`
 // for a mod it is about to read). After a game or app update they can read every mod for many minutes. The header
 // button (ScanStatus.tsx) is the only sign: it shows once work has gone on for a moment, says which check, which mod and
-// how far, and a run stopped with mods left says so until it picks up again. Never a toast. A run goes through STAGES in
-// order (brokenMods.ts says which one starts), so its whole progress is the stages done plus the share of the current
-// stage's mods read: one bar for the whole run, which never steps back (GlideFill.tsx).
+// how far, and a run stopped with mods left says so until it picks up again. Never a toast. A run is a fixed list of
+// steps (brokenMods.ts says which one starts and what each weighs: reading the game's files, each scan for the mods that
+// are on, then for the ones that are off, the textures), each weighing about as much as the mods it reads, so its whole
+// progress is the steps done plus the share of the current step's mods read. It shows as one count over every mod the
+// run scans and one bar, never stepping back.
 import { useEffect, useSyncExternalStore } from 'react'
 import { emit, listen } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
@@ -12,33 +14,39 @@ export type ScanStep = { step: 'effects' | 'materials' | 'blueprints' | 'meshes'
 /** Sent when a full run of the checks ends (finished, stopped for the game, or failed) */
 export const SCAN_DONE = 'repakxtra-scan-done'
 
-const STEP = { effects: 'VFX effects', materials: 'VFX materials', blueprints: 'Blueprints', meshes: 'Meshes' }
-/** A run's stages, in the order brokenMods.ts runs them. */
-export const STAGES = ['Reading game files', 'VFX effects', 'VFX materials', 'Blueprints', 'Meshes', "The game's older files", 'Textures'] as const
-export type Stage = (typeof STAGES)[number]
 /** "C:/x/Cool Mod_9999999_P.bak_repak" is "Cool Mod". Pure. */
 export const modLabel = (path: string) => (path.split(/[\\/]/).pop() ?? path).replace(/\.(pak|bak_repak|utoc)$/i, '').replace(/_\d+_P$/i, '')
-/** "VFX materials · Cool Mod (12 of 216)". Pure. */
-export const progressLine = (p: ScanStep) => `${STEP[p.step] ?? 'Mods'} · ${modLabel(p.path)} (${p.at} of ${p.total})`
+/** The mods scanned so far, out of every mod the run scans, as the whole run's share of its work: "57 of 200". Pure. */
+export const modsDone = (pct: number, mods: number) => Math.min(mods, Math.max(1, Math.round((pct / 100) * mods)))
+/** "Cool Mod (57 of 200)". Pure. */
+export const progressLine = (path: string, pct: number, mods: number) => `${modLabel(path)} (${modsDone(pct, mods)} of ${mods})`
 const SHOW_AFTER_MS = 1500
 
 /** `shown`: the run has read mods for a moment. `paused`: the last run stopped with mods left.
  *  `held`: the header's Pause or Cancel stopped them (xtra_vfx.rs HELD): they stay stopped until Resume or Refresh list. */
 /** `pct`: the whole run's progress as shown, which only rises in a run (a scan that counts again from 0 never lowers it). */
-export type ScanRun = { running: boolean; shown: boolean; paused: boolean; last: ScanStep | null; read: number; held: 'paused' | 'cancelled' | null; stage: number; pct: number }
-let run: ScanRun = { running: false, shown: false, paused: false, last: null, read: 0, held: null, stage: 0, pct: 0 }
+/** `stage`: the step the run is on, of `weights` (what each step weighs). `mods`: how many mods it scans. */
+export type ScanRun = { running: boolean; shown: boolean; paused: boolean; last: ScanStep | null; read: number; held: 'paused' | 'cancelled' | null; stage: number; weights: number[]; mods: number; pct: number }
+let run: ScanRun = { running: false, shown: false, paused: false, last: null, read: 0, held: null, stage: 0, weights: [1], mods: 0, pct: 0 }
 const listeners = new Set<() => void>()
 const set = (next: Partial<ScanRun>) => {
   run = { ...run, ...next }
-  run.pct = Math.max(run.pct, runPercent(run.stage, run.last))
+  run.pct = Math.max(run.pct, runPercent(run.stage, run.weights, run.last))
   listeners.forEach(l => l())
 }
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
 export const useScanRun = () => useSyncExternalStore(subscribe, () => run)
 
-/** The whole run's progress, 0 to 100: the stages before this one, plus the share of this stage's mods read. Pure. */
-export const runPercent = (stage: number, last: { at: number; total: number } | null) =>
-  ((stage + (last && last.total > 0 ? Math.min(1, last.at / last.total) : 0)) / STAGES.length) * 100
+/** The whole run's progress, 0 to 100: the steps before this one, plus the share of this step's mods read, each step by
+ *  its weight. Pure. */
+export const runPercent = (stage: number, weights: number[], last: { at: number; total: number } | null) => {
+  const all = weights.reduce((a, w) => a + w, 0)
+  if (all <= 0) return 0
+  const done = weights.slice(0, stage).reduce((a, w) => a + w, 0) + (weights[stage] ?? 0) * (last && last.total > 0 ? Math.min(1, last.at / last.total) : 0)
+  return Math.min(100, (done / all) * 100)
+}
+/** Where step `stage` ends, 0 to 100: how far a step with no count yet may creep. Pure. */
+export const stageEnd = (stage: number, weights: number[]) => runPercent(stage + 1, weights, null)
 
 let showTimer: number | undefined
 /** Shows the header status once a run has gone on for a moment (a quick run never flashes it). */
@@ -46,11 +54,12 @@ const showSoon = () => {
   if (run.shown || showTimer !== undefined) return
   showTimer = window.setTimeout(() => { showTimer = undefined; if (run.running) set({ shown: true }) }, SHOW_AFTER_MS)
 }
-/** brokenMods.ts: a run of the checks starts, reading the game's files first. */
-export const scanStarted = () => { set({ running: true, last: null, read: 0, stage: 0, pct: 0 }); run.pct = 0; showSoon() }
-/** brokenMods.ts: the next stage starts (its mods are counted from 0). `count`: textures, which the frontend counts itself. */
-export const scanStage = (stage: Stage, count?: { at: number; total: number }) => {
-  set({ stage: STAGES.indexOf(stage), last: count ? { step: 'materials', path: '', ...count } : null })
+/** brokenMods.ts: a run of the checks starts, reading the game's files first (step 0). */
+export const scanStarted = () => { set({ running: true, last: null, read: 0, stage: 0, weights: [1], mods: 0, pct: 0 }); run.pct = 0; showSoon() }
+/** brokenMods.ts: step `stage` of `weights` starts (its mods are counted from 0), in a run that scans `mods` mods.
+ *  `count`: textures, which the frontend counts itself. */
+export const scanStage = (stage: number, weights: number[], mods: number, count?: { at: number; total: number; path: string }) => {
+  set({ stage, weights, mods, last: count ? { step: 'materials', ...count } : null })
   showSoon()
 }
 /** brokenMods.ts: the run ended. `finished`: false when it stopped with mods left to read, or failed. */
@@ -89,6 +98,9 @@ export function useScanProgress() {
 
 if (import.meta.env.DEV) {
   console.assert(modLabel('C:\\Paks\\~mods\\Cool Mod_9999999_P.bak_repak') === 'Cool Mod' && modLabel('a/b_P.pak') === 'b_P', 'mod label')
-  console.assert(progressLine({ step: 'materials', at: 12, total: 216, path: 'x/Cyan_9999999_P.pak' }) === 'VFX materials · Cyan (12 of 216)', 'progress line')
-  console.assert(runPercent(0, null) === 0 && Math.round(runPercent(2, { at: 50, total: 100 })) === 36 && runPercent(STAGES.length - 1, { at: 9, total: 9 }) === 100, 'run percent')
+  console.assert(progressLine('x/Cyan_9999999_P.pak', 50, 200) === 'Cyan (100 of 200)' && progressLine('x/A_P.pak', 0, 200) === 'A_P (1 of 200)', 'progress line')
+  // three mods on (five quick steps) and 200 off: the first pass is a sliver of the run, not five twelfths of it
+  const w = [10, ...Array(5).fill(3), ...Array(5).fill(200), 20]
+  console.assert(runPercent(0, w, null) === 0 && runPercent(6, w, null) < 5 && runPercent(11, w, { at: 9, total: 9 }) === 100, 'run percent by weight', runPercent(6, w, null))
+  console.assert(stageEnd(0, w) === runPercent(1, w, null), 'stage end')
 }
