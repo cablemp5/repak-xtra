@@ -184,7 +184,8 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     report.error = `Not decrypted: ${String(e).replace(/[.!]?\s*$/, '')}. The mod was not changed.`
     log(report.error, 'warning')
   }
-  if (direct) report.ms = performance.now() - t0
+  // only a decrypt that worked says how long it took: a failed one never counts as a rebuild's time (ms 0 is never recorded)
+  if (direct && report.decrypted) report.ms = performance.now() - t0
   return report
 }
 
