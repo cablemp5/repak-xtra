@@ -783,9 +783,6 @@ export function VfxUpdaterPanel() {
   const needle = q.trim().toLowerCase()
   const heroes = [...new Set(list.map(m => heroOfName(m.hero)).filter(Boolean))].sort()
   const shown = list.filter(m => (!needle || m.name.toLowerCase().includes(needle) || (m.hero ?? '').toLowerCase().includes(needle)) && (!hero || heroOfName(m.hero) === hero))
-  // ticked mods the search or hero filter hides: Update still takes them, so the footer says so (and shows them in one click)
-  const shownKeys = new Set(shown.map(m => norm(m.utoc)))
-  const hiddenTicked = needle || hero ? [...picked].filter(k => !shownKeys.has(k)).length : 0
   // three groups: the mods that need an update (with any that ran this session and did not update), the ones updated this
   // session, the rest
   const updatedNow = (m: Mod) => runs[norm(m.utoc)]?.status === 'fixed'
@@ -826,8 +823,6 @@ export function VfxUpdaterPanel() {
   const partly = reports.filter(r => isPartial(r.report)).length
   const cl = usmapCl(usmap ? fileName(usmap) : null) // the file in use, not the last download
   const behind = cl && build?.cl && cl < build.cl
-  // old Niagara files are rebuilt once the USMAP matches the game: only a USMAP older than the game makes an update partial
-  const partialTodo = behind ? [...picked].filter(k => !isDone(runs[k]?.status) && stale.has(k)).length : 0
   const usmapState = checking ? 'Checking for a newer one…' : !usmap ? 'None chosen' : usmapOk === false ? 'File missing' : usmapInfo?.upToDate || usmapInfo?.updated ? 'Up to date' : 'Ready'
   const usmapMissing = !checking && (!usmap || usmapOk === false)
   const runningKey = batch.find(k => runs[k]?.status === 'running')
@@ -1037,12 +1032,8 @@ export function VfxUpdaterPanel() {
           {summary
             ? <>{summary.text}{summary.retry.length > 0 && <>{' '}<button type="button" className="su-link" onClick={() => void run(summary.retry)}>Try {plural(summary.retry.length, 'mod')} again</button></>}</>
             : state ? <span className={scan && !busy ? 't-shimmer' : undefined}>{state}</span>
-            : <>{/* its own line: the warning and its link stay together, apart from the estimate */}
-                {hiddenTicked > 0 && <span className="vf-hidden-line"><b className="vf-hidden-n">{hiddenTicked} ticked {hiddenTicked === 1 ? 'mod is' : 'mods are'} hidden by the filter.</b>{' '}
-                  <button type="button" className="su-link" onClick={() => { setQ(''); setHero('') }}>Show {hiddenTicked === 1 ? 'it' : 'them'}</button></span>}
-                {ahead !== undefined && <b className="vf-eta">{timeLeft(ahead).replace(/^./, c => c.toUpperCase())} for {plural(todo, 'mod')}</b>}
-                {partialTodo > 0 && <>{ahead !== undefined ? '. ' : ''}<b className="vf-partial-n">{partialTodo === todo ? (todo === 1 ? 'It' : `All ${todo}`) : `${partialTodo} of ${todo}`}</b> will only partially update, without {partialTodo === 1 ? 'its' : 'their'} old Niagara files, and keep {partialTodo === 1 ? 'its' : 'their'} original, off, as _ORIGINAL.{' '}</>}
-                </>}
+            // only the time it should take, as quiet subtext
+            : ahead !== undefined && <span className="vf-eta">{timeLeft(ahead).replace(/^./, c => c.toUpperCase())} for {plural(todo, 'mod')}</span>}
         </p>
         {/* read out: the run's progress and its result, not every tick's estimate */}
         <span className="xtra-sr-only" aria-live="polite">{summary ? summary.text : busy || scan || cancelling ? state : ''}</span>

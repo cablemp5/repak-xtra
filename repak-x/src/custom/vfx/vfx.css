@@ -70,8 +70,7 @@
    of warning; the footer says it once more for the picked mods */
 .vf-partial, .vf-needs { flex: none; height: 24px; display: inline-flex; align-items: center; padding: 0 8px; border-radius: 6px; font-size: 11px; font-weight: 600;
   color: #f5d342; border: 1px solid color-mix(in srgb, #f5d342, transparent 55%); cursor: help; white-space: nowrap; }
-.vf-partial-n { font-weight: 500; color: #f5d342; }
-[data-theme="light"] .vf-partial, [data-theme="light"] .vf-needs, [data-theme="light"] .vf-partial-n { color: #665400; }
+[data-theme="light"] .vf-partial, [data-theme="light"] .vf-needs { color: #665400; }
 /* needs an update the saved USMAP cannot make yet: grey, nothing to do until the new USMAP is out */
 .vf-needs.is-waiting, [data-theme="light"] .vf-needs.is-waiting { color: var(--text-secondary); border-color: color-mix(in srgb, var(--text-secondary), transparent 60%); }
 .vf-loadouts {flex: 0 1 auto; min-width: 0; max-width: 34%; display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px;
@@ -268,9 +267,8 @@ html[data-motion="off"] .vfx-notice { animation: none; }
 .vf-niagara { flex: none; height: 24px; display: inline-flex; align-items: center; padding: 0 8px; border-radius: 6px; font-size: 11px; font-weight: 600;
   color: #b9a4ff; border: 1px solid color-mix(in srgb, #9b7bff, transparent 55%); cursor: help; white-space: nowrap; }
 [data-theme="light"] .vf-niagara { color: #5b3fc4; }
-.vf-eta { font-weight: 600; color: var(--text-primary); }
+.vf-eta { font-weight: 400; color: var(--text-secondary); }
 /* ticked mods a filter hides: a line of its own above the estimate */
-.vf-hidden-line { display: block; margin-bottom: 2px; }
 
 /* Hierarchy (2026-10-30): the mod groups are the job, so they keep the strongest heading (14px 600). Advanced is settings,
    so its label steps down to a quiet 13px 500 and its parts indent under it, aligned with its text (nesting by position,
