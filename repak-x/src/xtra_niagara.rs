@@ -324,14 +324,16 @@ fn stage_as(from: &Path, to: &Path, rels: &[String], fresh: bool, link: bool) ->
         let _ = std::fs::remove_dir_all(to);
     }
     std::fs::create_dir_all(to).map_err(|e| e.to_string())?;
+    // by this call's own list, not by what is on disk: a file left from a folder that could not be cleared is replaced
+    let mut linked = std::collections::HashSet::new();
     for r in rels {
         for x in ["uasset", "uexp", "ubulk"] {
             let src = from.join(format!("{r}.{x}"));
             if src.exists() {
                 let dst = to.join(format!("{r}.{x}"));
                 std::fs::create_dir_all(dst.parent().unwrap_or(to)).map_err(|e| e.to_string())?;
-                if link && dst.exists() {
-                    continue; // named twice in `rels`: already linked, and a copy onto its own link fails
+                if link && !linked.insert(dst.clone()) {
+                    continue; // named twice in `rels`: linked in this call already, and a copy onto its own link fails
                 }
                 if !link || std::fs::hard_link(&src, &dst).is_err() {
                     std::fs::copy(&src, &dst).map_err(|e| format!("{}: {e}", src.display()))?;
