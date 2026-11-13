@@ -432,6 +432,15 @@ fn rim_on() -> bool {
         .unwrap_or(false)
 }
 
+/// Settings > Performance > Faster processing, read from the app's saved state: Blender and the exporter a run leaves
+/// open (about 3 GB) wait 5 minutes for the next run with it on and 1 minute with it off (speed.py KEEP_IDLE).
+fn faster_on() -> bool {
+    std::fs::read_to_string(crate::app_dir().join("repakxtra-state.json")).ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .and_then(|v| v["parallel_processing"].as_bool())
+        .unwrap_or(false)
+}
+
 #[tauri::command]
 pub fn preview_rim_get() -> bool {
     rim_on()
@@ -521,6 +530,7 @@ pub(crate) fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Re
     }
     // The game's key comes from the app (the same one it installs mods with), so the kit carries none
     cmd.env("REPAKXTRA_RIM", if rim_on() { "1" } else { "0" });
+    cmd.env("REPAKXTRA_KEEP_IDLE", if faster_on() { "300" } else { "60" });
     cmd.env("REPAKXTRA_AES", format!("0x{}", crate::install_mod::AES_KEY_HEX.trim_start_matches("0x")));
     #[cfg(windows)]
     {

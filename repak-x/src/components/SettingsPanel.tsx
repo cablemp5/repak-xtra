@@ -306,8 +306,9 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                         <span>Faster processing</span>
                       </Checkbox>
                       <p className="setting-subtext">
-                        Installs, conflict checks, and previews use 75% of your CPU threads instead of 50%. Leave it off if the PC
-                        slows down while the game runs.
+                        Installs, conflict checks, and previews use 75% of your CPU threads instead of 50%. The preview helpers also
+                        stay open for 5 minutes after a preview or 3D view instead of 1, so the next one starts in seconds. They hold
+                        about 3 GB of memory until then, and close when the game starts. Leave it off if the PC slows down.{/* repakxtra */}
                       </p>
                     </div>
                   </div>

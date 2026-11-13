@@ -8,8 +8,10 @@ import socket
 _kit_run_spec, _kit_close_exporters = run_spec, close_exporters
 
 # ---------- helper programs kept running between runs (keeper.py) ----------
-KEEP_IDLE = 300   # seconds a kept program waits for the next run before it ends (90 until 2026-11-12: a 3D view opened two
-# minutes after a preview loaded the game again, 17 s instead of 4). The app ends them when the game starts (stop_kept)
+# Seconds a kept program waits for the next run before it ends. The app says how long (xtra_previews.rs: 300 with Faster
+# processing on, 60 with it off: a 3D view opened after that loads the game again, 17 s instead of 4, and until then the
+# helpers hold about 3 GB). The app ends them when the game starts (stop_kept)
+KEEP_IDLE = int(os.environ.get("REPAKXTRA_KEEP_IDLE") or 90)
 
 
 class _Lines:
@@ -342,15 +344,63 @@ def on_threads(fn, items, most=16):
         return list(pool.map(fn, items))
 
 
+_UAT_SERVE = {}   # "proc": the app's tool in serve mode (kept), "q": its lines; "off": it cannot serve
+_UAT_LOCK = threading.Lock()
+
+
+def uat_extract(args, timeout=600):
+    """An extract_iostore_legacy run. Through the app's own tool in `serve` mode when the app gave one (REPAKXTRA_UAT,
+    xtra_uat_cli.rs): it keeps the game's containers loaded between requests, which a one-shot run opens every time (5 to
+    9 s of each encrypted mod's unpack). One request at a time. Without it, or on any trouble: the kit's tool, one-shot."""
+    tool, s = os.environ.get("REPAKXTRA_UAT"), _UAT_SERVE
+    if tool and not s.get("off"):
+        with _UAT_LOCK:
+            try:
+                if not s.get("proc") or s["proc"].poll() is not None:
+                    proc, q = kept([tool, "serve"], merge=True), queue.Queue()
+                    threading.Thread(target=lambda: ([q.put(l) for l in proc.stdout], q.put(None)), daemon=True).start()
+                    s["proc"], s["q"] = proc, q
+                s["proc"].stdin.write("\x1f".join(str(a) for a in args) + "\n")
+                s["proc"].stdin.flush()
+                end = time.time() + timeout
+                while True:
+                    line = s["q"].get(timeout=max(1, end - time.time()))
+                    if line is None:
+                        raise EOFError("the tool ended")
+                    if line.startswith("@@DONE "):
+                        if line[7:].split("\x1f")[0].strip() == "0":
+                            return
+                        raise RuntimeError(line[:300])
+            except Exception as e:   # this run goes on one-shot
+                print(f"# unpack: the tool's serve mode is off for this run ({e})", file=sys.stderr, flush=True)
+                if s.get("proc"):
+                    stop(s["proc"])
+                s.clear()
+                s["off"] = True
+    run([UAT, *args], timeout)
+
+
+def close_uat_serve():
+    if _UAT_SERVE.get("proc"):
+        try:
+            _UAT_SERVE["proc"].stdin.close()   # kept: handed back running, for the next run
+        except Exception:
+            pass
+
+
+atexit.register(close_uat_serve)
+
+
 def unpack_ahead(work, cfg, entries):
-    """mount()'s unpack of every encrypted mod that is not kept yet, all at once: each one loads the game in the tool (5 to
-    9 s), so a loadout's five took 36 s one after another and 16 s together. mount() then finds each kept."""
+    """mount()'s unpack of every encrypted mod that is not kept yet, before it runs: mount() then finds each kept. A
+    one-shot run loads the game in the tool each time (5 to 9 s), so a loadout's five took 36 s one after another. They
+    go through the app's tool kept in serve mode (uat_extract), or without it all at once (16 s for the five)."""
     def kept_at(e):
         stem, utoc, ucas, pak = e
         return WORK.parent / "cache" / "repacked" / hashlib.sha1(signature(utoc, ucas, current_pak(utoc, pak)).encode()).hexdigest()[:16]
     todo = [e for e in entries if obfuscated(e[1]) and not (kept_at(e) / (e[0] + ".utoc")).exists()]
-    if len(todo) < 2:
-        return   # one: mount() unpacks it as before
+    if not todo:
+        return
     stage("unpack")
     def one(e):
         stem, utoc = e[0], e[1]
@@ -358,7 +408,7 @@ def unpack_ahead(work, cfg, entries):
         legacy, tmp = work / "legacy" / stem, repacked.with_name(repacked.name + ".tmp")
         shutil.rmtree(tmp, ignore_errors=True)
         tmp.mkdir(parents=True)
-        run([UAT, "extract_iostore_legacy", cfg["paks"], legacy, "--mod", utoc, "--aes", cfg["aes"]], 600)
+        uat_extract(["extract_iostore_legacy", cfg["paks"], legacy, "--mod", utoc, "--aes", cfg["aes"]])
         run([UAT, "create_mod_iostore", tmp / stem, legacy, "--usmap", cfg["usmap"]], 600)
         if (tmp / (stem + ".utoc")).exists():   # a failed one is left to mount(), which says why
             shutil.rmtree(repacked, ignore_errors=True)
