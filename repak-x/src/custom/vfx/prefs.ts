@@ -12,20 +12,15 @@ export const ORIGINALS = 'repakxtra.vfx.originals' // what happens to an origina
 export type Naming = 'broken' | 'updated'
 export type Originals = 'off' | 'trash' | 'keep'
 
-export const SAFE_OFF = 'repakxtra.vfx.safeOff' // a flagged mod that could not be made safe: 'trash', '1' turned off, '0' stays on
-export type Safety = 'trash' | 'off' | 'on'
-/** What happens to a flagged mod an update could not make safe: Recently deleted (the default), off, or left on to crash. */
-export const readSafety = (): Safety => { const v = localStorage.getItem(SAFE_OFF); return v === '0' ? 'on' : v === '1' ? 'off' : 'trash' }
-/** Whether it is taken out of the game at all (off, or off and then to Recently deleted). */
-export const readSafeOff = () => readSafety() !== 'on'
-/** Turns the mod off (xtra_safe_off.rs keeps it off, with why), then with `trash` moves it to Recently deleted.
- *  'trashed' or 'off', or false when it was already off and stays. Throws when it could not be turned off. */
-export async function retireUnsafe(modPath: string, reason: string, trash: boolean): Promise<'trashed' | 'off' | false> {
-  const off = await invoke<string | null>('xtra_vfx_turn_off', { modPath, reason })
-  if (!trash) return off ? 'off' : false
-  // still off if the delete fails: safe either way
-  return invoke('delete_mod', { path: off ?? modPath.replace(/\.(utoc|pak)$/i, '.bak_repak'), trashId: null })
-    .then(() => 'trashed' as const, e => { console.warn('[safety] could not move it to Recently deleted, it stays off', e); return off ? 'off' as const : false as const })
+export const SAFE_OFF = 'repakxtra.vfx.safeOff' // a mod known to crash that nothing rebuilds: '1' (or an old 'trash') turned off, '0' stays on
+export type Safety = 'off' | 'on'
+/** What happens to a mod known to crash the game that the updater has nothing to rebuild: off (the default) or left on.
+ *  Never deleted, and never applied to a failed update, which leaves the mod as it was. */
+export const readSafety = (): Safety => (localStorage.getItem(SAFE_OFF) === '0' ? 'on' : 'off')
+/** Turns the mod off (xtra_safe_off.rs keeps it off, with why). 'off', or false when it was already off. Throws when it
+ *  could not be turned off. Its Needs update flag stays. */
+export async function retireUnsafe(modPath: string, reason: string): Promise<'off' | false> {
+  return (await invoke<string | null>('xtra_vfx_turn_off', { modPath, reason })) ? 'off' : false
 }
 export const REPAIR_POLICY = 'repakxtra.vfx.repairPolicy'
 export type RepairPolicy = 'strict' | 'bestEffort'
