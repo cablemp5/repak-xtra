@@ -351,11 +351,11 @@ const HOVER_MS = 250
  *  frame, with the preview boost as the clip has it drawn in), which is all an out-of-view card shows. */
 function LoopClip({ src }: { src: string }) {
   const still = clipStill(src)
-  return <>
+  return <span className="lo-clip-box">{/* its own box: the canvas covers this clip only, also in a slide of several */}
     {still && <img src={still} alt="" className={`is-loaded${isBoosted(src) ? ' pv-kit' : ''}`} decoding="async" />}
     <canvas className="lo-clip" aria-hidden="true" />
     <video src={src} autoPlay loop muted playsInline data-poster="" />
-  </>
+  </span>
 }
 
 /** One preview of a slide that shows several (a loadout's VFX swatches). */

@@ -71,7 +71,9 @@ export function holdCovers(root: HTMLElement) {
     if (still) { held.set(img, img.src); img.src = still }
   }
   // the clips in view stop where they are until the scroll rests (settle): each canvas keeps the frame it shows
-  for (const v of seen) if (v.dataset.poster !== undefined && !v.paused && root.contains(v)) { away.add(v); v.pause() }
+  let any = false
+  for (const v of seen) if (v.dataset.poster !== undefined && !v.paused && root.contains(v)) { away.add(v); v.pause(); any = true }
+  if (any) settleIn(150) // they start again at rest even when no further scroll event comes (a frame that ran late)
 }
 /** The held covers play again, where their still is what still shows (a preview that changed keeps its new picture). */
 export function releaseCovers() {
@@ -156,7 +158,10 @@ const paint = (v: HTMLVideoElement) => {
   const at = Math.floor(v.currentTime * 60), c = canvasOf(v)
   if (!c || drawn.get(v) === at || v.readyState < 2) return
   if (c.width !== v.videoWidth || c.height !== v.videoHeight) { c.width = v.videoWidth; c.height = v.videoHeight }
-  c.getContext('2d')?.drawImage(v, 0, 0)
+  const g = c.getContext('2d')
+  if (!g) return
+  g.clearRect(0, 0, c.width, c.height) // a video with transparency: the frame before must not show through
+  g.drawImage(v, 0, 0)
   drawn.set(v, at)
 }
 let drawing = 0

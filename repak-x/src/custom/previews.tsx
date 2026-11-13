@@ -339,7 +339,8 @@ export function BeatVideo({ src, beat, card }: { src: string; beat: number; card
     return () => { clearTimeout(t); observer.disconnect(); v.pause(); v.removeEventListener('ended', next); v.removeEventListener(card ? 'loadedmetadata' : 'loadeddata', join); document.removeEventListener('visibilitychange', join); window.removeEventListener('blur', join); window.removeEventListener('focus', join) }
   }, [src, beat, card])
   // `card`: on a loadout card the frames are drawn onto a canvas and the video is not rendered (idlePause.ts, as LoopClip)
-  return <>{card && <canvas className="lo-clip" aria-hidden="true" />}<video ref={ref} src={src} muted playsInline preload="auto" crossOrigin="anonymous" data-poster={card ? '' : undefined} /></>
+  const video = <video ref={ref} src={src} muted playsInline preload="auto" crossOrigin="anonymous" data-poster={card ? '' : undefined} />
+  return card ? <span className="lo-clip-box"><canvas className="lo-clip" aria-hidden="true" />{video}</span> : video
 }
 
 
